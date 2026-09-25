@@ -357,7 +357,7 @@ describe("DynamoDbDeploymentsRepository — GSI1 tenant reads", () => {
     expect(commands[0].input.FilterExpression).toBe("eventId = :ev");
   });
 
-  it("should list reconciler rows (jobId/status/updatedAt) with the reserved-word projection", async () => {
+  it("should list reconciler rows (jobId/status/updatedAt/createdAt) with the reserved-word projection", async () => {
     const { repo, seed, commands, reset } = makeRepo();
     await seed([
       metaItem({
@@ -372,11 +372,16 @@ describe("DynamoDbDeploymentsRepository — GSI1 tenant reads", () => {
 
     const rows = await repo.listReconcilerRowsByEvent("tenant-a", "ev-1");
     expect(rows).toEqual([
-      { jobId: "a", status: "DELETING", updatedAt: "2026-06-05T00:00:00.000Z" },
+      {
+        jobId: "a",
+        status: "DELETING",
+        updatedAt: "2026-06-05T00:00:00.000Z",
+        createdAt: "2026-06-01T00:00:00.000Z",
+      },
     ]);
 
     const first = commands[0].input;
-    expect(first.ProjectionExpression).toBe("PK, #status, updatedAt");
+    expect(first.ProjectionExpression).toBe("PK, #status, updatedAt, createdAt");
     expect(first.ExpressionAttributeNames).toEqual({ "#status": "status" });
     expect(first.FilterExpression).toBe("eventId = :ev");
   });

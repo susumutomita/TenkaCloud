@@ -121,5 +121,19 @@ describe("bulkDeployEvent — persistence: row shape & Event status flip", () =>
     // #872: tenantId condition で他 tenant の event を踏み越えない defense-in-depth
     expect(cmd.input.ConditionExpression).toContain("tenantId = :tenantId");
     expect(cmd.input.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
+    // [Issue #3261] The same write records the batch: its createdAt is the one every
+    // row of the plan carries, and its count is the number of rows written.
+    const transactCmd = ddbSend.mock.calls.find((c) => c[0] instanceof TransactWriteCommand)?.[0];
+    const puts = ((transactCmd as TransactWriteCommand).input.TransactItems ?? []).map(
+      (item) => item.Put?.Item,
+    );
+    expect(puts).toHaveLength(2);
+    const batchCreatedAt = new Date(NOW_MS).toISOString();
+    for (const item of puts) expect(item?.createdAt).toBe(batchCreatedAt);
+    expect(cmd.input.ExpressionAttributeValues?.[":batch"]).toEqual({
+      createdAt: batchCreatedAt,
+      count: 2,
+    });
+    expect(cmd.input.ExpressionAttributeValues?.[":now"]).toBe(batchCreatedAt);
   });
 });

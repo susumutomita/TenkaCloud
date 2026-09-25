@@ -466,12 +466,17 @@ export class SqlEventsRepository implements EventsRepository {
     tenantId: string,
     eventId: string,
     at: string,
+    batch?: { readonly count: number },
   ): Promise<EventMutationOutcome> {
+    // [Issue #3261] Same single conditional write as the DDB backend: the batch
+    // marker lands only together with the status.
+    const batchSet = batch ? ", '$.deployBatch', json(?)" : "";
+    const batchParams = batch ? [JSON.stringify({ createdAt: at, count: batch.count })] : [];
     return this.conditionalUpdate({
       tenantId,
       eventId,
-      set: "status = ?, payload = json_set(payload, '$.status', ?, '$.updatedAt', ?)",
-      setParams: ["DEPLOYING", "DEPLOYING", at],
+      set: `status = ?, payload = json_set(payload, '$.status', ?, '$.updatedAt', ?${batchSet})`,
+      setParams: ["DEPLOYING", "DEPLOYING", at, ...batchParams],
       where: "status IN (?, ?, ?)",
       whereParams: ["DRAFT", "READY", "DEPLOYING"],
       onMiss: "conflict",
@@ -485,14 +490,29 @@ export class SqlEventsRepository implements EventsRepository {
     from: string,
     to: string,
     at: string,
+    expected?: { readonly updatedAt: string | undefined },
   ): Promise<EventMutationOutcome> {
+    // [Issue #3261] DDB backend と同じく `expected` 指定時は updatedAt の一致
+    // (undefined なら不在) も CAS 条件に含める。
+    // `null` (a malformed caller value) is treated exactly like `undefined`, so a
+    // `= NULL` comparison (never true) cannot appear on this backend alone.
+    let updatedAtCondition = "";
+    const updatedAtParams: string[] = [];
+    if (expected) {
+      if (expected.updatedAt == null) {
+        updatedAtCondition = " AND json_extract(payload, '$.updatedAt') IS NULL";
+      } else {
+        updatedAtCondition = " AND json_extract(payload, '$.updatedAt') = ?";
+        updatedAtParams.push(expected.updatedAt);
+      }
+    }
     return this.conditionalUpdate({
       tenantId,
       eventId,
       set: "status = ?, payload = json_set(payload, '$.status', ?, '$.updatedAt', ?)",
       setParams: [to, to, at],
-      where: "status = ?",
-      whereParams: [from],
+      where: `status = ?${updatedAtCondition}`,
+      whereParams: [from, ...updatedAtParams],
       onMiss: "conflict",
       withPostImage: false,
     });

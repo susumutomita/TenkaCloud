@@ -144,7 +144,15 @@ export async function bulkDeployEvent(
   // its own `.filter()`) and hand each channel its own pre-filtered array.
   const { eventBridgeEntries, adapterEntries } = partitionBulkPlanEntries(plan.entries);
   const [eventBridgeFailures, adapterFailures] = await Promise.all([
-    publishBulkDeployPlan(shared, tenantId, eventId, plan.createdAt, eventBridgeEntries),
+    // [Issue #3261] The batch marker counts every row written above, adapter
+    // rows included, not just the eventbridge subset this call publishes.
+    publishBulkDeployPlan(
+      shared,
+      tenantId,
+      eventId,
+      { createdAt: plan.createdAt, count: plan.entries.length },
+      eventBridgeEntries,
+    ),
     dispatchBulkAdapterEntries(shared, tenantId, adapterEntries),
   ]);
   const failures = [...eventBridgeFailures, ...adapterFailures];

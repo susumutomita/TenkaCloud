@@ -60,7 +60,7 @@ async function writeBulkDeployChunk(
 /**
  * Event の status を DEPLOYING へ前進させる。 DRAFT / READY / DEPLOYING からのみ許可
  * (= ACTIVE / COMPLETE 等の後続状態を巻き戻さない)。 [#2437 Phase A2] 条件付き書き込みは
- * repository seam の `markDeploying(tenantId, eventId, at)` に移設 — 条件不成立は
+ * repository seam の `markDeploying(tenantId, eventId, at, batch)` に移設 — 条件不成立は
  * conflict outcome として返り no-op (= 旧 ConditionalCheckFailed 握り潰しと同じ挙動)。
  * bulk-deploy は Teams table を必ず配線する (手動 route / scheduled deploy とも) ので、
  * どちらの backend でも効く runtime resolver 経由で解決する。
@@ -70,9 +70,14 @@ export async function markBulkEventDeploying(
   tenantId: string,
   eventId: string,
   createdAt: string,
+  batchCount: number,
 ): Promise<void> {
   const repositories = await resolveEventRepositories(shared);
-  await repositories.events.markDeploying(tenantId, eventId, createdAt);
+  // [Issue #3261] `batchCount` is every row `writeBulkDeployPlan` wrote for this
+  // plan (both dispatch channels). `createdAt` is `plan.createdAt`, which each of
+  // those rows also carries as its own `createdAt`, so the reconciler can tell
+  // when the whole batch is visible before releasing READY.
+  await repositories.events.markDeploying(tenantId, eventId, createdAt, { count: batchCount });
 }
 
 /**

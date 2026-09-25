@@ -162,11 +162,13 @@ const STUCK_DELETING_THRESHOLD_MS = 30 * 60 * 1000;
  *   - `status`: 必須 (= 既存 `resolveEventStatusTransition` の入力)
  *   - `jobId`: rescue UpdateItem を打つときに `DEPLOYMENT#<jobId>` を再構築する。
  *   - `updatedAt`: stuck 判定の閾値比較 (= Issue #828)。 未設定行は rescue skip (= safe default)。
+ *   - `createdAt`: [Issue #3261] event の `deployBatch` に属する行の数を数える。
  */
 interface DeploymentReconcilerRow {
   readonly jobId?: string;
   readonly status: string;
   readonly updatedAt?: string;
+  readonly createdAt?: string;
 }
 
 /**
@@ -210,7 +212,12 @@ async function queryDeploymentRowsForEvent(
   const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
     await resolveDeploymentsRepository(ctx);
   const rows = await repository.listReconcilerRowsByEvent(event.tenantId, event.eventId);
-  return rows.map((row) => ({ jobId: row.jobId, status: row.status, updatedAt: row.updatedAt }));
+  return rows.map((row) => ({
+    jobId: row.jobId,
+    status: row.status,
+    updatedAt: row.updatedAt,
+    createdAt: row.createdAt,
+  }));
 }
 
 /**
@@ -467,6 +474,7 @@ async function reconcileSingleEvent(
       from: eventStatus,
       to: next,
       nowIso,
+      expectedUpdatedAt: event.updatedAt,
     });
     return;
   }
@@ -485,13 +493,107 @@ async function reconcileSingleEvent(
   );
   const next = resolveEventStatusTransition(eventStatus, adjustedStatuses);
   if (!next) return;
+  if (next === "READY" && !deployBatchVisible(event, depRows)) return;
+  // [Issue #3261] GSI1 is eventually consistent. After a force redeploy it can
+  // still return only the deleted COMPLETE row while the replacement is PENDING,
+  // so confirm every candidate against its base row before releasing READY.
+  if (next === "READY" && !(await confirmDeploymentsTerminal(ctx, event, depRows))) return;
   await applyEventStatusTransition(ctx, {
     tenantId: event.tenantId,
     eventId: event.eventId,
     from: eventStatus,
     to: next,
     nowIso,
+    // [Issue #3261] A redeploy between the reads above and this CAS leaves the
+    // status at DEPLOYING but rewrites updatedAt (`markDeploying`), so the CAS
+    // must also pin the updatedAt this decision was computed against.
+    expectedUpdatedAt: event.updatedAt,
   });
+}
+
+/**
+ * [Issue #3261] An additive bulk deploy only Puts new PENDING rows. Until GSI1
+ * surfaces them the reconciler sees just the older COMPLETE rows, whose
+ * consistent re-reads do confirm COMPLETE, and READY would never be revisited.
+ * A re-read cannot find a row the index has not returned, so the event records
+ * its batch (`deployBatch`, written by `markDeploying` in the same write as
+ * DEPLOYING) and READY waits until at least `count` rows created at or after
+ * the batch's `createdAt` are listed (ISO-8601 strings compare in time order). Those rows then go through
+ * {@link confirmDeploymentsTerminal} like any other.
+ *
+ * Events without `deployBatch` (last marked DEPLOYING before the field
+ * existed) keep the previous behaviour.
+ *
+ * This cannot block forever on its own. Deployment rows are deleted only by
+ * `createBulkDeployments` for an entry's `replacesJobId` (both
+ * `dynamodb-deployments-lifecycle.ts` and `sql-deployments-lifecycle.ts`;
+ * nothing else deletes from the deployments table) and by the DynamoDB TTL
+ * (7 days, the same horizon as the event row itself). A later batch that
+ * deletes rows of this one is followed by that batch's `markDeploying`, which
+ * rewrites `deployBatch`. If that later batch's write fails part-way, the
+ * orchestrator throws before `markDeploying`; the rows it did write replace the
+ * ones it deleted and carry a later `createdAt`, so they still count toward the
+ * current batch and the event is not held in DEPLOYING.
+ */
+function deployBatchVisible(
+  event: Pick<EventRecord, "eventId" | "deployBatch">,
+  rows: readonly DeploymentReconcilerRow[],
+): boolean {
+  const batch = event.deployBatch;
+  if (!batch) return true;
+  const visible = rows.filter(
+    (row) => row.createdAt !== undefined && row.createdAt >= batch.createdAt,
+  ).length;
+  if (visible >= batch.count) return true;
+  console.log("[generic-scoring] READY deferred: deploy batch not fully listed yet", {
+    eventId: event.eventId,
+    expected: batch.count,
+    visible,
+  });
+  return false;
+}
+
+/**
+ * [Issue #3261] Strongly consistent re-read of each GSI1 candidate (the same
+ * `getDeployment(..., { consistentRead: true })` guard #3259 added to the
+ * registration path). READY is released only when every candidate still exists
+ * on its base row, still belongs to this event, and is terminal. A deleted row
+ * means a replacement exists that the index has not surfaced yet; that tick is
+ * skipped and re-evaluated on the next one. A read failure is logged and also
+ * skips, the same as a failed CAS.
+ */
+async function confirmDeploymentsTerminal(
+  ctx: ReconcileEventStatusesContext,
+  event: { readonly tenantId: string; readonly eventId: string },
+  rows: readonly DeploymentReconcilerRow[],
+): Promise<boolean> {
+  try {
+    const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(ctx);
+    const confirmed = await Promise.all(
+      rows.map(async (row) => {
+        if (!row.jobId) return false;
+        const current = await repository.getDeployment(row.jobId, { consistentRead: true });
+        return (
+          current !== undefined &&
+          current.tenantId === event.tenantId &&
+          current.eventId === event.eventId &&
+          (current.status === "COMPLETE" || current.status === "FAILED")
+        );
+      }),
+    );
+    if (confirmed.every(Boolean)) return true;
+    console.log("[generic-scoring] READY deferred: index rows not confirmed by base rows", {
+      eventId: event.eventId,
+      unconfirmed: confirmed.filter((ok) => !ok).length,
+    });
+    return false;
+  } catch (err) {
+    console.warn("[generic-scoring] READY confirmation read failed", {
+      eventId: event.eventId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
 }
 
 async function rescueStuckDeploymentsForEvent(
@@ -518,6 +620,7 @@ async function applyEventStatusTransition(
     readonly from: string;
     readonly to: "READY" | "ENDED" | "ARCHIVED";
     readonly nowIso: string;
+    readonly expectedUpdatedAt: string | undefined;
   },
 ): Promise<void> {
   try {
@@ -532,6 +635,7 @@ async function applyEventStatusTransition(
       args.from,
       args.to,
       args.nowIso,
+      { updatedAt: args.expectedUpdatedAt },
     );
     if (result.outcome !== "updated") return;
     console.log("[generic-scoring] Event status auto-transition", {

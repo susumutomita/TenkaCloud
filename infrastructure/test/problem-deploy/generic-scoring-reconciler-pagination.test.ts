@@ -3,7 +3,7 @@ import {
   type ReconcileEventStatusesContext,
   reconcileEventStatuses,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
-import { buildCtx, NOW_ISO } from "./generic-scoring-reconciler.test-helpers";
+import { buildCtx, NOW_ISO, routeDeploymentGets } from "./generic-scoring-reconciler.test-helpers";
 
 /**
  * #557 / #539: pagination scenarios for the reconciler.
@@ -34,11 +34,13 @@ describe("reconcileEventStatuses pagination (#557 #539)", () => {
       LastEvaluatedKey: { PK: "cursor" },
     });
     ddbSend.mockResolvedValueOnce({ Items: [] }); // events scan page 2 (drains, no more events)
-    ddbSend.mockResolvedValueOnce({ Items: [{ status: "COMPLETE" }] }); // deployments query for P1
-    ddbSend.mockResolvedValueOnce({}); // transitionStatus update
+    // deployments query for P1
+    ddbSend.mockResolvedValueOnce({ Items: [{ PK: "DEPLOYMENT#JP1", status: "COMPLETE" }] });
+    // [Issue #3261] consistent base-row confirmation, then the transitionStatus update
+    routeDeploymentGets(ddbSend, { JP1: { tenantId: "t", eventId: "P1", status: "COMPLETE" } });
 
     await reconcileEventStatuses(ctx, NOW_ISO);
-    expect(ddbSend).toHaveBeenCalledTimes(4);
+    expect(ddbSend).toHaveBeenCalledTimes(5);
     const scan2 = ddbSend.mock.calls[1]?.[0] as {
       input: { ExclusiveStartKey?: Record<string, unknown> };
     };
@@ -61,20 +63,27 @@ describe("reconcileEventStatuses pagination (#557 #539)", () => {
       LastEvaluatedKey: { GSI1PK: "TENANT#tenant-acme", GSI1SK: "cursor" },
     });
     ddbSend.mockResolvedValueOnce({
-      Items: [{ status: "COMPLETE" }, { status: "COMPLETE" }],
+      Items: [
+        { PK: "DEPLOYMENT#JX", status: "COMPLETE" },
+        { PK: "DEPLOYMENT#JY", status: "COMPLETE" },
+      ],
     });
-    ddbSend.mockResolvedValueOnce({});
+    routeDeploymentGets(ddbSend, {
+      JX: { tenantId: "tenant-acme", eventId: "EV-PAGED", status: "COMPLETE" },
+      JY: { tenantId: "tenant-acme", eventId: "EV-PAGED", status: "COMPLETE" },
+    });
 
     await reconcileEventStatuses(ctx, NOW_ISO);
 
-    expect(ddbSend).toHaveBeenCalledTimes(4);
+    // Scan + 2 Query pages + 2 consistent GetItem + Update.
+    expect(ddbSend).toHaveBeenCalledTimes(6);
     const query1 = ddbSend.mock.calls[1]?.[0] as {
       input: { ExclusiveStartKey?: Record<string, unknown> };
     };
     const query2 = ddbSend.mock.calls[2]?.[0] as {
       input: { ExclusiveStartKey?: Record<string, unknown> };
     };
-    const updateCmd = ddbSend.mock.calls[3]?.[0] as {
+    const updateCmd = ddbSend.mock.calls[5]?.[0] as {
       input: { ExpressionAttributeValues: Record<string, string> };
     };
     expect(query1.input.ExclusiveStartKey).toBeUndefined();

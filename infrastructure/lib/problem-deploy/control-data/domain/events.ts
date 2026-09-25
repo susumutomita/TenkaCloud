@@ -160,6 +160,17 @@ export type EventRecord = {
    */
   deployFiredAt?: string;
   /**
+   * [Issue #3261] The bulk deploy batch that last moved this event to
+   * DEPLOYING (`markDeploying`). `createdAt` is the batch's `plan.createdAt`,
+   * the same value every deployment row of that batch carries as `createdAt`;
+   * `count` is how many rows the batch wrote. The reconciler releases READY
+   * only once it can see at least `count` rows with that `createdAt`, because
+   * an eventually consistent index may not have surfaced a new row yet and a
+   * re-read cannot confirm a row it was never given. Absent on events that were
+   * last marked DEPLOYING before this field existed (legacy rows).
+   */
+  deployBatch?: { readonly createdAt: string; readonly count: number };
+  /**
    * Archive 操作で `status=ARCHIVED` に遷移した時刻 (ISO 8601, UTC)。Issue #493。
    * EventList が ARCHIVED を default view から外すときの sort key としても使える。
    */
@@ -399,13 +410,28 @@ export interface EventsRepository {
    * [Phase 2a] Advances the event to DEPLOYING from DRAFT / READY / DEPLOYING
    * only (never rolls back a later status). Fire-and-forget shape: no probe on
    * `conflict` (callers treat it as a no-op).
+   *
+   * [Issue #3261] With `batch`, the same conditional write also records
+   * `deployBatch = { createdAt: at, count: batch.count }` (replacing any earlier
+   * batch). Without it, an existing `deployBatch` is left untouched.
    */
-  markDeploying(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome>;
+  markDeploying(
+    tenantId: string,
+    eventId: string,
+    at: string,
+    batch?: { readonly count: number },
+  ): Promise<EventMutationOutcome>;
   /**
    * [#557 / #539] Optimistic CAS for the reconciler: `from` → `to` only while the
    * status still equals `from` (an operator race loses ⇒ `conflict`, the caller
    * skips and re-evaluates next tick). No probe on `conflict` — the reconciler
    * never needs the reason, and the pre-seam path spent no extra read.
+   *
+   * [Issue #3261] With `expected`, the CAS also requires the row's `updatedAt`
+   * to still equal `expected.updatedAt` (`undefined` or `null` = the attribute
+   * must be absent). Every redeploy (`markDeploying`) rewrites `updatedAt`, so a
+   * decision computed from a read taken before a concurrent redeploy loses the
+   * CAS even though the status is `DEPLOYING` again.
    */
   transitionStatus(
     tenantId: string,
@@ -413,6 +439,7 @@ export interface EventsRepository {
     from: string,
     to: string,
     at: string,
+    expected?: { readonly updatedAt: string | undefined },
   ): Promise<EventMutationOutcome>;
   /**
    * Idempotently stamps `teardownFiredAt` / `deployFiredAt` = `at`

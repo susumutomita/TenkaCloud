@@ -103,9 +103,9 @@ export class SqlDeploymentsQuery implements DeploymentsQueryPort {
   async listReconcilerRowsByEvent(
     tenantId: string,
     eventId: string,
-  ): Promise<readonly Pick<DeploymentRecord, "jobId" | "status" | "updatedAt">[]> {
+  ): Promise<readonly Pick<DeploymentRecord, "jobId" | "status" | "updatedAt" | "createdAt">[]> {
     const rows = await this.core.selectRows(
-      "SELECT job_id, status, updated_at FROM deployments WHERE list_tenant_id = ? AND event_id = ? " +
+      "SELECT job_id, status, updated_at, created_at FROM deployments WHERE list_tenant_id = ? AND event_id = ? " +
         "ORDER BY created_at ASC, job_id ASC",
       [tenantId, eventId],
     );
@@ -113,6 +113,7 @@ export class SqlDeploymentsQuery implements DeploymentsQueryPort {
       jobId: String(row.job_id),
       status: row.status as DeploymentRecord["status"],
       updatedAt: String(row.updated_at),
+      createdAt: String(row.created_at),
     }));
   }
 

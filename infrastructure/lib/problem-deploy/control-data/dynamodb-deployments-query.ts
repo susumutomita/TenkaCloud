@@ -149,12 +149,12 @@ export class DynamoDbDeploymentsQuery implements DeploymentsQueryPort {
   async listReconcilerRowsByEvent(
     tenantId: string,
     eventId: string,
-  ): Promise<readonly Pick<DeploymentRecord, "jobId" | "status" | "updatedAt">[]> {
+  ): Promise<readonly Pick<DeploymentRecord, "jobId" | "status" | "updatedAt" | "createdAt">[]> {
     const items = await this.core.queryAllPages({
       IndexName: "GSI1",
       KeyConditionExpression: "GSI1PK = :pk",
       FilterExpression: "eventId = :ev",
-      ProjectionExpression: "PK, #status, updatedAt",
+      ProjectionExpression: "PK, #status, updatedAt, createdAt",
       ExpressionAttributeNames: { "#status": "status" },
       ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}`, ":ev": eventId },
     });
@@ -162,6 +162,7 @@ export class DynamoDbDeploymentsQuery implements DeploymentsQueryPort {
       jobId: jobIdFromPk(item.PK),
       status: item.status as DeploymentRecord["status"],
       updatedAt: item.updatedAt as string,
+      createdAt: item.createdAt as string,
     }));
   }
 
