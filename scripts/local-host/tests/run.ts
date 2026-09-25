@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { randomInt } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { id, randomToken } from "../auth";
 import { assertHostingModule, narrowCatalog, publicMetadata } from "../browser-metadata";
+import { DAEMON_UNAVAILABLE_MESSAGE, DockerHostingEngine } from "../docker-engine";
 import { persistentKey, prepareDatabase, privateDirectory } from "../files";
+import { type GatewayPortRange, parseGatewayPorts } from "../gateway-ports";
 import { SurfaceGateways } from "../gateways";
 import { type HttpHost, startHttpHost } from "../http";
-import type { SqlDatabase } from "../model";
+import { object, type SqlDatabase } from "../model";
 import { parseOptions } from "../options";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
@@ -56,6 +61,12 @@ function test(name: string, run: () => Promise<void>) {
 }
 let openDatabase: (path: string) => SqlDatabase;
 
+/** A per-fixture gateway range; a slot whose port is taken by another process is skipped. */
+function testGatewayPorts(): GatewayPortRange {
+  const start = 20_000 + randomInt(800) * 50;
+  return { start, end: start + 39 };
+}
+
 async function fixture(
   operation: (fixture: Awaited<ReturnType<typeof createFixture>>) => Promise<void>,
 ): Promise<void> {
@@ -80,6 +91,7 @@ async function createFixture() {
     "<!doctype html><title>HTTP boundary fixture, not the production UI</title>",
   );
   let clock = Date.parse("2026-09-15T00:00:00Z");
+  const gatewayPorts = testGatewayPorts();
   let store = new HostStore(openDatabase(databasePath));
   const engine = new ExerciseFixture(openDatabase);
   let service = new HostingService(
@@ -91,13 +103,14 @@ async function createFixture() {
       /* Expected boundary failures are asserted by the caller. */
     },
   );
+  service.gatewayPorts = gatewayPorts;
   let gateways: SurfaceGateways;
   let admin: HttpHost;
   let participant: HttpHost;
   let adminToken = "";
   let refreshToken = "";
   async function start(): Promise<void> {
-    gateways = new SurfaceGateways("127.0.0.1", service);
+    gateways = new SurfaceGateways("127.0.0.1", service, gatewayPorts);
     service.surfaceLink = (job, team) => gateways.link(job, team);
     service.closeSurface = (jobId) => gateways.closeJob(jobId);
     participant = await startHttpHost({
@@ -231,6 +244,7 @@ async function createFixture() {
         /* Expected boundary failures are asserted by the caller. */
       },
     );
+    service.gatewayPorts = gatewayPorts;
     await service.recover();
     await start();
   }
@@ -241,6 +255,7 @@ async function createFixture() {
     databasePath,
     key,
     engine,
+    gatewayPorts,
     request,
     create,
     deploy,
@@ -866,6 +881,281 @@ const c = import.meta.glob("../../../../.tenkacloud/pack-store/snapshots/**/meta
   assert.throws(() =>
     narrowCatalog("changed-glob", "/repo/apps/participant-portal/src/plugins/loader.ts"),
   );
+});
+
+test("Stopping, restarting and removing team A's environment leaves team B untouched", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const a = required(event.teams[0]);
+    const b = required(event.teams[1]);
+    const jobA = required(f.store.jobs(event.eventId, a.teamId)[0]).jobId;
+    const jobB = required(f.store.jobs(event.eventId, b.teamId)[0]).jobId;
+    const ca = await f.challenge(a.teamLoginKey);
+    let cb = await f.challenge(b.teamLoginKey);
+    const solved = await f.request(
+      "participant",
+      "/api/portal/me/submit-flag",
+      "POST",
+      { problemId: "sqli-demo", flag: cb.flag },
+      b.teamLoginKey,
+    );
+    assert.equal(solved.body.kind, "ok");
+    const teamB = () => {
+      const job = f.store.job(jobB);
+      const team = f.store.team(b.teamId);
+      return {
+        status: job.status,
+        unit: job.unit,
+        offset: job.offset,
+        operation: job.operation,
+        running: f.engine.running.has(jobB),
+        score: team.score,
+        scoreEvents: team.scoreEvents.length,
+        snapshot: team.snapshot,
+      };
+    };
+    const untouched = teamB();
+    assert.equal(untouched.score, 100);
+    async function assertTeamBUntouched(): Promise<void> {
+      assert.deepEqual(teamB(), untouched);
+      // Team B's existing gateway session keeps serving its own environment.
+      const page = await fetch(`${cb.origin}/`, { headers: { cookie: cb.cookie } });
+      assert.equal(page.status, 200);
+      await page.text();
+      const again = await f.challenge(b.teamLoginKey);
+      assert.equal(again.origin, cb.origin);
+      assert.equal(again.flag, cb.flag);
+      assert.ok(!f.engine.stops.includes(jobB));
+      assert.ok(!f.engine.pauses.includes(jobB));
+      assert.ok(!f.engine.resumes.includes(jobB));
+      assert.equal(f.store.event(event.eventId).status, "READY");
+    }
+    const operate = async (method: string, suffix: string) => {
+      const response = await f.request(
+        "admin",
+        `/api/events/${event.eventId}/deployments/${jobA}${suffix}`,
+        method,
+        method === "POST" ? {} : undefined,
+      );
+      assert.equal(response.status, 202, JSON.stringify(response.body));
+      await f.service.drain();
+    };
+
+    await operate("POST", "/stop");
+    assert.equal(f.store.job(jobA).status, "STOPPED");
+    assert.equal(f.store.job(jobA).operation, undefined);
+    assert.ok(f.store.job(jobA).unit, "A stopped environment keeps its ownership record.");
+    await assert.rejects(fetch(`${ca.origin}/`, { headers: { cookie: ca.cookie } }));
+    const stoppedView = await f.request<PortalView & { problems: { status: string }[] }>(
+      "participant",
+      "/api/portal/me",
+      "GET",
+      undefined,
+      a.teamLoginKey,
+    );
+    assert.equal(required(stoppedView.body.problems[0]).status, "DELETED");
+    assert.deepEqual(required(stoppedView.body.problems[0]).stackOutputs, {});
+    const refused = await f.request(
+      "participant",
+      "/api/portal/me/submit-flag",
+      "POST",
+      { problemId: "sqli-demo", flag: ca.flag },
+      a.teamLoginKey,
+    );
+    assert.equal(refused.status, 409);
+    await assertTeamBUntouched();
+
+    // A deliberately stopped environment neither fails recovery nor demotes the ready event.
+    await f.restart();
+    assert.equal(f.store.job(jobA).status, "STOPPED");
+    // Gateway sessions live in memory; the reopened gateway keeps its fixed port.
+    const reopened = await f.challenge(b.teamLoginKey);
+    assert.equal(reopened.origin, cb.origin);
+    cb = reopened;
+    await assertTeamBUntouched();
+
+    await operate("POST", "/restart");
+    assert.equal(f.store.job(jobA).status, "COMPLETE");
+    assert.deepEqual(f.engine.resumes, [jobA]);
+    assert.equal((await f.challenge(a.teamLoginKey)).flag, ca.flag);
+    await assertTeamBUntouched();
+
+    await operate("DELETE", "");
+    assert.equal(f.store.job(jobA).status, "DELETED");
+    assert.equal(f.store.job(jobA).unit, null);
+    assert.deepEqual(f.engine.stops, [jobA]);
+    await assertTeamBUntouched();
+
+    // A removed environment is rebuilt from scratch by restart.
+    const starts = f.engine.starts.length;
+    await operate("POST", "/restart");
+    assert.equal(f.store.job(jobA).status, "COMPLETE");
+    assert.equal(f.engine.starts.length, starts + 1);
+    await assertTeamBUntouched();
+    assert.equal(f.store.team(a.teamId).score, 0);
+  }));
+test("Environment operations are event-scoped, serialized and explained when refused", () =>
+  fixture(async (f) => {
+    const first = await f.create("First");
+    const second = await f.create("Second");
+    await f.deploy(first.eventId);
+    await f.deploy(second.eventId);
+    const foreignJob = required(f.store.jobs(second.eventId)[0]).jobId;
+    const foreign = await f.request(
+      "admin",
+      `/api/events/${first.eventId}/deployments/${foreignJob}/stop`,
+      "POST",
+      {},
+    );
+    assert.equal(foreign.status, 404);
+    assert.equal(f.store.job(foreignJob).status, "COMPLETE");
+    const job = required(f.store.jobs(first.eventId)[0]).jobId;
+    const path = `/api/events/${first.eventId}/deployments/${job}`;
+    f.engine.operationDelay = 500;
+    const stop = await f.request("admin", `${path}/stop`, "POST", {});
+    const overlapping = await f.request("admin", `${path}/restart`, "POST", {});
+    assert.equal(stop.status, 202);
+    assert.equal(overlapping.status, 409);
+    assert.match(String(overlapping.body.message), /already in progress/u);
+    await f.service.drain();
+    f.engine.operationDelay = 0;
+    const again = await f.request("admin", `${path}/stop`, "POST", {});
+    assert.equal(again.status, 409);
+    assert.match(String(again.body.message), /Only a running environment/u);
+    await f.begin(first.eventId);
+    await f.request("admin", `/api/events/${first.eventId}/end`, "POST", {});
+    const late = await f.request("admin", `${path}/restart`, "POST", {});
+    assert.equal(late.status, 409);
+    assert.match(String(late.body.message), /prepared or is ready/u);
+    const detail = await f.request<{
+      deploymentsByProblem: Record<string, { jobId: string; status: string }[]>;
+    }>("admin", `/api/events/${first.eventId}`);
+    const stopped = required(detail.body.deploymentsByProblem["sqli-demo"]).find(
+      (entry) => entry.jobId === job,
+    );
+    assert.equal(required(stopped).status, "STOPPED");
+  }));
+test("Exercise gateways use the fixed port of their slot and skip ports held elsewhere", () =>
+  fixture(async (f) => {
+    const blocker = createNetServer();
+    await new Promise<void>((accept) => blocker.listen(f.gatewayPorts.start, "127.0.0.1", accept));
+    try {
+      const event = await f.create();
+      await f.deploy(event.eventId);
+      await f.begin(event.eventId);
+      const detail = await f.request<{
+        deploymentsByProblem: Record<string, { jobId: string; gatewayPort?: number }[]>;
+      }>("admin", `/api/events/${event.eventId}`);
+      for (const team of event.teams) {
+        const job = required(f.store.jobs(event.eventId, team.teamId)[0]);
+        const expected = f.gatewayPorts.start + job.offset / 1000 - 1;
+        assert.notEqual(expected, f.gatewayPorts.start, "The occupied first port is skipped.");
+        assert.ok(expected <= f.gatewayPorts.end);
+        const reported = required(detail.body.deploymentsByProblem["sqli-demo"]).find(
+          (entry) => entry.jobId === job.jobId,
+        );
+        assert.equal(required(reported).gatewayPort, expected);
+        const { origin } = await f.challenge(team.teamLoginKey);
+        assert.equal(Number(new URL(origin).port), expected);
+      }
+    } finally {
+      await new Promise<void>((accept) => blocker.close(() => accept()));
+    }
+    assert.deepEqual(parseGatewayPorts("5200-5239"), { start: 5200, end: 5239 });
+    assert.equal(parseOptions([], "/tmp").gatewayPorts.start, 5200);
+    assert.throws(() => parseOptions(["--gateway-ports", "5170-5180"], "/tmp"), /must not/u);
+    assert.throws(() => parseOptions(["--gateway-ports", "6000-5000"], "/tmp"));
+    assert.throws(() => parseOptions(["--gateway-ports", "80-90"], "/tmp"));
+  }));
+test("A never-started event recovers from teardown; one that ran stays final", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    f.engine.failStart = true;
+    f.engine.failStop = true;
+    await f.deploy(event.eventId);
+    assert.ok(f.store.jobs(event.eventId).every((job) => job.status === "FAILED" && job.unit));
+    f.engine.failStop = false;
+    // The recovery the error message used to recommend.
+    assert.equal(
+      (await f.request("admin", `/api/events/${event.eventId}`, "DELETE", {})).status,
+      202,
+    );
+    await f.service.drain();
+    assert.equal(f.store.event(event.eventId).status, "TEARDOWN");
+    assert.equal(f.store.event(event.eventId).endsAt, undefined);
+    f.engine.failStart = false;
+    await f.deploy(event.eventId);
+    assert.equal(f.store.event(event.eventId).status, "READY");
+    await f.begin(event.eventId);
+    await f.request("admin", `/api/events/${event.eventId}/end`, "POST", {});
+    await f.request("admin", `/api/events/${event.eventId}`, "DELETE", {});
+    await f.service.drain();
+    const refused = await f.request("admin", `/api/events/${event.eventId}/deploy`, "POST", {});
+    assert.equal(refused.status, 409);
+    assert.match(String(refused.body.message), /already ran/u);
+  }));
+test("Without a Docker daemon, deployment reports that cause and retry advice", async () => {
+  const bin = mkdtempSync(join(tmpdir(), "tenkacloud-no-daemon-"));
+  const fake = join(bin, "docker");
+  // Test double at the process boundary: the real Docker CLI's unreachable-daemon output.
+  writeFileSync(
+    fake,
+    '#!/bin/sh\nif [ "$2" = "version" ]; then echo "Docker Compose version v2"; exit 0; fi\necho "failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running" >&2\nexit 1\n',
+    { mode: 0o700 },
+  );
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path ?? ""}`;
+  const data = privateDirectory(mkdtempSync(join(tmpdir(), "tenkacloud-no-daemon-data-")));
+  const databasePath = join(data, "hosting.sqlite");
+  prepareDatabase(databasePath);
+  const store = new HostStore(openDatabase(databasePath));
+  try {
+    const root = fileURLToPath(new URL("../../../", import.meta.url));
+    const engine = new DockerHostingEngine(root, data);
+    const service = new HostingService(store, engine, persistentKey(join(data, "host-key")));
+    const problem = required(engine.catalog()[0]);
+    const session = await service.admin({
+      method: "POST",
+      path: "/host/login",
+      query: new URLSearchParams(),
+      body: { key: persistentKey(join(data, "host-key")) },
+      token: "",
+    });
+    const token = String(object(session.body).idToken);
+    const call = (method: string, requestPath: string, body: unknown = {}) =>
+      service.admin({ method, path: requestPath, query: new URLSearchParams(), body, token });
+    const created = object(
+      (
+        await call("POST", "/events", {
+          name: "No daemon",
+          teams: [{ internalSlug: "team-a" }, { internalSlug: "team-b" }],
+          problems: [{ problemId: problem.problemId }],
+        })
+      ).body,
+    );
+    const eventId = String(created.eventId);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      assert.equal((await call("POST", `/events/${eventId}/deploy`)).status, 202);
+      await service.drain();
+      const jobs = store.jobs(eventId);
+      assert.equal(jobs.length, 2);
+      for (const job of jobs) {
+        assert.equal(job.status, "FAILED");
+        // The daemon failure is not masked by the equally failing cleanup, and the advice is
+        // the retry that actually works (not a teardown).
+        assert.equal(job.error, DAEMON_UNAVAILABLE_MESSAGE);
+        assert.ok(job.unit, "Ownership is retained until a cleanup succeeds.");
+      }
+      assert.equal(store.event(eventId).status, "DEPLOYING");
+    }
+  } finally {
+    process.env.PATH = path;
+    store.close();
+    rmSync(bin, { recursive: true, force: true });
+    rmSync(data, { recursive: true, force: true });
+  }
 });
 
 async function main(): Promise<void> {

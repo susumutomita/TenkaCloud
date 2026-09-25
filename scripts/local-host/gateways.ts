@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomToken } from "./auth";
+import { type GatewayPortRange, gatewayPort } from "./gateway-ports";
 import { closeServer, errorResponse, listen, readBody } from "./http";
 import { HostError, type Job, type Team } from "./model";
 import type { HostingService } from "./service";
@@ -11,6 +12,7 @@ interface Grant {
 }
 
 interface Gateway {
+  readonly url: string;
   link(team: Team): string;
   close(): Promise<void>;
 }
@@ -72,8 +74,20 @@ class JobGateway implements Gateway {
     this.server.requestTimeout = 15_000;
     this.server.setTimeout(15_000, (socket) => socket.destroy());
   }
-  async listen(hostname: string): Promise<void> {
-    this.origin = await listen(this.server, hostname, 0);
+  async listen(hostname: string, port: number): Promise<void> {
+    try {
+      this.origin = await listen(this.server, hostname, port);
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "EADDRINUSE")
+        throw new HostError(
+          503,
+          `Exercise gateway port ${String(port)} is used by another process. Free it, or restart the host with a different --gateway-ports range.`,
+        );
+      throw error;
+    }
+  }
+  get url(): string {
+    return this.origin;
   }
   close(): Promise<void> {
     return closeServer(this.server);
@@ -195,9 +209,15 @@ class JobGateway implements Gateway {
  * Cookies/Authorization/Set-Cookie are never forwarded across the proxy boundary. */
 export class SurfaceGateways {
   private readonly gateways = new Map<string, Promise<Gateway>>();
+  /**
+   * Each environment's gateway listens on the fixed port of its runtime slot, so the range the
+   * host prints at startup is exactly what a LAN firewall has to allow.
+   */
   constructor(
     private readonly hostname: string,
     private readonly service: HostingService,
+    private readonly ports: GatewayPortRange,
+    private readonly announce: (message: string) => void = () => undefined,
   ) {}
   async link(job: Job, team: Team): Promise<string> {
     let gateway = this.gateways.get(job.jobId);
@@ -227,7 +247,9 @@ export class SurfaceGateways {
     )
       throw new Error("Challenge surface must be an explicit loopback HTTP endpoint.");
     const gateway = new JobGateway(job, upstream, this.service);
-    await gateway.listen(this.hostname);
+    await gateway.listen(this.hostname, gatewayPort(this.ports, job.offset));
+    const team = this.service.store.team(job.teamId);
+    this.announce(`Exercise gateway for ${team.internalSlug} / ${job.problemId}: ${gateway.url}`);
     return gateway;
   }
 }
