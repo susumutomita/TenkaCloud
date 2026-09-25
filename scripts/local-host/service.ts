@@ -1,5 +1,6 @@
 import { id, issueSession, randomToken, SerialQueue } from "./auth";
 import {
+  formatGatewayPorts,
   type GatewayPortRange,
   gatewayPort,
   gatewaySlots,
@@ -105,6 +106,8 @@ export class HostingService {
   closeSurface?: (jobId: string) => Promise<void>;
   /** Fixed exercise-gateway ports; a runtime slot is only used when its gateway port is free. */
   gatewayPorts?: GatewayPortRange;
+  /** The address the gateways listen on (loopback, or the `--lan` address). */
+  gatewayHostname = "127.0.0.1";
   constructor(
     readonly store: HostStore,
     readonly engine: RuntimeEngine,
@@ -251,6 +254,7 @@ export class HostingService {
         422,
         "Local hosting supports at most 40 simultaneous team/problem environments.",
       );
+    this.assertGatewayCapacity(body.teams.length * problems.length);
     const timestamp = this.now();
     const eventId = id(timestamp);
     const teams: Team[] = body.teams.map((value) => {
@@ -358,28 +362,19 @@ export class HostingService {
   private async runJobOperation(jobId: string, operation: JobOperation): Promise<void> {
     const job = this.store.job(jobId);
     if (operation === "restart" && (job.status === "FAILED" || job.status === "DELETED")) {
-      job.operation = undefined;
-      this.store.putJob(job);
-      // A missing or failed environment is rebuilt exactly like a deployment retry.
+      // A missing or failed environment is rebuilt exactly like a deployment retry. The
+      // operation marker stays until the rebuild has finished.
       await this.startJob(jobId);
+      this.finishOperation(jobId);
     } else {
+      // Persist a non-linkable state before the gateway is closed, so no portal poll can
+      // reopen it while the environment changes (the `operation` marker is already stored).
+      if (operation === "restart") job.status = "IN_PROGRESS";
+      if (operation === "teardown") job.status = "DELETING";
+      this.store.putJob(job);
       try {
         await this.closeSurface?.(job.jobId);
-        if (operation === "stop") {
-          await this.engine.pause(job);
-          job.status = "STOPPED";
-        } else if (operation === "restart") {
-          job.status = "IN_PROGRESS";
-          this.store.putJob(job);
-          await this.engine.resume(job);
-          job.status = "COMPLETE";
-        } else {
-          job.status = "DELETING";
-          this.store.putJob(job);
-          if (job.unit) await this.engine.stop(job);
-          job.unit = null;
-          job.status = "DELETED";
-        }
+        await this.changeEnvironment(job, operation);
         job.error = undefined;
       } catch (error) {
         job.status = "FAILED";
@@ -389,6 +384,25 @@ export class HostingService {
       this.store.putJob(job);
     }
     this.promoteIfDeployed(job.eventId);
+  }
+  /** Stop, resume or remove the runtime in place; `job` records the resulting state. */
+  private async changeEnvironment(job: Job, operation: JobOperation): Promise<void> {
+    if (operation === "stop") {
+      await this.engine.pause(job);
+      job.status = "STOPPED";
+    } else if (operation === "restart") {
+      await this.engine.resume(job);
+      job.status = "COMPLETE";
+    } else {
+      if (job.unit) await this.engine.stop(job);
+      job.unit = null;
+      job.status = "DELETED";
+    }
+  }
+  private finishOperation(jobId: string): void {
+    const job = this.store.job(jobId);
+    job.operation = undefined;
+    this.store.putJob(job);
   }
   /** A deploying event becomes ready once every one of its environments is running. */
   private promoteIfDeployed(eventId: string): void {
@@ -505,11 +519,38 @@ export class HostingService {
   private clearPastEnd(event: HostedEvent): void {
     if (event.endsAt && Date.parse(event.endsAt) <= this.now()) event.endsAt = undefined;
   }
-  /** Every host port a slot needs: the problem's published ports and its exercise gateway. */
-  private slotPorts(definition: string, offset: number): readonly number[] {
-    const ports = [...(this.engine.hostPorts?.(definition, offset) ?? [])];
-    if (this.gatewayPorts) ports.push(gatewayPort(this.gatewayPorts, offset));
-    return ports;
+  /**
+   * Whether every host port a slot needs is free: the problem's published ports on loopback
+   * (where Compose binds them) and its exercise gateway on the gateways' listen address.
+   */
+  private async slotFree(definition: string, offset: number): Promise<boolean> {
+    const runtime = portsFree(this.engine.hostPorts?.(definition, offset) ?? [], "127.0.0.1");
+    const gateway = this.gatewayPorts
+      ? portsFree([gatewayPort(this.gatewayPorts, offset)], this.gatewayHostname)
+      : Promise.resolve(true);
+    const [runtimeFree, gatewayFree] = await Promise.all([runtime, gateway]);
+    return runtimeFree && gatewayFree;
+  }
+  /** Environments the gateway range can serve; named in the refusal so it can be widened. */
+  private assertGatewayCapacity(environments: number): void {
+    if (this.gatewayPorts && environments > gatewaySlots(this.gatewayPorts))
+      throw new HostError(
+        422,
+        `This event needs ${String(environments)} exercise gateway ports, but --gateway-ports ${formatGatewayPorts(this.gatewayPorts)} provides ${String(gatewaySlots(this.gatewayPorts))}. Restart the host with a wider --gateway-ports range.`,
+      );
+  }
+  /**
+   * The gateway range must not overlap any runtime port a supported problem publishes in any
+   * slot; otherwise a gateway and a team's exercise would compete for one port.
+   */
+  assertGatewayRange(range: GatewayPortRange): void {
+    for (const problem of this.engine.catalog())
+      for (let slot = 1; slot <= MAX_JOBS; slot += 1)
+        for (const port of this.engine.hostPorts?.(problem.definition, slot * SLOT_STRIDE) ?? [])
+          if (port >= range.start && port <= range.end)
+            throw new Error(
+              `--gateway-ports ${formatGatewayPorts(range)} overlaps port ${String(port)} that ${problem.problemId} publishes for runtime slot ${String(slot)}. Choose a range such as 5200-5239.`,
+            );
   }
   /** Offsets recorded for live jobs in this database, optionally ignoring one job. */
   private recordedOffsets(except?: string): Set<number> {
@@ -530,7 +571,7 @@ export class HostingService {
     for (let index = 1; index <= slots; index += 1) {
       const offset = index * SLOT_STRIDE;
       if (occupied.has(offset)) continue;
-      if (await portsFree(this.slotPorts(definition, offset))) {
+      if (await this.slotFree(definition, offset)) {
         occupied.add(offset);
         return offset;
       }
@@ -563,6 +604,8 @@ export class HostingService {
       );
     const teams = this.store.teams(event.eventId);
     const existing = this.store.jobs(event.eventId);
+    const failedOnly = body.retryFailedOnly === true;
+    this.assertGatewayCapacity(teams.length * event.problems.length);
     // Slot allocation reads every event's jobs, so serialize it across events too.
     const targets = await this.queue.run(SLOT_QUEUE, async () => {
       const occupied = this.recordedOffsets();
@@ -572,7 +615,8 @@ export class HostingService {
           const previous = existing.find(
             (job) => job.teamId === team.teamId && job.problemId === problem.problemId,
           );
-          if (previous?.status === "COMPLETE") continue;
+          const plan = deploymentPlan(previous, failedOnly);
+          if (plan === "skip") continue;
           if (previous) {
             planned.push(previous);
             continue;
@@ -617,8 +661,10 @@ export class HostingService {
   private async startJob(jobId: string): Promise<void> {
     const job = this.store.job(jobId);
     try {
+      // Always: a gateway opened for this job's previous runtime must not outlive it, even when
+      // the runtime itself is already gone.
+      await this.closeSurface?.(job.jobId);
       if (job.unit) {
-        await this.closeSurface?.(job.jobId);
         await this.engine.stop(job);
         job.unit = null;
         this.store.putJob(job);
@@ -626,7 +672,7 @@ export class HostingService {
       // A retry keeps its block unless something else took the ports in the meantime, or a
       // removed environment's block was recorded for another environment since.
       if (
-        !(await portsFree(this.slotPorts(job.definition, job.offset))) ||
+        !(await this.slotFree(job.definition, job.offset)) ||
         this.recordedOffsets(job.jobId).has(job.offset)
       ) {
         job.offset = await this.queue.run(SLOT_QUEUE, () =>
@@ -648,6 +694,14 @@ export class HostingService {
     this.store.putJob(job);
   }
   private teardown(event: HostedEvent): ApiResponse {
+    if (event.status === "ARCHIVED")
+      throw new HostError(409, "An archived event has no environments to remove.");
+    // A torn-down event only accepts a retry while some cleanup is still owed.
+    if (
+      event.status === "TEARDOWN" &&
+      this.store.jobs(event.eventId).every((job) => job.status === "DELETED")
+    )
+      throw new HostError(409, "Every environment of this event has already been removed.");
     if (this.eventHasBusyJob(event.eventId))
       throw new HostError(409, "A team environment operation is still in progress.");
     event.status = "TEARDOWN";
@@ -725,7 +779,10 @@ export class HostingService {
             job.status === "COMPLETE" ||
             (event.status === "READY" && INTENDED_IDLE_STATUSES.includes(job.status)),
         );
-      event.status = recovered ? "READY" : "DEPLOYING";
+      // A started event keeps running: one lost environment is repaired by its own restart
+      // instead of closing the scoring gate for every team.
+      event.status =
+        recovered || (event.status === "READY" && event.startsAt) ? "READY" : "DEPLOYING";
       this.saveEvent(event);
     }
   }
@@ -958,10 +1015,20 @@ export class HostingService {
         problem.expiresAt = context.event.expiresAt;
         // The participant contract has no organizer-stop state; "DELETED" renders as stopped.
         problem.status = job?.status === "STOPPED" ? "DELETED" : (job?.status ?? "PENDING");
-        problem.stackOutputs =
-          job?.status === "COMPLETE" && eventGate.kind === "ok" && this.surfaceLink
-            ? { Web: await this.surfaceLink(job, context.team) }
-            : {};
+        problem.stackOutputs = {};
+        if (job && linkable(job) && eventGate.kind === "ok" && this.surfaceLink) {
+          try {
+            problem.stackOutputs = { Web: await this.surfaceLink(job, context.team) };
+          } catch (error) {
+            // One environment's gateway must not take the whole team view down. The host
+            // keeps the reason; the participant gets a neutral instruction.
+            this.log(
+              `Exercise link for job ${job.jobId} failed: ${failureMessage(error, "unknown")}`,
+            );
+            problem.failureReason =
+              "This environment's link is temporarily unavailable. Ask the organizer.";
+          }
+        }
         return problem;
       }),
     );
@@ -982,7 +1049,7 @@ export class HostingService {
     const team = this.store.team(job.teamId);
     if (digest(team.loginKey) !== keyHash) throw new HostError(401, "Team access was revoked.");
     assertPlaying(this.currentEvent(job.eventId), this.now());
-    if (job.status !== "COMPLETE") throw new HostError(409, "Environment is not running.");
+    if (!linkable(job)) throw new HostError(409, "Environment is not running.");
     return job;
   }
 }
@@ -1019,4 +1086,20 @@ function assertJobOperation(event: HostedEvent, job: Job, operation: JobOperatio
     );
   if (!["COMPLETE", "STOPPED", "FAILED", "DELETED"].includes(job.status))
     throw new HostError(409, "This environment is still changing; wait for it to settle.");
+}
+
+/**
+ * A running or organizer-stopped environment is never redeployed by the event-level action
+ * (redeploying runs `compose down --volumes`, which would discard a stopped team's data).
+ * `retryFailedOnly` restricts the action to environments whose last attempt failed.
+ */
+function deploymentPlan(previous: Job | undefined, failedOnly: boolean): "skip" | "deploy" {
+  if (failedOnly) return previous?.status === "FAILED" ? "deploy" : "skip";
+  if (previous?.status === "COMPLETE" || previous?.status === "STOPPED") return "skip";
+  return "deploy";
+}
+
+/** Only a running environment that no organizer operation is changing is handed out. */
+function linkable(job: Job): boolean {
+  return job.status === "COMPLETE" && job.operation === undefined;
 }

@@ -13,7 +13,7 @@ import { persistentKey, prepareDatabase, privateDirectory } from "../files";
 import { type GatewayPortRange, parseGatewayPorts } from "../gateway-ports";
 import { SurfaceGateways } from "../gateways";
 import { type HttpHost, startHttpHost } from "../http";
-import { object, type SqlDatabase } from "../model";
+import { HostError, object, type SqlDatabase } from "../model";
 import { parseOptions } from "../options";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
@@ -1157,6 +1157,215 @@ test("Without a Docker daemon, deployment reports that cause and retry advice", 
     rmSync(data, { recursive: true, force: true });
   }
 });
+
+test("An environment under an operation is never handed out, and its gateway stops serving", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const a = required(event.teams[0]);
+    const jobA = required(f.store.jobs(event.eventId, a.teamId)[0]).jobId;
+    const opened = await f.challenge(a.teamLoginKey);
+    f.engine.operationDelay = 400;
+    const stop = await f.request(
+      "admin",
+      `/api/events/${event.eventId}/deployments/${jobA}/stop`,
+      "POST",
+      {},
+    );
+    assert.equal(stop.status, 202);
+    // While `compose stop` is still running, a portal poll must not reopen a gateway.
+    const during = await f.request<PortalView>(
+      "participant",
+      "/api/portal/me",
+      "GET",
+      undefined,
+      a.teamLoginKey,
+    );
+    assert.deepEqual(required(during.body.problems[0]).stackOutputs, {});
+    await assert.rejects(fetch(`${opened.origin}/`, { headers: { cookie: opened.cookie } }));
+    await f.service.drain();
+    f.engine.operationDelay = 0;
+    assert.equal(f.store.job(jobA).status, "STOPPED");
+  }));
+test("Rebuilding a removed environment closes that environment's gateway first", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    const a = required(event.teams[0]);
+    const jobA = required(f.store.jobs(event.eventId, a.teamId)[0]).jobId;
+    const path = `/api/events/${event.eventId}/deployments/${jobA}`;
+    assert.equal((await f.request("admin", path, "DELETE")).status, 202);
+    await f.service.drain();
+    const closed: string[] = [];
+    const close = f.service.closeSurface;
+    f.service.closeSurface = async (jobId) => {
+      closed.push(jobId);
+      await close?.(jobId);
+    };
+    assert.equal((await f.request("admin", `${path}/restart`, "POST", {})).status, 202);
+    await f.service.drain();
+    assert.equal(f.store.job(jobA).status, "COMPLETE");
+    assert.deepEqual(closed, [jobA]);
+  }));
+test("A gateway refuses to forward once its environment's slot or upstream changed", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const a = required(event.teams[0]);
+    const opened = await f.challenge(a.teamLoginKey);
+    const job = required(f.store.jobs(event.eventId, a.teamId)[0]);
+    job.offset += 1000;
+    f.store.putJob(job);
+    const moved = await fetch(`${opened.origin}/`, { headers: { cookie: opened.cookie } });
+    await moved.text();
+    assert.equal(moved.status, 409);
+  }));
+test("Gateway ports are probed on the address the gateways listen on", () =>
+  fixture(async (f) => {
+    // Linux routes all of 127/8 to loopback, so a second address stands in for a LAN address.
+    const lan = process.platform === "linux" ? "127.0.0.2" : "127.0.0.1";
+    f.service.gatewayHostname = lan;
+    const blocker = createNetServer();
+    await new Promise<void>((accept) => blocker.listen(f.gatewayPorts.start, lan, accept));
+    try {
+      const event = await f.create();
+      await f.deploy(event.eventId);
+      for (const job of f.store.jobs(event.eventId))
+        assert.notEqual(job.offset, 1000, "The slot whose gateway port is taken is skipped.");
+    } finally {
+      await new Promise<void>((accept) => blocker.close(() => accept()));
+    }
+  }));
+test("A started event stays ready when one environment failed before a host restart", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    // Team A's environment is gone (for example a restart that failed mid-way).
+    const job = required(f.store.jobs(event.eventId)[0]);
+    await f.engine.stop(job);
+    await f.restart();
+    assert.equal(f.store.job(job.jobId).status, "FAILED");
+    assert.equal(f.store.event(event.eventId).status, "READY");
+    const b = required(event.teams[1]);
+    assert.equal((await f.challenge(b.teamLoginKey)).origin.startsWith("http://"), true);
+  }));
+test("Deployment retry leaves stopped environments alone and honours retryFailedOnly", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    const [jobA, jobB] = f.store.jobs(event.eventId).map((job) => job.jobId);
+    const deployment = `/api/events/${event.eventId}/deployments`;
+    assert.equal(
+      (await f.request("admin", `${deployment}/${required(jobA)}/stop`, "POST", {})).status,
+      202,
+    );
+    await f.service.drain();
+    const failed = f.store.job(required(jobB));
+    failed.status = "FAILED";
+    f.store.putJob(failed);
+    const deploying = f.store.event(event.eventId);
+    deploying.status = "DEPLOYING";
+    f.store.putEvent(deploying);
+    const stops = f.engine.stops.length;
+    assert.equal(
+      (await f.request("admin", `/api/events/${event.eventId}/deploy`, "POST", {})).status,
+      202,
+    );
+    await f.service.drain();
+    assert.equal(f.store.job(required(jobA)).status, "STOPPED");
+    assert.ok(!f.engine.stops.slice(stops).includes(required(jobA)));
+    assert.equal(f.store.job(required(jobB)).status, "COMPLETE");
+    // retryFailedOnly: a removed environment is not rebuilt, a failed one is.
+    assert.equal(
+      (await f.request("admin", `${deployment}/${required(jobB)}`, "DELETE")).status,
+      202,
+    );
+    await f.service.drain();
+    const again = f.store.job(required(jobA));
+    again.status = "FAILED";
+    f.store.putJob(again);
+    const retry = await f.request("admin", `/api/events/${event.eventId}/deploy`, "POST", {
+      retryFailedOnly: true,
+    });
+    assert.equal(retry.status, 202);
+    await f.service.drain();
+    assert.equal(f.store.job(required(jobB)).status, "DELETED");
+    assert.equal(f.store.job(required(jobA)).status, "COMPLETE");
+  }));
+test("One environment's unavailable link does not fail the whole team view", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const a = required(event.teams[0]);
+    f.service.surfaceLink = () =>
+      Promise.reject(new HostError(503, "Exercise gateway port 5200 is used by another process."));
+    const view = await f.request<{ problems: { stackOutputs: object; failureReason?: string }[] }>(
+      "participant",
+      "/api/portal/me",
+      "GET",
+      undefined,
+      a.teamLoginKey,
+    );
+    assert.equal(view.status, 200);
+    const problem = required(view.body.problems[0]);
+    assert.deepEqual(problem.stackOutputs, {});
+    assert.ok(problem.failureReason);
+    assert.ok(!problem.failureReason.includes("5200"), "Host details stay on the host.");
+  }));
+test("Rebuilding a removed environment stays marked as in progress until it finishes", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    const job = required(f.store.jobs(event.eventId)[0]).jobId;
+    const path = `/api/events/${event.eventId}/deployments/${job}`;
+    await f.request("admin", path, "DELETE");
+    await f.service.drain();
+    f.engine.operationDelay = 300;
+    assert.equal((await f.request("admin", `${path}/restart`, "POST", {})).status, 202);
+    await new Promise((accept) => setTimeout(accept, 100));
+    assert.equal(f.store.job(job).operation, "restart");
+    await f.service.drain();
+    f.engine.operationDelay = 0;
+    assert.equal(f.store.job(job).operation, undefined);
+    assert.equal(f.store.job(job).status, "COMPLETE");
+  }));
+test("Event teardown refuses archived or fully removed events", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.request("admin", `/api/events/${event.eventId}`, "DELETE");
+    await f.service.drain();
+    const again = await f.request("admin", `/api/events/${event.eventId}`, "DELETE");
+    assert.equal(again.status, 409);
+    assert.equal(
+      (await f.request("admin", `/api/events/${event.eventId}/archive`, "POST", {})).status,
+      200,
+    );
+    const archived = await f.request("admin", `/api/events/${event.eventId}`, "DELETE");
+    assert.equal(archived.status, 409);
+    assert.equal(f.store.event(event.eventId).status, "ARCHIVED");
+  }));
+test("The gateway range must fit the event and stay clear of problem ports", () =>
+  fixture(async (f) => {
+    f.service.gatewayPorts = { start: f.gatewayPorts.start, end: f.gatewayPorts.start };
+    const tooMany = await f.request("admin", "/api/events", "POST", {
+      name: "Two teams, one gateway port",
+      teams: [{ internalSlug: "team-a" }, { internalSlug: "team-b" }],
+      problems: [{ problemId: "sqli-demo" }],
+    });
+    assert.equal(tooMany.status, 422);
+    assert.match(String(tooMany.body.message), /--gateway-ports/u);
+    f.engine.hostPorts = (_definition: string, offset: number) => [18_080 + offset];
+    assert.throws(
+      () => f.service.assertGatewayRange({ start: 19_080, end: 19_119 }),
+      /--gateway-ports/u,
+    );
+    assert.doesNotThrow(() => f.service.assertGatewayRange({ start: 5200, end: 5239 }));
+  }));
 
 async function main(): Promise<void> {
   const hasBun = "Bun" in globalThis;

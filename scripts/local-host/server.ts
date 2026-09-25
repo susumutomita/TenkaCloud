@@ -60,6 +60,8 @@ export async function startLocalHost(
     const engine = createEngine(directory);
     service = new HostingService(store, engine, masterKey);
     service.gatewayPorts = settings.gatewayPorts;
+    service.gatewayHostname = settings.hostname;
+    service.assertGatewayRange(settings.gatewayPorts);
     await service.recover();
     const surfaces = new SurfaceGateways(
       settings.hostname,

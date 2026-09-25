@@ -114,6 +114,7 @@ class JobGateway implements Gateway {
     const url = new URL(request.url ?? "/", this.origin);
     if (url.origin !== this.origin) throw new HostError(403, "Invalid challenge request target.");
     this.expire();
+    this.assertCurrent();
     if (request.method === "GET" && url.pathname === "/__join") {
       this.join(url.searchParams.get("ticket") ?? "", response);
       return;
@@ -124,6 +125,24 @@ class JobGateway implements Gateway {
     );
     if (!route) throw new HostError(404, "Challenge route not exposed.");
     await this.proxy(request, response, route);
+  }
+  /**
+   * Defence in depth: this gateway was opened for one runtime slot and upstream. If the stored
+   * job has since moved (rebuilt elsewhere, removed, or no longer running), never forward.
+   */
+  private assertCurrent(): void {
+    const current = this.service.store.job(this.job.jobId);
+    let upstream: string;
+    try {
+      upstream = new URL(this.service.engine.surface(current)).origin;
+    } catch {
+      upstream = "";
+    }
+    if (current.offset !== this.job.offset || upstream !== this.upstream.origin)
+      throw new HostError(
+        409,
+        "This environment changed. Open it again from your team's participant portal.",
+      );
   }
   private join(ticket: string, response: ServerResponse): void {
     const grant = this.pending.get(ticket);

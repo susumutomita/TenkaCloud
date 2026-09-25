@@ -97,8 +97,13 @@ scores are not touched:
   Restart is available while the event is being prepared or is ready.
 - **Tear down** removes that team's containers and volumes. Scores and submissions stay.
 
-A deliberately stopped or removed environment does not demote a ready event when
-the host restarts.
+While an operation runs, the environment is not handed out and its gateway stops
+forwarding. A gateway also refuses to forward once its environment was rebuilt in
+another slot. A deliberately stopped or removed environment does not demote a ready
+event when the host restarts, and an event that already started stays ready even if
+one environment was lost; restart that environment from the **Teams** tab. The
+event-level deploy never redeploys a stopped environment (redeploying discards its
+data), and **Retry failed** redeploys failed environments only.
 
 The initial host sign-in has a 15-minute absolute lifetime, in addition to the
 existing idle logout. Sign in again with the terminal key after expiration;
@@ -147,8 +152,12 @@ listens on the range's start plus `n - 1`, and slots never share a port. The
 gateway port is held by another process is skipped when environments are
 prepared. Choose another range with `--gateway-ports`, for example
 `--gateway-ports 6200-6239`; it must lie within 1024-65535 and not include the
-console or portal port. A range narrower than 40 ports lowers the number of
-environments the host can run at once.
+console or portal port. The host refuses to start when the range overlaps a port a
+supported problem publishes in any runtime slot. An event whose teams × problems
+exceeds the range is refused at creation and deployment with an error naming
+`--gateway-ports`. Gateway ports are probed on the address the gateways listen on
+(the `--lan` address in LAN mode); problem ports are probed on loopback, where
+Compose publishes them.
 
 The exercise containers' verifier ports remain loopback-only; do not expose them
 or rewrite their Compose bindings to `0.0.0.0`.
@@ -181,7 +190,8 @@ the retry removes what the failed attempt left and starts the environments.
 
 Use the host console's teardown action to remove the event's Docker projects
 and volumes. This keeps event records and results. Failed cleanup retains its
-ownership record and remains retryable. An event that was torn down before it
+ownership record and remains retryable; once every environment is removed, and for
+an archived event, teardown is refused. An event that was torn down before it
 ever started (for example after a failed first deployment) can be prepared again;
 an event that already ran stays final, so create a new event to host again. Do
 not delete the data directory while it still owns environments; the directory
