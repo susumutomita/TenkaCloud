@@ -149,6 +149,21 @@ describe("bulkDeployEvent — non-AWS single-provider adapter dispatch (#2571)",
       "arn:aws:iam::111111111111:role/TenkaCloud-CompetitorDeploy-Role",
     );
     expect(awsItem).not.toHaveProperty("runtimeProvider");
+
+    // [Issue #3261] The event's batch marker counts both channels' rows (1 aws +
+    // 1 adapter), not only the eventbridge subset that publish.ts receives.
+    const markDeploying = ddbSend.mock.calls
+      .map((c) => c[0])
+      .find(
+        (c): c is UpdateCommand =>
+          c instanceof UpdateCommand &&
+          c.input.ExpressionAttributeValues?.[":deploying"] === "DEPLOYING",
+      );
+    expect(markDeploying?.input.ExpressionAttributeValues?.[":batch"]).toEqual({
+      createdAt: gcpItem?.createdAt,
+      count: 2,
+    });
+    expect(awsItem?.createdAt).toBe(gcpItem?.createdAt);
   });
 
   it("should report missingCredential and skip the row when the team has no registered credential for the provider", async () => {

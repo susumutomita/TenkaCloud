@@ -1,5 +1,5 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DynamoDbDeploymentsRepository,
   SqlDeploymentsRepository,
@@ -203,18 +203,61 @@ function makeHarness(backend: Backend): Harness {
   };
 }
 
-/** The bulk-deploy order: write rows (Put + Delete of the replaced row), then DEPLOYING. */
+/**
+ * The bulk-deploy order: write rows (Put + Delete of the replaced row), then DEPLOYING.
+ * Without `batch` the event is marked the way it was before `deployBatch`
+ * existed (a legacy row), so these cases exercise the base-row confirmation alone.
+ */
 async function forceRedeploy(
   harness: Pick<Harness, "events" | "deployments">,
   replacement: DeploymentRecord,
   replacesJobId: string | undefined,
+  batch?: { readonly count: number },
 ): Promise<void> {
   const outcome = await harness.deployments.createBulkDeployments(TENANT, [
     { record: replacement, ...(replacesJobId ? { replacesJobId } : {}) },
   ]);
   expect(outcome.outcome).toBe("updated");
-  const marked = await harness.events.markDeploying(TENANT, EVENT_ID, REDEPLOY_AT);
+  const marked = await harness.events.markDeploying(TENANT, EVENT_ID, REDEPLOY_AT, batch);
   expect(marked.outcome).toBe("updated");
+}
+
+/**
+ * An additive bulk deploy as the orchestrator runs it: Put every new row (no
+ * `replacesJobId`, nothing deleted), then mark DEPLOYING with the batch that
+ * counts every row written. Every row carries the batch's `createdAt`.
+ */
+async function additiveBulkDeploy(
+  harness: Pick<Harness, "events" | "deployments">,
+  records: readonly DeploymentRecord[],
+): Promise<void> {
+  for (const record of records) expect(record.createdAt).toBe(REDEPLOY_AT);
+  const outcome = await harness.deployments.createBulkDeployments(
+    TENANT,
+    records.map((record) => ({ record })),
+  );
+  expect(outcome.outcome).toBe("updated");
+  const marked = await harness.events.markDeploying(TENANT, EVENT_ID, REDEPLOY_AT, {
+    count: records.length,
+  });
+  expect(marked.outcome).toBe("updated");
+}
+
+/** A batch row after its deploy finished: same `createdAt`, later `updatedAt`. */
+function finished(record: DeploymentRecord, status: DeploymentRecord["status"]): DeploymentRecord {
+  return { ...record, status, updatedAt: NOW_ISO };
+}
+
+/** Swaps the deployments repository the reconciler resolves, keeping everything else. */
+function withDeploymentsRepository(
+  harness: Harness,
+  repository: Harness["deployments"],
+): ReconcileEventStatusesContext {
+  const base = harness.ctx as unknown as { runtime: Record<string, unknown> };
+  return {
+    ...base,
+    runtime: { ...base.runtime, resolveDeploymentsRepository: async () => repository },
+  } as unknown as ReconcileEventStatusesContext;
 }
 
 async function eventStatus(events: EventsRepository): Promise<string | undefined> {
@@ -277,7 +320,183 @@ describe("reconcileEventStatuses force redeploy vs stale GSI1 (#3261)", () => {
     expect(await eventStatus(events)).toBe("READY");
   });
 
+  describe("additive bulk deploy vs lagging GSI1 (deploy batch marker)", () => {
+    it("should keep DEPLOYING while GSI1 has not surfaced the new batch row, then release READY", async () => {
+      const harness = makeHarness("DynamoDB");
+      const { events, deployments, indexView } = harness;
+      if (!indexView) throw new Error("DynamoDB harness must expose the index view");
+      await events.putEvent(eventRecord("READY", FIRST_DEPLOY_AT));
+      const old = deployment("JOB-A", "team-1", "COMPLETE", FIRST_DEPLOY_AT);
+      await deployments.putDeployment(old);
+      await indexView.putDeployment(old);
+
+      // Base table: A COMPLETE + B PENDING, event DEPLOYING with batch {REDEPLOY_AT, 1}.
+      // GSI1 has not surfaced B: it still lists only A, and A's base row is COMPLETE.
+      const added = deployment("JOB-B", "team-2", "PENDING", REDEPLOY_AT);
+      await additiveBulkDeploy(harness, [added]);
+      expect(await indexView.listReconcilerRowsByEvent(TENANT, EVENT_ID)).toEqual([
+        expect.objectContaining({ jobId: "JOB-A", status: "COMPLETE", createdAt: FIRST_DEPLOY_AT }),
+      ]);
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      let logged: unknown[][];
+      try {
+        await reconcileEventStatuses(harness.ctx, NOW_ISO);
+      } finally {
+        logged = [...log.mock.calls];
+        log.mockRestore();
+      }
+
+      const deferred = await events.getEvent(TENANT, EVENT_ID, true);
+      expect(deferred?.status).toBe("DEPLOYING");
+      expect(deferred?.deployBatch).toEqual({ createdAt: REDEPLOY_AT, count: 1 });
+      expect(logged).toContainEqual([
+        "[generic-scoring] READY deferred: deploy batch not fully listed yet",
+        { eventId: EVENT_ID, expected: 1, visible: 0 },
+      ]);
+
+      await deployments.putDeployment(finished(added, "COMPLETE"));
+      harness.catchUpIndex();
+      await reconcileEventStatuses(harness.ctx, NOW_ISO);
+
+      expect(await eventStatus(events)).toBe("READY");
+    });
+
+    it("should keep DEPLOYING while GSI1 lists only one of the batch's two rows, even when it is COMPLETE", async () => {
+      const harness = makeHarness("DynamoDB");
+      const { events, deployments, indexView } = harness;
+      if (!indexView) throw new Error("DynamoDB harness must expose the index view");
+      await events.putEvent(eventRecord("READY", FIRST_DEPLOY_AT));
+      const old = deployment("JOB-A", "team-1", "COMPLETE", FIRST_DEPLOY_AT);
+      await deployments.putDeployment(old);
+      await indexView.putDeployment(old);
+
+      const first = deployment("JOB-B", "team-2", "PENDING", REDEPLOY_AT);
+      const second = deployment("JOB-C", "team-3", "PENDING", REDEPLOY_AT);
+      await additiveBulkDeploy(harness, [first, second]);
+      // B finished and GSI1 surfaced it; C is still PENDING and not yet in GSI1.
+      await deployments.putDeployment(finished(first, "COMPLETE"));
+      await indexView.putDeployment(finished(first, "COMPLETE"));
+
+      await reconcileEventStatuses(harness.ctx, NOW_ISO);
+
+      expect(await eventStatus(events)).toBe("DEPLOYING");
+
+      await deployments.putDeployment(finished(second, "FAILED"));
+      harness.catchUpIndex();
+      await reconcileEventStatuses(harness.ctx, NOW_ISO);
+
+      expect(await eventStatus(events)).toBe("READY");
+    });
+  });
+
   describe.each<Backend>(["DynamoDB", "Turso"])("%s backend", (backend) => {
+    it("should still reach READY when a later batch replaced rows of the batch but failed before marking DEPLOYING", async () => {
+      const harness = makeHarness(backend);
+      harness.catchUpIndex();
+      const { events, deployments } = harness;
+      await events.putEvent(eventRecord("READY", FIRST_DEPLOY_AT));
+      const added = [
+        deployment("JOB-B", "team-1", "PENDING", REDEPLOY_AT),
+        deployment("JOB-C", "team-2", "PENDING", REDEPLOY_AT),
+      ];
+      await additiveBulkDeploy(harness, added);
+      // A later force batch replaced JOB-B with JOB-D and then failed before its
+      // markDeploying: the event still records the earlier batch of 2.
+      const replaced = await deployments.createBulkDeployments(TENANT, [
+        { record: deployment("JOB-D", "team-1", "COMPLETE", NOW_ISO), replacesJobId: "JOB-B" },
+      ]);
+      expect(replaced.outcome).toBe("updated");
+      await deployments.putDeployment(finished(added[1] as DeploymentRecord, "COMPLETE"));
+
+      await reconcileEventStatuses(harness.ctx, NOW_ISO);
+
+      expect(await eventStatus(events)).toBe("READY");
+    });
+
+    it("should not count a listed row without createdAt toward the batch", async () => {
+      const harness = makeHarness(backend);
+      harness.catchUpIndex();
+      const { events, deployments } = harness;
+      await events.putEvent(eventRecord("READY", FIRST_DEPLOY_AT));
+      const added = deployment("JOB-B", "team-1", "PENDING", REDEPLOY_AT);
+      await additiveBulkDeploy(harness, [added]);
+      await deployments.putDeployment(finished(added, "COMPLETE"));
+      const withoutCreatedAt = new Proxy(deployments, {
+        get(target, prop, receiver) {
+          if (prop === "listReconcilerRowsByEvent") {
+            return async (tenantId: string, eventId: string) =>
+              (await target.listReconcilerRowsByEvent(tenantId, eventId)).map(
+                ({ createdAt: _omitted, ...row }) => row,
+              );
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+
+      await reconcileEventStatuses(withDeploymentsRepository(harness, withoutCreatedAt), NOW_ISO);
+
+      expect(await eventStatus(events)).toBe("DEPLOYING");
+    });
+
+    it("should move an additive deploy to READY once every row of the batch is terminal", async () => {
+      const harness = makeHarness(backend);
+      harness.catchUpIndex();
+      const { events, deployments } = harness;
+      await events.putEvent(eventRecord("READY", FIRST_DEPLOY_AT));
+      await deployments.putDeployment(deployment("JOB-A", "team-1", "COMPLETE", FIRST_DEPLOY_AT));
+      const added = [
+        deployment("JOB-B", "team-2", "PENDING", REDEPLOY_AT),
+        deployment("JOB-C", "team-3", "PENDING", REDEPLOY_AT),
+      ];
+      await additiveBulkDeploy(harness, added);
+
+      await reconcileEventStatuses(harness.ctx, NOW_ISO);
+      expect(await eventStatus(events)).toBe("DEPLOYING");
+
+      await deployments.putDeployment(finished(added[0] as DeploymentRecord, "COMPLETE"));
+      await deployments.putDeployment(finished(added[1] as DeploymentRecord, "FAILED"));
+      await reconcileEventStatuses(harness.ctx, NOW_ISO);
+
+      const stored = await events.getEvent(TENANT, EVENT_ID, true);
+      expect(stored?.status).toBe("READY");
+      expect(stored?.updatedAt).toBe(NOW_ISO);
+    });
+
+    it.each<["eventId" | "tenantId", string]>([
+      ["eventId", "01EVENTSOMEOTHEREVENTAAAAA"],
+      ["tenantId", "tenant-other"],
+    ])("should keep DEPLOYING when a base row now carries another %s", async (field, value) => {
+      const harness = makeHarness(backend);
+      harness.catchUpIndex();
+      const { events, deployments } = harness;
+      await events.putEvent(eventRecord("DEPLOYING", REDEPLOY_AT));
+      await deployments.putDeployment(deployment("JOB-A", "team-1", "COMPLETE", REDEPLOY_AT));
+      // The listed row is terminal, but its base row no longer belongs to this event.
+      const reassigned = new Proxy(deployments, {
+        get(target, prop, receiver) {
+          if (prop === "getDeployment") {
+            return async (...args: Parameters<SqlDeploymentsRepository["getDeployment"]>) => {
+              const current = await target.getDeployment(...args);
+              return current ? { ...current, [field]: value } : current;
+            };
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+      const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      try {
+        await reconcileEventStatuses(withDeploymentsRepository(harness, reassigned), NOW_ISO);
+        expect(log).toHaveBeenCalledWith(
+          "[generic-scoring] READY deferred: index rows not confirmed by base rows",
+          { eventId: EVENT_ID, unconfirmed: 1 },
+        );
+      } finally {
+        log.mockRestore();
+      }
+
+      expect(await eventStatus(events)).toBe("DEPLOYING");
+    });
+
     it.each<DeploymentRecord["status"]>([
       "PENDING",
       "IN_PROGRESS",
@@ -327,6 +546,54 @@ describe("reconcileEventStatuses force redeploy vs stale GSI1 (#3261)", () => {
       const stored = await events.getEvent(TENANT, EVENT_ID, true);
       expect(stored?.status).toBe("READY");
       expect(stored?.updatedAt).toBe(NOW_ISO);
+    });
+
+    it.each<[string, unknown, string]>([
+      ["an Error", new Error("throttled"), "throttled"],
+      ["a non-Error value", "connection reset", "connection reset"],
+    ])("should keep DEPLOYING and report it when the base-row read throws %s", async (_label, thrown, message) => {
+      const harness = makeHarness(backend);
+      harness.catchUpIndex();
+      const { events, deployments } = harness;
+      await events.putEvent(eventRecord("DEPLOYING", REDEPLOY_AT));
+      await deployments.putDeployment(deployment("JOB-A", "team-1", "COMPLETE", REDEPLOY_AT));
+      harness.onFirstConfirmationRead(() => Promise.reject(thrown));
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+      try {
+        await reconcileEventStatuses(harness.ctx, NOW_ISO);
+        expect(warn).toHaveBeenCalledWith("[generic-scoring] READY confirmation read failed", {
+          eventId: EVENT_ID,
+          message,
+        });
+      } finally {
+        warn.mockRestore();
+      }
+
+      expect(await eventStatus(events)).toBe("DEPLOYING");
+    });
+
+    it("should keep DEPLOYING when an index row carries no jobId to confirm", async () => {
+      const harness = makeHarness(backend);
+      harness.catchUpIndex();
+      const { events, deployments } = harness;
+      await events.putEvent(eventRecord("DEPLOYING", REDEPLOY_AT));
+      await deployments.putDeployment(deployment("JOB-A", "team-1", "COMPLETE", REDEPLOY_AT));
+      // A terminal index row without a jobId cannot be checked against a base row.
+      const withoutJobId = new Proxy(deployments, {
+        get(target, prop, receiver) {
+          if (prop === "listReconcilerRowsByEvent") {
+            return async (tenantId: string, eventId: string) => [
+              ...(await target.listReconcilerRowsByEvent(tenantId, eventId)),
+              { jobId: "", status: "COMPLETE", updatedAt: REDEPLOY_AT },
+            ];
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+      await reconcileEventStatuses(withDeploymentsRepository(harness, withoutJobId), NOW_ISO);
+
+      expect(await eventStatus(events)).toBe("DEPLOYING");
     });
   });
 });

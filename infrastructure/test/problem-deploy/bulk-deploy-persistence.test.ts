@@ -85,22 +85,28 @@ describe("writeBulkDeployPlan", () => {
 });
 
 describe("markBulkEventDeploying", () => {
-  it("should update the event status to DEPLOYING", async () => {
-    await markBulkEventDeploying(shared, "t1", "e1", "2026-06-01T00:00:00Z");
+  it("should update the event status to DEPLOYING and record the batch", async () => {
+    await markBulkEventDeploying(shared, "t1", "e1", "2026-06-01T00:00:00Z", 3);
     expect(ddb.send).toHaveBeenCalledTimes(1);
+    const cmd = ddb.send.mock.calls[0]?.[0] as UpdateCommand;
+    expect(cmd.input.UpdateExpression).toContain("deployBatch = :batch");
+    expect(cmd.input.ExpressionAttributeValues?.[":batch"]).toEqual({
+      createdAt: "2026-06-01T00:00:00Z",
+      count: 3,
+    });
   });
 
   it("should swallow a ConditionalCheck failure (no-op)", async () => {
     cfg.eventUpdateReject = ccf();
     await expect(
-      markBulkEventDeploying(shared, "t1", "e1", "2026-06-01T00:00:00Z"),
+      markBulkEventDeploying(shared, "t1", "e1", "2026-06-01T00:00:00Z", 1),
     ).resolves.toBeUndefined();
   });
 
   it("should rethrow a non-ConditionalCheck error", async () => {
     cfg.eventUpdateReject = new Error("ddb down");
     await expect(
-      markBulkEventDeploying(shared, "t1", "e1", "2026-06-01T00:00:00Z"),
+      markBulkEventDeploying(shared, "t1", "e1", "2026-06-01T00:00:00Z", 1),
     ).rejects.toThrow("ddb down");
   });
 });

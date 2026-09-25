@@ -617,12 +617,17 @@ export class DynamoDbEventsRepository implements EventsRepository {
     tenantId: string,
     eventId: string,
     at: string,
+    batch?: { readonly count: number },
   ): Promise<EventMutationOutcome> {
+    // [Issue #3261] The batch marker rides the same conditional write as the
+    // status, so a lost condition records neither.
     return this.conditionalUpdate(
       tenantId,
       eventId,
       {
-        UpdateExpression: "SET #status = :deploying, updatedAt = :now",
+        UpdateExpression: batch
+          ? "SET #status = :deploying, updatedAt = :now, deployBatch = :batch"
+          : "SET #status = :deploying, updatedAt = :now",
         ConditionExpression:
           "tenantId = :tenantId AND (#status = :draft OR #status = :ready OR #status = :deploying)",
         ExpressionAttributeNames: { "#status": "status" },
@@ -632,6 +637,7 @@ export class DynamoDbEventsRepository implements EventsRepository {
           ":ready": "READY",
           ":now": at,
           ":tenantId": tenantId,
+          ...(batch ? { ":batch": { createdAt: at, count: batch.count } } : {}),
         },
       },
       "conflict",
@@ -650,10 +656,13 @@ export class DynamoDbEventsRepository implements EventsRepository {
     // [Issue #3261] `expected` 指定時は updatedAt も一致条件に含める (= 判定後に再 deploy が
     // 割り込んで status が同じ DEPLOYING のままでも、 markDeploying が updatedAt を
     // 書き換えているので CCF で skip する)。
+    // `null` (a malformed caller value) is treated exactly like `undefined`, the
+    // same as the SQL backend, so neither backend builds a never-true condition.
+    const expectedUpdatedAt = expected?.updatedAt ?? undefined;
     let updatedAtCondition = "";
     if (expected) {
       updatedAtCondition =
-        expected.updatedAt === undefined
+        expectedUpdatedAt === undefined
           ? " AND attribute_not_exists(updatedAt)"
           : " AND updatedAt = :expectedUpdatedAt";
     }
@@ -671,9 +680,7 @@ export class DynamoDbEventsRepository implements EventsRepository {
           ":current": from,
           ":next": to,
           ":now": at,
-          ...(expected?.updatedAt === undefined
-            ? {}
-            : { ":expectedUpdatedAt": expected.updatedAt }),
+          ...(expectedUpdatedAt === undefined ? {} : { ":expectedUpdatedAt": expectedUpdatedAt }),
         },
       },
       "conflict",

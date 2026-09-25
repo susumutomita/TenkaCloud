@@ -128,14 +128,15 @@ export interface DeploymentsQueryPort {
 
   /**
    * Reconciler view of a `(tenant, event)` pair (GSI1 + `FilterExpression`
-   * `eventId = :ev` + `ProjectionExpression "PK, #status, updatedAt"`, full-page
-   * drain). Site: `generic-scoring-handler/event-reconciler.ts`. `jobId` is
-   * derived from the projected `PK`.
+   * `eventId = :ev` + `ProjectionExpression "PK, #status, updatedAt, createdAt"`,
+   * full-page drain). Site: `generic-scoring-handler/event-reconciler.ts`.
+   * `jobId` is derived from the projected `PK`. [Issue #3261] `createdAt` lets
+   * the reconciler count the rows of the event's current bulk deploy batch.
    */
   listReconcilerRowsByEvent(
     tenantId: string,
     eventId: string,
-  ): Promise<readonly Pick<DeploymentRecord, "jobId" | "status" | "updatedAt">[]>;
+  ): Promise<readonly Pick<DeploymentRecord, "jobId" | "status" | "updatedAt" | "createdAt">[]>;
 
   /**
    * The COMPLETE deployment(s) for a fired `(tenant, event, team, problem)`

@@ -493,6 +493,73 @@ describe.each(backends)("EventsRepository mutations parity: %s", (_name, makeRep
         outcome: "conflict",
       });
     });
+
+    it("should record the deploy batch in the same write and round-trip it through every read (#3261)", async () => {
+      const { events } = makeRepos();
+      await events.putEvent(sampleEvent({ status: "READY" }));
+
+      const result = await events.markDeploying("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", AT, {
+        count: 3,
+      });
+
+      expect(result.outcome).toBe("updated");
+      const expected = { createdAt: AT, count: 3 };
+      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+      expect(stored?.status).toBe("DEPLOYING");
+      expect(stored?.updatedAt).toBe(AT);
+      expect(stored?.deployBatch).toEqual(expected);
+      expect(
+        (await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", true))?.deployBatch,
+      ).toEqual(expected);
+      const listed = await events.listEventsByStatus(["DEPLOYING"]);
+      expect(listed.map((event) => event.deployBatch)).toEqual([expected]);
+    });
+
+    it("should replace an earlier batch and keep it when a later call carries none (#3261)", async () => {
+      const { events } = makeRepos();
+      await events.putEvent(sampleEvent({ status: "DRAFT" }));
+      const later = "2026-07-08T13:00:00.000Z";
+      const latest = "2026-07-08T14:00:00.000Z";
+
+      await events.markDeploying("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", AT, { count: 2 });
+      await events.markDeploying("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", later, { count: 1 });
+      expect(
+        (await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA"))?.deployBatch,
+      ).toEqual({ createdAt: later, count: 1 });
+
+      await events.markDeploying("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", latest);
+      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+      expect(stored?.updatedAt).toBe(latest);
+      expect(stored?.deployBatch).toEqual({ createdAt: later, count: 1 });
+    });
+
+    it("should not record a batch when the status condition fails (#3261)", async () => {
+      const { events } = makeRepos();
+      await events.putEvent(sampleEvent({ status: "ENDED" }));
+
+      const result = await events.markDeploying("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", AT, {
+        count: 2,
+      });
+
+      expect(result).toEqual({ outcome: "conflict" });
+      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+      expect(stored?.deployBatch).toBeUndefined();
+      expect(stored?.updatedAt).toBe("2026-06-01T00:00:00.000Z");
+    });
+
+    it("should not record a batch on another tenant's event (#3261)", async () => {
+      const { events } = makeRepos();
+      await events.putEvent(sampleEvent({ status: "READY" }));
+
+      const result = await events.markDeploying("tenant-b", "01EVENTAAAAAAAAAAAAAAAAAAA", AT, {
+        count: 2,
+      });
+
+      expect(result).toEqual({ outcome: "conflict" });
+      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+      expect(stored?.status).toBe("READY");
+      expect(stored?.deployBatch).toBeUndefined();
+    });
   });
 
   describe("transitionStatus", () => {
@@ -624,6 +691,43 @@ describe.each(backends)("EventsRepository mutations parity: %s", (_name, makeRep
       const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
       expect(stored?.status).toBe("READY");
       expect(stored?.updatedAt).toBe(AT);
+    });
+
+    it("should treat a null expected updatedAt exactly like undefined (#3261)", async () => {
+      const { events } = makeRepos();
+      const withoutUpdatedAt: Partial<EventRecord> = sampleEvent({ status: "DEPLOYING" });
+      delete withoutUpdatedAt.updatedAt;
+      await events.putEvent(withoutUpdatedAt as EventRecord);
+      await events.putEvent(
+        sampleEvent({ eventId: "01EVENTBBBBBBBBBBBBBBBBBBB", status: "DEPLOYING" }),
+      );
+      // A malformed caller value: the type says string | undefined, JSON can say null.
+      const nullExpected = { updatedAt: null as unknown as undefined };
+
+      expect(
+        await events.transitionStatus(
+          "tenant-a",
+          "01EVENTBBBBBBBBBBBBBBBBBBB",
+          "DEPLOYING",
+          "READY",
+          AT,
+          nullExpected,
+        ),
+      ).toEqual({ outcome: "conflict" });
+      const result = await events.transitionStatus(
+        "tenant-a",
+        "01EVENTAAAAAAAAAAAAAAAAAAA",
+        "DEPLOYING",
+        "READY",
+        AT,
+        nullExpected,
+      );
+      expect(result.outcome).toBe("updated");
+      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+      expect(stored?.status).toBe("READY");
+      expect(stored?.updatedAt).toBe(AT);
+      const untouched = await events.getEvent("tenant-a", "01EVENTBBBBBBBBBBBBBBBBBBB");
+      expect(untouched?.status).toBe("DEPLOYING");
     });
   });
 

@@ -224,8 +224,18 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     ]);
     expect(await repo.listDeploymentKeysByEvent("tenant-a", "ev-1")).toEqual(["a", "b"]);
     expect(await repo.listReconcilerRowsByEvent("tenant-a", "ev-1")).toEqual([
-      { jobId: "a", status: "COMPLETE", updatedAt: "2026-07-01T00:00:00.000Z" },
-      { jobId: "b", status: "IN_PROGRESS", updatedAt: "2026-07-01T00:00:00.000Z" },
+      {
+        jobId: "a",
+        status: "COMPLETE",
+        updatedAt: "2026-07-01T00:00:00.000Z",
+        createdAt: "2026-07-01T00:00:00.000Z",
+      },
+      {
+        jobId: "b",
+        status: "IN_PROGRESS",
+        updatedAt: "2026-07-01T00:00:00.000Z",
+        createdAt: "2026-07-02T00:00:00.000Z",
+      },
     ]);
     expect(
       (await repo.listByEventTeamProblem("tenant-a", "ev-1", "t1", "p1")).map((r) => r.jobId),

@@ -25,6 +25,8 @@ import type { EventBridgePlanEntry, PublishFailure } from "./types.js";
  * 分割した eventbridge-kind の subset — この module 自身は二度目のフィルタをしない。
  * `markBulkEventDeploying` は eventbridge 行が 0 件でも無条件に走らせる (= Event 全体の
  * DEPLOYING 遷移は dispatch channel を問わない)。
+ * [Issue #3261] `batch.count` は eventbridge subset ではなく plan 全体の行数
+ * (eventbridge + adapter)。 caller が明示的に渡す (= この module は subset しか見ないため)。
  *
  * 戻り値は publish 失敗一覧。 caller が markPublishFailuresFailed で deployment を FAILED 化する。
  */
@@ -32,14 +34,14 @@ export async function publishBulkDeployPlan(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
-  createdAt: string,
+  batch: { readonly createdAt: string; readonly count: number },
   eventBridgeEntries: readonly EventBridgePlanEntry[],
 ): Promise<PublishFailure[]> {
   const publish = Promise.all(
     publishBulkPlanEntries(shared, tenantId, eventId, eventBridgeEntries),
   );
   const [, failures] = await Promise.all([
-    markBulkEventDeploying(shared, tenantId, eventId, createdAt),
+    markBulkEventDeploying(shared, tenantId, eventId, batch.createdAt, batch.count),
     publish,
   ]);
   return failures.flat();
