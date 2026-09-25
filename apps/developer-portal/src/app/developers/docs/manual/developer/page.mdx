@@ -39,6 +39,11 @@ you need.
 | `scripts/` | Repository checks, deploy helpers, and generated artifacts |
 | `problems/` | Pinned official problem catalog submodule |
 
+Local competition hosting (`make host`, Bun + SQLite) keeps its API and Docker
+environments in `scripts/local-host/`; its screens are the normal admin console
+and participant portal in local-host mode. See
+[Local competition hosting](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md) for the procedure, ports and checks.
+
 Read the nearest tests and repository instructions before changing a contract.
 The [platform architecture](/developers/docs/concepts/architecture/) explains
 the plane boundaries and cross-plane events.
