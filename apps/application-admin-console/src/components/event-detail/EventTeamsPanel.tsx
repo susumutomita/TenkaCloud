@@ -22,11 +22,14 @@ export function EventTeamsPanel({
   canMutateTenant = false,
   t,
   onRefresh,
+  showAccount = true,
 }: {
   readonly apiClient?: ApiClient | null;
   readonly canMutateTenant?: boolean;
   readonly detail: EventDetail;
   readonly onRefresh?: () => void;
+  /** Issue #3226: the local competition host has no per-team AWS account column. */
+  readonly showAccount?: boolean;
   readonly t: Translate;
 }) {
   const [rotationTeam, setRotationTeam] = useState<TeamSummary | null>(null);
@@ -87,18 +90,22 @@ export function EventTeamsPanel({
                   </Box>
                 ),
             },
-            {
-              id: "account",
-              header: t("event_detail.teams_col_account"),
-              cell: (tr) =>
-                tr.awsAccountId ? (
-                  <code>{tr.awsAccountId}</code>
-                ) : (
-                  <Box variant="small" color="text-status-inactive">
-                    {t("event_detail.teams_col_account_legacy")}
-                  </Box>
-                ),
-            },
+            ...(showAccount
+              ? [
+                  {
+                    id: "account",
+                    header: t("event_detail.teams_col_account"),
+                    cell: (tr: TeamSummary) =>
+                      tr.awsAccountId ? (
+                        <code>{tr.awsAccountId}</code>
+                      ) : (
+                        <Box variant="small" color="text-status-inactive">
+                          {t("event_detail.teams_col_account_legacy")}
+                        </Box>
+                      ),
+                  },
+                ]
+              : []),
             {
               id: "loginKey",
               header: t("event_detail.teams_col_login_key"),

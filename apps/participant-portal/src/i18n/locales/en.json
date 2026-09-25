@@ -363,6 +363,8 @@
     "writeup_heading": "Explanation and remediation",
     "writeup_handoff": "{solved}/{total} solved. Review the cause and remediation in the explanation",
     "failure_reason_header": "Failure reason",
+    "access_unavailable_header": "Access link unavailable",
+    "access_unavailable_body": "This environment is running, but its access link is temporarily unavailable. Refresh in a moment, and ask the organizer if it continues.",
     "stale_header": "Score is not increasing",
     "stale_body": "{ago} since last scoring. Something in your service may not be responding as expected.",
     "auto_delete_header": "Auto-delete scheduled",

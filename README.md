@@ -100,6 +100,16 @@ This path uses Bun and Vite. [Developer setup and commands](./docs/local-play.md
 
 </details>
 
+### Host a competition on your computer (no AWS)
+
+`make local` is individual practice. To run a real competition for several teams from one computer, use the Bun + SQLite host instead (Bun is required; Docker only for the problem environments):
+
+```bash
+make host
+```
+
+The organizer uses the normal admin console with the printed host key; teams sign in to the participant portal with their own keys. [Local competition hosting](./docs/local-hosting.md) covers LAN access, firewall ports, per-team environment operations and teardown.
+
 ### Deploy on AWS
 
 Use **Lite mode** for one organizing group. Prepare an AWS account and an administrator email address, then choose your [database](#running-costs) and deployment method.
@@ -204,6 +214,7 @@ make pack-activate ARGS="com.example.starter@0.1.0 --tenant local"
 | You want to… | Read |
 | --- | --- |
 | Run an event | [Planning and operations](./apps/developer-portal/src/app/developers/docs/operate/run-an-event/page.mdx) |
+| Host a competition on one computer (no AWS) | [Local competition hosting](./docs/local-hosting.md) |
 | Ask an LLM to help you set up or investigate | [LLM entry point](./landing/llms.txt) → [task guide and code map](./landing/llms-full.txt) |
 | Change platform code | [Contributing](./CONTRIBUTING.md) · [Agent instructions](./AGENTS.md) |
 | Understand the architecture | [Architecture guide](./docs/architecture/README.md) · [Online manual](./apps/developer-portal/src/app/developers/docs/concepts/architecture/page.mdx) · [System diagram](./docs/architecture/diagrams/system-architecture.drawio) |

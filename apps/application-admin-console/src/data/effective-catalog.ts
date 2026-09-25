@@ -65,6 +65,12 @@ export interface PackCatalogProblemInput extends CoreCatalogInput {
 export interface EffectiveCatalogInput {
   readonly core: readonly CoreCatalogInput[];
   readonly packs: readonly PackCatalogProblemInput[];
+  /**
+   * Issue #3226: the local competition host's console runs Docker problems on the organizer's
+   * computer, so it keeps local-only entries (the host's own catalog then decides which are
+   * selectable). The cloud console never sets this.
+   */
+  readonly includeLocalOnly?: boolean;
 }
 
 /**
@@ -145,11 +151,13 @@ export function buildEffectiveCatalog(input: EffectiveCatalogInput): readonly Pr
 
   // Core first, preserving the given (discovery) order — packs cannot override it.
   // Local-only (#2168) problems are excluded from this cloud console catalog.
+  const listed = (metadata: ProblemMetadata) =>
+    input.includeLocalOnly === true || isCloudCatalogEntry(metadata);
   for (const entry of input.core) {
-    if (isCloudCatalogEntry(entry.metadata)) claim(coreDetail(entry));
+    if (listed(entry.metadata)) claim(coreDetail(entry));
   }
   for (const entry of input.packs) {
-    if (isCloudCatalogEntry(entry.metadata)) claim(packDetail(entry));
+    if (listed(entry.metadata)) claim(packDetail(entry));
   }
 
   return [...owners.values()].sort((a, b) => a.id.localeCompare(b.id));

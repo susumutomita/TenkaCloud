@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomToken } from "./auth";
+import { type GatewayPortRange, gatewayPort } from "./gateway-ports";
 import { closeServer, errorResponse, listen, readBody } from "./http";
 import { HostError, type Job, type Team } from "./model";
 import type { HostingService } from "./service";
@@ -11,6 +12,10 @@ interface Grant {
 }
 
 interface Gateway {
+  readonly url: string;
+  /** The runtime slot and upstream this gateway was opened for. */
+  readonly offset: number;
+  readonly upstreamOrigin: string;
   link(team: Team): string;
   close(): Promise<void>;
 }
@@ -72,8 +77,26 @@ class JobGateway implements Gateway {
     this.server.requestTimeout = 15_000;
     this.server.setTimeout(15_000, (socket) => socket.destroy());
   }
-  async listen(hostname: string): Promise<void> {
-    this.origin = await listen(this.server, hostname, 0);
+  async listen(hostname: string, port: number): Promise<void> {
+    try {
+      this.origin = await listen(this.server, hostname, port);
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "EADDRINUSE")
+        throw new HostError(
+          503,
+          `Exercise gateway port ${String(port)} is used by another process. Free it, or restart the host with a different --gateway-ports range.`,
+        );
+      throw error;
+    }
+  }
+  get url(): string {
+    return this.origin;
+  }
+  get offset(): number {
+    return this.job.offset;
+  }
+  get upstreamOrigin(): string {
+    return this.upstream.origin;
   }
   close(): Promise<void> {
     return closeServer(this.server);
@@ -100,6 +123,7 @@ class JobGateway implements Gateway {
     const url = new URL(request.url ?? "/", this.origin);
     if (url.origin !== this.origin) throw new HostError(403, "Invalid challenge request target.");
     this.expire();
+    this.assertCurrent();
     if (request.method === "GET" && url.pathname === "/__join") {
       this.join(url.searchParams.get("ticket") ?? "", response);
       return;
@@ -110,6 +134,24 @@ class JobGateway implements Gateway {
     );
     if (!route) throw new HostError(404, "Challenge route not exposed.");
     await this.proxy(request, response, route);
+  }
+  /**
+   * Defence in depth: this gateway was opened for one runtime slot and upstream. If the stored
+   * job has since moved (rebuilt elsewhere, removed, or no longer running), never forward.
+   */
+  private assertCurrent(): void {
+    const current = this.service.store.job(this.job.jobId);
+    let upstream: string;
+    try {
+      upstream = new URL(this.service.engine.surface(current)).origin;
+    } catch {
+      upstream = "";
+    }
+    if (current.offset !== this.job.offset || upstream !== this.upstream.origin)
+      throw new HostError(
+        409,
+        "This environment changed. Open it again from your team's participant portal.",
+      );
   }
   private join(ticket: string, response: ServerResponse): void {
     const grant = this.pending.get(ticket);
@@ -164,6 +206,10 @@ class JobGateway implements Gateway {
       if (!inputTypes.test(type)) throw new HostError(415, "Unsupported challenge input.");
       body = await readBody(request);
     }
+    // Reading the body can take seconds: re-check the environment and the team's access
+    // immediately before anything is forwarded.
+    this.assertCurrent();
+    this.authenticate(request);
     const result = await fetch(new URL(route.path, this.upstream.origin), {
       method: route.method,
       body,
@@ -195,24 +241,61 @@ class JobGateway implements Gateway {
  * Cookies/Authorization/Set-Cookie are never forwarded across the proxy boundary. */
 export class SurfaceGateways {
   private readonly gateways = new Map<string, Promise<Gateway>>();
+  /**
+   * Each environment's gateway listens on the fixed port of its runtime slot, so the range the
+   * host prints at startup is exactly what a LAN firewall has to allow.
+   */
   constructor(
     private readonly hostname: string,
     private readonly service: HostingService,
+    private readonly ports: GatewayPortRange,
+    private readonly announce: (message: string) => void = () => undefined,
   ) {}
   async link(job: Job, team: Team): Promise<string> {
-    let gateway = this.gateways.get(job.jobId);
-    if (!gateway) {
-      gateway = this.create(job);
-      this.gateways.set(job.jobId, gateway);
-      void gateway.catch(() => this.gateways.delete(job.jobId));
+    // The caller's job object may be a snapshot from before an await: use the stored job.
+    const current = this.service.store.job(job.jobId);
+    const existing = await this.existing(current);
+    const entry = existing ? Promise.resolve(existing) : this.open(current);
+    const gateway = await entry;
+    try {
+      return gateway.link(team);
+    } catch (error) {
+      // A gateway opened for a request that is not authorized must not keep its port.
+      if (!existing) await this.closeJob(current.jobId);
+      throw error;
     }
-    return (await gateway).link(team);
+  }
+  /** The open gateway for this job, unless it was opened for another slot or upstream. */
+  private async existing(job: Job): Promise<Gateway | undefined> {
+    const pending = this.gateways.get(job.jobId);
+    if (!pending) return undefined;
+    const gateway = await pending.catch(() => undefined);
+    if (!gateway) return undefined;
+    let upstream = "";
+    try {
+      upstream = new URL(this.service.engine.surface(job)).origin;
+    } catch {
+      upstream = "";
+    }
+    if (gateway.offset === job.offset && gateway.upstreamOrigin === upstream) return gateway;
+    await this.closeJob(job.jobId);
+    return undefined;
+  }
+  private open(job: Job): Promise<Gateway> {
+    const gateway = this.create(job);
+    this.gateways.set(job.jobId, gateway);
+    void gateway.catch(() => {
+      if (this.gateways.get(job.jobId) === gateway) this.gateways.delete(job.jobId);
+    });
+    return gateway;
   }
   async closeJob(jobId: string): Promise<void> {
-    const gateway = this.gateways.get(jobId);
-    if (!gateway) return;
+    const pending = this.gateways.get(jobId);
+    if (!pending) return;
     this.gateways.delete(jobId);
-    await (await gateway).close();
+    // A creation that failed (for example a port held elsewhere) left nothing to close.
+    const gateway = await pending.catch(() => undefined);
+    await gateway?.close();
   }
   async close(): Promise<void> {
     await Promise.all([...this.gateways.keys()].map((jobId) => this.closeJob(jobId)));
@@ -227,7 +310,9 @@ export class SurfaceGateways {
     )
       throw new Error("Challenge surface must be an explicit loopback HTTP endpoint.");
     const gateway = new JobGateway(job, upstream, this.service);
-    await gateway.listen(this.hostname);
+    await gateway.listen(this.hostname, gatewayPort(this.ports, job.offset));
+    const team = this.service.store.team(job.teamId);
+    this.announce(`Exercise gateway for ${team.internalSlug} / ${job.problemId}: ${gateway.url}`);
     return gateway;
   }
 }

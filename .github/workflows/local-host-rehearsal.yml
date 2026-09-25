@@ -11,6 +11,8 @@ on:
       - 'scripts/local-play/**'
       - 'problems'
       - 'apps/**/local-host/**'
+      - 'apps/application-admin-console/src/**'
+      - 'apps/participant-portal/src/**'
       - 'apps/**/vite.host.config.ts'
       - 'apps/**/host.html'
       - 'tsconfig.host.json'
@@ -24,7 +26,7 @@ permissions:
 jobs:
   local-host:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -45,3 +47,17 @@ jobs:
           docker compose version
       - name: Production adapter and existing sqli-demo with two teams
         run: bun run test:host:docker
+      # Playwright's pinned Chromium for the browser rehearsal (the runner has none preinstalled).
+      - name: Install Chromium for the browser rehearsal
+        run: bunx playwright-core install --with-deps chromium
+      - name: Browser rehearsal (organizer console + two participant browsers, real Docker)
+        env:
+          HOST_E2E_ENGINE: docker
+        run: bun run scripts/local-host/tests/browser-e2e.ts
+      - name: Keep browser failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: local-host-e2e
+          path: .tenkacloud/host-e2e/
+          if-no-files-found: ignore

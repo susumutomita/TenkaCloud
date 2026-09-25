@@ -3,12 +3,15 @@
  * There is deliberately no fake runtime or skip-on-failure path in this check. */
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveComposeCli } from "../../local-play/docker-adapter";
 import { randomToken } from "../auth";
-import { DockerHostingEngine } from "../docker-engine";
+import { DAEMON_UNAVAILABLE_MESSAGE, DockerHostingEngine } from "../docker-engine";
 import { persistentKey, prepareDatabase, privateDirectory } from "../files";
+import { DEFAULT_GATEWAY_PORTS, parseGatewayPorts } from "../gateway-ports";
 import { SurfaceGateways } from "../gateways";
 import { type HttpHost, startHttpHost } from "../http";
 import { object, type Team } from "../model";
@@ -30,6 +33,34 @@ interface TeamView {
   }[];
 }
 
+/** The host's real range by default; CI can move it when another service holds those ports. */
+function smokeGatewayPorts() {
+  return parseGatewayPorts(process.env.HOST_GATEWAY_PORTS ?? DEFAULT_GATEWAY_PORTS);
+}
+
+/** Container IDs of one job's Compose project, asked from the daemon, not from our records. */
+function projectContainers(jobId: string, includeStopped = false): string[] {
+  // The label filter needs the Docker CLI itself (the Compose plugin's host command).
+  const cli = resolveComposeCli();
+  assert.equal(cli.command, "docker", "The Docker smoke needs the docker CLI.");
+  const result = spawnSync(
+    cli.command,
+    [
+      "ps",
+      ...(includeStopped ? ["-a"] : []),
+      "-q",
+      "--filter",
+      `label=com.docker.compose.project=tch-${jobId.toLowerCase()}`,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout
+    .split("\n")
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right));
+}
+
 async function main(): Promise<void> {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const parent = join(root, ".tenkacloud");
@@ -41,8 +72,10 @@ async function main(): Promise<void> {
   const masterKey = persistentKey(join(directory, "host-key"));
   let store = new HostStore(new Database(databasePath, { create: true, strict: true }));
   let engine = new DockerHostingEngine(root, directory);
+  const gatewayPorts = smokeGatewayPorts();
   let service = new HostingService(store, engine, masterKey);
-  let surfaces = new SurfaceGateways("127.0.0.1", service);
+  service.gatewayPorts = gatewayPorts;
+  let surfaces = new SurfaceGateways("127.0.0.1", service, gatewayPorts);
   let host: HttpHost | undefined;
   let portal: HttpHost | undefined;
   let accessToken = "";
@@ -142,14 +175,97 @@ async function main(): Promise<void> {
     store = new HostStore(new Database(databasePath, { create: true, strict: true }));
     engine = new DockerHostingEngine(root, directory);
     service = new HostingService(store, engine, masterKey);
+    service.gatewayPorts = gatewayPorts;
     await service.recover();
-    surfaces = new SurfaceGateways("127.0.0.1", service);
+    surfaces = new SurfaceGateways("127.0.0.1", service, gatewayPorts);
     await attach();
     await login();
+  }
+  /** Real CLI, unreachable daemon: the cause is reported, and the advised retry recovers. */
+  async function checkNoDaemonRecovery(): Promise<void> {
+    const saved = process.env.DOCKER_HOST;
+    process.env.DOCKER_HOST = "unix:///nonexistent/tenkacloud-no-daemon.sock";
+    let unavailable: CreatedEvent;
+    try {
+      unavailable = await api<CreatedEvent>("host", "/events", "POST", {
+        name: "Docker daemon outage",
+        teams: [{ internalSlug: "solo" }],
+        problems: [{ problemId: "sqli-demo" }],
+      });
+      await api("host", `/events/${unavailable.eventId}/deploy`, "POST", {});
+      await service.drain();
+    } finally {
+      if (saved === undefined) delete process.env.DOCKER_HOST;
+      else process.env.DOCKER_HOST = saved;
+    }
+    const [failedJob] = store.jobs(unavailable.eventId);
+    assert.equal(failedJob?.status, "FAILED");
+    assert.equal(failedJob?.error, DAEMON_UNAVAILABLE_MESSAGE);
+    assert.ok(failedJob?.unit, "Ownership is retained while cleanup could not run.");
+    await api("host", `/events/${unavailable.eventId}/deploy`, "POST", {});
+    await service.drain();
+    assert.equal(
+      store.job(failedJob.jobId).status,
+      "COMPLETE",
+      store.job(failedJob.jobId).error ?? "",
+    );
+    assert.equal(store.event(unavailable.eventId).status, "READY");
+    await api("host", `/events/${unavailable.eventId}`, "DELETE", {});
+    await service.drain();
+    assert.equal(store.job(failedJob.jobId).status, "DELETED");
+    assert.deepEqual(projectContainers(failedJob.jobId, true), []);
+    checks.push(
+      "An unreachable Docker daemon is reported as the cause; the advised retry then deploys and tears down for real",
+    );
+  }
+  /** Operating on one team's environment must not touch the other team's Docker project. */
+  async function checkTeamIsolation(
+    first: CreatedEvent["teams"][number],
+    second: CreatedEvent["teams"][number],
+    flagA: string,
+    flagB: string,
+  ): Promise<void> {
+    const jobA = store.jobs(eventId, first.teamId)[0]?.jobId ?? "";
+    const jobB = store.jobs(eventId, second.teamId)[0]?.jobId ?? "";
+    const scores = () => [store.team(first.teamId).score, store.team(second.teamId).score];
+    const scoresBefore = scores();
+    const containersB = projectContainers(jobB);
+    assert.ok(containersB.length > 0);
+    const operate = async (method: string, suffix: string) => {
+      await api("host", `/events/${eventId}/deployments/${jobA}${suffix}`, method, {});
+      await service.drain();
+    };
+    const expectTeamBUntouched = async () => {
+      assert.equal(store.job(jobB).status, "COMPLETE");
+      assert.deepEqual(projectContainers(jobB), containersB);
+      assert.equal(await solve(second), flagB);
+      assert.deepEqual(scores(), scoresBefore);
+    };
+    await operate("POST", "/stop");
+    assert.equal(store.job(jobA).status, "STOPPED", store.job(jobA).error ?? "");
+    assert.deepEqual(projectContainers(jobA), []);
+    assert.ok(projectContainers(jobA, true).length > 0, "Stop keeps the containers.");
+    await expectTeamBUntouched();
+    await operate("POST", "/restart");
+    assert.equal(store.job(jobA).status, "COMPLETE", store.job(jobA).error ?? "");
+    assert.equal(await solve(first), flagA);
+    await expectTeamBUntouched();
+    await operate("DELETE", "");
+    assert.equal(store.job(jobA).status, "DELETED", store.job(jobA).error ?? "");
+    assert.deepEqual(projectContainers(jobA, true), []);
+    await expectTeamBUntouched();
+    await operate("POST", "/restart");
+    assert.equal(store.job(jobA).status, "COMPLETE", store.job(jobA).error ?? "");
+    assert.match(await solve(first), /^TC\{/u);
+    await expectTeamBUntouched();
+    checks.push(
+      "Stopping, restarting and removing team A's Docker environment leaves team B's containers, gateway and score unchanged",
+    );
   }
   try {
     await attach();
     await login();
+    await checkNoDaemonRecovery();
     const event = await api<CreatedEvent>("host", "/events", "POST", {
       name: "Production Docker integration check",
       teams: [{ internalSlug: "team-a" }, { internalSlug: "team-b" }],
@@ -214,6 +330,7 @@ async function main(): Promise<void> {
     checks.push(
       "New production adapter instance recovers real running Docker projects and SQLite progress",
     );
+    await checkTeamIsolation(first, second, flagA, flagB);
     await api("host", `/events/${eventId}/end`, "POST", {});
     await restart();
     assert.equal(store.event(eventId).status, "ENDED");

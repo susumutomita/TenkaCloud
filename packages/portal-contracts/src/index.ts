@@ -327,6 +327,12 @@ export interface ParticipantProblemView {
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;
+  /**
+   * Issue #3226 (local competition host): the environment is running but its access link could
+   * not be issued right now. A code, not text: the portal shows a translated explanation and
+   * no host detail. Absent everywhere else.
+   */
+  readonly accessError?: "link_unavailable";
   readonly expiresAt: number;
   readonly score: number;
   readonly lastScoredAt?: string;

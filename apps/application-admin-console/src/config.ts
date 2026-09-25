@@ -1,6 +1,7 @@
 import { isCognitoDomain, isHttpsUrl } from "@tenkacloud/auth-client";
 import { resolveFeatureFlags } from "@tenkacloud/web-kit";
 import { type AppFeatures, FEATURE_REGISTRY } from "./features";
+import { LOCAL_HOST_BUILD } from "./local-host-build";
 
 export interface AppConfig {
   readonly cognitoDomain: string;
@@ -56,8 +57,17 @@ export interface AppConfig {
    * Issue #1954: `"demo"` は no-AWS demo mode (`?demo=1` / `VITE_DEMO_MODE=1` で有効化)。
    * このとき useApiClient は fixture client に切り替わり、 AuthProvider は mock session を
    * 注入する (= 実 AWS / Cognito を一切叩かない)。 未設定 (undefined) は通常運用。
+   *
+   * Issue #3226: `"local-host"` は `bun start` (Bun + SQLite のローカル大会) の主催者画面。
+   * 通常の console をそのまま使い、 認証は host key → session 交換、 API は同一 origin の
+   * `/api`。 local hosting build (`vite.host.config.ts`) だけがこの mode に入れる。
    */
-  readonly mode?: "demo";
+  readonly mode?: "demo" | "local-host";
+}
+
+/** Issue #3226: `bun start` のローカル大会 console で動いているか。 */
+export function isLocalHost(config: Pick<AppConfig, "mode">): boolean {
+  return config.mode === "local-host";
 }
 
 interface RuntimeConfig {
@@ -180,9 +190,61 @@ function buildDemoConfig(
   };
 }
 
+/** Features that need cloud infrastructure; the local host API has none of them. */
+const LOCAL_HOST_FEATURES = {
+  samlSso: false,
+  nonAwsRuntime: false,
+  redTeam: false,
+  challengePrerequisiteGate: false,
+} as const;
+
+/**
+ * Issue #3226: the local hosting build's configuration. It is served by the host process from
+ * the same origin, carries no credential, and must describe exactly this origin's API: anything
+ * else is a boot error, never a fallback to demo, practice or cloud sign-in.
+ */
+async function loadLocalHostConfig(): Promise<AppConfig> {
+  const origin = window.location.origin;
+  const response = await fetch("/runtime-config.json", { cache: "no-store" });
+  if (!response.ok) throw new Error("Local hosting configuration is unavailable.");
+  const runtime = (await response.json()) as {
+    mode?: unknown;
+    role?: unknown;
+    apiBaseUrl?: unknown;
+    participantPortalUrl?: unknown;
+  };
+  if (
+    runtime.mode !== "local-host" ||
+    runtime.role !== "admin" ||
+    runtime.apiBaseUrl !== `${origin}/api` ||
+    typeof runtime.participantPortalUrl !== "string" ||
+    !/^http:\/\/[^/]+$/u.test(runtime.participantPortalUrl)
+  )
+    throw new Error("Invalid local hosting configuration. No demo or cloud fallback is permitted.");
+  return {
+    apiBaseUrl: runtime.apiBaseUrl,
+    tenantId: "local-host",
+    tenantName: "Local competition",
+    samlIdpDirectory: {},
+    isolation: "pooled",
+    // Only the shared memory-only AuthProvider's revocation/logout wire protocol is reused
+    // (served by the host under /api/host). Sign-in is the host-key exchange, never a redirect.
+    cognitoDomain: `${origin}/api/host`,
+    cognitoClientId: "local-host",
+    redirectUri: `${origin}/callback`,
+    scope: "",
+    participantPortalUrl: runtime.participantPortalUrl,
+    features: resolveFeatureFlags(FEATURE_REGISTRY, LOCAL_HOST_FEATURES),
+    mode: "local-host",
+  };
+}
+
 export async function loadConfig(
   env: Record<string, string | undefined> = import.meta.env,
+  build: { readonly localHostBuild: boolean } = { localHostBuild: LOCAL_HOST_BUILD },
 ): Promise<AppConfig> {
+  // Set only by vite.host.config.ts; the cloud and demo builds never read the local host API.
+  if (build.localHostBuild) return loadLocalHostConfig();
   const redirectUri = `${window.location.origin}/callback`;
   const scope = env.VITE_COGNITO_SCOPE ?? "openid email profile";
 

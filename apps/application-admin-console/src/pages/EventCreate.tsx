@@ -15,7 +15,7 @@ import {
   type CreateEventResponse,
   createEvent,
 } from "../api/events-client";
-import type { AppConfig } from "../config";
+import { type AppConfig, isLocalHost } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
 import { useT } from "../i18n";
@@ -38,6 +38,7 @@ import {
   type TeamRow,
   validateTeamRows,
 } from "./event-create/helpers";
+import { LocalHostEventCreateNotice, useHostCatalog } from "./event-create/LocalHostEventCreate";
 import { useCompetitorAccountsLoader } from "./event-create/useCompetitorAccountsLoader";
 
 // 既存テストが `from "./EventCreate"` で import している pure helpers / 型は
@@ -167,7 +168,13 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
   // teamRows ベースの validation を 1 pass に集約 (= 4 つ .every() / IIFE を回す代わり)。
   // teamRows 変更時のみ再評価され、render path の負担を減らす。
-  const providerMode = useMemo(() => resolveEventProviderMode(problemRows), [problemRows]);
+  // Issue #3226: the local competition host deploys Docker environments on this computer.
+  const localHost = isLocalHost(config);
+  const hostCatalog = useHostCatalog(localHost ? apiClient : null);
+  const providerMode = useMemo<ReturnType<typeof resolveEventProviderMode>>(
+    () => (localHost ? { kind: "local" } : resolveEventProviderMode(problemRows)),
+    [localHost, problemRows],
+  );
   const teamValidation = useMemo(
     () => validateTeamRows(teamRows, providerMode),
     [teamRows, providerMode],
@@ -319,6 +326,8 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             teamCountInvalid={teamCountInvalid}
           />
 
+          {localHost && <LocalHostEventCreateNotice catalog={hostCatalog} />}
+
           {/* #528 / Phase 2.2 (Issue #459): Teams 入力の上に置く 3 種 Alert。
            *   load error / loading / 0-verified hint をまとめた小 component。 */}
           <EventCreateAccountsAlerts
@@ -345,6 +354,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             selectedProblems={selectedProblems}
             problemRows={problemRows}
             nonAwsRuntimeEnabled={config.features?.nonAwsRuntime ?? false}
+            hostSupportedProblemIds={localHost ? hostCatalog.supported : undefined}
             onProblemsChange={onProblemsChange}
             onUpdateProblemRow={updateProblemRow}
           />
@@ -369,7 +379,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         visible={deployPromptTarget !== null}
         canMutateTenant={canMutate}
         deployStarting={deployStarting}
-        bulkDeploySupported={providerMode.kind === "aws"}
+        bulkDeploySupported={providerMode.kind === "aws" || providerMode.kind === "local"}
         participantPortalUrl={config.participantPortalUrl}
         teams={deployPromptTarget?.teams ?? []}
         capacityWarnings={deployPromptTarget?.warnings ?? []}

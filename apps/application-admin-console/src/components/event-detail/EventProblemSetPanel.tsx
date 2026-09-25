@@ -1,9 +1,9 @@
 import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
-import Table from "@cloudscape-design/components/table";
+import Table, { type TableProps } from "@cloudscape-design/components/table";
 import { useNavigate } from "react-router";
-import type { EventDetail } from "../../api/events-client";
+import type { EventDetail, EventProblemTarget } from "../../api/events-client";
 import { ProblemCostSummary } from "../../components/ProblemCostSummary";
 import { findProblem } from "../../data/problems";
 import { renderProblemDeployStatus, renderProblemJobLinks } from "./shared";
@@ -12,12 +12,59 @@ type Translate = (key: string, params?: Readonly<Record<string, string | number>
 
 export function EventProblemSetPanel({
   detail,
+  localHost = false,
   t,
 }: {
   readonly detail: EventDetail;
+  /**
+   * Issue #3226: the local competition host has no AWS account, region, cloud cost or
+   * deployment-detail page; its environments are listed per team in the Teams tab.
+   */
+  readonly localHost?: boolean;
   readonly t: Translate;
 }) {
   const navigate = useNavigate();
+  type Column = TableProps.ColumnDefinition<EventProblemTarget>;
+  const idColumn: Column = {
+    id: "id",
+    header: t("event_detail.problemset_col_id"),
+    cell: (p) => <code>{p.problemId}</code>,
+  };
+  const statusColumn: Column = {
+    id: "status",
+    header: t("event_detail.problemset_col_status"),
+    cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId], t),
+  };
+  const cloudColumns: Column[] = [
+    idColumn,
+    {
+      id: "account",
+      header: t("event_detail.problemset_col_account"),
+      cell: (p) => p.defaultAwsAccountId,
+    },
+    {
+      id: "region",
+      header: t("event_detail.problemset_col_region"),
+      cell: (p) => p.defaultRegion,
+    },
+    {
+      id: "estimatedCost",
+      header: t("event_detail.problemset_col_estimated_cost"),
+      cell: (p) => (
+        <ProblemCostSummary
+          estimate={findProblem(p.problemId)?.costEstimate}
+          showResourceTypes={false}
+          t={t}
+        />
+      ),
+    },
+    statusColumn,
+    {
+      id: "jobs",
+      header: t("event_detail.problemset_col_jobs"),
+      cell: (p) => renderProblemJobLinks(detail.deploymentsByProblem[p.problemId], navigate),
+    },
+  ];
   return (
     <Container
       header={
@@ -29,44 +76,7 @@ export function EventProblemSetPanel({
       <Table
         variant="embedded"
         items={[...detail.problems]}
-        columnDefinitions={[
-          {
-            id: "id",
-            header: t("event_detail.problemset_col_id"),
-            cell: (p) => <code>{p.problemId}</code>,
-          },
-          {
-            id: "account",
-            header: t("event_detail.problemset_col_account"),
-            cell: (p) => p.defaultAwsAccountId,
-          },
-          {
-            id: "region",
-            header: t("event_detail.problemset_col_region"),
-            cell: (p) => p.defaultRegion,
-          },
-          {
-            id: "estimatedCost",
-            header: t("event_detail.problemset_col_estimated_cost"),
-            cell: (p) => (
-              <ProblemCostSummary
-                estimate={findProblem(p.problemId)?.costEstimate}
-                showResourceTypes={false}
-                t={t}
-              />
-            ),
-          },
-          {
-            id: "status",
-            header: t("event_detail.problemset_col_status"),
-            cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId], t),
-          },
-          {
-            id: "jobs",
-            header: t("event_detail.problemset_col_jobs"),
-            cell: (p) => renderProblemJobLinks(detail.deploymentsByProblem[p.problemId], navigate),
-          },
-        ]}
+        columnDefinitions={localHost ? [idColumn, statusColumn] : cloudColumns}
         empty={<Box>{t("event_detail.problemset_empty")}</Box>}
       />
     </Container>

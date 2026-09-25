@@ -34,6 +34,7 @@ export function viewIsUnchanged(
       // 破棄されて 「開いたヒントがリロードするまで出ない」 退行になっていた。
       JSON.stringify(p.scoring) !== JSON.stringify(n.scoring) ||
       p.failureReason !== n.failureReason ||
+      p.accessError !== n.accessError ||
       p.deployLog?.cursor !== n.deployLog?.cursor ||
       // Issue #2845: `lifecycle` was missing here, and it is the only field the
       // refetch right after Start changes (`stopped` -> `starting`). Treating

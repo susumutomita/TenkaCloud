@@ -10,7 +10,7 @@ import { EVENT_ID_RE, type EventDetail } from "../api/events-client";
 import { EventDangerZone } from "../components/event-detail/EventDangerZone";
 import { EventHeaderActions } from "../components/event-detail/EventHeaderActions";
 import { buildEventDangerZoneController } from "../components/event-detail/event-danger-zone-models";
-import type { AppConfig } from "../config";
+import { type AppConfig, isLocalHost } from "../config";
 import { useEventDetail } from "../hooks/useEventDetail";
 import { useEventOperations, validateEndsAtInput } from "../hooks/useEventOperations";
 import { useT } from "../i18n";
@@ -31,6 +31,11 @@ import {
 } from "./event-detail/tabs";
 
 type EventOperations = ReturnType<typeof useEventOperations>;
+
+/** Local Docker environments settle within seconds; 3s keeps the tables live without load. */
+const LOCAL_HOST_IN_FLIGHT_POLL_MS = 3_000;
+/** Issue #3226: tabs whose features need cloud infrastructure the local host does not have. */
+const CLOUD_ONLY_TABS: ReadonlySet<EventTabId> = new Set(["disruptions", "gate"]);
 type Translate = ReturnType<typeof useT>;
 
 interface DeploymentCounts {
@@ -124,6 +129,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       eventId,
       eventIdValid,
       withTeamLoginKeys: canMutate,
+      // Issue #3226: follow local deploys and single-environment operations closely.
+      ...(isLocalHost(config) ? { inFlightPollMs: LOCAL_HOST_IN_FLIGHT_POLL_MS } : {}),
     },
   );
   const operations = useEventOperations({
@@ -285,13 +292,13 @@ function renderTabs({
   } as const;
   // The red-team Disruptions tab is feature-flagged (config.features.redTeam) — hidden until the
   // cross-account executor is verified live, so operators don't fire into an unproven path.
-  return EVENT_TAB_IDS.filter((id) => id !== "disruptions" || config.features?.redTeam).map(
-    (id) => ({
+  return EVENT_TAB_IDS.filter((id) => id !== "disruptions" || config.features?.redTeam)
+    .filter((id) => !isLocalHost(config) || !CLOUD_ONLY_TABS.has(id))
+    .map((id) => ({
       id,
       label: t(`event_detail.tab_${id}`),
       content: <SpaceBetween size="l">{contentByTab[id]}</SpaceBetween>,
-    }),
-  );
+    }));
 }
 
 function EventDetailLoaded({

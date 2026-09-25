@@ -24,6 +24,8 @@ export class ExerciseFixture implements RuntimeEngine {
   readonly starts: string[] = [];
   readonly stops: string[] = [];
   failStart = false;
+  /** Published host ports per slot; absent by default like an adapter without port probing. */
+  hostPorts?: (definition: string, offset: number) => readonly number[];
   failStop = false;
   verifyDelay = 0;
   constructor(private readonly openDatabase: (path: string) => SqlDatabase) {}
@@ -39,6 +41,7 @@ export class ExerciseFixture implements RuntimeEngine {
   async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
     retain(JSON.stringify({ jobId: job.jobId }));
     if (this.failStart) throw new Error("Injected runtime failure; retain ownership.");
+    await this.delay();
     this.starts.push(job.jobId);
     const db = this.openDatabase(":memory:");
     db.exec("CREATE TABLE users (username TEXT, password TEXT, role TEXT)");
@@ -105,10 +108,36 @@ export class ExerciseFixture implements RuntimeEngine {
   }
   async stop(job: Job): Promise<void> {
     if (this.failStop) throw new Error("Injected cleanup failure.");
+    await this.delay();
     this.stops.push(job.jobId);
-    const exercise = this.running.get(job.jobId);
+    const exercise = this.running.get(job.jobId) ?? this.paused.get(job.jobId);
     if (exercise) await exercise.close();
     this.running.delete(job.jobId);
+    this.paused.delete(job.jobId);
+  }
+  /** Halted environments keep their per-job database, like Compose volumes survive `stop`. */
+  readonly paused = new Map<string, Exercise>();
+  readonly pauses: string[] = [];
+  readonly resumes: string[] = [];
+  /** Keeps an environment operation in flight long enough to observe its serialization. */
+  operationDelay = 0;
+  private async delay(): Promise<void> {
+    if (this.operationDelay) await new Promise((accept) => setTimeout(accept, this.operationDelay));
+  }
+  async pause(job: Job): Promise<void> {
+    await this.delay();
+    const exercise = this.running.get(job.jobId);
+    if (!exercise) throw new Error("Fixture runtime is not running.");
+    this.pauses.push(job.jobId);
+    this.running.delete(job.jobId);
+    this.paused.set(job.jobId, exercise);
+  }
+  async resume(job: Job): Promise<void> {
+    const exercise = this.paused.get(job.jobId) ?? this.running.get(job.jobId);
+    if (!exercise) throw new Error("Fixture runtime is gone.");
+    this.resumes.push(job.jobId);
+    this.paused.delete(job.jobId);
+    this.running.set(job.jobId, exercise);
   }
   surface(job: Job): string {
     const exercise = this.running.get(job.jobId);
@@ -194,7 +223,10 @@ export class ExerciseFixture implements RuntimeEngine {
     };
   }
   async close(): Promise<void> {
-    await Promise.all([...this.running.values()].map((exercise) => exercise.close()));
+    await Promise.all(
+      [...this.running.values(), ...this.paused.values()].map((exercise) => exercise.close()),
+    );
     this.running.clear();
+    this.paused.clear();
   }
 }

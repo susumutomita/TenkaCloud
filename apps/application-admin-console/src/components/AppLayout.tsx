@@ -1,5 +1,6 @@
 import Alert from "@cloudscape-design/components/alert";
 import Link from "@cloudscape-design/components/link";
+import type { SideNavigationProps } from "@cloudscape-design/components/side-navigation";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { type ShellUserMenu, ShellLayout as WebKitShellLayout } from "@tenkacloud/web-kit";
 import { Fragment, type ReactNode, useReducer } from "react";
@@ -30,6 +31,7 @@ export function ShellLayout({
   samlSsoEnabled = false,
   demoMode = false,
   demoParticipantUrl,
+  localHost = false,
 }: {
   children: ReactNode;
   /** Feature-flagged: show the Identity providers (SAML SSO) nav item only when enabled. */
@@ -38,6 +40,8 @@ export function ShellLayout({
   demoMode?: boolean;
   /** Issue #1954: 参加者 demo (participant-portal) への hand-off 先 base URL。 */
   demoParticipantUrl?: string;
+  /** Issue #3226: `bun start` のローカル大会。 cloud 専用の画面を nav に出さない。 */
+  localHost?: boolean;
 }) {
   const auth = useAuth();
   const location = useLocation();
@@ -62,54 +66,92 @@ export function ShellLayout({
       }
     : undefined;
 
+  const cloudNavItems: SideNavigationProps.Item[] = [
+    { type: "link", href: "/", text: t("nav.home") },
+    // Product-design pass: users first choose between the operator's two primary
+    // jobs (run an event / prepare content), then secondary operations. This keeps
+    // the left rail from looking like one undifferentiated list of destinations.
+    {
+      type: "section",
+      text: t("nav.event_ops_section"),
+      items: [
+        { type: "link", href: "/events", text: t("nav.events") },
+        { type: "link", href: "/deployments", text: t("nav.deployments") },
+        { type: "link", href: "/competitor-accounts", text: t("nav.competitor_accounts") },
+      ],
+    },
+    {
+      type: "section",
+      text: t("nav.content_section"),
+      items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
+    },
+    // 管理系 (監査ログ / IdP) は日常運用メニューと混ざると見つけにくいので、 1 つの
+    // category section にまとめて flat な羅列を解消する。
+    {
+      type: "section",
+      text: t("nav.admin_section"),
+      items: [
+        // Issue #1292: 自テナント監査ログ (= deploy / event 操作の audit)。
+        { type: "link", href: "/audit-log", text: t("nav.audit_log") },
+        { type: "link", href: "/users", text: t("nav.tenant_users") },
+        // Issue #2231: per-tenant runtime feature-flag toggle.
+        { type: "link", href: "/settings", text: t("nav.settings") },
+        // Issue #1294: per-tenant SAML SSO. Feature-flagged off until verified
+        // end-to-end (otherwise operators mistake an unproven feature for ready).
+        ...(samlSsoEnabled
+          ? [
+              {
+                type: "link" as const,
+                href: "/identity-providers",
+                text: t("nav.identity_providers"),
+              },
+            ]
+          : []),
+      ],
+    },
+  ];
+  // The local host runs events only; accounts, users, audit log and SAML are cloud features.
+  const localHostNavItems: SideNavigationProps.Item[] = [
+    {
+      type: "section",
+      text: t("nav.event_ops_section"),
+      items: [{ type: "link", href: "/events", text: t("nav.events") }],
+    },
+  ];
+
+  // Issue #3226 / #1954: a mode banner above the page for local hosting and the public demo.
+  let content: ReactNode = children;
+  if (localHost)
+    content = (
+      <SpaceBetween size="m">
+        <Alert type="info" header={t("local_host.banner_header")}>
+          {t("local_host.banner_body")}
+        </Alert>
+        {children}
+      </SpaceBetween>
+    );
+  else if (demoMode)
+    content = (
+      <SpaceBetween size="m">
+        <Alert type="info" header={t("demo.banner_header")}>
+          <SpaceBetween size="xs">
+            <span>{t("demo.banner_body")}</span>
+            {demoParticipantUrl && (
+              <Link href={`${demoParticipantUrl}/?demo=1`} external>
+                {t("demo.view_as_participant")}
+              </Link>
+            )}
+          </SpaceBetween>
+        </Alert>
+        {children}
+      </SpaceBetween>
+    );
+
   return (
     <WebKitShellLayout<LocaleCode>
-      title={t("app.title")}
+      title={localHost ? t("local_host.app_title") : t("app.title")}
       navHeaderText={t("nav.menu")}
-      navItems={[
-        { type: "link", href: "/", text: t("nav.home") },
-        // Product-design pass: users first choose between the operator's two primary
-        // jobs (run an event / prepare content), then secondary operations. This keeps
-        // the left rail from looking like one undifferentiated list of destinations.
-        {
-          type: "section",
-          text: t("nav.event_ops_section"),
-          items: [
-            { type: "link", href: "/events", text: t("nav.events") },
-            { type: "link", href: "/deployments", text: t("nav.deployments") },
-            { type: "link", href: "/competitor-accounts", text: t("nav.competitor_accounts") },
-          ],
-        },
-        {
-          type: "section",
-          text: t("nav.content_section"),
-          items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
-        },
-        // 管理系 (監査ログ / IdP) は日常運用メニューと混ざると見つけにくいので、 1 つの
-        // category section にまとめて flat な羅列を解消する。
-        {
-          type: "section",
-          text: t("nav.admin_section"),
-          items: [
-            // Issue #1292: 自テナント監査ログ (= deploy / event 操作の audit)。
-            { type: "link", href: "/audit-log", text: t("nav.audit_log") },
-            { type: "link", href: "/users", text: t("nav.tenant_users") },
-            // Issue #2231: per-tenant runtime feature-flag toggle.
-            { type: "link", href: "/settings", text: t("nav.settings") },
-            // Issue #1294: per-tenant SAML SSO. Feature-flagged off until verified
-            // end-to-end (otherwise operators mistake an unproven feature for ready).
-            ...(samlSsoEnabled
-              ? [
-                  {
-                    type: "link" as const,
-                    href: "/identity-providers",
-                    text: t("nav.identity_providers"),
-                  },
-                ]
-              : []),
-          ],
-        },
-      ]}
+      navItems={localHost ? localHostNavItems : cloudNavItems}
       activeHref={location.pathname}
       onNavigate={(href) => navigate(href)}
       isAuthenticated={Boolean(auth.tokens)}
@@ -123,25 +165,7 @@ export function ShellLayout({
       localeNames={LOCALE_NAME}
       localeSwitcherAriaLabel={t("nav.locale_switcher_aria")}
     >
-      <Fragment key={contentRevision}>
-        {demoMode ? (
-          <SpaceBetween size="m">
-            <Alert type="info" header={t("demo.banner_header")}>
-              <SpaceBetween size="xs">
-                <span>{t("demo.banner_body")}</span>
-                {demoParticipantUrl && (
-                  <Link href={`${demoParticipantUrl}/?demo=1`} external>
-                    {t("demo.view_as_participant")}
-                  </Link>
-                )}
-              </SpaceBetween>
-            </Alert>
-            {children}
-          </SpaceBetween>
-        ) : (
-          children
-        )}
-      </Fragment>
+      <Fragment key={contentRevision}>{content}</Fragment>
     </WebKitShellLayout>
   );
 }

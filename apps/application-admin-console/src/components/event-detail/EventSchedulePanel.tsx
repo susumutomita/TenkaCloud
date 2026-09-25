@@ -14,6 +14,7 @@ import type { WizardState } from "../../lib/event-wizard";
 import { Field, scoringBadge } from "./shared";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
+type BulkInFlight = "deploy" | "teardown" | "retry-failed" | "redeploy" | null;
 
 /**
  * デプロイ / 撤去 のライフサイクル操作 (予約 = 日時指定 + 即座に) をまとめた section。
@@ -182,6 +183,103 @@ function DeployTeardownFields({
   );
 }
 
+/**
+ * Issue #3226: the local competition host's deploy / teardown controls. There is no reconciler,
+ * so scheduled deploy and teardown are not offered (and say so). "Deploy now" prepares or
+ * retries every environment that is not running; a single team's environment is stopped,
+ * restarted or removed from the Teams tab. A never-started event can be prepared again after
+ * a teardown (the recovery from a failed first deployment).
+ */
+function LocalDeployTeardownFields({
+  apiClient,
+  bulkInFlight,
+  canMutateTenant,
+  detail,
+  onBulkDeploy,
+  onConfirmTeardown,
+  totalDeployCount,
+  t,
+  wizard,
+}: {
+  readonly apiClient: ApiClient | null;
+  readonly bulkInFlight: BulkInFlight;
+  readonly canMutateTenant: boolean;
+  readonly detail: EventDetail;
+  readonly onBulkDeploy: (body?: BulkDeployBody) => void;
+  readonly onConfirmTeardown: () => void;
+  readonly totalDeployCount: number;
+  readonly t: Translate;
+  readonly wizard: WizardState | null;
+}) {
+  const deployable =
+    detail.status === "DRAFT" ||
+    detail.status === "DEPLOYING" ||
+    (detail.status === "TEARDOWN" && !detail.startsAt);
+  const blocked = !apiClient || !canMutateTenant || bulkInFlight !== null;
+  return (
+    <>
+      <Box margin={{ top: "m" }}>
+        <Field label={t("local_host.deploy_label")}>
+          <SpaceBetween size="xs">
+            <Box variant="small" color="text-status-inactive">
+              {t(deployable ? "local_host.deploy_hint" : "local_host.deploy_done_hint")}
+            </Box>
+            {detail.status === "DEPLOYING" && hasStoppedEnvironment(detail) && (
+              // Deploy never redeploys a stopped environment (that would discard its data), so
+              // the event only becomes ready once that environment is restarted.
+              <Box variant="small" color="text-status-warning">
+                {t("local_host.deploy_stopped_hint")}
+              </Box>
+            )}
+            <Button
+              variant={wizard?.primary === "deploy" ? "primary" : "normal"}
+              loading={bulkInFlight === "deploy"}
+              disabled={blocked || !deployable || detail.teams.length === 0}
+              onClick={() => onBulkDeploy()}
+            >
+              {t(totalDeployCount > 0 ? "local_host.deploy_retry" : "event_detail.deploy_at_now")}
+            </Button>
+          </SpaceBetween>
+        </Field>
+      </Box>
+      <Box margin={{ top: "m" }}>
+        <Field label={t("local_host.teardown_label")}>
+          <SpaceBetween size="xs">
+            <Box variant="small" color="text-status-inactive">
+              {t("local_host.no_schedules")}
+            </Box>
+            <Button
+              loading={bulkInFlight === "teardown"}
+              disabled={blocked || totalDeployCount === 0 || !localTeardownOwed(detail)}
+              onClick={onConfirmTeardown}
+            >
+              {t("event_detail.teardown_at_now")}
+            </Button>
+          </SpaceBetween>
+        </Field>
+      </Box>
+    </>
+  );
+}
+
+/**
+ * The local host refuses teardown for an archived event and for a torn-down event whose
+ * environments are all removed; a torn-down event with a failed cleanup can retry.
+ */
+function hasStoppedEnvironment(detail: EventDetail): boolean {
+  return Object.values(detail.deploymentsByProblem).some((deployments) =>
+    deployments.some((deployment) => deployment.status === "STOPPED"),
+  );
+}
+
+function localTeardownOwed(detail: EventDetail): boolean {
+  if (detail.status === "ARCHIVED") return false;
+  if (detail.status !== "TEARDOWN") return true;
+  return Object.values(detail.deploymentsByProblem).some((deployments) =>
+    deployments.some((deployment) => deployment.status !== "DELETED"),
+  );
+}
+
 export function EventSchedulePanel({
   apiClient,
   bulkInFlight,
@@ -192,6 +290,7 @@ export function EventSchedulePanel({
   endsAtInFlight,
   freezeMinutesInFlight,
   freezeMinutesInput,
+  localHost = false,
   onBulkDeploy,
   onConfirmTeardown,
   onEndNowSchedule,
@@ -217,6 +316,8 @@ export function EventSchedulePanel({
   readonly endsAtInFlight: boolean;
   readonly freezeMinutesInFlight: boolean;
   readonly freezeMinutesInput: string;
+  /** Issue #3226: the local competition host (no scheduled deploy/teardown, no force redeploy). */
+  readonly localHost?: boolean;
   readonly onBulkDeploy: (body?: BulkDeployBody) => void;
   readonly onConfirmTeardown: () => void;
   readonly onEndNowSchedule: () => void;
@@ -328,22 +429,36 @@ export function EventSchedulePanel({
           </SpaceBetween>
         </Field>
       </Box>
-      <DeployTeardownFields
-        apiClient={apiClient}
-        bulkInFlight={bulkInFlight}
-        canMutateTenant={canMutateTenant}
-        completeCount={completeCount}
-        deployScheduleInFlight={deployScheduleInFlight}
-        detail={detail}
-        onBulkDeploy={onBulkDeploy}
-        onConfirmTeardown={onConfirmTeardown}
-        onOpenDeployModal={onOpenDeployModal}
-        onOpenTeardownModal={onOpenTeardownModal}
-        teardownInFlight={teardownInFlight}
-        totalDeployCount={totalDeployCount}
-        t={t}
-        wizard={wizard}
-      />
+      {localHost ? (
+        <LocalDeployTeardownFields
+          apiClient={apiClient}
+          bulkInFlight={bulkInFlight}
+          canMutateTenant={canMutateTenant}
+          detail={detail}
+          onBulkDeploy={onBulkDeploy}
+          onConfirmTeardown={onConfirmTeardown}
+          totalDeployCount={totalDeployCount}
+          t={t}
+          wizard={wizard}
+        />
+      ) : (
+        <DeployTeardownFields
+          apiClient={apiClient}
+          bulkInFlight={bulkInFlight}
+          canMutateTenant={canMutateTenant}
+          completeCount={completeCount}
+          deployScheduleInFlight={deployScheduleInFlight}
+          detail={detail}
+          onBulkDeploy={onBulkDeploy}
+          onConfirmTeardown={onConfirmTeardown}
+          onOpenDeployModal={onOpenDeployModal}
+          onOpenTeardownModal={onOpenTeardownModal}
+          teardownInFlight={teardownInFlight}
+          totalDeployCount={totalDeployCount}
+          t={t}
+          wizard={wizard}
+        />
+      )}
     </Container>
   );
 }

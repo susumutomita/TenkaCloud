@@ -5,6 +5,17 @@ import { type EventDetail, getEvent } from "../api/events-client";
 
 /** 30s: fast enough to follow a live scoreboard, slow enough not to hammer the API. */
 const EVENT_DETAIL_POLL_INTERVAL_MS = 30_000;
+const IN_FLIGHT_DEPLOYMENT_STATUSES = new Set(["PENDING", "IN_PROGRESS", "DELETING"]);
+
+/** Is any environment of this event still being created, changed or removed? */
+function hasEnvironmentWorkInFlight(detail: EventDetail | null): boolean {
+  return Object.values(detail?.deploymentsByProblem ?? {}).some((deployments) =>
+    deployments.some(
+      (deployment) =>
+        deployment.operation !== undefined || IN_FLIGHT_DEPLOYMENT_STATUSES.has(deployment.status),
+    ),
+  );
+}
 
 /**
  * Is the event running right now? Drives whether auto-refresh polls at all.
@@ -27,8 +38,14 @@ export function useEventDetail(args: {
   readonly eventId: string | undefined;
   readonly eventIdValid: boolean;
   readonly withTeamLoginKeys?: boolean;
+  /**
+   * Issue #3226: the local competition host finishes deploys and environment operations in
+   * seconds, so its console follows them at this interval while any is in flight. Unset (the
+   * cloud console) keeps the single 30s live-event poll.
+   */
+  readonly inFlightPollMs?: number;
 }) {
-  const { apiClient, eventId, eventIdValid, withTeamLoginKeys = false } = args;
+  const { apiClient, eventId, eventIdValid, withTeamLoginKeys = false, inFlightPollMs } = args;
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualRefreshInFlight, setManualRefreshInFlight] = useState(false);
@@ -80,6 +97,14 @@ export function useEventDetail(args: {
   usePolling(refresh, EVENT_DETAIL_POLL_INTERVAL_MS, {
     immediate: false,
     enabled: isRunningNow(detail) && Boolean(apiClient) && eventIdValid,
+  });
+  usePolling(refresh, inFlightPollMs ?? EVENT_DETAIL_POLL_INTERVAL_MS, {
+    immediate: false,
+    enabled:
+      inFlightPollMs !== undefined &&
+      hasEnvironmentWorkInFlight(detail) &&
+      Boolean(apiClient) &&
+      eventIdValid,
   });
 
   return {

@@ -62,6 +62,11 @@ export interface EventCreateProblemsetSectionProps {
    * 従来通り非 AWS 問題は disabled + 「近日対応」。
    */
   nonAwsRuntimeEnabled: boolean;
+  /**
+   * Issue #3226: on the local competition host, the problems its catalog supports. Others are
+   * disabled, and the cloud-only region / cost columns are not shown.
+   */
+  hostSupportedProblemIds?: ReadonlySet<string>;
   onProblemsChange: (next: readonly MultiselectProps.Option[]) => void;
   onUpdateProblemRow: (problemId: string, patch: Partial<ProblemRow>) => void;
 }
@@ -71,6 +76,7 @@ export function EventCreateProblemsetSection({
   selectedProblems,
   problemRows,
   nonAwsRuntimeEnabled,
+  hostSupportedProblemIds,
   onProblemsChange,
   onUpdateProblemRow,
 }: EventCreateProblemsetSectionProps) {
@@ -85,8 +91,16 @@ export function EventCreateProblemsetSection({
   );
   // #1414 / #2167: 選択不可 runtime の問題は disabled + 「近日対応」 tag。
   const problemOptions = useMemo(
-    () => buildProblemOptions(filtered, t("event_create.problem_reserved_tag"), enabledProviders),
-    [filtered, t, enabledProviders],
+    () =>
+      hostSupportedProblemIds
+        ? buildProblemOptions(
+            filtered,
+            t("local_host.problem_unsupported_tag"),
+            enabledProviders,
+            hostSupportedProblemIds,
+          )
+        : buildProblemOptions(filtered, t("event_create.problem_reserved_tag"), enabledProviders),
+    [filtered, t, enabledProviders, hostSupportedProblemIds],
   );
   const tagFacets = useMemo(() => collectTagFacets(problems), [problems]);
   const scoringKindFacets = useMemo(() => collectScoringKindFacets(problems), [problems]);
@@ -247,7 +261,7 @@ export function EventCreateProblemsetSection({
           </Box>
         )}
 
-        {problemRows.length > 0 && (
+        {problemRows.length > 0 && !hostSupportedProblemIds && (
           <Table
             variant="embedded"
             items={[...problemRows]}

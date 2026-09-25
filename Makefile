@@ -465,6 +465,13 @@ local-down: ## Stop local play and clear all persisted progress | local playを�
 local-status:
 	@sh scripts/local/docker-launcher.sh status
 
+# Issue #3226: a multi-team competition hosted on this computer (Bun + SQLite; Docker only for the
+# problem environments). Separate from `make local` individual practice. Pass options through
+# HOST_ARGS, e.g. `make host HOST_ARGS="--lan 192.168.1.20 --unsafe-lan"`. See docs/local-hosting.md.
+.PHONY: host
+host: ensure-deps ## Host a multi-team competition on this computer (Bun + SQLite) | このPCで複数チームの大会を開催(Bun + SQLite)
+	bun start $(HOST_ARGS)
+
 # Issue #2054 / #2392 / #2511 / #2906: the DEVELOPER path — the same local-play engine, run directly
 # on the host with Bun/Vite (hot reload, no container rebuild per change) instead of Docker. Run
 # `make local-onboard` first on a fresh clone.

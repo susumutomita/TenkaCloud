@@ -63,11 +63,17 @@ export interface Job {
   problemId: string;
   definition: string;
   offset: number;
-  status: "PENDING" | "IN_PROGRESS" | "COMPLETE" | "FAILED" | "DELETING" | "DELETED";
+  /** `STOPPED`: the organizer halted this one environment; containers and data are kept. */
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETE" | "FAILED" | "STOPPED" | "DELETING" | "DELETED";
   /** Committed before a runtime can be created; retained until physical cleanup succeeds. */
   unit: string | null;
   error?: string;
+  /** An organizer operation on this single environment that has not finished yet. */
+  operation?: JobOperation;
 }
+
+/** Organizer operations on one team/problem environment. */
+export type JobOperation = "stop" | "restart" | "teardown";
 
 export interface Context {
   event: HostedEvent;
@@ -89,7 +95,12 @@ export interface RuntimeEngine {
   catalog(): readonly Problem[];
   start(job: Job, retain: (unit: string | null) => void): Promise<void>;
   recover(job: Job): Promise<void>;
+  /** Remove the environment's containers and volumes (teardown). */
   stop(job: Job): Promise<void>;
+  /** Halt a running environment's containers, keeping them and their data. */
+  pause(job: Job): Promise<void>;
+  /** Restart a halted or running environment in place and wait until it is reachable. */
+  resume(job: Job): Promise<void>;
   view(context: Context): Promise<Record<string, unknown>>;
   submit(context: Context, body: Record<string, unknown>): Promise<EngineResult>;
   hint(context: Context, problemId: string, hintId: string): Promise<EngineResult>;

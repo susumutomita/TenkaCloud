@@ -102,6 +102,16 @@ Bun と Vite を使う開発用の経路です。[詳しい準備とコマンド
 
 </details>
 
+### 自分の PC で大会を開催する(AWS 不要)
+
+`make local` は個人練習用です。複数チームの大会を 1 台の PC から開催するときは、Bun と SQLite で動くローカル大会を使います(Bun が必要です。Docker は問題環境にだけ使います)。
+
+```bash
+make host
+```
+
+主催者は表示された主催者キーで通常の管理コンソールにサインインし、各チームは自分のチームキーで参加者ポータルにサインインします。LAN での参加、ファイアウォールで開けるポート、チームごとの環境操作、撤収は[ローカル大会の開催](./docs/local-hosting.md)を参照してください。
+
 ### AWS にデプロイする
 
 1 つの運営グループで使うなら **Lite モード**を選びます。AWS アカウントと管理者用メールアドレスを用意し、[データベース](#運用コスト)と、次の構築方法を選びます。
@@ -206,6 +216,7 @@ make pack-activate ARGS="com.example.starter@0.1.0 --tenant local"
 | やりたいこと | 読むもの |
 | --- | --- |
 | イベントを運営する | [準備から当日の運営まで](./apps/developer-portal/src/app/developers/docs/operate/run-an-event/page.ja.mdx) |
+| 1 台の PC で大会を開催する(AWS 不要) | [ローカル大会の開催](./docs/local-hosting.md) |
 | LLM に構築や調査を手伝ってもらう | [LLM 用の入口](./landing/llms.txt) → [目的別ガイドとコードの見取り図](./landing/llms-full.txt) |
 | 本体のコードを変える | [開発手順](./CONTRIBUTING.md) · [エージェント向け指示](./AGENTS.md) |
 | 構成を理解する | [アーキテクチャの読み方](./docs/architecture/README.md) · [オンラインマニュアル](./apps/developer-portal/src/app/developers/docs/concepts/architecture/page.ja.mdx) · [システム構成図](./docs/architecture/diagrams/system-architecture.drawio) |

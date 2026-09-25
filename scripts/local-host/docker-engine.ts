@@ -8,6 +8,7 @@ import { teamView } from "../local-play/api-views";
 import { assertComposePolicy } from "../local-play/compose-policy";
 import type { LocalComposeUnit, StartedContainer } from "../local-play/container-runner";
 import {
+  type ComposeCli,
   composeArgsForCli,
   generateSecretEnv,
   isComposeUnitRunning,
@@ -83,19 +84,55 @@ function definitionOf(job: Job, verifySources: boolean): Definition {
   return definition;
 }
 
+type ComposeAction = "up" | "down" | "stop" | "restart";
+
+/** Recognizes "no daemon" across Docker CLI generations, Docker Desktop and Compose v1. */
+const DAEMON_UNAVAILABLE =
+  /cannot connect to the docker daemon|failed to connect to the docker api|is the docker daemon running|daemon is not running|error during connect/iu;
+
+export const DAEMON_UNAVAILABLE_MESSAGE =
+  "Docker daemon is unavailable. Start Docker Desktop or Docker Engine, then retry the deployment from the host console.";
+
+/** A Compose failure caused by an unreachable daemon, never by the problem itself. */
+export class DockerDaemonUnavailableError extends Error {
+  constructor() {
+    super(DAEMON_UNAVAILABLE_MESSAGE);
+    this.name = "DockerDaemonUnavailableError";
+  }
+}
+
+function composeCommandArgs(
+  cli: ComposeCli,
+  unit: LocalComposeUnit,
+  action: ComposeAction,
+): string[] {
+  if (action === "up" || action === "down")
+    return composeArgsForCli(
+      cli,
+      unit.composePath,
+      unit.composeProjectName,
+      action,
+      unit.projectDirectory,
+    );
+  // `stop` keeps containers and volumes; `restart` starts stopped or running ones in place.
+  const args = [
+    "-f",
+    unit.composePath,
+    "-p",
+    unit.composeProjectName,
+    ...(unit.projectDirectory ? ["--project-directory", unit.projectDirectory] : []),
+    action,
+  ];
+  return cli.command === "docker-compose" ? args : ["compose", ...args];
+}
+
 async function compose(
   unit: LocalComposeUnit,
-  action: "up" | "down",
+  action: ComposeAction,
   environment: NodeJS.ProcessEnv,
 ): Promise<void> {
   const cli = resolveComposeCli();
-  const args = composeArgsForCli(
-    cli,
-    unit.composePath,
-    unit.composeProjectName,
-    action,
-    unit.projectDirectory,
-  );
+  const args = composeCommandArgs(cli, unit, action);
   await new Promise<void>((accept, reject) => {
     const child = spawn(cli.command, args, {
       env: environment,
@@ -116,16 +153,13 @@ async function compose(
       clearTimeout(timeout);
       // Do not send build logs or interpolated environment values to a competitor.
       if (code === 0) accept();
-      else {
-        const daemon = /cannot connect|daemon.*not running/iu.test(tail);
+      else if (DAEMON_UNAVAILABLE.test(tail)) reject(new DockerDaemonUnavailableError());
+      else
         reject(
           new Error(
-            daemon
-              ? "Docker daemon is unavailable. Start Docker Desktop or Engine and retry."
-              : `Docker Compose ${action} failed (exit ${String(code)}). Inspect project ${unit.composeProjectName} on the host.`,
+            `Docker Compose ${action} failed (exit ${String(code)}). Inspect project ${unit.composeProjectName} on the host.`,
           ),
         );
-      }
     });
   });
 }
@@ -210,11 +244,8 @@ export class DockerHostingEngine implements RuntimeEngine {
         await compose(unit, "down", { ...process.env, ...generated });
         unlinkSync(unit.composePath);
         retain(null);
-      } catch {
-        throw new Error(
-          "Problem startup failed and cleanup was incomplete. Runtime ownership was retained; use host teardown to retry.",
-          { cause: error },
-        );
+      } catch (cleanup) {
+        throw startupCleanupFailure(error, cleanup);
       }
       throw error;
     }
@@ -269,6 +300,40 @@ export class DockerHostingEngine implements RuntimeEngine {
     await compose(unit, "down", { ...process.env, ...cleanupEnvironment });
     this.running.delete(job.jobId);
     unlinkSync(unit.composePath);
+  }
+  /** Validated, unchanged private plan of an owned environment. */
+  private ownedUnit(
+    job: Job,
+    verifySources: boolean,
+  ): { unit: LocalComposeUnit; directory: string } {
+    const plan = this.plan(job, verifySources);
+    const unit = this.validatedUnit(job, plan.started.unit);
+    if (
+      !existsSync(unit.composePath) ||
+      readFileSync(unit.composePath, "utf8") !== plan.composeText
+    )
+      throw new Error(
+        "Recorded runtime composition changed or is missing; refusing to operate it.",
+      );
+    return { unit, directory: plan.directory };
+  }
+  async pause(job: Job): Promise<void> {
+    const { unit } = this.ownedUnit(job, false);
+    // `compose stop` never recreates containers; interpolation needs names, not the secrets.
+    const placeholders = Object.fromEntries(
+      unit.secretEnv.map((name) => [name, "tenkacloud-host-stop"]),
+    );
+    this.running.delete(job.jobId);
+    await compose(unit, "stop", { ...process.env, ...placeholders });
+  }
+  async resume(job: Job): Promise<void> {
+    const plan = this.plan(job);
+    const { unit, directory } = this.ownedUnit(job, true);
+    const generated = generateSecretEnv(directory, job.problemId, unit.secretEnv);
+    await compose(unit, "restart", { ...process.env, ...generated });
+    await ready(plan.started.problem.verifyUrl);
+    await ready(this.surfaceFrom(plan.started));
+    this.running.set(job.jobId, plan.started);
   }
   private surfaceFrom(started: StartedContainer): string {
     const url = started.problem.challengeEndpoints.Web;
@@ -372,4 +437,19 @@ export class DockerHostingEngine implements RuntimeEngine {
     const response = revealHint(problemId, hintId, state, new Date(context.now).toISOString());
     return this.result(state, response, context);
   }
+}
+
+/**
+ * Startup failed and removing its partial environment failed too. The first failure is the
+ * cause the organizer has to fix; ownership stays recorded, and the next deployment retry
+ * removes the partial environment before starting again.
+ */
+function startupCleanupFailure(startup: unknown, cleanup: unknown): Error {
+  if (startup instanceof DockerDaemonUnavailableError) return new DockerDaemonUnavailableError();
+  const reason = startup instanceof Error ? startup.message : String(startup);
+  const cleanupReason = cleanup instanceof Error ? cleanup.message : String(cleanup);
+  return new Error(
+    `${reason} Removing the partial environment also failed (${cleanupReason}); ownership is retained and retrying the deployment removes it first.`,
+    { cause: startup },
+  );
 }

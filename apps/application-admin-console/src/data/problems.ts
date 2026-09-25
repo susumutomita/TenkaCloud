@@ -6,6 +6,7 @@
  * 現在は静的 build-time discovery を正本として両 console の catalog を一元化する。
  */
 
+import { LOCAL_HOST_BUILD } from "../local-host-build";
 import type { CoreCatalogInput, PackCatalogProblemInput } from "./effective-catalog";
 import { buildEffectiveCatalog } from "./effective-catalog";
 import type { ProblemDetail, ProblemMetadata, ProblemSummary } from "./problem-types";
@@ -151,6 +152,8 @@ const packInputs = buildPackInputs(packMetadataModules, packTemplateModules, pac
 export const PROBLEM_CATALOG: readonly ProblemDetail[] = buildEffectiveCatalog({
   core: coreInputs,
   packs: packInputs,
+  // Issue #3226: set only by vite.host.config.ts (the local competition host build).
+  includeLocalOnly: LOCAL_HOST_BUILD,
 });
 
 export function findProblem(id: string): ProblemDetail | undefined {

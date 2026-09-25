@@ -291,6 +291,11 @@ function ProblemPanelAlerts({
           {problem.failureReason}
         </Alert>
       )}
+      {problem.accessError === "link_unavailable" && (
+        <Alert type="warning" header={t("problem_panel.access_unavailable_header")}>
+          {t("problem_panel.access_unavailable_body")}
+        </Alert>
+      )}
       {isStale && (
         <Alert type="warning" header={t("problem_panel.stale_header")}>
           {t("problem_panel.stale_body", { ago: describeAgo(problem.lastScoredAt, now, lang) })}

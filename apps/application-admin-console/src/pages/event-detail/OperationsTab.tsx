@@ -4,6 +4,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { DeployProgressPanel } from "../../components/event-detail/DeployProgressPanel";
 import { EventRescuePanel } from "../../components/event-detail/EventWizardPanel";
+import { isLocalHost } from "../../config";
 import { CapacityPanel } from "./CapacityPanel";
 import type { EventTabContentProps } from "./tab-content-props";
 
@@ -22,6 +23,7 @@ import type { EventTabContentProps } from "./tab-content-props";
 export function OperationsTab({
   apiClient,
   canMutateTenant,
+  config,
   counts,
   detail,
   manualRefresh,
@@ -63,7 +65,15 @@ export function OperationsTab({
         )}
       </Container>
 
-      <CapacityPanel apiClient={apiClient} t={t} />
+      {isLocalHost(config) ? (
+        // Issue #3226: say which console features need cloud infrastructure instead of
+        // calling APIs the local host does not have.
+        <Alert type="info" header={t("local_host.cloud_only_header")}>
+          {t("local_host.cloud_only_body")}
+        </Alert>
+      ) : (
+        <CapacityPanel apiClient={apiClient} t={t} />
+      )}
     </SpaceBetween>
   );
 }

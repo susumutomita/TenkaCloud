@@ -38,6 +38,10 @@ daemon を診断できます。設定変更は行いません。ローカルプ�
 | `scripts/` | リポジトリ検査、デプロイ補助、生成物 |
 | `problems/` | commitを固定した公式問題カタログsubmodule |
 
+ローカル大会(`make host`、Bun + SQLite)は`scripts/local-host/`が API と Docker 環境を担当し、
+画面は通常の管理コンソールと参加者ポータルを local-host mode で使います。
+手順、ポート、検証コマンドは[ローカル大会の開催](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md)にあります。
+
 契約を変える前に、最寄りのテストとリポジトリ内の指示を読みます。
 [プラットフォーム構成](/developers/docs/concepts/architecture/)はplane間の責務とevent
 契約を説明しています。

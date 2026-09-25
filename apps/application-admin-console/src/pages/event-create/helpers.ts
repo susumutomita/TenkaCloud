@@ -82,7 +82,9 @@ export type EventProviderMode =
   | { readonly kind: "aws" }
   | { readonly kind: "nonAws"; readonly provider: string }
   | { readonly kind: "composite"; readonly providers: readonly string[] }
-  | { readonly kind: "mixed" };
+  | { readonly kind: "mixed" }
+  /** Issue #3226: the local competition host runs Docker environments; no cloud destination. */
+  | { readonly kind: "local" };
 
 export type TeamTableItem = TeamRow & { idx: number };
 
@@ -109,12 +111,18 @@ export function buildProblemOptions(
   }[],
   reservedTag: string,
   enabledProviders: ReadonlySet<string>,
+  /**
+   * Issue #3226: on the local competition host the host's own catalog decides; a problem it
+   * does not support is disabled with `reservedTag` rather than offered for a failing deploy.
+   */
+  hostSupported?: ReadonlySet<string>,
 ): ProblemOption[] {
   return problems.map((p) => {
     const base = { value: p.id, label: `${p.name} (${p.id})` };
-    return isProviderSelectable(p.runtime, enabledProviders)
-      ? base
-      : { ...base, disabled: true, labelTag: reservedTag };
+    const selectable = hostSupported
+      ? hostSupported.has(p.id)
+      : isProviderSelectable(p.runtime, enabledProviders);
+    return selectable ? base : { ...base, disabled: true, labelTag: reservedTag };
   });
 }
 
@@ -223,6 +231,7 @@ function providerRequirements(providerMode: EventProviderMode): {
       nonAws: providerMode.providers.some((provider) => provider !== "aws"),
     };
   }
+  // "mixed" is rejected separately; "local" has no per-team cloud destination to validate.
   return { aws: false, nonAws: false };
 }
 
