@@ -644,8 +644,19 @@ export class DynamoDbEventsRepository implements EventsRepository {
     from: string,
     to: string,
     at: string,
+    expected?: { readonly updatedAt: string | undefined },
   ): Promise<EventMutationOutcome> {
     // 毎分 tick の CAS: 敗者は次 tick で再評価するだけなので probe しない。
+    // [Issue #3261] `expected` 指定時は updatedAt も一致条件に含める (= 判定後に再 deploy が
+    // 割り込んで status が同じ DEPLOYING のままでも、 markDeploying が updatedAt を
+    // 書き換えているので CCF で skip する)。
+    let updatedAtCondition = "";
+    if (expected) {
+      updatedAtCondition =
+        expected.updatedAt === undefined
+          ? " AND attribute_not_exists(updatedAt)"
+          : " AND updatedAt = :expectedUpdatedAt";
+    }
     return this.conditionalUpdate(
       tenantId,
       eventId,
@@ -653,13 +664,16 @@ export class DynamoDbEventsRepository implements EventsRepository {
         UpdateExpression: "SET #status = :next, updatedAt = :now",
         // race 防止: 期待 current status と一致しているときのみ更新 (= operator が
         // 手動 archive / 再 deploy で先に動かしてたら CCF で skip)。
-        ConditionExpression: "tenantId = :tenant AND #status = :current",
+        ConditionExpression: `tenantId = :tenant AND #status = :current${updatedAtCondition}`,
         ExpressionAttributeNames: { "#status": "status" },
         ExpressionAttributeValues: {
           ":tenant": tenantId,
           ":current": from,
           ":next": to,
           ":now": at,
+          ...(expected?.updatedAt === undefined
+            ? {}
+            : { ":expectedUpdatedAt": expected.updatedAt }),
         },
       },
       "conflict",

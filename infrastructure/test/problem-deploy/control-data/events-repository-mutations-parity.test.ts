@@ -549,6 +549,82 @@ describe.each(backends)("EventsRepository mutations parity: %s", (_name, makeRep
       const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
       expect(stored?.status).toBe("READY");
     });
+
+    it("should apply the CAS when the expected updatedAt still matches (#3261)", async () => {
+      const { events } = makeRepos();
+      await events.putEvent(sampleEvent({ status: "DEPLOYING" }));
+
+      const result = await events.transitionStatus(
+        "tenant-a",
+        "01EVENTAAAAAAAAAAAAAAAAAAA",
+        "DEPLOYING",
+        "READY",
+        AT,
+        { updatedAt: "2026-06-01T00:00:00.000Z" },
+      );
+
+      expect(result.outcome).toBe("updated");
+      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+      expect(stored?.status).toBe("READY");
+      expect(stored?.updatedAt).toBe(AT);
+    });
+
+    it("should return conflict when a redeploy rewrote updatedAt with the same status (#3261)", async () => {
+      const { events } = makeRepos();
+      await events.putEvent(sampleEvent({ status: "DEPLOYING" }));
+      const redeployAt = "2026-06-02T00:00:00.000Z";
+      expect(
+        (await events.markDeploying("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", redeployAt)).outcome,
+      ).toBe("updated");
+
+      const result = await events.transitionStatus(
+        "tenant-a",
+        "01EVENTAAAAAAAAAAAAAAAAAAA",
+        "DEPLOYING",
+        "READY",
+        AT,
+        { updatedAt: "2026-06-01T00:00:00.000Z" },
+      );
+
+      expect(result).toEqual({ outcome: "conflict" });
+      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+      expect(stored?.status).toBe("DEPLOYING");
+      expect(stored?.updatedAt).toBe(redeployAt);
+    });
+
+    it("should treat an undefined expected updatedAt as 'attribute absent' (#3261)", async () => {
+      const { events } = makeRepos();
+      // A legacy row that never carried `updatedAt`.
+      const withoutUpdatedAt: Partial<EventRecord> = sampleEvent({ status: "DEPLOYING" });
+      delete withoutUpdatedAt.updatedAt;
+      await events.putEvent(withoutUpdatedAt as EventRecord);
+      await events.putEvent(
+        sampleEvent({ eventId: "01EVENTBBBBBBBBBBBBBBBBBBB", status: "DEPLOYING" }),
+      );
+
+      expect(
+        await events.transitionStatus(
+          "tenant-a",
+          "01EVENTBBBBBBBBBBBBBBBBBBB",
+          "DEPLOYING",
+          "READY",
+          AT,
+          { updatedAt: undefined },
+        ),
+      ).toEqual({ outcome: "conflict" });
+      const result = await events.transitionStatus(
+        "tenant-a",
+        "01EVENTAAAAAAAAAAAAAAAAAAA",
+        "DEPLOYING",
+        "READY",
+        AT,
+        { updatedAt: undefined },
+      );
+      expect(result.outcome).toBe("updated");
+      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+      expect(stored?.status).toBe("READY");
+      expect(stored?.updatedAt).toBe(AT);
+    });
   });
 
   describe("markScheduleFired", () => {

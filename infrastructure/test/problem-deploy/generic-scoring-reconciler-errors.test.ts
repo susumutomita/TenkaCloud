@@ -31,13 +31,18 @@ describe("reconcileEventStatuses CCF skip (#557 #828)", () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#EV4", tenantId: "tenant-acme", eventId: "EV4", status: "DEPLOYING" }],
     });
-    ddbSend.mockResolvedValueOnce({ Items: [{ status: "COMPLETE" }] });
+    ddbSend.mockResolvedValueOnce({ Items: [{ PK: "DEPLOYMENT#J4", status: "COMPLETE" }] });
+    // [Issue #3261] consistent base-row confirmation passes; the event CAS then loses.
+    ddbSend.mockResolvedValueOnce({
+      Item: { PK: "DEPLOYMENT#J4", tenantId: "tenant-acme", eventId: "EV4", status: "COMPLETE" },
+    });
     ddbSend.mockImplementationOnce(async () => {
       const err: Error & { name?: string } = new Error("conditional check failed");
       err.name = "ConditionalCheckFailedException";
       throw err;
     });
     await expect(reconcileEventStatuses(ctx, NOW_ISO)).resolves.toBeUndefined();
+    expect(ddbSend).toHaveBeenCalledTimes(4);
   });
 
   it("`rescueStuckDeletingDeployments` should silently skip on UpdateItem CCF (= concurrent MarkDeleted/MarkFailed)", async () => {

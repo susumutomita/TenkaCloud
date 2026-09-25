@@ -5,7 +5,11 @@ import {
   reconcileEventStatuses,
   rescueStuckCreatingDeployments,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
-import { buildCtx } from "./generic-scoring-reconciler.test-helpers";
+import {
+  buildCtx,
+  routeDeploymentGets,
+  sentInputs,
+} from "./generic-scoring-reconciler.test-helpers";
 
 describe("reconcileEventStatuses stuck-create recovery (#2651)", () => {
   let ctx: ReconcileEventStatusesContext;
@@ -39,14 +43,23 @@ describe("reconcileEventStatuses stuck-create recovery (#2651)", () => {
         { PK: "DEPLOYMENT#IN-PROGRESS", status: "IN_PROGRESS", updatedAt: stale },
       ],
     });
-    ddbSend.mockResolvedValue({});
+    // [Issue #3261] After the rescue writes, the base rows read back as terminal.
+    const baseRow = (status: string) => ({
+      tenantId: "tenant-acme",
+      eventId: "EV-STUCK-CREATE",
+      status,
+    });
+    routeDeploymentGets(ddbSend, {
+      COMPLETE: baseRow("COMPLETE"),
+      PENDING: baseRow("FAILED"),
+      "IN-PROGRESS": baseRow("FAILED"),
+    });
 
     await reconcileEventStatuses(ctx, now);
 
-    expect(ddbSend).toHaveBeenCalledTimes(5);
-    const updateInputs = ddbSend.mock.calls
-      .slice(2)
-      .map((call) => (call[0] as { input: Record<string, unknown> }).input);
+    // Scan + Query + 2 rescue updates + 3 consistent GetItem + event Update.
+    expect(ddbSend).toHaveBeenCalledTimes(8);
+    const updateInputs = sentInputs(ddbSend, "UpdateCommand") as Record<string, unknown>[];
     const rescueInputs = updateInputs.filter(
       (input) => input.ConditionExpression === "#status IN (:pending, :inProgress)",
     );

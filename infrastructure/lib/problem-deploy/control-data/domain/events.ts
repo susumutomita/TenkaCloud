@@ -406,6 +406,12 @@ export interface EventsRepository {
    * status still equals `from` (an operator race loses ⇒ `conflict`, the caller
    * skips and re-evaluates next tick). No probe on `conflict` — the reconciler
    * never needs the reason, and the pre-seam path spent no extra read.
+   *
+   * [Issue #3261] With `expected`, the CAS also requires the row's `updatedAt`
+   * to still equal `expected.updatedAt` (`undefined` = the attribute must be
+   * absent). Every redeploy (`markDeploying`) rewrites `updatedAt`, so a
+   * decision computed from a read taken before a concurrent redeploy loses the
+   * CAS even though the status is `DEPLOYING` again.
    */
   transitionStatus(
     tenantId: string,
@@ -413,6 +419,7 @@ export interface EventsRepository {
     from: string,
     to: string,
     at: string,
+    expected?: { readonly updatedAt: string | undefined },
   ): Promise<EventMutationOutcome>;
   /**
    * Idempotently stamps `teardownFiredAt` / `deployFiredAt` = `at`

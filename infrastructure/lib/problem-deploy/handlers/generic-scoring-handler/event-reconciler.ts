@@ -467,6 +467,7 @@ async function reconcileSingleEvent(
       from: eventStatus,
       to: next,
       nowIso,
+      expectedUpdatedAt: event.updatedAt,
     });
     return;
   }
@@ -485,13 +486,64 @@ async function reconcileSingleEvent(
   );
   const next = resolveEventStatusTransition(eventStatus, adjustedStatuses);
   if (!next) return;
+  // [Issue #3261] GSI1 is eventually consistent. After a force redeploy it can
+  // still return only the deleted COMPLETE row while the replacement is PENDING,
+  // so confirm every candidate against its base row before releasing READY.
+  if (next === "READY" && !(await confirmDeploymentsTerminal(ctx, event, depRows))) return;
   await applyEventStatusTransition(ctx, {
     tenantId: event.tenantId,
     eventId: event.eventId,
     from: eventStatus,
     to: next,
     nowIso,
+    // [Issue #3261] A redeploy between the reads above and this CAS leaves the
+    // status at DEPLOYING but rewrites updatedAt (`markDeploying`), so the CAS
+    // must also pin the updatedAt this decision was computed against.
+    expectedUpdatedAt: event.updatedAt,
   });
+}
+
+/**
+ * [Issue #3261] Strongly consistent re-read of each GSI1 candidate (the same
+ * `getDeployment(..., { consistentRead: true })` guard #3259 added to the
+ * registration path). READY is released only when every candidate still exists
+ * on its base row, still belongs to this event, and is terminal. A deleted row
+ * means a replacement exists that the index has not surfaced yet; that tick is
+ * skipped and re-evaluated on the next one. A read failure is logged and also
+ * skips, the same as a failed CAS.
+ */
+async function confirmDeploymentsTerminal(
+  ctx: ReconcileEventStatusesContext,
+  event: { readonly tenantId: string; readonly eventId: string },
+  rows: readonly DeploymentReconcilerRow[],
+): Promise<boolean> {
+  try {
+    const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(ctx);
+    const confirmed = await Promise.all(
+      rows.map(async (row) => {
+        if (!row.jobId) return false;
+        const current = await repository.getDeployment(row.jobId, { consistentRead: true });
+        return (
+          current !== undefined &&
+          current.tenantId === event.tenantId &&
+          current.eventId === event.eventId &&
+          (current.status === "COMPLETE" || current.status === "FAILED")
+        );
+      }),
+    );
+    if (confirmed.every(Boolean)) return true;
+    console.log("[generic-scoring] READY deferred: index rows not confirmed by base rows", {
+      eventId: event.eventId,
+      unconfirmed: confirmed.filter((ok) => !ok).length,
+    });
+    return false;
+  } catch (err) {
+    console.warn("[generic-scoring] READY confirmation read failed", {
+      eventId: event.eventId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
 }
 
 async function rescueStuckDeploymentsForEvent(
@@ -518,6 +570,7 @@ async function applyEventStatusTransition(
     readonly from: string;
     readonly to: "READY" | "ENDED" | "ARCHIVED";
     readonly nowIso: string;
+    readonly expectedUpdatedAt: string | undefined;
   },
 ): Promise<void> {
   try {
@@ -532,6 +585,7 @@ async function applyEventStatusTransition(
       args.from,
       args.to,
       args.nowIso,
+      { updatedAt: args.expectedUpdatedAt },
     );
     if (result.outcome !== "updated") return;
     console.log("[generic-scoring] Event status auto-transition", {

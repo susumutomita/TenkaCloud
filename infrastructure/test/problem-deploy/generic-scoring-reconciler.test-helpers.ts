@@ -29,3 +29,43 @@ export function buildCtx(): {
   };
   return { ctx, ddbSend };
 }
+
+export interface SentCommand {
+  readonly constructor: { readonly name: string };
+  readonly input: {
+    readonly Key?: { readonly PK?: string };
+    readonly ConsistentRead?: boolean;
+    readonly ConditionExpression?: string;
+    readonly ExpressionAttributeValues?: Record<string, unknown>;
+  };
+}
+
+/**
+ * [Issue #3261] Answers the reconciler's strongly consistent base-row re-reads
+ * (`GetCommand`, `PK = DEPLOYMENT#<jobId>`) from `baseRows` (keyed by jobId; an
+ * absent key models a row a force redeploy already deleted). Every other
+ * command falls through to `other`.
+ */
+export function routeDeploymentGets(
+  ddbSend: ReturnType<typeof vi.fn>,
+  baseRows: Readonly<Record<string, Record<string, unknown>>>,
+  other: (cmd: SentCommand) => unknown = () => ({}),
+): void {
+  ddbSend.mockImplementation(async (cmd: SentCommand) => {
+    if (cmd.constructor.name !== "GetCommand") return other(cmd);
+    const jobId = String(cmd.input.Key?.PK ?? "").replace(/^DEPLOYMENT#/, "");
+    const item = baseRows[jobId];
+    return item ? { Item: { PK: `DEPLOYMENT#${jobId}`, SK: "META", jobId, ...item } } : {};
+  });
+}
+
+/** Inputs of the commands of one kind (e.g. `GetCommand`) the reconciler sent, in call order. */
+export function sentInputs(
+  ddbSend: ReturnType<typeof vi.fn>,
+  commandName: string,
+): SentCommand["input"][] {
+  return ddbSend.mock.calls
+    .map((call) => call[0] as SentCommand)
+    .filter((cmd) => cmd.constructor.name === commandName)
+    .map((cmd) => cmd.input);
+}

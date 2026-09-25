@@ -4,7 +4,12 @@ import {
   type ReconcileEventStatusesContext,
   reconcileEventStatuses,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
-import { buildCtx, NOW_ISO } from "./generic-scoring-reconciler.test-helpers";
+import {
+  buildCtx,
+  NOW_ISO,
+  routeDeploymentGets,
+  sentInputs,
+} from "./generic-scoring-reconciler.test-helpers";
 
 type EventsRepository = Awaited<ReturnType<ControlDataRuntime["resolveEventsRepository"]>>;
 type TeamsRepository = Awaited<ReturnType<ControlDataRuntime["resolveTeamsRepository"]>>;
@@ -50,18 +55,42 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
 
   it("should transition to READY via Update when DEPLOYING and all child deployments are COMPLETE", async () => {
     ddbSend.mockResolvedValueOnce({
-      Items: [{ PK: "EVENT#EV1", tenantId: "tenant-acme", eventId: "EV1", status: "DEPLOYING" }],
+      Items: [
+        {
+          PK: "EVENT#EV1",
+          tenantId: "tenant-acme",
+          eventId: "EV1",
+          status: "DEPLOYING",
+          updatedAt: "2026-05-10T23:00:00.000Z",
+        },
+      ],
       LastEvaluatedKey: undefined,
     });
     ddbSend.mockResolvedValueOnce({
-      Items: [{ status: "COMPLETE" }, { status: "COMPLETE" }],
+      Items: [
+        { PK: "DEPLOYMENT#J1", status: "COMPLETE" },
+        { PK: "DEPLOYMENT#J2", status: "COMPLETE" },
+      ],
     });
-    ddbSend.mockResolvedValueOnce({});
+    // [Issue #3261] Both index rows are confirmed by their base rows (terminal).
+    routeDeploymentGets(ddbSend, {
+      J1: { tenantId: "tenant-acme", eventId: "EV1", status: "COMPLETE" },
+      J2: { tenantId: "tenant-acme", eventId: "EV1", status: "FAILED" },
+    });
 
     await reconcileEventStatuses(ctx, NOW_ISO);
 
-    expect(ddbSend).toHaveBeenCalledTimes(3);
-    const updateCmd = ddbSend.mock.calls[2]?.[0] as {
+    // Scan + Query + 2 consistent GetItem + Update.
+    expect(ddbSend).toHaveBeenCalledTimes(5);
+    const gets = sentInputs(ddbSend, "GetCommand");
+    expect(gets.map((input) => input.Key)).toEqual(
+      expect.arrayContaining([
+        { PK: "DEPLOYMENT#J1", SK: "META" },
+        { PK: "DEPLOYMENT#J2", SK: "META" },
+      ]),
+    );
+    expect(gets.every((input) => input.ConsistentRead === true)).toBe(true);
+    const updateCmd = ddbSend.mock.calls[4]?.[0] as {
       input: {
         UpdateExpression: string;
         ConditionExpression: string;
@@ -73,6 +102,11 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     expect(updateCmd.input.ExpressionAttributeValues[":current"]).toBe("DEPLOYING");
     expect(updateCmd.input.ConditionExpression).toContain("tenantId = :tenant");
     expect(updateCmd.input.ConditionExpression).toContain("#status = :current");
+    // [Issue #3261] The CAS also pins the updatedAt the decision was read with.
+    expect(updateCmd.input.ConditionExpression).toContain("updatedAt = :expectedUpdatedAt");
+    expect(updateCmd.input.ExpressionAttributeValues[":expectedUpdatedAt"]).toBe(
+      "2026-05-10T23:00:00.000Z",
+    );
   });
 
   it("should transition to ARCHIVED via Update when TEARDOWN and all child deployments are DELETED", async () => {
@@ -112,17 +146,20 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
         { PK: "EVENT#B", tenantId: "tenant-acme", eventId: "B", status: "TEARDOWN" },
       ],
     });
-    ddbSend.mockImplementation(
-      async (cmd: { input?: { ExpressionAttributeValues?: Record<string, string> } }) => {
-        const ev = cmd.input?.ExpressionAttributeValues?.[":ev"];
-        if (ev === "A") return { Items: [{ status: "COMPLETE" }] };
-        if (ev === "B") return { Items: [{ status: "DELETED" }] };
+    routeDeploymentGets(
+      ddbSend,
+      { JA: { tenantId: "tenant-acme", eventId: "A", status: "COMPLETE" } },
+      (cmd) => {
+        const ev = cmd.input.ExpressionAttributeValues?.[":ev"];
+        if (ev === "A") return { Items: [{ PK: "DEPLOYMENT#JA", status: "COMPLETE" }] };
+        if (ev === "B") return { Items: [{ PK: "DEPLOYMENT#JB", status: "DELETED" }] };
         return {};
       },
     );
 
     await reconcileEventStatuses(ctx, NOW_ISO);
-    expect(ddbSend).toHaveBeenCalledTimes(5);
+    // Scan + 2 Query + 1 GetItem (READY candidate only) + 2 Update.
+    expect(ddbSend).toHaveBeenCalledTimes(6);
   });
 
   it("Event filter should target DEPLOYING / READY / TEARDOWN + ENDED + DRAFT", async () => {
