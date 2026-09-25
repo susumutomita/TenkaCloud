@@ -1,6 +1,7 @@
 import { isCognitoDomain, isHttpsUrl } from "@tenkacloud/auth-client";
 import { resolveFeatureFlags } from "@tenkacloud/web-kit";
 import { type AppFeatures, FEATURE_REGISTRY } from "./features";
+import { LOCAL_HOST_BUILD } from "./local-host-build";
 
 export interface AppConfig {
   readonly cognitoDomain: string;
@@ -240,9 +241,10 @@ async function loadLocalHostConfig(): Promise<AppConfig> {
 
 export async function loadConfig(
   env: Record<string, string | undefined> = import.meta.env,
+  build: { readonly localHostBuild: boolean } = { localHostBuild: LOCAL_HOST_BUILD },
 ): Promise<AppConfig> {
   // Set only by vite.host.config.ts; the cloud and demo builds never read the local host API.
-  if (env.VITE_LOCAL_HOST === "1") return loadLocalHostConfig();
+  if (build.localHostBuild) return loadLocalHostConfig();
   const redirectUri = `${window.location.origin}/callback`;
   const scope = env.VITE_COGNITO_SCOPE ?? "openid email profile";
 

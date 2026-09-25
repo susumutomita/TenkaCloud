@@ -243,7 +243,7 @@ function LocalDeployTeardownFields({
             </Box>
             <Button
               loading={bulkInFlight === "teardown"}
-              disabled={blocked || totalDeployCount === 0}
+              disabled={blocked || totalDeployCount === 0 || !localTeardownOwed(detail)}
               onClick={onConfirmTeardown}
             >
               {t("event_detail.teardown_at_now")}
@@ -252,6 +252,18 @@ function LocalDeployTeardownFields({
         </Field>
       </Box>
     </>
+  );
+}
+
+/**
+ * The local host refuses teardown for an archived event and for a torn-down event whose
+ * environments are all removed; a torn-down event with a failed cleanup can retry.
+ */
+function localTeardownOwed(detail: EventDetail): boolean {
+  if (detail.status === "ARCHIVED") return false;
+  if (detail.status !== "TEARDOWN") return true;
+  return Object.values(detail.deploymentsByProblem ?? {}).some((deployments) =>
+    deployments.some((deployment) => deployment.status !== "DELETED"),
   );
 }
 

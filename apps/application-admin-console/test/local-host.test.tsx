@@ -33,7 +33,7 @@ function stubRuntime(body: unknown, status = 200) {
 
 async function localConfig(): Promise<AppConfig> {
   stubRuntime(runtime);
-  return loadConfig({ VITE_LOCAL_HOST: "1" });
+  return loadConfig({}, { localHostBuild: true });
 }
 
 describe("loadConfig in the local hosting build", () => {
@@ -58,17 +58,27 @@ describe("loadConfig in the local hosting build", () => {
     { ...runtime, participantPortalUrl: "ftp://127.0.0.1:5175" },
   ])("refuses a configuration that does not describe this host: %o", async (body) => {
     stubRuntime(body);
-    await expect(loadConfig({ VITE_LOCAL_HOST: "1" })).rejects.toThrow(/No demo or cloud/u);
+    await expect(loadConfig({}, { localHostBuild: true })).rejects.toThrow(/No demo or cloud/u);
   });
 
   it("fails loudly when the host configuration is missing", async () => {
     stubRuntime({}, 404);
-    await expect(loadConfig({ VITE_LOCAL_HOST: "1" })).rejects.toThrow(/unavailable/u);
+    await expect(loadConfig({}, { localHostBuild: true })).rejects.toThrow(/unavailable/u);
   });
 
   it("never enters local-host mode outside the hosting build", async () => {
     stubRuntime(runtime);
     const config = await loadConfig({
+      VITE_COGNITO_DOMAIN: "https://dev.auth.example.com",
+      VITE_COGNITO_CLIENT_ID: "client",
+    });
+    expect(isLocalHost(config)).toBe(false);
+  });
+
+  it("ignores a stray VITE_LOCAL_HOST in a cloud build's environment", async () => {
+    stubRuntime(runtime);
+    const config = await loadConfig({
+      VITE_LOCAL_HOST: "1",
       VITE_COGNITO_DOMAIN: "https://dev.auth.example.com",
       VITE_COGNITO_CLIENT_ID: "client",
     });
@@ -122,6 +132,24 @@ describe("LocalHostLoginPage", () => {
     fireEvent.submit(document.querySelector("form") as HTMLFormElement);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(screen.queryByText("events page")).toBeNull();
+  });
+});
+
+describe("LocalHostLoginPage error bodies", () => {
+  it("shows the sign-in failure message for a non-JSON error response", async () => {
+    const config = await localConfig();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("<html>Bad gateway</html>", { status: 502 })),
+    );
+    renderLogin(config);
+    fireEvent.change(document.getElementById("local-host-key") as HTMLInputElement, {
+      target: { value: "host-key" },
+    });
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/Sign-in failed|サインインできませんでした/u);
+    expect(alert.textContent).not.toMatch(/JSON|Unexpected token/u);
   });
 });
 
