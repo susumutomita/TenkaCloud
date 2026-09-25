@@ -205,34 +205,50 @@ export function LocalEnvironmentsPanel({
           {t("local_host.env_rules")}
         </Box>
       </SpaceBetween>
-      <Modal
-        visible={confirmTeardown !== null}
-        onDismiss={() => setConfirmTeardown(null)}
-        header={t("local_host.env_teardown_confirm_header", {
-          team: confirmTeardown?.teamSlug ?? "",
-        })}
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => setConfirmTeardown(null)}>
-                {t("event_detail.modal_cancel")}
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  const row = confirmTeardown;
-                  setConfirmTeardown(null);
-                  if (row) void operate(row, "teardown");
-                }}
-              >
-                {t("local_host.env_teardown")}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        {t("local_host.env_teardown_confirm_body")}
-      </Modal>
+      {confirmTeardown && (
+        <TeardownConfirmation
+          row={confirmTeardown}
+          onCancel={() => setConfirmTeardown(null)}
+          onConfirm={() => {
+            setConfirmTeardown(null);
+            void operate(confirmTeardown, "teardown");
+          }}
+          t={t}
+        />
+      )}
     </Container>
+  );
+}
+
+/** Removing a team's containers and data is not undoable, so it is confirmed first. */
+function TeardownConfirmation({
+  row,
+  onCancel,
+  onConfirm,
+  t,
+}: {
+  readonly row: EnvironmentRow;
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+  readonly t: Translate;
+}) {
+  return (
+    <Modal
+      visible
+      onDismiss={onCancel}
+      header={t("local_host.env_teardown_confirm_header", { team: row.teamSlug })}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={onCancel}>{t("event_detail.modal_cancel")}</Button>
+            <Button variant="primary" onClick={onConfirm}>
+              {t("local_host.env_teardown")}
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      {t("local_host.env_teardown_confirm_body")}
+    </Modal>
   );
 }

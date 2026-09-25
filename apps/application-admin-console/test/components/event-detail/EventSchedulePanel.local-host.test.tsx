@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../../../src/api/client";
 import type { EventDetail } from "../../../src/api/events-client";
 import { EventSchedulePanel } from "../../../src/components/event-detail/EventSchedulePanel";
+import { computeEventWizardState } from "../../../src/lib/event-wizard";
 
 /** Issue #3226: the local host's deploy / teardown controls match what the host accepts. */
 type Props = Parameters<typeof EventSchedulePanel>[0];
@@ -64,6 +65,21 @@ function teardownButton(detail: Partial<EventDetail>) {
 }
 
 describe("EventSchedulePanel on the local host", () => {
+  it("prepares every environment of an undeployed event with a plain deploy", () => {
+    const panel = props({ status: "DRAFT" }, 0);
+    render(
+      <EventSchedulePanel
+        {...panel}
+        apiClient={createApiClient("http://127.0.0.1:5174/api", "a.e30.c")}
+        wizard={computeEventWizardState({ status: "DRAFT" }, Date.now())}
+      />,
+    );
+    expect(screen.getByText("local_host.deploy_hint")).toBeInTheDocument();
+    screen.getByRole("button", { name: "event_detail.deploy_at_now" }).click();
+    // No force-redeploy or team/problem subset: the host prepares what is not running.
+    expect(panel.onBulkDeploy).toHaveBeenCalledWith();
+  });
+
   it("explains that a stopped environment keeps a deploying event from becoming ready", () => {
     render(
       <EventSchedulePanel

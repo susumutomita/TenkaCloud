@@ -8,7 +8,7 @@
  */
 
 import type { TokenSet } from "@tenkacloud/auth-client";
-import { ConsoleAuthShell } from "@tenkacloud/web-kit";
+import { ConsoleAuthShell, toErrorMessage } from "@tenkacloud/web-kit";
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
@@ -89,7 +89,7 @@ export function LocalHostLoginPage({
       setKey("");
       navigate(returnPath ?? "/events", { replace: true });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t("local_host.login_failed"));
+      setError(toErrorMessage(cause));
     } finally {
       setBusy(false);
     }

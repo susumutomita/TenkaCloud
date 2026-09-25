@@ -197,6 +197,44 @@ describe("local host problem selection", () => {
     expect(options.map((option) => option.disabled ?? false)).toEqual([false, true]);
   });
 
+  it("keeps the newest client's catalog when an older answer arrives late", async () => {
+    let answerOld = (_value: unknown): void => undefined;
+    const oldClient = {
+      get: vi.fn().mockReturnValue(new Promise((accept) => (answerOld = accept))),
+    };
+    const newClient = { get: vi.fn().mockResolvedValue({ items: [{ problemId: "new" }] }) };
+    let captured: ReturnType<typeof useHostCatalog> | undefined;
+    function Probe({ client }: { client: never }) {
+      captured = useHostCatalog(client);
+      return null;
+    }
+    const view = render(<Probe client={oldClient as never} />);
+    view.rerender(<Probe client={newClient as never} />);
+    await waitFor(() => expect(captured?.supported.has("new")).toBe(true));
+    answerOld({ items: [{ problemId: "old" }] });
+    await new Promise((accept) => setTimeout(accept, 0));
+    expect(captured?.supported.has("old")).toBe(false);
+  });
+
+  it("does not report a failure from a client that has since been replaced", async () => {
+    let failOld = (_reason: unknown): void => undefined;
+    const oldClient = {
+      get: vi.fn().mockReturnValue(new Promise((_accept, reject) => (failOld = reject))),
+    };
+    const newClient = { get: vi.fn().mockResolvedValue({ items: [{ problemId: "new" }] }) };
+    let captured: ReturnType<typeof useHostCatalog> | undefined;
+    function Probe({ client }: { client: never }) {
+      captured = useHostCatalog(client);
+      return null;
+    }
+    const view = render(<Probe client={oldClient as never} />);
+    view.rerender(<Probe client={newClient as never} />);
+    await waitFor(() => expect(captured?.supported.has("new")).toBe(true));
+    failOld(new Error("old host down"));
+    await new Promise((accept) => setTimeout(accept, 0));
+    expect(captured?.error).toBeNull();
+  });
+
   it("loads the host catalog and reports a failure", async () => {
     const ok = { get: vi.fn().mockResolvedValue({ items: [{ problemId: "sqli-demo" }] }) };
     let captured: ReturnType<typeof useHostCatalog> | undefined;

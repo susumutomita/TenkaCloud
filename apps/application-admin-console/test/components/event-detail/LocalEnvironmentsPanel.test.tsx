@@ -1,3 +1,4 @@
+import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../../../src/api/client";
@@ -156,6 +157,76 @@ describe("LocalEnvironmentsPanel", () => {
     );
   });
 
+  it("lets the organizer back out of a teardown and dismiss a refusal", async () => {
+    mocks.operateLocalEnvironment.mockRejectedValue(new Error("busy"));
+    render(
+      <LocalEnvironmentsPanel
+        apiClient={apiClient}
+        canMutateTenant
+        detail={detail()}
+        onRefresh={vi.fn()}
+        t={t}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: 'local_host.env_teardown_aria|{"team":"team-a"}' }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "event_detail.modal_cancel" }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(mocks.operateLocalEnvironment).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: 'local_host.env_stop_aria|{"team":"team-a"}' }),
+    );
+    await screen.findByText(/local_host.env_operation_failed/u);
+    const dismiss = createWrapper(document.body).findAlert()?.findDismissButton();
+    if (!dismiss) throw new Error("The refusal cannot be dismissed.");
+    dismiss.click();
+    await waitFor(() => expect(screen.queryByText(/local_host.env_operation_failed/u)).toBeNull());
+  });
+
+  it("restarts a failed environment", async () => {
+    mocks.operateLocalEnvironment.mockResolvedValue({});
+    render(
+      <LocalEnvironmentsPanel
+        apiClient={apiClient}
+        canMutateTenant
+        detail={detail()}
+        onRefresh={vi.fn()}
+        t={t}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: 'local_host.env_restart_aria|{"team":"team-b"}' }),
+    );
+    await waitFor(() =>
+      expect(mocks.operateLocalEnvironment).toHaveBeenCalledWith(
+        apiClient,
+        "01J00000000000000000000000",
+        "JOB-B",
+        "restart",
+      ),
+    );
+  });
+
+  it("still lists an environment whose team is not in the event's team list", () => {
+    const orphan = detail();
+    orphan.deploymentsByProblem = {
+      "sqli-demo": [{ jobId: "JOB-X", teamId: "UNKNOWN-TEAM", status: "FAILED" }],
+    };
+    render(
+      <LocalEnvironmentsPanel
+        apiClient={apiClient}
+        canMutateTenant
+        detail={orphan}
+        onRefresh={vi.fn()}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("UNKNOWN-TEAM")).toBeInTheDocument();
+  });
+
   it("shows operations in progress and disables everything without permission", () => {
     const busy = detail();
     busy.deploymentsByProblem = {
@@ -173,5 +244,39 @@ describe("LocalEnvironmentsPanel", () => {
     expect(screen.getByText("local_host.env_operation_restart")).toBeInTheDocument();
     for (const button of screen.getAllByRole("button", { name: /aria/u }))
       expect(button).toBeDisabled();
+  });
+});
+
+describe("operateLocalEnvironment", () => {
+  it("addresses exactly one environment of one event", async () => {
+    const { operateLocalEnvironment } = await vi.importActual<
+      typeof import("../../../src/api/events-client")
+    >("../../../src/api/events-client");
+    const post = vi.fn().mockResolvedValue({ operation: "stop" });
+    const delJson = vi.fn().mockResolvedValue({ operation: "teardown" });
+    const client = { ...apiClient, post, delJson };
+    await operateLocalEnvironment(client, "EVENT/1", "JOB 1", "stop");
+    await operateLocalEnvironment(client, "EVENT/1", "JOB 1", "restart");
+    await operateLocalEnvironment(client, "EVENT/1", "JOB 1", "teardown");
+    expect(post).toHaveBeenNthCalledWith(1, "events/EVENT%2F1/deployments/JOB%201/stop", {});
+    expect(post).toHaveBeenNthCalledWith(2, "events/EVENT%2F1/deployments/JOB%201/restart", {});
+    expect(delJson).toHaveBeenCalledWith("events/EVENT%2F1/deployments/JOB%201");
+  });
+});
+
+describe("LOCAL_HOST_BUILD", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, "__TENKACLOUD_LOCAL_HOST_BUILD__");
+    vi.resetModules();
+  });
+  it("is on only when the build replaces the constant with a literal true", async () => {
+    vi.resetModules();
+    expect((await import("../../../src/local-host-build")).LOCAL_HOST_BUILD).toBe(false);
+    Reflect.set(globalThis, "__TENKACLOUD_LOCAL_HOST_BUILD__", "true");
+    vi.resetModules();
+    expect((await import("../../../src/local-host-build")).LOCAL_HOST_BUILD).toBe(false);
+    Reflect.set(globalThis, "__TENKACLOUD_LOCAL_HOST_BUILD__", true);
+    vi.resetModules();
+    expect((await import("../../../src/local-host-build")).LOCAL_HOST_BUILD).toBe(true);
   });
 });

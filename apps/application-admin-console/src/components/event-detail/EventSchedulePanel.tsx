@@ -267,7 +267,7 @@ function LocalDeployTeardownFields({
  * environments are all removed; a torn-down event with a failed cleanup can retry.
  */
 function hasStoppedEnvironment(detail: EventDetail): boolean {
-  return Object.values(detail.deploymentsByProblem ?? {}).some((deployments) =>
+  return Object.values(detail.deploymentsByProblem).some((deployments) =>
     deployments.some((deployment) => deployment.status === "STOPPED"),
   );
 }
@@ -275,7 +275,7 @@ function hasStoppedEnvironment(detail: EventDetail): boolean {
 function localTeardownOwed(detail: EventDetail): boolean {
   if (detail.status === "ARCHIVED") return false;
   if (detail.status !== "TEARDOWN") return true;
-  return Object.values(detail.deploymentsByProblem ?? {}).some((deployments) =>
+  return Object.values(detail.deploymentsByProblem).some((deployments) =>
     deployments.some((deployment) => deployment.status !== "DELETED"),
   );
 }

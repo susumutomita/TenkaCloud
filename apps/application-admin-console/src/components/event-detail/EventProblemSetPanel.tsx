@@ -24,13 +24,19 @@ export function EventProblemSetPanel({
   readonly t: Translate;
 }) {
   const navigate = useNavigate();
-  const cloudOnly = new Set(["account", "region", "estimatedCost", "jobs"]);
-  const columns: TableProps.ColumnDefinition<EventProblemTarget>[] = [
-    {
-      id: "id",
-      header: t("event_detail.problemset_col_id"),
-      cell: (p) => <code>{p.problemId}</code>,
-    },
+  type Column = TableProps.ColumnDefinition<EventProblemTarget>;
+  const idColumn: Column = {
+    id: "id",
+    header: t("event_detail.problemset_col_id"),
+    cell: (p) => <code>{p.problemId}</code>,
+  };
+  const statusColumn: Column = {
+    id: "status",
+    header: t("event_detail.problemset_col_status"),
+    cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId], t),
+  };
+  const cloudColumns: Column[] = [
+    idColumn,
     {
       id: "account",
       header: t("event_detail.problemset_col_account"),
@@ -52,11 +58,7 @@ export function EventProblemSetPanel({
         />
       ),
     },
-    {
-      id: "status",
-      header: t("event_detail.problemset_col_status"),
-      cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId], t),
-    },
+    statusColumn,
     {
       id: "jobs",
       header: t("event_detail.problemset_col_jobs"),
@@ -74,9 +76,7 @@ export function EventProblemSetPanel({
       <Table
         variant="embedded"
         items={[...detail.problems]}
-        columnDefinitions={columns.filter(
-          (column) => !localHost || !cloudOnly.has(column.id ?? ""),
-        )}
+        columnDefinitions={localHost ? [idColumn, statusColumn] : cloudColumns}
         empty={<Box>{t("event_detail.problemset_empty")}</Box>}
       />
     </Container>
