@@ -15,6 +15,7 @@ import "./Join.css";
 
 const knownErrors = new Set([
   "not_found",
+  "receipt_revoked",
   "closed",
   "full",
   "conflict",
@@ -54,15 +55,18 @@ function JoinSession({
   const [refreshStatus, setRefreshStatus] = useState({ pending: false });
   const [error, setError] = useState("");
   const pending = useRef<AbortController | null>(null);
-  const fail = useCallback(
-    (cause: unknown) =>
-      setError(
-        cause instanceof Error && knownErrors.has(cause.message)
-          ? cause.message
-          : "registration_unavailable",
-      ),
-    [],
-  );
+  const fail = useCallback((cause: unknown) => {
+    const code =
+      cause instanceof Error && knownErrors.has(cause.message)
+        ? cause.message
+        : "registration_unavailable";
+    if (code === "receipt_revoked") {
+      setProgress(null);
+      setInfo(null);
+      setInvitation(null);
+    }
+    setError(code);
+  }, []);
 
   const refresh = useCallback(() => {
     pending.current?.abort();

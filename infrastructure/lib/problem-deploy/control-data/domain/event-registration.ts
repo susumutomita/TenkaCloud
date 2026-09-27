@@ -7,6 +7,8 @@ export interface EventRegistration {
   readonly teamIds: readonly string[];
   readonly claims: readonly {
     readonly receiptHash: string;
+    /** Absent on legacy receipts, which must fail closed instead of adopting a new key. */
+    readonly teamLoginKeyHash?: string;
     readonly teamId: string;
     readonly claimedAt: string;
   }[];

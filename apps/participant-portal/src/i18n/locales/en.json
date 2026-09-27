@@ -704,6 +704,7 @@
     "progress": "{ready} / {total} problems ready",
     "footnote": "This page does not create an AWS account or request a credit card. You use an environment prepared by the organizer.",
     "error_not_found": "We could not verify this invitation. Open the latest link from your organizer.",
+    "error_receipt_revoked": "This reservation receipt is no longer valid. Ask your organizer for your team's login details.",
     "error_closed": "Registration or access to this event has ended. Contact your organizer.",
     "error_full": "No slots remain. Ask your organizer about additional environments.",
     "error_conflict": "Registrations overlapped. Check again; you will not receive a duplicate slot.",

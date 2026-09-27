@@ -23,7 +23,8 @@ export class RegistrationError extends Error {
       | "conflict"
       | "invalid_pool"
       | "not_ready"
-      | "login_key_missing",
+      | "login_key_missing"
+      | "receipt_revoked",
   ) {
     super(code);
   }
@@ -218,6 +219,8 @@ export async function claimRegistration(
     const occupied = new Set(registration.claims.map((claim) => claim.teamId));
     const teamId = registration.teamIds.find((id) => !occupied.has(id));
     if (!teamId) throw new RegistrationError("full");
+    const team = await deps.teams.getTeam(tenantId, eventId, teamId);
+    if (!team?.teamLoginKey) throw new RegistrationError("not_found");
     const updated = await deps.events.updateRegistration({
       tenantId,
       eventId,
@@ -228,7 +231,12 @@ export async function claimRegistration(
         version: registration.version + 1,
         claims: [
           ...registration.claims,
-          { receiptHash, teamId, claimedAt: new Date(attemptTime).toISOString() },
+          {
+            receiptHash,
+            teamId,
+            teamLoginKeyHash: registrationDigest(team.teamLoginKey),
+            claimedAt: new Date(attemptTime).toISOString(),
+          },
         ],
       },
     });
@@ -318,6 +326,11 @@ export async function registrationStatus(
   if (!activeEvent(event, now)) throw new RegistrationError("closed");
   const team = await deps.teams.getTeam(tenantId, eventId, claim.teamId);
   if (!team?.teamLoginKey) throw new RegistrationError("not_found");
+  // A receipt grants only the credential generation reserved at claim time. Never
+  // adopt today's key for legacy receipts or after an operator revokes the old key.
+  if (!claim.teamLoginKeyHash || !secretMatches(team.teamLoginKey, claim.teamLoginKeyHash)) {
+    throw new RegistrationError("receipt_revoked");
+  }
   if (team.expiresAt <= Math.floor(now / 1000)) throw new RegistrationError("closed");
   // Poll only the reserved team's existing index; do not read the entire event
   // once per waiting participant. summarizeDeployments still checks tenant/event/team.
