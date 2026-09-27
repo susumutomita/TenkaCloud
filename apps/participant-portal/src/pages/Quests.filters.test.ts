@@ -122,6 +122,27 @@ describe("filterQuestProblems", () => {
     ).toEqual([cleared, multiCleared]);
   });
 
+  it("should classify a coordination-only problem (no scoring.kind) via the catalog category", () => {
+    // Coordination-only battles (e.g. Cryptography Battle) never declare `scoring` -- the
+    // portal only knows their category through catalog metadata.
+    const coordinationBattle = problem({ problemId: "crypto-battle", scoring: undefined });
+    const flagChallenge = problem({
+      problemId: "flag-challenge",
+      scoring: { kind: "flag", flagSubmitted: false },
+    });
+    const metadata = new Map<string, QuestSearchMetadata>([
+      ["crypto-battle", { category: "Battle" }],
+    ]);
+
+    expect(
+      filterQuestProblems(
+        [coordinationBattle, flagChallenge],
+        { ...ALL_FILTERS, category: "battle" },
+        metadata,
+      ),
+    ).toEqual([coordinationBattle]);
+  });
+
   it("should trim an empty query and exclude unknown metadata from a difficulty match", () => {
     const target = problem({ problemId: "unknown" });
     const metadata = new Map<string, QuestSearchMetadata>();

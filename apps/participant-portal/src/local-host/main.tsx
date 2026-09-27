@@ -36,6 +36,7 @@ async function boot(root: HTMLElement): Promise<void> {
     eventRegion: "local",
     mode: "backend",
     cloudMode: "real",
+    hasAws: false,
   };
   createRoot(root).render(
     <StrictMode>
