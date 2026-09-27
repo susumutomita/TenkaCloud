@@ -262,6 +262,51 @@ The organizer's own account, local operating-system processes and the checked-ou
 repository are trusted. This feature does not protect against a malicious
 organizer or an attacker already running code as that operating-system user.
 
+## Capacity
+
+Fixed limits:
+
+- 1–40 teams per event.
+- At most 40 team/problem environments on one host, across all events.
+- A Battle's saved match state must stay under 2 MiB.
+
+One host process serves every request on one thread, so the number of open
+participant browser tabs sets the load. A tab on the Cryptography Battle page
+reads the match every 5 seconds, its team view and the leaderboard every 30
+seconds, and notifications every 60 seconds.
+
+Measured on an Apple M5 (10 cores, 32 GB), Bun 1.3.11, over loopback, with the
+load generator on the same computer. One event with 40 teams, one organizer
+tab, and the participant tabs spread evenly across the teams, 60 seconds per
+step:
+
+| Participant tabs | Tabs per team | Latency p95 | Errors | Host CPU (avg) |
+| --- | --- | --- | --- | --- |
+| 40 | 1 | 16 ms | 0 | 13% |
+| 160 | 4 | 17 ms | 0 | 27% |
+| 320 | 8 | 17 ms | 0 | 40% |
+| 640 | 16 | 23 ms | 0 | 61% |
+| 960 | 24 | 34 ms | 0 | 84% |
+
+These numbers are from the start of a match. In a simulated 90-minute match
+where every team published every Order it could, the 40-team match state
+stayed under 100 KB, and one match read took 3.3 ms at the start and 5.5 ms at
+the end (p95). Expect roughly half the headroom above late in a match. The
+table does not cover Wi-Fi or other LAN transport, SQL exercises in Docker, or
+slower computers.
+
+Each match read also saves the whole match state to SQLite, about 80 KB with 40
+teams. 40 teams with 2 tabs each write about 1.3 MB/s, roughly 7 GB of data
+during a 90-minute match.
+
+Measure your own computer with the same tool. It starts a separate host on
+ports 6274, 6275 and 6300-6339 with a temporary data directory:
+
+```sh
+BUN_CONFIG_MAX_HTTP_REQUESTS=4096 bun run bench:host -- --mode http --teams 40 --tabs 40,160,320,640,960
+bun run bench:host -- --mode state --teams 2,10,20,40
+```
+
 ## Validation commands
 
 The hosting suite uses real HTTP listeners and SQLite. It tests the actual
