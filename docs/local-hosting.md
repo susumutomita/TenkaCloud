@@ -100,7 +100,9 @@ start time cannot be changed. Create a new event for a fresh match.
 
 **Stop**, **Restart** and **Tear down** on a Battle team control that team's portal
 access. They retain shared match state and scores; the match clock continues.
-To end scoring for everyone, use **End Event**. The optional AWS Parameter Store
+To end scoring for everyone, use **End Event**. A scoring lock pauses the Battle
+clock; unlocking does not apply penalties for the locked interval. The event
+end time remains fixed. Teardown settles elapsed play before closing access. The optional AWS Parameter Store
 item is not enabled in local hosting. Battle parameters currently use the catalog
 defaults; local event duration can be set from Schedule.
 
@@ -178,11 +180,14 @@ gateway port is held by another process is skipped when environments are
 prepared. Choose another range with `--gateway-ports`, for example
 `--gateway-ports 6200-6239`; it must lie within 1024-65535 and not include the
 console or portal port. The host refuses to start when the range overlaps a port a
-supported problem publishes in any runtime slot. An event whose teams × problems
+supported problem publishes in any runtime slot. An event whose teams × Docker problems
 exceeds the range is refused at creation and deployment with an error naming
 `--gateway-ports`. Gateway ports are probed on the address the gateways listen on
 (the `--lan` address in LAN mode); problem ports are probed on loopback, where
 Compose publishes them.
+
+Battle teams do not reserve or probe exercise-gateway ports. The overall limit
+of 40 team/problem environments still applies.
 
 The exercise containers' verifier ports remain loopback-only; do not expose them
 or rewrite their Compose bindings to `0.0.0.0`.

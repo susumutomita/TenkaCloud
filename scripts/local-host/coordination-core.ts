@@ -82,9 +82,9 @@ function scoreDeltas(
   const deltas: Record<string, number> = {};
   for (const teamId of teamIds) {
     const score = scores[teamId];
-    if (!Number.isSafeInteger(score) || (score as number) < 0)
+    if (typeof score !== "number" || !Number.isFinite(score))
       throw new Error("Plugin returned an invalid score.");
-    deltas[teamId] = (score as number) - (previous[teamId] ?? 0);
+    deltas[teamId] = score - (previous[teamId] ?? 0);
   }
   return deltas;
 }

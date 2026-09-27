@@ -178,16 +178,7 @@ export class HostingService {
   /** Display-only: an out-of-range slot is reported by the gateway itself when it is opened. */
   private gatewayPortField(job: Job): { gatewayPort?: number } {
     const range = this.gatewayPorts;
-    if (
-      !range ||
-      job.status === "DELETED" ||
-      this.store
-        .event(job.eventId)
-        .problems.some(
-          (problem) => problem.problemId === job.problemId && problem.runtime === "coordination",
-        )
-    )
-      return {};
+    if (!range || job.status === "DELETED" || !this.needsGateway(job.definition)) return {};
     const slot = job.offset / SLOT_STRIDE;
     return Number.isInteger(slot) && slot >= 1 && slot <= gatewaySlots(range)
       ? { gatewayPort: gatewayPort(range, job.offset) }
@@ -272,7 +263,10 @@ export class HostingService {
         422,
         "Local hosting supports at most 40 simultaneous team/problem environments.",
       );
-    this.assertGatewayCapacity(body.teams.length * problems.length);
+    this.assertGatewayCapacity(
+      body.teams.length *
+        problems.filter((problem) => this.needsGateway(problem.definition)).length,
+    );
     const timestamp = this.now();
     const eventId = id(timestamp);
     const teams: Team[] = body.teams.map((value) => {
@@ -449,7 +443,10 @@ export class HostingService {
   private lockScoring(event: HostedEvent, locked: boolean): ApiResponse {
     if (!["READY", "ENDED"].includes(event.status))
       throw new HostError(409, "Event is not lockable.");
+    if (event.scoringLocked === locked)
+      return ok({ scoringLocked: event.scoringLocked, scoringLockedAt: event.scoringLockedAt });
     this.coordination.advance(event);
+    this.coordination.accountUnlock(event, locked);
     event.scoringLocked = locked;
     event.scoringLockedAt = locked ? new Date(this.now()).toISOString() : undefined;
     this.saveEvent(event);
@@ -544,6 +541,9 @@ export class HostingService {
    * Whether every host port a slot needs is free: the problem's published ports on loopback
    * (where Compose binds them) and its exercise gateway on the gateways' listen address.
    */
+  private needsGateway(definition: string): boolean {
+    return this.engine.requiresGateway?.(definition) ?? true;
+  }
   private async slotFree(definition: string, offset: number): Promise<boolean> {
     const runtime = portsFree(this.engine.hostPorts?.(definition, offset) ?? [], "127.0.0.1");
     const gateway = this.gatewayPorts
@@ -584,7 +584,10 @@ export class HostingService {
     return new Set(
       this.store
         .jobs()
-        .filter((job) => job.status !== "DELETED" && job.jobId !== except)
+        .filter(
+          (job) =>
+            job.status !== "DELETED" && job.jobId !== except && this.needsGateway(job.definition),
+        )
         .map((job) => job.offset),
     );
   }
@@ -594,6 +597,7 @@ export class HostingService {
    * allocated exercise gateway can hold a block that no recorded job owns.
    */
   private async freeSlot(definition: string, occupied: Set<number>): Promise<number> {
+    if (!this.needsGateway(definition)) return 0;
     const slots = this.gatewayPorts ? gatewaySlots(this.gatewayPorts) : MAX_JOBS;
     for (let index = 1; index <= slots; index += 1) {
       const offset = index * SLOT_STRIDE;
@@ -632,7 +636,10 @@ export class HostingService {
     const teams = this.store.teams(event.eventId);
     const existing = this.store.jobs(event.eventId);
     const failedOnly = body.retryFailedOnly === true;
-    this.assertGatewayCapacity(teams.length * event.problems.length);
+    this.assertGatewayCapacity(
+      teams.length *
+        event.problems.filter((problem) => this.needsGateway(problem.definition)).length,
+    );
     // Slot allocation reads every event's jobs, so serialize it across events too.
     const targets = await this.queue.run(SLOT_QUEUE, async () => {
       const occupied = this.recordedOffsets();
@@ -699,9 +706,10 @@ export class HostingService {
       // A retry keeps its block unless something else took the ports in the meantime, or a
       // removed environment's block was recorded for another environment since.
       if (
-        !this.slotInRange(job.offset) ||
-        !(await this.slotFree(job.definition, job.offset)) ||
-        this.recordedOffsets(job.jobId).has(job.offset)
+        this.needsGateway(job.definition) &&
+        (!this.slotInRange(job.offset) ||
+          !(await this.slotFree(job.definition, job.offset)) ||
+          this.recordedOffsets(job.jobId).has(job.offset))
       ) {
         job.offset = await this.queue.run(SLOT_QUEUE, () =>
           this.freeSlot(job.definition, this.recordedOffsets(job.jobId)),
@@ -732,6 +740,7 @@ export class HostingService {
       throw new HostError(409, "Every environment of this event has already been removed.");
     if (this.eventHasBusyJob(event.eventId))
       throw new HostError(409, "A team environment operation is still in progress.");
+    this.coordination.advance(event);
     event.status = "TEARDOWN";
     // Only an event that ran gets a final end time; a never-started event stays re-deployable.
     if (event.startsAt) event.endsAt ??= new Date(this.now()).toISOString();

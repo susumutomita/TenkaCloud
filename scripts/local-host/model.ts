@@ -32,6 +32,8 @@ export interface HostedEvent {
   expiresAt: number;
   scoringLocked: boolean;
   scoringLockedAt?: string;
+  /** Elapsed lock time excluded from the shared Battle clock. */
+  coordinationPausedMs?: number;
   scoreboardFreezeMinutes: number;
   problems: Problem[];
 }
@@ -94,6 +96,7 @@ export interface EngineResult {
 
 export interface RuntimeEngine {
   catalog(): readonly Problem[];
+  requiresGateway?(definition: string): boolean;
   coordinationPlugin?(problem: Problem): import("./coordination-core").HostPlugin;
   start(job: Job, retain: (unit: string | null) => void): Promise<void>;
   recover(job: Job): Promise<void>;

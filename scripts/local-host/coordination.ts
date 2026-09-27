@@ -21,10 +21,13 @@ export class LocalCoordination {
   }
   private elapsed(event: HostedEvent): number {
     let end = event.endsAt ? Date.parse(event.endsAt) : Infinity;
-    if (event.scoringLocked && event.scoringLockedAt) end = Date.parse(event.scoringLockedAt);
+    if (event.scoringLocked && event.scoringLockedAt)
+      end = Math.min(end, Date.parse(event.scoringLockedAt));
     return Math.max(
       0,
-      Math.min(this.host.now(), end) - Date.parse(event.startsAt ?? event.createdAt),
+      Math.min(this.host.now(), end) -
+        Date.parse(event.startsAt ?? event.createdAt) -
+        (event.coordinationPausedMs ?? 0),
     );
   }
   private load(event: HostedEvent, problem: Problem): LocalMatch {
@@ -70,9 +73,27 @@ export class LocalCoordination {
       });
     }
   }
+  accountUnlock(event: HostedEvent, locked: boolean): void {
+    if (
+      !this.problem(event) ||
+      locked ||
+      !event.scoringLocked ||
+      !event.scoringLockedAt ||
+      !event.startsAt
+    )
+      return;
+    const end = Math.min(this.host.now(), event.endsAt ? Date.parse(event.endsAt) : Infinity);
+    const start = Math.max(Date.parse(event.scoringLockedAt), Date.parse(event.startsAt));
+    event.coordinationPausedMs = (event.coordinationPausedMs ?? 0) + Math.max(0, end - start);
+  }
   assertSchedule(event: HostedEvent, body: Record<string, unknown>): void {
     if (!this.problem(event) || !event.startsAt || Date.parse(event.startsAt) > this.host.now())
       return;
+    if (typeof body.endsAt === "string" && Date.parse(body.endsAt) < this.host.now())
+      throw new HostError(
+        409,
+        "A running Battle cannot end in the past. Use End Event to stop now.",
+      );
     if (body.startNow || (body.startsAt !== undefined && body.startsAt !== event.startsAt))
       throw new HostError(
         409,

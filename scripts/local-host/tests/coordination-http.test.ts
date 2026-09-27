@@ -110,10 +110,15 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
   }
   try {
     await attach();
+    // The only configured gateway is occupied by this test's portal listener.
+    // A Battle still deploys: it has no exercise URL or gateway allocation.
+    const occupiedPort = Number(new URL(required(portal).origin).port);
+    service.gatewayPorts = { start: occupiedPort, end: occupiedPort };
     const event = await create("crypto local"),
       unrelated = await create("other match");
     await deploy(event);
     await deploy(unrelated);
+    expect(store.jobs().every((job) => job.offset === 0)).toBe(true);
     const [a, b] = event.teams;
     expect(a).toBeDefined();
     expect(b).toBeDefined();
@@ -286,8 +291,66 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
     expect((await op(required(a).teamLoginKey, { kind: "ready" })).status).toBe(409);
     const beforeLock = store.coordination(event.eventId, "ac26-crypto-battle");
     clock += 300_000;
+    // Repeated lock requests must not reset the start of the paused interval.
+    await api("admin", `/events/${event.eventId}/lock-scoring`, "POST", {});
     await api("participant", "/portal/leaderboard", "GET", undefined, required(b).teamLoginKey);
     expect(store.coordination(event.eventId, "ac26-crypto-battle")).toBe(beforeLock);
+    const before = JSON.parse(required(beforeLock)) as {
+      state: { nowMs: number };
+      scores: unknown;
+    };
+    await api("admin", `/events/${event.eventId}/lock-scoring`, "DELETE");
+    await api("participant", "/portal/leaderboard", "GET", undefined, required(b).teamLoginKey);
+    const resumed = JSON.parse(required(store.coordination(event.eventId, "ac26-crypto-battle")));
+    expect(resumed.state.nowMs).toBe(before.state.nowMs);
+    expect(resumed.scores).toEqual(before.scores);
+    expect(store.event(event.eventId).coordinationPausedMs).toBe(300_000);
+    expect(
+      (
+        await api("admin", `/events/${event.eventId}/schedule`, "PATCH", {
+          endsAt: new Date(clock - 1000).toISOString(),
+        })
+      ).status,
+    ).toBe(409);
+    // Teardown must process the pending deadline without relying on another poll.
+    clock += 300_000;
+    expect((await api("admin", `/events/${event.eventId}`, "DELETE")).status).toBe(202);
+    await service.drain();
+    const final = JSON.parse(required(store.coordination(event.eventId, "ac26-crypto-battle")));
+    expect(final.state.nowMs).toBe(before.state.nowMs + 300_000);
+    expect(final.scores[required(a).teamId]).toBeLessThan(alphaScore);
+    expect(store.team(required(a).teamId).score).toBe(final.scores[required(a).teamId]);
+    const ended = store.coordination(event.eventId, "ac26-crypto-battle");
+    clock += 300_000;
+    await api("participant", "/portal/leaderboard", "GET", undefined, required(b).teamLoginKey);
+    expect(store.coordination(event.eventId, "ac26-crypto-battle")).toBe(ended);
+    // The simulated long match exceeded the host's 15-minute login lifetime.
+    admin = (await api("admin", "/host/login", "POST", { key: "test-only-host-key" })).body.idToken;
+    // An event that ends while locked must not acquire retroactive penalties on unlock.
+    const peer = required(unrelated.teams[0]);
+    await api("admin", `/events/${unrelated.eventId}/schedule`, "PATCH", { startNow: true });
+    for (const team of unrelated.teams) await op(team.teamLoginKey, { kind: "ready" });
+    clock += 1;
+    await api("admin", `/events/${unrelated.eventId}/lock-scoring`, "POST", {});
+    const frozen = JSON.parse(
+      required(store.coordination(unrelated.eventId, "ac26-crypto-battle")),
+    );
+    await api("admin", `/events/${unrelated.eventId}/schedule`, "PATCH", {
+      endsAt: new Date(clock + 1000).toISOString(),
+    });
+    clock += 300_000;
+    await api("participant", "/portal/leaderboard", "GET", undefined, peer.teamLoginKey);
+    expect(store.event(unrelated.eventId).status).toBe("ENDED");
+    expect((await api("admin", `/events/${unrelated.eventId}/lock-scoring`, "DELETE")).status).toBe(
+      200,
+    );
+    await api("participant", "/portal/leaderboard", "GET", undefined, peer.teamLoginKey);
+    const unfreezed = JSON.parse(
+      required(store.coordination(unrelated.eventId, "ac26-crypto-battle")),
+    );
+    expect(unfreezed.state).toEqual(frozen.state);
+    expect(unfreezed.scores).toEqual(frozen.scores);
+    expect(store.event(unrelated.eventId).coordinationPausedMs).toBe(1000);
   } finally {
     await host?.close();
     await portal?.close();

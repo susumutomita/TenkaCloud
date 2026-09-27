@@ -20,6 +20,9 @@ export class CompetitionEngine extends DockerHostingEngine {
   override catalog(): readonly Problem[] {
     return [...super.catalog(), ...this.battles];
   }
+  requiresGateway(definition: string): boolean {
+    return !isCoordination(definition);
+  }
   coordinationPlugin(problem: Problem) {
     return this.loader.load(problem.definition);
   }

@@ -41,6 +41,16 @@ describe("durable local coordination transitions", () => {
       "roster",
     );
   });
+  test("accepts finite negative and fractional scores, rejects non-finite scores", () => {
+    const first = createMatch(plugin, { eventId: "e", teamIds: ["a"] });
+    const result = transitionMatch(plugin, first, ["a"], 0, { teamId: "a", op: -6.5 });
+    expect(result.match.scores.a).toBe(-6.5);
+    expect(result.deltas.a).toBe(-6.5);
+    for (const op of [NaN, Infinity, -Infinity])
+      expect(() => transitionMatch(plugin, first, ["a"], 0, { teamId: "a", op })).toThrow(
+        "invalid score",
+      );
+  });
   test("rejects malformed operations and incompatible saved state without resetting", () => {
     const first = createMatch(plugin, { eventId: "e", teamIds: ["a"] });
     expect(transitionMatch(plugin, first, ["a"], 0, { teamId: "a", op: {} }).rejection).toBe(
