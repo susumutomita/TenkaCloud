@@ -53,23 +53,20 @@ export class LocalCoordination {
     if (Buffer.byteLength(serialized) > 2 * 1024 * 1024)
       throw new HostError(503, "Coordination state exceeds the local runtime limit.");
     this.host.store.putCoordination(event.eventId, problem.problemId, serialized);
-    const jobs = this.host.store.jobs(event.eventId);
     const occurredAt = new Date(
       Math.min(this.host.now(), event.endsAt ? Date.parse(event.endsAt) : Infinity),
     ).toISOString();
     for (const [teamId, delta] of Object.entries(result.deltas)) {
       if (!delta) continue;
       const team = this.host.store.team(teamId);
-      const job = jobs.find(
-        (candidate) => candidate.teamId === teamId && candidate.problemId === problem.problemId,
-      );
-      if (!job) throw new HostError(503, "Coordination roster has no deployment.");
+      const jobId = this.host.store.jobId(event.eventId, teamId, problem.problemId);
+      if (!jobId) throw new HostError(503, "Coordination roster has no deployment.");
       this.host.store.putTeam({
         ...team,
         score: team.score + delta,
         scoreEvents: [
           {
-            jobId: job.jobId,
+            jobId,
             problemId: problem.problemId,
             source: "coordination",
             points: delta,
