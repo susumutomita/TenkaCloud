@@ -85,6 +85,66 @@ describe("Join participant journey", () => {
     expect(login).toHaveBeenCalledWith(key);
   });
 
+  it.each([
+    ["ja", "この受付票は無効になりました。主催者にチームのログイン情報を確認してください。"],
+    [
+      "en",
+      "This reservation receipt is no longer valid. Ask your organizer for your team's login details.",
+    ],
+  ])("explains a revoked receipt in %s without offering another slot", async (locale, message) => {
+    localStorage.setItem("tenkacloud.portal.locale", locale);
+    const receipt = registrationStorage("tenant", "event").ensureReceipt();
+    const fetcher = vi.fn().mockResolvedValue(httpError("receipt_revoked"));
+    vi.stubGlobal("fetch", fetcher);
+    mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(document.querySelector(".join-primary")).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(registrationStorage("tenant", "event").receipt()).toBe(receipt);
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it("removes stale progress and stops polling when a receipt is revoked", async () => {
+    vi.useFakeTimers();
+    const receipt = registrationStorage("tenant", "event").ensureReceipt();
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        ok({ ...progress, state: "preparing", ready: 0, teamLoginKey: undefined }),
+      )
+      .mockResolvedValueOnce(httpError("receipt_revoked"));
+    vi.stubGlobal("fetch", fetcher);
+    await act(async () => {
+      mount();
+    });
+    expect(screen.getByText("準備完了 0 / 1 問")).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("この受付票は無効になりました。");
+    expect(screen.queryByText("準備完了 0 / 1 問")).not.toBeInTheDocument();
+    expect(document.querySelector(".join-primary")).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(registrationStorage("tenant", "event").receipt()).toBe(receipt);
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it("removes the claim button when a concurrent claim discovers revocation", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(ok({ name: "AWS Battle", state: "open", remaining: 1 }))
+      .mockResolvedValueOnce(httpError("receipt_revoked"));
+    vi.stubGlobal("fetch", fetcher);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "チームの環境を受け取る" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("この受付票は無効になりました。");
+    expect(document.querySelector(".join-primary")).toBeNull();
+    expect(login).not.toHaveBeenCalled();
+  });
+
   it("resumes from a receipt after reload without reserving another slot", async () => {
     const receipt = registrationStorage("tenant", "event").ensureReceipt();
     const fetcher = vi.fn().mockResolvedValue(ok(progress));

@@ -155,7 +155,7 @@ Only trusted deployment administrators should have this launcher's **Start build
 
 **Your first success: a test team can open a problem, submit an answer, and see its score.** Check this before inviting participants.
 
-**Deployment status: candidate/unverified.** The launcher pins the platform/catalog pair from the published v1.10.0 release; the [current release manifest](./release/tenkacloud-release.json) certifies no deployment mode or AWS region. Pins identify the code being deployed. Local `make deploy` uses your current checkout. Read the [verification status and pinned identity](./release/tenkacloud-release.md) before an event. [All launcher settings](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline).
+**Deployment status: candidate/unverified.** The launcher pins the platform/catalog pair from the published v1.9.2 release; the [current release manifest](./release/tenkacloud-release.json) certifies no deployment mode or AWS region. Pins identify the code being deployed. Local `make deploy` uses your current checkout. Read the [verification status and pinned identity](./release/tenkacloud-release.md) before an event. [All launcher settings](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline).
 
 #### Required AWS permissions
 

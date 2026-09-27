@@ -23,6 +23,12 @@ The invitation secret is shown only on issuance. Reissue if lost or exposed: the
 
 The receipt is saved in that browser. Changing devices or clearing browser data loses automatic recovery. The host checks the claimed labels in the registration pool and confirms the representative before distributing the existing key from the team list. There is no release-and-reassign action.
 
+## Receipt and credential revocation
+
+Each receipt is bound to the team's login key at reservation time. Regenerating that key prevents the old receipt from retrieving the replacement; the participant screen directs the representative to the host. Closing registration or reissuing its invitation does not undo revocation. Reissuing only the invitation preserves receipts whose team key has not changed.
+
+**Upgrading to v1.10.1:** Receipts issued by v1.10.0 or earlier have no credential binding and become invalid after the upgrade. They are not automatically rebound to today's key. The host must confirm the claimed team and its representative, then distribute the current key from the existing team list. Participants must not delete their receipt to reserve another slot. Existing logins with unchanged keys and team allocations are preserved.
+
 ## Boundaries and cost
 
 - Hosts supply the AWS accounts and deployment pool. This feature does not automatically create AWS Free Projects; eligibility, service restrictions and provisioning remain separate.

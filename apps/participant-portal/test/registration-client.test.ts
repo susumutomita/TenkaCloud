@@ -69,6 +69,7 @@ describe("registrationRequest", () => {
     [404, { error: "not_found" }, "not_found"],
     [410, { error: "closed" }, "closed"],
     [409, { error: "full" }, "full"],
+    [409, { error: "receipt_revoked" }, "receipt_revoked"],
     [429, { error: "rate_limited" }, "rate_limited"],
     [503, { message: "unavailable" }, "registration_unavailable"],
     [500, { error: 123 }, "registration_unavailable"],
@@ -221,6 +222,19 @@ describe("loadRegistration", () => {
       loadRegistration(base, "tenant", "event", new AbortController().signal),
     ).rejects.toBe(cause);
     expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(registrationStorage("tenant", "event").receipt()).toBe(receipt);
+  });
+
+  it("does not replace a revoked receipt with another reservation", async () => {
+    window.history.replaceState({}, "", `/join/tenant/event#invite=${invitation}`);
+    const receipt = registrationStorage("tenant", "event").ensureReceipt();
+    const fetcher = vi.fn().mockResolvedValue(response({ error: "receipt_revoked" }, 409));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      loadRegistration(base, "tenant", "event", new AbortController().signal),
+    ).rejects.toThrow("receipt_revoked");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]?.[0]).toContain("/status");
     expect(registrationStorage("tenant", "event").receipt()).toBe(receipt);
   });
 
