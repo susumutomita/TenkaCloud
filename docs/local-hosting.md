@@ -65,10 +65,10 @@ with the terminal's host key (there is no Cognito). Then:
    creation shows each team's key and invitation link once; keys stay copyable in
    the **Teams** tab.
 2. **Deploy**: choose **Deploy now** in that dialog, or prepare the environments from
-   the **Schedule** tab. Each team/problem environment gets its own block of host
-   ports; the application skips blocks whose ports are already bound by another
-   process, and a retried environment moves to a free block when its previous ports
-   were taken in the meantime.
+   the **Schedule** tab. Each Docker team/problem environment gets its own block of host
+   ports; the application skips occupied blocks and moves a retried environment
+   when its previous ports were taken. Cryptography Battle runs in the participant
+   portal and does not allocate exercise ports.
 3. **Start**: in the **Schedule** tab, choose **Start now** (or pick a start time) and,
    optionally, an end time. **End Event** in the page header stops scoring.
 
@@ -102,8 +102,8 @@ start time cannot be changed. Create a new event for a fresh match.
 access. They retain shared match state and scores; the match clock continues.
 To end scoring for everyone, use **End Event**. A scoring lock pauses the Battle
 clock; unlocking does not apply penalties for the locked interval. The event
-end time remains fixed. Teardown settles elapsed play before closing access. The optional AWS Parameter Store
-item is not enabled in local hosting. Battle parameters currently use the catalog
+end time remains fixed. Teardown settles elapsed play before closing access.
+The optional AWS Parameter Store item is not enabled in local hosting. Battle parameters currently use the catalog
 defaults; local event duration can be set from Schedule.
 
 ### One team's environment
@@ -169,10 +169,11 @@ An attacker who can capture network traffic can steal HTTP credentials.
 
 Participants need the printed participant URL, not the host-console URL. The
 operating-system firewall must permit the participant port (default `5175`) and
-the printed exercise-gateway range (default `5200-5239`) on the selected address.
+the exercise-gateway ports for Docker problems (default `5200-5239`) on the selected
+address. A Battle-only event needs only the participant port.
 Keep the host-console port closed; it listens on loopback only.
 
-Each environment's gateway always uses the port of its runtime slot: slot `n`
+Each Docker environment's gateway always uses the port of its runtime slot: slot `n`
 listens on the range's start plus `n - 1`, and slots never share a port. The
 **Teams** tab shows each environment's port, and the terminal logs
 `Exercise gateway for <team> / <problem>: <URL>` when a gateway opens. A slot whose
