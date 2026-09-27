@@ -7,6 +7,57 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
+interface DeployStatus {
+  readonly type: "error" | "in-progress" | "success";
+  readonly label: string;
+  readonly description: string;
+}
+
+/** After the event ends, "ready to start" and "retry failed" no longer apply. */
+function computeDeployStatus(
+  t: Translate,
+  counts: {
+    readonly allDoneCount: number;
+    readonly ended: boolean;
+    readonly failedCount: number;
+    readonly inFlightCount: number;
+    readonly totalDeployCount: number;
+  },
+): DeployStatus {
+  const { allDoneCount, ended, failedCount, inFlightCount, totalDeployCount } = counts;
+  if (inFlightCount > 0) {
+    return {
+      type: failedCount > 0 ? "error" : "in-progress",
+      label: t("event_detail.deploy_progress_in_flight", {
+        done: allDoneCount,
+        total: totalDeployCount,
+      }),
+      description: t("event_detail.deploy_progress_in_flight_description"),
+    };
+  }
+  if (failedCount > 0) {
+    return {
+      type: "error",
+      label: t("event_detail.deploy_progress_complete_with_failed", { failed: failedCount }),
+      description: t(
+        ended
+          ? "event_detail.deploy_progress_failed_description_ended"
+          : "event_detail.deploy_progress_failed_description",
+        { failed: failedCount },
+      ),
+    };
+  }
+  return {
+    type: "success",
+    label: t("event_detail.deploy_progress_complete"),
+    description: t(
+      ended
+        ? "event_detail.deploy_progress_complete_description_ended"
+        : "event_detail.deploy_progress_complete_description",
+    ),
+  };
+}
+
 /**
  * Event の deployment 群の進捗パネル。 進捗は status の counts (完了 / 進行中 / 失敗) で
  * 表現し、 % プログレスバーは持たない (= 状態ベースの per-deployment weight 平均は
@@ -16,6 +67,7 @@ type Translate = (key: string, params?: Readonly<Record<string, string | number>
 export function DeployProgressPanel({
   allDoneCount,
   completeCount,
+  ended,
   failedCount,
   inFlightCount,
   manualRefreshInFlight,
@@ -25,6 +77,8 @@ export function DeployProgressPanel({
 }: {
   readonly allDoneCount: number;
   readonly completeCount: number;
+  /** The event has ended: an explicit terminal status, or READY past its reserved end time. */
+  readonly ended: boolean;
   readonly failedCount: number;
   readonly inFlightCount: number;
   readonly manualRefreshInFlight: boolean;
@@ -33,27 +87,17 @@ export function DeployProgressPanel({
   readonly totalDeployCount: number;
 }) {
   if (totalDeployCount <= 0) return null;
-  const status =
-    failedCount > 0
-      ? ("error" as const)
-      : inFlightCount > 0
-        ? ("in-progress" as const)
-        : ("success" as const);
-  const statusLabel =
-    inFlightCount > 0
-      ? t("event_detail.deploy_progress_in_flight", {
-          done: allDoneCount,
-          total: totalDeployCount,
-        })
-      : failedCount > 0
-        ? t("event_detail.deploy_progress_complete_with_failed", { failed: failedCount })
-        : t("event_detail.deploy_progress_complete");
-  const statusDescription =
-    inFlightCount > 0
-      ? t("event_detail.deploy_progress_in_flight_description")
-      : failedCount > 0
-        ? t("event_detail.deploy_progress_failed_description")
-        : t("event_detail.deploy_progress_complete_description");
+  const {
+    type: status,
+    label: statusLabel,
+    description: statusDescription,
+  } = computeDeployStatus(t, {
+    allDoneCount,
+    ended,
+    failedCount,
+    inFlightCount,
+    totalDeployCount,
+  });
   return (
     <Container
       header={

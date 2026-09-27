@@ -144,11 +144,6 @@
       "count": 1
     }
   },
-  "apps/application-admin-console/src/components/event-detail/DeployProgressPanel.tsx": {
-    "sonarjs/no-nested-conditional": {
-      "count": 3
-    }
-  },
   "apps/application-admin-console/src/components/event-detail/EventSchedulePanel.tsx": {
     "sonarjs/no-nested-conditional": {
       "count": 1
