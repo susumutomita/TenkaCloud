@@ -4,9 +4,17 @@ import {
   type MatchTransition,
   transitionMatch,
 } from "./coordination-core";
-import { assertPlaying, gate, HostError, type HostedEvent, object, type Problem } from "./model";
+import { type Gate, gate, HostError, type HostedEvent, object, type Problem } from "./model";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
 import { digest } from "./store";
+
+/** SaaS coordination parity (coordination-handler.ts's isScoringActive): a move outside the
+ * scoring window is a 422 rejection, not the 409 the flag-submission gate uses. */
+const moveRejection: Record<Exclude<Gate["kind"], "ok">, string> = {
+  scoring_not_started: "event_ended",
+  scoring_ended: "event_ended",
+  scoring_locked: "scoring_locked",
+};
 
 /** Called under HostingService's event queue; SQLite commits state and every affected score together. */
 export class LocalCoordination {
@@ -133,8 +141,13 @@ export class LocalCoordination {
       .find((item) => item.problemId === problem.problemId);
     if (job?.status !== "COMPLETE" || job.operation)
       throw new HostError(409, "This team's Battle is not running.");
-    if (move) assertPlaying(event, this.host.now());
-    else if (gate(event, this.host.now()).kind === "scoring_not_started")
+    if (move) {
+      const result = gate(event, this.host.now());
+      if (result.kind !== "ok") {
+        const error = moveRejection[result.kind];
+        throw new HostError(422, error, error);
+      }
+    } else if (gate(event, this.host.now()).kind === "scoring_not_started")
       throw new HostError(409, "The event has not started.");
     const body = move ? object(request.body) : {};
     if ("teamId" in body || "eventId" in body)
