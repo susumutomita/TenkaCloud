@@ -20,7 +20,13 @@ export function publicMetadata(code: string, id: string): string | null {
     shortDescription: raw.shortDescription,
     learningGoals: [],
     tags: Array.isArray(raw.tags) ? raw.tags : [],
-    runtime: { provider: runtime.provider, engine: runtime.engine },
+    runtime:
+      raw.id === "ac26-crypto-battle"
+        ? { provider: "local", engine: "bun" }
+        : { provider: runtime.provider, engine: runtime.engine },
+    ...(raw.id === "ac26-crypto-battle"
+      ? { dashboard: raw.dashboard, interTeamCoordination: raw.interTeamCoordination }
+      : {}),
     i18n: { en: { name: english.name, shortDescription: english.shortDescription } },
   });
 }
@@ -37,7 +43,12 @@ export function narrowCatalog(code: string, id: string): string | null {
     throw new Error("The catalog glob changed. Review the hosting bundle before building.");
   // Include neither other problems' portal code nor author-installed pack snapshots.
   // The reserved empty glob is valid in Vite 7; the module guard rejects any accidental match.
-  const narrowed = code.replace(glob, "problems/challenges/sqli-demo/");
+  const narrowed = code
+    .replace(glob, "problems/{challenges/sqli-demo,battles/ac26-crypto-battle}/")
+    .replaceAll(
+      "problems/{challenges/sqli-demo,battles/ac26-crypto-battle}/*.yaml",
+      "problems/challenges/sqli-demo/__local_host_empty__/*.yaml",
+    );
   return narrowed.replace(
     /"(?:\.\.\/)+\.tenkacloud\/pack-store\/snapshots\/[^"\n]+"/gu,
     '"../../../../problems/challenges/sqli-demo/__local_host_empty__/**/*"',
@@ -50,6 +61,15 @@ export function assertHostingModule(id: string): void {
   if (normalized.includes("/.tenkacloud/pack-store/"))
     throw new Error("Installed pack content cannot enter a local-host browser bundle.");
   if (!normalized.includes("/problems/")) return;
+  if (
+    /\/problems\/battles\/ac26-crypto-battle\/(?:metadata\.json|diagram(?:\.en)?\.svg|portal\/[^/]+\.(?:tsx?|css)|game\/src\/[^/]+\.ts)(?:\?.*)?$/u.test(
+      normalized,
+    )
+  ) {
+    if (/\/game\/src\/(?:reducer|fixtures|prng|secret|seed)/u.test(normalized))
+      throw new Error(`Server-only game code entered the browser: ${id}`);
+    return;
+  }
   if (
     !/\/problems\/challenges\/sqli-demo\/(?:metadata\.json|diagram(?:\.en)?\.svg)(?:\?.*)?$/u.test(
       normalized,

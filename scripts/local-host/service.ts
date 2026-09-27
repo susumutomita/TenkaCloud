@@ -1,4 +1,5 @@
 import { id, issueSession, randomToken, SerialQueue } from "./auth";
+import { LocalCoordination } from "./coordination";
 import {
   formatGatewayPorts,
   type GatewayPortRange,
@@ -76,10 +77,10 @@ function participantProblem(
   const problem = { ...raw };
   delete problem.lifecycle; // Competition environments are host-owned, never participant-resettable.
   delete problem.recommended;
-  if (typeof problem.instructions === "string")
+  if (!problem.coordination && typeof problem.instructions === "string")
     problem.instructions = NOTICE_JA + problem.instructions;
   withEnglish(problem, (english) => {
-    if (typeof english.instructions === "string")
+    if (!problem.coordination && typeof english.instructions === "string")
       english.instructions = NOTICE_EN + english.instructions;
   });
   if (!ended) {
@@ -98,6 +99,7 @@ function participantProblem(
 /** The local adapter retains the existing admin/participant HTTP contracts. */
 export class HostingService {
   private readonly queue = new SerialQueue();
+  private readonly coordination = new LocalCoordination(this);
   private readonly tasks = new Set<Promise<void>>();
   private readonly busyEvents = new Set<string>();
   /** jobId → eventId of single-environment operations still running. */
@@ -176,7 +178,7 @@ export class HostingService {
   /** Display-only: an out-of-range slot is reported by the gateway itself when it is opened. */
   private gatewayPortField(job: Job): { gatewayPort?: number } {
     const range = this.gatewayPorts;
-    if (!range || job.status === "DELETED") return {};
+    if (!range || job.status === "DELETED" || !this.needsGateway(job.definition)) return {};
     const slot = job.offset / SLOT_STRIDE;
     return Number.isInteger(slot) && slot >= 1 && slot <= gatewaySlots(range)
       ? { gatewayPort: gatewayPort(range, job.offset) }
@@ -192,7 +194,12 @@ export class HostingService {
     const eventId = parts[0] === "events" ? parts[1] : undefined;
     if (!eventId || !eventPattern.test(eventId)) throw new HostError(404, "Unknown host endpoint.");
     if (parts.length === 2 && request.method === "GET")
-      return ok(this.detail(this.currentEvent(eventId), request.query));
+      return this.queue.run(eventId, async () => {
+        this.store.authenticateAdmin(request.token, this.now());
+        const event = this.currentEvent(eventId);
+        this.coordination.advance(event);
+        return ok(this.detail(event, request.query));
+      });
     return this.queue.run(eventId, async () =>
       this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request),
     );
@@ -215,7 +222,7 @@ export class HostingService {
         items: this.engine.catalog().map((problem) => ({
           problemId: problem.problemId,
           name: problem.name,
-          runtime: "docker",
+          runtime: problem.runtime ?? "docker",
         })),
       });
     }
@@ -247,6 +254,8 @@ export class HostingService {
         throw new HostError(422, `Problem is not supported by local hosting: ${problemId}`);
       return { ...problem };
     });
+    if (problems.filter((problem) => problem.runtime === "coordination").length > 1)
+      throw new HostError(422, "Choose at most one coordination Battle per event.");
     if (new Set(problems.map((problem) => problem.problemId)).size !== problems.length)
       throw new HostError(400, "Duplicate problem.");
     if (body.teams.length * problems.length > MAX_JOBS)
@@ -254,7 +263,10 @@ export class HostingService {
         422,
         "Local hosting supports at most 40 simultaneous team/problem environments.",
       );
-    this.assertGatewayCapacity(body.teams.length * problems.length);
+    this.assertGatewayCapacity(
+      body.teams.length *
+        problems.filter((problem) => this.needsGateway(problem.definition)).length,
+    );
     const timestamp = this.now();
     const eventId = id(timestamp);
     const teams: Team[] = body.teams.map((value) => {
@@ -419,6 +431,7 @@ export class HostingService {
   }
   private end(event: HostedEvent): ApiResponse {
     if (event.status !== "READY") throw new HostError(409, "Only a ready event can end.");
+    this.coordination.advance(event);
     event.status = "ENDED";
     event.endsAt = new Date(this.now()).toISOString();
     this.saveEvent(event);
@@ -430,6 +443,10 @@ export class HostingService {
   private lockScoring(event: HostedEvent, locked: boolean): ApiResponse {
     if (!["READY", "ENDED"].includes(event.status))
       throw new HostError(409, "Event is not lockable.");
+    if (event.scoringLocked === locked)
+      return ok({ scoringLocked: event.scoringLocked, scoringLockedAt: event.scoringLockedAt });
+    this.coordination.advance(event);
+    this.coordination.accountUnlock(event, locked);
     event.scoringLocked = locked;
     event.scoringLockedAt = locked ? new Date(this.now()).toISOString() : undefined;
     this.saveEvent(event);
@@ -494,6 +511,7 @@ export class HostingService {
         throw new HostError(400, "An ISO timestamp with a timezone is required.");
       return new Date(milliseconds).toISOString();
     };
+    this.coordination.assertSchedule(event, body);
     if (body.startNow) event.startsAt = new Date(this.now()).toISOString();
     if (body.startsAt !== undefined) event.startsAt = parseTime(body.startsAt);
     if (body.endsAt !== undefined) event.endsAt = parseTime(body.endsAt);
@@ -523,6 +541,9 @@ export class HostingService {
    * Whether every host port a slot needs is free: the problem's published ports on loopback
    * (where Compose binds them) and its exercise gateway on the gateways' listen address.
    */
+  private needsGateway(definition: string): boolean {
+    return this.engine.requiresGateway?.(definition) ?? true;
+  }
   private async slotFree(definition: string, offset: number): Promise<boolean> {
     const runtime = portsFree(this.engine.hostPorts?.(definition, offset) ?? [], "127.0.0.1");
     const gateway = this.gatewayPorts
@@ -563,7 +584,10 @@ export class HostingService {
     return new Set(
       this.store
         .jobs()
-        .filter((job) => job.status !== "DELETED" && job.jobId !== except)
+        .filter(
+          (job) =>
+            job.status !== "DELETED" && job.jobId !== except && this.needsGateway(job.definition),
+        )
         .map((job) => job.offset),
     );
   }
@@ -573,6 +597,7 @@ export class HostingService {
    * allocated exercise gateway can hold a block that no recorded job owns.
    */
   private async freeSlot(definition: string, occupied: Set<number>): Promise<number> {
+    if (!this.needsGateway(definition)) return 0;
     const slots = this.gatewayPorts ? gatewaySlots(this.gatewayPorts) : MAX_JOBS;
     for (let index = 1; index <= slots; index += 1) {
       const offset = index * SLOT_STRIDE;
@@ -611,7 +636,10 @@ export class HostingService {
     const teams = this.store.teams(event.eventId);
     const existing = this.store.jobs(event.eventId);
     const failedOnly = body.retryFailedOnly === true;
-    this.assertGatewayCapacity(teams.length * event.problems.length);
+    this.assertGatewayCapacity(
+      teams.length *
+        event.problems.filter((problem) => this.needsGateway(problem.definition)).length,
+    );
     // Slot allocation reads every event's jobs, so serialize it across events too.
     const targets = await this.queue.run(SLOT_QUEUE, async () => {
       const occupied = this.recordedOffsets();
@@ -678,9 +706,10 @@ export class HostingService {
       // A retry keeps its block unless something else took the ports in the meantime, or a
       // removed environment's block was recorded for another environment since.
       if (
-        !this.slotInRange(job.offset) ||
-        !(await this.slotFree(job.definition, job.offset)) ||
-        this.recordedOffsets(job.jobId).has(job.offset)
+        this.needsGateway(job.definition) &&
+        (!this.slotInRange(job.offset) ||
+          !(await this.slotFree(job.definition, job.offset)) ||
+          this.recordedOffsets(job.jobId).has(job.offset))
       ) {
         job.offset = await this.queue.run(SLOT_QUEUE, () =>
           this.freeSlot(job.definition, this.recordedOffsets(job.jobId)),
@@ -711,6 +740,7 @@ export class HostingService {
       throw new HostError(409, "Every environment of this event has already been removed.");
     if (this.eventHasBusyJob(event.eventId))
       throw new HostError(409, "A team environment operation is still in progress.");
+    this.coordination.advance(event);
     event.status = "TEARDOWN";
     // Only an event that ran gets a final end time; a never-started event stays re-deployable.
     if (event.startsAt) event.endsAt ??= new Date(this.now()).toISOString();
@@ -837,17 +867,17 @@ export class HostingService {
   }
   async participant(request: ApiRequest): Promise<ApiResponse> {
     const team = this.store.authenticateTeam(request.token);
-    const context = this.context(team);
-    if (request.method === "GET") return this.participantRead(context, request.path);
-    if (request.method === "PATCH" && request.path === "/portal/me") {
-      return this.queue.run(team.eventId, async () => {
-        const latest = this.store.authenticateTeam(request.token);
-        latest.displayName = text(object(request.body).teamName, "teamName", 80);
-        this.store.putTeam(latest);
-        return ok(await this.teamView(this.context(latest)));
-      });
+    if (request.path.startsWith("/portal/me/coordination/")) {
+      return this.queue.run(team.eventId, async () => this.coordination.request(request));
     }
+    if (request.method === "GET")
+      return this.queue.run(team.eventId, () => this.readParticipant(request));
+    if (request.method === "PATCH" && request.path === "/portal/me")
+      return this.queue.run(team.eventId, () => this.renameParticipant(request));
     if (request.method !== "POST") throw new HostError(404, "Unknown participant endpoint.");
+    return this.submitParticipant(request, team);
+  }
+  private submitParticipant(request: ApiRequest, team: Team): Promise<ApiResponse> {
     const hintMatch = /^\/portal\/me\/problems\/([^/]+)\/hints\/([^/]+)\/reveal$/u.exec(
       request.path,
     );
@@ -876,6 +906,17 @@ export class HostingService {
         }
       : { problemId: String(body.problemId) };
     return this.queue.run(team.eventId, () => this.score(request, body, action));
+  }
+  private async renameParticipant(request: ApiRequest): Promise<ApiResponse> {
+    const latest = this.store.authenticateTeam(request.token);
+    latest.displayName = text(object(request.body).teamName, "teamName", 80);
+    this.store.putTeam(latest);
+    return ok(await this.teamView(this.context(latest)));
+  }
+  private readParticipant(request: ApiRequest): Promise<ApiResponse> {
+    const team = this.store.authenticateTeam(request.token);
+    this.coordination.advance(this.currentEvent(team.eventId));
+    return this.participantRead(this.context(this.store.team(team.teamId)), request.path);
   }
   /** Runs inside the event's serial queue: one submission or hint reveal, awarded at most once. */
   private async score(
@@ -1017,7 +1058,7 @@ export class HostingService {
       problems.map(async (raw) => {
         const problem = participantProblem(object(raw), eventGate.kind, ended);
         const job = context.jobs.find((candidate) => candidate.problemId === problem.problemId);
-        problem.provider = "docker";
+        problem.provider = problem.coordination ? "local" : "docker";
         problem.jobId = job?.jobId ?? problem.jobId;
         problem.eventStartsAt = context.event.startsAt;
         problem.eventEndsAt = context.event.endsAt;
@@ -1027,7 +1068,13 @@ export class HostingService {
         problem.stackOutputs = {};
         // The context was read before the engine view was awaited; decide on the stored job.
         const current = job && this.store.job(job.jobId);
-        if (current && linkable(current) && eventGate.kind === "ok" && this.surfaceLink) {
+        if (
+          !problem.coordination &&
+          current &&
+          linkable(current) &&
+          eventGate.kind === "ok" &&
+          this.surfaceLink
+        ) {
           try {
             problem.stackOutputs = { Web: await this.surfaceLink(current, context.team) };
           } catch (error) {

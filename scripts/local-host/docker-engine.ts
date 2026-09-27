@@ -154,6 +154,12 @@ async function compose(
       // Do not send build logs or interpolated environment values to a competitor.
       if (code === 0) accept();
       else if (DAEMON_UNAVAILABLE.test(tail)) reject(new DockerDaemonUnavailableError());
+      else if (/all predefined address pools have been fully subnetted/iu.test(tail))
+        reject(
+          new Error(
+            "Docker has no free network address pool. Review unused Docker networks on the host and remove only those no longer needed, then retry the failed deployment. Existing team environments are unchanged.",
+          ),
+        );
       else
         reject(
           new Error(

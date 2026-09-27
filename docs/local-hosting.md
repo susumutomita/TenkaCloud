@@ -5,24 +5,22 @@ entry point from `make local`: individual practice and its existing login flow
 are unchanged. The host console requires a host key, while participants sign in
 with the team keys issued for their event.
 
-## Initial supported scope
+## Supported problems
 
 The application server uses Bun and a local SQLite file. There is no AWS,
 Cognito, external database, or application container to provision. The browser
 interfaces are built using the repository's existing Vite pipelines.
 
-The initial exercise is the existing `challenges/sqli-demo` problem. Its Docker
-Compose environment, statement, verifier, hint rules and score calculation are
-reused. Each team receives its own Compose project, ports and deployment secret.
-Docker is required to start this exercise, not to start the hosting application
-or prepare an event. A missing or unhealthy Docker daemon produces a deployment
-failure; it never becomes a simulated success.
+| Problem | Runtime | Requirements |
+| --- | --- | --- |
+| SQL injection (`challenges/sqli-demo`) | One isolated Docker Compose project per team | Docker |
+| Cryptography Battle (`battles/ac26-crypto-battle`) | Shared match on the host; private view per team | Bun + SQLite, no Docker or AWS |
 
-Other catalog problems are not automatically offered. A problem with a shell,
-code execution, a custom portal plugin, a different HTTP surface, or a shared
-network needs its own isolation and compatibility review before being enabled.
-The sqli-demo-only gateway is not a generic proxy or a sandbox for arbitrary
-untrusted workloads.
+Both reuse the catalog's statements, rules and scoring. You can include both in
+one event; their points contribute to the same leaderboard. A local event can
+have one shared Battle. Other catalog problems require a compatibility and
+isolation review before being enabled. The SQL exercise gateway is not a generic
+proxy or a sandbox for arbitrary workloads.
 
 ## Start
 
@@ -67,10 +65,10 @@ with the terminal's host key (there is no Cognito). Then:
    creation shows each team's key and invitation link once; keys stay copyable in
    the **Teams** tab.
 2. **Deploy**: choose **Deploy now** in that dialog, or prepare the environments from
-   the **Schedule** tab. Each team/problem environment gets its own block of host
-   ports; the application skips blocks whose ports are already bound by another
-   process, and a retried environment moves to a free block when its previous ports
-   were taken in the meantime.
+   the **Schedule** tab. Each Docker team/problem environment gets its own block of host
+   ports; the application skips occupied blocks and moves a retried environment
+   when its previous ports were taken. Cryptography Battle runs in the participant
+   portal and does not allocate exercise ports.
 3. **Start**: in the **Schedule** tab, choose **Start now** (or pick a start time) and,
    optionally, an end time. **End Event** in the page header stops scoring.
 
@@ -84,11 +82,35 @@ monitoring, scheduled deploy and automatic teardown. Their navigation entries an
 tabs are hidden; opening such a URL shows an explanation instead of a failing
 request.
 
+### Play Cryptography Battle
+
+1. Create an event, choose **Cryptography Battle** and two or more teams.
+2. Deploy, then distribute each team's invitation link/key. No AWS account or
+   Docker daemon is needed for this problem.
+3. Start the event from **Schedule**. Participants open the problem and press
+   **Ready**. Orders begin when every team is ready.
+4. Solve an order or choose **LEAK** to score. Published evidence can then be used
+   by opponents for **HUNT**. Battle points appear in the portal and leaderboard.
+
+The actual catalog plugin runs on the host. Each participant receives their own
+vault and public evidence. The match secret and other teams' vaults stay on the host. State, public evidence,
+orders, scores and retry receipts are saved in SQLite. Restart with the same data
+directory to resume; restarting does not reset the clock. A running Battle's
+start time cannot be changed. Create a new event for a fresh match.
+
+**Stop**, **Restart** and **Tear down** on a Battle team control that team's portal
+access. They retain shared match state and scores; the match clock continues.
+To end scoring for everyone, use **End Event**. A scoring lock pauses the Battle
+clock; unlocking does not apply penalties for the locked interval. The event
+end time remains fixed. Teardown settles elapsed play before closing access.
+The optional AWS Parameter Store item is not enabled in local hosting. Battle parameters currently use the catalog
+defaults; local event duration can be set from Schedule.
+
 ### One team's environment
 
 The **Teams** tab lists every team/problem environment with its status and gateway
-port. Each row can be operated on its own; other teams' containers, gateways and
-scores are not touched:
+port. Docker rows can be operated on their own; other teams' containers, gateways and
+scores are not touched. Battle access controls are described above:
 
 - **Stop** halts the containers (`docker compose stop`) and keeps their data. The team
   sees the problem as stopped and cannot submit to it.
@@ -147,10 +169,11 @@ An attacker who can capture network traffic can steal HTTP credentials.
 
 Participants need the printed participant URL, not the host-console URL. The
 operating-system firewall must permit the participant port (default `5175`) and
-the printed exercise-gateway range (default `5200-5239`) on the selected address.
+the exercise-gateway ports for Docker problems (default `5200-5239`) on the selected
+address. A Battle-only event needs only the participant port.
 Keep the host-console port closed; it listens on loopback only.
 
-Each environment's gateway always uses the port of its runtime slot: slot `n`
+Each Docker environment's gateway always uses the port of its runtime slot: slot `n`
 listens on the range's start plus `n - 1`, and slots never share a port. The
 **Teams** tab shows each environment's port, and the terminal logs
 `Exercise gateway for <team> / <problem>: <URL>` when a gateway opens. A slot whose
@@ -158,11 +181,14 @@ gateway port is held by another process is skipped when environments are
 prepared. Choose another range with `--gateway-ports`, for example
 `--gateway-ports 6200-6239`; it must lie within 1024-65535 and not include the
 console or portal port. The host refuses to start when the range overlaps a port a
-supported problem publishes in any runtime slot. An event whose teams × problems
+supported problem publishes in any runtime slot. An event whose teams × Docker problems
 exceeds the range is refused at creation and deployment with an error naming
 `--gateway-ports`. Gateway ports are probed on the address the gateways listen on
 (the `--lan` address in LAN mode); problem ports are probed on loopback, where
 Compose publishes them.
+
+Battle teams do not reserve or probe exercise-gateway ports. The overall limit
+of 40 team/problem environments still applies.
 
 The exercise containers' verifier ports remain loopback-only; do not expose them
 or rewrite their Compose bindings to `0.0.0.0`.
@@ -187,7 +213,7 @@ retryable deployment state. The host console can retry failed environments.
 The original event timestamps are retained, so a recovery does not secretly
 extend the competition deadline.
 
-When Docker is not running, preparing environments fails with
+When Docker is not running, preparing SQL exercise environments fails with
 `Docker daemon is unavailable. Start Docker Desktop or Docker Engine, then retry
 the deployment from the host console.` Ownership of any partial environment is
 kept. Start Docker and deploy again from the **Schedule** tab (or **Retry failed**):
@@ -228,8 +254,8 @@ The normal portal's existing submission interface is retained.
 
 The build has a separate allowlist for catalog metadata. Author descriptions,
 writeups, hint content and problem implementation files must not be distributed
-through browser metadata. Only the initial reviewed exercise is included in
-hosting catalog/plugin globs. Participant instructions are returned by the
+through browser metadata. Only reviewed SQL metadata and the Battle portal are included in
+hosting catalog/plugin globs; server reducers, fixtures and private seeds are excluded. Participant instructions are returned by the
 authenticated backend after the event starts.
 
 The organizer's own account, local operating-system processes and the checked-out
@@ -238,8 +264,9 @@ organizer or an attacker already running code as that operating-system user.
 
 ## Validation commands
 
-The dependency-free hosting boundary suite uses real HTTP listeners and SQLite,
-with an explicitly test-only exercise adapter. It does not stand in for a
+The hosting suite uses real HTTP listeners and SQLite. It tests the actual
+Battle plugin through Ready, LEAK, HUNT, score/rank updates, event isolation and
+restart recovery. SQL boundary tests use an explicitly test-only exercise adapter. It does not stand in for a
 production Docker or browser-interface test:
 
 ```sh

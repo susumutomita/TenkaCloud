@@ -870,7 +870,7 @@ const c = import.meta.glob("../../../../.tenkacloud/pack-store/snapshots/**/meta
       "/repo/apps/participant-portal/src/plugins/loader.ts",
     ),
   );
-  assert.ok(plugins.includes("problems/challenges/sqli-demo/portal/"));
+  assert.ok(plugins.includes("problems/{challenges/sqli-demo,battles/ac26-crypto-battle}/portal/"));
   assert.doesNotThrow(() =>
     assertHostingModule("/repo/problems/challenges/sqli-demo/metadata.json"),
   );
