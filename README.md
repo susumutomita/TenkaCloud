@@ -108,7 +108,7 @@ This path uses Bun and Vite. [Developer setup and commands](./docs/local-play.md
 make host
 ```
 
-The organizer uses the normal admin console with the printed host key; teams sign in to the participant portal with their own keys. [Local competition hosting](./docs/local-hosting.md) covers LAN access, firewall ports, per-team environment operations and teardown.
+Choose SQL injection (Docker) or Cryptography Battle (Bun + SQLite, no AWS or Docker). The organizer uses the normal admin console with the printed host key; teams sign in to the participant portal with their own keys. [Local competition hosting](./docs/local-hosting.md) covers LAN access, firewall ports, per-team environment operations and teardown.
 
 ### Deploy on AWS
 

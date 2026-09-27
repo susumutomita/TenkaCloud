@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { buildHosting } from "./build";
-import { DockerHostingEngine } from "./docker-engine";
+import { CompetitionEngine } from "./competition-engine";
 import { DEFAULT_GATEWAY_PORTS, formatGatewayPorts } from "./gateway-ports";
 import { parseOptions } from "./options";
 import { startLocalHost } from "./server";
@@ -10,7 +10,7 @@ async function main(): Promise<void> {
   const options = parseOptions(process.argv.slice(2), root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nbun start [--data <directory>] [--no-build]\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, one fixed port per team environment\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n\nThe host application needs Bun and SQLite only. The sqli-demo problem requires Docker Compose.\nExisting make local individual practice is unchanged.`,
+      `TenkaCloud local competition hosting\n\nbun start [--data <directory>] [--no-build]\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, one fixed port per team environment\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n\nThe host application and Cryptography Battle need Bun and SQLite only. The sqli-demo problem requires Docker Compose.\nExisting make local individual practice is unchanged.`,
     );
     return;
   }
@@ -21,7 +21,7 @@ async function main(): Promise<void> {
   const host = await startLocalHost(
     root,
     options,
-    (directory) => new DockerHostingEngine(root, directory),
+    (directory) => new CompetitionEngine(root, directory),
   );
   try {
     const gateways = `http://${options.hostname}:${formatGatewayPorts(options.gatewayPorts)}`;

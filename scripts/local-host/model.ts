@@ -18,6 +18,7 @@ export interface Problem {
   problemId: string;
   name: string;
   definition: string;
+  runtime?: "docker" | "coordination";
 }
 
 export interface HostedEvent {
@@ -93,6 +94,7 @@ export interface EngineResult {
 
 export interface RuntimeEngine {
   catalog(): readonly Problem[];
+  coordinationPlugin?(problem: Problem): import("./coordination-core").HostPlugin;
   start(job: Job, retain: (unit: string | null) => void): Promise<void>;
   recover(job: Job): Promise<void>;
   /** Remove the environment's containers and volumes (teardown). */

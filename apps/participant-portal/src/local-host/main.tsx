@@ -31,6 +31,7 @@ async function boot(root: HTMLElement): Promise<void> {
   // entry cannot acquire localTeamLoginKey or activate the individual-practice UI.
   const config: AppConfig = {
     apiBaseUrl: expected,
+    coordinationApiUrl: expected,
     eventTitle: "TenkaCloud Local Competition",
     eventRegion: "local",
     mode: "backend",

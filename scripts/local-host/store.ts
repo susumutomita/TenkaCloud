@@ -60,6 +60,10 @@ export class HostStore {
           FOREIGN KEY(team_id,event_id) REFERENCES host_teams(id,event_id),
           UNIQUE(event_id,team_id,problem_id)
         ) STRICT;
+        CREATE TABLE IF NOT EXISTS host_coordination(
+          event_id TEXT NOT NULL REFERENCES host_events(id), problem_id TEXT NOT NULL,
+          body TEXT NOT NULL, PRIMARY KEY(event_id,problem_id)
+        ) STRICT;
         CREATE TABLE IF NOT EXISTS host_sessions(
           token_hash TEXT PRIMARY KEY, refresh_hash TEXT NOT NULL UNIQUE, expires INTEGER NOT NULL
         ) STRICT;
@@ -88,6 +92,17 @@ export class HostStore {
       this.database.exec("ROLLBACK");
       throw error;
     }
+  }
+  coordination(eventId: string, problemId: string): string | undefined {
+    const row = this.statement(
+      "SELECT body FROM host_coordination WHERE event_id=? AND problem_id=?",
+    ).get(eventId, problemId) as BodyRow | undefined;
+    return row?.body;
+  }
+  putCoordination(eventId: string, problemId: string, body: string): void {
+    this.statement(
+      "INSERT INTO host_coordination(event_id,problem_id,body) VALUES (?,?,?) ON CONFLICT(event_id,problem_id) DO UPDATE SET body=excluded.body",
+    ).run(eventId, problemId, body);
   }
   events(): HostedEvent[] {
     return (
