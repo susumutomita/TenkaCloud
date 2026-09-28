@@ -162,6 +162,13 @@ export class HostStore {
     }
     return (rows as BodyRow[]).map((row) => JSON.parse(row.body) as Job);
   }
+  /** Id only: a Battle job body carries the whole plugin bundle, too large to parse per poll. */
+  jobId(eventId: string, teamId: string, problemId: string): string | undefined {
+    const row = this.statement(
+      "SELECT id FROM host_jobs WHERE event_id=? AND team_id=? AND problem_id=?",
+    ).get(eventId, teamId, problemId) as { id: string } | undefined;
+    return row?.id;
+  }
   job(id: string): Job {
     const row = this.statement("SELECT body FROM host_jobs WHERE id=?").get(id) as
       | BodyRow
