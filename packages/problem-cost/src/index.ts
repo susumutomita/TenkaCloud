@@ -315,8 +315,13 @@ function customResourceHeuristic(resourceType: string): ResourceCostHeuristic | 
   };
 }
 
+/** Parses a CloudFormation template without reporting its short-form intrinsics as unknown tags. */
+export function parseCloudFormationYaml(templateYaml: string): unknown {
+  return parseYaml(templateYaml, { customTags: [...CFN_YAML_TAGS] });
+}
+
 export function analyzeProblemCost(templateYaml: string): ProblemCostEstimate {
-  const parsed = parseYaml(templateYaml, { customTags: [...CFN_YAML_TAGS] });
+  const parsed = parseCloudFormationYaml(templateYaml);
   const template = isPlainObject(parsed) ? parsed : {};
   const resources = isPlainObject(template.Resources) ? template.Resources : {};
   const costedResources = Object.entries(resources)

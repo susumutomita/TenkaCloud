@@ -80,6 +80,6 @@ describe("formatFindings", () => {
     const message = formatFindings(["tmp/a.mjs", "tmp/b.mjs"]);
     expect(message).toContain("tmp/a.mjs");
     expect(message).toContain("tmp/b.mjs");
-    expect(message).toContain("eslint.config.js");
+    expect(message).toContain("eslint.config.mjs");
   });
 });

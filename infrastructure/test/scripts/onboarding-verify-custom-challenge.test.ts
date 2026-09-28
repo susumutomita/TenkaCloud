@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   formatCheckpoint,
   verifyCustomChallengePack,
@@ -103,6 +103,24 @@ describe("verifyCustomChallengePack (#2781)", () => {
       problemCount: 2,
       checkpoint: "TC{CUSTOM-CHALLENGE:my-first-problem}",
     });
+  });
+
+  it("should read the template's short-form intrinsics without a YAML warning", () => {
+    // The golden template emits its flag with `!GetAtt`. Parsed as plain YAML, every run
+    // printed `YAMLWarning: Unresolved tag: !GetAtt`.
+    const emitWarning = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+    try {
+      const packDir = makePack();
+      customize(addSecondProblem(packDir, "my-first-problem"));
+
+      expect(verifyCustomChallengePack(packDir).ok).toBe(true);
+      const yamlWarnings = emitWarning.mock.calls.filter(
+        ([warning]) => warning instanceof Error && warning.name === "YAMLWarning",
+      );
+      expect(yamlWarnings).toEqual([]);
+    } finally {
+      emitWarning.mockRestore();
+    }
   });
 
   it("should reject replacing hello-world instead of adding alongside it", () => {
