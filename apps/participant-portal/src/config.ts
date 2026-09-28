@@ -34,6 +34,14 @@ export function showsCourseTracks(cloudMode: CloudMode): boolean {
   return cloudMode === "local";
 }
 
+/**
+ * AWS-only features (Console handoff, Tools > SSO Credentials). Local hosting keeps
+ * `cloudMode: "real"` for the full competition portal, so it opts out with `hasAws: false`.
+ */
+export function hasAwsFeatures(config: Pick<AppConfig, "cloudMode" | "hasAws">): boolean {
+  return config.cloudMode !== "local" && config.hasAws !== false;
+}
+
 export interface AppConfig {
   readonly apiBaseUrl: string;
   readonly eventTitle: string;
@@ -48,6 +56,8 @@ export interface AppConfig {
    * portal slot は coordination-client 経由で呼び出す。
    */
   readonly coordinationApiUrl?: string;
+  /** False for the local-host build, which has no AWS. Absent means true. */
+  readonly hasAws?: boolean;
 }
 
 interface RuntimeConfig {

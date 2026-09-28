@@ -366,12 +366,17 @@ export function splitStackOutputs(stackOutputs: ParticipantProblemView["stackOut
   };
 }
 
+/** `scoring` の無い coordination Battle は kind ラベルを出さない (null)。 未知の kind は kind_unknown。 */
 export function describeProblemKind(
   t: ProblemPanelT,
   scoring: ParticipantProblemView["scoring"],
-): string {
-  if (!scoring) return t("problem_panel.kind_unknown");
+): string | null {
+  if (!scoring) return null;
   return t(SCORING_KIND_KEY[scoring.kind] ?? "problem_panel.kind_unknown");
+}
+
+export function buildPanelDescription(kindLabel: string | null, score: number): string {
+  return kindLabel ? `${kindLabel} / ${score} pt` : `${score} pt`;
 }
 
 export function isUptimeScoring(scoring: ParticipantProblemView["scoring"]): boolean {

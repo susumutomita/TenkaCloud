@@ -88,6 +88,7 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
         projection: Projection;
         entries: { teamId: string; rank: number; score: number }[];
         problems: { score: number; stackOutputs: unknown; instructions: string }[];
+        error?: string;
       },
     };
   }
@@ -122,7 +123,9 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
     const [a, b] = event.teams;
     expect(a).toBeDefined();
     expect(b).toBeDefined();
-    expect((await op(required(a).teamLoginKey, { kind: "ready" })).status).toBe(409);
+    const beforeStart = await op(required(a).teamLoginKey, { kind: "ready" });
+    expect(beforeStart.status).toBe(422);
+    expect(beforeStart.body.error).toBe("event_ended");
     expect((await api("participant", "/portal/me/coordination/projection")).status).toBe(401);
     await api("admin", `/events/${event.eventId}/schedule`, "PATCH", { startNow: true });
     const one = await op(required(a).teamLoginKey, { kind: "ready" });
@@ -185,14 +188,12 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
         )
       ).status,
     ).toBe(400);
-    expect(
-      (
-        await op(required(unrelated.teams[0]).teamLoginKey, {
-          kind: "leak",
-          contractId: required(order).id,
-        })
-      ).status,
-    ).toBe(409);
+    const unstartedLeak = await op(required(unrelated.teams[0]).teamLoginKey, {
+      kind: "leak",
+      contractId: required(order).id,
+    });
+    expect(unstartedLeak.status).toBe(422);
+    expect(unstartedLeak.body.error).toBe("event_ended");
     expect(store.team(required(unrelated.teams[0]).teamId).score).toBe(0);
     const raw = required(store.coordination(event.eventId, "ac26-crypto-battle"));
     expect(JSON.stringify(me.body)).not.toContain(JSON.parse(raw).matchSecret);
@@ -288,7 +289,9 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
     expect(store.team(required(a).teamId).score).toBe(alphaScore);
     expect(store.team(required(b).teamId).score).toBe(betaScore);
     await api("admin", `/events/${event.eventId}/lock-scoring`, "POST", {});
-    expect((await op(required(a).teamLoginKey, { kind: "ready" })).status).toBe(409);
+    const duringLock = await op(required(a).teamLoginKey, { kind: "ready" });
+    expect(duringLock.status).toBe(422);
+    expect(duringLock.body.error).toBe("scoring_locked");
     const beforeLock = store.coordination(event.eventId, "ac26-crypto-battle");
     clock += 300_000;
     // Repeated lock requests must not reset the start of the paused interval.
@@ -351,6 +354,11 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
     expect(unfreezed.state).toEqual(frozen.state);
     expect(unfreezed.scores).toEqual(frozen.scores);
     expect(store.event(unrelated.eventId).coordinationPausedMs).toBe(1000);
+    const beforeEndedOp = store.coordination(unrelated.eventId, "ac26-crypto-battle");
+    const endedOp = await op(peer.teamLoginKey, { kind: "ready" });
+    expect(endedOp.status).toBe(422);
+    expect(endedOp.body.error).toBe("event_ended");
+    expect(store.coordination(unrelated.eventId, "ac26-crypto-battle")).toBe(beforeEndedOp);
   } finally {
     await host?.close();
     await portal?.close();

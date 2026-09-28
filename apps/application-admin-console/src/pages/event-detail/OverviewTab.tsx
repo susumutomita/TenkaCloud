@@ -2,6 +2,7 @@ import { DeployProgressPanel } from "../../components/event-detail/DeployProgres
 import { EventPhaseBanner } from "../../components/event-detail/EventPhaseBanner";
 import { EventWizardPanel } from "../../components/event-detail/EventWizardPanel";
 import { ScoringLockPanel } from "../../components/event-detail/ScoringLockPanel";
+import { isEffectivelyEnded } from "../../lib/effective-event-status";
 import type { EventTabContentProps } from "./tab-content-props";
 
 /**
@@ -29,6 +30,11 @@ export function OverviewTab({
       <DeployProgressPanel
         allDoneCount={counts.allDoneCount}
         completeCount={counts.completeCount}
+        ended={isEffectivelyEnded({
+          status: detail.status,
+          startsAt: detail.startsAt ?? null,
+          endsAt: detail.endsAt ?? null,
+        })}
         failedCount={counts.failedCount}
         inFlightCount={counts.inFlightCount}
         manualRefreshInFlight={manualRefreshInFlight}

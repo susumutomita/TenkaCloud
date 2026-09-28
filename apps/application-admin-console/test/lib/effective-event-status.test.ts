@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EventStatus } from "../../src/api/events-client";
 import {
   computeEffectiveStatus,
+  isEffectivelyEnded,
   isTerminalEventStatus,
 } from "../../src/lib/effective-event-status";
 
@@ -116,5 +117,41 @@ describe("isTerminalEventStatus", () => {
     "READY",
   ])("should be false for non-terminal status %s", (status) => {
     expect(isTerminalEventStatus(status)).toBe(false);
+  });
+});
+
+/**
+ * Local-hosting rehearsal defect: a fully-deployed event whose reserved end time already passed,
+ * but which nobody has explicitly ended, still shows "Ready to start the competition." because the
+ * Overview's Deploy-progress card previously gated on `isTerminalEventStatus(detail.status)` —
+ * the raw, operator-set status. `computeEffectiveStatus` already promotes READY + past `endsAt` to
+ * ENDED for the phase banner and badge; `isEffectivelyEnded` reuses that so every panel agrees on
+ * whether the event is over.
+ */
+describe("isEffectivelyEnded", () => {
+  it("should be false for a READY event before its end time", () => {
+    expect(isEffectivelyEnded({ status: "READY", startsAt: PAST, endsAt: FUTURE }, NOW)).toBe(
+      false,
+    );
+  });
+
+  it("should be true for a READY event whose endsAt has already passed, even though nobody ended it", () => {
+    expect(isEffectivelyEnded({ status: "READY", startsAt: PAST, endsAt: PAST }, NOW)).toBe(true);
+  });
+
+  it.each<EventStatus>([
+    "ENDED",
+    "TEARDOWN",
+    "ARCHIVED",
+  ])("should be true for the explicit terminal status %s regardless of times", (status) => {
+    expect(isEffectivelyEnded({ status }, NOW)).toBe(true);
+  });
+
+  it.each<EventStatus>([
+    "DRAFT",
+    "DEPLOYING",
+    "READY",
+  ])("should be false for %s with no end time", (status) => {
+    expect(isEffectivelyEnded({ status }, NOW)).toBe(false);
   });
 });

@@ -11,7 +11,7 @@
     },
     "catalog": {
       "repository": "https://github.com/susumutomita/TenkaCloudChallenge.git",
-      "commit": "dd7dbac4682ffe15a189c2e47b1db03366f5e380"
+      "commit": "363a7c9b83969e20d63b74fd0410a354da5e202b"
     }
   },
   "artifacts": {
@@ -47,6 +47,7 @@
     "goldenPathRuns": []
   },
   "knownLimitations": [
+    "The Lite launcher default RepoRef/ProblemsRepoRef pair is generated from release/launcher-defaults.json but still points at the previously released identity; it advances to this release's pair only after the published Release is verified (#3024 PR 5).",
     "No fresh-environment Golden Path run is attached, so this release is not certified for third-party production use.",
     "No deployment mode or AWS region is certified by this manifest.",
     "The platform commit of this release is derived from its v1.10.1 tag at publish time (#3024); the manifest lives inside that tree and cannot record it.",

@@ -15,7 +15,7 @@ import { useLocation, useNavigate } from "react-router";
 import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
-import { type AppConfig, type CloudMode, showsCourseTracks } from "../config";
+import { type AppConfig, type CloudMode, hasAwsFeatures, showsCourseTracks } from "../config";
 import { problemProvider } from "../data/providers";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
@@ -247,15 +247,17 @@ export function handleSideNavFollow(
  * `info` バッジに件数を出す。> 99 は "99+" にクランプして badge 横幅を一定にする。
  *
  * Issue #2474: `cloudMode === "local"` (単独ドリル) は主催者アナウンスも federate 先の
- * AWS も無いため、 AWS 専用の導線を出さない — `Tools` セクション (SSO 資格情報) を丸ごと省き、
- * `Event` セクションから `notifications` link を落とす (unread badge 計算も local では不要)。
- * `mock` (dev-mock) / `real` は従来どおり全導線を出す。
+ * AWS も無いため、 `Event` セクションから `notifications` link を落とす (unread badge 計算も
+ * local では不要)。 `mock` (dev-mock) / `real` は従来どおり notifications を出す。
+ *
+ * `Tools` セクション (SSO 資格情報) は {@link hasAwsFeatures} の結果 `showsAwsFeatures` だけで決める。
  */
 export function buildSideNavItems(
   unread: number,
   t: (key: string) => string,
   cloudMode: CloudMode,
   locale: LocaleCode,
+  showsAwsFeatures: boolean,
 ): SideNavigationProps.Item[] {
   const isLocal = cloudMode === "local";
   const eventItems: SideNavigationProps.Item[] = [
@@ -288,7 +290,7 @@ export function buildSideNavItems(
       ],
     },
   ];
-  if (!isLocal) {
+  if (showsAwsFeatures) {
     sections.push({
       type: "section",
       text: t("nav.tools_section"),
@@ -325,6 +327,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
 
   const { locale, setLocale, t } = useI18n();
   const consoleAccess = useConsoleAccess(config);
+  const showsAwsFeatures = hasAwsFeatures(config);
 
   const utilities = useMemo<TopNavigationProps.Utility[]>(() => {
     // Issue #583 Phase 1.A: locale switcher utility は session 有無に依存しない (= ログイン
@@ -340,17 +343,17 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
       localeUtility,
       // Issue #1919: AWS Console 導線を右上常設にして「入口が分からない」を解消する。
       // Issue #2474: ただし local (単独ドリル) は federate 先の AWS が無く Console を開けない
-      // (= "Portal API 404") ので、 local のときは常設 utility から外す。
-      ...(config.cloudMode === "local"
-        ? []
-        : [
+      // (= "Portal API 404") ので、 AWS の無い構成では常設 utility から外す。
+      ...(showsAwsFeatures
+        ? [
             buildConsoleUtility(
               teamView.view?.problems ?? [],
               consoleAccess.openConsole,
               navigate,
               t,
             ),
-          ]),
+          ]
+        : []),
       buildRefreshLatestUtility(teamView.refresh, t),
       buildAutoRefreshUtility(teamView.autoRefreshEnabled, teamView.setAutoRefreshEnabled, t),
       // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
@@ -372,15 +375,22 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     teamView.leaderboard,
     teamView.leaderboardNoEvent,
     config.mode,
-    config.cloudMode,
+    showsAwsFeatures,
     locale,
     setLocale,
     t,
   ]);
 
   const sideNavItems = useMemo(
-    () => buildSideNavItems(teamView.unreadNotificationCount, t, config.cloudMode, locale),
-    [teamView.unreadNotificationCount, t, config.cloudMode, locale],
+    () =>
+      buildSideNavItems(
+        teamView.unreadNotificationCount,
+        t,
+        config.cloudMode,
+        locale,
+        showsAwsFeatures,
+      ),
+    [teamView.unreadNotificationCount, t, config.cloudMode, locale, showsAwsFeatures],
   );
 
   return (
