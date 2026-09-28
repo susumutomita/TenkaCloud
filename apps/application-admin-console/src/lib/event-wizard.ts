@@ -28,13 +28,14 @@ export interface EventWizardInput {
 /**
  * #531 Wizard step ラベル (5 段表示)。READY 状態 (= 3, 4) は startsAt / 現在時刻で
  * 「開始待ち / 採点中」を分岐する。TEARDOWN / ARCHIVED は終了系として step 5 に集約。
+ * `labelKey` は EventWizardPanel が `t()` で解決する i18n key。
  */
-export const WIZARD_STEPS: readonly { key: WizardStepKey; label: string }[] = [
-  { key: "draft", label: "作成" },
-  { key: "deploying", label: "Deploy" },
-  { key: "ready_unscheduled", label: "開始時刻設定" },
-  { key: "in_competition", label: "競技中" },
-  { key: "ended", label: "終了" },
+export const WIZARD_STEPS: readonly { key: WizardStepKey; labelKey: string }[] = [
+  { key: "draft", labelKey: "event_detail.phase_step_draft" },
+  { key: "deploying", labelKey: "event_detail.phase_step_deploying" },
+  { key: "ready_unscheduled", labelKey: "event_detail.phase_step_ready_unscheduled" },
+  { key: "in_competition", labelKey: "event_detail.phase_step_in_competition" },
+  { key: "ended", labelKey: "event_detail.phase_step_ended" },
 ] as const;
 
 /**

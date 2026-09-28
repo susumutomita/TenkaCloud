@@ -108,6 +108,8 @@ export function EventCreateTeamsSection({
         <Input
           value={tr.internalSlug}
           placeholder="team-1"
+          // Every row shares the placeholder, which would otherwise become each row's accessible name.
+          ariaLabel={t("event_create.col_internal_slug_aria", { row: tr.idx + 1 })}
           invalid={!SLUG_RE.test(tr.internalSlug)}
           onChange={({ detail }) => onUpdateTeamRow(tr.idx, { internalSlug: detail.value })}
         />
@@ -243,10 +245,14 @@ export function EventCreateTeamsSection({
     });
   }
 
+  const descriptionKey =
+    providerMode?.kind === "local"
+      ? "event_create.teams_description_local"
+      : "event_create.teams_description";
   return (
     <Container
       header={
-        <Header variant="h2" description={t("event_create.teams_description")}>
+        <Header variant="h2" description={t(descriptionKey)}>
           {t("event_create.teams_header", { count: teamCount })}
         </Header>
       }
