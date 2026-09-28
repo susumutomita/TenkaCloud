@@ -281,7 +281,7 @@ load generator on the same computer. One event with 40 teams, one organizer
 tab, and the participant tabs spread evenly across the teams, 60 seconds per
 step:
 
-"Latency p95" means 95% of requests were answered within that time.
+"Latency p95" means 95 out of 100 requests were answered within that time.
 
 | Participant tabs | Tabs per team | Latency p95 | Errors | Host CPU (avg) |
 | --- | --- | --- | --- | --- |
