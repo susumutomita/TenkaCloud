@@ -2145,82 +2145,85 @@ describe("provider-neutral local runtime", () => {
     ["restored-known", 5, true, false],
     ["active-switched", 6, true, false],
     ["completed-receipt", 7, false, true],
-  ] as const)("should rehydrate and clean the %s snapshot generation", async (stage, failAtCommit, expectsPendingRestored, expectsCompleted) => {
-    const root = mkdtempSync(join(tmpdir(), `tc-simulator-snapshot-${stage}-`));
-    let commits = 0;
-    const options: SimulatorRuntimeOptions = {
-      ...runtimeOptions(root),
-      retryDelayMs: 1,
-      sessionWriteHooks: {
-        afterSecretCommit: () => {
-          commits += 1;
-          if (commits === failAtCommit) {
-            throw new Error(`injected ${stage} commit interruption`);
-          }
+  ] as const)(
+    "should rehydrate and clean the %s snapshot generation",
+    async (stage, failAtCommit, expectsPendingRestored, expectsCompleted) => {
+      const root = mkdtempSync(join(tmpdir(), `tc-simulator-snapshot-${stage}-`));
+      let commits = 0;
+      const options: SimulatorRuntimeOptions = {
+        ...runtimeOptions(root),
+        retryDelayMs: 1,
+        sessionWriteHooks: {
+          afterSecretCommit: () => {
+            commits += 1;
+            if (commits === failAtCommit) {
+              throw new Error(`injected ${stage} commit interruption`);
+            }
+          },
         },
-      },
-    };
-    const runtime = new SimulatorLocalRuntime(options);
-    runningRuntimes.push(runtime);
-    const original = await runtime.start(problem(root));
-    const snapshotPath = join(root, `${stage}.json`);
-    await runtime.exportSnapshot(original.problemId, snapshotPath);
+      };
+      const runtime = new SimulatorLocalRuntime(options);
+      runningRuntimes.push(runtime);
+      const original = await runtime.start(problem(root));
+      const snapshotPath = join(root, `${stage}.json`);
+      await runtime.exportSnapshot(original.problemId, snapshotPath);
 
-    await expect(runtime.importSnapshot(original.problemId, snapshotPath)).rejects.toThrow(
-      "world still requires cleanup",
-    );
-    let persisted = readSimulatorSessionRecord(options.sessionPath);
-    expect(persisted.completedSnapshotRestores !== undefined).toBe(expectsCompleted);
-    if (expectsCompleted) {
-      expect(persisted.pendingSnapshotRestores).toBeUndefined();
-    } else {
-      expect(persisted.pendingSnapshotRestores).toHaveLength(1);
-      expect(persisted.pendingSnapshotRestores?.[0]?.restoredWorldId !== undefined).toBe(
-        expectsPendingRestored,
+      await expect(runtime.importSnapshot(original.problemId, snapshotPath)).rejects.toThrow(
+        "world still requires cleanup",
       );
-    }
-    expect(readFileSync(options.sessionPath, "utf8")).not.toMatch(
-      /idempotencyKey|launchToken|completedSnapshotRestores/,
-    );
-
-    if (stage === "restored-known") {
-      const expiredToken = issueSimulatorLaunchToken(
-        persisted.launcher.launchSecret,
-        {
-          tenantId: "local",
-          eventId: "local",
-          teamId: "local",
-          deploymentId: original.deploymentId,
-        },
-        1,
-        0,
+      let persisted = readSimulatorSessionRecord(options.sessionPath);
+      expect(persisted.completedSnapshotRestores !== undefined).toBe(expectsCompleted);
+      if (expectsCompleted) {
+        expect(persisted.pendingSnapshotRestores).toBeUndefined();
+      } else {
+        expect(persisted.pendingSnapshotRestores).toHaveLength(1);
+        expect(persisted.pendingSnapshotRestores?.[0]?.restoredWorldId !== undefined).toBe(
+          expectsPendingRestored,
+        );
+      }
+      expect(readFileSync(options.sessionPath, "utf8")).not.toMatch(
+        /idempotencyKey|launchToken|completedSnapshotRestores/,
       );
-      writeSimulatorSessionRecord(options.sessionPath, {
-        ...persisted,
-        deployments: persisted.deployments.map((deployment) => ({
-          ...deployment,
-          launchToken: expiredToken,
-          consoleUrl: simulatorConsoleUrl(
-            new URL(deployment.consoleUrl.split("#", 1)[0] ?? deployment.consoleUrl).toString(),
-            expiredToken,
-            persisted.launcher.baseUrl,
-          ),
-        })),
-      });
-      persisted = readSimulatorSessionRecord(options.sessionPath);
-      expect(persisted.deployments[0]?.launchToken).toBe(expiredToken);
-    }
 
-    const recovered = new SimulatorLocalRuntime({ ...options, sessionWriteHooks: undefined });
-    runningRuntimes.splice(runningRuntimes.indexOf(runtime), 1);
-    await recovered.stop(original.problemId);
-    expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toEqual([]);
-    const cleaned = readSimulatorSessionRecord(options.sessionPath);
-    expect(cleaned.deployments).toEqual([]);
-    expect(cleaned.pendingSnapshotRestores).toBeUndefined();
-    expect(cleaned.completedSnapshotRestores).toBeUndefined();
-    await recovered.close();
-  });
+      if (stage === "restored-known") {
+        const expiredToken = issueSimulatorLaunchToken(
+          persisted.launcher.launchSecret,
+          {
+            tenantId: "local",
+            eventId: "local",
+            teamId: "local",
+            deploymentId: original.deploymentId,
+          },
+          1,
+          0,
+        );
+        writeSimulatorSessionRecord(options.sessionPath, {
+          ...persisted,
+          deployments: persisted.deployments.map((deployment) => ({
+            ...deployment,
+            launchToken: expiredToken,
+            consoleUrl: simulatorConsoleUrl(
+              new URL(deployment.consoleUrl.split("#", 1)[0] ?? deployment.consoleUrl).toString(),
+              expiredToken,
+              persisted.launcher.baseUrl,
+            ),
+          })),
+        });
+        persisted = readSimulatorSessionRecord(options.sessionPath);
+        expect(persisted.deployments[0]?.launchToken).toBe(expiredToken);
+      }
+
+      const recovered = new SimulatorLocalRuntime({ ...options, sessionWriteHooks: undefined });
+      runningRuntimes.splice(runningRuntimes.indexOf(runtime), 1);
+      await recovered.stop(original.problemId);
+      expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toEqual([]);
+      const cleaned = readSimulatorSessionRecord(options.sessionPath);
+      expect(cleaned.deployments).toEqual([]);
+      expect(cleaned.pendingSnapshotRestores).toBeUndefined();
+      expect(cleaned.completedSnapshotRestores).toBeUndefined();
+      await recovered.close();
+    },
+  );
 
   it("should launch an injected executable through an argv-safe supervisor", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-process-"));

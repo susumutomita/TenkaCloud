@@ -129,46 +129,46 @@ describe("resolveCurrentCoordinationRunId (#3153)", () => {
 });
 
 describe("starting a run keeps the previous one (#3153)", () => {
-  it.each([
-    false,
-    true,
-  ])("should refuse a pending delivery and allow reset after acknowledgement (rotated=%s)", async (rotated) => {
-    const repository = makeRepository();
-    const artifacts = makeArtifactSpy();
-    if (rotated) await startCoordinationRun({ repository }, KEY, AT);
-    const pointer = await repository.readCoordinationRun(KEY);
-    const runId = pointer?.runId ?? DEFAULT_COORDINATION_RUN_ID;
-    const scope = coordinationScopeForRun(KEY, runId);
-    const state = {
-      __tenkacloudCoordinationEnvelope: 1,
-      stateSchemaVersion: 1,
-      state: { scores: { "team-a": 30, "team-b": 10 }, ledger: ["accepted"] },
-      pendingScores: {
-        occurredAt: AT,
-        // Team A has already committed; only B remains in this delivery.
-        teams: { "team-b": { before: 0, score: 10, reason: "leak" } },
-      },
-    };
-    await seedState(repository, KEY, runId, state);
-    const initializedPointer = await repository.readCoordinationRun(KEY);
+  it.each([false, true])(
+    "should refuse a pending delivery and allow reset after acknowledgement (rotated=%s)",
+    async (rotated) => {
+      const repository = makeRepository();
+      const artifacts = makeArtifactSpy();
+      if (rotated) await startCoordinationRun({ repository }, KEY, AT);
+      const pointer = await repository.readCoordinationRun(KEY);
+      const runId = pointer?.runId ?? DEFAULT_COORDINATION_RUN_ID;
+      const scope = coordinationScopeForRun(KEY, runId);
+      const state = {
+        __tenkacloudCoordinationEnvelope: 1,
+        stateSchemaVersion: 1,
+        state: { scores: { "team-a": 30, "team-b": 10 }, ledger: ["accepted"] },
+        pendingScores: {
+          occurredAt: AT,
+          // Team A has already committed; only B remains in this delivery.
+          teams: { "team-b": { before: 0, score: 10, reason: "leak" } },
+        },
+      };
+      await seedState(repository, KEY, runId, state);
+      const initializedPointer = await repository.readCoordinationRun(KEY);
 
-    expect(await startCoordinationRun({ repository, artifacts }, KEY, AT)).toEqual({
-      kind: "conflict",
-    });
-    expect(await repository.readCoordinationRun(KEY)).toEqual(initializedPointer);
-    expect((await repository.readCoordinationState(scope))?.state).toEqual(state);
-    expect(artifacts.deleted).toEqual([]);
+      expect(await startCoordinationRun({ repository, artifacts }, KEY, AT)).toEqual({
+        kind: "conflict",
+      });
+      expect(await repository.readCoordinationRun(KEY)).toEqual(initializedPointer);
+      expect((await repository.readCoordinationState(scope))?.state).toEqual(state);
+      expect(artifacts.deleted).toEqual([]);
 
-    await repository.acknowledgeCoordinationScores(scope, 1);
-    const retried = await startCoordinationRun({ repository, artifacts }, KEY, AT);
+      await repository.acknowledgeCoordinationScores(scope, 1);
+      const retried = await startCoordinationRun({ repository, artifacts }, KEY, AT);
 
-    expect(retried).toMatchObject({ kind: "started", previousRunId: runId });
-    expect((await repository.readCoordinationState(scope))?.state).toEqual({
-      __tenkacloudCoordinationEnvelope: 1,
-      stateSchemaVersion: 1,
-      state: state.state,
-    });
-  });
+      expect(retried).toMatchObject({ kind: "started", previousRunId: runId });
+      expect((await repository.readCoordinationState(scope))?.state).toEqual({
+        __tenkacloudCoordinationEnvelope: 1,
+        stateSchemaVersion: 1,
+        state: state.state,
+      });
+    },
+  );
 
   it("should reject a delivery saved after the pre-rotation read", async () => {
     const repository = makeRepository();

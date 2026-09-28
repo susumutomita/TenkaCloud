@@ -389,15 +389,14 @@ describe("createCompetitorAccountsRepository", () => {
     );
   });
 
-  it.each([
-    "sql",
-    "turso-mirror",
-    "sql-mirror",
-  ])("should reject the removed backend value %s", (backend) => {
-    expect(() => createCompetitorAccountsRepository(backend, ddbDeps())).toThrow(
-      /expected one of: dynamodb, turso/,
-    );
-  });
+  it.each(["sql", "turso-mirror", "sql-mirror"])(
+    "should reject the removed backend value %s",
+    (backend) => {
+      expect(() => createCompetitorAccountsRepository(backend, ddbDeps())).toThrow(
+        /expected one of: dynamodb, turso/,
+      );
+    },
+  );
 
   it("should fail loudly when DynamoDB deps are missing", () => {
     expect(() => createCompetitorAccountsRepository("dynamodb", {})).toThrow(/requires deps.ddb/);
@@ -422,26 +421,27 @@ describe("resolveCompetitorAccountsRepository (runtime)", () => {
     expect(repo).toBeInstanceOf(DynamoDbCompetitorAccountsRepository);
   });
 
-  it.each([
-    "turso",
-  ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
-    const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: backend,
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
-      createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
-        batch: vi.fn().mockResolvedValue([]),
-      }),
-    });
+  it.each(["turso"])(
+    "should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs",
+    async (backend) => {
+      const runtime = createControlDataRuntime({
+        env: {
+          CONTROL_DATA_BACKEND: backend,
+          TURSO_DATABASE_URL: "file:local.db",
+          TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
+        },
+        ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+        createClient: vi.fn().mockReturnValue({
+          execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
+          batch: vi.fn().mockResolvedValue([]),
+        }),
+      });
 
-    await expect(runtime.resolveCompetitorAccountsRepository({})).resolves.toBeInstanceOf(
-      SqlCompetitorAccountsRepository,
-    );
-  });
+      await expect(runtime.resolveCompetitorAccountsRepository({})).resolves.toBeInstanceOf(
+        SqlCompetitorAccountsRepository,
+      );
+    },
+  );
 
   it("should fail loudly when the dynamodb backend is missing ddb/competitorAccountsTableName", async () => {
     const runtime = createControlDataRuntime({

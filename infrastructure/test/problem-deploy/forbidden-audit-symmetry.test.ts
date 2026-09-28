@@ -76,31 +76,31 @@ function humanEnv(role: string) {
 }
 
 describe("#2954: a human role denial writes an audit row on the deploy and event Lambdas", () => {
-  it.each([
-    "[deploy]",
-    "[events]",
-  ])("should write a forbidden row from the %s handler", async (logPrefix) => {
-    const res = await appWithAdminOnlyRoute(logPrefix).request(
-      "/events/01H8XGJWBWBAQ4N6RZHM4S2KMV",
-      { method: "DELETE" },
-      humanEnv("TenantViewer"),
-    );
-    expect(res.status).toBe(StatusCodes.FORBIDDEN);
-    expect(auditMocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: "tenant-1",
-        actor: "cognito-sub-1",
-        actorUsername: "viewer@example.com",
-        action: "DELETE /events/01H8XGJWBWBAQ4N6RZHM4S2KMV",
-        outcome: "forbidden",
-        ipAddress: "203.0.113.9",
-        extra: expect.objectContaining({
-          actualRole: "TenantViewer",
-          requiredRoles: TENANT_ADMIN_ROLE,
+  it.each(["[deploy]", "[events]"])(
+    "should write a forbidden row from the %s handler",
+    async (logPrefix) => {
+      const res = await appWithAdminOnlyRoute(logPrefix).request(
+        "/events/01H8XGJWBWBAQ4N6RZHM4S2KMV",
+        { method: "DELETE" },
+        humanEnv("TenantViewer"),
+      );
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+      expect(auditMocks.writeAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: "tenant-1",
+          actor: "cognito-sub-1",
+          actorUsername: "viewer@example.com",
+          action: "DELETE /events/01H8XGJWBWBAQ4N6RZHM4S2KMV",
+          outcome: "forbidden",
+          ipAddress: "203.0.113.9",
+          extra: expect.objectContaining({
+            actualRole: "TenantViewer",
+            requiredRoles: TENANT_ADMIN_ROLE,
+          }),
         }),
-      }),
-    );
-  });
+      );
+    },
+  );
 
   it("should still write a row when the tenant cannot be resolved (the attempt is the audit subject)", async () => {
     delete process.env.DEFAULT_TENANT_ID;

@@ -134,16 +134,14 @@ describe("createSamlConfigRepository", () => {
     expect(() => createSamlConfigRepository("turso", {})).toThrow(/requires a SqlExecutor/);
   });
 
-  it.each([
-    "postgres",
-    "sql",
-    "turso-mirror",
-    "sql-mirror",
-  ])("should reject the unknown backend value %s", (backend) => {
-    expect(() => createSamlConfigRepository(backend, ddbDeps())).toThrow(
-      /Unknown CONTROL_DATA_BACKEND/,
-    );
-  });
+  it.each(["postgres", "sql", "turso-mirror", "sql-mirror"])(
+    "should reject the unknown backend value %s",
+    (backend) => {
+      expect(() => createSamlConfigRepository(backend, ddbDeps())).toThrow(
+        /Unknown CONTROL_DATA_BACKEND/,
+      );
+    },
+  );
 
   it("should fail loudly when DynamoDB deps are missing", () => {
     expect(() => createSamlConfigRepository("dynamodb", {})).toThrow(/requires deps.ddb/);

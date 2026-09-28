@@ -93,14 +93,13 @@ describe("EventHeaderActions", () => {
     expect(btn("event_detail.end_event")).toBeDisabled();
   });
 
-  it.each<EventStatus>([
-    "ENDED",
-    "TEARDOWN",
-    "ARCHIVED",
-  ])("should disable the retry-failed action for terminal status %s", (status) => {
-    renderActions({ detail: detail({ status }), failedCount: 1 });
-    expect(btn("event_detail.retry_failed")).toBeDisabled();
-  });
+  it.each<EventStatus>(["ENDED", "TEARDOWN", "ARCHIVED"])(
+    "should disable the retry-failed action for terminal status %s",
+    (status) => {
+      renderActions({ detail: detail({ status }), failedCount: 1 });
+      expect(btn("event_detail.retry_failed")).toBeDisabled();
+    },
+  );
 
   it("should hide conditional buttons when there is nothing to act on", () => {
     renderActions({ detail: detail({ status: "DRAFT" }), failedCount: 0 });

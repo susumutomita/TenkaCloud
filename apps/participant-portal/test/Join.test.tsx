@@ -251,26 +251,26 @@ describe("Join participant journey", () => {
     expect(registrationStorage("tenant", "event").receipt()).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
-  it.each([
-    "failed",
-    "unprepared",
-  ])("rechecks the reserved environment after the organizer fixes a %s setup", async (state) => {
-    const receipt = registrationStorage("tenant", "event").ensureReceipt();
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(ok({ ...progress, state, ready: 0, teamLoginKey: undefined }))
-      .mockResolvedValueOnce(ok(progress));
-    vi.stubGlobal("fetch", fetcher);
-    mount();
-    fireEvent.click(await screen.findByRole("button", { name: "もう一度確認する" }));
-    expect(await screen.findByRole("button", { name: "この環境で始める" })).toBeEnabled();
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    for (const [url, init] of fetcher.mock.calls) {
-      expect(url).toContain("/status");
-      expect(init.headers.Authorization).toBe(`Bearer ${receipt}`);
-    }
-    expect(registrationStorage("tenant", "event").receipt()).toBe(receipt);
-  });
+  it.each(["failed", "unprepared"])(
+    "rechecks the reserved environment after the organizer fixes a %s setup",
+    async (state) => {
+      const receipt = registrationStorage("tenant", "event").ensureReceipt();
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(ok({ ...progress, state, ready: 0, teamLoginKey: undefined }))
+        .mockResolvedValueOnce(ok(progress));
+      vi.stubGlobal("fetch", fetcher);
+      mount();
+      fireEvent.click(await screen.findByRole("button", { name: "もう一度確認する" }));
+      expect(await screen.findByRole("button", { name: "この環境で始める" })).toBeEnabled();
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      for (const [url, init] of fetcher.mock.calls) {
+        expect(url).toContain("/status");
+        expect(init.headers.Authorization).toBe(`Bearer ${receipt}`);
+      }
+      expect(registrationStorage("tenant", "event").receipt()).toBe(receipt);
+    },
+  );
 
   it("polls a preparing environment until ready and then stops", async () => {
     vi.useFakeTimers();
@@ -383,71 +383,71 @@ describe("Join participant journey", () => {
     expect(screen.getByRole("button", { name: "この環境で始める" })).toBeEnabled();
   });
 
-  it.each([
-    "unmount",
-    "switch event",
-  ])("cancels retries after a failed poll when the participant leaves via %s", async (departure) => {
-    vi.useFakeTimers();
-    registrationStorage("tenant", "event").ensureReceipt();
-    registrationStorage("tenant", "next").ensureReceipt();
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(
-        ok({ ...progress, state: "preparing", ready: 0, teamLoginKey: undefined }),
-      )
-      .mockRejectedValueOnce(new Error("connection lost"))
-      .mockResolvedValueOnce(ok({ ...progress, eventName: "Next Battle" }));
-    vi.stubGlobal("fetch", fetcher);
-    let view: ReturnType<typeof mount> | undefined;
-    await act(async () => {
-      view = mount();
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(screen.getByRole("alert")).toBeInTheDocument();
-    await act(async () => {
-      if (departure === "unmount") view?.unmount();
-      else fireEvent.click(screen.getByRole("button", { name: "別のイベントへ" }));
-    });
-    expect(fetcher.mock.calls[1]?.[1].signal.aborted).toBe(true);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(15000);
-    });
-    expect(fetcher).toHaveBeenCalledTimes(departure === "unmount" ? 2 : 3);
-    if (departure === "switch event") {
-      expect(screen.getByRole("heading", { name: "Next Battle" })).toBeInTheDocument();
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    }
-  });
+  it.each(["unmount", "switch event"])(
+    "cancels retries after a failed poll when the participant leaves via %s",
+    async (departure) => {
+      vi.useFakeTimers();
+      registrationStorage("tenant", "event").ensureReceipt();
+      registrationStorage("tenant", "next").ensureReceipt();
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(
+          ok({ ...progress, state: "preparing", ready: 0, teamLoginKey: undefined }),
+        )
+        .mockRejectedValueOnce(new Error("connection lost"))
+        .mockResolvedValueOnce(ok({ ...progress, eventName: "Next Battle" }));
+      vi.stubGlobal("fetch", fetcher);
+      let view: ReturnType<typeof mount> | undefined;
+      await act(async () => {
+        view = mount();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      await act(async () => {
+        if (departure === "unmount") view?.unmount();
+        else fireEvent.click(screen.getByRole("button", { name: "別のイベントへ" }));
+      });
+      expect(fetcher.mock.calls[1]?.[1].signal.aborted).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15000);
+      });
+      expect(fetcher).toHaveBeenCalledTimes(departure === "unmount" ? 2 : 3);
+      if (departure === "switch event") {
+        expect(screen.getByRole("heading", { name: "Next Battle" })).toBeInTheDocument();
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      }
+    },
+  );
 
-  it.each([
-    "closed",
-    "not_found",
-  ])("stops automatic polling when the registration is no longer usable (%s)", async (code) => {
-    vi.useFakeTimers();
-    registrationStorage("tenant", "event").ensureReceipt();
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(
-        ok({ ...progress, state: "preparing", ready: 0, teamLoginKey: undefined }),
-      )
-      .mockImplementation(() => Promise.resolve(httpError(code, 410)));
-    vi.stubGlobal("fetch", fetcher);
-    await act(async () => {
-      mount();
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(screen.getByRole("alert")).toBeInTheDocument();
-    const completedRequests = fetcher.mock.calls.length;
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(15000);
-    });
-    expect(fetcher).toHaveBeenCalledTimes(completedRequests);
-    expect(screen.getByRole("button", { name: "もう一度確認する" })).toBeEnabled();
-  });
+  it.each(["closed", "not_found"])(
+    "stops automatic polling when the registration is no longer usable (%s)",
+    async (code) => {
+      vi.useFakeTimers();
+      registrationStorage("tenant", "event").ensureReceipt();
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(
+          ok({ ...progress, state: "preparing", ready: 0, teamLoginKey: undefined }),
+        )
+        .mockImplementation(() => Promise.resolve(httpError(code, 410)));
+      vi.stubGlobal("fetch", fetcher);
+      await act(async () => {
+        mount();
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      const completedRequests = fetcher.mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15000);
+      });
+      expect(fetcher).toHaveBeenCalledTimes(completedRequests);
+      expect(screen.getByRole("button", { name: "もう一度確認する" })).toBeEnabled();
+    },
+  );
 
   it("cancels future status polling when the participant leaves", async () => {
     vi.useFakeTimers();
@@ -471,38 +471,38 @@ describe("Join participant journey", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    "resolve",
-    "reject",
-  ])("ignores a stale status response that will %s after switching events", async (completion) => {
-    registrationStorage("tenant", "event").ensureReceipt();
-    registrationStorage("tenant", "next").ensureReceipt();
-    let resolveOld: (value: Response) => void = (_value) => undefined;
-    let rejectOld: (reason: Error) => void = (_reason) => undefined;
-    const oldRequest = new Promise<Response>((resolve, reject) => {
-      resolveOld = resolve;
-      rejectOld = reject;
-    });
-    const fetcher = vi
-      .fn()
-      .mockReturnValueOnce(oldRequest)
-      .mockResolvedValueOnce(ok({ ...progress, eventName: "Next Battle" }));
-    vi.stubGlobal("fetch", fetcher);
-    mount();
-    expect(screen.getByRole("status")).toHaveTextContent("参加先を確認しています…");
-    const signal: AbortSignal = fetcher.mock.calls[0]?.[1].signal;
-    fireEvent.click(screen.getByRole("button", { name: "別のイベントへ" }));
-    expect(await screen.findByRole("heading", { name: "Next Battle" })).toBeInTheDocument();
-    expect(signal.aborted).toBe(true);
-    await act(async () => {
-      if (completion === "resolve") resolveOld(ok(progress));
-      else rejectOld(new Error("registration_unavailable"));
-    });
-    expect(screen.getByRole("heading", { name: "Next Battle" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "AWS Battle" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(fetcher).toHaveBeenCalledTimes(2);
-  });
+  it.each(["resolve", "reject"])(
+    "ignores a stale status response that will %s after switching events",
+    async (completion) => {
+      registrationStorage("tenant", "event").ensureReceipt();
+      registrationStorage("tenant", "next").ensureReceipt();
+      let resolveOld: (value: Response) => void = (_value) => undefined;
+      let rejectOld: (reason: Error) => void = (_reason) => undefined;
+      const oldRequest = new Promise<Response>((resolve, reject) => {
+        resolveOld = resolve;
+        rejectOld = reject;
+      });
+      const fetcher = vi
+        .fn()
+        .mockReturnValueOnce(oldRequest)
+        .mockResolvedValueOnce(ok({ ...progress, eventName: "Next Battle" }));
+      vi.stubGlobal("fetch", fetcher);
+      mount();
+      expect(screen.getByRole("status")).toHaveTextContent("参加先を確認しています…");
+      const signal: AbortSignal = fetcher.mock.calls[0]?.[1].signal;
+      fireEvent.click(screen.getByRole("button", { name: "別のイベントへ" }));
+      expect(await screen.findByRole("heading", { name: "Next Battle" })).toBeInTheDocument();
+      expect(signal.aborted).toBe(true);
+      await act(async () => {
+        if (completion === "resolve") resolveOld(ok(progress));
+        else rejectOld(new Error("registration_unavailable"));
+      });
+      expect(screen.getByRole("heading", { name: "Next Battle" })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "AWS Battle" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("allows login retry after authentication fails without allocating another environment", async () => {
     registrationStorage("tenant", "event").ensureReceipt();
@@ -520,19 +520,19 @@ describe("Join participant journey", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it.each<Partial<AppConfig>>([
-    { mode: "dev-mock" },
-    { cloudMode: "local" },
-  ])("explains unsupported registration configuration %j without calling the API", async (overrides) => {
-    const fetcher = vi.fn();
-    vi.stubGlobal("fetch", fetcher);
-    mount(overrides);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "この参加リンクはAWS版のイベントで使用します。",
-    );
-    expect(fetcher).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole("button", { name: "チームの環境を受け取る" }),
-    ).not.toBeInTheDocument();
-  });
+  it.each<Partial<AppConfig>>([{ mode: "dev-mock" }, { cloudMode: "local" }])(
+    "explains unsupported registration configuration %j without calling the API",
+    async (overrides) => {
+      const fetcher = vi.fn();
+      vi.stubGlobal("fetch", fetcher);
+      mount(overrides);
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "この参加リンクはAWS版のイベントで使用します。",
+      );
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole("button", { name: "チームの環境を受け取る" }),
+      ).not.toBeInTheDocument();
+    },
+  );
 });

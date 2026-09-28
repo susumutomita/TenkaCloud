@@ -100,30 +100,28 @@ describe("GET /admin/capacity", () => {
     expect(mocks.getCapacityOverview).toHaveBeenCalledWith(shared, { windowMinutes: 60 });
   });
 
-  it.each([
-    "0",
-    "4",
-    "181",
-    "abc",
-  ])("should 400 on an invalid windowMinutes %s without touching AWS", async (value) => {
-    const res = await buildApp().request(`/admin/capacity?windowMinutes=${value}`);
+  it.each(["0", "4", "181", "abc"])(
+    "should 400 on an invalid windowMinutes %s without touching AWS",
+    async (value) => {
+      const res = await buildApp().request(`/admin/capacity?windowMinutes=${value}`);
 
-    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
-    expect((await res.json()).error).toBe("invalid_window_minutes");
-    expect(mocks.getCapacityOverview).not.toHaveBeenCalled();
-  });
+      expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+      expect((await res.json()).error).toBe("invalid_window_minutes");
+      expect(mocks.getCapacityOverview).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each([
-    "TenantOperator",
-    "TenantViewer",
-  ])("should reject a %s caller (TenantAdmin only)", async (role) => {
-    process.env.DEFAULT_USER_ROLE = role;
+  it.each(["TenantOperator", "TenantViewer"])(
+    "should reject a %s caller (TenantAdmin only)",
+    async (role) => {
+      process.env.DEFAULT_USER_ROLE = role;
 
-    const res = await buildApp().request("/admin/capacity");
+      const res = await buildApp().request("/admin/capacity");
 
-    expect(res.status).toBe(StatusCodes.FORBIDDEN);
-    expect(mocks.getCapacityOverview).not.toHaveBeenCalled();
-  });
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+      expect(mocks.getCapacityOverview).not.toHaveBeenCalled();
+    },
+  );
 
   it("should 503 when the monitoring envs are not wired (old deploy chain)", async () => {
     mocks.getCapacityOverview.mockRejectedValueOnce(
@@ -246,16 +244,16 @@ describe("POST /admin/capacity", () => {
     expect(mocks.auditEventAction).not.toHaveBeenCalled();
   });
 
-  it.each([
-    "TenantOperator",
-    "TenantViewer",
-  ])("should reject a %s caller (TenantAdmin only)", async (role) => {
-    process.env.DEFAULT_USER_ROLE = role;
+  it.each(["TenantOperator", "TenantViewer"])(
+    "should reject a %s caller (TenantAdmin only)",
+    async (role) => {
+      process.env.DEFAULT_USER_ROLE = role;
 
-    const res = await postCapacity();
+      const res = await postCapacity();
 
-    expect(res.status).toBe(StatusCodes.FORBIDDEN);
-    expect(mocks.startCapacityScale).not.toHaveBeenCalled();
-    expect(mocks.auditEventAction).not.toHaveBeenCalled();
-  });
+      expect(res.status).toBe(StatusCodes.FORBIDDEN);
+      expect(mocks.startCapacityScale).not.toHaveBeenCalled();
+      expect(mocks.auditEventAction).not.toHaveBeenCalled();
+    },
+  );
 });

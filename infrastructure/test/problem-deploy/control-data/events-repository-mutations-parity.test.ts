@@ -247,22 +247,21 @@ describe.each(backends)("EventsRepository mutations parity: %s", (_name, makeRep
   });
 
   describe("archiveEvent", () => {
-    it.each([
-      "DRAFT",
-      "ENDED",
-      "TEARDOWN",
-    ] as const)("should archive a %s event with archivedAt", async (status) => {
-      const { events } = makeRepos();
-      await events.putEvent(sampleEvent({ status }));
+    it.each(["DRAFT", "ENDED", "TEARDOWN"] as const)(
+      "should archive a %s event with archivedAt",
+      async (status) => {
+        const { events } = makeRepos();
+        await events.putEvent(sampleEvent({ status }));
 
-      const result = await events.archiveEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", AT);
+        const result = await events.archiveEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", AT);
 
-      expect(result.outcome).toBe("updated");
-      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
-      expect(stored?.status).toBe("ARCHIVED");
-      expect(stored?.archivedAt).toBe(AT);
-      expect(stored?.updatedAt).toBe(AT);
-    });
+        expect(result.outcome).toBe("updated");
+        const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+        expect(stored?.status).toBe("ARCHIVED");
+        expect(stored?.archivedAt).toBe(AT);
+        expect(stored?.updatedAt).toBe(AT);
+      },
+    );
 
     it("should return conflict with the probed event for an in-flight status (READY)", async () => {
       const { events } = makeRepos();
@@ -460,21 +459,20 @@ describe.each(backends)("EventsRepository mutations parity: %s", (_name, makeRep
   });
 
   describe("markDeploying", () => {
-    it.each([
-      "DRAFT",
-      "READY",
-      "DEPLOYING",
-    ] as const)("should advance a %s event to DEPLOYING", async (status) => {
-      const { events } = makeRepos();
-      await events.putEvent(sampleEvent({ status }));
+    it.each(["DRAFT", "READY", "DEPLOYING"] as const)(
+      "should advance a %s event to DEPLOYING",
+      async (status) => {
+        const { events } = makeRepos();
+        await events.putEvent(sampleEvent({ status }));
 
-      const result = await events.markDeploying("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", AT);
+        const result = await events.markDeploying("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA", AT);
 
-      expect(result.outcome).toBe("updated");
-      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
-      expect(stored?.status).toBe("DEPLOYING");
-      expect(stored?.updatedAt).toBe(AT);
-    });
+        expect(result.outcome).toBe("updated");
+        const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+        expect(stored?.status).toBe("DEPLOYING");
+        expect(stored?.updatedAt).toBe(AT);
+      },
+    );
 
     it("should return conflict for a later status (ENDED) without rolling it back", async () => {
       const { events } = makeRepos();

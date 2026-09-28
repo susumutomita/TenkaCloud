@@ -259,15 +259,14 @@ describe("createSamlIdpsRepository", () => {
     );
   });
 
-  it.each([
-    "sql",
-    "turso-mirror",
-    "sql-mirror",
-  ])("should reject the removed %s backend value (#2677)", (backend) => {
-    expect(() => createSamlIdpsRepository(backend, ddbDeps())).toThrow(
-      /Unknown CONTROL_DATA_BACKEND.*expected one of: dynamodb, turso/,
-    );
-  });
+  it.each(["sql", "turso-mirror", "sql-mirror"])(
+    "should reject the removed %s backend value (#2677)",
+    (backend) => {
+      expect(() => createSamlIdpsRepository(backend, ddbDeps())).toThrow(
+        /Unknown CONTROL_DATA_BACKEND.*expected one of: dynamodb, turso/,
+      );
+    },
+  );
 
   it("should fail loudly when DynamoDB deps are missing", () => {
     expect(() => createSamlIdpsRepository("dynamodb", {})).toThrow(/requires deps.ddb/);
@@ -292,26 +291,27 @@ describe("resolveSamlIdpsRepository (runtime)", () => {
     expect(repo).toBeInstanceOf(DynamoDbSamlIdpsRepository);
   });
 
-  it.each([
-    "turso",
-  ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
-    const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: backend,
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
-      createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
-        batch: vi.fn().mockResolvedValue([]),
-      }),
-    });
+  it.each(["turso"])(
+    "should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs",
+    async (backend) => {
+      const runtime = createControlDataRuntime({
+        env: {
+          CONTROL_DATA_BACKEND: backend,
+          TURSO_DATABASE_URL: "file:local.db",
+          TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
+        },
+        ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+        createClient: vi.fn().mockReturnValue({
+          execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
+          batch: vi.fn().mockResolvedValue([]),
+        }),
+      });
 
-    await expect(runtime.resolveSamlIdpsRepository({})).resolves.toBeInstanceOf(
-      SqlSamlIdpsRepository,
-    );
-  });
+      await expect(runtime.resolveSamlIdpsRepository({})).resolves.toBeInstanceOf(
+        SqlSamlIdpsRepository,
+      );
+    },
+  );
 
   it("should fail loudly when the dynamodb backend is missing ddb/samlIdpsTableName", async () => {
     const runtime = createControlDataRuntime({

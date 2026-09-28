@@ -133,22 +133,25 @@ describe("useCapacityOverview", () => {
     [StatusCodes.FORBIDDEN, "forbidden"],
     [StatusCodes.SERVICE_UNAVAILABLE, "unavailable"],
     [StatusCodes.NOT_IMPLEMENTED, "unsupported"],
-  ] as const)("should stop polling on terminal status %s and expose reason %s", async (status, reason) => {
-    vi.useFakeTimers();
-    mocks.getCapacityOverview.mockRejectedValue(new ApiError(status, "nope"));
+  ] as const)(
+    "should stop polling on terminal status %s and expose reason %s",
+    async (status, reason) => {
+      vi.useFakeTimers();
+      mocks.getCapacityOverview.mockRejectedValue(new ApiError(status, "nope"));
 
-    const { result } = renderHook(() => useCapacityOverview(apiClient));
-    await act(async () => {});
+      const { result } = renderHook(() => useCapacityOverview(apiClient));
+      await act(async () => {});
 
-    expect(result.current.terminalReason).toBe(reason);
-    expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(1);
+      expect(result.current.terminalReason).toBe(reason);
+      expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(1);
 
-    // terminal: interval が進んでも再 fetch しない (= 無駄な有料 poll を出さない)。
-    await act(async () => {
-      vi.advanceTimersByTime(DEPLOYMENT_POLL_INTERVAL_MS * 3);
-    });
-    expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(1);
-  });
+      // terminal: interval が進んでも再 fetch しない (= 無駄な有料 poll を出さない)。
+      await act(async () => {
+        vi.advanceTimersByTime(DEPLOYMENT_POLL_INTERVAL_MS * 3);
+      });
+      expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("should recover from a terminal state via manual refresh and re-arm polling", async () => {
     mocks.getCapacityOverview

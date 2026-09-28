@@ -238,19 +238,18 @@ const DESTRUCTIVE_ROUTES: ReadonlyArray<{
 ];
 
 describe("#2948 T-4: destructive routes are structurally unreachable for a machine principal", () => {
-  it.each(DESTRUCTIVE_ROUTES)("should return 403 for $method $path", async ({
-    app,
-    method,
-    path,
-  }) => {
-    const target = app === "deploy" ? deployApp : eventApp;
-    const res = await target.request(
-      path,
-      { method, body: method === "GET" ? undefined : "{}", headers: JSON_HEADERS },
-      machineEnv(),
-    );
-    expect(res.status).toBe(403);
-  });
+  it.each(DESTRUCTIVE_ROUTES)(
+    "should return 403 for $method $path",
+    async ({ app, method, path }) => {
+      const target = app === "deploy" ? deployApp : eventApp;
+      const res = await target.request(
+        path,
+        { method, body: method === "GET" ? undefined : "{}", headers: JSON_HEADERS },
+        machineEnv(),
+      );
+      expect(res.status).toBe(403);
+    },
+  );
 
   it("should still deny a destructive route when the guard middleware is removed entirely", async () => {
     // guard を外し、blanket (`TENANT_BLANKET_ROLES`) と per-route `requireRole` だけを残した app。

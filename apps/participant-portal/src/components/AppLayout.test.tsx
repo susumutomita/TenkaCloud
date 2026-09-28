@@ -65,12 +65,12 @@ describe("buildSideNavItems", () => {
     expect(hrefsOf(buildSideNavItems(3, t, mode, "ja", false))).not.toContain("/tools/sso");
   });
 
-  it.each([
-    "real",
-    "mock",
-  ] as const)("should keep the Tools/SSO link in %s mode when showsAwsFeatures is true", (mode) => {
-    expect(hrefsOf(buildSideNavItems(3, t, mode, "ja", true))).toContain("/tools/sso");
-  });
+  it.each(["real", "mock"] as const)(
+    "should keep the Tools/SSO link in %s mode when showsAwsFeatures is true",
+    (mode) => {
+      expect(hrefsOf(buildSideNavItems(3, t, mode, "ja", true))).toContain("/tools/sso");
+    },
+  );
 
   it("should gate the Tools/SSO link on showsAwsFeatures alone, not on cloudMode", () => {
     // The function itself has no opinion on *why* AWS features are unavailable. The caller

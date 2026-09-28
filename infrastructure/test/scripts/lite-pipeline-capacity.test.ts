@@ -28,35 +28,35 @@ function paramBlock(name: string): string {
   return block;
 }
 
-describe.each([
-  "DynamoReadCapacity",
-  "DynamoWriteCapacity",
-] as const)("lite-pipeline.yaml %s parameter (Issue #2679)", (name) => {
-  const block = paramBlock(name);
+describe.each(["DynamoReadCapacity", "DynamoWriteCapacity"] as const)(
+  "lite-pipeline.yaml %s parameter (Issue #2679)",
+  (name) => {
+    const block = paramBlock(name);
 
-  it("should be a Number parameter", () => {
-    expect(block).toMatch(/^\s+Type: Number$/m);
-  });
+    it("should be a Number parameter", () => {
+      expect(block).toMatch(/^\s+Type: Number$/m);
+    });
 
-  it("should default to 1 so existing pipelines stay NO-OP", () => {
-    expect(block).toMatch(/^\s+Default: 1$/m);
-  });
+    it("should default to 1 so existing pipelines stay NO-OP", () => {
+      expect(block).toMatch(/^\s+Default: 1$/m);
+    });
 
-  it("should enforce MinValue 1", () => {
-    expect(block).toMatch(/^\s+MinValue: 1$/m);
-  });
+    it("should enforce MinValue 1", () => {
+      expect(block).toMatch(/^\s+MinValue: 1$/m);
+    });
 
-  it("should enforce the runbook's 200 billing-guard ceiling as MaxValue", () => {
-    // docs/operations/dynamodb-event-capacity.md 課金爆死ガード layer 2: the SSM
-    // runbook caps event-window changes at 200 so a digit typo (20 → 2000) fails
-    // before provisioning. The deploy-time knob shares the same ceiling.
-    expect(block).toMatch(/^\s+MaxValue: 200$/m);
-  });
+    it("should enforce the runbook's 200 billing-guard ceiling as MaxValue", () => {
+      // docs/operations/dynamodb-event-capacity.md 課金爆死ガード layer 2: the SSM
+      // runbook caps event-window changes at 200 so a digit typo (20 → 2000) fails
+      // before provisioning. The deploy-time knob shares the same ceiling.
+      expect(block).toMatch(/^\s+MaxValue: 200$/m);
+    });
 
-  it("should warn in the description that a turso backend ignores the parameter", () => {
-    expect(block).toMatch(/[Ii]gnored when ControlDataBackend/);
-  });
-});
+    it("should warn in the description that a turso backend ignores the parameter", () => {
+      expect(block).toMatch(/[Ii]gnored when ControlDataBackend/);
+    });
+  },
+);
 
 describe("lite-pipeline.yaml capacity wiring (Issue #2679)", () => {
   it("should forward both parameters to the build as environment variables", () => {

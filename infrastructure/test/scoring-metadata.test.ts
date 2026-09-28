@@ -504,17 +504,12 @@ describe("parseScoringMetadata", () => {
   });
 
   describe("無効入力", () => {
-    it.each([
-      null,
-      undefined,
-      123,
-      "uptime",
-      [],
-      { kind: "wrong-kind" },
-      { points: 100 },
-    ])("should return undefined for %s", (input) => {
-      expect(parseScoringMetadata(input)).toBeUndefined();
-    });
+    it.each([null, undefined, 123, "uptime", [], { kind: "wrong-kind" }, { points: 100 }])(
+      "should return undefined for %s",
+      (input) => {
+        expect(parseScoringMetadata(input)).toBeUndefined();
+      },
+    );
   });
 });
 

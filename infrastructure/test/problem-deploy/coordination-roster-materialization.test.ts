@@ -325,39 +325,38 @@ describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", 
     expect((await ctx.apply()).kind).toBe("ok");
   });
 
-  it.each([
-    "operation",
-    "tick",
-    "rejected",
-  ])("preserves a committed %s result if lease cleanup fails", async (kind) => {
-    const ctx = await setup(backend);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    vi.spyOn(ctx.repository, "releaseCoordinationInitialization").mockRejectedValueOnce(
-      new Error("cleanup store unavailable"),
-    );
-    if (kind === "tick") expect(await ctx.runTick()).toEqual({ ticked: 1, written: 1 });
-    else if (kind === "rejected")
-      expect(
-        await handleCoordinationOp(
-          ctx.deps,
-          "login-alpha",
-          { ...op, targetTeamId: "absent" },
-          at,
-          key.problemId,
-        ),
-      ).toEqual({ kind: "rejected", error: "unknown_team" });
-    else expect((await ctx.apply()).kind).toBe("ok");
-    expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({
-      moves: kind === "operation" ? 1 : 0,
-    });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("lease release failed"), scope);
-    // Stored state remains immediately playable even before the failed lease expires.
-    expect((await ctx.apply()).kind).toBe("ok");
-    expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({
-      moves: kind === "operation" ? 2 : 1,
-    });
-    expect(ctx.initialState).toHaveBeenCalledTimes(1);
-  });
+  it.each(["operation", "tick", "rejected"])(
+    "preserves a committed %s result if lease cleanup fails",
+    async (kind) => {
+      const ctx = await setup(backend);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      vi.spyOn(ctx.repository, "releaseCoordinationInitialization").mockRejectedValueOnce(
+        new Error("cleanup store unavailable"),
+      );
+      if (kind === "tick") expect(await ctx.runTick()).toEqual({ ticked: 1, written: 1 });
+      else if (kind === "rejected")
+        expect(
+          await handleCoordinationOp(
+            ctx.deps,
+            "login-alpha",
+            { ...op, targetTeamId: "absent" },
+            at,
+            key.problemId,
+          ),
+        ).toEqual({ kind: "rejected", error: "unknown_team" });
+      else expect((await ctx.apply()).kind).toBe("ok");
+      expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({
+        moves: kind === "operation" ? 1 : 0,
+      });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("lease release failed"), scope);
+      // Stored state remains immediately playable even before the failed lease expires.
+      expect((await ctx.apply()).kind).toBe("ok");
+      expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({
+        moves: kind === "operation" ? 2 : 1,
+      });
+      expect(ctx.initialState).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("refuses a request snapshot from any different scope", async () => {
     const ctx = await setup(backend);
@@ -373,31 +372,31 @@ describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", 
     }
   });
 
-  it.each([
-    "2026-09-05T23:59:00.000Z",
-    "2026-09-06T01:00:00.000Z",
-  ])("rejects inactive operations before any roster reads at %s", async (nowIso) => {
-    const ctx = await setup(backend);
-    for (let i = 0; i < 97; i += 1) await ctx.repository.putDeployment(deployment(`team-${i}`));
-    const metaReads = vi.spyOn(ctx.repository, "getDeployment");
-    const results = await Promise.all(
-      Array.from({ length: 10 }, () =>
-        handleCoordinationOp(ctx.deps, "login-alpha", op, nowIso, key.problemId),
-      ),
-    );
-    expect(results).toEqual(
-      Array.from({ length: 10 }, () => ({ kind: "rejected", error: "event_ended" })),
-    );
-    expect(ctx.roster).not.toHaveBeenCalled();
-    expect(metaReads).not.toHaveBeenCalled();
-    expect(ctx.initialState).not.toHaveBeenCalled();
-    expect(ctx.write).not.toHaveBeenCalled();
-    expect(ctx.mint).not.toHaveBeenCalled();
-    // The refusal must not persist a minimal roster: an active operation still gets all teams.
-    expect((await ctx.apply()).kind).toBe("ok");
-    expect(metaReads).toHaveBeenCalledTimes(99);
-    expect(ctx.initialState.mock.lastCall?.[0].teamIds).toHaveLength(99);
-  });
+  it.each(["2026-09-05T23:59:00.000Z", "2026-09-06T01:00:00.000Z"])(
+    "rejects inactive operations before any roster reads at %s",
+    async (nowIso) => {
+      const ctx = await setup(backend);
+      for (let i = 0; i < 97; i += 1) await ctx.repository.putDeployment(deployment(`team-${i}`));
+      const metaReads = vi.spyOn(ctx.repository, "getDeployment");
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          handleCoordinationOp(ctx.deps, "login-alpha", op, nowIso, key.problemId),
+        ),
+      );
+      expect(results).toEqual(
+        Array.from({ length: 10 }, () => ({ kind: "rejected", error: "event_ended" })),
+      );
+      expect(ctx.roster).not.toHaveBeenCalled();
+      expect(metaReads).not.toHaveBeenCalled();
+      expect(ctx.initialState).not.toHaveBeenCalled();
+      expect(ctx.write).not.toHaveBeenCalled();
+      expect(ctx.mint).not.toHaveBeenCalled();
+      // The refusal must not persist a minimal roster: an active operation still gets all teams.
+      expect((await ctx.apply()).kind).toBe("ok");
+      expect(metaReads).toHaveBeenCalledTimes(99);
+      expect(ctx.initialState.mock.lastCall?.[0].teamIds).toHaveLength(99);
+    },
+  );
 
   it("serves absent-run projections and artifacts despite malformed superseded history", async () => {
     const ctx = await setup(backend);

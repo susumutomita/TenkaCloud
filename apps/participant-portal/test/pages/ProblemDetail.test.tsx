@@ -176,91 +176,95 @@ describe("visibility helpers", () => {
 });
 
 describe("ProblemDetailPage", () => {
-  it.each([
-    undefined,
-    { status: "running", runtimeKind: "docker" },
-  ])("shows problem information before an active Battle and preserves its answer (lifecycle: %j)", async (lifecycle) => {
-    const user = userEvent.setup();
-    mockTeamView.mockReturnValue(
-      teamView({ view: viewWith({ problems: [problem({ status: "COMPLETE", lifecycle })] }) }),
-    );
-    mockFindMeta.mockReturnValue(
-      meta({
-        endpoints: [],
-        dashboardSlots: { StatusPanel: "portal/StatusPanel.tsx" },
-        interTeamCoordination: {},
-      }),
-    );
-    const { rerender } = renderPage();
-    const live = screen.getByTestId("plugin-slots");
-    const reference = screen.getByText("problem_detail.info_header");
-    expect(reference).toBeVisible();
-    expect(reference.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "problem_detail.reference_header" }),
-    ).not.toBeInTheDocument();
-    await user.type(screen.getByRole("textbox", { name: "live answer draft" }), "123");
-    expect(screen.getByText("problem_detail.info_header")).toBeVisible();
-    expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
-    // A normal team poll does not remount the running plugin.
-    mockTeamView.mockReturnValue(
-      teamView({
-        view: viewWith({ problems: [problem({ status: "COMPLETE", lifecycle, score: 30 })] }),
-      }),
-    );
-    rerender(<ProblemDetailPage config={config} />);
-    expect(screen.getByTestId("plugin-slots")).toBe(live);
-    expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
-  });
-
-  it.each([
-    "stopped",
-    "starting",
-  ] as const)("preserves the information-first layout and Battle draft when %s becomes running", async (status) => {
-    const user = userEvent.setup();
-    const setLifecycle = (nextStatus: string) =>
+  it.each([undefined, { status: "running", runtimeKind: "docker" }])(
+    "shows problem information before an active Battle and preserves its answer (lifecycle: %j)",
+    async (lifecycle) => {
+      const user = userEvent.setup();
       mockTeamView.mockReturnValue(
-        teamView({
-          view: viewWith({
-            problems: [
-              problem({
-                status: "COMPLETE",
-                lifecycle: { status: nextStatus, runtimeKind: "docker" },
-              }),
-            ],
-          }),
+        teamView({ view: viewWith({ problems: [problem({ status: "COMPLETE", lifecycle })] }) }),
+      );
+      mockFindMeta.mockReturnValue(
+        meta({
+          endpoints: [],
+          dashboardSlots: { StatusPanel: "portal/StatusPanel.tsx" },
+          interTeamCoordination: {},
         }),
       );
-    setLifecycle(status);
-    mockFindMeta.mockReturnValue(
-      meta({
-        endpoints: [],
-        dashboardSlots: { StatusPanel: "portal/StatusPanel.tsx" },
-        interTeamCoordination: {},
-      }),
-    );
-    const { rerender } = renderPage();
-    const game = screen.getByTestId("plugin-slots");
-    const draft = screen.getByRole("textbox", { name: "live answer draft" });
-    await user.type(draft, "123");
+      const { rerender } = renderPage();
+      const live = screen.getByTestId("plugin-slots");
+      const reference = screen.getByText("problem_detail.info_header");
+      expect(reference).toBeVisible();
+      expect(
+        reference.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "problem_detail.reference_header" }),
+      ).not.toBeInTheDocument();
+      await user.type(screen.getByRole("textbox", { name: "live answer draft" }), "123");
+      expect(screen.getByText("problem_detail.info_header")).toBeVisible();
+      expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
+      // A normal team poll does not remount the running plugin.
+      mockTeamView.mockReturnValue(
+        teamView({
+          view: viewWith({ problems: [problem({ status: "COMPLETE", lifecycle, score: 30 })] }),
+        }),
+      );
+      rerender(<ProblemDetailPage config={config} />);
+      expect(screen.getByTestId("plugin-slots")).toBe(live);
+      expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
+    },
+  );
 
-    setLifecycle("running");
-    rerender(<ProblemDetailPage config={config} />);
-    expect(screen.getByTestId("plugin-slots")).toBe(game);
-    expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
-    const reference = screen.getByText("problem_detail.info_header");
-    expect(reference).toBeVisible();
-    expect(reference.compareDocumentPosition(game) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  it.each(["stopped", "starting"] as const)(
+    "preserves the information-first layout and Battle draft when %s becomes running",
+    async (status) => {
+      const user = userEvent.setup();
+      const setLifecycle = (nextStatus: string) =>
+        mockTeamView.mockReturnValue(
+          teamView({
+            view: viewWith({
+              problems: [
+                problem({
+                  status: "COMPLETE",
+                  lifecycle: { status: nextStatus, runtimeKind: "docker" },
+                }),
+              ],
+            }),
+          }),
+        );
+      setLifecycle(status);
+      mockFindMeta.mockReturnValue(
+        meta({
+          endpoints: [],
+          dashboardSlots: { StatusPanel: "portal/StatusPanel.tsx" },
+          interTeamCoordination: {},
+        }),
+      );
+      const { rerender } = renderPage();
+      const game = screen.getByTestId("plugin-slots");
+      const draft = screen.getByRole("textbox", { name: "live answer draft" });
+      await user.type(draft, "123");
 
-    setLifecycle("stopped");
-    rerender(<ProblemDetailPage config={config} />);
-    expect(screen.getByTestId("plugin-slots")).toBe(game);
-    expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
-    expect(
-      screen.getByText("problem_detail.info_header").compareDocumentPosition(game) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
+      setLifecycle("running");
+      rerender(<ProblemDetailPage config={config} />);
+      expect(screen.getByTestId("plugin-slots")).toBe(game);
+      expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
+      const reference = screen.getByText("problem_detail.info_header");
+      expect(reference).toBeVisible();
+      expect(
+        reference.compareDocumentPosition(game) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      setLifecycle("stopped");
+      rerender(<ProblemDetailPage config={config} />);
+      expect(screen.getByTestId("plugin-slots")).toBe(game);
+      expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
+      expect(
+        screen.getByText("problem_detail.info_header").compareDocumentPosition(game) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    },
+  );
 
   it("keeps an endpoint-registration Battle instruction-first", () => {
     mockTeamView.mockReturnValue(

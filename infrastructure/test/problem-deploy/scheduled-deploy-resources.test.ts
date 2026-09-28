@@ -44,14 +44,15 @@ describe("buildScheduledDeployResources", () => {
     expect(buildScheduledDeployResources(makeTestControlDataRuntime())).toBeUndefined();
   });
 
-  it.each(
-    Object.keys(REQUIRED_ENV),
-  )("should return undefined when only %s is missing (every required env is needed)", (missing) => {
-    for (const [key, value] of Object.entries(REQUIRED_ENV)) {
-      if (key !== missing) process.env[key] = value;
-    }
-    expect(buildScheduledDeployResources(makeTestControlDataRuntime())).toBeUndefined();
-  });
+  it.each(Object.keys(REQUIRED_ENV))(
+    "should return undefined when only %s is missing (every required env is needed)",
+    (missing) => {
+      for (const [key, value] of Object.entries(REQUIRED_ENV)) {
+        if (key !== missing) process.env[key] = value;
+      }
+      expect(buildScheduledDeployResources(makeTestControlDataRuntime())).toBeUndefined();
+    },
+  );
 
   it("should return undefined when BATTLE_PROBLEMS_CATALOG is an empty catalog (no problemDir to resolve)", () => {
     for (const [key, value] of Object.entries(REQUIRED_ENV)) process.env[key] = value;
@@ -132,14 +133,15 @@ describe("buildScheduledTeardownResources", () => {
     expect(buildScheduledTeardownResources(makeTestControlDataRuntime())).toBeUndefined();
   });
 
-  it.each(
-    Object.keys(TEARDOWN_REQUIRED_ENV),
-  )("should return undefined when only %s is missing (every required env is needed)", (missing) => {
-    for (const [key, value] of Object.entries(TEARDOWN_REQUIRED_ENV)) {
-      if (key !== missing) process.env[key] = value;
-    }
-    expect(buildScheduledTeardownResources(makeTestControlDataRuntime())).toBeUndefined();
-  });
+  it.each(Object.keys(TEARDOWN_REQUIRED_ENV))(
+    "should return undefined when only %s is missing (every required env is needed)",
+    (missing) => {
+      for (const [key, value] of Object.entries(TEARDOWN_REQUIRED_ENV)) {
+        if (key !== missing) process.env[key] = value;
+      }
+      expect(buildScheduledTeardownResources(makeTestControlDataRuntime())).toBeUndefined();
+    },
+  );
 
   it("should build teardown resources with the injected runtime and safe placeholders", () => {
     for (const [key, value] of Object.entries(TEARDOWN_REQUIRED_ENV)) process.env[key] = value;

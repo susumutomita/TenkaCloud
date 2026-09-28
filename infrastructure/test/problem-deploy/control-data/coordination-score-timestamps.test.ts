@@ -130,46 +130,46 @@ describe.each(["DynamoDB", "SQL"])("coordination delivery timestamps: %s", (back
       ).toEqual({ updated_at: DELIVERED });
   });
 
-  it.each([
-    undefined,
-    EARLIER,
-  ])("advances a missing or older scoring timestamp (%s) to the event time", async (previous) => {
-    const { repository, update } = await setup(backend, previous);
-    expect(await repository.publishCoordinationScore(SCOPE, 1, update())).toEqual({
-      outcome: "updated",
-    });
-    expect(await repository.getDeployment(DEPLOYMENT.jobId)).toMatchObject({
-      lastScoredAt: OCCURRED,
-      updatedAt: DELIVERED,
-    });
-  });
-
-  it.each([
-    undefined,
-    EARLIER,
-  ])("keeps a concurrent zero-point scorer's timestamp when the prior value was %s", async (previous) => {
-    const { repository, update, onPublish } = await setup(backend, previous);
-    // Score and status stay identical: only lastScoredAt/updatedAt advance
-    // after the publisher has prepared its transaction.
-    onPublish(async () => {
-      await repository.applyKindScoringResult(DEPLOYMENT.jobId, { scoreDelta: 0 }, SCORED);
-    });
-
-    const result = await repository.publishCoordinationScore(SCOPE, 1, update());
-    expect((await repository.getDeployment(DEPLOYMENT.jobId))?.lastScoredAt).toBe(SCORED);
-    if (result.outcome === "conflict") {
-      expect(await repository.listScoreEvents(DEPLOYMENT.jobId, { pageSize: 10 })).toEqual([]);
+  it.each([undefined, EARLIER])(
+    "advances a missing or older scoring timestamp (%s) to the event time",
+    async (previous) => {
+      const { repository, update } = await setup(backend, previous);
       expect(await repository.publishCoordinationScore(SCOPE, 1, update())).toEqual({
         outcome: "updated",
       });
-    } else expect(result.outcome).toBe("updated");
-    expect(await repository.getDeployment(DEPLOYMENT.jobId)).toMatchObject({
-      score: 30,
-      lastScoredAt: SCORED,
-      updatedAt: DELIVERED,
-    });
-    expect(await repository.listScoreEvents(DEPLOYMENT.jobId, { pageSize: 10 })).toMatchObject([
-      { occurredAt: OCCURRED, points: 30 },
-    ]);
-  });
+      expect(await repository.getDeployment(DEPLOYMENT.jobId)).toMatchObject({
+        lastScoredAt: OCCURRED,
+        updatedAt: DELIVERED,
+      });
+    },
+  );
+
+  it.each([undefined, EARLIER])(
+    "keeps a concurrent zero-point scorer's timestamp when the prior value was %s",
+    async (previous) => {
+      const { repository, update, onPublish } = await setup(backend, previous);
+      // Score and status stay identical: only lastScoredAt/updatedAt advance
+      // after the publisher has prepared its transaction.
+      onPublish(async () => {
+        await repository.applyKindScoringResult(DEPLOYMENT.jobId, { scoreDelta: 0 }, SCORED);
+      });
+
+      const result = await repository.publishCoordinationScore(SCOPE, 1, update());
+      expect((await repository.getDeployment(DEPLOYMENT.jobId))?.lastScoredAt).toBe(SCORED);
+      if (result.outcome === "conflict") {
+        expect(await repository.listScoreEvents(DEPLOYMENT.jobId, { pageSize: 10 })).toEqual([]);
+        expect(await repository.publishCoordinationScore(SCOPE, 1, update())).toEqual({
+          outcome: "updated",
+        });
+      } else expect(result.outcome).toBe("updated");
+      expect(await repository.getDeployment(DEPLOYMENT.jobId)).toMatchObject({
+        score: 30,
+        lastScoredAt: SCORED,
+        updatedAt: DELIVERED,
+      });
+      expect(await repository.listScoreEvents(DEPLOYMENT.jobId, { pageSize: 10 })).toMatchObject([
+        { occurredAt: OCCURRED, points: 30 },
+      ]);
+    },
+  );
 });

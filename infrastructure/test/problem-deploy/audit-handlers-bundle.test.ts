@@ -19,17 +19,18 @@ const HANDLERS = [
 ] as const;
 
 describe("audit handler runtime bundles (#2655, #2864)", () => {
-  it.each(
-    HANDLERS,
-  )("should exclude aws-cdk-lib and @aws-sdk and stay below the runtime-only size ceiling ($name)", async ({
-    entry,
-  }) => {
-    const bundle = await inspectRuntimeBundle(entry);
+  it.each(HANDLERS)(
+    "should exclude aws-cdk-lib and @aws-sdk and stay below the runtime-only size ceiling ($name)",
+    async ({ entry }) => {
+      const bundle = await inspectRuntimeBundle(entry);
 
-    expect(bundle.inputs.some((input) => input.includes("node_modules/aws-cdk-lib/"))).toBe(false);
-    // Issue #2864: `@aws-sdk/*` は runtime 同梱 SDK を使う設計のため、 bundle への混入は設計違反。
-    expect(bundle.inputs.some((input) => input.includes("node_modules/@aws-sdk/"))).toBe(false);
-    expect(bundle.bytes).toBeGreaterThan(0);
-    expect(bundle.bytes).toBeLessThan(MAX_RUNTIME_BUNDLE_BYTES);
-  });
+      expect(bundle.inputs.some((input) => input.includes("node_modules/aws-cdk-lib/"))).toBe(
+        false,
+      );
+      // Issue #2864: `@aws-sdk/*` は runtime 同梱 SDK を使う設計のため、 bundle への混入は設計違反。
+      expect(bundle.inputs.some((input) => input.includes("node_modules/@aws-sdk/"))).toBe(false);
+      expect(bundle.bytes).toBeGreaterThan(0);
+      expect(bundle.bytes).toBeLessThan(MAX_RUNTIME_BUNDLE_BYTES);
+    },
+  );
 });

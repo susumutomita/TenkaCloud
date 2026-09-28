@@ -99,17 +99,17 @@ describe("repository-local CDK CLI contract", () => {
     expect(makefile).not.toMatch(/^CDK\s*[:+?]?=/mu);
   });
 
-  it.each([
-    "synth",
-    "check-synth",
-  ])("should route make %s through the repository-local CLI", (target) => {
-    expect(makeDryRun(target)).toContain(EXPECTED_MAKE_COMMAND);
-  });
+  it.each(["synth", "check-synth"])(
+    "should route make %s through the repository-local CLI",
+    (target) => {
+      expect(makeDryRun(target)).toContain(EXPECTED_MAKE_COMMAND);
+    },
+  );
 
-  it.each([
-    "synth",
-    "check-synth",
-  ])("should not pass the removed --all option to make %s", (target) => {
-    expect(makeDryRun(target)).not.toMatch(/\bcdk synth\b[^\n]*\s--all(?:\s|$)/);
-  });
+  it.each(["synth", "check-synth"])(
+    "should not pass the removed --all option to make %s",
+    (target) => {
+      expect(makeDryRun(target)).not.toMatch(/\bcdk synth\b[^\n]*\s--all(?:\s|$)/);
+    },
+  );
 });

@@ -103,21 +103,19 @@ describe("computeEffectiveStatus", () => {
 });
 
 describe("isTerminalEventStatus", () => {
-  it.each<EventStatus>([
-    "ENDED",
-    "TEARDOWN",
-    "ARCHIVED",
-  ])("should be true for terminal status %s", (status) => {
-    expect(isTerminalEventStatus(status)).toBe(true);
-  });
+  it.each<EventStatus>(["ENDED", "TEARDOWN", "ARCHIVED"])(
+    "should be true for terminal status %s",
+    (status) => {
+      expect(isTerminalEventStatus(status)).toBe(true);
+    },
+  );
 
-  it.each<EventStatus>([
-    "DRAFT",
-    "DEPLOYING",
-    "READY",
-  ])("should be false for non-terminal status %s", (status) => {
-    expect(isTerminalEventStatus(status)).toBe(false);
-  });
+  it.each<EventStatus>(["DRAFT", "DEPLOYING", "READY"])(
+    "should be false for non-terminal status %s",
+    (status) => {
+      expect(isTerminalEventStatus(status)).toBe(false);
+    },
+  );
 });
 
 /**
@@ -139,19 +137,17 @@ describe("isEffectivelyEnded", () => {
     expect(isEffectivelyEnded({ status: "READY", startsAt: PAST, endsAt: PAST }, NOW)).toBe(true);
   });
 
-  it.each<EventStatus>([
-    "ENDED",
-    "TEARDOWN",
-    "ARCHIVED",
-  ])("should be true for the explicit terminal status %s regardless of times", (status) => {
-    expect(isEffectivelyEnded({ status }, NOW)).toBe(true);
-  });
+  it.each<EventStatus>(["ENDED", "TEARDOWN", "ARCHIVED"])(
+    "should be true for the explicit terminal status %s regardless of times",
+    (status) => {
+      expect(isEffectivelyEnded({ status }, NOW)).toBe(true);
+    },
+  );
 
-  it.each<EventStatus>([
-    "DRAFT",
-    "DEPLOYING",
-    "READY",
-  ])("should be false for %s with no end time", (status) => {
-    expect(isEffectivelyEnded({ status }, NOW)).toBe(false);
-  });
+  it.each<EventStatus>(["DRAFT", "DEPLOYING", "READY"])(
+    "should be false for %s with no end time",
+    (status) => {
+      expect(isEffectivelyEnded({ status }, NOW)).toBe(false);
+    },
+  );
 });

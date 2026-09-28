@@ -37,18 +37,15 @@ describe("release identity resolution", () => {
     });
   });
 
-  it.each([
-    "1.4.0",
-    "v1.4",
-    "v1.4.0-rc.1",
-    "v01.4.0",
-    "release-1.4.0",
-  ])("rejects non-stable tag %s", (tag) => {
-    const manifest = committedManifest();
-    expect(() => resolveReleaseIdentity(manifest, { ...contextFor(manifest), tag })).toThrow(
-      "not a stable v<major>.<minor>.<patch> release tag",
-    );
-  });
+  it.each(["1.4.0", "v1.4", "v1.4.0-rc.1", "v01.4.0", "release-1.4.0"])(
+    "rejects non-stable tag %s",
+    (tag) => {
+      const manifest = committedManifest();
+      expect(() => resolveReleaseIdentity(manifest, { ...contextFor(manifest), tag })).toThrow(
+        "not a stable v<major>.<minor>.<patch> release tag",
+      );
+    },
+  );
 
   it("rejects a tag that does not match the manifest release version", () => {
     const manifest = committedManifest();
@@ -57,16 +54,15 @@ describe("release identity resolution", () => {
     ).toThrow("does not match the manifest release version");
   });
 
-  it.each([
-    "main",
-    "d".repeat(39),
-    "D".repeat(40),
-  ])("rejects tag commit %s that is not a full lowercase SHA", (tagCommit) => {
-    const manifest = committedManifest();
-    expect(() => resolveReleaseIdentity(manifest, { ...contextFor(manifest), tagCommit })).toThrow(
-      "not a lowercase full 40-hex commit",
-    );
-  });
+  it.each(["main", "d".repeat(39), "D".repeat(40)])(
+    "rejects tag commit %s that is not a full lowercase SHA",
+    (tagCommit) => {
+      const manifest = committedManifest();
+      expect(() =>
+        resolveReleaseIdentity(manifest, { ...contextFor(manifest), tagCommit }),
+      ).toThrow("not a lowercase full 40-hex commit");
+    },
+  );
 
   it("rejects a tagged tree whose problems gitlink disagrees with the manifest catalog pin", () => {
     const manifest = committedManifest();

@@ -216,17 +216,14 @@ describe("release manifest schema and parser", () => {
     expect(() => parseReleaseManifest(value)).toThrow("$.sources.platform.branch");
   });
 
-  it.each([
-    "main",
-    "HEAD",
-    "v1.1.0",
-    "0732c74",
-    "A".repeat(40),
-  ])("rejects mutable, abbreviated, or non-canonical authoritative ref %s", (ref) => {
-    const value = cloneManifestValue();
-    objectAt(objectAt(value, "sources"), "catalog").commit = ref;
-    expect(() => parseReleaseManifest(value)).toThrow("lowercase full 40-hex commit");
-  });
+  it.each(["main", "HEAD", "v1.1.0", "0732c74", "A".repeat(40)])(
+    "rejects mutable, abbreviated, or non-canonical authoritative ref %s",
+    (ref) => {
+      const value = cloneManifestValue();
+      objectAt(objectAt(value, "sources"), "catalog").commit = ref;
+      expect(() => parseReleaseManifest(value)).toThrow("lowercase full 40-hex commit");
+    },
+  );
 
   it("rejects a manifest that tries to pin its own platform commit", () => {
     const value = cloneManifestValue();
@@ -349,15 +346,15 @@ describe("certification evidence", () => {
     expect(() => parseFixture(value)).toThrow("verification-runner commit");
   });
 
-  it.each([
-    "failed",
-    "undecidable",
-  ])("rejects certification when a latest residual scan is %s", (decision) => {
-    const value = certifiedManifest(["passed", "passed", "passed"]);
-    const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
-    objectAt(runs[2], "residualScan").decision = decision;
-    expect(() => parseFixture(value)).toThrow("residual scanner report v1 decision passed");
-  });
+  it.each(["failed", "undecidable"])(
+    "rejects certification when a latest residual scan is %s",
+    (decision) => {
+      const value = certifiedManifest(["passed", "passed", "passed"]);
+      const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
+      objectAt(runs[2], "residualScan").decision = decision;
+      expect(() => parseFixture(value)).toThrow("residual scanner report v1 decision passed");
+    },
+  );
 
   it("rejects reusing one environment identity as three fresh starts", () => {
     const value = certifiedManifest(["passed", "passed", "passed"]);
@@ -369,26 +366,25 @@ describe("certification evidence", () => {
     expect(() => parseFixture(value)).toThrow("duplicate value");
   });
 
-  it.each([
-    "failed",
-    "undecidable",
-  ])("rejects certification when fresh-environment evidence is %s", (decision) => {
-    const value = certifiedManifest(["passed", "passed", "passed"]);
-    const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
-    objectAt(runs[2], "freshEnvironment").decision = decision;
-    expect(() => parseFixture(value)).toThrow("fresh-environment evidence decision passed");
-  });
+  it.each(["failed", "undecidable"])(
+    "rejects certification when fresh-environment evidence is %s",
+    (decision) => {
+      const value = certifiedManifest(["passed", "passed", "passed"]);
+      const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
+      objectAt(runs[2], "freshEnvironment").decision = decision;
+      expect(() => parseFixture(value)).toThrow("fresh-environment evidence decision passed");
+    },
+  );
 
-  it.each([
-    "2026-02-30T00:00:00Z",
-    "2026-13-01T00:00:00Z",
-    "2026-01-01T24:00:00Z",
-  ])("rejects nonexistent completion date %s", (completedAt) => {
-    const value = certifiedManifest(["passed", "passed", "passed"]);
-    const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
-    runs[0].completedAt = completedAt;
-    expect(() => parseFixture(value)).toThrow("date-time is not a real calendar instant");
-  });
+  it.each(["2026-02-30T00:00:00Z", "2026-13-01T00:00:00Z", "2026-01-01T24:00:00Z"])(
+    "rejects nonexistent completion date %s",
+    (completedAt) => {
+      const value = certifiedManifest(["passed", "passed", "passed"]);
+      const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
+      runs[0].completedAt = completedAt;
+      expect(() => parseFixture(value)).toThrow("date-time is not a real calendar instant");
+    },
+  );
 
   it("rejects a residual scanner report bound to another run", () => {
     const value = certifiedManifest(["passed", "passed", "passed"]);

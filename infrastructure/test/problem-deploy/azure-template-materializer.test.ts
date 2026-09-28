@@ -198,19 +198,16 @@ describe("materializeAzureTemplate fail-closed dispatch (#2743)", () => {
     expect(readArtifact).not.toHaveBeenCalled();
   });
 
-  it.each([
-    "/etc/passwd.json",
-    "../../secret.json",
-    "a/../../b.json",
-    "a\0b.json",
-    "",
-  ])("should reject a traversal/absolute/empty entry '%s' before any read", async (entry) => {
-    const readArtifact = vi.fn();
-    await expect(materializeAzureTemplate(entry, { readArtifact })).rejects.toThrow(
-      AzureTemplateMaterializationError,
-    );
-    expect(readArtifact).not.toHaveBeenCalled();
-  });
+  it.each(["/etc/passwd.json", "../../secret.json", "a/../../b.json", "a\0b.json", ""])(
+    "should reject a traversal/absolute/empty entry '%s' before any read",
+    async (entry) => {
+      const readArtifact = vi.fn();
+      await expect(materializeAzureTemplate(entry, { readArtifact })).rejects.toThrow(
+        AzureTemplateMaterializationError,
+      );
+      expect(readArtifact).not.toHaveBeenCalled();
+    },
+  );
 
   it("should fail closed and propagate when the artifact is missing (readArtifact throws)", async () => {
     const readArtifact = vi.fn().mockRejectedValue(new Error("artifact not found"));

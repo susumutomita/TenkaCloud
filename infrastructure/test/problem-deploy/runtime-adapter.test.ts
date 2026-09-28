@@ -93,13 +93,14 @@ describe("classifyRuntimeSupport (reserved runtimes)", () => {
     ).toBe("executable");
   });
 
-  it.each(
-    RESERVED_RUNTIMES.map((r) => [r.provider, r.engine] as const),
-  )("should classify the planned runtime %s/%s as reserved", (provider, engine) => {
-    const runtime: ProblemRuntime = { provider, engine, entry: "entry" };
-    expect(classifyRuntimeSupport(runtime)).toBe("reserved");
-    expect(isReservedRuntime(runtime)).toBe(true);
-  });
+  it.each(RESERVED_RUNTIMES.map((r) => [r.provider, r.engine] as const))(
+    "should classify the planned runtime %s/%s as reserved",
+    (provider, engine) => {
+      const runtime: ProblemRuntime = { provider, engine, entry: "entry" };
+      expect(classifyRuntimeSupport(runtime)).toBe("reserved");
+      expect(isReservedRuntime(runtime)).toBe(true);
+    },
+  );
 
   it("should reserve the three planned cloud runtime providers", () => {
     expect(RESERVED_RUNTIMES).toEqual([

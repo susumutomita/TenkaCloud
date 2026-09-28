@@ -36,16 +36,14 @@ describe("release manifest catalog pin", () => {
     expect(stamped.sources.catalog.repository).toBe(committed.sources.catalog.repository);
   });
 
-  it.each([
-    "a".repeat(39),
-    "A".repeat(40),
-    "main",
-    "",
-  ])("rejects gitlink %s that is not a full lowercase SHA", (gitlink) => {
-    expect(() => stampCatalogPin(COMMITTED_MANIFEST, gitlink)).toThrow(
-      "not a lowercase full 40-hex commit",
-    );
-  });
+  it.each(["a".repeat(39), "A".repeat(40), "main", ""])(
+    "rejects gitlink %s that is not a full lowercase SHA",
+    (gitlink) => {
+      expect(() => stampCatalogPin(COMMITTED_MANIFEST, gitlink)).toThrow(
+        "not a lowercase full 40-hex commit",
+      );
+    },
+  );
 
   it("refuses to stamp a manifest whose catalog site was reshaped away", () => {
     const reshaped = COMMITTED_MANIFEST.replace('"catalog": {', '"catalogue": {');

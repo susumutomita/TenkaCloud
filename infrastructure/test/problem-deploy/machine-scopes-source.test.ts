@@ -44,17 +44,17 @@ describe("#2948 T-21 / #2955: TenantMachine is only widened on the declared muta
     expect(callSites.length).toBe(mutatingRoutes.length);
   });
 
-  it.each([
-    ["/problems/:problemId/deploy"],
-    ["/deployments/retry"],
-  ])("should attach the widened allowlist directly to %s", (honoPath) => {
-    const source = readRepoFile("lib/problem-deploy/handlers/deploy-handler/index.ts");
-    const index = source.indexOf(`app.post("${honoPath}"`);
-    expect(index).toBeGreaterThan(-1);
-    const machineIndex = source.indexOf("TENANT_MACHINE_ROLE]", index);
-    expect(machineIndex).toBeGreaterThan(index);
-    expect(machineIndex - index).toBeLessThan(900);
-  });
+  it.each([["/problems/:problemId/deploy"], ["/deployments/retry"]])(
+    "should attach the widened allowlist directly to %s",
+    (honoPath) => {
+      const source = readRepoFile("lib/problem-deploy/handlers/deploy-handler/index.ts");
+      const index = source.indexOf(`app.post("${honoPath}"`);
+      expect(index).toBeGreaterThan(-1);
+      const machineIndex = source.indexOf("TENANT_MACHINE_ROLE]", index);
+      expect(machineIndex).toBeGreaterThan(index);
+      expect(machineIndex - index).toBeLessThan(900);
+    },
+  );
 
   it("should never widen a requireRole allowlist in the event or competitor-accounts handlers", () => {
     for (const relativePath of [

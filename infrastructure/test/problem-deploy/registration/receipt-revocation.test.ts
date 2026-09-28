@@ -46,65 +46,64 @@ async function readyClaimFixture() {
 }
 
 describe("registration receipt credential revocation through persistent API", () => {
-  it.each([
-    "open",
-    "closed",
-    "reissued",
-  ])("rejects a rotated credential when registration is %s", async (mode) => {
-    const { app, deps, invitation, team, teamId, jobs, registration } = await readyClaimFixture();
+  it.each(["open", "closed", "reissued"])(
+    "rejects a rotated credential when registration is %s",
+    async (mode) => {
+      const { app, deps, invitation, team, teamId, jobs, registration } = await readyClaimFixture();
 
-    let currentInvitation = invitation;
-    if (mode === "closed")
-      await configureRegistration(deps, fixtureTenantId, fixtureEventId, { enabled: false });
-    if (mode === "reissued") {
-      const reopened = await configureRegistration(deps, fixtureTenantId, fixtureEventId, {
-        enabled: true,
-        teamIds: [...registration.teamIds],
-        closesAt: registration.closesAt,
-      });
-      if (!("invitation" in reopened) || !reopened.invitation)
-        throw new Error("Missing invitation");
-      currentInvitation = reopened.invitation;
-      // Reissuing only the invitation does not revoke an unchanged team credential.
-      expect((await app.request(`${base}/status`, request(receipt))).status).toBe(200);
-    }
-    const newLoginKey = "n".repeat(43);
-    expect(
-      await deps.teams.rotateLoginKey({
-        tenantId: fixtureTenantId,
-        eventId: fixtureEventId,
-        teamId,
-        newLoginKey,
-        expectedUpdatedAt: team.updatedAt,
-        updatedAt: new Date(Date.now() + 1000).toISOString(),
-        deployments: jobs.map(({ jobId, createdAt }) => ({ jobId, createdAt })),
-      }),
-    ).toEqual({ outcome: "updated" });
-    expect(await deps.deployments.listByTeamLoginKey(newLoginKey)).toHaveLength(jobs.length);
-    expect(await deps.deployments.listByTeamLoginKey(team.teamLoginKey)).toHaveLength(0);
-    for (const [action, token] of [
-      ["status", receipt],
-      ["claim", currentInvitation],
-    ]) {
-      const denied = await app.request(`${base}/${action}`, request(token, { receipt }));
-      expect(denied.status).toBe(409);
-      expect(await denied.json()).toEqual({ error: "receipt_revoked" });
-    }
-    expect(
-      (await deps.events.getEvent(fixtureTenantId, fixtureEventId))?.registration?.claims,
-    ).toEqual(registration.claims);
-    if (mode !== "closed") {
-      // Revoking one team does not block a different representative's unused slot.
+      let currentInvitation = invitation;
+      if (mode === "closed")
+        await configureRegistration(deps, fixtureTenantId, fixtureEventId, { enabled: false });
+      if (mode === "reissued") {
+        const reopened = await configureRegistration(deps, fixtureTenantId, fixtureEventId, {
+          enabled: true,
+          teamIds: [...registration.teamIds],
+          closesAt: registration.closesAt,
+        });
+        if (!("invitation" in reopened) || !reopened.invitation)
+          throw new Error("Missing invitation");
+        currentInvitation = reopened.invitation;
+        // Reissuing only the invitation does not revoke an unchanged team credential.
+        expect((await app.request(`${base}/status`, request(receipt))).status).toBe(200);
+      }
+      const newLoginKey = "n".repeat(43);
       expect(
-        (
-          await app.request(
-            `${base}/claim`,
-            request(currentInvitation, { receipt: "s".repeat(43) }),
-          )
-        ).status,
-      ).toBe(200);
-    }
-  });
+        await deps.teams.rotateLoginKey({
+          tenantId: fixtureTenantId,
+          eventId: fixtureEventId,
+          teamId,
+          newLoginKey,
+          expectedUpdatedAt: team.updatedAt,
+          updatedAt: new Date(Date.now() + 1000).toISOString(),
+          deployments: jobs.map(({ jobId, createdAt }) => ({ jobId, createdAt })),
+        }),
+      ).toEqual({ outcome: "updated" });
+      expect(await deps.deployments.listByTeamLoginKey(newLoginKey)).toHaveLength(jobs.length);
+      expect(await deps.deployments.listByTeamLoginKey(team.teamLoginKey)).toHaveLength(0);
+      for (const [action, token] of [
+        ["status", receipt],
+        ["claim", currentInvitation],
+      ]) {
+        const denied = await app.request(`${base}/${action}`, request(token, { receipt }));
+        expect(denied.status).toBe(409);
+        expect(await denied.json()).toEqual({ error: "receipt_revoked" });
+      }
+      expect(
+        (await deps.events.getEvent(fixtureTenantId, fixtureEventId))?.registration?.claims,
+      ).toEqual(registration.claims);
+      if (mode !== "closed") {
+        // Revoking one team does not block a different representative's unused slot.
+        expect(
+          (
+            await app.request(
+              `${base}/claim`,
+              request(currentInvitation, { receipt: "s".repeat(43) }),
+            )
+          ).status,
+        ).toBe(200);
+      }
+    },
+  );
 
   it("rejects legacy unbound receipts without binding them to the current key", async () => {
     const { app, deps, invitation } = await registrationHttpFixture();
@@ -155,21 +154,21 @@ describe("registration receipt credential revocation through persistent API", ()
     ).toBe(registrationDigest("1".repeat(43)));
   });
 
-  it.each([
-    undefined,
-    "",
-  ])("does not reserve a slot when its team credential is missing (%s)", async (key) => {
-    const { app, deps, invitation } = await registrationHttpFixture();
-    const get = deps.teams.getTeam.bind(deps.teams);
-    vi.spyOn(deps.teams, "getTeam").mockImplementationOnce(async (...args) => {
-      const team = await get(...args);
-      if (!team) throw new Error("Missing fixture team");
-      return key === undefined ? undefined : { ...team, teamLoginKey: key };
-    });
-    const denied = await app.request(`${base}/claim`, request(invitation, { receipt }));
-    expect(denied.status).toBe(404);
-    expect(
-      (await deps.events.getEvent(fixtureTenantId, fixtureEventId))?.registration?.claims,
-    ).toEqual([]);
-  });
+  it.each([undefined, ""])(
+    "does not reserve a slot when its team credential is missing (%s)",
+    async (key) => {
+      const { app, deps, invitation } = await registrationHttpFixture();
+      const get = deps.teams.getTeam.bind(deps.teams);
+      vi.spyOn(deps.teams, "getTeam").mockImplementationOnce(async (...args) => {
+        const team = await get(...args);
+        if (!team) throw new Error("Missing fixture team");
+        return key === undefined ? undefined : { ...team, teamLoginKey: key };
+      });
+      const denied = await app.request(`${base}/claim`, request(invitation, { receipt }));
+      expect(denied.status).toBe(404);
+      expect(
+        (await deps.events.getEvent(fixtureTenantId, fixtureEventId))?.registration?.claims,
+      ).toEqual([]);
+    },
+  );
 });

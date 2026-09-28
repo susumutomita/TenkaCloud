@@ -145,62 +145,64 @@ describe.each(["DynamoDB", "SQL"])("accepted reset initialization: %s", (backend
     expect(ctx.initialState).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    "COMPLETE",
-    "DELETED",
-  ] as const)("fulfils a reset accepted one millisecond before end through scheduled recovery, once (deployment=%s)", async (status) => {
-    const ctx = await setup(backend);
-    await ctx.repository.putDeployment({ ...deployment, status });
-    expect(await ctx.repository.readCoordinationRun(key)).toMatchObject({
-      pendingInitialization: true,
-    });
-    expect(await ctx.repository.readCoordinationState(ctx.scope)).toBeUndefined();
-    const invoke = vi.fn(async (_name: string, batch: CoordinationTickBatch) => {
-      const parsed = parseCoordinationTickBatch(batch);
-      expect(parsed).not.toBeNull();
-      if (parsed) await handleCoordinationTickBatch(ctx.deps, parsed);
-    });
-    const pass = createCoordinationTickPass(
-      invoke,
-      "dispatcher",
-      new Set(["battle"]),
-      ctx.repository,
-    );
-    await ctx.repository.forEachCompleteDeploymentPage(
-      async (items) => pass.collect(items, materializedAt),
-      async (scopes) => pass.collectRecovery(scopes),
-    );
-    pass.collectRecovery([ctx.scope]);
-    await pass.run(Date.parse(materializedAt), materializedAt);
-    expect(invoke).toHaveBeenCalledTimes(1);
-    expect(ctx.initialState).toHaveBeenCalledTimes(1);
-    expect(ctx.initialState).toHaveBeenCalledWith(
-      expect.objectContaining({ teamIds: ["red"], teamNames: { red: "Red" } }),
-    );
-    expect(ctx.tick).not.toHaveBeenCalled();
-    expect(await ctx.repository.getDeployment(deployment.jobId)).toMatchObject({
-      score: 217,
-      coordinationSubtotal: 17,
-    });
-    expect(await ctx.repository.listScoreEvents(deployment.jobId, { pageSize: 100 })).toEqual([
-      expect.objectContaining({ points: -13, occurredAt: acceptedAt, reason: "sync" }),
-    ]);
-    expect((await ctx.repository.readCoordinationRun(key))?.pendingInitialization).toBeUndefined();
-    expect((await readCoordinationState(ctx.store, ctx.scope))?.pendingScores).toBeUndefined();
-    await handleCoordinationTickBatch(ctx.deps, ctx.batch);
-    await pass.run(Date.parse(materializedAt), materializedAt);
-    expect(invoke).toHaveBeenCalledTimes(1);
-    expect(ctx.initialState).toHaveBeenCalledTimes(1);
-    await ctx.repository.sweepExpiredCoordinationState(
-      Math.floor(Date.parse(materializedAt) / 1000) + 8 * 86400,
-    );
-    expect(await ctx.repository.readCoordinationState(ctx.scope)).toBeUndefined();
-    await handleCoordinationTickBatch(ctx.deps, ctx.batch);
-    await pass.run(Date.parse(materializedAt), materializedAt);
-    expect(ctx.importer).toHaveBeenCalledTimes(1);
-    expect(await ctx.repository.readCoordinationMatchSecret(ctx.scope)).toBeUndefined();
-    expect(await ctx.repository.readCoordinationState(ctx.scope)).toBeUndefined();
-  });
+  it.each(["COMPLETE", "DELETED"] as const)(
+    "fulfils a reset accepted one millisecond before end through scheduled recovery, once (deployment=%s)",
+    async (status) => {
+      const ctx = await setup(backend);
+      await ctx.repository.putDeployment({ ...deployment, status });
+      expect(await ctx.repository.readCoordinationRun(key)).toMatchObject({
+        pendingInitialization: true,
+      });
+      expect(await ctx.repository.readCoordinationState(ctx.scope)).toBeUndefined();
+      const invoke = vi.fn(async (_name: string, batch: CoordinationTickBatch) => {
+        const parsed = parseCoordinationTickBatch(batch);
+        expect(parsed).not.toBeNull();
+        if (parsed) await handleCoordinationTickBatch(ctx.deps, parsed);
+      });
+      const pass = createCoordinationTickPass(
+        invoke,
+        "dispatcher",
+        new Set(["battle"]),
+        ctx.repository,
+      );
+      await ctx.repository.forEachCompleteDeploymentPage(
+        async (items) => pass.collect(items, materializedAt),
+        async (scopes) => pass.collectRecovery(scopes),
+      );
+      pass.collectRecovery([ctx.scope]);
+      await pass.run(Date.parse(materializedAt), materializedAt);
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(ctx.initialState).toHaveBeenCalledTimes(1);
+      expect(ctx.initialState).toHaveBeenCalledWith(
+        expect.objectContaining({ teamIds: ["red"], teamNames: { red: "Red" } }),
+      );
+      expect(ctx.tick).not.toHaveBeenCalled();
+      expect(await ctx.repository.getDeployment(deployment.jobId)).toMatchObject({
+        score: 217,
+        coordinationSubtotal: 17,
+      });
+      expect(await ctx.repository.listScoreEvents(deployment.jobId, { pageSize: 100 })).toEqual([
+        expect.objectContaining({ points: -13, occurredAt: acceptedAt, reason: "sync" }),
+      ]);
+      expect(
+        (await ctx.repository.readCoordinationRun(key))?.pendingInitialization,
+      ).toBeUndefined();
+      expect((await readCoordinationState(ctx.store, ctx.scope))?.pendingScores).toBeUndefined();
+      await handleCoordinationTickBatch(ctx.deps, ctx.batch);
+      await pass.run(Date.parse(materializedAt), materializedAt);
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(ctx.initialState).toHaveBeenCalledTimes(1);
+      await ctx.repository.sweepExpiredCoordinationState(
+        Math.floor(Date.parse(materializedAt) / 1000) + 8 * 86400,
+      );
+      expect(await ctx.repository.readCoordinationState(ctx.scope)).toBeUndefined();
+      await handleCoordinationTickBatch(ctx.deps, ctx.batch);
+      await pass.run(Date.parse(materializedAt), materializedAt);
+      expect(ctx.importer).toHaveBeenCalledTimes(1);
+      expect(await ctx.repository.readCoordinationMatchSecret(ctx.scope)).toBeUndefined();
+      expect(await ctx.repository.readCoordinationState(ctx.scope)).toBeUndefined();
+    },
+  );
   it("keeps the obligation when roster reads fail or return no teams, then recovers", async () => {
     const ctx = await setup(backend);
     const roster = vi.spyOn(ctx.repository, "listByTenantAndEvent");

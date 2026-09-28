@@ -64,18 +64,18 @@ describe("GET /feature-flags", () => {
     expect(mocks.getFeatureFlags).toHaveBeenCalledWith(shared, "tenant-test");
   });
 
-  it.each([
-    "TenantOperator",
-    "TenantViewer",
-  ])("should return the tenant's stored flags for a %s caller (config.features must resolve for every role)", async (role) => {
-    process.env.DEFAULT_USER_ROLE = role;
-    mocks.getFeatureFlags.mockResolvedValueOnce({ redTeam: true });
+  it.each(["TenantOperator", "TenantViewer"])(
+    "should return the tenant's stored flags for a %s caller (config.features must resolve for every role)",
+    async (role) => {
+      process.env.DEFAULT_USER_ROLE = role;
+      mocks.getFeatureFlags.mockResolvedValueOnce({ redTeam: true });
 
-    const res = await buildApp().request("/feature-flags");
+      const res = await buildApp().request("/feature-flags");
 
-    expect(res.status).toBe(StatusCodes.OK);
-    expect(await res.json()).toEqual({ flags: { redTeam: true } });
-  });
+      expect(res.status).toBe(StatusCodes.OK);
+      expect(await res.json()).toEqual({ flags: { redTeam: true } });
+    },
+  );
 
   it("should return {} when the tenant has no saved overrides", async () => {
     mocks.getFeatureFlags.mockResolvedValueOnce({});

@@ -273,50 +273,54 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
       },
       { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: 2, pendingScores: { raw: true } },
     ].map((raw) => ({ raw })),
-  )("does not mistake opaque plugin field names for a pending platform delivery: %j", async ({
-    raw,
-  }) => {
-    const { repository, store } = await setup(backend);
-    // A raw pre-upgrade row; no new writer has wrapped or normalized it yet.
-    await repository.writeCoordinationState(scope, raw, 0, at, 9999);
-    expect((await readCoordinationState(store, scope))?.state).toEqual(raw);
-    expect(
-      await repository.publishCoordinationScore(scope, 1, {
-        jobId: "red",
-        teamId: "red",
-        expectedScore: 0,
-        expectedStatus: "COMPLETE",
-        score: 30,
-        coordinationSubtotal: 30,
-        occurredAt: at,
-        events: [buildScoreEventRecord(deployment("red"), "coordination", 30, at)],
-      }),
-    ).toEqual({ outcome: "conflict" });
-    expect((await repository.getDeployment("red"))?.score).toBe(0);
-    expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(0);
-    await repository.acknowledgeCoordinationScores(scope, 1);
-    expect((await readCoordinationState(store, scope))?.state).toEqual(raw);
-    const next = { ...raw, changed: true };
-    expect(await writeCoordinationState(store, scope, next, 1, at)).toEqual({ kind: "ok" });
-    expect((await readCoordinationState(store, scope))?.state).toEqual(next);
-  });
+  )(
+    "does not mistake opaque plugin field names for a pending platform delivery: %j",
+    async ({ raw }) => {
+      const { repository, store } = await setup(backend);
+      // A raw pre-upgrade row; no new writer has wrapped or normalized it yet.
+      await repository.writeCoordinationState(scope, raw, 0, at, 9999);
+      expect((await readCoordinationState(store, scope))?.state).toEqual(raw);
+      expect(
+        await repository.publishCoordinationScore(scope, 1, {
+          jobId: "red",
+          teamId: "red",
+          expectedScore: 0,
+          expectedStatus: "COMPLETE",
+          score: 30,
+          coordinationSubtotal: 30,
+          occurredAt: at,
+          events: [buildScoreEventRecord(deployment("red"), "coordination", 30, at)],
+        }),
+      ).toEqual({ outcome: "conflict" });
+      expect((await repository.getDeployment("red"))?.score).toBe(0);
+      expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(0);
+      await repository.acknowledgeCoordinationScores(scope, 1);
+      expect((await readCoordinationState(store, scope))?.state).toEqual(raw);
+      const next = { ...raw, changed: true };
+      expect(await writeCoordinationState(store, scope, next, 1, at)).toEqual({ kind: "ok" });
+      expect((await readCoordinationState(store, scope))?.state).toEqual(next);
+    },
+  );
 
-  it.each([
-    2, 1e30,
-  ])("guards genuine pending envelopes at schema version %s", async (schemaVersion) => {
-    const { store, repository } = await setup(backend);
-    const state = { scores: { red: 30 } };
-    const pending = {
-      occurredAt: at,
-      teams: { red: { before: 0, score: 30, reason: "cipher" as const } },
-    };
-    await writeCoordinationState(store, scope, state, 0, at, schemaVersion, pending);
-    expect((await readCoordinationState(store, scope))?.pendingScores).toEqual(pending);
-    expect(await writeCoordinationState(store, scope, state, 1, at)).toEqual({ kind: "conflict" });
-    await deliverCoordinationScores(store, scope, await readCoordinationState(store, scope));
-    expect((await repository.getDeployment("red"))?.score).toBe(30);
-    expect(await writeCoordinationState(store, scope, state, 1, at)).toEqual({ kind: "ok" });
-  });
+  it.each([2, 1e30])(
+    "guards genuine pending envelopes at schema version %s",
+    async (schemaVersion) => {
+      const { store, repository } = await setup(backend);
+      const state = { scores: { red: 30 } };
+      const pending = {
+        occurredAt: at,
+        teams: { red: { before: 0, score: 30, reason: "cipher" as const } },
+      };
+      await writeCoordinationState(store, scope, state, 0, at, schemaVersion, pending);
+      expect((await readCoordinationState(store, scope))?.pendingScores).toEqual(pending);
+      expect(await writeCoordinationState(store, scope, state, 1, at)).toEqual({
+        kind: "conflict",
+      });
+      await deliverCoordinationScores(store, scope, await readCoordinationState(store, scope));
+      expect((await repository.getDeployment("red"))?.score).toBe(30);
+      expect(await writeCoordinationState(store, scope, state, 1, at)).toEqual({ kind: "ok" });
+    },
+  );
 
   it("records a correct operation and a floored deadline penalty through the real participant history route", async () => {
     const { repository, store, input, tick } = await setup(backend);
@@ -888,44 +892,44 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
     expect((await repository.getDeployment("red"))?.score).toBe(30);
   });
 
-  it.each([
-    false,
-    true,
-  ])("does not initialize a missing ended state (declared=%s)", async (declared) => {
-    const { repository, store } = await setup(backend);
-    const importer = vi.fn(async () => {
-      throw new Error("must not load a game");
-    });
-    const stateWrite = vi.spyOn(repository, "writeCoordinationState");
-    const secret = vi.spyOn(repository, "ensureCoordinationMatchSecret");
-    const runRead = vi.spyOn(repository, "readCoordinationRun");
-    expect(
-      await handleCoordinationTickBatch(
-        { store, importer, config: declared ? { battle: { plugin: "battle" } } : {} },
-        {
-          action: COORDINATION_TICK_ACTION,
-          nowIso: at,
-          targets: [
-            {
-              tenantId: scope.tenantId,
-              eventId: scope.eventId,
-              moduleRef: scope.problemId,
-              teamIds: ["red"],
-              eventNowMs: 2000,
-              drainOnly: true,
-            },
-          ],
-        },
-      ),
-    ).toEqual({ ticked: 1, written: 0 });
-    expect(importer).not.toHaveBeenCalled();
-    expect(stateWrite).not.toHaveBeenCalled();
-    expect(secret).not.toHaveBeenCalled();
-    expect(runRead).toHaveBeenCalledTimes(declared ? 1 : 0);
-    stateWrite.mockRestore();
-    secret.mockRestore();
-    runRead.mockRestore();
-  });
+  it.each([false, true])(
+    "does not initialize a missing ended state (declared=%s)",
+    async (declared) => {
+      const { repository, store } = await setup(backend);
+      const importer = vi.fn(async () => {
+        throw new Error("must not load a game");
+      });
+      const stateWrite = vi.spyOn(repository, "writeCoordinationState");
+      const secret = vi.spyOn(repository, "ensureCoordinationMatchSecret");
+      const runRead = vi.spyOn(repository, "readCoordinationRun");
+      expect(
+        await handleCoordinationTickBatch(
+          { store, importer, config: declared ? { battle: { plugin: "battle" } } : {} },
+          {
+            action: COORDINATION_TICK_ACTION,
+            nowIso: at,
+            targets: [
+              {
+                tenantId: scope.tenantId,
+                eventId: scope.eventId,
+                moduleRef: scope.problemId,
+                teamIds: ["red"],
+                eventNowMs: 2000,
+                drainOnly: true,
+              },
+            ],
+          },
+        ),
+      ).toEqual({ ticked: 1, written: 0 });
+      expect(importer).not.toHaveBeenCalled();
+      expect(stateWrite).not.toHaveBeenCalled();
+      expect(secret).not.toHaveBeenCalled();
+      expect(runRead).toHaveBeenCalledTimes(declared ? 1 : 0);
+      stateWrite.mockRestore();
+      secret.mockRestore();
+      runRead.mockRestore();
+    },
+  );
 
   it("automatically drains after event end without loading the game, extending TTL, or invoking again after ACK", async () => {
     const { repository, store, input, tick } = await setup(backend);
@@ -1131,107 +1135,108 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
     expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(1);
   });
 
-  it.each([
-    0, 17,
-  ])("synchronizes all teams to the new run's initial %s points on a no-op tick", async (initial) => {
-    const { repository, store, input } = await setup(backend, ["red", "blue"]);
-    await dispatchCoordinationOp(store, plugin, input);
-    const archived = await readCoordinationState(store, scope);
-    await repository.rotateCoordinationRun(
-      scope,
-      scope.runId,
-      { runId: "new", startedAt: at, history: [] },
-      0,
-    );
-    const initialPlugin = {
-      ...plugin,
-      initialState: (ctx: { teamIds: readonly string[] }) => ({
-        scores: Object.fromEntries(ctx.teamIds.map((id) => [id, initial])),
-        solved: false,
-        expired: false,
-      }),
-      tick: (state: State) => state,
-    };
-    const batch = {
-      action: COORDINATION_TICK_ACTION,
-      nowIso: at,
-      targets: [
-        {
-          tenantId: scope.tenantId,
-          eventId: scope.eventId,
-          moduleRef: scope.problemId,
-          teamIds: ["red", "blue"],
-          eventNowMs: 0,
-        },
-      ],
-    };
-    const deps = {
-      store,
-      importer: async () => ({ default: initialPlugin }),
-      config: { battle: { plugin: "battle" } },
-    };
-    expect(await handleCoordinationTickBatch(deps, batch)).toEqual({ ticked: 1, written: 1 });
-    for (const team of ["red", "blue"]) {
-      expect(await repository.getDeployment(team)).toMatchObject({
-        score: initial,
-        coordinationSubtotal: initial,
+  it.each([0, 17])(
+    "synchronizes all teams to the new run's initial %s points on a no-op tick",
+    async (initial) => {
+      const { repository, store, input } = await setup(backend, ["red", "blue"]);
+      await dispatchCoordinationOp(store, plugin, input);
+      const archived = await readCoordinationState(store, scope);
+      await repository.rotateCoordinationRun(
+        scope,
+        scope.runId,
+        { runId: "new", startedAt: at, history: [] },
+        0,
+      );
+      const initialPlugin = {
+        ...plugin,
+        initialState: (ctx: { teamIds: readonly string[] }) => ({
+          scores: Object.fromEntries(ctx.teamIds.map((id) => [id, initial])),
+          solved: false,
+          expired: false,
+        }),
+        tick: (state: State) => state,
+      };
+      const batch = {
+        action: COORDINATION_TICK_ACTION,
+        nowIso: at,
+        targets: [
+          {
+            tenantId: scope.tenantId,
+            eventId: scope.eventId,
+            moduleRef: scope.problemId,
+            teamIds: ["red", "blue"],
+            eventNowMs: 0,
+          },
+        ],
+      };
+      const deps = {
+        store,
+        importer: async () => ({ default: initialPlugin }),
+        config: { battle: { plugin: "battle" } },
+      };
+      expect(await handleCoordinationTickBatch(deps, batch)).toEqual({ ticked: 1, written: 1 });
+      for (const team of ["red", "blue"]) {
+        expect(await repository.getDeployment(team)).toMatchObject({
+          score: initial,
+          coordinationSubtotal: initial,
+          coordinationScoreRunId: "new",
+        });
+        const history = await repository.listScoreEvents(team, { pageSize: 100 });
+        expect(history.reduce((sum, event) => sum + event.points, 0)).toBe(initial);
+      }
+      expect(await readCoordinationState(store, scope)).toEqual(archived);
+      expect(
+        (await readCoordinationState(store, { ...scope, runId: "new" }))?.pendingScores,
+      ).toBeUndefined();
+      expect(await handleCoordinationTickBatch(deps, batch)).toEqual({ ticked: 1, written: 0 });
+    },
+  );
+
+  it.each(["additive", "unknown"] as const)(
+    "preserves ordinary score and hints with %s coordination attribution",
+    async (mode) => {
+      const { repository, store, input, tick } = await setup(backend, ["red"], mode);
+      await repository.putDeployment(deployment("red", { score: 200 }));
+      await dispatchCoordinationOp(store, plugin, input);
+      expect(await repository.getDeployment("red")).toMatchObject({
+        score: 230,
+        coordinationSubtotal: 30,
+      });
+      await repository.applyHintPenalty(
+        "red",
+        { hintId: "hint", revealedAt: at, penaltyApplied: 5 },
+        at,
+      );
+      await tick();
+      expect(await repository.getDeployment("red")).toMatchObject({
+        score: 195,
+        coordinationSubtotal: 0,
+      });
+      expect(
+        (await repository.listScoreEvents("red", { pageSize: 100 })).map((event) => [
+          event.points,
+          event.reason,
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          [30, "cipher"],
+          [-30, "deadline"],
+        ]),
+      );
+      await repository.rotateCoordinationRun(
+        scope,
+        scope.runId,
+        { runId: "new", startedAt: at, history: [] },
+        0,
+      );
+      await tick(0);
+      expect(await repository.getDeployment("red")).toMatchObject({
+        score: 195,
+        coordinationSubtotal: 0,
         coordinationScoreRunId: "new",
       });
-      const history = await repository.listScoreEvents(team, { pageSize: 100 });
-      expect(history.reduce((sum, event) => sum + event.points, 0)).toBe(initial);
-    }
-    expect(await readCoordinationState(store, scope)).toEqual(archived);
-    expect(
-      (await readCoordinationState(store, { ...scope, runId: "new" }))?.pendingScores,
-    ).toBeUndefined();
-    expect(await handleCoordinationTickBatch(deps, batch)).toEqual({ ticked: 1, written: 0 });
-  });
-
-  it.each([
-    "additive",
-    "unknown",
-  ] as const)("preserves ordinary score and hints with %s coordination attribution", async (mode) => {
-    const { repository, store, input, tick } = await setup(backend, ["red"], mode);
-    await repository.putDeployment(deployment("red", { score: 200 }));
-    await dispatchCoordinationOp(store, plugin, input);
-    expect(await repository.getDeployment("red")).toMatchObject({
-      score: 230,
-      coordinationSubtotal: 30,
-    });
-    await repository.applyHintPenalty(
-      "red",
-      { hintId: "hint", revealedAt: at, penaltyApplied: 5 },
-      at,
-    );
-    await tick();
-    expect(await repository.getDeployment("red")).toMatchObject({
-      score: 195,
-      coordinationSubtotal: 0,
-    });
-    expect(
-      (await repository.listScoreEvents("red", { pageSize: 100 })).map((event) => [
-        event.points,
-        event.reason,
-      ]),
-    ).toEqual(
-      expect.arrayContaining([
-        [30, "cipher"],
-        [-30, "deadline"],
-      ]),
-    );
-    await repository.rotateCoordinationRun(
-      scope,
-      scope.runId,
-      { runId: "new", startedAt: at, history: [] },
-      0,
-    );
-    await tick(0);
-    expect(await repository.getDeployment("red")).toMatchObject({
-      score: 195,
-      coordinationSubtotal: 0,
-      coordinationScoreRunId: "new",
-    });
-  });
+    },
+  );
 
   it("keeps ordinary hint and game deadline deltas once each when the combined total crosses zero", async () => {
     const { repository, store, input, tick } = await setup(backend, ["red"], "additive");
@@ -1300,89 +1305,92 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
     { hintsRevealed: [{ hintId: "hint", revealedAt: at, penaltyApplied: 5 }] },
     { flagSubmitted: true },
     { scoringState: '{"checks":1}' },
-  ])("preserves ordinary-score evidence %j when today's catalog has no scoring declaration", async (ordinary) => {
-    const { repository, store, tick } = await setup(backend);
-    await repository.putDeployment(deployment("red", { score: 50, ...ordinary }));
-    await writeCoordinationState(
-      store,
-      scope,
-      { scores: { red: 30 }, solved: true, expired: false },
-      0,
-      at,
-    );
-    await tick();
-    expect(await repository.getDeployment("red")).toMatchObject({
-      score: 20,
-      coordinationSubtotal: 0,
-    });
-    expect(await repository.listScoreEvents("red", { pageSize: 100 })).toMatchObject([
-      { points: -30, reason: "deadline" },
-    ]);
-  });
-
-  it.each([
-    "additive",
-    "unknown",
-  ] as const)("adds unmaterialized initial points to ordinary score for a %s catalog", async (mode) => {
-    const { repository, store } = await setup(backend, ["red", "blue"], mode);
-    for (const team of ["red", "blue"])
-      await repository.putDeployment(deployment(team, { score: 200 }));
-    const initialPlugin = {
-      ...plugin,
-      initialState: () => ({ scores: { red: 17, blue: 17 }, solved: false, expired: false }),
-      tick: (state: State) => state,
-    };
-    const batch = {
-      action: COORDINATION_TICK_ACTION,
-      nowIso: at,
-      targets: [
-        {
-          tenantId: scope.tenantId,
-          eventId: scope.eventId,
-          moduleRef: scope.problemId,
-          teamIds: ["red", "blue"],
-          eventNowMs: 0,
-        },
-      ],
-    };
-    const deps = {
-      store,
-      importer: async () => ({ default: initialPlugin }),
-      config: { battle: { plugin: "battle" } },
-    };
-    const publisher = vi
-      .spyOn(repository, "publishCoordinationScore")
-      .mockRejectedValueOnce(new Error("retry initial contribution"));
-    await handleCoordinationTickBatch(deps, batch);
-    expect((await readCoordinationState(store, scope))?.pendingScores?.initializing).toBe(true);
-    publisher.mockRestore();
-    await handleCoordinationTickBatch(deps, batch);
-    await handleCoordinationTickBatch(deps, batch);
-    for (const team of ["red", "blue"]) {
-      expect(await repository.getDeployment(team)).toMatchObject({
-        score: 217,
-        coordinationSubtotal: 17,
+  ])(
+    "preserves ordinary-score evidence %j when today's catalog has no scoring declaration",
+    async (ordinary) => {
+      const { repository, store, tick } = await setup(backend);
+      await repository.putDeployment(deployment("red", { score: 50, ...ordinary }));
+      await writeCoordinationState(
+        store,
+        scope,
+        { scores: { red: 30 }, solved: true, expired: false },
+        0,
+        at,
+      );
+      await tick();
+      expect(await repository.getDeployment("red")).toMatchObject({
+        score: 20,
+        coordinationSubtotal: 0,
       });
-      expect(await repository.listScoreEvents(team, { pageSize: 100 })).toMatchObject([
-        { points: 17, reason: "sync" },
+      expect(await repository.listScoreEvents("red", { pageSize: 100 })).toMatchObject([
+        { points: -30, reason: "deadline" },
       ]);
-    }
-    await repository.rotateCoordinationRun(
-      scope,
-      scope.runId,
-      { runId: "new", startedAt: at, history: [] },
-      0,
-    );
-    await handleCoordinationTickBatch(deps, batch);
-    for (const team of ["red", "blue"]) {
-      expect(await repository.getDeployment(team)).toMatchObject({
-        score: 217,
-        coordinationSubtotal: 17,
-        coordinationScoreRunId: "new",
-      });
-      expect(await repository.listScoreEvents(team, { pageSize: 100 })).toHaveLength(1);
-    }
-  });
+    },
+  );
+
+  it.each(["additive", "unknown"] as const)(
+    "adds unmaterialized initial points to ordinary score for a %s catalog",
+    async (mode) => {
+      const { repository, store } = await setup(backend, ["red", "blue"], mode);
+      for (const team of ["red", "blue"])
+        await repository.putDeployment(deployment(team, { score: 200 }));
+      const initialPlugin = {
+        ...plugin,
+        initialState: () => ({ scores: { red: 17, blue: 17 }, solved: false, expired: false }),
+        tick: (state: State) => state,
+      };
+      const batch = {
+        action: COORDINATION_TICK_ACTION,
+        nowIso: at,
+        targets: [
+          {
+            tenantId: scope.tenantId,
+            eventId: scope.eventId,
+            moduleRef: scope.problemId,
+            teamIds: ["red", "blue"],
+            eventNowMs: 0,
+          },
+        ],
+      };
+      const deps = {
+        store,
+        importer: async () => ({ default: initialPlugin }),
+        config: { battle: { plugin: "battle" } },
+      };
+      const publisher = vi
+        .spyOn(repository, "publishCoordinationScore")
+        .mockRejectedValueOnce(new Error("retry initial contribution"));
+      await handleCoordinationTickBatch(deps, batch);
+      expect((await readCoordinationState(store, scope))?.pendingScores?.initializing).toBe(true);
+      publisher.mockRestore();
+      await handleCoordinationTickBatch(deps, batch);
+      await handleCoordinationTickBatch(deps, batch);
+      for (const team of ["red", "blue"]) {
+        expect(await repository.getDeployment(team)).toMatchObject({
+          score: 217,
+          coordinationSubtotal: 17,
+        });
+        expect(await repository.listScoreEvents(team, { pageSize: 100 })).toMatchObject([
+          { points: 17, reason: "sync" },
+        ]);
+      }
+      await repository.rotateCoordinationRun(
+        scope,
+        scope.runId,
+        { runId: "new", startedAt: at, history: [] },
+        0,
+      );
+      await handleCoordinationTickBatch(deps, batch);
+      for (const team of ["red", "blue"]) {
+        expect(await repository.getDeployment(team)).toMatchObject({
+          score: 217,
+          coordinationSubtotal: 17,
+          coordinationScoreRunId: "new",
+        });
+        expect(await repository.listScoreEvents(team, { pageSize: 100 })).toHaveLength(1);
+      }
+    },
+  );
 
   it("publishes the first score when a legacy deployment has no score attribute", async () => {
     const { repository, store, input } = await setup(backend);
@@ -1506,24 +1514,24 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
     expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(2);
   });
 
-  it.each([
-    "before",
-    "after",
-  ] as const)("rejects a non-finite %s plugin score before saving game state", async (invalid) => {
-    const { repository, store, input } = await setup(backend);
-    const invalidPlugin = {
-      ...plugin,
-      teamScores: (state: State) => ({
-        red: (invalid === "after") === state.solved ? Number.NaN : 0,
-      }),
-    };
-    await expect(dispatchCoordinationOp(store, invalidPlugin, input)).rejects.toThrow(
-      "Invalid coordination score",
-    );
-    expect(await readCoordinationState(store, scope)).toBeUndefined();
-    expect((await repository.getDeployment("red"))?.score).toBe(0);
-    expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(0);
-  });
+  it.each(["before", "after"] as const)(
+    "rejects a non-finite %s plugin score before saving game state",
+    async (invalid) => {
+      const { repository, store, input } = await setup(backend);
+      const invalidPlugin = {
+        ...plugin,
+        teamScores: (state: State) => ({
+          red: (invalid === "after") === state.solved ? Number.NaN : 0,
+        }),
+      };
+      await expect(dispatchCoordinationOp(store, invalidPlugin, input)).rejects.toThrow(
+        "Invalid coordination score",
+      );
+      expect(await readCoordinationState(store, scope)).toBeUndefined();
+      expect((await repository.getDeployment("red"))?.score).toBe(0);
+      expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(0);
+    },
+  );
 
   it("clears an empty delivery left after overlapping partial checkpoints and tolerates replay", async () => {
     const { repository, store } = await setup(backend);

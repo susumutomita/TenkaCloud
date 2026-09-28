@@ -85,23 +85,21 @@ describe.each(["DynamoDB", "SQL"])("shared initialization lease: %s", (backend) 
     });
   });
 
-  it.each([
-    "tenantId",
-    "eventId",
-    "problemId",
-    "runId",
-  ] as const)("isolates the %s dimension", async (dimension) => {
-    const [first, second] = clients(backend);
-    await first.acquireCoordinationInitialization(scope, "first", 1_000, 31_000);
-    expect(
-      await second.acquireCoordinationInitialization(
-        { ...scope, [dimension]: "different" },
-        "second",
-        1_000,
-        31_000,
-      ),
-    ).toEqual({ outcome: "updated" });
-  });
+  it.each(["tenantId", "eventId", "problemId", "runId"] as const)(
+    "isolates the %s dimension",
+    async (dimension) => {
+      const [first, second] = clients(backend);
+      await first.acquireCoordinationInitialization(scope, "first", 1_000, 31_000);
+      expect(
+        await second.acquireCoordinationInitialization(
+          { ...scope, [dimension]: "different" },
+          "second",
+          1_000,
+          31_000,
+        ),
+      ).toEqual({ outcome: "updated" });
+    },
+  );
 
   it("teardown revokes an in-flight initializer before it can create state", async () => {
     const [first, second] = clients(backend);

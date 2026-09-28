@@ -127,14 +127,13 @@ describe("scoringBadge", () => {
     expect(screen.getByText("event_detail.scoring_badge_locked")).toBeInTheDocument();
   });
 
-  it.each<EventStatus>([
-    "ENDED",
-    "ARCHIVED",
-    "TEARDOWN",
-  ])("should show ended for terminal status %s", (status) => {
-    badge({ scoringLocked: false, status });
-    expect(screen.getByText("event_detail.scoring_badge_ended")).toBeInTheDocument();
-  });
+  it.each<EventStatus>(["ENDED", "ARCHIVED", "TEARDOWN"])(
+    "should show ended for terminal status %s",
+    (status) => {
+      badge({ scoringLocked: false, status });
+      expect(screen.getByText("event_detail.scoring_badge_ended")).toBeInTheDocument();
+    },
+  );
 
   it("should show not-started when there is no start time", () => {
     badge({ scoringLocked: false, status: "READY", startsAt: undefined });
