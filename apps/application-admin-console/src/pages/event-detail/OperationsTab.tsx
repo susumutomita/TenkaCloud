@@ -5,6 +5,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { DeployProgressPanel } from "../../components/event-detail/DeployProgressPanel";
 import { EventRescuePanel } from "../../components/event-detail/EventWizardPanel";
 import { isLocalHost } from "../../config";
+import { isEffectivelyEnded } from "../../lib/effective-event-status";
 import { CapacityPanel } from "./CapacityPanel";
 import type { EventTabContentProps } from "./tab-content-props";
 
@@ -53,6 +54,11 @@ export function OperationsTab({
           <DeployProgressPanel
             allDoneCount={counts.allDoneCount}
             completeCount={counts.completeCount}
+            ended={isEffectivelyEnded({
+              status: detail.status,
+              startsAt: detail.startsAt ?? null,
+              endsAt: detail.endsAt ?? null,
+            })}
             failedCount={counts.failedCount}
             inFlightCount={counts.inFlightCount}
             manualRefreshInFlight={manualRefreshInFlight}

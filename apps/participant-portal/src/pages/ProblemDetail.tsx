@@ -109,7 +109,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const t = useT();
   const sessionToken = auth.session?.sessionToken ?? null;
-  const { view, error, refresh } = useTeamView();
+  const { view, error, refresh, leaderboard } = useTeamView();
+  // The header countdown's source, so a plugin sees End Event without waiting for its own clock.
+  const eventEndsAt = leaderboard?.endsAt;
   // Issue #583 Phase 5.B: locale に応じて metadata.i18n[locale] override を被せる。
   // hooks-rule のため early return より前で hook を呼ぶ (= jobId 不在でも順序が変わらない)。
   const { locale } = useI18n();
@@ -236,6 +238,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           endpoints={endpointRegistry.endpoints}
           coordinationApiUrl={config.coordinationApiUrl}
           sessionToken={sessionToken ?? undefined}
+          eventEndsAt={eventEndsAt}
         />
       )}
     </>

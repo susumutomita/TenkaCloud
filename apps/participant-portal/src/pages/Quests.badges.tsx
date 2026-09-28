@@ -1,15 +1,22 @@
 import Badge from "@cloudscape-design/components/badge";
 import type * as React from "react";
 import type { ParticipantScoringInfo } from "../api/portal-client";
-import { findProblemMetadata } from "../data/problems";
+import { findProblemMetadata, resolveLocalizedNarrative } from "../data/problems";
+import type { LocaleCode } from "../i18n";
 import { categoryOf } from "../lib/category";
 import type { TFn } from "./Quests.submission-state";
 
+/**
+ * `scoring` は live team view の申告 (優先)、 catalog の `category` は coordination-only な
+ * 問題 (`scoring` 自体が無い、 暗号 Battle 等) のための fallback。 `categoryOf` の 1 か所に
+ * fallback ロジックを持たせ、 caller ごとに同じ判定を書き直さない。
+ */
 export function categoryBadge(
+  problemId: string,
   scoring: ParticipantScoringInfo | undefined,
   uncategorizedLabel: string,
 ) {
-  const cat = categoryOf(scoring);
+  const cat = categoryOf(scoring, findProblemMetadata(problemId)?.category);
   if (cat === "battle") return <Badge color="red">Battle</Badge>;
   if (cat === "challenge") return <Badge color="blue">Challenge</Badge>;
   return <Badge color="grey">{uncategorizedLabel}</Badge>;
@@ -25,9 +32,15 @@ export function categoryBadge(
  * Issue #2189: the quest list card was showing the raw problem id instead of
  * its display name (the detail screen already shows the name). Falls back to
  * the id when the catalog has no metadata for it (e.g. a stale/removed problem).
+ *
+ * Uses the same `resolveLocalizedNarrative` the problem detail header uses, so the two
+ * screens agree on the English name instead of the card showing the raw ja `name` while
+ * the detail header shows the `i18n.en` override.
  */
-export function questCardTitle(problemId: string): string {
-  return findProblemMetadata(problemId)?.name ?? problemId;
+export function questCardTitle(problemId: string, locale: LocaleCode): string {
+  const metadata = findProblemMetadata(problemId);
+  if (!metadata) return problemId;
+  return resolveLocalizedNarrative(metadata, locale).name;
 }
 
 export function difficultyBadge(problemId: string, t: TFn): React.ReactElement | null {

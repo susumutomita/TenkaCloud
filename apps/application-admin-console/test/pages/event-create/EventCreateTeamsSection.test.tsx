@@ -97,6 +97,27 @@ describe("EventCreateTeamsSection", () => {
     render(<EventCreateTeamsSection {...props({ teamValidation: validation(true) })} />);
     expect(screen.getByText("event_create.duplicate_slug_error")).toBeInTheDocument();
   });
+
+  it("should label a known region, fall back to the raw code for an unknown one, and emit a region change", () => {
+    const p = props({
+      teamTableItems: [
+        { idx: 0, internalSlug: "team-1", awsAccountId: "", region: "ap-northeast-1" },
+        { idx: 1, internalSlug: "team-2", awsAccountId: "", region: "ap-northeast-9" },
+      ] as TeamTableItem[],
+      teamCount: 2,
+    });
+    const { container } = render(<EventCreateTeamsSection {...p} />);
+    expect(screen.getByText("ap-northeast-1 (東京)")).toBeInTheDocument();
+    // A region code the catalog no longer lists falls back to showing the raw code.
+    expect(screen.getByText("ap-northeast-9")).toBeInTheDocument();
+
+    const selects = createWrapper(container).findAllSelects();
+    // Row order per team: [account, region]; row 0's region select is index 1.
+    const regionSelect = selects[1];
+    regionSelect?.openDropdown();
+    regionSelect?.selectOptionByValue("us-east-1", { expandToViewport: true });
+    expect(p.onUpdateTeamRow).toHaveBeenCalledWith(0, { region: "us-east-1" });
+  });
 });
 
 const nonAwsValidation = (provider = "gcp") => ({

@@ -1,3 +1,4 @@
+import type { ProblemCategory as CatalogCategory } from "@tenkacloud/portal-contracts";
 import type { ParticipantProblemView } from "../api/portal-client";
 import { categoryOf } from "../lib/category";
 
@@ -20,6 +21,11 @@ export interface QuestSearchMetadata {
   readonly difficulty?: 1 | 2 | 3 | 4 | 5;
   /** カタログの公開段階。draft の表示切り替え (lib/draft-visibility.ts) と draft badge が読む。 */
   readonly status?: "ready" | "draft" | "deprecated";
+  /**
+   * catalog 側の宣言カテゴリ。 `categoryOf` の fallback 用。 `scoring` が無い coordination-only
+   * な問題 (暗号 Battle 等) を "all" 以外の category filter や集計から漏らさないために使う。
+   */
+  readonly category?: CatalogCategory;
   readonly i18n?: {
     readonly en?: {
       readonly name?: string;
@@ -73,7 +79,10 @@ export function filterQuestProblems(
   const normalizedQuery = filters.query.trim().toLocaleLowerCase();
   return problems.filter((problem) => {
     const metadata = metadataByProblemId.get(problem.problemId);
-    if (filters.category !== "all" && categoryOf(problem.scoring) !== filters.category) {
+    if (
+      filters.category !== "all" &&
+      categoryOf(problem.scoring, metadata?.category) !== filters.category
+    ) {
       return false;
     }
     if (filters.difficulty !== "all" && metadata?.difficulty !== filters.difficulty) {

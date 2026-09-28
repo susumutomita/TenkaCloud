@@ -159,12 +159,14 @@ export function QuestsPage() {
   );
 
   const counts = useMemo(() => {
+    const category = (p: ParticipantProblemView) =>
+      categoryOf(p.scoring, metadataByProblemId.get(p.problemId)?.category);
     return {
       all: catalogProblems.length,
-      battle: catalogProblems.filter((p) => categoryOf(p.scoring) === "battle").length,
-      challenge: catalogProblems.filter((p) => categoryOf(p.scoring) === "challenge").length,
+      battle: catalogProblems.filter((p) => category(p) === "battle").length,
+      challenge: catalogProblems.filter((p) => category(p) === "challenge").length,
     };
-  }, [catalogProblems]);
+  }, [catalogProblems, metadataByProblemId]);
 
   const filteredProblems = useMemo(
     () =>
@@ -238,14 +240,18 @@ export function QuestsPage() {
                   navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
                 }}
               >
-                {questCardTitle(problem.problemId)}
+                {questCardTitle(problem.problemId, locale)}
               </Link>
               {/* [#2696 PR5] local play's one fixed container intro drill:
                * the backend pins it first in the catalog and flags it `recommended`. */}
               {problem.recommended && (
                 <Badge color="green">{t("quests.recommended_start_here")}</Badge>
               )}
-              {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
+              {categoryBadge(
+                problem.problemId,
+                problem.scoring,
+                t("quests.category_uncategorized"),
+              )}
               {difficultyBadge(problem.problemId, t)}
               {awsOnlyBadge(problem.problemId, t)}
               {/* 開発者が toggle で表示した draft を見分ける印。exempt (進行中等) の draft にも付く。 */}
@@ -271,7 +277,7 @@ export function QuestsPage() {
       },
       sections: [],
     }),
-    [navigate, t, progression, gateName, metadataByProblemId],
+    [navigate, t, progression, gateName, metadataByProblemId, locale],
   );
 
   const emptyUnsolved = (

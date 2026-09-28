@@ -85,3 +85,9 @@ const TERMINAL_EVENT_STATUSES: ReadonlySet<EventStatus> = new Set<EventStatus>([
 export function isTerminalEventStatus(status: EventStatus): boolean {
   return TERMINAL_EVENT_STATUSES.has(status);
 }
+
+/** Terminal status, or READY past its end time (rule 3), before anyone presses End Event. */
+export function isEffectivelyEnded(event: EffectiveEventInput, now: Date = new Date()): boolean {
+  const effective = computeEffectiveStatus(event, now);
+  return effective === "ENDED" || effective === "TEARDOWN" || effective === "ARCHIVED";
+}

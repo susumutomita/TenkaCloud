@@ -35,4 +35,18 @@ describe("categoryOf", () => {
   it("should return battle for kind=attack-detection", () => {
     expect(categoryOf({ kind: "attack-detection" })).toBe("battle");
   });
+
+  it("should fall back to the catalog category when scoring is absent (coordination-only Battle, e.g. Cryptography Battle)", () => {
+    expect(categoryOf(undefined, "Battle")).toBe("battle");
+    expect(categoryOf(undefined, "Challenge")).toBe("challenge");
+  });
+
+  it("should still return null when scoring and the catalog category are both absent", () => {
+    expect(categoryOf(undefined, undefined)).toBeNull();
+  });
+
+  it("should prefer the declared scoring kind over the catalog category when both are present", () => {
+    const scoring: ParticipantScoringInfo = { kind: "flag", points: 100 };
+    expect(categoryOf(scoring, "Battle")).toBe("challenge");
+  });
 });

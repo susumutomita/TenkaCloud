@@ -32,7 +32,12 @@ vi.mock("../../src/i18n", () => ({
   // locale-aware, so the stub must expose the locale too.
   useI18n: () => ({ locale: "ja" }),
 }));
-vi.mock("../../src/data/problems", () => ({
+// Partial mock: only the catalog lookups are faked (this suite controls their fixtures
+// directly); `resolveLocalizedNarrative` is the real implementation, so the en/ja name
+// resolution the questCardTitle tests assert on is the production behavior, not a re-stated
+// mock of it.
+vi.mock("../../src/data/problems", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/data/problems")>()),
   findProblemMetadata: mockFindMeta,
   listProblemCatalog: mockListCatalog,
 }));
@@ -324,8 +329,10 @@ beforeEach(() => {
   mockNav.mockClear();
   mockFindMeta.mockReset();
   // difficulty badge: 既知 problem は metadata あり、 それ以外は undefined (= badge 無し)。
+  // `name` は本物の ProblemCatalogEntry では必須 field なので、 questCardTitle の
+  // resolveLocalizedNarrative 経路にも耐える値を入れておく (= problemId と同じ文字列)。
   mockFindMeta.mockImplementation((id: string) =>
-    id === "ctf-unsolved" ? { difficulty: 3 } : undefined,
+    id === "ctf-unsolved" ? { difficulty: 3, name: "ctf-unsolved" } : undefined,
   );
 });
 
@@ -336,12 +343,29 @@ describe("questCardTitle (issue #2189: card must show the display name, not the 
     mockFindMeta.mockImplementation((id: string) =>
       id === "sqli-demo" ? { name: "スタッフ専用ログイン" } : undefined,
     );
-    expect(questCardTitle("sqli-demo")).toBe("スタッフ専用ログイン");
+    expect(questCardTitle("sqli-demo", "ja")).toBe("スタッフ専用ログイン");
   });
 
   it("should fall back to the problem id when no metadata is found", () => {
     mockFindMeta.mockImplementation(() => undefined);
-    expect(questCardTitle("unknown-problem")).toBe("unknown-problem");
+    expect(questCardTitle("unknown-problem", "ja")).toBe("unknown-problem");
+  });
+
+  it("should use the i18n.en override for the en locale, not the raw ja name (Quests card / problem detail parity)", () => {
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "ac26-crypto-battle"
+        ? { name: "暗号バトル", i18n: { en: { name: "Cryptography Battle" } } }
+        : undefined,
+    );
+    expect(questCardTitle("ac26-crypto-battle", "en")).toBe("Cryptography Battle");
+    expect(questCardTitle("ac26-crypto-battle", "ja")).toBe("暗号バトル");
+  });
+
+  it("should fall back to the ja name for the en locale when no i18n override is declared", () => {
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "sqli-demo" ? { name: "スタッフ専用ログイン" } : undefined,
+    );
+    expect(questCardTitle("sqli-demo", "en")).toBe("スタッフ専用ログイン");
   });
 });
 
@@ -557,6 +581,27 @@ describe("QuestsPage", () => {
     // counts in the segmented control: all=4, battle=1, challenge=2
     // (SegmentedControl は segment + responsive select の 2 箇所に text を出す)
     expect(screen.getAllByText(/quests\.filter_all \(4\)/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/quests\.filter_battle \(1\)/).length).toBeGreaterThan(0);
+  });
+
+  it("should classify a coordination-only Battle (no scoring.kind, e.g. Cryptography Battle) via the catalog category instead of Uncategorized", () => {
+    const coordinationBattle = problem({
+      problemId: "crypto-battle",
+      jobId: "job-crypto",
+      scoring: undefined,
+    });
+    mockListCatalog.mockReturnValue([
+      { ...alignedCatalogEntry("crypto-battle", "Cryptography Battle"), category: "Battle" },
+    ]);
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "crypto-battle" ? { category: "Battle" } : undefined,
+    );
+    mockTeamView.mockReturnValue({ view: { problems: [coordinationBattle] }, error: null });
+
+    render(<QuestsPage />);
+
+    expect(screen.getByText("Battle")).toBeInTheDocument();
+    expect(screen.queryByText("quests.category_uncategorized")).not.toBeInTheDocument();
     expect(screen.getAllByText(/quests\.filter_battle \(1\)/).length).toBeGreaterThan(0);
   });
 

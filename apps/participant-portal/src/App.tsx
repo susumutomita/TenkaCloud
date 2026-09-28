@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from "react-router";
 import { AuthProvider } from "./auth/AuthProvider";
 import { RequireAuth } from "./auth/RequireAuth";
 import { ShellLayout } from "./components/AppLayout";
-import { type AppConfig, showsCourseTracks } from "./config";
+import { type AppConfig, hasAwsFeatures, showsCourseTracks } from "./config";
 import { CourseTracksPage } from "./pages/CourseTracks";
 import { JoinPage } from "./pages/Join";
 import { LoginPage } from "./pages/Login";
@@ -60,10 +60,13 @@ export function App({ config }: { config: AppConfig }) {
           path="/problems/:jobId"
           element={guarded(config, <ProblemDetailPage config={config} />)}
         />
-        <Route
-          path="/tools/sso"
-          element={guarded(config, <SsoCredentialsPage config={config} />)}
-        />
+        {/* Unregistered without AWS, so a direct visit falls through to the catch-all. */}
+        {hasAwsFeatures(config) && (
+          <Route
+            path="/tools/sso"
+            element={guarded(config, <SsoCredentialsPage config={config} />)}
+          />
+        )}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>

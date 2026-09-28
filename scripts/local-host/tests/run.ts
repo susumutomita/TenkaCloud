@@ -364,6 +364,31 @@ test("Host/Origin, malformed bodies and private filesystem routes fail closed", 
       request.end();
     });
     assert.equal(wrongHostStatus, 403);
+    const linkFromAnotherSite = {
+      "sec-fetch-site": "cross-site",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-dest": "document",
+    };
+    for (const [role, apiPath] of [
+      ["admin", "/api/events"],
+      ["participant", "/api/portal/me"],
+    ] as const) {
+      const page = await f.request(role, "/login", "GET", undefined, "", linkFromAnotherSite);
+      assert.equal(page.status, 200, `${role} page opens from a link on another site`);
+      const api = await f.request(role, apiPath, "GET", undefined, "", linkFromAnotherSite);
+      assert.equal(api.status, 403, `${role} API is not reachable by a cross-site navigation`);
+      const framed = await f.request(role, "/login", "GET", undefined, "", {
+        ...linkFromAnotherSite,
+        "sec-fetch-dest": "iframe",
+      });
+      assert.equal(framed.status, 403, `${role} page is not embedded by another site`);
+      const scripted = await f.request(role, "/runtime-config.json", "GET", undefined, "", {
+        "sec-fetch-site": "cross-site",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
+      });
+      assert.equal(scripted.status, 403, `${role} configuration is not read by another site`);
+    }
     for (const path of ["/host-key.json", "/state.sqlite", "/assets/%2e%2e/state.sqlite"]) {
       const result = await f.request("admin", path);
       assert.equal(result.status, 404);

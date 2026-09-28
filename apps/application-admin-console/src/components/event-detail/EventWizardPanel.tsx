@@ -44,7 +44,7 @@ export function EventWizardPanel({
             <Badge
               color={i < wizard.stepIndex ? "green" : i === wizard.stepIndex ? "blue" : "grey"}
             >
-              {i + 1}. {step.label}
+              {i + 1}. {t(step.labelKey)}
             </Badge>
           </Fragment>
         ))}
