@@ -266,19 +266,22 @@ organizer or an attacker already running code as that operating-system user.
 
 Fixed limits:
 
-- 1–40 teams per event.
-- At most 40 team/problem environments on one host, across all events.
+- 1–40 teams per event, and at most 40 team/problem pairs per event.
+- At most 40 Docker exercise environments at once on one host, across all events (one
+  exercise-gateway port each). A Battle uses no such environment.
 - A Battle's saved match state must stay under 2 MiB.
 
 One host process serves every request on one thread, so the number of open
-participant browser tabs sets the load. A tab on the Cryptography Battle page
-reads the match every 5 seconds, its team view and the leaderboard every 30
-seconds, and notifications every 60 seconds.
+participant browser tabs sets the load. Measured in a browser, a tab on the
+Cryptography Battle page reads the match every 5 seconds, its team view and the
+leaderboard every 30 seconds, and notifications every 60 seconds.
 
 Measured on an Apple M5 (10 cores, 32 GB), Bun 1.3.11, over loopback, with the
 load generator on the same computer. One event with 40 teams, one organizer
 tab, and the participant tabs spread evenly across the teams, 60 seconds per
 step:
+
+"Latency p95" means 95% of requests were answered within that time.
 
 | Participant tabs | Tabs per team | Latency p95 | Errors | Host CPU (avg) |
 | --- | --- | --- | --- | --- |
@@ -291,13 +294,18 @@ step:
 These numbers are from the start of a match. In a simulated 90-minute match
 where every team published every Order it could, the 40-team match state
 stayed under 100 KB, and one match read took 3.3 ms at the start and 5.5 ms at
-the end (p95). Expect roughly half the headroom above late in a match. The
-table does not cover Wi-Fi or other LAN transport, SQL exercises in Docker, or
-slower computers.
+the end (p95). That suggests, but does not measure, less headroom late in a
+match, possibly about half. The table does not cover Wi-Fi or other LAN
+transport, SQL exercises in Docker, or slower computers. The load generator
+waits for a tab's previous request before sending its next one, while real
+browsers do not, so the point where the host falls behind comes earlier than
+the tool shows.
 
-Each match read also saves the whole match state to SQLite, about 80 KB with 40
-teams. 40 teams with 2 tabs each write about 1.3 MB/s, roughly 7 GB of data
-during a 90-minute match.
+Each match read also saves the whole match state to SQLite: about 50–95 KB
+with 40 teams, growing during the match. Estimated from that size, not
+measured on disk: 40 teams with 2 tabs each write about 1.3 MB/s, roughly 7 GB
+during a 90-minute match. SQLite writes whole pages and later copies its
+write-ahead log into the database file, so the actual disk writes are higher.
 
 Measure your own computer with the same tool. It starts a separate host on
 ports 6274, 6275 and 6300-6339 with a temporary data directory:

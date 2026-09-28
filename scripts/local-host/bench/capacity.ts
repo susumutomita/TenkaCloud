@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { runHttpMode } from "./http-load";
+import { exitOnInterrupt } from "./interrupt";
 import { renderHttpTable, renderStateTable, writeJsonReport } from "./report";
 import { runStateMode } from "./state-sim";
 import { machineInfo } from "./stats";
@@ -107,6 +108,7 @@ async function runHttp(
 }
 
 async function main(): Promise<void> {
+  exitOnInterrupt();
   // `bun run <script> -- --foo` sometimes hands the script a leading literal "--"; strip it so
   // `parseArgs({ strict: true })` does not reject it as a stray positional.
   const rawArgs = process.argv.slice(2);

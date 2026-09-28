@@ -98,6 +98,7 @@ export function spawnHostProcess(options: SpawnHostOptions): Promise<HostProcess
     const partial: PartialHostProcessInfo = {};
     const timeout = setTimeout(() => {
       cleanup();
+      child.kill("SIGKILL");
       reject(
         new Error(
           `Local host did not print its startup banner within ${String(options.readyTimeoutMs)}ms.`,
@@ -129,6 +130,7 @@ export function spawnHostProcess(options: SpawnHostOptions): Promise<HostProcess
       };
       const pid = child.pid;
       if (pid === undefined) {
+        child.kill("SIGKILL");
         reject(new Error("Local host process has no pid."));
         return;
       }

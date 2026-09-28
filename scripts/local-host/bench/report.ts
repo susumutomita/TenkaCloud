@@ -95,6 +95,8 @@ export function renderHttpTable(result: HttpRunResult): string {
       "relative headroom, not an isolated server measurement.",
     "Note: SQLite Δ is a floor — WAL frames are reused after a checkpoint, so file growth can " +
       "understate write volume once checkpoints start.",
+    "Note: a simulated tab skips a tick while its previous request is pending; the portal does " +
+      "not, so near saturation real browsers queue more requests than this reports.",
   ];
   if (result.stoppedEarly)
     notes.push(

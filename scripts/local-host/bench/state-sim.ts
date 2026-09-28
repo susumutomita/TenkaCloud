@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { CompetitionEngine } from "../competition-engine";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { onInterrupt } from "./interrupt";
 import { fileBytesOrZero } from "./process-metrics";
 import {
   apiRequest,
@@ -261,6 +262,8 @@ async function simulateMatch(
       if (stop) return { minutes: state.minutes, totals: state.totals, stoppedReason: stop };
     }
     advanceClock();
+    // In-process calls settle as microtasks; yield once per step so the Ctrl+C handler can run.
+    await new Promise((accept) => setImmediate(accept));
   }
 }
 
@@ -270,16 +273,19 @@ async function runOneStateCase(
 ): Promise<StateRunResult> {
   const started = Date.now();
   const dataDirectory = mkdtempSync(join(tmpdir(), "tenka-bench-state-"));
+  const releaseInterrupt = onInterrupt(() =>
+    rmSync(dataDirectory, { recursive: true, force: true }),
+  );
   const databasePath = join(dataDirectory, "host.sqlite");
   let clock = Date.parse("2026-01-01T00:00:00Z");
   const store = new HostStore(new Database(databasePath));
-  const service = new HostingService(
-    store,
-    new CompetitionEngine(options.repositoryRoot, dataDirectory),
-    HOST_KEY,
-    () => clock,
-  );
   try {
+    const service = new HostingService(
+      store,
+      new CompetitionEngine(options.repositoryRoot, dataDirectory),
+      HOST_KEY,
+      () => clock,
+    );
     const created = await setupMatch(service, teamCount);
     clock += STEP_MS;
     const { minutes, totals, stoppedReason } = await simulateMatch(
@@ -309,6 +315,7 @@ async function runOneStateCase(
   } finally {
     store.close();
     rmSync(dataDirectory, { recursive: true, force: true });
+    releaseInterrupt();
   }
 }
 

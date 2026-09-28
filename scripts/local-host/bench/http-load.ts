@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { parseGatewayPorts } from "../gateway-ports";
 import { assertPortsFree, type HostProcessHandle, spawnHostProcess } from "./host-process";
 import { adminLogin, apiCall, createEvent, expectOk, waitForReady } from "./http-client";
+import { onInterrupt } from "./interrupt";
 import { ProcessSampler, sqliteBytesTotal } from "./process-metrics";
 import { WindowRecorder } from "./recorder";
 import type { HttpRunResult, HttpStepRecord } from "./types";
@@ -31,7 +32,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((accept) => setTimeout(accept, ms));
 }
 
-/** Open-loop timer with a random phase offset; `onDrop` fires if the previous tick is still in flight. */
+/** Fixed-interval timer with a random phase offset. Unlike the portal it skips a tick while the previous request is in flight (`onDrop`). */
 function scheduleTick(
   intervalMs: number,
   tick: () => Promise<void>,
@@ -143,6 +144,10 @@ export async function runHttpMode(options: HttpRunOptions): Promise<HttpRunResul
   const dataDirectory = mkdtempSync(join(tmpdir(), "tenka-bench-http-"));
   let host: HostProcessHandle | undefined;
   const stopTabs: (() => void)[] = [];
+  const releaseInterrupt = onInterrupt(() => {
+    if (host) process.kill(host.pid, "SIGKILL");
+    rmSync(dataDirectory, { recursive: true, force: true });
+  });
   try {
     host = await spawnHostProcess({
       repositoryRoot: options.repositoryRoot,
@@ -261,5 +266,6 @@ export async function runHttpMode(options: HttpRunOptions): Promise<HttpRunResul
     for (const stop of stopTabs) stop();
     await host?.stop();
     rmSync(dataDirectory, { recursive: true, force: true });
+    releaseInterrupt();
   }
 }
