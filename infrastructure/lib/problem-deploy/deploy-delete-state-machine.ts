@@ -86,7 +86,7 @@ type DeployDeleteStatusWriteTask = DynamoUpdateItem | LambdaInvoke;
  * AssumeRole 後に target account の stack を消す。旧 event detail は same-account fallback に倒す。
  *
  * Issue #2291: 在来 CodeBuild 経路と Lambda DeleteStack 経路の 2 branch。
- * default (deployViaLambda=false/未指定) は CodeBuild 定義を **そのまま** 生成するので、既存
+ * prop が false / 未指定なら CodeBuild 定義を **そのまま** 生成するので、既存
  * CFn テンプレと byte 互換 (追加リソースなし)。true のときだけ Lambda + poll 定義。
  */
 export class DeployDeleteStateMachine extends Construct {
@@ -121,7 +121,7 @@ export class DeployDeleteStateMachine extends Construct {
   }
 
   /**
-   * 在来 (default) の CodeBuild `.sync` 定義。`deployViaLambda` が false / 未指定のとき使う。
+   * 在来の CodeBuild `.sync` 定義。`deployViaLambda` が false / 未指定のとき使う (app config の既定は true)。
    * 生成する construct ID / chain は #2291 前と完全一致させ、flag OFF の synth を byte 互換に
    * 保つ (= additive リソースは一切増やさない)。
    */
@@ -217,7 +217,7 @@ export class DeployDeleteStateMachine extends Construct {
 
   /**
    * Issue #2291: Lambda DeleteStack + DescribeStacks poll 定義。
-   * `deployViaLambda === true` のときだけ生成する (additive; default synth には現れない)。
+   * `deployViaLambda === true` のときだけ生成する (app config の既定。false の synth には現れない)。
    *
    * flow: InvokeCfnDelete (DeleteStack を投げて即 return) → Wait → DescribeDeleteStatus (poll) →
    *   RoutePollStatus:

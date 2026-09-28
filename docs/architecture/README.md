@@ -2,6 +2,7 @@
 
 TenkaCloud の開発者向けに、利用者・責務・実行担当・操作順を分けて説明します。
 確認基準は `80dfebb145fc8df2fbe93f3259e5342f75d72da9` の実装です。
+Draw.io の 5 ページは、`308c5dfc91282d3e35bf7098b85df570b5685cb9` の実装と部品・線・名前を突き合わせています。
 図はコードの構造を示し、実 AWS のリソース一覧や稼働実績を示すものではありません。
 
 ## 最初に読む順番
@@ -115,6 +116,16 @@ HTTP サーバーは変更後に `persist()` を待ってから応答します�
 ## 図の更新
 
 物理構成・コンテキスト・ユースケースの正本は [Draw.io](diagrams/system-architecture.drawio) です。
+Draw.io の 5 ページは[生成スクリプト](diagrams/system-architecture.gen.py)で作ります。
+図を直すときは、スクリプトの部品・線・座標を編集してから実行します。
+draw.io で直接編集した内容は、次の実行で上書きされます。
+
+```bash
+python3 docs/architecture/diagrams/system-architecture.gen.py
+```
+
+実行したら draw.io の CLI で PNG に書き出し、ラベルと線が重なっていないかを確かめます。
+
 追加した責務・操作順の図は [Mermaid 原稿](diagrams/)を編集し、developer-portal の `public/docs/assets/architecture/` にある SVG を再生成します。
 再生成は Mermaid CLI 11.17.0 を使用します。ブラウザ実行環境に合わせた Puppeteer 設定を指定してください。
 

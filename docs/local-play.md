@@ -32,7 +32,8 @@ tenkacloud local [--problem <id>] [--database sqlite|turso]
   │     • the verdict is recorded (score / leaderboard / hints / score events)
   │     • --problem <id> pre-starts a runtime; otherwise runtimes start on demand
   ├─ Docker Compose up    the selected problem container (loopback only)
-  │     • per-deploy random secret (FLAG_SEED, …) injected as env
+  │     • per-problem secret (FLAG_SEED, …) injected as env, derived by HMAC from a
+  │       per-deployment key, so it stays the same across restarts until `make local-down`
   │     • the container serves the challenge surface AND POST /verify
   ├─ OR Simulator         a selected cloud / Composite problem (loopback only)
   │     • capability preflight runs before world creation

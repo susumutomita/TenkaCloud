@@ -47,7 +47,8 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     // Issue #2232: was permanently unreachable in production (no CDK_PARAM_* wired it true).
     useBulkDistributedMap: config.useBulkDistributedMap,
     // Issue #2291: DeployCreate を Lambda CreateStack 経路にするか。両モードで同一挙動にするため
-    // base props に集約 (default false = 在来 CodeBuild、CFn テンプレ byte 互換)。
+    // base props に集約 (app config の既定は true = Lambda 経路。`CDK_PARAM_DEPLOY_VIA_LAMBDA=false`
+    // で在来の CodeBuild 経路)。
     deployViaLambda: config.deployViaLambda,
     // Issue #2462: Lite が activation store から解決した pack assets を materialize 用に渡す。
     // 両モードで同一に届くよう base props に集約するが、SaaS (bin/infrastructure.ts) は packAssets を

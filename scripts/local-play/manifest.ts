@@ -128,7 +128,7 @@ export interface ContainerProblem {
   readonly challengeEndpoints: Readonly<Record<string, string>>;
   /** Loopback `/verify` endpoint the container exposes for scoring delegation. */
   readonly verifyUrl: string;
-  /** Env var names filled with a per-deploy random secret (e.g. FLAG_SEED). */
+  /** Env var names filled with a per-problem secret derived by HMAC from the deployment key (e.g. FLAG_SEED). */
   readonly secretEnv: readonly string[];
   /** [#2850] Portal terminal opt-in; absent = this problem has no terminal. */
   readonly terminal?: ContainerTerminal;

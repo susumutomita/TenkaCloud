@@ -554,7 +554,8 @@ export function loadSimulatedCloudProblems(
  * [Issue #2632] The multicloud Simulator problems (Issue #2631) are still being
  * brought up to catalog quality — endpoint URLs, access instructions, and problem
  * framing are inconsistent — so they are gated OFF by default. Opt in per session
- * with `TENKACLOUD_LOCAL_SIMULATOR=1 make local`. The value is parsed strictly
+ * with `TENKACLOUD_LOCAL_SIMULATOR=1 make local-dev` (or `tenkacloud local`); `make local`
+ * does not forward the variable into its container. The value is parsed strictly
  * (only `1` / `true`, case- and whitespace-insensitive) so a stray truthy-looking
  * string cannot silently surface half-ready problems.
  */
