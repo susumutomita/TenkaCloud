@@ -95,7 +95,7 @@
     "typescript-eslint": "^8.46.2"
   },
   "overrides": {
-    "@biomejs/biome": "2.5.3",
+    "@biomejs/biome": "2.5.14",
     "@cloudscape-design/component-toolkit": "1.0.0-beta.171",
     "@hono/node-server": "2.0.12",
     "@vitest/coverage-istanbul": "4.1.9",
