@@ -519,18 +519,18 @@ describe("QuestsPage", () => {
     expect(screen.getByTestId("local-next-problem")).toBeInTheDocument();
   });
 
-  it.each([
-    "mock",
-    "real",
-  ] as const)("should not show local start guidance in %s mode", (cloudMode) => {
-    mockAppConfig.mockReturnValue({ cloudMode });
-    mockListCatalog.mockReturnValue([alignedCatalogEntry("course-first", "Course first")]);
-    mockTeamView.mockReturnValue({ view: { problems: [] }, error: null });
+  it.each(["mock", "real"] as const)(
+    "should not show local start guidance in %s mode",
+    (cloudMode) => {
+      mockAppConfig.mockReturnValue({ cloudMode });
+      mockListCatalog.mockReturnValue([alignedCatalogEntry("course-first", "Course first")]);
+      mockTeamView.mockReturnValue({ view: { problems: [] }, error: null });
 
-    render(<QuestsPage />);
+      render(<QuestsPage />);
 
-    expect(screen.queryByTestId("local-start-guidance")).not.toBeInTheDocument();
-  });
+      expect(screen.queryByTestId("local-start-guidance")).not.toBeInTheDocument();
+    },
+  );
 
   it("should show the problem's display name (not its raw id) on the quest card", () => {
     mockFindMeta.mockImplementation((id: string) =>
@@ -996,19 +996,19 @@ describe("QuestsPage draft visibility toggle", () => {
     expect(screen.queryByText(/drafts_hidden_hint/)).not.toBeInTheDocument();
   });
 
-  it.each([
-    "real",
-    "mock",
-  ] as const)("should keep an operator-deployed draft and drop the dev toggle in %s mode", (cloudMode) => {
-    // cloud mode の一覧は運営が deploy した分だけ。catalog が draft でも隠さないし、
-    // 何も隠れない以上 toggle も出さない。
-    mockAppConfig.mockReturnValue({ cloudMode });
+  it.each(["real", "mock"] as const)(
+    "should keep an operator-deployed draft and drop the dev toggle in %s mode",
+    (cloudMode) => {
+      // cloud mode の一覧は運営が deploy した分だけ。catalog が draft でも隠さないし、
+      // 何も隠れない以上 toggle も出さない。
+      mockAppConfig.mockReturnValue({ cloudMode });
 
-    render(<QuestsPage />);
+      render(<QuestsPage />);
 
-    expect(screen.getByText("draft-quest")).toBeInTheDocument();
-    expect(screen.getByText("ready-quest")).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(screen.queryByText(/drafts_hidden_hint/)).not.toBeInTheDocument();
-  });
+      expect(screen.getByText("draft-quest")).toBeInTheDocument();
+      expect(screen.getByText("ready-quest")).toBeInTheDocument();
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+      expect(screen.queryByText(/drafts_hidden_hint/)).not.toBeInTheDocument();
+    },
+  );
 });

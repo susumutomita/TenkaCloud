@@ -65,50 +65,52 @@ describe.each(["DynamoDB", "SQL"])("atomic coordination closure: %s", (backend) 
     expect((await repo.readCoordinationRun(key))?.closed).toBeUndefined();
   });
 
-  it.each([
-    "default",
-    "reset-run",
-  ])("fences queued first writes during artifact deletion and after teardown (%s)", async (runId) => {
-    const repo = repository();
-    const scope = { ...key, runId };
-    if (runId !== "default") {
-      expect(await startCoordinationRun({ repository: repo }, key, at, runId)).toMatchObject({
-        kind: "started",
+  it.each(["default", "reset-run"])(
+    "fences queued first writes during artifact deletion and after teardown (%s)",
+    async (runId) => {
+      const repo = repository();
+      const scope = { ...key, runId };
+      if (runId !== "default") {
+        expect(await startCoordinationRun({ repository: repo }, key, at, runId)).toMatchObject({
+          kind: "started",
+        });
+      }
+      expect(await repo.writeCoordinationState(scope, 0, 0, at, 0)).toEqual({ outcome: "updated" });
+      const artifacts = fakeArtifactStore();
+      let attempts = 0;
+      vi.spyOn(artifacts, "deleteScope").mockImplementation(async () => {
+        attempts++;
+        expect(await repo.readCoordinationState(scope)).toBeUndefined();
+        expect(await repo.readCoordinationRun(key)).toMatchObject({ runId, closed: true });
+        // The exact review interleaving: state gone, slow artifact I/O, stale tick
+        // tries version 0 so that it would recreate version 1 with a score debt.
+        expect(
+          await repo.writeCoordinationState(scope, structuredClone(pending), 0, at, 0),
+        ).toEqual({
+          outcome: "conflict",
+        });
+        expect(
+          await repo.writeCoordinationState(
+            { ...scope, runId: "default" },
+            structuredClone(pending),
+            0,
+            at,
+            0,
+          ),
+        ).toEqual({ outcome: "conflict" });
+        return 0;
       });
-    }
-    expect(await repo.writeCoordinationState(scope, 0, 0, at, 0)).toEqual({ outcome: "updated" });
-    const artifacts = fakeArtifactStore();
-    let attempts = 0;
-    vi.spyOn(artifacts, "deleteScope").mockImplementation(async () => {
-      attempts++;
-      expect(await repo.readCoordinationState(scope)).toBeUndefined();
+      await deleteAllCoordinationRuns({ repository: repo, artifacts }, key);
+      expect(attempts).toBeGreaterThan(0);
+      await repo.deleteCoordinationRun(key);
+      await repo.sweepExpiredCoordinationState(Number.MAX_SAFE_INTEGER);
       expect(await repo.readCoordinationRun(key)).toMatchObject({ runId, closed: true });
-      // The exact review interleaving: state gone, slow artifact I/O, stale tick
-      // tries version 0 so that it would recreate version 1 with a score debt.
       expect(await repo.writeCoordinationState(scope, structuredClone(pending), 0, at, 0)).toEqual({
         outcome: "conflict",
       });
-      expect(
-        await repo.writeCoordinationState(
-          { ...scope, runId: "default" },
-          structuredClone(pending),
-          0,
-          at,
-          0,
-        ),
-      ).toEqual({ outcome: "conflict" });
-      return 0;
-    });
-    await deleteAllCoordinationRuns({ repository: repo, artifacts }, key);
-    expect(attempts).toBeGreaterThan(0);
-    await repo.deleteCoordinationRun(key);
-    await repo.sweepExpiredCoordinationState(Number.MAX_SAFE_INTEGER);
-    expect(await repo.readCoordinationRun(key)).toMatchObject({ runId, closed: true });
-    expect(await repo.writeCoordinationState(scope, structuredClone(pending), 0, at, 0)).toEqual({
-      outcome: "conflict",
-    });
-    expect(await repo.readCoordinationState(scope)).toBeUndefined();
-  });
+      expect(await repo.readCoordinationState(scope)).toBeUndefined();
+    },
+  );
 
   it("keeps a delivery that wins immediately before closure, then closes after acknowledgement", async () => {
     const repo = repository();

@@ -85,18 +85,16 @@ describe("ProblemTerminals: attach (#2846)", () => {
     });
   });
 
-  it.each([
-    "stopped",
-    "starting",
-    "error",
-    undefined,
-  ])("should refuse to attach while the container is %s", (status) => {
-    const { terminals } = makeTerminals({ statusOf: () => status });
-    expect(terminals.attach("a", collector().handlers)).toEqual({
-      ok: false,
-      reason: "not_running",
-    });
-  });
+  it.each(["stopped", "starting", "error", undefined])(
+    "should refuse to attach while the container is %s",
+    (status) => {
+      const { terminals } = makeTerminals({ statusOf: () => status });
+      expect(terminals.attach("a", collector().handlers)).toEqual({
+        ok: false,
+        reason: "not_running",
+      });
+    },
+  );
 
   it("should cap concurrent sessions per problem", () => {
     const { terminals } = makeTerminals();

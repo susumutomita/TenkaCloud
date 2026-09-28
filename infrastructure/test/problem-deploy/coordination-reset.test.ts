@@ -175,16 +175,16 @@ describe("resetCoordinationRun (#3153)", () => {
     expect(ddbSend.mock.calls.every(([cmd]) => cmd instanceof GetCommand)).toBe(true);
   });
 
-  it.each([
-    null,
-    { tenantId: "another-tenant", status: "READY" },
-  ])("should not reset a missing or foreign event despite stale deployment rows: %j", async (event) => {
-    const { shared, ddbSend } = buildShared([deployment("battle-a", "team-1")], event);
-    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
-      kind: "not_found",
-    });
-    expect(ddbSend.mock.calls.every(([cmd]) => cmd instanceof GetCommand)).toBe(true);
-  });
+  it.each([null, { tenantId: "another-tenant", status: "READY" }])(
+    "should not reset a missing or foreign event despite stale deployment rows: %j",
+    async (event) => {
+      const { shared, ddbSend } = buildShared([deployment("battle-a", "team-1")], event);
+      expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+        kind: "not_found",
+      });
+      expect(ddbSend.mock.calls.every(([cmd]) => cmd instanceof GetCommand)).toBe(true);
+    },
+  );
 
   it.each([
     { status: "DELETING" },
@@ -206,23 +206,23 @@ describe("resetCoordinationRun (#3153)", () => {
     ).toBeUndefined();
   });
 
-  it.each([
-    "PENDING",
-    "DEPLOYING",
-    "COMPLETE",
-    "FAILED",
-  ])("should allow a new run while a matching %s deployment remains playable", async (status) => {
-    const { shared, getItem } = buildShared([
-      { ...deployment("battle-a", "team-1"), status: "DELETED" },
-      { ...deployment("battle-a", "team-2"), status },
-    ]);
-    expect((await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).kind).toBe("ok");
-    expect(await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" })).toMatchObject(
-      {
+  it.each(["PENDING", "DEPLOYING", "COMPLETE", "FAILED"])(
+    "should allow a new run while a matching %s deployment remains playable",
+    async (status) => {
+      const { shared, getItem } = buildShared([
+        { ...deployment("battle-a", "team-1"), status: "DELETED" },
+        { ...deployment("battle-a", "team-2"), status },
+      ]);
+      expect((await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).kind).toBe(
+        "ok",
+      );
+      expect(
+        await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+      ).toMatchObject({
         pendingInitialization: true,
-      },
-    );
-  });
+      });
+    },
+  );
 
   it("should keep the current run and return conflict while score delivery is pending", async () => {
     const { shared, ddbSend, getItem, putItem } = buildShared([deployment("battle-a", "team-1")]);

@@ -162,25 +162,25 @@ describe("self-registration with real SQLite repositories", () => {
     expect(await status(1)).toMatchObject({ state: "ready", teamLoginKey: "1".repeat(43) });
   });
 
-  it.each([
-    "IN_PROGRESS",
-    "FAILED",
-  ] as const)("withholds the login key when a newer %s retry follows a completed deployment", async (retryStatus) => {
-    expect(await claim(1)).toHaveProperty("teamLoginKey");
-    jobs.push({
-      ...present(jobs[0]),
-      jobId: "newer-retry",
-      status: retryStatus,
-      createdAt: "2026-09-22T09:01:00.000Z",
-    });
-    const progress = await status(1);
-    expect(progress).toMatchObject({
-      state: retryStatus === "FAILED" ? "failed" : "preparing",
-      ready: 0,
-      total: 1,
-    });
-    expect(progress).not.toHaveProperty("teamLoginKey");
-  });
+  it.each(["IN_PROGRESS", "FAILED"] as const)(
+    "withholds the login key when a newer %s retry follows a completed deployment",
+    async (retryStatus) => {
+      expect(await claim(1)).toHaveProperty("teamLoginKey");
+      jobs.push({
+        ...present(jobs[0]),
+        jobId: "newer-retry",
+        status: retryStatus,
+        createdAt: "2026-09-22T09:01:00.000Z",
+      });
+      const progress = await status(1);
+      expect(progress).toMatchObject({
+        state: retryStatus === "FAILED" ? "failed" : "preparing",
+        ready: 0,
+        total: 1,
+      });
+      expect(progress).not.toHaveProperty("teamLoginKey");
+    },
+  );
 
   it("accepts claims during redeployment but withholds credentials from stale completed rows", async () => {
     await events.putEvent({
@@ -222,25 +222,25 @@ describe("self-registration with real SQLite repositories", () => {
     });
   });
 
-  it.each([
-    "FAILED",
-    "missing",
-  ] as const)("preserves %s deployment evidence while the event is deploying", async (deploymentState) => {
-    await events.putEvent({
-      ...present(await events.getEvent(event.tenantId, event.eventId)),
-      status: "DEPLOYING",
-    });
-    await claim(1);
-    if (deploymentState === "missing") jobs = [];
-    else jobs[0] = { ...present(jobs[0]), status: deploymentState };
-    const progress = await status(1);
-    expect(progress).toMatchObject({
-      state: deploymentState === "missing" ? "unprepared" : "failed",
-      ready: 0,
-      total: 1,
-    });
-    expect(progress).not.toHaveProperty("teamLoginKey");
-  });
+  it.each(["FAILED", "missing"] as const)(
+    "preserves %s deployment evidence while the event is deploying",
+    async (deploymentState) => {
+      await events.putEvent({
+        ...present(await events.getEvent(event.tenantId, event.eventId)),
+        status: "DEPLOYING",
+      });
+      await claim(1);
+      if (deploymentState === "missing") jobs = [];
+      else jobs[0] = { ...present(jobs[0]), status: deploymentState };
+      const progress = await status(1);
+      expect(progress).toMatchObject({
+        state: deploymentState === "missing" ? "unprepared" : "failed",
+        ready: 0,
+        total: 1,
+      });
+      expect(progress).not.toHaveProperty("teamLoginKey");
+    },
+  );
 
   it("waits for a replacement when READY and GSI2 still expose a deleted COMPLETE row", async () => {
     const stale = present(jobs[0]);
@@ -271,22 +271,21 @@ describe("self-registration with real SQLite repositories", () => {
     });
   });
 
-  it.each([
-    "PENDING",
-    "IN_PROGRESS",
-    "FAILED",
-  ] as const)("uses the primary %s status when the team index still reports COMPLETE", async (primaryStatus) => {
-    const stale = present(jobs[0]);
-    jobs[0] = { ...stale, status: primaryStatus };
-    vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue([stale]);
-    const progress = await claim(1);
-    expect(progress).toMatchObject({
-      state: primaryStatus === "FAILED" ? "failed" : "preparing",
-      ready: 0,
-      total: 1,
-    });
-    expect(progress).not.toHaveProperty("teamLoginKey");
-  });
+  it.each(["PENDING", "IN_PROGRESS", "FAILED"] as const)(
+    "uses the primary %s status when the team index still reports COMPLETE",
+    async (primaryStatus) => {
+      const stale = present(jobs[0]);
+      jobs[0] = { ...stale, status: primaryStatus };
+      vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue([stale]);
+      const progress = await claim(1);
+      expect(progress).toMatchObject({
+        state: primaryStatus === "FAILED" ? "failed" : "preparing",
+        ready: 0,
+        total: 1,
+      });
+      expect(progress).not.toHaveProperty("teamLoginKey");
+    },
+  );
 
   it.each([
     { tenantId: "other-tenant" },

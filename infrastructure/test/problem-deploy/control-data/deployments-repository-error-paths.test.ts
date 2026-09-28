@@ -223,13 +223,13 @@ describe("SqlDeploymentsLifecycle error paths", () => {
     expect(outcome).toEqual({ outcome: "conflict" });
   });
 
-  it.each([
-    ["SQL", makeSqlRepo] as const,
-    ["DynamoDB", makeDdbRepo] as const,
-  ])("should return updated for an empty bulk-create entry list (%s)", async (_label, make) => {
-    const outcome = await make().createBulkDeployments("tenant-a", []);
-    expect(outcome).toEqual({ outcome: "updated" });
-  });
+  it.each([["SQL", makeSqlRepo] as const, ["DynamoDB", makeDdbRepo] as const])(
+    "should return updated for an empty bulk-create entry list (%s)",
+    async (_label, make) => {
+      const outcome = await make().createBulkDeployments("tenant-a", []);
+      expect(outcome).toEqual({ outcome: "updated" });
+    },
+  );
 
   it("should return not_found when marking create in progress on a missing job", async () => {
     const outcome = await makeSqlRepo().markCreateInProgress("ghost", AT);
@@ -463,33 +463,33 @@ describe("SqlDeploymentsScoring error paths", () => {
     expect(outcome).toEqual({ outcome: "conflict" });
   });
 
-  it.each([
-    ["SQL", makeSqlRepo] as const,
-    ["DynamoDB", makeDdbRepo] as const,
-  ])("should return no score events when maxPages is zero (%s)", async (_label, make) => {
-    const repo = make();
-    await repo.putDeployment(deployment({ jobId: "se-1" }));
-    expect(await repo.listScoreEvents("se-1", { pageSize: 5, maxPages: 0 })).toEqual([]);
-  });
+  it.each([["SQL", makeSqlRepo] as const, ["DynamoDB", makeDdbRepo] as const])(
+    "should return no score events when maxPages is zero (%s)",
+    async (_label, make) => {
+      const repo = make();
+      await repo.putDeployment(deployment({ jobId: "se-1" }));
+      expect(await repo.listScoreEvents("se-1", { pageSize: 5, maxPages: 0 })).toEqual([]);
+    },
+  );
 
-  it.each([
-    ["SQL", makeSqlRepo] as const,
-    ["DynamoDB", makeDdbRepo] as const,
-  ])("should default a payload-less inbox event to an empty payload (%s)", async (_label, make) => {
-    const repo = make();
-    await repo.putDeployment(deployment({ jobId: "ib-1" }));
-    await repo.appendInboxEvent("ib-1", "01ULID", {
-      eventId: "e1",
-      fromTeamId: "t2",
-      fromJobId: "j2",
-      kind: "cast",
-      occurredAt: AT,
-    });
-    const events = await repo.listInboxEventsInRange("ib-1", "INBOX#", "INBOX#￿");
-    expect(events).toHaveLength(1);
-    expect(events[0]?.kind).toBe("cast");
-    expect(events[0]?.payload).toEqual({});
-  });
+  it.each([["SQL", makeSqlRepo] as const, ["DynamoDB", makeDdbRepo] as const])(
+    "should default a payload-less inbox event to an empty payload (%s)",
+    async (_label, make) => {
+      const repo = make();
+      await repo.putDeployment(deployment({ jobId: "ib-1" }));
+      await repo.appendInboxEvent("ib-1", "01ULID", {
+        eventId: "e1",
+        fromTeamId: "t2",
+        fromJobId: "j2",
+        kind: "cast",
+        occurredAt: AT,
+      });
+      const events = await repo.listInboxEventsInRange("ib-1", "INBOX#", "INBOX#￿");
+      expect(events).toHaveLength(1);
+      expect(events[0]?.kind).toBe("cast");
+      expect(events[0]?.payload).toEqual({});
+    },
+  );
 });
 
 describe("SqlDeploymentsCoordination", () => {

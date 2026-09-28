@@ -114,46 +114,47 @@ const VARIANTS: ReadonlyArray<readonly [name: string, synth: () => Template]> = 
   ["lite mode (no eventBusArn)", () => synthLite("TestStackLite", "test-source-bucket")],
 ];
 
-describe.each(
-  VARIANTS,
-)("ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — %s", (_name, synth) => {
-  it(
-    "should keep the exact logical ID inventory (REPLACE/DELETE guard)",
-    () => {
-      expect(logicalIds(synth())).toMatchSnapshot();
-    },
-    SYNTH_TIMEOUT_MS,
-  );
+describe.each(VARIANTS)(
+  "ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — %s",
+  (_name, synth) => {
+    it(
+      "should keep the exact logical ID inventory (REPLACE/DELETE guard)",
+      () => {
+        expect(logicalIds(synth())).toMatchSnapshot();
+      },
+      SYNTH_TIMEOUT_MS,
+    );
 
-  it(
-    "should keep the complete CfnOutputs surface",
-    () => {
-      expect(sortByKey(synth().findOutputs("*"))).toMatchSnapshot();
-    },
-    SYNTH_TIMEOUT_MS,
-  );
+    it(
+      "should keep the complete CfnOutputs surface",
+      () => {
+        expect(sortByKey(synth().findOutputs("*"))).toMatchSnapshot();
+      },
+      SYNTH_TIMEOUT_MS,
+    );
 
-  it(
-    "should keep every Lambda function's environment variables",
-    () => {
-      expect(lambdaEnvironments(synth())).toMatchSnapshot();
-    },
-    SYNTH_TIMEOUT_MS,
-  );
+    it(
+      "should keep every Lambda function's environment variables",
+      () => {
+        expect(lambdaEnvironments(synth())).toMatchSnapshot();
+      },
+      SYNTH_TIMEOUT_MS,
+    );
 
-  it(
-    "should keep every IAM role and policy document",
-    () => {
-      expect(iamSurface(synth())).toMatchSnapshot();
-    },
-    SYNTH_TIMEOUT_MS,
-  );
+    it(
+      "should keep every IAM role and policy document",
+      () => {
+        expect(iamSurface(synth())).toMatchSnapshot();
+      },
+      SYNTH_TIMEOUT_MS,
+    );
 
-  it(
-    "should keep every Lambda function's wiring (role binding, handler, runtime, sizing)",
-    () => {
-      expect(lambdaWiring(synth())).toMatchSnapshot();
-    },
-    SYNTH_TIMEOUT_MS,
-  );
-});
+    it(
+      "should keep every Lambda function's wiring (role binding, handler, runtime, sizing)",
+      () => {
+        expect(lambdaWiring(synth())).toMatchSnapshot();
+      },
+      SYNTH_TIMEOUT_MS,
+    );
+  },
+);

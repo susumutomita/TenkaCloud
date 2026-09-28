@@ -174,40 +174,37 @@ describe("registration admin tenant and role boundaries", () => {
     expect(resolve).not.toHaveBeenCalled();
   });
 
-  it.each([
-    "closed",
-    "invalid_pool",
-    "not_ready",
-    "login_key_missing",
-    "conflict",
-  ] as const)("returns the business error %s without changing registration settings", async (code) => {
-    const f = await fixture();
-    const event = await f.deps.events.getEvent(fixtureTenantId, fixtureEventId);
-    if (!event?.registration) throw new Error("fixture registration missing");
-    let teamIds = event.registration.teamIds;
-    if (code === "closed") {
-      await f.deps.events.putEvent({ ...event, expiresAt: 1 });
-    } else if (code === "invalid_pool") {
-      teamIds = [teamIds[0], teamIds[0]];
-    } else if (code === "not_ready") {
-      await f.sql.run("DELETE FROM deployments");
-    } else if (code === "login_key_missing") {
-      await f.sql.run("UPDATE teams SET payload = json_remove(payload, '$.teamLoginKey')");
-    } else {
-      await f.sql.run(
-        "CREATE TRIGGER reject_registration BEFORE UPDATE ON events BEGIN SELECT RAISE(IGNORE); END",
+  it.each(["closed", "invalid_pool", "not_ready", "login_key_missing", "conflict"] as const)(
+    "returns the business error %s without changing registration settings",
+    async (code) => {
+      const f = await fixture();
+      const event = await f.deps.events.getEvent(fixtureTenantId, fixtureEventId);
+      if (!event?.registration) throw new Error("fixture registration missing");
+      let teamIds = event.registration.teamIds;
+      if (code === "closed") {
+        await f.deps.events.putEvent({ ...event, expiresAt: 1 });
+      } else if (code === "invalid_pool") {
+        teamIds = [teamIds[0], teamIds[0]];
+      } else if (code === "not_ready") {
+        await f.sql.run("DELETE FROM deployments");
+      } else if (code === "login_key_missing") {
+        await f.sql.run("UPDATE teams SET payload = json_remove(payload, '$.teamLoginKey')");
+      } else {
+        await f.sql.run(
+          "CREATE TRIGGER reject_registration BEFORE UPDATE ON events BEGIN SELECT RAISE(IGNORE); END",
+        );
+      }
+      const response = await f.app.request(path, {
+        ...close,
+        body: JSON.stringify({ enabled: true, teamIds, closesAt: event.registration.closesAt }),
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: code });
+      expect((await f.deps.events.getEvent(fixtureTenantId, fixtureEventId))?.registration).toEqual(
+        event.registration,
       );
-    }
-    const response = await f.app.request(path, {
-      ...close,
-      body: JSON.stringify({ enabled: true, teamIds, closesAt: event.registration.closesAt }),
-    });
-    expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ error: code });
-    expect((await f.deps.events.getEvent(fixtureTenantId, fixtureEventId))?.registration).toEqual(
-      event.registration,
-    );
-  });
+    },
+  );
 
   it("returns not_found for a deleted event on both read and update routes", async () => {
     const f = await fixture();

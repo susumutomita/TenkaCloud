@@ -103,27 +103,29 @@ describe("writePackScaffold (#2089) — validator-passing output", () => {
     expect(result.problemIds.length).toBe(1);
   });
 
-  it.each(
-    SCAFFOLD_RUNTIMES,
-  )("should scaffold a %s pack that validates with zero diagnostics", (runtime) => {
-    writePackScaffold(targetRoot, { packId: "com.example.starter", runtime });
+  it.each(SCAFFOLD_RUNTIMES)(
+    "should scaffold a %s pack that validates with zero diagnostics",
+    (runtime) => {
+      writePackScaffold(targetRoot, { packId: "com.example.starter", runtime });
 
-    const result = validatePackDirectory(targetRoot);
+      const result = validatePackDirectory(targetRoot);
 
-    expect(result.diagnostics).toEqual([]);
-    expect(result.ok).toBe(true);
-  });
+      expect(result.diagnostics).toEqual([]);
+      expect(result.ok).toBe(true);
+    },
+  );
 
-  it.each(
-    SCAFFOLD_RUNTIMES,
-  )("should write the right provider artifact placeholder for %s", (runtime) => {
-    writePackScaffold(targetRoot, { packId: "com.example.starter", runtime });
+  it.each(SCAFFOLD_RUNTIMES)(
+    "should write the right provider artifact placeholder for %s",
+    (runtime) => {
+      writePackScaffold(targetRoot, { packId: "com.example.starter", runtime });
 
-    const tree = readTree(targetRoot);
-    const artifact = ARTIFACT_BY_RUNTIME[runtime];
-    const hasArtifact = [...tree.keys()].some((rel) => rel.endsWith(`/${artifact}`));
-    expect(hasArtifact).toBe(true);
-  });
+      const tree = readTree(targetRoot);
+      const artifact = ARTIFACT_BY_RUNTIME[runtime];
+      const hasArtifact = [...tree.keys()].some((rel) => rel.endsWith(`/${artifact}`));
+      expect(hasArtifact).toBe(true);
+    },
+  );
 
   it("should declare the chosen runtime in both the manifest and the problem metadata", () => {
     writePackScaffold(targetRoot, { packId: "com.example.starter", runtime: "azure/bicep" });

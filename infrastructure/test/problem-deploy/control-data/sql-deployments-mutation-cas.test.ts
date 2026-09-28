@@ -81,44 +81,44 @@ async function publishCoordinationDelivery(repository: SqlDeploymentsRepository)
 }
 
 describe("SQL deployment payload CAS (#3194)", () => {
-  it.each([
-    "hint",
-    "kind",
-  ] as const)("should preserve coordination score, delivery identity and history across a racing %s update", async (kind) => {
-    const sql = makeSqliteExecutor();
-    const winner = new SqlDeploymentsRepository(sql);
-    await winner.putDeployment(DEPLOYMENT);
-    await saveCoordinationDelivery(winner);
-    const racing = new SqlDeploymentsRepository(
-      raceAfterRead(sql, async (reads) => {
-        if (reads === 1) await publishCoordinationDelivery(winner);
-      }),
-    );
+  it.each(["hint", "kind"] as const)(
+    "should preserve coordination score, delivery identity and history across a racing %s update",
+    async (kind) => {
+      const sql = makeSqliteExecutor();
+      const winner = new SqlDeploymentsRepository(sql);
+      await winner.putDeployment(DEPLOYMENT);
+      await saveCoordinationDelivery(winner);
+      const racing = new SqlDeploymentsRepository(
+        raceAfterRead(sql, async (reads) => {
+          if (reads === 1) await publishCoordinationDelivery(winner);
+        }),
+      );
 
-    const outcome =
-      kind === "hint"
-        ? await racing.applyHintPenalty(DEPLOYMENT.jobId, { hintIndex: 0, penaltyApplied: 2 }, AT)
-        : await racing.applyKindScoringResult(DEPLOYMENT.jobId, { scoreDelta: 5 }, AT);
+      const outcome =
+        kind === "hint"
+          ? await racing.applyHintPenalty(DEPLOYMENT.jobId, { hintIndex: 0, penaltyApplied: 2 }, AT)
+          : await racing.applyKindScoringResult(DEPLOYMENT.jobId, { scoreDelta: 5 }, AT);
 
-    expect(outcome.outcome).toBe("updated");
-    const expectedScore = kind === "hint" ? 28 : 35;
-    expect(await winner.getDeployment(DEPLOYMENT.jobId)).toMatchObject({
-      score: expectedScore,
-      coordinationSubtotal: 30,
-      coordinationScoreRunId: "default",
-      coordinationScoreVersion: 1,
-    });
-    if (kind === "hint") {
-      expect(outcome).toMatchObject({ record: { score: 28, coordinationSubtotal: 30 } });
-    }
-    expect(
-      await sql.get("SELECT score FROM deployments WHERE job_id = ?", [DEPLOYMENT.jobId]),
-    ).toEqual({ score: expectedScore });
-    expect(await winner.listScoreEvents(DEPLOYMENT.jobId, { pageSize: 10 })).toMatchObject([
-      { source: "coordination", points: 30, reason: "cipher" },
-    ]);
-    expect(await winner.listByTeamLoginKey("participant-key")).toHaveLength(1);
-  });
+      expect(outcome.outcome).toBe("updated");
+      const expectedScore = kind === "hint" ? 28 : 35;
+      expect(await winner.getDeployment(DEPLOYMENT.jobId)).toMatchObject({
+        score: expectedScore,
+        coordinationSubtotal: 30,
+        coordinationScoreRunId: "default",
+        coordinationScoreVersion: 1,
+      });
+      if (kind === "hint") {
+        expect(outcome).toMatchObject({ record: { score: 28, coordinationSubtotal: 30 } });
+      }
+      expect(
+        await sql.get("SELECT score FROM deployments WHERE job_id = ?", [DEPLOYMENT.jobId]),
+      ).toEqual({ score: expectedScore });
+      expect(await winner.listScoreEvents(DEPLOYMENT.jobId, { pageSize: 10 })).toMatchObject([
+        { source: "coordination", points: 30, reason: "cipher" },
+      ]);
+      expect(await winner.listByTeamLoginKey("participant-key")).toHaveLength(1);
+    },
+  );
 
   it("should re-evaluate the flag predicate after another request accepts the same flag", async () => {
     const sql = makeSqliteExecutor();

@@ -130,114 +130,116 @@ async function setup(backend: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe.each(["DynamoDB", "SQL"])("teardown retains committed score history: %s", (backend) => {
-  it.each([
-    "bulk",
-    "single",
-  ])("continues %s resource teardown during delivery failure, then settles the deleted deployment exactly once", async (mode) => {
-    const { repository, store, scope, shared, send, input, artifacts, deleteArtifacts } =
-      await setup(backend);
-    const publish = vi
-      .spyOn(repository, "publishCoordinationScore")
-      .mockRejectedValue(new Error("delivery backend unavailable"));
-    expect(await dispatchCoordinationOp(store, plugin, input)).toEqual({
-      kind: "ok",
-      projection: 30,
-    });
-    const pending = await readCoordinationState(store, scope);
-    expect(pending?.pendingScores).toMatchObject({ teams: { red: { before: 0, score: 30 } } });
-    if (mode === "bulk") {
-      expect(
-        await bulkTeardownEvent(shared, key.tenantId, key.eventId, Date.parse(teardownAt)),
-      ).toEqual({
+  it.each(["bulk", "single"])(
+    "continues %s resource teardown during delivery failure, then settles the deleted deployment exactly once",
+    async (mode) => {
+      const { repository, store, scope, shared, send, input, artifacts, deleteArtifacts } =
+        await setup(backend);
+      const publish = vi
+        .spyOn(repository, "publishCoordinationScore")
+        .mockRejectedValue(new Error("delivery backend unavailable"));
+      expect(await dispatchCoordinationOp(store, plugin, input)).toEqual({
         kind: "ok",
-        result: { eventId: key.eventId, enqueued: 1, skipped: 0, failed: 0 },
+        projection: 30,
       });
-    } else {
-      expect(await requestTeardown(shared, key.tenantId, "red", Date.parse(teardownAt))).toEqual({
-        kind: "accepted",
-        previousStatus: "COMPLETE",
+      const pending = await readCoordinationState(store, scope);
+      expect(pending?.pendingScores).toMatchObject({ teams: { red: { before: 0, score: 30 } } });
+      if (mode === "bulk") {
+        expect(
+          await bulkTeardownEvent(shared, key.tenantId, key.eventId, Date.parse(teardownAt)),
+        ).toEqual({
+          kind: "ok",
+          result: { eventId: key.eventId, enqueued: 1, skipped: 0, failed: 0 },
+        });
+      } else {
+        expect(await requestTeardown(shared, key.tenantId, "red", Date.parse(teardownAt))).toEqual({
+          kind: "accepted",
+          previousStatus: "COMPLETE",
+        });
+      }
+      expect(send).toHaveBeenCalledOnce();
+      expect(send.mock.calls[0]?.[0].input.Entries?.[0]?.DetailType).toBe("DeployDeleteRequested");
+      expect((await repository.getDeployment("red"))?.status).toBe("DELETING");
+      expect(await readCoordinationState(store, scope)).toEqual(pending);
+      expect((await repository.readCoordinationRun(key))?.runId).toBe(scope.runId);
+      expect(await repository.readCoordinationMatchSecret(scope)).toBe("fixture-secret");
+      expect(deleteArtifacts).not.toHaveBeenCalled();
+      expect(
+        await cleanupCoordinationStateIfLastDeployment({ repository, artifacts }, key),
+      ).toEqual({
+        kind: "pending_scores",
       });
-    }
-    expect(send).toHaveBeenCalledOnce();
-    expect(send.mock.calls[0]?.[0].input.Entries?.[0]?.DetailType).toBe("DeployDeleteRequested");
-    expect((await repository.getDeployment("red"))?.status).toBe("DELETING");
-    expect(await readCoordinationState(store, scope)).toEqual(pending);
-    expect((await repository.readCoordinationRun(key))?.runId).toBe(scope.runId);
-    expect(await repository.readCoordinationMatchSecret(scope)).toBe("fixture-secret");
-    expect(deleteArtifacts).not.toHaveBeenCalled();
-    expect(await cleanupCoordinationStateIfLastDeployment({ repository, artifacts }, key)).toEqual({
-      kind: "pending_scores",
-    });
-    // Cloud teardown completes while score delivery is still down.
-    await repository.markDeleted("red", teardownAt);
-    publish.mockRestore();
-    const importer = vi.fn(async () => ({ default: plugin }));
-    const invoke = vi.fn<CoordinationTickInvoker>(async (_functionName, batch) => {
-      await handleCoordinationTickBatch(
-        { store, importer, config: { battle: { plugin: "battle" } } },
-        batch,
-      );
-    });
-    const scanAndDrain = async () => {
-      // A fresh pass per scheduled invocation: no state from the preceding scan.
-      const pass = createCoordinationTickPass(
-        invoke,
-        "fixture-dispatcher",
-        new Set([key.problemId]),
-        repository,
-      );
-      const complete: DeploymentRecord[] = [];
-      const recovery: CoordinationStateScope[] = [];
-      await repository.forEachCompleteDeploymentPage(
-        async (items) => {
-          complete.push(...items);
-          pass.collect(items, teardownAt);
-        },
-        async (scopes) => {
-          recovery.push(...scopes);
-          pass.collectRecovery(scopes);
-        },
-      );
-      // Only the durable recovery marker can find this event; no COMPLETE row remains.
-      expect(complete).toEqual([]);
-      await pass.run(Date.parse(teardownAt), teardownAt);
-      return recovery;
-    };
-    expect(await scanAndDrain()).toEqual([scope]);
-    expect(invoke).toHaveBeenCalledOnce();
-    expect(invoke.mock.calls[0]?.[1].targets).toEqual([
-      expect.objectContaining({
-        tenantId: key.tenantId,
-        eventId: key.eventId,
-        moduleRef: key.problemId,
-        drainOnly: true,
-      }),
-    ]);
-    expect(importer).not.toHaveBeenCalled();
-    const settled = await readCoordinationState(store, scope);
-    expect(settled).toMatchObject({
-      state: pending?.state,
-      version: pending?.version,
-      expiresAt: pending?.expiresAt,
-    });
-    expect(settled?.pendingScores).toBeUndefined();
-    expect(await scanAndDrain()).toEqual([]);
-    expect(invoke).toHaveBeenCalledOnce();
-    expect((await repository.getDeployment("red"))?.score).toBe(30);
-    expect((await repository.getDeployment("red"))?.status).toBe("DELETED");
-    const history = await repository.listScoreEvents("red", { pageSize: 100 });
-    expect(history).toHaveLength(1);
-    expect(history[0]).toMatchObject({ occurredAt: at, points: 30 });
-    expect(
-      await cleanupCoordinationStateIfLastDeployment({ repository, artifacts }, key),
-    ).toMatchObject({ kind: "deleted" });
-    expect(await readCoordinationState(store, scope)).toBeUndefined();
-    expect(await repository.readCoordinationRun(key)).toMatchObject({
-      runId: scope.runId,
-      closed: true,
-    });
-    expect(await repository.readCoordinationMatchSecret(scope)).toBeUndefined();
-  });
+      // Cloud teardown completes while score delivery is still down.
+      await repository.markDeleted("red", teardownAt);
+      publish.mockRestore();
+      const importer = vi.fn(async () => ({ default: plugin }));
+      const invoke = vi.fn<CoordinationTickInvoker>(async (_functionName, batch) => {
+        await handleCoordinationTickBatch(
+          { store, importer, config: { battle: { plugin: "battle" } } },
+          batch,
+        );
+      });
+      const scanAndDrain = async () => {
+        // A fresh pass per scheduled invocation: no state from the preceding scan.
+        const pass = createCoordinationTickPass(
+          invoke,
+          "fixture-dispatcher",
+          new Set([key.problemId]),
+          repository,
+        );
+        const complete: DeploymentRecord[] = [];
+        const recovery: CoordinationStateScope[] = [];
+        await repository.forEachCompleteDeploymentPage(
+          async (items) => {
+            complete.push(...items);
+            pass.collect(items, teardownAt);
+          },
+          async (scopes) => {
+            recovery.push(...scopes);
+            pass.collectRecovery(scopes);
+          },
+        );
+        // Only the durable recovery marker can find this event; no COMPLETE row remains.
+        expect(complete).toEqual([]);
+        await pass.run(Date.parse(teardownAt), teardownAt);
+        return recovery;
+      };
+      expect(await scanAndDrain()).toEqual([scope]);
+      expect(invoke).toHaveBeenCalledOnce();
+      expect(invoke.mock.calls[0]?.[1].targets).toEqual([
+        expect.objectContaining({
+          tenantId: key.tenantId,
+          eventId: key.eventId,
+          moduleRef: key.problemId,
+          drainOnly: true,
+        }),
+      ]);
+      expect(importer).not.toHaveBeenCalled();
+      const settled = await readCoordinationState(store, scope);
+      expect(settled).toMatchObject({
+        state: pending?.state,
+        version: pending?.version,
+        expiresAt: pending?.expiresAt,
+      });
+      expect(settled?.pendingScores).toBeUndefined();
+      expect(await scanAndDrain()).toEqual([]);
+      expect(invoke).toHaveBeenCalledOnce();
+      expect((await repository.getDeployment("red"))?.score).toBe(30);
+      expect((await repository.getDeployment("red"))?.status).toBe("DELETED");
+      const history = await repository.listScoreEvents("red", { pageSize: 100 });
+      expect(history).toHaveLength(1);
+      expect(history[0]).toMatchObject({ occurredAt: at, points: 30 });
+      expect(
+        await cleanupCoordinationStateIfLastDeployment({ repository, artifacts }, key),
+      ).toMatchObject({ kind: "deleted" });
+      expect(await readCoordinationState(store, scope)).toBeUndefined();
+      expect(await repository.readCoordinationRun(key)).toMatchObject({
+        runId: scope.runId,
+        closed: true,
+      });
+      expect(await repository.readCoordinationMatchSecret(scope)).toBeUndefined();
+    },
+  );
 
   it("keeps an accepted reset's initialization obligation while resource teardown proceeds", async () => {
     const { repository, shared, send, deleteArtifacts } = await setup(backend);

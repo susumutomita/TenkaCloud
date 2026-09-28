@@ -114,38 +114,33 @@ describe("public registration API with persistent repositories", () => {
     expect(participantRateLimiter.snapshot().size).toBe(0);
   });
 
-  it.each([
-    "Basic credentials",
-    "Bearer short",
-    `Bearer ${"!".repeat(43)}`,
-  ])("rejects malformed authorization %s before accessing repositories", async (authorization) => {
-    const { app, shared } = await registrationHttpFixture();
-    const resolve = vi.spyOn(shared.runtime, "resolveRepositories");
-    const response = await app.request(`${base}/claim`, {
-      ...request(receipt, { receipt }),
-      headers: { Authorization: authorization, "Content-Type": "application/json" },
-    });
-    expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: "not_found" });
-    expect(resolve).not.toHaveBeenCalled();
-  });
+  it.each(["Basic credentials", "Bearer short", `Bearer ${"!".repeat(43)}`])(
+    "rejects malformed authorization %s before accessing repositories",
+    async (authorization) => {
+      const { app, shared } = await registrationHttpFixture();
+      const resolve = vi.spyOn(shared.runtime, "resolveRepositories");
+      const response = await app.request(`${base}/claim`, {
+        ...request(receipt, { receipt }),
+        headers: { Authorization: authorization, "Content-Type": "application/json" },
+      });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: "not_found" });
+      expect(resolve).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each([
-    "",
-    "{",
-    "null",
-    "[]",
-    "{}",
-    '{"receipt":123}',
-  ])("rejects invalid claim JSON %s without changing the pool", async (body) => {
-    const { app, invitation, deps } = await registrationHttpFixture();
-    const response = await app.request(`${base}/claim`, { ...request(invitation), body });
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({ error: "invalid_request" });
-    expect(
-      (await deps.events.getEvent(fixtureTenantId, fixtureEventId))?.registration?.claims,
-    ).toEqual([]);
-  });
+  it.each(["", "{", "null", "[]", "{}", '{"receipt":123}'])(
+    "rejects invalid claim JSON %s without changing the pool",
+    async (body) => {
+      const { app, invitation, deps } = await registrationHttpFixture();
+      const response = await app.request(`${base}/claim`, { ...request(invitation), body });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "invalid_request" });
+      expect(
+        (await deps.events.getEvent(fixtureTenantId, fixtureEventId))?.registration?.claims,
+      ).toEqual([]);
+    },
+  );
 
   it("enforces the 1024-byte body limit before accessing repositories", async () => {
     const { app, invitation, shared } = await registrationHttpFixture();
@@ -236,38 +231,45 @@ describe("public registration API with persistent repositories", () => {
     ["info", 100],
     ["claim", 100],
     ["status", 60],
-  ] as const)("limits %s per bearer and resumes after its Retry-After delay", async (action, capacity) => {
-    const { app, invitation } = await registrationHttpFixture();
-    expect((await app.request(`${base}/claim`, request(invitation, { receipt }))).status).toBe(200);
-    participantRateLimiter.reset();
-    const now = Date.now();
-    const time = vi.spyOn(Date, "now").mockReturnValue(now);
-    const token = action === "status" ? receipt : invitation;
-    for (let index = 0; index < capacity; index++) {
-      const response = await app.request(`${base}/${action}`, request(token, { receipt }));
-      expect(response.status).toBe(200);
-    }
-    const limited = await app.request(`${base}/${action}`, request(token, { receipt }));
-    expect(limited.status).toBe(429);
-    expect(await limited.json()).toEqual({ error: "rate_limited" });
-    expect(limited.headers.get("Retry-After")).toBe("1");
-    const otherAction = action === "status" ? "info" : "status";
-    expect(
-      (
-        await app.request(
-          `${base}/${otherAction}`,
-          request(otherAction === "info" ? invitation : receipt),
-        )
-      ).status,
-    ).toBe(200);
-    const differentToken = await app.request(
-      `${base}/${action}`,
-      request("z".repeat(43), { receipt }),
-    );
-    expect(differentToken.status).toBe(404);
-    time.mockReturnValue(now + 1000);
-    expect((await app.request(`${base}/${action}`, request(token, { receipt }))).status).toBe(200);
-  });
+  ] as const)(
+    "limits %s per bearer and resumes after its Retry-After delay",
+    async (action, capacity) => {
+      const { app, invitation } = await registrationHttpFixture();
+      expect((await app.request(`${base}/claim`, request(invitation, { receipt }))).status).toBe(
+        200,
+      );
+      participantRateLimiter.reset();
+      const now = Date.now();
+      const time = vi.spyOn(Date, "now").mockReturnValue(now);
+      const token = action === "status" ? receipt : invitation;
+      for (let index = 0; index < capacity; index++) {
+        const response = await app.request(`${base}/${action}`, request(token, { receipt }));
+        expect(response.status).toBe(200);
+      }
+      const limited = await app.request(`${base}/${action}`, request(token, { receipt }));
+      expect(limited.status).toBe(429);
+      expect(await limited.json()).toEqual({ error: "rate_limited" });
+      expect(limited.headers.get("Retry-After")).toBe("1");
+      const otherAction = action === "status" ? "info" : "status";
+      expect(
+        (
+          await app.request(
+            `${base}/${otherAction}`,
+            request(otherAction === "info" ? invitation : receipt),
+          )
+        ).status,
+      ).toBe(200);
+      const differentToken = await app.request(
+        `${base}/${action}`,
+        request("z".repeat(43), { receipt }),
+      );
+      expect(differentToken.status).toBe(404);
+      time.mockReturnValue(now + 1000);
+      expect((await app.request(`${base}/${action}`, request(token, { receipt }))).status).toBe(
+        200,
+      );
+    },
+  );
 
   it("supports SQL repositories without a DynamoDB teams table name", async () => {
     const { shared, invitation } = await registrationHttpFixture();

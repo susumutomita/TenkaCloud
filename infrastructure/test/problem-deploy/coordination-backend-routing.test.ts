@@ -43,96 +43,96 @@ function restrictRepository(repository: DeploymentsRepository, forbidden: readon
 }
 
 describe.each(["DynamoDB", "SQL"])("coordination backend routing: %s", (backend) => {
-  it.each([
-    false,
-    true,
-  ])("saves a move normally and confines delivery failure/replay to the bounded backend (timeout=%s)", async (timeout) => {
-    const ddb = makeFakeDdb();
-    const sql = makeSqliteExecutor();
-    const repository: DeploymentsRepository =
-      backend === "DynamoDB"
-        ? new DynamoDbDeploymentsRepository(ddb, "Deployments")
-        : new SqlDeploymentsRepository(sql);
-    await repository.putDeployment({
-      ...scope,
-      jobId: "red",
-      teamId: "red",
-      teamName: "Red",
-      teamLoginKey: "fixture-key",
-      namePrefix: "red",
-      awsAccountId: "123456789012",
-      region: "ap-northeast-1",
-      status: "COMPLETE",
-      createdAt: at,
-      updatedAt: at,
-      score: 0,
-    });
-    const publish = vi.spyOn(repository, "publishCoordinationScore");
-    if (timeout)
-      publish.mockRejectedValueOnce(
-        Object.assign(new Error("request timed out"), { name: "TimeoutError" }),
-      );
-    const normalRepository = restrictRepository(repository, [
-      "listByTenantAndEvent",
-      "getDeployment",
-      "publishCoordinationScore",
-      "acknowledgeCoordinationScores",
-    ]);
-    const deliveryRepository = restrictRepository(repository, [
-      "readCoordinationState",
-      "writeCoordinationState",
-      "readCoordinationMatchSecret",
-      "ensureCoordinationMatchSecret",
-    ]);
-    const runtime = makeTestControlDataRuntime({
-      CONTROL_DATA_BACKEND: backend === "SQL" ? "turso" : "dynamodb",
-    });
-    const normalResolver = vi.fn(async () => normalRepository);
-    const deliveryResolver = vi.fn(async () => deliveryRepository);
-    const deliveryDdb = { send: vi.fn() };
-    const store: CoordinationStoreDeps = {
-      runtime: { ...runtime, resolveDeploymentsRepository: normalResolver },
-      ddb,
-      tableName: "Deployments",
-      coordinationScoreModes: { battle: "exclusive" },
-      scoreDelivery: {
-        runtime: { ...runtime, resolveDeploymentsRepository: deliveryResolver },
-        ddb: deliveryDdb,
+  it.each([false, true])(
+    "saves a move normally and confines delivery failure/replay to the bounded backend (timeout=%s)",
+    async (timeout) => {
+      const ddb = makeFakeDdb();
+      const sql = makeSqliteExecutor();
+      const repository: DeploymentsRepository =
+        backend === "DynamoDB"
+          ? new DynamoDbDeploymentsRepository(ddb, "Deployments")
+          : new SqlDeploymentsRepository(sql);
+      await repository.putDeployment({
+        ...scope,
+        jobId: "red",
+        teamId: "red",
+        teamName: "Red",
+        teamLoginKey: "fixture-key",
+        namePrefix: "red",
+        awsAccountId: "123456789012",
+        region: "ap-northeast-1",
+        status: "COMPLETE",
+        createdAt: at,
+        updatedAt: at,
+        score: 0,
+      });
+      const publish = vi.spyOn(repository, "publishCoordinationScore");
+      if (timeout)
+        publish.mockRejectedValueOnce(
+          Object.assign(new Error("request timed out"), { name: "TimeoutError" }),
+        );
+      const normalRepository = restrictRepository(repository, [
+        "listByTenantAndEvent",
+        "getDeployment",
+        "publishCoordinationScore",
+        "acknowledgeCoordinationScores",
+      ]);
+      const deliveryRepository = restrictRepository(repository, [
+        "readCoordinationState",
+        "writeCoordinationState",
+        "readCoordinationMatchSecret",
+        "ensureCoordinationMatchSecret",
+      ]);
+      const runtime = makeTestControlDataRuntime({
+        CONTROL_DATA_BACKEND: backend === "SQL" ? "turso" : "dynamodb",
+      });
+      const normalResolver = vi.fn(async () => normalRepository);
+      const deliveryResolver = vi.fn(async () => deliveryRepository);
+      const deliveryDdb = { send: vi.fn() };
+      const store: CoordinationStoreDeps = {
+        runtime: { ...runtime, resolveDeploymentsRepository: normalResolver },
+        ddb,
         tableName: "Deployments",
-      },
-    };
-    await writeCoordinationState(store, scope, 0, 0, at);
-    const input = {
-      scope,
-      teamId: "red",
-      ctx: { eventId: scope.eventId, teamIds: ["red"] },
-      op: { kind: "solve" as const },
-      fallbackProjection: 0,
-      nowIso: at,
-    };
-    expect(await dispatchCoordinationOp(store, plugin, input)).toEqual({
-      kind: "ok",
-      projection: 30,
-    });
-    const saved = await readCoordinationState(store, scope);
-    expect(saved).toMatchObject({ state: 30, version: 2 });
-    expect(Boolean(saved?.pendingScores)).toBe(timeout);
-    expect(publish).toHaveBeenCalledTimes(1);
-    if (timeout) {
-      expect((await repository.getDeployment("red"))?.score).toBe(0);
-      expect(await deliverCoordinationScores(store, scope, saved)).toBe(true);
-      expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
-      expect(publish).toHaveBeenCalledTimes(2);
-    }
-    expect((await repository.getDeployment("red"))?.score).toBe(30);
-    expect(await dispatchCoordinationOp(store, plugin, input)).toEqual({
-      kind: "rejected",
-      error: "already_solved",
-    });
-    expect(normalResolver).toHaveBeenCalledWith({ ddb, deploymentsTableName: "Deployments" });
-    expect(deliveryResolver).toHaveBeenCalledWith({
-      ddb: deliveryDdb,
-      deploymentsTableName: "Deployments",
-    });
-  });
+        coordinationScoreModes: { battle: "exclusive" },
+        scoreDelivery: {
+          runtime: { ...runtime, resolveDeploymentsRepository: deliveryResolver },
+          ddb: deliveryDdb,
+          tableName: "Deployments",
+        },
+      };
+      await writeCoordinationState(store, scope, 0, 0, at);
+      const input = {
+        scope,
+        teamId: "red",
+        ctx: { eventId: scope.eventId, teamIds: ["red"] },
+        op: { kind: "solve" as const },
+        fallbackProjection: 0,
+        nowIso: at,
+      };
+      expect(await dispatchCoordinationOp(store, plugin, input)).toEqual({
+        kind: "ok",
+        projection: 30,
+      });
+      const saved = await readCoordinationState(store, scope);
+      expect(saved).toMatchObject({ state: 30, version: 2 });
+      expect(Boolean(saved?.pendingScores)).toBe(timeout);
+      expect(publish).toHaveBeenCalledTimes(1);
+      if (timeout) {
+        expect((await repository.getDeployment("red"))?.score).toBe(0);
+        expect(await deliverCoordinationScores(store, scope, saved)).toBe(true);
+        expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
+        expect(publish).toHaveBeenCalledTimes(2);
+      }
+      expect((await repository.getDeployment("red"))?.score).toBe(30);
+      expect(await dispatchCoordinationOp(store, plugin, input)).toEqual({
+        kind: "rejected",
+        error: "already_solved",
+      });
+      expect(normalResolver).toHaveBeenCalledWith({ ddb, deploymentsTableName: "Deployments" });
+      expect(deliveryResolver).toHaveBeenCalledWith({
+        ddb: deliveryDdb,
+        deploymentsTableName: "Deployments",
+      });
+    },
+  );
 });

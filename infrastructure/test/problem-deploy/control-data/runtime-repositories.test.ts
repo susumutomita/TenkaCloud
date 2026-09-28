@@ -195,24 +195,22 @@ describe("control-data runtime repository resolver", () => {
   // [#2677] The former `sql` alias and the `turso-mirror`/`sql-mirror` bridge
   // values were removed — they must now fail loudly, never silently fall back
   // to another data path.
-  it.each([
-    "postgres",
-    "sql",
-    "turso-mirror",
-    "sql-mirror",
-  ])("should reject the removed/unknown backend %s before network access", async (backend) => {
-    const send = vi.fn();
-    const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: backend },
-      ssm: { send },
-      createClient: vi.fn(),
-    });
+  it.each(["postgres", "sql", "turso-mirror", "sql-mirror"])(
+    "should reject the removed/unknown backend %s before network access",
+    async (backend) => {
+      const send = vi.fn();
+      const runtime = createControlDataRuntime({
+        env: { CONTROL_DATA_BACKEND: backend },
+        ssm: { send },
+        createClient: vi.fn(),
+      });
 
-    await expect(runtime.resolveRepositories(input)).rejects.toThrow(
-      /Unknown CONTROL_DATA_BACKEND/,
-    );
-    expect(send).not.toHaveBeenCalled();
-  });
+      await expect(runtime.resolveRepositories(input)).rejects.toThrow(
+        /Unknown CONTROL_DATA_BACKEND/,
+      );
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
 
   it("should fail closed when the SecureString is absent or empty", async () => {
     const runtime = createControlDataRuntime({

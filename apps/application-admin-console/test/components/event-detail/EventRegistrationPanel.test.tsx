@@ -200,24 +200,22 @@ describe("event invitation settings", () => {
     expect(api.put).not.toHaveBeenCalled();
   });
 
-  it.each([
-    "invalid_pool",
-    "not_ready",
-    "closed",
-    "conflict",
-  ])("shows actionable %s feedback without replacing an existing invitation", async (code) => {
-    const api = fixture();
-    const link = await issue();
-    const original = (link as HTMLInputElement).value;
-    api.put.mockRejectedValueOnce(new ApiError(409, JSON.stringify({ error: code })));
+  it.each(["invalid_pool", "not_ready", "closed", "conflict"])(
+    "shows actionable %s feedback without replacing an existing invitation",
+    async (code) => {
+      const api = fixture();
+      const link = await issue();
+      const original = (link as HTMLInputElement).value;
+      api.put.mockRejectedValueOnce(new ApiError(409, JSON.stringify({ error: code })));
 
-    fireEvent.click(screen.getByRole("button", { name: "registration.reissue" }));
+      fireEvent.click(screen.getByRole("button", { name: "registration.reissue" }));
 
-    expect(await screen.findByText(`registration.error_${code}`)).toBeInTheDocument();
-    expect(link).toHaveValue(original);
-    expect(screen.getByRole("button", { name: "registration.reissue" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "registration.refresh" })).toBeEnabled();
-  });
+      expect(await screen.findByText(`registration.error_${code}`)).toBeInTheDocument();
+      expect(link).toHaveValue(original);
+      expect(screen.getByRole("button", { name: "registration.reissue" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "registration.refresh" })).toBeEnabled();
+    },
+  );
 
   it.each([
     ["non-JSON gateway error", "Bad Gateway"],
@@ -345,27 +343,30 @@ describe("event invitation settings", () => {
   it.each([
     ["reissues the invitation", true],
     ["closes registration", false],
-  ])("removes the previous link after refreshing when another operator %s", async (_action, enabled) => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    const api = fixture();
-    const link = await issue();
-    fireEvent.click(screen.getByRole("button", { name: "registration.copy" }));
-    await screen.findByRole("button", { name: "registration.copied" });
-    // GET never returns the one-time invitation, including after another operator reissues it.
-    api.get.mockResolvedValueOnce({ ...summary, enabled });
+  ])(
+    "removes the previous link after refreshing when another operator %s",
+    async (_action, enabled) => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      const api = fixture();
+      const link = await issue();
+      fireEvent.click(screen.getByRole("button", { name: "registration.copy" }));
+      await screen.findByRole("button", { name: "registration.copied" });
+      // GET never returns the one-time invitation, including after another operator reissues it.
+      api.get.mockResolvedValueOnce({ ...summary, enabled });
 
-    fireEvent.click(screen.getByRole("button", { name: "registration.refresh" }));
+      fireEvent.click(screen.getByRole("button", { name: "registration.refresh" }));
 
-    await waitFor(() => expect(link).not.toBeInTheDocument());
-    expect(
-      screen.getByText(`registration.${enabled ? "open" : "closed"}:{"claimed":0,"capacity":1}`),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "registration.copy" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "registration.copied" })).not.toBeInTheDocument();
-    expect(api.put).toHaveBeenCalledTimes(1);
-    expect(writeText).toHaveBeenCalledTimes(1);
-  });
+      await waitFor(() => expect(link).not.toBeInTheDocument());
+      expect(
+        screen.getByText(`registration.${enabled ? "open" : "closed"}:{"claimed":0,"capacity":1}`),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "registration.copy" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "registration.copied" })).not.toBeInTheDocument();
+      expect(api.put).toHaveBeenCalledTimes(1);
+      expect(writeText).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("keeps the issued link and copy result when refreshing fails", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);

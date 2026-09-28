@@ -164,14 +164,12 @@ describe("CapacityQuerySchema", () => {
     expect(CapacityQuerySchema.parse({ windowMinutes: "60" })).toEqual({ windowMinutes: 60 });
   });
 
-  it.each([
-    "4",
-    "181",
-    "abc",
-    "30.5",
-  ])("should reject out-of-range or non-integer windowMinutes %s", (value) => {
-    expect(CapacityQuerySchema.safeParse({ windowMinutes: value }).success).toBe(false);
-  });
+  it.each(["4", "181", "abc", "30.5"])(
+    "should reject out-of-range or non-integer windowMinutes %s",
+    (value) => {
+      expect(CapacityQuerySchema.safeParse({ windowMinutes: value }).success).toBe(false);
+    },
+  );
 });
 
 describe("getCapacityOverview", () => {

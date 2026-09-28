@@ -25,44 +25,44 @@ const cursor = {
 };
 
 describe("participant deployment lookup pagination", () => {
-  it.each([
-    "FAILED",
-    "IN_PROGRESS",
-  ])("includes the newer %s retry after an old COMPLETE job on page one", async (status) => {
-    const latest = {
-      ...complete,
-      PK: "DEPLOYMENT#new-job",
-      GSI2SK: "2026-09-22T09:01:00.000Z",
-      jobId: "new-job",
-      createdAt: "2026-09-22T09:01:00.000Z",
-      status,
-    };
-    const send = vi
-      .fn()
-      .mockResolvedValueOnce({ Items: [complete], LastEvaluatedKey: cursor })
-      .mockResolvedValueOnce({ Items: [latest] });
-    const repo = new DynamoDbDeploymentsRepository(
-      { send } as unknown as DynamoDBDocumentClient,
-      "Deployments",
-    );
+  it.each(["FAILED", "IN_PROGRESS"])(
+    "includes the newer %s retry after an old COMPLETE job on page one",
+    async (status) => {
+      const latest = {
+        ...complete,
+        PK: "DEPLOYMENT#new-job",
+        GSI2SK: "2026-09-22T09:01:00.000Z",
+        jobId: "new-job",
+        createdAt: "2026-09-22T09:01:00.000Z",
+        status,
+      };
+      const send = vi
+        .fn()
+        .mockResolvedValueOnce({ Items: [complete], LastEvaluatedKey: cursor })
+        .mockResolvedValueOnce({ Items: [latest] });
+      const repo = new DynamoDbDeploymentsRepository(
+        { send } as unknown as DynamoDBDocumentClient,
+        "Deployments",
+      );
 
-    const rows = await repo.listByTeamLoginKey(loginKey);
+      const rows = await repo.listByTeamLoginKey(loginKey);
 
-    expect(rows.map((row) => ({ jobId: row.jobId, status: row.status }))).toEqual([
-      { jobId: "old-job", status: "COMPLETE" },
-      { jobId: "new-job", status },
-    ]);
-    expect(send).toHaveBeenCalledTimes(2);
-    const next = send.mock.calls[1]?.[0];
-    expect(next).toBeInstanceOf(QueryCommand);
-    expect(next.input).toEqual({
-      TableName: "Deployments",
-      IndexName: "GSI2",
-      KeyConditionExpression: "GSI2PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TEAMKEY#${loginKey}` },
-      ExclusiveStartKey: cursor,
-    });
-  });
+      expect(rows.map((row) => ({ jobId: row.jobId, status: row.status }))).toEqual([
+        { jobId: "old-job", status: "COMPLETE" },
+        { jobId: "new-job", status },
+      ]);
+      expect(send).toHaveBeenCalledTimes(2);
+      const next = send.mock.calls[1]?.[0];
+      expect(next).toBeInstanceOf(QueryCommand);
+      expect(next.input).toEqual({
+        TableName: "Deployments",
+        IndexName: "GSI2",
+        KeyConditionExpression: "GSI2PK = :pk",
+        ExpressionAttributeValues: { ":pk": `TEAMKEY#${loginKey}` },
+        ExclusiveStartKey: cursor,
+      });
+    },
+  );
 
   it("propagates a later page failure instead of returning a partial successful history", async () => {
     const send = vi

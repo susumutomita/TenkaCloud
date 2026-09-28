@@ -359,21 +359,24 @@ describe("event teardown cleans up coordination state (#3123)", () => {
     // The reason does not have to be an Error; the trace line must still carry
     // it rather than logging "[object Object]".
     ["a non-Error rejection", "ddb down"],
-  ])("should still report the teardown result when the cleanup fails with %s", async (_label, thrown) => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
-    ddbSend.mockResolvedValueOnce({ Items: [dep({ jobId: "01A" })] });
-    ddbSend.mockImplementation(async (cmd: unknown) => {
-      if (cmd instanceof DeleteCommand) throw thrown;
-      return {};
-    });
+  ])(
+    "should still report the teardown result when the cleanup fails with %s",
+    async (_label, thrown) => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
+      ddbSend.mockResolvedValueOnce({ Items: [dep({ jobId: "01A" })] });
+      ddbSend.mockImplementation(async (cmd: unknown) => {
+        if (cmd instanceof DeleteCommand) throw thrown;
+        return {};
+      });
 
-    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
-    expect(out).toEqual({
-      kind: "ok",
-      result: { eventId: "EV1", enqueued: 1, skipped: 0, failed: 0 },
-    });
-  });
+      const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+      expect(out).toEqual({
+        kind: "ok",
+        result: { eventId: "EV1", enqueued: 1, skipped: 0, failed: 0 },
+      });
+    },
+  );
 
   /**
    * A deployment row with no `problemId` names no namespace, so there is
@@ -383,16 +386,21 @@ describe("event teardown cleans up coordination state (#3123)", () => {
   it.each([
     ["absent", undefined],
     ["empty", ""],
-  ])("should not delete anything when every deployment's problemId is %s", async (_label, problemId) => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
-    ddbSend.mockResolvedValueOnce({ Items: [dep({ jobId: "01A", problemId })] });
-    ddbSend.mockResolvedValue({});
+  ])(
+    "should not delete anything when every deployment's problemId is %s",
+    async (_label, problemId) => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
+      ddbSend.mockResolvedValueOnce({ Items: [dep({ jobId: "01A", problemId })] });
+      ddbSend.mockResolvedValue({});
 
-    await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+      await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
 
-    expect(ddbSend.mock.calls.map((c) => c[0]).some((c) => c instanceof DeleteCommand)).toBe(false);
-  });
+      expect(ddbSend.mock.calls.map((c) => c[0]).some((c) => c instanceof DeleteCommand)).toBe(
+        false,
+      );
+    },
+  );
 
   /**
    * A failed publish is compensated `DELETING` -> `FAILED` so the operator can

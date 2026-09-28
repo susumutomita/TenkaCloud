@@ -186,17 +186,20 @@ describe("CapacityPanel", () => {
     [StatusCodes.FORBIDDEN, "capacity.forbidden"],
     [StatusCodes.SERVICE_UNAVAILABLE, "capacity.unconfigured"],
     [StatusCodes.NOT_IMPLEMENTED, "capacity.demo_unsupported"],
-  ] as const)("should render a calm info alert (not a red error) for terminal status %s", async (status, messageKey) => {
-    mocks.getCapacityOverview.mockRejectedValue(new ApiError(status, "nope"));
+  ] as const)(
+    "should render a calm info alert (not a red error) for terminal status %s",
+    async (status, messageKey) => {
+      mocks.getCapacityOverview.mockRejectedValue(new ApiError(status, "nope"));
 
-    render(<CapacityPanel apiClient={apiClient} t={t} />);
+      render(<CapacityPanel apiClient={apiClient} t={t} />);
 
-    await waitFor(() => expect(screen.getByTestId("capacity-terminal")).toBeInTheDocument());
-    expect(screen.getByText(messageKey)).toBeInTheDocument();
-    // terminal 状態では table / 赤エラーを出さない
-    expect(screen.queryByTestId("capacity-error")).not.toBeInTheDocument();
-    expect(screen.queryByText("capacity.loading")).not.toBeInTheDocument();
-  });
+      await waitFor(() => expect(screen.getByTestId("capacity-terminal")).toBeInTheDocument());
+      expect(screen.getByText(messageKey)).toBeInTheDocument();
+      // terminal 状態では table / 赤エラーを出さない
+      expect(screen.queryByTestId("capacity-error")).not.toBeInTheDocument();
+      expect(screen.queryByText("capacity.loading")).not.toBeInTheDocument();
+    },
+  );
 
   it("should recover from a terminal state via the manual refresh button", async () => {
     mocks.getCapacityOverview

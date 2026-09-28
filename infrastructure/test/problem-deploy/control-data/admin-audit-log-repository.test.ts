@@ -362,15 +362,14 @@ describe("createAdminAuditLogRepository", () => {
     );
   });
 
-  it.each([
-    "sql",
-    "turso-mirror",
-    "sql-mirror",
-  ])("should reject the removed legacy backend value %s", (legacy) => {
-    expect(() => createAdminAuditLogRepository(legacy, ddbDeps())).toThrow(
-      /expected one of: dynamodb, turso/,
-    );
-  });
+  it.each(["sql", "turso-mirror", "sql-mirror"])(
+    "should reject the removed legacy backend value %s",
+    (legacy) => {
+      expect(() => createAdminAuditLogRepository(legacy, ddbDeps())).toThrow(
+        /expected one of: dynamodb, turso/,
+      );
+    },
+  );
 
   it("should fail loudly when DynamoDB deps are missing", () => {
     expect(() => createAdminAuditLogRepository("dynamodb", {})).toThrow(/requires deps.ddb/);

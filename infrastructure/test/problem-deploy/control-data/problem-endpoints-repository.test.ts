@@ -203,16 +203,14 @@ describe("createProblemEndpointsRepository", () => {
     expect(() => createProblemEndpointsRepository("turso", {})).toThrow(/requires a SqlExecutor/);
   });
 
-  it.each([
-    "postgres",
-    "sql",
-    "turso-mirror",
-    "sql-mirror",
-  ])("should reject the unknown backend value %s", (backend) => {
-    expect(() => createProblemEndpointsRepository(backend, ddbDeps())).toThrow(
-      /Unknown CONTROL_DATA_BACKEND.*expected one of: dynamodb, turso/,
-    );
-  });
+  it.each(["postgres", "sql", "turso-mirror", "sql-mirror"])(
+    "should reject the unknown backend value %s",
+    (backend) => {
+      expect(() => createProblemEndpointsRepository(backend, ddbDeps())).toThrow(
+        /Unknown CONTROL_DATA_BACKEND.*expected one of: dynamodb, turso/,
+      );
+    },
+  );
 
   it("should fail loudly when DynamoDB deps are missing", () => {
     expect(() => createProblemEndpointsRepository("dynamodb", {})).toThrow(/requires deps.ddb/);

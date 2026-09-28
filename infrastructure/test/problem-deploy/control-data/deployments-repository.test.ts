@@ -734,15 +734,14 @@ describe("createDeploymentsRepository", () => {
     );
   });
 
-  it.each([
-    "sql",
-    "turso-mirror",
-    "sql-mirror",
-  ])("should reject the removed %s backend value (#2677)", (backend) => {
-    expect(() => createDeploymentsRepository(backend, ddbDeps())).toThrow(
-      /Unknown CONTROL_DATA_BACKEND/,
-    );
-  });
+  it.each(["sql", "turso-mirror", "sql-mirror"])(
+    "should reject the removed %s backend value (#2677)",
+    (backend) => {
+      expect(() => createDeploymentsRepository(backend, ddbDeps())).toThrow(
+        /Unknown CONTROL_DATA_BACKEND/,
+      );
+    },
+  );
 
   it("should fail loudly when DynamoDB deps are missing", () => {
     expect(() => createDeploymentsRepository("dynamodb", {})).toThrow(/requires deps.ddb/);

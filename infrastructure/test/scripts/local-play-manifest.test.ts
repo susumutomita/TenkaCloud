@@ -257,21 +257,19 @@ describe("loadContainerProblem", () => {
     ).toThrow(/runtime.terminal.service must be a non-empty string/);
   });
 
-  it.each([
-    "-rm",
-    "a b",
-    "svc/../up",
-    "",
-  ])("should reject the unsafe terminal service name %j (#2850)", (service) => {
-    // A leading "-" would read as a compose CLI flag; whitespace and path
-    // separators are not compose service names at all.
-    expect(() =>
-      loadContainerProblem(
-        DIR,
-        fixture({ runtime: { ...VALID_METADATA.runtime, terminal: { service } } }),
-      ),
-    ).toThrow(/runtime.terminal.service/);
-  });
+  it.each(["-rm", "a b", "svc/../up", ""])(
+    "should reject the unsafe terminal service name %j (#2850)",
+    (service) => {
+      // A leading "-" would read as a compose CLI flag; whitespace and path
+      // separators are not compose service names at all.
+      expect(() =>
+        loadContainerProblem(
+          DIR,
+          fixture({ runtime: { ...VALID_METADATA.runtime, terminal: { service } } }),
+        ),
+      ).toThrow(/runtime.terminal.service/);
+    },
+  );
 
   it("should reject a non-verify scoring kind", () => {
     expect(() =>

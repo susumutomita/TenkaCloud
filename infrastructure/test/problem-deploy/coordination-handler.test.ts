@@ -580,52 +580,46 @@ describe("makeCoordinationScopeResolver", () => {
    * teardown had just removed. Every sibling participant write path already
    * applies this filter.
    */
-  it.each([
-    "DELETING",
-    "DELETED",
-    "EXPIRED",
-    "AUTO_DELETED",
-  ])("should refuse a scope for a %s deployment", async (status) => {
-    const resolve = makeCoordinationScopeResolver(
-      fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status }]),
-      config,
-    );
-    expect(await resolve("key")).toEqual({ kind: "not_configured" });
-  });
+  it.each(["DELETING", "DELETED", "EXPIRED", "AUTO_DELETED"])(
+    "should refuse a scope for a %s deployment",
+    async (status) => {
+      const resolve = makeCoordinationScopeResolver(
+        fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status }]),
+        config,
+      );
+      expect(await resolve("key")).toEqual({ kind: "not_configured" });
+    },
+  );
 
   /**
    * A Deployments row is written in stages, so a row can match the login index
    * before it carries everything a scope needs. Resolving one anyway would name
    * a persistence namespace with an empty segment in it.
    */
-  it.each([
-    "tenantId",
-    "eventId",
-    "problemId",
-    "teamId",
-  ])("should refuse a scope for a row still missing %s", async (missing) => {
-    const row = Object.fromEntries(
-      Object.entries({ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" }).filter(
-        ([field]) => field !== missing,
-      ),
-    );
-    expect(await makeCoordinationScopeResolver(fakeShared([row]), config)("key")).toEqual({
-      kind: "not_configured",
-    });
-  });
+  it.each(["tenantId", "eventId", "problemId", "teamId"])(
+    "should refuse a scope for a row still missing %s",
+    async (missing) => {
+      const row = Object.fromEntries(
+        Object.entries({ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" }).filter(
+          ([field]) => field !== missing,
+        ),
+      );
+      expect(await makeCoordinationScopeResolver(fakeShared([row]), config)("key")).toEqual({
+        kind: "not_configured",
+      });
+    },
+  );
 
-  it.each([
-    "PENDING",
-    "IN_PROGRESS",
-    "COMPLETE",
-    "FAILED",
-  ])("should still resolve a scope for a %s deployment", async (status) => {
-    const resolve = makeCoordinationScopeResolver(
-      fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status }]),
-      config,
-    );
-    expect((await resolve("key")).kind).toBe("scope");
-  });
+  it.each(["PENDING", "IN_PROGRESS", "COMPLETE", "FAILED"])(
+    "should still resolve a scope for a %s deployment",
+    async (status) => {
+      const resolve = makeCoordinationScopeResolver(
+        fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status }]),
+        config,
+      );
+      expect((await resolve("key")).kind).toBe("scope");
+    },
+  );
 
   /**
    * [Issue #3128] The gap status alone could not close.
@@ -637,27 +631,25 @@ describe("makeCoordinationScopeResolver", () => {
    * passed this guard, the event window was still open, and the next op rebuilt
    * the match the operator had just ended.
    */
-  it.each([
-    "FAILED",
-    "COMPLETE",
-    "PENDING",
-    "IN_PROGRESS",
-  ])("should refuse a scope for a torn-down deployment that landed on %s", async (status) => {
-    const resolve = makeCoordinationScopeResolver(
-      fakeShared([
-        {
-          tenantId: "tn1",
-          eventId: "e1",
-          teamId: "t1",
-          problemId: "p1",
-          status,
-          teardownRequestedAt: "2026-08-30T09:00:00.000Z",
-        },
-      ]),
-      config,
-    );
-    expect(await resolve("key")).toEqual({ kind: "not_configured" });
-  });
+  it.each(["FAILED", "COMPLETE", "PENDING", "IN_PROGRESS"])(
+    "should refuse a scope for a torn-down deployment that landed on %s",
+    async (status) => {
+      const resolve = makeCoordinationScopeResolver(
+        fakeShared([
+          {
+            tenantId: "tn1",
+            eventId: "e1",
+            teamId: "t1",
+            problemId: "p1",
+            status,
+            teardownRequestedAt: "2026-08-30T09:00:00.000Z",
+          },
+        ]),
+        config,
+      );
+      expect(await resolve("key")).toEqual({ kind: "not_configured" });
+    },
+  );
 
   it("should keep resolving a row written before the teardown marker existed", async () => {
     // Absence means "unknown", not "not torn down" — pre-marker rows keep the

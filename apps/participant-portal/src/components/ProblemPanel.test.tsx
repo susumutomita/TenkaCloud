@@ -600,32 +600,35 @@ describe("ProblemPanel render branches", () => {
   it.each([
     ["cloud", "real"],
     ["local multi-verify", "local"],
-  ] as const)("should link a fully solved %s problem to its released writeup", (_label, cloudMode) => {
-    renderPanel(
-      {
-        status: "COMPLETE",
-        writeup: "Root cause and remediation",
-        scoring: {
-          kind: "multi-flag",
-          points: 100,
-          flags: [
-            { id: "one", label: "One", points: 50, solved: true },
-            { id: "two", label: "Two", points: 50, solved: true },
-          ],
+  ] as const)(
+    "should link a fully solved %s problem to its released writeup",
+    (_label, cloudMode) => {
+      renderPanel(
+        {
+          status: "COMPLETE",
+          writeup: "Root cause and remediation",
+          scoring: {
+            kind: "multi-flag",
+            points: 100,
+            flags: [
+              { id: "one", label: "One", points: 50, solved: true },
+              { id: "two", label: "Two", points: 50, solved: true },
+            ],
+          },
         },
-      },
-      cloudMode,
-    );
+        cloudMode,
+      );
 
-    expect(
-      screen.getByRole("link", {
-        name: "2/2 solved. Review the cause and remediation in the explanation",
-      }),
-    ).toHaveAttribute("href", "#problem-writeup");
-    expect(
-      screen.getByText("Root cause and remediation").closest("#problem-writeup"),
-    ).toHaveAttribute("tabindex", "-1");
-  });
+      expect(
+        screen.getByRole("link", {
+          name: "2/2 solved. Review the cause and remediation in the explanation",
+        }),
+      ).toHaveAttribute("href", "#problem-writeup");
+      expect(
+        screen.getByText("Root cause and remediation").closest("#problem-writeup"),
+      ).toHaveAttribute("tabindex", "-1");
+    },
+  );
 
   it("should keep the hosted spoiler and single-flag behavior unchanged", () => {
     const hosted = renderPanel({

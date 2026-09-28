@@ -497,21 +497,21 @@ describe("reconcileEventStatuses force redeploy vs stale GSI1 (#3261)", () => {
       expect(await eventStatus(events)).toBe("DEPLOYING");
     });
 
-    it.each<DeploymentRecord["status"]>([
-      "PENDING",
-      "IN_PROGRESS",
-    ])("should keep DEPLOYING while an old COMPLETE row sits next to a new %s row", async (status) => {
-      const harness = makeHarness(backend);
-      harness.catchUpIndex();
-      const { events, deployments } = harness;
-      await events.putEvent(eventRecord("READY", FIRST_DEPLOY_AT));
-      await deployments.putDeployment(deployment("JOB-A", "team-1", "COMPLETE", FIRST_DEPLOY_AT));
-      await forceRedeploy(harness, deployment("JOB-B", "team-2", status, REDEPLOY_AT), undefined);
+    it.each<DeploymentRecord["status"]>(["PENDING", "IN_PROGRESS"])(
+      "should keep DEPLOYING while an old COMPLETE row sits next to a new %s row",
+      async (status) => {
+        const harness = makeHarness(backend);
+        harness.catchUpIndex();
+        const { events, deployments } = harness;
+        await events.putEvent(eventRecord("READY", FIRST_DEPLOY_AT));
+        await deployments.putDeployment(deployment("JOB-A", "team-1", "COMPLETE", FIRST_DEPLOY_AT));
+        await forceRedeploy(harness, deployment("JOB-B", "team-2", status, REDEPLOY_AT), undefined);
 
-      await reconcileEventStatuses(harness.ctx, NOW_ISO);
+        await reconcileEventStatuses(harness.ctx, NOW_ISO);
 
-      expect(await eventStatus(events)).toBe("DEPLOYING");
-    });
+        expect(await eventStatus(events)).toBe("DEPLOYING");
+      },
+    );
 
     it("should lose the READY CAS when a redeploy lands between the reads and the CAS", async () => {
       const harness = makeHarness(backend);
@@ -551,27 +551,30 @@ describe("reconcileEventStatuses force redeploy vs stale GSI1 (#3261)", () => {
     it.each<[string, unknown, string]>([
       ["an Error", new Error("throttled"), "throttled"],
       ["a non-Error value", "connection reset", "connection reset"],
-    ])("should keep DEPLOYING and report it when the base-row read throws %s", async (_label, thrown, message) => {
-      const harness = makeHarness(backend);
-      harness.catchUpIndex();
-      const { events, deployments } = harness;
-      await events.putEvent(eventRecord("DEPLOYING", REDEPLOY_AT));
-      await deployments.putDeployment(deployment("JOB-A", "team-1", "COMPLETE", REDEPLOY_AT));
-      harness.onFirstConfirmationRead(() => Promise.reject(thrown));
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    ])(
+      "should keep DEPLOYING and report it when the base-row read throws %s",
+      async (_label, thrown, message) => {
+        const harness = makeHarness(backend);
+        harness.catchUpIndex();
+        const { events, deployments } = harness;
+        await events.putEvent(eventRecord("DEPLOYING", REDEPLOY_AT));
+        await deployments.putDeployment(deployment("JOB-A", "team-1", "COMPLETE", REDEPLOY_AT));
+        harness.onFirstConfirmationRead(() => Promise.reject(thrown));
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
-      try {
-        await reconcileEventStatuses(harness.ctx, NOW_ISO);
-        expect(warn).toHaveBeenCalledWith("[generic-scoring] READY confirmation read failed", {
-          eventId: EVENT_ID,
-          message,
-        });
-      } finally {
-        warn.mockRestore();
-      }
+        try {
+          await reconcileEventStatuses(harness.ctx, NOW_ISO);
+          expect(warn).toHaveBeenCalledWith("[generic-scoring] READY confirmation read failed", {
+            eventId: EVENT_ID,
+            message,
+          });
+        } finally {
+          warn.mockRestore();
+        }
 
-      expect(await eventStatus(events)).toBe("DEPLOYING");
-    });
+        expect(await eventStatus(events)).toBe("DEPLOYING");
+      },
+    );
 
     it("should keep DEPLOYING when an index row carries no jobId to confirm", async () => {
       const harness = makeHarness(backend);

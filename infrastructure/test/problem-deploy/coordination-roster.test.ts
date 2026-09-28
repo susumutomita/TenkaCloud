@@ -46,49 +46,47 @@ describe("resolveEventRoster", () => {
     });
   });
 
-  it.each([
-    undefined,
-    "",
-    "{}",
-    "[]",
-  ])("preserves valid absent or empty outputs: %s", async (stackOutputs) => {
-    const roster = await resolveEventRoster(
-      fakeParticipantSharedWithItems([row({ teamId: "t1", stackOutputs })]),
-      { ...target, knownTeamIds: ["t1"], requireComplete: true },
-    );
-    expect(roster.rosterIncomplete).toBeUndefined();
-    expect(roster.deploymentInputs).toBeUndefined();
-  });
+  it.each([undefined, "", "{}", "[]"])(
+    "preserves valid absent or empty outputs: %s",
+    async (stackOutputs) => {
+      const roster = await resolveEventRoster(
+        fakeParticipantSharedWithItems([row({ teamId: "t1", stackOutputs })]),
+        { ...target, knownTeamIds: ["t1"], requireComplete: true },
+      );
+      expect(roster.rosterIncomplete).toBeUndefined();
+      expect(roster.deploymentInputs).toBeUndefined();
+    },
+  );
 
-  it.each([
-    false,
-    true,
-  ])("previews only the newest outputs, including malformed history (reversed: %s)", async (reversed) => {
-    const rows = [
-      row({ teamId: "t1", jobId: "old", createdAt: "2026-09-01", stackOutputs: "{broken" }),
-      row({
-        teamId: "t1",
-        jobId: "new",
-        createdAt: "2026-09-02",
-        stackOutputs: '{"CoordinationSetting":"current"}',
-      }),
-    ];
-    const args = { ...target, knownTeamIds: ["t1"], readOnlyPreview: true };
-    const shared = fakeParticipantSharedWithItems(reversed ? [...rows].reverse() : rows);
-    expect(await resolveEventRoster(shared, args)).toEqual({
-      teamIds: ["t1"],
-      teamNames: {},
-      deploymentInputs: { t1: { CoordinationSetting: "current" } },
-    });
-    // A corrupt current row must still fail closed instead of reviving old values.
-    const corruptCurrent = fakeParticipantSharedWithItems([
-      ...rows,
-      row({ teamId: "t1", jobId: "newest", createdAt: "2026-09-03", stackOutputs: "{broken" }),
-    ]);
-    expect(await resolveEventRoster(corruptCurrent, args)).toMatchObject({
-      rosterIncomplete: true,
-    });
-  });
+  it.each([false, true])(
+    "previews only the newest outputs, including malformed history (reversed: %s)",
+    async (reversed) => {
+      const rows = [
+        row({ teamId: "t1", jobId: "old", createdAt: "2026-09-01", stackOutputs: "{broken" }),
+        row({
+          teamId: "t1",
+          jobId: "new",
+          createdAt: "2026-09-02",
+          stackOutputs: '{"CoordinationSetting":"current"}',
+        }),
+      ];
+      const args = { ...target, knownTeamIds: ["t1"], readOnlyPreview: true };
+      const shared = fakeParticipantSharedWithItems(reversed ? [...rows].reverse() : rows);
+      expect(await resolveEventRoster(shared, args)).toEqual({
+        teamIds: ["t1"],
+        teamNames: {},
+        deploymentInputs: { t1: { CoordinationSetting: "current" } },
+      });
+      // A corrupt current row must still fail closed instead of reviving old values.
+      const corruptCurrent = fakeParticipantSharedWithItems([
+        ...rows,
+        row({ teamId: "t1", jobId: "newest", createdAt: "2026-09-03", stackOutputs: "{broken" }),
+      ]);
+      expect(await resolveEventRoster(corruptCurrent, args)).toMatchObject({
+        rosterIncomplete: true,
+      });
+    },
+  );
 
   it("accepts the CloudFormation output array format", async () => {
     const roster = await resolveEventRoster(
@@ -257,25 +255,28 @@ describe("resolveEventRoster", () => {
     { eventId: "another-event" },
     { problemId: "another-problem" },
     { teamId: "another-team" },
-  ])("defers initialization if the authoritative deployment is missing or mismatched: %j", async (overrides) => {
-    const indexed = row({
-      teamId: "t1",
-      jobId: "job1",
-      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "stale" }),
-    });
-    const send = vi.fn(async (cmd: unknown) =>
-      cmd instanceof GetCommand
-        ? { Item: overrides ? { ...indexed, ...overrides } : undefined }
-        : { Items: [indexed] },
-    );
-    const shared = fakeParticipantShared(send);
-    await expect(
-      resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"], requireComplete: true }),
-    ).rejects.toThrow("missing or no longer belongs");
-    const existing = await resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"] });
-    expect(existing.rosterIncomplete).toBe(true);
-    expect(existing.deploymentInputs).toBeUndefined();
-  });
+  ])(
+    "defers initialization if the authoritative deployment is missing or mismatched: %j",
+    async (overrides) => {
+      const indexed = row({
+        teamId: "t1",
+        jobId: "job1",
+        stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "stale" }),
+      });
+      const send = vi.fn(async (cmd: unknown) =>
+        cmd instanceof GetCommand
+          ? { Item: overrides ? { ...indexed, ...overrides } : undefined }
+          : { Items: [indexed] },
+      );
+      const shared = fakeParticipantShared(send);
+      await expect(
+        resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"], requireComplete: true }),
+      ).rejects.toThrow("missing or no longer belongs");
+      const existing = await resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"] });
+      expect(existing.rosterIncomplete).toBe(true);
+      expect(existing.deploymentInputs).toBeUndefined();
+    },
+  );
 
   it("should union the rows' teams with the known ids, sorted, whatever their status", async () => {
     const roster = await resolveEventRoster(

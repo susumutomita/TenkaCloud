@@ -28,21 +28,17 @@ describe("evaluateMockFlag", () => {
     expect(evaluateMockFlag(egg, 800).kind).toBe("ok");
   });
 
-  it.each([
-    "wrong",
-    "xxx",
-    "test",
-    "12345",
-    "hello world",
-    "  ",
-  ])("should reject obvious wrong / unrelated input %p", (input) => {
-    const result = evaluateMockFlag(input, 800);
-    expect(result.kind).toBe("wrong");
-    if (result.kind === "wrong") {
-      expect(result.scoreDelta).toBe(-10);
-      expect(result.wrongCount).toBe(1);
-    }
-  });
+  it.each(["wrong", "xxx", "test", "12345", "hello world", "  "])(
+    "should reject obvious wrong / unrelated input %p",
+    (input) => {
+      const result = evaluateMockFlag(input, 800);
+      expect(result.kind).toBe("wrong");
+      if (result.kind === "wrong") {
+        expect(result.scoreDelta).toBe(-10);
+        expect(result.wrongCount).toBe(1);
+      }
+    },
+  );
 
   it("should reject empty input", () => {
     expect(evaluateMockFlag("", 800).kind).toBe("wrong");

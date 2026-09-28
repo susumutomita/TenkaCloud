@@ -210,20 +210,20 @@ describe("loadRegistration", () => {
     expect(registrationStorage("tenant", "event").ensureReceipt()).toBe(receipt);
   });
 
-  it.each([
-    new Error("registration_unavailable"),
-    "connection interrupted",
-  ])("preserves a reservation on a status failure instead of attempting a new signup: %s", async (cause) => {
-    window.history.replaceState({}, "", `/join/tenant/event#invite=${invitation}`);
-    const receipt = registrationStorage("tenant", "event").ensureReceipt();
-    const fetcher = vi.fn().mockRejectedValue(cause);
-    vi.stubGlobal("fetch", fetcher);
-    await expect(
-      loadRegistration(base, "tenant", "event", new AbortController().signal),
-    ).rejects.toBe(cause);
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(registrationStorage("tenant", "event").receipt()).toBe(receipt);
-  });
+  it.each([new Error("registration_unavailable"), "connection interrupted"])(
+    "preserves a reservation on a status failure instead of attempting a new signup: %s",
+    async (cause) => {
+      window.history.replaceState({}, "", `/join/tenant/event#invite=${invitation}`);
+      const receipt = registrationStorage("tenant", "event").ensureReceipt();
+      const fetcher = vi.fn().mockRejectedValue(cause);
+      vi.stubGlobal("fetch", fetcher);
+      await expect(
+        loadRegistration(base, "tenant", "event", new AbortController().signal),
+      ).rejects.toBe(cause);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(registrationStorage("tenant", "event").receipt()).toBe(receipt);
+    },
+  );
 
   it("does not replace a revoked receipt with another reservation", async () => {
     window.history.replaceState({}, "", `/join/tenant/event#invite=${invitation}`);

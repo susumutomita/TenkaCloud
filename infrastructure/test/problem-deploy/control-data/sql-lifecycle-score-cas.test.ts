@@ -57,57 +57,60 @@ const transitions = [
 ] as const;
 
 describe("SQL lifecycle writes preserve concurrent scores (#3194)", () => {
-  it.each(
-    transitions,
-  )("should preserve the winning score while writing status %s", async (status, transition) => {
-    const sql = makeSqliteExecutor();
-    const winner = new SqlDeploymentsRepository(sql);
-    await winner.putDeployment(DEPLOYMENT);
-    const racing = new SqlDeploymentsRepository(
-      raceAfterRead(sql, async (reads) => {
-        if (reads === 1)
-          await winner.applyKindScoringResult(DEPLOYMENT.jobId, { scoreDelta: 30 }, AT);
-      }),
-    );
+  it.each(transitions)(
+    "should preserve the winning score while writing status %s",
+    async (status, transition) => {
+      const sql = makeSqliteExecutor();
+      const winner = new SqlDeploymentsRepository(sql);
+      await winner.putDeployment(DEPLOYMENT);
+      const racing = new SqlDeploymentsRepository(
+        raceAfterRead(sql, async (reads) => {
+          if (reads === 1)
+            await winner.applyKindScoringResult(DEPLOYMENT.jobId, { scoreDelta: 30 }, AT);
+        }),
+      );
 
-    expect(await transition(racing)).toEqual({ outcome: "updated" });
-    expect(await winner.getDeployment(DEPLOYMENT.jobId)).toMatchObject({ score: 30, status });
-    expect(
-      await sql.get("SELECT score, status FROM deployments WHERE job_id = ?", [DEPLOYMENT.jobId]),
-    ).toEqual({ score: 30, status });
-    expect(await winner.listByTeamLoginKey("participant-key")).toHaveLength(
-      status === "DELETED" ? 0 : 1,
-    );
-  });
+      expect(await transition(racing)).toEqual({ outcome: "updated" });
+      expect(await winner.getDeployment(DEPLOYMENT.jobId)).toMatchObject({ score: 30, status });
+      expect(
+        await sql.get("SELECT score, status FROM deployments WHERE job_id = ?", [DEPLOYMENT.jobId]),
+      ).toEqual({ score: 30, status });
+      expect(await winner.listByTeamLoginKey("participant-key")).toHaveLength(
+        status === "DELETED" ? 0 : 1,
+      );
+    },
+  );
 
-  it.each(
-    transitions,
-  )("should report conflict after three losing %s attempts without clearing the credential", async (_status, transition) => {
-    const sql = makeSqliteExecutor();
-    const winner = new SqlDeploymentsRepository(sql);
-    await winner.putDeployment(DEPLOYMENT);
-    let attempts = 0;
-    const racing = new SqlDeploymentsRepository(
-      raceAfterRead(sql, async () => {
-        attempts += 1;
-        await winner.applyKindScoringResult(DEPLOYMENT.jobId, { scoreDelta: 1 }, AT);
-      }),
-    );
+  it.each(transitions)(
+    "should report conflict after three losing %s attempts without clearing the credential",
+    async (_status, transition) => {
+      const sql = makeSqliteExecutor();
+      const winner = new SqlDeploymentsRepository(sql);
+      await winner.putDeployment(DEPLOYMENT);
+      let attempts = 0;
+      const racing = new SqlDeploymentsRepository(
+        raceAfterRead(sql, async () => {
+          attempts += 1;
+          await winner.applyKindScoringResult(DEPLOYMENT.jobId, { scoreDelta: 1 }, AT);
+        }),
+      );
 
-    expect(await transition(racing)).toEqual({ outcome: "conflict" });
-    expect(attempts).toBe(3);
-    expect(await winner.getDeployment(DEPLOYMENT.jobId)).toMatchObject({
-      score: 3,
-      status: "COMPLETE",
-    });
-    expect(await winner.listByTeamLoginKey("participant-key")).toHaveLength(1);
-  });
+      expect(await transition(racing)).toEqual({ outcome: "conflict" });
+      expect(attempts).toBe(3);
+      expect(await winner.getDeployment(DEPLOYMENT.jobId)).toMatchObject({
+        score: 3,
+        status: "COMPLETE",
+      });
+      expect(await winner.listByTeamLoginKey("participant-key")).toHaveLength(1);
+    },
+  );
 
-  it.each(
-    transitions,
-  )("should retain not_found for an absent row during %s", async (_status, transition) => {
-    const repository = new SqlDeploymentsRepository(makeSqliteExecutor());
-    expect(await transition(repository)).toEqual({ outcome: "not_found" });
-    expect(await repository.getDeployment(DEPLOYMENT.jobId)).toBeUndefined();
-  });
+  it.each(transitions)(
+    "should retain not_found for an absent row during %s",
+    async (_status, transition) => {
+      const repository = new SqlDeploymentsRepository(makeSqliteExecutor());
+      expect(await transition(repository)).toEqual({ outcome: "not_found" });
+      expect(await repository.getDeployment(DEPLOYMENT.jobId)).toBeUndefined();
+    },
+  );
 });
