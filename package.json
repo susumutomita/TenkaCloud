@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "start": "bun run scripts/local-host/main.ts",
+    "bench:host": "bun run scripts/local-host/bench/capacity.ts",
     "test:host": "bun test ./scripts/local-host/tests/*.test.ts && bun run scripts/local-host/tests/run.ts",
     "test:host:docker": "bun run scripts/local-host/tests/docker-smoke.ts",
     "test:host:e2e": "bun run build:host && bun run scripts/local-host/tests/browser-e2e.ts",
