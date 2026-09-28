@@ -34,32 +34,49 @@ function hrefsOf(items: ReturnType<typeof buildSideNavItems>): string[] {
 describe("buildSideNavItems", () => {
   it.each(MODES)("should build a non-empty nav for %s, so an empty list cannot pass", (mode) => {
     // 以下の not.toContain 群は、nav が丸ごと空でも通ってしまう。
-    expect(hrefsOf(buildSideNavItems(0, t, mode, "ja")).length).toBeGreaterThan(0);
+    expect(hrefsOf(buildSideNavItems(0, t, mode, "ja", true)).length).toBeGreaterThan(0);
   });
 
   it("should offer the course tracks in local mode", () => {
-    expect(hrefsOf(buildSideNavItems(0, t, "local", "ja"))).toContain("/course-tracks");
+    expect(hrefsOf(buildSideNavItems(0, t, "local", "ja", true))).toContain("/course-tracks");
   });
 
   it.each(["real", "mock"] as const)("should not offer the course tracks in %s mode", (mode) => {
-    expect(hrefsOf(buildSideNavItems(0, t, mode, "ja"))).not.toContain("/course-tracks");
+    expect(hrefsOf(buildSideNavItems(0, t, mode, "ja", true))).not.toContain("/course-tracks");
   });
 
   it.each(MODES)("should keep the flat problem list in %s mode", (mode) => {
     // 講座トラックを外しても問題一覧は残る = デモから問題に行けなくなってはいない。
-    expect(hrefsOf(buildSideNavItems(0, t, mode, "ja"))).toContain("/problems");
+    expect(hrefsOf(buildSideNavItems(0, t, mode, "ja", true))).toContain("/problems");
   });
 
-  it("should drop the AWS-only links in local mode", () => {
+  it("should drop the notifications link in local mode", () => {
     // Issue #2474 の既存挙動。講座トラックの変更で壊れていないことを併せて見る。
-    const hrefs = hrefsOf(buildSideNavItems(3, t, "local", "ja"));
-    expect(hrefs).not.toContain("/notifications");
-    expect(hrefs).not.toContain("/tools/sso");
+    expect(hrefsOf(buildSideNavItems(3, t, "local", "ja", true))).not.toContain("/notifications");
   });
 
-  it.each(["real", "mock"] as const)("should keep the AWS-only links in %s mode", (mode) => {
-    const hrefs = hrefsOf(buildSideNavItems(3, t, mode, "ja"));
-    expect(hrefs).toContain("/notifications");
-    expect(hrefs).toContain("/tools/sso");
+  it.each(["real", "mock"] as const)("should keep the notifications link in %s mode", (mode) => {
+    expect(hrefsOf(buildSideNavItems(3, t, mode, "ja", true))).toContain("/notifications");
+  });
+
+  it.each(MODES)("should drop the Tools/SSO link when showsAwsFeatures is false", (mode) => {
+    // local-host (`hasAws: false`) reuses `cloudMode: "real"`, so this must be driven by the
+    // resolved `showsAwsFeatures` flag alone, independent of cloudMode.
+    expect(hrefsOf(buildSideNavItems(3, t, mode, "ja", false))).not.toContain("/tools/sso");
+  });
+
+  it.each([
+    "real",
+    "mock",
+  ] as const)("should keep the Tools/SSO link in %s mode when showsAwsFeatures is true", (mode) => {
+    expect(hrefsOf(buildSideNavItems(3, t, mode, "ja", true))).toContain("/tools/sso");
+  });
+
+  it("should gate the Tools/SSO link on showsAwsFeatures alone, not on cloudMode", () => {
+    // The function itself has no opinion on *why* AWS features are unavailable. The caller
+    // resolves that via hasAwsFeatures(config), which folds in both cloudMode === "local" and
+    // hasAws === false. Passing true for "local" here is not a real call production makes; it
+    // pins that buildSideNavItems does not redundantly re-check cloudMode for this section.
+    expect(hrefsOf(buildSideNavItems(3, t, "local", "ja", true))).toContain("/tools/sso");
   });
 });

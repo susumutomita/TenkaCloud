@@ -40,12 +40,22 @@ export async function readBody(request: IncomingMessage, limit = MAX_BODY): Prom
   return Buffer.concat(parts).toString("utf8");
 }
 
+/** A link from chat, mail or a browser-based terminal opens the app; `localhost` and `127.0.0.1` are different sites. */
+function pageNavigation(request: IncomingMessage): boolean {
+  return (
+    request.method === "GET" &&
+    request.headers["sec-fetch-mode"] === "navigate" &&
+    request.headers["sec-fetch-dest"] === "document" &&
+    !(request.url ?? "/").startsWith("/api/")
+  );
+}
+
 function validOrigin(request: IncomingMessage, origin: string): void {
   if (request.headers.host !== new URL(origin).host)
     throw new HostError(403, "Untrusted Host header.");
   if (request.headers.origin && request.headers.origin !== origin)
     throw new HostError(403, "Cross-origin requests are not allowed.");
-  if (request.headers["sec-fetch-site"] === "cross-site")
+  if (request.headers["sec-fetch-site"] === "cross-site" && !pageNavigation(request))
     throw new HostError(403, "Cross-site requests are not allowed.");
 }
 

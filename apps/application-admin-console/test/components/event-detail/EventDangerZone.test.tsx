@@ -8,6 +8,24 @@ import type {
 } from "../../../src/components/event-detail/event-danger-zone-models";
 import type { AppConfig } from "../../../src/config";
 import type { EndsAtValidation } from "../../../src/hooks/useEventOperations";
+import en from "../../../src/i18n/locales/en.json";
+import ja from "../../../src/i18n/locales/ja.json";
+
+/** Resolves against a real locale dictionary so copy assertions pin the actual shipped text. */
+function realT(dict: Record<string, unknown>) {
+  return (key: string, params?: Readonly<Record<string, string | number>>) => {
+    const value = key
+      .split(".")
+      .reduce<unknown>(
+        (node, part) =>
+          node && typeof node === "object" ? (node as Record<string, unknown>)[part] : undefined,
+        dict,
+      );
+    let s = typeof value === "string" ? value : key;
+    if (params) for (const [k, v] of Object.entries(params)) s = s.split(`{${k}}`).join(String(v));
+    return s;
+  };
+}
 
 /**
  * Issue #1350 / #2020: EventDangerZone (end / force-archive / teardown / schedule-start / ends-at /
@@ -56,6 +74,7 @@ function scheduleModel(over: Partial<ScheduleOperationModel> = {}): ScheduleOper
 function controller(
   over: {
     canMutateTenant?: boolean;
+    config?: AppConfig;
     detail?: EventDetail | null;
     endEvent?: Partial<EventDangerZoneController["endEvent"]>;
     forceArchive?: Partial<EventDangerZoneController["forceArchive"]>;
@@ -70,7 +89,7 @@ function controller(
   return {
     eventContext: {
       canMutateTenant: over.canMutateTenant ?? true,
-      config: {} as AppConfig,
+      config: over.config ?? ({} as AppConfig),
       detail: over.detail === undefined ? DEFAULT_DETAIL : over.detail,
       eventId: "e1",
     },
@@ -344,5 +363,97 @@ describe("EventDangerZone", () => {
     expect(screen.getByText("event_detail.notification_sent_body")).toBeInTheDocument();
     fireEvent.click(document.querySelector('button[class*="dismiss-button"]') as HTMLButtonElement);
     expect(c.notification.dismissSuccess).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Local-hosting rehearsal defect: the teardown modal showed CloudFormation / competitor-account
+ * copy in local mode, which has neither. Assert the literal shipped text (real en/ja dictionaries,
+ * not the key-echo `t`) so a future edit can't reintroduce AWS wording under `isLocalHost`.
+ */
+describe("EventDangerZone teardown modal copy (local hosting vs SaaS)", () => {
+  const twoTeamsOneProblem = {
+    teams: [{}, {}],
+    problems: [{}],
+  } as unknown as EventDetail;
+  const localHostConfig: AppConfig = {
+    cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
+    cognitoClientId: "abc",
+    redirectUri: "http://localhost:5174/callback",
+    scope: "openid email profile",
+    tenantId: "tenant-test",
+    tenantName: "Test Tenant",
+    apiBaseUrl: "https://api.example.com/prod",
+    samlIdpDirectory: {},
+    mode: "local-host",
+  };
+
+  it("should show accurate local-hosting copy in English with no AWS/CloudFormation wording", () => {
+    const c = controller({
+      config: localHostConfig,
+      detail: twoTeamsOneProblem,
+      teardown: { open: true },
+    });
+    render(<EventDangerZone controller={c} t={realT(en)} />);
+    const dialog = within(
+      screen.getByRole("dialog", { name: "Delete all deployments for this Event?" }),
+    );
+    expect(
+      dialog.getByText(
+        "Tears down every team's problem environment for this Event. Docker containers and volumes are deleted for Docker problems on this computer; Battle problems have their access closed. The event, scores and submissions are kept. Cannot be undone.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      dialog.getByText(
+        "2 team(s) × 1 problem(s) will be torn down on this computer. Cannot be undone.",
+      ),
+    ).toBeInTheDocument();
+    expect(dialog.getByText("Environments already removed are skipped.")).toBeInTheDocument();
+    expect(dialog.queryByText(/CloudFormation/)).not.toBeInTheDocument();
+    expect(dialog.queryByText(/competitor account/i)).not.toBeInTheDocument();
+    expect(dialog.queryByText(/Phase 3/)).not.toBeInTheDocument();
+  });
+
+  it("should show accurate local-hosting copy in Japanese with no competitor-account wording", () => {
+    const c = controller({
+      config: localHostConfig,
+      detail: twoTeamsOneProblem,
+      teardown: { open: true },
+    });
+    render(<EventDangerZone controller={c} t={realT(ja)} />);
+    const dialog = within(
+      screen.getByRole("dialog", { name: "Event 全 deployment を削除しますか?" }),
+    );
+    expect(
+      dialog.getByText(
+        "このイベントの全チームの問題環境を撤収します。Docker 問題はこのPC上のコンテナとボリュームを削除し、Battle 問題は参加アクセスを閉じます。イベント、得点、提出結果は保持します。取り消しできません。",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      dialog.getByText("2 チーム × 1 問題の環境をこのPCで撤収します。取り消しできません。"),
+    ).toBeInTheDocument();
+    expect(dialog.queryByText(/競技者アカウント/)).not.toBeInTheDocument();
+    expect(dialog.queryByText(/Phase 3/)).not.toBeInTheDocument();
+  });
+
+  it("should keep the SaaS teardown copy (CloudFormation / competitor accounts) unchanged", () => {
+    const c = controller({ detail: twoTeamsOneProblem, teardown: { open: true } });
+    render(<EventDangerZone controller={c} t={realT(en)} />);
+    const dialog = within(
+      screen.getByRole("dialog", { name: "Delete all deployments for this Event?" }),
+    );
+    expect(
+      dialog.getByText(
+        "All deployments under this Event will be moved to DELETING and a CloudFormation stack delete will be issued on competitor accounts. Cannot be undone.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      dialog.getByText(
+        "2 team(s) × 1 problem(s) — all CloudFormation stacks will be deleted on the competitor accounts. Cannot be undone.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      dialog.getByText(/Rows already in DELETING \/ DELETED are idempotently skipped/),
+    ).toBeInTheDocument();
   });
 });

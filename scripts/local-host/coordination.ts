@@ -4,9 +4,17 @@ import {
   type MatchTransition,
   transitionMatch,
 } from "./coordination-core";
-import { assertPlaying, gate, HostError, type HostedEvent, object, type Problem } from "./model";
+import { type Gate, gate, HostError, type HostedEvent, object, type Problem } from "./model";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
 import { digest } from "./store";
+
+/** SaaS coordination parity (coordination-handler.ts's isScoringActive): a move outside the
+ * scoring window is a 422 rejection, not the 409 the flag-submission gate uses. */
+const moveRejection: Record<Exclude<Gate["kind"], "ok">, string> = {
+  scoring_not_started: "event_ended",
+  scoring_ended: "event_ended",
+  scoring_locked: "scoring_locked",
+};
 
 /** Called under HostingService's event queue; SQLite commits state and every affected score together. */
 export class LocalCoordination {
@@ -45,23 +53,20 @@ export class LocalCoordination {
     if (Buffer.byteLength(serialized) > 2 * 1024 * 1024)
       throw new HostError(503, "Coordination state exceeds the local runtime limit.");
     this.host.store.putCoordination(event.eventId, problem.problemId, serialized);
-    const jobs = this.host.store.jobs(event.eventId);
     const occurredAt = new Date(
       Math.min(this.host.now(), event.endsAt ? Date.parse(event.endsAt) : Infinity),
     ).toISOString();
     for (const [teamId, delta] of Object.entries(result.deltas)) {
       if (!delta) continue;
       const team = this.host.store.team(teamId);
-      const job = jobs.find(
-        (candidate) => candidate.teamId === teamId && candidate.problemId === problem.problemId,
-      );
-      if (!job) throw new HostError(503, "Coordination roster has no deployment.");
+      const jobId = this.host.store.jobId(event.eventId, teamId, problem.problemId);
+      if (!jobId) throw new HostError(503, "Coordination roster has no deployment.");
       this.host.store.putTeam({
         ...team,
         score: team.score + delta,
         scoreEvents: [
           {
-            jobId: job.jobId,
+            jobId,
             problemId: problem.problemId,
             source: "coordination",
             points: delta,
@@ -133,8 +138,13 @@ export class LocalCoordination {
       .find((item) => item.problemId === problem.problemId);
     if (job?.status !== "COMPLETE" || job.operation)
       throw new HostError(409, "This team's Battle is not running.");
-    if (move) assertPlaying(event, this.host.now());
-    else if (gate(event, this.host.now()).kind === "scoring_not_started")
+    if (move) {
+      const result = gate(event, this.host.now());
+      if (result.kind !== "ok") {
+        const error = moveRejection[result.kind];
+        throw new HostError(422, error, error);
+      }
+    } else if (gate(event, this.host.now()).kind === "scoring_not_started")
       throw new HostError(409, "The event has not started.");
     const body = move ? object(request.body) : {};
     if ("teamId" in body || "eventId" in body)

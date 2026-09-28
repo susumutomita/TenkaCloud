@@ -59,7 +59,7 @@
     "@aws-sdk/credential-provider-node": "^3.972.84",
     "@cdklabs/sbt-aws": "0.9.5",
     "@libsql/client": "^0.17.4",
-    "@smithy/protocol-http": "^5.5.10",
+    "@smithy/protocol-http": "^5.6.2",
     "@smithy/signature-v4": "^5.4.3",
     "@smithy/types": "^4.19.0",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",

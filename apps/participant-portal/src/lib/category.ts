@@ -1,3 +1,4 @@
+import type { ProblemCategory as CatalogCategory } from "@tenkacloud/portal-contracts";
 import type { ParticipantScoringInfo, ScoringKind } from "../api/portal-client";
 
 export type ProblemCategory = "battle" | "challenge";
@@ -17,8 +18,7 @@ export type ProblemCategory = "battle" | "challenge";
  * 旧 logic は `kind === "uptime" ? battle : challenge` で battle 軸の新 kind が
  * すべて challenge に流れていた。
  *
- * 将来 1 problem が両方の scoring を持つようになる場合 (Issue #502 注釈参照) は backend が
- * metadata.json の `category` を直接 view に流す形に切り替える。
+ * `scoring` の無い coordination 問題 (暗号 Battle など) だけ、 catalog metadata の `category` を使う。
  */
 const BATTLE_KINDS: ReadonlySet<ScoringKind> = new Set<ScoringKind>([
   "uptime",
@@ -28,7 +28,12 @@ const BATTLE_KINDS: ReadonlySet<ScoringKind> = new Set<ScoringKind>([
   "attack-detection",
 ]);
 
-export function categoryOf(scoring: ParticipantScoringInfo | undefined): ProblemCategory | null {
-  if (!scoring) return null;
-  return BATTLE_KINDS.has(scoring.kind) ? "battle" : "challenge";
+export function categoryOf(
+  scoring: ParticipantScoringInfo | undefined,
+  catalogCategory?: CatalogCategory,
+): ProblemCategory | null {
+  if (scoring) return BATTLE_KINDS.has(scoring.kind) ? "battle" : "challenge";
+  if (catalogCategory === "Battle") return "battle";
+  if (catalogCategory === "Challenge") return "challenge";
+  return null;
 }

@@ -816,6 +816,29 @@ describe("ProblemDetailPage", () => {
     expect(mockPortalPluginSlots).toHaveBeenCalledWith(expect.objectContaining({ endpoints }));
   });
 
+  it("should pass the leaderboard end time to plugin slot props as eventEndsAt, and omit it when the event has no end time", () => {
+    mockFindMeta.mockReturnValue(meta());
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith(),
+        leaderboard: { eventId: "e1", entries: [], endsAt: "2026-09-27T12:00:00.000Z" },
+      }),
+    );
+
+    renderPage();
+
+    expect(mockPortalPluginSlots).toHaveBeenCalledWith(
+      expect.objectContaining({ eventEndsAt: "2026-09-27T12:00:00.000Z" }),
+    );
+
+    mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+    renderPage();
+
+    expect(mockPortalPluginSlots).toHaveBeenLastCalledWith(
+      expect.objectContaining({ eventEndsAt: undefined }),
+    );
+  });
+
   it("should reset endpoint form state when the active problem or team changes", async () => {
     const user = userEvent.setup();
     let activeView = viewWith({

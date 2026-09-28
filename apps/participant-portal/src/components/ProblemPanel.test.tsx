@@ -21,6 +21,7 @@ function catalogTitleOf(problemId: string): string {
 
 import {
   buildAutoDeleteNotice,
+  buildPanelDescription,
   codespacesLoopbackUrl,
   describeProblemKind,
   formatProblemPanelActionError,
@@ -284,7 +285,9 @@ describe("ProblemPanel pure helpers", () => {
   });
 
   it("should describe each scoring kind", () => {
-    expect(describeProblemKind(echoT, undefined)).toBe("problem_panel.kind_unknown");
+    // Coordination-only problems (no `scoring` at all) have no kind axis to state;
+    // null (= render nothing), not "unknown", is the honest answer for them.
+    expect(describeProblemKind(echoT, undefined)).toBeNull();
     expect(describeProblemKind(echoT, { kind: "flag" })).toBe("problem_panel.kind_flag");
     expect(describeProblemKind(echoT, { kind: "multi-flag" })).toBe(
       "problem_panel.kind_multi_flag",
@@ -299,6 +302,13 @@ describe("ProblemPanel pure helpers", () => {
     expect(describeProblemKind(echoT, { kind: "mystery" } as never)).toBe(
       "problem_panel.kind_unknown",
     );
+  });
+
+  it("should build the header description with the kind label when present, and score alone otherwise", () => {
+    expect(buildPanelDescription("problem_panel.kind_flag", 42)).toBe(
+      "problem_panel.kind_flag / 42 pt",
+    );
+    expect(buildPanelDescription(null, 42)).toBe("42 pt");
   });
 
   it("should classify uptime vs flag scoring", () => {
@@ -446,6 +456,26 @@ describe("ProblemPanel render branches", () => {
       scoring: { kind: "flag", flagSubmitted: false, points: 100 },
     });
     expect(screen.getByTestId("flag-panel")).toBeInTheDocument();
+  });
+
+  it("should show the score without a scoring-kind prefix for a problem with no scoring (e.g. a coordination Battle)", () => {
+    // baseProblem carries no `scoring` (coordination-only problems, such as the
+    // Cryptography Battle, never declare one). Before the fix the header described this as
+    // "(unknown) / 42 pt", falsely claiming an unrecognized scoring kind. With no `scoring`
+    // at all there is no kind to state, so only the score should render, matching the
+    // score already shown in the facts row below (2 occurrences of the same string).
+    renderPanel({ score: 42 });
+    expect(screen.getAllByText("42 pt")).toHaveLength(2);
+    expect(screen.queryByText(/\(unknown\)|\(未設定\)/)).not.toBeInTheDocument();
+  });
+
+  it("should keep the scoring-kind prefix when the problem has scoring", () => {
+    renderPanel({
+      status: "COMPLETE",
+      scoring: { kind: "flag", flagSubmitted: false, points: 100 },
+      score: 42,
+    });
+    expect(screen.getByText(/Challenge \(flag/)).toBeInTheDocument();
   });
 
   it("should render the multi-flag submission panel for a COMPLETE multi-flag problem", () => {

@@ -8,6 +8,7 @@ import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import TimeInput from "@cloudscape-design/components/time-input";
 import { useEffect, useState } from "react";
+import { isLocalHost } from "../../config";
 import { SendNotificationModal } from "../SendNotificationModal";
 import type {
   ConfirmOperationModel,
@@ -129,21 +130,30 @@ function ForceArchiveModal({
   );
 }
 
-/** Bulk-teardown confirmation modal (DELETE-gated; blast radius shown from counts). */
+/** Bulk-teardown confirmation. Local hosting has no CloudFormation stacks, so it gets its own copy. */
 function TeardownModal({
   canMutateTenant,
+  localHost,
   model,
   problemCount,
   teamCount,
   t,
 }: {
   readonly canMutateTenant: boolean;
+  readonly localHost: boolean;
   readonly model: TeardownOperationModel;
   readonly problemCount: number;
   readonly teamCount: number;
   readonly t: Translate;
 }) {
   const teardownConfirm = useTeardownConfirmInput(model.open);
+  const blastRadiusBodyKey = localHost
+    ? "local_host.modal_teardown_blast_radius_body"
+    : "event_detail.modal_teardown_blast_radius_body";
+  const bodyKey = localHost ? "local_host.modal_teardown_body" : "event_detail.modal_teardown_body";
+  const extraKey = localHost
+    ? "local_host.modal_teardown_extra"
+    : "event_detail.modal_teardown_extra";
   return (
     <Modal
       visible={model.open}
@@ -167,11 +177,11 @@ function TeardownModal({
     >
       <SpaceBetween size="s">
         <Alert type="warning" header={t("event_detail.modal_teardown_blast_radius_header")}>
-          {t("event_detail.modal_teardown_blast_radius_body", { teamCount, problemCount })}
+          {t(blastRadiusBodyKey, { teamCount, problemCount })}
         </Alert>
-        <Box>{t("event_detail.modal_teardown_body")}</Box>
+        <Box>{t(bodyKey)}</Box>
         <Box variant="small" color="text-status-warning">
-          {t("event_detail.modal_teardown_extra")}
+          {t(extraKey)}
         </Box>
         <FormField
           label={t("event_detail.modal_teardown_confirm_input_label")}
@@ -438,6 +448,7 @@ export function EventDangerZone({
       <ForceArchiveModal canMutateTenant={canMutateTenant} model={controller.forceArchive} t={t} />
       <TeardownModal
         canMutateTenant={canMutateTenant}
+        localHost={isLocalHost(config)}
         model={controller.teardown}
         problemCount={detail?.problems.length ?? 0}
         teamCount={detail?.teams.length ?? 0}
