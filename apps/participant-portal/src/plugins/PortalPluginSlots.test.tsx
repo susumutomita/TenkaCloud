@@ -126,6 +126,24 @@ describe("PortalPluginSlots", () => {
     );
   });
 
+  it("should pass eventEndsAt to plugin slot props when the event has an end time, and omit it otherwise", async () => {
+    function EndsAtPanel(props: { eventEndsAt?: string }) {
+      return <div data-testid="ends-at">{props.eventEndsAt ?? "none"}</div>;
+    }
+    mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
+      slotName === "StatusPanel" ? EndsAtPanel : undefined,
+    );
+    const { rerender } = render(
+      <PortalPluginSlots {...baseProps} eventEndsAt="2026-09-27T12:00:00.000Z" />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("ends-at")).toHaveTextContent("2026-09-27T12:00:00.000Z"),
+    );
+
+    rerender(<PortalPluginSlots {...baseProps} />);
+    await waitFor(() => expect(screen.getByTestId("ends-at")).toHaveTextContent("none"));
+  });
+
   it("should pass the authoritative endpoint override to plugin slot props", async () => {
     function EndpointPanel(props: {
       endpoints: readonly { slot: string; effectiveUrl?: string }[];

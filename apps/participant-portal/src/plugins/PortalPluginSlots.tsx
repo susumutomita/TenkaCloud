@@ -55,6 +55,8 @@ interface PortalPluginSlotsProps {
   readonly coordinationApiUrl?: string;
   /** [#1420] team の session token (= bearer)。 coordinationClient の束縛に使う。 */
   readonly sessionToken?: string;
+  /** Event の採点終了時刻 (ISO 8601)。 `PortalSlotProps.eventEndsAt` へ渡す。 */
+  readonly eventEndsAt?: string;
 }
 
 export function PortalPluginSlots({
@@ -69,6 +71,7 @@ export function PortalPluginSlots({
   endpoints: registeredEndpoints,
   coordinationApiUrl,
   sessionToken,
+  eventEndsAt,
 }: PortalPluginSlotsProps) {
   const { refreshAfterMutation } = useTeamView();
   // problemId が変わらない限り phases / disruptions / slot 検索結果は不変 (= build-time catalog
@@ -118,6 +121,7 @@ export function PortalPluginSlots({
       disruptions,
       ...(coordination ? { coordination } : {}),
       ...(coordinationClient ? { coordinationClient } : {}),
+      ...(eventEndsAt ? { eventEndsAt } : {}),
       nowIso,
     }),
     [
@@ -133,6 +137,7 @@ export function PortalPluginSlots({
       disruptions,
       coordination,
       coordinationClient,
+      eventEndsAt,
       nowIso,
     ],
   );

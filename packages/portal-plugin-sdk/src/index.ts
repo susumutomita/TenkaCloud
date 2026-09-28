@@ -32,6 +32,9 @@ import type { ComponentType } from "react";
  * - `phases`: metadata.phases[] (= operator 内部 field なし、 predict 用)。
  * - `disruptions`: metadata.disruptions[] (= 同上)。
  * - `nowIso`: portal が plugin に「現在時刻」を渡す (= test 容易性 + clock skew 緩和)。
+ * - `eventEndsAt`: event の採点終了時刻 (ISO 8601)。 event に終了時刻がある場合だけ portal が
+ *    設定し、無ければ undefined。 plugin 自身の match clock (例: 90 分の対戦タイマー) は
+ *    End Event で即座に終わらない。 運営が End Event した瞬間にこの field で気付けるようにする。
  */
 export interface PortalSlotProps {
   readonly team: {
@@ -62,6 +65,7 @@ export interface PortalSlotProps {
    */
   readonly coordinationClient?: PortalCoordinationClient;
   readonly nowIso: string;
+  readonly eventEndsAt?: string;
 }
 
 export type PortalLocale = "ja" | "en";

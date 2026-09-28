@@ -46,6 +46,23 @@ describe("PortalSlotProps / PortalSlotComponent (type-level)", () => {
     expect(props.problemId).toBe("sqli-demo");
   });
 
+  it("should accept an optional ISO 8601 eventEndsAt and allow omitting it", () => {
+    const withEnd: PortalSlotProps = {
+      team: { teamName: "Alpha" },
+      problemId: "sqli-demo",
+      jobId: "job-1",
+      score: 0,
+      locale: "ja",
+      endpoints: [],
+      phases: [],
+      disruptions: [],
+      nowIso: "2026-01-01T00:00:00.000Z",
+      eventEndsAt: "2026-01-01T02:00:00.000Z",
+    };
+    expect(withEnd.eventEndsAt).toBe("2026-01-01T02:00:00.000Z");
+    expectTypeOf<PortalSlotProps["eventEndsAt"]>().toEqualTypeOf<string | undefined>();
+  });
+
   it("should type coordinationClient.submitOp/getProjection as returning a PortalCoordinationOutcome", () => {
     const client: PortalCoordinationClient = {
       submitOp: async () => ({ kind: "ok", projection: {} }),

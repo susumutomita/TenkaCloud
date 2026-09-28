@@ -23,6 +23,7 @@ import { ContainerWorkbenchPanel } from "./ContainerWorkbenchPanel";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
 import {
   buildAutoDeleteNotice,
+  buildPanelDescription,
   codespacesLoopbackUrl,
   describeApplicationStatus,
   describeProblemKind,
@@ -351,7 +352,7 @@ export function ProblemPanel({
     ? describeApplicationStatus(problem.applicationStatus, t)
     : null;
   let panelTitle = resolveProblemTitle(problem);
-  let panelDescription = `${kindLabel} / ${problem.score} pt`;
+  let panelDescription = buildPanelDescription(kindLabel, problem.score);
   if (isIntroTutorial) {
     panelTitle = t("onboarding_tutorial.panel_title");
     panelDescription = t("onboarding_tutorial.panel_description");

@@ -358,7 +358,7 @@ const linkHrefs = (section: SideNavigationProps.Section | undefined) =>
 
 describe("buildSideNavItems (Issue #2474 local nav pruning)", () => {
   it("should omit the Tools section and the notifications link in local cloud mode", () => {
-    const items = buildSideNavItems(0, (k) => k, "local", "ja");
+    const items = buildSideNavItems(0, (k) => k, "local", "ja", false);
     // Tools (SSO 資格情報) セクションは丸ごと省く。
     expect(sectionByText(items, "nav.tools_section")).toBeUndefined();
     // Event セクションは home / scoreboard / score-events のみで notifications 無し。
@@ -372,20 +372,27 @@ describe("buildSideNavItems (Issue #2474 local nav pruning)", () => {
   });
 
   it("should keep the Tools section and notifications link in real cloud mode (regression guard)", () => {
-    const items = buildSideNavItems(0, (k) => k, "real", "ja");
+    const items = buildSideNavItems(0, (k) => k, "real", "ja", true);
     expect(sectionByText(items, "nav.tools_section")).toBeDefined();
     expect(linkHrefs(sectionByText(items, "nav.event_section"))).toContain("/notifications");
   });
 
   it("should keep the Tools section and notifications link in mock cloud mode (regression guard)", () => {
-    const items = buildSideNavItems(0, (k) => k, "mock", "ja");
+    const items = buildSideNavItems(0, (k) => k, "mock", "ja", true);
     expect(sectionByText(items, "nav.tools_section")).toBeDefined();
+    expect(linkHrefs(sectionByText(items, "nav.event_section"))).toContain("/notifications");
+  });
+
+  it("should omit the Tools section for the local-host build (real cloud mode, showsAwsFeatures=false)", () => {
+    const items = buildSideNavItems(0, (k) => k, "real", "ja", false);
+    expect(sectionByText(items, "nav.tools_section")).toBeUndefined();
+    // notifications is unrelated to hasAws (only cloudMode === "local" hides it).
     expect(linkHrefs(sectionByText(items, "nav.event_section"))).toContain("/notifications");
   });
 
   it("should append a language section with #locale- links in every cloud mode (#2711 follow-up)", () => {
     for (const cloudMode of ["local", "mock", "real"] as const) {
-      const items = buildSideNavItems(0, (k) => k, cloudMode, "ja");
+      const items = buildSideNavItems(0, (k) => k, cloudMode, "ja", true);
       const language = sectionByText(items, "nav.language_section");
       expect(language).toBeDefined();
       expect(linkHrefs(language)).toEqual(["#locale-ja", "#locale-en"]);
@@ -394,7 +401,7 @@ describe("buildSideNavItems (Issue #2474 local nav pruning)", () => {
 
   it("should mark only the active locale with a checkmark in the language section", () => {
     const language = sectionByText(
-      buildSideNavItems(0, (k) => k, "real", "en"),
+      buildSideNavItems(0, (k) => k, "real", "en", true),
       "nav.language_section",
     );
     const texts = (language?.items ?? []).map((i) => ("text" in i ? i.text : undefined));
@@ -567,6 +574,20 @@ describe("ShellLayout", () => {
     expect(screen.queryByText("nav.sso_credentials")).not.toBeInTheDocument();
     expect(screen.queryByText("nav.notifications")).not.toBeInTheDocument();
     // home / scoreboard など Event 導線は維持。
+    expect(screen.getAllByText("nav.scoreboard").length).toBeGreaterThan(0);
+  });
+
+  it("should hide the AWS Console utility and Tools/SSO link for the local-host build (real cloud mode, hasAws=false)", () => {
+    // local-host (`make host`/`bun start`, no AWS at all) deliberately keeps cloudMode "real"
+    // to reuse the full competition portal (real team-key login, no self-paced UI), so this
+    // must be driven by `hasAws: false` alone -- not by cloudMode.
+    renderShell({ cloudMode: "real", hasAws: false });
+    expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+    expect(screen.queryByText("nav.tools_section")).not.toBeInTheDocument();
+    expect(screen.queryByText("nav.sso_credentials")).not.toBeInTheDocument();
+    // notifications is unrelated to hasAws (only cloudMode === "local" hides it) and local-host
+    // does have an operator/event, so it stays.
+    expect(screen.getAllByText("nav.notifications").length).toBeGreaterThan(0);
     expect(screen.getAllByText("nav.scoreboard").length).toBeGreaterThan(0);
   });
 
