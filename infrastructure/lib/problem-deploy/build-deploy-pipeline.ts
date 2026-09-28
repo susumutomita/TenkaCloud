@@ -153,7 +153,7 @@ export function buildDeployPipeline(
     // is validated as `problems/<category>/<id>` (events.ts `DeployCreateRequestedDetailSchema`),
     // so uploading `problems/`'s contents under the `problems/` key prefix lands the objects at
     // `problems/<category>/<id>/{template.yaml,metadata.json}` — byte-for-byte the on-disk layout
-    // `deploy-battles.sh` reads. Gated on `deployViaLambda`, so the default (flag OFF) synth adds
+    // `deploy-battles.sh` reads. Gated on `deployViaLambda` (default on), so a flag-OFF synth adds
     // no BucketDeployment and stays byte-identical. Copying the whole tree (rather than filtering
     // to just the two files) is deliberate: the default GLOB ignore strategy cannot re-include a
     // nested file whose parent directory is excluded, so a `!**/template.yaml` filter would skip

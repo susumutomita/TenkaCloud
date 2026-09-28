@@ -41,6 +41,9 @@ export default [
       // that `bun start` / `bun run build:host` emit under `.tenkacloud/host-build/`. Minified
       // output, never tracked source; CI never has it at lint time.
       ".tenkacloud/**",
+      // Local-only caches (`.gitignore:75`): source bundles, nested worktrees and tool installs
+      // such as `.cache/pstack-install-*`. Untracked, so CI never has them at lint time.
+      ".cache/**",
     ],
   },
   ...tseslint.configs.strict,

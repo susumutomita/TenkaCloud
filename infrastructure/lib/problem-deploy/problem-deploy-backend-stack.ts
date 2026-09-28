@@ -103,7 +103,7 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   readonly useBulkDistributedMap?: boolean;
   /**
    * Issue #2291: DeployCreate を CodeBuild ではなく Lambda CreateStack +
-   * DescribeStacks poll 経路にするか (`CDK_PARAM_DEPLOY_VIA_LAMBDA`)。default (未指定 / false) は
+   * DescribeStacks poll 経路にするか (`CDK_PARAM_DEPLOY_VIA_LAMBDA`、app config の既定は true)。未指定 / false は
    * 在来の CodeBuild 経路で、追加リソースなし = CFn テンプレ byte 互換。true で {@link CfnDeployLambda}
    * を生成し、`DeployCreate` state machine が Lambda + poll 定義に切り替わる。
    */
