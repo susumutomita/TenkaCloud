@@ -40,7 +40,7 @@ function buildStubLambda(scope: cdk.Stack, id: string): LambdaFunction {
   });
 }
 
-function synth(): Template {
+function synth(features?: Readonly<Record<string, boolean>>): Template {
   const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
@@ -53,6 +53,7 @@ function synth(): Template {
     deployApiLambda: buildStubLambda(stack, "StubDeploy"),
     eventApiLambda: buildStubLambda(stack, "StubEvent"),
     competitorAccountsApiLambda: buildStubLambda(stack, "StubCompetitorAccounts"),
+    ...(features ? { features } : {}),
     apiKeyConfig: {
       ssmParameterNames: {
         basic: { keyId: "basic-id", value: "basic-val" },
@@ -280,5 +281,31 @@ describe("buildAppPlaneCore", () => {
     const lambdaConfig = (userPool?.Properties as { LambdaConfig?: Record<string, unknown> })
       ?.LambdaConfig;
     expect(lambdaConfig?.PreSignUp).toBeUndefined();
+  });
+
+  it("should open /admin/team-cloud-credentials/{provider}/{teamSlug} only when features.nonAwsRuntime is on (#3290)", () => {
+    const teamCloudCredentialMethods = (template: Template): string[] => {
+      const teamSlugIds = Object.keys(
+        template.findResources("AWS::ApiGateway::Resource", {
+          Properties: { PathPart: "{teamSlug}" },
+        }),
+      );
+      return Object.values(template.findResources("AWS::ApiGateway::Method"))
+        .map((method) => method.Properties as { HttpMethod: string; ResourceId: { Ref?: string } })
+        .filter(
+          (props) =>
+            props.HttpMethod !== "OPTIONS" && teamSlugIds.includes(props.ResourceId.Ref ?? ""),
+        )
+        .map((props) => props.HttpMethod)
+        .sort();
+    };
+
+    expect(teamCloudCredentialMethods(synth())).toEqual([]);
+    expect(teamCloudCredentialMethods(synth({ nonAwsRuntime: false }))).toEqual([]);
+    expect(teamCloudCredentialMethods(synth({ nonAwsRuntime: true }))).toEqual([
+      "DELETE",
+      "GET",
+      "PUT",
+    ]);
   });
 });

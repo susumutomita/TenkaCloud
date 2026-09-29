@@ -1,7 +1,10 @@
 import type { Stack } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
-import { isHumanAuthorizerAudiencePinEnabled } from "../app-config/index.js";
+import {
+  isHumanAuthorizerAudiencePinEnabled,
+  isNonAwsRuntimeEnabled,
+} from "../app-config/index.js";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
 import { SamlIdpLambda } from "../problem-deploy/saml-idp-lambda.js";
 import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
@@ -255,6 +258,7 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     idpDetails: identityProvider.identityDetails,
     userPool: identityProvider.tenantUserPool,
     ...(humanAudienceValidationExpression ? { humanAudienceValidationExpression } : {}),
+    teamCloudCredentialsRoutes: isNonAwsRuntimeEnabled(props.features),
     deployApiLambda: props.deployApiLambda,
     eventApiLambda: props.eventApiLambda,
     competitorAccountsApiLambda: props.competitorAccountsApiLambda,

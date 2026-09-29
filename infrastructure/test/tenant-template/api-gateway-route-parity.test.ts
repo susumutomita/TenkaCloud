@@ -41,7 +41,18 @@ interface HandlerOnlyRoute {
   readonly route: string;
   readonly reason: string;
   readonly issue: number;
+  /** Handler-only only in this state of the deploy-time `nonAwsRuntime` feature. */
+  readonly whenNonAwsRuntime?: boolean;
 }
+
+const NON_AWS_RUNTIME_OFF_REASON =
+  "nonAwsRuntime off: the console hides it and the gateway does not expose it (#3290)";
+
+const TEAM_CLOUD_CREDENTIAL_ROUTES = [
+  "GET /admin/team-cloud-credentials/{provider}/{teamSlug}",
+  "PUT /admin/team-cloud-credentials/{provider}/{teamSlug}",
+  "DELETE /admin/team-cloud-credentials/{provider}/{teamSlug}",
+];
 
 /** Handler routes that deliberately have no gateway method. */
 const HANDLER_ONLY_ROUTES: readonly HandlerOnlyRoute[] = [
@@ -69,6 +80,15 @@ const HANDLER_ONLY_ROUTES: readonly HandlerOnlyRoute[] = [
     reason: "Lambda liveness probe. Nothing calls it through the tenant gateway.",
     issue: 3285,
   },
+  ...TEAM_CLOUD_CREDENTIAL_ROUTES.map(
+    (route): HandlerOnlyRoute => ({
+      backend: "CompetitorAccountsApi",
+      route,
+      reason: NON_AWS_RUNTIME_OFF_REASON,
+      issue: 3290,
+      whenNonAwsRuntime: false,
+    }),
+  ),
 ];
 
 type CfnProps = Record<string, unknown>;
@@ -79,7 +99,7 @@ interface GatewaySide {
   readonly unmapped: string[];
 }
 
-function synthGateway(): GatewaySide {
+function synthGateway(nonAwsRuntime: boolean): GatewaySide {
   const app = new App({ autoSynth: false });
   const stack = new Stack(app, "TestStack");
   const userPool = new UserPool(stack, "UP");
@@ -120,6 +140,7 @@ function synthGateway(): GatewaySide {
     apiKeyStandardTier: apiKey,
     apiKeyPremiumTier: apiKey,
     apiKeyPlatinumTier: apiKey,
+    teamCloudCredentialsRoutes: nonAwsRuntime,
   });
   const template = Template.fromStack(Stack.of(tenantApi));
 
@@ -165,7 +186,6 @@ async function handlerRoutes(backend: Backend): Promise<Set<string>> {
 }
 
 describe("tenant API Gateway and handler route parity (#3285)", () => {
-  const gateway = synthGateway();
   let handlers: Record<Backend, Set<string>>;
 
   beforeAll(async () => {
@@ -181,24 +201,44 @@ describe("tenant API Gateway and handler route parity (#3285)", () => {
     vi.unstubAllEnvs();
   });
 
-  it("should integrate every gateway method with exactly one backing Lambda", () => {
-    expect(gateway.unmapped).toEqual([]);
-  });
+  describe.each([{ nonAwsRuntime: false }, { nonAwsRuntime: true }])(
+    "with nonAwsRuntime=$nonAwsRuntime",
+    ({ nonAwsRuntime }) => {
+      const gateway = synthGateway(nonAwsRuntime);
 
-  it.each(BACKENDS)("should back every %s gateway method with a handler route", (backend) => {
-    const orphans = gateway.routes[backend].filter((route) => !handlers[backend].has(route));
-    expect(orphans).toEqual([]);
-  });
+      it("should integrate every gateway method with exactly one backing Lambda", () => {
+        expect(gateway.unmapped).toEqual([]);
+      });
 
-  it.each(BACKENDS)(
-    "should expose every %s handler route on the gateway unless it is listed as handler-only",
-    (backend) => {
-      const onGateway = new Set(gateway.routes[backend]);
-      const handlerOnly = [...handlers[backend]].filter((route) => !onGateway.has(route)).sort();
-      const listed = HANDLER_ONLY_ROUTES.filter((entry) => entry.backend === backend)
-        .map((entry) => entry.route)
-        .sort();
-      expect(handlerOnly).toEqual(listed);
+      it.each(BACKENDS)("should back every %s gateway method with a handler route", (backend) => {
+        const orphans = gateway.routes[backend].filter((route) => !handlers[backend].has(route));
+        expect(orphans).toEqual([]);
+      });
+
+      it.each(BACKENDS)(
+        "should expose every %s handler route on the gateway unless it is listed as handler-only",
+        (backend) => {
+          const onGateway = new Set(gateway.routes[backend]);
+          const handlerOnly = [...handlers[backend]]
+            .filter((route) => !onGateway.has(route))
+            .sort();
+          const listed = HANDLER_ONLY_ROUTES.filter(
+            (entry) =>
+              entry.backend === backend &&
+              (entry.whenNonAwsRuntime ?? nonAwsRuntime) === nonAwsRuntime,
+          )
+            .map((entry) => entry.route)
+            .sort();
+          expect(handlerOnly).toEqual(listed);
+        },
+      );
+
+      it("should expose the team cloud credential routes exactly when nonAwsRuntime is on (#3290)", () => {
+        const exposed = TEAM_CLOUD_CREDENTIAL_ROUTES.filter((route) =>
+          gateway.routes.CompetitorAccountsApi.includes(route),
+        );
+        expect(exposed).toEqual(nonAwsRuntime ? TEAM_CLOUD_CREDENTIAL_ROUTES : []);
+      });
     },
   );
 });

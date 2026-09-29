@@ -390,6 +390,10 @@ provider の問題は「近日対応」のまま選べません（Issue 2167）�
 手編集は不要になりました）。Application Admin Console の Competitor Accounts ページに
 Team Cloud Credentials パネルが現れます。
 
+同じフラグで tenant API に `/admin/team-cloud-credentials/{provider}/{teamSlug}` が作られます。
+フラグを OFF のまま `runtime-config.json` や console の設定画面でパネルだけ出しても、登録 API は
+API Gateway に無いので保存できません（Issue 3290）。
+
 ### 2. provider 側で認証情報を作る
 
 運営者は SSM を直接触りません。下記で作った値をパネルに貼り、パネルが API 経由で暗号化保存

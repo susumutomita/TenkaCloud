@@ -80,6 +80,13 @@ interface ApiGatewayProps {
    * 再 deploy するだけで、authorizer は元の (照合なし) 状態に戻る。
    */
   humanAudienceValidationExpression?: string;
+  /**
+   * Issue #3290: `/admin/team-cloud-credentials/{provider}/{teamSlug}` を開くか。未指定は開かない。
+   * PUT 1 回が account 共有の SSM Standard parameter を 1 個作るので、pooled では 1 tenant の
+   * TenantAdmin が全 tenant の parameter quota を食い潰せる。使う deploy (= `nonAwsRuntime` ON)
+   * だけに開く。
+   */
+  teamCloudCredentialsRoutes?: boolean;
 }
 
 /**
@@ -300,16 +307,18 @@ export class ApiGateway extends Construct {
       .addResource("verify")
       .addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
 
-    // Issue #1413 / #3285: 非 AWS 問題用のチーム別クラウド認証情報 (GET=登録状態 / PUT=登録・更新 /
-    // DELETE=失効)。画面は `nonAwsRuntime` フラグで隠れているが、route はフラグに関係なく開く。
-    // 認可は handler 側で閉じている (3 method とも 1 行目で TenantAdmin を要求する)。
-    const teamCloudCredential = admin
-      .addResource("team-cloud-credentials")
-      .addResource("{provider}")
-      .addResource("{teamSlug}");
-    teamCloudCredential.addMethod("GET", competitorAccountsIntegration, deployMethodOptions);
-    teamCloudCredential.addMethod("PUT", competitorAccountsIntegration, deployMethodOptions);
-    teamCloudCredential.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
+    // Issue #1413 / #3285 / #3290: 非 AWS 問題用のチーム別クラウド認証情報 (GET=登録状態 /
+    // PUT=登録・更新 / DELETE=失効)。deploy 時の `nonAwsRuntime` が ON のときだけ開く (理由は
+    // `teamCloudCredentialsRoutes`)。開いた後の認可は handler 側 (3 method とも TenantAdmin)。
+    if (props.teamCloudCredentialsRoutes) {
+      const teamCloudCredential = admin
+        .addResource("team-cloud-credentials")
+        .addResource("{provider}")
+        .addResource("{teamSlug}");
+      teamCloudCredential.addMethod("GET", competitorAccountsIntegration, deployMethodOptions);
+      teamCloudCredential.addMethod("PUT", competitorAccountsIntegration, deployMethodOptions);
+      teamCloudCredential.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
+    }
 
     // Issue #839 follow-up Phase B: Tenant 管理者が画面 / API から SAML IdP を CRUD する経路。
     // 同 Lambda (competitor-accounts) に相乗りさせ、 IAM 拡張 (cognito-idp) は Lambda 側で済ませる。
