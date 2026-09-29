@@ -431,7 +431,7 @@ export class HostingService {
   }
   private end(event: HostedEvent): ApiResponse {
     if (event.status !== "READY") throw new HostError(409, "Only a ready event can end.");
-    this.coordination.advance(event);
+    this.coordination.settle(event);
     event.status = "ENDED";
     event.endsAt = new Date(this.now()).toISOString();
     this.saveEvent(event);
@@ -445,7 +445,7 @@ export class HostingService {
       throw new HostError(409, "Event is not lockable.");
     if (event.scoringLocked === locked)
       return ok({ scoringLocked: event.scoringLocked, scoringLockedAt: event.scoringLockedAt });
-    this.coordination.advance(event);
+    this.coordination.settle(event);
     this.coordination.accountUnlock(event, locked);
     event.scoringLocked = locked;
     event.scoringLockedAt = locked ? new Date(this.now()).toISOString() : undefined;
@@ -740,7 +740,7 @@ export class HostingService {
       throw new HostError(409, "Every environment of this event has already been removed.");
     if (this.eventHasBusyJob(event.eventId))
       throw new HostError(409, "A team environment operation is still in progress.");
-    this.coordination.advance(event);
+    this.coordination.settle(event);
     event.status = "TEARDOWN";
     // Only an event that ran gets a final end time; a never-started event stays re-deployable.
     if (event.startsAt) event.endsAt ??= new Date(this.now()).toISOString();
@@ -795,6 +795,10 @@ export class HostingService {
   }
   async drain(): Promise<void> {
     await Promise.all([...this.tasks]);
+  }
+  /** Writes Battle state held in memory; call it after `drain()` and before closing SQLite. */
+  flush(): void {
+    this.coordination.flush();
   }
   /**
    * Re-adopt recorded runtimes before the listeners open. Jobs recover concurrently: each

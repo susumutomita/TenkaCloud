@@ -16,8 +16,24 @@ const moveRejection: Record<Exclude<Gate["kind"], "ok">, string> = {
   scoring_locked: "scoring_locked",
 };
 
+/** A tick that changes no score is written at most this often; `flush` writes the rest. */
+const FLUSH_INTERVAL_MS = 5_000;
+
+/** A Battle's match as SQLite stores it; `body` is current, `saved` is what SQLite holds. */
+interface MatchRow {
+  readonly problemId: string;
+  body: string;
+  saved?: { readonly body: string; readonly at: number };
+}
+
 /** Called under HostingService's event queue; SQLite commits state and every affected score together. */
 export class LocalCoordination {
+  /**
+   * Authoritative over SQLite, whose exclusive lock admits one host process. A tick's result
+   * depends on every earlier tick time, so each request ticks this row: resuming from an older
+   * saved row and ticking straight to now would issue different contracts and scores.
+   */
+  private readonly rows = new Map<string, MatchRow>();
   constructor(private readonly host: HostingService) {}
   private problem(event: HostedEvent): Problem | undefined {
     return event.problems.find((problem) => problem.runtime === "coordination");
@@ -38,25 +54,61 @@ export class LocalCoordination {
         (event.coordinationPausedMs ?? 0),
     );
   }
-  private load(event: HostedEvent, problem: Problem): LocalMatch {
+  private row(event: HostedEvent, problem: Problem): MatchRow {
+    let row = this.rows.get(event.eventId);
+    if (row) return row;
     const saved = this.host.store.coordination(event.eventId, problem.problemId);
-    if (saved) return JSON.parse(saved) as LocalMatch;
-    const teams = this.host.store.teams(event.eventId);
-    return createMatch(this.plugin(problem), {
-      eventId: event.eventId,
-      teamIds: teams.map((team) => team.teamId).sort((a, b) => a.localeCompare(b)),
-      teamNames: Object.fromEntries(teams.map((team) => [team.teamId, team.displayName])),
-    });
+    if (saved) {
+      row = {
+        problemId: problem.problemId,
+        body: saved,
+        saved: { body: saved, at: this.host.now() },
+      };
+    } else {
+      const teams = this.host.store.teams(event.eventId);
+      const match = createMatch(this.plugin(problem), {
+        eventId: event.eventId,
+        teamIds: teams.map((team) => team.teamId).sort((a, b) => a.localeCompare(b)),
+        teamNames: Object.fromEntries(teams.map((team) => [team.teamId, team.displayName])),
+      });
+      row = { problemId: problem.problemId, body: JSON.stringify(match) };
+    }
+    this.rows.set(event.eventId, row);
+    return row;
   }
-  private save(event: HostedEvent, problem: Problem, result: MatchTransition): void {
-    const serialized = JSON.stringify(result.match);
-    if (Buffer.byteLength(serialized) > 2 * 1024 * 1024)
+  private load(event: HostedEvent, problem: Problem): LocalMatch {
+    return JSON.parse(this.row(event, problem).body) as LocalMatch;
+  }
+  /** Writes at once when forced or scored, otherwise at most once per FLUSH_INTERVAL_MS. */
+  private save(
+    event: HostedEvent,
+    problem: Problem,
+    result: MatchTransition,
+    force: boolean,
+    receipt?: () => void,
+  ): void {
+    const body = JSON.stringify(result.match);
+    if (Buffer.byteLength(body) > 2 * 1024 * 1024)
       throw new HostError(503, "Coordination state exceeds the local runtime limit.");
-    this.host.store.putCoordination(event.eventId, problem.problemId, serialized);
+    const row = this.row(event, problem);
+    const scored = Object.values(result.deltas).some((delta) => delta !== 0);
+    if (!force && !scored && row.saved && this.host.now() - row.saved.at < FLUSH_INTERVAL_MS) {
+      row.body = body;
+      return;
+    }
+    this.host.store.transaction(() => {
+      this.host.store.putCoordination(event.eventId, problem.problemId, body);
+      this.award(event, problem, result.deltas);
+      receipt?.();
+    });
+    row.body = body;
+    row.saved = { body, at: this.host.now() };
+  }
+  private award(event: HostedEvent, problem: Problem, deltas: Record<string, number>): void {
     const occurredAt = new Date(
       Math.min(this.host.now(), event.endsAt ? Date.parse(event.endsAt) : Infinity),
     ).toISOString();
-    for (const [teamId, delta] of Object.entries(result.deltas)) {
+    for (const [teamId, delta] of Object.entries(deltas)) {
       if (!delta) continue;
       const team = this.host.store.team(teamId);
       const jobId = this.host.store.jobId(event.eventId, teamId, problem.problemId);
@@ -105,7 +157,25 @@ export class LocalCoordination {
         "A running Battle's start time cannot change. Create a new event to start over.",
       );
   }
+  /** A read's tick: written with a score change, otherwise at most once per FLUSH_INTERVAL_MS. */
   advance(event: HostedEvent): void {
+    this.tick(event, false);
+  }
+  /** End Event, lock and teardown write at once: no read ticks a locked or torn-down match. */
+  settle(event: HostedEvent): void {
+    this.tick(event, true);
+  }
+  /** Writes every match tick SQLite does not hold yet; the host calls it before closing SQLite. */
+  flush(): void {
+    this.host.store.transaction(() => {
+      for (const [eventId, row] of this.rows) {
+        if (row.saved?.body === row.body) continue;
+        this.host.store.putCoordination(eventId, row.problemId, row.body);
+        row.saved = { body: row.body, at: this.host.now() };
+      }
+    });
+  }
+  private tick(event: HostedEvent, settle: boolean): void {
     const problem = this.problem(event);
     if (
       !problem ||
@@ -122,7 +192,7 @@ export class LocalCoordination {
       this.host.store.teams(event.eventId).map((team) => team.teamId),
       this.elapsed(event),
     );
-    this.host.store.transaction(() => this.save(event, problem, result));
+    this.save(event, problem, result, settle);
   }
   private authorize(request: ApiRequest) {
     const projection =
@@ -179,8 +249,7 @@ export class LocalCoordination {
           status: 200,
           body: { projection: plugin.projectForTeam(result.match.state, team.teamId) },
         };
-    this.host.store.transaction(() => {
-      this.save(event, problem, result);
+    this.save(event, problem, result, true, () => {
       if (request.nonce)
         this.host.store.putReceipt(
           team.teamId,

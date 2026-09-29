@@ -22,7 +22,7 @@ export interface RunningLocalHost {
   readonly participant: HttpHost;
   readonly masterKey: string;
   readonly databasePath: string;
-  /** Close listeners first, then wait for in-flight environment work, then close SQLite. */
+  /** Close listeners, wait for in-flight environment work, write held Battle state, close SQLite. */
   stop(): Promise<void>;
 }
 
@@ -53,6 +53,7 @@ export async function startLocalHost(
     participant = undefined;
     await service?.drain();
     await gateways?.close();
+    service?.flush();
     store.close();
   }
   try {

@@ -200,6 +200,7 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
     await required(host).close();
     await required(portal).close();
     await service.drain();
+    service.flush();
     store.close();
     store = new HostStore(new Database(database));
     service = new HostingService(
