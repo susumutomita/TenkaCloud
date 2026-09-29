@@ -614,7 +614,8 @@ describe("competitor-accounts-handler route role gates (#948)", () => {
       await expectForbidden(res);
     });
 
-    // #3285: the gateway exposes these whether or not the console's `nonAwsRuntime` flag is on.
+    // #3285 / #3290: the gateway exposes these only when `nonAwsRuntime` is on at deploy time, and
+    // then the handler is what keeps them TenantAdmin-only.
     it.each(["GET", "PUT", "DELETE"])(
       "%s /admin/team-cloud-credentials/:provider/:teamSlug は 403 (= Admin 限定)",
       async (method) => {
