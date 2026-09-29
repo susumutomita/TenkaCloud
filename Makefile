@@ -150,7 +150,7 @@ lint-text: ## Check Japanese and technical-writing conventions | 日本語・技
 lint-format: ## Check code formatting with Biome | Biomeでcode formatを検査
 	bun run lint:format
 # #3014: 対象は repo 全体 (`eslint .`)。 型情報を要する rule は `scripts/**` だけに効く
-# (eslint.config.js の typedSourceFiles) が、 strict / stylistic / sonarjs は全 workspace に効く。
+# (eslint.config.mjs の typedSourceFiles) が、 strict / stylistic / sonarjs は全 workspace に効く。
 # 既存違反は `eslint-suppressions.json` に file × rule の件数として焼いてあり、 その件数以下なら緑、
 # 1 件でも超えたら赤。
 #

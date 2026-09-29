@@ -2,8 +2,8 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { parseCloudFormationYaml } from "@tenkacloud/problem-cost";
 import { validatePackDirectory } from "@tenkacloud/problem-sdk";
-import YAML from "yaml";
 
 const RESERVED_IDS = new Set(["hello-world", "golden-basic-find-the-flag"]);
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -148,7 +148,10 @@ function checkTemplate(
   relDir: string,
 ): VerificationFailure[] {
   const failures: VerificationFailure[] = [];
-  const template = YAML.parse(templateText) as { readonly Outputs?: unknown } | null | undefined;
+  const template = parseCloudFormationYaml(templateText) as
+    | { readonly Outputs?: unknown }
+    | null
+    | undefined;
   const outputs = template?.Outputs;
   const hasOutputsMapping =
     typeof outputs === "object" && outputs !== null && !Array.isArray(outputs);

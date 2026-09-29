@@ -11,7 +11,7 @@ export default [
     // When it drifted, `eslint .` walked into build output and nested agent worktrees and
     // reported 186,110 errors across 15,640 files instead of the 1,694 the repository actually
     // owns — and the file set differed per machine, so the suppressions ceiling below could not
-    // have been reproduced in CI. `lint-eslint-scope` (scripts/lint/check-eslint-ignore-parity.ts)
+    // have been reproduced in CI. `lint-eslint-scope` (scripts/quality/check-eslint-scope.ts)
     // now fails the gate when a git-ignored directory holding lintable files is missing here,
     // so the drift cannot come back silently.
     ignores: [

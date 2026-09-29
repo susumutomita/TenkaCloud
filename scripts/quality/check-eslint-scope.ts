@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * `eslint.config.js` の ignores が `.gitignore` から drift していないことを検査する。
+ * `eslint.config.mjs` の ignores が `.gitignore` から drift していないことを検査する。
  *
  * なぜ要るか: repo 全体 lint (`eslint . --max-warnings 0`) を bulk suppressions の ceiling
  * 付きで gate 化した時点で、「ESLint が何 file を見るか」が gate の正しさそのものになった。
@@ -64,7 +64,7 @@ export function formatFindings(lintedPaths: readonly string[]): string {
     "",
     "生成物や nested worktree を lint すると、 ceiling (eslint-suppressions.json) が その machine",
     "にしか無い file を含んで焼かれ、 CI と手元で結果が一致しなくなります。 上記を覆う pattern を",
-    "eslint.config.js の ignores に足してください。",
+    "eslint.config.mjs の ignores に足してください。",
   ].join("\n");
 }
 
