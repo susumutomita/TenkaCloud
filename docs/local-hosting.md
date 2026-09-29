@@ -301,11 +301,19 @@ waits for a tab's previous request before sending its next one, while real
 browsers do not, so the point where the host falls behind comes earlier than
 the tool shows.
 
-Each match read also saves the whole match state to SQLite: about 50–95 KB
-with 40 teams, growing during the match. Estimated from that size, not
-measured on disk: 40 teams with 2 tabs each write about 1.3 MB/s, roughly 7 GB
-during a 90-minute match. SQLite writes whole pages and later copies its
-write-ahead log into the database file, so the actual disk writes are higher.
+The host keeps each Battle's match state in memory (about 50–95 KB with 40
+teams, growing during the match) and writes it to SQLite when a team acts, when
+a score changes, when the organizer ends, locks or tears down the event, and
+otherwise at most once every 5 seconds, however many tabs are open. Measured
+in one run of the state simulation below (40 teams, one match read per team
+every 5 seconds, every Order leaked, 30 simulated minutes): 801 match state
+writes totalling 55 MB, about 27 writes and 1.8 MB per minute. SQLite writes
+whole pages and later copies its write-ahead log into the database file, so the
+actual disk writes are higher. Ctrl+C writes the state held in memory before
+the host exits. If the host process is killed instead, up to 5 seconds of match
+progress that changed no score is lost and the match continues from the last
+write, which can change the Orders issued afterwards. Closing the terminal
+window counts as a kill.
 
 Measure your own computer with the same tool. It starts a separate host on
 ports 6274, 6275 and 6300-6339 with a temporary data directory:
