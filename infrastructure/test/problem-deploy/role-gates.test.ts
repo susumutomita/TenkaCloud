@@ -613,6 +613,23 @@ describe("competitor-accounts-handler route role gates (#948)", () => {
       });
       await expectForbidden(res);
     });
+
+    // #3285: the gateway exposes these whether or not the console's `nonAwsRuntime` flag is on.
+    it.each(["GET", "PUT", "DELETE"])(
+      "%s /admin/team-cloud-credentials/:provider/:teamSlug は 403 (= Admin 限定)",
+      async (method) => {
+        const res = await competitorApp.request("/admin/team-cloud-credentials/sakura/team-a", {
+          method,
+          ...(method === "PUT"
+            ? {
+                body: JSON.stringify({ accessToken: "t", accessTokenSecret: "s" }),
+                headers: { "Content-Type": "application/json" },
+              }
+            : {}),
+        });
+        await expectForbidden(res);
+      },
+    );
   });
 
   describe("TenantAdmin (= everything OK)", () => {
