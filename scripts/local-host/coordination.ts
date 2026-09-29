@@ -167,13 +167,14 @@ export class LocalCoordination {
   }
   /** Writes every match tick SQLite does not hold yet; the host calls it before closing SQLite. */
   flush(): void {
+    const dirty = [...this.rows].filter(([, row]) => row.saved?.body !== row.body);
+    if (dirty.length === 0) return;
     this.host.store.transaction(() => {
-      for (const [eventId, row] of this.rows) {
-        if (row.saved?.body === row.body) continue;
+      for (const [eventId, row] of dirty)
         this.host.store.putCoordination(eventId, row.problemId, row.body);
-        row.saved = { body: row.body, at: this.host.now() };
-      }
     });
+    const at = this.host.now();
+    for (const [, row] of dirty) row.saved = { body: row.body, at };
   }
   private tick(event: HostedEvent, settle: boolean): void {
     const problem = this.problem(event);

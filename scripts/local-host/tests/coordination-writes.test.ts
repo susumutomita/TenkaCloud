@@ -95,8 +95,9 @@ test("write-behind serves the same match as saving and reloading SQLite on every
   };
   const leaked = new Set<string>();
   const scoreHistory = new Set<string>();
-  for (let step = 1; step <= 240; step += 1) {
-    clock.now += 5_000;
+  // 1.7 s does not divide the flush interval, so reads also land between writes.
+  for (let step = 1; step <= 600; step += 1) {
+    clock.now += 1_700;
     for (const team of created.teams) {
       const projection = await service.participant(read(team));
       expect(projection).toEqual(await reference(read(team)));

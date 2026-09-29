@@ -312,7 +312,8 @@ whole pages and later copies its write-ahead log into the database file, so the
 actual disk writes are higher. Ctrl+C writes the state held in memory before
 the host exits. If the host process is killed instead, up to 5 seconds of match
 progress that changed no score is lost and the match continues from the last
-write, which can change the Orders issued afterwards.
+write, which can change the Orders issued afterwards. Closing the terminal
+window counts as a kill.
 
 Measure your own computer with the same tool. It starts a separate host on
 ports 6274, 6275 and 6300-6339 with a temporary data directory:
