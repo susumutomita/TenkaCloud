@@ -13,6 +13,7 @@
       "**/*.tsx",
       "**/*.js",
       "**/*.jsx",
+      "eslint.config.mjs",
       "**/*.json",
       "!**/node_modules",
       "!**/dist",
