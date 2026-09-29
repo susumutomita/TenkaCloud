@@ -221,21 +221,6 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("should have POST /admin/competitor-accounts/{awsAccountId}/rotate-external-id (Issue #596)", () => {
-    // Issue #596: ExternalId rotation route
-    expect(findResource("rotate-external-id")).toBeDefined();
-    const rotateResourceId = Object.entries(
-      tpl.findResources("AWS::ApiGateway::Resource", {
-        Properties: { PathPart: "rotate-external-id" },
-      }),
-    )[0]?.[0];
-    expect(rotateResourceId).toBeDefined();
-    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
-      HttpMethod: "POST",
-      ResourceId: { Ref: rotateResourceId },
-    });
-  });
-
   it("should bind GET /admin/audit-log and GET /admin/audit-log/export to the EventApi integration (#1292)", () => {
     const adminResourceId = Object.entries(
       tpl.findResources("AWS::ApiGateway::Resource", {

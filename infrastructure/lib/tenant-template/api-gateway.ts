@@ -213,6 +213,8 @@ export class ApiGateway extends Construct {
     // events/{eventId}/notifications POST = 運営 → 競技者 通知 1 件作成 (#553)
     // /events/{eventId}/lock-scoring   POST  = 採点を lock (表彰フェーズ)、DELETE = unlock (#558)
     // /events/{eventId}/progression-gate PUT = Gate 設定、DELETE = Gate 設定解除 (#2283)
+    // /events/{eventId}/teams/{teamId}/rotate-login-key            POST = チームキー再発行 (#3284)
+    // /events/{eventId}/problems/{problemId}/coordination/reset   POST = 共有 run の作り直し (#3126)
     // EventApi は ~40 route を持つので、 最初にこの pattern が必要になったのはここだった
     // (per-method permission では /feature-flags を足した時点で 20KB を超えた)。 現在は他の
     // Lambda も同じ理由で同じ扱いにしてある — 詳細は `proxyIntegrationFor` を正本とする。
@@ -240,6 +242,17 @@ export class ApiGateway extends Construct {
     registration.addMethod("PUT", eventIntegration, deployMethodOptions);
     progressionGate.addMethod("PUT", eventIntegration, deployMethodOptions);
     progressionGate.addMethod("DELETE", eventIntegration, deployMethodOptions);
+    event
+      .addResource("teams")
+      .addResource("{teamId}")
+      .addResource("rotate-login-key")
+      .addMethod("POST", eventIntegration, deployMethodOptions);
+    event
+      .addResource("problems")
+      .addResource("{problemId}")
+      .addResource("coordination")
+      .addResource("reset")
+      .addMethod("POST", eventIntegration, deployMethodOptions);
 
     // Issue #888 Phase A: Red Team Disruption Injection
     //   /events/{eventId}/disruptions                                  GET  = catalog
@@ -263,7 +276,6 @@ export class ApiGateway extends Construct {
     //   /admin/competitor-accounts/bulk                                POST=一括登録 (行ごとに結果)
     //   /admin/competitor-accounts/{awsAccountId}                      DELETE=remove (last row なら SSM 鍵も掃除)
     //   /admin/competitor-accounts/{awsAccountId}/verify               POST=STS AssumeRole sanity check
-    //   /admin/competitor-accounts/{awsAccountId}/rotate-external-id   POST=ExternalId rotation (Issue #596 / Phase 3.1)
     const competitorAccountsIntegration = this.proxyIntegrationFor(
       "ApiGatewayInvokeCompetitorAccountsRoutes",
       props.competitorAccountsApiLambda,
@@ -287,9 +299,17 @@ export class ApiGateway extends Construct {
     competitorAccount
       .addResource("verify")
       .addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
-    competitorAccount
-      .addResource("rotate-external-id")
-      .addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
+
+    // Issue #1413 / #3285: 非 AWS 問題用のチーム別クラウド認証情報 (GET=登録状態 / PUT=登録・更新 /
+    // DELETE=失効)。画面は `nonAwsRuntime` フラグで隠れているが、route はフラグに関係なく開く。
+    // 認可は handler 側で閉じている (3 method とも 1 行目で TenantAdmin を要求する)。
+    const teamCloudCredential = admin
+      .addResource("team-cloud-credentials")
+      .addResource("{provider}")
+      .addResource("{teamSlug}");
+    teamCloudCredential.addMethod("GET", competitorAccountsIntegration, deployMethodOptions);
+    teamCloudCredential.addMethod("PUT", competitorAccountsIntegration, deployMethodOptions);
+    teamCloudCredential.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
 
     // Issue #839 follow-up Phase B: Tenant 管理者が画面 / API から SAML IdP を CRUD する経路。
     // 同 Lambda (competitor-accounts) に相乗りさせ、 IAM 拡張 (cognito-idp) は Lambda 側で済ませる。
