@@ -126,6 +126,13 @@ python3 docs/architecture/diagrams/system-architecture.gen.py
 
 実行したら draw.io の CLI で PNG に書き出し、ラベルと線が重なっていないかを確かめます。
 
+JAWS-UG 横浜 2026 の発表資料は、01 ページを SVG にして表示しています。
+01 ページを変えたら次のスクリプトで書き出し直し、表示された範囲を `landing/jaws-yokohama-2026/index.html` の `data-view-box` に反映します。
+
+```bash
+python3 docs/architecture/diagrams/export-jaws-slide.py
+```
+
 追加した責務・操作順の図は [Mermaid 原稿](diagrams/)を編集し、developer-portal の `public/docs/assets/architecture/` にある SVG を再生成します。
 再生成は Mermaid CLI 11.17.0 を使用します。ブラウザ実行環境に合わせた Puppeteer 設定を指定してください。
 
