@@ -115,6 +115,7 @@ async function main(): Promise<void> {
       apiBaseUrl: `${admin}/api`,
       participantPortalUrl: participant,
       role: "admin",
+      hasAws: false,
     });
 
     const login = await api(admin, "POST", "/host/login", "", { key });
