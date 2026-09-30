@@ -28,3 +28,10 @@ sampleimages/
 docs/
 landing/
 apps/participant-portal/public/runtime-config.json
+apps/participant-portal/public/runtime-config.backup.json
+
+# Mirror the root .dockerignore's secret exclusions: this file replaces it.
+.env
+**/.env
+**/.env.*
+!**/.env.example
