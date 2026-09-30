@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CreateCompetitorAccountResponse } from "../../../src/api/competitor-accounts-client";
+import { COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK } from "../../../src/lib/competitor-bootstrap";
 import { SecretRevealModal } from "../../../src/pages/competitor-accounts/SecretRevealModal";
 
 /**
@@ -79,5 +80,34 @@ describe("SecretRevealModal", () => {
     );
     const link = screen.getByRole("link", { name: "competitor-bootstrap.yaml (raw)" });
     expect(link).toHaveAttribute("href", "https://custom.example.com/bootstrap.yaml");
+  });
+
+  it("shows manual host bootstrap steps and copies the exact details without a launch link", async () => {
+    render(<SecretRevealModal secret={secret} onDismiss={vi.fn()} localHost />);
+    expect(screen.getByText("competitor_accounts.host_secret_warning_header")).toBeInTheDocument();
+    expect(screen.getByText("competitor_accounts.host_secret_warning_body")).toBeInTheDocument();
+    expect(screen.getByText("competitor_accounts.host_secret_step_1")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "competitor_accounts.secret_modal_launch_button" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "competitor-bootstrap.yaml (raw)" })).toHaveAttribute(
+      "href",
+      COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "competitor_accounts.host_secret_copy_all" }),
+    );
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        [
+          "TenkaCloud competitor bootstrap",
+          "TenkaCloudAccountId: 999988887777",
+          "ExternalId: ext-abc",
+          "RoleName: TenkaCompetitorRole",
+          `Download competitor-bootstrap.yaml: ${COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK}`,
+          "Create the stack manually in the competitor AWS account, then ask the organizer to verify the role.",
+        ].join("\n"),
+      ),
+    );
   });
 });

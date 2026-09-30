@@ -11,11 +11,21 @@ const BANNER_HEADER = /Demo mode|デモモード/;
 
 const PARTICIPANT_LINK = /participant|参加者/i;
 
-function renderShell(demoMode: boolean, demoParticipantUrl?: string) {
+function renderShell(
+  demoMode: boolean,
+  demoParticipantUrl?: string,
+  localHost = false,
+  hostAwsEnabled = false,
+) {
   return render(
     <I18nProvider>
       <MemoryRouter>
-        <ShellLayout demoMode={demoMode} demoParticipantUrl={demoParticipantUrl}>
+        <ShellLayout
+          demoMode={demoMode}
+          demoParticipantUrl={demoParticipantUrl}
+          localHost={localHost}
+          hostAwsEnabled={hostAwsEnabled}
+        >
           <div>page content</div>
         </ShellLayout>
       </MemoryRouter>
@@ -45,5 +55,17 @@ describe("ShellLayout demo banner (#1954)", () => {
   it("should omit the participant link when no hand-off URL is provided", () => {
     renderShell(true);
     expect(screen.queryByRole("link", { name: PARTICIPANT_LINK })).not.toBeInTheDocument();
+  });
+
+  it("shows the competitor account navigation only when the local host has AWS enabled", () => {
+    const withoutAws = renderShell(false, undefined, true, false);
+    expect(
+      screen.queryByRole("link", { name: /Competitor Accounts|競技者アカウント/u }),
+    ).toBeNull();
+    withoutAws.unmount();
+    renderShell(false, undefined, true, true);
+    expect(
+      screen.getByRole("link", { name: /Competitor Accounts|競技者アカウント/u }),
+    ).toHaveAttribute("href", "/competitor-accounts");
   });
 });

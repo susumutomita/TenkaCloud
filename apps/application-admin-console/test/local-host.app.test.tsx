@@ -98,6 +98,37 @@ describe("organizer journey in local-host mode", () => {
     );
   });
 
+  it("navigates to the local competitor account registry when AWS is configured", async () => {
+    const fetchMock = stubHost({
+      "/api/admin/competitor-accounts": () =>
+        new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={["/login"]}>
+          <App config={{ ...config, hostAwsRegion: "ap-northeast-1" }} />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    signIn();
+    fireEvent.click(await screen.findByRole("link", { name: "Competitor Accounts" }));
+    expect(await screen.findByRole("heading", { name: "Competitor Accounts" })).toBeInTheDocument();
+    await waitFor(() => {
+      const request = fetchMock.mock.calls.find(
+        ([input]) => String(input) === `${origin}/api/admin/competitor-accounts`,
+      );
+      expect(request?.[1]).toEqual({
+        headers: {
+          authorization: "Bearer a.e30.c",
+          "content-type": "application/json",
+        },
+      });
+    });
+  });
+
   it("signs the organizer out when the host session's absolute lifetime ends", async () => {
     const fetchMock = stubHost({}, 150);
     render(

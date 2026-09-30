@@ -196,6 +196,15 @@ describe("CompetitorAccountsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("explains manual account setup on a local AWS host", () => {
+    renderPage(config({ mode: "local-host", hostAwsRegion: "ap-northeast-1" }));
+    expect(screen.getByText("competitor_accounts.host_description")).toBeInTheDocument();
+    expect(screen.getByText("competitor_accounts.host_bootstrap_info")).toBeInTheDocument();
+    expect(
+      screen.queryByText("competitor_accounts.bootstrap_url_missing_body"),
+    ).not.toBeInTheDocument();
+  });
+
   it("should hide the non-AWS team cloud credentials panel by default (feature off)", () => {
     renderPage();
     expect(screen.queryByTestId("team-cloud-credentials")).not.toBeInTheDocument();

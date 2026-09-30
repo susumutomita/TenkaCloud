@@ -51,6 +51,13 @@ describe("loadConfig in the local hosting build", () => {
     });
   });
 
+  it("exposes only a valid host AWS region from the same-origin runtime configuration", async () => {
+    stubRuntime({ ...runtime, awsRegion: "ap-northeast-1" });
+    expect((await loadConfig({}, { localHostBuild: true })).hostAwsRegion).toBe("ap-northeast-1");
+    stubRuntime({ ...runtime, awsRegion: "https://attacker.example" });
+    expect((await loadConfig({}, { localHostBuild: true })).hostAwsRegion).toBeUndefined();
+  });
+
   it.each([
     { ...runtime, mode: "demo" },
     { ...runtime, role: "participant" },
