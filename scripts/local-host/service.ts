@@ -1,4 +1,4 @@
-import { id, issueSession, randomToken, SerialQueue } from "./auth";
+import { id, issueOrganizerSession, randomToken, SerialQueue, sameSecret } from "./auth";
 import { LocalCoordination } from "./coordination";
 import {
   formatGatewayPorts,
@@ -29,10 +29,18 @@ import {
   type Team,
   text,
 } from "./model";
-import { type OrganizerRole, requireOrganizerPermission } from "./organizer-access";
+import { type OrganizerPermission, requireOrganizerPermission } from "./organizer-access";
 import { ParticipantAssumeRoleError, type ParticipantAwsAccess } from "./participant-aws-access";
 import { portsFree } from "./ports";
-import { digest, type HostStore } from "./store";
+import {
+  digest,
+  type HostStore,
+  type OrganizerPrincipal,
+  type OrganizerRole,
+  type OrganizerStatus,
+  type OrganizerUser,
+  type OrganizerView,
+} from "./store";
 
 export interface ApiRequest {
   method: string;
@@ -59,6 +67,40 @@ const NONTERMINAL_STATUSES: readonly Job["status"][] = ["PENDING", "IN_PROGRESS"
 /** Organizer-intended states of one environment that do not make a ready event undeployed. */
 const INTENDED_IDLE_STATUSES: readonly Job["status"][] = ["STOPPED", "DELETED"];
 const jobPattern = eventPattern;
+const usernamePattern = /^[a-z][a-z0-9._-]{2,63}$/u;
+
+function username(value: unknown): string {
+  if (typeof value !== "string" || !usernamePattern.test(value))
+    throw new HostError(
+      400,
+      "Username must be 3–64 lowercase letters, digits, dots, underscores, or hyphens.",
+    );
+  return value;
+}
+function password(value: unknown): string {
+  if (typeof value !== "string" || value.length < 12 || value.length > 256)
+    throw new HostError(400, "Password must be 12–256 characters.");
+  return value;
+}
+function organizerRole(value: unknown): OrganizerRole {
+  if (
+    typeof value === "string" &&
+    (value === "Admin" || value === "Operator" || value === "Viewer")
+  )
+    return value;
+  throw new HostError(400, "Invalid organizer role.");
+}
+function organizerStatus(value: unknown): OrganizerStatus {
+  if (value === "active" || value === "disabled") return value;
+  throw new HostError(400, "Invalid organizer status.");
+}
+function requireRole(principal: OrganizerPrincipal, permission: OrganizerPermission): void {
+  requireOrganizerPermission(principal.role, permission);
+}
+function requireAdmin(principal: OrganizerPrincipal): void {
+  requireRole(principal, "manage-connections");
+  if (!principal.userId) throw new HostError(403, "Complete organizer bootstrap first.");
+}
 
 function failureMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message.slice(0, 2000) : fallback;
@@ -208,36 +250,38 @@ export class HostingService {
       : {};
   }
   async admin(request: ApiRequest): Promise<ApiResponse> {
-    const unauthenticated = this.adminLogin(request);
+    const unauthenticated = await this.adminLogin(request);
     if (unauthenticated) return unauthenticated;
-    const role = this.store.authenticateAdmin(request.token, this.now());
-    const fixed = this.adminFixedRoute(request, role);
+    const principal = this.store.authenticateAdmin(request.token, this.now());
+    const fixed = await this.adminFixedRoute(request, principal);
     if (fixed) return fixed;
     const parts = request.path.split("/").filter(Boolean).map(decodeURIComponent);
     const eventId = parts[0] === "events" ? parts[1] : undefined;
     if (!eventId || !eventPattern.test(eventId)) throw new HostError(404, "Unknown host endpoint.");
     if (parts.length === 2 && request.method === "GET")
       return this.queue.run(eventId, async () => {
-        const currentRole = this.store.authenticateAdmin(request.token, this.now());
-        if (request.query.get("withTeamLoginKeys") === "true")
-          requireOrganizerPermission(currentRole, "reveal-team-keys");
+        const current = this.store.authenticateAdmin(request.token, this.now());
+        requireRole(
+          current,
+          request.query.get("withTeamLoginKeys") === "true" ? "reveal-team-keys" : "read",
+        );
         const event = this.currentEvent(eventId);
         this.coordination.advance(event);
         return ok(this.detail(event, request.query));
       });
-    requireOrganizerPermission(role, "run-events");
     return this.queue.run(eventId, async () => {
-      requireOrganizerPermission(
-        this.store.authenticateAdmin(request.token, this.now()),
-        "run-events",
-      );
+      const current = this.store.authenticateAdmin(request.token, this.now());
+      requireRole(current, parts[2] === "teams" ? "reveal-team-keys" : "run-events");
       return this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request);
     });
   }
-  private adminLogin(request: ApiRequest): ApiResponse | undefined {
-    if (request.path === "/host/login" && request.method === "POST") {
-      return ok(issueSession(this.store, this.masterKey, object(request.body).key, this.now()));
-    }
+  private async adminLogin(request: ApiRequest): Promise<ApiResponse | undefined> {
+    if (request.path === "/host/bootstrap-status" && request.method === "GET")
+      return ok({ bootstrapCompleted: this.store.bootstrapCompleted() });
+    if (request.path === "/host/bootstrap" && request.method === "POST")
+      return this.bootstrapOrganizer(request.body);
+    if (request.path === "/host/login" && request.method === "POST")
+      return this.loginOrganizer(request.body);
     if (request.path === "/host/logout" && request.method === "POST") {
       // A revocation handle only revokes itself and works after its access token expires.
       const body = object(request.body);
@@ -246,12 +290,81 @@ export class HostingService {
     }
     return undefined;
   }
-  private adminFixedRoute(
+  private async bootstrapOrganizer(input: unknown): Promise<ApiResponse> {
+    if (this.store.bootstrapCompleted()) throw new HostError(409, "Host bootstrap is complete.");
+    const body = object(input);
+    if (typeof body.key !== "string" || !sameSecret(this.masterKey, body.key))
+      throw new HostError(401, "Invalid host key.");
+    const name = username(body.username);
+    const hash = await Bun.password.hash(password(body.password), { algorithm: "argon2id" });
+    const user: OrganizerUser = {
+      id: id(this.now()),
+      username: name,
+      role: "Admin",
+      status: "active",
+      authVersion: 1,
+      passwordHash: hash,
+      createdAt: this.now(),
+    };
+    const identity = this.store.bootstrap(user);
+    return ok(issueOrganizerSession(this.store, this.masterKey, user, this.now(), identity), 201);
+  }
+  private async loginOrganizer(input: unknown): Promise<ApiResponse> {
+    if (!this.store.bootstrapCompleted())
+      throw new HostError(
+        409,
+        "Create the first Admin account before signing in.",
+        "bootstrap_required",
+      );
+    const body = object(input);
+    const name =
+      typeof body.username === "string" && usernamePattern.test(body.username) ? body.username : "";
+    const secret = typeof body.password === "string" ? body.password : "";
+    const identity = this.store.identity("local-password", "local-host", name);
+    const user = identity ? this.store.organizer(identity.userId) : undefined;
+    if (
+      !identity ||
+      !user ||
+      user.username !== name ||
+      user.status !== "active" ||
+      !(await Bun.password.verify(secret, user.passwordHash))
+    )
+      throw new HostError(401, "Invalid username or password.");
+    // Argon2 verification yields. Recheck role, status, password, and identity before issue.
+    return this.store.transaction(() => {
+      const currentIdentity = this.store.identity("local-password", "local-host", name);
+      const current = currentIdentity ? this.store.organizer(currentIdentity.userId) : undefined;
+      if (
+        !currentIdentity ||
+        !current ||
+        current.id !== user.id ||
+        current.status !== "active" ||
+        current.authVersion !== user.authVersion ||
+        current.passwordHash !== user.passwordHash ||
+        currentIdentity.id !== identity.id
+      )
+        throw new HostError(401, "Invalid username or password.");
+      return ok(
+        issueOrganizerSession(this.store, this.masterKey, current, this.now(), currentIdentity),
+      );
+    });
+  }
+  private async adminFixedRoute(
     request: ApiRequest,
-    role: OrganizerRole,
-  ): ApiResponse | Promise<ApiResponse> | undefined {
+    principal: OrganizerPrincipal,
+  ): Promise<ApiResponse | undefined> {
+    if (request.path === "/host/me" && request.method === "GET")
+      return ok({
+        user: principal.userId
+          ? this.publicOrganizer(this.store.organizer(principal.userId))
+          : null,
+        role: principal.role,
+        authMethod: principal.authMethod,
+      });
+    const organizer = await this.organizerRoutes(request, principal);
+    if (organizer) return organizer;
     if (request.path.startsWith("/admin/competitor-accounts"))
-      return this.accountRoute(request, role);
+      return this.accountRoute(request, principal);
     if (request.path === "/host/catalog" && request.method === "GET") {
       return ok({
         items: this.engine.catalog().map((problem) => ({
@@ -261,17 +374,108 @@ export class HostingService {
         })),
       });
     }
-    if (request.path === "/feature-flags" && request.method === "GET") return ok({ flags: {} });
     if (request.path === "/events" && request.method === "GET") {
       return ok({
         items: this.store.events().map((event) => this.summary(this.currentEvent(event.eventId))),
       });
     }
     if (request.path === "/events" && request.method === "POST") {
-      requireOrganizerPermission(role, "run-events");
+      requireRole(principal, "run-events");
       return this.createEvent(object(request.body));
     }
     return undefined;
+  }
+  private async organizerRoutes(
+    request: ApiRequest,
+    principal: OrganizerPrincipal,
+  ): Promise<ApiResponse | undefined> {
+    if (request.path === "/host/users" && request.method === "GET") {
+      requireAdmin(principal);
+      return ok({ items: this.store.organizers() });
+    }
+    if (request.path === "/host/users" && request.method === "POST") {
+      requireAdmin(principal);
+      return this.createOrganizer(request);
+    }
+    const userPath = /^\/host\/users\/([0-9A-HJKMNP-TV-Z]{26})$/u.exec(request.path);
+    if (userPath) {
+      requireAdmin(principal);
+      const userId = userPath[1] ?? "";
+      if (request.method === "DELETE") {
+        this.store.deleteOrganizer(userId);
+        return ok({ deleted: true });
+      }
+      if (request.method === "PATCH") {
+        return this.updateOrganizer(request, userId);
+      }
+    }
+    if (request.path === "/feature-flags" && request.method === "GET")
+      return ok({ flags: this.store.featureFlags() });
+    if (request.path === "/feature-flags" && request.method === "PUT") {
+      requireAdmin(principal);
+      return this.updateFeatureFlag(request.body);
+    }
+    return undefined;
+  }
+  private async createOrganizer(request: ApiRequest): Promise<ApiResponse> {
+    const body = object(request.body);
+    const name = username(body.username);
+    const role = organizerRole(body.role);
+    const hash = await Bun.password.hash(password(body.password), { algorithm: "argon2id" });
+    return this.store.transaction(() => {
+      requireAdmin(this.store.authenticateAdmin(request.token, this.now()));
+      if (this.store.organizerByUsername(name))
+        throw new HostError(409, "Username already exists.");
+      const user: OrganizerUser = {
+        id: id(this.now()),
+        username: name,
+        role,
+        status: "active",
+        authVersion: 1,
+        passwordHash: hash,
+        createdAt: this.now(),
+      };
+      this.store.insertOrganizer(user);
+      return ok({ user: this.publicOrganizer(user) }, 201);
+    });
+  }
+  private async updateOrganizer(request: ApiRequest, userId: string): Promise<ApiResponse> {
+    const body = object(request.body);
+    const current = this.store.organizer(userId);
+    if (!current) throw new HostError(404, "Organizer not found.");
+    const hash =
+      body.password === undefined
+        ? current.passwordHash
+        : await Bun.password.hash(password(body.password), { algorithm: "argon2id" });
+    const updated: OrganizerUser = {
+      ...current,
+      role: body.role === undefined ? current.role : organizerRole(body.role),
+      status: body.status === undefined ? current.status : organizerStatus(body.status),
+      passwordHash: hash,
+    };
+    requireAdmin(this.store.authenticateAdmin(request.token, this.now()));
+    this.store.updateOrganizer(updated);
+    return ok({ user: this.publicOrganizer(this.store.organizer(userId)) });
+  }
+  private updateFeatureFlag(input: unknown): ApiResponse {
+    const body = object(input);
+    const key = body.key;
+    if (key !== "saml" && key !== "audit") throw new HostError(400, "Unknown feature flag.");
+    if (typeof body.enabled !== "boolean")
+      throw new HostError(400, "Flag enabled must be boolean.");
+    this.store.setFeatureFlag(key, body.enabled);
+    return ok({ flags: this.store.featureFlags() });
+  }
+  private publicOrganizer(user: OrganizerUser | undefined): OrganizerView {
+    if (!user) throw new HostError(401, "Host session expired or invalid.");
+    return {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      status: user.status,
+      authVersion: user.authVersion,
+      createdAt: user.createdAt,
+    };
   }
   private connection(): AccountConnection {
     if (!this.accountConnection)
@@ -312,11 +516,11 @@ export class HostingService {
   }
   private accountRoute(
     request: ApiRequest,
-    role: OrganizerRole,
+    principal: OrganizerPrincipal,
   ): ApiResponse | Promise<ApiResponse> {
     if (request.path === "/admin/competitor-accounts" && request.method === "GET")
       return ok({ items: this.store.accounts() });
-    requireOrganizerPermission(role, "manage-connections");
+    requireRole(principal, "manage-connections");
     if (request.path === "/admin/competitor-accounts" && request.method === "POST") {
       const account = this.registerAccount(object(request.body));
       const cloud = this.connection();
@@ -351,8 +555,9 @@ export class HostingService {
       return { awsAccountId, outcome: "created" as const };
     } catch (error) {
       const status = error instanceof HostError ? error.status : 500;
-      const fallbackOutcome = status < 500 ? ("invalid" as const) : ("failed" as const);
-      const outcome = status === 409 ? ("duplicate" as const) : fallbackOutcome;
+      let outcome: "duplicate" | "invalid" | "failed" = "failed";
+      if (status === 409) outcome = "duplicate";
+      else if (status < 500) outcome = "invalid";
       return {
         awsAccountId,
         outcome,
@@ -379,19 +584,13 @@ export class HostingService {
   }
   private verifyAccount(accountId: string, token: string): Promise<ApiResponse> {
     return this.queue.run(`account:${accountId}`, async () => {
-      requireOrganizerPermission(
-        this.store.authenticateAdmin(token, this.now()),
-        "manage-connections",
-      );
+      requireRole(this.store.authenticateAdmin(token, this.now()), "manage-connections");
       const account = this.store.account(accountId);
       const cloud = this.connection();
       try {
         await cloud.verify(account.awsAccountId, account.competitorRoleName);
       } catch {
-        requireOrganizerPermission(
-          this.store.authenticateAdmin(token, this.now()),
-          "manage-connections",
-        );
+        requireRole(this.store.authenticateAdmin(token, this.now()), "manage-connections");
         const updatedAt = new Date(this.now()).toISOString();
         this.store.putAccount({ ...account, verified: false, verifiedAt: undefined, updatedAt });
         throw new HostError(
@@ -399,10 +598,7 @@ export class HostingService {
           "Could not verify the competitor role. Check the account, role, ExternalId, and operator trust.",
         );
       }
-      requireOrganizerPermission(
-        this.store.authenticateAdmin(token, this.now()),
-        "manage-connections",
-      );
+      requireRole(this.store.authenticateAdmin(token, this.now()), "manage-connections");
       const verifiedAt = new Date(this.now()).toISOString();
       const verified = { ...account, verified: true, verifiedAt, updatedAt: verifiedAt };
       this.store.putAccount(verified);
@@ -411,10 +607,7 @@ export class HostingService {
   }
   private deleteAccount(accountId: string, token: string): Promise<ApiResponse> {
     return this.queue.run(`account:${accountId}`, async () => {
-      requireOrganizerPermission(
-        this.store.authenticateAdmin(token, this.now()),
-        "manage-connections",
-      );
+      requireRole(this.store.authenticateAdmin(token, this.now()), "manage-connections");
       this.store.account(accountId);
       if (this.store.accountReferenced(accountId))
         throw new HostError(
@@ -541,7 +734,7 @@ export class HostingService {
       throw new HostError(409, "An environment operation is already in progress.");
     const body = () => object(request.body);
     const commands: Record<string, () => ApiResponse | Promise<ApiResponse>> = {
-      "POST deploy": () => this.deploy(event, body()),
+      "POST deploy": () => this.deploy(event, body(), request.token),
       "DELETE ": () => this.teardown(event),
       "PATCH schedule": () => this.schedule(event, body()),
       "POST end": () => this.end(event),
@@ -826,7 +1019,11 @@ export class HostingService {
       "No free runtime port blocks. Tear down another event or stop the processes holding the local ports.",
     );
   }
-  private async deploy(event: HostedEvent, body: Record<string, unknown>): Promise<ApiResponse> {
+  private async deploy(
+    event: HostedEvent,
+    body: Record<string, unknown>,
+    token: string,
+  ): Promise<ApiResponse> {
     // A torn-down event that never started (for example after a failed first deployment) can
     // be prepared again; an event that already ran is final and needs a new event instead.
     const redeployable = event.status === "TEARDOWN" && !event.startsAt;
@@ -880,9 +1077,10 @@ export class HostingService {
             unit: null,
           });
         }
-      if (redeployable) this.clearPastEnd(event);
-      event.status = "DEPLOYING";
       this.store.transaction(() => {
+        requireRole(this.store.authenticateAdmin(token, this.now()), "run-events");
+        if (redeployable) this.clearPastEnd(event);
+        event.status = "DEPLOYING";
         this.saveEvent(event);
         for (const job of planned) this.store.putJob(job);
       });

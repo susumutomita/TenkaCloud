@@ -12,6 +12,7 @@ import type { Context, ScoreEvent } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { FakeAws, fakeFlag } from "./fake-aws";
+import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const START = Date.parse("2026-09-30T00:00:00.000Z");
@@ -77,10 +78,7 @@ async function host(withAws = true) {
         );
       },
     };
-  const login = await service.admin(
-    apiRequest({ method: "POST", path: "/host/login", token: "", body: { key: HOST_KEY } }),
-  );
-  const token = (login.body as { idToken: string }).idToken;
+  const token = await bootstrapOrganizer(service, HOST_KEY);
   if (withAws)
     for (const awsAccountId of ["111111111111", "222222222222"]) {
       await service.admin(

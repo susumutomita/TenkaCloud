@@ -1,15 +1,6 @@
-/**
- * Issue #3226: sign-in for the local competition host (`bun start`).
- *
- * The organizer types the host key printed in the terminal; the host exchanges it for a
- * short-lived session token held only in memory by the shared AuthProvider. There is no
- * Cognito redirect, no stored credential and no demo/practice fallback: a wrong key is shown
- * as a wrong key.
- */
-
 import type { TokenSet } from "@tenkacloud/auth-client";
 import { ConsoleAuthShell, toErrorMessage } from "@tenkacloud/web-kit";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { ArrowIcon, applicationConsoleCopy } from "../components/ProductLoginShell";
@@ -27,33 +18,27 @@ function isSession(value: SessionResponse): value is TokenSet & { refreshToken: 
   );
 }
 
-/** `POST /api/host/login`: the terminal's host key for a short-lived, memory-only session. */
-async function exchangeHostKey(
+async function exchangeCredentials(
   apiBaseUrl: string,
-  key: string,
-  t: (key: string) => string,
+  path: string,
+  body: unknown,
 ): Promise<TokenSet> {
-  const response = await fetch(`${apiBaseUrl}/host/login`, {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key }),
+    body: JSON.stringify(body),
   });
-  if (response.status === 401) throw new Error(t("local_host.login_invalid_key"));
   let parsed: unknown;
   try {
     parsed = await response.json();
   } catch {
-    // A proxy or crash page is not the host's JSON API; never show the parser's error.
-    throw new Error(t("local_host.login_failed"));
+    throw new Error("Host sign-in failed.");
   }
-  // `null`, arrays and scalars are valid JSON but not a session or an error object.
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-    throw new Error(t("local_host.login_failed"));
+    throw new Error("Host sign-in failed.");
   const value = parsed as SessionResponse;
   if (!response.ok || !isSession(value))
-    throw new Error(
-      typeof value.message === "string" ? value.message : t("local_host.login_failed"),
-    );
+    throw new Error(typeof value.message === "string" ? value.message : "Host sign-in failed.");
   return {
     idToken: value.idToken,
     accessToken: value.accessToken,
@@ -73,63 +58,132 @@ export function LocalHostLoginPage({
   const navigate = useNavigate();
   const t = useT();
   const { locale, setLocale } = useI18n();
+  const [bootstrap, setBootstrap] = useState<boolean | null>(null);
   const [key, setKey] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${config.apiBaseUrl}/host/bootstrap-status`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Host status unavailable.");
+        return (await response.json()) as { bootstrapCompleted: boolean };
+      })
+      .then((body) => {
+        if (!cancelled) setBootstrap(!body.bootstrapCompleted);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Host status unavailable.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [config.apiBaseUrl]);
 
   if (auth.tokens) return <Navigate to={returnPath ?? "/events"} replace />;
 
   const signIn = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!key) return;
+    if (bootstrap === null || !username || !password || (bootstrap && !key)) return;
     setBusy(true);
     setError(undefined);
     try {
-      auth.setTokens(await exchangeHostKey(config.apiBaseUrl, key, t));
+      const tokens = await exchangeCredentials(
+        config.apiBaseUrl,
+        bootstrap ? "/host/bootstrap" : "/host/login",
+        bootstrap ? { key, username, password } : { username, password },
+      );
+      auth.setTokens(tokens);
       setKey("");
+      setPassword("");
       navigate(returnPath ?? "/events", { replace: true });
     } catch (cause) {
+      setPassword("");
       setError(toErrorMessage(cause));
     } finally {
       setBusy(false);
     }
   };
 
+  const submitLabel = bootstrap ? t("local_host.bootstrap_submit") : t("local_host.login_submit");
   return (
     <ConsoleAuthShell
       plane="app"
-      copy={applicationConsoleCopy(t, t("local_host.login_title"), t("local_host.login_subtitle"))}
+      copy={applicationConsoleCopy(
+        t,
+        bootstrap ? t("local_host.bootstrap_title") : t("local_host.login_title"),
+        bootstrap ? t("local_host.bootstrap_subtitle") : t("local_host.password_login_subtitle"),
+      )}
       locale={locale}
       onLocale={(code) => setLocale(code as LocaleCode)}
     >
-      {error ? (
+      {error && (
         <div className="error-line" role="alert">
           <span className="x">!</span>
           {error}
         </div>
-      ) : null}
-      <form onSubmit={(event) => void signIn(event)} noValidate>
-        <div className="field">
-          <label className="label" htmlFor="local-host-key">
-            {t("local_host.login_key_label")}
-          </label>
-          <div className="input">
-            <input
-              id="local-host-key"
-              type="password"
-              value={key}
-              autoComplete="off"
-              spellCheck={false}
-              disabled={busy}
-              onChange={(event) => setKey(event.target.value)}
-            />
+      )}
+      {bootstrap !== null && (
+        <form onSubmit={(event) => void signIn(event)} noValidate>
+          {bootstrap && (
+            <div className="field">
+              <label className="label" htmlFor="local-host-key">
+                {t("local_host.login_key_label")}
+              </label>
+              <div className="input">
+                <input
+                  id="local-host-key"
+                  type="password"
+                  value={key}
+                  autoComplete="off"
+                  disabled={busy}
+                  onChange={(event) => setKey(event.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          <div className="field">
+            <label className="label" htmlFor="organizer-username">
+              {t("local_host.username_label")}
+            </label>
+            <div className="input">
+              <input
+                id="organizer-username"
+                value={username}
+                autoComplete="username"
+                disabled={busy}
+                onChange={(event) => setUsername(event.target.value)}
+              />
+            </div>
           </div>
-        </div>
-        <button type="submit" className="sso" disabled={busy || !key}>
-          {busy ? t("local_host.login_signing_in") : t("local_host.login_submit")}
-          <ArrowIcon />
-        </button>
-      </form>
+          <div className="field">
+            <label className="label" htmlFor="organizer-password">
+              {t("local_host.password_label")}
+            </label>
+            <div className="input">
+              <input
+                id="organizer-password"
+                type="password"
+                value={password}
+                autoComplete={bootstrap ? "new-password" : "current-password"}
+                disabled={busy}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            className="sso"
+            disabled={busy || !username || !password || (bootstrap && !key)}
+          >
+            {busy ? t("local_host.login_signing_in") : submitLabel}
+            <ArrowIcon />
+          </button>
+        </form>
+      )}
     </ConsoleAuthShell>
   );
 }

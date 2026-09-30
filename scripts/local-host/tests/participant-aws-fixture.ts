@@ -14,6 +14,7 @@ import { startHttpHost } from "../http";
 import type { Job } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { TEST_ORGANIZER_PASSWORD } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 type Stage = "competitor" | "participant_viewer" | "federation" | "token_body";
@@ -136,8 +137,10 @@ export async function createParticipantAwsFixture(
       body: z.record(z.unknown()).parse(await response.json()),
     };
   }
-  const login = await request(admin.origin, "/api/host/login", "", "POST", {
+  const login = await request(admin.origin, "/api/host/bootstrap", "", "POST", {
     key: "host-test-key",
+    username: "fixture-admin",
+    password: TEST_ORGANIZER_PASSWORD,
   });
   const token = z.string().parse(login.body.idToken);
   const eventId = id();

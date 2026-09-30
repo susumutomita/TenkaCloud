@@ -13,6 +13,7 @@ import { parseOptions } from "../options";
 import { HostingService } from "../service";
 import { digest, HostStore } from "../store";
 import { FakeAws, OPERATOR_ACCOUNT } from "./fake-aws";
+import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const directories: string[] = [];
@@ -37,7 +38,7 @@ test("--aws-region enables cloud problems and must name a standard-partition reg
     );
 });
 
-test("version 1 host sessions survive the SQLite account-registry migration", () => {
+test("version 1 host sessions are revoked while account-registry data remains readable", () => {
   const path = join(temporary(), "legacy.sqlite");
   const database = new Database(path);
   database.exec(`
@@ -52,11 +53,15 @@ test("version 1 host sessions survive the SQLite account-registry migration", ()
   legacyInsert.run(digest("old-admin-token"), digest("old-refresh"), now + 60_000);
   legacyInsert.finalize();
   const migrated = new HostStore(database);
-  expect(migrated.authenticateAdmin("old-admin-token", now)).toBe("Admin");
+  expect(() => migrated.authenticateAdmin("old-admin-token", now)).toThrow(
+    "Host session expired or invalid.",
+  );
   expect(migrated.accounts()).toEqual([]);
   migrated.close();
   const reopened = new HostStore(new Database(path));
-  expect(reopened.authenticateAdmin("old-admin-token", now)).toBe("Admin");
+  expect(() => reopened.authenticateAdmin("old-admin-token", now)).toThrow(
+    "Host session expired or invalid.",
+  );
   reopened.close();
 });
 
@@ -82,10 +87,7 @@ test("the ExternalId is one private key file, and the operator account is read o
     );
     const service = new HostingService(store, engine, HOST_KEY);
     service.accountConnection = hosting;
-    const login = await service.admin(
-      apiRequest({ method: "POST", path: "/host/login", token: "", body: { key: HOST_KEY } }),
-    );
-    const token = (login.body as { idToken: string }).idToken;
+    const token = await bootstrapOrganizer(service, HOST_KEY);
     for (const awsAccountId of ["111111111111", "222222222222"]) {
       await service.admin(
         apiRequest({

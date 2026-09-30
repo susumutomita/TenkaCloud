@@ -1,6 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { HostError } from "./model";
-import { digest, type HostStore } from "./store";
+import { digest, type HostStore, type OrganizerIdentity, type OrganizerUser } from "./store";
 export const randomToken = (): string => randomBytes(32).toString("base64url");
 const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /** Existing event routes use ULID wire identifiers. */
@@ -22,17 +21,32 @@ export function sameSecret(left: string, right: string): boolean {
   return timingSafeEqual(Buffer.from(digest(left)), Buffer.from(digest(right)));
 }
 
-export function issueSession(store: HostStore, masterKey: string, provided: unknown, now: number) {
-  if (typeof provided !== "string" || !sameSecret(masterKey, provided))
-    throw new HostError(401, "Invalid host key.");
-  const expiresAt = now + 15 * 60 * 1000;
+export function issueOrganizerSession(
+  store: HostStore,
+  masterKey: string,
+  user: OrganizerUser,
+  now: number,
+  identity: OrganizerIdentity,
+) {
+  return createSession(store, masterKey, now, user, identity);
+}
+
+function createSession(
+  store: HostStore,
+  masterKey: string,
+  now: number,
+  user?: OrganizerUser,
+  identity?: OrganizerIdentity,
+) {
+  const expiresAt = now + (user ? 8 * 60 * 60 * 1000 : 15 * 60 * 1000);
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const payload = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({
-    sub: "local-host",
+    sub: user?.id ?? "local-host",
     jti: randomToken(),
     iss: "tenkacloud-local-host",
     aud: "host-console",
-    "custom:userRole": "TenantAdmin",
+    "custom:userRole": user?.role === "Viewer" ? "TenantViewer" : "TenantAdmin",
+    ...(user ? { "custom:organizerRole": user.role, email: user.username } : {}),
     "custom:tenantId": "local-host",
     "custom:tenantName": "Local competition",
     iat: Math.floor(now / 1000),
@@ -41,7 +55,7 @@ export function issueSession(store: HostStore, masterKey: string, provided: unkn
   const idToken = `${payload}.${createHmac("sha256", masterKey).update(payload).digest("base64url")}`;
   const refreshToken = randomToken();
   // Exact issued-token membership is the authority; accepting arbitrary client JWT claims is not.
-  store.addSession(idToken, refreshToken, expiresAt, now);
+  store.addSession(idToken, refreshToken, expiresAt, now, user, identity);
   return {
     idToken,
     accessToken: idToken,

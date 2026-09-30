@@ -3,7 +3,7 @@
  * organizer and participants see: the built host console and participant portal, served by
  * `e2e-host.ts` (production wiring over a temporary data directory).
  *
- * Organizer: host-key sign-in → normal event creation page (2 teams) → deploy → start.
+ * Organizer: one-time Admin bootstrap, password sign-in, event creation, deploy, and start.
  * Participants: two independent browser contexts sign in with their team keys, open their own
  * exercise through the portal link, obtain the flag through that exercise's login form, submit
  * it in the portal, and see the ranking. Organizer: end the event and tear the environments down.
@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
+import { signInOrganizer } from "./organizer-login";
 
 interface HostInfo {
   admin: string;
@@ -49,13 +50,6 @@ async function startHost(): Promise<{ info: HostInfo; child: ChildProcess }> {
     lines.once("line", (line) => accept(JSON.parse(line) as HostInfo));
   });
   return { info, child };
-}
-
-async function signInOrganizer(page: Page, info: HostInfo): Promise<void> {
-  await page.goto(`${info.admin}/events`);
-  await page.locator("#local-host-key").fill(info.key);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByText("Local competition mode").first().waitFor();
 }
 
 async function createEvent(page: Page, name: string): Promise<Map<string, string>> {
@@ -194,6 +188,8 @@ async function main(): Promise<void> {
     const admin = await browser.newContext({ locale: "en-US" });
     admin.setDefaultTimeout(STEP_TIMEOUT);
     organizer = await admin.newPage();
+    await signInOrganizer(organizer, info);
+    // A page navigation drops the memory-only token; the second sign-in uses the password.
     await signInOrganizer(organizer, info);
     const keys = await createEvent(organizer, "Browser rehearsal");
     await waitForReady(organizer);

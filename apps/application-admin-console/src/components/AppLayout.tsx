@@ -112,6 +112,7 @@ export function ShellLayout({
       ],
     },
   ];
+  const organizerRole = claims?.["custom:organizerRole"];
   const localHostNavItems: SideNavigationProps.Item[] = [
     {
       type: "section",
@@ -129,6 +130,18 @@ export function ShellLayout({
           : []),
       ],
     },
+    ...(organizerRole === "Admin"
+      ? [
+          {
+            type: "section" as const,
+            text: t("nav.admin_section"),
+            items: [
+              { type: "link" as const, href: "/users", text: t("nav.tenant_users") },
+              { type: "link" as const, href: "/settings", text: t("nav.settings") },
+            ],
+          },
+        ]
+      : []),
   ];
 
   // Issue #3226 / #1954: a mode banner above the page for local hosting and the public demo.

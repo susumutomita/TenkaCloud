@@ -2,8 +2,9 @@
 
 Local hosting runs a competition on the organizer's computer. It is a different
 entry point from `make local`: individual practice and its existing login flow
-are unchanged. The host console requires a host key, while participants sign in
-with the team keys issued for their event.
+are unchanged. The host console uses local organizer accounts. The host key
+creates the first Admin once. Participants sign in with the team keys issued
+for their event.
 
 ## Supported problems
 
@@ -51,15 +52,24 @@ mode and refuses to change the permissions of an existing one, so pointing
 users and services out of unrelated files.
 
 The terminal prints the two URLs, the exercise-gateway port range and the host
-login key. The defaults are the host console at `http://127.0.0.1:5174`, the
+key used for the first organizer account. The defaults are the host console at `http://127.0.0.1:5174`, the
 participant portal at `http://127.0.0.1:5175` and exercise gateways on ports
 `5200-5239`. Use the printed URLs exactly; arbitrary Host aliases are not
 accepted. The host key is not included in public browser configuration.
 
 The host console is the normal Application Admin Console running in local-host
 mode: the same event list, event creation page, event detail tabs, schedule,
-scoreboard, notifications and report, served against this computer's API. Sign in
-with the terminal's host key (there is no Cognito). Then:
+scoreboard, notifications and report, served against this computer's API. On the
+first visit, enter the terminal's host key and create a local Admin username and
+password. Later visits use that username and password. There is no Cognito.
+
+Admin can manage organizer users and settings. Operator can run events and
+distribute team keys. Viewer can read event data but cannot see team keys or
+change events. Admin can add, disable, change, and delete organizer users from
+**Users**. The host refuses any change that would remove the last active Admin
+with a local password.
+
+After signing in:
 
 1. **Create event**: name the event, set the team count and choose the problem.
    Only problems this host can run are selectable; the others are listed as not
@@ -78,8 +88,8 @@ with the terminal's host key (there is no Cognito). Then:
 Participants use the normal Participant Portal and its actual backend login, not
 the practice-mode or demo login.
 
-Console features that need tenant infrastructure are not offered: tenant users, the audit log, SAML, the problem catalog's cloud
-deployments, disruptions, the progression gate, registration links, capacity
+Console features that need tenant infrastructure are not offered: the audit log, SAML,
+the problem catalog's cloud deployments, disruptions, the progression gate, registration links, capacity
 monitoring, scheduled deploy and automatic teardown. Their navigation entries and
 tabs are hidden; opening such a URL shows an explanation instead of a failing
 request.
@@ -134,9 +144,12 @@ event that is still being prepared does not become ready while one of its
 environments is stopped; the **Schedule** tab says so, and restarting that
 environment from the **Teams** tab completes the preparation.
 
-The initial host sign-in has a 15-minute absolute lifetime, in addition to the
-existing idle logout. Sign in again with the terminal key after expiration;
-this does not stop the event or discard its results.
+An organizer login expires after eight hours or 15 minutes without a request.
+Sign in again with the organizer password after expiration. Changing a user's
+role, password, or status revokes that user's sessions. Bootstrap completion
+persists in SQLite across restarts, including when no users remain. The host key
+cannot reopen bootstrap or recover an Admin password. Expiry does not
+stop the event or discard its results.
 
 Subsequent runs may reuse the compiled interfaces:
 
@@ -230,7 +243,7 @@ make host HOST_ARGS="--aws-region ap-northeast-1"
 
   ```sh
   TOKEN=$(curl -s -X POST http://127.0.0.1:5174/api/host/login \
-    -H 'content-type: application/json' -d '{"key":"<host key>"}' | jq -r .idToken)
+    -H 'content-type: application/json' -d '{"username":"<organizer username>","password":"<password>"}' | jq -r .idToken)
   curl -s -X POST http://127.0.0.1:5174/api/admin/competitor-accounts \
     -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
     -d '{"awsAccountId":"111111111111"}'
@@ -375,7 +388,7 @@ JSON file. Back up the entire data directory after stopping the application;
 when using a custom backup process, include SQLite's WAL state correctly.
 
 The host console, participant portal and exercise pages use separate origins.
-Host APIs require a host sign-in token issued by the application. Participant identity is derived from
+Host APIs require an organizer sign-in token issued by the application. Participant identity is derived from
 the authenticated team key, never from a submitted `teamId`. The exercise
 proxy does not forward portal credentials, cookies or the verifier endpoint.
 Submitted answers, hint fees and score updates are serialized per event and
@@ -484,7 +497,8 @@ environment while checking that the other team's containers, gateway and score
 are unchanged.
 
 The browser rehearsal builds the interfaces and drives them in Chromium: the
-organizer signs in with the host key in the normal console, creates a two-team
+organizer creates the first Admin with the host key, signs in again with the
+Admin password, then creates a two-team
 event, deploys and starts it; two independent participant browsers sign in with
 their team keys, open their own exercise, submit its flag and see the ranking;
 the organizer then ends the event and tears the environments down:

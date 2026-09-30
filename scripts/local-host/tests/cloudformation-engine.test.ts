@@ -9,6 +9,7 @@ import { CloudFormationEngine } from "../cloudformation-engine";
 import { type ApiResponse, HostingService } from "../service";
 import { HostStore } from "../store";
 import { FakeAws, OPERATOR_ACCOUNT } from "./fake-aws";
+import { bootstrapOrganizer, createOrganizerSession } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const EXTERNAL_ID = "host-external-id-0123456789";
@@ -52,10 +53,7 @@ async function host() {
       );
     },
   };
-  const login = await service.admin(
-    apiRequest({ method: "POST", path: "/host/login", token: "", body: { key: HOST_KEY } }),
-  );
-  const token = (login.body as { idToken: string }).idToken;
+  const token = await bootstrapOrganizer(service, HOST_KEY);
   const admin = (method: string, path: string, body: Record<string, unknown> = {}) =>
     service.admin(apiRequest({ method, path, token, body }));
   for (const [awsAccountId, competitorRoleName] of [
@@ -65,7 +63,7 @@ async function host() {
     await admin("POST", "/admin/competitor-accounts", { awsAccountId, competitorRoleName });
     await admin("POST", `/admin/competitor-accounts/${awsAccountId}/verify`);
   }
-  return { store, aws, engine, service, admin };
+  return { store, aws, engine, service, admin, adminToken: token };
 }
 
 const TEAM_A = { internalSlug: "team-a", awsAccountId: "111111111111" };
@@ -320,11 +318,10 @@ test("registered roles are verified and pinned to event teams; assigned accounts
 });
 
 test("Operator can distribute team keys but only Admin manages competitor connections", async () => {
-  const { admin, store, service } = await host();
+  const { admin, service, adminToken } = await host();
   const eventId = await createEvent(admin);
-  const now = Date.now();
-  store.addSession("operator-token", "operator-refresh", now + 60_000, now, "Operator");
-  store.addSession("viewer-token", "viewer-refresh", now + 60_000, now, "Viewer");
+  const operator = await createOrganizerSession(service, adminToken, "operator", "Operator");
+  const viewer = await createOrganizerSession(service, adminToken, "viewer", "Viewer");
   const call = (
     token: string,
     method: string,
@@ -333,15 +330,15 @@ test("Operator can distribute team keys but only Admin manages competitor connec
     query = new URLSearchParams(),
   ) => service.admin(apiRequest({ method, path, token, body, query }));
   const keysQuery = new URLSearchParams({ withTeamLoginKeys: "true" });
-  const operator = await call("operator-token", "GET", `/events/${eventId}`, {}, keysQuery);
-  expect(operator.status).toBe(200);
+  const operatorEvent = await call(operator.token, "GET", `/events/${eventId}`, {}, keysQuery);
+  expect(operatorEvent.status).toBe(200);
   await expect(
-    call("operator-token", "POST", "/admin/competitor-accounts", { awsAccountId: "333333333333" }),
+    call(operator.token, "POST", "/admin/competitor-accounts", { awsAccountId: "333333333333" }),
   ).rejects.toMatchObject({ status: 403 });
   await expect(
-    call("viewer-token", "GET", `/events/${eventId}`, {}, keysQuery),
+    call(viewer.token, "GET", `/events/${eventId}`, {}, keysQuery),
   ).rejects.toMatchObject({ status: 403 });
-  await expect(call("viewer-token", "POST", `/events/${eventId}/deploy`)).rejects.toMatchObject({
+  await expect(call(viewer.token, "POST", `/events/${eventId}/deploy`)).rejects.toMatchObject({
     status: 403,
   });
 });
@@ -375,28 +372,33 @@ test("failed re-verification revokes eligibility without exposing SDK error text
 });
 
 test("a revoked Admin session cannot save a pending verification result", async () => {
-  const { store, service } = await host();
+  const { store, service, adminToken } = await host();
   const connection = service.accountConnection;
   if (!connection) throw new Error("account connection missing");
   let finish: (() => void) | undefined;
+  let started: (() => void) | undefined;
+  const verificationStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
   service.accountConnection = {
     ...connection,
-    verify: () =>
-      new Promise<void>((resolve) => {
+    verify: () => {
+      started?.();
+      return new Promise<void>((resolve) => {
         finish = resolve;
-      }),
+      });
+    },
   };
-  const now = Date.now();
-  store.addSession("pending-admin", "pending-refresh", now + 60_000, now, "Admin");
+  const pendingAdmin = await createOrganizerSession(service, adminToken, "pending-admin", "Admin");
   const pending = service.admin(
     apiRequest({
       method: "POST",
       path: "/admin/competitor-accounts/111111111111/verify",
-      token: "pending-admin",
+      token: pendingAdmin.token,
     }),
   );
-  await Promise.resolve();
-  store.revokeSession("pending-refresh");
+  await verificationStarted;
+  store.revokeSession(pendingAdmin.refresh);
   if (!finish) throw new Error("verification did not start");
   finish();
   await expect(pending).rejects.toMatchObject({ status: 401 });

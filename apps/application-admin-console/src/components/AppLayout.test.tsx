@@ -1,10 +1,22 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
 import { ShellLayout } from "./AppLayout";
 
-vi.mock("../auth/AuthProvider", () => ({ useAuth: () => ({ tokens: null, logout: vi.fn() }) }));
+const authState = vi.hoisted(() => ({ organizerRole: "Admin" as "Admin" | "Operator" | "Viewer" }));
+vi.mock("../auth/AuthProvider", () => ({
+  useAuth: () => ({
+    tokens: {
+      idToken: `a.${btoa(JSON.stringify({ "custom:organizerRole": authState.organizerRole }))}.c`,
+    },
+    logout: vi.fn(),
+  }),
+}));
+
+afterEach(() => {
+  authState.organizerRole = "Admin";
+});
 
 // Locale resolves from navigator.language in the test env, so match either locale's header.
 const BANNER_HEADER = /Demo mode|デモモード/;
@@ -16,7 +28,9 @@ function renderShell(
   demoParticipantUrl?: string,
   localHost = false,
   hostAwsEnabled = false,
+  organizerRole: "Admin" | "Operator" | "Viewer" = "Admin",
 ) {
+  authState.organizerRole = organizerRole;
   return render(
     <I18nProvider>
       <MemoryRouter>
@@ -67,5 +81,22 @@ describe("ShellLayout demo banner (#1954)", () => {
     expect(
       screen.getByRole("link", { name: /Competitor Accounts|競技者アカウント/u }),
     ).toHaveAttribute("href", "/competitor-accounts");
+  });
+
+  it("shows Users and Settings only to a local Admin", () => {
+    const admin = renderShell(false, undefined, true, false, "Admin");
+    expect(screen.getByRole("link", { name: /Users|ユーザー/u })).toHaveAttribute("href", "/users");
+    expect(screen.getByRole("link", { name: /Settings|設定/u })).toHaveAttribute(
+      "href",
+      "/settings",
+    );
+    admin.unmount();
+
+    for (const role of ["Operator", "Viewer"] as const) {
+      const view = renderShell(false, undefined, true, true, role);
+      expect(screen.queryByRole("link", { name: /Users|ユーザー/u })).toBeNull();
+      expect(screen.queryByRole("link", { name: /Settings|設定/u })).toBeNull();
+      view.unmount();
+    }
   });
 });

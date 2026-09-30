@@ -54,14 +54,16 @@ export function SecretRevealModal({
         competitorRoleName: secret.competitorRoleName,
         templateUrl,
       });
-  const copyLabel = localHost
-    ? "competitor_accounts.host_secret_copy_all"
-    : "competitor_accounts.secret_modal_copy_all";
   const onCopyAll = async () => {
     await navigator.clipboard.writeText(payload);
     setAllCopied(true);
     setTimeout(() => setAllCopied(false), COPIED_FEEDBACK_RESET_MS);
   };
+  const copyAllLabel = t(
+    localHost
+      ? "competitor_accounts.host_secret_copy_all"
+      : "competitor_accounts.secret_modal_copy_all",
+  );
   return (
     <Modal
       visible
@@ -118,7 +120,7 @@ export function SecretRevealModal({
             iconName={allCopied ? "status-positive" : "copy"}
             onClick={() => void onCopyAll()}
           >
-            {allCopied ? t("competitor_accounts.secret_modal_copy_done") : t(copyLabel)}
+            {allCopied ? t("competitor_accounts.secret_modal_copy_done") : copyAllLabel}
           </Button>
         </SpaceBetween>
         <div>

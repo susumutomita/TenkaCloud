@@ -8,6 +8,7 @@ import { CompetitionEngine } from "../competition-engine";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 interface EventResult {
@@ -58,7 +59,12 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
       staticRoot: data,
       service,
     });
-    const login = await api("admin", "/host/login", "POST", { key: "test-only-host-key" });
+    const firstVisit = !(await api("admin", "/host/bootstrap-status")).body.bootstrapCompleted;
+    const login = await api("admin", firstVisit ? "/host/bootstrap" : "/host/login", "POST", {
+      ...(firstVisit ? { key: "test-only-host-key" } : {}),
+      username: REHEARSAL_ORGANIZER.username,
+      password: REHEARSAL_ORGANIZER.password,
+    });
     admin = login.body.idToken as string;
   }
   async function api(
@@ -85,6 +91,7 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
       status: response.status,
       body: (await response.json()) as {
         idToken: string;
+        bootstrapCompleted: boolean;
         projection: Projection;
         entries: { teamId: string; rank: number; score: number }[];
         problems: { score: number; stackOutputs: unknown; instructions: string }[];
@@ -329,7 +336,12 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
     await api("participant", "/portal/leaderboard", "GET", undefined, required(b).teamLoginKey);
     expect(store.coordination(event.eventId, "ac26-crypto-battle")).toBe(ended);
     // The simulated long match exceeded the host's 15-minute login lifetime.
-    admin = (await api("admin", "/host/login", "POST", { key: "test-only-host-key" })).body.idToken;
+    admin = (
+      await api("admin", "/host/login", "POST", {
+        username: REHEARSAL_ORGANIZER.username,
+        password: REHEARSAL_ORGANIZER.password,
+      })
+    ).body.idToken;
     // An event that ends while locked must not acquire retroactive penalties on unlock.
     const peer = required(unrelated.teams[0]);
     await api("admin", `/events/${unrelated.eventId}/schedule`, "PATCH", { startNow: true });

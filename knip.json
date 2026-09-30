@@ -57,6 +57,7 @@
         "scripts/local-host/tests/docker-smoke.ts",
         "scripts/local-host/tests/e2e-host.ts",
         "scripts/local-host/tests/browser-e2e.ts",
+        "scripts/local-host/tests/organizer-browser-e2e.ts",
         "scripts/local-host/tests/cloud-browser-e2e.ts",
         "scripts/local-host/tests/accounts-browser-e2e.ts",
         "scripts/local-host/tests/participant-aws-browser-e2e.ts"

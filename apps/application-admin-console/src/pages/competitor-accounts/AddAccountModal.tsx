@@ -5,7 +5,7 @@ import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
-import { canMutateTenant, useApiClient } from "../../api/client";
+import { canManageConnections, useApiClient } from "../../api/client";
 import {
   type CreateCompetitorAccountResponse,
   createCompetitorAccount,
@@ -28,7 +28,7 @@ interface AddAccountModalProps {
 
 export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountModalProps) {
   const apiClient = useApiClient(config);
-  const canMutate = canMutateTenant(apiClient);
+  const canMutate = canManageConnections(config, apiClient);
   const t = useT();
   // Issue #1314: Plane (= tenantId) scope を含む unique 名を default で提案する。
   // 同一競技者 AWS account を複数 Plane に並列接続できる (= 名前衝突しない)。

@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
+import { organizerToken } from "./organizer-login";
 
 const IMAGE = process.env.TENKACLOUD_HOST_IMAGE ?? "tenkacloud-host";
 const NAME = `tenkacloud-host-smoke-${String(process.pid)}`;
@@ -118,9 +119,9 @@ async function main(): Promise<void> {
       hasAws: false,
     });
 
-    const login = await api(admin, "POST", "/host/login", "", { key });
-    assert.equal(login.status, 200, JSON.stringify(login.body));
-    const token = String(login.body.idToken);
+    const firstToken = await organizerToken({ admin, key });
+    const token = await organizerToken({ admin, key });
+    assert.notEqual(firstToken, token, "a return visit must use an organizer password");
 
     const catalog = await api(admin, "GET", "/host/catalog", token);
     assert.deepEqual(

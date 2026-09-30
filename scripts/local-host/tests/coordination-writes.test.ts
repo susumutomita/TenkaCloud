@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   apiRequest,
+  BENCH_ORGANIZER,
   type CreatedTeam,
   HOST_KEY,
   PROBLEM_ID,
@@ -16,6 +17,7 @@ import { DEFAULT_GATEWAY_PORTS, parseGatewayPorts } from "../gateway-ports";
 import { startLocalHost } from "../server";
 import { type ApiResponse, HostingService } from "../service";
 import { HostStore } from "../store";
+import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const directories: string[] = [];
@@ -149,10 +151,10 @@ test("End Event, lock and teardown write their tick without waiting for the inte
   const { clock, store, service, created } = await startedMatch(2);
   const [first] = created.teams;
   if (!first) throw new Error("Expected a team.");
-  const login = await service.admin(
-    apiRequest({ method: "POST", path: "/host/login", token: "", body: { key: HOST_KEY } }),
+  const session = await service.admin(
+    apiRequest({ method: "POST", path: "/host/login", token: "", body: BENCH_ORGANIZER }),
   );
-  const token = (login.body as { idToken: string }).idToken;
+  const token = (session.body as { idToken: string }).idToken;
   const admin = (method: string, action: string) =>
     service.admin(apiRequest({ method, path: `/events/${created.eventId}${action}`, token }));
   clock.now += 5_000;
@@ -225,8 +227,12 @@ test("stopping the host writes the reads it held in memory", async () => {
     };
     const admin = (path: string, method: string, token: string, body?: unknown) =>
       api(host.admin.origin, path, method, token, body);
-    const token = (await admin("/host/login", "POST", "", { key: host.masterKey }))
-      .idToken as string;
+    const token = (
+      await admin("/host/bootstrap", "POST", "", {
+        key: host.masterKey,
+        ...REHEARSAL_ORGANIZER,
+      })
+    ).idToken as string;
     const created = await admin("/events", "POST", token, {
       name: "stop flush",
       teams: [{ internalSlug: "solo" }],

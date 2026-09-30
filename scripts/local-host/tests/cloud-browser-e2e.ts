@@ -9,6 +9,7 @@ import { CompetitionEngine } from "../competition-engine";
 import { parseGatewayPorts } from "../gateway-ports";
 import { startLocalHost } from "../server";
 import { FakeAws, fakeFlag } from "./fake-aws";
+import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 interface CreatedEvent {
   eventId: string;
@@ -56,12 +57,12 @@ async function rehearse(root: string, data: string): Promise<void> {
         process.env.HOST_E2E_CHROMIUM ??
         (existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined),
     });
-    const login = await fetch(`${host.admin.origin}/api/host/login`, {
+    const login = await fetch(`${host.admin.origin}/api/host/bootstrap`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key: host.masterKey }),
+      body: JSON.stringify({ key: host.masterKey, ...REHEARSAL_ORGANIZER }),
     });
-    assert.equal(login.status, 200);
+    assert.equal(login.status, 201);
     const { idToken } = (await login.json()) as { idToken: string };
     async function admin(method: string, path: string, body: unknown = {}) {
       const response = await fetch(`${host.admin.origin}/api${path}`, {

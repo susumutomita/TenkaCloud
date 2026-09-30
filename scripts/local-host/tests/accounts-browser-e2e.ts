@@ -15,6 +15,7 @@ import { parseGatewayPorts } from "../gateway-ports";
 import { startLocalHost } from "../server";
 import type { HostStore } from "../store";
 import { FakeAws } from "./fake-aws";
+import { organizerToken, REHEARSAL_ORGANIZER, signInOrganizer } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const accountId = "111111111111";
@@ -26,9 +27,8 @@ function chromiumPath(): string | undefined {
 }
 
 async function signIn(page: Page, origin: string, hostKey: string): Promise<void> {
-  await page.goto(`${origin}/competitor-accounts`);
-  await page.locator("#local-host-key").fill(hostKey);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await signInOrganizer(page, { admin: origin, key: hostKey });
+  await page.locator('a[href="/competitor-accounts"]').click();
   await page.getByRole("heading", { name: "Competitor Accounts" }).first().waitFor();
 }
 
@@ -97,6 +97,65 @@ async function rejectAssignedDelete(page: Page): Promise<void> {
   await row.getByText("Verified").waitFor();
 }
 
+async function verifyReadOnlyAccountRoles(
+  browser: Browser,
+  origin: string,
+  hostKey: string,
+): Promise<void> {
+  const hostAddress = { admin: origin, key: hostKey };
+  const adminToken = await organizerToken(hostAddress);
+  for (const role of ["Operator", "Viewer"] as const) {
+    const username = `account-${role.toLowerCase()}`;
+    const credentials = { username, password: REHEARSAL_ORGANIZER.password };
+    const created = await fetch(`${origin}/api/host/users`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ ...credentials, role }),
+    });
+    assert.equal(created.status, 201, `${role} account creation failed`);
+    const context = await browser.newContext({ locale: "en-US" });
+    context.setDefaultTimeout(90_000);
+    try {
+      const page = await context.newPage();
+      await signInOrganizer(page, hostAddress, credentials);
+      await page.locator('a[href="/competitor-accounts"]').click();
+      await page.getByRole("heading", { name: "Competitor Accounts" }).first().waitFor();
+      const row = page.getByRole("row").filter({ hasText: accountId });
+      await row.getByText("Verified").waitFor();
+      assert.equal(
+        await page.getByRole("button", { name: "Add account" }).first().isEnabled(),
+        false,
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "Bulk import (JSON)" }).isEnabled(),
+        false,
+      );
+      assert.equal(await row.getByRole("button", { name: "Re-verify" }).isEnabled(), false);
+      assert.equal(await row.getByRole("button", { name: "Delete" }).isEnabled(), false);
+      const token = await organizerToken(hostAddress, credentials);
+      const read = await fetch(`${origin}/api/admin/competitor-accounts`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(read.status, 200);
+      const listed = (await read.json()) as { items: { awsAccountId: string }[] };
+      assert.equal(
+        listed.items.some((item) => item.awsAccountId === accountId),
+        true,
+      );
+      const denied = await fetch(`${origin}/api/admin/competitor-accounts/${accountId}/verify`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(denied.status, 403);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const dataDirectory = mkdtempSync(join(tmpdir(), "tenkacloud-host-accounts-e2e-"));
   const fakeAws = new FakeAws();
@@ -146,13 +205,14 @@ async function main(): Promise<void> {
       ),
       "Verification used the registered role and mandatory ExternalId.",
     );
+    await verifyReadOnlyAccountRoles(browser, host.admin.origin, host.masterKey);
     const eventId = await createMixedEvent(page);
     assert.equal(store?.teams(eventId)[0]?.aws?.roleName, roleName);
     assert.deepEqual(
       store
         ?.event(eventId)
         .problems.map((problem) => problem.runtime)
-        .sort((left, right) => (left ?? "").localeCompare(right ?? "")),
+        .sort((left, right) => String(left).localeCompare(String(right))),
       ["cloudformation", "coordination"],
     );
     await rejectAssignedDelete(page);

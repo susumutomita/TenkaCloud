@@ -17,6 +17,7 @@ import { type HttpHost, startHttpHost } from "../http";
 import { object, type Team } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 interface CreatedEvent {
   eventId: string;
@@ -132,11 +133,16 @@ async function main(): Promise<void> {
     return payload as Body;
   }
   async function login(): Promise<void> {
+    const status = await api<{ bootstrapCompleted: boolean }>("host", "/host/bootstrap-status");
+    const firstVisit = !status.bootstrapCompleted;
     const session = await api<{ idToken: string }>(
       "host",
-      "/host/login",
+      firstVisit ? "/host/bootstrap" : "/host/login",
       "POST",
-      { key: masterKey },
+      {
+        ...(firstVisit ? { key: masterKey } : {}),
+        ...REHEARSAL_ORGANIZER,
+      },
       "",
     );
     accessToken = session.idToken;
