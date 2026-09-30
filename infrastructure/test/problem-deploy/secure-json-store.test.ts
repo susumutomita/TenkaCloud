@@ -98,7 +98,7 @@ describe("tenant team parameters (#3290)", () => {
 
   it("should count every page under the tenant's teams path without decrypting", async () => {
     const send = vi.fn().mockResolvedValueOnce(pageOf(10, "p2")).mockResolvedValueOnce(pageOf(3));
-    expect(await countTenantTeamParameters(deps(send), "t1", 99)).toBe(13);
+    expect(await countTenantTeamParameters(deps(send), "t1", "/x", 99)).toBe(13);
     expect(send).toHaveBeenCalledTimes(2);
     const first = (send.mock.calls[0][0] as GetParametersByPathCommand).input;
     expect(first).toEqual({
@@ -112,12 +112,25 @@ describe("tenant team parameters (#3290)", () => {
 
   it("should stop reading pages once the count reaches stopAt", async () => {
     const send = vi.fn().mockResolvedValue(pageOf(10, "more"));
-    expect(await countTenantTeamParameters(deps(send), "t1", 20)).toBe(20);
+    expect(await countTenantTeamParameters(deps(send), "t1", "/x", 20)).toBe(20);
     expect(send).toHaveBeenCalledTimes(2);
   });
 
+  it("should count only parameters whose name ends with the suffix", async () => {
+    const send = vi.fn().mockResolvedValue({
+      Parameters: [
+        { Name: "/dev/tenants/t1/teams/a/sakura-api-key" },
+        { Name: "/dev/tenants/t1/teams/a/azure-credential" },
+        { Name: "/dev/tenants/t1/teams/b/sakura-api-key" },
+        {},
+      ],
+    });
+    expect(await countTenantTeamParameters(deps(send), "t1", "/sakura-api-key", 99)).toBe(2);
+  });
+
   it("should count an empty page as zero", async () => {
-    expect(await countTenantTeamParameters(deps(vi.fn().mockResolvedValue({})), "t1", 99)).toBe(0);
+    const send = vi.fn().mockResolvedValue({});
+    expect(await countTenantTeamParameters(deps(send), "t1", "/x", 99)).toBe(0);
   });
 
   it("should scope the IAM pattern to the teams path of any tenant", () => {

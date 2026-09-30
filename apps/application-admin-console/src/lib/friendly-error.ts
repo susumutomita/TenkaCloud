@@ -65,10 +65,10 @@ const KNOWN_ERRORS: Readonly<Record<string, FriendlyError>> = {
     title: "対象が見つかりません",
     hint: "他の operator が削除した可能性があります。 一覧を再読み込みしてください",
   },
-  // Issue #3290: tenant ごとの team 認証情報の上限 (1 event の最大チーム数)。
+  // Issue #3290: tenant ごと・provider ごとの team 認証情報の上限 (1 event の最大チーム数)。
   team_credential_limit_reached: {
     title: "チームの認証情報はこれ以上登録できません",
-    hint: "登録できるのは 1 つのイベントの最大チーム数 (99) までです。 使い終わったチームの認証情報を失効してから登録してください。 登録済みのチームの上書きはできます",
+    hint: "登録できるのはクラウドごとに 1 つのイベントの最大チーム数 (99) までです。 使い終わったチームの認証情報を失効してから登録してください。 登録済みのチームの上書きはできます",
   },
   // Issue #705: SSO Credentials の 4 分岐
   role_arn_missing: {

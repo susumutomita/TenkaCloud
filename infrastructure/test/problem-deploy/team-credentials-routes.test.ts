@@ -163,13 +163,8 @@ describe("team credential limit per tenant (#3290)", () => {
     expect(ssm.params.has("/development/tenants/t1/teams/new/sakura-api-key")).toBe(true);
   });
 
-  it("should refuse a new team once the tenant holds 99 credentials of any provider", async () => {
-    const names = [
-      ...teamNames("t1", 50),
-      ...teamNames("t1", 30, "azure-credential"),
-      ...teamNames("t1", 19, "gcp-credential"),
-    ];
-    const ssm = fakeParameterStore(names);
+  it("should refuse a new team once the tenant holds 99 credentials of that provider", async () => {
+    const ssm = fakeParameterStore(teamNames("t1", 99, "gcp-credential"));
     const res = await handleRegisterTeamCredential(deps(ssm.send), "gcp", "t1", "new", GCP);
     expect(res).toEqual({
       status: 409,
@@ -177,6 +172,18 @@ describe("team credential limit per tenant (#3290)", () => {
     });
     expect(putCommands(ssm.send)).toEqual([]);
     expect(ssm.params.size).toBe(99);
+  });
+
+  it("should count each provider separately so a composite event can use all of them", async () => {
+    const names = [
+      ...teamNames("t1", 99),
+      ...teamNames("t1", 99, "gcp-credential"),
+      ...teamNames("t1", 98, "azure-credential"),
+    ];
+    const ssm = fakeParameterStore(names);
+    const res = await handleRegisterTeamCredential(deps(ssm.send), "azure", "t1", "team-98", AZURE);
+    expect(res.status).toBe(201);
+    expect(ssm.params.size).toBe(297);
   });
 
   it("should still overwrite an existing team at the limit (rotation)", async () => {

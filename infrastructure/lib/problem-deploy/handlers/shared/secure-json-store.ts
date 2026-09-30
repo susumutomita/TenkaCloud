@@ -115,12 +115,13 @@ export async function secureParameterExists(
 }
 
 /**
- * tenant の per-team 機密を数える。 `stopAt` に達したらそれ以上 page を読まない (= 上限判定に要る
- * 分だけ SSM を呼ぶ)。 値は復号しない。
+ * tenant の per-team 機密のうち、 名前が `nameSuffix` で終わるものを数える。 `stopAt` に達したら
+ * それ以上 page を読まない (= 上限判定に要る分だけ SSM を呼ぶ)。 値は復号しない。
  */
 export async function countTenantTeamParameters(
   deps: SecureJsonStoreDeps,
   tenantId: string,
+  nameSuffix: string,
   stopAt: number,
 ): Promise<number> {
   let count = 0;
@@ -134,7 +135,7 @@ export async function countTenantTeamParameters(
         NextToken: nextToken,
       }),
     );
-    count += out.Parameters?.length ?? 0;
+    count += (out.Parameters ?? []).filter((p) => p.Name?.endsWith(nameSuffix)).length;
     nextToken = out.NextToken;
   } while (nextToken !== undefined && count < stopAt);
   return count;

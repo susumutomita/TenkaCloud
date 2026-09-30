@@ -70,11 +70,12 @@ export function isTeamCredentialProvider(value: string): value is TeamCredential
 }
 
 /**
- * [Issue #3290] 1 tenant が持てる team credential の数。 非 AWS event は provider 1 つで最大
- * {@link MAX_TEAMS_PER_EVENT} チームなので、 1 event 分を用意できる数にする。 SSM Standard parameter の
- * quota は account 全体で共有するため、 1 tenant が他 tenant の分まで使い切れないようにする。
+ * [Issue #3290] 1 tenant が provider ごとに持てる team credential の数。 1 event は最大
+ * {@link MAX_TEAMS_PER_EVENT} チームで、 composite event は 1 チームに provider ごとの credential を
+ * 使うので、 provider ごとに 1 event 分を用意できる数にする。 SSM Standard parameter の quota は
+ * account 全体で共有するため、 1 tenant が他 tenant の分まで使い切れないようにする。
  */
-const TEAM_CREDENTIAL_LIMIT_PER_TENANT = MAX_TEAMS_PER_EVENT;
+const TEAM_CREDENTIAL_LIMIT_PER_PROVIDER = MAX_TEAMS_PER_EVENT;
 
 const CREDENTIAL_PARAMETER_NAME: Readonly<
   Record<TeamCredentialProvider, (env: string, tenantId: string, teamSlug: string) => string>
@@ -159,7 +160,7 @@ export async function handleRegisterTeamCredential(
   if (await isTenantAtCredentialLimit(store, provider, tenantId, teamSlug)) {
     return {
       status: StatusCodes.CONFLICT,
-      body: { error: "team_credential_limit_reached", limit: TEAM_CREDENTIAL_LIMIT_PER_TENANT },
+      body: { error: "team_credential_limit_reached", limit: TEAM_CREDENTIAL_LIMIT_PER_PROVIDER },
     };
   }
   await put();
@@ -212,8 +213,14 @@ async function isTenantAtCredentialLimit(
 ): Promise<boolean> {
   const name = CREDENTIAL_PARAMETER_NAME[provider](store.env, tenantId, teamSlug);
   if (await secureParameterExists(store, name)) return false;
-  const count = await countTenantTeamParameters(store, tenantId, TEAM_CREDENTIAL_LIMIT_PER_TENANT);
-  return count >= TEAM_CREDENTIAL_LIMIT_PER_TENANT;
+  const providerSuffix = name.slice(name.lastIndexOf("/"));
+  const count = await countTenantTeamParameters(
+    store,
+    tenantId,
+    providerSuffix,
+    TEAM_CREDENTIAL_LIMIT_PER_PROVIDER,
+  );
+  return count >= TEAM_CREDENTIAL_LIMIT_PER_PROVIDER;
 }
 
 function validationFailed(issues: unknown): TeamCredentialRouteResult {
