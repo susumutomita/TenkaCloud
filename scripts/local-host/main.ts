@@ -10,7 +10,7 @@ async function main(): Promise<void> {
   const options = parseOptions(process.argv.slice(2), root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nbun start [--data <directory>] [--no-build]\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, one fixed port per team environment\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n\nThe host application and Cryptography Battle need Bun and SQLite only. The sqli-demo problem requires Docker Compose.\nExisting make local individual practice is unchanged.`,
+      `TenkaCloud local competition hosting\n\nbun start [--data <directory>] [--no-build]\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, one fixed port per team environment\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nThe host application and Cryptography Battle need Bun and SQLite only. The sqli-demo problem requires Docker Compose.\nExisting make local individual practice is unchanged.`,
     );
     return;
   }
@@ -21,14 +21,21 @@ async function main(): Promise<void> {
   const host = await startLocalHost(
     root,
     options,
-    (directory) => new CompetitionEngine(root, directory),
+    (directory) => new CompetitionEngine(root, directory, !options.public),
   );
   try {
-    const gateways = `http://${options.hostname}:${formatGatewayPorts(options.gatewayPorts)}`;
-    console.log(
-      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (one fixed port per team environment)\nHost login key: ${host.masterKey}\nState: ${host.databasePath}\n`,
-    );
-    if (options.hostname !== "127.0.0.1")
+    if (options.public) {
+      // Container logs are shipped and retained elsewhere; the key stays in the data volume.
+      console.log(
+        `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nHost login key: stored in ${host.masterKeyPath}\nState: ${host.databasePath}\nDocker Compose problems are not offered in public mode.\n`,
+      );
+    } else {
+      const gateways = `http://${options.hostname}:${formatGatewayPorts(options.gatewayPorts)}`;
+      console.log(
+        `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (one fixed port per team environment)\nHost login key: ${host.masterKey}\nState: ${host.databasePath}\n`,
+      );
+    }
+    if (!options.public && options.hostname !== "127.0.0.1")
       console.warn(
         `WARNING: LAN HTTP is unencrypted. Use a trusted isolated network only. Never port-forward these listeners to the Internet.\nAllow TCP ${String(options.participantPort)} and ${formatGatewayPorts(options.gatewayPorts)} on ${options.hostname} in the firewall; keep ${String(options.adminPort)} closed.`,
       );

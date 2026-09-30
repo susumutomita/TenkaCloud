@@ -12,13 +12,18 @@ import type { Context, EngineResult, Job, Problem } from "./model";
 export class CompetitionEngine extends DockerHostingEngine {
   private readonly battles: Problem[];
   private readonly loader: LocalPluginLoader;
-  constructor(root: string, dataDirectory: string) {
+  constructor(
+    root: string,
+    dataDirectory: string,
+    /** False in a container: Docker Compose problems publish on a loopback it cannot reach. */
+    private readonly dockerProblems = true,
+  ) {
     super(root, dataDirectory);
     this.battles = coordinationCatalog(root);
     this.loader = new LocalPluginLoader(dataDirectory);
   }
   override catalog(): readonly Problem[] {
-    return [...super.catalog(), ...this.battles];
+    return [...(this.dockerProblems ? super.catalog() : []), ...this.battles];
   }
   requiresGateway(definition: string): boolean {
     return !isCoordination(definition);

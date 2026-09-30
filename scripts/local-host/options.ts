@@ -16,6 +16,10 @@ export function parseOptions(args: string[], repositoryRoot: string) {
       "participant-port": { type: "string", default: "5175" },
       "gateway-ports": { type: "string", default: DEFAULT_GATEWAY_PORTS },
       "no-build": { type: "boolean", default: false },
+      "public-admin-origin": { type: "string" },
+      "public-participant-origin": { type: "string" },
+      "behind-proxy": { type: "boolean", default: false },
+      "unsafe-http": { type: "boolean", default: false },
       help: {
         type: "boolean",
         short: "h",
@@ -28,7 +32,10 @@ export function parseOptions(args: string[], repositoryRoot: string) {
       throw new Error("Ports must be integers from 1024 to 65535.");
     return Number(raw);
   };
-  const hostname = listenAddress(values.lan, values["unsafe-lan"]);
+  const exposure = publicExposure(values);
+  if (exposure && values.lan)
+    throw new Error("Choose either --lan or the public origins, not both.");
+  const hostname = exposure ? "0.0.0.0" : listenAddress(values.lan, values["unsafe-lan"]);
   const adminPort = port(values["admin-port"]);
   const participantPort = port(values["participant-port"]);
   if (adminPort === participantPort)
@@ -47,9 +54,59 @@ export function parseOptions(args: string[], repositoryRoot: string) {
     adminPort,
     participantPort,
     gatewayPorts,
+    ...(exposure ? { public: exposure } : {}),
     build: !values["no-build"],
     help: values.help,
   };
+}
+
+/** Served through a TLS-terminating proxy; both listeners bind every interface of the container. */
+export interface PublicExposure {
+  /** The origins the proxy serves. Host and Origin checks compare requests against them. */
+  readonly adminOrigin: string;
+  readonly participantOrigin: string;
+  /** Key the invalid-credential limiter on the entry the trusted proxy appended to X-Forwarded-For. */
+  readonly behindProxy: boolean;
+}
+
+function publicExposure(values: {
+  "public-admin-origin"?: string;
+  "public-participant-origin"?: string;
+  "behind-proxy"?: boolean;
+  "unsafe-http"?: boolean;
+}): PublicExposure | undefined {
+  const admin = values["public-admin-origin"];
+  const participant = values["public-participant-origin"];
+  if (!admin && !participant) {
+    if (values["behind-proxy"] || values["unsafe-http"])
+      throw new Error("--behind-proxy and --unsafe-http need the public origins.");
+    return undefined;
+  }
+  if (!admin || !participant)
+    throw new Error("Give both --public-admin-origin and --public-participant-origin.");
+  const adminOrigin = publicOrigin(admin, values["unsafe-http"] ?? false);
+  const participantOrigin = publicOrigin(participant, values["unsafe-http"] ?? false);
+  if (adminOrigin === participantOrigin)
+    throw new Error("The host console and participant portal need different origins.");
+  return { adminOrigin, participantOrigin, behindProxy: values["behind-proxy"] ?? false };
+}
+
+function publicOrigin(raw: string, unsafeHttp: boolean): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${raw} is not a URL.`);
+  }
+  if (url.origin !== raw.replace(/\/$/u, ""))
+    throw new Error(`${raw} must be an origin only: scheme, host and optional port.`);
+  if (url.protocol === "http:" && !unsafeHttp)
+    throw new Error(
+      `${raw} uses HTTP. Public hosting needs HTTPS at the proxy; --unsafe-http is for local tests only.`,
+    );
+  if (url.protocol !== "https:" && url.protocol !== "http:")
+    throw new Error(`${raw} must use https.`);
+  return url.origin;
 }
 
 /** Loopback by default; a LAN address only when it is private and explicitly acknowledged. */

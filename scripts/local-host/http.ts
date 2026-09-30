@@ -51,8 +51,9 @@ function pageNavigation(request: IncomingMessage): boolean {
 }
 
 function validOrigin(request: IncomingMessage, origin: string): void {
-  if (request.headers.host !== new URL(origin).host)
-    throw new HostError(403, "Untrusted Host header.");
+  const host = new URL(origin).host;
+  if (request.headers.host !== host)
+    throw new HostError(403, `Untrusted Host header. Expected ${host}.`);
   if (request.headers.origin && request.headers.origin !== origin)
     throw new HostError(403, "Cross-origin requests are not allowed.");
   if (request.headers["sec-fetch-site"] === "cross-site" && !pageNavigation(request))
@@ -163,6 +164,18 @@ class InvalidCredentialLimiter {
   }
 }
 
+/**
+ * Behind a proxy every socket is the proxy's, so one attacker's failures would lock out everyone.
+ * The rightmost X-Forwarded-For entry is the one the trusted proxy appended; entries to its left
+ * come from the client and can be forged.
+ */
+function clientAddress(request: IncomingMessage, behindProxy: boolean): string {
+  const forwarded = request.headers["x-forwarded-for"];
+  const chain = Array.isArray(forwarded) ? forwarded.join(",") : forwarded;
+  const appended = behindProxy ? chain?.split(",").at(-1)?.trim() : undefined;
+  return appended || request.socket.remoteAddress || "unknown";
+}
+
 function requestTarget(request: IncomingMessage, origin: string): URL {
   const url = new URL(request.url ?? "/", origin);
   try {
@@ -200,17 +213,23 @@ function idempotencyKey(request: IncomingMessage): string | undefined {
   return nonce;
 }
 
-/** Distinct origins: the admin listener is loopback-only and has no participant routes. */
+/**
+ * Distinct origins: the admin listener has no participant routes, and binds loopback unless a
+ * TLS-terminating proxy publishes it at an advertised origin.
+ */
 export async function startHttpHost(options: {
   kind: "admin" | "participant";
   hostname: string;
   port: number;
+  /** The public origin the proxy serves; responses and origin checks use it instead of the bind. */
+  advertised?: string;
+  behindProxy?: boolean;
   staticRoot: string;
   service: HostingService;
   participantOrigin?: string;
   log?: (error: unknown) => void;
 }): Promise<HttpHost> {
-  if (options.kind === "admin" && options.hostname !== "127.0.0.1")
+  if (options.kind === "admin" && options.hostname !== "127.0.0.1" && !options.advertised)
     throw new Error("The host console must bind to IPv4 loopback.");
   let origin = "";
   const limiter = new InvalidCredentialLimiter(options.service.now);
@@ -225,6 +244,11 @@ export async function startHttpHost(options: {
   server.maxHeadersCount = 40;
   server.setTimeout(15_000, (socket) => socket.destroy());
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    // Platform health checks reach the container directly, with its own Host header.
+    if (options.advertised && request.method === "GET" && request.url === "/healthz") {
+      json(response, 200, { status: "ok", mode: "local-host", role: options.kind });
+      return;
+    }
     validOrigin(request, origin);
     const url = requestTarget(request, origin);
     if (url.pathname === "/healthz" && request.method === "GET") {
@@ -291,7 +315,7 @@ export async function startHttpHost(options: {
   ): Promise<void> {
     if (await handleSessionCompat(request, response, path)) return;
     assertRoleRoute(path);
-    const remote = request.socket.remoteAddress ?? "unknown";
+    const remote = clientAddress(request, options.behindProxy ?? false);
     limiter.assertAllowed(remote);
     const apiRequest: ApiRequest = {
       method: request.method ?? "GET",
@@ -309,6 +333,7 @@ export async function startHttpHost(options: {
       throw error;
     }
   }
-  origin = await listen(server, options.hostname, options.port);
+  const bound = await listen(server, options.hostname, options.port);
+  origin = options.advertised ?? bound;
   return { origin, close: () => closeServer(server) };
 }

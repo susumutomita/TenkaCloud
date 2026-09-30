@@ -16,6 +16,7 @@ on:
       - 'apps/**/vite.host.config.ts'
       - 'apps/**/host.html'
       - 'tsconfig.host.json'
+      - 'docker/host/**'
       - '.github/workflows/local-host-rehearsal.yml'
 
 permissions:
@@ -47,6 +48,10 @@ jobs:
           docker compose version
       - name: Production adapter and existing sqli-demo with two teams
         run: bun run test:host:docker
+      - name: Hosted image plays a Cryptography Battle at its advertised origins
+        run: |
+          docker build -f docker/host/Dockerfile -t tenkacloud-host .
+          bun run test:host:container
       # Playwright's pinned Chromium for the browser rehearsal (the runner has none preinstalled).
       - name: Install Chromium for the browser rehearsal
         run: bunx playwright-core install --with-deps chromium
