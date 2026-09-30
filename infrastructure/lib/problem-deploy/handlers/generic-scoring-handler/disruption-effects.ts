@@ -1,8 +1,9 @@
+import type { ActiveDisruptionEffect } from "../../../../../scripts/lib/deployment-scoring-state";
+import type { KindResult } from "../../../../../scripts/lib/scoring-common";
 import type {
   DisruptionEffect,
   ProblemDisruptionEntry,
 } from "../../../utils/discover-problems-catalog.js";
-import type { ActiveDisruptionEffect, KindResult } from "./shared.js";
 
 /**
  * [Issue #1665] disruption の **採点上の効果** を採点 tick に畳み込む純関数。

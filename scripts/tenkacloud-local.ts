@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compareCodePoints } from "./lib/code-point-order";
+import { listLocalPlayProblems } from "./local-host/container/manifest";
 import { scoreSimulatedProblem } from "./local-play/api-scoring";
 import { DEFAULT_MAX_RUNNING, type LocalPlayDeployment } from "./local-play/api-state";
 import { formatLocalProblemListing } from "./local-play/catalog-listing";
@@ -36,7 +37,6 @@ import {
   waitForProblemRunning,
   waitForServeProcessExit,
 } from "./local-play/local-runtime-support";
-import { listLocalPlayProblems } from "./local-play/manifest";
 import { observeProcessIdentity } from "./local-play/process-identity";
 import { assertPortFree, freeLoopbackPort, waitForLocalApi } from "./local-play/readiness";
 import { startLocalPlayServer } from "./local-play/server";

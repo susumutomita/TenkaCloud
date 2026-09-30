@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { readCappedResponseText } from "./bounded-response";
-import { parseLoopbackUrl } from "./loopback";
+import { readCappedResponseText } from "../local-host/container/bounded-response";
+import { parseLoopbackUrl } from "../local-host/container/loopback";
 
 /**
  * Bounded, loopback-only client for the editor contract hosted by a running

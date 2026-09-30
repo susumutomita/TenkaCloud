@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { loadContainerProblem, type ManifestFs } from "../../../scripts/local-play/manifest";
+import {
+  loadContainerProblem,
+  type ManifestFs,
+} from "../../../scripts/local-host/container/manifest";
 import { parseScoringMetadata } from "../../lib/utils/scoring-metadata";
 
 /**

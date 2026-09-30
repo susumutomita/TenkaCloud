@@ -4,6 +4,11 @@ import { extname, join, normalize, sep } from "node:path";
 import type { Duplex } from "node:stream";
 import { getReasonPhrase, StatusCodes } from "http-status-codes";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
+import {
+  type LocalPlayStateStore,
+  restoreLocalPlayState,
+  snapshotLocalPlayState,
+} from "../local-host/container/state-store";
 import { buildRuntimeConfig } from "../ops/participant-portal-runtime-config";
 import { handleLocalPlayRequest } from "./api";
 import {
@@ -14,11 +19,6 @@ import {
 } from "./api-state";
 import { corsHeaders, isAllowedCorsOrigin, isTrustedRuntimeConfigHost } from "./cors";
 import { proxySimulatorNativeRequest } from "./simulator-native-proxy";
-import {
-  type LocalPlayStateStore,
-  restoreLocalPlayState,
-  snapshotLocalPlayState,
-} from "./state-store";
 import {
   bridgeTerminalSocket,
   consumeTerminalTicket,

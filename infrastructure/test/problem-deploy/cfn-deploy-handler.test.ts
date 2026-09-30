@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   parseDeployAllowedCidrs,
   resolveAllowedCidrOverride,
-} from "../../lib/problem-deploy/deploy-allowed-cidrs.js";
+} from "../../../scripts/lib/deploy-allowed-cidrs.js";
 import {
   buildArtifactsResolver,
   buildCloudFormationClient,

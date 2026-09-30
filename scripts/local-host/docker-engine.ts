@@ -2,26 +2,27 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { revealHint, submitFlag } from "../local-play/api-scoring";
-import { createLocalPlayState, sessionScore } from "../local-play/api-state";
-import { teamView } from "../local-play/api-views";
-import { assertComposePolicy } from "../local-play/compose-policy";
-import type { LocalComposeUnit, StartedContainer } from "../local-play/container-runner";
 import {
   type ComposeCli,
   composeArgsForCli,
   generateSecretEnv,
   isComposeUnitRunning,
   resolveComposeCli,
-} from "../local-play/docker-adapter";
-import { type ContainerProblem, loadContainerProblem } from "../local-play/manifest";
-import { remapComposeHostPorts, remapContainerProblem } from "../local-play/port-remap";
+} from "./container/compose-cli";
+import { assertComposePolicy } from "./container/compose-policy";
+import type { LocalComposeUnit, StartedContainer } from "./container/container-runner";
+import { type ContainerProblem, loadContainerProblem } from "./container/manifest";
+import { remapComposeHostPorts, remapContainerProblem } from "./container/port-remap";
+import { revealContainerHint, submitFlag } from "./container/scoring";
+import { createContainerState } from "./container/session";
+import { sessionScore } from "./container/state";
 import {
   parseLocalPlaySnapshot,
   restoreLocalPlayState,
   snapshotLocalPlayState,
-} from "../local-play/state-store";
-import { verifySubmission } from "../local-play/verify-client";
+} from "./container/state-store";
+import { verifySubmission } from "./container/verify-client";
+import { teamView } from "./container/views";
 import { privateDirectory } from "./files";
 import {
   type Context,
@@ -355,36 +356,29 @@ export class DockerHostingEngine implements RuntimeEngine {
     const problems = context.event.problems.map(
       (problem) => (JSON.parse(problem.definition) as Definition).problem,
     );
-    const state = createLocalPlayState(
-      { problems },
-      {
-        teamName: context.team.displayName,
-        maxRunning: Math.max(1, problems.length),
-        verify: (url, submission, verifyContext, options) =>
-          verifySubmission(
-            url,
-            submission,
-            { ...verifyContext, teamId: context.team.teamId },
-            {
-              ...options,
-              fetchImpl: (input, init) =>
-                fetch(input, { ...init, signal: AbortSignal.timeout(5000) }),
-            },
-          ),
-        startContainer: async (problem) => {
-          const job = context.jobs.find(
-            (candidate) =>
-              candidate.problemId === problem.problemId && candidate.status === "COMPLETE",
-          );
-          const started = job && this.running.get(job.jobId);
-          if (!started) throw new Error("Host-owned problem runtime is unavailable.");
-          return started;
-        },
-        stopContainer: async () => {
-          throw new Error("Participant state may not stop host-owned environments.");
-        },
+    const state = createContainerState(problems, {
+      teamName: context.team.displayName,
+      verify: (url, submission, verifyContext, options) =>
+        verifySubmission(
+          url,
+          submission,
+          { ...verifyContext, teamId: context.team.teamId },
+          {
+            ...options,
+            fetchImpl: (input, init) =>
+              fetch(input, { ...init, signal: AbortSignal.timeout(5000) }),
+          },
+        ),
+      startContainer: async (problem) => {
+        const job = context.jobs.find(
+          (candidate) =>
+            candidate.problemId === problem.problemId && candidate.status === "COMPLETE",
+        );
+        const started = job && this.running.get(job.jobId);
+        if (!started) throw new Error("Host-owned problem runtime is unavailable.");
+        return started;
       },
-    );
+    });
     if (context.team.snapshot)
       restoreLocalPlayState(state, parseLocalPlaySnapshot(context.team.snapshot));
     for (const job of context.jobs) {
@@ -440,7 +434,12 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   async hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
     const state = await this.state(context);
-    const response = revealHint(problemId, hintId, state, new Date(context.now).toISOString());
+    const response = revealContainerHint(
+      problemId,
+      hintId,
+      state,
+      new Date(context.now).toISOString(),
+    );
     return this.result(state, response, context);
   }
 }

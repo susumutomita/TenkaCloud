@@ -1,4 +1,4 @@
-import { parseLoopbackUrl } from "./loopback";
+import { parseLoopbackUrl } from "../local-host/container/loopback";
 import type { SimulatedCloudProblem } from "./simulator";
 import { type NativeTarget, nativeTargets } from "./simulator-native-environment";
 

@@ -17,19 +17,17 @@ import {
   scoreCompositeProbe,
 } from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/kinds/composite-probe";
 import { runPhasedPollingKind } from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/kinds/phased-polling";
-import { runUptimeFlatKind } from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/kinds/uptime-flat";
 import { runUptimeMultiKind } from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/kinds/uptime-multi";
+import type { DeploymentScoringState } from "../lib/deployment-scoring-state";
+import type { ProbeFn, ProbeOptions, ProbeResult } from "../lib/http-probe-client";
 import type {
   AttackProbeFn,
   AttackProbeRequest,
   AuthoritativeEndpointPlacement,
-  DeploymentScoringState,
   KindResult,
-  ProbeFn,
-  ProbeOptions,
-  ProbeResult,
-} from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/scoring-kernel";
-import { parseLoopbackUrl } from "./loopback";
+} from "../lib/scoring-common";
+import { runUptimeFlatKind } from "../lib/uptime-flat";
+import { parseLoopbackUrl } from "../local-host/container/loopback";
 import type { SimulatedCloudProblem } from "./simulator";
 
 const MAX_PROBE_BODY_BYTES = 4_096;

@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { LOCAL_INTRO_DRILL_PROBLEM_ID } from "../../../scripts/lib/intro-drill";
+import { resolveProblemDir } from "../../../scripts/local-host/container/manifest";
 import {
-  LOCAL_INTRO_DRILL_PROBLEM_ID,
   loadProblemCatalogEntries,
   pinIntroDrillFirst,
   problemSearchRoots,
 } from "../../../scripts/local-play/catalog-loader";
-import { resolveProblemDir } from "../../../scripts/local-play/manifest";
 
 /**
  * [#2696 PR5] `pinIntroDrillFirst` is the single place that decides local play's one

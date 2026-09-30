@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { LocalComposeUnit } from "./container-runner";
+import type { LocalComposeUnit } from "../local-host/container/container-runner";
 import { observeProcessIdentity } from "./process-identity";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");

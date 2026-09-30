@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { StatusCodes } from "http-status-codes";
 import { compareCodePoints } from "../lib/code-point-order";
+import { parseLoopbackUrl } from "../local-host/container/loopback";
 import type { LocalPlayState } from "./api-state";
-import { parseLoopbackUrl } from "./loopback";
 import type { SimulatorNativeRoute } from "./simulator-native-environment";
 
 export const SIMULATOR_NATIVE_PROXY_PREFIX = "/local/simulator-native";

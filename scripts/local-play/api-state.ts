@@ -5,11 +5,19 @@ import {
   type LocalComposeUnit,
   type RecoveredContainer,
   type StartedContainer,
-} from "./container-runner";
-import type { ContainerProblem } from "./manifest";
-import { createNativeCompatibilityGate } from "./native-compatibility";
-import { remapContainerProblem } from "./port-remap";
-import { type LifecycleDeps, ProblemLifecycle } from "./problem-lifecycle";
+} from "../local-host/container/container-runner";
+import type { ContainerProblem } from "../local-host/container/manifest";
+import { createNativeCompatibilityGate } from "../local-host/container/native-compatibility";
+import { remapContainerProblem } from "../local-host/container/port-remap";
+import { type LifecycleDeps, ProblemLifecycle } from "../local-host/container/problem-lifecycle";
+import {
+  type ContainerState,
+  createProblemRuntimes,
+  type LocalPlayResponse,
+  type ProblemRuntime,
+  type VerifyFn,
+} from "../local-host/container/state";
+import { verifySubmission } from "../local-host/container/verify-client";
 import { ProblemTerminals, type TerminalDeps, type TerminalProcess } from "./problem-terminal";
 import type { SimulatedCloudProblem } from "./simulator";
 import type { LocalSimulatorDeployment, LocalSimulatorRuntimePort } from "./simulator-runtime";
@@ -18,21 +26,7 @@ import {
   type SimulatorScoringContract,
   simulatorScoringContract,
 } from "./simulator-scoring";
-import { type VerifyContext, type VerifyResult, verifySubmission } from "./verify-client";
 import { requestWorkbench, type WorkbenchFn } from "./workbench-client";
-
-/**
- * [#2527 Slice 6] The local scoring API's contract + session state, extracted verbatim
- * from `api.ts`: the participant-facing shapes (deployment / state / request / response /
- * score events), the docker seams, and `createLocalPlayState` (the warm-session factory
- * wiring `ProblemLifecycle` to the injected container adapter). Views live in
- * `api-views.ts`, submission scoring in `api-scoring.ts`, routing in `api.ts`.
- */
-
-export const LOCAL_CONTEXT = {
-  eventId: "local",
-  teamId: "local",
-} as const;
 
 export interface LocalPlayDeployment {
   /** [#2392] The full local-play catalog (order = portal display order). */
@@ -55,43 +49,6 @@ export type StartProblemContainer = (
 /** Injected docker stop: tear one started unit down (idempotent). */
 export type StopProblemContainer = (unit: LocalComposeUnit) => void | Promise<void>;
 
-export type VerifyFn = (
-  verifyUrl: string,
-  submission: string,
-  context: VerifyContext,
-  options?: { readonly checkpointId?: string },
-) => Promise<VerifyResult>;
-
-export interface LocalPlayScoreEvent {
-  readonly jobId: string;
-  readonly problemId: string;
-  readonly source: "flag" | "flag-wrong" | "hint" | "uptime" | "attack-detected";
-  readonly points: number;
-  readonly result: "ok" | "wrong";
-  readonly occurredAt: string;
-}
-
-/**
- * Per-problem runtime state. `solved` / `wrongCounts` keys are the submission
- * target (problemId for `verify`, check id for `multi-verify`); `revealedHints`
- * keys are hint ids (unique within a problem). `score` is this problem's running
- * score including hint / wrong-answer penalties.
- */
-export interface ProblemRuntime {
-  /**
-   * [#2392 Phase 2] The currently-active problem: the catalog original while
-   * stopped, the offset-remapped copy while running. The offset moves every
-   * loopback URL the problem mentions — `challengeEndpoints`, `verifyUrl`, and
-   * the instructions / hints prose that quote them — onto the assigned port
-   * block; points and answers never change.
-   */
-  problem: ContainerProblem;
-  readonly solved: Set<string>;
-  readonly revealedHints: Map<string, string>;
-  readonly wrongCounts: Map<string, number>;
-  score: number;
-}
-
 export interface SimulatedProblemRuntime {
   readonly problem: SimulatedCloudProblem;
   readonly contract: SimulatorScoringContract;
@@ -110,9 +67,7 @@ export interface SimulatedProblemRuntime {
   score: number;
 }
 
-export interface LocalPlayState {
-  /** Per-problem runtime keyed by problemId; insertion order is display order. */
-  readonly runtimes: Map<string, ProblemRuntime>;
+export interface LocalPlayState extends ContainerState {
   readonly simulatedRuntimes: Map<string, SimulatedProblemRuntime>;
   /** Per-problem Simulator score cycle shared by start, explicit score, and the periodic timer. */
   readonly simulatorScoringInFlight: Map<string, Promise<LocalPlayResponse>>;
@@ -140,13 +95,8 @@ export interface LocalPlayState {
   >;
   /** [#2846] Interactive container shells, keyed by problem. Never outlive their container. */
   readonly terminals: ProblemTerminals;
-  /** Score events across all problems (each carries its own problemId). */
-  readonly scoreEvents: LocalPlayScoreEvent[];
-  readonly verify: VerifyFn;
   /** Authenticated proxy seam for the running container's generic editor contract. */
   readonly workbench: WorkbenchFn;
-  /** Browser-facing rewrite for loopback URLs in problem prose / endpoint outputs. */
-  readonly browserText: (text: string) => string;
   /** [#2392 Phase 2] On-demand container lifecycle (cap / LRU eviction; explicit stop only, #2512). */
   readonly lifecycle: ProblemLifecycle;
   readonly simulator?: LocalSimulatorRuntimePort;
@@ -160,25 +110,7 @@ export interface LocalPlayState {
    * Empty for sessions that never loaded one (unit tests, simulator-only).
    */
   readonly problemCatalog: readonly ProblemCatalogEntry[];
-  teamName: string;
 }
-
-export interface LocalPlayRequest {
-  readonly method: string;
-  readonly path: string;
-  readonly query: Readonly<Record<string, string>>;
-  readonly body: unknown;
-  readonly authorization?: string;
-}
-
-export interface LocalPlayResponse {
-  readonly status: number;
-  readonly body: unknown;
-  /** Non-JSON response metadata used only for explicit browser handoffs. */
-  readonly headers?: Readonly<Record<string, string>>;
-}
-
-export const jobIdOf = (problemId: string) => `local-${problemId}`;
 
 export interface CreateStateOptions {
   readonly teamName?: string;
@@ -266,18 +198,11 @@ interface RuntimeCollections {
 }
 
 function createRuntimeCollections(deployment: LocalPlayDeployment): RuntimeCollections {
-  const runtimes = new Map<string, ProblemRuntime>();
+  const runtimes = createProblemRuntimes(deployment.problems);
   const simulatedRuntimes = new Map<string, SimulatedProblemRuntime>();
   const catalog = new Map<string, ContainerProblem>();
   for (const problem of deployment.problems) {
     catalog.set(problem.problemId, problem);
-    runtimes.set(problem.problemId, {
-      problem,
-      solved: new Set(),
-      revealedHints: new Map(),
-      wrongCounts: new Map(),
-      score: 0,
-    });
   }
   for (const problem of deployment.simulatedProblems ?? []) {
     if (catalog.has(problem.problemId) || simulatedRuntimes.has(problem.problemId)) {
@@ -526,14 +451,6 @@ export function createLocalPlayState(
     problemCatalog: options.problemCatalog ?? [],
     teamName: options.teamName ?? "Local Player",
   };
-}
-
-/** Session total = sum of every problem's running score. */
-export function sessionScore(state: LocalPlayState): number {
-  let total = 0;
-  for (const rt of state.runtimes.values()) total += rt.score;
-  for (const rt of state.simulatedRuntimes.values()) total += rt.score;
-  return total;
 }
 
 /**

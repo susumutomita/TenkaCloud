@@ -72,7 +72,7 @@ vi.mock(
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/scoring-active", () => ({
   isScoringActive: mocks.isScoringActive,
 }));
-vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/uptime-flat", () => ({
+vi.mock("../../../scripts/lib/uptime-flat", () => ({
   runUptimeFlatKind: mocks.runUptimeFlatKind,
 }));
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/uptime-multi", () => ({

@@ -100,5 +100,3 @@ export function resolveDisruptionsRepository(
     disruptionsTableName: shared.disruptionsTableName,
   });
 }
-
-export * from "./scoring-kernel.js";

@@ -3,14 +3,14 @@ import { mkdtempSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { createLocalPlayState } from "../../../scripts/local-play/api-state";
-import type { ContainerProblem } from "../../../scripts/local-play/manifest";
-import { startLocalPlayServer } from "../../../scripts/local-play/server";
+import type { ContainerProblem } from "../../../scripts/local-host/container/manifest";
 import {
   parseLocalPlaySnapshot,
   restoreLocalPlayState,
   snapshotLocalPlayState,
-} from "../../../scripts/local-play/state-store";
+} from "../../../scripts/local-host/container/state-store";
+import { createLocalPlayState } from "../../../scripts/local-play/api-state";
+import { startLocalPlayServer } from "../../../scripts/local-play/server";
 import {
   clearLocalPlayStateStore,
   localPlayDatabaseBackend,

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StatusCodes } from "http-status-codes";
 import { describe, expect, it, vi } from "vitest";
-import type { ContainerProblem } from "../../../scripts/local-play/manifest";
+import type { ContainerProblem } from "../../../scripts/local-host/container/manifest";
 import { corsHeaders, startLocalPlayServer } from "../../../scripts/local-play/server";
 
 const PROBLEM: ContainerProblem = {

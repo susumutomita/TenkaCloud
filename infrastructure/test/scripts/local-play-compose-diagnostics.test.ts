@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { LocalComposeUnit } from "../../../scripts/local-play/container-runner";
+import type { LocalComposeUnit } from "../../../scripts/local-host/container/container-runner";
 import { diagnoseComposeUnit } from "../../../scripts/local-play/docker-adapter";
 
 const CLI = { command: "docker" as const, prefix: ["compose"] as const, label: "docker compose" };

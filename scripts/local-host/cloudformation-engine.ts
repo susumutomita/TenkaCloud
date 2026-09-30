@@ -12,29 +12,22 @@ import type { STSClient } from "@aws-sdk/client-sts";
 import type { ParticipantProblemView } from "@tenkacloud/portal-contracts";
 import {
   type ProblemDisruptionEntry,
-  type ProblemPhaseEntry,
-  projectScore,
-} from "@tenkacloud/problem-sdk/internal";
-import {
-  buildParameterOverrides,
-  generateRandomAlphanumeric,
-} from "../../infrastructure/lib/problem-deploy/handlers/cfn-deploy-handler/parameter-overrides";
-import { flagMatches } from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/kinds/flag";
-import { assumeRoleWithExternalId } from "../../infrastructure/lib/problem-deploy/handlers/shared/assume-competitor-role";
-import {
   type ProblemEndpointSlot,
+  type ProblemPhaseEntry,
   parseEndpointSlot,
-} from "../../infrastructure/lib/utils/endpoints-metadata";
-import {
   parseScoringMetadata,
+  projectScore,
   type UptimeFlatScoringMetadata,
-} from "../../infrastructure/lib/utils/scoring-metadata";
-import { hintViews } from "../local-play/api-views";
+} from "@tenkacloud/problem-sdk/internal";
+import { assumeRoleWithExternalId } from "../lib/assume-role";
+import { buildParameterOverrides, generateRandomAlphanumeric } from "../lib/cfn-parameters";
+import { flagMatches } from "../lib/flag-matches";
 import {
   type ContainerVerifyScoring,
+  hintViews,
   parseEnglishOverlay,
   parseVerifyScoring,
-} from "../local-play/manifest";
+} from "../lib/problem-presentation";
 import { AwsDisruptionAdapter } from "./aws-disruption-adapter";
 import {
   type AwsTarget,

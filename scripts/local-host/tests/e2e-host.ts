@@ -5,14 +5,47 @@
  * reports which one ran. Prints one JSON line with the URLs and host key, then waits for SIGTERM.
  */
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DockerHostingEngine } from "../docker-engine";
 import { parseGatewayPorts } from "../gateway-ports";
 import { startLocalHost } from "../server";
+import { HostStore } from "../store";
 import { ExerciseFixture } from "./exercise-fixture";
+
+export async function cleanOwnedDockerJobs(
+  root: string,
+  data: string,
+  engine: Pick<DockerHostingEngine, "stop"> = new DockerHostingEngine(root, data),
+): Promise<boolean> {
+  const databasePath = join(data, "hosting.sqlite");
+  if (!existsSync(databasePath)) throw new Error(`Fixture database is missing: ${databasePath}`);
+  const database = new Database(databasePath, { strict: true });
+  let store: HostStore | undefined;
+  let clean = true;
+  try {
+    store = new HostStore(database);
+    // This fixture creates a fresh database. Every persisted unit belongs to this run.
+    for (const job of store.jobs()) {
+      if (!job.unit) continue;
+      try {
+        await engine.stop(job);
+        job.unit = null;
+        job.status = "DELETED";
+        store.putJob(job);
+      } catch (error) {
+        clean = false;
+        console.error(`Fixture Docker cleanup failed for job ${job.jobId}:`, error);
+      }
+    }
+  } finally {
+    if (store) store.close();
+    else database.close();
+  }
+  return clean;
+}
 
 async function main(): Promise<void> {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -43,11 +76,22 @@ async function main(): Promise<void> {
     process.once("SIGTERM", accept);
     process.once("SIGINT", accept);
   });
-  await host.stop();
-  if (engineKind === "fixture") await fixture.close();
-  rmSync(data, { recursive: true, force: true });
+  try {
+    await host.stop();
+    if (engineKind === "docker" && !(await cleanOwnedDockerJobs(root, data))) {
+      console.error(`Fixture SQLite ownership retained at ${join(data, "hosting.sqlite")}.`);
+      process.exitCode = 1;
+      return;
+    }
+    if (engineKind === "fixture") await fixture.close();
+    rmSync(data, { recursive: true, force: true });
+  } catch (error) {
+    console.error(`Fixture cleanup failed; inspect retained data at ${data}:`, error);
+    process.exitCode = 1;
+  }
 }
-void main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (import.meta.main)
+  void main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });

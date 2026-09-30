@@ -52,6 +52,28 @@ async function startHost(): Promise<{ info: HostInfo; child: ChildProcess }> {
   return { info, child };
 }
 
+async function stopHost(child: ChildProcess): Promise<void> {
+  let code = child.exitCode;
+  let signal = child.signalCode;
+  if (code === null && signal === null) {
+    const completed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (accept) =>
+        child.once("exit", (exitCode, exitSignal) =>
+          accept({ code: exitCode, signal: exitSignal }),
+        ),
+    );
+    if (!child.kill("SIGTERM") && child.exitCode === null && child.signalCode === null)
+      throw new Error("Could not signal the browser fixture host to clean up its jobs.");
+    ({ code, signal } = await completed);
+  }
+  if (code !== 0) {
+    const status = code === null ? `signal ${String(signal)}` : `code ${String(code)}`;
+    throw new Error(
+      `Browser fixture host exited with ${status}. Check stderr for retained SQLite ownership.`,
+    );
+  }
+}
+
 async function createEvent(page: Page, name: string): Promise<Map<string, string>> {
   // In-app navigation: the session lives in memory only, so a reload means signing in again.
   await page.getByRole("button", { name: "Create event" }).first().click();
@@ -98,6 +120,14 @@ async function startEvent(page: Page): Promise<void> {
   await page.getByText("Scoring", { exact: true }).first().waitFor({ timeout: STEP_TIMEOUT });
 }
 
+async function captureFailure(page: Page, filename: string): Promise<void> {
+  try {
+    await page.screenshot({ path: join(artifacts, filename), fullPage: true });
+  } catch (error) {
+    console.error("Could not capture the browser failure:", error);
+  }
+}
+
 async function participantSolves(
   context: BrowserContext,
   info: HostInfo,
@@ -107,10 +137,7 @@ async function participantSolves(
   try {
     return await solveAs(page, context, info, teamKey);
   } catch (error) {
-    await page.screenshot({
-      path: join(artifacts, `participant-${teamKey.slice(0, 6)}.png`),
-      fullPage: true,
-    });
+    await captureFailure(page, `participant-${teamKey.slice(0, 6)}.png`);
     throw error;
   }
 }
@@ -183,6 +210,7 @@ async function main(): Promise<void> {
   const { info, child } = await startHost();
   let browser: Browser | undefined;
   let organizer: Page | undefined;
+  const failures: unknown[] = [];
   try {
     browser = await chromium.launch({ executablePath: chromiumPath() });
     const admin = await browser.newContext({ locale: "en-US" });
@@ -208,21 +236,26 @@ async function main(): Promise<void> {
     assert.notEqual(flagOne, flagTwo, "Each team has its own environment and flag.");
     await organizer.getByRole("tab", { name: "Scoreboard" }).click();
     await endAndTearDown(organizer);
-    console.log(
-      `PASS local competition browser rehearsal (${info.engine === "docker" ? "real Docker exercise" : "test-only exercise adapter, not Docker"})`,
-    );
   } catch (error) {
-    if (organizer)
-      await organizer.screenshot({
-        path: join(artifacts, "organizer-failure.png"),
-        fullPage: true,
-      });
-    throw error;
+    failures.push(error);
+    if (organizer) await captureFailure(organizer, "organizer-failure.png");
   } finally {
-    await browser?.close();
-    child.kill("SIGTERM");
-    await new Promise((accept) => child.once("exit", accept));
+    for (const close of [() => browser?.close(), () => stopHost(child)]) {
+      try {
+        await close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
   }
+  if (failures.length > 0) {
+    for (const error of failures.slice(1))
+      console.error("Additional fixture cleanup failure:", error);
+    throw failures[0];
+  }
+  console.log(
+    `PASS local competition browser rehearsal (${info.engine === "docker" ? "real Docker exercise" : "test-only exercise adapter, not Docker"})`,
+  );
 }
 void main().catch((error) => {
   console.error(error);

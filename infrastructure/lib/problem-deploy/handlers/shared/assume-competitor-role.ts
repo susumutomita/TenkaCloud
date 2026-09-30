@@ -1,3 +1,4 @@
+import { assumeRoleWithExternalId } from "../../../../../scripts/lib/assume-role";
 /**
  * Cross-account AssumeRole into the competitor's `CompetitorDeployRole`, shared across handlers.
  *
@@ -19,7 +20,7 @@
  */
 
 import { GetParameterCommand, type SSMClient } from "@aws-sdk/client-ssm";
-import { AssumeRoleCommand, type Credentials, type STSClient } from "@aws-sdk/client-sts";
+import type { Credentials, STSClient } from "@aws-sdk/client-sts";
 import { errorDeployTrace } from "./trace-log.js";
 
 export interface AssumeCompetitorRoleDeps {
@@ -48,33 +49,6 @@ const ASSUME_ROLE_FALLBACK_ERROR_NAMES: ReadonlySet<string> = new Set([
 export function shouldRetryWithPreviousExternalIdVersion(err: unknown): boolean {
   const name = err instanceof Error ? err.name : "";
   return ASSUME_ROLE_FALLBACK_ERROR_NAMES.has(name);
-}
-
-function assertCompleteCredentials(credentials: Credentials | undefined): Credentials {
-  if (!credentials?.AccessKeyId || !credentials.SecretAccessKey || !credentials.SessionToken) {
-    throw new Error("AssumeRole returned incomplete credentials");
-  }
-  return credentials;
-}
-
-export async function assumeRoleWithExternalId(
-  deps: Pick<AssumeCompetitorRoleDeps, "sts">,
-  args: {
-    readonly roleArn: string;
-    readonly jobId: string;
-    readonly externalId: string;
-    readonly sessionNamePrefix: string;
-  },
-): Promise<Credentials> {
-  const assumeOut = await deps.sts.send(
-    new AssumeRoleCommand({
-      RoleArn: args.roleArn,
-      RoleSessionName: `${args.sessionNamePrefix}${args.jobId.slice(0, 24)}`,
-      ExternalId: args.externalId,
-      DurationSeconds: 900,
-    }),
-  );
-  return assertCompleteCredentials(assumeOut.Credentials);
 }
 
 async function retryWithPreviousExternalId(

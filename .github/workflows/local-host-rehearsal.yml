@@ -1,7 +1,7 @@
 name: Local hosting rehearsal
 
 # Exercise the real Docker adapter when the hosting implementation or any runtime contract it
-# imports changes: the shared local-play scorer, Compose policy, Docker adapter, manifest, port
+# imports changes: the shared container scorer, Compose policy, Docker adapter, manifest, port
 # remapper, state store and verifier, plus the pinned problems catalog it reads sqli-demo from.
 on:
   workflow_dispatch:
@@ -9,6 +9,10 @@ on:
     paths:
       - 'scripts/local-host/**'
       - 'scripts/local-play/**'
+      - 'scripts/lib/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'bun.lock'
       - 'problems'
       - 'apps/**/local-host/**'
       - 'apps/application-admin-console/src/**'
@@ -58,7 +62,7 @@ jobs:
       - name: Browser rehearsal (organizer console + two participant browsers, real Docker)
         env:
           HOST_E2E_ENGINE: docker
-        run: bun run scripts/local-host/tests/browser-e2e.ts
+        run: bun run test:host:browser
       - name: Keep browser failure screenshots
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

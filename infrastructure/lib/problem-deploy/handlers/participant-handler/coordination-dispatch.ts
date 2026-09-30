@@ -6,6 +6,11 @@ import {
   runTick,
   safeProjectForTeam,
 } from "@tenkacloud/coordination-plugin-sdk";
+import {
+  pluginStateSchemaVersion,
+  reconcileStateSchema,
+  type StateSchemaMismatchReason,
+} from "../../../../../scripts/lib/coordination-state-schema.js";
 import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import {
@@ -15,11 +20,6 @@ import {
   tryDeliverCoordinationScores,
 } from "./coordination-scoring.js";
 import { coordinationStateChanged } from "./coordination-state-changed.js";
-import {
-  pluginStateSchemaVersion,
-  reconcileStateSchema,
-  type StateSchemaMismatchReason,
-} from "./coordination-state-schema.js";
 import {
   type CoordinationStateSnapshot,
   type CoordinationStoreDeps,

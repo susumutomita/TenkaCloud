@@ -1063,11 +1063,6 @@
       "count": 1
     }
   },
-  "infrastructure/lib/problem-deploy/deploy-allowed-cidrs.ts": {
-    "sonarjs/concise-regex": {
-      "count": 1
-    }
-  },
   "infrastructure/lib/problem-deploy/handlers/acceptance/composite-acceptance-harness.ts": {
     "@typescript-eslint/no-empty-function": {
       "count": 1
@@ -1251,11 +1246,6 @@
     },
     "sonarjs/slow-regex": {
       "count": 1
-    }
-  },
-  "infrastructure/lib/problem-deploy/runtime-clients/ssrf-guard.ts": {
-    "sonarjs/no-hardcoded-ip": {
-      "count": 6
     }
   },
   "infrastructure/lib/problem-pack/catalog-source.ts": {
@@ -1842,11 +1832,6 @@
       "count": 1
     }
   },
-  "infrastructure/test/problem-deploy/cfn-status.test.ts": {
-    "sonarjs/no-clear-text-protocols": {
-      "count": 4
-    }
-  },
   "infrastructure/test/problem-deploy/cloud-action-enforcement.test.ts": {
     "@typescript-eslint/consistent-type-assertions": {
       "count": 2
@@ -2391,9 +2376,6 @@
   "infrastructure/test/problem-deploy/generic-scoring-shared.test.ts": {
     "@typescript-eslint/no-dynamic-delete": {
       "count": 1
-    },
-    "sonarjs/no-clear-text-protocols": {
-      "count": 2
     }
   },
   "infrastructure/test/problem-deploy/generic-scoring-uptime-multi.test.ts": {
@@ -2524,14 +2506,6 @@
   "infrastructure/test/problem-deploy/shared-builders.test.ts": {
     "@typescript-eslint/no-dynamic-delete": {
       "count": 2
-    }
-  },
-  "infrastructure/test/problem-deploy/ssrf-guard.test.ts": {
-    "sonarjs/no-clear-text-protocols": {
-      "count": 14
-    },
-    "sonarjs/no-hardcoded-ip": {
-      "count": 10
     }
   },
   "infrastructure/test/problem-deploy/stack-progress.test.ts": {
@@ -2707,35 +2681,6 @@
     },
     "sonarjs/publicly-writable-directories": {
       "count": 2
-    }
-  },
-  "infrastructure/test/scripts/local-play-container-runner.test.ts": {
-    "@typescript-eslint/array-type": {
-      "count": 2
-    },
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 1
-    }
-  },
-  "infrastructure/test/scripts/local-play-lifecycle.test.ts": {
-    "@typescript-eslint/array-type": {
-      "count": 2
-    },
-    "@typescript-eslint/no-empty-function": {
-      "count": 5
-    },
-    "@typescript-eslint/no-invalid-void-type": {
-      "count": 1
-    }
-  },
-  "infrastructure/test/scripts/local-play-loopback.test.ts": {
-    "sonarjs/no-clear-text-protocols": {
-      "count": 2
-    }
-  },
-  "infrastructure/test/scripts/local-play-native-compatibility.test.ts": {
-    "@typescript-eslint/array-type": {
-      "count": 1
     }
   },
   "infrastructure/test/scripts/local-play-server-cors.test.ts": {
@@ -3230,6 +3175,63 @@
   "packages/web-kit/test/usePolling.test.tsx": {
     "@typescript-eslint/no-non-null-assertion": {
       "count": 2
+    }
+  },
+  "scripts/lib/cfn-outputs.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 4
+    }
+  },
+  "scripts/lib/deploy-allowed-cidrs.ts": {
+    "sonarjs/concise-regex": {
+      "count": 1
+    }
+  },
+  "scripts/lib/http-probe-client.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 2
+    }
+  },
+  "scripts/lib/ssrf-guard.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 14
+    },
+    "sonarjs/no-hardcoded-ip": {
+      "count": 10
+    }
+  },
+  "scripts/lib/ssrf-guard.ts": {
+    "sonarjs/no-hardcoded-ip": {
+      "count": 6
+    }
+  },
+  "scripts/local-host/container/container-runner.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "scripts/local-host/container/lifecycle.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 5
+    },
+    "@typescript-eslint/no-invalid-void-type": {
+      "count": 1
+    }
+  },
+  "scripts/local-host/container/loopback.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 2
+    }
+  },
+  "scripts/local-host/container/native-compatibility.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
     }
   }
 }

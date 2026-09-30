@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { KindHandlerInput, PhaseEntry } from "../../../scripts/lib/scoring-common";
 import { runPhasedPollingKind } from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/phased-polling";
-import type {
-  KindHandlerInput,
-  PhaseEntry,
-} from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
 import type { PhasedPollingScoringMetadata } from "../../lib/utils/scoring-metadata";
 
 /**
@@ -64,15 +61,9 @@ function buildInput(
 ): KindHandlerInput<PhasedPollingScoringMetadata> {
   return {
     deployment: {
-      PK: "DEPLOYMENT#JOB1",
-      jobId: "JOB1",
       problemId: "microservice-migration-battle",
-      tenantId: "tenant-acme",
-      teamId: "team-1",
-      eventId: "event-1",
       createdAt: CREATED_AT,
       stackOutputs: JSON.stringify({ BaseUrl: "https://api.example.com/" }),
-      expiresAt: 9_999_999_999,
     },
     scoring: baseScoring,
     slots: baseSlots,

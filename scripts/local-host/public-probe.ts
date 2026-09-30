@@ -2,10 +2,7 @@ import { lookup } from "node:dns/promises";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
-import type {
-  ProbeFn,
-  ProbeResult,
-} from "../../infrastructure/lib/problem-deploy/runtime-clients/http-probe-client";
+import type { ProbeFn, ProbeResult } from "../lib/http-probe-client";
 
 const TIMEOUT_MS = 8_000;
 

@@ -1,4 +1,4 @@
-import { createNativeCompatibilityGate } from "./native-compatibility";
+import { createNativeCompatibilityGate } from "../local-host/container/native-compatibility";
 
 /**
  * [#3008] Text presentation for `tenkacloud local list`.

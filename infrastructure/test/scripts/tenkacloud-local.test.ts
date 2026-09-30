@@ -12,6 +12,16 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  composeArgs,
+  composeArgsForCli,
+  composeFailureMessage,
+  composeRunningPsArgsForCli,
+  generateSecretEnv,
+  isComposeUnitRunning,
+  resolveComposeCli,
+} from "../../../scripts/local-host/container/compose-cli";
+import type { ContainerProblem } from "../../../scripts/local-host/container/manifest";
+import {
   autoInitProblemsSubmodule,
   problemSearchRoots,
 } from "../../../scripts/local-play/catalog-loader";
@@ -21,16 +31,9 @@ import {
 } from "../../../scripts/local-play/codespaces-links";
 import { codespacesForwardedOrigin } from "../../../scripts/local-play/codespaces-origin";
 import {
-  composeArgs,
-  composeArgsForCli,
   composeExecArgs,
   composeExecArgsForCli,
-  composeFailureMessage,
-  composeRunningPsArgsForCli,
-  generateSecretEnv,
-  isComposeUnitRunning,
   openPrivateAppendLog,
-  resolveComposeCli,
 } from "../../../scripts/local-play/docker-adapter";
 import {
   ensurePrivateLocalDirectory,
@@ -44,7 +47,6 @@ import {
   waitForProblemRunning,
   waitForServeProcessExit,
 } from "../../../scripts/local-play/local-runtime-support";
-import type { ContainerProblem } from "../../../scripts/local-play/manifest";
 import { observeProcessIdentity } from "../../../scripts/local-play/process-identity";
 import {
   reclaimStaleSession,

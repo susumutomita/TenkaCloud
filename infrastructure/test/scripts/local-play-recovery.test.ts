@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ContainerProblem } from "../../../scripts/local-host/container/manifest";
+import {
+  PORT_STRIDE,
+  remapContainerProblem,
+} from "../../../scripts/local-host/container/port-remap";
 import { handleLocalPlayRequest } from "../../../scripts/local-play/api";
 import { createLocalPlayState } from "../../../scripts/local-play/api-state";
-import type { ContainerProblem } from "../../../scripts/local-play/manifest";
-import { PORT_STRIDE, remapContainerProblem } from "../../../scripts/local-play/port-remap";
 
 const PROBLEM: ContainerProblem = {
   problemId: "sqli-demo",

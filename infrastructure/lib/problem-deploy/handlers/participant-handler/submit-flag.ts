@@ -1,4 +1,6 @@
 import type { SubmitFlagOutcome as SubmitFlagWireOutcome } from "@tenkacloud/portal-contracts";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
+import { flagMatches } from "../../../../../scripts/lib/flag-matches.js";
 import type {
   FlagScoringMetadata,
   MultiFlagEntry,
@@ -6,8 +8,6 @@ import type {
 } from "../../../utils/scoring-metadata.js";
 import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import { flagMatches } from "../generic-scoring-handler/kinds/flag.js";
-import { parseStackOutputs } from "../shared/cfn-status.js";
 import { buildScoreEventRecord } from "../shared/score-event.js";
 import { getCompetitionAccessBlock } from "./challenge-access.js";
 import {

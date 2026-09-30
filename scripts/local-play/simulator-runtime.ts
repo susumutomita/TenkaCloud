@@ -1,11 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { StatusCodes } from "http-status-codes";
-import type {
-  AttackProbeRequest,
-  AuthoritativeEndpointPlacement,
-  ProbeResult,
-} from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/shared";
-import { parseLoopbackUrl } from "./loopback";
+import type { ProbeResult } from "../lib/http-probe-client";
+import type { AttackProbeRequest, AuthoritativeEndpointPlacement } from "../lib/scoring-common";
+import { parseLoopbackUrl } from "../local-host/container/loopback";
 import {
   type createSimulatorClient,
   type SimulatedCloudProblem,

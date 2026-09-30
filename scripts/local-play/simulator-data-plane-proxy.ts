@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import { StatusCodes } from "http-status-codes";
+import { parseLoopbackUrl } from "../local-host/container/loopback";
 import { codespacesForwardedOrigin } from "./codespaces-origin";
-import { parseLoopbackUrl } from "./loopback";
 import type { SimulatorDataPlaneRoute } from "./simulator-runtime";
 
 const MAX_DATA_PLANE_BODY_BYTES = 64 * 1024;

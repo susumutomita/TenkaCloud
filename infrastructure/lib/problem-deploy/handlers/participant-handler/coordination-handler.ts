@@ -1,4 +1,5 @@
 import type { CoordinationContext } from "@tenkacloud/coordination-plugin-sdk";
+import type { StateSchemaMismatchReason } from "../../../../../scripts/lib/coordination-state-schema.js";
 import type { CoordinationArtifactStore } from "../../control-data/coordination-artifact-store.js";
 import type { CoordinationArtifactRef } from "../../control-data/domain/coordination-artifact.js";
 import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
@@ -27,7 +28,6 @@ import {
   type PluginImporter,
 } from "./coordination-plugin-loader.js";
 import { type EventRoster, resolveEventRoster } from "./coordination-roster.js";
-import type { StateSchemaMismatchReason } from "./coordination-state-schema.js";
 import {
   type CoordinationStateSnapshot,
   type CoordinationStoreDeps,

@@ -6,8 +6,13 @@ import {
   type ProblemCatalogEntry,
   type ProblemMetadata,
 } from "@tenkacloud/portal-contracts";
-import type { CommandSucceeds } from "./docker-adapter";
-import { listLocalPlayProblems, loadContainerProblem, resolveProblemDir } from "./manifest";
+import { LOCAL_INTRO_DRILL_PROBLEM_ID } from "../lib/intro-drill";
+import type { CommandSucceeds } from "../local-host/container/compose-cli";
+import {
+  listLocalPlayProblems,
+  loadContainerProblem,
+  resolveProblemDir,
+} from "../local-host/container/manifest";
 
 /**
  * [#2527 Slice 6] Local-play catalog loading, extracted verbatim from
@@ -59,15 +64,6 @@ export function autoInitProblemsSubmodule(
   console.log("problems/ catalog is empty — fetching it: git submodule update --init problems");
   return run("git", ["submodule", "update", "--init", "problems"]);
 }
-
-/**
- * [#2696 PR5] The platform's one fixed intro drill for local play. It must be a
- * real container problem because the local catalog excludes AWS-only problems.
- * `sqli-demo` is the documented reference container problem and works with the
- * default Docker runtime. A single named constant keeps the pin decision in one
- * place instead of being re-decided per caller / component.
- */
-export const LOCAL_INTRO_DRILL_PROBLEM_ID = "sqli-demo";
 
 /**
  * Move the intro drill to the front of `items`, keeping every other entry in

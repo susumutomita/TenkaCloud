@@ -1,5 +1,15 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type {
+  ActiveDisruptionEffect,
+  DeploymentScoringState,
+} from "../../../../../scripts/lib/deployment-scoring-state";
+import type {
+  KindHandlerInput,
+  KindResult,
+  PhaseEntry,
+} from "../../../../../scripts/lib/scoring-common";
+import { runUptimeFlatKind } from "../../../../../scripts/lib/uptime-flat";
+import type {
   DeploymentsCoordinationPort,
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
@@ -35,20 +45,14 @@ import {
 } from "./gate-completion-bonus.js";
 import { runAttackDetectionKind } from "./kinds/attack-detection.js";
 import { runPhasedPollingKind } from "./kinds/phased-polling.js";
-import { runUptimeFlatKind } from "./kinds/uptime-flat.js";
 import { runUptimeMultiKind } from "./kinds/uptime-multi.js";
 import { parsePhasesEnv } from "./phases-env.js";
 import { reconcileRuntimeStatuses } from "./runtime-status-reconciler.js";
 import { isScoringActive } from "./scoring-active.js";
+import { parseScoringState } from "./scoring-kernel";
 import {
-  type ActiveDisruptionEffect,
   buildSharedResources,
-  type DeploymentScoringState,
   type GenericScoringSharedResources,
-  type KindHandlerInput,
-  type KindResult,
-  type PhaseEntry,
-  parseScoringState,
   resolveDeploymentsRepository,
   resolveDisruptionsRepository,
   resolveProblemEndpointsRepository,

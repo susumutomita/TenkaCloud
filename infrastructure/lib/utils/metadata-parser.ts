@@ -13,7 +13,6 @@ export {
   DISRUPTION_EFFECT_MAX_DURATION_SECONDS,
   type DisruptionAction,
   type DisruptionEffect,
-  type DisruptionTrigger,
   type ProblemDisruptionEntry,
   type ProblemPhaseEntry,
   parseDisruptionAction,

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
-import { isLoopbackUrl } from "./loopback";
+import { isLoopbackUrl } from "../local-host/container/loopback";
 import { readPrivateJson, unlinkIfExists, writePrivateJson } from "./session-state";
 import { decodeSimulatorLaunchSecret } from "./simulator-auth";
 

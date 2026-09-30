@@ -1,11 +1,11 @@
 import { StatusCodes } from "http-status-codes";
 import { describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
+import type { ContainerProblem } from "../../../scripts/local-host/container/manifest";
 import {
   type ComposeExecTarget,
   createProblemShellSpawner,
 } from "../../../scripts/local-play/docker-adapter";
-import type { ContainerProblem } from "../../../scripts/local-play/manifest";
 import type { TerminalProcess } from "../../../scripts/local-play/problem-terminal";
 import { type LocalPlayServer, startLocalPlayServer } from "../../../scripts/local-play/server";
 

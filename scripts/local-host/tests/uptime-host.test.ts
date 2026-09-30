@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ProbeFn } from "../../../infrastructure/lib/problem-deploy/runtime-clients/http-probe-client";
+import type { ProbeFn } from "../../lib/http-probe-client";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
 import { CloudFormationEngine } from "../cloudformation-engine";
 import { CompetitionEngine } from "../competition-engine";

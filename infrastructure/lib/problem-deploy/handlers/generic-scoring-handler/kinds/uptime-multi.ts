@@ -1,22 +1,21 @@
 import type { AttackProbeResult } from "@tenkacloud/portal-contracts";
-import { resolveDefaultUrl } from "../../../../utils/endpoints-metadata.js";
-import type { UptimeMultiScoringMetadata } from "../../../../utils/scoring-metadata.js";
-import { serializeAttackProbeStatus } from "../../shared/attack-probe-status.js";
-import { parseStackOutputs } from "../../shared/cfn-status.js";
+import { parseStackOutputs } from "../../../../../../scripts/lib/cfn-outputs";
 import {
   computeSince,
   type EndpointHealth,
   parseEndpointsHealth,
-} from "../../shared/endpoints-health.js";
+} from "../../../../../../scripts/lib/endpoints-health";
+import { type ProbeFn, probeUrl } from "../../../../../../scripts/lib/http-probe-client";
 import {
   type AttackProbeFn,
   joinUrl,
   type KindHandlerInput,
   type KindResult,
   noopKindResult,
-  type ProbeFn,
-  probeUrl,
-} from "../scoring-kernel.js";
+} from "../../../../../../scripts/lib/scoring-common";
+import { resolveDefaultUrl } from "../../../../utils/endpoints-metadata.js";
+import type { UptimeMultiScoringMetadata } from "../../../../utils/scoring-metadata.js";
+import { serializeAttackProbeStatus } from "../../shared/attack-probe-status.js";
 import { scoreCounterDelta } from "./attack-counter.js";
 
 type SlotResolver = (slotName: string) => string | undefined;

@@ -39,14 +39,14 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { type Credentials, STSClient } from "@aws-sdk/client-sts";
 import {
-  type ChallengePayloadArtifacts,
-  fetchChallengePayloadArtifacts,
-} from "../../challenge-payload-artifacts.js";
-import {
   type AllowedCidrOverrideDecision,
   parseDeployAllowedCidrs,
   resolveAllowedCidrOverride,
-} from "../../deploy-allowed-cidrs.js";
+} from "../../../../../scripts/lib/deploy-allowed-cidrs.js";
+import {
+  type ChallengePayloadArtifacts,
+  fetchChallengePayloadArtifacts,
+} from "../../challenge-payload-artifacts.js";
 import { getS3ObjectText } from "../../s3-artifact-text.js";
 import {
   type AssumeCompetitorRoleDeps,
@@ -73,13 +73,13 @@ export {
   buildParameterOverrides,
   generateRandomAlphanumeric,
   RANDOM_PASSWORD_TOKEN,
-} from "./parameter-overrides.js";
+} from "../../../../../scripts/lib/cfn-parameters.js";
 
 import {
   buildParameterOverrides,
   type CfnParameter,
   generateRandomAlphanumeric,
-} from "./parameter-overrides.js";
+} from "../../../../../scripts/lib/cfn-parameters.js";
 
 // ---------------------------------------------------------------------------
 // Pure helpers (fully unit-tested, no AWS SDK calls)

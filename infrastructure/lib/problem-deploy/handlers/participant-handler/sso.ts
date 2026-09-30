@@ -1,7 +1,7 @@
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import type { CliCredentialsView } from "@tenkacloud/portal-contracts";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
-import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
 import { getExternalId } from "../shared/external-id-store.js";
 import { logDeployTrace } from "../shared/trace-log.js";

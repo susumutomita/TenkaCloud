@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { CloudFormationClient } from "@aws-sdk/client-cloudformation";
 import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
-import { assumeRoleWithExternalId } from "../../infrastructure/lib/problem-deploy/handlers/shared/assume-competitor-role";
+import { assumeRoleWithExternalId } from "../lib/assume-role";
 import { CloudFormationEngine, type CloudFormationEngineOptions } from "./cloudformation-engine";
 import { persistentKey, privateDirectory } from "./files";
 import type { Job, Team } from "./model";

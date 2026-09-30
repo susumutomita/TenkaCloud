@@ -54,10 +54,6 @@ COPY --from=runtime-deps /app/package.json /app/package.json
 COPY packages /app/packages
 COPY scripts/lib /app/scripts/lib
 COPY scripts/local-host /app/scripts/local-host
-COPY scripts/local-play /app/scripts/local-play
-# local-play and local-host share the scoring kernel and schemas with infrastructure/lib;
-# nothing here runs CDK.
-COPY infrastructure/lib /app/infrastructure/lib
 COPY problems /app/problems
 COPY --from=build /app/.tenkacloud/host-build /app/.tenkacloud/host-build
 

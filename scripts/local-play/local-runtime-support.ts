@@ -1,18 +1,19 @@
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
+import { isComposeUnitRunning, resolveComposeCli } from "../local-host/container/compose-cli";
 import {
   type ContainerRunner,
   ContainerStartOwnershipError,
   type LocalComposeUnit,
   type RecoveredContainer,
   type StartedContainer,
-} from "./container-runner";
-import { createContainerRunner, isComposeUnitRunning, resolveComposeCli } from "./docker-adapter";
-import type { ContainerProblem } from "./manifest";
+} from "../local-host/container/container-runner";
+import type { ContainerProblem } from "../local-host/container/manifest";
 import {
   createNativeCompatibilityGate,
   type NativeCompatibilityVerdict,
-} from "./native-compatibility";
-import { PORT_STRIDE } from "./port-remap";
+} from "../local-host/container/native-compatibility";
+import { PORT_STRIDE } from "../local-host/container/port-remap";
+import { createContainerRunner } from "./docker-adapter";
 import { observeProcessIdentity } from "./process-identity";
 import {
   type LocalPaths,

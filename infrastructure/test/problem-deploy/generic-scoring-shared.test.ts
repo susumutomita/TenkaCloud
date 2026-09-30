@@ -1,16 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isScoringActive } from "../../lib/problem-deploy/handlers/generic-scoring-handler/scoring-active";
-import {
-  buildSharedResources,
-  joinUrl,
-  parseScoringState,
-  probeUrl,
-} from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
-import {
-  computeSince,
-  type EndpointHealth,
-  parseEndpointsHealth,
-} from "../../lib/problem-deploy/handlers/shared/endpoints-health";
+import { parseScoringState } from "../../lib/problem-deploy/handlers/generic-scoring-handler/scoring-kernel";
+import { buildSharedResources } from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
@@ -120,84 +111,6 @@ describe("isScoringActive (relocated from health-check-handler)", () => {
   });
 });
 
-describe("joinUrl (relocated from health-check-handler)", () => {
-  it("should return base as-is when path is empty", () => {
-    expect(joinUrl("https://x.example.com", "")).toBe("https://x.example.com");
-  });
-
-  it("should normalize the double slash between trailing / on base and leading / on path", () => {
-    expect(joinUrl("https://x.example.com/", "/foo")).toBe("https://x.example.com/foo");
-  });
-
-  it("should insert a / between base without trailing / and path without leading /", () => {
-    expect(joinUrl("https://x.example.com", "foo")).toBe("https://x.example.com/foo");
-  });
-
-  it("should use the path as-is when it is an absolute URL (override)", () => {
-    expect(joinUrl("https://x.example.com", "https://other.example.com/health")).toBe(
-      "https://other.example.com/health",
-    );
-  });
-
-  it("normal case (base without trailing / + path with leading /) should join as base/path", () => {
-    expect(joinUrl("https://x.example.com", "/healthz")).toBe("https://x.example.com/healthz");
-  });
-});
-
-describe("parseEndpointsHealth", () => {
-  it("should return an empty map for undefined / empty string / broken JSON", () => {
-    expect(parseEndpointsHealth(undefined)).toEqual({});
-    expect(parseEndpointsHealth("")).toEqual({});
-    expect(parseEndpointsHealth("{not-json")).toEqual({});
-  });
-
-  it("should decode a valid health map", () => {
-    const raw = JSON.stringify({
-      FrontendUrl: { ok: true, checkedAt: "2026-05-05T10:00:00.000Z" },
-      ApiUrl: {
-        ok: false,
-        checkedAt: "2026-05-05T10:00:00.000Z",
-        since: "2026-05-05T09:55:00.000Z",
-      },
-    });
-    expect(parseEndpointsHealth(raw)).toEqual({
-      FrontendUrl: { ok: true, checkedAt: "2026-05-05T10:00:00.000Z" },
-      ApiUrl: {
-        ok: false,
-        checkedAt: "2026-05-05T10:00:00.000Z",
-        since: "2026-05-05T09:55:00.000Z",
-      },
-    });
-  });
-});
-
-describe("computeSince", () => {
-  const NOW = "2026-05-05T10:05:00.000Z";
-
-  it("should return undefined when ok=true", () => {
-    expect(computeSince(true, undefined, NOW)).toBeUndefined();
-    expect(computeSince(true, { ok: false, checkedAt: "x", since: "y" }, NOW)).toBeUndefined();
-  });
-
-  it("should return now when ok=false starts fresh (prev=undefined)", () => {
-    expect(computeSince(false, undefined, NOW)).toBe(NOW);
-  });
-
-  it("should return now when ok=false starts fresh (prev.ok=true)", () => {
-    const prev: EndpointHealth = { ok: true, checkedAt: "2026-05-05T10:04:00.000Z" };
-    expect(computeSince(false, prev, NOW)).toBe(NOW);
-  });
-
-  it("should preserve prev.since when ok=false continues (prev.ok=false with prev.since)", () => {
-    const prev: EndpointHealth = {
-      ok: false,
-      checkedAt: "2026-05-05T10:04:00.000Z",
-      since: "2026-05-05T09:50:00.000Z",
-    };
-    expect(computeSince(false, prev, NOW)).toBe("2026-05-05T09:50:00.000Z");
-  });
-});
-
 describe("parseScoringState dispatcher state persistence", () => {
   it("should return empty state for undefined / empty string / broken JSON", () => {
     expect(parseScoringState(undefined)).toEqual({});
@@ -248,74 +161,5 @@ describe("parseScoringState dispatcher state persistence", () => {
   it("should omit activeEffects when none survive parsing", () => {
     expect(parseScoringState(JSON.stringify({ activeEffects: [] })).activeEffects).toBeUndefined();
     expect(parseScoringState(JSON.stringify({ activeEffects: "x" })).activeEffects).toBeUndefined();
-  });
-});
-
-describe("probeUrl (SSRF revalidation + bounded body read)", () => {
-  const fetchMock = vi.fn();
-
-  beforeEach(() => {
-    vi.stubGlobal("fetch", fetchMock);
-    fetchMock.mockReset();
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  /** stream-backed Response stub returning the given byte chunks via getReader(). */
-  function streamResponse(status: number, chunks: readonly Uint8Array[], url?: string): unknown {
-    let i = 0;
-    const cancel = vi.fn(async () => undefined);
-    return {
-      status,
-      url,
-      body: {
-        getReader() {
-          return {
-            read: async () =>
-              i < chunks.length
-                ? { done: false, value: chunks[i++] }
-                : { done: true, value: undefined },
-            cancel,
-          };
-        },
-      },
-      text: async () => chunks.map((c) => new TextDecoder().decode(c)).join(""),
-    };
-  }
-
-  it("should not call fetch and return not-ok when the URL host is SSRF-blocked", async () => {
-    const result = await probeUrl("http://169.254.169.254/latest/meta-data/", {
-      readBody: true,
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.ok).toBe(false);
-    expect(result.status).toBeUndefined();
-  });
-
-  it("should cap the read body at MAX_BODY_BYTES (4096) for an oversized streamed response", async () => {
-    const huge = new Uint8Array(5000).fill(0x61); // 5000 × 'a'
-    fetchMock.mockResolvedValue(streamResponse(200, [huge]));
-    const result = await probeUrl("https://team.example.com/meta", { readBody: true });
-    expect(result.ok).toBe(true);
-    expect(result.body).toBeDefined();
-    expect((result.body as string).length).toBe(4096);
-  });
-
-  it("should treat a redirect that lands on a blocked host as not-ok and not reflect its body", async () => {
-    const secret = new TextEncoder().encode("AWS_SECRET_ACCESS_KEY=leak");
-    fetchMock.mockResolvedValue(
-      streamResponse(200, [secret], "http://169.254.169.254/latest/meta-data/iam/"),
-    );
-    const result = await probeUrl("https://team.example.com/meta", { readBody: true });
-    expect(result.ok).toBe(false);
-    expect(result.body).toBeUndefined();
-  });
-
-  it("should read a small body via the res.text() fallback for non-stream mock responses", async () => {
-    fetchMock.mockResolvedValue({ status: 200, text: async () => "platform=ok" });
-    const result = await probeUrl("https://team.example.com/meta", { readBody: true });
-    expect(result.ok).toBe(true);
-    expect(result.body).toBe("platform=ok");
   });
 });

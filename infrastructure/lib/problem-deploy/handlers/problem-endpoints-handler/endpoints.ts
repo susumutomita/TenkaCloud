@@ -1,8 +1,11 @@
+import {
+  type ResolvedEndpoint,
+  resolveEndpoints,
+} from "../../../../../scripts/lib/resolve-endpoints";
+import { isSsrfSafeUrl } from "../../../../../scripts/lib/ssrf-guard";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { getPrerequisiteBlockByEventId } from "../participant-handler/challenge-access.js";
 import { type ParticipantSharedResources, queryTeamItems } from "../participant-handler/shared.js";
-import { isSsrfSafeUrl } from "../shared/ssrf-guard.js";
-import { type ResolvedEndpoint, resolveEndpoints } from "./resolve.js";
 import { deleteOverride, putOverride, queryOverrides } from "./store.js";
 
 /**
@@ -131,7 +134,7 @@ export type PutOverrideOutcome =
  * 競技者向け URL validation。`https?://...` のみ許容、 private IP / VPC 内 endpoint は許容
  * (= Battle で参加者が自分の AWS account 内 endpoint を登録するため public/private は問わない)。
  * SSRF 対策として metadata service / loopback literal は拒否する。host blocklist + scheme check は
- * `shared/ssrf-guard.ts` の `isSsrfSafeUrl` に集約 (scoring engine の probe 側と共有)。
+ * `scripts/lib/ssrf-guard.ts` の `isSsrfSafeUrl` に集約 (scoring engine の probe 側と共有)。
  */
 function isValidOverrideUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;

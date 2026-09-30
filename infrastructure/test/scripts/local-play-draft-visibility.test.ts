@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { listLocalPlayProblems } from "../../../scripts/local-play/manifest";
+import { listLocalPlayProblems } from "../../../scripts/local-host/container/manifest";
 
 /**
  * Issue #2965: local play が `status: "draft"` の問題を出すことを **決定として固定する**。

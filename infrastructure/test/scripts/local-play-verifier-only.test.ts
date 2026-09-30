@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ContainerRunner,
   type ContainerRunnerDeps,
-} from "../../../scripts/local-play/container-runner";
+} from "../../../scripts/local-host/container/container-runner";
 import {
   listLocalPlayProblems,
   loadContainerProblem,
   type ManifestFs,
-} from "../../../scripts/local-play/manifest";
+} from "../../../scripts/local-host/container/manifest";
 
 const ROOT = "/repo/problems/challenges";
 const PROBLEM_ID = "ac26-verifier-only";

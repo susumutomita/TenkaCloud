@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { KindHandlerInput, PhaseEntry } from "../../../scripts/lib/scoring-common";
 import { runAttackDetectionKind } from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/attack-detection";
-import type {
-  KindHandlerInput,
-  PhaseEntry,
-} from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
 import type { AttackDetectionScoringMetadata } from "../../lib/utils/scoring-metadata";
 
 /**
@@ -21,17 +18,11 @@ function buildInput(
 ): KindHandlerInput<AttackDetectionScoringMetadata> {
   return {
     deployment: {
-      PK: "DEPLOYMENT#JOB1",
-      jobId: "JOB1",
       problemId: "security-battle-royale",
-      tenantId: "tenant-acme",
-      teamId: "team-1",
-      eventId: "event-1",
       stackOutputs:
         attackCounter !== undefined
           ? JSON.stringify({ AttackCounter: attackCounter })
           : JSON.stringify({}),
-      expiresAt: 9_999_999_999,
     },
     scoring: {
       kind: "attack-detection",

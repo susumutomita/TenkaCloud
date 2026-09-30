@@ -1,8 +1,5 @@
-import type {
-  AttackProbeRequest,
-  AuthoritativeEndpointPlacement,
-  ProbeResult,
-} from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/shared";
+import type { ProbeResult } from "../lib/http-probe-client";
+import type { AttackProbeRequest, AuthoritativeEndpointPlacement } from "../lib/scoring-common";
 import type { SimulatedCloudProblem, SimulatorClockAdvanceResponse } from "./simulator";
 import type { startSimulatorDataPlaneListener } from "./simulator-data-plane-proxy";
 import type { SimulatorLauncherRecord, SimulatorOwnedLaunchIntent } from "./simulator-launcher";

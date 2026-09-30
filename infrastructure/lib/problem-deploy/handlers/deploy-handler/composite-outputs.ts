@@ -20,7 +20,7 @@
  * no secrets — and has no cloud provider SDK dependency.
  */
 
-import { parseStackOutputs } from "../shared/cfn-status.js";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
 import {
   type CompositeDeploymentRepositoryDeps,
   listCompositeTargets,

@@ -1,10 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { KindHandlerInput, PhaseEntry } from "../../../scripts/lib/scoring-common";
 import { runUptimeMultiKind } from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/uptime-multi";
-import type {
-  KindHandlerInput,
-  PhaseEntry,
-} from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
 import type { UptimeMultiScoringMetadata } from "../../lib/utils/scoring-metadata";
 
 /**
@@ -20,17 +17,11 @@ function buildInput(
 ): KindHandlerInput<UptimeMultiScoringMetadata> {
   return {
     deployment: {
-      PK: "DEPLOYMENT#JOB1",
-      jobId: "JOB1",
       problemId: "security-battle-royale",
-      tenantId: "tenant-acme",
-      teamId: "team-1",
-      eventId: "event-1",
       stackOutputs: JSON.stringify({
         FrontendUrl: "https://frontend.example.com",
         ApiUrl: "https://api.example.com",
       }),
-      expiresAt: 9_999_999_999,
     },
     scoring: {
       kind: "uptime-multi",

@@ -8,6 +8,10 @@ export { coordinationStateChanged } from "./coordination-state-changed.js";
 
 import { type CoordinationPlugin, runTick } from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
+import {
+  pluginStateSchemaVersion,
+  reconcileStateSchema,
+} from "../../../../../scripts/lib/coordination-state-schema.js";
 import { resolvePlayableCoordinationRunId } from "../shared/coordination-run.js";
 import {
   COORDINATION_TICK_ACTION,
@@ -27,7 +31,6 @@ import {
   deliverCoordinationScores,
   tryDeliverCoordinationScores,
 } from "./coordination-scoring.js";
-import { pluginStateSchemaVersion, reconcileStateSchema } from "./coordination-state-schema.js";
 import {
   type CoordinationStateRow,
   type CoordinationStateScope,

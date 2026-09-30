@@ -4,10 +4,7 @@ import {
   type CoordinationPlugin,
   dispatchOp,
 } from "@tenkacloud/coordination-plugin-sdk";
-import {
-  pluginStateSchemaVersion,
-  reconcileStateSchema,
-} from "../../infrastructure/lib/problem-deploy/handlers/participant-handler/coordination-state-schema";
+import { pluginStateSchemaVersion, reconcileStateSchema } from "../lib/coordination-state-schema";
 
 export type HostPlugin = CoordinationPlugin<unknown, unknown>;
 export interface LocalMatch {

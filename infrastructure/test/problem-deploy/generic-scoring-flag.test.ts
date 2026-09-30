@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  flagMatches,
-  runFlagKind,
-} from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/flag";
-import type {
-  KindHandlerInput,
-  PhaseEntry,
-} from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
+import { flagMatches } from "../../../scripts/lib/flag-matches";
+import type { KindHandlerInput, PhaseEntry } from "../../../scripts/lib/scoring-common";
+import { runFlagKind } from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/flag";
 import type { FlagScoringMetadata } from "../../lib/utils/scoring-metadata";
 
 /**
@@ -19,7 +14,7 @@ import type { FlagScoringMetadata } from "../../lib/utils/scoring-metadata";
 describe("flag kind in polling dispatcher", () => {
   it("should do nothing via polling (scoreDelta=0, empty scoreEvents)", () => {
     const input: KindHandlerInput<FlagScoringMetadata> = {
-      deployment: { PK: "DEPLOYMENT#JOB1", jobId: "JOB1", problemId: "hello-world" },
+      deployment: { problemId: "hello-world" },
       scoring: { kind: "flag", flagOutputKey: "ParameterValue", points: 100 },
       slots: [],
       overrides: [],

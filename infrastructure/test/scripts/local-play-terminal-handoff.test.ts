@@ -1,12 +1,12 @@
 import { StatusCodes } from "http-status-codes";
 import { describe, expect, it, vi } from "vitest";
+import type { ContainerProblem } from "../../../scripts/local-host/container/manifest";
+import type { LocalPlayRequest } from "../../../scripts/local-host/container/state";
 import { handleLocalPlayRequest } from "../../../scripts/local-play/api";
 import {
   type CreateStateOptions,
   createLocalPlayState,
-  type LocalPlayRequest,
 } from "../../../scripts/local-play/api-state";
-import type { ContainerProblem } from "../../../scripts/local-play/manifest";
 import type { SimulatedCloudProblem } from "../../../scripts/local-play/simulator";
 import {
   bridgeTerminalSocket,

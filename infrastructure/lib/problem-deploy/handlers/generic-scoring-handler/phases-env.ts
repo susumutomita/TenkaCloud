@@ -1,5 +1,5 @@
+import type { PhaseEntry } from "../../../../../scripts/lib/scoring-common";
 import { decodeLargeEnvValue } from "../../../utils/env-encoding.js";
-import type { PhaseEntry } from "./shared.js";
 
 /**
  * `BATTLE_PROBLEMS_PHASES` env を decode (= `{ [problemId]: PhaseEntry[] }`)。

@@ -1,6 +1,10 @@
+import { parseStackOutputs } from "../../../../../../scripts/lib/cfn-outputs";
+import {
+  type KindHandlerInput,
+  type KindResult,
+  noopKindResult,
+} from "../../../../../../scripts/lib/scoring-common";
 import type { AttackDetectionScoringMetadata } from "../../../../utils/scoring-metadata.js";
-import { parseStackOutputs } from "../../shared/cfn-status.js";
-import { type KindHandlerInput, type KindResult, noopKindResult } from "../scoring-kernel.js";
 import { scoreCounterDelta } from "./attack-counter.js";
 
 /**

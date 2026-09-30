@@ -9,7 +9,6 @@ import { type ProblemEndpointSlot, parseEndpointSlot } from "./endpoints-metadat
 import {
   type DisruptionAction,
   type DisruptionEffect,
-  type DisruptionTrigger,
   type ProblemDisruptionEntry,
   type ProblemPhaseEntry,
   parseDisruptionAction,
@@ -29,7 +28,6 @@ export type { ProblemEndpointSlot, ProblemScoringMetadata, ProblemWriteup };
 export {
   type DisruptionAction,
   type DisruptionEffect,
-  type DisruptionTrigger,
   type ProblemDisruptionEntry,
   type ProblemPhaseEntry,
   parseDisruptionAction,

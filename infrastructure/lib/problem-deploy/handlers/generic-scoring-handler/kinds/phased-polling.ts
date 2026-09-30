@@ -1,18 +1,17 @@
-import { resolveDefaultUrl } from "../../../../utils/endpoints-metadata.js";
-import type { PhasedPollingScoringMetadata } from "../../../../utils/scoring-metadata.js";
-import { parseStackOutputs } from "../../shared/cfn-status.js";
+import { parseStackOutputs } from "../../../../../../scripts/lib/cfn-outputs";
+import type { DeploymentScoringState } from "../../../../../../scripts/lib/deployment-scoring-state.js";
+import { type ProbeFn, probeUrl } from "../../../../../../scripts/lib/http-probe-client";
 import {
-  type DeploymentScoringState,
   joinUrl,
   type KindHandlerInput,
   type KindResult,
   type KindScoreEvent,
   noopKindResult,
-  type ProbeFn,
-  probeUrl,
-  resolveActivePhase,
   uptimeEvent,
-} from "../scoring-kernel.js";
+} from "../../../../../../scripts/lib/scoring-common";
+import { resolveDefaultUrl } from "../../../../utils/endpoints-metadata.js";
+import type { PhasedPollingScoringMetadata } from "../../../../utils/scoring-metadata.js";
+import { resolveActivePhase } from "../scoring-kernel.js";
 
 /**
  * `phased-polling` kind (microservice-migration-battle 想定)。

@@ -13,6 +13,7 @@
  * tested with no Docker.
  */
 import { spawnSync } from "node:child_process";
+import { resolveComposeCli } from "../local-host/container/compose-cli";
 import {
   type ComposeService,
   classifyService,
@@ -23,7 +24,6 @@ import {
   parseComposePs,
   parseLongRunning,
 } from "./compose-health";
-import { resolveComposeCli } from "./docker-adapter";
 
 export {
   type ComposeService,

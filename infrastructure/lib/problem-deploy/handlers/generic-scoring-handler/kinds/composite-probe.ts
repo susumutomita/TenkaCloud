@@ -25,12 +25,12 @@
  * generic scoring Lambda's existing probe contract.
  */
 
+import { joinUrl } from "../../../../../../scripts/lib/scoring-common";
 import type {
   CompositeProbeScoringMetadata,
   CompositeProbeTarget,
 } from "../../../../utils/scoring-metadata.js";
 import type { DeploymentStatus } from "../../deploy-handler/types.js";
-import { joinUrl } from "../scoring-kernel.js";
 
 /** The four runtimes a composite target may resolve to. */
 export type CompositeTargetProvider = "aws" | "gcp" | "azure" | "sakura";

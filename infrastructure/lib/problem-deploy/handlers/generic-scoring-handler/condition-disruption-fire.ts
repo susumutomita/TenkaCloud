@@ -1,15 +1,11 @@
+import type { DeploymentScoringState } from "../../../../../scripts/lib/deployment-scoring-state";
+import type { KindResult, PhaseEntry } from "../../../../../scripts/lib/scoring-common";
 import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { putEventsBatched } from "../shared/events.js";
 import { buildActiveDisruptionEffect } from "./disruption-effects.js";
 import { evaluateDisruptionTriggers, type FiredDisruption } from "./disruption-triggers.js";
-import {
-  type DeploymentScoringState,
-  type GenericScoringSharedResources,
-  type KindResult,
-  type PhaseEntry,
-  resolveDeploymentsRepository,
-} from "./shared.js";
+import { type GenericScoringSharedResources, resolveDeploymentsRepository } from "./shared.js";
 
 /**
  * #1422: scoring tick の condition-triggered disruption 発火 I/O。

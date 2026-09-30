@@ -3,16 +3,15 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { resolveDefaultUrl } from "@tenkacloud/problem-sdk/internal";
 import { StatusCodes } from "http-status-codes";
-import { revealHint, scoreSimulatedProblem, submitFlag } from "./api-scoring";
+import { parseLoopbackUrl } from "../local-host/container/loopback";
 import {
   LOCAL_CONTEXT,
   type LocalPlayRequest,
   type LocalPlayResponse,
-  type LocalPlayState,
-  type SimulatedProblemRuntime,
-} from "./api-state";
+} from "../local-host/container/state";
+import { revealHint, scoreSimulatedProblem, submitFlag } from "./api-scoring";
+import type { LocalPlayState, SimulatedProblemRuntime } from "./api-state";
 import { leaderboard, teamView } from "./api-views";
-import { parseLoopbackUrl } from "./loopback";
 import { participantSimulatorOutputs, simulatorOutput } from "./simulator-scoring";
 import { type WorkbenchAction, WorkbenchClientError } from "./workbench-client";
 

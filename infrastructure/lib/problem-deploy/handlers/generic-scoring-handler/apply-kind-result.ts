@@ -1,11 +1,8 @@
+import type { KindResult } from "../../../../../scripts/lib/scoring-common";
 import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { buildScoreEventRecord } from "../shared/score-event.js";
-import {
-  type GenericScoringSharedResources,
-  type KindResult,
-  resolveDeploymentsRepository,
-} from "./shared.js";
+import { type GenericScoringSharedResources, resolveDeploymentsRepository } from "./shared.js";
 
 /**
  * KindResult を deployment 行に書き戻す。 score 加算 / endpointsHealth 更新 / lastResult 更新 /

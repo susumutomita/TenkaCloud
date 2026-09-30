@@ -1,4 +1,7 @@
-import { type LocalPlayStateStore, parseLocalPlaySnapshot } from "./state-store";
+import {
+  type LocalPlayStateStore,
+  parseLocalPlaySnapshot,
+} from "../local-host/container/state-store";
 
 export interface TursoLocalPlayStateStoreOptions {
   readonly url: string;

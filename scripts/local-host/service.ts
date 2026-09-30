@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ProbeFn } from "../../infrastructure/lib/problem-deploy/runtime-clients/http-probe-client";
+import type { ProbeFn } from "../lib/http-probe-client";
 import { HostAuditLog } from "./audit-log";
 import { type AuditOperation, auditActor } from "./audit-record";
 import { auditFailure, auditRequest } from "./audit-request";

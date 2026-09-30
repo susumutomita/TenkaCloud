@@ -15,8 +15,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { StatusCodes } from "http-status-codes";
 import { afterEach, describe, expect, it } from "vitest";
+import type { LocalPlayRequest } from "../../../scripts/local-host/container/state";
 import { handleLocalPlayRequest } from "../../../scripts/local-play/api";
-import { createLocalPlayState, type LocalPlayRequest } from "../../../scripts/local-play/api-state";
+import { createLocalPlayState } from "../../../scripts/local-play/api-state";
 import { waitForReachable } from "../../../scripts/local-play/docker-adapter";
 import { observeProcessIdentity } from "../../../scripts/local-play/process-identity";
 import {

@@ -1,15 +1,11 @@
 import { StatusCodes } from "http-status-codes";
 import { describe, expect, it, vi } from "vitest";
+import { ContainerStartOwnershipError } from "../../../scripts/local-host/container/container-runner";
+import type { ContainerProblem } from "../../../scripts/local-host/container/manifest";
+import { PORT_STRIDE } from "../../../scripts/local-host/container/port-remap";
+import type { LocalPlayRequest, VerifyFn } from "../../../scripts/local-host/container/state";
 import { handleLocalPlayRequest } from "../../../scripts/local-play/api";
-import {
-  createLocalPlayState,
-  isLocalApiHealthy,
-  type LocalPlayRequest,
-  type VerifyFn,
-} from "../../../scripts/local-play/api-state";
-import { ContainerStartOwnershipError } from "../../../scripts/local-play/container-runner";
-import type { ContainerProblem } from "../../../scripts/local-play/manifest";
-import { PORT_STRIDE } from "../../../scripts/local-play/port-remap";
+import { createLocalPlayState, isLocalApiHealthy } from "../../../scripts/local-play/api-state";
 import { WorkbenchClientError } from "../../../scripts/local-play/workbench-client";
 
 const PROBLEM: ContainerProblem = {

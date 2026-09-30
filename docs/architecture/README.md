@@ -57,7 +57,7 @@ Dispatcher の分離は、フェデレーション用の権限をプラグイン
 起動・停止は Docker ソケット、正誤照会は loopback HTTP の `/verify`、学習進捗の保存は SQLite です。
 `local-data-permissions` が volume の所有者を調整した後、uid 1000 の制御用コンテナが起動します。
 
-根拠: [compose.local.yaml](../../compose.local.yaml)、[docker-launcher.sh](../../scripts/local/docker-launcher.sh)、[server.ts](../../scripts/local-play/server.ts)、[container-runner.ts](../../scripts/local-play/container-runner.ts)。
+根拠: [compose.local.yaml](../../compose.local.yaml)、[docker-launcher.sh](../../scripts/local/docker-launcher.sh)、[server.ts](../../scripts/local-play/server.ts)、[container-runner.ts](../../scripts/local-host/container/container-runner.ts)。
 
 Docker ソケットの `:ro` は、Docker API の作成・削除操作を読み取り専用にはしません。
 `assertComposePolicy()` は起動・復旧時に Compose を検査しますが、独立した権限仲介サービスではありません。

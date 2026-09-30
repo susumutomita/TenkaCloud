@@ -8,10 +8,10 @@
  */
 
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
 import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import { parseStackOutputs } from "../shared/cfn-status.js";
 import type { DeploymentTarget, DisruptionFiredDetail } from "./execute.js";
 import { resolveDeploymentsRepository, resolveDisruptionsRepository } from "./shared.js";
 

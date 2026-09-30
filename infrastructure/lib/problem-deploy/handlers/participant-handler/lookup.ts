@@ -10,13 +10,13 @@ import type {
   ParticipantProblemView as PortalParticipantProblemView,
   TargetAccessCapability,
 } from "@tenkacloud/portal-contracts";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
+import { parseEndpointsHealth } from "../../../../../scripts/lib/endpoints-health";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import { resolveTargetAccessCapability } from "../deploy-handler/composite-target-access.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseAttackProbeStatus } from "../shared/attack-probe-status.js";
-import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
-import { parseEndpointsHealth } from "../shared/endpoints-health.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { decorateTeamView } from "./challenge-access.js";
 import { warnLoginUnauthorized } from "./login-diagnostics.js";

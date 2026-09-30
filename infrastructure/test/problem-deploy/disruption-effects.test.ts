@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
+import type { ActiveDisruptionEffect } from "../../../scripts/lib/deployment-scoring-state";
+import type { KindResult } from "../../../scripts/lib/scoring-common";
 import {
   applyDisruptionEffects,
   buildActiveDisruptionEffect,
   dedupeEffectsByDisruptionId,
   resolveOperatorEffects,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/disruption-effects";
-import type {
-  ActiveDisruptionEffect,
-  KindResult,
-} from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
 import type { ProblemDisruptionEntry } from "../../lib/utils/discover-problems-catalog";
 
 /**

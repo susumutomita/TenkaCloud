@@ -2,7 +2,6 @@ export {
   CHALLENGE_PREREQUISITE_GATE_FLAG,
   computeLockedProblemIds,
   isGateCompleted,
-  MAX_COMPLETION_BONUS,
   type ProgressionGateConfig,
   ProgressionGateConfigSchema,
   parseProgressionGate,

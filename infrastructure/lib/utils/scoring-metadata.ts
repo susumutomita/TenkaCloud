@@ -24,8 +24,6 @@ export {
   type ProblemScoringMetadata,
   type ProgressiveHint,
   parseScoringMetadata,
-  type UptimeFlatEndpoint,
-  type UptimeFlatScoringMetadata,
   type UptimeMultiScoringMetadata,
 } from "@tenkacloud/problem-sdk/internal";
 

@@ -1,6 +1,6 @@
+import type { LocalPlayStateStore } from "../local-host/container/state-store";
 import type { LocalPaths } from "./session-state";
 import { openSqliteLocalPlayStateStore } from "./sqlite-state-store";
-import type { LocalPlayStateStore } from "./state-store";
 
 export type LocalPlayDatabaseBackend = "sqlite" | "turso";
 

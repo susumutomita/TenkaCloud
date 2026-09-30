@@ -1,6 +1,9 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { type LocalPlayStateStore, parseLocalPlaySnapshot } from "./state-store";
+import {
+  type LocalPlayStateStore,
+  parseLocalPlaySnapshot,
+} from "../local-host/container/state-store";
 
 function assertSafeDatabasePath(path: string): void {
   const directory = dirname(path);

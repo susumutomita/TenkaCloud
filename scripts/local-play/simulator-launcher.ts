@@ -14,7 +14,7 @@ import {
 import { createServer } from "node:net";
 import { isAbsolute, join } from "node:path";
 import { compareCodePoints } from "../lib/code-point-order";
-import { isLoopbackUrl } from "./loopback";
+import { isLoopbackUrl } from "../local-host/container/loopback";
 import { observeProcessIdentity, processIdentityFromStartTime } from "./process-identity";
 import { readPrivateJson, unlinkIfExists, writePrivateText } from "./session-state";
 import { createSimulatorLaunchSecret, decodeSimulatorLaunchSecret } from "./simulator-auth";

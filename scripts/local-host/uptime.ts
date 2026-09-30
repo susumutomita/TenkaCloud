@@ -1,6 +1,6 @@
-import { runUptimeFlatKind } from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/kinds/uptime-flat";
-import { resolveEndpoints } from "../../infrastructure/lib/problem-deploy/handlers/problem-endpoints-handler/resolve";
-import type { ProbeFn } from "../../infrastructure/lib/problem-deploy/runtime-clients/http-probe-client";
+import type { ProbeFn } from "../lib/http-probe-client";
+import { resolveEndpoints } from "../lib/resolve-endpoints";
+import { runUptimeFlatKind } from "../lib/uptime-flat";
 import { type StackUnit, type UptimeStackDefinition, unitOf } from "./cloudformation-engine";
 import {
   gate,

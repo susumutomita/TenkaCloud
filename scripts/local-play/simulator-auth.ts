@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { parseLoopbackUrl } from "./loopback";
+import { parseLoopbackUrl } from "../local-host/container/loopback";
 
 const TOKEN_PREFIX = "tc_sim_v1";
 const MIN_SECRET_BYTES = 32;
