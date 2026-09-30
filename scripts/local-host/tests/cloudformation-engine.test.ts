@@ -155,23 +155,26 @@ test("a stack whose CreateStack response was lost is found by name and removed",
   expect(aws.stacks.every((stack) => stack.status === "DELETE_COMPLETE")).toBe(true);
 });
 
-test("a missing flag output fails deployment and retry replaces the owned stack", async () => {
-  const { store, aws, service, admin } = await host();
-  aws.flagOutput = false;
-  const eventId = await createEvent(admin, [TEAM_A]);
-  await admin("POST", `/events/${eventId}/deploy`);
-  await service.drain();
-  expect(store.event(eventId).status).toBe("DEPLOYING");
-  expect(store.jobs(eventId)[0]?.status).toBe("FAILED");
-  expect(store.jobs(eventId)[0]?.error).toContain("has no ParameterValue flag output");
+test.each(["missing", "blank"] as const)(
+  "a %s flag output fails deployment and retry replaces the owned stack",
+  async (flagOutput) => {
+    const { store, aws, service, admin } = await host();
+    aws.flagOutput = flagOutput;
+    const eventId = await createEvent(admin, [TEAM_A]);
+    await admin("POST", `/events/${eventId}/deploy`);
+    await service.drain();
+    expect(store.event(eventId).status).toBe("DEPLOYING");
+    expect(store.jobs(eventId)[0]?.status).toBe("FAILED");
+    expect(store.jobs(eventId)[0]?.error).toContain("has no ParameterValue flag output");
 
-  aws.flagOutput = true;
-  await admin("POST", `/events/${eventId}/deploy`, { retryFailedOnly: true });
-  await service.drain();
-  expect(store.event(eventId).status).toBe("READY");
-  expect(store.jobs(eventId)[0]?.status).toBe("COMPLETE");
-  expect(aws.stacks.map((stack) => stack.status)).toEqual(["DELETE_COMPLETE", "CREATE_COMPLETE"]);
-});
+    aws.flagOutput = "flag";
+    await admin("POST", `/events/${eventId}/deploy`, { retryFailedOnly: true });
+    await service.drain();
+    expect(store.event(eventId).status).toBe("READY");
+    expect(store.jobs(eventId)[0]?.status).toBe("COMPLETE");
+    expect(aws.stacks.map((stack) => stack.status)).toEqual(["DELETE_COMPLETE", "CREATE_COMPLETE"]);
+  },
+);
 
 test("two events can use the same team account and slug without sharing a stack", async () => {
   const { store, aws, service, admin } = await host();

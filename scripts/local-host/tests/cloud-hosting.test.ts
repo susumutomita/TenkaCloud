@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
+import { assertHostingModule, narrowCatalog } from "../browser-metadata";
 import { connectCloudHosting } from "../cloud-hosting";
 import { CompetitionEngine } from "../competition-engine";
 import { parseOptions } from "../options";
@@ -26,13 +27,14 @@ function temporary(): string {
   return directory;
 }
 
-test("--aws-region enables cloud problems and must name a region", () => {
+test("--aws-region enables cloud problems and must name a standard-partition region", () => {
   expect(parseOptions(["--aws-region", "ap-northeast-1"], root).awsRegion).toBe("ap-northeast-1");
-  expect(parseOptions(["--aws-region", "us-gov-west-1"], root).awsRegion).toBe("us-gov-west-1");
+  expect(parseOptions(["--aws-region", "us-east-2"], root).awsRegion).toBe("us-east-2");
   expect("awsRegion" in parseOptions([], root)).toBe(false);
-  expect(() => parseOptions(["--aws-region", "tokyo"], root)).toThrow(
-    "--aws-region tokyo is not an AWS region name such as ap-northeast-1.",
-  );
+  for (const region of ["tokyo", "us-gov-west-1", "cn-north-1", "us-isob-east-1"])
+    expect(() => parseOptions(["--aws-region", region], root)).toThrow(
+      `--aws-region ${region} is not a region of the standard AWS partition, such as ap-northeast-1.`,
+    );
 });
 
 test("the ExternalId is one private key file, and the operator account is read once per start", async () => {
@@ -109,6 +111,30 @@ test("the ExternalId is one private key file, and the operator account is read o
   writeFileSync(path, "tampered\n");
   await expect(connectCloudHosting(root, data, "ap-northeast-1", clients)).rejects.toThrow(
     "Invalid competitor-external-id file; refusing to replace it.",
+  );
+});
+
+test("both browser catalogs carry reviewed hello-world metadata, and never its template", () => {
+  const catalog = `import.meta.glob("../../../../problems/*/*/metadata.json");
+import.meta.glob("../../../../problems/*/*/*.yaml");`;
+  const participant = narrowCatalog(catalog, "/repo/apps/participant-portal/src/data/problems.ts");
+  const hostConsole = narrowCatalog(
+    catalog,
+    "/repo/apps/application-admin-console/src/data/problems.ts",
+  );
+  expect(
+    participant,
+  ).toBe(`import.meta.glob("../../../../problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/metadata.json");
+import.meta.glob("../../../../problems/challenges/sqli-demo/__local_host_empty__/*.yaml");`);
+  expect(
+    hostConsole,
+  ).toBe(`import.meta.glob("../../../../problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/metadata.json");
+import.meta.glob("../../../../problems/challenges/sqli-demo/__local_host_empty__/*.yaml");`);
+  expect(() =>
+    assertHostingModule("/repo/problems/challenges/hello-world/metadata.json"),
+  ).not.toThrow();
+  expect(() => assertHostingModule("/repo/problems/challenges/hello-world/template.yaml")).toThrow(
+    "Unreviewed problem content entered the hosting bundle: /repo/problems/challenges/hello-world/template.yaml",
   );
 });
 

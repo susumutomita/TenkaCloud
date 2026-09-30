@@ -35,8 +35,8 @@ export class FakeAws {
   readonly stacks: FakeStack[] = [];
   createOutcome: "complete" | "rollback" | "lost-response" = "complete";
   beforeCreate?: (input: CreateStackCommandInput) => void;
-  /** False models a template whose stack completes without the flag output. */
-  flagOutput = true;
+  /** A template whose stack completes without the flag output, or with a blank one. */
+  flagOutput: "flag" | "missing" | "blank" = "flag";
   identityCalls = 0;
 
   readonly sts = {
@@ -122,9 +122,14 @@ export class FakeAws {
           StackStatusReason: stack.reason,
           Tags: stack.tags,
           Outputs: [
-            ...(this.flagOutput
-              ? [{ OutputKey: "ParameterValue", OutputValue: fakeFlag(stack.name) }]
-              : []),
+            ...(this.flagOutput === "missing"
+              ? []
+              : [
+                  {
+                    OutputKey: "ParameterValue",
+                    OutputValue: this.flagOutput === "blank" ? " " : fakeFlag(stack.name),
+                  },
+                ]),
             { OutputKey: "ParameterConsoleUrl", OutputValue: "https://console.example/p" },
           ],
         },

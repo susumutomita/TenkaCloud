@@ -1,8 +1,8 @@
 # Build context for docker/host/Dockerfile (BuildKit reads this file instead of the
 # root .dockerignore). Unlike `make local`, the hosted image carries its catalog: a
 # cloud platform has no checkout to bind-mount. Only the problems host mode offers
-# are included. scripts/local-host/browser-metadata.ts narrows the UI build to the
-# Battle and sqli-demo; hello-world (offered with --aws-region) is served by the API.
+# are included, and scripts/local-host/browser-metadata.ts narrows the UI build to
+# the same reviewed public metadata. CloudFormation templates stay on the host.
 .git
 .gitmodules
 problems/*

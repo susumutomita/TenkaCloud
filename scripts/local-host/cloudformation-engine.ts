@@ -198,7 +198,7 @@ export class CloudFormationEngine implements RuntimeEngine {
     );
     unit.stackId ??= stack?.StackId;
     retain(JSON.stringify(unit));
-    if (!unit.outputs[definition.flagOutputKey])
+    if (!unit.outputs[definition.flagOutputKey]?.trim())
       throw new Error(`Stack ${unit.stackName} has no ${definition.flagOutputKey} flag output.`);
   }
 
@@ -208,7 +208,7 @@ export class CloudFormationEngine implements RuntimeEngine {
     if (stack?.StackStatus !== "CREATE_COMPLETE")
       throw new Error(`Stack ${unit.stackName} is ${stack?.StackStatus ?? "gone"}.`);
     const definition = JSON.parse(job.definition) as StackDefinition;
-    if (!unit.outputs?.[definition.flagOutputKey])
+    if (!unit.outputs?.[definition.flagOutputKey]?.trim())
       throw new Error(
         `Stack ${unit.stackName} has no retained ${definition.flagOutputKey} flag output.`,
       );
@@ -295,7 +295,7 @@ export class CloudFormationEngine implements RuntimeEngine {
       return outcome(team, { kind: "already_scored", totalScore: team.score });
     const outputs = deployed.job.unit ? unitOf(deployed.job).outputs : undefined;
     const expected = outputs?.[deployed.definition.flagOutputKey];
-    if (!expected)
+    if (!expected?.trim())
       throw new HostError(
         409,
         "This team's stack has no flag output yet. Ask the organizer to redeploy it.",

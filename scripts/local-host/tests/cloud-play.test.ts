@@ -201,6 +201,7 @@ test("a correct flag scores once, trimmed, and a second one is already solved", 
   const fixture = await host();
   const event = await startedEvent(fixture);
   const { alpha } = teams(event);
+  const awsCalls = fixture.aws.assumed.length;
 
   const first = await submit(fixture, alpha, `  ${fakeFlag(stackName(fixture, "alpha"))}\n`);
   expect(first).toEqual({ status: 200, body: { kind: "ok", scoreDelta: 100, totalScore: 100 } });
@@ -230,6 +231,7 @@ test("a correct flag scores once, trimmed, and a second one is already solved", 
     { teamName: "alpha", score: 100, completedProblems: 1 },
     { teamName: "beta", score: 0, completedProblems: 0 },
   ]);
+  expect(fixture.aws.assumed.length).toBe(awsCalls);
 });
 
 test("a wrong flag, including another team's, costs the wrong-answer penalty", async () => {
@@ -258,7 +260,7 @@ test("a wrong flag, including another team's, costs the wrong-answer penalty", a
 
 test("a submission is refused until the team's stack is running with its flag output", async () => {
   const fixture = await host();
-  fixture.aws.flagOutput = false;
+  fixture.aws.flagOutput = "missing";
   const created = await fixture.admin("POST", "/events", {
     name: "missing flag",
     teams: [{ internalSlug: "alpha", awsAccountId: "111111111111" }],
@@ -290,6 +292,57 @@ test("a submission is refused until the team's stack is running with its flag ou
   expect(fixture.store.team(alpha.teamId).scoreEvents).toEqual([]);
 });
 
+test("a blank flag output is refused rather than matched by an empty answer", async () => {
+  const fixture = await host();
+  const event = await startedEvent(fixture);
+  const { alpha } = teams(event);
+  const job = required(
+    fixture.store
+      .jobs(event.eventId)
+      .find((entry) => entry.teamId === alpha.teamId && entry.problemId === "hello-world"),
+  );
+  const unit = JSON.parse(required(job.unit ?? undefined));
+  unit.outputs.ParameterValue = " ";
+  fixture.store.putJob({ ...job, unit: JSON.stringify(unit) });
+
+  await expect(submit(fixture, alpha, "")).rejects.toMatchObject({
+    status: 409,
+    kind: "not_deployed",
+  });
+  expect(fixture.store.team(alpha.teamId).scoreEvents).toEqual([]);
+});
+
+test("a stack that finished while the host was down is retried, not reported running", async () => {
+  const fixture = await host();
+  const created = await fixture.admin("POST", "/events", {
+    name: "interrupted",
+    teams: [{ internalSlug: "alpha", awsAccountId: "111111111111" }],
+    problems: [{ problemId: "hello-world" }],
+  });
+  const event = created.body as Created;
+  await fixture.admin("POST", `/events/${event.eventId}/deploy`);
+  await fixture.service.drain();
+  const job = required(fixture.store.jobs(event.eventId)[0]);
+  const unrecorded = JSON.parse(required(job.unit ?? undefined)) as Record<string, unknown>;
+  delete unrecorded.outputs;
+  fixture.store.putJob({ ...job, status: "IN_PROGRESS", unit: JSON.stringify(unrecorded) });
+
+  await new HostingService(fixture.store, fixture.engine, HOST_KEY, () => START).recover();
+  const failed = fixture.store.job(job.jobId);
+  expect(failed.status).toBe("FAILED");
+  expect(failed.error).toBe(
+    `Stack ${stackName(fixture, "alpha")} has no retained ParameterValue flag output.`,
+  );
+
+  await fixture.admin("POST", `/events/${event.eventId}/deploy`, { retryFailedOnly: true });
+  await fixture.service.drain();
+  expect(fixture.store.job(job.jobId).status).toBe("COMPLETE");
+  expect(fixture.aws.deleted).toEqual([required(fixture.aws.stacks[0]).stackId]);
+  expect(JSON.parse(required(fixture.store.job(job.jobId).unit ?? undefined))).toMatchObject({
+    outputs: { ParameterValue: fakeFlag(stackName(fixture, "alpha")) },
+  });
+});
+
 test("a hint is charged once and only its own content is revealed", async () => {
   const fixture = await host();
   const event = await startedEvent(fixture);
@@ -298,6 +351,7 @@ test("a hint is charged once and only its own content is revealed", async () => 
   const english = helloWorld.i18n.en.hints.find((each) => each.id === required(hint1).id);
   const reveal = () =>
     fixture.as(alpha).post("/portal/me/problems/hello-world/hints/hint-1/reveal");
+  const awsCalls = fixture.aws.assumed.length;
 
   const first = await reveal();
   const revealedAt = new Date(START).toISOString();
@@ -342,9 +396,10 @@ test("a hint is charged once and only its own content is revealed", async () => 
     },
     { id: required(hint2).id, penalty: 30, revealed: false },
   ]);
+  expect(fixture.aws.assumed.length).toBe(awsCalls);
 });
 
-test("Battle points and cloud points add up whichever arrives first", async () => {
+test("a Battle score, a cloud flag and a cloud hint add up to one total", async () => {
   const fixture = await host();
   const event = await startedEvent(fixture);
   const { alpha, beta } = teams(event);
