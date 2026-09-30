@@ -35,7 +35,7 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
   const suggestedRoleName = defaultCompetitorRoleName({ tenantId: config.tenantId });
   const [awsAccountId, setAwsAccountId] = useState("");
   const [alias, setAlias] = useState("");
-  const [region, setRegion] = useState("ap-northeast-1");
+  const [region, setRegion] = useState(config.hostAwsRegion ?? "ap-northeast-1");
   const [competitorRoleName, setCompetitorRoleName] = useState(suggestedRoleName);
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
@@ -43,7 +43,7 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
   const reset = () => {
     setAwsAccountId("");
     setAlias("");
-    setRegion("ap-northeast-1");
+    setRegion(config.hostAwsRegion ?? "ap-northeast-1");
     setCompetitorRoleName(suggestedRoleName);
     setError(null);
   };
@@ -144,7 +144,11 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
           label={t("competitor_accounts.add_modal_region_label")}
           description={t("competitor_accounts.add_modal_region_description")}
         >
-          <Input value={region} onChange={(e) => setRegion(e.detail.value)} disabled={inFlight} />
+          <Input
+            value={region}
+            onChange={(e) => setRegion(e.detail.value)}
+            disabled={inFlight || !!config.hostAwsRegion}
+          />
         </FormField>
         <FormField
           label={t("competitor_accounts.add_modal_role_label")}

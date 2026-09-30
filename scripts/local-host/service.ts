@@ -9,8 +9,10 @@ import {
   SLOT_STRIDE,
 } from "./gateway-ports";
 import {
+  type AccountConnection,
   type AwsTarget,
   assertPlaying,
+  type CompetitorAccount,
   type Context,
   type Gate,
   gate,
@@ -27,6 +29,7 @@ import {
   type Team,
   text,
 } from "./model";
+import { type OrganizerRole, requireOrganizerPermission } from "./organizer-access";
 import { portsFree } from "./ports";
 import { digest, type HostStore } from "./store";
 
@@ -48,7 +51,7 @@ const eventPattern = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
 const slugPattern = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/u;
 const awsAccountPattern = /^\d{12}$/u;
 const awsRoleNamePattern = /^[A-Za-z0-9_+=,.@-]{1,64}$/u;
-/** The role `competitor-bootstrap.yaml` creates unless the organizer agreed on another name. */
+/** Existing bootstrap default; the form may propose a host-scoped name explicitly. */
 const DEFAULT_COMPETITOR_ROLE = "TenkaCloud-CompetitorDeploy-Role";
 const SLOT_QUEUE = "runtime-slots";
 const NONTERMINAL_STATUSES: readonly Job["status"][] = ["PENDING", "IN_PROGRESS"];
@@ -128,6 +131,7 @@ export class HostingService {
   gatewayPorts?: GatewayPortRange;
   /** The address the gateways listen on (loopback, or the `--lan` address). */
   gatewayHostname = "127.0.0.1";
+  accountConnection?: AccountConnection;
   constructor(
     readonly store: HostStore,
     readonly engine: RuntimeEngine,
@@ -205,22 +209,29 @@ export class HostingService {
   async admin(request: ApiRequest): Promise<ApiResponse> {
     const unauthenticated = this.adminLogin(request);
     if (unauthenticated) return unauthenticated;
-    this.store.authenticateAdmin(request.token, this.now());
-    const fixed = this.adminFixedRoute(request);
+    const role = this.store.authenticateAdmin(request.token, this.now());
+    const fixed = this.adminFixedRoute(request, role);
     if (fixed) return fixed;
     const parts = request.path.split("/").filter(Boolean).map(decodeURIComponent);
     const eventId = parts[0] === "events" ? parts[1] : undefined;
     if (!eventId || !eventPattern.test(eventId)) throw new HostError(404, "Unknown host endpoint.");
     if (parts.length === 2 && request.method === "GET")
       return this.queue.run(eventId, async () => {
-        this.store.authenticateAdmin(request.token, this.now());
+        const currentRole = this.store.authenticateAdmin(request.token, this.now());
+        if (request.query.get("withTeamLoginKeys") === "true")
+          requireOrganizerPermission(currentRole, "reveal-team-keys");
         const event = this.currentEvent(eventId);
         this.coordination.advance(event);
         return ok(this.detail(event, request.query));
       });
-    return this.queue.run(eventId, async () =>
-      this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request),
-    );
+    requireOrganizerPermission(role, "run-events");
+    return this.queue.run(eventId, async () => {
+      requireOrganizerPermission(
+        this.store.authenticateAdmin(request.token, this.now()),
+        "run-events",
+      );
+      return this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request);
+    });
   }
   private adminLogin(request: ApiRequest): ApiResponse | undefined {
     if (request.path === "/host/login" && request.method === "POST") {
@@ -234,7 +245,12 @@ export class HostingService {
     }
     return undefined;
   }
-  private adminFixedRoute(request: ApiRequest): ApiResponse | undefined {
+  private adminFixedRoute(
+    request: ApiRequest,
+    role: OrganizerRole,
+  ): ApiResponse | Promise<ApiResponse> | undefined {
+    if (request.path.startsWith("/admin/competitor-accounts"))
+      return this.accountRoute(request, role);
     if (request.path === "/host/catalog" && request.method === "GET") {
       return ok({
         items: this.engine.catalog().map((problem) => ({
@@ -250,9 +266,163 @@ export class HostingService {
         items: this.store.events().map((event) => this.summary(this.currentEvent(event.eventId))),
       });
     }
-    if (request.path === "/events" && request.method === "POST")
+    if (request.path === "/events" && request.method === "POST") {
+      requireOrganizerPermission(role, "run-events");
       return this.createEvent(object(request.body));
+    }
     return undefined;
+  }
+  private connection(): AccountConnection {
+    if (!this.accountConnection)
+      throw new HostError(422, "Start the host with --aws-region to manage competitor accounts.");
+    return this.accountConnection;
+  }
+  private registerAccount(body: Record<string, unknown>): CompetitorAccount {
+    const connection = this.connection();
+    const awsAccountId = text(body.awsAccountId, "awsAccountId", 12);
+    if (!awsAccountPattern.test(awsAccountId))
+      throw new HostError(422, "Use a 12-digit AWS account ID.");
+    if (awsAccountId === connection.operatorAccountId)
+      throw new HostError(422, "The operator account cannot be a competitor account.");
+    const region = body.region === undefined ? connection.region : text(body.region, "region", 32);
+    if (region !== connection.region)
+      throw new HostError(422, `This host deploys AWS problems in ${connection.region}.`);
+    const competitorRoleName =
+      body.competitorRoleName === undefined
+        ? DEFAULT_COMPETITOR_ROLE
+        : text(body.competitorRoleName, "competitorRoleName", 64);
+    if (!awsRoleNamePattern.test(competitorRoleName))
+      throw new HostError(422, "Invalid competitor IAM role name.");
+    const alias = body.alias === undefined ? undefined : text(body.alias, "alias", 120);
+    if (this.store.accounts().some((account) => account.awsAccountId === awsAccountId))
+      throw new HostError(409, "Competitor account is already registered.");
+    const now = new Date(this.now()).toISOString();
+    const account: CompetitorAccount = {
+      awsAccountId,
+      region,
+      competitorRoleName,
+      ...(alias ? { alias } : {}),
+      verified: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.store.putAccount(account);
+    return account;
+  }
+  private accountRoute(
+    request: ApiRequest,
+    role: OrganizerRole,
+  ): ApiResponse | Promise<ApiResponse> {
+    if (request.path === "/admin/competitor-accounts" && request.method === "GET")
+      return ok({ items: this.store.accounts() });
+    requireOrganizerPermission(role, "manage-connections");
+    if (request.path === "/admin/competitor-accounts" && request.method === "POST") {
+      const account = this.registerAccount(object(request.body));
+      const cloud = this.connection();
+      return ok(
+        { ...account, externalId: cloud.externalId, tenkaCloudAccountId: cloud.operatorAccountId },
+        201,
+      );
+    }
+    if (request.path === "/admin/competitor-accounts/bulk" && request.method === "POST")
+      return this.bulkRegisterAccounts(object(request.body));
+    const match = /^\/admin\/competitor-accounts\/(\d{12})(?:\/(verify))?$/u.exec(request.path);
+    if (!match) throw new HostError(404, "Unknown host endpoint.");
+    const accountId = match[1];
+    if (!accountId) throw new HostError(404, "Unknown host endpoint.");
+    if (request.method === "POST" && match[2] === "verify")
+      return this.verifyAccount(accountId, request.token);
+    if (request.method === "DELETE" && !match[2])
+      return this.deleteAccount(accountId, request.token);
+    throw new HostError(404, "Unknown host endpoint.");
+  }
+  private bulkRegisterOne(value: unknown, defaults: Record<string, unknown>) {
+    const awsAccountId =
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      "awsAccountId" in value &&
+      typeof value.awsAccountId === "string"
+        ? value.awsAccountId
+        : "";
+    try {
+      this.registerAccount({ ...defaults, ...object(value) });
+      return { awsAccountId, outcome: "created" as const };
+    } catch (error) {
+      const status = error instanceof HostError ? error.status : 500;
+      const fallbackOutcome = status < 500 ? ("invalid" as const) : ("failed" as const);
+      const outcome = status === 409 ? ("duplicate" as const) : fallbackOutcome;
+      return {
+        awsAccountId,
+        outcome,
+        message: error instanceof HostError ? error.message : "Registration failed.",
+      };
+    }
+  }
+  private bulkRegisterAccounts(body: Record<string, unknown>): ApiResponse {
+    if (!Array.isArray(body.accounts) || body.accounts.length < 1 || body.accounts.length > 100)
+      throw new HostError(400, "Choose 1–100 competitor accounts.");
+    const defaults = body.defaults === undefined ? {} : object(body.defaults);
+    const results = body.accounts.map((value: unknown) => this.bulkRegisterOne(value, defaults));
+    const created = results.filter((result) => result.outcome === "created").length;
+    const cloud = this.connection();
+    return ok({
+      results,
+      created,
+      duplicate: results.filter((result) => result.outcome === "duplicate").length,
+      invalid: results.filter((result) => result.outcome === "invalid").length,
+      failed: results.filter((result) => result.outcome === "failed").length,
+      ...(created ? { externalId: cloud.externalId } : {}),
+      tenkaCloudAccountId: cloud.operatorAccountId,
+    });
+  }
+  private verifyAccount(accountId: string, token: string): Promise<ApiResponse> {
+    return this.queue.run(`account:${accountId}`, async () => {
+      requireOrganizerPermission(
+        this.store.authenticateAdmin(token, this.now()),
+        "manage-connections",
+      );
+      const account = this.store.account(accountId);
+      const cloud = this.connection();
+      try {
+        await cloud.verify(account.awsAccountId, account.competitorRoleName);
+      } catch {
+        requireOrganizerPermission(
+          this.store.authenticateAdmin(token, this.now()),
+          "manage-connections",
+        );
+        const updatedAt = new Date(this.now()).toISOString();
+        this.store.putAccount({ ...account, verified: false, verifiedAt: undefined, updatedAt });
+        throw new HostError(
+          422,
+          "Could not verify the competitor role. Check the account, role, ExternalId, and operator trust.",
+        );
+      }
+      requireOrganizerPermission(
+        this.store.authenticateAdmin(token, this.now()),
+        "manage-connections",
+      );
+      const verifiedAt = new Date(this.now()).toISOString();
+      const verified = { ...account, verified: true, verifiedAt, updatedAt: verifiedAt };
+      this.store.putAccount(verified);
+      return ok(verified);
+    });
+  }
+  private deleteAccount(accountId: string, token: string): Promise<ApiResponse> {
+    return this.queue.run(`account:${accountId}`, async () => {
+      requireOrganizerPermission(
+        this.store.authenticateAdmin(token, this.now()),
+        "manage-connections",
+      );
+      this.store.account(accountId);
+      if (this.store.accountReferenced(accountId))
+        throw new HostError(
+          409,
+          "Competitor account is assigned to an event or has resources awaiting cleanup.",
+        );
+      this.store.deleteAccount(accountId);
+      return ok({ deleted: true });
+    });
   }
   private createEvent(body: Record<string, unknown>): ApiResponse {
     const name = text(body.name, "name");
@@ -292,7 +462,7 @@ export class HostingService {
       const internalSlug = text(object(value).internalSlug, "internalSlug", 40);
       if (!slugPattern.test(internalSlug))
         throw new HostError(400, "Use lowercase letters, digits and hyphens for team slugs.");
-      const aws = needsAws ? awsTarget(object(value), internalSlug) : undefined;
+      const aws = needsAws ? this.awsTarget(object(value), internalSlug) : undefined;
       return {
         ...(aws ? { aws } : {}),
         teamId: id(timestamp),
@@ -338,6 +508,28 @@ export class HostingService {
       },
       201,
     );
+  }
+  private awsTarget(team: Record<string, unknown>, internalSlug: string): AwsTarget {
+    const accountId = team.awsAccountId;
+    if (typeof accountId !== "string" || !awsAccountPattern.test(accountId))
+      throw new HostError(422, `Team ${internalSlug} needs a registered AWS account.`);
+    if (team.awsRoleName !== undefined)
+      throw new HostError(
+        422,
+        "Select a registered account; event requests cannot override its IAM role.",
+      );
+    if (team.region !== undefined && team.region !== this.connection().region)
+      throw new HostError(422, `This host deploys AWS problems in ${this.connection().region}.`);
+    const account = this.store.accounts().find((candidate) => candidate.awsAccountId === accountId);
+    if (!account) throw new HostError(422, `Competitor account ${accountId} is not registered.`);
+    if (!account.verified)
+      throw new HostError(
+        422,
+        `Competitor account ${accountId} must be verified before event creation.`,
+      );
+    if (account.region !== this.connection().region)
+      throw new HostError(422, `Competitor account ${accountId} is registered in another region.`);
+    return { accountId, roleName: account.competitorRoleName };
   }
   private async mutateEvent(
     event: HostedEvent,
@@ -1193,14 +1385,4 @@ function deploymentPlan(previous: Job | undefined, failedOnly: boolean): "skip" 
 /** Only a running environment that no organizer operation is changing is handed out. */
 function linkable(job: Job): boolean {
   return job.status === "COMPLETE" && job.operation === undefined;
-}
-
-function awsTarget(team: Record<string, unknown>, internalSlug: string): AwsTarget {
-  const accountId = team.awsAccountId;
-  if (typeof accountId !== "string" || !awsAccountPattern.test(accountId))
-    throw new HostError(422, `Team ${internalSlug} needs a 12-digit AWS account ID.`);
-  const roleName = team.awsRoleName ?? DEFAULT_COMPETITOR_ROLE;
-  if (typeof roleName !== "string" || !awsRoleNamePattern.test(roleName))
-    throw new HostError(422, `Team ${internalSlug} has an invalid IAM role name.`);
-  return { accountId, roleName };
 }

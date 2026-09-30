@@ -62,10 +62,43 @@ async function host(withAws = true) {
   });
   const engine = new CompetitionEngine(root, data, true, withAws ? cloud : undefined);
   const service = new HostingService(store, engine, HOST_KEY, () => clock);
+  if (withAws)
+    service.accountConnection = {
+      region: "ap-northeast-1",
+      operatorAccountId: "999999999999",
+      externalId: "host-external-id-0123456789",
+      verify: async (accountId, roleName) => {
+        await aws.sts.send(
+          new (await import("@aws-sdk/client-sts")).AssumeRoleCommand({
+            RoleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
+            ExternalId: "host-external-id-0123456789",
+            RoleSessionName: "test-verify",
+          }),
+        );
+      },
+    };
   const login = await service.admin(
     apiRequest({ method: "POST", path: "/host/login", token: "", body: { key: HOST_KEY } }),
   );
   const token = (login.body as { idToken: string }).idToken;
+  if (withAws)
+    for (const awsAccountId of ["111111111111", "222222222222"]) {
+      await service.admin(
+        apiRequest({
+          method: "POST",
+          path: "/admin/competitor-accounts",
+          token,
+          body: { awsAccountId },
+        }),
+      );
+      await service.admin(
+        apiRequest({
+          method: "POST",
+          path: `/admin/competitor-accounts/${awsAccountId}/verify`,
+          token,
+        }),
+      );
+    }
   return {
     store,
     aws,

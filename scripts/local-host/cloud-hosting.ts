@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { CloudFormationClient } from "@aws-sdk/client-cloudformation";
 import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
+import { assumeRoleWithExternalId } from "../../infrastructure/lib/problem-deploy/handlers/shared/assume-competitor-role";
 import { CloudFormationEngine, type CloudFormationEngineOptions } from "./cloudformation-engine";
 import { persistentKey, privateDirectory } from "./files";
 import type { Job, Team } from "./model";
@@ -12,6 +13,7 @@ export interface CloudHosting {
   readonly operatorAccountId: string;
   readonly externalId: string;
   readonly externalIdPath: string;
+  verify(accountId: string, roleName: string): Promise<void>;
   engine(team: (job: Job) => Team): CloudFormationEngine;
 }
 
@@ -52,6 +54,17 @@ export async function connectCloudHosting(
     operatorAccountId,
     externalId,
     externalIdPath,
+    verify: async (accountId, roleName) => {
+      await assumeRoleWithExternalId(
+        { sts: clients.sts },
+        {
+          roleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
+          jobId: accountId,
+          externalId,
+          sessionNamePrefix: "tenkacloud-host-verify-",
+        },
+      );
+    },
     engine: (team) =>
       new CloudFormationEngine(repositoryRoot, {
         ...clients,

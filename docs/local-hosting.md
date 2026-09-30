@@ -63,7 +63,8 @@ with the terminal's host key (there is no Cognito). Then:
 
 1. **Create event**: name the event, set the team count and choose the problem.
    Only problems this host can run are selectable; the others are listed as not
-   supported locally. There is no AWS account or region to choose. The dialog after
+   supported locally. For Docker-only and Battle events there is no AWS account to choose;
+   cloud problems require a verified registered account per team. The dialog after
    creation shows each team's key and invitation link once; keys stay copyable in
    the **Teams** tab.
 2. **Deploy**: choose **Deploy now** in that dialog, or prepare the environments from
@@ -77,8 +78,7 @@ with the terminal's host key (there is no Cognito). Then:
 Participants use the normal Participant Portal and its actual backend login, not
 the practice-mode or demo login.
 
-Console features that need cloud infrastructure are not offered: AWS competitor
-account entry (see [AWS problems](#aws-problems)), tenant users, the audit log, SAML, the problem catalog's cloud
+Console features that need tenant infrastructure are not offered: tenant users, the audit log, SAML, the problem catalog's cloud
 deployments, disruptions, the progression gate, registration links, capacity
 monitoring, scheduled deploy and automatic teardown. Their navigation entries and
 tabs are hidden; opening such a URL shows an explanation instead of a failing
@@ -217,15 +217,30 @@ make host HOST_ARGS="--aws-region ap-northeast-1"
   once, with the same file permissions as `host-key`, and prints its value. In
   public mode it prints the file path instead. Every competitor role requires this
   ExternalId, as `competitor-bootstrap.yaml` does.
-- **Competitor accounts.** Prepare each team's account with
-  `competitor-bootstrap.yaml`, trusting the operator account and the ExternalId.
-  The host console cannot enter the accounts yet, so create the event through the
-  API. Give each team an `awsAccountId`, and an `awsRoleName` when the role is not
-  `TenkaCloud-CompetitorDeploy-Role`:
+- **Competitor accounts.** Open **Competitor Accounts** in the host console, register
+  each account, and use the displayed operator account ID, ExternalId and exact RoleName
+  with `competitor-bootstrap.yaml`. Download the template from the modal and create
+  its stack manually in the competitor account; the local host has no public S3
+  TemplateURL for CloudFormation Quick Create. Then select **Verify**. Verification
+  assumes the registered role with the required ExternalId; only verified accounts
+  appear in the cloud event team picker. The form proposes a host-scoped role name,
+  while API registration without `competitorRoleName` uses the template's inherited
+  `TenkaCloud-CompetitorDeploy-Role` default. An event stores the registered role,
+  not an `awsRoleName` supplied in its request. The API equivalent is:
 
   ```sh
   TOKEN=$(curl -s -X POST http://127.0.0.1:5174/api/host/login \
     -H 'content-type: application/json' -d '{"key":"<host key>"}' | jq -r .idToken)
+  curl -s -X POST http://127.0.0.1:5174/api/admin/competitor-accounts \
+    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+    -d '{"awsAccountId":"111111111111"}'
+  curl -s -X POST http://127.0.0.1:5174/api/admin/competitor-accounts/111111111111/verify \
+    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'
+  curl -s -X POST http://127.0.0.1:5174/api/admin/competitor-accounts \
+    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+    -d '{"awsAccountId":"222222222222"}'
+  curl -s -X POST http://127.0.0.1:5174/api/admin/competitor-accounts/222222222222/verify \
+    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'
   curl -s -X POST http://127.0.0.1:5174/api/events \
     -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
     -d '{"name":"Cloud day","problems":[{"problemId":"ac26-crypto-battle"},{"problemId":"hello-world"}],
@@ -233,10 +248,12 @@ make host HOST_ARGS="--aws-region ap-northeast-1"
                   {"internalSlug":"team-b","awsAccountId":"222222222222"}]}'
   ```
 
-  Deploy, start and end the event in the host console as usual. Each deployment
-  uses a separate stack name, including when events reuse a team account and slug.
-  Recovery and teardown check the stack ownership tag before using or deleting it.
-  A stack without its scoring output fails deployment.
+  Register and verify every target account before creating the event. Deploy,
+  start and end it in the host console as usual. An account assigned to an active
+  event or an environment awaiting cleanup cannot be deleted.
+  Each deployment uses a separate stack name, including when events reuse a team
+  account and slug. Recovery and teardown verify ownership before using or deleting
+  a stack. A missing or blank scoring output fails deployment.
 - **Playing.** Participants see the stack's outputs except the flag output, submit
   the flag and reveal hints in the normal portal. The host compares the answer with
   the flag output it read when the stack was created; scoring makes no AWS call.

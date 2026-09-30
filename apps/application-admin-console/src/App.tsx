@@ -43,6 +43,7 @@ function guarded(element: React.ReactNode, config: AppConfig) {
         samlSsoEnabled={config.features?.samlSso}
         demoMode={config.mode === "demo"}
         localHost={isLocalHost(config)}
+        hostAwsEnabled={Boolean(config.hostAwsRegion)}
         // The banner only renders the link when demoMode is true, so passing the URL
         // unconditionally is safe (and avoids an untested non-demo ternary branch).
         demoParticipantUrl={config.participantPortalUrl}
@@ -160,6 +161,12 @@ function LocalHostRoutes({ config }: { config: AppConfig }) {
       <Route path="/" element={<Navigate to="/events" replace />} />
       <Route path="/events" element={guarded(<EventListPage config={config} />, config)} />
       <Route path="/events/new" element={guarded(<EventCreatePage config={config} />, config)} />
+      {config.hostAwsRegion && (
+        <Route
+          path="/competitor-accounts"
+          element={guarded(<CompetitorAccountsPage config={config} />, config)}
+        />
+      )}
       <Route
         path="/events/:eventId"
         element={guarded(<EventDetailPage config={config} />, config)}

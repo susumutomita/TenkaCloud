@@ -35,6 +35,7 @@ async function rehearse(root: string, data: string): Promise<void> {
     root,
     {
       dataDirectory: data,
+      accountConnection: cloud,
       hostname: "127.0.0.1",
       adminPort: 0,
       participantPort: 0,
@@ -73,6 +74,10 @@ async function rehearse(root: string, data: string): Promise<void> {
         `${method} ${path}: ${response.status} ${await response.clone().text()}`,
       );
       return response;
+    }
+    for (const awsAccountId of ["111111111111", "222222222222"]) {
+      await admin("POST", "/admin/competitor-accounts", { awsAccountId });
+      await admin("POST", `/admin/competitor-accounts/${awsAccountId}/verify`);
     }
     const created = await admin("POST", "/events", {
       name: "Cloud browser rehearsal",

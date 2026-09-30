@@ -171,10 +171,12 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   // Issue #3226: the local competition host deploys Docker environments on this computer.
   const localHost = isLocalHost(config);
   const hostCatalog = useHostCatalog(localHost ? apiClient : null);
-  const providerMode = useMemo<ReturnType<typeof resolveEventProviderMode>>(
-    () => (localHost ? { kind: "local" } : resolveEventProviderMode(problemRows)),
-    [localHost, problemRows],
-  );
+  const providerMode = useMemo<ReturnType<typeof resolveEventProviderMode>>(() => {
+    if (!localHost) return resolveEventProviderMode(problemRows);
+    return problemRows.some((row) => hostCatalog.cloud.has(row.problemId))
+      ? { kind: "aws" }
+      : { kind: "local" };
+  }, [localHost, problemRows, hostCatalog.cloud]);
   const teamValidation = useMemo(
     () => validateTeamRows(teamRows, providerMode),
     [teamRows, providerMode],
@@ -334,7 +336,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             accountsLoadError={accountsLoadError}
             accountsLoading={accountsLoading}
             showLoadingHint={competitorAccounts === null && accountsLoading && !accountsLoadError}
-            showNoVerifiedAccountsHint={showNoVerifiedAccountsHint}
+            showNoVerifiedAccountsHint={showNoVerifiedAccountsHint && providerMode.kind === "aws"}
             onReload={() => void fetchAccounts()}
           />
 
@@ -346,6 +348,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             accountById={accountById}
             noVerifiedAccounts={noVerifiedAccounts}
             apiClient={apiClient}
+            hostAwsRegion={config.hostAwsRegion}
             onUpdateTeamRow={updateTeamRow}
           />
 

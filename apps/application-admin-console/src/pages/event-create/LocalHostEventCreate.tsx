@@ -12,12 +12,13 @@ import type { ApiClient } from "../../api/client";
 import { useT } from "../../i18n";
 
 interface HostCatalogResponse {
-  readonly items: readonly { readonly problemId: string }[];
+  readonly items: readonly { readonly problemId: string; readonly runtime: string }[];
 }
 
 export interface HostCatalog {
   /** Problem IDs the host can run; empty until loaded (nothing is selectable meanwhile). */
   readonly supported: ReadonlySet<string>;
+  readonly cloud: ReadonlySet<string>;
   readonly error: string | null;
 }
 
@@ -25,6 +26,7 @@ const EMPTY: ReadonlySet<string> = new Set();
 
 export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
   const [supported, setSupported] = useState<ReadonlySet<string>>(EMPTY);
+  const [cloud, setCloud] = useState<ReadonlySet<string>>(EMPTY);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!apiClient) return;
@@ -34,6 +36,13 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
       .then((response) => {
         if (!active) return;
         setSupported(new Set(response.items.map((item) => item.problemId)));
+        setCloud(
+          new Set(
+            response.items
+              .filter((item) => item.runtime === "cloudformation")
+              .map((item) => item.problemId),
+          ),
+        );
         setError(null);
       })
       .catch((cause: unknown) => {
@@ -43,7 +52,7 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
       active = false;
     };
   }, [apiClient]);
-  return { supported, error };
+  return { supported, cloud, error };
 }
 
 export function LocalHostEventCreateNotice({ catalog }: { readonly catalog: HostCatalog }) {

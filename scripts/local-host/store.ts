@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  type CompetitorAccount,
   HostError,
   type HostedEvent,
   type Job,
@@ -7,6 +8,7 @@ import {
   type SqlStatement,
   type Team,
 } from "./model";
+import type { OrganizerRole } from "./organizer-access";
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 interface BodyRow {
@@ -43,12 +45,12 @@ export class HostStore {
         const versions = this.statement("SELECT version FROM host_schema").all() as {
           version: number;
         }[];
-        if (versions.length !== 1 || versions[0]?.version !== 1)
+        if (versions.length !== 1 || ![1, 2].includes(versions[0]?.version ?? 0))
           throw new Error("Unsupported local-host database schema.");
       }
       database.exec(`
         CREATE TABLE IF NOT EXISTS host_schema(version INTEGER NOT NULL) STRICT;
-        INSERT INTO host_schema SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM host_schema);
+        INSERT INTO host_schema SELECT 2 WHERE NOT EXISTS (SELECT 1 FROM host_schema);
         CREATE TABLE IF NOT EXISTS host_events(id TEXT PRIMARY KEY, body TEXT NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS host_teams(
           id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES host_events(id),
@@ -65,7 +67,11 @@ export class HostStore {
           body TEXT NOT NULL, PRIMARY KEY(event_id,problem_id)
         ) STRICT;
         CREATE TABLE IF NOT EXISTS host_sessions(
-          token_hash TEXT PRIMARY KEY, refresh_hash TEXT NOT NULL UNIQUE, expires INTEGER NOT NULL
+          token_hash TEXT PRIMARY KEY, refresh_hash TEXT NOT NULL UNIQUE, expires INTEGER NOT NULL,
+          role TEXT NOT NULL DEFAULT 'Admin' CHECK(role IN ('Admin','Operator','Viewer'))
+        ) STRICT;
+        CREATE TABLE IF NOT EXISTS host_accounts(
+          account_id TEXT PRIMARY KEY, body TEXT NOT NULL
         ) STRICT;
         CREATE TABLE IF NOT EXISTS host_requests(
           team_id TEXT NOT NULL REFERENCES host_teams(id), nonce TEXT NOT NULL,
@@ -76,6 +82,17 @@ export class HostStore {
           id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES host_events(id), body TEXT NOT NULL
         ) STRICT;
       `);
+      if (present) {
+        const version = (
+          this.statement("SELECT version FROM host_schema").get() as { version: number }
+        ).version;
+        if (version === 1) {
+          database.exec(
+            "ALTER TABLE host_sessions ADD COLUMN role TEXT NOT NULL DEFAULT 'Admin' CHECK(role IN ('Admin','Operator','Viewer'));",
+          );
+          database.exec("UPDATE host_schema SET version=2;");
+        }
+      }
       database.exec("COMMIT");
     } catch (error) {
       database.exec("ROLLBACK");
@@ -147,6 +164,42 @@ export class HostStore {
       "INSERT INTO host_teams(id,event_id,login_hash,body) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET login_hash=excluded.login_hash,body=excluded.body",
     ).run(team.teamId, team.eventId, digest(team.loginKey), JSON.stringify(team));
   }
+  accounts(): CompetitorAccount[] {
+    return (
+      this.statement("SELECT body FROM host_accounts ORDER BY rowid DESC").all() as BodyRow[]
+    ).map((row) => JSON.parse(row.body) as CompetitorAccount);
+  }
+  account(accountId: string): CompetitorAccount {
+    const row = this.statement("SELECT body FROM host_accounts WHERE account_id=?").get(
+      accountId,
+    ) as BodyRow | undefined;
+    if (!row) throw new HostError(404, "Competitor account not found.");
+    return JSON.parse(row.body) as CompetitorAccount;
+  }
+  putAccount(account: CompetitorAccount): void {
+    this.statement(
+      "INSERT INTO host_accounts(account_id,body) VALUES (?,?) ON CONFLICT(account_id) DO UPDATE SET body=excluded.body",
+    ).run(account.awsAccountId, JSON.stringify(account));
+  }
+  deleteAccount(accountId: string): void {
+    this.statement("DELETE FROM host_accounts WHERE account_id=?").run(accountId);
+  }
+  /** An event assignment remains authoritative until archival and physical cleanup. */
+  accountReferenced(accountId: string): boolean {
+    for (const event of this.events()) {
+      for (const team of this.teams(event.eventId)) {
+        if (team.aws?.accountId !== accountId) continue;
+        if (event.status !== "ARCHIVED") return true;
+        if (
+          this.jobs(event.eventId, team.teamId).some(
+            (job) => job.unit !== null || job.status !== "DELETED",
+          )
+        )
+          return true;
+      }
+    }
+    return false;
+  }
   jobs(eventId?: string, teamId?: string): Job[] {
     let rows: unknown[];
     if (eventId === undefined) {
@@ -181,19 +234,24 @@ export class HostStore {
       "INSERT INTO host_jobs(id,event_id,team_id,problem_id,body) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body",
     ).run(job.jobId, job.eventId, job.teamId, job.problemId, JSON.stringify(job));
   }
-  addSession(token: string, refresh: string, expires: number, now: number): void {
+  addSession(
+    token: string,
+    refresh: string,
+    expires: number,
+    now: number,
+    role: OrganizerRole = "Admin",
+  ): void {
     this.statement("DELETE FROM host_sessions WHERE expires<=?").run(now);
-    this.statement("INSERT INTO host_sessions(token_hash,refresh_hash,expires) VALUES (?,?,?)").run(
-      digest(token),
-      digest(refresh),
-      expires,
-    );
+    this.statement(
+      "INSERT INTO host_sessions(token_hash,refresh_hash,expires,role) VALUES (?,?,?,?)",
+    ).run(digest(token), digest(refresh), expires, role);
   }
-  authenticateAdmin(token: string, now: number): void {
-    const row = this.statement("SELECT expires FROM host_sessions WHERE token_hash=?").get(
+  authenticateAdmin(token: string, now: number): OrganizerRole {
+    const row = this.statement("SELECT expires,role FROM host_sessions WHERE token_hash=?").get(
       digest(token),
-    ) as { expires: number } | undefined;
+    ) as { expires: number; role: OrganizerRole } | undefined;
     if (!row || row.expires <= now) throw new HostError(401, "Host session expired or invalid.");
+    return row.role;
   }
   revokeSession(refresh: string): void {
     this.statement("DELETE FROM host_sessions WHERE refresh_hash=?").run(digest(refresh));

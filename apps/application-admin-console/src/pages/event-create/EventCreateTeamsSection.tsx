@@ -40,6 +40,8 @@ export interface EventCreateTeamsSectionProps {
   accountById: ReadonlyMap<string, CompetitorAccountSummary>;
   noVerifiedAccounts: boolean;
   apiClient?: ApiClient | null;
+  /** Host cloud events always deploy in the configured host region. */
+  hostAwsRegion?: string;
   onUpdateTeamRow: (idx: number, patch: Partial<TeamRow>) => void;
 }
 
@@ -51,6 +53,7 @@ export function EventCreateTeamsSection({
   accountById,
   noVerifiedAccounts,
   apiClient,
+  hostAwsRegion,
   onUpdateTeamRow,
 }: EventCreateTeamsSectionProps) {
   const t = useT();
@@ -162,7 +165,7 @@ export function EventCreateTeamsSection({
       },
     });
   }
-  if (showAwsAccount) {
+  if (showAwsAccount && !hostAwsRegion) {
     // [Issue #3173] Where this team's stacks go. Blank follows the problem's
     // region, which is what every event did before — one account and one region
     // for everybody, meeting that region's service limits first.

@@ -32,6 +32,7 @@ export function ShellLayout({
   demoMode = false,
   demoParticipantUrl,
   localHost = false,
+  hostAwsEnabled = false,
 }: {
   children: ReactNode;
   /** Feature-flagged: show the Identity providers (SAML SSO) nav item only when enabled. */
@@ -42,6 +43,7 @@ export function ShellLayout({
   demoParticipantUrl?: string;
   /** Issue #3226: `bun start` のローカル大会。 cloud 専用の画面を nav に出さない。 */
   localHost?: boolean;
+  hostAwsEnabled?: boolean;
 }) {
   const auth = useAuth();
   const location = useLocation();
@@ -110,12 +112,22 @@ export function ShellLayout({
       ],
     },
   ];
-  // The local host runs events only; accounts, users, audit log and SAML are cloud features.
   const localHostNavItems: SideNavigationProps.Item[] = [
     {
       type: "section",
       text: t("nav.event_ops_section"),
-      items: [{ type: "link", href: "/events", text: t("nav.events") }],
+      items: [
+        { type: "link", href: "/events", text: t("nav.events") },
+        ...(hostAwsEnabled
+          ? [
+              {
+                type: "link" as const,
+                href: "/competitor-accounts",
+                text: t("nav.competitor_accounts"),
+              },
+            ]
+          : []),
+      ],
     },
   ];
 

@@ -11,7 +11,7 @@ import { connectCloudHosting } from "../cloud-hosting";
 import { CompetitionEngine } from "../competition-engine";
 import { parseOptions } from "../options";
 import { HostingService } from "../service";
-import { HostStore } from "../store";
+import { digest, HostStore } from "../store";
 import { FakeAws, OPERATOR_ACCOUNT } from "./fake-aws";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -37,6 +37,29 @@ test("--aws-region enables cloud problems and must name a standard-partition reg
     );
 });
 
+test("version 1 host sessions survive the SQLite account-registry migration", () => {
+  const path = join(temporary(), "legacy.sqlite");
+  const database = new Database(path);
+  database.exec(`
+    CREATE TABLE host_schema(version INTEGER NOT NULL) STRICT;
+    INSERT INTO host_schema VALUES (1);
+    CREATE TABLE host_sessions(token_hash TEXT PRIMARY KEY, refresh_hash TEXT NOT NULL UNIQUE, expires INTEGER NOT NULL) STRICT;
+  `);
+  const now = Date.now();
+  const legacyInsert = database.prepare(
+    "INSERT INTO host_sessions(token_hash,refresh_hash,expires) VALUES (?,?,?)",
+  );
+  legacyInsert.run(digest("old-admin-token"), digest("old-refresh"), now + 60_000);
+  legacyInsert.finalize();
+  const migrated = new HostStore(database);
+  expect(migrated.authenticateAdmin("old-admin-token", now)).toBe("Admin");
+  expect(migrated.accounts()).toEqual([]);
+  migrated.close();
+  const reopened = new HostStore(new Database(path));
+  expect(reopened.authenticateAdmin("old-admin-token", now)).toBe("Admin");
+  reopened.close();
+});
+
 test("the ExternalId is one private key file, and the operator account is read once per start", async () => {
   const data = temporary();
   const aws = new FakeAws();
@@ -58,10 +81,28 @@ test("the ExternalId is one private key file, and the operator account is read o
       hosting.engine((job) => store.team(job.teamId)),
     );
     const service = new HostingService(store, engine, HOST_KEY);
+    service.accountConnection = hosting;
     const login = await service.admin(
       apiRequest({ method: "POST", path: "/host/login", token: "", body: { key: HOST_KEY } }),
     );
     const token = (login.body as { idToken: string }).idToken;
+    for (const awsAccountId of ["111111111111", "222222222222"]) {
+      await service.admin(
+        apiRequest({
+          method: "POST",
+          path: "/admin/competitor-accounts",
+          token,
+          body: { awsAccountId },
+        }),
+      );
+      await service.admin(
+        apiRequest({
+          method: "POST",
+          path: `/admin/competitor-accounts/${awsAccountId}/verify`,
+          token,
+        }),
+      );
+    }
     const created = await service.admin(
       apiRequest({
         method: "POST",

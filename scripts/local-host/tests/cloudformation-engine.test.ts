@@ -38,20 +38,38 @@ async function host() {
     timeoutMs: 60_000,
   });
   const service = new HostingService(store, engine, HOST_KEY);
+  service.accountConnection = {
+    region: "ap-northeast-1",
+    operatorAccountId: OPERATOR_ACCOUNT,
+    externalId: EXTERNAL_ID,
+    verify: async (accountId, roleName) => {
+      await aws.sts.send(
+        new (await import("@aws-sdk/client-sts")).AssumeRoleCommand({
+          RoleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
+          ExternalId: EXTERNAL_ID,
+          RoleSessionName: "test-verify",
+        }),
+      );
+    },
+  };
   const login = await service.admin(
     apiRequest({ method: "POST", path: "/host/login", token: "", body: { key: HOST_KEY } }),
   );
   const token = (login.body as { idToken: string }).idToken;
   const admin = (method: string, path: string, body: Record<string, unknown> = {}) =>
     service.admin(apiRequest({ method, path, token, body }));
+  for (const [awsAccountId, competitorRoleName] of [
+    ["111111111111", "TenkaCloud-local-host-deploy-Role"],
+    ["222222222222", "Agreed-Role"],
+  ]) {
+    await admin("POST", "/admin/competitor-accounts", { awsAccountId, competitorRoleName });
+    await admin("POST", `/admin/competitor-accounts/${awsAccountId}/verify`);
+  }
   return { store, aws, engine, service, admin };
 }
 
 const TEAM_A = { internalSlug: "team-a", awsAccountId: "111111111111" };
-const TEAMS = [
-  TEAM_A,
-  { internalSlug: "team-b", awsAccountId: "222222222222", awsRoleName: "Agreed-Role" },
-];
+const TEAMS = [TEAM_A, { internalSlug: "team-b", awsAccountId: "222222222222" }];
 
 async function createEvent(
   admin: (method: string, path: string, body?: Record<string, unknown>) => Promise<ApiResponse>,
@@ -77,7 +95,7 @@ test("deploys each team's stack into its own account and tears it down", async (
   expect(jobs.map((job) => job.status)).toEqual(["COMPLETE", "COMPLETE"]);
   expect(new Set(aws.assumed.map((input) => input.RoleArn))).toEqual(
     new Set([
-      "arn:aws:iam::111111111111:role/TenkaCloud-CompetitorDeploy-Role",
+      "arn:aws:iam::111111111111:role/TenkaCloud-local-host-deploy-Role",
       "arn:aws:iam::222222222222:role/Agreed-Role",
     ]),
   );
@@ -255,8 +273,133 @@ test("an event with a cloud problem requires every team's AWS account", async ()
   });
   await expect(creating).rejects.toMatchObject({
     status: 422,
-    message: "Team team-a needs a 12-digit AWS account ID.",
+    message: "Team team-a needs a registered AWS account.",
   });
+});
+
+test("registered roles are verified and pinned to event teams; assigned accounts cannot be deleted", async () => {
+  const { admin, store } = await host();
+  const listed = await admin("GET", "/admin/competitor-accounts");
+  expect(
+    (listed.body as { items: { verified: boolean }[] }).items.map((item) => item.verified),
+  ).toEqual([true, true]);
+  await expect(
+    admin("POST", "/events", {
+      name: "role override",
+      teams: [{ ...TEAMS[0], awsRoleName: "Administrator" }],
+      problems: [{ problemId: "hello-world" }],
+    }),
+  ).rejects.toMatchObject({ status: 422 });
+  await expect(
+    admin("POST", "/admin/competitor-accounts", {
+      awsAccountId: "333333333333",
+      region: "us-east-1",
+    }),
+  ).rejects.toMatchObject({ status: 422 });
+  await admin("POST", "/admin/competitor-accounts", {
+    awsAccountId: "333333333333",
+    competitorRoleName: "Custom-Role",
+  });
+  await expect(
+    admin("POST", "/events", {
+      name: "unverified",
+      teams: [{ internalSlug: "third", awsAccountId: "333333333333" }],
+      problems: [{ problemId: "hello-world" }],
+    }),
+  ).rejects.toMatchObject({ status: 422 });
+  await admin("POST", "/admin/competitor-accounts/333333333333/verify");
+  expect((await admin("DELETE", "/admin/competitor-accounts/333333333333")).status).toBe(200);
+  const eventId = await createEvent(admin);
+  expect(store.teams(eventId).map((team) => team.aws?.roleName)).toEqual([
+    "TenkaCloud-local-host-deploy-Role",
+    "Agreed-Role",
+  ]);
+  await expect(admin("DELETE", "/admin/competitor-accounts/111111111111")).rejects.toMatchObject({
+    status: 409,
+  });
+});
+
+test("Operator can distribute team keys but only Admin manages competitor connections", async () => {
+  const { admin, store, service } = await host();
+  const eventId = await createEvent(admin);
+  const now = Date.now();
+  store.addSession("operator-token", "operator-refresh", now + 60_000, now, "Operator");
+  store.addSession("viewer-token", "viewer-refresh", now + 60_000, now, "Viewer");
+  const call = (
+    token: string,
+    method: string,
+    path: string,
+    body: Record<string, unknown> = {},
+    query = new URLSearchParams(),
+  ) => service.admin(apiRequest({ method, path, token, body, query }));
+  const keysQuery = new URLSearchParams({ withTeamLoginKeys: "true" });
+  const operator = await call("operator-token", "GET", `/events/${eventId}`, {}, keysQuery);
+  expect(operator.status).toBe(200);
+  await expect(
+    call("operator-token", "POST", "/admin/competitor-accounts", { awsAccountId: "333333333333" }),
+  ).rejects.toMatchObject({ status: 403 });
+  await expect(
+    call("viewer-token", "GET", `/events/${eventId}`, {}, keysQuery),
+  ).rejects.toMatchObject({ status: 403 });
+  await expect(call("viewer-token", "POST", `/events/${eventId}/deploy`)).rejects.toMatchObject({
+    status: 403,
+  });
+});
+
+test("failed re-verification revokes eligibility without exposing SDK error text", async () => {
+  const { admin, store, service } = await host();
+  const connection = service.accountConnection;
+  if (!connection) throw new Error("account connection missing");
+  service.accountConnection = {
+    ...connection,
+    verify: async () => {
+      throw new Error("AWS secret credential should never appear in API output");
+    },
+  };
+  await expect(
+    admin("POST", "/admin/competitor-accounts/111111111111/verify"),
+  ).rejects.toMatchObject({
+    status: 422,
+    message:
+      "Could not verify the competitor role. Check the account, role, ExternalId, and operator trust.",
+  });
+  expect(store.account("111111111111")).toMatchObject({ verified: false });
+  expect(store.account("111111111111").verifiedAt).toBeUndefined();
+  await expect(
+    admin("POST", "/events", {
+      name: "rejected after failed check",
+      teams: [{ internalSlug: "team-a", awsAccountId: "111111111111" }],
+      problems: [{ problemId: "hello-world" }],
+    }),
+  ).rejects.toMatchObject({ status: 422 });
+});
+
+test("a revoked Admin session cannot save a pending verification result", async () => {
+  const { store, service } = await host();
+  const connection = service.accountConnection;
+  if (!connection) throw new Error("account connection missing");
+  let finish: (() => void) | undefined;
+  service.accountConnection = {
+    ...connection,
+    verify: () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  };
+  const now = Date.now();
+  store.addSession("pending-admin", "pending-refresh", now + 60_000, now, "Admin");
+  const pending = service.admin(
+    apiRequest({
+      method: "POST",
+      path: "/admin/competitor-accounts/111111111111/verify",
+      token: "pending-admin",
+    }),
+  );
+  await Promise.resolve();
+  store.revokeSession("pending-refresh");
+  if (!finish) throw new Error("verification did not start");
+  finish();
+  await expect(pending).rejects.toMatchObject({ status: 401 });
 });
 
 test("recovery marks a job failed when its stack was deleted outside the host", async () => {

@@ -5,7 +5,7 @@ import { persistentKey, prepareDatabase, privateDirectory } from "./files";
 import type { GatewayPortRange } from "./gateway-ports";
 import { SurfaceGateways } from "./gateways";
 import { type HttpHost, startHttpHost } from "./http";
-import type { RuntimeEngine } from "./model";
+import type { AccountConnection, RuntimeEngine } from "./model";
 import type { PublicExposure } from "./options";
 import { HostingService } from "./service";
 import { HostStore } from "./store";
@@ -17,6 +17,7 @@ export interface LocalHostSettings {
   readonly participantPort: number;
   readonly gatewayPorts: GatewayPortRange;
   readonly public?: PublicExposure;
+  readonly accountConnection?: AccountConnection;
 }
 
 export interface RunningLocalHost {
@@ -64,6 +65,7 @@ export async function startLocalHost(
     const masterKey = persistentKey(masterKeyPath);
     const engine = createEngine(directory, store);
     service = new HostingService(store, engine, masterKey);
+    service.accountConnection = settings.accountConnection;
     service.gatewayPorts = settings.gatewayPorts;
     // Public mode offers no gateway problems; a recovered one must still not open on every interface.
     const gatewayHostname = settings.public ? "127.0.0.1" : settings.hostname;

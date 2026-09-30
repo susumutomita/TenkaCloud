@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   if (options.build) await buildHosting(root);
   const host = await startLocalHost(
     root,
-    options,
+    { ...options, ...(cloud ? { accountConnection: cloud } : {}) },
     (directory, store) =>
       new CompetitionEngine(
         root,

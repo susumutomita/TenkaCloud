@@ -84,6 +84,26 @@ export interface AwsTarget {
   roleName: string;
 }
 
+/** Registration is host-local; the shared ExternalId stays in its private key file. */
+export interface CompetitorAccount {
+  awsAccountId: string;
+  region: string;
+  competitorRoleName: string;
+  alias?: string;
+  verified: boolean;
+  verifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Supplied only when the host starts with AWS enabled; tests inject a local verifier. */
+export interface AccountConnection {
+  readonly region: string;
+  readonly operatorAccountId: string;
+  readonly externalId: string;
+  verify(accountId: string, roleName: string): Promise<void>;
+}
+
 export interface Job {
   jobId: string;
   eventId: string;

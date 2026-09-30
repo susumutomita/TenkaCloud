@@ -55,7 +55,7 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
   const t = useT();
   const suggestedRoleName = defaultCompetitorRoleName({ tenantId: config.tenantId });
   const [text, setText] = useState("");
-  const [region, setRegion] = useState("ap-northeast-1");
+  const [region, setRegion] = useState(config.hostAwsRegion ?? "ap-northeast-1");
   const [competitorRoleName, setCompetitorRoleName] = useState(suggestedRoleName);
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
@@ -65,7 +65,7 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
 
   const reset = () => {
     setText("");
-    setRegion("ap-northeast-1");
+    setRegion(config.hostAwsRegion ?? "ap-northeast-1");
     setCompetitorRoleName(suggestedRoleName);
     setError(null);
     setResponse(null);

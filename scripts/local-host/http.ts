@@ -243,6 +243,17 @@ export async function startHttpHost(options: {
   server.requestTimeout = 15_000;
   server.maxHeadersCount = 40;
   server.setTimeout(15_000, (socket) => socket.destroy());
+  const runtimeAwsRegion =
+    options.kind === "admin" ? options.service.accountConnection?.region : undefined;
+  function runtimeConfiguration() {
+    return {
+      mode: "local-host",
+      apiBaseUrl: `${origin}/api`,
+      participantPortalUrl: options.participantOrigin,
+      role: options.kind,
+      ...(runtimeAwsRegion ? { awsRegion: runtimeAwsRegion } : {}),
+    };
+  }
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     // Platform health checks reach the container directly, with its own Host header.
     if (options.advertised && request.method === "GET" && request.url === "/healthz") {
@@ -256,12 +267,7 @@ export async function startHttpHost(options: {
       return;
     }
     if (url.pathname === "/runtime-config.json" && request.method === "GET") {
-      json(response, 200, {
-        mode: "local-host",
-        apiBaseUrl: `${origin}/api`,
-        participantPortalUrl: options.participantOrigin,
-        role: options.kind,
-      });
+      json(response, 200, runtimeConfiguration());
       return;
     }
     if (!url.pathname.startsWith("/api/")) {
