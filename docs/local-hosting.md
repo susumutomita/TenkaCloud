@@ -92,9 +92,8 @@ After signing in:
 Participants use the normal Participant Portal and its actual backend login, not
 the practice-mode or demo login.
 
-Console features that still need tenant infrastructure are not offered: the
-registration links, capacity monitoring, scheduled deploy and
-automatic teardown. Their navigation entries and
+Console features that still need tenant infrastructure are not offered:
+capacity monitoring, scheduled deploy and automatic teardown. Their navigation entries and
 tabs are hidden; opening such a URL shows an explanation instead of a failing
 request.
 
@@ -610,3 +609,9 @@ participant payments, cost splitting,
 automatic deploy/teardown schedules, arbitrary problem packs, Docker problems in
 the hosted container, and platforms without a persistent volume are not implemented
 yet.
+
+## Participant registration
+
+The Teams tab can issue a shared link that allocates prepared team environments.
+See [host participant registration](host-participant-registration.md) for the
+feature flag, receipt recovery and key-rotation behavior.

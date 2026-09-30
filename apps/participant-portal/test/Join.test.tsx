@@ -527,7 +527,7 @@ describe("Join participant journey", () => {
       vi.stubGlobal("fetch", fetcher);
       mount(overrides);
       expect(await screen.findByRole("alert")).toHaveTextContent(
-        "この参加リンクはAWS版のイベントで使用します。",
+        "このポータルでは参加登録リンクを利用できません。主催者に URL を確認してください。",
       );
       expect(fetcher).not.toHaveBeenCalled();
       expect(
@@ -535,4 +535,88 @@ describe("Join participant journey", () => {
       ).not.toBeInTheDocument();
     },
   );
+});
+
+it.each(["resolves", "rejects"])(
+  "aborts a claim that %s after navigation and retains its receipt",
+  async (outcome) => {
+    registrationStorage("tenant", "next").ensureReceipt();
+    let finish: ((response: Response) => void) | undefined;
+    let fail: ((error: Error) => void) | undefined;
+    const pending = new Promise<Response>((resolve, reject) => {
+      finish = resolve;
+      fail = reject;
+    });
+    let claimSignal: AbortSignal | undefined;
+    const fetcher = vi.fn().mockImplementation((url: string, init: RequestInit) => {
+      if (url.endsWith("/claim")) {
+        claimSignal = init.signal as AbortSignal;
+        return pending;
+      }
+      if (url.includes("/next/status"))
+        return Promise.resolve(ok({ ...progress, eventName: "Next event" }));
+      return Promise.resolve(ok({ name: "AWS Battle", state: "open", remaining: 1 }));
+    });
+    vi.stubGlobal("fetch", fetcher);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "チームの環境を受け取る" }));
+    const receipt = registrationStorage("tenant", "event").receipt();
+    expect(receipt).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    fireEvent.click(screen.getByRole("button", { name: "別のイベントへ" }));
+    await waitFor(() => expect(claimSignal?.aborted).toBe(true));
+    await act(async () => {
+      if (outcome === "resolves") finish?.(ok(progress));
+      else fail?.(new Error("registration_unavailable"));
+      await pending.catch(() => undefined);
+    });
+    expect(await screen.findByRole("heading", { name: "Next event" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(registrationStorage("tenant", "event").receipt()).toBe(receipt);
+    expect(login).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["resolves", "rejects"])(
+  "keeps the next event on screen when a previous login %s",
+  async (outcome) => {
+    registrationStorage("tenant", "event").ensureReceipt();
+    registrationStorage("tenant", "next").ensureReceipt();
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(ok(progress))
+      .mockResolvedValueOnce(ok({ ...progress, eventName: "Next event" }));
+    vi.stubGlobal("fetch", fetcher);
+    let finish: ((value: undefined) => void) | undefined;
+    let fail: ((error: Error) => void) | undefined;
+    login.mockReturnValueOnce(
+      new Promise<undefined>((resolve, reject) => {
+        finish = resolve;
+        fail = reject;
+      }),
+    );
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "この環境で始める" }));
+    fireEvent.click(screen.getByRole("button", { name: "別のイベントへ" }));
+    expect(await screen.findByRole("heading", { name: "Next event" })).toBeInTheDocument();
+
+    await act(async () => {
+      if (outcome === "resolves") finish?.(undefined);
+      else fail?.(new Error("authentication unavailable"));
+    });
+    expect(screen.getByRole("heading", { name: "Next event" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "チーム名を決める" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(login).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("retrieves the saved receipt before checking an invitation while new registration is disabled", async () => {
+  const receipt = registrationStorage("tenant", "event").ensureReceipt();
+  const fetcher = vi.fn().mockResolvedValue(ok(progress));
+  vi.stubGlobal("fetch", fetcher);
+  mount();
+  expect(await screen.findByRole("button", { name: "この環境で始める" })).toBeEnabled();
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(fetcher.mock.calls[0]?.[0]).toMatch(/\/status$/u);
+  expect(fetcher.mock.calls[0]?.[1].headers.Authorization).toBe(`Bearer ${receipt}`);
 });

@@ -189,9 +189,9 @@ function requestTarget(request: IncomingMessage, origin: string): URL {
   return url;
 }
 
-async function jsonBody(request: IncomingMessage): Promise<unknown> {
+async function jsonBody(request: IncomingMessage, limit = MAX_BODY): Promise<unknown> {
   if (!["POST", "PATCH", "PUT", "DELETE"].includes(request.method ?? "")) return {};
-  const raw = await readBody(request);
+  const raw = await readBody(request, limit);
   if (!raw) return {};
   if (!request.headers["content-type"]?.toLowerCase().startsWith("application/json"))
     throw new HostError(415, "Use application/json.");
@@ -410,7 +410,7 @@ export async function startHttpHost(options: {
         method: request.method ?? "GET",
         path,
         query,
-        body: await jsonBody(request),
+        body: await jsonBody(request, path.startsWith("/portal/registration/") ? 1024 : MAX_BODY),
         token: bearerToken(request),
         nonce: idempotencyKey(request),
       };

@@ -142,7 +142,12 @@ async function main() {
     assert.equal((await enable).status(), 200);
     const enabled = await api(host.admin.origin, adminToken, "GET", "/feature-flags");
     assert.deepEqual(await enabled.json(), {
-      flags: { saml: false, audit: true, challengePrerequisiteGate: false },
+      flags: {
+        saml: false,
+        audit: true,
+        challengePrerequisiteGate: false,
+        registration: false,
+      },
     });
     const disable = adminPage.waitForResponse(
       (candidate) =>
@@ -180,7 +185,14 @@ async function main() {
     assert.equal((await api(host.admin.origin, viewerToken, "GET", "/events")).status, 200);
     assert.equal((await api(host.admin.origin, adminToken, "GET", "/host/me")).status, 200);
     const flags = await api(host.admin.origin, adminToken, "GET", "/feature-flags");
-    assert.deepEqual(await flags.json(), { flags: { saml: false, audit: false } });
+    assert.deepEqual(await flags.json(), {
+      flags: {
+        saml: false,
+        audit: false,
+        challengePrerequisiteGate: false,
+        registration: false,
+      },
+    });
     const reopened = await browser.newPage({ locale: "en-US" });
     await signIn(
       reopened,

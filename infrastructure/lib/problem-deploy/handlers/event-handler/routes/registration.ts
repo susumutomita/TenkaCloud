@@ -1,3 +1,4 @@
+import { RegistrationConfigSchema as configSchema } from "@tenkacloud/problem-sdk/internal";
 import type { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -19,17 +20,6 @@ import {
   resolveDeploymentsRepository,
   resolveEventRepositories,
 } from "../shared.js";
-
-const configSchema = z.discriminatedUnion("enabled", [
-  z.object({ enabled: z.literal(false) }).strict(),
-  z
-    .object({
-      enabled: z.literal(true),
-      closesAt: z.string().datetime(),
-      teamIds: z.array(z.string().regex(ULID_RE)).min(1).max(99),
-    })
-    .strict(),
-]);
 
 export function registerRegistrationAdminRoutes(app: Hono, shared: EventSharedResources) {
   app.get(

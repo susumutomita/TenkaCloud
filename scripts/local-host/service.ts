@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ProbeFn } from "../../infrastructure/lib/problem-deploy/runtime-clients/http-probe-client";
 import { HostAuditLog } from "./audit-log";
 import { type AuditOperation, auditActor } from "./audit-record";
@@ -39,6 +40,7 @@ import { type OrganizerPermission, requireOrganizerPermission } from "./organize
 import { ParticipantAssumeRoleError, type ParticipantAwsAccess } from "./participant-aws-access";
 import { portsFree } from "./ports";
 import { HostProgression, lockedProblem } from "./progression";
+import { HostRegistration } from "./registration";
 import { SamlSignIn } from "./saml-sign-in";
 import { projectedScore, projectedTimeline } from "./score";
 import {
@@ -223,6 +225,7 @@ export class HostingService {
   readonly saml: SamlSignIn;
   readonly audit: HostAuditLog;
   private readonly queue = new SerialQueue();
+  readonly registration: HostRegistration;
   private readonly coordination = new LocalCoordination(this);
   readonly progression: HostProgression;
   readonly disruptions: LocalDisruptions;
@@ -258,6 +261,18 @@ export class HostingService {
       uptimeProbe,
       log,
     );
+    this.registration = new HostRegistration(store, now);
+    this.registration.onMutation = (mutation) => {
+      if (mutation.action !== "claim_registration" || !mutation.teamId) return;
+      this.audit.append({
+        operationId: randomUUID(),
+        phase: "request",
+        actor: { kind: "anonymous" },
+        action: "registration.claimed",
+        resource: { kind: "team", id: mutation.teamId },
+        outcome: "succeeded",
+      });
+    };
   }
   private currentEvent(eventId: string): HostedEvent {
     const event = this.store.event(eventId);
@@ -369,6 +384,11 @@ export class HostingService {
     const parts = request.path.split("/").filter(Boolean);
     const eventId = parts[0] === "events" ? parts[1] : undefined;
     if (!eventId || !eventPattern.test(eventId)) throw new HostError(404, "Unknown host endpoint.");
+    if (parts.length === 3 && parts[2] === "registration" && request.method === "GET")
+      return this.queue.run(eventId, async () => {
+        const current = this.store.authenticateAdmin(request.token, this.now());
+        return ok(this.registration.summary(eventId, current.role === "Admin"));
+      });
     if (parts.length === 3 && parts[2] === "progression-gate" && request.method === "GET")
       return this.queue.run(eventId, async () => {
         this.store.authenticateAdmin(request.token, this.now());
@@ -388,6 +408,7 @@ export class HostingService {
     return this.queue.run(eventId, async () => {
       const current = this.store.authenticateAdmin(request.token, this.now());
       if (operation) operation.actor = auditActor(current);
+      if (parts[2] === "registration") requireAdmin(current);
       let permission: OrganizerPermission = "run-events";
       if (parts[2] === "teams") permission = "reveal-team-keys";
       else if (parts[2] === "disruptions" && request.method === "GET") permission = "read";
@@ -697,7 +718,12 @@ export class HostingService {
   ): ApiResponse {
     const body = object(input);
     const key = body.key;
-    if (key !== "saml" && key !== "audit" && key !== "challengePrerequisiteGate")
+    if (
+      key !== "saml" &&
+      key !== "audit" &&
+      key !== "challengePrerequisiteGate" &&
+      key !== "registration"
+    )
       throw new HostError(400, "Unknown feature flag.");
     if (typeof body.enabled !== "boolean")
       throw new HostError(400, "Flag enabled must be boolean.");
@@ -1034,6 +1060,13 @@ export class HostingService {
       "POST notifications": () => this.notify(event, body()),
     };
     const commandKey = `${request.method} ${parts.join("/")}`;
+    if (commandKey === "PUT registration")
+      return ok(
+        this.registration.configure(event.eventId, request.body, () => {
+          if (operation)
+            this.audit.append({ ...operation, phase: "request", outcome: "succeeded" });
+        }),
+      );
     if (commandKey === "POST deploy") return this.deploy(event, body(), request.token, operation);
     if (commandKey === "DELETE ") return this.teardown(event, operation);
     const command = commands[commandKey];
@@ -1638,6 +1671,7 @@ export class HostingService {
     };
   }
   async participant(request: ApiRequest): Promise<ApiResponse> {
+    if (request.path.startsWith("/portal/registration/")) return this.registration.request(request);
     const team = this.store.authenticateTeam(request.token);
     if (request.path.startsWith("/portal/me/coordination/")) {
       return this.queue.run(team.eventId, async () => this.coordination.request(request));

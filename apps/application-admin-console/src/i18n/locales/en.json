@@ -1105,7 +1105,18 @@
     "error_conflict": "Another operation changed the event. Refresh and try again.",
     "error_unavailable": "Could not load or save registration settings. Check the connection and backend version.",
     "refresh": "Refresh allocations",
-    "error_login_key_missing": "Some selected teams have no stored login key (Turso teams created before July 4, 2026). Use “Regenerate key” for those teams on the event detail page, then open registration."
+    "error_login_key_missing": "Some selected teams have no stored login key (Turso teams created before July 4, 2026). Use “Regenerate key” for those teams on the event detail page, then open registration.",
+    "host_description": "Select undistributed teams whose environments are ready and issue a shared registration link. Docker and Battle teams do not need AWS accounts. Each receipt reserves one team.",
+    "host_confirm": "These ready team environments may be assigned to participants.",
+    "feature_on": "Host participant registration is enabled.",
+    "feature_off": "Host participant registration is disabled. Settings and existing team keys are retained.",
+    "enable_feature": "Enable registration feature",
+    "disable_feature": "Disable registration feature",
+    "host_error_invalid_pool": "Check the teams and deadline. Claimed teams must remain selected, and registration must close within the event lifetime.",
+    "host_error_not_ready": "Finish preparing every problem for the selected teams before opening registration.",
+    "host_error_login_key_missing": "A selected team has no valid login key. Regenerate its key before opening registration.",
+    "error_feature_disabled": "An Admin must enable the registration feature before changing these settings.",
+    "error_forbidden": "Only an Admin can manage registration settings."
   },
   "local_host": {
     "app_title": "TenkaCloud Local Competition",
@@ -1132,7 +1143,7 @@
     "create_body": "Cryptography Battle needs no Docker. The SQL exercise creates a Docker environment per team. Up to 40 team/problem entries. No AWS account or region is required.",
     "catalog_error_header": "Could not load the problems local hosting supports",
     "cloud_only_header": "Not available in a local competition",
-    "cloud_only_body": "Registration links, capacity monitoring, scheduled deploy/teardown and the cloud deployment detail pages are cloud features and are not shown here. Stop, restart or remove one team's environment from the Teams tab.",
+    "cloud_only_body": "Capacity monitoring, scheduled deploy/teardown and cloud deployment detail pages are not available in local hosting. Stop, restart or remove one team's environment from the Teams tab.",
     "deploy_label": "Problem environments",
     "deploy_hint": "Prepares every team’s access. Cryptography Battle uses a shared game; the SQL exercise starts in Docker. Failed environments can be retried individually.",
     "deploy_done_hint": "Environments are prepared. Stop, restart or remove one team's environment from the Teams tab. After an event that already ran is torn down, create a new event.",

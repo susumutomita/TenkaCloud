@@ -1,4 +1,8 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import {
+  registrationEventActive as activeEvent,
+  validRegistrationSelection,
+} from "@tenkacloud/problem-sdk/internal";
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
 import type { DeploymentRecord } from "../../control-data/domain/deployments.js";
 import type { EventRegistration } from "../../control-data/domain/event-registration.js";
@@ -37,15 +41,6 @@ function secretMatches(secret: string, digest: string): boolean {
   const actual = Buffer.from(registrationDigest(secret));
   const expected = Buffer.from(digest);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
-function activeEvent(event: EventRecord | undefined, now: number): event is EventRecord {
-  return (
-    !!event &&
-    ["DRAFT", "DEPLOYING", "READY"].includes(event.status) &&
-    event.expiresAt > Math.floor(now / 1000) &&
-    (!event.endsAt || Date.parse(event.endsAt) > now)
-  );
 }
 
 export function registrationSummary(event: EventRecord, now = Date.now()) {
@@ -113,17 +108,9 @@ async function validatePool(
   closesAt: string,
   now: number,
 ) {
-  if (
-    !teamIds.length ||
-    teamIds.length > 99 ||
-    new Set(teamIds).size !== teamIds.length ||
-    !Number.isFinite(Date.parse(closesAt)) ||
-    Date.parse(closesAt) <= now ||
-    Date.parse(closesAt) > event.expiresAt * 1000 ||
-    (event.endsAt && Date.parse(closesAt) > Date.parse(event.endsAt))
-  ) {
+  if (!validRegistrationSelection(event, teamIds, closesAt, now))
     throw new RegistrationError("invalid_pool");
-  }
+  // AWS account and deployment checks are this cloud adapter's readiness policy.
   const teams = await Promise.all(
     teamIds.map((id) => deps.teams.getTeam(event.tenantId, event.eventId, id)),
   );

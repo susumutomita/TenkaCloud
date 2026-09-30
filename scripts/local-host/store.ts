@@ -102,6 +102,20 @@ export class HostStore {
           fingerprint TEXT NOT NULL, status INTEGER NOT NULL, body TEXT NOT NULL,
           PRIMARY KEY(team_id,nonce)
         ) STRICT;
+        CREATE TABLE IF NOT EXISTS host_registrations(
+          event_id TEXT PRIMARY KEY REFERENCES host_events(id),
+          enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+          invitation_hash TEXT NOT NULL CHECK(length(invitation_hash)=64),
+          closes_at TEXT NOT NULL, pool TEXT NOT NULL
+        ) STRICT;
+        CREATE TABLE IF NOT EXISTS host_registration_claims(
+          event_id TEXT NOT NULL REFERENCES host_registrations(event_id),
+          receipt_hash TEXT NOT NULL CHECK(length(receipt_hash)=64),
+          team_id TEXT NOT NULL, login_hash TEXT NOT NULL CHECK(length(login_hash)=64),
+          claimed_at TEXT NOT NULL,
+          PRIMARY KEY(event_id,receipt_hash), UNIQUE(event_id,team_id),
+          FOREIGN KEY(team_id,event_id) REFERENCES host_teams(id,event_id)
+        ) STRICT;
         CREATE TABLE IF NOT EXISTS host_problem_completions(
           event_id TEXT NOT NULL, team_id TEXT NOT NULL, problem_id TEXT NOT NULL,
           completed_at TEXT NOT NULL, bonus_points INTEGER,
@@ -434,9 +448,13 @@ export class HostStore {
       saml: this.setting("flag:saml") === "true",
       audit: this.setting("flag:audit") === "true",
       challengePrerequisiteGate: this.setting("flag:challengePrerequisiteGate") === "true",
+      registration: this.setting("flag:registration") === "true",
     };
   }
-  setFeatureFlag(key: "saml" | "audit" | "challengePrerequisiteGate", enabled: boolean): void {
+  setFeatureFlag(
+    key: "saml" | "audit" | "challengePrerequisiteGate" | "registration",
+    enabled: boolean,
+  ): void {
     this.statement(
       "INSERT INTO host_settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     ).run(`flag:${key}`, String(enabled));

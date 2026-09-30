@@ -30,6 +30,17 @@ export {
   parseEndpointSlot,
   resolveDefaultUrl,
 } from "./endpoints-metadata.js";
+export {
+  type RegistrationConfigInput,
+  RegistrationConfigSchema,
+  type RegistrationInfo,
+  type RegistrationProgress,
+  registrationEventActive,
+  registrationInfoSchema,
+  registrationProgressSchema,
+  registrationSecretSchema,
+  validRegistrationSelection,
+} from "./event-registration.js";
 export type {
   PackManifest,
   PackManifestIssue,

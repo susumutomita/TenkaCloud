@@ -11,6 +11,7 @@ test("fresh SQLite creates organizer tables with bootstrap and flags off", () =>
     saml: false,
     audit: false,
     challengePrerequisiteGate: false,
+    registration: false,
   });
   expect(store.organizers()).toEqual([]);
   store.close();

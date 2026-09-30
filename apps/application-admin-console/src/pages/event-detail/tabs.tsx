@@ -120,13 +120,11 @@ export function TeamsTab({
   manualRefresh,
   t,
 }: EventTabContentProps) {
-  // Issue #3226: the local host has no self-registration pool; each team's own environment
-  // is operated from this tab instead.
   const localHost = isLocalHost(config);
   return (
     <>
       <EventParticipantsPanel config={config} detail={detail} t={t} />
-      {localHost ? (
+      {localHost && (
         <LocalEnvironmentsPanel
           apiClient={apiClient}
           canMutateTenant={canMutateTenant}
@@ -134,15 +132,14 @@ export function TeamsTab({
           onRefresh={manualRefresh}
           t={t}
         />
-      ) : (
-        <EventRegistrationPanel
-          key={detail.eventId}
-          apiClient={apiClient}
-          config={config}
-          detail={detail}
-          canMutateTenant={canMutateTenant}
-        />
       )}
+      <EventRegistrationPanel
+        key={detail.eventId}
+        apiClient={apiClient}
+        config={config}
+        detail={detail}
+        canMutateTenant={canMutateTenant}
+      />
       <EventTeamsPanel
         apiClient={apiClient}
         canMutateTenant={canMutateTenant}

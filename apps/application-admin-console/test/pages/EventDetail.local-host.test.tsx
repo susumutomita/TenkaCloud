@@ -95,7 +95,7 @@ async function loaded() {
 }
 
 describe("EventDetailPage on the local competition host", () => {
-  it("shows Progression and hides Disruptions when the host has no AWS connection", async () => {
+  it("shows Progression and hides the cloud-only Disruptions tab", async () => {
     await loaded();
     expect(screen.getByRole("tab", { name: "Teams" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Progression/u })).toBeInTheDocument();
@@ -111,9 +111,8 @@ describe("EventDetailPage on the local competition host", () => {
     if (!betaRow) throw new Error("team-beta row is missing");
     expect(within(betaRow).getByText("5201")).toBeInTheDocument();
     expect(within(betaRow).getByText("Stopped")).toBeInTheDocument();
-    expect(screen.queryByText(/AWS account/u)).toBeNull();
-    // The cloud self-registration panel is not offered locally.
-    expect(screen.queryByText(/registration/iu)).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: /AWS account/u })).toBeNull();
+    expect(screen.getByText("Let participants claim their environment")).toBeInTheDocument();
   });
 
   it("shows only the problem and its status, not cloud account, region or job links", async () => {

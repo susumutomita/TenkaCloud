@@ -118,7 +118,12 @@ test("bootstrap revokes the host key, and organizer roles control API access", a
     );
     expect((await call("GET", "/events", viewer)).body).toEqual({ items: [] });
     expect((await call("GET", "/feature-flags", viewer)).body).toEqual({
-      flags: { saml: false, audit: false, challengePrerequisiteGate: false },
+      flags: {
+        saml: false,
+        audit: false,
+        challengePrerequisiteGate: false,
+        registration: false,
+      },
     });
     await expect(call("POST", "/events", viewer)).rejects.toMatchObject({ status: 403 });
     await expect(call("GET", "/host/users", viewer)).rejects.toMatchObject({ status: 403 });
@@ -154,7 +159,14 @@ test("bootstrap revokes the host key, and organizer roles control API access", a
     ).rejects.toMatchObject({ status: 403 });
     expect(
       (await call("PUT", "/feature-flags", admin, { key: "audit", enabled: true })).body,
-    ).toEqual({ flags: { saml: false, audit: true, challengePrerequisiteGate: false } });
+    ).toEqual({
+      flags: {
+        saml: false,
+        audit: true,
+        challengePrerequisiteGate: false,
+        registration: false,
+      },
+    });
 
     const identity = store.localIdentity(reader.id);
     if (!identity) throw new Error("Reader identity was not stored.");

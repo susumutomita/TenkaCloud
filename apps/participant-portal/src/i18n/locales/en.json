@@ -710,6 +710,8 @@
     "error_conflict": "Registrations overlapped. Check again; you will not receive a duplicate slot.",
     "error_rate_limited": "Please wait briefly and check again.",
     "error_registration_unavailable": "The request or local storage failed. Check your connection and browser storage settings, then retry on this page.",
-    "error_unsupported": "This invitation requires an AWS event portal. Check the address with your organizer."
+    "error_unsupported": "This portal does not support event invitations. Check the address with your organizer.",
+    "error_not_ready": "No prepared environment is available yet. Ask the organizer, then retry on this page.",
+    "error_feature_disabled": "Participant registration is disabled. Contact the organizer."
   }
 }
