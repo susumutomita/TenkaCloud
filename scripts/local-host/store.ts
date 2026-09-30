@@ -17,6 +17,7 @@ interface BodyRow {
 
 export type { OrganizerRole } from "./organizer-access";
 export type OrganizerStatus = "active" | "disabled";
+export type OrganizerAuthMethod = "host-key" | "local-password" | "saml";
 export interface OrganizerUser {
   id: string;
   username: string;
@@ -38,14 +39,14 @@ export interface OrganizerPrincipal {
   userId: string | null;
   identityId: string | null;
   role: OrganizerRole;
-  authMethod: "host-key" | "local-password";
+  authMethod: OrganizerAuthMethod;
 }
 /** Exclusive connection: two host processes must not independently award one submission. */
 export class HostStore {
   private readonly statements = new Map<string, SqlStatement>();
   private connectionClosed = false;
 
-  private statement(sql: string): SqlStatement {
+  statement(sql: string): SqlStatement {
     let statement = this.statements.get(sql);
     if (!statement) {
       statement = this.database.prepare(sql);
@@ -71,12 +72,12 @@ export class HostStore {
         const versions = this.statement("SELECT version FROM host_schema").all() as {
           version: number;
         }[];
-        if (versions.length !== 1 || ![1, 2, 3, 4].includes(versions[0]?.version ?? 0))
+        if (versions.length !== 1 || ![1, 2, 3, 4, 5].includes(versions[0]?.version ?? 0))
           throw new Error("Unsupported local-host database schema.");
       }
       database.exec(`
         CREATE TABLE IF NOT EXISTS host_schema(version INTEGER NOT NULL) STRICT;
-        INSERT INTO host_schema SELECT 4 WHERE NOT EXISTS (SELECT 1 FROM host_schema);
+        INSERT INTO host_schema SELECT 5 WHERE NOT EXISTS (SELECT 1 FROM host_schema);
         CREATE TABLE IF NOT EXISTS host_events(id TEXT PRIMARY KEY, body TEXT NOT NULL) STRICT;
         CREATE TABLE IF NOT EXISTS host_teams(
           id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES host_events(id),
@@ -115,6 +116,8 @@ export class HostStore {
             "ALTER TABLE host_organizer_identities RENAME TO host_organizer_identities_legacy;",
           );
       }
+      if (version.version === 4)
+        database.exec("ALTER TABLE host_sessions RENAME TO host_sessions_v4;");
       database.exec(`
         CREATE TABLE IF NOT EXISTS host_organizer_users(
           id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, role TEXT NOT NULL,
@@ -136,7 +139,7 @@ export class HostStore {
           identity_id TEXT REFERENCES host_organizer_identities(id) ON DELETE CASCADE,
           auth_method TEXT NOT NULL, auth_version INTEGER NOT NULL,
           issued_at INTEGER NOT NULL, last_seen INTEGER NOT NULL, expires INTEGER NOT NULL,
-          CHECK(auth_method IN ('host-key','local-password'))
+          CHECK(auth_method IN ('host-key','local-password','saml'))
         ) STRICT;
       `);
       if (oldIdentityShape) {
@@ -156,19 +159,31 @@ export class HostStore {
           throw new Error("Organizer identity migration lost records.");
         database.exec("DROP TABLE host_organizer_identities_legacy;");
       }
-      if (version.version < 4) database.exec("UPDATE host_schema SET version=4;");
+      if (version.version === 4) this.migrateOrganizerSessions();
+      if (version.version < 5) database.exec("UPDATE host_schema SET version=5;");
       database.exec("COMMIT");
     } catch (error) {
       database.exec("ROLLBACK");
       throw error;
     }
   }
+  private migrateOrganizerSessions(): void {
+    this.statement("INSERT INTO host_sessions SELECT * FROM host_sessions_v4").run();
+    const old = this.statement("SELECT count(*) AS count FROM host_sessions_v4").get() as {
+      count: number;
+    };
+    const current = this.statement("SELECT count(*) AS count FROM host_sessions").get() as {
+      count: number;
+    };
+    if (old.count !== current.count) throw new Error("Organizer session migration lost records.");
+    this.database.exec("DROP TABLE host_sessions_v4");
+  }
   private legacyOrganizerIdentity(version: number, existingSchema: boolean): boolean {
     const identityTable = this.statement(
       "SELECT name FROM sqlite_master WHERE name='host_organizer_identities'",
     ).get();
     if (!identityTable) {
-      if (version === 3 || (existingSchema && version === 4))
+      if (version === 3 || (existingSchema && version >= 4))
         throw new Error("Unsupported organizer identity schema.");
       return false;
     }
@@ -180,7 +195,7 @@ export class HostStore {
       : ["issuer", "subject", "user_id"];
     if (
       !required.every((name) => columns.includes(name)) ||
-      (version === 4 && !columns.includes("provider"))
+      (version >= 4 && !columns.includes("provider"))
     )
       throw new Error("Unsupported organizer identity schema.");
     return !columns.includes("provider");
@@ -434,6 +449,21 @@ export class HostStore {
     ).get() as { count: number };
     return row.count;
   }
+  private identityById(id: string): OrganizerIdentity | undefined {
+    return this.statement(
+      "SELECT id,provider,issuer,subject,user_id AS userId FROM host_organizer_identities WHERE id=?",
+    ).get(id) as OrganizerIdentity | undefined;
+  }
+  private validIdentity(user: OrganizerUser, identity: OrganizerIdentity): boolean {
+    if (identity.userId !== user.id || this.identityById(identity.id)?.userId !== user.id)
+      return false;
+    if (identity.provider === "saml") return this.featureFlags().saml === true;
+    return (
+      identity.provider === "local-password" &&
+      identity.issuer === "local-host" &&
+      identity.subject === user.username
+    );
+  }
   addSession(
     token: string,
     refresh: string,
@@ -444,15 +474,13 @@ export class HostStore {
   ): void {
     if (
       (user === undefined) !== (identity === undefined) ||
-      (user &&
-        identity &&
-        (identity.userId !== user.id ||
-          identity.provider !== "local-password" ||
-          identity.issuer !== "local-host" ||
-          identity.subject !== user.username))
+      (user && identity && !this.validIdentity(user, identity))
     )
       throw new HostError(401, "Organizer identity is invalid.");
     this.statement("DELETE FROM host_sessions WHERE expires<=?").run(now);
+    let method: OrganizerAuthMethod = "host-key";
+    if (identity?.provider === "saml") method = "saml";
+    else if (user) method = "local-password";
     this.statement(
       "INSERT INTO host_sessions(token_hash,refresh_hash,user_id,identity_id,auth_method,auth_version,issued_at,last_seen,expires) VALUES (?,?,?,?,?,?,?,?,?)",
     ).run(
@@ -460,7 +488,7 @@ export class HostStore {
       digest(refresh),
       user?.id ?? null,
       identity?.id ?? null,
-      user ? "local-password" : "host-key",
+      method,
       user?.authVersion ?? 0,
       now,
       now,
@@ -474,7 +502,7 @@ export class HostStore {
       | {
           userId: string | null;
           identityId: string | null;
-          authMethod: "host-key" | "local-password";
+          authMethod: OrganizerAuthMethod;
           authVersion: number;
           lastSeen: number;
           expires: number;
@@ -486,14 +514,13 @@ export class HostStore {
       throw new HostError(401, "Host session expired or invalid.");
     }
     const user = row.userId ? this.organizer(row.userId) : undefined;
-    const identity = row.identityId ? this.localIdentity(row.userId ?? "") : undefined;
+    const identity = row.identityId ? this.identityById(row.identityId) : undefined;
     if (
       user?.status !== "active" ||
       user.authVersion !== row.authVersion ||
       !identity ||
-      identity.id !== row.identityId ||
-      identity.subject !== user.username ||
-      identity.userId !== user.id
+      identity.provider !== row.authMethod ||
+      !this.validIdentity(user, identity)
     )
       throw new HostError(401, "Host session expired or invalid.");
     this.statement("UPDATE host_sessions SET last_seen=? WHERE token_hash=?").run(
@@ -504,7 +531,7 @@ export class HostStore {
       userId: user.id,
       identityId: identity.id,
       role: user.role,
-      authMethod: "local-password",
+      authMethod: row.authMethod,
     };
   }
   revokeSession(refresh: string): void {

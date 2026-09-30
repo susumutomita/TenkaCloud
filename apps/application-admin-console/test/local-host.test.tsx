@@ -128,6 +128,7 @@ function stubLogin(
     const path = new URL(String(input)).pathname;
     if (path === "/api/host/bootstrap-status")
       return new Response(JSON.stringify({ bootstrapCompleted }));
+    if (path === "/api/host/saml") return new Response(JSON.stringify({ enabled: false }));
     if (path === "/api/host/bootstrap" || path === "/api/host/login") return exchange();
     return new Response("{}", { status: 404 });
   });

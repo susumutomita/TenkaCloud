@@ -5,7 +5,7 @@ import { HostStore } from "../store";
 test("fresh SQLite creates organizer tables with bootstrap and flags off", () => {
   const db = new Database(":memory:");
   const store = new HostStore(db);
-  expect(db.query("SELECT version FROM host_schema").get()).toEqual({ version: 4 });
+  expect(db.query("SELECT version FROM host_schema").get()).toEqual({ version: 5 });
   expect(store.bootstrapCompleted()).toBe(false);
   expect(store.featureFlags()).toEqual({ saml: false, audit: false });
   expect(store.organizers()).toEqual([]);
@@ -29,7 +29,7 @@ for (const version of [1, 2] as const) {
       INSERT INTO host_accounts VALUES ('account-1','{"accountId":"account-1"}');
     `);
     const store = new HostStore(db);
-    expect(db.query("SELECT version FROM host_schema").get()).toEqual({ version: 4 });
+    expect(db.query("SELECT version FROM host_schema").get()).toEqual({ version: 5 });
     expect(db.query("SELECT body FROM host_events WHERE id='event-1'").get()).toEqual({
       body: '{"eventId":"event-1","name":"preserved"}',
     });
@@ -81,7 +81,7 @@ test("v3 identities migrate to stable provider IDs while credentials and records
   ).run(hash);
   db.exec("INSERT INTO host_organizer_identities VALUES ('local','admin','user-1')");
   const store = new HostStore(db);
-  expect(db.query("SELECT version FROM host_schema").get()).toEqual({ version: 4 });
+  expect(db.query("SELECT version FROM host_schema").get()).toEqual({ version: 5 });
   expect(store.bootstrapCompleted()).toBe(true);
   expect(store.localIdentity("user-1")).toMatchObject({
     provider: "local-password",

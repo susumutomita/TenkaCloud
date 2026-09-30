@@ -57,6 +57,7 @@ function stubHost(
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   const routes: Record<string, Handler> = {
     "/api/host/bootstrap-status": () => json({ bootstrapCompleted: true }),
+    "/api/host/saml": () => json({ enabled: false }),
     "/api/host/login": () =>
       json({
         idToken: token,
@@ -407,7 +408,9 @@ describe("organizer journey in local-host mode", () => {
 
     fireEvent.click(screen.getByRole("link", { name: "設定" }));
     expect(await screen.findByRole("heading", { name: "ローカルホスト設定" })).toBeInTheDocument();
-    expect(screen.getByText(/機能フラグは SQLite に保存されます/u)).toBeInTheDocument();
+    expect(
+      screen.getByText(/SAML を有効にする前に、IdP とユーザーの NameID を設定してください/u),
+    ).toBeInTheDocument();
     const audit = await screen.findByRole("checkbox", { name: "audit" });
     fireEvent.click(audit);
     await waitFor(() => expect(audit).toBeChecked());
@@ -736,6 +739,19 @@ describe("organizer journey in local-host mode", () => {
       });
       const fetchMock = vi.fn((input: RequestInfo | URL) => {
         const pathname = new URL(String(input), origin).pathname;
+        if (pathname.endsWith("/host/saml/provider"))
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                provider: null,
+                entityId: `${origin}/api/host/saml/metadata`,
+                callbackUrl: `${origin}/api/host/saml/acs`,
+                identities: [],
+              }),
+            ),
+          );
+        if (pathname.endsWith("/host/users"))
+          return Promise.resolve(new Response(JSON.stringify({ items: [] })));
         if (pathname === "/api/feature-flags") return oldResponse;
         if (pathname === "/api-next/feature-flags")
           return Promise.resolve(

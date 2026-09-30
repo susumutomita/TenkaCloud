@@ -6,6 +6,9 @@ are unchanged. The host console uses local organizer accounts. The host key
 creates the first Admin once. Participants sign in with the team keys issued
 for their event.
 
+SAML sign-in for existing organizers is optional. See [host SAML setup](host-saml.md)
+for identity-provider configuration, NameID links and revocation.
+
 ## Supported problems
 
 The application server uses Bun and a local SQLite file. There is no Cognito,
@@ -88,9 +91,9 @@ After signing in:
 Participants use the normal Participant Portal and its actual backend login, not
 the practice-mode or demo login.
 
-Console features that need tenant infrastructure are not offered: the audit log, SAML,
-the problem catalog's cloud deployments, disruptions, the progression gate, registration links, capacity
-monitoring, scheduled deploy and automatic teardown. Their navigation entries and
+Console features that still need tenant infrastructure are not offered: the audit
+log, disruptions, the progression gate, registration links, capacity monitoring,
+scheduled deploy and automatic teardown. Their navigation entries and
 tabs are hidden; opening such a URL shows an explanation instead of a failing
 request.
 

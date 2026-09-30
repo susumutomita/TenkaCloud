@@ -32,6 +32,7 @@ import {
 import { type OrganizerPermission, requireOrganizerPermission } from "./organizer-access";
 import { ParticipantAssumeRoleError, type ParticipantAwsAccess } from "./participant-aws-access";
 import { portsFree } from "./ports";
+import { SamlSignIn } from "./saml-sign-in";
 import {
   digest,
   type HostStore,
@@ -162,6 +163,7 @@ function participantProblem(
 
 /** The local adapter retains the existing admin/participant HTTP contracts. */
 export class HostingService {
+  readonly saml: SamlSignIn;
   private readonly queue = new SerialQueue();
   private readonly coordination = new LocalCoordination(this);
   private readonly tasks = new Set<Promise<void>>();
@@ -181,7 +183,9 @@ export class HostingService {
     private readonly masterKey: string,
     readonly now: () => number = Date.now,
     private readonly log: (message: string) => void = console.error,
-  ) {}
+  ) {
+    this.saml = new SamlSignIn(store, masterKey, now);
+  }
   private currentEvent(eventId: string): HostedEvent {
     const event = this.store.event(eventId);
     if (event.status === "READY" && event.endsAt && Date.parse(event.endsAt) <= this.now()) {
@@ -252,7 +256,15 @@ export class HostingService {
   async admin(request: ApiRequest): Promise<ApiResponse> {
     const unauthenticated = await this.adminLogin(request);
     if (unauthenticated) return unauthenticated;
+    if (request.path === "/host/saml" && request.method === "GET")
+      return ok({ enabled: this.saml.available() });
+    if (request.path === "/host/saml/start" && request.method === "POST")
+      return ok(await this.saml.start(request.body));
+    if (request.path === "/host/saml/complete" && request.method === "POST")
+      return ok(this.saml.complete(request.body));
     const principal = this.store.authenticateAdmin(request.token, this.now());
+    const samlResponse = this.samlAdminRoute(request, principal);
+    if (samlResponse) return samlResponse;
     const fixed = await this.adminFixedRoute(request, principal);
     if (fixed) return fixed;
     const parts = request.path.split("/").filter(Boolean).map(decodeURIComponent);
@@ -274,6 +286,29 @@ export class HostingService {
       requireRole(current, parts[2] === "teams" ? "reveal-team-keys" : "run-events");
       return this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request);
     });
+  }
+  private samlAdminRoute(
+    request: ApiRequest,
+    principal: OrganizerPrincipal,
+  ): ApiResponse | undefined {
+    if (!request.path.startsWith("/host/saml/")) return undefined;
+    requireAdmin(principal);
+    if (request.path === "/host/saml/provider" && request.method === "GET")
+      return ok(this.saml.settings());
+    if (request.path === "/host/saml/provider" && request.method === "PUT") {
+      this.saml.configure(request.body);
+      return ok(this.saml.settings());
+    }
+    if (request.path === "/host/saml/identities" && request.method === "POST") {
+      this.saml.link(request.body);
+      return ok({ identities: this.saml.identities() }, 201);
+    }
+    const identity = /^\/host\/saml\/identities\/([^/]+)$/u.exec(request.path);
+    if (identity?.[1] && request.method === "DELETE") {
+      this.saml.unlink(identity[1]);
+      return ok({ identities: this.saml.identities() });
+    }
+    return undefined;
   }
   private async adminLogin(request: ApiRequest): Promise<ApiResponse | undefined> {
     if (request.path === "/host/bootstrap-status" && request.method === "GET")
@@ -463,7 +498,11 @@ export class HostingService {
     if (key !== "saml" && key !== "audit") throw new HostError(400, "Unknown feature flag.");
     if (typeof body.enabled !== "boolean")
       throw new HostError(400, "Flag enabled must be boolean.");
-    this.store.setFeatureFlag(key, body.enabled);
+    const enabled = body.enabled;
+    this.store.transaction(() => {
+      this.store.setFeatureFlag(key, enabled);
+      if (key === "saml" && !enabled) this.saml.invalidate();
+    });
     return ok({ flags: this.store.featureFlags() });
   }
   private publicOrganizer(user: OrganizerUser | undefined): OrganizerView {

@@ -1101,7 +1101,7 @@
     "login_invalid_key": "That host key is not correct. Paste the key exactly as the terminal printed it.",
     "login_failed": "Sign-in failed. Check the host terminal for details.",
     "unavailable_header": "Not available in a local competition",
-    "unavailable_body": "This screen uses cloud features (AWS accounts, audit log, SAML, cloud deployment history). Run a local competition from the Events screens.",
+    "unavailable_body": "This screen uses cloud features (AWS accounts, user management, audit log, SAML, cloud deployment history). Run a local competition from the Events screens.",
     "go_to_events": "Go to events",
     "problem_unsupported_tag": "Not supported locally",
     "create_header": "Local competition event",

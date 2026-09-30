@@ -50,10 +50,11 @@ function pageNavigation(request: IncomingMessage): boolean {
   );
 }
 
-function validOrigin(request: IncomingMessage, origin: string): void {
+function validOrigin(request: IncomingMessage, origin: string, samlPost = false): void {
   const host = new URL(origin).host;
   if (request.headers.host !== host)
     throw new HostError(403, `Untrusted Host header. Expected ${host}.`);
+  if (samlPost) return;
   if (request.headers.origin && request.headers.origin !== origin)
     throw new HostError(403, "Cross-origin requests are not allowed.");
   if (request.headers["sec-fetch-site"] === "cross-site" && !pageNavigation(request))
@@ -261,8 +262,12 @@ export async function startHttpHost(options: {
       json(response, 200, { status: "ok", mode: "local-host", role: options.kind });
       return;
     }
-    validOrigin(request, origin);
     const url = requestTarget(request, origin);
+    const samlPost =
+      options.kind === "admin" &&
+      request.method === "POST" &&
+      url.pathname === "/api/host/saml/acs";
+    validOrigin(request, origin, samlPost);
     if (url.pathname === "/healthz" && request.method === "GET") {
       json(response, 200, { status: "ok", mode: "local-host", role: options.kind });
       return;
@@ -314,6 +319,47 @@ export async function startHttpHost(options: {
       ? options.service.admin(apiRequest)
       : options.service.participant(apiRequest);
   }
+  async function handleSaml(
+    request: IncomingMessage,
+    response: ServerResponse,
+    path: string,
+  ): Promise<boolean> {
+    if (options.kind !== "admin") return false;
+    if (path === "/host/saml/metadata" && request.method === "GET") {
+      const metadata = options.service.saml.metadata();
+      response.writeHead(200, {
+        "content-type": "application/samlmetadata+xml; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      });
+      response.end(metadata);
+      return true;
+    }
+    if (path !== "/host/saml/acs" || request.method !== "POST") return false;
+    if (
+      request.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
+      "application/x-www-form-urlencoded"
+    )
+      throw new HostError(415, "Use a form-encoded SAML response.");
+    const form = new URLSearchParams(await readBody(request, 320 * 1024));
+    if (
+      Array.from(form.keys()).length !== 2 ||
+      form.getAll("SAMLResponse").length !== 1 ||
+      form.getAll("RelayState").length !== 1
+    )
+      throw new HostError(400, "Provide one SAMLResponse and one RelayState.");
+    const ticket = await options.service.saml.consume(
+      form.get("SAMLResponse") ?? "",
+      form.get("RelayState") ?? "",
+    );
+    response.writeHead(303, {
+      location: `/login#samlTicket=${encodeURIComponent(ticket)}`,
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    });
+    response.end();
+    return true;
+  }
   async function handleApi(
     request: IncomingMessage,
     response: ServerResponse,
@@ -324,15 +370,16 @@ export async function startHttpHost(options: {
     assertRoleRoute(path);
     const remote = clientAddress(request, options.behindProxy ?? false);
     limiter.assertAllowed(remote);
-    const apiRequest: ApiRequest = {
-      method: request.method ?? "GET",
-      path,
-      query,
-      body: await jsonBody(request),
-      token: bearerToken(request),
-      nonce: idempotencyKey(request),
-    };
     try {
+      if (await handleSaml(request, response, path)) return;
+      const apiRequest: ApiRequest = {
+        method: request.method ?? "GET",
+        path,
+        query,
+        body: await jsonBody(request),
+        token: bearerToken(request),
+        nonce: idempotencyKey(request),
+      };
       const result = await dispatch(apiRequest);
       json(response, result.status, result.body);
     } catch (error) {
@@ -342,5 +389,6 @@ export async function startHttpHost(options: {
   }
   const bound = await listen(server, options.hostname, options.port);
   origin = options.advertised ?? bound;
+  if (options.kind === "admin") options.service.saml.bindOrigin(origin);
   return { origin, close: () => closeServer(server) };
 }

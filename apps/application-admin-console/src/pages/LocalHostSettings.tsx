@@ -11,6 +11,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { decodeIdToken } from "../auth/claims";
 import type { AppConfig } from "../config";
 import { useLang } from "../i18n";
+import { LocalHostSamlSettings } from "./LocalHostSamlSettings";
 
 interface Flags {
   saml: boolean;
@@ -73,8 +74,8 @@ export function LocalHostSettingsPage({ config }: { config: AppConfig }) {
       <SpaceBetween size="m">
         <Box color="text-body-secondary">
           {ja
-            ? "機能フラグは SQLite に保存されます。SAML と監査ログは後続の実装まで有効になりません。"
-            : "Feature flags are stored in SQLite. SAML and audit logging remain unavailable until their implementations are installed."}
+            ? "機能フラグは保存されます。SAML を有効にする前に、IdP とユーザーの NameID を設定してください。監査ログは後続の実装で利用できます。"
+            : "Feature flags are saved. Configure the IdP and organizer NameIDs before enabling SAML. Audit logging becomes available in the next implementation step."}
         </Box>
         {error && <Alert type="error">{error}</Alert>}
         {flags &&
@@ -88,6 +89,7 @@ export function LocalHostSettingsPage({ config }: { config: AppConfig }) {
               {key}
             </Toggle>
           ))}
+        <LocalHostSamlSettings config={config} />
       </SpaceBetween>
     </Container>
   );
