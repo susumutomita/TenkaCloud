@@ -1,12 +1,15 @@
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
+import { MAX_TEAMS_PER_EVENT } from "../../control-data/domain/teams.js";
 import {
   type AzureDeployCredential,
+  buildAzureCredentialParameterName,
   deleteAzureCredential,
   getAzureCredential,
   putAzureCredential,
 } from "../shared/azure-credential-store.js";
 import {
+  buildGcpCredentialParameterName,
   deleteGcpCredential,
   type GcpDeployCredential,
   getGcpCredential,
@@ -14,11 +17,16 @@ import {
 } from "../shared/gcp-credential-store.js";
 import type { SakuraCredential } from "../shared/runtime/sakura-apprun-adapter.js";
 import {
+  buildSakuraCredentialParameterName,
   deleteSakuraCredential,
   getSakuraCredential,
   putSakuraCredential,
 } from "../shared/sakura-credential-store.js";
-import type { SecureJsonStoreDeps } from "../shared/secure-json-store.js";
+import {
+  countTenantTeamParameters,
+  type SecureJsonStoreDeps,
+  secureParameterExists,
+} from "../shared/secure-json-store.js";
 
 /**
  * [Issue #1413] per-team cloud credential onboarding routes。
@@ -61,6 +69,22 @@ export function isTeamCredentialProvider(value: string): value is TeamCredential
   return (TEAM_CREDENTIAL_PROVIDERS as readonly string[]).includes(value);
 }
 
+/**
+ * [Issue #3290] 1 tenant が provider ごとに持てる team credential の数。 1 event は最大
+ * {@link MAX_TEAMS_PER_EVENT} チームで、 composite event は 1 チームに provider ごとの credential を
+ * 使うので、 provider ごとに 1 event 分を用意できる数にする。 SSM Standard parameter の quota は
+ * account 全体で共有するため、 1 tenant が他 tenant の分まで使い切れないようにする。
+ */
+const TEAM_CREDENTIAL_LIMIT_PER_PROVIDER = MAX_TEAMS_PER_EVENT;
+
+const CREDENTIAL_PARAMETER_NAME: Readonly<
+  Record<TeamCredentialProvider, (env: string, tenantId: string, teamSlug: string) => string>
+> = {
+  sakura: buildSakuraCredentialParameterName,
+  azure: buildAzureCredentialParameterName,
+  gcp: buildGcpCredentialParameterName,
+};
+
 export interface TeamCredentialDeps {
   readonly shared: SecureJsonStoreDeps;
 }
@@ -98,10 +122,15 @@ export type TeamCredentialRouteResult =
   | {
       readonly status: StatusCodes.BAD_REQUEST;
       readonly body: { readonly error: "validation_failed"; readonly issues: unknown };
+    }
+  | {
+      readonly status: StatusCodes.CONFLICT;
+      readonly body: { readonly error: "team_credential_limit_reached"; readonly limit: number };
     };
 
 /**
  * provider の credential を登録 / 上書き (= register + rotation)。 secret は response に含めない。
+ * 新しい team の登録は tenant の上限で止める。 既にある parameter の上書きは数を増やさないので通す。
  */
 export async function handleRegisterTeamCredential(
   deps: TeamCredentialDeps,
@@ -111,24 +140,30 @@ export async function handleRegisterTeamCredential(
   rawBody: unknown,
 ): Promise<TeamCredentialRouteResult> {
   const store = deps.shared;
+  let put: () => Promise<void>;
   if (provider === "sakura") {
     const parsed = SakuraCredentialSchema.safeParse(rawBody);
     if (!parsed.success) return validationFailed(parsed.error.issues);
-    await putSakuraCredential(store, tenantId, teamSlug, parsed.data satisfies SakuraCredential);
+    put = () =>
+      putSakuraCredential(store, tenantId, teamSlug, parsed.data satisfies SakuraCredential);
   } else if (provider === "azure") {
     const parsed = AzureCredentialSchema.safeParse(rawBody);
     if (!parsed.success) return validationFailed(parsed.error.issues);
-    await putAzureCredential(
-      store,
-      tenantId,
-      teamSlug,
-      parsed.data satisfies AzureDeployCredential,
-    );
+    put = () =>
+      putAzureCredential(store, tenantId, teamSlug, parsed.data satisfies AzureDeployCredential);
   } else {
     const parsed = GcpCredentialSchema.safeParse(rawBody);
     if (!parsed.success) return validationFailed(parsed.error.issues);
-    await putGcpCredential(store, tenantId, teamSlug, parsed.data satisfies GcpDeployCredential);
+    put = () =>
+      putGcpCredential(store, tenantId, teamSlug, parsed.data satisfies GcpDeployCredential);
   }
+  if (await isTenantAtCredentialLimit(store, provider, tenantId, teamSlug)) {
+    return {
+      status: StatusCodes.CONFLICT,
+      body: { error: "team_credential_limit_reached", limit: TEAM_CREDENTIAL_LIMIT_PER_PROVIDER },
+    };
+  }
+  await put();
   return { status: StatusCodes.CREATED, body: { registered: true, provider, teamSlug } };
 }
 
@@ -164,6 +199,28 @@ export async function handleGetTeamCredentialStatus(
         ? (await getAzureCredential(store, tenantId, teamSlug)) !== undefined
         : (await getGcpCredential(store, tenantId, teamSlug)) !== undefined;
   return { status: StatusCodes.OK, body: { provider, teamSlug, registered } };
+}
+
+/**
+ * 同時に来た新規登録はどちらも上限未満と数えるので、 同時実行数ぶんだけ上限を超えうる。
+ * TenantAdmin だけが呼べる経路なので、 その幅は許容する。
+ */
+async function isTenantAtCredentialLimit(
+  store: SecureJsonStoreDeps,
+  provider: TeamCredentialProvider,
+  tenantId: string,
+  teamSlug: string,
+): Promise<boolean> {
+  const name = CREDENTIAL_PARAMETER_NAME[provider](store.env, tenantId, teamSlug);
+  if (await secureParameterExists(store, name)) return false;
+  const providerSuffix = name.slice(name.lastIndexOf("/"));
+  const count = await countTenantTeamParameters(
+    store,
+    tenantId,
+    providerSuffix,
+    TEAM_CREDENTIAL_LIMIT_PER_PROVIDER,
+  );
+  return count >= TEAM_CREDENTIAL_LIMIT_PER_PROVIDER;
 }
 
 function validationFailed(issues: unknown): TeamCredentialRouteResult {

@@ -394,6 +394,11 @@ Team Cloud Credentials パネルが現れます。
 フラグを OFF のまま `runtime-config.json` や console の設定画面でパネルだけ出しても、登録 API は
 API Gateway に無いので保存できません（Issue 3290）。
 
+1 つの tenant が登録できる team 認証情報は、provider ごとに 99 件までです。これは 1 イベントの
+最大チーム数と同じで、複数の provider を使うイベントでも全チーム分を登録できます。SSM Standard parameter の上限は account 全体で共有するため、この上限で 1 tenant が
+他の tenant の分まで使い切らないようにしています。上限に達したら、使い終わった team の認証情報を
+失効してから登録してください。登録済みの team の上書き（ローテーション）は上限に関係なくできます。
+
 ### 2. provider 側で認証情報を作る
 
 運営者は SSM を直接触りません。下記で作った値をパネルに貼り、パネルが API 経由で暗号化保存

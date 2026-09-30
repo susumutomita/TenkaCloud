@@ -150,4 +150,11 @@ describe("toFriendlyError", () => {
     expect(fe.title).toBe("エラー (500)");
     expect(fe.hint).toBeUndefined();
   });
+
+  it("should explain the team credential limit and how to free a slot (#3290)", () => {
+    const err = new ApiError(409, '{"error":"team_credential_limit_reached","limit":99}');
+    const fe = toFriendlyError(err);
+    expect(fe.title).toBe("チームの認証情報はこれ以上登録できません");
+    expect(fe.hint).toMatch(/失効してから登録/);
+  });
 });

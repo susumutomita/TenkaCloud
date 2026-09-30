@@ -11,6 +11,7 @@ import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
+import { buildTenantTeamsPathArnPattern } from "./handlers/shared/secure-json-store.js";
 
 export interface CompetitorAccountsApiLambdaProps {
   /**
@@ -160,6 +161,18 @@ export class CompetitorAccountsApiLambda extends Construct {
             "kms:EncryptionContext:PARAMETER_ARN": credentialSsmArns,
           },
         },
+      }),
+    );
+    // [Issue #3290] 新しい team credential を登録する前に tenant の登録数を数える。
+    // GetParametersByPath は要求した path に対して認可されるので、 resource は teams path にする。
+    // 値は復号しない (WithDecryption=false) ので KMS 権限は足さない。
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["ssm:GetParametersByPath"],
+        resources: [
+          buildTenantTeamsPathArnPattern(stack.region, stack.account, props.environmentName),
+        ],
       }),
     );
 

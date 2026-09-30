@@ -1,6 +1,7 @@
 import {
   DeleteParameterCommand,
   GetParameterCommand,
+  GetParametersByPathCommand,
   ParameterType,
   PutParameterCommand,
   type SSMClient,
@@ -78,4 +79,64 @@ export function createSecureJsonStore<T>(config: SecureJsonStoreConfig<T>): Secu
       }
     },
   };
+}
+
+/** 1 tenant の per-team 機密がすべて入る SSM path (`/{env}/tenants/{tenantId}/teams`)。 */
+export function buildTenantTeamsPath(env: string, tenantId: string): string {
+  return `/${env}/tenants/${tenantId}/teams`;
+}
+
+/**
+ * IAM policy 用の {@link buildTenantTeamsPath} pattern。 `GetParametersByPath` は返す parameter ではなく
+ * 要求した path に対して認可されるので、 resource はこの path 自体になる。
+ */
+export function buildTenantTeamsPathArnPattern(
+  region: string,
+  account: string,
+  env: string,
+): string {
+  return `arn:aws:ssm:${region}:${account}:parameter/${env}/tenants/*/teams`;
+}
+
+/**
+ * parameter が存在するか。 復号も parse もしないので、 壊れた値の parameter も「存在する」と答える。
+ */
+export async function secureParameterExists(
+  deps: SecureJsonStoreDeps,
+  name: string,
+): Promise<boolean> {
+  try {
+    const out = await deps.ssm.send(new GetParameterCommand({ Name: name, WithDecryption: false }));
+    return out.Parameter !== undefined;
+  } catch (err) {
+    if (isParameterNotFound(err)) return false;
+    throw err;
+  }
+}
+
+/**
+ * tenant の per-team 機密のうち、 名前が `nameSuffix` で終わるものを数える。 `stopAt` に達したら
+ * それ以上 page を読まない (= 上限判定に要る分だけ SSM を呼ぶ)。 値は復号しない。
+ */
+export async function countTenantTeamParameters(
+  deps: SecureJsonStoreDeps,
+  tenantId: string,
+  nameSuffix: string,
+  stopAt: number,
+): Promise<number> {
+  let count = 0;
+  let nextToken: string | undefined;
+  do {
+    const out = await deps.ssm.send(
+      new GetParametersByPathCommand({
+        Path: buildTenantTeamsPath(deps.env, tenantId),
+        Recursive: true,
+        WithDecryption: false,
+        NextToken: nextToken,
+      }),
+    );
+    count += (out.Parameters ?? []).filter((p) => p.Name?.endsWith(nameSuffix)).length;
+    nextToken = out.NextToken;
+  } while (nextToken !== undefined && count < stopAt);
+  return count;
 }

@@ -1,6 +1,7 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../../src/api/client";
 import type { AppConfig } from "../../../src/config";
 
 /**
@@ -97,6 +98,21 @@ describe("TeamCloudCredentialsPanel (#1413)", () => {
     // toFriendlyError → FriendlyErrorAlert (Cloudscape Alert type=error)。 test-util で検出する。
     await waitFor(() => expect(w.findAlert()).not.toBeNull());
     expect(mocks.registerTeamCredential).toHaveBeenCalled();
+  });
+
+  it("should show the limit message when the tenant already holds 99 team credentials (#3290)", async () => {
+    mocks.registerTeamCredential.mockRejectedValueOnce(
+      new ApiError(409, '{"error":"team_credential_limit_reached","limit":99}'),
+    );
+    const w = renderPanel();
+    setTeamSlug(w, "team-a");
+    setCredential(w, "{}");
+    btn("team_cloud_credentials.register_button").click();
+    await waitFor(() =>
+      expect(w.findAlert()?.getElement().textContent).toContain(
+        "チームの認証情報はこれ以上登録できません",
+      ),
+    );
   });
 
   it("should revoke and show a notice", async () => {
