@@ -62,7 +62,7 @@ export function resolveAllowedCidrParameterType(templateBody: string): string | 
   const doc = YAML.parseDocument(templateBody);
   if (doc.errors.length > 0) {
     throw new Error(
-      `template.yaml could not be parsed while checking ${ALLOWED_CIDR_PARAMETER_NAME}: ${doc.errors[0].message}`,
+      `template.yaml could not be parsed while checking ${ALLOWED_CIDR_PARAMETER_NAME}: ${doc.errors[0]?.message}`,
     );
   }
   const root = asRecord(doc.toJSON());

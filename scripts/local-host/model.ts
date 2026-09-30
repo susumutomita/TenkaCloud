@@ -18,7 +18,7 @@ export interface Problem {
   problemId: string;
   name: string;
   definition: string;
-  runtime?: "docker" | "coordination";
+  runtime?: "docker" | "coordination" | "cloudformation";
 }
 
 export interface HostedEvent {
@@ -57,6 +57,14 @@ export interface Team {
   score: number;
   completedProblems: number;
   scoreEvents: ScoreEvent[];
+  /** Where this team's cloud problems are deployed; required when the event has one. */
+  aws?: AwsTarget;
+}
+
+/** A competitor account prepared with `competitor-bootstrap.yaml`. */
+export interface AwsTarget {
+  accountId: string;
+  roleName: string;
 }
 
 export interface Job {

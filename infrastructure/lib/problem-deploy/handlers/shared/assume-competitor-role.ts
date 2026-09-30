@@ -57,8 +57,8 @@ function assertCompleteCredentials(credentials: Credentials | undefined): Creden
   return credentials;
 }
 
-async function assumeRoleWithExternalId(
-  deps: AssumeCompetitorRoleDeps,
+export async function assumeRoleWithExternalId(
+  deps: Pick<AssumeCompetitorRoleDeps, "sts">,
   args: {
     readonly roleArn: string;
     readonly jobId: string;

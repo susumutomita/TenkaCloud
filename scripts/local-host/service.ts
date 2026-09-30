@@ -9,6 +9,7 @@ import {
   SLOT_STRIDE,
 } from "./gateway-ports";
 import {
+  type AwsTarget,
   assertPlaying,
   type Context,
   type Gate,
@@ -43,6 +44,10 @@ export interface ApiResponse {
 const ok = (body: unknown, status = 200): ApiResponse => ({ status, body });
 const eventPattern = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
 const slugPattern = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/u;
+const awsAccountPattern = /^\d{12}$/u;
+const awsRoleNamePattern = /^[A-Za-z0-9_+=,.@-]{1,64}$/u;
+/** The role `competitor-bootstrap.yaml` creates unless the organizer agreed on another name. */
+const DEFAULT_COMPETITOR_ROLE = "TenkaCloud-CompetitorDeploy-Role";
 const SLOT_QUEUE = "runtime-slots";
 const NONTERMINAL_STATUSES: readonly Job["status"][] = ["PENDING", "IN_PROGRESS"];
 /** Organizer-intended states of one environment that do not make a ready event undeployed. */
@@ -269,11 +274,14 @@ export class HostingService {
     );
     const timestamp = this.now();
     const eventId = id(timestamp);
+    const needsAws = problems.some((problem) => problem.runtime === "cloudformation");
     const teams: Team[] = body.teams.map((value) => {
       const internalSlug = text(object(value).internalSlug, "internalSlug", 40);
       if (!slugPattern.test(internalSlug))
         throw new HostError(400, "Use lowercase letters, digits and hyphens for team slugs.");
+      const aws = needsAws ? awsTarget(object(value), internalSlug) : undefined;
       return {
+        ...(aws ? { aws } : {}),
         teamId: id(timestamp),
         eventId,
         internalSlug,
@@ -1163,4 +1171,14 @@ function deploymentPlan(previous: Job | undefined, failedOnly: boolean): "skip" 
 /** Only a running environment that no organizer operation is changing is handed out. */
 function linkable(job: Job): boolean {
   return job.status === "COMPLETE" && job.operation === undefined;
+}
+
+function awsTarget(team: Record<string, unknown>, internalSlug: string): AwsTarget {
+  const accountId = team.awsAccountId;
+  if (typeof accountId !== "string" || !awsAccountPattern.test(accountId))
+    throw new HostError(422, `Team ${internalSlug} needs a 12-digit AWS account ID.`);
+  const roleName = team.awsRoleName ?? DEFAULT_COMPETITOR_ROLE;
+  if (typeof roleName !== "string" || !awsRoleNamePattern.test(roleName))
+    throw new HostError(422, `Team ${internalSlug} has an invalid IAM role name.`);
+  return { accountId, roleName };
 }
