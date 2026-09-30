@@ -12,14 +12,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createTenantAuditClient,
   describeTenantAuditError,
+  type HostAuditCollection,
   TenantAuditApiError,
   type TenantAuditClient,
   type TenantAuditItem,
 } from "../api/audit-log-client";
 import { useAuth } from "../auth/AuthProvider";
-import type { AppConfig } from "../config";
+import { type AppConfig, isLocalHost } from "../config";
 import { useLang } from "../i18n";
 import { formatDateTime, formatRelativeTime } from "../lib/format";
+import { AuditCollectionStatus } from "./AuditCollectionStatus";
 
 const PAGE_LIMIT = 50;
 
@@ -92,6 +94,8 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
     () => (auth.tokens ? createTenantAuditClient(config, auth.tokens.idToken) : null),
     [auth.tokens, config],
   );
+  const localHost = isLocalHost(config);
+  const [collection, setCollection] = useState<HostAuditCollection>();
   const [items, setItems] = useState<TenantAuditItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [filters, setFilters] = useState<AuditFilters>(EMPTY_FILTERS);
@@ -108,6 +112,7 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
         const page = await client.list(buildListInput(filters, cursor));
         setItems((prev) => mergeItems(prev, page.items, cursor));
         setNextCursor(page.nextCursor);
+        setCollection(page.collection);
       } catch (err) {
         setError(describeError(err));
       } finally {
@@ -157,19 +162,20 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
   if (!client) {
     return (
       <Container header={<Header>監査ログ</Header>}>
-        <Alert type="warning" header="未配線">
-          audit log API は配線されていません。 deploy chain の更新後にアクセスしてください。
-        </Alert>
+        <Alert type="warning">セッションが切れました。再ログインしてください。</Alert>
       </Container>
     );
   }
 
   function outcomeIndicator(outcome: string) {
-    if (outcome === "success") return <StatusIndicator type="success">success</StatusIndicator>;
-    if (outcome === "forbidden") return <StatusIndicator type="error">forbidden</StatusIndicator>;
+    if (outcome === "success" || outcome === "succeeded")
+      return <StatusIndicator type="success">success</StatusIndicator>;
+    if (outcome === "forbidden" || outcome === "denied")
+      return <StatusIndicator type="error">forbidden</StatusIndicator>;
     if (outcome === "not_found") return <StatusIndicator type="warning">not_found</StatusIndicator>;
     if (outcome === "conflict") return <StatusIndicator type="warning">conflict</StatusIndicator>;
-    if (outcome === "error") return <StatusIndicator type="error">error</StatusIndicator>;
+    if (outcome === "error" || outcome === "failed")
+      return <StatusIndicator type="error">error</StatusIndicator>;
     return <span>{outcome}</span>;
   }
 
@@ -177,7 +183,11 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description="自テナントの操作監査ログ (= 365 日保持、 admin 操作のみ記録)"
+        description={
+          localHost
+            ? "このホストの操作履歴。保持中の記録のみを表示・出力します。"
+            : "自テナントの操作監査ログ (= 365 日保持、 admin 操作のみ記録)"
+        }
         actions={
           <SpaceBetween size="xs" direction="horizontal">
             <Button
@@ -206,6 +216,8 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
         監査ログ
       </Header>
 
+      {collection && <AuditCollectionStatus collection={collection} lang={lang} />}
+
       <Container header={<Header variant="h2">フィルター</Header>}>
         <SpaceBetween size="m" direction="horizontal">
           <Input
@@ -223,7 +235,9 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
             onChange={(e) => setFilters((f) => ({ ...f, principal: e.detail.value }))}
             // #2954: 末尾 `*` は prefix 一致。machine principal は `m2m:<clientId>` で client id が
             // 発行ごとに変わるため、`m2m:*` で「machine が起こした操作」を 1 query で引ける。
-            placeholder="principal (sub / username / m2m:*)"
+            placeholder={
+              localHost ? "実行者ID / anonymous / system" : "principal (sub / username / m2m:*)"
+            }
           />
           <Input
             value={filters.action}
@@ -259,11 +273,29 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
               </span>
             ),
           },
-          { id: "actor", header: "実行者", cell: (i) => i.actorUsername ?? i.actor },
+          {
+            id: "actor",
+            header: "実行者",
+            cell: (i) =>
+              i.actorRole ? `${i.actor} (${i.actorRole})` : (i.actorUsername ?? i.actor),
+          },
           { id: "action", header: "操作", cell: (i) => i.action },
           { id: "outcome", header: "結果", cell: (i) => outcomeIndicator(i.outcome) },
-          { id: "target", header: "対象", cell: (i) => describeTarget(i.action, i.target) },
-          { id: "ipAddress", header: "IP", cell: (i) => i.ipAddress ?? "-" },
+          {
+            id: "target",
+            header: "対象",
+            cell: (i) =>
+              i.resourceKind
+                ? `${i.resourceKind}: ${i.target ?? "-"}`
+                : describeTarget(i.action, i.target),
+          },
+          localHost
+            ? {
+                id: "operation",
+                header: "処理ID / 段階",
+                cell: (i) => `${i.operationId ?? "-"} / ${i.phase ?? "-"}`,
+              }
+            : { id: "ipAddress", header: "IP", cell: (i) => i.ipAddress ?? "-" },
         ]}
         empty={
           // Issue #1362: アイコン + 強調 + 行動誘導の 3 段で empty state を friendly に。

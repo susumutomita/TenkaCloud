@@ -162,6 +162,7 @@ function LocalHostRoutes({ config }: { config: AppConfig }) {
       <Route path="/" element={<Navigate to="/events" replace />} />
       <Route path="/events" element={guarded(<EventListPage config={config} />, config)} />
       <Route path="/events/new" element={guarded(<EventCreatePage config={config} />, config)} />
+      <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />, config)} />
       <Route path="/users" element={guarded(<LocalHostUsersPage config={config} />, config)} />
       <Route
         path="/settings"

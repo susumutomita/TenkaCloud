@@ -138,6 +138,7 @@ export function ShellLayout({
             items: [
               { type: "link" as const, href: "/users", text: t("nav.tenant_users") },
               { type: "link" as const, href: "/settings", text: t("nav.settings") },
+              { type: "link" as const, href: "/audit-log", text: t("nav.audit_log") },
             ],
           },
         ]

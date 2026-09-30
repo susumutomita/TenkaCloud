@@ -35,7 +35,7 @@ describe("AuditLog page helpers (#1292)", () => {
   });
 
   it("should describe TenantAuditApiError, Error, and unknown values", () => {
-    expect(describeError(new TenantAuditApiError(403, undefined))).toContain("TenantAdmin");
+    expect(describeError(new TenantAuditApiError(403, undefined))).toContain("管理者ロール");
     expect(describeError(new Error("boom"))).toBe("boom");
     expect(describeError(123)).toBe("audit log の取得に失敗しました");
   });

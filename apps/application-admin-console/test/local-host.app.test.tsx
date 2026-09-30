@@ -102,7 +102,7 @@ describe("organizer journey in local-host mode", () => {
     render(
       <I18nProvider>
         <MemoryRouter
-          initialEntries={[{ pathname: "/login", state: { returnPath: "/audit-log" } }]}
+          initialEntries={[{ pathname: "/login", state: { returnPath: "/deployments" } }]}
         >
           <App config={config} />
         </MemoryRouter>
@@ -117,6 +117,36 @@ describe("organizer journey in local-host mode", () => {
     fireEvent.click(screen.getByRole("button", { name: "Go to events" }));
     await waitFor(() =>
       expect(screen.queryByText("Not available in a local competition")).toBeNull(),
+    );
+  });
+
+  it("returns to the host audit log after sign-in", async () => {
+    const fetchMock = stubHost({
+      "/api/admin/audit-log": () =>
+        new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+    render(
+      <I18nProvider>
+        <MemoryRouter
+          initialEntries={[{ pathname: "/login", state: { returnPath: "/audit-log" } }]}
+        >
+          <App config={config} />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    await signIn();
+    expect(await screen.findByRole("heading", { name: "監査ログ", level: 1 })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.objectContaining({ pathname: "/api/admin/audit-log" }),
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({ authorization: `Bearer ${organizerToken("Admin")}` }),
+        }),
+      ),
     );
   });
 

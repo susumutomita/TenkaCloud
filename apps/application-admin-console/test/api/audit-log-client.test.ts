@@ -40,10 +40,10 @@ describe("describeTenantAuditError (#1292)", () => {
   it("should map status codes to operator-friendly messages", () => {
     expect(
       describeTenantAuditError(new TenantAuditApiError(StatusCodes.FORBIDDEN, undefined)),
-    ).toBe("TenantAdmin role が必要です");
+    ).toBe("監査ログを閲覧できる管理者ロールが必要です");
     expect(
       describeTenantAuditError(new TenantAuditApiError(StatusCodes.SERVICE_UNAVAILABLE, undefined)),
-    ).toContain("audit log table");
+    ).toContain("保存先の状態");
     expect(
       describeTenantAuditError(new TenantAuditApiError(StatusCodes.BAD_REQUEST, "invalid_from")),
     ).toBe("from が無効な timestamp です");

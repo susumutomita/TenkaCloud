@@ -57,6 +57,9 @@ test("HTTP SAML uses cross-site signed ACS only, browser-bound completion and cu
     });
     expect(bootstrap.status).toBe(201);
     const admin = bootstrap.body.idToken;
+    expect(
+      (await api("/feature-flags", "PUT", { key: "audit", enabled: true }, admin)).status,
+    ).toBe(200);
     const viewer = await api(
       "/host/users",
       "POST",
@@ -121,6 +124,16 @@ test("HTTP SAML uses cross-site signed ACS only, browser-bound completion and cu
     const complete = await api("/host/saml/complete", "POST", { ticket, browserProof });
     expect(complete.status).toBe(200);
     const saml = complete.body.idToken;
+    expect(
+      service.audit
+        .list(new URLSearchParams({ action: "organizer.login" }))
+        .items.some(
+          (item) =>
+            item.actor === viewer.body.user.id &&
+            item.authMethod === "saml" &&
+            item.outcome === "succeeded",
+        ),
+    ).toBe(true);
     expect((await api("/host/me", "GET", undefined, saml)).body).toMatchObject({
       role: "Viewer",
       authMethod: "saml",

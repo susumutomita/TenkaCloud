@@ -127,7 +127,7 @@ export class SamlSignIn {
       )
       .all() as OrganizerIdentity[];
   }
-  link(raw: unknown): void {
+  link(raw: unknown): string {
     const parsed = mappingSchema.safeParse(raw);
     if (!parsed.success)
       throw new HostError(400, "Choose an existing organizer and a persistent NameID.");
@@ -144,11 +144,13 @@ export class SamlSignIn {
       )
     )
       throw new HostError(409, "This organizer or NameID is already linked to this provider.");
+    const identityId = randomUUID();
     this.store
       .statement(
         "INSERT INTO host_organizer_identities(id,provider,issuer,subject,user_id) VALUES (?,'saml',?,?,?)",
       )
-      .run(randomUUID(), provider.issuer, parsed.data.subject, user.id);
+      .run(identityId, provider.issuer, parsed.data.subject, user.id);
+    return identityId;
   }
   unlink(identityId: string): void {
     this.store

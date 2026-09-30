@@ -218,6 +218,19 @@ function idempotencyKey(request: IncomingMessage): string | undefined {
  * Distinct origins: the admin listener has no participant routes, and binds loopback unless a
  * TLS-terminating proxy publishes it at an advertised origin.
  */
+function sendApiResponse(response: ServerResponse, result: ApiResponse): void {
+  if (result.contentType) {
+    response.writeHead(result.status, {
+      "content-type": result.contentType,
+      "cache-control": "no-store",
+      "content-disposition": 'attachment; filename="host-audit.csv"',
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+    });
+    response.end(result.body);
+  } else json(response, result.status, result.body);
+}
+
 export async function startHttpHost(options: {
   kind: "admin" | "participant";
   hostname: string;
@@ -296,8 +309,14 @@ export async function startHttpHost(options: {
       if (!request.headers["content-type"]?.startsWith("application/x-www-form-urlencoded"))
         throw new HostError(415, "Use form-encoded token revocation.");
       const token = new URLSearchParams(await readBody(request)).get("token") ?? "";
-      options.service.store.revokeSession(token);
-      json(response, 200, { revoked: true });
+      const result = await options.service.admin({
+        method: "POST",
+        path: "/host/logout",
+        query: new URLSearchParams(),
+        body: { refreshToken: token },
+        token: bearerToken(request),
+      });
+      json(response, result.status, result.body);
       return true;
     }
     if (path === "/host/logout" && request.method === "GET") {
@@ -360,6 +379,21 @@ export async function startHttpHost(options: {
     response.end();
     return true;
   }
+  function recordCredentialFailure(error: unknown, remote: string, path: string): void {
+    if (error instanceof HostError && error.status === 401) {
+      limiter.record(remote);
+      if (path === "/host/saml/acs")
+        options.service.audit.observe({
+          operationId: crypto.randomUUID(),
+          actor: { kind: "anonymous" },
+          action: "organizer.login",
+          resource: { kind: "host" },
+          phase: "request",
+          outcome: "denied",
+          reason: "invalid_credentials",
+        });
+    }
+  }
   async function handleApi(
     request: IncomingMessage,
     response: ServerResponse,
@@ -381,9 +415,9 @@ export async function startHttpHost(options: {
         nonce: idempotencyKey(request),
       };
       const result = await dispatch(apiRequest);
-      json(response, result.status, result.body);
+      sendApiResponse(response, result);
     } catch (error) {
-      if (error instanceof HostError && error.status === 401) limiter.record(remote);
+      recordCredentialFailure(error, remote, path);
       throw error;
     }
   }

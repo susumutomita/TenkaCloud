@@ -193,10 +193,10 @@ describe("describeTenantAuditError", () => {
   it("should map 403 / 503 / 401 to their dedicated messages", () => {
     expect(
       describeTenantAuditError(new TenantAuditApiError(StatusCodes.FORBIDDEN, undefined)),
-    ).toContain("TenantAdmin");
+    ).toContain("管理者ロール");
     expect(
       describeTenantAuditError(new TenantAuditApiError(StatusCodes.SERVICE_UNAVAILABLE, undefined)),
-    ).toContain("audit log table");
+    ).toContain("保存先の状態");
     expect(
       describeTenantAuditError(new TenantAuditApiError(StatusCodes.UNAUTHORIZED, undefined)),
     ).toContain("再ログイン");

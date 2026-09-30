@@ -74,8 +74,8 @@ export function LocalHostSettingsPage({ config }: { config: AppConfig }) {
       <SpaceBetween size="m">
         <Box color="text-body-secondary">
           {ja
-            ? "機能フラグは保存されます。SAML を有効にする前に、IdP とユーザーの NameID を設定してください。監査ログは後続の実装で利用できます。"
-            : "Feature flags are saved. Configure the IdP and organizer NameIDs before enabling SAML. Audit logging becomes available in the next implementation step."}
+            ? "機能フラグは保存されます。SAML を有効にする前に、IdP とユーザーの NameID を設定してください。監査ログは既定で停止中です。有効にすると host のデータベースだけに記録します。停止中も保存済みの記録を閲覧できます。"
+            : "Feature flags are saved. Configure the IdP and organizer NameIDs before enabling SAML. Audit logging is off by default. When enabled, records are saved only in the host database. Retained records remain readable while recording is stopped."}
         </Box>
         {error && <Alert type="error">{error}</Alert>}
         {flags &&

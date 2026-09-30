@@ -23,11 +23,29 @@ export interface TenantAuditItem {
   readonly userAgent?: string;
   readonly occurredAt: string;
   readonly extra?: Record<string, unknown>;
+  readonly actorRole?: string;
+  readonly authMethod?: string;
+  readonly operationId?: string;
+  readonly phase?: string;
+  readonly resourceKind?: string;
+  readonly reason?: string;
+}
+
+export interface HostAuditCollection {
+  readonly enabled: boolean;
+  readonly retentionDays: number;
+  readonly maxRows: number;
+  readonly missed: number;
+  readonly firstGapAt: number | null;
+  readonly lastGapAt: number | null;
+  readonly discarded: number;
+  readonly gapStatusDurable: boolean;
 }
 
 export interface TenantAuditPage {
   readonly items: readonly TenantAuditItem[];
   readonly nextCursor?: string;
+  readonly collection?: HostAuditCollection;
 }
 
 export interface TenantAuditListInput {
@@ -119,9 +137,11 @@ export function useTenantAuditClient(config: AppConfig): TenantAuditClient | nul
 export function describeTenantAuditError(err: TenantAuditApiError): string {
   switch (err.status) {
     case StatusCodes.FORBIDDEN:
-      return "TenantAdmin role が必要です";
+      return "監査ログを閲覧できる管理者ロールが必要です";
     case StatusCodes.SERVICE_UNAVAILABLE:
-      return "audit log table が配線されていません (= deploy chain の更新が必要)";
+      return "監査ログを読み出せません。保存先の状態を確認してください";
+    case StatusCodes.REQUEST_TOO_LONG:
+      return "出力が5,000件を超えます。期間や実行者を絞ってください";
     case StatusCodes.BAD_REQUEST:
       if (err.errorCode === "invalid_from") return "from が無効な timestamp です";
       if (err.errorCode === "invalid_to") return "to が無効な timestamp です";

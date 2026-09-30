@@ -45,6 +45,7 @@ export interface OrganizerPrincipal {
 export class HostStore {
   private readonly statements = new Map<string, SqlStatement>();
   private connectionClosed = false;
+  private transactionDepth = 0;
 
   statement(sql: string): SqlStatement {
     let statement = this.statements.get(sql);
@@ -201,14 +202,20 @@ export class HostStore {
     return !columns.includes("provider");
   }
   transaction<T>(operation: () => T): T {
-    this.database.exec("BEGIN IMMEDIATE");
+    const depth = this.transactionDepth;
+    const savepoint = `host_tx_${depth}`;
+    this.database.exec(depth === 0 ? "BEGIN IMMEDIATE" : `SAVEPOINT ${savepoint}`);
+    this.transactionDepth += 1;
     try {
       const result = operation();
-      this.database.exec("COMMIT");
+      this.database.exec(depth === 0 ? "COMMIT" : `RELEASE SAVEPOINT ${savepoint}`);
       return result;
     } catch (error) {
-      this.database.exec("ROLLBACK");
+      this.database.exec(depth === 0 ? "ROLLBACK" : `ROLLBACK TO SAVEPOINT ${savepoint}`);
+      if (depth !== 0) this.database.exec(`RELEASE SAVEPOINT ${savepoint}`);
       throw error;
+    } finally {
+      this.transactionDepth -= 1;
     }
   }
   coordination(eventId: string, problemId: string): string | undefined {
@@ -534,8 +541,15 @@ export class HostStore {
       authMethod: row.authMethod,
     };
   }
-  revokeSession(refresh: string): void {
-    this.statement("DELETE FROM host_sessions WHERE refresh_hash=?").run(digest(refresh));
+  revokeSession(refresh: string): OrganizerPrincipal | undefined {
+    return this.transaction(() => {
+      const hash = digest(refresh);
+      const principal = this.statement(`SELECT s.user_id AS userId,s.identity_id AS identityId,
+        s.auth_method AS authMethod,u.role FROM host_sessions s JOIN host_organizer_users u ON u.id=s.user_id
+        WHERE s.refresh_hash=?`).get(hash) as OrganizerPrincipal | null;
+      this.statement("DELETE FROM host_sessions WHERE refresh_hash=?").run(hash);
+      return principal ?? undefined;
+    });
   }
   receipt(
     teamId: string,

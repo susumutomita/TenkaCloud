@@ -53,7 +53,8 @@
     "fix:format": "biome check --write",
     "prepare": "husky",
     "build:host": "bun run scripts/local-host/build-main.ts",
-    "test:host:saml": "bun run build:host && bun run scripts/local-host/tests/saml-browser-e2e.ts"
+    "test:host:saml": "bun run build:host && bun run scripts/local-host/tests/saml-browser-e2e.ts",
+    "test:host:audit": "bun run build:host && bun run scripts/local-host/tests/audit-browser-e2e.ts"
   },
   "trustedDependencies": [],
   "keywords": [],
