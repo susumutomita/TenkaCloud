@@ -159,7 +159,7 @@ class InvalidCredentialLimiter {
   record(remote: string): void {
     const current = this.failures.get(remote) ?? { count: 0, reset: this.now() + 60_000 };
     current.count += 1;
-    // Only a LAN address can reach this listener; still cap the map, not just the rate.
+    // Public listeners see unbounded remote addresses; cap the map, not just the rate.
     if (this.failures.size < 4096 || this.failures.has(remote)) this.failures.set(remote, current);
   }
 }

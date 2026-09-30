@@ -3,7 +3,11 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { DEFAULT_GATEWAY_PORTS, gatewayPortsOverlap, parseGatewayPorts } from "./gateway-ports";
 
-export function parseOptions(args: string[], repositoryRoot: string) {
+export function parseOptions(
+  args: string[],
+  repositoryRoot: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+) {
   const { values } = parseArgs({
     args,
     strict: true,
@@ -33,6 +37,11 @@ export function parseOptions(args: string[], repositoryRoot: string) {
     return Number(raw);
   };
   const exposure = publicExposure(values);
+  // Inside the hosted image loopback is unreachable and the log would carry the host key.
+  if (!exposure && environment.TENKACLOUD_HOST_REQUIRE_PUBLIC === "1")
+    throw new Error(
+      "This image runs behind a TLS proxy. Pass --public-admin-origin and --public-participant-origin.",
+    );
   if (exposure && values.lan)
     throw new Error("Choose either --lan or the public origins, not both.");
   const hostname = exposure ? "0.0.0.0" : listenAddress(values.lan, values["unsafe-lan"]);

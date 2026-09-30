@@ -11,9 +11,13 @@ const IMAGE = process.env.TENKACLOUD_HOST_IMAGE ?? "tenkacloud-host";
 const NAME = `tenkacloud-host-smoke-${String(process.pid)}`;
 const VOLUME = `${NAME}-data`;
 
-function docker(args: string[], check = true): string {
+function runDocker(args: string[]) {
   // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local tooling, like test:host:docker
-  const result = spawnSync("docker", args, { encoding: "utf8" });
+  return spawnSync("docker", args, { encoding: "utf8" });
+}
+
+function docker(args: string[], check = true): string {
+  const result = runDocker(args);
   if (check && result.status !== 0)
     throw new Error(`docker ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
   return `${result.stdout}${check ? "" : result.stderr}`.trim();
@@ -56,6 +60,9 @@ async function waitFor<T>(label: string, probe: () => Promise<T | undefined>): P
 }
 
 async function main(): Promise<void> {
+  const refused = runDocker(["run", "--rm", IMAGE]);
+  assert.notEqual(refused.status, 0, "the image must refuse to start without public origins");
+  assert.match(refused.stderr + refused.stdout, /This image runs behind a TLS proxy/u);
   const adminPort = await freePort();
   const participantPort = await freePort();
   const admin = `http://127.0.0.1:${String(adminPort)}`;

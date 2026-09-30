@@ -5,11 +5,13 @@
 # checked out:
 #
 #   docker build -f docker/host/Dockerfile -t tenkacloud-host .
-#   docker run -v tenkacloud-host-data:/data -p 5174:5174 -p 5175:5175 tenkacloud-host \
+#   docker run -v tenkacloud-host-data:/data \
+#     -p 127.0.0.1:5174:5174 -p 127.0.0.1:5175:5175 tenkacloud-host \
 #     --public-admin-origin https://admin.example.com \
 #     --public-participant-origin https://play.example.com --behind-proxy
 #
-# The proxy must pass the original Host header (Caddy does by default; nginx needs
+# Publish on loopback for a proxy on the same VM; only the proxy may reach these ports. The
+# proxy must pass the original Host header (Caddy does by default; nginx needs
 # `proxy_set_header Host $host`). State and the host login key live in /data.
 
 FROM oven/bun:1.3.11-alpine AS build
@@ -60,6 +62,7 @@ COPY problems /app/problems
 COPY --from=build /app/.tenkacloud/host-build /app/.tenkacloud/host-build
 
 ENV HOME=/tmp/tenkacloud-home
+ENV TENKACLOUD_HOST_REQUIRE_PUBLIC=1
 # Host mode refuses a data directory other users can read (scripts/local-host/files.ts).
 RUN test "$(id -u bun)" = "1000" \
     && mkdir -p /data \

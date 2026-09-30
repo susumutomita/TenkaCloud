@@ -208,13 +208,19 @@ HTTPS origins, and the host checks every request's Host and Origin against them:
 docker build -f docker/host/Dockerfile -t tenkacloud-host .
 docker run --read-only --tmpfs /tmp --cap-drop ALL \
   --volume tenkacloud-host-data:/data \
-  --publish 5174:5174 --publish 5175:5175 \
+  --publish 127.0.0.1:5174:5174 --publish 127.0.0.1:5175:5175 \
   tenkacloud-host \
   --public-admin-origin https://admin.example.com \
   --public-participant-origin https://play.example.com \
   --behind-proxy
 ```
 
+- **Only the proxy may reach the ports.** The example publishes on loopback for a
+  proxy on the same VM. A client that reaches the container directly could forge the
+  Host and `X-Forwarded-For` headers, and would speak plain HTTP. On a container
+  platform, keep the ports private to its load balancer.
+- **The image refuses to start without the public origins.** Inside a container
+  loopback is unreachable, and the log would carry the host key.
 - **The proxy must pass the original Host header.** Caddy does this by default.
   nginx needs `proxy_set_header Host $host`. A request with another Host is refused
   with `Untrusted Host header. Expected <host>.`

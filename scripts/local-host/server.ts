@@ -65,15 +65,12 @@ export async function startLocalHost(
     const engine = createEngine(directory);
     service = new HostingService(store, engine, masterKey);
     service.gatewayPorts = settings.gatewayPorts;
-    service.gatewayHostname = settings.hostname;
+    // Public mode offers no gateway problems; a recovered one must still not open on every interface.
+    const gatewayHostname = settings.public ? "127.0.0.1" : settings.hostname;
+    service.gatewayHostname = gatewayHostname;
     service.assertGatewayRange(settings.gatewayPorts);
     await service.recover();
-    const surfaces = new SurfaceGateways(
-      settings.hostname,
-      service,
-      settings.gatewayPorts,
-      announce,
-    );
+    const surfaces = new SurfaceGateways(gatewayHostname, service, settings.gatewayPorts, announce);
     gateways = surfaces;
     service.surfaceLink = (job, team) => surfaces.link(job, team);
     service.closeSurface = (jobId) => surfaces.closeJob(jobId);

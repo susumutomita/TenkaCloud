@@ -36,6 +36,12 @@ test("public origins bind every interface and keep both origins", () => {
   expect(parse().public).toBeUndefined();
 });
 
+test("the hosted image refuses to start without public origins", () => {
+  const image = { TENKACLOUD_HOST_REQUIRE_PUBLIC: "1" };
+  expect(() => parseOptions([], root, image)).toThrow("This image runs behind a TLS proxy.");
+  expect(parseOptions(publicArgs, root, image).public?.adminOrigin).toBe(ADMIN);
+});
+
 test("public origins are refused when they could expose the host console unsafely", () => {
   expect(() =>
     parse(
