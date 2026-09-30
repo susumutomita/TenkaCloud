@@ -1,5 +1,7 @@
 # Local play (Docker and multi-cloud simulation, no cloud account)
 
+> Historical SaaS/Lite/local-practice reference. These commands do not describe the current host-only candidate. Use the [host guide](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md) or the [pinned legacy checkout](https://github.com/susumutomita/TenkaCloud/blob/main/docs/legacy-operations.md).
+
 Local play lets a participant solve a problem entirely on their machine — no
 cloud account and no billed cloud resources. It has two explicit runtimes:
 

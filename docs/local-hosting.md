@@ -1,10 +1,11 @@
 # Local competition hosting
 
-Local hosting runs a competition on the organizer's computer. It is a different
-entry point from `make local`: individual practice and its existing login flow
-are unchanged. The host console uses local organizer accounts. The host key
-creates the first Admin once. Participants sign in with the team keys issued
-for their event.
+Local hosting runs a competition on the organizer's computer through `make host`.
+The former `make local` individual-practice entry point and its login flow are
+retired from this host-only source tree. Existing installations should follow
+their [pinned legacy release](legacy-operations.md). The host console uses local
+organizer accounts. The host key creates the first Admin once. Participants sign
+in with the team keys issued for their event.
 
 SAML sign-in for existing organizers is optional. See [host SAML setup](host-saml.md)
 for identity-provider configuration, NameID links and revocation.
@@ -36,7 +37,7 @@ point. From the repository root:
 
 ```sh
 git submodule update --init --recursive
-bun install --frozen-lockfile
+bun install --frozen-lockfile --ignore-scripts
 make host      # the same as: bun start
 ```
 

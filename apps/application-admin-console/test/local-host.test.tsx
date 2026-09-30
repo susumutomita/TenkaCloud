@@ -55,6 +55,22 @@ describe("loadConfig in the local hosting build", () => {
     });
   });
 
+  it.each(["https://play.example.com", "https://play.example.com:8443"])(
+    "accepts the public host's HTTPS participant origin: %s",
+    async (participantPortalUrl) => {
+      const publicOrigin = "https://admin.example.com";
+      vi.stubGlobal("window", { location: { origin: publicOrigin } });
+      stubRuntime({ ...runtime, apiBaseUrl: `${publicOrigin}/api`, participantPortalUrl });
+
+      const config = await loadConfig({}, { localHostBuild: true });
+
+      expect(isLocalHost(config)).toBe(true);
+      expect(config.apiBaseUrl).toBe(`${publicOrigin}/api`);
+      expect(config.cognitoDomain).toBe(`${publicOrigin}/api/host`);
+      expect(config.participantPortalUrl).toBe(participantPortalUrl);
+    },
+  );
+
   it("exposes only a valid host AWS region from the same-origin runtime configuration", async () => {
     stubRuntime({ ...runtime, awsRegion: "ap-northeast-1" });
     expect((await loadConfig({}, { localHostBuild: true })).hostAwsRegion).toBe("ap-northeast-1");
@@ -67,6 +83,10 @@ describe("loadConfig in the local hosting build", () => {
     { ...runtime, role: "participant" },
     { ...runtime, apiBaseUrl: "https://evil.example/api" },
     { ...runtime, participantPortalUrl: "ftp://127.0.0.1:5175" },
+    { ...runtime, participantPortalUrl: "https://play.example.com/path" },
+    { ...runtime, participantPortalUrl: "//play.example.com" },
+    // eslint-disable-next-line sonarjs/code-eval -- Rejected protocol fixture; never evaluated.
+    { ...runtime, participantPortalUrl: "javascript:alert(1)" },
   ])("refuses a configuration that does not describe this host: %o", async (body) => {
     stubRuntime(body);
     await expect(loadConfig({}, { localHostBuild: true })).rejects.toThrow(/No demo or cloud/u);

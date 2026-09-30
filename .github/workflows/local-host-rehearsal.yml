@@ -8,11 +8,12 @@ on:
   pull_request:
     paths:
       - 'scripts/local-host/**'
-      - 'scripts/local-play/**'
       - 'scripts/lib/**'
+      - 'scripts/problem-pack/**'
       - 'packages/**'
       - 'package.json'
       - 'bun.lock'
+      - 'templates/**'
       - 'problems'
       - 'apps/**/local-host/**'
       - 'apps/application-admin-console/src/**'
@@ -54,8 +55,12 @@ jobs:
         run: bun run test:host:docker
       - name: Hosted image plays a Cryptography Battle at its advertised origins
         run: |
-          docker build -f docker/host/Dockerfile -t tenkacloud-host .
-          bun run test:host:container
+          docker build -f docker/host/Dockerfile \
+            --build-arg TENKACLOUD_SOURCE_COMMIT="$(git rev-parse HEAD)" \
+            --build-arg TENKACLOUD_CATALOG_COMMIT="$(git rev-parse HEAD:problems)" \
+            -t tenkacloud-host:review .
+          TENKACLOUD_HOST_IMAGE=tenkacloud-host:review bun run test:host:container
+          bun run release:candidate --image tenkacloud-host:review --out .tenkacloud/host-candidate-built.json
       # Playwright's pinned Chromium for the browser rehearsal (the runner has none preinstalled).
       - name: Install Chromium for the browser rehearsal
         run: bunx playwright-core install --with-deps chromium

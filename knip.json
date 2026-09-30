@@ -38,15 +38,9 @@
         "scripts/landing/generate-landing-locales.ts",
         "scripts/landing/stamp-asset-versions.ts",
         "scripts/landing/onboarding-videos/render-*.ts",
-        "scripts/local-play/server.ts",
-        "scripts/local-play/api.ts",
-        "scripts/local-play/local-smoke.ts",
-        "scripts/local/measure-profile.ts",
         "scripts/onboarding/verify-custom-challenge.ts",
-        "scripts/openapi/generate.ts",
         "scripts/ops/*.ts",
         "scripts/quality/*.ts",
-        "scripts/release/generate-release-report.ts",
         "scripts/security/*.ts",
         "scripts/workspace/*.ts",
         "scripts/**/*.test.ts",
@@ -57,11 +51,13 @@
         "scripts/local-host/tests/docker-smoke.ts",
         "scripts/local-host/tests/e2e-host.ts",
         "scripts/local-host/tests/browser-e2e.ts",
+        "scripts/local-host/tests/cloud-browser-e2e.ts",
+        "scripts/problem-pack/main.ts",
+        "scripts/release/host-candidate.ts",
         "scripts/local-host/tests/disruption-browser-e2e.ts",
         "scripts/local-host/tests/uptime-browser-e2e.ts",
         "scripts/local-host/tests/progression-browser-e2e.ts",
         "scripts/local-host/tests/organizer-browser-e2e.ts",
-        "scripts/local-host/tests/cloud-browser-e2e.ts",
         "scripts/local-host/tests/accounts-browser-e2e.ts",
         "scripts/local-host/tests/participant-aws-browser-e2e.ts",
         "scripts/local-host/tests/saml-browser-e2e.ts",
@@ -69,20 +65,6 @@
         "scripts/local-host/tests/registration-browser-e2e.ts"
       ],
       "project": ["scripts/**/*.ts"]
-    },
-    "infrastructure": {
-      "entry": [
-        "bin/*.ts",
-        "lib/**/handlers/**/index.ts",
-        "lib/**/handler/index.ts",
-        "lib/**/handlers/handler.ts",
-        "lib/problem-pack/pack-cli.ts",
-        "test/**/*.ts"
-      ],
-      "project": ["bin/**/*.ts", "lib/**/*.ts", "test/**/*.ts"]
-    },
-    "apps/admin-console": {
-      "project": ["src/**"]
     },
     "apps/application-admin-console": {
       "project": ["src/**"],

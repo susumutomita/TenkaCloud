@@ -1,85 +1,45 @@
-import { MaturityBadge } from "@/components/MaturityBadge";
-
 export const metadata = { title: "開発者マニュアル" };
 
-# 開発者マニュアル <MaturityBadge level="stable" />
+# 開発者マニュアル
 
-TenkaCloud本体、インフラコード、共通パッケージ、各Portal、リポジトリのツールを変更
-する人のためのマニュアルです。本体のコードを変えずに競技をデプロイする作業は
-競技開催者の役割です。
+現在のブランチは未公開の host 専用 candidate です。
+[開発手順](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md)と
+[廃止・未対応の一覧](https://github.com/susumutomita/TenkaCloud/blob/main/docs/host-retirement.md)を確認してください。
+既存 SaaS/Lite 環境は固定した旧版で運用します。このブランチは移行や撤収を行いません。
 
-## あなたのゴール
+## 準備と起動
 
-プラットフォームの契約を壊さず、必要なリポジトリ検査に通る、範囲の明確な変更を
-1つ作ります。
-
-## リポジトリを準備する
-
-[Contributing](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md)に沿って固定バージョンのツールを用意してから実行します。
-
-```bash
-mise exec -- make install
-git submodule update --init --recursive problems
+```sh
+git submodule update --init --recursive
+bun install --frozen-lockfile --ignore-scripts
+bun run build:host
+make host HOST_ARGS="--no-build"
 ```
 
-ローカルプレイの開発では `mise exec -- make doctor-dev` で Bun・Docker CLI・Compose・
-daemon を診断できます。設定変更は行いません。ローカルプレイを使わない文書・API・
-インフラの変更では、この Docker 診断は不要です。別の `make doctor` は Bun 不要の
-参加者向け Docker 経路を診断します。[Getting started](/developers/docs/getting-started/)から
-必要な実行経路だけを選びます。
+Bun 1.3.11 を使います。host は開催者・参加者アプリを配信し、競技状態を SQLite に保存します。
+専用の非公開データディレクトリを用意してください。
+Docker 問題には Docker、AWS 問題には承認された競技者アカウントが必要です。
+組み込みの Battle は Bun で動作します。
 
-## 変更前に担当場所を見つける
+## 担当コード
 
-| パス | 担当 |
+| 領域 | ソース |
 | --- | --- |
-| `apps/` | 管理者・参加者・開発者向けWebアプリ |
-| `infrastructure/` | AWS CDK stack、環境設定、デプロイ経路 |
-| `packages/` | 共通contract、SDK、runtime adapter、CLI |
-| `scripts/` | リポジトリ検査、デプロイ補助、生成物 |
-| `problems/` | commitを固定した公式問題カタログsubmodule |
+| HTTP、永続化、認証、実行アダプター | `scripts/local-host/` |
+| Docker の検証・採点・Compose | `scripts/local-host/container/` |
+| 共通の純粋な処理と ExternalId | `scripts/lib/` |
+| 開催者アプリ | `apps/application-admin-console/` |
+| 参加者アプリ | `apps/participant-portal/` |
+| pack 作成・検証・保存 | `scripts/problem-pack/` |
+| 公開 SDK と作者向けツール | `packages/` |
+| 問題コンテンツと CloudFormation | pin した `problems/` submodule |
+| 競技者アカウントの初期設定 | `templates/competitor-bootstrap.yaml` |
 
-ローカル大会(`make host`、Bun + SQLite)は`scripts/local-host/`が API と Docker 環境を担当し、
-画面は通常の管理コンソールと参加者ポータルを local-host mode で使います。
-手順、ポート、検証コマンドは[ローカル大会の開催](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md)にあります。
+## 確認
 
-契約を変える前に、最寄りのテストとリポジトリ内の指示を読みます。
-[プラットフォーム構成](/developers/docs/concepts/architecture/)はplane間の責務とevent
-契約を説明しています。
-
-LLMに調査や修正を頼むときは、[目的別ガイドとコードの見取り図](https://tenkacloud.com/llms-full.txt)
-から担当ファイルを探します。画面の入力→処理→保存→結果表示の順に、1つの症状を追います。
-必要な文書だけを読みます。
-
-## 変更の流れ
-
-1. 依頼やIssueから、何を確認できれば完了かを決める。
-2. 最小の担当moduleと既存テストを見つける。
-3. 実装と利用者向け文書を同時に更新する。
-4. 作業中は範囲を絞ったテストを実行する。
-5. commit前に`make before-commit`を通す。pre-commit hookが自動で実行する。
-6. 最終差分を確認し、対象ファイルだけをstageする。
-
-`.env`、認証情報、生成されたsecret、無関係な変更をcommitしません。単体テストが
-greenでも、実AWSデプロイやブラウザ操作まで証明したことにはなりません。未確認の
-境界は正確に報告します。
-
-## コード変更か環境設定か
-
-- 対応済みの値へ開催者が変えるだけなら、既存の`.env`パラメータを使い、説明を
-  更新します。[競技開催者マニュアル](/developers/docs/manual/organizer/)を参照。
-- 受け付ける値、検証、生成リソース、実行時の挙動を変えるなら、担当コード、テスト、
-  `.env.example`、マニュアルを同じPull Requestで更新します。
-- データベース保存先の変更では、データ移行とロールバックの境界を明示します。
-  暗黙のdual writeを追加しません。
-
-## レビュー依頼前の確認
-
-- 新しい挙動を確認する範囲の絞られたテストがある。
-- 利用者向けの英語と日本語が一致している。
-- 生成物と索引が最新である。
-- link、type、format、関係するbuildが通る。
-- 未実施のライブ検証を**Not run**と書く。
-- IssueとPull Requestがコード差分だけでなく利用者への影響を説明している。
-
-問題内容を変更する作業はpackの担当です。その場合は
-[問題作成者マニュアル](/developers/docs/manual/problem-author/)を使ってください。
+`bun run test:host`、`bun run test:authoring`、`bun run typecheck` と
+`make before-commit` を実行します。既存の lint と coverage の基準を維持してください。
+永続化や認証の変更は実 HTTP/SQLite 経路で確認します。
+配布に関わる変更では
+[clean checkout とコンテナ再起動](https://github.com/susumutomita/TenkaCloud/blob/main/docs/host-build-verification.md)
+も確認します。ブラウザ検証と任意の実 AWS・IdP 検証は、ローカルテストと分けて報告します。

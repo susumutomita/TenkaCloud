@@ -167,7 +167,31 @@ async function main(): Promise<void> {
       teams[0]?.teamLoginKey ?? "",
     );
     assert.equal(projection.status, 200, JSON.stringify(projection.body));
-    console.log(`PASS container smoke: ${IMAGE} served a started Cryptography Battle to 2 teams.`);
+    const before = projection.body.projection as { ready: unknown; vault: unknown };
+    assert.deepEqual(before.ready, { count: 2, total: 2, me: true });
+    assert.ok(before.vault, "the original match must contain the team vault");
+    docker(["restart", NAME]);
+    await waitFor("participant recovery after container restart", async () =>
+      (await fetch(`${participant}/healthz`)).ok ? true : undefined,
+    );
+    assert.equal(docker(["exec", NAME, "cat", "/data/host-key"]), key);
+    for (const team of teams) {
+      const recovered = await api(participant, "GET", "/portal/me", team.teamLoginKey);
+      assert.equal(recovered.status, 200, JSON.stringify(recovered.body));
+    }
+    const recoveredProjection = await api(
+      participant,
+      "GET",
+      "/portal/me/coordination/projection",
+      teams[0]?.teamLoginKey ?? "",
+    );
+    assert.equal(recoveredProjection.status, 200, JSON.stringify(recoveredProjection.body));
+    const after = recoveredProjection.body.projection as { ready: unknown; vault: unknown };
+    assert.deepEqual(after.ready, before.ready, "both ready players must survive restart");
+    assert.deepEqual(after.vault, before.vault, "the same team vault must survive restart");
+    console.log(
+      `PASS container smoke: ${IMAGE} served a started Cryptography Battle to 2 teams; same-volume restart preserved keys, readiness and vault.`,
+    );
   } finally {
     docker(["rm", "--force", NAME], false);
     docker(["volume", "rm", VOLUME], false);

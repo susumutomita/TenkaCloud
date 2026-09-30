@@ -221,7 +221,7 @@ async function loadLocalHostConfig(): Promise<AppConfig> {
     runtime.role !== "admin" ||
     runtime.apiBaseUrl !== `${origin}/api` ||
     typeof runtime.participantPortalUrl !== "string" ||
-    !/^http:\/\/[^/]+$/u.test(runtime.participantPortalUrl)
+    !/^https?:\/\/[^/]+$/u.test(runtime.participantPortalUrl)
   )
     throw new Error("Invalid local hosting configuration. No demo or cloud fallback is permitted.");
   return {

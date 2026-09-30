@@ -1,5 +1,7 @@
 # アーキテクチャの読み方
 
+> Historical SaaS/Lite/local-practice reference. These commands do not describe the current host-only candidate. Use the [host guide](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md) or the [pinned legacy checkout](https://github.com/susumutomita/TenkaCloud/blob/main/docs/legacy-operations.md).
+
 TenkaCloud の開発者向けに、利用者・責務・実行担当・操作順を分けて説明します。
 確認基準は `80dfebb145fc8df2fbe93f3259e5342f75d72da9` の実装です。
 Draw.io の 5 ページは、`308c5dfc91282d3e35bf7098b85df570b5685cb9` の実装と部品・線・名前を突き合わせています。

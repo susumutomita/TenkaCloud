@@ -1,5 +1,7 @@
 # Local mode system requirements
 
+> Historical SaaS/Lite/local-practice reference. These commands do not describe the current host-only candidate. Use the [host guide](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md) or the [pinned legacy checkout](https://github.com/susumutomita/TenkaCloud/blob/main/docs/legacy-operations.md).
+
 What local play costs depends on which components you run and how many problems
 are up at the same time, so this page publishes three run profiles instead of one
 "required memory" figure. Every number below is traced to a measurement record

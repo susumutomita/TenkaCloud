@@ -20,8 +20,6 @@ WORKDIR /app
 # workspace in package.json needs its manifest for --frozen-lockfile.
 COPY package.json bun.lock ./
 COPY packages ./packages
-COPY infrastructure/package.json ./infrastructure/
-COPY apps/admin-console/package.json ./apps/admin-console/
 COPY apps/application-admin-console/package.json ./apps/application-admin-console/
 COPY apps/developer-portal/package.json ./apps/developer-portal/
 COPY apps/participant-portal/package.json ./apps/participant-portal/
@@ -31,29 +29,30 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 COPY . .
 RUN bun run build:host
 
-# Runtime dependencies only: the root's own dependencies and packages/*, without the
-# apps, infrastructure and build tooling (same approach as docker/local-control-plane).
+# Resolve runtime dependencies from the same frozen graph used for the UI build.
 FROM oven/bun:1.3.11-alpine AS runtime-deps
 WORKDIR /app
-COPY bun.lock ./
-COPY package.json ./package.json.full
+COPY package.json bun.lock ./
 COPY packages ./packages
-RUN bun --eval ' \
-      const pkg = JSON.parse(await Bun.file("package.json.full").text()); \
-      pkg.workspaces = ["packages/*"]; \
-      delete pkg.devDependencies; \
-      await Bun.write("package.json", JSON.stringify(pkg, null, 2)); \
-    ' \
-  && rm package.json.full
-RUN --mount=type=cache,target=/root/.bun/install/cache bun install --ignore-scripts
+COPY apps/application-admin-console/package.json ./apps/application-admin-console/
+COPY apps/developer-portal/package.json ./apps/developer-portal/
+COPY apps/participant-portal/package.json ./apps/participant-portal/
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+      bun install --production --frozen-lockfile --ignore-scripts
 
 FROM oven/bun:1.3.11-alpine AS runtime
 WORKDIR /app
+ARG TENKACLOUD_SOURCE_COMMIT
+ARG TENKACLOUD_CATALOG_COMMIT
+LABEL org.opencontainers.image.source="https://github.com/susumutomita/TenkaCloud" \
+      org.opencontainers.image.revision=$TENKACLOUD_SOURCE_COMMIT \
+      io.tenkacloud.catalog.revision=$TENKACLOUD_CATALOG_COMMIT
 COPY --from=runtime-deps /app/node_modules /app/node_modules
 COPY --from=runtime-deps /app/package.json /app/package.json
 COPY packages /app/packages
 COPY scripts/lib /app/scripts/lib
 COPY scripts/local-host /app/scripts/local-host
+COPY templates /app/templates
 COPY problems /app/problems
 COPY --from=build /app/.tenkacloud/host-build /app/.tenkacloud/host-build
 

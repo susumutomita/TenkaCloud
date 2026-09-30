@@ -1,6 +1,6 @@
 # Contributing
 
-Use the [README](./README.md) to try TenkaCloud locally or host an event on AWS.
+Use the [README](./README.md) to host an event from a local process or container.
 This guide is for changes to the platform. Problem content belongs in
 [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) or a
 [private Problem Pack](./README.md#add-your-own-problems).
@@ -24,13 +24,12 @@ Read [AGENTS.md](./AGENTS.md) for platform boundaries. Use the
 for code ownership, or the [LLM task guide](./landing/llms-full.txt) to locate code
 by symptom. An AWS deployment is needed only when your change requires one.
 
-For the participant local-play environment, run `mise exec -- make doctor-dev`
-to check Bun, Docker CLI, Compose, and the daemon; then use `make local-onboard`
-and `make local-dev`. This Docker diagnosis is not required for docs, API, or
-infrastructure changes that do not run local-play services.
-For a single SPA, use its dev server, for example
-`cd apps/application-admin-console && make dev`. See [Local play](./docs/local-play.md)
-for required services and ports.
+Build the host interfaces with `bun run build:host`, then run `make host
+HOST_ARGS="--no-build"`. Docker is required only for Docker problem execution.
+Use `bun run test:host` for real HTTP/SQLite tests and `bun run test:authoring`
+for the retained pack tools. See [clean checkout verification](docs/host-build-verification.md).
+The old SaaS/Lite/local-play backend is retired; use [a pinned legacy release](docs/legacy-operations.md)
+when maintaining an existing installation.
 
 ## Make one reviewable change
 
