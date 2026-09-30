@@ -251,6 +251,7 @@ export async function startHttpHost(options: {
       apiBaseUrl: `${origin}/api`,
       participantPortalUrl: options.participantOrigin,
       role: options.kind,
+      hasAws: options.service.engine.hasAws === true,
       ...(runtimeAwsRegion ? { awsRegion: runtimeAwsRegion } : {}),
     };
   }

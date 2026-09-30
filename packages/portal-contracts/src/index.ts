@@ -474,3 +474,13 @@ export interface LeaderboardResponse {
   /** event の終了予定時刻 (ISO 8601、 UI で「あと N 分で公開」 表示用)。 */
   readonly endsAt?: string;
 }
+
+/** Temporary credentials for one participant viewer role, never the deploy role. */
+export interface CliCredentialsView {
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+  readonly sessionToken: string;
+  readonly expiration: string;
+  readonly region: string;
+  readonly awsAccountId: string;
+}

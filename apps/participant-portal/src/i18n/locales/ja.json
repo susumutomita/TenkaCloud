@@ -317,7 +317,7 @@
     "mock_open_blocked": "このデモはモックモード (= local mock cloud adapter) で動作しています。 実際の AWS Console を開くには、 本物のイベントへの参加 (= backend mode 配信) が必要です。",
     "validation_error": "バリデーションエラー: {errorCode}",
     "howto_header": "使い方",
-    "howto_body": "下のボタンを押すと新しいタブで AWS Console (CloudFormation スタック画面) が自動でログイン状態で開きます。session の TTL は 1 時間です。",
+    "howto_body": "下のボタンを押すと、この問題の閲覧用ロールでログインした AWS Console のホーム画面が新しいタブで開きます。セッションの有効期間は最長 1 時間です。",
     "empty_problems": "問題がありません",
     "open_console_button": "AWS Console を開く",
     "open_console_aria": "{problemId} の AWS Console を開く",

@@ -17,6 +17,7 @@ import {
   type Job,
   type Problem,
 } from "./model";
+import type { ParticipantAwsAccess } from "./participant-aws-access";
 
 function problemKinds(event: HostedEvent): ReadonlyMap<string, DefinitionKind> {
   return new Map(
@@ -26,6 +27,20 @@ function problemKinds(event: HostedEvent): ReadonlyMap<string, DefinitionKind> {
 
 /** Runtime dispatch only; cryptography and scoring rules belong to the catalog plugin. */
 export class CompetitionEngine extends DockerHostingEngine {
+  get hasAws(): boolean {
+    return this.cloud !== undefined;
+  }
+
+  participantAwsAccess(args: {
+    kind: ParticipantAwsAccess["kind"];
+    job: Job;
+    assertCurrent: () => void;
+  }): Promise<ParticipantAwsAccess> {
+    if (definitionKind(args.job.definition) !== "cloudformation")
+      throw new HostError(409, "This environment has no AWS access.", "not_ready");
+    return this.aws().participantAwsAccess(args);
+  }
+
   private readonly battles: Problem[];
   private readonly loader: LocalPluginLoader;
   constructor(

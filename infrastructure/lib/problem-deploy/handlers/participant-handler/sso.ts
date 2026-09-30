@@ -1,4 +1,5 @@
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
+import type { CliCredentialsView } from "@tenkacloud/portal-contracts";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
@@ -35,17 +36,7 @@ export type SsoOutcome =
  * frontend は受け取った credentials を `aws configure` / `boto3` / `Terraform` で
  * そのまま使える形 (= AccessKeyId / SecretAccessKey / SessionToken + Expiration) で返す。
  */
-export interface CliCredentialsView {
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
-  readonly sessionToken: string;
-  /** ISO 8601 string。 STS Credentials.Expiration を直接 echo (= TTL ~ 1 hour)。 */
-  readonly expiration: string;
-  /** deploy region (= competitor account 側の deploy 先) */
-  readonly region: string;
-  /** 12 桁 AWS Account ID。 frontend が UI で表示する用。 */
-  readonly awsAccountId: string;
-}
+export type { CliCredentialsView } from "@tenkacloud/portal-contracts";
 
 export type CliCredentialsOutcome =
   | { kind: "ok"; credentials: CliCredentialsView }

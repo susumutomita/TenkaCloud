@@ -166,6 +166,7 @@ test("the host console answers only at its advertised origin and links the adver
     apiBaseUrl: `${ADMIN}/api`,
     participantPortalUrl: PLAY,
     role: "admin",
+    hasAws: false,
   });
 });
 

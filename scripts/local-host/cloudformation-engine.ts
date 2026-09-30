@@ -34,6 +34,11 @@ import {
   type ScoreEvent,
   type Team,
 } from "./model";
+import {
+  type ParticipantAwsAccess,
+  type ParticipantAwsClients,
+  participantAwsAccess,
+} from "./participant-aws-access";
 
 /** Short-lived credentials for the team's competitor role; the SDK refreshes them near expiry. */
 export type CredentialsProvider = () => Promise<{
@@ -69,7 +74,7 @@ interface StackUnit {
   outputs?: Record<string, string>;
 }
 
-export interface CloudFormationEngineOptions {
+export interface CloudFormationEngineOptions extends ParticipantAwsClients {
   readonly region: string;
   /** The host's ExternalId. Every competitor role requires it (`competitor-bootstrap.yaml`). */
   readonly externalId: string;
@@ -136,6 +141,21 @@ export function cloudFormationCatalog(repositoryRoot: string): Problem[] {
 }
 
 export class CloudFormationEngine implements RuntimeEngine {
+  readonly hasAws = true;
+
+  participantAwsAccess(args: {
+    kind: ParticipantAwsAccess["kind"];
+    job: Job;
+    assertCurrent: () => void;
+  }): Promise<ParticipantAwsAccess> {
+    return participantAwsAccess({
+      ...args,
+      team: this.options.team(args.job),
+      externalId: this.options.externalId,
+      clients: this.options,
+    });
+  }
+
   private readonly problems: readonly Problem[];
 
   constructor(

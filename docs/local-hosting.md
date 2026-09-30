@@ -264,8 +264,25 @@ make host HOST_ARGS="--aws-region ap-northeast-1"
   that finished creating while the host was stopped has no recorded outputs, so it
   is marked failed. **Restart** on that environment in the **Teams** tab deletes and
   recreates it, as does **Retry failed** while the event is being prepared.
-- **Not yet available.** The portal's **Open AWS Console** needs participant
-  console sign-in, which host mode does not provide yet.
+- **Participant AWS access.** During play, choose **Open AWS Console** in the portal,
+  or open **Tools > SSO Credentials** to issue CLI credentials. Both use the
+  environment's `ParticipantViewerRoleArn` from the saved stack outputs. The host
+  first assumes the competitor deploy role with its host ExternalId, then the
+  viewer role with the saved job ID as ExternalId. Participants receive only the
+  viewer credentials, with the permissions defined by the problem template.
+  The host requests one-hour credentials and returns the actual STS expiry for CLI
+  credentials. Credentials stay in browser memory and disappear when cleared or
+  the page reloads. Console sign-in uses the fixed AWS federation endpoint and
+  the region's console home page. This flow supports commercial AWS accounts.
+- **Access gates.** Before and after AWS calls, the host checks team membership,
+  event start, lock, end and expiry, and whether the environment is running.
+  Rotating a team key or starting an environment operation blocks a pending
+  request. Ending the event blocks new credentials and console links. Sessions
+  already issued remain valid until AWS expires or revokes them.
+
+The access checks and built portal flows are covered by local HTTP, SQLite and
+Chromium tests with STS and federation mocks. A real AWS rehearsal requires
+separate approval and is optional for development completion.
 
 The container image accepts the same flag. Give it credentials through the
 platform's role or environment variables.

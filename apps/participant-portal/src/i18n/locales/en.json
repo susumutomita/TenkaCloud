@@ -317,7 +317,7 @@
     "mock_open_blocked": "This demo is running in mock mode (= local mock cloud adapter). Opening the real AWS Console requires participation in a live event (= backend mode deployment).",
     "validation_error": "Validation error: {errorCode}",
     "howto_header": "How to use",
-    "howto_body": "Pressing the button below opens the AWS Console (CloudFormation stacks view) in a new tab, already signed in. Session TTL is 1 hour.",
+    "howto_body": "The button opens the AWS Console home page in a new tab, signed in to this problem's viewer role. The session lasts up to one hour.",
     "empty_problems": "No problems",
     "open_console_button": "Open AWS Console",
     "open_console_aria": "Open AWS Console for {problemId}",

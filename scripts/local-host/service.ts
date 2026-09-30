@@ -30,6 +30,7 @@ import {
   text,
 } from "./model";
 import { type OrganizerRole, requireOrganizerPermission } from "./organizer-access";
+import { ParticipantAssumeRoleError, type ParticipantAwsAccess } from "./participant-aws-access";
 import { portsFree } from "./ports";
 import { digest, type HostStore } from "./store";
 
@@ -1087,12 +1088,94 @@ export class HostingService {
     if (request.path.startsWith("/portal/me/coordination/")) {
       return this.queue.run(team.eventId, async () => this.coordination.request(request));
     }
+    if (request.method === "GET" && request.path === "/portal/me/console-signin-url")
+      return this.awsAccess(request, "console");
+    if (request.method === "GET" && request.path === "/portal/me/cli-credentials")
+      return this.awsAccess(request, "cli");
     if (request.method === "GET")
       return this.queue.run(team.eventId, () => this.readParticipant(request));
     if (request.method === "PATCH" && request.path === "/portal/me")
       return this.queue.run(team.eventId, () => this.renameParticipant(request));
     if (request.method !== "POST") throw new HostError(404, "Unknown participant endpoint.");
     return this.submitParticipant(request, team);
+  }
+  private async awsAccess(
+    request: ApiRequest,
+    kind: ParticipantAwsAccess["kind"],
+  ): Promise<ApiResponse> {
+    const jobId = request.query.get("jobId") ?? "";
+    if (
+      !jobPattern.test(jobId) ||
+      request.query.getAll("jobId").length !== 1 ||
+      [...request.query.keys()].some((key) => key !== "jobId")
+    )
+      throw new HostError(400, "Specify only one valid jobId.", "invalid_jobid");
+    if (!this.engine.hasAws || !this.engine.participantAwsAccess)
+      throw new HostError(503, "AWS access is not configured on this host.", "aws_not_configured");
+    const resolve = () => {
+      const team = this.store.authenticateTeam(request.token);
+      const event = this.currentEvent(team.eventId);
+      assertPlaying(event, this.now());
+      if (event.expiresAt * 1000 <= this.now())
+        throw new HostError(409, "This event has expired.", "scoring_ended");
+      const job = this.store
+        .jobs(team.eventId, team.teamId)
+        .find((candidate) => candidate.jobId === jobId);
+      if (!job)
+        throw new HostError(403, "This environment does not belong to your team.", "unauthorized");
+      if (
+        !linkable(job) ||
+        !event.problems.some(
+          (problem) =>
+            problem.problemId === job.problemId &&
+            problem.definition === job.definition &&
+            problem.runtime === "cloudformation",
+        )
+      )
+        throw new HostError(409, "This AWS environment is not running.", "not_ready");
+      return { job, team };
+    };
+    const initial = resolve();
+    const assertCurrent = () => {
+      const current = resolve();
+      if (
+        current.job.unit !== initial.job.unit ||
+        current.job.definition !== initial.job.definition ||
+        current.team.aws?.accountId !== initial.team.aws?.accountId ||
+        current.team.aws?.roleName !== initial.team.aws?.roleName
+      )
+        throw new HostError(
+          409,
+          "This AWS environment changed. Request access again.",
+          "not_ready",
+        );
+    };
+    try {
+      const result = await this.engine.participantAwsAccess({
+        kind,
+        job: initial.job,
+        assertCurrent,
+      });
+      assertCurrent();
+      return ok(
+        result.kind === "console"
+          ? { loginUrl: result.loginUrl }
+          : { credentials: result.credentials },
+      );
+    } catch (error) {
+      if (error instanceof ParticipantAssumeRoleError)
+        return ok(
+          {
+            error: error.kind,
+            kind: error.kind,
+            stage: error.stage,
+            reason: "Role access denied or temporary credentials unavailable.",
+            message: error.message,
+          },
+          error.status,
+        );
+      throw error;
+    }
   }
   private submitParticipant(request: ApiRequest, team: Team): Promise<ApiResponse> {
     const hintMatch = /^\/portal\/me\/problems\/([^/]+)\/hints\/([^/]+)\/reveal$/u.exec(

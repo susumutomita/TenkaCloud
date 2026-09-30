@@ -17,6 +17,7 @@ async function boot(root: HTMLElement): Promise<void> {
     mode?: string;
     role?: string;
     apiBaseUrl?: string;
+    hasAws?: boolean;
   };
   const expected = `${window.location.origin}/api`;
   if (
@@ -36,7 +37,7 @@ async function boot(root: HTMLElement): Promise<void> {
     eventRegion: "local",
     mode: "backend",
     cloudMode: "real",
-    hasAws: false,
+    hasAws: runtime.hasAws === true,
   };
   createRoot(root).render(
     <StrictMode>

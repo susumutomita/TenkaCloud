@@ -140,6 +140,12 @@ export interface EngineResult {
 }
 
 export interface RuntimeEngine {
+  readonly hasAws?: boolean;
+  participantAwsAccess?(args: {
+    kind: import("./participant-aws-access").ParticipantAwsAccess["kind"];
+    job: Job;
+    assertCurrent: () => void;
+  }): Promise<import("./participant-aws-access").ParticipantAwsAccess>;
   catalog(): readonly Problem[];
   requiresGateway?(definition: string): boolean;
   coordinationPlugin?(problem: Problem): import("./coordination-core").HostPlugin;
