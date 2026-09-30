@@ -3,6 +3,7 @@ import {
   type CreateStackCommandInput,
   DeleteStackCommand,
   DescribeStacksCommand,
+  type Tag,
 } from "@aws-sdk/client-cloudformation";
 import {
   AssumeRoleCommand,
@@ -17,6 +18,7 @@ interface FakeStack {
   stackId: string;
   name: string;
   status: string;
+  tags: Tag[];
   reason?: string;
 }
 
@@ -32,6 +34,7 @@ export class FakeAws {
   readonly deleted: string[] = [];
   readonly stacks: FakeStack[] = [];
   createOutcome: "complete" | "rollback" | "lost-response" = "complete";
+  beforeCreate?: (input: CreateStackCommandInput) => void;
   /** False models a template whose stack completes without the flag output. */
   flagOutput = true;
   identityCalls = 0;
@@ -75,14 +78,24 @@ export class FakeAws {
 
   private create(input: CreateStackCommandInput) {
     this.created.push(input);
-    const stack: FakeStack = {
-      stackId: `arn:aws:cloudformation:ap-northeast-1:111:stack/${input.StackName}/${this.stacks.length}`,
-      name: String(input.StackName),
-      status: "CREATE_IN_PROGRESS",
-    };
-    this.stacks.push(stack);
+    this.beforeCreate?.(input);
+    const name = String(input.StackName);
+    if (this.find(name)) throw new Error(`Stack ${name} already exists`);
+    const stack = this.seedStack(name, input.Tags ?? []);
+    stack.status = "CREATE_IN_PROGRESS";
     if (this.createOutcome === "lost-response") throw new Error("socket hang up");
     return { StackId: stack.stackId };
+  }
+
+  seedStack(name: string, tags: Tag[] = []): FakeStack {
+    const stack: FakeStack = {
+      stackId: `arn:aws:cloudformation:ap-northeast-1:111:stack/${name}/${this.stacks.length}`,
+      name,
+      status: "CREATE_COMPLETE",
+      tags,
+    };
+    this.stacks.push(stack);
+    return stack;
   }
 
   private find(nameOrId: string): FakeStack | undefined {
@@ -107,6 +120,7 @@ export class FakeAws {
           StackName: stack.name,
           StackStatus: stack.status,
           StackStatusReason: stack.reason,
+          Tags: stack.tags,
           Outputs: [
             ...(this.flagOutput
               ? [{ OutputKey: "ParameterValue", OutputValue: fakeFlag(stack.name) }]

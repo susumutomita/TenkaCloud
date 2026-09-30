@@ -47,17 +47,19 @@ async function host() {
   return { store, aws, engine, service, admin };
 }
 
+const TEAM_A = { internalSlug: "team-a", awsAccountId: "111111111111" };
 const TEAMS = [
-  { internalSlug: "team-a", awsAccountId: "111111111111" },
+  TEAM_A,
   { internalSlug: "team-b", awsAccountId: "222222222222", awsRoleName: "Agreed-Role" },
 ];
 
 async function createEvent(
   admin: (method: string, path: string, body?: Record<string, unknown>) => Promise<ApiResponse>,
+  teams = TEAMS,
 ) {
   const created = await admin("POST", "/events", {
     name: "cloud rehearsal",
-    teams: TEAMS,
+    teams,
     problems: [{ problemId: "hello-world" }],
   });
   expect(created.status).toBe(201);
@@ -85,14 +87,17 @@ test("deploys each team's stack into its own account and tears it down", async (
     join(root, "problems/challenges/hello-world/template.yaml"),
     "utf8",
   );
-  const teamA = aws.created.find((input) => input.StackName === "tc-hello-world-team-a");
+  const teamA = aws.created.find((input) =>
+    String(input.StackName).startsWith("tc-hello-world-team-a-"),
+  );
   const jobA = jobs.find((job) => store.team(job.teamId).internalSlug === "team-a");
+  expect(teamA?.StackName).toBe(`tc-hello-world-team-a-${jobA?.jobId.slice(-12).toLowerCase()}`);
   expect(teamA?.TemplateBody).toBe(template);
   expect(teamA?.Capabilities).toEqual(["CAPABILITY_NAMED_IAM"]);
   const parameters = Object.fromEntries(
     (teamA?.Parameters ?? []).map((p) => [p.ParameterKey, p.ParameterValue]),
   );
-  expect(parameters.NamePrefix).toBe("tc-hello-world-team-a");
+  expect(parameters.NamePrefix).toBe(teamA?.StackName);
   expect(parameters.TenkaCloudAccountId).toBe(OPERATOR_ACCOUNT);
   expect(parameters.ExternalId).toBe(jobA?.jobId);
   expect(parameters.FlagSeed).toMatch(/^[A-Za-z0-9]{32}$/u);
@@ -148,6 +153,94 @@ test("a stack whose CreateStack response was lost is found by name and removed",
   await admin("DELETE", `/events/${eventId}`);
   await service.drain();
   expect(aws.stacks.every((stack) => stack.status === "DELETE_COMPLETE")).toBe(true);
+});
+
+test("a missing flag output fails deployment and retry replaces the owned stack", async () => {
+  const { store, aws, service, admin } = await host();
+  aws.flagOutput = false;
+  const eventId = await createEvent(admin, [TEAM_A]);
+  await admin("POST", `/events/${eventId}/deploy`);
+  await service.drain();
+  expect(store.event(eventId).status).toBe("DEPLOYING");
+  expect(store.jobs(eventId)[0]?.status).toBe("FAILED");
+  expect(store.jobs(eventId)[0]?.error).toContain("has no ParameterValue flag output");
+
+  aws.flagOutput = true;
+  await admin("POST", `/events/${eventId}/deploy`, { retryFailedOnly: true });
+  await service.drain();
+  expect(store.event(eventId).status).toBe("READY");
+  expect(store.jobs(eventId)[0]?.status).toBe("COMPLETE");
+  expect(aws.stacks.map((stack) => stack.status)).toEqual(["DELETE_COMPLETE", "CREATE_COMPLETE"]);
+});
+
+test("two events can use the same team account and slug without sharing a stack", async () => {
+  const { store, aws, service, admin } = await host();
+  const first = await createEvent(admin);
+  const second = await createEvent(admin);
+  for (const eventId of [first, second]) {
+    await admin("POST", `/events/${eventId}/deploy`);
+    await service.drain();
+    expect(store.jobs(eventId).map((job) => job.status)).toEqual(["COMPLETE", "COMPLETE"]);
+  }
+  expect(new Set(aws.created.map((input) => input.StackName)).size).toBe(4);
+  const firstIds = new Set(
+    store.jobs(first).map((job) => (JSON.parse(job.unit ?? "{}") as { stackId: string }).stackId),
+  );
+  await admin("DELETE", `/events/${first}`);
+  await service.drain();
+  expect(new Set(aws.deleted)).toEqual(firstIds);
+  expect(
+    aws.stacks.filter((stack) => !firstIds.has(stack.stackId)).map((stack) => stack.status),
+  ).toEqual(["CREATE_COMPLETE", "CREATE_COMPLETE"]);
+});
+
+test("an unowned stack with the reserved name is neither scored nor deleted", async () => {
+  for (const tags of [[], [{ Key: "tenkacloud:job", Value: "another-job" }]]) {
+    const { store, aws, engine, service, admin } = await host();
+    aws.beforeCreate = (input) => {
+      aws.seedStack(String(input.StackName), tags);
+    };
+    const eventId = await createEvent(admin, [TEAM_A]);
+    await admin("POST", `/events/${eventId}/deploy`);
+    await service.drain();
+    const [job] = store.jobs(eventId);
+    if (!job) throw new Error("Expected a deployment job.");
+    expect(job.status).toBe("FAILED");
+    await expect(
+      engine.submit(
+        {
+          event: store.event(eventId),
+          team: store.team(job.teamId),
+          jobs: [job],
+          now: Date.now(),
+        },
+        { problemId: "hello-world", flag: "TC{guess}" },
+      ),
+    ).rejects.toMatchObject({ status: 409, kind: "not_deployed" });
+    await admin("DELETE", `/events/${eventId}`);
+    await service.drain();
+    expect(aws.deleted).toEqual([]);
+    expect(aws.stacks.map((stack) => stack.status)).toEqual(["CREATE_COMPLETE"]);
+    expect(store.jobs(eventId)[0]?.status).toBe("DELETED");
+  }
+});
+
+test("recovery refuses a recorded stack whose ownership tag changed", async () => {
+  const { store, aws, engine, service, admin } = await host();
+  const eventId = await createEvent(admin, [TEAM_A]);
+  await admin("POST", `/events/${eventId}/deploy`);
+  await service.drain();
+  const [stack] = aws.stacks;
+  if (!stack) throw new Error("Expected a stack.");
+  stack.tags = [{ Key: "tenkacloud:job", Value: "another-job" }];
+
+  await new HostingService(store, engine, HOST_KEY).recover();
+  expect(store.jobs(eventId)[0]?.status).toBe("FAILED");
+  expect(store.jobs(eventId)[0]?.error).toContain("does not belong");
+  await admin("DELETE", `/events/${eventId}`);
+  await service.drain();
+  expect(aws.deleted).toEqual([]);
+  expect(stack.status).toBe("CREATE_COMPLETE");
 });
 
 test("an event with a cloud problem requires every team's AWS account", async () => {

@@ -233,7 +233,10 @@ make host HOST_ARGS="--aws-region ap-northeast-1"
                   {"internalSlug":"team-b","awsAccountId":"222222222222"}]}'
   ```
 
-  Deploy, start and end the event in the host console as usual.
+  Deploy, start and end the event in the host console as usual. Each deployment
+  uses a separate stack name, including when events reuse a team account and slug.
+  Recovery and teardown check the stack ownership tag before using or deleting it.
+  A stack without its scoring output fails deployment.
 - **Playing.** Participants see the stack's outputs except the flag output, submit
   the flag and reveal hints in the normal portal. The host compares the answer with
   the flag output it read when the stack was created; scoring makes no AWS call.
@@ -452,6 +455,11 @@ bun run test:host:e2e                          # test-only exercise adapter
 HOST_E2E_ENGINE=docker bun run test:host:e2e   # the real sqli-demo in Docker
 ```
 
+The same command also runs a cloud rehearsal with a test-only AWS adapter. It
+creates a two-team event through the real HTTP API, then checks each participant
+portal in Chromium, submits the team's flag, checks the score, and tears down.
+This checks the host application without creating resources in AWS.
+
 It uses an installed Chromium (`HOST_E2E_CHROMIUM`, or Playwright's browser under
 `PLAYWRIGHT_BROWSERS_PATH`) and never downloads one itself. Failure screenshots
 are written to `.tenkacloud/host-e2e/`.
@@ -470,7 +478,7 @@ key and direct attempts to access host or other-team resources fail.
 ## Not included
 
 Single-binary release packaging, identity verification, wallet integration,
-participant payments, cost splitting, cloud provisioning from local hosting,
+participant payments, cost splitting,
 automatic deploy/teardown schedules, arbitrary problem packs, Docker problems in
 the hosted container, and platforms without a persistent volume are not implemented
 yet.

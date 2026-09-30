@@ -163,7 +163,8 @@ export class CloudFormationEngine implements RuntimeEngine {
     const definition = JSON.parse(job.definition) as StackDefinition;
     const team = this.options.team(job);
     const aws = awsTargetOf(team);
-    const namePrefix = `tc-${definition.problemId}-${team.internalSlug}`;
+    // A job gets its own names even when another event uses the same team account and slug.
+    const namePrefix = `tc-${definition.problemId}-${team.internalSlug}-${job.jobId.slice(-12).toLowerCase()}`;
     const unit: StackUnit = {
       kind: "cloudformation",
       accountId: aws.accountId,
@@ -191,26 +192,37 @@ export class CloudFormationEngine implements RuntimeEngine {
     );
     unit.stackId = created.StackId;
     retain(JSON.stringify(unit));
-    const stack = await this.settle(client, unit, "CREATE_COMPLETE");
+    const stack = await this.settle(client, unit, job.jobId, "CREATE_COMPLETE");
     unit.outputs = Object.fromEntries(
       (stack?.Outputs ?? []).map((output) => [output.OutputKey ?? "", output.OutputValue ?? ""]),
     );
+    unit.stackId ??= stack?.StackId;
     retain(JSON.stringify(unit));
+    if (!unit.outputs[definition.flagOutputKey])
+      throw new Error(`Stack ${unit.stackName} has no ${definition.flagOutputKey} flag output.`);
   }
 
   async recover(job: Job): Promise<void> {
     const unit = unitOf(job);
-    const stack = await this.describe(this.client(unit, job), unit);
+    const stack = await this.describe(this.client(unit, job), unit, job.jobId);
     if (stack?.StackStatus !== "CREATE_COMPLETE")
       throw new Error(`Stack ${unit.stackName} is ${stack?.StackStatus ?? "gone"}.`);
+    const definition = JSON.parse(job.definition) as StackDefinition;
+    if (!unit.outputs?.[definition.flagOutputKey])
+      throw new Error(
+        `Stack ${unit.stackName} has no retained ${definition.flagOutputKey} flag output.`,
+      );
   }
 
   async stop(job: Job): Promise<void> {
     const unit = unitOf(job);
     const client = this.client(unit, job);
-    if (!(await this.describe(client, unit))) return;
-    await client.send(new DeleteStackCommand({ StackName: unit.stackId ?? unit.stackName }));
-    await this.settle(client, unit, "DELETE_COMPLETE");
+    const stack = await this.describe(client, unit, job.jobId);
+    if (!stack) return;
+    if (!stack.StackId) throw new Error(`Stack ${unit.stackName} has no ID; refusing deletion.`);
+    unit.stackId = stack.StackId;
+    await client.send(new DeleteStackCommand({ StackName: stack.StackId }));
+    await this.settle(client, unit, job.jobId, "DELETE_COMPLETE");
   }
 
   async pause(): Promise<void> {
@@ -315,7 +327,6 @@ export class CloudFormationEngine implements RuntimeEngine {
     );
   }
 
-  /** A hint is charged once; revealing it again returns it for free. */
   async hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
     const deployed = this.deployed(context, problemId);
     const hint = deployed.definition.scoring.hints.find((candidate) => candidate.id === hintId);
@@ -396,13 +407,24 @@ export class CloudFormationEngine implements RuntimeEngine {
   private async describe(
     client: Pick<CloudFormationClient, "send">,
     unit: StackUnit,
+    jobId: string,
   ): Promise<Stack | undefined> {
     try {
       const out = await client.send(
         new DescribeStacksCommand({ StackName: unit.stackId ?? unit.stackName }),
       );
       const stack = out.Stacks?.[0];
-      return stack?.StackStatus === "DELETE_COMPLETE" ? undefined : stack;
+      if (!stack || stack.StackStatus === "DELETE_COMPLETE") return undefined;
+      const owned =
+        stack.StackName === unit.stackName &&
+        stack.Tags?.some((tag) => tag.Key === "tenkacloud:job" && tag.Value === jobId);
+      if (!owned) {
+        if (!unit.stackId) return undefined;
+        throw new Error(`Stack ${unit.stackName} does not belong to job ${jobId}.`);
+      }
+      if (unit.stackId && stack.StackId !== unit.stackId)
+        throw new Error(`Stack ${unit.stackName} changed ID; refusing to use it for job ${jobId}.`);
+      return stack;
     } catch (error) {
       if (error instanceof Error && error.message.includes("does not exist")) return undefined;
       throw error;
@@ -412,11 +434,12 @@ export class CloudFormationEngine implements RuntimeEngine {
   private async settle(
     client: Pick<CloudFormationClient, "send">,
     unit: StackUnit,
+    jobId: string,
     goal: "CREATE_COMPLETE" | "DELETE_COMPLETE",
   ): Promise<Stack | undefined> {
     const deadline = Date.now() + this.options.timeoutMs;
     for (;;) {
-      const stack = await this.describe(client, unit);
+      const stack = await this.describe(client, unit, jobId);
       if (!stack) {
         if (goal === "DELETE_COMPLETE") return undefined;
         throw new Error(`Stack ${unit.stackName} disappeared while it was being created.`);

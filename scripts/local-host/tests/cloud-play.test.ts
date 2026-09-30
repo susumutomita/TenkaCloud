@@ -88,6 +88,14 @@ async function host(withAws = true) {
 
 type Host = Awaited<ReturnType<typeof host>>;
 
+function stackName(fixture: Host, teamSlug: string): string {
+  const name = fixture.aws.created.find((input) =>
+    String(input.StackName).startsWith(`tc-hello-world-${teamSlug}-`),
+  )?.StackName;
+  if (!name) throw new Error(`Expected a stack for ${teamSlug}.`);
+  return name;
+}
+
 /** Battle plus hello-world for two teams with their own AWS accounts, deployed and started. */
 async function startedEvent(fixture: Host): Promise<Created> {
   const created = await fixture.admin("POST", "/events", {
@@ -133,10 +141,9 @@ test("a mixed Battle and hello-world event deploys every team and shows the stac
     "hello-world:COMPLETE",
     "hello-world:COMPLETE",
   ]);
-  expect(fixture.aws.created.map((input) => input.StackName).sort()).toEqual([
-    "tc-hello-world-alpha",
-    "tc-hello-world-beta",
-  ]);
+  expect(fixture.aws.created.map((input) => input.StackName).sort()).toEqual(
+    [stackName(fixture, "alpha"), stackName(fixture, "beta")].sort(),
+  );
 
   const me = await fixture.as(alpha).get("/portal/me");
   expect((me.problems as { problemId: string }[]).map((each) => each.problemId)).toEqual([
@@ -172,7 +179,7 @@ test("a mixed Battle and hello-world event deploys every team and shows the stac
     eventStartsAt: new Date(START).toISOString(),
     expiresAt: fixture.store.event(event.eventId).expiresAt,
   });
-  expect(JSON.stringify(me)).not.toContain(fakeFlag("tc-hello-world-alpha"));
+  expect(JSON.stringify(me)).not.toContain(fakeFlag(stackName(fixture, "alpha")));
 });
 
 test("stack outputs stay hidden until the event starts", async () => {
@@ -195,9 +202,9 @@ test("a correct flag scores once, trimmed, and a second one is already solved", 
   const event = await startedEvent(fixture);
   const { alpha } = teams(event);
 
-  const first = await submit(fixture, alpha, `  ${fakeFlag("tc-hello-world-alpha")}\n`);
+  const first = await submit(fixture, alpha, `  ${fakeFlag(stackName(fixture, "alpha"))}\n`);
   expect(first).toEqual({ status: 200, body: { kind: "ok", scoreDelta: 100, totalScore: 100 } });
-  const again = await submit(fixture, alpha, fakeFlag("tc-hello-world-alpha"));
+  const again = await submit(fixture, alpha, fakeFlag(stackName(fixture, "alpha")));
   expect(again).toEqual({ status: 200, body: { kind: "already_scored", totalScore: 100 } });
 
   const team = fixture.store.team(alpha.teamId);
@@ -234,7 +241,7 @@ test("a wrong flag, including another team's, costs the wrong-answer penalty", a
     status: 200,
     body: { kind: "wrong", scoreDelta: -5, totalScore: -5, wrongCount: 1 },
   });
-  expect(await submit(fixture, alpha, fakeFlag("tc-hello-world-beta"))).toEqual({
+  expect(await submit(fixture, alpha, fakeFlag(stackName(fixture, "beta")))).toEqual({
     status: 200,
     body: { kind: "wrong", scoreDelta: -5, totalScore: -10, wrongCount: 2 },
   });
@@ -252,39 +259,35 @@ test("a wrong flag, including another team's, costs the wrong-answer penalty", a
 test("a submission is refused until the team's stack is running with its flag output", async () => {
   const fixture = await host();
   fixture.aws.flagOutput = false;
-  const event = await startedEvent(fixture);
-  const { alpha, beta } = teams(event);
-
-  await expect(submit(fixture, alpha, "TC{}")).rejects.toMatchObject({
-    status: 409,
-    kind: "not_deployed",
+  const created = await fixture.admin("POST", "/events", {
+    name: "missing flag",
+    teams: [{ internalSlug: "alpha", awsAccountId: "111111111111" }],
+    problems: [{ problemId: "hello-world" }],
   });
-  const job = required(
-    fixture.store
-      .jobs(event.eventId)
-      .find((each) => each.teamId === beta.teamId && each.problemId === "hello-world"),
-  );
-  expect(
-    (await fixture.admin("DELETE", `/events/${event.eventId}/deployments/${job.jobId}`)).status,
-  ).toBe(202);
+  const event = created.body as Created;
+  await fixture.admin("POST", `/events/${event.eventId}/deploy`);
   await fixture.service.drain();
-  await expect(submit(fixture, beta, "TC{}")).rejects.toMatchObject({ status: 409 });
+  const alpha = required(event.teams[0]);
+  const job = required(fixture.store.jobs(event.eventId)[0]);
+  expect(fixture.store.event(event.eventId).status).toBe("DEPLOYING");
+  expect(job.status).toBe("FAILED");
+  expect(job.error).toContain("has no ParameterValue flag output");
+  await expect(
+    fixture.admin("PATCH", `/events/${event.eventId}/schedule`, { startNow: true }),
+  ).rejects.toMatchObject({ status: 409 });
+  await expect(submit(fixture, alpha, "TC{}")).rejects.toMatchObject({ status: 409 });
 
   const unstarted: Context = {
     event: fixture.store.event(event.eventId),
     team: fixture.store.team(alpha.teamId),
-    jobs: fixture.store
-      .jobs(event.eventId, alpha.teamId)
-      .map((each) => ({ ...each, status: "IN_PROGRESS" as const })),
+    jobs: [job],
     now: START,
   };
   await expect(
     fixture.engine.submit(unstarted, { problemId: "hello-world", flag: "TC{}" }),
   ).rejects.toMatchObject({ status: 409, kind: "not_deployed" });
-  for (const team of [alpha, beta]) {
-    expect(fixture.store.team(team.teamId).score).toBe(0);
-    expect(fixture.store.team(team.teamId).scoreEvents).toEqual([]);
-  }
+  expect(fixture.store.team(alpha.teamId).score).toBe(0);
+  expect(fixture.store.team(alpha.teamId).scoreEvents).toEqual([]);
 });
 
 test("a hint is charged once and only its own content is revealed", async () => {
@@ -361,7 +364,7 @@ test("Battle points and cloud points add up whichever arrives first", async () =
   expect(battlePoints).toBeGreaterThan(0);
 
   fixture.advance(1000);
-  expect((await submit(fixture, alpha, fakeFlag("tc-hello-world-alpha"))).body).toEqual({
+  expect((await submit(fixture, alpha, fakeFlag(stackName(fixture, "alpha")))).body).toEqual({
     kind: "ok",
     scoreDelta: 100,
     totalScore: battlePoints + 100,

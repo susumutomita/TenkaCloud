@@ -895,13 +895,21 @@ const c = import.meta.glob("../../../../.tenkacloud/pack-store/snapshots/**/meta
       "/repo/apps/participant-portal/src/plugins/loader.ts",
     ),
   );
-  assert.ok(plugins.includes("problems/{challenges/sqli-demo,battles/ac26-crypto-battle}/portal/"));
+  assert.ok(
+    plugins.includes(
+      "problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/portal/",
+    ),
+  );
   assert.doesNotThrow(() =>
     assertHostingModule("/repo/problems/challenges/sqli-demo/metadata.json"),
   );
   assert.throws(() =>
     assertHostingModule("/repo/problems/challenges/sqli-demo/local/app/server.mjs"),
   );
+  assert.doesNotThrow(() =>
+    assertHostingModule("/repo/problems/challenges/hello-world/metadata.json"),
+  );
+  assert.throws(() => assertHostingModule("/repo/problems/challenges/hello-world/template.yaml"));
   assert.throws(() => assertHostingModule("/repo/problems/challenges/other/metadata.json"));
   assert.throws(() => assertHostingModule("/repo/.tenkacloud/pack-store/snapshots/secret.json"));
   assert.throws(() =>

@@ -44,9 +44,12 @@ export function narrowCatalog(code: string, id: string): string | null {
   // Include neither other problems' portal code nor author-installed pack snapshots.
   // The reserved empty glob is valid in Vite 7; the module guard rejects any accidental match.
   const narrowed = code
-    .replace(glob, "problems/{challenges/sqli-demo,battles/ac26-crypto-battle}/")
+    .replace(
+      glob,
+      "problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/",
+    )
     .replaceAll(
-      "problems/{challenges/sqli-demo,battles/ac26-crypto-battle}/*.yaml",
+      "problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/*.yaml",
       "problems/challenges/sqli-demo/__local_host_empty__/*.yaml",
     );
   return narrowed.replace(
@@ -71,7 +74,7 @@ export function assertHostingModule(id: string): void {
     return;
   }
   if (
-    !/\/problems\/challenges\/sqli-demo\/(?:metadata\.json|diagram(?:\.en)?\.svg)(?:\?.*)?$/u.test(
+    !/\/problems\/challenges\/(?:sqli-demo|hello-world)\/(?:metadata\.json|diagram(?:\.en)?\.svg)(?:\?.*)?$/u.test(
       normalized,
     )
   ) {

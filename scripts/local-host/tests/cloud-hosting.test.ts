@@ -95,6 +95,17 @@ test("the ExternalId is one private key file, and the operator account is read o
 
   const again = await connectCloudHosting(root, data, "ap-northeast-1", clients);
   expect(again.externalId).toBe(hosting.externalId);
+  const refused = {
+    ...clients,
+    sts: {
+      send: async () => {
+        throw new Error("The security token included in the request is invalid.");
+      },
+    },
+  };
+  await expect(connectCloudHosting(root, data, "ap-northeast-1", refused)).rejects.toThrow(
+    "--aws-region needs usable AWS credentials. STS GetCallerIdentity failed: The security token included in the request is invalid.",
+  );
   writeFileSync(path, "tampered\n");
   await expect(connectCloudHosting(root, data, "ap-northeast-1", clients)).rejects.toThrow(
     "Invalid competitor-external-id file; refusing to replace it.",

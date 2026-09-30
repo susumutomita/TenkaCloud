@@ -104,7 +104,6 @@ export class CompetitionEngine extends DockerHostingEngine {
       );
     return this.cloud;
   }
-  /** The part of the context one runtime owns. */
   private only(
     context: Context,
     kinds: ReadonlyMap<string, DefinitionKind>,

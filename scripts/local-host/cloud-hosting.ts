@@ -38,7 +38,14 @@ export async function connectCloudHosting(
 ): Promise<CloudHosting> {
   const externalIdPath = join(privateDirectory(dataDirectory), "competitor-external-id");
   const externalId = persistentKey(externalIdPath);
-  const { Account: operatorAccountId } = await clients.sts.send(new GetCallerIdentityCommand({}));
+  const { Account: operatorAccountId } = await clients.sts
+    .send(new GetCallerIdentityCommand({}))
+    .catch((error: unknown) => {
+      throw new Error(
+        `--aws-region needs usable AWS credentials. STS GetCallerIdentity failed: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    });
   if (!operatorAccountId) throw new Error("STS GetCallerIdentity returned no account ID.");
   return {
     region,
