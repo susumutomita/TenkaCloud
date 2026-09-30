@@ -1,10 +1,10 @@
 import { isPrivateCoordinationOutputKey } from "@tenkacloud/coordination-plugin-sdk";
 import { type ProblemEndpointSlot, resolveDefaultUrl } from "@tenkacloud/problem-sdk/internal";
-import { parseStackOutputs } from "./cfn-outputs";
+import { parseStackOutputs } from "./cfn-outputs.js";
 
 export interface EndpointOverride {
   readonly slot: string;
-  readonly overrideUrl: string;
+  readonly overrideUrl?: string;
 }
 
 /**

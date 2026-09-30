@@ -7,7 +7,7 @@
  */
 
 import { z } from "zod";
-import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs.js";
 import { CompositeOutputsError } from "./composite-outputs.js";
 import {
   type CompositeDeploymentRepositoryDeps,

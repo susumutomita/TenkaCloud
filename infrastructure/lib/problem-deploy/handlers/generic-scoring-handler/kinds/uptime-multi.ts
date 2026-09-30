@@ -1,18 +1,18 @@
 import type { AttackProbeResult } from "@tenkacloud/portal-contracts";
-import { parseStackOutputs } from "../../../../../../scripts/lib/cfn-outputs";
+import { parseStackOutputs } from "../../../../../../scripts/lib/cfn-outputs.js";
 import {
   computeSince,
   type EndpointHealth,
   parseEndpointsHealth,
-} from "../../../../../../scripts/lib/endpoints-health";
-import { type ProbeFn, probeUrl } from "../../../../../../scripts/lib/http-probe-client";
+} from "../../../../../../scripts/lib/endpoints-health.js";
+import { type ProbeFn, probeUrl } from "../../../../../../scripts/lib/http-probe-client.js";
 import {
   type AttackProbeFn,
   joinUrl,
   type KindHandlerInput,
   type KindResult,
   noopKindResult,
-} from "../../../../../../scripts/lib/scoring-common";
+} from "../../../../../../scripts/lib/scoring-common.js";
 import { resolveDefaultUrl } from "../../../../utils/endpoints-metadata.js";
 import type { UptimeMultiScoringMetadata } from "../../../../utils/scoring-metadata.js";
 import { serializeAttackProbeStatus } from "../../shared/attack-probe-status.js";

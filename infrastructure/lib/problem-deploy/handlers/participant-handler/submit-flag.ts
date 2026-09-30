@@ -1,5 +1,5 @@
 import type { SubmitFlagOutcome as SubmitFlagWireOutcome } from "@tenkacloud/portal-contracts";
-import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs.js";
 import { flagMatches } from "../../../../../scripts/lib/flag-matches.js";
 import type {
   FlagScoringMetadata,

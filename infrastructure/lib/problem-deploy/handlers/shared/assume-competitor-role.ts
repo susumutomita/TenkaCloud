@@ -1,4 +1,4 @@
-import { assumeRoleWithExternalId } from "../../../../../scripts/lib/assume-role";
+import { assumeRoleWithExternalId } from "../../../../../scripts/lib/assume-role.js";
 /**
  * Cross-account AssumeRole into the competitor's `CompetitorDeployRole`, shared across handlers.
  *

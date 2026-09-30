@@ -25,7 +25,7 @@
  * generic scoring Lambda's existing probe contract.
  */
 
-import { joinUrl } from "../../../../../../scripts/lib/scoring-common";
+import { joinUrl } from "../../../../../../scripts/lib/scoring-common.js";
 import type {
   CompositeProbeScoringMetadata,
   CompositeProbeTarget,

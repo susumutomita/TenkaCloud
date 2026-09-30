@@ -1,4 +1,4 @@
-import type { KindResult } from "../../../../../scripts/lib/scoring-common";
+import type { KindResult } from "../../../../../scripts/lib/scoring-common.js";
 import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { buildScoreEventRecord } from "../shared/score-event.js";

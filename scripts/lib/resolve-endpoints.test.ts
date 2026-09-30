@@ -71,6 +71,23 @@ describe("resolveEndpoints", () => {
     });
   });
 
+  it("should keep the default URL when a stored endpoint row has no override URL", () => {
+    const result = resolveEndpoints({
+      slots: [slot("frontend", "FrontendUrl", { overridable: true })],
+      stackOutputs: JSON.stringify({ FrontendUrl: "https://front.example.com/" }),
+      overrides: [{ slot: "frontend" }],
+    });
+    expect(result).toEqual([
+      {
+        slot: "frontend",
+        overridable: true,
+        defaultKey: "FrontendUrl",
+        defaultUrl: "https://front.example.com/",
+        effectiveUrl: "https://front.example.com/",
+      },
+    ]);
+  });
+
   it("should assemble the default URL including appendPath", () => {
     const stackOutputs = JSON.stringify([
       { OutputKey: "BaseUrl", OutputValue: "https://api.example.com/" },

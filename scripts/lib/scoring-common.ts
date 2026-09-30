@@ -1,6 +1,6 @@
 import type { ProblemEndpointSlot, ProblemScoringMetadata } from "@tenkacloud/problem-sdk/internal";
-import type { DeploymentScoringState } from "./deployment-scoring-state";
-import type { ProbeFn, ProbeResult } from "./http-probe-client";
+import type { DeploymentScoringState } from "./deployment-scoring-state.js";
+import type { ProbeFn, ProbeResult } from "./http-probe-client.js";
 
 export interface ScoringDeployment {
   readonly problemId?: string;

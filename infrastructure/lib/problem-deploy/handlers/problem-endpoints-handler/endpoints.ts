@@ -1,8 +1,8 @@
 import {
   type ResolvedEndpoint,
   resolveEndpoints,
-} from "../../../../../scripts/lib/resolve-endpoints";
-import { isSsrfSafeUrl } from "../../../../../scripts/lib/ssrf-guard";
+} from "../../../../../scripts/lib/resolve-endpoints.js";
+import { isSsrfSafeUrl } from "../../../../../scripts/lib/ssrf-guard.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { getPrerequisiteBlockByEventId } from "../participant-handler/challenge-access.js";
 import { type ParticipantSharedResources, queryTeamItems } from "../participant-handler/shared.js";

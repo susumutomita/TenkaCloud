@@ -1,4 +1,4 @@
-import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs.js";
 import type { DeploymentsQueryPort } from "../../control-data/domain/deployments-port.js";
 import type { DeploymentRecord } from "../../control-data/types.js";
 import {

@@ -1,8 +1,8 @@
 import type {
   ActiveDisruptionEffect,
   DeploymentScoringState,
-} from "../../../../../scripts/lib/deployment-scoring-state";
-import type { PhaseEntry } from "../../../../../scripts/lib/scoring-common";
+} from "../../../../../scripts/lib/deployment-scoring-state.js";
+import type { PhaseEntry } from "../../../../../scripts/lib/scoring-common.js";
 
 function parseActiveEffects(raw: unknown): readonly ActiveDisruptionEffect[] | undefined {
   if (!Array.isArray(raw)) return undefined;

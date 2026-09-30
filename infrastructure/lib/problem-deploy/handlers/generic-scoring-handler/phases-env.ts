@@ -1,4 +1,4 @@
-import type { PhaseEntry } from "../../../../../scripts/lib/scoring-common";
+import type { PhaseEntry } from "../../../../../scripts/lib/scoring-common.js";
 import { decodeLargeEnvValue } from "../../../utils/env-encoding.js";
 
 /**

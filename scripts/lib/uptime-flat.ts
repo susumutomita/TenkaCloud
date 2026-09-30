@@ -3,16 +3,16 @@ import type {
   UptimeFlatScoringMetadata,
 } from "@tenkacloud/problem-sdk/internal";
 import { type ProblemEndpointSlot, resolveDefaultUrl } from "@tenkacloud/problem-sdk/internal";
-import { parseStackOutputs } from "./cfn-outputs";
-import { computeSince, type EndpointHealth, parseEndpointsHealth } from "./endpoints-health";
-import { probeUrl } from "./http-probe-client";
+import { parseStackOutputs } from "./cfn-outputs.js";
+import { computeSince, type EndpointHealth, parseEndpointsHealth } from "./endpoints-health.js";
+import { probeUrl } from "./http-probe-client.js";
 import {
   joinUrl,
   type KindHandlerInput,
   type KindResult,
   noopKindResult,
   uptimeEvent,
-} from "./scoring-common";
+} from "./scoring-common.js";
 
 /**
  * `uptime-flat` kind (legacy `uptime` alias)。

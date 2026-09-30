@@ -2,13 +2,13 @@ import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type {
   ActiveDisruptionEffect,
   DeploymentScoringState,
-} from "../../../../../scripts/lib/deployment-scoring-state";
+} from "../../../../../scripts/lib/deployment-scoring-state.js";
 import type {
   KindHandlerInput,
   KindResult,
   PhaseEntry,
-} from "../../../../../scripts/lib/scoring-common";
-import { runUptimeFlatKind } from "../../../../../scripts/lib/uptime-flat";
+} from "../../../../../scripts/lib/scoring-common.js";
+import { runUptimeFlatKind } from "../../../../../scripts/lib/uptime-flat.js";
 import type {
   DeploymentsCoordinationPort,
   DeploymentsQueryPort,
@@ -49,7 +49,7 @@ import { runUptimeMultiKind } from "./kinds/uptime-multi.js";
 import { parsePhasesEnv } from "./phases-env.js";
 import { reconcileRuntimeStatuses } from "./runtime-status-reconciler.js";
 import { isScoringActive } from "./scoring-active.js";
-import { parseScoringState } from "./scoring-kernel";
+import { parseScoringState } from "./scoring-kernel.js";
 import {
   buildSharedResources,
   type GenericScoringSharedResources,

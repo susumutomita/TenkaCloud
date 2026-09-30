@@ -1,5 +1,5 @@
-import type { DeploymentScoringState } from "../../../../../scripts/lib/deployment-scoring-state";
-import type { KindResult, PhaseEntry } from "../../../../../scripts/lib/scoring-common";
+import type { DeploymentScoringState } from "../../../../../scripts/lib/deployment-scoring-state.js";
+import type { KindResult, PhaseEntry } from "../../../../../scripts/lib/scoring-common.js";
 import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { putEventsBatched } from "../shared/events.js";

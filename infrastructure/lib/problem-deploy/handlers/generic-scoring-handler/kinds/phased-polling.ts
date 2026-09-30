@@ -1,6 +1,6 @@
-import { parseStackOutputs } from "../../../../../../scripts/lib/cfn-outputs";
+import { parseStackOutputs } from "../../../../../../scripts/lib/cfn-outputs.js";
 import type { DeploymentScoringState } from "../../../../../../scripts/lib/deployment-scoring-state.js";
-import { type ProbeFn, probeUrl } from "../../../../../../scripts/lib/http-probe-client";
+import { type ProbeFn, probeUrl } from "../../../../../../scripts/lib/http-probe-client.js";
 import {
   joinUrl,
   type KindHandlerInput,
@@ -8,7 +8,7 @@ import {
   type KindScoreEvent,
   noopKindResult,
   uptimeEvent,
-} from "../../../../../../scripts/lib/scoring-common";
+} from "../../../../../../scripts/lib/scoring-common.js";
 import { resolveDefaultUrl } from "../../../../utils/endpoints-metadata.js";
 import type { PhasedPollingScoringMetadata } from "../../../../utils/scoring-metadata.js";
 import { resolveActivePhase } from "../scoring-kernel.js";

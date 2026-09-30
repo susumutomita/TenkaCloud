@@ -9,7 +9,7 @@
  */
 
 import { COMPOSITE_PROVIDERS, type CompositeInputBinding } from "@tenkacloud/problem-runtime";
-import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs.js";
 import type { DeploymentsCompositePort } from "../../control-data/deployments-repository.js";
 import type { ProblemRuntimeAdapter } from "../shared/runtime/adapter.js";
 import {

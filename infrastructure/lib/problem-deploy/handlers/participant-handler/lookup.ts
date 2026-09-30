@@ -10,8 +10,8 @@ import type {
   ParticipantProblemView as PortalParticipantProblemView,
   TargetAccessCapability,
 } from "@tenkacloud/portal-contracts";
-import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs";
-import { parseEndpointsHealth } from "../../../../../scripts/lib/endpoints-health";
+import { parseStackOutputs } from "../../../../../scripts/lib/cfn-outputs.js";
+import { parseEndpointsHealth } from "../../../../../scripts/lib/endpoints-health.js";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import { resolveTargetAccessCapability } from "../deploy-handler/composite-target-access.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";

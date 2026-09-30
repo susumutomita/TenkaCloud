@@ -1,5 +1,5 @@
-import type { ActiveDisruptionEffect } from "../../../../../scripts/lib/deployment-scoring-state";
-import type { KindResult } from "../../../../../scripts/lib/scoring-common";
+import type { ActiveDisruptionEffect } from "../../../../../scripts/lib/deployment-scoring-state.js";
+import type { KindResult } from "../../../../../scripts/lib/scoring-common.js";
 import type {
   DisruptionEffect,
   ProblemDisruptionEntry,

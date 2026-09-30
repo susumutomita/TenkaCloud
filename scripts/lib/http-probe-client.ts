@@ -1,5 +1,5 @@
 import { StatusCodes } from "http-status-codes";
-import { isSsrfSafeUrl } from "./ssrf-guard";
+import { isSsrfSafeUrl } from "./ssrf-guard.js";
 
 export interface ProbeResult {
   readonly ok: boolean;
