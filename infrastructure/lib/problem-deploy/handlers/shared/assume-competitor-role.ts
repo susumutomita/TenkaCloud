@@ -39,16 +39,22 @@ export interface AssumeCompetitorRoleParams {
   readonly graceFallbackTraceEvent: string;
 }
 
-const ASSUME_ROLE_FALLBACK_ERROR_NAMES: ReadonlySet<string> = new Set([
-  "AccessDenied",
-  "AccessDeniedException",
-  "Forbidden",
-]);
+const ASSUME_ROLE_FALLBACK_ERROR_NAMES = {
+  AccessDenied: true,
+  AccessDeniedException: true,
+  Forbidden: true,
+};
+
+type ExternalIdMismatchError = Error & {
+  readonly name: keyof typeof ASSUME_ROLE_FALLBACK_ERROR_NAMES;
+};
 
 /** AccessDenied 系 (= ExternalId mismatch) のみ 1 generation 前での retry 対象。 */
-export function shouldRetryWithPreviousExternalIdVersion(err: unknown): boolean {
+export function shouldRetryWithPreviousExternalIdVersion(
+  err: unknown,
+): err is ExternalIdMismatchError {
   const name = err instanceof Error ? err.name : "";
-  return ASSUME_ROLE_FALLBACK_ERROR_NAMES.has(name);
+  return typeof name === "string" && Object.hasOwn(ASSUME_ROLE_FALLBACK_ERROR_NAMES, name);
 }
 
 async function retryWithPreviousExternalId(
@@ -87,7 +93,7 @@ async function retryWithPreviousExternalId(
     correlationId: args.jobId,
     region: args.region,
     externalIdVersion: previousVersion,
-    reason: currentErr instanceof Error ? currentErr.name : "Unknown",
+    reason: currentErr.name,
   });
   return credentials;
 }

@@ -84,20 +84,30 @@ describe("assumeCompetitorRole (shared)", () => {
     );
   });
 
-  it("should grace-fallback to the previous ExternalId version on AccessDenied and fire the caller's trace event", async () => {
-    const ssm = vi
-      .fn()
-      .mockResolvedValueOnce({ Parameter: { Value: "new-id", Version: 4 } })
-      .mockResolvedValueOnce({ Parameter: { Value: "old-id", Version: 3 } });
-    const denied = Object.assign(new Error("denied"), { name: "AccessDenied" });
-    const sts = vi.fn().mockRejectedValueOnce(denied).mockResolvedValueOnce({ Credentials: CREDS });
-    expect(await assumeCompetitorRole(makeDeps(ssm, sts), baseParams)).toEqual(CREDS);
-    expect(ssm.mock.calls[1][0].input.Name).toBe(`${baseParams.externalIdParameterName}:3`);
-    expect(errorDeployTrace).toHaveBeenCalledWith(
-      "deploy.disruption-executor.assume-role.grace-fallback",
-      expect.objectContaining({ externalIdVersion: 3, reason: "AccessDenied" }),
-    );
-  });
+  it.each(["AccessDenied", "AccessDeniedException", "Forbidden"])(
+    "should grace-fallback on %s and trace the accepted error name",
+    async (name) => {
+      const ssm = vi
+        .fn()
+        .mockResolvedValueOnce({ Parameter: { Value: "new-id", Version: 4 } })
+        .mockResolvedValueOnce({ Parameter: { Value: "old-id", Version: 3 } });
+      const denied = Object.assign(new Error("denied"), { name });
+      const sts = vi
+        .fn()
+        .mockRejectedValueOnce(denied)
+        .mockResolvedValueOnce({ Credentials: CREDS });
+      expect(await assumeCompetitorRole(makeDeps(ssm, sts), baseParams)).toEqual(CREDS);
+      expect(ssm.mock.calls[1][0].input).toEqual({
+        Name: `${baseParams.externalIdParameterName}:3`,
+        WithDecryption: true,
+      });
+      expect(sts.mock.calls[1][0].input.ExternalId).toBe("old-id");
+      expect(errorDeployTrace).toHaveBeenCalledWith(
+        "deploy.disruption-executor.assume-role.grace-fallback",
+        expect.objectContaining({ externalIdVersion: 3, reason: name }),
+      );
+    },
+  );
 
   it("should rethrow immediately on a non-AccessDenied error (no blanket band-aid)", async () => {
     const ssm = vi.fn().mockResolvedValue({ Parameter: { Value: "id", Version: 2 } });
@@ -107,6 +117,37 @@ describe("assumeCompetitorRole (shared)", () => {
     await expect(assumeCompetitorRole(makeDeps(ssm, sts), baseParams)).rejects.toThrow("slow");
     expect(errorDeployTrace).not.toHaveBeenCalled();
   });
+
+  it("should rethrow an AccessDenied-shaped non-Error without using a previous ExternalId", async () => {
+    const ssm = vi.fn().mockResolvedValue({ Parameter: { Value: "id", Version: 2 } });
+    const rejected = { name: "AccessDenied" };
+    const sts = vi.fn().mockRejectedValue(rejected);
+    await expect(assumeCompetitorRole(makeDeps(ssm, sts), baseParams)).rejects.toBe(rejected);
+    expect(ssm).toHaveBeenCalledTimes(1);
+    expect(sts).toHaveBeenCalledTimes(1);
+    expect(errorDeployTrace).not.toHaveBeenCalled();
+  });
+
+  it.each(["boxed string", "convertible object", "throwing object"])(
+    "should rethrow an Error with a %s name without coercion or retry",
+    async (kind) => {
+      const coerceName = vi.fn(() => {
+        if (kind === "throwing object") throw new Error("name coercion must not run");
+        return "AccessDenied";
+      });
+      const name: unknown = kind === "boxed string" ? Object("AccessDenied") : {};
+      Object.defineProperty(name, "toString", { value: coerceName });
+      const rejected = new Error("original rejection");
+      Object.defineProperty(rejected, "name", { value: name });
+      const ssm = vi.fn().mockResolvedValue({ Parameter: { Value: "id", Version: 2 } });
+      const sts = vi.fn().mockRejectedValue(rejected);
+      await expect(assumeCompetitorRole(makeDeps(ssm, sts), baseParams)).rejects.toBe(rejected);
+      expect(ssm).toHaveBeenCalledTimes(1);
+      expect(sts).toHaveBeenCalledTimes(1);
+      expect(coerceName).not.toHaveBeenCalled();
+      expect(errorDeployTrace).not.toHaveBeenCalled();
+    },
+  );
 
   it("should rethrow the original error when there is no previous version to fall back to", async () => {
     const ssm = vi.fn().mockResolvedValue({ Parameter: { Value: "id", Version: 1 } });
@@ -129,5 +170,10 @@ describe("shouldRetryWithPreviousExternalIdVersion", () => {
       ),
     ).toBe(false);
     expect(shouldRetryWithPreviousExternalIdVersion("not-an-error")).toBe(false);
+    for (const name of ["toString", "constructor"]) {
+      expect(shouldRetryWithPreviousExternalIdVersion(Object.assign(new Error(), { name }))).toBe(
+        false,
+      );
+    }
   });
 });
