@@ -4,7 +4,7 @@ import type {
   EventRecord,
   EventStatus,
 } from "../../control-data/domain/events.js";
-import type { TeamRecord } from "../../control-data/domain/teams.js";
+import { MAX_TEAMS_PER_EVENT, type TeamRecord } from "../../control-data/domain/teams.js";
 import { ProgressionGateConfigSchema } from "../shared/progression-gate.js";
 import { PUBLIC_SCORE_EVENT_RESULTS, PUBLIC_SCORE_EVENT_SOURCES } from "../shared/score-event.js";
 
@@ -145,7 +145,10 @@ export const CreateEventRequestSchema = z.object({
     // 100 item 上限なので teams は最大 99 (= 100 - event 1 行)。 以前 max(100) だったが、 event
     // 行の +1 を数え落とした off-by-one で、 schema 上は通る 100-team request が runtime で
     // `TransactWrite items > 100` を投げて 500 になっていた。 schema を実上限に揃える。
-    .max(99, "1 event あたり最大 99 teams (event 1 行 + teams で DDB TransactWrite 100-item 上限)"),
+    .max(
+      MAX_TEAMS_PER_EVENT,
+      `1 event あたり最大 ${MAX_TEAMS_PER_EVENT} teams (event 1 行 + teams で DDB TransactWrite 100-item 上限)`,
+    ),
   problems: z.array(EventProblemTargetSchema).min(1).max(50),
 });
 export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;

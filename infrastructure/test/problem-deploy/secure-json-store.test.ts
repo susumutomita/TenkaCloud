@@ -1,10 +1,16 @@
 import {
   type GetParameterCommand,
+  type GetParametersByPathCommand,
   ParameterNotFound,
   type PutParameterCommand,
 } from "@aws-sdk/client-ssm";
 import { describe, expect, it, vi } from "vitest";
-import { createSecureJsonStore } from "../../lib/problem-deploy/handlers/shared/secure-json-store.js";
+import {
+  buildTenantTeamsPathArnPattern,
+  countTenantTeamParameters,
+  createSecureJsonStore,
+  secureParameterExists,
+} from "../../lib/problem-deploy/handlers/shared/secure-json-store.js";
 
 /**
  * [#1412 #1410] 汎用 SecureJsonStore の契約 pin (Sakura / Azure store が共有する DRY 基盤)。
@@ -64,5 +70,59 @@ describe("secure-json-store (shared)", () => {
     await expect(store.delete(deps(gone), "t", "team")).resolves.toBeUndefined();
     const boom = vi.fn().mockRejectedValue(new Error("denied"));
     await expect(store.delete(deps(boom), "t", "team")).rejects.toThrow("denied");
+  });
+});
+
+describe("tenant team parameters (#3290)", () => {
+  const pageOf = (n: number, nextToken?: string) => ({
+    Parameters: Array.from({ length: n }, (_, i) => ({ Name: `/dev/tenants/t1/teams/s${i}/x` })),
+    NextToken: nextToken,
+  });
+
+  it("should report a parameter as existing without decrypting it", async () => {
+    const send = vi.fn().mockResolvedValue({ Parameter: { Name: "/p", Value: "not json" } });
+    expect(await secureParameterExists(deps(send), "/p")).toBe(true);
+    expect((send.mock.calls[0][0] as GetParameterCommand).input).toEqual({
+      Name: "/p",
+      WithDecryption: false,
+    });
+  });
+
+  it("should report a missing parameter as absent and rethrow other errors", async () => {
+    const gone = vi.fn().mockRejectedValue(new ParameterNotFound({ message: "x", $metadata: {} }));
+    expect(await secureParameterExists(deps(gone), "/p")).toBe(false);
+    expect(await secureParameterExists(deps(vi.fn().mockResolvedValue({})), "/p")).toBe(false);
+    const boom = vi.fn().mockRejectedValue(new Error("throttled"));
+    await expect(secureParameterExists(deps(boom), "/p")).rejects.toThrow("throttled");
+  });
+
+  it("should count every page under the tenant's teams path without decrypting", async () => {
+    const send = vi.fn().mockResolvedValueOnce(pageOf(10, "p2")).mockResolvedValueOnce(pageOf(3));
+    expect(await countTenantTeamParameters(deps(send), "t1", 99)).toBe(13);
+    expect(send).toHaveBeenCalledTimes(2);
+    const first = (send.mock.calls[0][0] as GetParametersByPathCommand).input;
+    expect(first).toEqual({
+      Path: "/dev/tenants/t1/teams",
+      Recursive: true,
+      WithDecryption: false,
+      NextToken: undefined,
+    });
+    expect((send.mock.calls[1][0] as GetParametersByPathCommand).input.NextToken).toBe("p2");
+  });
+
+  it("should stop reading pages once the count reaches stopAt", async () => {
+    const send = vi.fn().mockResolvedValue(pageOf(10, "more"));
+    expect(await countTenantTeamParameters(deps(send), "t1", 20)).toBe(20);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("should count an empty page as zero", async () => {
+    expect(await countTenantTeamParameters(deps(vi.fn().mockResolvedValue({})), "t1", 99)).toBe(0);
+  });
+
+  it("should scope the IAM pattern to the teams path of any tenant", () => {
+    expect(buildTenantTeamsPathArnPattern("ap-northeast-1", "123456789012", "dev")).toBe(
+      "arn:aws:ssm:ap-northeast-1:123456789012:parameter/dev/tenants/*/teams",
+    );
   });
 });

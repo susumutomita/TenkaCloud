@@ -1,4 +1,9 @@
-import { GetParameterCommand, ParameterNotFound, PutParameterCommand } from "@aws-sdk/client-ssm";
+import {
+  GetParameterCommand,
+  GetParametersByPathCommand,
+  ParameterNotFound,
+  PutParameterCommand,
+} from "@aws-sdk/client-ssm";
 import { describe, expect, it, vi } from "vitest";
 import {
   handleDeleteTeamCredential,
@@ -15,6 +20,45 @@ import {
 function deps(send: ReturnType<typeof vi.fn>) {
   return { shared: { ssm: { send } as never, env: "development" } };
 }
+
+function putCommands(send: ReturnType<typeof vi.fn>): PutParameterCommand[] {
+  return send.mock.calls
+    .map(([cmd]) => cmd)
+    .filter((cmd): cmd is PutParameterCommand => cmd instanceof PutParameterCommand);
+}
+
+/** SSM Parameter Store の in-memory 版。 GetParametersByPath は実物と同じく 1 page 10 件で返す。 */
+function fakeParameterStore(names: readonly string[]) {
+  const params = new Map(names.map((name) => [name, "stored"]));
+  const send = vi.fn(async (cmd: unknown) => {
+    if (cmd instanceof GetParameterCommand) {
+      const value = params.get(String(cmd.input.Name));
+      if (value === undefined) throw new ParameterNotFound({ message: "x", $metadata: {} });
+      return { Parameter: { Name: cmd.input.Name, Value: value } };
+    }
+    if (cmd instanceof PutParameterCommand) {
+      params.set(String(cmd.input.Name), String(cmd.input.Value));
+      return {};
+    }
+    if (cmd instanceof GetParametersByPathCommand) {
+      const under = [...params.keys()].filter((n) => n.startsWith(`${cmd.input.Path}/`)).sort();
+      const start = Number(cmd.input.NextToken ?? 0);
+      const next = start + 10 < under.length ? String(start + 10) : undefined;
+      return {
+        Parameters: under.slice(start, start + 10).map((Name) => ({ Name })),
+        NextToken: next,
+      };
+    }
+    throw new Error("unexpected SSM command");
+  });
+  return { send, params };
+}
+
+const teamNames = (tenantId: string, count: number, suffix = "sakura-api-key") =>
+  Array.from(
+    { length: count },
+    (_, i) => `/development/tenants/${tenantId}/teams/team-${i}/${suffix}`,
+  );
 
 const SAKURA = { accessToken: "tok", accessTokenSecret: "sec" };
 const AZURE = {
@@ -45,8 +89,7 @@ describe("team-credentials-routes (#1413)", () => {
     const res = await handleRegisterTeamCredential(deps(send), "sakura", "t1", "team-a", SAKURA);
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ registered: true, provider: "sakura", teamSlug: "team-a" });
-    const cmd = send.mock.calls[0][0] as PutParameterCommand;
-    expect(cmd).toBeInstanceOf(PutParameterCommand);
+    const [cmd] = putCommands(send);
     expect(cmd.input.Name).toBe("/development/tenants/t1/teams/team-a/sakura-api-key");
     expect(cmd.input.Type).toBe("SecureString");
   });
@@ -54,12 +97,12 @@ describe("team-credentials-routes (#1413)", () => {
   it("should register azure + gcp credentials at their own paths", async () => {
     const sendA = vi.fn().mockResolvedValue({});
     await handleRegisterTeamCredential(deps(sendA), "azure", "t1", "team-a", AZURE);
-    expect((sendA.mock.calls[0][0] as PutParameterCommand).input.Name).toBe(
+    expect(putCommands(sendA)[0].input.Name).toBe(
       "/development/tenants/t1/teams/team-a/azure-credential",
     );
     const sendG = vi.fn().mockResolvedValue({});
     await handleRegisterTeamCredential(deps(sendG), "gcp", "t1", "team-a", GCP);
-    expect((sendG.mock.calls[0][0] as PutParameterCommand).input.Name).toBe(
+    expect(putCommands(sendG)[0].input.Name).toBe(
       "/development/tenants/t1/teams/team-a/gcp-credential",
     );
   });
@@ -109,5 +152,62 @@ describe("team-credentials-routes (#1413)", () => {
     const res = await handleDeleteTeamCredential(deps(send), "gcp", "t1", "team-a");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ deleted: true, provider: "gcp", teamSlug: "team-a" });
+  });
+});
+
+describe("team credential limit per tenant (#3290)", () => {
+  it("should register a new team while the tenant is under the limit", async () => {
+    const ssm = fakeParameterStore(teamNames("t1", 98));
+    const res = await handleRegisterTeamCredential(deps(ssm.send), "sakura", "t1", "new", SAKURA);
+    expect(res.status).toBe(201);
+    expect(ssm.params.has("/development/tenants/t1/teams/new/sakura-api-key")).toBe(true);
+  });
+
+  it("should refuse a new team once the tenant holds 99 credentials of any provider", async () => {
+    const names = [
+      ...teamNames("t1", 50),
+      ...teamNames("t1", 30, "azure-credential"),
+      ...teamNames("t1", 19, "gcp-credential"),
+    ];
+    const ssm = fakeParameterStore(names);
+    const res = await handleRegisterTeamCredential(deps(ssm.send), "gcp", "t1", "new", GCP);
+    expect(res).toEqual({
+      status: 409,
+      body: { error: "team_credential_limit_reached", limit: 99 },
+    });
+    expect(putCommands(ssm.send)).toEqual([]);
+    expect(ssm.params.size).toBe(99);
+  });
+
+  it("should still overwrite an existing team at the limit (rotation)", async () => {
+    const ssm = fakeParameterStore(teamNames("t1", 99));
+    const res = await handleRegisterTeamCredential(
+      deps(ssm.send),
+      "sakura",
+      "t1",
+      "team-7",
+      SAKURA,
+    );
+    expect(res.status).toBe(201);
+    expect(ssm.params.get("/development/tenants/t1/teams/team-7/sakura-api-key")).toBe(
+      JSON.stringify(SAKURA),
+    );
+    expect(ssm.params.size).toBe(99);
+  });
+
+  it("should not count another tenant's credentials", async () => {
+    const ssm = fakeParameterStore(teamNames("t2", 99));
+    const res = await handleRegisterTeamCredential(deps(ssm.send), "sakura", "t1", "new", SAKURA);
+    expect(res.status).toBe(201);
+  });
+
+  it("should stop listing after the pages that reach the limit", async () => {
+    const ssm = fakeParameterStore(teamNames("t1", 150));
+    const res = await handleRegisterTeamCredential(deps(ssm.send), "sakura", "t1", "new", SAKURA);
+    expect(res.status).toBe(409);
+    const listings = ssm.send.mock.calls.filter(
+      ([cmd]) => cmd instanceof GetParametersByPathCommand,
+    );
+    expect(listings).toHaveLength(10);
   });
 });

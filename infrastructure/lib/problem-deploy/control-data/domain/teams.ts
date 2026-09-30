@@ -7,6 +7,12 @@
  */
 
 /**
+ * 1 event あたりの最大チーム数。 event 作成は event 1 行 + teams を 1 つの atomic write で書き、
+ * DynamoDB TransactWrite の 100-item 上限から event 行の 1 を引いた値になる。
+ */
+export const MAX_TEAMS_PER_EVENT = 99;
+
+/**
  * Team aggregate の domain shape。 物理 DDB キー (PK / SK / GSI1PK /
  * GSI1SK) は DynamoDB backend の実装詳細であり、 SQLite backend
  * (Turso / D1) は独自のキー / カラムを導出する。
