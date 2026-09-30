@@ -5,6 +5,7 @@ import {
   transitionMatch,
 } from "./coordination-core";
 import { type Gate, gate, HostError, type HostedEvent, object, type Problem } from "./model";
+import { projectedScore } from "./score";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
 import { digest } from "./store";
 
@@ -99,6 +100,7 @@ export class LocalCoordination {
     this.host.store.transaction(() => {
       this.host.store.putCoordination(event.eventId, problem.problemId, body);
       this.award(event, problem, result.deltas);
+      this.host.disruptions.captureTriggers(event);
       receipt?.();
     });
     row.body = body;
@@ -113,20 +115,21 @@ export class LocalCoordination {
       const team = this.host.store.team(teamId);
       const jobId = this.host.store.jobId(event.eventId, teamId, problem.problemId);
       if (!jobId) throw new HostError(503, "Coordination roster has no deployment.");
+      const scoreEvents = [
+        {
+          jobId,
+          problemId: problem.problemId,
+          source: "coordination",
+          points: delta,
+          result: delta > 0 ? ("ok" as const) : ("wrong" as const),
+          occurredAt,
+        },
+        ...team.scoreEvents,
+      ];
       this.host.store.putTeam({
         ...team,
-        score: team.score + delta,
-        scoreEvents: [
-          {
-            jobId,
-            problemId: problem.problemId,
-            source: "coordination",
-            points: delta,
-            result: delta > 0 ? "ok" : "wrong",
-            occurredAt,
-          },
-          ...team.scoreEvents,
-        ],
+        score: projectedScore(event, scoreEvents).total,
+        scoreEvents,
       });
     }
   }

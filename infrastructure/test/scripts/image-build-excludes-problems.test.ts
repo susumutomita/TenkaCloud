@@ -37,6 +37,22 @@ describe("participant-portal image build", () => {
     expect(entries).toContain("problems/");
   });
 
+  it("includes only the reviewed hello-world-battle inputs in the hosted image", () => {
+    const entries = readFileSync(join(REPO_ROOT, "docker/host/Dockerfile.dockerignore"), "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
+    expect(entries).toContain("problems/battles/*");
+    expect(entries).toContain("!problems/battles/hello-world-battle/");
+    expect(entries).toContain("problems/battles/hello-world-battle/*");
+    for (const file of ["metadata.json", "template.yaml", "diagram.svg"]) {
+      expect(existsSync(join(REPO_ROOT, "problems/battles/hello-world-battle", file))).toBe(true);
+      expect(entries).toContain(`!problems/battles/hello-world-battle/${file}`);
+    }
+    expect(entries).not.toContain("!problems/battles/*");
+    expect(readFileSync(join(REPO_ROOT, ".dockerignore"), "utf8")).toMatch(/^problems\/$/mu);
+  });
+
   it("should type-check the build with a config that excludes tests", () => {
     // build が既定の tsconfig (= test 込み) を使うと、image に入れないと決めた problems/ を
     // 解決させることになる。

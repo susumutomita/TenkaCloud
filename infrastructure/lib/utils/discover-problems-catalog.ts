@@ -8,7 +8,6 @@ import {
 import { type ProblemEndpointSlot, parseEndpointSlot } from "./endpoints-metadata.js";
 import {
   type DisruptionAction,
-  type DisruptionActionKind,
   type DisruptionEffect,
   type DisruptionTrigger,
   type ProblemDisruptionEntry,
@@ -29,7 +28,6 @@ export type { ProblemEndpointSlot, ProblemScoringMetadata, ProblemWriteup };
 // 引き続き import できるよう re-export する (= 既存 importer の互換維持)。
 export {
   type DisruptionAction,
-  type DisruptionActionKind,
   type DisruptionEffect,
   type DisruptionTrigger,
   type ProblemDisruptionEntry,

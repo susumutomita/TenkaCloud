@@ -35,7 +35,7 @@ type EventOperations = ReturnType<typeof useEventOperations>;
 /** Local Docker environments settle within seconds; 3s keeps the tables live without load. */
 const LOCAL_HOST_IN_FLIGHT_POLL_MS = 3_000;
 /** Issue #3226: tabs whose features need cloud infrastructure the local host does not have. */
-const CLOUD_ONLY_TABS: ReadonlySet<EventTabId> = new Set(["disruptions", "gate"]);
+const CLOUD_ONLY_TABS: ReadonlySet<EventTabId> = new Set(["gate"]);
 type Translate = ReturnType<typeof useT>;
 
 interface DeploymentCounts {

@@ -41,14 +41,14 @@ async function localConfig(): Promise<AppConfig> {
 }
 
 describe("loadConfig in the local hosting build", () => {
-  it("uses the same-origin host API and turns cloud-only features off", async () => {
+  it("uses the same-origin host API and exposes supported host features", async () => {
     const config = await localConfig();
     expect(isLocalHost(config)).toBe(true);
     expect(config.apiBaseUrl).toBe(`${origin}/api`);
     expect(config.cognitoDomain).toBe(`${origin}/api/host`);
     expect(config.participantPortalUrl).toBe("http://127.0.0.1:5175");
     expect(config.features).toMatchObject({
-      redTeam: false,
+      redTeam: true,
       samlSso: false,
       nonAwsRuntime: false,
       challengePrerequisiteGate: false,

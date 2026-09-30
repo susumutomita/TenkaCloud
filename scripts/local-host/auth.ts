@@ -66,7 +66,7 @@ function createSession(
 /** Per-key queue protects read/verify/write across asynchronous external verifiers. */
 export class SerialQueue {
   private readonly tails = new Map<string, Promise<unknown>>();
-  run<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  run<T>(key: string, operation: () => Promise<T> | T): Promise<T> {
     const previous = this.tails.get(key) ?? Promise.resolve();
     const next = previous.then(operation, operation);
     const tail = next.then(

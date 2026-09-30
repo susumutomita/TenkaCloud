@@ -116,8 +116,38 @@ export interface Job {
   /** Committed before a runtime can be created; retained until physical cleanup succeeds. */
   unit: string | null;
   error?: string;
+  /** Successful creation time for this deployment generation; resuming preserves it. */
+  deployedAt?: number;
   /** An organizer operation on this single environment that has not finished yet. */
   operation?: JobOperation;
+}
+
+/** One team's uptime scorer state. The generation changes when its stack is redeployed. */
+export interface UptimeState {
+  revision: number;
+  generation?: string;
+  readyAt?: number;
+  endpointsHealth?: string;
+  lastResult?: "ok" | "fail";
+  hostHintHealth?: { frontend: boolean; api: boolean; checkedAt: string };
+}
+
+export interface UptimeOverride {
+  slot: string;
+  overrideUrl: string;
+  updatedAt: string;
+}
+
+export interface UptimeObservation {
+  eventId: string;
+  teamId: string;
+  problemId: string;
+  minute: number;
+  generation: string;
+  checkedAt: string;
+  scoreDelta: number;
+  endpointsHealth: string;
+  hostHintHealth: UptimeState["hostHintHealth"];
 }
 
 /** Organizer operations on one team/problem environment. */
@@ -140,6 +170,7 @@ export interface EngineResult {
 }
 
 export interface RuntimeEngine {
+  disruptionAdapter?(): import("./disruption-model").DisruptionAdapter | undefined;
   readonly hasAws?: boolean;
   participantAwsAccess?(args: {
     kind: import("./participant-aws-access").ParticipantAwsAccess["kind"];

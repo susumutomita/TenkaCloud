@@ -54,22 +54,26 @@ export async function runUptimeFlatKind(
   for (const o of overrides) overrideMap.set(o.slot, o.overrideUrl);
   const slotMap = new Map(slots.map((s) => [s.slot, s] as const));
 
-  // 各 endpoint を並列 probe。順序は保証しないが結果は key 付きで戻す。
-  const probes = await Promise.all(
-    scoring.endpoints.map(async (e) => {
-      const resolved = resolveEndpointUrl(e, slotMap, overrideMap, outputs);
-      if (!resolved) return undefined;
-      const probe = await (input.probe ?? probeUrl)(joinUrl(resolved.baseUrl, e.path), {
-        expectStatus: e.expectStatus,
+  const targets = scoring.endpoints.map((endpoint) => ({
+    endpoint,
+    resolved: resolveEndpointUrl(endpoint, slotMap, overrideMap, outputs),
+  }));
+  const complete = targets.filter(
+    (target): target is { endpoint: UptimeFlatEndpoint; resolved: ResolvedEndpoint } =>
+      target.resolved !== undefined,
+  );
+  // Every required slot must exist before the first probe or point. This also prevents a
+  // partially registered Battle from earning points with its one healthy URL.
+  if (complete.length === 0 || complete.length !== scoring.endpoints.length)
+    return noopKindResult();
+  const resolved = await Promise.all(
+    complete.map(async ({ endpoint, resolved }) => {
+      const probe = await (input.probe ?? probeUrl)(joinUrl(resolved.baseUrl, endpoint.path), {
+        expectStatus: endpoint.expectStatus,
       });
       return { key: resolved.healthKey, ok: probe.ok };
     }),
   );
-
-  // 解決できなかった endpoint (= deploy 未完了 / output 不在) は skip。1 つも解決
-  // できなければ noop (= 既存 health-check-handler 同型)。
-  const resolved = probes.filter((p): p is { key: string; ok: boolean } => p !== undefined);
-  if (resolved.length === 0) return noopKindResult();
 
   const prevHealth = parseEndpointsHealth(deployment.endpointsHealth);
   const newHealth: Record<string, EndpointHealth> = {};

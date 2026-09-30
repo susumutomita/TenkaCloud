@@ -4,8 +4,10 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { auditRequest } from "../audit-request";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
 import { CloudFormationEngine } from "../cloudformation-engine";
+import { startHttpHost } from "../http";
 import { type ApiResponse, HostingService } from "../service";
 import { HostStore } from "../store";
 import { FakeAws, OPERATOR_ACCOUNT } from "./fake-aws";
@@ -63,7 +65,7 @@ async function host() {
     await admin("POST", "/admin/competitor-accounts", { awsAccountId, competitorRoleName });
     await admin("POST", `/admin/competitor-accounts/${awsAccountId}/verify`);
   }
-  return { store, aws, engine, service, admin, adminToken: token };
+  return { data, store, aws, engine, service, admin, adminToken: token };
 }
 
 const TEAM_A = { internalSlug: "team-a", awsAccountId: "111111111111" };
@@ -138,6 +140,80 @@ test("deploys each team's stack into its own account and tears it down", async (
   expect(store.jobs(eventId).map((job) => job.status)).toEqual(["DELETED", "DELETED"]);
   expect(aws.deleted.sort()).toEqual(aws.stacks.map((stack) => stack.stackId).sort());
   expect(aws.stacks.every((stack) => stack.status === "DELETE_COMPLETE")).toBe(true);
+});
+
+test("HTTP refuses cloud stop before accepting work, and recovery keeps an old retained stack", async () => {
+  const { data, store, aws, engine, service, admin, adminToken } = await host();
+  const eventId = await createEvent(admin, [TEAM_A]);
+  expect((await admin("POST", `/events/${eventId}/deploy`)).status).toBe(202);
+  await service.drain();
+  expect((await admin("PUT", "/feature-flags", { key: "audit", enabled: true })).status).toBe(200);
+  const before = store.jobs(eventId)[0];
+  if (!before) throw new Error("Expected a deployed cloud job.");
+  expect(before.status).toBe("COMPLETE");
+  const stack = aws.stacks[0] ? { ...aws.stacks[0] } : undefined;
+  if (!stack) throw new Error("Expected a retained cloud stack.");
+  const listener = await startHttpHost({
+    kind: "admin",
+    hostname: "127.0.0.1",
+    port: 0,
+    staticRoot: data,
+    service,
+  });
+  try {
+    const path = `/api/events/${eventId}/deployments/${before.jobId}/stop`;
+    const detail = await fetch(`${listener.origin}/api/events/${eventId}`, {
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(detail.status).toBe(200);
+    const view = (await detail.json()) as {
+      deploymentsByProblem: Record<string, { stopSupported: boolean }[]>;
+    };
+    expect(view.deploymentsByProblem["hello-world"]?.[0]?.stopSupported).toBe(false);
+
+    const refused = await fetch(`${listener.origin}${path}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${adminToken}`, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(refused.status).toBe(409);
+    expect((await refused.json()) as { message: string }).toMatchObject({
+      message: "This environment cannot be paused. Tear it down instead.",
+    });
+    await service.drain();
+    expect(store.job(before.jobId)).toEqual(before);
+    expect(store.event(eventId).status).toBe("READY");
+    expect(aws.stacks[0]).toEqual(stack);
+    expect(aws.deleted).toEqual([]);
+    expect(
+      service.audit.list(new URLSearchParams({ action: "environment.stop" })).items,
+    ).toMatchObject([
+      { action: "environment.stop", outcome: "failed", phase: "request", reason: "conflict" },
+    ]);
+
+    // A prior version could persist this invalid intent before the async pause failed.
+    const legacyIntent = auditRequest("POST", path.slice(4));
+    if (!legacyIntent) throw new Error("Expected an auditable environment operation.");
+    service.audit.accept(legacyIntent, [before.jobId], () =>
+      store.putJob({ ...before, operation: "stop" }),
+    );
+    await new HostingService(store, engine, HOST_KEY).recover();
+    expect(store.job(before.jobId)).toEqual(before);
+    expect(aws.stacks[0]).toEqual(stack);
+    expect(aws.deleted).toEqual([]);
+    expect(
+      service.audit
+        .list(new URLSearchParams({ action: "environment.stop" }))
+        .items.filter((record) => record.operationId === legacyIntent.operationId)
+        .map((record) => ({ phase: record.phase, outcome: record.outcome, reason: record.reason })),
+    ).toEqual([
+      { phase: "result", outcome: "failed", reason: "operation_failed" },
+      { phase: "result", outcome: "unknown", reason: undefined },
+      { phase: "request", outcome: "accepted", reason: undefined },
+    ]);
+  } finally {
+    await listener.close();
+  }
 });
 
 test("a stack that rolls back fails the job with CloudFormation's reason and is still removed", async () => {

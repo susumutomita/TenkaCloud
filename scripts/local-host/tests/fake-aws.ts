@@ -88,8 +88,11 @@ export class FakeAws {
   }
 
   seedStack(name: string, tags: Tag[] = []): FakeStack {
+    const accountId =
+      /^arn:aws:iam::(\d{12}):role\//u.exec(this.assumed.at(-1)?.RoleArn ?? "")?.[1] ??
+      "111111111111";
     const stack: FakeStack = {
-      stackId: `arn:aws:cloudformation:ap-northeast-1:111:stack/${name}/${this.stacks.length}`,
+      stackId: `arn:aws:cloudformation:ap-northeast-1:${accountId}:stack/${name}/${this.stacks.length}`,
       name,
       status: "CREATE_COMPLETE",
       tags,
@@ -131,6 +134,14 @@ export class FakeAws {
                   },
                 ]),
             { OutputKey: "ParameterConsoleUrl", OutputValue: "https://console.example/p" },
+            ...(stack.name.includes("hello-world-battle")
+              ? [
+                  { OutputKey: "FrontendUrl", OutputValue: "" },
+                  { OutputKey: "ApiUrl", OutputValue: "" },
+                  { OutputKey: "Ec2HostHint", OutputValue: "ec2-203-0-113-10.example.com" },
+                  { OutputKey: "InstanceId", OutputValue: "i-0123456789abcdef0" },
+                ]
+              : []),
           ],
         },
       ],

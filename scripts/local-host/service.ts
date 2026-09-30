@@ -1,8 +1,10 @@
+import type { ProbeFn } from "../../infrastructure/lib/problem-deploy/runtime-clients/http-probe-client";
 import { HostAuditLog } from "./audit-log";
 import { type AuditOperation, auditActor } from "./audit-record";
 import { auditFailure, auditRequest } from "./audit-request";
 import { id, issueOrganizerSession, randomToken, SerialQueue, sameSecret } from "./auth";
 import { LocalCoordination } from "./coordination";
+import { LocalDisruptions } from "./disruptions";
 import {
   formatGatewayPorts,
   type GatewayPortRange,
@@ -17,6 +19,7 @@ import {
   assertPlaying,
   type CompetitorAccount,
   type Context,
+  definitionKind,
   type Gate,
   gate,
   HostError,
@@ -36,6 +39,7 @@ import { type OrganizerPermission, requireOrganizerPermission } from "./organize
 import { ParticipantAssumeRoleError, type ParticipantAwsAccess } from "./participant-aws-access";
 import { portsFree } from "./ports";
 import { SamlSignIn } from "./saml-sign-in";
+import { projectedScore, projectedTimeline } from "./score";
 import {
   digest,
   type HostStore,
@@ -45,6 +49,7 @@ import {
   type OrganizerUser,
   type OrganizerView,
 } from "./store";
+import { LocalUptime, uptimeGeneration } from "./uptime";
 
 export interface ApiRequest {
   method: string;
@@ -176,16 +181,60 @@ function participantProblem(
   return problem;
 }
 
+function showUptimeStatus(
+  store: HostStore,
+  context: Context,
+  problem: Record<string, unknown>,
+  job: Job | undefined,
+): void {
+  if (!problem.scoring || object(problem.scoring).kind !== "uptime-flat") return;
+  const state = store.uptimeState(
+    context.event.eventId,
+    context.team.teamId,
+    String(problem.problemId),
+  );
+  const current = job?.status === "COMPLETE" && state.generation === uptimeGeneration(job);
+  const health =
+    current && state.endpointsHealth
+      ? (JSON.parse(state.endpointsHealth) as Record<string, { ok: boolean; checkedAt: string }>)
+      : {};
+  const observations = Object.values(health);
+  const healthyCount = observations.filter((entry) => entry.ok).length;
+  const totalCount = observations.length;
+  let overall = "unknown";
+  if (totalCount > 0) {
+    if (healthyCount === totalCount) overall = "healthy";
+    else if (healthyCount === 0) overall = "down";
+    else overall = "degraded";
+  }
+  problem.applicationStatus = {
+    overall,
+    healthyCount,
+    totalCount,
+    ...(observations[0]?.checkedAt ? { checkedAt: observations[0].checkedAt } : {}),
+  };
+  if (current && state.lastResult) problem.lastResult = state.lastResult;
+  if (job?.deployedAt) problem.createdAt = new Date(job.deployedAt).toISOString();
+}
+
 /** The local adapter retains the existing admin/participant HTTP contracts. */
 export class HostingService {
   readonly saml: SamlSignIn;
   readonly audit: HostAuditLog;
   private readonly queue = new SerialQueue();
   private readonly coordination = new LocalCoordination(this);
+  readonly disruptions: LocalDisruptions;
   private readonly tasks = new Set<Promise<void>>();
   private readonly busyEvents = new Set<string>();
   /** jobId → eventId of single-environment operations still running. */
   private readonly busyJobs = new Map<string, string>();
+  readonly uptime: LocalUptime;
+  /** Connected by the progression slice when the branches are stacked. */
+  progression?: {
+    allowed(team: Team, problemId: string): boolean;
+    assertAccess(team: Team, problemId: string): void;
+    captureTeam(team: Team): void;
+  };
   surfaceLink?: (job: Job, team: Team) => Promise<string>;
   closeSurface?: (jobId: string) => Promise<void>;
   /** Fixed exercise-gateway ports; a runtime slot is only used when its gateway port is free. */
@@ -199,9 +248,19 @@ export class HostingService {
     private readonly masterKey: string,
     readonly now: () => number = Date.now,
     private readonly log: (message: string) => void = console.error,
+    uptimeProbe?: ProbeFn,
   ) {
     this.saml = new SamlSignIn(store, masterKey, now);
     this.audit = new HostAuditLog(store, now);
+    this.disruptions = new LocalDisruptions(this);
+    this.uptime = new LocalUptime(
+      store,
+      now,
+      (eventId, action) => this.queue.run(eventId, action),
+      () => ({ progression: this.progression, disruptions: this.disruptions }),
+      uptimeProbe,
+      log,
+    );
   }
   private currentEvent(eventId: string): HostedEvent {
     const event = this.store.event(eventId);
@@ -244,6 +303,7 @@ export class HostingService {
               jobId: job.jobId,
               teamId: job.teamId,
               status: job.status,
+              stopSupported: definitionKind(job.definition) !== "cloudformation",
               ...(job.error ? { error: job.error } : {}),
               ...(job.operation ? { operation: job.operation } : {}),
               ...this.gatewayPortField(job),
@@ -252,11 +312,21 @@ export class HostingService {
       ),
       ...(query.get("withScoreEvents") === "true"
         ? {
-            scoreEventsByTeam: teams.map((team) => ({
-              teamId: team.teamId,
-              teamName: team.displayName,
-              events: [...team.scoreEvents].reverse(),
-            })),
+            scoreEventsByTeam: teams.map((team) => {
+              const events = [...team.scoreEvents].reverse();
+              const timeline = projectedTimeline(event, events);
+              const projected = projectedScore(event, events);
+              return {
+                teamId: team.teamId,
+                teamName: team.displayName,
+                projectedTotal: projected.total,
+                projectedByProblem: projected.byProblem,
+                events: events.map((entry, index) => ({
+                  ...entry,
+                  projectedTotal: timeline[index],
+                })),
+              };
+            }),
           }
         : {}),
     };
@@ -313,8 +383,17 @@ export class HostingService {
     return this.queue.run(eventId, async () => {
       const current = this.store.authenticateAdmin(request.token, this.now());
       if (operation) operation.actor = auditActor(current);
-      requireRole(current, parts[2] === "teams" ? "reveal-team-keys" : "run-events");
-      return this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request, operation);
+      let permission: OrganizerPermission = "run-events";
+      if (parts[2] === "teams") permission = "reveal-team-keys";
+      else if (parts[2] === "disruptions" && request.method === "GET") permission = "read";
+      requireRole(current, permission);
+      return this.mutateEvent(
+        this.currentEvent(eventId),
+        parts.slice(2),
+        request,
+        operation,
+        current,
+      );
     });
   }
   private async publicSamlRoute(
@@ -930,7 +1009,10 @@ export class HostingService {
     parts: string[],
     request: ApiRequest,
     operation: AuditOperation | undefined,
+    principal: OrganizerPrincipal,
   ): Promise<ApiResponse> {
+    const disruption = this.disruptions.route(event, parts, request, principal, operation);
+    if (disruption) return disruption;
     if (this.busyEvents.has(event.eventId))
       throw new HostError(409, "An environment operation is already in progress.");
     const body = () => object(request.body);
@@ -1344,6 +1426,7 @@ export class HostingService {
           this.freeSlot(job.definition, this.recordedOffsets(job.jobId)),
         );
       }
+      job.deployedAt = undefined;
       job.status = "IN_PROGRESS";
       job.error = undefined;
       this.store.putJob(job);
@@ -1352,6 +1435,7 @@ export class HostingService {
         this.store.putJob(job);
       });
       job.status = "COMPLETE";
+      job.deployedAt = this.now();
     } catch (error) {
       job.status = "FAILED";
       job.error = failureMessage(error, "Runtime failed.");
@@ -1436,6 +1520,7 @@ export class HostingService {
   }
   async drain(): Promise<void> {
     await Promise.all([...this.tasks]);
+    await this.disruptions.drain();
   }
   /** Writes Battle state held in memory; call it after `drain()` and before closing SQLite. */
   flush(): void {
@@ -1448,6 +1533,7 @@ export class HostingService {
    * of an hour.
    */
   async recover(): Promise<void> {
+    this.disruptions.recover();
     await Promise.all(
       this.store.jobs().map(async (job) => {
         this.audit.settleJob(job.jobId, "unknown");
@@ -1479,6 +1565,10 @@ export class HostingService {
   private async recoverJob(job: Job): Promise<void> {
     // Resume the accepted intent before adopting an environment that may still be unchanged.
     if (job.operation) {
+      if (job.operation === "stop" && definitionKind(job.definition) === "cloudformation") {
+        await this.recoverUnsupportedStop(job);
+        return;
+      }
       await this.runJobOperation(job.jobId, job.operation);
       return;
     }
@@ -1514,6 +1604,21 @@ export class HostingService {
     }
     this.store.putJob(job);
   }
+  private async recoverUnsupportedStop(job: Job): Promise<void> {
+    // Older hosts accepted this operation before discovering that the runtime cannot
+    // pause. Re-adopt the retained environment and fail only the accepted intent.
+    try {
+      await this.engine.recover(job);
+      job.status = "COMPLETE";
+      job.error = undefined;
+    } catch (error) {
+      job.status = "FAILED";
+      job.error = failureMessage(error, "Runtime recovery failed.");
+    }
+    job.operation = undefined;
+    this.store.putJob(job);
+    this.audit.settleJob(job.jobId, "FAILED");
+  }
   private context(team: Team): Context {
     return {
       event: this.currentEvent(team.eventId),
@@ -1527,6 +1632,9 @@ export class HostingService {
     if (request.path.startsWith("/portal/me/coordination/")) {
       return this.queue.run(team.eventId, async () => this.coordination.request(request));
     }
+    if (/^\/portal\/me\/problems\/[^/]+\/endpoints(?:\/[^/]+)?$/u.test(request.path)) {
+      return this.queue.run(team.eventId, () => this.participantEndpoint(request));
+    }
     if (request.method === "GET" && request.path === "/portal/me/console-signin-url")
       return this.awsAccess(request, "console");
     if (request.method === "GET" && request.path === "/portal/me/cli-credentials")
@@ -1537,6 +1645,25 @@ export class HostingService {
       return this.queue.run(team.eventId, () => this.renameParticipant(request));
     if (request.method !== "POST") throw new HostError(404, "Unknown participant endpoint.");
     return this.submitParticipant(request, team);
+  }
+  private participantEndpoint(request: ApiRequest): ApiResponse {
+    const team = this.store.authenticateTeam(request.token);
+    const parts = request.path.split("/").filter(Boolean);
+    const problemId = decodeURIComponent(parts[3] ?? "");
+    const slot = parts[5] ? decodeURIComponent(parts[5]) : undefined;
+    this.progression?.assertAccess(team, problemId);
+    if (request.method === "GET" && !slot) return ok(this.uptime.view(team, problemId));
+    if (slot && (request.method === "POST" || request.method === "DELETE"))
+      return ok(
+        this.uptime.change(
+          team,
+          problemId,
+          slot,
+          request.method,
+          request.method === "POST" ? object(request.body).url : undefined,
+        ),
+      );
+    throw new HostError(404, "Unknown participant endpoint.");
   }
   private async awsAccess(
     request: ApiRequest,
@@ -1685,18 +1812,28 @@ export class HostingService {
     // A verifier finishing after the server deadline must not award points. The
     // engine works on a disposable snapshot, so rejecting here discards its mutation.
     assertPlaying(this.currentEvent(fresh.eventId), this.now());
+    const projected = projectedScore(current.event, result.scoreEvents);
+    const responseBody =
+      "totalScore" in result.body ? { ...result.body, totalScore: projected.total } : result.body;
     this.store.transaction(() => {
       this.store.putTeam({
         ...fresh,
         snapshot: result.snapshot,
-        score: result.score,
+        score: projected.total,
         completedProblems: result.completedProblems,
         scoreEvents: result.scoreEvents,
       });
+      this.disruptions.captureTriggers(this.currentEvent(fresh.eventId));
       if (request.nonce)
-        this.store.putReceipt(fresh.teamId, request.nonce, fingerprint, result.status, result.body);
+        this.store.putReceipt(
+          fresh.teamId,
+          request.nonce,
+          fingerprint,
+          result.status,
+          responseBody,
+        );
     });
-    return ok(result.body, result.status);
+    return ok(responseBody, result.status);
   }
   private async participantRead(context: Context, path: string): Promise<ApiResponse> {
     switch (path) {
@@ -1727,12 +1864,14 @@ export class HostingService {
       const events = [...team.scoreEvents]
         .reverse()
         .filter((event) => cutoff === null || Date.parse(event.occurredAt) < cutoff);
+      const timeline = projectedTimeline(context.event, events);
+      const projected = projectedScore(context.event, events);
       return {
         teamId: team.teamId,
         teamName: team.displayName,
         isMyTeam: team.teamId === context.team.teamId,
-        events,
-        total: events.reduce((sum, event) => sum + event.points, 0),
+        events: events.map((entry, index) => ({ ...entry, projectedTotal: timeline[index] })),
+        total: projected.total,
       };
     });
     teams.sort(
@@ -1760,8 +1899,7 @@ export class HostingService {
         return {
           teamId: team.teamId,
           teamName: team.displayName,
-          score:
-            cutoff === null ? team.score : historical.reduce((sum, event) => sum + event.points, 0),
+          score: cutoff === null ? team.score : projectedScore(context.event, historical).total,
           completedProblems:
             cutoff === null
               ? team.completedProblems
@@ -1785,6 +1923,7 @@ export class HostingService {
   }
   private async teamView(context: Context): Promise<Record<string, unknown>> {
     const result = await this.engine.view(context);
+    const projected = projectedScore(context.event, context.team.scoreEvents);
     const eventGate = gate(context.event, context.now);
     // A canceled or never-started event has nothing to reveal: writeups need a real start.
     const ended = eventGate.kind === "scoring_ended" && hasStarted(context.event, context.now);
@@ -1793,22 +1932,9 @@ export class HostingService {
       context.event.problems.map((each) => [each.problemId, each.runtime ?? "docker"]),
     );
     const safeProblems = await Promise.all(
-      problems.map(async (raw) => {
-        const entry = object(raw);
-        const runtime = runtimes.get(String(entry.problemId));
-        if (!runtime) throw new Error("The runtime described a problem outside the event.");
-        const problem = participantProblem(entry, runtime, eventGate.kind, ended);
-        const job = context.jobs.find((candidate) => candidate.problemId === problem.problemId);
-        problem.provider = PROVIDERS[runtime];
-        problem.jobId = job?.jobId ?? problem.jobId;
-        problem.eventStartsAt = context.event.startsAt;
-        problem.eventEndsAt = context.event.endsAt;
-        problem.expiresAt = context.event.expiresAt;
-        // The participant contract has no organizer-stop state; "DELETED" renders as stopped.
-        problem.status = job?.status === "STOPPED" ? "DELETED" : (job?.status ?? "PENDING");
-        await this.grantAccess(problem, runtime, job, context, eventGate.kind);
-        return problem;
-      }),
+      problems.map((raw) =>
+        this.teamProblemView(raw, context, runtimes, eventGate.kind, ended, projected.byProblem),
+      ),
     );
     return {
       ...result,
@@ -1821,6 +1947,31 @@ export class HostingService {
       problems: safeProblems,
       eventGate,
     };
+  }
+  private async teamProblemView(
+    raw: unknown,
+    context: Context,
+    runtimes: ReadonlyMap<string, Runtime>,
+    gateKind: Gate["kind"],
+    ended: boolean,
+    projectedByProblem: Readonly<Record<string, number>>,
+  ): Promise<Record<string, unknown>> {
+    const entry = object(raw);
+    const runtime = runtimes.get(String(entry.problemId));
+    if (!runtime) throw new Error("The runtime described a problem outside the event.");
+    const problem = participantProblem(entry, runtime, gateKind, ended);
+    problem.score = projectedByProblem[String(problem.problemId)] ?? 0;
+    const job = context.jobs.find((candidate) => candidate.problemId === problem.problemId);
+    problem.provider = PROVIDERS[runtime];
+    problem.jobId = job?.jobId ?? problem.jobId;
+    problem.eventStartsAt = context.event.startsAt;
+    problem.eventEndsAt = context.event.endsAt;
+    problem.expiresAt = context.event.expiresAt;
+    // The participant contract has no organizer-stop state; "DELETED" renders as stopped.
+    problem.status = job?.status === "STOPPED" ? "DELETED" : (job?.status ?? "PENDING");
+    showUptimeStatus(this.store, context, problem, job);
+    await this.grantAccess(problem, runtime, job, context, gateKind);
+    return problem;
   }
   /**
    * A stack's outputs or a Docker exercise's Web link, only while the environment runs and the
@@ -1878,6 +2029,8 @@ function assertJobOperation(event: HostedEvent, job: Job, operation: JobOperatio
     return;
   }
   if (operation === "stop") {
+    if (definitionKind(job.definition) === "cloudformation")
+      throw new HostError(409, "This environment cannot be paused. Tear it down instead.");
     if (!["DEPLOYING", "READY", "ENDED"].includes(event.status))
       throw new HostError(409, "Environments of this event can no longer be stopped.");
     if (job.status !== "COMPLETE")

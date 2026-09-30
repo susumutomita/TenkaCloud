@@ -102,6 +102,7 @@ async function host(withAws = true) {
     aws,
     service,
     engine,
+    adminToken: token,
     advance: (milliseconds: number) => {
       clock += milliseconds;
     },
@@ -272,20 +273,84 @@ test("a wrong flag, including another team's, costs the wrong-answer penalty", a
 
   expect(await submit(fixture, alpha, "TC{guess}")).toEqual({
     status: 200,
-    body: { kind: "wrong", scoreDelta: -5, totalScore: -5, wrongCount: 1 },
+    body: { kind: "wrong", scoreDelta: -5, totalScore: 0, wrongCount: 1 },
   });
   expect(await submit(fixture, alpha, fakeFlag(stackName(fixture, "beta")))).toEqual({
     status: 200,
-    body: { kind: "wrong", scoreDelta: -5, totalScore: -10, wrongCount: 2 },
+    body: { kind: "wrong", scoreDelta: -5, totalScore: 0, wrongCount: 2 },
   });
   const team = fixture.store.team(alpha.teamId);
-  expect(team.score).toBe(-10);
+  expect(team.score).toBe(0);
   expect(team.completedProblems).toBe(0);
   expect(
     team.scoreEvents.map(({ source, points, result }) => ({ source, points, result })),
   ).toEqual([
     { source: "flag-wrong", points: -5, result: "wrong" },
     { source: "flag-wrong", points: -5, result: "wrong" },
+  ]);
+});
+
+test("pinned hello-world debt, signed Battle loss, and host read models agree", async () => {
+  const fixture = await host();
+  const event = await startedEvent(fixture);
+  const { alpha, beta } = teams(event);
+  expect((await submit(fixture, alpha, "TC{guess}")).body).toMatchObject({
+    scoreDelta: -5,
+    totalScore: 0,
+  });
+  expect((await submit(fixture, alpha, fakeFlag(stackName(fixture, "alpha")))).body).toMatchObject({
+    scoreDelta: 100,
+    totalScore: 95,
+  });
+  const beforeBattle = fixture.store.team(alpha.teamId);
+  expect(beforeBattle.score).toBe(95);
+  fixture.advance(1000);
+  const battle = {
+    jobId: required(fixture.store.jobId(event.eventId, alpha.teamId, "ac26-crypto-battle")),
+    problemId: "ac26-crypto-battle",
+    source: "coordination",
+    points: -100,
+    result: "wrong" as const,
+    occurredAt: new Date(START + 1000).toISOString(),
+  };
+  fixture.store.putTeam({
+    ...beforeBattle,
+    score: -5,
+    scoreEvents: [battle, ...beforeBattle.scoreEvents],
+  });
+  const me = await fixture.as(alpha).get("/portal/me");
+  expect(problem(me, "hello-world").score).toBe(95);
+  expect(problem(me, "ac26-crypto-battle").score).toBe(-100);
+  const board = await fixture.as(beta).get("/portal/leaderboard");
+  expect(
+    (board.entries as { teamId: string; score: number }[]).find(
+      (row) => row.teamId === alpha.teamId,
+    )?.score,
+  ).toBe(-5);
+  const detail = await fixture.service.admin(
+    apiRequest({
+      method: "GET",
+      path: `/events/${event.eventId}`,
+      token: fixture.adminToken,
+      query: new URLSearchParams({ withScoreEvents: "true" }),
+    }),
+  );
+  const history = (
+    detail.body as {
+      scoreEventsByTeam: {
+        teamId: string;
+        projectedTotal: number;
+        projectedByProblem: Record<string, number>;
+        events: { points: number; projectedTotal: number }[];
+      }[];
+    }
+  ).scoreEventsByTeam.find((row) => row.teamId === alpha.teamId);
+  expect(history?.projectedTotal).toBe(-5);
+  expect(history?.projectedByProblem).toEqual({ "ac26-crypto-battle": -100, "hello-world": 95 });
+  expect(history?.events.map((entry) => [entry.points, entry.projectedTotal])).toEqual([
+    [-5, 0],
+    [100, 95],
+    [-100, -5],
   ]);
 });
 
@@ -393,7 +458,7 @@ test("a hint is charged once and only its own content is revealed", async () => 
       content: required(hint1).content,
       i18n: { en: { content: required(english).content } },
       penaltyApplied: 20,
-      totalScore: -20,
+      totalScore: 0,
       revealedAt,
     },
   });
@@ -403,7 +468,7 @@ test("a hint is charged once and only its own content is revealed", async () => 
     content: required(hint1).content,
     i18n: { en: { content: required(english).content } },
     penaltyApplied: 0,
-    totalScore: -20,
+    totalScore: 0,
     revealedAt,
   });
   await expect(
@@ -411,7 +476,7 @@ test("a hint is charged once and only its own content is revealed", async () => 
   ).rejects.toMatchObject({ status: 404, kind: "unknown_hint" });
 
   const team = fixture.store.team(alpha.teamId);
-  expect(team.score).toBe(-20);
+  expect(team.score).toBe(0);
   expect(
     team.scoreEvents.map(({ source, points, hintId }) => ({ source, points, hintId })),
   ).toEqual([{ source: "hint", points: -20, hintId: "hint-1" }]);

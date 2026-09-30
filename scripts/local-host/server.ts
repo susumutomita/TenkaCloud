@@ -49,12 +49,22 @@ export async function startLocalHost(
   let participant: HttpHost | undefined;
   let gateways: SurfaceGateways | undefined;
   let service: HostingService | undefined;
+  let uptimeTimer: ReturnType<typeof setInterval> | undefined;
+  let uptimeTick: Promise<void> | undefined;
+  let disruptionTimer: ReturnType<typeof setInterval> | undefined;
+  let disruptionTick: Promise<void> | undefined;
   async function stop(): Promise<void> {
+    if (uptimeTimer) clearInterval(uptimeTimer);
+    uptimeTimer = undefined;
+    if (disruptionTimer) clearInterval(disruptionTimer);
+    disruptionTimer = undefined;
     // Stop accepting requests first: a deployment or teardown accepted after the drain
     // snapshot would otherwise keep writing SQLite/Docker state past store.close().
     await Promise.all([admin?.close(), participant?.close()]);
+    await disruptionTick;
     admin = undefined;
     participant = undefined;
+    await uptimeTick;
     await service?.drain();
     await gateways?.close();
     service?.flush();
@@ -72,6 +82,20 @@ export async function startLocalHost(
     service.gatewayHostname = gatewayHostname;
     service.assertGatewayRange(settings.gatewayPorts);
     await service.recover();
+    const runningService = service;
+    disruptionTimer = setInterval(() => {
+      if (disruptionTick) return;
+      disruptionTick = runningService.disruptions
+        .tick()
+        .catch(() =>
+          announce(
+            "Disruption processing failed; inspect durable execution history before retrying.",
+          ),
+        )
+        .finally(() => {
+          disruptionTick = undefined;
+        });
+    }, 1000);
     const surfaces = new SurfaceGateways(gatewayHostname, service, settings.gatewayPorts, announce);
     gateways = surfaces;
     service.surfaceLink = (job, team) => surfaces.link(job, team);
@@ -95,6 +119,21 @@ export async function startLocalHost(
       service,
       participantOrigin: participant.origin,
     });
+    const pollUptime = () => {
+      if (!service || uptimeTick) return;
+      uptimeTick = service.uptime
+        .tick()
+        .catch((error: unknown) => {
+          announce(
+            `Uptime scheduler failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        })
+        .finally(() => {
+          uptimeTick = undefined;
+        });
+    };
+    uptimeTimer = setInterval(pollUptime, 10_000);
+    pollUptime();
     return { admin, participant, masterKey, masterKeyPath, databasePath, stop };
   } catch (error) {
     await stop();

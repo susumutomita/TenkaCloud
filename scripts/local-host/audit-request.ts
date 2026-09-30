@@ -62,6 +62,8 @@ function eventTarget(
   const suffix = event[2] ?? "";
   const action = eventActions[`${method} ${suffix}`];
   if (action) return { action, resource: { kind: "event", id: event[1] } };
+  const disruption = disruptionTarget(method, suffix, event[1]);
+  if (disruption) return disruption;
   const team = new RegExp(`^teams/(${ulid})/rotate-login-key$`, "u").exec(suffix);
   if (team?.[1] && method === "POST")
     return { action: "team.credential_rotated", resource: { kind: "team", id: team[1] } };
@@ -74,6 +76,18 @@ function eventTarget(
       action: job[2] === "stop" ? "environment.stop" : "environment.restart",
       resource: { kind: "job", id: job[1] },
     };
+  return undefined;
+}
+function disruptionTarget(
+  method: string,
+  suffix: string,
+  eventId: string,
+): Pick<AuditOperation, "action" | "resource"> | undefined {
+  if (method !== "POST") return undefined;
+  if (suffix === "disruptions/fire")
+    return { action: "disruption.requested", resource: { kind: "event", id: eventId } };
+  if (/^disruptions\/recurring\/[^/]+\/cancel$/u.test(suffix))
+    return { action: "disruption.cancelled", resource: { kind: "event", id: eventId } };
   return undefined;
 }
 

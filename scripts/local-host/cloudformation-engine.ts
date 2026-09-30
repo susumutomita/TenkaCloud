@@ -11,17 +11,31 @@ import {
 import type { STSClient } from "@aws-sdk/client-sts";
 import type { ParticipantProblemView } from "@tenkacloud/portal-contracts";
 import {
+  type ProblemDisruptionEntry,
+  type ProblemPhaseEntry,
+  projectScore,
+} from "@tenkacloud/problem-sdk/internal";
+import {
   buildParameterOverrides,
   generateRandomAlphanumeric,
 } from "../../infrastructure/lib/problem-deploy/handlers/cfn-deploy-handler/parameter-overrides";
 import { flagMatches } from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/kinds/flag";
 import { assumeRoleWithExternalId } from "../../infrastructure/lib/problem-deploy/handlers/shared/assume-competitor-role";
+import {
+  type ProblemEndpointSlot,
+  parseEndpointSlot,
+} from "../../infrastructure/lib/utils/endpoints-metadata";
+import {
+  parseScoringMetadata,
+  type UptimeFlatScoringMetadata,
+} from "../../infrastructure/lib/utils/scoring-metadata";
 import { hintViews } from "../local-play/api-views";
 import {
   type ContainerVerifyScoring,
   parseEnglishOverlay,
   parseVerifyScoring,
 } from "../local-play/manifest";
+import { AwsDisruptionAdapter } from "./aws-disruption-adapter";
 import {
   type AwsTarget,
   type Context,
@@ -39,6 +53,7 @@ import {
   type ParticipantAwsClients,
   participantAwsAccess,
 } from "./participant-aws-access";
+import { projectedScore } from "./score";
 
 /** Short-lived credentials for the team's competitor role; the SDK refreshes them near expiry. */
 export type CredentialsProvider = () => Promise<{
@@ -49,22 +64,41 @@ export type CredentialsProvider = () => Promise<{
 }>;
 
 /** A problem deployed as one CloudFormation stack in each team's own AWS account. */
-interface StackDefinition {
+interface StackDefinitionBase {
   kind: "cloudformation";
   problemId: string;
   templateBody: string;
   cfnParameters: Record<string, string>;
-  /** The stack output holding the flag. Participants never see it through the host. */
-  flagOutputKey: string;
   name: string;
   instructions: string;
   /** English overlay without the author-only description. */
   english?: { name?: string; instructions?: string };
-  scoring: Omit<ContainerVerifyScoring, "kind">;
+  disruptions?: ProblemDisruptionEntry[];
+  phases?: ProblemPhaseEntry[];
+  /** Explicit per-problem projection policy, pinned when the event is created. */
+  scoreFloor?: number;
+}
+
+interface FlagStackDefinition extends StackDefinitionBase {
+  /** The stack output holding the flag. Participants never see it through the host. */
+  flagOutputKey: string;
+  scoring: Omit<ContainerVerifyScoring, "kind"> & { kind: "flag" };
+}
+
+export interface UptimeStackDefinition extends StackDefinitionBase {
+  endpoints: readonly ProblemEndpointSlot[];
+  scoring: UptimeFlatScoringMetadata & { kind: "uptime-flat" };
+  hostHintOutputKey: "Ec2HostHint";
+}
+
+type StackDefinition = FlagStackDefinition | UptimeStackDefinition;
+
+function isFlagStackDefinition(definition: StackDefinition): definition is FlagStackDefinition {
+  return definition.scoring.kind === "flag";
 }
 
 /** Recorded before CreateStack, so an interrupted create can still be cleaned up. */
-interface StackUnit {
+export interface StackUnit {
   kind: "cloudformation";
   accountId: string;
   roleArn: string;
@@ -95,49 +129,116 @@ export interface CloudFormationEngineOptions extends ParticipantAwsClients {
 const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_=,.@:/-]{16,128}$/u;
 
 /** Reviewed list: extending it requires reviewing the template's cost and blast radius. */
-const REVIEWED_STACK_PROBLEMS = ["hello-world"];
+const REVIEWED_STACK_PROBLEMS = [
+  { problemId: "hello-world", folder: "challenges", scoring: "flag" },
+  { problemId: "hello-world-battle", folder: "battles", scoring: "uptime-flat" },
+] as const;
+
+interface StackMetadata {
+  name: string;
+  instructions: string;
+  cfnTemplate: string;
+  cfnParameters?: Record<string, string>;
+  scoring: unknown;
+  endpoints?: unknown;
+  disruptions?: ProblemDisruptionEntry[];
+  phases?: ProblemPhaseEntry[];
+  i18n?: { en?: Record<string, unknown> };
+}
+
+function flagStackDefinition(
+  base: StackDefinitionBase,
+  metadata: StackMetadata,
+  hintById: ReadonlyMap<string, string>,
+): FlagStackDefinition {
+  const scoring = metadata.scoring as { kind?: unknown; flagOutputKey?: unknown };
+  if (scoring.kind !== "flag" || typeof scoring.flagOutputKey !== "string")
+    throw new Error(`${base.problemId}'s scoring contract changed; review cloud hosting support.`);
+  const { points, wrongAnswerPenalty, hints, hintReveal } = parseVerifyScoring(
+    metadata.scoring as Parameters<typeof parseVerifyScoring>[0],
+    hintById,
+  );
+  return {
+    ...base,
+    flagOutputKey: scoring.flagOutputKey,
+    scoring: {
+      kind: "flag",
+      points,
+      wrongAnswerPenalty,
+      hints,
+      ...(hintReveal ? { hintReveal } : {}),
+    },
+  };
+}
+
+function uptimeStackDefinition(
+  base: StackDefinitionBase,
+  metadata: StackMetadata,
+): UptimeStackDefinition {
+  const scoring = parseScoringMetadata(metadata.scoring);
+  if (scoring?.kind !== "uptime-flat" || !Array.isArray(metadata.endpoints))
+    throw new Error(`${base.problemId}'s uptime contract changed; review cloud hosting support.`);
+  const endpoints = metadata.endpoints.map(parseEndpointSlot);
+  if (
+    endpoints.some((slot) => !slot) ||
+    endpoints.length !== 2 ||
+    endpoints[0]?.slot !== "frontend" ||
+    endpoints[1]?.slot !== "api" ||
+    scoring.endpoints.length !== endpoints.length ||
+    scoring.endpoints.some((endpoint, index) => endpoint.slot !== endpoints[index]?.slot)
+  )
+    throw new Error(
+      `${base.problemId}'s required endpoint slots changed; review cloud hosting support.`,
+    );
+  return {
+    ...base,
+    endpoints: endpoints.filter((slot): slot is ProblemEndpointSlot => slot !== undefined),
+    scoring: { ...scoring, kind: "uptime-flat" },
+    hostHintOutputKey: "Ec2HostHint",
+  };
+}
+
+function stackProblem(
+  repositoryRoot: string,
+  entry: (typeof REVIEWED_STACK_PROBLEMS)[number],
+): Problem {
+  const { problemId, folder, scoring } = entry;
+  const directory = join(repositoryRoot, "problems", folder, problemId);
+  const metadata = JSON.parse(
+    readFileSync(join(directory, "metadata.json"), "utf8"),
+  ) as StackMetadata;
+  const overlay = parseEnglishOverlay(metadata.i18n);
+  // Picked, not filtered: the author-only description never reaches participants.
+  const english = {
+    ...(overlay.text?.name ? { name: overlay.text.name } : {}),
+    ...(overlay.text?.instructions ? { instructions: overlay.text.instructions } : {}),
+  };
+  const base: StackDefinitionBase = {
+    kind: "cloudformation",
+    problemId,
+    templateBody: readFileSync(join(directory, metadata.cfnTemplate), "utf8"),
+    cfnParameters: metadata.cfnParameters ?? {},
+    name: metadata.name,
+    instructions: metadata.instructions,
+    ...(Object.keys(english).length > 0 ? { english } : {}),
+    disruptions: metadata.disruptions ?? [],
+    phases: metadata.phases ?? [],
+    ...(problemId === "hello-world" ? { scoreFloor: 0 } : {}),
+  };
+  const definition: StackDefinition =
+    scoring === "flag"
+      ? flagStackDefinition(base, metadata, overlay.hintById)
+      : uptimeStackDefinition(base, metadata);
+  return {
+    problemId,
+    name: metadata.name,
+    definition: JSON.stringify(definition),
+    runtime: "cloudformation",
+  };
+}
 
 export function cloudFormationCatalog(repositoryRoot: string): Problem[] {
-  return REVIEWED_STACK_PROBLEMS.map((problemId) => {
-    const directory = join(repositoryRoot, "problems/challenges", problemId);
-    const metadata = JSON.parse(readFileSync(join(directory, "metadata.json"), "utf8")) as {
-      name: string;
-      instructions: string;
-      cfnTemplate: string;
-      cfnParameters?: Record<string, string>;
-      scoring: { kind: string; flagOutputKey?: string } & Record<string, unknown>;
-      i18n?: { en?: Record<string, unknown> };
-    };
-    if (metadata.scoring.kind !== "flag" || !metadata.scoring.flagOutputKey)
-      throw new Error(`${problemId}'s scoring contract changed; review cloud hosting support.`);
-    const overlay = parseEnglishOverlay(metadata.i18n);
-    const { points, wrongAnswerPenalty, hints, hintReveal } = parseVerifyScoring(
-      metadata.scoring,
-      overlay.hintById,
-    );
-    // Picked, not filtered: the author-only description never reaches participants.
-    const english = {
-      ...(overlay.text?.name ? { name: overlay.text.name } : {}),
-      ...(overlay.text?.instructions ? { instructions: overlay.text.instructions } : {}),
-    };
-    const definition: StackDefinition = {
-      kind: "cloudformation",
-      problemId,
-      templateBody: readFileSync(join(directory, metadata.cfnTemplate), "utf8"),
-      cfnParameters: metadata.cfnParameters ?? {},
-      flagOutputKey: metadata.scoring.flagOutputKey,
-      name: metadata.name,
-      instructions: metadata.instructions,
-      ...(Object.keys(english).length > 0 ? { english } : {}),
-      scoring: { points, wrongAnswerPenalty, hints, ...(hintReveal ? { hintReveal } : {}) },
-    };
-    return {
-      problemId,
-      name: metadata.name,
-      definition: JSON.stringify(definition),
-      runtime: "cloudformation",
-    };
-  });
+  return REVIEWED_STACK_PROBLEMS.map((entry) => stackProblem(repositoryRoot, entry));
 }
 
 export class CloudFormationEngine implements RuntimeEngine {
@@ -165,6 +266,10 @@ export class CloudFormationEngine implements RuntimeEngine {
     if (!EXTERNAL_ID_PATTERN.test(options.externalId))
       throw new Error("The host ExternalId must be 16–128 characters of [A-Za-z0-9_=,.@:/-].");
     this.problems = cloudFormationCatalog(repositoryRoot);
+  }
+
+  disruptionAdapter(): AwsDisruptionAdapter {
+    return new AwsDisruptionAdapter({ sts: this.options.sts }, this.options.externalId);
   }
 
   catalog(): readonly Problem[] {
@@ -218,8 +323,12 @@ export class CloudFormationEngine implements RuntimeEngine {
     );
     unit.stackId ??= stack?.StackId;
     retain(JSON.stringify(unit));
-    if (!unit.outputs[definition.flagOutputKey]?.trim())
+    if (!isFlagStackDefinition(definition)) {
+      if (!unit.outputs.Ec2HostHint || !unit.outputs.InstanceId)
+        throw new Error("The uptime stack did not return its EC2 host and instance outputs.");
+    } else if (!unit.outputs[definition.flagOutputKey]?.trim()) {
       throw new Error(`Stack ${unit.stackName} has no ${definition.flagOutputKey} flag output.`);
+    }
   }
 
   async recover(job: Job): Promise<void> {
@@ -228,10 +337,14 @@ export class CloudFormationEngine implements RuntimeEngine {
     if (stack?.StackStatus !== "CREATE_COMPLETE")
       throw new Error(`Stack ${unit.stackName} is ${stack?.StackStatus ?? "gone"}.`);
     const definition = JSON.parse(job.definition) as StackDefinition;
-    if (!unit.outputs?.[definition.flagOutputKey]?.trim())
+    if (!isFlagStackDefinition(definition)) {
+      if (!unit.outputs?.Ec2HostHint || !unit.outputs.InstanceId)
+        throw new Error("The uptime stack has no retained EC2 host and instance outputs.");
+    } else if (!unit.outputs?.[definition.flagOutputKey]?.trim()) {
       throw new Error(
         `Stack ${unit.stackName} has no retained ${definition.flagOutputKey} flag output.`,
       );
+    }
   }
 
   async stop(job: Job): Promise<void> {
@@ -292,17 +405,33 @@ export class CloudFormationEngine implements RuntimeEngine {
       region: unit?.region ?? this.options.region,
       awsAccountId: awsTargetOf(context.team).accountId,
       stackOutputs: Object.fromEntries(
-        Object.entries(unit?.outputs ?? {}).filter(([key]) => key !== definition.flagOutputKey),
+        Object.entries(unit?.outputs ?? {}).filter(
+          ([key]) => !isFlagStackDefinition(definition) || key !== definition.flagOutputKey,
+        ),
       ),
-      score: events.reduce((sum, event) => sum + event.points, 0),
+      score:
+        projectScore(
+          [
+            {
+              problemId: problem.problemId,
+              ...(definition.scoreFloor !== undefined ? { scoreFloor: definition.scoreFloor } : {}),
+            },
+          ],
+          events,
+        ).byProblem[problem.problemId] ?? 0,
       ...(solved ? { lastResult: "ok" as const } : {}),
-      scoring: {
-        kind: "flag",
-        points: definition.scoring.points,
-        flagSubmitted: solved,
-        hints: hintViews(revealedHints(events), definition.scoring.hints),
-        ...(definition.scoring.hintReveal ? { hintReveal: definition.scoring.hintReveal } : {}),
-      },
+      scoring:
+        definition.scoring.kind === "flag"
+          ? {
+              kind: "flag",
+              points: definition.scoring.points,
+              flagSubmitted: solved,
+              hints: hintViews(revealedHints(events), definition.scoring.hints),
+              ...(definition.scoring.hintReveal
+                ? { hintReveal: definition.scoring.hintReveal }
+                : {}),
+            }
+          : { kind: "uptime-flat", pointsPerSuccess: definition.scoring.pointsPerSuccess },
       deployLog: { cursor: "", entries: [] },
     };
   }
@@ -310,9 +439,13 @@ export class CloudFormationEngine implements RuntimeEngine {
   /** Scored against the flag output retained at deploy time; nothing is read from AWS. */
   async submit(context: Context, body: Record<string, unknown>): Promise<EngineResult> {
     const deployed = this.deployed(context, String(body.problemId));
-    const { team } = context;
-    if (deployed.events.some(isSolve))
-      return outcome(team, { kind: "already_scored", totalScore: team.score });
+    if (!isFlagStackDefinition(deployed.definition))
+      throw new HostError(
+        409,
+        "This Battle scores through its registered endpoints.",
+        "not_flag_problem",
+      );
+    if (deployed.events.some(isSolve)) return outcome(context, { kind: "already_scored" });
     const outputs = deployed.job.unit ? unitOf(deployed.job).outputs : undefined;
     const expected = outputs?.[deployed.definition.flagOutputKey];
     if (!expected?.trim())
@@ -324,11 +457,7 @@ export class CloudFormationEngine implements RuntimeEngine {
     const scoring = deployed.definition.scoring;
     if (flagMatches(String(body.flag), expected)) {
       const event = deployed.record("flag", scoring.points, "ok");
-      return outcome(
-        team,
-        { kind: "ok", scoreDelta: event.points, totalScore: team.score + event.points },
-        event,
-      );
+      return outcome(context, { kind: "ok", scoreDelta: event.points }, event);
     }
     const event = deployed.record(
       "flag-wrong",
@@ -336,11 +465,10 @@ export class CloudFormationEngine implements RuntimeEngine {
       "wrong",
     );
     return outcome(
-      team,
+      context,
       {
         kind: "wrong",
         scoreDelta: event.points,
-        totalScore: team.score + event.points,
         wrongCount: deployed.events.filter((each) => each.source === "flag-wrong").length + 1,
       },
       event,
@@ -349,17 +477,17 @@ export class CloudFormationEngine implements RuntimeEngine {
 
   async hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
     const deployed = this.deployed(context, problemId);
+    if (!isFlagStackDefinition(deployed.definition))
+      throw new HostError(404, "This Battle has no hints.", "unknown_hint");
     const hint = deployed.definition.scoring.hints.find((candidate) => candidate.id === hintId);
     if (!hint) throw new HostError(404, "This problem has no such hint.", "unknown_hint");
-    const { team } = context;
     const text = { content: hint.content, ...(hint.i18n ? { i18n: hint.i18n } : {}) };
     const revealedAt = revealedHints(deployed.events).get(hint.id);
     if (revealedAt)
-      return outcome(team, {
+      return outcome(context, {
         kind: "already_revealed",
         ...text,
         penaltyApplied: 0,
-        totalScore: team.score,
         revealedAt,
       });
     const event = {
@@ -367,12 +495,11 @@ export class CloudFormationEngine implements RuntimeEngine {
       hintId: hint.id,
     };
     return outcome(
-      team,
+      context,
       {
         kind: "ok",
         ...text,
         penaltyApplied: hint.penalty,
-        totalScore: team.score + event.points,
         revealedAt: event.occurredAt,
       },
       event,
@@ -476,7 +603,7 @@ export class CloudFormationEngine implements RuntimeEngine {
   }
 }
 
-function unitOf(job: Job): StackUnit {
+export function unitOf(job: Job): StackUnit {
   if (!job.unit) throw new Error(`Job ${job.jobId} owns no stack.`);
   return JSON.parse(job.unit) as StackUnit;
 }
@@ -498,13 +625,20 @@ function revealedHints(events: readonly ScoreEvent[]): ReadonlyMap<string, strin
  * The team after one cloud action. Docker's snapshot is not touched, and the totals move by
  * exactly the new event, so points from other runtimes are kept as they are.
  */
-function outcome(team: Team, body: Record<string, unknown>, event?: ScoreEvent): EngineResult {
+function outcome(
+  context: Context,
+  body: Record<string, unknown>,
+  event?: ScoreEvent,
+): EngineResult {
+  const { team } = context;
+  const scoreEvents = event ? [event, ...team.scoreEvents] : team.scoreEvents;
+  const score = projectedScore(context.event, scoreEvents).total;
   return {
     status: 200,
-    body,
+    body: { ...body, totalScore: score },
     snapshot: team.snapshot,
-    score: team.score + (event?.points ?? 0),
+    score,
     completedProblems: team.completedProblems + (event && isSolve(event) ? 1 : 0),
-    scoreEvents: event ? [event, ...team.scoreEvents] : team.scoreEvents,
+    scoreEvents,
   };
 }

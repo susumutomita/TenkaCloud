@@ -1,3 +1,5 @@
+import { parseEndpointSlot } from "../../packages/problem-sdk/src/endpoints-metadata";
+
 /** Build-time allowlist, not runtime tree-shaking: never ship author metadata,
  * hint content, answers, writeups or pre-start instructions to a hosting browser. */
 export function publicMetadata(code: string, id: string): string | null {
@@ -27,7 +29,17 @@ export function publicMetadata(code: string, id: string): string | null {
     ...(raw.id === "ac26-crypto-battle"
       ? { dashboard: raw.dashboard, interTeamCoordination: raw.interTeamCoordination }
       : {}),
+    ...(raw.id === "hello-world-battle" ? { endpoints: publicEndpointSlots(raw.endpoints) } : {}),
     i18n: { en: { name: english.name, shortDescription: english.shortDescription } },
+  });
+}
+
+function publicEndpointSlots(value: unknown) {
+  if (!Array.isArray(value)) throw new Error("Reviewed Battle endpoints are missing.");
+  return value.map((entry) => {
+    const endpoint = parseEndpointSlot(entry);
+    if (!endpoint) throw new Error("Reviewed Battle endpoint is invalid.");
+    return { slot: endpoint.slot, default: endpoint.default, overridable: endpoint.overridable };
   });
 }
 
@@ -46,10 +58,10 @@ export function narrowCatalog(code: string, id: string): string | null {
   const narrowed = code
     .replace(
       glob,
-      "problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/",
+      "problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle,battles/hello-world-battle}/",
     )
     .replaceAll(
-      "problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/*.yaml",
+      "problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle,battles/hello-world-battle}/*.yaml",
       "problems/challenges/sqli-demo/__local_host_empty__/*.yaml",
     );
   return narrowed.replace(
@@ -73,6 +85,12 @@ export function assertHostingModule(id: string): void {
       throw new Error(`Server-only game code entered the browser: ${id}`);
     return;
   }
+  if (
+    /\/problems\/battles\/hello-world-battle\/(?:metadata\.json|diagram(?:\.en)?\.svg)(?:\?.*)?$/u.test(
+      normalized,
+    )
+  )
+    return;
   if (
     !/\/problems\/challenges\/(?:sqli-demo|hello-world)\/(?:metadata\.json|diagram(?:\.en)?\.svg)(?:\?.*)?$/u.test(
       normalized,

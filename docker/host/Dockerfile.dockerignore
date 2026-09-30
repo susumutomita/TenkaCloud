@@ -1,14 +1,19 @@
 # Build context for docker/host/Dockerfile (BuildKit reads this file instead of the
 # root .dockerignore). Unlike `make local`, the hosted image carries its catalog: a
 # cloud platform has no checkout to bind-mount. Only the problems host mode offers
-# are included, and scripts/local-host/browser-metadata.ts narrows the UI build to
-# the same reviewed public metadata. CloudFormation templates stay on the host.
+# are included. scripts/local-host/browser-metadata.ts narrows the UI build to
+# reviewed public metadata and diagrams; CloudFormation templates stay on the host.
 .git
 .gitmodules
 problems/*
 !problems/battles/
 problems/battles/*
 !problems/battles/ac26-crypto-battle/
+!problems/battles/hello-world-battle/
+problems/battles/hello-world-battle/*
+!problems/battles/hello-world-battle/metadata.json
+!problems/battles/hello-world-battle/template.yaml
+!problems/battles/hello-world-battle/diagram.svg
 !problems/challenges/
 problems/challenges/*
 !problems/challenges/sqli-demo/

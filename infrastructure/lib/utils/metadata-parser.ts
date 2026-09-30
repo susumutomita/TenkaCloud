@@ -12,7 +12,6 @@ export {
   DISRUPTION_ACTION_KINDS,
   DISRUPTION_EFFECT_MAX_DURATION_SECONDS,
   type DisruptionAction,
-  type DisruptionActionKind,
   type DisruptionEffect,
   type DisruptionTrigger,
   type ProblemDisruptionEntry,

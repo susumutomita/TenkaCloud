@@ -943,7 +943,7 @@ const c = import.meta.glob("../../../../.tenkacloud/pack-store/snapshots/**/meta
   );
   assert.ok(
     plugins.includes(
-      "problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/portal/",
+      "problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle,battles/hello-world-battle}/portal/",
     ),
   );
   assert.doesNotThrow(() =>

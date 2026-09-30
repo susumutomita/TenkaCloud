@@ -18,6 +18,7 @@ import {
   type Problem,
 } from "./model";
 import type { ParticipantAwsAccess } from "./participant-aws-access";
+import { projectedScore } from "./score";
 
 function problemKinds(event: HostedEvent): ReadonlyMap<string, DefinitionKind> {
   return new Map(
@@ -54,6 +55,9 @@ export class CompetitionEngine extends DockerHostingEngine {
     super(root, dataDirectory);
     this.battles = coordinationCatalog(root);
     this.loader = new LocalPluginLoader(dataDirectory);
+  }
+  disruptionAdapter() {
+    return this.cloud?.disruptionAdapter();
   }
   override catalog(): readonly Problem[] {
     return [
@@ -175,19 +179,20 @@ export class CompetitionEngine extends DockerHostingEngine {
         .filter((event) => kinds.get(event.problemId) === "cloudformation" && isSolve(event))
         .map((event) => event.problemId),
     );
+    const scoreEvents = [...result.scoreEvents, ...kept].sort((a, b) =>
+      b.occurredAt.localeCompare(a.occurredAt),
+    );
     return {
       ...result,
-      score: result.score + kept.reduce((sum, event) => sum + event.points, 0),
+      score: projectedScore(context.event, scoreEvents).total,
       completedProblems: result.completedProblems + cloudSolves.size,
-      scoreEvents: [...result.scoreEvents, ...kept].sort((a, b) =>
-        b.occurredAt.localeCompare(a.occurredAt),
-      ),
+      scoreEvents,
     };
   }
   override async submit(context: Context, body: Record<string, unknown>): Promise<EngineResult> {
     const kinds = problemKinds(context.event);
     if (kinds.get(String(body.problemId)) === "cloudformation")
-      return this.aws().submit(this.only(context, kinds, "cloudformation"), body);
+      return this.aws().submit(context, body);
     return this.combined(
       await super.submit(this.only(context, kinds, "compose"), body),
       context,
@@ -197,7 +202,7 @@ export class CompetitionEngine extends DockerHostingEngine {
   override async hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
     const kinds = problemKinds(context.event);
     if (kinds.get(problemId) === "cloudformation")
-      return this.aws().hint(this.only(context, kinds, "cloudformation"), problemId, hintId);
+      return this.aws().hint(context, problemId, hintId);
     return this.combined(
       await super.hint(this.only(context, kinds, "compose"), problemId, hintId),
       context,

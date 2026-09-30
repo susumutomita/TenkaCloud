@@ -195,6 +195,33 @@ describe("uptime-flat kind legacy uptime probe compatibility", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://my-override.example.com/");
   });
 
+  it("does not probe or score until every required slot has a URL", async () => {
+    const input = buildInput({
+      deployment: { ...buildInput().deployment, stackOutputs: "{}" },
+      scoring: {
+        kind: "uptime-flat",
+        endpoints: [
+          { slot: "frontend", path: "/", expectStatus: [200] },
+          { slot: "api", path: "/healthz", expectStatus: [200] },
+        ],
+        pointsPerSuccess: 100,
+        failurePenalty: -100,
+      },
+      slots: [
+        {
+          slot: "frontend",
+          default: { from: "cfn-output", key: "FrontendUrl" },
+          overridable: true,
+        },
+        { slot: "api", default: { from: "cfn-output", key: "ApiUrl" }, overridable: true },
+      ],
+      overrides: [{ slot: "frontend", overrideUrl: "https://frontend.example.com" }],
+    });
+    const result = await runUptimeFlatKind(input);
+    expect(result).toEqual({ scoreDelta: 0, scoreEvents: [] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("should noop when stackOutputs is missing (don't probe pre-deploy)", async () => {
     const input = buildInput({
       deployment: { ...buildInput().deployment, stackOutputs: undefined },

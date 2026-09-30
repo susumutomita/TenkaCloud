@@ -93,6 +93,10 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
         idToken: string;
         bootstrapCompleted: boolean;
         projection: Projection;
+        deploymentsByProblem: Record<
+          string,
+          { jobId: string; teamId: string; status: string; stopSupported: boolean }[]
+        >;
         entries: { teamId: string; rank: number; score: number }[];
         problems: { score: number; stackOutputs: unknown; instructions: string }[];
         error?: string;
@@ -279,20 +283,65 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
       (await api("admin", `/events/${event.eventId}/schedule`, "PATCH", { startNow: true })).status,
     ).toBe(409);
     const job = required(store.jobs(event.eventId, required(a).teamId)[0]);
+    const betaJob = required(store.jobs(event.eventId, required(b).teamId)[0]);
     const betaScore = store.team(required(b).teamId).score;
     const alphaScore = store.team(required(a).teamId).score;
     const savedMatch = store.coordination(event.eventId, "ac26-crypto-battle");
+    const detail = await api("admin", `/events/${event.eventId}`);
+    expect(detail.body.deploymentsByProblem["ac26-crypto-battle"]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ jobId: job.jobId, stopSupported: true }),
+        expect.objectContaining({ jobId: betaJob.jobId, stopSupported: true }),
+      ]),
+    );
     expect(
       (await api("admin", `/events/${event.eventId}/deployments/${job.jobId}/stop`, "POST", {}))
         .status,
     ).toBe(202);
     await service.drain();
+    expect(store.job(job.jobId).status).toBe("STOPPED");
+    expect(store.job(betaJob.jobId).status).toBe("COMPLETE");
+    expect(store.coordination(event.eventId, "ac26-crypto-battle")).toBe(savedMatch);
+    expect(
+      (
+        await api(
+          "participant",
+          "/portal/me/coordination/projection",
+          "GET",
+          undefined,
+          required(a).teamLoginKey,
+        )
+      ).status,
+    ).toBe(409);
     expect((await op(required(a).teamLoginKey, { kind: "ready" })).status).toBe(409);
+    expect(
+      (
+        await api(
+          "participant",
+          "/portal/me/coordination/projection",
+          "GET",
+          undefined,
+          required(b).teamLoginKey,
+        )
+      ).status,
+    ).toBe(200);
     expect(
       (await api("admin", `/events/${event.eventId}/deployments/${job.jobId}/restart`, "POST", {}))
         .status,
     ).toBe(202);
     await service.drain();
+    expect(store.job(job.jobId).status).toBe("COMPLETE");
+    expect(
+      (
+        await api(
+          "participant",
+          "/portal/me/coordination/projection",
+          "GET",
+          undefined,
+          required(a).teamLoginKey,
+        )
+      ).status,
+    ).toBe(200);
     expect(store.coordination(event.eventId, "ac26-crypto-battle")).toBe(savedMatch);
     expect(store.team(required(a).teamId).score).toBe(alphaScore);
     expect(store.team(required(b).teamId).score).toBe(betaScore);

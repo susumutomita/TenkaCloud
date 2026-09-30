@@ -7,6 +7,9 @@ import {
   type SqlDatabase,
   type SqlStatement,
   type Team,
+  type UptimeObservation,
+  type UptimeOverride,
+  type UptimeState,
 } from "./model";
 import type { OrganizerRole } from "./organizer-access";
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
@@ -101,6 +104,23 @@ export class HostStore {
         ) STRICT;
         CREATE TABLE IF NOT EXISTS host_notifications(
           id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES host_events(id), body TEXT NOT NULL
+        ) STRICT;
+        CREATE TABLE IF NOT EXISTS host_uptime_state(
+          event_id TEXT NOT NULL, team_id TEXT NOT NULL, problem_id TEXT NOT NULL,
+          body TEXT NOT NULL, PRIMARY KEY(event_id,team_id,problem_id),
+          FOREIGN KEY(team_id,event_id) REFERENCES host_teams(id,event_id)
+        ) STRICT;
+        CREATE TABLE IF NOT EXISTS host_uptime_endpoints(
+          event_id TEXT NOT NULL, team_id TEXT NOT NULL, problem_id TEXT NOT NULL,
+          slot TEXT NOT NULL, override_url TEXT NOT NULL, updated_at TEXT NOT NULL,
+          PRIMARY KEY(event_id,team_id,problem_id,slot),
+          FOREIGN KEY(team_id,event_id) REFERENCES host_teams(id,event_id)
+        ) STRICT;
+        CREATE TABLE IF NOT EXISTS host_uptime_observations(
+          event_id TEXT NOT NULL, team_id TEXT NOT NULL, problem_id TEXT NOT NULL,
+          minute INTEGER NOT NULL, body TEXT NOT NULL,
+          PRIMARY KEY(event_id,team_id,problem_id,minute),
+          FOREIGN KEY(team_id,event_id) REFERENCES host_teams(id,event_id)
         ) STRICT;
         CREATE TABLE IF NOT EXISTS host_accounts(account_id TEXT PRIMARY KEY, body TEXT NOT NULL) STRICT;
       `);
@@ -341,6 +361,58 @@ export class HostStore {
     this.statement(
       "INSERT INTO host_jobs(id,event_id,team_id,problem_id,body) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body",
     ).run(job.jobId, job.eventId, job.teamId, job.problemId, JSON.stringify(job));
+  }
+  uptimeState(eventId: string, teamId: string, problemId: string): UptimeState {
+    const row = this.statement(
+      "SELECT body FROM host_uptime_state WHERE event_id=? AND team_id=? AND problem_id=?",
+    ).get(eventId, teamId, problemId) as BodyRow | undefined;
+    return row ? (JSON.parse(row.body) as UptimeState) : { revision: 0 };
+  }
+  putUptimeState(eventId: string, teamId: string, problemId: string, state: UptimeState): void {
+    this.statement(
+      "INSERT INTO host_uptime_state(event_id,team_id,problem_id,body) VALUES (?,?,?,?) ON CONFLICT(event_id,team_id,problem_id) DO UPDATE SET body=excluded.body",
+    ).run(eventId, teamId, problemId, JSON.stringify(state));
+  }
+  uptimeOverrides(eventId: string, teamId: string, problemId: string): UptimeOverride[] {
+    return this.statement(
+      "SELECT slot,override_url,updated_at FROM host_uptime_endpoints WHERE event_id=? AND team_id=? AND problem_id=? ORDER BY slot",
+    )
+      .all(eventId, teamId, problemId)
+      .map((row) => {
+        const entry = row as { slot: string; override_url: string; updated_at: string };
+        return { slot: entry.slot, overrideUrl: entry.override_url, updatedAt: entry.updated_at };
+      });
+  }
+  putUptimeOverride(
+    eventId: string,
+    teamId: string,
+    problemId: string,
+    override: UptimeOverride,
+  ): void {
+    this.statement(
+      "INSERT INTO host_uptime_endpoints(event_id,team_id,problem_id,slot,override_url,updated_at) VALUES (?,?,?,?,?,?) ON CONFLICT(event_id,team_id,problem_id,slot) DO UPDATE SET override_url=excluded.override_url,updated_at=excluded.updated_at",
+    ).run(eventId, teamId, problemId, override.slot, override.overrideUrl, override.updatedAt);
+  }
+  deleteUptimeOverride(eventId: string, teamId: string, problemId: string, slot: string): void {
+    this.statement(
+      "DELETE FROM host_uptime_endpoints WHERE event_id=? AND team_id=? AND problem_id=? AND slot=?",
+    ).run(eventId, teamId, problemId, slot);
+  }
+  uptimeObserved(eventId: string, teamId: string, problemId: string, minute: number): boolean {
+    return !!this.statement(
+      "SELECT 1 FROM host_uptime_observations WHERE event_id=? AND team_id=? AND problem_id=? AND minute=?",
+    ).get(eventId, teamId, problemId, minute);
+  }
+  putUptimeObservation(observation: UptimeObservation): void {
+    this.statement(
+      "INSERT INTO host_uptime_observations(event_id,team_id,problem_id,minute,body) VALUES (?,?,?,?,?)",
+    ).run(
+      observation.eventId,
+      observation.teamId,
+      observation.problemId,
+      observation.minute,
+      JSON.stringify(observation),
+    );
   }
   bootstrapCompleted(): boolean {
     return this.setting("bootstrap_completed") === "true";

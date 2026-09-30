@@ -192,11 +192,11 @@ function buildDemoConfig(
   };
 }
 
-/** Features that need cloud infrastructure; the local host API has none of them. */
+/** Feature availability provided by the local host API. */
 const LOCAL_HOST_FEATURES = {
   samlSso: false,
   nonAwsRuntime: false,
-  redTeam: false,
+  redTeam: true,
   challengePrerequisiteGate: false,
 } as const;
 

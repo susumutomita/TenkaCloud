@@ -74,6 +74,14 @@ export function DisruptionsPanel({
       .catch((err) => setLoadError(toErrorMessage(err)));
   }, [apiClient, eventId]);
 
+  useEffect(() => {
+    if (!audit.some((row) => row.executions?.length)) return;
+    const timer = setInterval(() => {
+      void reloadAudit().catch((error) => setLoadError(toErrorMessage(error)));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [audit, reloadAudit]);
+
   const teamOptions = useMemo<readonly TeamOption[]>(
     () => teams.map((tm) => ({ value: tm.teamId, label: tm.displayName || tm.internalSlug })),
     [teams],
@@ -82,7 +90,7 @@ export function DisruptionsPanel({
   const onFired = (flash: string) => {
     setLastFired(flash);
     setFireTarget(null);
-    void reloadAudit();
+    void reloadAudit().catch((error) => setLoadError(toErrorMessage(error)));
     // recurring fire なら 「実行中の定期障害」 一覧に新規行が出るよう取り直しを促す。
     setRecurringRefresh((n) => n + 1);
   };
@@ -128,7 +136,16 @@ export function DisruptionsPanel({
             {
               id: "description",
               header: t("disruptions.col_description"),
-              cell: (e: DisruptionCatalogEntry) => e.disruption.description,
+              cell: (e: DisruptionCatalogEntry) => (
+                <>
+                  {e.disruption.description}
+                  {e.disruption.unavailableReason ? (
+                    <Box color="text-status-error">
+                      {t(`disruptions.unavailable_${e.disruption.unavailableReason}`)}
+                    </Box>
+                  ) : null}
+                </>
+              ),
               maxWidth: 560,
             },
             {
@@ -164,7 +181,7 @@ export function DisruptionsPanel({
               cell: (e: DisruptionCatalogEntry) => (
                 <Button
                   variant="inline-link"
-                  disabled={!canMutateTenant}
+                  disabled={!canMutateTenant || Boolean(e.disruption.unavailableReason)}
                   onClick={() => setFireTarget({ problemId: e.problemId, item: e.disruption })}
                 >
                   {t("disruptions.fire_button")}
@@ -186,10 +203,46 @@ export function DisruptionsPanel({
           t={t}
         />
 
-        <Header variant="h3">{t("disruptions.audit_header")}</Header>
+        <Header
+          variant="h3"
+          actions={
+            <Button
+              onClick={() => {
+                void reloadAudit().catch((error) => setLoadError(toErrorMessage(error)));
+              }}
+            >
+              {t("disruptions.refresh")}
+            </Button>
+          }
+        >
+          {t("disruptions.audit_header")}
+        </Header>
         <Table
           variant="embedded"
           columnDefinitions={[
+            {
+              id: "execution",
+              header: t("disruptions.execution_header"),
+              cell: (row: DisruptionAuditRow) =>
+                row.executions ? (
+                  <SpaceBetween size="xxs">
+                    {row.executions.map((execution) => (
+                      <Box key={execution.id}>
+                        {teams.find((team) => team.teamId === execution.teamId)?.displayName ??
+                          execution.teamId}{" "}
+                        · #{execution.tick}: {t(`disruptions.status_${execution.status}`)}
+                        {execution.reason ? (
+                          <Box variant="small" display="block">
+                            {execution.reason}
+                          </Box>
+                        ) : null}
+                      </Box>
+                    ))}
+                  </SpaceBetween>
+                ) : (
+                  "—"
+                ),
+            },
             {
               id: "firedAt",
               header: t("disruptions.col_fired_at"),
@@ -217,6 +270,7 @@ export function DisruptionsPanel({
               cell: (r: DisruptionAuditRow) => r.scheduledFor ?? "-",
             },
           ]}
+          wrapLines
           items={audit}
           empty={<Box textAlign="center">{t("disruptions.audit_empty")}</Box>}
         />

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
-import { assertHostingModule, narrowCatalog } from "../browser-metadata";
+import { assertHostingModule, narrowCatalog, publicMetadata } from "../browser-metadata";
 import { connectCloudHosting } from "../cloud-hosting";
 import { CompetitionEngine } from "../competition-engine";
 import { parseOptions } from "../options";
@@ -167,15 +167,23 @@ import.meta.glob("../../../../problems/*/*/*.yaml");`;
   );
   expect(
     participant,
-  ).toBe(`import.meta.glob("../../../../problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/metadata.json");
+  ).toBe(`import.meta.glob("../../../../problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle,battles/hello-world-battle}/metadata.json");
 import.meta.glob("../../../../problems/challenges/sqli-demo/__local_host_empty__/*.yaml");`);
   expect(
     hostConsole,
-  ).toBe(`import.meta.glob("../../../../problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle}/metadata.json");
+  ).toBe(`import.meta.glob("../../../../problems/{challenges/sqli-demo,challenges/hello-world,battles/ac26-crypto-battle,battles/hello-world-battle}/metadata.json");
 import.meta.glob("../../../../problems/challenges/sqli-demo/__local_host_empty__/*.yaml");`);
   expect(() =>
     assertHostingModule("/repo/problems/challenges/hello-world/metadata.json"),
   ).not.toThrow();
+  expect(() =>
+    assertHostingModule("/repo/problems/battles/hello-world-battle/metadata.json"),
+  ).not.toThrow();
+  expect(() =>
+    assertHostingModule("/repo/problems/battles/hello-world-battle/template.yaml"),
+  ).toThrow(
+    "Unreviewed problem content entered the hosting bundle: /repo/problems/battles/hello-world-battle/template.yaml",
+  );
   expect(() => assertHostingModule("/repo/problems/challenges/hello-world/template.yaml")).toThrow(
     "Unreviewed problem content entered the hosting bundle: /repo/problems/challenges/hello-world/template.yaml",
   );
@@ -225,4 +233,42 @@ test("the SDK reuses competitor credentials and fetches new ones as they near ex
   const beforeSecondRequest = expiring.fetches();
   await expiring.describe();
   expect(expiring.fetches()).toBeGreaterThan(beforeSecondRequest);
+});
+
+test("reviewed Battle browser metadata retains endpoint fields without early instructions or scoring", () => {
+  const path = "/repo/problems/battles/hello-world-battle/metadata.json";
+  const raw = {
+    id: "hello-world-battle",
+    instructions: "early-instructions",
+    scoring: { flag: "private-answer" },
+    endpoints: [
+      {
+        slot: "frontend",
+        default: { from: "cfn-output", key: "FrontendUrl" },
+        overridable: true,
+        label: "early-label",
+        description: "early-endpoint-instructions",
+        secret: "private-endpoint-data",
+      },
+      {
+        slot: "api",
+        default: { from: "cfn-output", key: "ApiUrl" },
+        overridable: true,
+      },
+    ],
+  };
+  const sanitized = publicMetadata(JSON.stringify(raw), path);
+  if (!sanitized) throw new Error("Expected reviewed browser metadata.");
+  expect(JSON.parse(sanitized).endpoints).toEqual([
+    { slot: "frontend", default: { from: "cfn-output", key: "FrontendUrl" }, overridable: true },
+    { slot: "api", default: { from: "cfn-output", key: "ApiUrl" }, overridable: true },
+  ]);
+  for (const hidden of ["early-", "private-", "scoring", "secret"])
+    expect(sanitized).not.toContain(hidden);
+  expect(() => publicMetadata(JSON.stringify({ ...raw, endpoints: [{}] }), path)).toThrow(
+    "Reviewed Battle endpoint is invalid.",
+  );
+  expect(() => publicMetadata(JSON.stringify({ ...raw, endpoints: null }), path)).toThrow(
+    "Reviewed Battle endpoints are missing.",
+  );
 });

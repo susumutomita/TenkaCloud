@@ -21,6 +21,7 @@ using the repository's existing Vite pipelines.
 | SQL injection (`challenges/sqli-demo`) | One isolated Docker Compose project per team | Docker |
 | Cryptography Battle (`battles/ac26-crypto-battle`) | Shared match on the host; private view per team | Bun + SQLite, no Docker or AWS |
 | Hello World (`challenges/hello-world`) | One CloudFormation stack in each team's own AWS account | `--aws-region`, AWS credentials and a competitor account per team |
+| Hello World Battle (`battles/hello-world-battle`) | One CloudFormation stack per team, with registered frontend/API URLs and uptime scoring | `--aws-region`, AWS credentials, a competitor account and two public endpoints per team |
 
 All of them reuse the catalog's statements, rules and scoring. You can mix them in
 one event; their points contribute to the same leaderboard. A local event can
@@ -91,11 +92,46 @@ After signing in:
 Participants use the normal Participant Portal and its actual backend login, not
 the practice-mode or demo login.
 
-Console features that still need tenant infrastructure are not offered: the audit
-log, disruptions, the progression gate, registration links, capacity monitoring,
-scheduled deploy and automatic teardown. Their navigation entries and
+Console features that still need tenant infrastructure are not offered: the
+progression gate, registration links, capacity monitoring, scheduled deploy and
+automatic teardown. Their navigation entries and
 tabs are hidden; opening such a URL shows an explanation instead of a failing
 request.
+
+### Disruptions (Red Team)
+
+The Disruptions tab lists declarations retained with the event's problem definition.
+With AWS configured, organizers can submit an immediate, scheduled or recurring
+SSM disruption for all teams, selected teams or a persisted random selection.
+The history shows each team's command outcome and skipped or uncertain execution.
+Request IDs reject conflicting payloads; a transport retry does not create a new fire.
+
+SQLite stores the request, every due time, the target deployment generation and
+resolved inject/revert commands before sending anything. Cancellation and event end
+stop new injections while retaining cleanup work. Another disruption cannot use the
+same resource until the prior revert command finishes. The host never redirects
+old cleanup to a replacement stack after redeployment.
+
+Keep the host running through the revert deadline. A stopped host cannot guarantee
+on-time recovery. On restart, overdue injections are skipped and pending cleanup
+is polled first. An interrupted or timed-out send is discovered by its command
+identity and exact targets; it is never blindly repeated. If SSM cannot establish
+what executed, history keeps `inject_unknown` or `recovery_required`. Inspect the
+original account, instance IDs and SSM command history before manual recovery.
+Uncertain executions continue to reserve those resources.
+
+`revert_command_completed` means SSM finished the declared revert command. It does
+not prove that the frontend is healthy, especially for declarations using
+`|| true`. Check frontend readiness separately; participant-supplied URLs are not
+recovery evidence. The host supports SSM declarations with explicit reverts up to
+one hour. Lambda/CloudFormation actions, scoring effects and declarations without
+an action are reported as unsupported rather than recorded as successful fires.
+
+Execution records are mandatory local operational state, separate from the optional
+organizer audit log. The reviewed `hello-world` challenge declares no faults.
+`hello-world-battle` declares the `frontend-down` SSM disruption and is selectable
+with AWS configured. Its fixed EC2 host hint is checked for initial readiness and
+recorded separately from the participant's endpoint observations.
 
 ### Play Cryptography Battle
 
@@ -273,6 +309,12 @@ make host HOST_ARGS="--aws-region ap-northeast-1"
 - **Playing.** Participants see the stack's outputs except the flag output, submit
   the flag and reveal hints in the normal portal. The host compares the answer with
   the flag output it read when the stack was created; scoring makes no AWS call.
+- **Hello World Battle.** After deployment, each team registers public frontend
+  and API URLs in the participant portal. Both registrations and initial EC2
+  readiness are required before the first uptime point. The host records at most
+  one score observation per minute in SQLite; a restart does not backfill missed
+  minutes. The Disruptions tab can fire the declared SSM fault and tracks its
+  revert command separately from observed application health.
 - **Regions.** Only regions of the standard AWS partition are accepted; GovCloud,
   China and ISO regions are refused at startup.
 - **Restarting.** Without the flag, recovery marks the event's stacks failed with
