@@ -2,7 +2,7 @@
  * Issue #3226: the organizer's journey through the normal console in local-host mode, against
  * a stubbed host API (the same wire shapes `scripts/local-host/service.ts` serves).
  */
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useEffect } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,8 @@ import { AuthProvider, useAuth } from "../src/auth/AuthProvider";
 import type { AppConfig } from "../src/config";
 import { I18nProvider } from "../src/i18n";
 import { LocalHostLoginPage } from "../src/pages/LocalHostLogin";
+import { LocalHostSettingsPage } from "../src/pages/LocalHostSettings";
+import { LocalHostUsersPage } from "../src/pages/LocalHostUsers";
 
 const origin = window.location.origin;
 const config: AppConfig = {
@@ -301,6 +303,117 @@ describe("organizer journey in local-host mode", () => {
     });
   });
 
+  it("lets a Japanese Admin change an organizer password and a host flag without losing the saved state", async () => {
+    window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
+    const replacement = "replacement-password";
+    const users = [{ id: "owner-id", username: "owner", role: "Admin", status: "active" }];
+    const flags = { saml: false, audit: false };
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
+    const fetchMock = stubHost({
+      "/api/host/users": (_url, init) => {
+        if (init?.method === "POST") {
+          const body = JSON.parse(String(init.body)) as { username: string; role: OrganizerRole };
+          users.push({
+            id: `${body.username}-id`,
+            username: body.username,
+            role: body.role,
+            status: "active",
+          });
+        }
+        return json({ items: users });
+      },
+      "/api/host/users/:id": (url, init) => {
+        const index = users.findIndex((user) => user.id === url.split("/").at(-1));
+        if (index < 0) return new Response("{}", { status: 404 });
+        if (init?.method === "PATCH") {
+          const body = JSON.parse(String(init.body)) as {
+            role: OrganizerRole;
+            status: "active" | "disabled";
+          };
+          users[index] = { ...users[index], ...body };
+        }
+        if (init?.method === "DELETE") users.splice(index, 1);
+        return json({ items: users });
+      },
+      "/api/feature-flags": (_url, init) => {
+        if (init?.method === "PUT") {
+          const body = JSON.parse(String(init.body)) as {
+            key: keyof typeof flags;
+            enabled: boolean;
+          };
+          flags[body.key] = body.enabled;
+        }
+        return json({ flags });
+      },
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[{ pathname: "/login", state: { returnPath: "/users" } }]}>
+          <App config={config} />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    fireEvent.change(await screen.findByLabelText("ユーザー名"), { target: { value: "owner" } });
+    fireEvent.change(screen.getByLabelText("パスワード"), {
+      target: { value: "organizer-password" },
+    });
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+    expect(await screen.findByRole("heading", { name: "主催者ユーザー" })).toBeInTheDocument();
+    expect(screen.getByText(/最後の有効な Admin は変更・削除できません/u)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "ユーザー名" }), {
+      target: { value: "helper" },
+    });
+    fireEvent.change(screen.getByLabelText("パスワード（12文字以上）"), {
+      target: { value: "initial-password" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "新しいユーザーの権限" }), {
+      target: { value: "Operator" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "追加" }));
+    await waitFor(() =>
+      expect(screen.getByText("helper").closest("li")).toHaveTextContent("Operator · active"),
+    );
+    const helper = screen.getByText("helper").closest("li") as HTMLLIElement;
+    fireEvent.click(within(helper).getByRole("button", { name: "編集" }));
+    expect(screen.getByRole("heading", { name: "ユーザーを編集: helper" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "状態" }), {
+      target: { value: "disabled" },
+    });
+    fireEvent.change(screen.getByLabelText("新しいパスワード（変更時のみ）"), {
+      target: { value: replacement },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(screen.getByText("helper").closest("li")).toHaveTextContent("Operator · disabled"),
+    );
+    const passwordChange = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input) === `${origin}/api/host/users/helper-id` && init?.method === "PATCH",
+    )?.[1];
+    expect(JSON.parse(String(passwordChange?.body))).toEqual({
+      role: "Operator",
+      status: "disabled",
+      password: replacement,
+    });
+    fireEvent.click(within(helper).getByRole("button", { name: "削除" }));
+    expect(confirm).toHaveBeenCalledWith("helper を削除しますか？");
+    expect(screen.getByText("helper")).toBeInTheDocument();
+    confirm.mockReturnValue(true);
+    fireEvent.click(within(helper).getByRole("button", { name: "削除" }));
+    await waitFor(() => expect(screen.queryByText("helper")).toBeNull());
+
+    fireEvent.click(screen.getByRole("link", { name: "設定" }));
+    expect(await screen.findByRole("heading", { name: "ローカルホスト設定" })).toBeInTheDocument();
+    expect(screen.getByText(/機能フラグは SQLite に保存されます/u)).toBeInTheDocument();
+    const audit = await screen.findByRole("checkbox", { name: "audit" });
+    fireEvent.click(audit);
+    await waitFor(() => expect(audit).toBeChecked());
+    expect(flags.audit).toBe(true);
+  });
+
   it("keeps the last Admin visible when user changes are rejected", async () => {
     const secret = "replacement-password";
     const json = (body: unknown, status = 200) =>
@@ -545,7 +658,128 @@ describe("organizer journey in local-host mode", () => {
       ).toBe(false);
     },
   );
+
+  it("explains both protected routes in Japanese to a Viewer without loading organizer data", async () => {
+    window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
+    const fetchMock = stubHost({}, 8 * 60 * 60_000, "Viewer");
+    const users = render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[{ pathname: "/login", state: { returnPath: "/users" } }]}>
+          <App config={config} />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    fireEvent.change(await screen.findByLabelText("ユーザー名"), { target: { value: "viewer" } });
+    fireEvent.change(screen.getByLabelText("パスワード"), { target: { value: "viewer-password" } });
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+    expect(await screen.findByText("ユーザー管理は Admin のみ利用できます。")).toBeInTheDocument();
+    users.unmount();
+
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={[{ pathname: "/login", state: { returnPath: "/settings" } }]}>
+          <App config={config} />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    fireEvent.change(await screen.findByLabelText("ユーザー名"), { target: { value: "viewer" } });
+    fireEvent.change(screen.getByLabelText("パスワード"), { target: { value: "viewer-password" } });
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+    expect(await screen.findByText("設定は Admin のみ変更できます。")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input) === `${origin}/api/host/users`),
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input) === `${origin}/api/feature-flags` && init?.method === "PUT",
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps organizer management private while no sign-in token is available", () => {
+    const fetchMock = stubHost();
+    const settings = render(
+      <I18nProvider>
+        <MemoryRouter>
+          <AuthProvider config={config}>
+            <LocalHostSettingsPage config={config} />
+          </AuthProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    expect(screen.getByText("Only Admin can change settings.")).toBeInTheDocument();
+    settings.unmount();
+
+    render(
+      <I18nProvider>
+        <MemoryRouter>
+          <AuthProvider config={config}>
+            <LocalHostUsersPage config={config} />
+          </AuthProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    expect(screen.getByText("Only Admin can manage organizers.")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["success", "failure"] as const)(
+    "ignores a %s from an old host settings endpoint after the API origin changes",
+    async (outcome) => {
+      let settleOld!: (outcome: "success" | "failure") => void;
+      const oldResponse = new Promise<Response>((resolve, reject) => {
+        settleOld = (result) => {
+          if (result === "failure") reject(new Error("Old host unavailable."));
+          else resolve(new Response(JSON.stringify({ flags: { saml: false, audit: false } })));
+        };
+      });
+      const fetchMock = vi.fn((input: RequestInfo | URL) => {
+        const pathname = new URL(String(input), origin).pathname;
+        if (pathname === "/api/feature-flags") return oldResponse;
+        if (pathname === "/api-next/feature-flags")
+          return Promise.resolve(
+            new Response(JSON.stringify({ flags: { saml: false, audit: true } })),
+          );
+        throw new Error(`Unexpected request to ${pathname}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const settings = (pageConfig: AppConfig) => (
+        <I18nProvider>
+          <MemoryRouter>
+            <AuthProvider config={pageConfig}>
+              <SignedInSettings config={pageConfig} />
+            </AuthProvider>
+          </MemoryRouter>
+        </I18nProvider>
+      );
+      const view = render(settings(config));
+      await waitFor(() =>
+        expect(
+          fetchMock.mock.calls.some(([input]) => String(input).endsWith("/api/feature-flags")),
+        ).toBe(true),
+      );
+      view.rerender(settings({ ...config, apiBaseUrl: `${origin}/api-next` }));
+      expect(await screen.findByRole("checkbox", { name: "audit" })).toBeChecked();
+      await act(async () => settleOld(outcome));
+      expect(screen.getByRole("checkbox", { name: "audit" })).toBeChecked();
+      expect(screen.queryByText("Old host unavailable.")).toBeNull();
+    },
+  );
 });
+
+function SignedInSettings({ config: pageConfig }: { config: AppConfig }) {
+  const { tokens, setTokens } = useAuth();
+  useEffect(() => {
+    if (!tokens)
+      setTokens({
+        idToken: organizerToken("Admin"),
+        accessToken: organizerToken("Admin"),
+        expiresAt: Date.now() + 60_000,
+      });
+  }, [tokens, setTokens]);
+  return tokens ? <LocalHostSettingsPage config={pageConfig} /> : null;
+}
 
 function Seeded({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -614,6 +848,19 @@ describe("LocalHostLoginPage", () => {
     fireEvent.submit(document.querySelector("form") as HTMLFormElement);
     expect(fetchMock).toHaveBeenCalledWith(`${origin}/api/host/bootstrap-status`);
     expect(fetchMock).not.toHaveBeenCalledWith(`${origin}/api/host/login`, expect.anything());
+  });
+
+  it("shows a host-status failure before accepting credentials", async () => {
+    const fetchMock = stubHost({
+      "/api/host/bootstrap-status": () => new Response("{}", { status: 503 }),
+    });
+    renderLoginOnly();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Host status unavailable.");
+    expect(screen.queryByLabelText("Username")).toBeNull();
+    expect(screen.queryByLabelText("Host key")).toBeNull();
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input) === `${origin}/api/host/login`),
+    ).toBe(false);
   });
 
   it("switches the password sign-in page between Japanese and English", async () => {
