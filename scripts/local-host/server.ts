@@ -6,6 +6,7 @@ import type { GatewayPortRange } from "./gateway-ports";
 import { SurfaceGateways } from "./gateways";
 import { type HttpHost, startHttpHost } from "./http";
 import type { RuntimeEngine } from "./model";
+import type { PublicExposure } from "./options";
 import { HostingService } from "./service";
 import { HostStore } from "./store";
 
@@ -15,12 +16,14 @@ export interface LocalHostSettings {
   readonly adminPort: number;
   readonly participantPort: number;
   readonly gatewayPorts: GatewayPortRange;
+  readonly public?: PublicExposure;
 }
 
 export interface RunningLocalHost {
   readonly admin: HttpHost;
   readonly participant: HttpHost;
   readonly masterKey: string;
+  readonly masterKeyPath: string;
   readonly databasePath: string;
   /** Close listeners, wait for in-flight environment work, write held Battle state, close SQLite. */
   stop(): Promise<void>;
@@ -57,19 +60,17 @@ export async function startLocalHost(
     store.close();
   }
   try {
-    const masterKey = persistentKey(join(directory, "host-key"));
+    const masterKeyPath = join(directory, "host-key");
+    const masterKey = persistentKey(masterKeyPath);
     const engine = createEngine(directory);
     service = new HostingService(store, engine, masterKey);
     service.gatewayPorts = settings.gatewayPorts;
-    service.gatewayHostname = settings.hostname;
+    // Public mode offers no gateway problems; a recovered one must still not open on every interface.
+    const gatewayHostname = settings.public ? "127.0.0.1" : settings.hostname;
+    service.gatewayHostname = gatewayHostname;
     service.assertGatewayRange(settings.gatewayPorts);
     await service.recover();
-    const surfaces = new SurfaceGateways(
-      settings.hostname,
-      service,
-      settings.gatewayPorts,
-      announce,
-    );
+    const surfaces = new SurfaceGateways(gatewayHostname, service, settings.gatewayPorts, announce);
     gateways = surfaces;
     service.surfaceLink = (job, team) => surfaces.link(job, team);
     service.closeSurface = (jobId) => surfaces.closeJob(jobId);
@@ -77,18 +78,22 @@ export async function startLocalHost(
       kind: "participant",
       hostname: settings.hostname,
       port: settings.participantPort,
+      advertised: settings.public?.participantOrigin,
+      behindProxy: settings.public?.behindProxy,
       staticRoot: hostBuildDirectory(repositoryRoot, "participant-portal"),
       service,
     });
     admin = await startHttpHost({
       kind: "admin",
-      hostname: "127.0.0.1",
+      hostname: settings.public ? "0.0.0.0" : "127.0.0.1",
       port: settings.adminPort,
+      advertised: settings.public?.adminOrigin,
+      behindProxy: settings.public?.behindProxy,
       staticRoot: hostBuildDirectory(repositoryRoot, "application-admin-console"),
       service,
       participantOrigin: participant.origin,
     });
-    return { admin, participant, masterKey, databasePath, stop };
+    return { admin, participant, masterKey, masterKeyPath, databasePath, stop };
   } catch (error) {
     await stop();
     throw error;

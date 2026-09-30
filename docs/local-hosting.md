@@ -198,6 +198,52 @@ and single-use, and each browser receives its own HttpOnly Cookie. Different
 teammates can open independent links concurrently. Team-key rotation revokes
 old team access, including existing exercise-gateway sessions.
 
+## Hosting behind a TLS proxy
+
+The same host runs as one container image on a VM or container platform. A
+TLS-terminating proxy publishes the host console and the participant portal at two
+HTTPS origins, and the host checks every request's Host and Origin against them:
+
+```sh
+docker build -f docker/host/Dockerfile -t tenkacloud-host .
+docker run --read-only --tmpfs /tmp --cap-drop ALL \
+  --volume tenkacloud-host-data:/data \
+  --publish 127.0.0.1:5174:5174 --publish 127.0.0.1:5175:5175 \
+  tenkacloud-host \
+  --public-admin-origin https://admin.example.com \
+  --public-participant-origin https://play.example.com \
+  --behind-proxy
+```
+
+- **Only the proxy may reach the ports.** The example publishes on loopback for a
+  proxy on the same VM. A client that reaches the container directly could forge the
+  Host and `X-Forwarded-For` headers, and would speak plain HTTP. On a container
+  platform, keep the ports private to its load balancer.
+- **The image refuses to start without the public origins.** Inside a container
+  loopback is unreachable, and the log would carry the host key.
+- **The proxy must pass the original Host header.** Caddy does this by default.
+  nginx needs `proxy_set_header Host $host`. A request with another Host is refused
+  with `Untrusted Host header. Expected <host>.`
+- **Rate limiting behind the proxy.** `--behind-proxy` rate-limits failed logins by
+  the last `X-Forwarded-For` entry, which is the one the proxy appended. Without the
+  flag, every request would appear to come from the proxy, so one client's failures
+  would lock out everyone. Use the flag only when the proxy sets that header.
+- **HTTPS only.** Public origins must be `https:`. `--unsafe-http` exists for local
+  smoke tests only.
+- **The host login key.** It is not printed, because platforms retain container
+  logs. Read it with `docker exec <container> cat /data/host-key`. The database and
+  the key live in the `/data` volume, so use a platform that provides a persistent
+  volume.
+- **Health checks.** `GET /healthz` answers on either port whatever the Host header,
+  and returns only a status.
+- **Supported problems.** Docker Compose problems are not offered. Their sibling
+  containers publish on the host's loopback, which the container cannot reach. The
+  Cryptography Battle runs in-process and is offered. To use Docker problems on a
+  VM, run `make host` directly on that VM.
+
+`bun run test:host:container` runs a built image, logs in, and plays a started
+Cryptography Battle for two teams at the advertised origins.
+
 ## Stop, restart and teardown
 
 Ctrl+C closes the host's HTTP listeners first, waits for environment
@@ -378,5 +424,6 @@ key and direct attempts to access host or other-team resources fail.
 
 Single-binary release packaging, identity verification, wallet integration,
 participant payments, cost splitting, cloud provisioning from local hosting,
-automatic deploy/teardown schedules, arbitrary problem packs, and public
-Internet hosting are not implemented in this increment.
+automatic deploy/teardown schedules, arbitrary problem packs, Docker problems in
+the hosted container, and platforms without a persistent volume are not implemented
+yet.
