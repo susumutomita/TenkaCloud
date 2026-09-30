@@ -13,6 +13,7 @@ export interface EventProblemTarget {
 }
 
 export interface EventSummary {
+  progressionGateError?: "invalid_progression_gate";
   eventId: string;
   name: string;
   status: EventStatus;

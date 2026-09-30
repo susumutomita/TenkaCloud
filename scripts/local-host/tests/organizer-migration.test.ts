@@ -7,7 +7,11 @@ test("fresh SQLite creates organizer tables with bootstrap and flags off", () =>
   const store = new HostStore(db);
   expect(db.query("SELECT version FROM host_schema").get()).toEqual({ version: 5 });
   expect(store.bootstrapCompleted()).toBe(false);
-  expect(store.featureFlags()).toEqual({ saml: false, audit: false });
+  expect(store.featureFlags()).toEqual({
+    saml: false,
+    audit: false,
+    challengePrerequisiteGate: false,
+  });
   expect(store.organizers()).toEqual([]);
   store.close();
 });

@@ -1,3 +1,5 @@
+import type { ProgressionGateConfig } from "@tenkacloud/problem-sdk/internal";
+
 /** Local hosting's durable records. Private runtime descriptors never enter browser responses. */
 type SqlBinding = string | number | null;
 
@@ -46,6 +48,7 @@ export interface HostedEvent {
   coordinationPausedMs?: number;
   scoreboardFreezeMinutes: number;
   problems: Problem[];
+  progressionGate?: ProgressionGateConfig;
 }
 
 export interface ScoreEvent {

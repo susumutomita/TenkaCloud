@@ -178,7 +178,7 @@ class JobGateway implements Gateway {
     });
     response.end();
   }
-  private authenticate(request: IncomingMessage): void {
+  private authenticate(request: IncomingMessage): Job {
     const prefix = `${this.cookieName}=`;
     const token =
       (request.headers.cookie ?? "")
@@ -189,9 +189,10 @@ class JobGateway implements Gateway {
     const grant = this.sessions.get(digest(token));
     if (!grant)
       throw new HostError(401, "Open this environment from your team's participant portal.");
-    this.service.authorizeSurface(this.job.jobId, grant.keyHash);
+    const job = this.service.authorizeSurface(this.job.jobId, grant.keyHash);
     if (request.headers.origin && request.headers.origin !== this.origin)
       throw new HostError(403, "Cross-origin challenge requests are forbidden.");
+    return job;
   }
   private async proxy(
     request: IncomingMessage,
@@ -209,7 +210,7 @@ class JobGateway implements Gateway {
     // Reading the body can take seconds: re-check the environment and the team's access
     // immediately before anything is forwarded.
     this.assertCurrent();
-    this.authenticate(request);
+    const forwarded = this.authenticate(request);
     const result = await fetch(new URL(route.path, this.upstream.origin), {
       method: route.method,
       body,
@@ -221,6 +222,18 @@ class JobGateway implements Gateway {
     if (!outputTypes.test(responseType))
       throw new HostError(502, "Unsupported challenge response type.");
     const payload = await collectUpstream(result);
+    // Buffer the response until access is checked again; no headers or body have been sent.
+    this.assertCurrent();
+    const current = this.authenticate(request);
+    if (
+      current.unit !== forwarded.unit ||
+      current.definition !== forwarded.definition ||
+      current.deployedAt !== forwarded.deployedAt
+    )
+      throw new HostError(
+        409,
+        "This environment changed. Open it again from the participant portal.",
+      );
     response.writeHead(result.status, {
       "content-type": responseType,
       "cache-control": "no-store",

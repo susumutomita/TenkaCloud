@@ -315,14 +315,6 @@
       "count": 2
     }
   },
-  "apps/application-admin-console/test/components/event-detail/EventProgressionGatePanel.test.tsx": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-empty-function": {
-      "count": 2
-    }
-  },
   "apps/application-admin-console/test/components/event-detail/EventSchedulePanel.test.tsx": {
     "@typescript-eslint/consistent-type-assertions": {
       "count": 1
@@ -1010,7 +1002,7 @@
   },
   "infrastructure/lib/problem-deploy/control-data/domain/events.ts": {
     "@typescript-eslint/consistent-type-definitions": {
-      "count": 4
+      "count": 2
     }
   },
   "infrastructure/lib/problem-deploy/control-data/domain/feature-flags.ts": {

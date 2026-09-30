@@ -141,7 +141,9 @@ async function main() {
     await adminPage.getByRole("checkbox", { name: "audit" }).click();
     assert.equal((await enable).status(), 200);
     const enabled = await api(host.admin.origin, adminToken, "GET", "/feature-flags");
-    assert.deepEqual(await enabled.json(), { flags: { saml: false, audit: true } });
+    assert.deepEqual(await enabled.json(), {
+      flags: { saml: false, audit: true, challengePrerequisiteGate: false },
+    });
     const disable = adminPage.waitForResponse(
       (candidate) =>
         candidate.url().endsWith("/api/feature-flags") && candidate.request().method() === "PUT",

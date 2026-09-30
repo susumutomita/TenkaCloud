@@ -100,6 +100,7 @@ export class LocalCoordination {
     this.host.store.transaction(() => {
       this.host.store.putCoordination(event.eventId, problem.problemId, body);
       this.award(event, problem, result.deltas);
+      this.host.progression.captureEvent(event.eventId);
       this.host.disruptions.captureTriggers(event);
       receipt?.();
     });
@@ -113,6 +114,7 @@ export class LocalCoordination {
     for (const [teamId, delta] of Object.entries(deltas)) {
       if (!delta) continue;
       const team = this.host.store.team(teamId);
+      if (!this.host.progression.allowed(team, problem.problemId)) continue;
       const jobId = this.host.store.jobId(event.eventId, teamId, problem.problemId);
       if (!jobId) throw new HostError(503, "Coordination roster has no deployment.");
       const scoreEvents = [
@@ -207,6 +209,7 @@ export class LocalCoordination {
     const event = this.host.store.event(team.eventId);
     const problem = this.problem(event);
     if (!problem) throw new HostError(404, "No coordination Battle in this event.");
+    this.host.progression.assertAccess(team, problem.problemId);
     const job = this.host.store
       .jobs(event.eventId, team.teamId)
       .find((item) => item.problemId === problem.problemId);

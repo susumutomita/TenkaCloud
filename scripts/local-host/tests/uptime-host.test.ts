@@ -104,7 +104,7 @@ test("Battle endpoint registration scores the current minute once after EC2 read
     const created = await request("POST", "/events", {
       name: "uptime",
       teams: [{ internalSlug: "alpha", awsAccountId: "111111111111" }],
-      problems: [{ problemId: "hello-world-battle" }],
+      problems: [{ problemId: "hello-world-battle" }, { problemId: "hello-world" }],
     });
     expect(created.status).toBe(201);
     const event = created.body as {
@@ -214,19 +214,30 @@ test("Battle endpoint registration scores the current minute once after EC2 read
     await restarted.uptime.tick();
     expect(store.team(team.teamId).score).toBe(100);
     expect(store.team(team.teamId).scoreEvents).toHaveLength(3);
-    restarted.progression = {
-      allowed: () => false,
-      assertAccess: () => undefined,
-      captureTeam: () => {
-        throw new Error("locked scoring reached capture");
-      },
-    };
+    const configure = (path: string, body: unknown) =>
+      restarted.admin(apiRequest({ method: "PUT", path, token: admin, body }));
+    expect(
+      (await configure("/feature-flags", { key: "challengePrerequisiteGate", enabled: true }))
+        .status,
+    ).toBe(200);
+    expect(
+      (
+        await configure(`/events/${event.eventId}/progression-gate`, {
+          gateProblemId: "hello-world",
+          unlockTargetIds: ["hello-world-battle"],
+          defaultPolicy: "required",
+        })
+      ).status,
+    ).toBe(200);
     clock += 60_000;
     const callsBeforeLock = calls.length;
     await restarted.uptime.tick();
     expect(calls).toHaveLength(callsBeforeLock);
     expect(store.team(team.teamId).score).toBe(100);
-    restarted.progression = undefined;
+    expect(
+      (await configure("/feature-flags", { key: "challengePrerequisiteGate", enabled: false }))
+        .status,
+    ).toBe(200);
     const fired = await restarted.admin(
       apiRequest({
         method: "POST",

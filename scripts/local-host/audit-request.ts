@@ -26,8 +26,8 @@ const eventActions: Record<string, AuditAction> = {
   "DELETE lock-scoring": "event.scoring_lock",
   "POST archive": "event.updated",
   "POST notifications": "event.updated",
-  "PUT progression": "progression.updated",
-  "DELETE progression": "progression.updated",
+  "PUT progression-gate": "progression.updated",
+  "DELETE progression-gate": "progression.updated",
   "PUT registration": "registration.updated",
 };
 function target(

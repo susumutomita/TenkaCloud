@@ -1,7 +1,7 @@
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 
 /** problemId は metadata.json と整合する RFC 1035-ish の slug。両端は英数字、内側のみ - 許容。 */
-export const PROBLEM_ID_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+export { GATE_PROBLEM_ID_RE as PROBLEM_ID_RE } from "@tenkacloud/problem-sdk/internal";
 
 /** ULID (Crockford Base32, 26 文字)。 */
 export const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;

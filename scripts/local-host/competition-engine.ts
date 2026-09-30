@@ -172,7 +172,7 @@ export class CompetitionEngine extends DockerHostingEngine {
   ): EngineResult {
     const kept = context.team.scoreEvents.filter((event) => {
       const kind = kinds.get(event.problemId);
-      return kind === "coordination" || kind === "cloudformation";
+      return event.source === "gate_bonus" || kind === "coordination" || kind === "cloudformation";
     });
     const cloudSolves = new Set(
       kept

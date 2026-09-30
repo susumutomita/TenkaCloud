@@ -38,6 +38,7 @@ import {
 import { type OrganizerPermission, requireOrganizerPermission } from "./organizer-access";
 import { ParticipantAssumeRoleError, type ParticipantAwsAccess } from "./participant-aws-access";
 import { portsFree } from "./ports";
+import { HostProgression, lockedProblem } from "./progression";
 import { SamlSignIn } from "./saml-sign-in";
 import { projectedScore, projectedTimeline } from "./score";
 import {
@@ -223,18 +224,13 @@ export class HostingService {
   readonly audit: HostAuditLog;
   private readonly queue = new SerialQueue();
   private readonly coordination = new LocalCoordination(this);
+  readonly progression: HostProgression;
   readonly disruptions: LocalDisruptions;
   private readonly tasks = new Set<Promise<void>>();
   private readonly busyEvents = new Set<string>();
   /** jobId → eventId of single-environment operations still running. */
   private readonly busyJobs = new Map<string, string>();
   readonly uptime: LocalUptime;
-  /** Connected by the progression slice when the branches are stacked. */
-  progression?: {
-    allowed(team: Team, problemId: string): boolean;
-    assertAccess(team: Team, problemId: string): void;
-    captureTeam(team: Team): void;
-  };
   surfaceLink?: (job: Job, team: Team) => Promise<string>;
   closeSurface?: (jobId: string) => Promise<void>;
   /** Fixed exercise-gateway ports; a runtime slot is only used when its gateway port is free. */
@@ -250,6 +246,7 @@ export class HostingService {
     private readonly log: (message: string) => void = console.error,
     uptimeProbe?: ProbeFn,
   ) {
+    this.progression = new HostProgression(store, now);
     this.saml = new SamlSignIn(store, masterKey, now);
     this.audit = new HostAuditLog(store, now);
     this.disruptions = new LocalDisruptions(this);
@@ -275,6 +272,9 @@ export class HostingService {
     const { problems, ...summary } = event;
     return {
       ...summary,
+      ...(!this.progression.configurationValid(event)
+        ? { progressionGate: undefined, progressionGateError: "invalid_progression_gate" }
+        : {}),
       teamCount: this.store.teams(event.eventId).length,
       problemCount: problems.length,
     };
@@ -369,6 +369,11 @@ export class HostingService {
     const parts = request.path.split("/").filter(Boolean);
     const eventId = parts[0] === "events" ? parts[1] : undefined;
     if (!eventId || !eventPattern.test(eventId)) throw new HostError(404, "Unknown host endpoint.");
+    if (parts.length === 3 && parts[2] === "progression-gate" && request.method === "GET")
+      return this.queue.run(eventId, async () => {
+        this.store.authenticateAdmin(request.token, this.now());
+        return ok({ progressionGate: this.currentEvent(eventId).progressionGate });
+      });
     if (parts.length === 2 && request.method === "GET")
       return this.queue.run(eventId, async () => {
         const current = this.store.authenticateAdmin(request.token, this.now());
@@ -692,7 +697,8 @@ export class HostingService {
   ): ApiResponse {
     const body = object(input);
     const key = body.key;
-    if (key !== "saml" && key !== "audit") throw new HostError(400, "Unknown feature flag.");
+    if (key !== "saml" && key !== "audit" && key !== "challengePrerequisiteGate")
+      throw new HostError(400, "Unknown feature flag.");
     if (typeof body.enabled !== "boolean")
       throw new HostError(400, "Flag enabled must be boolean.");
     const enabled = body.enabled;
@@ -702,6 +708,7 @@ export class HostingService {
       this.audit.commit(operation, () => {
         this.store.setFeatureFlag(key, enabled);
         if (key === "saml" && !enabled) this.saml.invalidate();
+        if (key === "challengePrerequisiteGate" && enabled) this.progression.captureAllEvents();
       });
     }
     return ok({ flags: this.store.featureFlags() });
@@ -1017,6 +1024,8 @@ export class HostingService {
       throw new HostError(409, "An environment operation is already in progress.");
     const body = () => object(request.body);
     const commands: Record<string, () => ApiResponse> = {
+      "PUT progression-gate": () => ok(this.progression.configure(event, request.body)),
+      "DELETE progression-gate": () => ok(this.progression.configure(event, undefined, true)),
       "PATCH schedule": () => this.schedule(event, body()),
       "POST end": () => this.end(event),
       "POST lock-scoring": () => this.lockScoring(event, true),
@@ -1533,6 +1542,7 @@ export class HostingService {
    * of an hour.
    */
   async recover(): Promise<void> {
+    this.store.transaction(() => this.progression.captureAllEvents());
     this.disruptions.recover();
     await Promise.all(
       this.store.jobs().map(async (job) => {
@@ -1651,7 +1661,7 @@ export class HostingService {
     const parts = request.path.split("/").filter(Boolean);
     const problemId = decodeURIComponent(parts[3] ?? "");
     const slot = parts[5] ? decodeURIComponent(parts[5]) : undefined;
-    this.progression?.assertAccess(team, problemId);
+    this.progression.assertAccess(team, problemId);
     if (request.method === "GET" && !slot) return ok(this.uptime.view(team, problemId));
     if (slot && (request.method === "POST" || request.method === "DELETE"))
       return ok(
@@ -1689,6 +1699,7 @@ export class HostingService {
         .find((candidate) => candidate.jobId === jobId);
       if (!job)
         throw new HostError(403, "This environment does not belong to your team.", "unauthorized");
+      this.progression.assertAccess(team, job.problemId);
       if (
         !linkable(job) ||
         !event.problems.some(
@@ -1792,6 +1803,7 @@ export class HostingService {
   ): Promise<ApiResponse> {
     const fresh = this.store.authenticateTeam(request.token);
     const current = this.context(fresh);
+    this.progression.assertAccess(fresh, action.problemId);
     const fingerprint = digest(JSON.stringify({ path: request.path, body }));
     if (request.nonce) {
       if (!/^[A-Za-z0-9_-]{8,128}$/u.test(request.nonce))
@@ -1808,6 +1820,23 @@ export class HostingService {
       action.hintId === undefined
         ? await this.engine.submit(current, body)
         : await this.engine.hint(current, action.problemId, action.hintId);
+    const latest = this.store.authenticateTeam(request.token);
+    this.progression.assertAccess(latest, action.problemId);
+    if (
+      latest.snapshot !== fresh.snapshot ||
+      JSON.stringify(latest.scoreEvents) !== JSON.stringify(fresh.scoreEvents)
+    )
+      throw new HostError(
+        409,
+        "The score changed while this action was checked. Try again.",
+        "scoring_state_changed",
+      );
+    if (
+      !this.store
+        .jobs(latest.eventId, latest.teamId)
+        .some((job) => job.problemId === action.problemId && linkable(job))
+    )
+      throw new HostError(409, "This team’s problem environment is not running.");
     if (result.status >= 400) return ok(result.body, result.status);
     // A verifier finishing after the server deadline must not award points. The
     // engine works on a disposable snapshot, so rejecting here discards its mutation.
@@ -1817,12 +1846,15 @@ export class HostingService {
       "totalScore" in result.body ? { ...result.body, totalScore: projected.total } : result.body;
     this.store.transaction(() => {
       this.store.putTeam({
-        ...fresh,
+        ...latest,
         snapshot: result.snapshot,
         score: projected.total,
         completedProblems: result.completedProblems,
         scoreEvents: result.scoreEvents,
       });
+      this.progression.captureTeam(this.store.team(fresh.teamId));
+      if (typeof responseBody.totalScore === "number")
+        responseBody.totalScore = this.store.team(fresh.teamId).score;
       this.disruptions.captureTriggers(this.currentEvent(fresh.eventId));
       if (request.nonce)
         this.store.putReceipt(
@@ -1922,7 +1954,9 @@ export class HostingService {
     };
   }
   private async teamView(context: Context): Promise<Record<string, unknown>> {
+    this.progression.view(context.team);
     const result = await this.engine.view(context);
+    context = this.context(this.store.team(context.team.teamId));
     const projected = projectedScore(context.event, context.team.scoreEvents);
     const eventGate = gate(context.event, context.now);
     // A canceled or never-started event has nothing to reveal: writeups need a real start.
@@ -1936,16 +1970,24 @@ export class HostingService {
         this.teamProblemView(raw, context, runtimes, eventGate.kind, ended, projected.byProblem),
       ),
     );
+    const latest = this.context(this.store.team(context.team.teamId));
+    const progression = this.progression.view(latest.team);
     return {
       ...result,
+      progression,
       team: {
         teamId: context.team.teamId,
         eventId: context.event.eventId,
         teamName: context.team.displayName,
         teamNameSetByCompetitor: true,
       },
-      problems: safeProblems,
-      eventGate,
+      problems: safeProblems.map((problem) => {
+        if (progression?.lockedProblemIds.includes(String(problem.problemId)))
+          return lockedProblem(problem);
+        if (gate(latest.event, latest.now).kind !== "ok") problem.stackOutputs = {};
+        return problem;
+      }),
+      eventGate: gate(latest.event, latest.now),
     };
   }
   private async teamProblemView(
@@ -1986,7 +2028,11 @@ export class HostingService {
   ): Promise<void> {
     // The context was read before the engine view was awaited; decide on the stored job.
     const current = job && this.store.job(job.jobId);
-    const open = current !== undefined && linkable(current) && gateKind === "ok";
+    const open =
+      current !== undefined &&
+      linkable(current) &&
+      gateKind === "ok" &&
+      this.progression.allowed(context.team, current.problemId);
     problem.stackOutputs = runtime === "cloudformation" && open ? problem.stackOutputs : {};
     if (runtime !== "docker" || !current || !open || !this.surfaceLink) return;
     try {
@@ -2005,6 +2051,7 @@ export class HostingService {
     const team = this.store.team(job.teamId);
     if (digest(team.loginKey) !== keyHash) throw new HostError(401, "Team access was revoked.");
     assertPlaying(this.currentEvent(job.eventId), this.now());
+    this.progression.assertAccess(team, job.problemId);
     if (!linkable(job)) throw new HostError(409, "Environment is not running.");
     return job;
   }

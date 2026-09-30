@@ -65,6 +65,22 @@ export {
 } from "./metadata-parser.js";
 export { type ProblemMetadataView, validateMetadataSections } from "./metadata-sections.js";
 export type { PackProblem } from "./problem-metadata.js";
+export {
+  CHALLENGE_PREREQUISITE_GATE_FLAG,
+  computeLockedProblemIds,
+  GATE_PROBLEM_ID_RE,
+  isGateCompleted,
+  MAX_COMPLETION_BONUS,
+  type ProgressionGateConfig,
+  ProgressionGateConfigSchema,
+  type ProgressionGateTeamOverride,
+  ProgressionGateTeamOverrideSchema,
+  type ProgressionGateTeamPolicy,
+  ProgressionGateTeamPolicySchema,
+  parseProgressionGate,
+  type ResolvedTeamGatePolicy,
+  resolveTeamGatePolicy,
+} from "./progression-gate.js";
 // Pack-file walk shared with the Core snapshot installer, so the copied file set
 // is exactly the digested file set (#2866).
 export { type CollectedPackFile, collectPackFiles } from "./report.js";

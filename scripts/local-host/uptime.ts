@@ -12,22 +12,17 @@ import {
   type UptimeOverride,
   type UptimeState,
 } from "./model";
+import type { HostProgression } from "./progression";
 import { probePublicEndpoint, publicEndpointUrl } from "./public-probe";
 import { projectedScore } from "./score";
 import { digest, type HostStore } from "./store";
-
-interface ProgressionHook {
-  allowed(team: Team, problemId: string): boolean;
-  assertAccess(team: Team, problemId: string): void;
-  captureTeam(team: Team): void;
-}
 
 interface DisruptionHook {
   captureTriggers(event: HostedEvent): void;
 }
 
 interface Hooks {
-  readonly progression?: ProgressionHook;
+  readonly progression: HostProgression;
   readonly disruptions: DisruptionHook;
 }
 
@@ -98,7 +93,7 @@ export class LocalUptime {
     team: Team,
     problemId: string,
   ): { teamId: string; endpoints: ReturnType<typeof resolveEndpoints> } {
-    this.hooks().progression?.assertAccess(team, problemId);
+    this.hooks().progression.assertAccess(team, problemId);
     const job = this.authorizedJob(team, problemId);
     const definition = uptimeDefinition(job);
     if (!definition)
@@ -114,7 +109,7 @@ export class LocalUptime {
   }
 
   change(team: Team, problemId: string, slot: string, method: "POST" | "DELETE", value?: unknown) {
-    this.hooks().progression?.assertAccess(team, problemId);
+    this.hooks().progression.assertAccess(team, problemId);
     const job = this.authorizedJob(team, problemId);
     const definition = uptimeDefinition(job);
     if (!definition)
@@ -128,7 +123,7 @@ export class LocalUptime {
     const event = this.store.event(team.eventId);
     if (gate(event, this.now()).kind !== "ok")
       throw new HostError(409, "Scoring is not active.", "scoring_not_active");
-    if (this.hooks().progression && !this.hooks().progression?.allowed(team, problemId))
+    if (!this.hooks().progression.allowed(team, problemId))
       throw new HostError(
         409,
         "A prerequisite challenge is not complete.",
@@ -192,8 +187,7 @@ export class LocalUptime {
     const event = this.store.event(job.eventId);
     if (gate(event, this.now()).kind !== "ok") return undefined;
     const team = this.store.team(job.teamId);
-    if (this.hooks().progression && !this.hooks().progression?.allowed(team, job.problemId))
-      return undefined;
+    if (!this.hooks().progression.allowed(team, job.problemId)) return undefined;
     if (this.store.uptimeObserved(job.eventId, job.teamId, job.problemId, minute)) return undefined;
     const unit = unitOf(job);
     if (!hostHintUrls(unit)) return undefined;
@@ -321,7 +315,7 @@ export class LocalUptime {
         this.store.putTeam(updatedTeam);
         this.store.putUptimeState(snapshot.eventId, snapshot.teamId, snapshot.problemId, nextState);
         this.store.putUptimeObservation(observation);
-        this.hooks().progression?.captureTeam(updatedTeam);
+        this.hooks().progression.captureTeam(updatedTeam);
         this.hooks().disruptions.captureTriggers(event);
       });
     });
@@ -332,8 +326,7 @@ export class LocalUptime {
     const event = this.store.event(snapshot.eventId);
     if (gate(event, this.now()).kind !== "ok") return false;
     const team = this.store.team(snapshot.teamId);
-    if (this.hooks().progression && !this.hooks().progression?.allowed(team, snapshot.problemId))
-      return false;
+    if (!this.hooks().progression.allowed(team, snapshot.problemId)) return false;
     const jobId = this.store.jobId(snapshot.eventId, snapshot.teamId, snapshot.problemId);
     if (!jobId) return false;
     const job = this.store.job(jobId);

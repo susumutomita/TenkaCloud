@@ -37,52 +37,9 @@ export type EventProblemTarget = {
   defaultRegion: string;
 };
 
-/** Progression Gate (#2283) の team 単位ポリシー。 `required` = Gate 完了まで lock、 `off` = bypass。 */
-export type ProgressionGateTeamPolicy = "required" | "off";
+export type { ProgressionGateConfig } from "@tenkacloud/problem-sdk/internal";
 
-/**
- * team 単位の上書き。
- *   - `required`: Gate 完了まで unlock target を開始できない
- *   - `off`: この team は Gate を bypass (= 最初から全問題)
- *   - `completionBonus`: Gate 完了時に 1 度だけ付与する固定ボーナス (省略時 0)
- */
-export type ProgressionGateTeamOverride = {
-  /**
-   * [Issue #3174] Optional, so a team can carry a bonus while still following
-   * the event's policy. It used to be required, which welded the two together:
-   * the only way to give a team a handicap was to stop it inheriting the
-   * policy, and the admin UI dropped every `inherit` row on save — so "same
-   * policy for everyone, a bonus for each" could not be expressed at all.
-   */
-  policy?: ProgressionGateTeamPolicy;
-  completionBonus?: number;
-};
-
-/**
- * Event 1 件の Gate 設定 (= `PUT /events/:eventId/progression-gate` body / EventRecord 保存 shape)。
- *
- * 初期実装は 「1 つの Gate challenge を起点に指定 target を unlock」 の単一 Gate モデル
- * (複数 Gate / 分岐ルートは Issue #2283 の将来拡張)。
- *
- * [Issue #2527 Slice 1 step 2] Source of truth; the validation schema with the
- * self-reference / uniqueness refinements stays in
- * `handlers/shared/progression-gate.ts` (`ProgressionGateConfigSchema`) and is
- * compile-time locked to this shape.
- */
-export type ProgressionGateConfig = {
-  gateProblemId: string;
-  unlockTargetIds: string[];
-  defaultPolicy: ProgressionGateTeamPolicy;
-  /**
-   * [Issue #3174] The bonus every team gets for completing the Gate, unless its
-   * own override says otherwise. Omitted means 0 — the same figure as before,
-   * but now with somewhere to state it: an operator who left the default policy
-   * alone previously had no field for the bonus and no way to find out it was
-   * zero.
-   */
-  completionBonus?: number;
-  teamOverrides?: Record<string, ProgressionGateTeamOverride>;
-};
+import type { ProgressionGateConfig } from "@tenkacloud/problem-sdk/internal";
 
 /**
  * Control-plane data behind a repository seam.

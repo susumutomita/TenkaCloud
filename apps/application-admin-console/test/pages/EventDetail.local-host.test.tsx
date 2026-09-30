@@ -95,10 +95,10 @@ async function loaded() {
 }
 
 describe("EventDetailPage on the local competition host", () => {
-  it("hides the cloud-only Disruptions and Progression tabs", async () => {
+  it("shows Progression and hides Disruptions when the host has no AWS connection", async () => {
     await loaded();
     expect(screen.getByRole("tab", { name: "Teams" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /Progression/u })).toBeNull();
+    expect(screen.getByRole("tab", { name: /Progression/u })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Disruptions/u })).toBeNull();
   });
 

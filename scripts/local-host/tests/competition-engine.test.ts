@@ -21,6 +21,13 @@ test("SQL awards and hint costs preserve Battle points and never pass Battle job
     result: "ok",
     occurredAt: at,
   };
+  const bonus: ScoreEvent = {
+    ...battle,
+    jobId: "sql-job",
+    problemId: "sqli-demo",
+    source: "gate_bonus",
+    points: 50,
+  };
   const context: Context = {
     now: Date.parse(at),
     event: {
@@ -42,9 +49,9 @@ test("SQL awards and hint costs preserve Battle points and never pass Battle job
       displayName: "Alpha",
       loginKey: "test-only",
       snapshot: null,
-      score: 30,
+      score: 80,
       completedProblems: 0,
-      scoreEvents: [battle],
+      scoreEvents: [battle, bonus],
     },
     jobs: engine.catalog().map((problem, index) => ({
       jobId: `${index}`,
@@ -86,13 +93,14 @@ test("SQL awards and hint costs preserve Battle points and never pass Battle job
   });
   try {
     const answer = await engine.submit(context, { problemId: "sqli-demo", flag: "test-only" });
-    expect(answer.score).toBe(130);
+    expect(answer.score).toBe(180);
+    expect(answer.scoreEvents.filter((event) => event.source === "gate_bonus")).toEqual([bonus]);
     expect(answer.snapshot).toBe("SQL snapshot");
     expect(answer.completedProblems).toBe(1);
     expect(answer.scoreEvents.filter((event) => event.source === "coordination")).toEqual([battle]);
     const hinted = await engine.hint(context, "sqli-demo", "1");
-    expect(hinted.score).toBe(128);
-    expect(hinted.scoreEvents.reduce((sum, event) => sum + event.points, 0)).toBe(128);
+    expect(hinted.score).toBe(178);
+    expect(hinted.scoreEvents.reduce((sum, event) => sum + event.points, 0)).toBe(178);
   } finally {
     submit.mockRestore();
     hint.mockRestore();

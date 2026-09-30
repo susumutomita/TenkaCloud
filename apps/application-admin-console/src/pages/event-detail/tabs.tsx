@@ -191,6 +191,7 @@ export function DisruptionsTab({ apiClient, canMutateTenant, detail, t }: EventT
 // [#2283] Progression / Gate (Advanced) tab。 保存成功 / 除去成功時に manualRefresh で
 // detail を取り直す (= progressionGate の反映)。
 export function GateTab({
+  config,
   apiClient,
   canMutateTenant,
   detail,
@@ -199,6 +200,7 @@ export function GateTab({
 }: EventTabContentProps) {
   return (
     <EventProgressionGatePanel
+      localHost={isLocalHost(config)}
       apiClient={apiClient}
       canMutateTenant={canMutateTenant}
       detail={detail}

@@ -93,7 +93,7 @@ Participants use the normal Participant Portal and its actual backend login, not
 the practice-mode or demo login.
 
 Console features that still need tenant infrastructure are not offered: the
-progression gate, registration links, capacity monitoring, scheduled deploy and
+registration links, capacity monitoring, scheduled deploy and
 automatic teardown. Their navigation entries and
 tabs are hidden; opening such a URL shows an explanation instead of a failing
 request.
@@ -156,6 +156,36 @@ clock; unlocking does not apply penalties for the locked interval. The event
 end time remains fixed. Teardown settles elapsed play before closing access.
 The optional AWS Parameter Store item is not enabled in local hosting. Battle parameters currently use the catalog
 defaults; local event duration can be set from Schedule.
+
+### Progression gates
+
+Open **Progression / Gate** in the event detail page. The host flag
+`challengePrerequisiteGate` defaults to OFF. Enable it, choose one gate problem
+and the problems it unlocks, then save. Team overrides can bypass the prerequisite
+or change the completion bonus. With the flag OFF, the host retains the settings
+and permits ordinary play, while rejecting gate configuration PUT and DELETE.
+The flag itself remains editable by an Admin; viewing saved settings remains available.
+
+The first positive cumulative score or correct flag completes a problem. SQLite
+records that fact under the event, team and problem, independently of deployments.
+Removing and adding the configuration, rebuilding the environment, changing the
+bonus or switching the feature OFF and ON does not erase completion or award the
+bonus twice. A completion recorded while OFF can receive its configured bonus
+when the feature is enabled. A zero bonus is also recorded as settled.
+
+Locked problems reveal only their card identity. Their instructions, hints,
+outputs and endpoints are withheld; flag submissions, hint reveals, Battle
+operations and exercise-gateway requests are rejected. Shared Battle time still
+advances; scores for locked teams are skipped and are not awarded retroactively.
+Invalid stored gate settings close participant access until an organizer repairs
+them; the host and admin settings remain available.
+
+This gate controls host APIs and newly issued access. It does not revoke AWS STS
+credentials or federation sessions already issued. The participant ViewerRole is
+shared across problems in a team's AWS account; its IAM policy may allow access
+to another locked problem's resources. Gate enforcement is therefore not an AWS
+resource-isolation boundary. Use separate accounts or narrower IAM policies if
+resource isolation between problems is required.
 
 ### One team's environment
 

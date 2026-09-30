@@ -59,6 +59,7 @@
         "scripts/local-host/tests/browser-e2e.ts",
         "scripts/local-host/tests/disruption-browser-e2e.ts",
         "scripts/local-host/tests/uptime-browser-e2e.ts",
+        "scripts/local-host/tests/progression-browser-e2e.ts",
         "scripts/local-host/tests/organizer-browser-e2e.ts",
         "scripts/local-host/tests/cloud-browser-e2e.ts",
         "scripts/local-host/tests/accounts-browser-e2e.ts",

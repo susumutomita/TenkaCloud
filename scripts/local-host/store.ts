@@ -102,6 +102,12 @@ export class HostStore {
           fingerprint TEXT NOT NULL, status INTEGER NOT NULL, body TEXT NOT NULL,
           PRIMARY KEY(team_id,nonce)
         ) STRICT;
+        CREATE TABLE IF NOT EXISTS host_problem_completions(
+          event_id TEXT NOT NULL, team_id TEXT NOT NULL, problem_id TEXT NOT NULL,
+          completed_at TEXT NOT NULL, bonus_points INTEGER,
+          FOREIGN KEY(team_id,event_id) REFERENCES host_teams(id,event_id),
+          PRIMARY KEY(event_id,team_id,problem_id)
+        ) STRICT;
         CREATE TABLE IF NOT EXISTS host_notifications(
           id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES host_events(id), body TEXT NOT NULL
         ) STRICT;
@@ -427,9 +433,10 @@ export class HostStore {
     return {
       saml: this.setting("flag:saml") === "true",
       audit: this.setting("flag:audit") === "true",
+      challengePrerequisiteGate: this.setting("flag:challengePrerequisiteGate") === "true",
     };
   }
-  setFeatureFlag(key: "saml" | "audit", enabled: boolean): void {
+  setFeatureFlag(key: "saml" | "audit" | "challengePrerequisiteGate", enabled: boolean): void {
     this.statement(
       "INSERT INTO host_settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     ).run(`flag:${key}`, String(enabled));

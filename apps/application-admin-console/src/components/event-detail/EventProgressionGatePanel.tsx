@@ -57,12 +57,14 @@ function StoredGateSummary({
  * Modal パターン踏襲)。
  */
 function GateEditor({
+  localHost,
   apiClient,
   canMutateTenant,
   detail,
   onRefresh,
   t,
 }: {
+  readonly localHost: boolean;
   readonly apiClient: ApiClient | null;
   readonly canMutateTenant: boolean;
   readonly detail: EventDetail;
@@ -95,6 +97,7 @@ function GateEditor({
 
       <Field label={t("gate.gate_problem_label")}>
         <Select
+          ariaLabel={t("gate.gate_problem_label")}
           selectedOption={
             editor.gateProblemId
               ? { value: editor.gateProblemId, label: editor.gateProblemId }
@@ -112,6 +115,7 @@ function GateEditor({
       </Field>
       <Field label={t("gate.unlock_targets_label")}>
         <Multiselect
+          ariaLabel={t("gate.unlock_targets_label")}
           selectedOptions={editor.unlockTargetIds.map((id) => ({ value: id, label: id }))}
           options={targetOptions}
           placeholder={t("gate.unlock_targets_placeholder")}
@@ -147,6 +151,7 @@ function GateEditor({
           {t("gate.default_bonus_description")}
         </Box>
         <Input
+          ariaLabel={t("gate.default_bonus_label")}
           type="number"
           inputMode="numeric"
           placeholder={t("gate.default_bonus_placeholder")}
@@ -260,7 +265,7 @@ function GateEditor({
             </Box>
           }
         >
-          {t("gate.modal_remove_body")}
+          {t(localHost ? "gate.host_modal_remove_body" : "gate.modal_remove_body")}
         </Modal>
       )}
     </SpaceBetween>
@@ -278,19 +283,22 @@ function GateEditor({
  *   - Flag ON: Gate 編集 form (`GateEditor`)。 Toggle で OFF 化 (鏡像フロー)。
  */
 export function EventProgressionGatePanel({
+  localHost = false,
   apiClient,
   canMutateTenant,
   detail,
   onRefresh,
   t,
 }: {
+  readonly localHost?: boolean;
   readonly apiClient: ApiClient | null;
   readonly canMutateTenant: boolean;
   readonly detail: EventDetail;
   readonly onRefresh: () => void;
   readonly t: Translate;
 }) {
-  const flag = useTenantGateFlag(apiClient, t);
+  const flag = useTenantGateFlag(apiClient, t, localHost);
+  const copyPrefix = localHost ? "gate.host_" : "gate.";
 
   return (
     <Container
@@ -301,6 +309,7 @@ export function EventProgressionGatePanel({
       }
     >
       <SpaceBetween size="l">
+        {detail.progressionGateError && <Alert type="error">{t("gate.host_invalid_config")}</Alert>}
         {flag.flagsError && (
           <Alert type="error" header={t("gate.flags_error_header")}>
             {flag.flagsError}
@@ -317,13 +326,18 @@ export function EventProgressionGatePanel({
           <>
             <Toggle
               checked={flag.enabled}
-              disabled={!apiClient || flag.toggleInFlight}
+              disabled={
+                !apiClient ||
+                flag.toggleInFlight ||
+                (localHost && apiClient?.organizerRole !== "Admin")
+              }
               onChange={({ detail: d }) => void flag.toggleFlag(d.checked)}
             >
-              {t("gate.feature_toggle_label")}
+              {t(`${copyPrefix}feature_toggle_label`)}
             </Toggle>
             {flag.enabled ? (
               <GateEditor
+                localHost={localHost}
                 // #2283: 保存済み設定が変わったら remount して stale form を防ぐ
                 // (Remove + refresh 後 / 他 session の保存が refresh で届いた後)。
                 key={JSON.stringify(detail.progressionGate ?? null)}
@@ -336,7 +350,7 @@ export function EventProgressionGatePanel({
             ) : (
               <>
                 <Alert type="info" header={t("gate.disabled_alert_header")}>
-                  {t("gate.disabled_alert_body")}
+                  {t(`${copyPrefix}disabled_alert_body`)}
                 </Alert>
                 {detail.progressionGate && (
                   <StoredGateSummary stored={detail.progressionGate} t={t} />
