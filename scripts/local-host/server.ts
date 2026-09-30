@@ -37,7 +37,7 @@ export interface RunningLocalHost {
 export async function startLocalHost(
   repositoryRoot: string,
   settings: LocalHostSettings,
-  createEngine: (dataDirectory: string) => RuntimeEngine,
+  createEngine: (dataDirectory: string, store: HostStore) => RuntimeEngine,
   announce: (message: string) => void = console.log,
 ): Promise<RunningLocalHost> {
   const directory = privateDirectory(settings.dataDirectory);
@@ -62,7 +62,7 @@ export async function startLocalHost(
   try {
     const masterKeyPath = join(directory, "host-key");
     const masterKey = persistentKey(masterKeyPath);
-    const engine = createEngine(directory);
+    const engine = createEngine(directory, store);
     service = new HostingService(store, engine, masterKey);
     service.gatewayPorts = settings.gatewayPorts;
     // Public mode offers no gateway problems; a recovered one must still not open on every interface.

@@ -21,6 +21,16 @@ export interface Problem {
   runtime?: "docker" | "coordination" | "cloudformation";
 }
 
+/** Which runtime owns a pinned problem definition. */
+export type DefinitionKind = "compose" | "coordination" | "cloudformation";
+
+export function definitionKind(definition: string): DefinitionKind {
+  const { kind } = JSON.parse(definition) as { kind?: unknown };
+  if (kind === undefined) return "compose";
+  if (kind === "coordination" || kind === "cloudformation") return kind;
+  throw new Error(`Unknown problem definition kind: ${JSON.stringify(kind)}`);
+}
+
 export interface HostedEvent {
   eventId: string;
   name: string;
@@ -45,6 +55,13 @@ export interface ScoreEvent {
   points: number;
   result: "ok" | "wrong";
   occurredAt: string;
+  /** The revealed hint of a `hint` event whose runtime keeps no other record of reveals. */
+  hintId?: string;
+}
+
+/** An accepted answer. A problem counts as completed once it has one. */
+export function isSolve(event: ScoreEvent): boolean {
+  return event.source === "flag" && event.result === "ok";
 }
 
 export interface Team {
@@ -96,7 +113,7 @@ export interface Context {
 export interface EngineResult {
   status: number;
   body: Record<string, unknown>;
-  snapshot: string;
+  snapshot: string | null;
   score: number;
   completedProblems: number;
   scoreEvents: ScoreEvent[];

@@ -7,16 +7,18 @@ with the team keys issued for their event.
 
 ## Supported problems
 
-The application server uses Bun and a local SQLite file. There is no AWS,
-Cognito, external database, or application container to provision. The browser
-interfaces are built using the repository's existing Vite pipelines.
+The application server uses Bun and a local SQLite file. There is no Cognito,
+external database, or application container to provision, and AWS is needed only
+for the optional [AWS problem](#aws-problems). The browser interfaces are built
+using the repository's existing Vite pipelines.
 
 | Problem | Runtime | Requirements |
 | --- | --- | --- |
 | SQL injection (`challenges/sqli-demo`) | One isolated Docker Compose project per team | Docker |
 | Cryptography Battle (`battles/ac26-crypto-battle`) | Shared match on the host; private view per team | Bun + SQLite, no Docker or AWS |
+| Hello World (`challenges/hello-world`) | One CloudFormation stack in each team's own AWS account | `--aws-region`, AWS credentials and a competitor account per team |
 
-Both reuse the catalog's statements, rules and scoring. You can include both in
+All of them reuse the catalog's statements, rules and scoring. You can mix them in
 one event; their points contribute to the same leaderboard. A local event can
 have one shared Battle. Other catalog problems require a compatibility and
 isolation review before being enabled. The SQL exercise gateway is not a generic
@@ -76,7 +78,7 @@ Participants use the normal Participant Portal and its actual backend login, not
 the practice-mode or demo login.
 
 Console features that need cloud infrastructure are not offered: AWS competitor
-accounts, tenant users, the audit log, SAML, the problem catalog's cloud
+account entry (see [AWS problems](#aws-problems)), tenant users, the audit log, SAML, the problem catalog's cloud
 deployments, disruptions, the progression gate, registration links, capacity
 monitoring, scheduled deploy and automatic teardown. Their navigation entries and
 tabs are hidden; opening such a URL shows an explanation instead of a failing
@@ -198,6 +200,51 @@ and single-use, and each browser receives its own HttpOnly Cookie. Different
 teammates can open independent links concurrently. Team-key rotation revokes
 old team access, including existing exercise-gateway sessions.
 
+## AWS problems
+
+`hello-world` deploys one CloudFormation stack into each team's own AWS account.
+Start the host with a region to offer it:
+
+```sh
+make host HOST_ARGS="--aws-region ap-northeast-1"
+```
+
+- **Credentials.** The host uses the AWS SDK's default credential chain:
+  environment variables, a profile, or an instance or task role. No flag takes
+  keys. At startup the host calls STS `GetCallerIdentity` and prints the operator
+  account ID. Without usable credentials it refuses to start.
+- **ExternalId.** The host creates `competitor-external-id` in its data directory
+  once, with the same file permissions as `host-key`, and prints its value. In
+  public mode it prints the file path instead. Every competitor role requires this
+  ExternalId, as `competitor-bootstrap.yaml` does.
+- **Competitor accounts.** Prepare each team's account with
+  `competitor-bootstrap.yaml`, trusting the operator account and the ExternalId.
+  The host console cannot enter the accounts yet, so create the event through the
+  API. Give each team an `awsAccountId`, and an `awsRoleName` when the role is not
+  `TenkaCloud-CompetitorDeploy-Role`:
+
+  ```sh
+  TOKEN=$(curl -s -X POST http://127.0.0.1:5174/api/host/login \
+    -H 'content-type: application/json' -d '{"key":"<host key>"}' | jq -r .idToken)
+  curl -s -X POST http://127.0.0.1:5174/api/events \
+    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+    -d '{"name":"Cloud day","problems":[{"problemId":"ac26-crypto-battle"},{"problemId":"hello-world"}],
+         "teams":[{"internalSlug":"team-a","awsAccountId":"111111111111"},
+                  {"internalSlug":"team-b","awsAccountId":"222222222222"}]}'
+  ```
+
+  Deploy, start and end the event in the host console as usual.
+- **Playing.** Participants see the stack's outputs except the flag output, submit
+  the flag and reveal hints in the normal portal. The host compares the answer with
+  the flag output it read when the stack was created; scoring makes no AWS call.
+- **Restarting without the flag.** Recovery marks the event's stacks failed with
+  a message asking for `--aws-region`. Restarting with it recovers them.
+- **Not yet available.** The portal's **Open AWS Console** needs participant
+  console sign-in, which host mode does not provide yet.
+
+The container image accepts the same flag. Give it credentials through the
+platform's role or environment variables.
+
 ## Hosting behind a TLS proxy
 
 The same host runs as one container image on a VM or container platform. A
@@ -238,8 +285,8 @@ docker run --read-only --tmpfs /tmp --cap-drop ALL \
   and returns only a status.
 - **Supported problems.** Docker Compose problems are not offered. Their sibling
   containers publish on the host's loopback, which the container cannot reach. The
-  Cryptography Battle runs in-process and is offered. To use Docker problems on a
-  VM, run `make host` directly on that VM.
+  Cryptography Battle runs in-process and is offered, and so is `hello-world` with
+  `--aws-region`. To use Docker problems on a VM, run `make host` directly on that VM.
 
 `bun run test:host:container` runs a built image, logs in, and plays a started
 Cryptography Battle for two teams at the advertised origins.

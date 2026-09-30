@@ -24,6 +24,7 @@ export function parseOptions(
       "public-participant-origin": { type: "string" },
       "behind-proxy": { type: "boolean", default: false },
       "unsafe-http": { type: "boolean", default: false },
+      "aws-region": { type: "string" },
       help: {
         type: "boolean",
         short: "h",
@@ -57,6 +58,9 @@ export function parseOptions(
     throw new Error(
       "--gateway-ports must not include the host console or participant portal port.",
     );
+  const awsRegion = values["aws-region"];
+  if (awsRegion !== undefined && !/^[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/u.test(awsRegion))
+    throw new Error(`--aws-region ${awsRegion} is not an AWS region name such as ap-northeast-1.`);
   return {
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
     hostname,
@@ -64,6 +68,7 @@ export function parseOptions(
     participantPort,
     gatewayPorts,
     ...(exposure ? { public: exposure } : {}),
+    ...(awsRegion ? { awsRegion } : {}),
     build: !values["no-build"],
     help: values.help,
   };

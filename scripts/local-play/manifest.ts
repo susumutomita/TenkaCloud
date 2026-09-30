@@ -436,7 +436,7 @@ function parseEnglishCheckMap(checks: unknown): ReadonlyMap<string, EnglishCheck
  * text only; the platform still never learns the answer. Returns an empty
  * overlay (and empty map) when no translation is present.
  */
-function parseEnglishOverlay(i18n: RawMetadata["i18n"]): {
+export function parseEnglishOverlay(i18n: RawMetadata["i18n"]): {
   readonly text?: LocalizedProblemText;
   readonly hintById: ReadonlyMap<string, string>;
   readonly checkById: ReadonlyMap<string, EnglishCheckOverlay>;
@@ -601,7 +601,7 @@ export function loadContainerProblem(
   };
 }
 
-function parseVerifyScoring(
+export function parseVerifyScoring(
   scoring: RawMetadata["scoring"],
   hintById: ReadonlyMap<string, string>,
 ): ContainerVerifyScoring {

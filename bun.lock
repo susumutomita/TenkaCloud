@@ -5,12 +5,16 @@
     "": {
       "name": "tenkacloud",
       "dependencies": {
+        "@aws-sdk/client-cloudformation": "^3.1140.0",
+        "@aws-sdk/client-ssm": "^3.1140.0",
+        "@aws-sdk/client-sts": "^3.1140.0",
         "@libsql/client": "^0.17.4",
         "@tenkacloud/coordination-plugin-sdk": "workspace:*",
         "esbuild": "^0.28.2",
         "http-status-codes": "^2.3.0",
         "js-yaml": "5.4.1",
         "ws": "^8.21.1",
+        "yaml": "^2.9.0",
         "zod": "^3.25.76",
       },
       "devDependencies": {

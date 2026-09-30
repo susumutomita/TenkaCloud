@@ -22,9 +22,12 @@ import { participantSimulatorOutputs } from "./simulator-scoring";
  * {@link LocalPlayState} — no mutation, no routing.
  */
 
-function hintViews(runtime: ProblemRuntime, hints: readonly ContainerHint[]) {
+export function hintViews(
+  revealedHints: ReadonlyMap<string, string>,
+  hints: readonly ContainerHint[],
+) {
   return hints.map((hint) => {
-    const revealedAt = runtime.revealedHints.get(hint.id);
+    const revealedAt = revealedHints.get(hint.id);
     return {
       id: hint.id,
       penalty: hint.penalty,
@@ -63,7 +66,7 @@ function multiVerifyScoringView(
       points: check.points,
       solved: runtime.solved.has(check.id),
       ...(check.i18n ? { i18n: check.i18n } : {}),
-      ...(check.hints.length > 0 ? { hints: hintViews(runtime, check.hints) } : {}),
+      ...(check.hints.length > 0 ? { hints: hintViews(runtime.revealedHints, check.hints) } : {}),
     })),
   };
 }
@@ -90,7 +93,7 @@ function localScoringView(runtime: ProblemRuntime, complete: boolean) {
       kind: "flag" as const,
       points: scoring.points,
       flagSubmitted: complete,
-      hints: hintViews(runtime, scoring.hints),
+      hints: hintViews(runtime.revealedHints, scoring.hints),
       ...(scoring.hintReveal ? { hintReveal: scoring.hintReveal } : {}),
     };
   }

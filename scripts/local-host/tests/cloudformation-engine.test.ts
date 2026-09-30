@@ -4,21 +4,14 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  CreateStackCommand,
-  type CreateStackCommandInput,
-  DeleteStackCommand,
-  DescribeStacksCommand,
-} from "@aws-sdk/client-cloudformation";
-import { AssumeRoleCommand, type AssumeRoleCommandInput } from "@aws-sdk/client-sts";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
-import { CloudFormationEngine, type CredentialsProvider } from "../cloudformation-engine";
+import { CloudFormationEngine } from "../cloudformation-engine";
 import { type ApiResponse, HostingService } from "../service";
 import { HostStore } from "../store";
+import { FakeAws, OPERATOR_ACCOUNT } from "./fake-aws";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const EXTERNAL_ID = "host-external-id-0123456789";
-const OPERATOR_ACCOUNT = "999999999999";
 const directories: string[] = [];
 const stores: HostStore[] = [];
 afterEach(() => {
@@ -26,98 +19,6 @@ afterEach(() => {
   for (const directory of directories.splice(0))
     rmSync(directory, { recursive: true, force: true });
 });
-
-interface FakeStack {
-  stackId: string;
-  name: string;
-  status: string;
-  reason?: string;
-}
-
-/** STS and CloudFormation as they behave for these calls; each poll moves a stack one step. */
-class FakeAws {
-  readonly assumed: AssumeRoleCommandInput[] = [];
-  readonly created: CreateStackCommandInput[] = [];
-  readonly deleted: string[] = [];
-  readonly stacks: FakeStack[] = [];
-  createOutcome: "complete" | "rollback" | "lost-response" = "complete";
-
-  readonly sts = {
-    send: async (command: unknown) => {
-      if (!(command instanceof AssumeRoleCommand)) throw new Error("unexpected STS call");
-      this.assumed.push(command.input);
-      return {
-        Credentials: {
-          AccessKeyId: "AKIA",
-          SecretAccessKey: "secret",
-          SessionToken: "token",
-          Expiration: new Date(Date.now() + 900_000),
-        },
-      };
-    },
-  };
-
-  readonly cloudFormation = (credentials: CredentialsProvider) => ({
-    send: async (command: unknown) => {
-      await credentials();
-      if (command instanceof CreateStackCommand) return this.create(command.input);
-      if (command instanceof DescribeStacksCommand)
-        return this.describe(String(command.input.StackName));
-      if (command instanceof DeleteStackCommand) {
-        const stack = this.find(String(command.input.StackName));
-        if (stack) {
-          this.deleted.push(stack.stackId);
-          stack.status = "DELETE_IN_PROGRESS";
-        }
-        return {};
-      }
-      throw new Error("unexpected CloudFormation call");
-    },
-  });
-
-  private create(input: CreateStackCommandInput) {
-    this.created.push(input);
-    const stack: FakeStack = {
-      stackId: `arn:aws:cloudformation:ap-northeast-1:111:stack/${input.StackName}/${this.stacks.length}`,
-      name: String(input.StackName),
-      status: "CREATE_IN_PROGRESS",
-    };
-    this.stacks.push(stack);
-    if (this.createOutcome === "lost-response") throw new Error("socket hang up");
-    return { StackId: stack.stackId };
-  }
-
-  private find(nameOrId: string): FakeStack | undefined {
-    return this.stacks.find(
-      (stack) =>
-        stack.stackId === nameOrId ||
-        (stack.name === nameOrId && stack.status !== "DELETE_COMPLETE"),
-    );
-  }
-
-  private describe(nameOrId: string) {
-    const stack = this.find(nameOrId);
-    if (!stack) throw new Error(`Stack with id ${nameOrId} does not exist`);
-    if (stack.status === "CREATE_IN_PROGRESS") {
-      stack.status = this.createOutcome === "rollback" ? "ROLLBACK_COMPLETE" : "CREATE_COMPLETE";
-      if (this.createOutcome === "rollback") stack.reason = "The following resource(s) failed";
-    } else if (stack.status === "DELETE_IN_PROGRESS") stack.status = "DELETE_COMPLETE";
-    return {
-      Stacks: [
-        {
-          StackId: stack.stackId,
-          StackName: stack.name,
-          StackStatus: stack.status,
-          StackStatusReason: stack.reason,
-          Outputs: [
-            { OutputKey: "ParameterValue", OutputValue: "TC{secret}" },
-            { OutputKey: "ParameterConsoleUrl", OutputValue: "https://console.example/p" },
-          ],
-        },
-      ],
-    };
-  }
-}
 
 async function host() {
   const data = mkdtempSync(join(tmpdir(), "tenka-cloudformation-"));
@@ -204,14 +105,11 @@ test("deploys each team's stack into its own account and tears it down", async (
     jobs: [jobA],
     now: Date.now(),
   });
-  expect(view).toEqual({
-    problems: [
-      {
-        problemId: "hello-world",
-        status: "COMPLETE",
-        outputs: { ParameterConsoleUrl: "https://console.example/p" },
-      },
-    ],
+  expect(view.problems).toMatchObject([
+    { problemId: "hello-world", awsAccountId: "111111111111", region: "ap-northeast-1" },
+  ]);
+  expect((view.problems as { stackOutputs: unknown }[])[0]?.stackOutputs).toEqual({
+    ParameterConsoleUrl: "https://console.example/p",
   });
 
   expect((await admin("DELETE", `/events/${eventId}`)).status).toBe(202);

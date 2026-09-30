@@ -10,7 +10,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { randomToken } from "./auth";
 
 function assertOwner(uid: number): void {
@@ -88,7 +88,7 @@ export function persistentKey(path: string): string {
   try {
     const value = created ? randomToken() : readFileSync(descriptor, "utf8").trim();
     if (!/^[A-Za-z0-9_-]{43}$/u.test(value))
-      throw new Error("Invalid host-key file; refusing to replace it.");
+      throw new Error(`Invalid ${basename(path)} file; refusing to replace it.`);
     if (created) {
       writeFileSync(descriptor, `${value}\n`);
       fsyncSync(descriptor);

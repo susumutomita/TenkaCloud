@@ -17,9 +17,11 @@ import {
   HostError,
   type HostedEvent,
   hasStarted,
+  isSolve,
   type Job,
   type JobOperation,
   object,
+  type Problem,
   type RuntimeEngine,
   scoringEnded,
   type Team,
@@ -63,6 +65,15 @@ const NOTICE_JA =
 const NOTICE_EN =
   "> In competition mode, the organizer starts and stops your environment. Skip the problem's Start instruction and open Web under Access URLs during the event.\n\n";
 
+type Runtime = NonNullable<Problem["runtime"]>;
+
+/** What the portal names as each runtime's provider. */
+const PROVIDERS: Record<Runtime, string> = {
+  docker: "docker",
+  coordination: "local",
+  cloudformation: "aws",
+};
+
 function withEnglish(
   problem: Record<string, unknown>,
   edit: (english: Record<string, unknown>) => void,
@@ -76,16 +87,18 @@ function withEnglish(
 /** Strip organizer-only and not-yet-earned content from a scorer problem view. */
 function participantProblem(
   raw: Record<string, unknown>,
+  runtime: Runtime,
   gateKind: Gate["kind"],
   ended: boolean,
 ): Record<string, unknown> {
   const problem = { ...raw };
   delete problem.lifecycle; // Competition environments are host-owned, never participant-resettable.
   delete problem.recommended;
-  if (!problem.coordination && typeof problem.instructions === "string")
+  // The notice points at the Docker exercise's Web link; other runtimes have none.
+  if (runtime === "docker" && typeof problem.instructions === "string")
     problem.instructions = NOTICE_JA + problem.instructions;
   withEnglish(problem, (english) => {
-    if (!problem.coordination && typeof english.instructions === "string")
+    if (runtime === "docker" && typeof english.instructions === "string")
       english.instructions = NOTICE_EN + english.instructions;
   });
   if (!ended) {
@@ -1038,11 +1051,7 @@ export class HostingService {
           completedProblems:
             cutoff === null
               ? team.completedProblems
-              : new Set(
-                  historical
-                    .filter((event) => event.source === "flag" && event.result === "ok")
-                    .map((event) => event.problemId),
-                ).size,
+              : new Set(historical.filter(isSolve).map((event) => event.problemId)).size,
           totalProblems: context.event.problems.length,
           isMyTeam: team.teamId === context.team.teamId,
         };
@@ -1066,38 +1075,24 @@ export class HostingService {
     // A canceled or never-started event has nothing to reveal: writeups need a real start.
     const ended = eventGate.kind === "scoring_ended" && hasStarted(context.event, context.now);
     const problems = Array.isArray(result.problems) ? result.problems : [];
+    const runtimes = new Map(
+      context.event.problems.map((each) => [each.problemId, each.runtime ?? "docker"]),
+    );
     const safeProblems = await Promise.all(
       problems.map(async (raw) => {
-        const problem = participantProblem(object(raw), eventGate.kind, ended);
+        const entry = object(raw);
+        const runtime = runtimes.get(String(entry.problemId));
+        if (!runtime) throw new Error("The runtime described a problem outside the event.");
+        const problem = participantProblem(entry, runtime, eventGate.kind, ended);
         const job = context.jobs.find((candidate) => candidate.problemId === problem.problemId);
-        problem.provider = problem.coordination ? "local" : "docker";
+        problem.provider = PROVIDERS[runtime];
         problem.jobId = job?.jobId ?? problem.jobId;
         problem.eventStartsAt = context.event.startsAt;
         problem.eventEndsAt = context.event.endsAt;
         problem.expiresAt = context.event.expiresAt;
         // The participant contract has no organizer-stop state; "DELETED" renders as stopped.
         problem.status = job?.status === "STOPPED" ? "DELETED" : (job?.status ?? "PENDING");
-        problem.stackOutputs = {};
-        // The context was read before the engine view was awaited; decide on the stored job.
-        const current = job && this.store.job(job.jobId);
-        if (
-          !problem.coordination &&
-          current &&
-          linkable(current) &&
-          eventGate.kind === "ok" &&
-          this.surfaceLink
-        ) {
-          try {
-            problem.stackOutputs = { Web: await this.surfaceLink(current, context.team) };
-          } catch (error) {
-            // One environment's gateway must not take the whole team view down. The host
-            // keeps the reason; the portal shows a translated, detail-free explanation.
-            this.log(
-              `Exercise link for job ${current.jobId} failed: ${failureMessage(error, "unknown")}`,
-            );
-            problem.accessError = "link_unavailable";
-          }
-        }
+        await this.grantAccess(problem, runtime, job, context, eventGate.kind);
         return problem;
       }),
     );
@@ -1112,6 +1107,33 @@ export class HostingService {
       problems: safeProblems,
       eventGate,
     };
+  }
+  /**
+   * A stack's outputs or a Docker exercise's Web link, only while the environment runs and the
+   * event is scoring.
+   */
+  private async grantAccess(
+    problem: Record<string, unknown>,
+    runtime: Runtime,
+    job: Job | undefined,
+    context: Context,
+    gateKind: Gate["kind"],
+  ): Promise<void> {
+    // The context was read before the engine view was awaited; decide on the stored job.
+    const current = job && this.store.job(job.jobId);
+    const open = current !== undefined && linkable(current) && gateKind === "ok";
+    problem.stackOutputs = runtime === "cloudformation" && open ? problem.stackOutputs : {};
+    if (runtime !== "docker" || !current || !open || !this.surfaceLink) return;
+    try {
+      problem.stackOutputs = { Web: await this.surfaceLink(current, context.team) };
+    } catch (error) {
+      // One environment's gateway must not take the whole team view down. The host
+      // keeps the reason; the portal shows a translated, detail-free explanation.
+      this.log(
+        `Exercise link for job ${current.jobId} failed: ${failureMessage(error, "unknown")}`,
+      );
+      problem.accessError = "link_unavailable";
+    }
   }
   authorizeSurface(jobId: string, keyHash: string): Job {
     const job = this.store.job(jobId);
