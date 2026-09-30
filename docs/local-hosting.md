@@ -237,8 +237,13 @@ make host HOST_ARGS="--aws-region ap-northeast-1"
 - **Playing.** Participants see the stack's outputs except the flag output, submit
   the flag and reveal hints in the normal portal. The host compares the answer with
   the flag output it read when the stack was created; scoring makes no AWS call.
-- **Restarting without the flag.** Recovery marks the event's stacks failed with
-  a message asking for `--aws-region`. Restarting with it recovers them.
+- **Regions.** Only regions of the standard AWS partition are accepted; GovCloud,
+  China and ISO regions are refused at startup.
+- **Restarting.** Without the flag, recovery marks the event's stacks failed with
+  a message asking for `--aws-region`, and restarting with it recovers them. A stack
+  that finished creating while the host was stopped has no recorded outputs, so it
+  is marked failed. **Restart** on that environment in the **Teams** tab deletes and
+  recreates it, as does **Retry failed** while the event is being prepared.
 - **Not yet available.** The portal's **Open AWS Console** needs participant
   console sign-in, which host mode does not provide yet.
 
@@ -348,7 +353,7 @@ The normal portal's existing submission interface is retained.
 The build has a separate allowlist for catalog metadata. Author descriptions,
 writeups, hint content and problem implementation files must not be distributed
 through browser metadata. Only reviewed SQL metadata and the Battle portal are included in
-hosting catalog/plugin globs; server reducers, fixtures and private seeds are excluded. Participant instructions are returned by the
+hosting catalog/plugin globs, plus the public `hello-world` catalog entry in the participant portal; server reducers, fixtures and private seeds are excluded. Participant instructions are returned by the
 authenticated backend after the event starts.
 
 The organizer's own account, local operating-system processes and the checked-out

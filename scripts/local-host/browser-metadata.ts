@@ -31,6 +31,14 @@ export function publicMetadata(code: string, id: string): string | null {
   });
 }
 
+const HOSTED = "challenges/sqli-demo,battles/ac26-crypto-battle";
+/**
+ * The participant portal draws a problem's statement only beside its catalog entry, so the
+ * AWS problem needs one there. The host console keeps the pair: it cannot enter the
+ * competitor accounts an AWS event needs yet.
+ */
+const PARTICIPANT_CATALOG = `${HOSTED},challenges/hello-world`;
+
 export function narrowCatalog(code: string, id: string): string | null {
   const normalized = id.replaceAll("\\", "/");
   if (
@@ -41,12 +49,15 @@ export function narrowCatalog(code: string, id: string): string | null {
   const glob = /problems\/\*\/\*\//gu;
   if (!glob.test(code))
     throw new Error("The catalog glob changed. Review the hosting bundle before building.");
+  const problems = normalized.endsWith("/participant-portal/src/data/problems.ts")
+    ? PARTICIPANT_CATALOG
+    : HOSTED;
   // Include neither other problems' portal code nor author-installed pack snapshots.
   // The reserved empty glob is valid in Vite 7; the module guard rejects any accidental match.
   const narrowed = code
-    .replace(glob, "problems/{challenges/sqli-demo,battles/ac26-crypto-battle}/")
+    .replace(glob, `problems/{${problems}}/`)
     .replaceAll(
-      "problems/{challenges/sqli-demo,battles/ac26-crypto-battle}/*.yaml",
+      `problems/{${problems}}/*.yaml`,
       "problems/challenges/sqli-demo/__local_host_empty__/*.yaml",
     );
   return narrowed.replace(
@@ -71,7 +82,7 @@ export function assertHostingModule(id: string): void {
     return;
   }
   if (
-    !/\/problems\/challenges\/sqli-demo\/(?:metadata\.json|diagram(?:\.en)?\.svg)(?:\?.*)?$/u.test(
+    !/\/problems\/challenges\/(?:sqli-demo|hello-world)\/(?:metadata\.json|diagram(?:\.en)?\.svg)(?:\?.*)?$/u.test(
       normalized,
     )
   ) {

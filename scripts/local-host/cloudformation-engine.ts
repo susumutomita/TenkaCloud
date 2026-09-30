@@ -203,6 +203,12 @@ export class CloudFormationEngine implements RuntimeEngine {
     const stack = await this.describe(this.client(unit, job), unit);
     if (stack?.StackStatus !== "CREATE_COMPLETE")
       throw new Error(`Stack ${unit.stackName} is ${stack?.StackStatus ?? "gone"}.`);
+    // Scoring reads only the outputs recorded at creation; a stack that finished while the
+    // host was down has none, so it must be redeployed rather than reported running.
+    if (!unit.outputs)
+      throw new Error(
+        `Stack ${unit.stackName} finished while the host was stopped, so its outputs were not recorded. Retry the deployment.`,
+      );
   }
 
   async stop(job: Job): Promise<void> {
@@ -283,7 +289,7 @@ export class CloudFormationEngine implements RuntimeEngine {
       return outcome(team, { kind: "already_scored", totalScore: team.score });
     const outputs = deployed.job.unit ? unitOf(deployed.job).outputs : undefined;
     const expected = outputs?.[deployed.definition.flagOutputKey];
-    if (!expected)
+    if (!expected?.trim())
       throw new HostError(
         409,
         "This team's stack has no flag output yet. Ask the organizer to redeploy it.",
@@ -315,7 +321,6 @@ export class CloudFormationEngine implements RuntimeEngine {
     );
   }
 
-  /** A hint is charged once; revealing it again returns it for free. */
   async hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
     const deployed = this.deployed(context, problemId);
     const hint = deployed.definition.scoring.hints.find((candidate) => candidate.id === hintId);

@@ -59,8 +59,14 @@ export function parseOptions(
       "--gateway-ports must not include the host console or participant portal port.",
     );
   const awsRegion = values["aws-region"];
-  if (awsRegion !== undefined && !/^[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/u.test(awsRegion))
-    throw new Error(`--aws-region ${awsRegion} is not an AWS region name such as ap-northeast-1.`);
+  // Stack role ARNs and console links assume the standard partition (`arn:aws:`).
+  if (
+    awsRegion !== undefined &&
+    !/^(?!(?:us-gov|cn|us-iso[a-z]?|eu-iso[a-z]?)-)[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/u.test(awsRegion)
+  )
+    throw new Error(
+      `--aws-region ${awsRegion} is not a region of the standard AWS partition, such as ap-northeast-1.`,
+    );
   return {
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
     hostname,
