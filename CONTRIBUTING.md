@@ -24,12 +24,20 @@ Read [AGENTS.md](./AGENTS.md) for platform boundaries. Use the
 for code ownership, or the [LLM task guide](./landing/llms-full.txt) to locate code
 by symptom. An AWS deployment is needed only when your change requires one.
 
-Build the host interfaces with `bun run build:host`, then run `make host
-HOST_ARGS="--no-build"`. Docker is required only for Docker problem execution.
+Build the host interfaces with `bun run build:host`, then run `make local
+LOCAL_ARGS="--no-build"`. Stop with `make down` to keep event and problem data. Docker is required only for Docker problem execution.
 Use `bun run test:host` for real HTTP/SQLite tests and `bun run test:authoring`
 for the retained pack tools. See [clean checkout verification](docs/host-build-verification.md).
-The old SaaS/Lite/local-play backend is retired; use [a pinned legacy release](docs/legacy-operations.md)
-when maintaining an existing installation.
+The old mode-specific launchers are retired. Cloud hosting selectively reuses the
+serverless backend without SaaS/SBT and is still under integration verification.
+Use [a pinned legacy release](docs/legacy-operations.md) for an existing legacy installation.
+
+The default `make help` separates hosting commands from these development commands:
+
+- `make install`: install dependencies without lifecycle scripts
+- `make test`: run root, authoring, host and workspace tests
+- `make lint`: check Markdown, prose, formatting and typed TypeScript lint
+- `make before-commit`: run lint, dead-code checks and the complete test suite
 
 ## Make one reviewable change
 

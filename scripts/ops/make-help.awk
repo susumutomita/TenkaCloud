@@ -26,12 +26,31 @@ BEGIN {
 }
 
 /^[a-z][a-zA-Z0-9_-]*:.*## / {
-  if (scope == "user" && $1 !~ /^(local|down|deploy|destroy)$/) next
   split($2, descriptions, " \\| ")
-  printf "  %-30s %s\n", $1, (lang == "ja" ? descriptions[2] : descriptions[1])
+  description = (lang == "ja" ? descriptions[2] : descriptions[1])
+  if (scope == "user") {
+    summaries[$1] = description
+    next
+  }
+  printf "  %-30s %s\n", $1, description
+}
+
+function show_commands(names, title, targets, count, i) {
+  printf "\n%s\n", title
+  count = split(names, targets, " ")
+  for (i = 1; i <= count; i++) {
+    if (!(targets[i] in summaries)) {
+      print "Missing documented Make target: " targets[i] > "/dev/stderr"
+      exit 2
+    }
+    printf "  %-30s %s\n", targets[i], summaries[targets[i]]
+  }
 }
 
 END {
-  if (scope == "user" && (lang == "en" || lang == "ja"))
-    print (lang == "ja" ? "\n開発用の検査: make help HELP_SCOPE=developer" : "\nDevelopment checks: make help HELP_SCOPE=developer")
+  if (scope == "user" && (lang == "en" || lang == "ja")) {
+    show_commands("local down deploy destroy", lang == "ja" ? "開催・停止" : "Hosting")
+    show_commands("install test lint before-commit", lang == "ja" ? "開発用" : "Development")
+    print (lang == "ja" ? "\n開発用の全コマンド: make help HELP_SCOPE=developer" : "\nAll development commands: make help HELP_SCOPE=developer")
+  }
 }
