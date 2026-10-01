@@ -3,7 +3,10 @@ import { DescribeExecutionCommand, SFNClient, StartExecutionCommand } from "@aws
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import { assertCommercialRegion } from "../../../cloud-hosting/regions.js";
-import type { DeploymentIdentity } from "../../control-data/domain/deployment-work.js";
+import {
+  DeploymentConflict,
+  type DeploymentIdentity,
+} from "../../control-data/domain/deployment-work.js";
 import { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
 import { identitySchema, serializeDispatchIdentity } from "./workflow.js";
 
@@ -18,7 +21,10 @@ export interface DispatchDependencies {
 }
 
 export interface RecoveryDependencies {
-  readonly repository: Pick<DynamoDeploymentWork, "getJob" | "finish" | "failPending">;
+  readonly repository: Pick<
+    DynamoDeploymentWork,
+    "getJob" | "finish" | "failPending" | "getTeardown" | "finishTeardown"
+  >;
   readonly stateMachineArn: string;
   readonly describeExecution: (input: { readonly executionArn: string }) => Promise<{
     readonly executionArn?: string;
@@ -69,10 +75,40 @@ async function verifiedTerminalExecution(value: unknown, deps: RecoveryDependenc
   return { identity, executionArn: execution.executionArn, status: execution.status };
 }
 
+async function recoverTeardownExecution(
+  execution: NonNullable<Awaited<ReturnType<typeof verifiedTerminalExecution>>>,
+  deps: RecoveryDependencies,
+) {
+  const { identity } = execution;
+  let marker: Awaited<ReturnType<RecoveryDependencies["repository"]["getTeardown"]>>;
+  try {
+    marker = await deps.repository.getTeardown(identity);
+  } catch (error) {
+    if (error instanceof DeploymentConflict) return { outcome: "stale" };
+    throw error;
+  }
+  if (!marker) return { outcome: "stale" };
+  if (marker.status === "DELETED" || marker.status === "FAILED")
+    return { outcome: "already_terminal" };
+  if (marker.owner && marker.owner !== execution.executionArn) return { outcome: "stale" };
+  await deps.repository.finishTeardown(
+    identity,
+    marker.owner,
+    {
+      status: "FAILED",
+      failureReason: `workflow_${execution.status.toLowerCase()}`,
+      ...(marker.stackId ? { stackId: marker.stackId } : {}),
+    },
+    new Date((deps.now ?? Date.now)()).toISOString(),
+  );
+  return { outcome: marker.owner ? "failed_owned" : "failed_pending" };
+}
+
 export async function recoverTerminalExecution(value: unknown, deps: RecoveryDependencies) {
   const execution = await verifiedTerminalExecution(value, deps);
   if (!execution) return { outcome: "ignored" };
   const { identity } = execution;
+  if (identity.operation === "delete") return recoverTeardownExecution(execution, deps);
   const job = await deps.repository.getJob(identity.jobId);
   if (
     !job ||
@@ -101,7 +137,9 @@ export async function recoverTerminalExecution(value: unknown, deps: RecoveryDep
 
 export function dispatchExecutionName(value: DeploymentIdentity): string {
   const identity = identitySchema.parse(value);
-  return `tc-${identity.jobId}-${identity.attempt}`;
+  return identity.operation === "delete"
+    ? `tc-delete-${identity.jobId}-${identity.attempt}-${identity.generation}`
+    : `tc-${identity.jobId}-${identity.attempt}`;
 }
 
 async function dispatchOne(
@@ -114,6 +152,7 @@ async function dispatchOne(
       teamId: value.teamId,
       jobId: value.jobId,
       attempt: value.attempt,
+      ...(value.operation ? { operation: value.operation, generation: value.generation } : {}),
     });
     const name = dispatchExecutionName(identity);
     const result = await deps.startExecution({

@@ -81,7 +81,7 @@
 </tr>
 <tr>
 <td>Docker 問題内の terminal</td>
-<td>15 問が宣言。synthetic shell の HTTP/WebSocket 11 tests・96 assertions は成功。実 Docker exec と全経路のブラウザ検証は未確認</td>
+<td>15 問が宣言。実 PostgreSQL terminal の exec、3 checkpoints、チーム分離、再起動を確認。他の terminal 問題には追加の代表経路確認が必要</td>
 </tr>
 <tr>
 <td>プロセス内 Cryptography Battle</td>
@@ -89,11 +89,11 @@
 </tr>
 <tr>
 <td>AWS CloudFormation</td>
-<td>hello-world と hello-world-battle の確認対象 adapter。実 AWS は別途承認したリハーサル</td>
+<td>クラウド開催専用。明示設定した hello-world の flag 経路を接続。cloud Battle と参加者 AWS アクセスは未完成。実 AWS は別途リハーサル</td>
 </tr>
 <tr>
-<td>Turso を使うクラウド基盤</td>
-<td>対応中。make deploy と make destroy は未実装</td>
+<td>Lambda/DynamoDB のクラウド基盤</td>
+<td>基盤と永続化した処理を実装。make deploy/destroy と非 AWS 問題の cloud runner は未完成</td>
 </tr>
 <tr>
 <td>外部 pack、Azure、GCP、Sakura、その他の採点方式</td>

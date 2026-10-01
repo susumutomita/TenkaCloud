@@ -66,6 +66,51 @@ export const jobSchema = deploymentSchema.extend({
   failureReason: z.string().optional(),
   publicOutputs: z.record(z.string()).optional(),
 });
+const operationIdentity = {
+  eventId: id,
+  teamId: id,
+  jobId: id,
+  attempt: z.number().int().positive(),
+};
+export const creationSchema = z.object({
+  ...operationIdentity,
+  state: z.enum(["NOT_STARTED", "REQUESTED", "ACKNOWLEDGED"]),
+  owner: z.string().optional(),
+  leaseUntil: z.number().finite(),
+  stackId: z.string().optional(),
+  fingerprint: z.string().optional(),
+});
+export const teardownSchema = z.object({
+  ...operationIdentity,
+  generation: z.number().int().positive(),
+  status: z.enum(["PENDING", "IN_PROGRESS", "FAILED", "DELETED"]),
+  owner: z.string().optional(),
+  fingerprint: z.string().optional(),
+  requestedAt: z.string(),
+  updatedAt: z.string(),
+  failureReason: z.string().optional(),
+  stackId: z.string().optional(),
+});
+export function creationKey(jobId: string, attempt: number) {
+  return { ...jobKey(jobId), SK: `CREATE#${attempt}` };
+}
+export function teardownKey(jobId: string) {
+  return { ...jobKey(jobId), SK: "TEARDOWN" };
+}
+export function teardownDispatchKey(jobId: string, attempt: number, generation: number) {
+  return { PK: "DISPATCH#PENDING", SK: `${id.parse(jobId)}#${attempt}#DELETE#${generation}` };
+}
+export function closingEventGuard(table: string, eventId: string): Write {
+  return {
+    ConditionCheck: {
+      TableName: table,
+      Key: eventKey(eventId),
+      ConditionExpression: "#status = :closing",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: { ":closing": "TEARDOWN" },
+    },
+  };
+}
 export const receiptSchema = z.object({ requestHash: z.string(), response: z.unknown() });
 export function jobKey(jobId: string) {
   return { PK: `DEPLOYMENT#${id.parse(jobId)}`, SK: "META" };

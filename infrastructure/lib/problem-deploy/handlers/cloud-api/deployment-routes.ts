@@ -102,6 +102,8 @@ async function deploy(context: Context, options: RouteOptions) {
   const now = options.now();
   const actor = requireOrganizer(context, ["Admin", "Operator"], options.organizerAuth, now);
   const event = await currentEvent(options, context.req.param("eventId") ?? "");
+  if (!["DRAFT", "DEPLOYING", "READY"].includes(event.status))
+    throw new ApiError(409, "event_closed");
   const text = await context.req.text();
   if (Buffer.byteLength(text, "utf8") > 64 * 1024) throw new ApiError(400, "request_too_large");
   let json: unknown;
@@ -327,9 +329,39 @@ async function submit(context: Context, options: RouteOptions) {
   });
   return context.json(outcome);
 }
+async function teardown(context: Context, options: RouteOptions) {
+  const now = options.now();
+  requireOrganizer(context, ["Admin", "Operator"], options.organizerAuth, now);
+  const event = await currentEvent(options, context.req.param("eventId") ?? "");
+  const at = new Date(Math.max(now, Date.parse(event.updatedAt) + 1)).toISOString();
+  if ((await options.work.closeEvent(event, at)) === "archived")
+    return context.json({
+      eventId: event.eventId,
+      enqueued: 0,
+      skipped: event.teardownExpected ?? 0,
+      failed: 0,
+    });
+  const teams = await options.repository.listTeamsByEvent(event.eventId);
+  const jobs: DeploymentJob[] = [];
+  await boundedMap(teams, async (team) => {
+    jobs.push(...(await options.work.listTargetJobs(event.eventId, team.teamId)));
+  });
+  await options.work.setTeardownExpected(event.eventId, jobs.length);
+  const result = { eventId: event.eventId, enqueued: 0, skipped: 0, failed: 0 };
+  await boundedMap(jobs, async (job) => {
+    try {
+      result[await options.work.requestTeardown(job, at)]++;
+    } catch {
+      result.failed++;
+    }
+  });
+  await options.work.archiveTeardown(event.eventId);
+  return context.json(result, 202);
+}
 /** Existing event-deploy/participant-flag wire paths; no tenant claims or process-local locks. */
 export function registerCloudDeploymentRoutes(app: Hono, options: RouteOptions): void {
   app.post("/events/:eventId/deploy", (context) => deploy(context, options));
+  app.delete("/events/:eventId", (context) => teardown(context, options));
   app.post("/portal/me/submit-flag", (context) => submit(context, options));
   app.get("/portal/me/score-events", async (context) => {
     const team = await options.repository.authenticateTeam(

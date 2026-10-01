@@ -12,9 +12,12 @@ import type {
 import {
   type CloudRunnerDependencies,
   createDeployment,
+  type DeletionObservation,
   type DeploymentObservation,
   type DeploymentReference,
+  deleteDeployment,
   deploymentIdentity,
+  describeDeletion,
   describeDeployment,
   parseDeploymentInput,
 } from "./index.js";
@@ -26,8 +29,11 @@ export const identitySchema = z
     teamId: id,
     jobId: id,
     attempt: z.number().int().positive().max(1_000_000),
+    operation: z.literal("delete").optional(),
+    generation: z.number().int().positive().max(1_000_000).optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => (value.operation === "delete") === (value.generation !== undefined));
 const stateSchema = z
   .object({
     identity: identitySchema,
@@ -41,6 +47,7 @@ const stateSchema = z
       .object({ stackId: z.string().max(2048), fingerprint: z.string().regex(/^[a-f0-9]{64}$/u) })
       .strict()
       .optional(),
+    deleteSubmitted: z.boolean().optional(),
     failureCode: z
       .enum(["worker_failed", "poll_limit_exceeded", "stack_failed", "flag_output_missing"])
       .optional(),
@@ -56,7 +63,18 @@ export interface DeploymentArtifacts {
 export type ArtifactResolver = (job: DeploymentJob) => Promise<DeploymentArtifacts>;
 export type WorkflowRepository = Pick<
   DynamoDeploymentWork,
-  "getJob" | "getConnection" | "begin" | "finish"
+  | "getJob"
+  | "getConnection"
+  | "begin"
+  | "finish"
+  | "getCreation"
+  | "reserveCreation"
+  | "recordCreation"
+  | "getTeardown"
+  | "beginTeardown"
+  | "prepareDeletion"
+  | "recordTeardownReference"
+  | "finishTeardown"
 >;
 export interface WorkflowDependencies {
   readonly repository: WorkflowRepository;
@@ -103,7 +121,11 @@ async function ownedJob(state: WorkflowState, deps: WorkflowDependencies, claime
   return job;
 }
 
-async function guardRemote(job: DeploymentJob, deps: WorkflowDependencies): Promise<void> {
+async function guardRemote(
+  job: DeploymentJob,
+  deps: WorkflowDependencies,
+  cleanup = false,
+): Promise<void> {
   await deps.authorizeJob(job);
   const connection = await deps.repository.getConnection(job.eventId, job.teamId);
   if (
@@ -113,7 +135,7 @@ async function guardRemote(job: DeploymentJob, deps: WorkflowDependencies): Prom
     job.connection.teamId !== job.teamId ||
     job.awsAccountId !== job.connection.accountId ||
     job.region !== job.connection.region ||
-    job.expiresAt <= Math.floor((deps.now ?? Date.now)() / 1000)
+    (!cleanup && job.expiresAt <= Math.floor((deps.now ?? Date.now)() / 1000))
   )
     throw new CloudWorkflowError();
 }
@@ -190,6 +212,110 @@ function selectPublicOutputs(
   return selected;
 }
 
+async function teardownState(state: WorkflowState, deps: WorkflowDependencies, claimed = true) {
+  const marker = await deps.repository.getTeardown(state.identity);
+  if (!marker || (claimed && marker.owner !== state.owner)) throw new CloudWorkflowError();
+  return marker;
+}
+function terminalTeardown(state: WorkflowState, status: string): WorkflowState | undefined {
+  if (status === "DELETED") return { ...state, phase: "ready" };
+  if (status === "FAILED") return { ...state, phase: "failed" };
+  return undefined;
+}
+function deletionState(state: WorkflowState, result: DeletionObservation): WorkflowState {
+  let phase: WorkflowState["phase"] = "pending";
+  if (result.phase === "deleted") phase = "ready";
+  else if (result.phase === "failed") phase = "failed";
+  return {
+    ...state,
+    phase,
+    deleteSubmitted: result.phase === "pending" || (state.deleteSubmitted ?? false),
+    ...(result.reference ? { reference: result.reference } : {}),
+  };
+}
+async function runTeardown(
+  state: WorkflowState,
+  deps: WorkflowDependencies,
+): Promise<WorkflowState> {
+  const marker = await teardownState(state, deps);
+  const done = terminalTeardown(state, marker.status);
+  if (done) return done;
+  const job = await ownedJob(state, deps, false);
+  await guardRemote(job, deps, true);
+  if (
+    !(await deps.repository.prepareDeletion(state.identity, state.owner, (deps.now ?? Date.now)()))
+  )
+    return { ...state, phase: "pending" };
+  const { input } = await runnerInput(job, deps);
+  const latest = await ownedJob(state, deps, false);
+  if (latest.status !== "DELETING") throw new CloudWorkflowError();
+  await guardRemote(latest, deps, true);
+  const creation = await deps.repository.getCreation(state.identity);
+  const stackId = marker.stackId ?? creation?.stackId ?? job.stackId;
+  const reference =
+    state.reference ??
+    (stackId
+      ? {
+          stackId,
+          fingerprint:
+            marker.fingerprint ?? creation?.fingerprint ?? deploymentIdentity(input).fingerprint,
+        }
+      : undefined);
+  const result =
+    state.deleteSubmitted && reference
+      ? await describeDeletion(input, reference, deps.runner, true)
+      : await deleteDeployment(
+          input,
+          reference,
+          deps.runner,
+          `tc-${state.identity.jobId}-${state.identity.attempt}-${state.identity.generation}`,
+          Boolean(reference) || creation?.state === "NOT_STARTED",
+          (resolved) =>
+            deps.repository.recordTeardownReference(state.identity, state.owner, resolved),
+        );
+  return deletionState(state, result);
+}
+async function failTeardown(
+  state: WorkflowState,
+  deps: WorkflowDependencies,
+): Promise<WorkflowState> {
+  const marker = await teardownState(state, deps, false);
+  if (marker.owner && marker.owner !== state.owner) throw new CloudWorkflowError();
+  const done = terminalTeardown(state, marker.status);
+  if (done) return done;
+  await deps.repository.finishTeardown(
+    state.identity,
+    marker.owner,
+    {
+      status: "FAILED",
+      failureReason: state.failureCode ?? "worker_failed",
+      ...(state.reference ? { stackId: state.reference.stackId } : {}),
+    },
+    new Date((deps.now ?? Date.now)()).toISOString(),
+  );
+  return { ...state, phase: "failed" };
+}
+async function finishTeardownState(
+  state: WorkflowState,
+  deps: WorkflowDependencies,
+): Promise<WorkflowState> {
+  if (state.phase === "failed")
+    return failTeardown({ ...state, failureCode: "stack_failed" }, deps);
+  if (state.phase !== "ready") throw new CloudWorkflowError();
+  const checked = await runTeardown(state, deps);
+  if (checked.phase !== "ready") throw new CloudWorkflowError();
+  await deps.repository.finishTeardown(
+    state.identity,
+    state.owner,
+    {
+      status: "DELETED",
+      ...(checked.reference ? { stackId: checked.reference.stackId } : {}),
+    },
+    new Date((deps.now ?? Date.now)()).toISOString(),
+  );
+  return checked;
+}
+
 export function createWorkflowHandlers(deps: WorkflowDependencies) {
   const at = () => new Date((deps.now ?? Date.now)()).toISOString();
   const wrap =
@@ -202,6 +328,13 @@ export function createWorkflowHandlers(deps: WorkflowDependencies) {
       }
     };
   const claim = wrap(async (state) => {
+    if (state.identity.operation === "delete") {
+      const marker = await teardownState(state, deps, false);
+      const done = terminalTeardown(state, marker.status);
+      if (done) return done;
+      await deps.repository.beginTeardown(state.identity, state.owner, at());
+      return { ...state, phase: "pending" };
+    }
     const job = await ownedJob(state, deps, false);
     if (job.owner === state.owner) {
       const done = completedState(state, job);
@@ -214,14 +347,20 @@ export function createWorkflowHandlers(deps: WorkflowDependencies) {
     return { ...state, phase: "pending" };
   });
   const create = wrap(async (state) => {
+    if (state.identity.operation === "delete") return runTeardown(state, deps);
     const job = await ownedJob(state, deps);
     const done = completedState(state, job);
     if (done) return done;
     const { input } = await prepareRemote(state, deps);
-    return safeObservation(state, await createDeployment(input, deps.runner));
+    await deps.repository.reserveCreation(state.identity, state.owner, (deps.now ?? Date.now)());
+    const result = await createDeployment(input, deps.runner);
+    await deps.repository.recordCreation(state.identity, state.owner, result.reference);
+    return safeObservation(state, result);
   });
   const describe = wrap(async (state) => {
     if (state.pollCount >= 120) throw new CloudWorkflowError();
+    if (state.identity.operation === "delete")
+      return runTeardown({ ...state, pollCount: state.pollCount + 1 }, deps);
     const job = await ownedJob(state, deps);
     const done = completedState(state, job);
     if (done) return done;
@@ -230,6 +369,7 @@ export function createWorkflowHandlers(deps: WorkflowDependencies) {
     return safeObservation({ ...state, pollCount: state.pollCount + 1 }, result);
   });
   const fail = wrap(async (state) => {
+    if (state.identity.operation === "delete") return failTeardown(state, deps);
     const job = await ownedJob(state, deps);
     const done = completedState(state, job);
     if (done) return done;
@@ -247,6 +387,7 @@ export function createWorkflowHandlers(deps: WorkflowDependencies) {
     return { ...state, phase: "failed" };
   });
   const finish = wrap(async (state) => {
+    if (state.identity.operation === "delete") return finishTeardownState(state, deps);
     const job = await ownedJob(state, deps);
     const done = completedState(state, job);
     if (done) return done;

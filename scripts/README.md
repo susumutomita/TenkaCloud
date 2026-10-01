@@ -3,6 +3,7 @@
 | Directory or command | Purpose |
 | --- | --- |
 | `local-host/local.ts` | Managed local start/down, controller ownership and state-preserving shutdown |
+| `cloud-hosting/` | Current Lambda/DynamoDB CLI preparation and ownership checks; full public deploy/destroy remains incomplete |
 | `local-host/` | Unified event/team HTTP server, SQLite state, authentication and exercise adapters |
 | `local-host/container/` | Compose policy, metadata, verifier/checkpoint scoring and workbench helpers |
 | `lib/` | Shared helpers and required AWS ExternalId boundary |
@@ -29,13 +30,16 @@ Existing events retain their legacy lifecycle.
 
 `make deploy` and `make destroy` are the cloud command names, but currently exit
 with an unimplemented error and do not change resources. They are not aliases for
-AWS exercise deployment. Cloud Turso integration and platform placement remain
-in progress. The old host launch target has been removed.
+AWS exercise deployment. Lambda/DynamoDB onboarding and coordinated platform
+teardown remain in progress. The complete `cloud-pipeline.yaml` launcher uses its
+fixed historical source refs. The old host launch target has been removed.
 
 Use `bun run pack --help` for authoring. Retained legacy activation records do
-not add a pack to the event catalog. Generic Docker catalog/workbench restoration
-is in progress. Synthetic-shell terminal HTTP/WebSocket tests pass (11 tests,
-96 assertions); actual Docker exec and full real Docker/browser verification are incomplete.
+not add a pack to the event catalog. The generic catalog/workbench exposes 106 local definitions and 15 terminal
+declarations. Representative real Docker/browser checks cover SQL and PostgreSQL
+terminal checkpoints, team separation and preserved work after restart; they do
+not prove complete play-throughs of every problem. AWS-service problems are
+cloud-only and cannot be enabled through the local entrypoint.
 
 For existing SaaS/Lite deployments, use the [pinned legacy scripts](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/scripts/README.md)
 and the version that created the environment. There is no automatic migration.

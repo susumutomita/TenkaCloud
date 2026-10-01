@@ -59,6 +59,6 @@ export function assertRunnerChange(output: string, mode: "up" | "down", configur
     );
   if (mode === "down")
     throw new Error(
-      `Runner-enabled stack ${stack.StackId} cannot be destroyed by this command yet. Stop acceptance, drain pending and active executions, then review owned problem stacks and retained data, source-bundle and execution-artifact buckets before coordinated platform teardown. No resources were removed.`,
+      `Runner-enabled stack ${stack.StackId} cannot be destroyed by this command yet. Stop acceptance, drain pending and active executions, then review owned problem stacks and retained data, CDK asset and execution-artifact buckets before coordinated platform teardown. No resources were removed.`,
     );
 }

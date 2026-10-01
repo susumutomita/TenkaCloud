@@ -116,9 +116,17 @@ export class CloudDeploymentPipeline extends Construct {
       [props.deployments.tableArn],
     );
     grant(workers.claim, ["dynamodb:ConditionCheckItem"], [props.events.tableArn]);
-    for (const worker of [workers.finish, workers.fail])
-      grant(worker, ["dynamodb:PutItem"], [props.deployments.tableArn]);
-    grant(workers.finish, ["dynamodb:UpdateItem"], [props.teams.tableArn]);
+    for (const worker of [workers.create, workers.finish, workers.fail])
+      grant(worker, ["dynamodb:PutItem", "dynamodb:UpdateItem"], [props.deployments.tableArn]);
+    grant(workers.describe, ["dynamodb:UpdateItem"], [props.deployments.tableArn]);
+    grant(workers.fail, ["dynamodb:DeleteItem"], [props.deployments.tableArn]);
+    for (const worker of [workers.create, workers.describe, workers.finish])
+      grant(
+        worker,
+        ["dynamodb:ConditionCheckItem"],
+        [props.events.tableArn, props.deployments.tableArn],
+      );
+    grant(workers.finish, ["dynamodb:UpdateItem"], [props.events.tableArn]);
     for (const worker of [workers.create, workers.describe, workers.finish]) {
       grant(worker, ["sts:AssumeRole"], [...props.allowedRoleArns]);
       grant(worker, ["ssm:GetParameter"], [...props.externalIdParameterArns]);
@@ -161,14 +169,8 @@ export class CloudDeploymentPipeline extends Construct {
       resultPath: "$.failureCode",
     }).next(failureSave);
     const exhausted = new Pass(this, "PollLimitExceeded", {
-      parameters: {
-        "identity.$": "$.identity",
-        "owner.$": "$.owner",
-        "pollCount.$": "$.pollCount",
-        "reference.$": "$.reference",
-        phase: "failed",
-        failureCode: "poll_limit_exceeded",
-      },
+      result: Result.fromString("poll_limit_exceeded"),
+      resultPath: "$.failureCode",
     }).next(failureSave);
     const claim = invoke("ClaimDeployment", workers.claim);
     const create = invoke("CreateDeployment", workers.create);

@@ -532,6 +532,21 @@ describe("host registration feature and permissions", () => {
     expect(api.put).not.toHaveBeenCalled();
   });
 
+  it("does not toggle the host feature after its authenticated API client disappears", async () => {
+    const api = makeApi();
+    api.get.mockResolvedValue({ ...summary, featureEnabled: true, canConfigure: true });
+    const view = fixture({ api, config: { mode: "local-host" } });
+    await screen.findByText("registration.feature_on");
+    api.get.mockClear();
+
+    view.update({ apiClient: null });
+    fireEvent.click(screen.getByRole("button", { name: "registration.disable_feature" }));
+
+    expect(api.put).not.toHaveBeenCalled();
+    expect(api.get).not.toHaveBeenCalled();
+    expect(screen.getByText("registration.feature_on")).toBeInTheDocument();
+  });
+
   it("does not refresh registration after leaving while the feature toggle is pending", async () => {
     const api = makeApi();
     api.get.mockResolvedValue({

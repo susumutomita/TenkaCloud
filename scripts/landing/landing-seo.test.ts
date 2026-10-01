@@ -150,6 +150,7 @@ describe("documentation home by role", () => {
     expect(author).toContain("/docs/assets/problem-author-flow.ja.svg");
     expect(read("landing/docs/assets/problem-author-flow.ja.svg")).toContain("<title");
     const settings = read("landing/docs/reference/lite-settings/index.html");
+    expect(settings).toContain("SSM");
     expect(settings).toContain("16–128");
     expect(settings).toContain("ExternalId");
     for (const page of [settings, read("landing/docs/reference/lite-messages/index.html")]) {
@@ -157,6 +158,20 @@ describe("documentation home by role", () => {
       expect(page).toContain("/docs/getting-started/");
       expect(page).toContain("旧");
     }
+  });
+  it("keeps current local/cloud guidance consistent without relabeling the historical setup", () => {
+    for (const suffix of ["index.html", "index.en.html"]) {
+      for (const page of ["getting-started", "concepts/architecture", "reference/runtime-matrix"]) {
+        const document = read(`landing/docs/${page}/${suffix}`);
+        expect(document).toContain("Lambda");
+        expect(document).toContain("DynamoDB");
+        expect(document).not.toContain("Cloud Turso");
+        expect(document).not.toContain("クラウド用 Turso");
+      }
+    }
+    expect(read("README.md")).not.toContain("CDK/Lambda\nplatform deployment are retired");
+    expect(read("README.ja.md")).not.toContain("CDK/Lambda による基盤配置は廃止");
+    expect(read("docs/local-hosting.md")).toContain("AWS-service problems belong to cloud hosting");
   });
 });
 

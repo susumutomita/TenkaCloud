@@ -56,6 +56,8 @@ const eventSchema = z.object({
   endsAt: z.string().optional(),
   scoringLocked: z.boolean().optional(),
   scoreboardFreezeMinutes: z.number().optional(),
+  teardownExpected: z.number().int().nonnegative().optional(),
+  teardownCompleted: z.number().int().nonnegative().optional(),
 });
 export const deploymentSchema = z.object({
   jobId: z.string().regex(ID),
@@ -80,6 +82,8 @@ export const deploymentSchema = z.object({
   scoring: z.object({ kind: z.literal("flag"), points: z.number() }).optional(),
   flagSubmitted: z.boolean().optional(),
   failureReason: z.string().optional(),
+  teardownStatus: z.enum(["PENDING", "IN_PROGRESS", "FAILED", "DELETED"]).optional(),
+  teardownFailureReason: z.string().optional(),
   createdAt: z.string().optional(),
 });
 export function eventKey(eventId: string) {

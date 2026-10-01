@@ -137,3 +137,35 @@ it("preserves displayed settings when a provider mutation fails and labels missi
   expect(screen.getByText("old-subject")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Save IdP settings" })).toBeEnabled();
 });
+
+it("disables every SAML mutation if the API session disappears after loading settings", async () => {
+  const f = fixture();
+  f.settings.provider = provider;
+  f.settings.identities = [
+    { id: "identity-id", issuer: provider.issuer, subject: "old-subject", userId: "existing-user" },
+  ];
+  const view = render(<LocalHostSamlSettings config={config} />);
+  await screen.findByText("old-subject");
+  fireEvent.change(screen.getByLabelText("Existing organizer"), {
+    target: { value: "existing-user" },
+  });
+  fireEvent.change(screen.getByLabelText("Persistent NameID"), {
+    target: { value: "new-subject" },
+  });
+  for (const name of ["Save IdP settings", "Link NameID", "Unlink"])
+    expect(screen.getByRole("button", { name })).toBeEnabled();
+
+  f.get.mockClear();
+  mocks.api.mockReturnValue(null);
+  view.rerender(<LocalHostSamlSettings config={config} />);
+  for (const name of ["Save IdP settings", "Link NameID", "Unlink"]) {
+    const button = screen.getByRole("button", { name });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+  }
+  expect(f.get).not.toHaveBeenCalled();
+  expect(f.put).not.toHaveBeenCalled();
+  expect(f.post).not.toHaveBeenCalled();
+  expect(f.del).not.toHaveBeenCalled();
+  expect(screen.getByText("old-subject")).toBeInTheDocument();
+});

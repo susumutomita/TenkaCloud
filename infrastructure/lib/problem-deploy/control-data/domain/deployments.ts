@@ -21,5 +21,7 @@ export interface DeploymentRecord {
   readonly scoring?: { readonly kind: "flag"; readonly points: number };
   readonly flagSubmitted?: boolean;
   readonly failureReason?: string;
+  readonly teardownStatus?: "PENDING" | "IN_PROGRESS" | "FAILED" | "DELETED";
+  readonly teardownFailureReason?: string;
   readonly createdAt?: string;
 }

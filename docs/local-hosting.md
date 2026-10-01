@@ -2,7 +2,7 @@
 
 Local hosting runs a competition on the organizer's computer through `make local`.
 The former `make local` individual-practice entry point and its login flow are
-retired from this host-only source tree. Existing installations should follow
+retired as a separate backend in this integration candidate. Existing installations should follow
 their [pinned legacy release](legacy-operations.md). The host console uses local
 organizer accounts. The host key creates the first Admin once. Participants sign
 in with the team keys issued for their event.
@@ -86,13 +86,12 @@ After signing in:
 
 1. **Create event**: name the event, set the team count and choose the problem.
    Only problems this host can run are selectable; the others are listed as not
-   supported locally. For Docker-only and Battle events there is no AWS account to choose;
-   cloud problems require a verified registered account per team. The dialog after
+   supported locally. Local Docker and Battle events do not select an AWS account. The dialog after
    creation shows each team's key and invitation link once; keys stay copyable in
    the **Teams** tab.
 2. **Prepare**: choose **Deploy now** in that dialog or the **Schedule** tab.
    New Docker jobs receive exact durable port maps but stay stopped. Native Battle
-   and AWS preparation keep their existing behavior. Docker port reservations are
+   preparation keeps its existing behavior. Docker port reservations are
    retained while stopped so resume never recreates a played environment merely
    to move its ports. Only active jobs lease an exercise-gateway slot.
 3. **Start**: in the **Schedule** tab, choose **Start now** (or pick a start time) and,
@@ -104,45 +103,27 @@ for on-demand exercises. Admission errors do not stop another environment.
 A played generation is always resumed in place; a first start that never became
 playable can clean up its owned partial resources before retrying.
 
-Console features that still need tenant infrastructure are not offered:
+Cloud-only features that are not implemented by this local host are not offered:
 capacity monitoring, scheduled deploy and automatic teardown. Their navigation entries and
 tabs are hidden; opening such a URL shows an explanation instead of a failing
 request.
 
 ### Disruptions (Red Team)
 
-The Disruptions tab lists declarations retained with the event's problem definition.
-With AWS configured, organizers can submit an immediate, scheduled or recurring
-SSM disruption for all teams, selected teams or a persisted random selection.
-The history shows each team's command outcome and skipped or uncertain execution.
-Request IDs reject conflicting payloads; a transport retry does not create a new fire.
+The retained disruption engine and its tests cover SSM inject/revert ownership,
+scheduled work, uncertain outcomes and durable cleanup. This is not an available
+AWS execution feature of `make local`: the current entrypoint does not configure
+AWS clients, and `hello-world-battle` is not selectable for local hosting.
 
-SQLite stores the request, every due time, the target deployment generation and
-resolved inject/revert commands before sending anything. Cancellation and event end
-stop new injections while retaining cleanup work. Another disruption cannot use the
-same resource until the prior revert command finishes. The host never redirects
-old cleanup to a replacement stack after redeployment.
+AWS disruption execution and its cloud UI/API wiring remain part of cloud-hosting
+acceptance. Retaining these modules or displaying authored fault declarations does
+not make those actions executable. Unsupported declarations must not be reported
+as successful fires.
 
-Keep the host running through the revert deadline. A stopped host cannot guarantee
-on-time recovery. On restart, overdue injections are skipped and pending cleanup
-is polled first. An interrupted or timed-out send is discovered by its command
-identity and exact targets; it is never blindly repeated. If SSM cannot establish
-what executed, history keeps `inject_unknown` or `recovery_required`. Inspect the
-original account, instance IDs and SSM command history before manual recovery.
-Uncertain executions continue to reserve those resources.
-
-`revert_command_completed` means SSM finished the declared revert command. It does
-not prove that the frontend is healthy, especially for declarations using
-`|| true`. Check frontend readiness separately; participant-supplied URLs are not
-recovery evidence. The host supports SSM declarations with explicit reverts up to
-one hour. Lambda/CloudFormation actions, scoring effects and declarations without
-an action are reported as unsupported rather than recorded as successful fires.
-
-Execution records are mandatory local operational state, separate from the optional
-organizer audit log. The reviewed `hello-world` challenge declares no faults.
-`hello-world-battle` declares the `frontend-down` SSM disruption and is selectable
-with AWS configured. Its fixed EC2 host hint is checked for initial readiness and
-recorded separately from the participant's endpoint observations.
+For an event created by an earlier AWS-enabled host revision, retain that exact
+revision and its private state for reviewed cleanup. Pending SSM revert work must
+not be redirected to a new account or replacement stack. See
+[AWS problems use cloud hosting](#aws-problems-use-cloud-hosting).
 
 ### Play Cryptography Battle
 
@@ -191,12 +172,9 @@ advances; scores for locked teams are skipped and are not awarded retroactively.
 Invalid stored gate settings close participant access until an organizer repairs
 them; the host and admin settings remain available.
 
-This gate controls host APIs and newly issued access. It does not revoke AWS STS
-credentials or federation sessions already issued. The participant ViewerRole is
-shared across problems in a team's AWS account; its IAM policy may allow access
-to another locked problem's resources. Gate enforcement is therefore not an AWS
-resource-isolation boundary. Use separate accounts or narrower IAM policies if
-resource isolation between problems is required.
+This gate controls local host APIs and newly issued exercise access. Cloud AWS
+resource isolation requires its own account/role policy review. A host progression
+gate is not proof that already-issued AWS sessions have been revoked.
 
 ### One team's environment
 
@@ -235,7 +213,7 @@ stop the event or discard its results.
 Subsequent runs may reuse the compiled interfaces:
 
 ```sh
-bun start --no-build
+make local LOCAL_ARGS="--no-build"
 ```
 
 Rebuild after changing source code. To build without starting servers:
@@ -251,11 +229,8 @@ portal and authorized exercise gateways on the organizer's private network,
 select an explicit private IPv4 address of that computer. For example:
 
 ```sh
-bun start --lan 192.168.1.20 --unsafe-lan
+make local LOCAL_ARGS="--lan 192.168.1.20 --unsafe-lan"
 ```
-
-With `make local`, pass the same options as
-`make local LOCAL_ARGS="--lan 192.168.1.20 --unsafe-lan"`.
 
 The address above is an example, not an automatically discovered address. This
 mode uses unencrypted HTTP. The explicit `--unsafe-lan` acknowledgement is

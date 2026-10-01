@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { type CloudDeploymentInput, deploymentIdentity, parseDeploymentInput } from "./input.js";
 import type {
   AssumedCredentials,
@@ -38,6 +39,12 @@ export interface DeploymentObservation {
 
 export interface CreateDeploymentResult extends DeploymentObservation {
   readonly operation: "created" | "existing";
+}
+
+export interface DeletionObservation {
+  readonly reference?: DeploymentReference;
+  readonly phase: "waiting" | "pending" | "deleted" | "failed";
+  readonly stackStatus: string;
 }
 
 /** Ownership includes the complete immutable request, not just a display name or team slug. */
@@ -157,7 +164,7 @@ async function lookupStack(
     if (stackAbsent(error, name)) return undefined;
     throw error;
   }
-  if (result.Stacks?.length !== 1) {
+  if (result.Stacks?.length !== 1 || !result.Stacks[0]) {
     throw new Error("CloudFormation returned an ambiguous stack description");
   }
   return result.Stacks[0];
@@ -266,6 +273,134 @@ export async function describeDeployment(
   if (!stack) throw new Error("Previously created CloudFormation stack is missing");
   if (stack.StackId !== stackId) throw new Error("CloudFormation replaced the deployment stack");
   return observation(input, stack);
+}
+
+function boundDeletionReference(
+  input: CloudDeploymentInput,
+  reference: DeploymentReference,
+): DeploymentReference {
+  const stackId = assertStackId(input, reference.stackId);
+  const fingerprint = deploymentIdentity(input).fingerprint;
+  if (reference.fingerprint !== fingerprint) {
+    throw new Error("Deployment reference does not match the immutable input");
+  }
+  return Object.freeze({ stackId, fingerprint });
+}
+
+function deletionObservation(
+  reference: DeploymentReference | undefined,
+  phase: DeletionObservation["phase"],
+  stackStatus: string,
+): DeletionObservation {
+  return Object.freeze({ ...(reference ? { reference } : {}), phase, stackStatus });
+}
+
+const deletableStatuses = new Set([
+  "CREATE_COMPLETE",
+  "CREATE_FAILED",
+  "ROLLBACK_COMPLETE",
+  "ROLLBACK_FAILED",
+  "DELETE_FAILED",
+]);
+
+async function lookupOwnedDeletionStack(
+  input: CloudDeploymentInput,
+  reference: DeploymentReference | undefined,
+  cfn: CloudFormationTransport,
+  allowAbsent: boolean,
+) {
+  const stack = await lookupStack(cfn, reference?.stackId ?? deploymentIdentity(input).stackName);
+  if (!stack) {
+    // A lost CreateStack response is not evidence that no stack was created. Without a
+    // recorded ARN the caller must prove, durably, that remote creation was never started.
+    if (!allowAbsent) {
+      throw new Error("CloudFormation stack absence is not confirmed for this teardown");
+    }
+    return { phase: "absent" as const, reference };
+  }
+  const stackId = assertOwnership(input, stack);
+  if (reference && stackId !== reference.stackId) {
+    throw new Error("CloudFormation replaced the deployment stack");
+  }
+  return {
+    phase: "present" as const,
+    reference:
+      reference ?? Object.freeze({ stackId, fingerprint: deploymentIdentity(input).fingerprint }),
+    stack,
+  };
+}
+
+/** Delete only the exact owned create attempt. Creation in progress must converge first. */
+export async function deleteDeployment(
+  value: unknown,
+  reference: DeploymentReference | undefined,
+  deps: CloudRunnerDependencies,
+  requestToken: string,
+  allowAbsent: boolean,
+  onResolved?: (reference: DeploymentReference) => Promise<void>,
+): Promise<DeletionObservation> {
+  const input = parseDeploymentInput(value);
+  const boundReference = reference ? boundDeletionReference(input, reference) : undefined;
+  if (typeof requestToken !== "string" || !/^[A-Za-z0-9][A-Za-z0-9-]{0,127}$/.test(requestToken)) {
+    throw new Error("A bounded teardown request token is required");
+  }
+  if (typeof allowAbsent !== "boolean")
+    throw new Error("Explicit stack absence permission is required");
+  const cfn = await connect(input, deps);
+  const owned = await lookupOwnedDeletionStack(input, boundReference, cfn, allowAbsent);
+  if (owned.phase === "absent")
+    return deletionObservation(owned.reference, "deleted", "DELETE_COMPLETE");
+  // Persist a newly discovered physical ARN before a destructive request can lose its response.
+  // A failed durability acknowledgement must leave the remote stack untouched.
+  await onResolved?.(owned.reference);
+  const status = owned.stack.StackStatus;
+  if (status && pendingStatuses.has(status)) {
+    return deletionObservation(owned.reference, "waiting", status);
+  }
+  if (status === "DELETE_IN_PROGRESS")
+    return deletionObservation(owned.reference, "pending", status);
+  if (status === "DELETE_COMPLETE") return deletionObservation(owned.reference, "deleted", status);
+  if (!status || !deletableStatuses.has(status)) {
+    throw new Error("Unexpected status for an owned CloudFormation teardown");
+  }
+  // Retries of one teardown keep the same bounded token; a new teardown after DELETE_FAILED
+  // supplies a new token. Bind it to both the original request and resolved physical stack.
+  const token = createHash("sha256")
+    .update(JSON.stringify([owned.reference.fingerprint, owned.reference.stackId, requestToken]))
+    .digest("hex");
+  await cfn.deleteStack({
+    StackName: owned.reference.stackId,
+    ClientRequestToken: `tc-delete-${token}`,
+  });
+  return deletionObservation(owned.reference, "pending", "DELETE_IN_PROGRESS");
+}
+
+/** One safe teardown poll. Failure is visible; retries require a new explicit delete request. */
+export async function describeDeletion(
+  value: unknown,
+  reference: DeploymentReference,
+  deps: CloudRunnerDependencies,
+  allowAbsent: boolean,
+): Promise<DeletionObservation> {
+  const input = parseDeploymentInput(value);
+  const boundReference = boundDeletionReference(input, reference);
+  if (typeof allowAbsent !== "boolean")
+    throw new Error("Explicit stack absence permission is required");
+  const cfn = await connect(input, deps);
+  const owned = await lookupOwnedDeletionStack(input, boundReference, cfn, allowAbsent);
+  if (owned.phase === "absent")
+    return deletionObservation(owned.reference, "deleted", "DELETE_COMPLETE");
+  const status = owned.stack.StackStatus;
+  if (status === "DELETE_COMPLETE") return deletionObservation(owned.reference, "deleted", status);
+  if (status === "DELETE_FAILED") return deletionObservation(owned.reference, "failed", status);
+  if (status && pendingStatuses.has(status)) {
+    return deletionObservation(owned.reference, "waiting", status);
+  }
+  // DescribeStacks can briefly retain the pre-delete terminal create status after acceptance.
+  if (status && (status === "DELETE_IN_PROGRESS" || deletableStatuses.has(status))) {
+    return deletionObservation(owned.reference, "pending", status);
+  }
+  throw new Error("Unexpected status for an owned CloudFormation teardown");
 }
 
 /** Bounded polling convenience for workers; durable orchestration can use describeDeployment. */

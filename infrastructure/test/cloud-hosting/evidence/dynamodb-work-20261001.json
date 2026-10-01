@@ -11,7 +11,7 @@
       "duplicateAwards": 0,
       "ledgerEntries": 25,
       "solvedProjection": "0 after deploy; 1 after first solve and repeated submissions",
-      "durationMs": 1402
+      "durationMs": 1807
     },
     {
       "milestone": "durable-replay-and-ownership",
@@ -42,9 +42,9 @@
       "rounds": [
         {
           "round": 0,
-          "durationMs": 1160,
-          "p50Ms": 579,
-          "p95Ms": 1136,
+          "durationMs": 1225,
+          "p50Ms": 623,
+          "p95Ms": 1176,
           "commands": 1000,
           "queryRows": 7000,
           "pointReads": 700,
@@ -52,9 +52,9 @@
         },
         {
           "round": 1,
-          "durationMs": 775,
+          "durationMs": 767,
           "p50Ms": 693,
-          "p95Ms": 744,
+          "p95Ms": 710,
           "commands": 1000,
           "queryRows": 7000,
           "pointReads": 700,
@@ -79,10 +79,34 @@
       "lockedEvent": "rejected"
     },
     {
+      "milestone": "durable-event-teardown",
+      "teams": 25,
+      "targets": 28,
+      "concurrentTerminalFinishes": 25,
+      "strongTargetQueries": 75,
+      "pendingCancellation": "counted once, original dispatch removed",
+      "createStates": "NOT_STARTED, REQUESTED, ACKNOWLEDGED preserved",
+      "createAndExpiredLeaseFence": "passed",
+      "httpDeleteReplayAndPartialFailure": "passed",
+      "retryGenerationAndDurableReference": "preserved; stale owner, generation and attempt rejected",
+      "eventCompletion": "28 unique targets; archive only after final target",
+      "retainedScores": 2500,
+      "retainedScoreLedgerEntries": 25,
+      "retainedReceipts": 53,
+      "durationMs": 2086
+    },
+    {
+      "milestone": "historical-attempt-teardown-boundary",
+      "oldAccountArn": "blocks before any teardown acceptance or archive",
+      "expiredUncertainCreate": "blocks",
+      "provenNeverStarted": "may complete",
+      "newJobTargetReplacement": "rejected"
+    },
+    {
       "outcome": "passed",
       "target": "official DynamoDB Local, synthetic work, no AWS execution"
     }
   ],
-  "scope": "Actual Dynamo transactions and Hono HTTP, including real SPA create/bulk/flag clients and solved-problem projection: 0 after deployment, 1 after first solve/replays, 2 after the second distinct solve among 20 deployed jobs. CloudFormation and Step Functions calls are intercepted in a separate unit/synth suite. Not AWS latency or RCU capacity guarantees.",
+  "scope": "Actual Dynamo transactions and Hono HTTP, including real SPA create/bulk/flag clients, solved-problem projection, event teardown with durable create/delete markers, concurrent terminal completion, retained scoring history, and historical-attempt blockers. CloudFormation and Step Functions calls are intercepted in a separate unit/synth suite. Not AWS latency or RCU capacity guarantees.",
   "cleanup": "All three unique synthetic tables deleted; loopback-only Java process stopped"
 }

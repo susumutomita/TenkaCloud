@@ -62,6 +62,10 @@ export interface CloudFormationTransport {
     readonly OnFailure: "DO_NOTHING";
     readonly TimeoutInMinutes: 30;
   }): Promise<{ readonly StackId?: string }>;
+  deleteStack(input: {
+    readonly StackName: string;
+    readonly ClientRequestToken: string;
+  }): Promise<unknown>;
 }
 
 export interface CloudRunnerDependencies {

@@ -345,12 +345,16 @@ export async function runCloudCli(
         await down(context, args.length > 0);
         return 0;
       case "status":
-        return await status(context);
+        return await status(await resolveCloudContext(context));
       case "console-url":
-        io.stdout(`${await output(context, context.stacks.app, "ApplicationAdminConsoleUrl")}\n`);
+        io.stdout(
+          `${await output(await resolveCloudContext(context), context.stacks.app, "ApplicationAdminConsoleUrl")}\n`,
+        );
         return 0;
       case "portal-url":
-        io.stdout(`${await output(context, context.stacks.backend, "ParticipantPortalApiUrl")}\n`);
+        io.stdout(
+          `${await output(await resolveCloudContext(context), context.stacks.backend, "ParticipantPortalApiUrl")}\n`,
+        );
         return 0;
       default:
         throw new Error(`Unknown cloud command: ${command}`);

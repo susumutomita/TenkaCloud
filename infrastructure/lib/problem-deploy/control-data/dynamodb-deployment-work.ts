@@ -7,9 +7,12 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import {
+  closingEventGuard,
   connectionGuard,
   connectionKey,
   connectionSchema,
+  creationKey,
+  creationSchema,
   dispatchKey,
   eventGuard,
   indexedJob,
@@ -20,10 +23,14 @@ import {
   scoreKey,
   targetKey,
   teamGuard,
+  teardownDispatchKey,
+  teardownKey,
+  teardownSchema,
   type Write,
 } from "./deployment-storage.js";
 import {
   type AcceptDeployment,
+  type CreationReservation,
   contentDigest,
   DeploymentConflict,
   type DeploymentConnection,
@@ -35,8 +42,9 @@ import {
   type FlagRequest,
   flagMatchesDigest,
   scoringBlock,
+  type TeardownRecord,
 } from "./domain/deployment-work.js";
-import { type CloudTableNames, conflict } from "./dynamodb-cloud-repository.js";
+import { type CloudTableNames, conflict, eventKey } from "./dynamodb-cloud-repository.js";
 
 interface Accepted {
   readonly kind: "accepted" | "replay";
@@ -49,6 +57,11 @@ export interface DeploymentCompletion {
   readonly flagDigest?: string;
   readonly publicOutputs?: Readonly<Record<string, string>>;
   readonly failureReason?: string;
+}
+interface TeardownCompletion {
+  readonly status: "DELETED" | "FAILED";
+  readonly failureReason?: string;
+  readonly stackId?: string;
 }
 const acceptedSchema = z.object({ jobId: z.string(), attempt: z.number() });
 const flagOutcomeSchema = z.discriminatedUnion("kind", [
@@ -78,6 +91,663 @@ export class DynamoDeploymentWork {
       if (conflict(error)) return false;
       throw error;
     }
+  }
+  async closeEvent(
+    event: import("./domain/events.js").EventRecord,
+    at: string,
+  ): Promise<"closing" | "archived"> {
+    if (event.status === "ARCHIVED") return "archived";
+    if (event.status === "TEARDOWN") return "closing";
+    const closed = await this.commit([
+      {
+        Update: {
+          TableName: this.tables.events,
+          Key: eventKey(event.eventId),
+          UpdateExpression:
+            "SET #status = :closing, updatedAt = :at, scoringLocked = :yes, teardownCompleted = if_not_exists(teardownCompleted, :zero)",
+          ConditionExpression: "updatedAt = :previous AND #status <> :archived",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: {
+            ":closing": "TEARDOWN",
+            ":archived": "ARCHIVED",
+            ":at": at,
+            ":previous": event.updatedAt,
+            ":yes": true,
+            ":zero": 0,
+          },
+        },
+      },
+    ]);
+    if (closed) return "closing";
+    const current = await this.read(this.tables.events, eventKey(event.eventId));
+    if (current?.status === "TEARDOWN") return "closing";
+    if (current?.status === "ARCHIVED") return "archived";
+    throw new DeploymentConflict("event_teardown_conflict");
+  }
+  async setTeardownExpected(eventId: string, count: number): Promise<void> {
+    if (!Number.isInteger(count) || count < 0 || count > 2450)
+      throw new Error("Invalid teardown target count.");
+    if (
+      await this.commit([
+        {
+          Update: {
+            TableName: this.tables.events,
+            Key: eventKey(eventId),
+            UpdateExpression:
+              "SET teardownExpected = :count, teardownCompleted = if_not_exists(teardownCompleted, :zero)",
+            ConditionExpression:
+              "#status = :closing AND (attribute_not_exists(teardownExpected) OR teardownExpected = :count)",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: { ":closing": "TEARDOWN", ":count": count, ":zero": 0 },
+          },
+        },
+      ])
+    )
+      return;
+    const current = await this.read(this.tables.events, eventKey(eventId));
+    if (current?.status !== "ARCHIVED" || current.teardownExpected !== count)
+      throw new DeploymentConflict("teardown_target_set_changed");
+  }
+  async archiveTeardown(eventId: string): Promise<boolean> {
+    return this.commit([
+      {
+        Update: {
+          TableName: this.tables.events,
+          Key: eventKey(eventId),
+          UpdateExpression: "SET #status = :archived",
+          ConditionExpression:
+            "#status = :closing AND attribute_exists(teardownExpected) AND teardownCompleted = teardownExpected",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: { ":closing": "TEARDOWN", ":archived": "ARCHIVED" },
+        },
+      },
+    ]);
+  }
+  /** The base-table TARGET rows are strong reads; an eventually-consistent GSI cannot prove complete cleanup. */
+  async listTargetJobs(eventId: string, teamId: string): Promise<DeploymentJob[]> {
+    const jobs: DeploymentJob[] = [];
+    let cursor: Record<string, unknown> | undefined;
+    do {
+      const page = await this.ddb.send(
+        new QueryCommand({
+          TableName: this.tables.deployments,
+          ConsistentRead: true,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+          ExpressionAttributeValues: {
+            ":pk": `EVENT#${eventId}#TEAM#${teamId}`,
+            ":prefix": "TARGET#",
+          },
+          Limit: 100,
+          ExclusiveStartKey: cursor,
+        }),
+      );
+      for (const row of page.Items ?? []) {
+        const target = z
+          .object({ jobId: z.string(), SK: z.string(), attempt: z.number() })
+          .parse(row);
+        const job = await this.getJob(target.jobId);
+        if (
+          !job ||
+          job.eventId !== eventId ||
+          job.teamId !== teamId ||
+          job.attempt !== target.attempt ||
+          targetKey(eventId, teamId, job.problemId).SK !== target.SK
+        )
+          throw new Error("Corrupt teardown target ownership.");
+        await this.assertHistoricalAttemptsEmpty(job);
+        jobs.push(job);
+      }
+      cursor = page.LastEvaluatedKey;
+    } while (cursor);
+    return jobs;
+  }
+  /** A current target cannot certify cleanup in an older account/region. Unknown historical sends remain explicit blockers. */
+  private async assertHistoricalAttemptsEmpty(job: DeploymentJob): Promise<void> {
+    let cursor: Record<string, unknown> | undefined;
+    const seen = new Set<number>();
+    do {
+      const page = await this.ddb.send(
+        new QueryCommand({
+          TableName: this.tables.deployments,
+          ConsistentRead: true,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+          ExpressionAttributeValues: { ":pk": jobKey(job.jobId).PK, ":prefix": "ATTEMPT#" },
+          Limit: 100,
+          ExclusiveStartKey: cursor,
+        }),
+      );
+      for (const row of page.Items ?? []) {
+        const parsed = jobSchema.safeParse(row);
+        if (!parsed.success) throw new DeploymentConflict("historical_attempt_record_invalid");
+        const previous = parsed.data;
+        if (
+          previous.jobId !== job.jobId ||
+          previous.eventId !== job.eventId ||
+          previous.teamId !== job.teamId ||
+          previous.problemId !== job.problemId ||
+          previous.attempt >= job.attempt ||
+          row.SK !== `ATTEMPT#${previous.attempt}` ||
+          seen.has(previous.attempt)
+        )
+          throw new DeploymentConflict("historical_attempt_record_invalid");
+        seen.add(previous.attempt);
+        await this.assertNeverCreated(previous);
+      }
+      cursor = page.LastEvaluatedKey;
+    } while (cursor);
+    if (seen.size !== job.attempt - 1)
+      throw new DeploymentConflict("historical_attempt_history_incomplete");
+  }
+  private async assertNeverCreated(previous: DeploymentJob): Promise<void> {
+    if (previous.stackId) throw new DeploymentConflict("historical_attempt_resources_unresolved");
+    const creation = await this.getCreation(previous);
+    if (
+      creation?.state !== "NOT_STARTED" ||
+      creation.stackId ||
+      creation.fingerprint ||
+      creation.owner ||
+      creation.leaseUntil !== 0
+    )
+      throw new DeploymentConflict("historical_attempt_resources_unresolved");
+  }
+  async getCreation(identity: DeploymentIdentity): Promise<CreationReservation | undefined> {
+    const row = await this.read(
+      this.tables.deployments,
+      creationKey(identity.jobId, identity.attempt),
+    );
+    if (!row) return undefined;
+    const reservation = creationSchema.parse(row);
+    if (
+      reservation.jobId !== identity.jobId ||
+      reservation.eventId !== identity.eventId ||
+      reservation.teamId !== identity.teamId ||
+      reservation.attempt !== identity.attempt
+    )
+      throw new DeploymentConflict("creation_scope_changed");
+    return reservation;
+  }
+  /** Reserve before remote create. Closing the event and this transaction serialize, so no recovery can restart creation. */
+  async reserveCreation(identity: DeploymentIdentity, owner: string, now: number): Promise<void> {
+    const prior = await this.getCreation(identity);
+    if (prior?.owner && prior.owner !== owner)
+      throw new DeploymentConflict("creation_owner_changed");
+    const item: CreationReservation = {
+      ...identity,
+      ...prior,
+      state: prior?.state === "ACKNOWLEDGED" ? "ACKNOWLEDGED" : "REQUESTED",
+      owner,
+      leaseUntil: now + 120_000,
+    };
+    if (
+      !(await this.commit([
+        this.openEventCheck(identity.eventId, now),
+        this.jobOwnerCheck(identity, owner, "IN_PROGRESS"),
+        {
+          Put: {
+            TableName: this.tables.deployments,
+            Item: { ...item, ...creationKey(identity.jobId, identity.attempt) },
+            ConditionExpression: prior
+              ? "#state = :previous AND (attribute_not_exists(#owner) OR #owner = :owner)"
+              : "attribute_not_exists(PK)",
+            ...(prior
+              ? {
+                  ExpressionAttributeNames: { "#owner": "owner", "#state": "state" },
+                  ExpressionAttributeValues: { ":owner": owner, ":previous": prior.state },
+                }
+              : {}),
+          },
+        },
+      ]))
+    )
+      throw new DeploymentConflict("creation_closed_or_owner_changed");
+  }
+  async recordCreation(
+    identity: DeploymentIdentity,
+    owner: string,
+    reference: { readonly stackId: string; readonly fingerprint: string },
+  ): Promise<void> {
+    await this.verifyStoredReference(identity, reference);
+    if (
+      !(await this.commit([
+        {
+          Update: {
+            TableName: this.tables.deployments,
+            Key: creationKey(identity.jobId, identity.attempt),
+            UpdateExpression: "SET #state = :ack, stackId = :stack, fingerprint = :fingerprint",
+            ConditionExpression:
+              "#owner = :owner AND (attribute_not_exists(stackId) OR (stackId = :stack AND fingerprint = :fingerprint))",
+            ExpressionAttributeNames: { "#state": "state", "#owner": "owner" },
+            ExpressionAttributeValues: {
+              ":ack": "ACKNOWLEDGED",
+              ":owner": owner,
+              ":stack": reference.stackId,
+              ":fingerprint": reference.fingerprint,
+            },
+          },
+        },
+      ]))
+    )
+      throw new DeploymentConflict("creation_receipt_changed");
+  }
+  async getTeardown(identity: DeploymentIdentity): Promise<TeardownRecord | undefined> {
+    const row = await this.read(this.tables.deployments, teardownKey(identity.jobId));
+    if (!row) return undefined;
+    const record = teardownSchema.parse(row);
+    if (
+      record.jobId !== identity.jobId ||
+      record.eventId !== identity.eventId ||
+      record.teamId !== identity.teamId ||
+      record.attempt !== identity.attempt ||
+      (identity.generation !== undefined && identity.generation !== record.generation)
+    )
+      throw new DeploymentConflict("teardown_scope_or_generation_changed");
+    return record;
+  }
+  async requestTeardown(identity: DeploymentIdentity, at: string): Promise<"enqueued" | "skipped"> {
+    for (let retry = 0; retry < 8; retry++) {
+      const job = await this.ownedJob(identity);
+      const previous = await this.getTeardown(identity);
+      if (previous && previous.status !== "FAILED") return "skipped";
+      const generation = (previous?.generation ?? 0) + 1;
+      const cancelled = job.status === "PENDING" || job.status === "DELETED";
+      const marker = this.nextTeardown(job, previous, generation, cancelled, at);
+      const writes = this.teardownRequestWrites(job, marker, previous, cancelled);
+      if (await this.commit(writes)) {
+        if (cancelled) await this.archiveTeardown(job.eventId);
+        return "enqueued";
+      }
+      await pause(retry);
+    }
+    throw new DeploymentConflict("teardown_request_conflict");
+  }
+  private nextTeardown(
+    job: DeploymentJob,
+    previous: TeardownRecord | undefined,
+    generation: number,
+    cancelled: boolean,
+    at: string,
+  ): TeardownRecord {
+    return {
+      eventId: job.eventId,
+      teamId: job.teamId,
+      jobId: job.jobId,
+      attempt: job.attempt,
+      generation,
+      status: cancelled ? "DELETED" : "PENDING",
+      requestedAt: previous?.requestedAt ?? at,
+      updatedAt: at,
+      ...(previous?.stackId ? { stackId: previous.stackId } : {}),
+      ...(previous?.fingerprint ? { fingerprint: previous.fingerprint } : {}),
+    };
+  }
+  private teardownRequestWrites(
+    job: DeploymentJob,
+    marker: TeardownRecord,
+    previous: TeardownRecord | undefined,
+    cancelled: boolean,
+  ): Write[] {
+    const writes: Write[] = [
+      closingEventGuard(this.tables.events, job.eventId),
+      {
+        Update: {
+          TableName: this.tables.deployments,
+          Key: jobKey(job.jobId),
+          UpdateExpression: `SET teardownStatus = :teardown${cancelled ? ", #status = :deleted" : ""} REMOVE teardownFailureReason`,
+          ConditionExpression:
+            "attempt = :attempt AND #status = :previous AND revision = :revision",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: {
+            ":teardown": marker.status,
+            ":attempt": job.attempt,
+            ":previous": job.status,
+            ":revision": job.revision,
+            ...(cancelled ? { ":deleted": "DELETED" } : {}),
+          },
+        },
+      },
+      {
+        Put: {
+          TableName: this.tables.deployments,
+          Item: { ...marker, ...teardownKey(job.jobId) },
+          ConditionExpression: previous
+            ? "generation = :generation AND #status = :failed"
+            : "attribute_not_exists(PK)",
+          ...(previous
+            ? {
+                ExpressionAttributeNames: { "#status": "status" },
+                ExpressionAttributeValues: {
+                  ":generation": previous.generation,
+                  ":failed": "FAILED",
+                },
+              }
+            : {}),
+        },
+      },
+    ];
+    if (cancelled) {
+      // Replace the event ConditionCheck: DynamoDB cannot check and update the same item separately.
+      writes[0] = this.completedTeardownUpdate(job.eventId);
+      writes.push({
+        Delete: { TableName: this.tables.deployments, Key: dispatchKey(job.jobId, job.attempt) },
+      });
+    } else
+      writes.push({
+        Put: {
+          TableName: this.tables.deployments,
+          Item: {
+            ...teardownDispatchKey(job.jobId, job.attempt, marker.generation),
+            eventId: job.eventId,
+            teamId: job.teamId,
+            jobId: job.jobId,
+            attempt: job.attempt,
+            operation: "delete",
+            generation: marker.generation,
+            createdAt: marker.requestedAt,
+          },
+          ConditionExpression: "attribute_not_exists(PK)",
+        },
+      });
+    return writes;
+  }
+  async beginTeardown(
+    identity: DeploymentIdentity,
+    owner: string,
+    at: string,
+  ): Promise<"started" | "replay"> {
+    if (!owner || owner.length > 512) throw new Error("An immutable teardown owner is required.");
+    const marker = await this.requireTeardown(identity);
+    if (marker.status === "IN_PROGRESS" && marker.owner === owner) return "replay";
+    if (
+      !(await this.commit([
+        closingEventGuard(this.tables.events, identity.eventId),
+        {
+          Update: {
+            TableName: this.tables.deployments,
+            Key: teardownKey(identity.jobId),
+            UpdateExpression: "SET #status = :running, #owner = :owner, updatedAt = :at",
+            ConditionExpression: "generation = :generation AND #status = :pending",
+            ExpressionAttributeNames: { "#status": "status", "#owner": "owner" },
+            ExpressionAttributeValues: {
+              ":running": "IN_PROGRESS",
+              ":pending": "PENDING",
+              ":owner": owner,
+              ":at": at,
+              ":generation": marker.generation,
+            },
+          },
+        },
+        {
+          Delete: {
+            TableName: this.tables.deployments,
+            Key: teardownDispatchKey(identity.jobId, identity.attempt, marker.generation),
+          },
+        },
+      ]))
+    )
+      throw new DeploymentConflict("teardown_claim_conflict");
+    return "started";
+  }
+  async prepareDeletion(
+    identity: DeploymentIdentity,
+    owner: string,
+    now: number,
+  ): Promise<boolean> {
+    const job = await this.ownedJob(identity);
+    const creation = await this.getCreation(identity);
+    if (job.status === "IN_PROGRESS" || (creation && creation.leaseUntil > now)) return false;
+    if (!["COMPLETE", "FAILED", "DELETING"].includes(job.status))
+      throw new DeploymentConflict("teardown_source_not_terminal");
+    if (
+      !(await this.commit([
+        closingEventGuard(this.tables.events, identity.eventId),
+        this.teardownOwnerCheck(identity, owner),
+        {
+          Update: {
+            TableName: this.tables.deployments,
+            Key: jobKey(job.jobId),
+            UpdateExpression: "SET #status = :deleting, teardownStatus = :running",
+            ConditionExpression: "attempt = :attempt AND #status = :previous",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: {
+              ":deleting": "DELETING",
+              ":running": "IN_PROGRESS",
+              ":attempt": job.attempt,
+              ":previous": job.status,
+            },
+          },
+        },
+      ]))
+    )
+      throw new DeploymentConflict("teardown_prepare_conflict");
+    return true;
+  }
+  async recordTeardownReference(
+    identity: DeploymentIdentity,
+    owner: string,
+    reference: { readonly stackId: string; readonly fingerprint: string },
+  ): Promise<void> {
+    await this.verifyStoredReference(identity, reference);
+    if (
+      !(await this.commit([
+        {
+          Update: {
+            TableName: this.tables.deployments,
+            Key: teardownKey(identity.jobId),
+            UpdateExpression: "SET stackId = :stack, fingerprint = :fingerprint",
+            ConditionExpression:
+              "generation = :generation AND #status = :running AND #owner = :owner AND (attribute_not_exists(stackId) OR (stackId = :stack AND fingerprint = :fingerprint))",
+            ExpressionAttributeNames: { "#status": "status", "#owner": "owner" },
+            ExpressionAttributeValues: {
+              ":generation": identity.generation,
+              ":running": "IN_PROGRESS",
+              ":owner": owner,
+              ":stack": reference.stackId,
+              ":fingerprint": reference.fingerprint,
+            },
+          },
+        },
+      ]))
+    )
+      throw new DeploymentConflict("teardown_reference_changed");
+  }
+  async finishTeardown(
+    identity: DeploymentIdentity,
+    owner: string | undefined,
+    result: TeardownCompletion,
+    at: string,
+  ): Promise<"updated" | "replay"> {
+    if (result.status === "DELETED" && !owner)
+      throw new DeploymentConflict("teardown_owner_required");
+    for (let retry = 0; retry < 16; retry++) {
+      const outcome = await this.finishTeardownOnce(identity, owner, result, at);
+      if (outcome) return outcome;
+      await pause(retry);
+    }
+    throw new DeploymentConflict("teardown_finish_conflict");
+  }
+  private async finishTeardownOnce(
+    identity: DeploymentIdentity,
+    owner: string | undefined,
+    result: TeardownCompletion,
+    at: string,
+  ): Promise<"updated" | "replay" | undefined> {
+    if (result.status === "FAILED" && (!result.failureReason || result.failureReason.length > 2000))
+      throw new Error("A bounded teardown failure reason is required.");
+    const marker = await this.requireTeardown(identity);
+    if (marker.owner !== owner) throw new DeploymentConflict("teardown_owner_changed");
+    if (result.stackId && marker.stackId && result.stackId !== marker.stackId)
+      throw new DeploymentConflict("teardown_reference_changed");
+    if (marker.status === result.status) {
+      if (result.status === "DELETED") await this.archiveTeardown(identity.eventId);
+      return "replay";
+    }
+    const job = await this.ownedJob(identity);
+    const deleted = result.status === "DELETED";
+    if (deleted && job.status !== "DELETING") throw new DeploymentConflict("teardown_not_deleting");
+    const completion = await this.checkedTeardownCompletion(identity, job, marker, result);
+    const writes = this.teardownFinishWrites(identity, owner, marker, job, completion, at);
+    if (deleted) writes.push(this.completedTeardownUpdate(identity.eventId));
+    if (!owner)
+      writes.push({
+        Delete: {
+          TableName: this.tables.deployments,
+          Key: teardownDispatchKey(identity.jobId, identity.attempt, marker.generation),
+        },
+      });
+    if (!(await this.commit(writes))) return undefined;
+    if (deleted) await this.archiveTeardown(identity.eventId);
+    return "updated";
+  }
+  private async checkedTeardownCompletion(
+    identity: DeploymentIdentity,
+    job: DeploymentJob,
+    marker: TeardownRecord,
+    result: TeardownCompletion,
+  ): Promise<TeardownCompletion> {
+    let known = marker.stackId ?? job.stackId;
+    let creation: CreationReservation | undefined;
+    if (!known && (result.status === "DELETED" || result.stackId)) {
+      creation = await this.getCreation(identity);
+      known = creation?.stackId;
+    }
+    if (result.stackId !== undefined && result.stackId !== known)
+      throw new DeploymentConflict("teardown_reference_changed");
+    if (result.status === "DELETED" && !known && creation?.state !== "NOT_STARTED")
+      throw new DeploymentConflict("teardown_absence_unconfirmed");
+    return {
+      status: result.status,
+      ...(result.failureReason ? { failureReason: result.failureReason } : {}),
+      ...(known ? { stackId: known } : {}),
+    };
+  }
+  private teardownFinishWrites(
+    identity: DeploymentIdentity,
+    owner: string | undefined,
+    marker: TeardownRecord,
+    job: DeploymentJob,
+    result: TeardownCompletion,
+    at: string,
+  ): Write[] {
+    const deleted = result.status === "DELETED";
+    return [
+      {
+        Put: {
+          TableName: this.tables.deployments,
+          Item: {
+            ...marker,
+            status: result.status,
+            ...(result.failureReason ? { failureReason: result.failureReason } : {}),
+            ...(result.stackId ? { stackId: result.stackId } : {}),
+            updatedAt: at,
+            ...teardownKey(identity.jobId),
+          },
+          ConditionExpression: `generation = :generation AND #status = :expected AND ${owner ? "#owner = :owner" : "attribute_not_exists(#owner)"}`,
+          ExpressionAttributeNames: { "#status": "status", "#owner": "owner" },
+          ExpressionAttributeValues: {
+            ":generation": marker.generation,
+            ":expected": owner ? "IN_PROGRESS" : "PENDING",
+            ...(owner ? { ":owner": owner } : {}),
+          },
+        },
+      },
+      {
+        Update: {
+          TableName: this.tables.deployments,
+          Key: jobKey(identity.jobId),
+          UpdateExpression: `SET teardownStatus = :teardown, updatedAt = :at${deleted ? ", #status = :deleted" : ", teardownFailureReason = :reason"}`,
+          ConditionExpression: "attempt = :attempt AND #status = :previous",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: {
+            ":teardown": result.status,
+            ":at": at,
+            ":attempt": job.attempt,
+            ":previous": job.status,
+            ...(deleted ? { ":deleted": "DELETED" } : { ":reason": result.failureReason }),
+          },
+        },
+      },
+    ];
+  }
+  private async verifyStoredReference(
+    identity: DeploymentIdentity,
+    reference: { readonly stackId: string; readonly fingerprint: string },
+  ): Promise<void> {
+    const job = await this.ownedJob(identity);
+    const prefix = `arn:aws:cloudformation:${job.region}:${job.awsAccountId}:stack/${job.stackName}/`;
+    if (
+      !reference.stackId.startsWith(prefix) ||
+      !/^[A-Za-z0-9-]+$/u.test(reference.stackId.slice(prefix.length)) ||
+      !/^[a-f0-9]{64}$/u.test(reference.fingerprint)
+    )
+      throw new DeploymentConflict("stack_reference_scope_changed");
+  }
+  private async requireTeardown(identity: DeploymentIdentity): Promise<TeardownRecord> {
+    if (identity.operation !== "delete" || !identity.generation)
+      throw new DeploymentConflict("invalid_teardown_identity");
+    const marker = await this.getTeardown(identity);
+    if (!marker) throw new DeploymentConflict("teardown_missing");
+    return marker;
+  }
+  private teardownOwnerCheck(identity: DeploymentIdentity, owner: string): Write {
+    return {
+      ConditionCheck: {
+        TableName: this.tables.deployments,
+        Key: teardownKey(identity.jobId),
+        ConditionExpression: "generation = :generation AND #status = :running AND #owner = :owner",
+        ExpressionAttributeNames: { "#status": "status", "#owner": "owner" },
+        ExpressionAttributeValues: {
+          ":generation": identity.generation,
+          ":running": "IN_PROGRESS",
+          ":owner": owner,
+        },
+      },
+    };
+  }
+  private completedTeardownUpdate(eventId: string): Write {
+    return {
+      Update: {
+        TableName: this.tables.events,
+        Key: eventKey(eventId),
+        UpdateExpression: "ADD teardownCompleted :one",
+        ConditionExpression: "#status = :closing",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":one": 1, ":closing": "TEARDOWN" },
+      },
+    };
+  }
+  private openEventCheck(eventId: string, now: number): Write {
+    return {
+      ConditionCheck: {
+        TableName: this.tables.events,
+        Key: eventKey(eventId),
+        ConditionExpression: "#status IN (:draft, :deploying, :ready) AND expiresAt > :now",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":draft": "DRAFT",
+          ":deploying": "DEPLOYING",
+          ":ready": "READY",
+          ":now": Math.floor(now / 1000),
+        },
+      },
+    };
+  }
+  private jobOwnerCheck(identity: DeploymentIdentity, owner: string, status: string): Write {
+    return {
+      ConditionCheck: {
+        TableName: this.tables.deployments,
+        Key: jobKey(identity.jobId),
+        ConditionExpression:
+          "attempt = :attempt AND eventId = :event AND teamId = :team AND #owner = :owner AND #status = :status",
+        ExpressionAttributeNames: { "#owner": "owner", "#status": "status" },
+        ExpressionAttributeValues: {
+          ":attempt": identity.attempt,
+          ":event": identity.eventId,
+          ":team": identity.teamId,
+          ":owner": owner,
+          ":status": status,
+        },
+      },
+    };
   }
   async setSchedule(
     event: import("./domain/events.js").EventRecord,
@@ -221,6 +891,21 @@ export class DynamoDeploymentWork {
         },
       });
     }
+    writes.push({
+      Put: {
+        TableName: this.tables.deployments,
+        Item: {
+          ...creationKey(job.jobId, job.attempt),
+          eventId: job.eventId,
+          teamId: job.teamId,
+          jobId: job.jobId,
+          attempt: job.attempt,
+          state: "NOT_STARTED",
+          leaseUntil: 0,
+        },
+        ConditionExpression: "attribute_not_exists(PK)",
+      },
+    });
     writes.push({
       Put: {
         TableName: this.tables.deployments,
@@ -378,6 +1063,8 @@ export class DynamoDeploymentWork {
           teamId: z.string(),
           jobId: z.string(),
           attempt: z.number().int().positive(),
+          operation: z.literal("delete").optional(),
+          generation: z.number().int().positive().optional(),
           createdAt: z.string(),
         })
         .parse(row),
@@ -413,6 +1100,7 @@ export class DynamoDeploymentWork {
       },
       { Delete: { TableName: this.tables.deployments, Key: dispatchKey(job.jobId, job.attempt) } },
       connectionGuard(this.tables.events, job.connection),
+      this.openEventCheck(job.eventId, Date.parse(at)),
     ]);
     if (!done) throw new DeploymentConflict("deployment_claim_conflict");
     return "started";
@@ -480,27 +1168,33 @@ export class DynamoDeploymentWork {
         throw new DeploymentConflict("completion_payload_changed");
       return "replay";
     }
-    const next: DeploymentJob = {
-      ...job,
-      ...completion,
-      completionDigest: digest,
-      updatedAt: at,
-      ...(completion.status === "COMPLETE" ? { completedAt: at } : {}),
+    const values: Record<string, unknown> = {
+      ":attempt": identity.attempt,
+      ":owner": owner,
+      ":running": "IN_PROGRESS",
+      ":revision": job.revision,
+      ":status": completion.status,
+      ":digest": digest,
+      ":at": at,
     };
+    const sets = ["#status = :status", "completionDigest = :digest", "updatedAt = :at"];
+    for (const [name, value] of Object.entries(completion)) {
+      if (name !== "status" && value !== undefined) {
+        sets.push(`${name} = :${name}`);
+        values[`:${name}`] = value;
+      }
+    }
+    if (completion.status === "COMPLETE") sets.push("completedAt = :at");
     const writes: Write[] = [
       {
-        Put: {
+        Update: {
           TableName: this.tables.deployments,
-          Item: indexedJob(next),
+          Key: jobKey(job.jobId),
+          UpdateExpression: `SET ${sets.join(", ")}`,
           ConditionExpression:
             "attempt = :attempt AND #owner = :owner AND #status = :running AND revision = :revision",
           ExpressionAttributeNames: { "#owner": "owner", "#status": "status" },
-          ExpressionAttributeValues: {
-            ":attempt": identity.attempt,
-            ":owner": owner,
-            ":running": "IN_PROGRESS",
-            ":revision": job.revision,
-          },
+          ExpressionAttributeValues: values,
         },
       },
     ];

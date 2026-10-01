@@ -42,7 +42,7 @@ Options use `LOCAL_ARGS`, for example `make local LOCAL_ARGS="--no-build"`. When
 
 <h2 id="cloud-status">Cloud deployment status</h2>
 
-`make deploy` and `make destroy` currently exit with an unimplemented error and change no resources. Cloud Turso integration is in progress. Do not rely on a managed-cloud or zero-fixed-cost deployment claim. AWS exercises are separate: a locally running host can use the AWS SDK and approved competitor accounts; their resources can incur charges.
+`make deploy` and `make destroy` currently exit with an unimplemented error and change no resources. Lambda/DynamoDB hosting is in progress; this is not a verified zero-cost deployment. AWS-service problems are cloud-only. Non-AWS cloud exercises still need a separate runner. The preserved cloud pipeline uses fixed historical source refs rather than this unfinished path.
 
 Codespaces forwarded-origin and exercise routing have not been verified for this candidate. Use the local checkout procedure above until that path has its own evidence.
 

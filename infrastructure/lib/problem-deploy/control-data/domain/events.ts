@@ -20,4 +20,6 @@ export interface EventRecord {
   readonly endsAt?: string;
   readonly scoringLocked?: boolean;
   readonly scoreboardFreezeMinutes?: number;
+  readonly teardownExpected?: number;
+  readonly teardownCompleted?: number;
 }

@@ -6,19 +6,19 @@ export const metadata = { title: "Platform architecture" };
 
 <h2 id="reading-order">Reading order</h2>
 
-Read the responsibilities and trust boundaries before selecting an execution environment. This unpublished candidate runs one community competition process; it does not include SaaS tenant provisioning.
+Read the responsibilities and trust boundaries before selecting an execution environment. This draft candidate unifies local and cloud competition workflows without SaaS/SBT tenant provisioning.
 
 <h2 id="local-play-and-docker">Local competition and Docker</h2>
 
 `make local` serves organizer and participant applications from one Bun process. Organizer roles and event/team keys authorize separate HTTP surfaces. SQLite and private key files retain competition state and runtime ownership. `make down` stops owned local runtimes while preserving data; explicit teardown is separate.
 
-New Docker events prepare up to 512 dormant jobs, then participants Start / resume and Stop (keep data). Defaults are team 3 / host 12 active environments and 4096 MiB summed memory caps. The 40 gateway slots are active-only; runtime ports persist while stopped. Writable layers and volumes survive, not RAM. There is no automatic eviction or reset. Existing events keep their legacy lifecycle. Generic Docker catalog/workbench restoration is in progress. The target is all 106 former local problems as Challenge competitions. Terminal support and real Docker/browser verification remain incomplete. Verifiers must remain separate from public challenge surfaces and other teams.
+New Docker events prepare up to 512 dormant jobs, then participants Start / resume and Stop (keep data). Defaults are team 3 / host 12 active environments and 4096 MiB summed memory caps. The 40 gateway slots are active-only; runtime ports persist while stopped. Writable layers and volumes survive, not RAM. There is no automatic eviction or reset. Existing events keep their legacy lifecycle. The generic catalog and workbench expose all 106 former local definitions as Challenges and 15 declared terminals. Real Docker/browser verification covers representative SQL, PostgreSQL terminal and Battle flows; full play-throughs of all definitions remain incomplete. Verifiers must remain separate from public challenge surfaces and other teams.
 
 <h2 id="cloud-components">AWS exercises and cloud platform</h2>
 
-The reviewed AWS adapters deploy owned CloudFormation stacks in verified competitor accounts. The deployment role requires the host ExternalId; participant access assumes a separate saved viewer role with the deployment ExternalId. Operator credentials never become participant credentials.
+AWS-service problems are restricted to cloud hosting. The opt-in cloud flag runner deploys owned CloudFormation stacks through configured competitor roles and mandatory ExternalId parameters in SSM. Participant viewer-role access and full onboarding remain incomplete; deployment-role credentials must never become participant credentials.
 
-Cloud Turso integration and platform placement are in progress. `make deploy` and `make destroy` currently fail explicitly without resource changes. A long-running process, its schedulers and persistent identity need an actual deployment contract before cloud claims can be made.
+The cloud foundation uses Lambda, Cognito and DynamoDB, with durable dispatch and Step Functions work. `make deploy` and `make destroy` currently fail explicitly without resource changes until the complete deployment/teardown path is ready. Non-AWS cloud exercises need a separate runner; the local Docker process is not a Lambda deployment.
 
 <h2 id="problem-deployment">Problem deployment and scoring</h2>
 
@@ -26,10 +26,10 @@ An authenticated organizer requests an event operation. Ownership is saved befor
 
 <h2 id="diagram-sources">Editable diagram sources</h2>
 
-The repository's `docs/architecture/README.md` links current Mermaid sources and `system-architecture.drawio`. Previously rendered architecture images describe the historical implementation and are not displayed here as current evidence.
+The repository's `docs/architecture/README.md` identifies the restored AWS-icon `system-architecture.drawio` and its generator. The restored drawing preserves its original visual quality and historical architecture; it is not evidence of the current cloud implementation.
 
 <h2 id="legacy-reference">Historical reference</h2>
 
-Old control-plane, tenant, Lite and Step Functions details are available only in the pinned legacy source linked below. Logical event/team responsibilities are retained without speculative SaaS abstractions.
+Old SaaS/control-plane and Lite deployment details remain in the pinned legacy source below. The current cloud foundation selectively reuses single-installation Lambda/DynamoDB and Step Functions mechanisms. Logical event/team responsibilities are retained without speculative SaaS abstractions.
 
 [Legacy architecture / 固定した旧版](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/architecture/README.md).

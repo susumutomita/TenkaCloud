@@ -2,20 +2,23 @@
 
 [日本語](README.ja.md)
 
-TenkaCloud hosts cloud competitions from one Bun process and a persistent SQLite
-store. The host serves the organizer console and participant portal. AWS problem
-resources run in competitor accounts; Docker exercises require a local Docker
-engine. Participants use the portal URL and team key supplied by their organizer.
+TenkaCloud supports local and cloud competition hosting with the organizer console
+and participant portal. Local hosting uses one Bun process and persistent SQLite.
+Cloud hosting is being restored with AWS Lambda and DynamoDB. SaaS/SBT tenant
+provisioning is not part of this direction.
 
-This branch is an **unpublished host-only candidate**. SaaS, Lite, CDK/Lambda
-platform deployment are retired. `make local` opens the unified competition console. Existing installations must use
-[their pinned legacy release](docs/legacy-operations.md). There is no automatic
-migration or cleanup. [The retirement matrix](docs/host-retirement.md) lists the
-missing host features and the unresolved standalone deploy API decision.
+This branch is a **draft integration candidate**. `make local` opens the unified
+local competition console for non-AWS exercises. AWS-service problems belong to
+cloud hosting, whose complete lifecycle remains under verification. Participants
+use the portal URL and team key supplied by their organizer.
+
+Existing installations must use [their pinned legacy release](docs/legacy-operations.md).
+There is no automatic migration or cleanup. [The compatibility matrix](docs/host-retirement.md)
+distinguishes working local features, incomplete cloud wiring and retired entrypoints.
 
 [![Historical overview](docs/assets/lp-30s/tenkacloud-30s-preview.gif)](landing/videos/lp/tenkacloud-30s.mp4)
 
-Historical product overview, recorded for the retired local/Lite workflow. This is not host candidate verification. [Vertical video](landing/videos/lp/tenkacloud-30s-vertical.mp4).
+Historical product overview, recorded for the retired local/Lite workflow. This is not integration-candidate verification. [Vertical video](landing/videos/lp/tenkacloud-30s-vertical.mp4).
 
 ## Quickstart
 
@@ -23,7 +26,7 @@ Use Bun 1.3.11 and the pinned `problems/` catalog. Install the tools in `mise.to
 or provide compatible tools yourself.
 
 ```sh
-git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+git clone --recurse-submodules --branch integration/host-only-20261001 https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 bun install --frozen-lockfile --ignore-scripts
 bun run build:host
@@ -45,15 +48,17 @@ teardown removes known generated runtime files; old or unknown temporary files a
 not swept automatically. See [generated-file ownership](docs/local-hosting.md#generated-files-and-retained-data).
 
 Cloud commands are `make deploy` and `make destroy`. They currently refuse before
-creating or deleting resources because the cloud/Turso deployment profile is still
-under verification. They are not substitutes for the historical Lite deployment.
+creating or deleting resources because the Lambda/DynamoDB deployment and coordinated teardown path is still
+under verification. The preserved [cloud pipeline](infrastructure/README.md#cloud-deployment-pipeline)
+runs its fixed historical source refs, not this unfinished path.
 
 The host exposes all 106 Compose exercise definitions as Challenges, including
 workbenches and the 15 explicitly declared participant terminals. Catalog coverage
 and synthetic lifecycle tests are not a claim that all 106 have passed real Docker
-rehearsals. Other authored runtimes remain unsupported. Docker and AWS exercises
-need their respective runtime prerequisites; the built-in Cryptography Battle
-requires neither AWS nor the Docker daemon.
+rehearsals. Local Docker exercises need Docker; the built-in Cryptography Battle
+requires neither AWS nor the Docker daemon. AWS-service problems are not offered
+by `make local`. Non-AWS exercises in cloud hosting still need the separate runner
+implementation described in the compatibility matrix.
 
 Default local admission limits are three active environments per team, twelve
 across the host, and 4096 MiB of configured container memory caps. Stop preserves
@@ -61,7 +66,7 @@ container data; no other team is automatically stopped. See the resource options
 in `make local LOCAL_ARGS="--help"` and measure your own Docker machine before an event.
 
 Read [host operations](docs/local-hosting.md) for data directories, public
-origins, TLS proxy configuration and the optional AWS runtime. The admin and
+origins, TLS proxy configuration and retained data. The admin and
 participant URLs are separate origins. Do not expose the organizer port without
 the documented access controls.
 

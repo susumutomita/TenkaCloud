@@ -41,6 +41,8 @@ export interface DeploymentJob extends DeploymentRecord {
   readonly flagSubmitted?: boolean;
   readonly completedAt?: string;
   readonly failureReason?: string;
+  readonly teardownStatus?: "PENDING" | "IN_PROGRESS" | "FAILED" | "DELETED";
+  readonly teardownFailureReason?: string;
   readonly publicOutputs?: Readonly<Record<string, string>>;
 }
 export interface TeamScoreProjection {
@@ -63,6 +65,25 @@ export interface DeploymentIdentity {
   readonly teamId: string;
   readonly jobId: string;
   readonly attempt: number;
+  readonly operation?: "delete";
+  readonly generation?: number;
+}
+export interface CreationReservation extends DeploymentIdentity {
+  readonly state: "NOT_STARTED" | "REQUESTED" | "ACKNOWLEDGED";
+  readonly owner?: string;
+  readonly leaseUntil: number;
+  readonly stackId?: string;
+  readonly fingerprint?: string;
+}
+export interface TeardownRecord extends DeploymentIdentity {
+  readonly generation: number;
+  readonly status: "PENDING" | "IN_PROGRESS" | "FAILED" | "DELETED";
+  readonly owner?: string;
+  readonly fingerprint?: string;
+  readonly requestedAt: string;
+  readonly updatedAt: string;
+  readonly failureReason?: string;
+  readonly stackId?: string;
 }
 export interface DispatchIntent extends DeploymentIdentity {
   readonly createdAt: string;

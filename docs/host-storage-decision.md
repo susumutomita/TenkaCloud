@@ -1,13 +1,15 @@
-# Host storage and AWS trust boundary
+# Local storage and cloud trust boundaries
 
-## Decision
+## Local hosting
 
-A host deployment is one process with one SQLite database on a local or attached
-persistent disk. Its dedicated data directory also contains the host key and the
-competitor ExternalId. The current implementation stores the ExternalId in
-`competitor-external-id`, not in SQLite or SSM Parameter Store. The same file is
-reused after restart; an invalid existing value causes startup to fail instead
-of silently generating a replacement.
+Local hosting uses one Bun process with one SQLite database on a local or attached
+persistent disk. Its dedicated data directory contains the host key. `make local`
+does not configure AWS clients and refuses the former `--aws-region` option.
+
+An earlier AWS-enabled host revision may also have saved a competitor ExternalId
+in `competitor-external-id`. Retain that file with its database for reviewed
+recovery; it is not a new cloud secret store. An invalid existing value must fail
+instead of silently generating a replacement.
 
 The directory is private to the process owner. On POSIX systems the host requires
 mode `0700` for an existing directory and uses mode `0600` for private files. It
@@ -20,12 +22,11 @@ mandatory authentication state. Optional audit collection is a separate feature
 flag, defaults OFF, and writes only to the host database. Turning audit OFF does
 not turn off operational or authentication records.
 
-## Why
+## Local persistence boundary
 
-The host must start and retain competition state without an AWS-hosted control
-plane. Requiring SSM or a remote database for host state would reintroduce an
-external service dependency and its continuing operation costs. Reusing a local
-private key file also matches the existing host key lifecycle.
+Local hosting must start and retain competition state without an external
+control plane or database. This local requirement does not remove the separate
+Lambda/DynamoDB cloud-hosting path.
 
 This changes the trust boundary from cloud-managed storage access to possession
 of the host disk and process account. The operator must provide disk and backup
@@ -33,9 +34,23 @@ access control. If at-rest encryption is required, configure it on the disk or
 volume. This implementation does not claim application-level encryption or a
 KMS-protected secret store.
 
-## AWS authorization
+## Cloud storage and authorization
 
-The host obtains operator credentials through the AWS SDK credential chain.
+The cloud candidate uses Lambda and DynamoDB, reusing the former single-installation
+cloud path without SaaS/SBT provisioning. Its existing three tables retain events,
+teams, deployment work, scoring and retry receipts. No SQLite or Turso driver is
+used by this cloud path. Initial setup, complete exercise execution and coordinated
+platform teardown remain under verification; see [cloud status](../infrastructure/README.md).
+
+The opt-in flag runner assumes only explicitly configured competitor role ARNs
+and reads ExternalId values from their configured SSM parameter ARNs. These values
+are not browser configuration. Local data-directory keys are not uploaded or
+adopted automatically. This candidate does not guarantee zero AWS charges.
+
+### Retained earlier AWS-host contracts
+
+The following describes retained implementation and recovery constraints for an
+earlier AWS-enabled host, not an available `make local` option. That host obtains operator credentials through the AWS SDK credential chain.
 Those credentials are not supplied through host command-line flags. Each
 competitor account must trust the operator identity and require the persisted
 ExternalId when the host assumes its deployment role. The ExternalId is an
@@ -71,8 +86,9 @@ job was saved. Without those records, a missing ExternalId is indistinguishable
 from enabling AWS for the first time on a local-only host. Complete-directory
 backups remain required; the startup checks cannot detect every partial restore.
 
-Changing from Lite/SaaS, DynamoDB or Turso to the host does not migrate any data or
-remove existing cloud resources. Those environments require a separate migration
-or retirement decision. The new host schema migrations apply only to supported
+Changing deployment models does not migrate existing Lite/SaaS, DynamoDB, Turso
+or practice-mode data, and does not remove their resources. Existing installations
+need their exact legacy release and a separately reviewed migration or retirement
+plan. The new host schema migrations apply only to supported
 host SQLite versions. Running two host processes against one data directory or
 using a network filesystem is outside this storage contract.

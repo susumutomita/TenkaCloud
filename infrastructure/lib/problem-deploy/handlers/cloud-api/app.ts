@@ -125,10 +125,14 @@ async function detail(
     if (job.eventId !== event.eventId) throw new Error("Deployment scope mismatch.");
     const group = deploymentsByProblem[job.problemId] ?? [];
     deploymentsByProblem[job.problemId] = group;
+    let status = job.status;
+    if (job.teardownStatus === "FAILED") status = "FAILED";
+    else if (job.teardownStatus && job.teardownStatus !== "DELETED") status = "DELETING";
     group.push({
       jobId: job.jobId,
       teamId: job.teamId,
-      status: job.status,
+      status,
+      ...(job.teardownFailureReason ? { failureReason: job.teardownFailureReason } : {}),
     });
   }
   return context.json({

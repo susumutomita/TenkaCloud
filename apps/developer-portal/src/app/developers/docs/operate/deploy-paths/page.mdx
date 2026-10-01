@@ -4,22 +4,22 @@ export const metadata = { title: "Launch and deployment boundaries" };
 
 # Launch and deployment boundaries <MaturityBadge level="preview" />
 
-This documents the unpublished integration candidate. Local event/team operation is implemented; cloud platform deployment and complete catalog playability are not verified release claims.
+This documents the draft integration candidate. Local event/team operation is implemented; cloud platform deployment and complete catalog playability are not verified release claims.
 
 <h2 id="local-platform">Local platform</h2>
 
 `make local` runs the unified Bun server and two browser applications with persistent SQLite. `make down` stops owned local runtimes and preserves event data. The removed host target is not a second launch mode. See [getting started](/developers/docs/getting-started/) for bootstrap, event creation and participant login.
 
-<h2 id="cloud-platform">Cloud platform: not implemented</h2>
+<h2 id="cloud-platform">Cloud platform: integration in progress</h2>
 
-The final public command names are `make deploy` and `make destroy`. In this candidate both exit nonzero with an explicit unimplemented message; no resources are created, removed or migrated. Turso integration, provider selection, persistent identity and singleton execution need implementation and verification. A container build is not deployment evidence or a zero-cost promise.
+The final public command names are `make deploy` and `make destroy`. In this candidate both exit nonzero with an explicit unimplemented message; no resources are created, removed or migrated. Lambda/DynamoDB setup, competitor onboarding and coordinated teardown need completion and verification. The preserved `infrastructure/templates/cloud-pipeline.yaml` runs fixed historical source refs, not this unfinished path. A container build is not deployment evidence or a zero-cost promise.
 
 <h2 id="exercise-deployment">Exercise deployment is separate</h2>
 
-An organizer can deploy selected exercise environments from an event. Docker uses owned Compose projects; reviewed AWS adapters use CloudFormation in verified competitor accounts. AWS deployment needs an explicit region, credentials and the required ExternalId. Those resources can incur charges even when the organizer runs the platform locally. Ending an event or stopping the local process does not delete its AWS stacks.
+Local events use owned Docker Compose projects or native Battle execution. AWS-service problems are cloud-only and require reviewed competitor account/region/role configuration with ExternalId. Cloud execution of non-AWS exercises still needs a separate runner. Exercise resources can incur charges; stopping a local process does not remove resources created by an older AWS-enabled revision.
 
 <h2 id="legacy-installations">Legacy installations</h2>
 
 Historical SaaS/Lite and individual-practice instructions are available in the [pinned legacy source](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9). Do not use them against this candidate or assume data migrates automatically.
 
-SaaS tenant rollout, CodePipeline, Lite launcher and its CodeBuild cleanup are historical contracts, not current setup steps. Use the exact legacy version that owns an existing deployment for its lifecycle operations.
+SaaS tenant rollout remains historical. The renamed cloud pipeline preserves its original CodePipeline/CodeBuild deployment and cleanup for its pinned source refs. Use the exact legacy version that owns an existing deployment for its lifecycle operations.

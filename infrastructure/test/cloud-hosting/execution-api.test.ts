@@ -105,6 +105,14 @@ function fixture() {
     .spyOn(work, "submitFlag")
     .mockResolvedValue({ kind: "ok", scoreDelta: 100, totalScore: 100 });
   const history = vi.spyOn(work, "listScoreEvents").mockResolvedValue([]);
+  const close = vi.spyOn(work, "closeEvent").mockImplementation(async (current) => {
+    repository.events.set(current.eventId, { ...current, status: "TEARDOWN" });
+    return "closing";
+  });
+  const targets = vi.spyOn(work, "listTargetJobs").mockResolvedValue([]);
+  const expected = vi.spyOn(work, "setTeardownExpected").mockResolvedValue();
+  const teardown = vi.spyOn(work, "requestTeardown").mockResolvedValue("enqueued");
+  const archive = vi.spyOn(work, "archiveTeardown").mockResolvedValue(false);
   const catalog = vi.fn(
     async (): Promise<Readonly<Record<string, CloudProblem>>> => ({ "hello-world": problem }),
   );
@@ -177,6 +185,11 @@ function fixture() {
     schedule,
     submit,
     history,
+    close,
+    targets,
+    expected,
+    teardown,
+    archive,
     catalog,
     verify,
     app,
@@ -513,4 +526,108 @@ describe("verified connection and schedule routes", () => {
     expect((await f.organizer(`${f.path}/schedule`, "PATCH", { startNow: true })).status).toBe(404);
     expect((await f.organizer(`${f.path}/lock-scoring`)).status).toBe(404);
   });
+});
+
+describe("existing event DELETE contract with durable-teardown repository boundary", () => {
+  it("closes intake before strong target discovery and durably queues each owned job", async () => {
+    const f = fixture();
+    const job = await acceptedJob(f);
+    f.targets.mockResolvedValue([job]);
+    const result = await f.organizer(f.path, "DELETE", {}, "Operator");
+    expect(result.status).toBe(202);
+    expect(await result.json()).toEqual({
+      eventId: f.event.eventId,
+      enqueued: 1,
+      skipped: 0,
+      failed: 0,
+    });
+    expect(f.close.mock.invocationCallOrder[0]).toBeLessThan(
+      f.targets.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(f.targets).toHaveBeenCalledWith(f.event.eventId, f.team.teamId);
+    expect(f.expected).toHaveBeenCalledWith(f.event.eventId, 1);
+    expect(f.expected.mock.invocationCallOrder[0]).toBeLessThan(
+      f.teardown.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(f.teardown).toHaveBeenCalledWith(job, new Date(NOW + 1).toISOString());
+    f.accept.mockClear();
+    expect((await f.organizer(`${f.path}/deploy`)).status).toBe(409);
+    expect(f.accept).not.toHaveBeenCalled();
+    f.teardown.mockResolvedValue("skipped");
+    expect(await (await f.organizer(f.path, "DELETE")).json()).toMatchObject({
+      enqueued: 0,
+      skipped: 1,
+      failed: 0,
+    });
+  });
+  it("requires organizer write permission and does not discover foreign or missing scopes", async () => {
+    const f = fixture();
+    expect((await f.organizer(f.path, "DELETE", {}, "Viewer")).status).toBe(403);
+    expect((await f.participant(f.path, "DELETE")).status).toBe(401);
+    expect((await f.organizer(`/events/${ulid()}`, "DELETE")).status).toBe(404);
+    expect(f.close).not.toHaveBeenCalled();
+    expect(f.targets).not.toHaveBeenCalled();
+  });
+  it("reports partial acceptance failure without reopening the event or claiming all resources deleted", async () => {
+    const f = fixture();
+    const job = await acceptedJob(f);
+    f.targets.mockResolvedValue([job]);
+    f.teardown.mockRejectedValueOnce(new DeploymentConflict("teardown_request_conflict"));
+    const result = await f.organizer(f.path, "DELETE");
+    expect(result.status).toBe(202);
+    expect(await result.json()).toEqual({
+      eventId: f.event.eventId,
+      enqueued: 0,
+      skipped: 0,
+      failed: 1,
+    });
+    expect(f.repository.events.get(f.event.eventId)?.status).toBe("TEARDOWN");
+    expect(f.archive).toHaveBeenCalledWith(f.event.eventId);
+  });
+  it("returns an already-archived result without re-enqueueing or modifying deployment state", async () => {
+    const f = fixture();
+    f.repository.events.set(f.event.eventId, {
+      ...f.event,
+      status: "ARCHIVED",
+      teardownExpected: 4,
+      teardownCompleted: 4,
+    });
+    f.close.mockResolvedValue("archived");
+    const result = await f.organizer(f.path, "DELETE");
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({ enqueued: 0, skipped: 4, failed: 0 });
+    expect(f.targets).not.toHaveBeenCalled();
+    expect(f.teardown).not.toHaveBeenCalled();
+  });
+  it("projects a failed teardown to the existing organizer status/failure fields without exposing its owner", async () => {
+    const f = fixture();
+    const job = await acceptedJob(f);
+    f.repository.deployments = [
+      {
+        ...job,
+        status: "COMPLETE",
+        teardownStatus: "FAILED",
+        teardownFailureReason: "worker_failed",
+      },
+    ];
+    const response = await f.app.request(f.path, { method: "GET" }, f.claims("Admin"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      deploymentsByProblem: {
+        "hello-world": [{ jobId: job.jobId, status: "FAILED", failureReason: "worker_failed" }],
+      },
+    });
+  });
+});
+
+it("keeps the event closed and refuses a completeness claim when old-attempt resources are unresolved", async () => {
+  const f = fixture();
+  f.targets.mockRejectedValue(new DeploymentConflict("historical_attempt_resources_unresolved"));
+  const response = await f.organizer(f.path, "DELETE");
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({ error: "historical_attempt_resources_unresolved" });
+  expect(f.repository.events.get(f.event.eventId)?.status).toBe("TEARDOWN");
+  expect(f.expected).not.toHaveBeenCalled();
+  expect(f.teardown).not.toHaveBeenCalled();
+  expect(f.archive).not.toHaveBeenCalled();
 });

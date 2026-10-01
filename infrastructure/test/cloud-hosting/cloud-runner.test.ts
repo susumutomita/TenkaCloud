@@ -1,6 +1,7 @@
 import {
   CloudFormationClient,
   CreateStackCommand,
+  DeleteStackCommand,
   DescribeStacksCommand,
 } from "@aws-sdk/client-cloudformation";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
@@ -11,8 +12,11 @@ import {
   type CloudFormationTransport,
   type CloudRunnerDependencies,
   createDeployment,
+  type DeploymentReference,
+  deleteDeployment,
   deploymentIdentity,
   deploymentOwnershipTags,
+  describeDeletion,
   describeDeployment,
   MAX_DEPLOYMENT_INPUT_BYTES,
   parseDeploymentInput,
@@ -80,6 +84,7 @@ function fixture(value: unknown = INPUT) {
   const createStack = vi.fn<CloudFormationTransport["createStack"]>(async () => ({
     StackId: stackId,
   }));
+  const deleteStack = vi.fn<CloudFormationTransport["deleteStack"]>(async () => ({}));
   const getParameter = vi.fn(async () => ({
     Parameter: {
       ARN: input.target.externalIdParameterArn,
@@ -95,7 +100,7 @@ function fixture(value: unknown = INPUT) {
       Expiration: new Date(NOW + 15 * 60_000),
     },
   }));
-  const cloudFormation = vi.fn(() => ({ describeStacks, createStack }));
+  const cloudFormation = vi.fn(() => ({ describeStacks, createStack, deleteStack }));
   const ssm = vi.fn(() => ({ getParameter }));
   const deps: CloudRunnerDependencies = {
     ssm,
@@ -113,6 +118,7 @@ function fixture(value: unknown = INPUT) {
     ownedStack,
     describeStacks,
     createStack,
+    deleteStack,
     getParameter,
     assumeRole,
     cloudFormation,
@@ -609,6 +615,473 @@ describe("owned status polling and participant output whitelist", () => {
   });
 });
 
+describe("owned CloudFormation teardown", () => {
+  it("durably acknowledges the exact resolved ARN before submitting deletion", async () => {
+    const f = fixture();
+    f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack()] });
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const onResolved = vi.fn(async (reference: DeploymentReference) => {
+      expect(reference).toEqual(f.reference);
+      expect(Object.isFrozen(reference)).toBe(true);
+      expect(f.describeStacks).toHaveBeenCalledExactlyOnceWith({ StackName: f.identity.stackName });
+      expect(f.deleteStack).not.toHaveBeenCalled();
+      await gate;
+    });
+    const pending = deleteDeployment(INPUT, undefined, f.deps, "teardown-a", false, onResolved);
+    await vi.waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1));
+    expect(f.deleteStack).not.toHaveBeenCalled();
+    release?.();
+    expect((await pending).reference).toEqual(f.reference);
+    expect(f.deleteStack).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["CREATE_COMPLETE", "CREATE_IN_PROGRESS", "DELETE_IN_PROGRESS"])(
+    "propagates reference persistence failure in %s without sending DeleteStack",
+    async (StackStatus) => {
+      const f = fixture();
+      f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack({ StackStatus })] });
+      const failure = new Error("synthetic durable reference acknowledgement failed");
+      const onResolved = vi.fn(async () => {
+        throw failure;
+      });
+      await expect(
+        deleteDeployment(INPUT, undefined, f.deps, "teardown-a", false, onResolved),
+      ).rejects.toBe(failure);
+      expect(onResolved).toHaveBeenCalledExactlyOnceWith(f.reference);
+      expect(f.deleteStack).not.toHaveBeenCalled();
+    },
+  );
+
+  it("deletes the resolved ARN with a deterministic bounded token and no outputs", async () => {
+    const f = fixture();
+    f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack()] });
+    const first = await deleteDeployment(INPUT, undefined, f.deps, "teardown-a", false);
+    const second = await deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", false);
+    expect(first).toEqual({
+      reference: f.reference,
+      phase: "pending",
+      stackStatus: "DELETE_IN_PROGRESS",
+    });
+    expect(second).toEqual(first);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.reference)).toBe(true);
+    expect(f.describeStacks.mock.calls).toEqual([
+      [{ StackName: f.identity.stackName }],
+      [{ StackName: f.stackId }],
+    ]);
+    expect(f.deleteStack.mock.calls[0]).toEqual(f.deleteStack.mock.calls[1]);
+    expect(f.deleteStack).toHaveBeenCalledWith({
+      StackName: f.stackId,
+      ClientRequestToken: expect.stringMatching(/^tc-delete-[a-f0-9]{64}$/),
+    });
+    expect(f.createStack).not.toHaveBeenCalled();
+    expect(JSON.stringify(first)).not.toMatch(
+      /Outputs|outputs|AdminPassword|synthetic-secret|synthetic-session/,
+    );
+  });
+
+  it.each(["CREATE_IN_PROGRESS", "ROLLBACK_IN_PROGRESS"])(
+    "waits for %s before attempting deletion",
+    async (StackStatus) => {
+      const f = fixture();
+      f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack({ StackStatus })] });
+      expect(await deleteDeployment(INPUT, undefined, f.deps, "teardown-a", false)).toEqual({
+        reference: f.reference,
+        phase: "waiting",
+        stackStatus: StackStatus,
+      });
+      expect((await describeDeletion(INPUT, f.reference, f.deps, true)).phase).toBe("waiting");
+      expect(f.deleteStack).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "CREATE_COMPLETE",
+    "CREATE_FAILED",
+    "ROLLBACK_COMPLETE",
+    "ROLLBACK_FAILED",
+    "DELETE_FAILED",
+  ])("allows an explicit delete request from owned %s", async (StackStatus) => {
+    const f = fixture();
+    f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack({ StackStatus })] });
+    expect((await deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", false)).phase).toBe(
+      "pending",
+    );
+    expect(f.deleteStack).toHaveBeenCalledTimes(1);
+  });
+
+  it("converges creation, exposes partial delete failure and supports an explicit fresh retry", async () => {
+    const f = fixture();
+    const status = (StackStatus: string) => ({ Stacks: [f.ownedStack({ StackStatus })] });
+    f.describeStacks
+      .mockResolvedValueOnce(status("CREATE_IN_PROGRESS"))
+      .mockResolvedValueOnce(status("CREATE_COMPLETE"))
+      .mockResolvedValueOnce(status("CREATE_COMPLETE"))
+      .mockResolvedValueOnce(status("DELETE_FAILED"))
+      .mockResolvedValueOnce(status("DELETE_FAILED"))
+      .mockResolvedValueOnce(status("DELETE_IN_PROGRESS"))
+      .mockResolvedValueOnce(status("DELETE_COMPLETE"));
+    expect((await deleteDeployment(INPUT, undefined, f.deps, "teardown-a", false)).phase).toBe(
+      "waiting",
+    );
+    expect(f.deleteStack).not.toHaveBeenCalled();
+    expect((await deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", false)).phase).toBe(
+      "pending",
+    );
+    expect((await describeDeletion(INPUT, f.reference, f.deps, true)).phase).toBe("pending");
+    expect(await describeDeletion(INPUT, f.reference, f.deps, true)).toEqual({
+      reference: f.reference,
+      phase: "failed",
+      stackStatus: "DELETE_FAILED",
+    });
+    expect(f.deleteStack).toHaveBeenCalledTimes(1);
+    expect((await deleteDeployment(INPUT, f.reference, f.deps, "teardown-b", false)).phase).toBe(
+      "pending",
+    );
+    expect(f.deleteStack.mock.calls[0]?.[0].ClientRequestToken).not.toBe(
+      f.deleteStack.mock.calls[1]?.[0].ClientRequestToken,
+    );
+    expect((await describeDeletion(INPUT, f.reference, f.deps, true)).phase).toBe("pending");
+    expect((await describeDeletion(INPUT, f.reference, f.deps, true)).phase).toBe("deleted");
+    expect(f.deleteStack).toHaveBeenCalledTimes(2);
+    expect(f.deleteStack.mock.calls.every(([input]) => input.StackName === f.stackId)).toBe(true);
+    expect(f.getParameter).toHaveBeenCalledTimes(7);
+    expect(f.assumeRole).toHaveBeenCalledTimes(7);
+  });
+
+  it.each(["DELETE_IN_PROGRESS", "DELETE_COMPLETE"])(
+    "handles duplicate submission in %s without another delete",
+    async (StackStatus) => {
+      const f = fixture();
+      f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack({ StackStatus })] });
+      const expected = StackStatus === "DELETE_COMPLETE" ? "deleted" : "pending";
+      expect((await deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", false)).phase).toBe(
+        expected,
+      );
+      expect((await describeDeletion(INPUT, f.reference, f.deps, true)).phase).toBe(expected);
+      expect(f.deleteStack).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "EventId",
+    "TeamId",
+    "ProblemId",
+    "JobId",
+    "AttemptId",
+    "AccountId",
+    "Region",
+    "RequestFingerprint",
+  ])(
+    "rejects mismatched, missing or duplicate %s ownership tags on delete and poll",
+    async (field) => {
+      for (const change of ["mismatch", "missing", "duplicate"]) {
+        const f = fixture();
+        const key = `TenkaCloud:${field}`;
+        const tags = deploymentOwnershipTags(f.input);
+        let Tags: StackDescription["Tags"];
+        if (change === "missing") Tags = tags.filter((tag) => tag.Key !== key);
+        else if (change === "duplicate") Tags = [...tags, ...tags.filter((tag) => tag.Key === key)];
+        else Tags = tags.map((tag) => (tag.Key === key ? { ...tag, Value: "other" } : tag));
+        f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack({ Tags })] });
+        await expect(
+          deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", true),
+        ).rejects.toThrow("ownership");
+        await expect(describeDeletion(INPUT, f.reference, f.deps, true)).rejects.toThrow(
+          "ownership",
+        );
+        expect(f.deleteStack).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each([
+    { eventId: "event-b" },
+    { teamId: "team-b" },
+    { problemId: "problem-b" },
+    { jobId: "job-b" },
+    { attemptId: "attempt-b" },
+    { templateBody: "changed" },
+    { parameters: [{ key: "NamePrefix", value: "changed" }] },
+    { capabilities: ["CAPABILITY_IAM"] },
+    { allowedOutputKeys: ["OtherOutput"] },
+    { target: { ...INPUT.target, roleArn: "arn:aws:iam::123456789012:role/Other" } },
+    {
+      target: {
+        ...INPUT.target,
+        externalIdParameterArn: `${INPUT.target.externalIdParameterArn}-other`,
+      },
+    },
+    {
+      target: {
+        ...INPUT.target,
+        accountId: "111111111111",
+        roleArn: "arn:aws:iam::111111111111:role/TenkaCloudDeploy",
+      },
+    },
+    { target: { ...INPUT.target, region: "us-west-2" } },
+  ])("rejects changed immutable input before acquiring credentials: %j", async (change) => {
+    const f = fixture();
+    await expect(
+      deleteDeployment({ ...INPUT, ...change }, f.reference, f.deps, "teardown-a", true),
+    ).rejects.toThrow();
+    await expect(
+      describeDeletion({ ...INPUT, ...change }, f.reference, f.deps, true),
+    ).rejects.toThrow();
+    expect(f.ssm).not.toHaveBeenCalled();
+    expect(f.cloudFormation).not.toHaveBeenCalled();
+  });
+
+  it("rejects a substituted ARN or name even when all ownership tags match", async () => {
+    for (const change of [
+      { StackId: fixture().stackId.replace("123456789012", "111111111111") },
+      { StackId: fixture().stackId.replace("us-east-1", "us-west-2") },
+      { StackId: fixture().stackId.replace("stack/tc-", "stack/other-") },
+      { StackId: `${fixture().stackId}-replacement` },
+      { StackName: "another-stack" },
+    ]) {
+      const f = fixture();
+      f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack(change)] });
+      await expect(
+        deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", true),
+      ).rejects.toThrow();
+      await expect(describeDeletion(INPUT, f.reference, f.deps, true)).rejects.toThrow();
+      expect(f.describeStacks.mock.calls.every(([input]) => input.StackName === f.stackId)).toBe(
+        true,
+      );
+      expect(f.deleteStack).not.toHaveBeenCalled();
+    }
+  });
+
+  it("requires explicit permission for exact absence and keeps uncertain creation fail-closed", async () => {
+    const f = fixture();
+    for (const reference of [undefined, f.reference]) {
+      await expect(deleteDeployment(INPUT, reference, f.deps, "teardown-a", false)).rejects.toThrow(
+        "absence is not confirmed",
+      );
+      const result = await deleteDeployment(INPUT, reference, f.deps, "teardown-a", true);
+      expect(result).toEqual({
+        ...(reference ? { reference } : {}),
+        phase: "deleted",
+        stackStatus: "DELETE_COMPLETE",
+      });
+    }
+    await expect(describeDeletion(INPUT, f.reference, f.deps, false)).rejects.toThrow(
+      "absence is not confirmed",
+    );
+    expect(await describeDeletion(INPUT, f.reference, f.deps, true)).toEqual({
+      reference: f.reference,
+      phase: "deleted",
+      stackStatus: "DELETE_COMPLETE",
+    });
+    expect(f.deleteStack).not.toHaveBeenCalled();
+  });
+
+  it("never mistakes access denial, generic validation, unrelated absence or malformed responses for deletion", async () => {
+    const f = fixture();
+    for (const error of [
+      namedError("AccessDenied", `Stack with id ${f.stackId} does not exist`),
+      namedError("ValidationError", "Validation failed"),
+      namedError("ValidationError", `Stack with id ${f.identity.stackName} does not exist`),
+      namedError("ValidationError", `Stack with id ${f.stackId} does not exist; try again`),
+      namedError("ThrottlingException", "slow down"),
+      { name: "ValidationError", message: `Stack with id ${f.stackId} does not exist` },
+    ]) {
+      f.describeStacks.mockRejectedValue(error);
+      await expect(deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", true)).rejects.toBe(
+        error,
+      );
+      await expect(describeDeletion(INPUT, f.reference, f.deps, true)).rejects.toBe(error);
+    }
+    for (const response of [
+      {},
+      { Stacks: [] },
+      { Stacks: new Array<StackDescription>(1) },
+      { Stacks: [f.ownedStack(), f.ownedStack()] },
+    ]) {
+      f.describeStacks.mockResolvedValue(response);
+      await expect(
+        deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", true),
+      ).rejects.toThrow("ambiguous");
+      await expect(describeDeletion(INPUT, f.reference, f.deps, true)).rejects.toThrow("ambiguous");
+    }
+    expect(f.deleteStack).not.toHaveBeenCalled();
+  });
+
+  it.each(["UPDATE_IN_PROGRESS", "UPDATE_COMPLETE", "IMPORT_COMPLETE", "UNKNOWN", undefined])(
+    "rejects unrecognized status %s without sending a delete",
+    async (StackStatus) => {
+      const f = fixture();
+      f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack({ StackStatus })] });
+      await expect(
+        deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", true),
+      ).rejects.toThrow("Unexpected status");
+      await expect(describeDeletion(INPUT, f.reference, f.deps, true)).rejects.toThrow(
+        "Unexpected status",
+      );
+      expect(f.deleteStack).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["", "x".repeat(129), "with space", "invalid/token"])(
+    "rejects invalid teardown token %j before credentials",
+    async (token) => {
+      const f = fixture();
+      await expect(deleteDeployment(INPUT, f.reference, f.deps, token, true)).rejects.toThrow(
+        "request token",
+      );
+      expect(f.ssm).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refreshes the current ExternalId and target credentials on every delete and poll", async () => {
+    const f = fixture();
+    f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack()] });
+    await deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", false);
+    f.getParameter.mockResolvedValue({
+      Parameter: {
+        ARN: INPUT.target.externalIdParameterArn,
+        Type: "SecureString",
+        Value: "rotated-external-id",
+      },
+    });
+    f.assumeRole.mockResolvedValue({
+      Credentials: {
+        AccessKeyId: "ROTATED_ACCESS_KEY",
+        SecretAccessKey: "rotated-secret",
+        SessionToken: "rotated-session",
+        Expiration: new Date(NOW + 900_000),
+      },
+    });
+    await describeDeletion(INPUT, f.reference, f.deps, true);
+    expect(f.getParameter).toHaveBeenCalledTimes(2);
+    expect(f.assumeRole).toHaveBeenLastCalledWith(
+      expect.objectContaining({ RoleArn: INPUT.target.roleArn, ExternalId: "rotated-external-id" }),
+    );
+    expect(f.cloudFormation).toHaveBeenLastCalledWith({
+      region: INPUT.target.region,
+      accountId: INPUT.target.accountId,
+      credentials: {
+        accessKeyId: "ROTATED_ACCESS_KEY",
+        secretAccessKey: "rotated-secret",
+        sessionToken: "rotated-session",
+        expiration: new Date(NOW + 900_000),
+      },
+    });
+  });
+
+  it.each([
+    { Type: "String" },
+    { Value: "" },
+    { Value: "with spaces" },
+    { ARN: `${INPUT.target.externalIdParameterArn}-other` },
+  ])("requires the matching current SecureString on delete and poll: %j", async (change) => {
+    const f = fixture();
+    f.getParameter.mockResolvedValue({
+      Parameter: {
+        ARN: INPUT.target.externalIdParameterArn,
+        Type: "SecureString",
+        Value: EXTERNAL_ID,
+        ...change,
+      },
+    });
+    await expect(deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", true)).rejects.toThrow(
+      "SecureString ExternalId",
+    );
+    await expect(describeDeletion(INPUT, f.reference, f.deps, true)).rejects.toThrow(
+      "SecureString ExternalId",
+    );
+    expect(f.assumeRole).not.toHaveBeenCalled();
+    expect(f.cloudFormation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { AccessKeyId: "" },
+    { SecretAccessKey: "" },
+    { SessionToken: "" },
+    { Expiration: new Date(NOW) },
+    { Expiration: new Date(NOW + 60_000) },
+    { Expiration: new Date(Number.NaN) },
+  ])(
+    "rejects incomplete or expiring delete/poll credentials without ambient fallback: %j",
+    async (change) => {
+      const f = fixture();
+      f.assumeRole.mockResolvedValue({
+        Credentials: {
+          AccessKeyId: "synthetic",
+          SecretAccessKey: "synthetic",
+          SessionToken: "synthetic",
+          Expiration: new Date(NOW + 900_000),
+          ...change,
+        },
+      });
+      await expect(
+        deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", true),
+      ).rejects.toThrow("incomplete or expired");
+      await expect(describeDeletion(INPUT, f.reference, f.deps, true)).rejects.toThrow(
+        "incomplete or expired",
+      );
+      expect(f.cloudFormation).not.toHaveBeenCalled();
+    },
+  );
+
+  it("propagates current authorization failure and all delete submission failures", async () => {
+    const denied = namedError("AccessDenied", "synthetic denied");
+    const f = fixture();
+    f.assumeRole.mockRejectedValue(denied);
+    await expect(deleteDeployment(INPUT, f.reference, f.deps, "teardown-a", true)).rejects.toBe(
+      denied,
+    );
+    await expect(describeDeletion(INPUT, f.reference, f.deps, true)).rejects.toBe(denied);
+    expect(f.cloudFormation).not.toHaveBeenCalled();
+    const submitting = fixture();
+    submitting.describeStacks.mockResolvedValue({ Stacks: [submitting.ownedStack()] });
+    for (const error of [
+      denied,
+      namedError("ValidationError", `Stack with id ${submitting.stackId} does not exist`),
+    ]) {
+      submitting.deleteStack.mockRejectedValue(error);
+      await expect(
+        deleteDeployment(INPUT, submitting.reference, submitting.deps, "teardown-a", true),
+      ).rejects.toBe(error);
+    }
+  });
+
+  it("snapshots caller input and physical reference before asynchronous work", async () => {
+    const mutable = structuredClone(INPUT);
+    const f = fixture(mutable);
+    const reference = { ...f.reference };
+    f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack()] });
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    f.getParameter.mockImplementation(async () => {
+      await gate;
+      return {
+        Parameter: {
+          ARN: INPUT.target.externalIdParameterArn,
+          Type: "SecureString",
+          Value: EXTERNAL_ID,
+        },
+      };
+    });
+    const pending = deleteDeployment(mutable, reference, f.deps, "teardown-a", false);
+    Object.assign(mutable, { teamId: "other" });
+    Object.assign(mutable.target, { roleArn: "arn:aws:iam::123456789012:role/Other" });
+    reference.stackId = `${f.stackId}-replacement`;
+    reference.fingerprint = "other";
+    release?.();
+    expect((await pending).reference).toEqual(f.reference);
+    expect(f.describeStacks).toHaveBeenCalledExactlyOnceWith({ StackName: f.stackId });
+    expect(f.deleteStack.mock.calls[0]?.[0].StackName).toBe(f.stackId);
+    expect(f.assumeRole.mock.calls[0]?.[0].RoleArn).toBe(INPUT.target.roleArn);
+  });
+});
+
 describe("real SDK adapter with all AWS send methods intercepted", () => {
   it("constructs explicit commands and regions without resolving credentials or making network requests", async () => {
     const f = fixture();
@@ -649,6 +1122,22 @@ describe("real SDK adapter with all AWS send methods intercepted", () => {
     expect(stsSend.mock.calls[0]?.[0]).toBeInstanceOf(AssumeRoleCommand);
     expect(cfnSend.mock.calls[0]?.[0]).toBeInstanceOf(DescribeStacksCommand);
     expect(cfnSend.mock.calls[1]?.[0]).toBeInstanceOf(CreateStackCommand);
+    cfnSend.mockImplementation(async (command) => {
+      if (command instanceof DescribeStacksCommand) return { Stacks: [f.ownedStack()] };
+      if (command instanceof DeleteStackCommand) return { $metadata: {} };
+      throw new Error("Unexpected SDK command during teardown");
+    });
+    expect((await deleteDeployment(INPUT, f.reference, deps, "teardown-a", false)).phase).toBe(
+      "pending",
+    );
+    expect(cfnSend.mock.calls[2]?.[0]).toBeInstanceOf(DescribeStacksCommand);
+    expect(cfnSend.mock.calls[3]?.[0]).toBeInstanceOf(DeleteStackCommand);
+    expect(cfnSend.mock.calls[3]?.[0].input).toEqual({
+      StackName: f.stackId,
+      ClientRequestToken: expect.stringMatching(/^tc-delete-[a-f0-9]{64}$/),
+    });
+    expect(ssmSend).toHaveBeenCalledTimes(2);
+    expect(stsSend).toHaveBeenCalledTimes(2);
     const ssm = ssmSend.mock.contexts[0];
     const sts = stsSend.mock.contexts[0];
     const cfn = cfnSend.mock.contexts[0];

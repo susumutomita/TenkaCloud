@@ -68,14 +68,14 @@
 <main class="doc">
 <article>
 <h1>アーキテクチャ <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<h2 id="reading-order">読む順番</h2><p>配置先を選ぶ前に責務と信頼境界を確認します。未公開 candidate はコミュニティの競技を一つのプロセスで運営します。SaaS tenant の作成基盤は含みません。</p>
+<h2 id="reading-order">読む順番</h2><p>配置先を選ぶ前に責務と信頼境界を確認します。この Draft はローカル・クラウドの競技操作を統合検証しています。SaaS/SBT のテナント構築基盤は含みません。</p>
 <h2 id="local-play-and-docker">ローカル競技と Docker</h2><p><code>make local</code> は一つの Bun プロセスで開催者・参加者の画面を配信します。開催者 role と大会・チームのキーは異なる HTTP 面を認証します。SQLite と非公開キーに大会状態と環境の所有情報を保持します。<code>make down</code> は所有するローカル環境を止め、データを残します。明示的な teardown は別です。</p>
-<p>新しい Docker 大会は最大 512 件の停止中 jobs を準備し、参加者が Start / resume と Stop (keep data) を使います。デフォルトはチーム 3、host 全体 12 環境、メモリー上限の合計 4096 MiB です。40 個の gateway 枠は起動中だけに使い、runtime port は停止後も保持します。書き込みレイヤーと volume は保持しますが、RAM は保持しません。自動退避や初期化は行わず、既存大会は従来の lifecycle を維持します。汎用 Docker カタログと workbench は復旧中です。旧ローカル 106 問すべてを Challenge 競技にする方針ですが、terminal と実 Docker・ブラウザの検証は未完了です。verifier は公開画面や他チームから分離しなければなりません。</p>
-<h2 id="cloud-components">AWS 問題とクラウド基盤</h2><p>確認対象の AWS adapter は、検証済み競技者アカウントへ所有情報付きの CloudFormation stack を配置します。配置 role は host の ExternalId を要求します。参加者アクセスは保存した別の viewer role と配置ごとの ExternalId を使います。運営用の認証情報は参加者へ渡しません。</p>
-<p>クラウド用 Turso と配置先は対応中です。<code>make deploy</code> と <code>make destroy</code> は現在、リソースを変えず明示的に失敗します。常駐プロセス、定期処理、永続的な識別情報には、実際に確認した配置契約が必要です。</p>
+<p>新しい Docker 大会は最大 512 件の停止中 jobs を準備し、参加者が Start / resume と Stop (keep data) を使います。デフォルトはチーム 3、host 全体 12 環境、メモリー上限の合計 4096 MiB です。40 個の gateway 枠は起動中だけに使い、runtime port は停止後も保持します。書き込みレイヤーと volume は保持しますが、RAM は保持しません。自動退避や初期化は行わず、既存大会は従来の lifecycle を維持します。汎用カタログと workbench は旧ローカル 106 定義を Challenge として表示し、15 件の terminal 宣言に対応します。実 Docker・ブラウザでは SQL、PostgreSQL terminal、Battle の代表経路を確認しています。全問題の通し検証は未完了です。verifier は公開画面や他チームから分離しなければなりません。</p>
+<h2 id="cloud-components">AWS 問題とクラウド基盤</h2><p>AWS サービスの問題はクラウド開催専用です。明示設定した cloud flag runner は、競技者 role と SSM に保存した必須の ExternalId を使い、所有情報付きの CloudFormation stack を配置します。参加者用 viewer role と初回設定の結線は未完了です。配置 role の認証情報を参加者へ渡してはいけません。</p>
+<p>クラウド基盤は Lambda、Cognito、DynamoDB を使い、配置受付と Step Functions の処理を永続化します。配置・撤収の経路が整うまで、<code>make deploy</code> と <code>make destroy</code> はリソースを変えず明示的に失敗します。非 AWS 問題のクラウド実行には別の runner が必要です。ローカルの Docker プロセスを Lambda に配置する構成ではありません。</p>
 <h2 id="problem-deployment">問題の配置と採点</h2><p>認証済み開催者が大会の操作を要求し、外部作成前に所有情報を保存します。状態、エラー、復旧情報を保持します。参加者の要求ではチーム、大会、問題、時刻を検証し、得点、進捗、再試行受付票を一緒に確定してから成功を返します。verifier の失敗や不明なクラウド操作を成功にしません。</p>
-<h2 id="diagram-sources">編集可能な図のソース</h2><p>リポジトリの <code>docs/architecture/README.md</code> から現在の Mermaid と <code>system-architecture.drawio</code> を開けます。以前生成した図は旧実装の資料であり、このページでは現行の証拠として表示しません。</p>
-<h2 id="legacy-reference">旧版資料</h2><p>旧 control plane、tenant、Lite、Step Functions は以下の固定した旧版だけで参照します。大会・チームの責務を保ち、将来の SaaS のためだけの抽象化は追加しません。</p>
+<h2 id="diagram-sources">編集可能な図のソース</h2><p>リポジトリの <code>docs/architecture/README.md</code> に、復元した AWS アイコン付き <code>system-architecture.drawio</code> と生成元を記載しています。元の見た目を保った旧構成の図であり、現在のクラウド実装を検証済みと示すものではありません。</p>
+<h2 id="legacy-reference">旧版資料</h2><p>旧 SaaS/control plane と Lite の配置手順は、以下の固定した旧版を参照します。現クラウド基盤は単独開催向けの Lambda/DynamoDB と Step Functions の必要部分を再利用します。大会・チームの責務を保ち、将来の SaaS のためだけの抽象化は追加しません。</p>
 <p><a href="https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/architecture/README.md">Legacy architecture / 固定した旧版</a>.</p>
 
 </article>

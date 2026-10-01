@@ -167,6 +167,12 @@ export class CloudApplicationStack extends Stack {
       );
       apiHandler.addToRolePolicy(
         new PolicyStatement({
+          actions: ["dynamodb:DeleteItem"],
+          resources: [props.backend.deployments.tableArn],
+        }),
+      );
+      apiHandler.addToRolePolicy(
+        new PolicyStatement({
           actions: ["s3:GetObject"],
           resources: [
             execution.bucket.arnForObjects(execution.catalogKey),
@@ -238,6 +244,7 @@ export class CloudApplicationStack extends Stack {
     }
     if (execution) {
       event.addResource("deploy").addMethod("POST", integration, protectedMethod);
+      event.addMethod("DELETE", integration, protectedMethod);
       event.addResource("schedule").addMethod("PATCH", integration, protectedMethod);
       const scoringLock = event.addResource("lock-scoring");
       scoringLock.addMethod("POST", integration, protectedMethod);

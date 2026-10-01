@@ -9,10 +9,10 @@ export const metadata = { title: "runtime の実行状況" };
 | Runtime | 現在の境界 |
 | --- | --- |
 | ローカル Docker Compose | 新しい大会は最大 512 件の停止中 jobs を準備。参加者が起動・再開・停止する。デフォルトはチーム 3、host 全体 12 環境、メモリー上限の合計 4096 MiB。106 問の表示は全問のプレイ確認ではない |
-| Docker 問題内の terminal | 15 問が宣言。synthetic shell の HTTP/WebSocket 11 tests・96 assertions は成功。実 Docker exec と全経路のブラウザ検証は未確認 |
+| Docker 問題内の terminal | 15 問が宣言。実 PostgreSQL terminal の exec、3 checkpoints、チーム分離、再起動を確認。他の terminal 問題には追加の代表経路確認が必要 |
 | プロセス内 Cryptography Battle | adapter とローカルテストを継続。Docker・AWS は不要 |
-| AWS CloudFormation | hello-world と hello-world-battle の確認対象 adapter。実 AWS は別途承認したリハーサル |
-| Turso を使うクラウド基盤 | 対応中。make deploy と make destroy は未実装 |
+| AWS CloudFormation | クラウド開催専用。明示設定した hello-world の flag 経路を接続。cloud Battle と参加者 AWS アクセスは未完成。実 AWS は別途リハーサル |
+| Lambda/DynamoDB のクラウド基盤 | 基盤と永続化した処理を実装。make deploy/destroy と非 AWS 問題の cloud runner は未完成 |
 | 外部 pack、Azure、GCP、Sakura、その他の採点方式 | schema・作問用の宣言だけでは大会での実行対応になりません |
 
 <h2 id="support-classes">確認結果を区別する</h2>

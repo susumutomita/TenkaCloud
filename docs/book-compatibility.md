@@ -12,8 +12,8 @@ instructions include legacy local-practice and Lite paths.
 | make local for individual practice | make local starts one event/team competition system; prepare dormant Docker jobs, start the event, then use participant Start / resume |
 | make local-down clears progress | make down preserves DB, scores, keys, writable layers and volumes; new Docker jobs remain stopped until participant resume, with no RAM retention |
 | make host | Removed public target; use make local |
-| Lite launcher / CodeBuild platform setup | No current replacement deployment yet; make deploy exits unimplemented |
-| ACTION=destroy-all | Legacy-only; make destroy currently exits unimplemented and deletes nothing |
+| Lite launcher / CodeBuild platform setup | Renamed cloud-pipeline.yaml retains the complete fixed-old-ref flow; current Lambda/DynamoDB make deploy remains incomplete |
+| ACTION=destroy-all | Retained only by the fixed-old-ref pipeline; current make destroy remains incomplete and deletes nothing |
 | pack activate for a tenant | Retained local record only; does not add problems to current events |
 
 Local SQLite is implemented. Cloud Lambda / DynamoDB hosting is being restored.
@@ -46,8 +46,8 @@ an authorized book revision rather than silently changing the score engine.
 ## Chapters needing an authorized book revision
 
 - Execution modes and local chapters: event/team flow, Bun setup, actual exercise links and state-preserving shutdown
-- AWS access: required host deployment ExternalId versus per-deployment participant-role ExternalId, exact bootstrap role and region
-- Lite setup and cleanup: replace with a working cloud path only after implementation; retain legacy cleanup solely for legacy installations
+- AWS access: cloud-only execution, configured deployment-role ExternalId in SSM, separate participant role and exact bootstrap region; no local AWS startup option
+- Cloud setup and cleanup: preserve the complete renamed pipeline while identifying its fixed legacy refs; update to the current path only after implementation
 - Authoring/private packs: distinguish validation/install from executable catalog integration
 - Codespaces and appendix: require new forwarded-origin, gateway and terminal evidence; update the shutdown checklist
 

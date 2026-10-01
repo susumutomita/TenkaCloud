@@ -14,7 +14,7 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { DescribeExecutionCommand, SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
-import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { App, Stack } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { AttributeType, Table } from "aws-cdk-lib/aws-dynamodb";
@@ -24,10 +24,12 @@ import { CloudApplicationStack } from "../../lib/cloud-hosting/application-stack
 import { CloudDataStack } from "../../lib/cloud-hosting/data-stack.js";
 import { CloudDeploymentPipeline } from "../../lib/cloud-hosting/deployment-pipeline.js";
 import {
+  type CreationReservation,
   contentDigest,
   type DeploymentJob,
   deploymentStackName,
   flagDigest,
+  type TeardownRecord,
 } from "../../lib/problem-deploy/control-data/domain/deployment-work.js";
 import {
   createAwsDispatcherDependencies,
@@ -68,7 +70,15 @@ afterEach(() => {
 });
 
 function fixture() {
-  const data: { job: DeploymentJob } = {
+  const data: {
+    job: DeploymentJob;
+    creation?: CreationReservation;
+    teardown?: TeardownRecord;
+    now: number;
+    eventClosed: boolean;
+  } = {
+    now: NOW,
+    eventClosed: false,
     job: {
       ...IDENTITY,
       problemId: "hello-world",
@@ -101,6 +111,64 @@ function fixture() {
       scoring: { kind: "flag", points: 100, wrongPenalty: 0, flagOutputKey: "ExpectedFlag" },
     },
   };
+  data.creation = { ...IDENTITY, state: "NOT_STARTED", leaseUntil: 0 };
+  const getCreation = vi.fn<WorkflowRepository["getCreation"]>(async () =>
+    structuredClone(data.creation),
+  );
+  const reserveCreation = vi.fn<WorkflowRepository["reserveCreation"]>(
+    async (identity, owner, now) => {
+      if (data.eventClosed) throw new Error("event closed");
+      data.creation = { ...identity, state: "REQUESTED", owner, leaseUntil: now + 120_000 };
+    },
+  );
+  const recordCreation = vi.fn<WorkflowRepository["recordCreation"]>(
+    async (_identity, owner, reference) => {
+      if (!data.creation || data.creation.owner !== owner)
+        throw new Error("creation owner changed");
+      data.creation = { ...data.creation, state: "ACKNOWLEDGED", ...reference };
+    },
+  );
+  const getTeardown = vi.fn<WorkflowRepository["getTeardown"]>(async (identity) => {
+    if (
+      data.teardown &&
+      (identity.generation !== data.teardown.generation ||
+        identity.attempt !== data.teardown.attempt)
+    )
+      throw new Error("teardown generation changed");
+    return structuredClone(data.teardown);
+  });
+  const beginTeardown = vi.fn<WorkflowRepository["beginTeardown"]>(async (_identity, owner) => {
+    if (data.teardown?.status !== "PENDING") throw new Error("teardown not pending");
+    data.teardown = { ...data.teardown, owner, status: "IN_PROGRESS" };
+    return "started";
+  });
+  const prepareDeletion = vi.fn<WorkflowRepository["prepareDeletion"]>(
+    async (_identity, _owner, now) => {
+      if (data.job.status === "IN_PROGRESS" || (data.creation?.leaseUntil ?? 0) > now) return false;
+      data.job = { ...data.job, status: "DELETING" };
+      return true;
+    },
+  );
+  const recordTeardownReference = vi.fn<WorkflowRepository["recordTeardownReference"]>(
+    async (_identity, owner, reference) => {
+      if (!data.teardown || data.teardown.owner !== owner)
+        throw new Error("teardown owner changed");
+      data.teardown = { ...data.teardown, ...reference };
+    },
+  );
+  const finishTeardown = vi.fn<WorkflowRepository["finishTeardown"]>(
+    async (identity, owner, result) => {
+      if (
+        !data.teardown ||
+        data.teardown.generation !== identity.generation ||
+        data.teardown.owner !== owner
+      )
+        throw new Error("teardown changed");
+      data.teardown = { ...data.teardown, ...result };
+      if (result.status === "DELETED") data.job = { ...data.job, status: "DELETED" };
+      return "updated";
+    },
+  );
   const getJob = vi.fn<WorkflowRepository["getJob"]>(async () => structuredClone(data.job));
   const getConnection = vi.fn<WorkflowRepository["getConnection"]>(async () =>
     structuredClone(data.job.connection),
@@ -161,6 +229,7 @@ function fixture() {
   const createStack = vi.fn<CloudFormationTransport["createStack"]>(async () => ({
     StackId: stackId,
   }));
+  const deleteStack = vi.fn<CloudFormationTransport["deleteStack"]>(async () => ({}));
   const getParameter = vi.fn(async () => ({
     Parameter: {
       ARN: data.job.connection.externalIdParameter,
@@ -177,15 +246,28 @@ function fixture() {
     },
   }));
   const deps: WorkflowDependencies = {
-    repository: { getJob, getConnection, begin, finish },
+    repository: {
+      getJob,
+      getConnection,
+      begin,
+      finish,
+      getCreation,
+      reserveCreation,
+      recordCreation,
+      getTeardown,
+      beginTeardown,
+      prepareDeletion,
+      recordTeardownReference,
+      finishTeardown,
+    },
     resolveArtifacts,
     authorizeJob,
-    now: () => NOW,
+    now: () => data.now,
     runner: {
       ssm: () => ({ getParameter }),
       sts: { assumeRole },
-      cloudFormation: () => ({ describeStacks, createStack }),
-      now: () => NOW,
+      cloudFormation: () => ({ describeStacks, createStack, deleteStack }),
+      now: () => data.now,
     },
   };
   return {
@@ -205,6 +287,15 @@ function fixture() {
     createStack,
     resolveArtifacts,
     authorizeJob,
+    getCreation,
+    reserveCreation,
+    recordCreation,
+    getTeardown,
+    beginTeardown,
+    prepareDeletion,
+    recordTeardownReference,
+    finishTeardown,
+    deleteStack,
   };
 }
 
@@ -404,7 +495,12 @@ describe("production Lambda factory with every SDK send intercepted", () => {
       Body: { transformToString: async () => raw },
     }));
     vi.spyOn(DynamoDBDocumentClient.prototype, "send").mockImplementation(async (command) => {
-      if (!(command instanceof GetCommand)) throw new Error("Unexpected mutating Dynamo command");
+      if (command instanceof TransactWriteCommand) {
+        expect(command.input.TransactItems?.length).toBeGreaterThan(0);
+        return {};
+      }
+      if (!(command instanceof GetCommand)) throw new Error("Unexpected Dynamo command");
+      if (String(command.input.Key?.SK).startsWith("CREATE#")) return { Item: f.data.creation };
       return {
         Item: command.input.TableName === "synthetic-events" ? f.data.job.connection : f.data.job,
       };
@@ -516,7 +612,13 @@ describe("terminal Standard execution reconciliation", () => {
     }));
     const deps: RecoveryDependencies = {
       stateMachineArn: MACHINE,
-      repository: { getJob: f.getJob, finish: f.finish, failPending },
+      repository: {
+        getJob: f.getJob,
+        finish: f.finish,
+        failPending,
+        getTeardown: f.getTeardown,
+        finishTeardown: f.finishTeardown,
+      },
       describeExecution,
       now: () => NOW,
     };
@@ -842,4 +944,191 @@ describe("optional deployment pipeline offline synthesis", () => {
     expect(catalog.problems[0]?.templateBody).toBe(source);
     expect(catalog.problems[0]?.artifactDigest).toBe(contentDigest(source));
   }, 90_000);
+});
+
+function teardownFixture() {
+  const f = fixture();
+  const identity = { ...IDENTITY, operation: "delete" as const, generation: 1 };
+  const owner = `${MACHINE.replace(":stateMachine:", ":execution:")}:${dispatchExecutionName(identity)}`;
+  f.data.eventClosed = true;
+  f.data.job = { ...f.data.job, owner: OWNER, status: "COMPLETE", stackId: f.stackId };
+  f.data.creation = {
+    ...IDENTITY,
+    state: "ACKNOWLEDGED",
+    owner: OWNER,
+    leaseUntil: 0,
+    stackId: f.stackId,
+    fingerprint: deploymentIdentity(f.input).fingerprint,
+  };
+  f.data.teardown = {
+    ...identity,
+    status: "PENDING",
+    requestedAt: new Date(NOW).toISOString(),
+    updatedAt: new Date(NOW).toISOString(),
+  };
+  f.stack.StackStatus = "CREATE_COMPLETE";
+  const initial: WorkflowState = { identity, owner, phase: "pending", pollCount: 0 };
+  return { ...f, initial };
+}
+describe("event-owned teardown through the existing workflow handlers", () => {
+  it("persists the resolved original ARN before delete, polls, and completes without create or score writes", async () => {
+    const f = teardownFixture();
+    let state = await f.handlers.claim(f.initial);
+    state = await f.handlers.create(state);
+    expect(state.phase).toBe("pending");
+    expect(state.deleteSubmitted).toBe(true);
+    expect(f.recordTeardownReference).toHaveBeenCalledWith(
+      f.initial.identity,
+      f.initial.owner,
+      state.reference,
+    );
+    expect(f.recordTeardownReference.mock.invocationCallOrder[0]).toBeLessThan(
+      f.deleteStack.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(f.deleteStack.mock.calls[0]?.[0].StackName).toBe(f.stackId);
+    f.stack.StackStatus = "DELETE_IN_PROGRESS";
+    state = await f.handlers.describe(state);
+    expect(state.phase).toBe("pending");
+    f.stack.StackStatus = "DELETE_COMPLETE";
+    state = await f.handlers.describe(state);
+    expect(state.phase).toBe("ready");
+    state = await f.handlers.finish(state);
+    expect(f.data.job.status).toBe("DELETED");
+    expect(f.data.teardown?.status).toBe("DELETED");
+    expect(f.finish).not.toHaveBeenCalled();
+    expect(f.createStack).not.toHaveBeenCalled();
+    expect(JSON.stringify(state)).not.toContain(PRIVATE_FLAG);
+    expect((await f.handlers.finish(state)).phase).toBe("ready");
+  });
+  it("waits for the original create and its live request lease rather than deleting underneath it", async () => {
+    const f = teardownFixture();
+    f.data.job = { ...f.data.job, status: "IN_PROGRESS" };
+    let state = await f.handlers.claim(f.initial);
+    state = await f.handlers.create(state);
+    expect(state.phase).toBe("pending");
+    expect(f.describeStacks).not.toHaveBeenCalled();
+    expect(f.deleteStack).not.toHaveBeenCalled();
+    f.data.job = { ...f.data.job, status: "FAILED" };
+    f.data.creation = { ...IDENTITY, owner: OWNER, state: "REQUESTED", leaseUntil: NOW + 60000 };
+    state = await f.handlers.describe(state);
+    expect(state.phase).toBe("pending");
+    expect(f.deleteStack).not.toHaveBeenCalled();
+    f.data.now = NOW + 60001;
+    expect((await f.handlers.describe(state)).deleteSubmitted).toBe(true);
+  });
+  it("does not interpret an expired uncertain-create lease and missing name as successful cleanup", async () => {
+    const f = teardownFixture();
+    f.data.job = { ...f.data.job, status: "FAILED", stackId: undefined };
+    f.data.creation = { ...IDENTITY, owner: OWNER, state: "REQUESTED", leaseUntil: NOW - 1 };
+    f.describeStacks.mockRejectedValue(
+      Object.assign(new Error(`Stack with id ${f.data.job.stackName} does not exist`), {
+        name: "ValidationError",
+      }),
+    );
+    const state = await f.handlers.claim(f.initial);
+    await expect(f.handlers.create(state)).rejects.toThrow("could not complete");
+    expect(f.deleteStack).not.toHaveBeenCalled();
+    expect(f.finishTeardown).not.toHaveBeenCalled();
+    await f.handlers.fail(state);
+    expect(f.data.teardown?.status).toBe("FAILED");
+    expect(f.data.job.status).not.toBe("DELETED");
+  });
+  it("permits the durably proved never-started case without issuing create or delete", async () => {
+    const f = teardownFixture();
+    f.data.job = { ...f.data.job, status: "FAILED", stackId: undefined };
+    f.data.creation = { ...IDENTITY, state: "NOT_STARTED", leaseUntil: 0 };
+    f.describeStacks.mockRejectedValue(
+      Object.assign(new Error(`Stack with id ${f.data.job.stackName} does not exist`), {
+        name: "ValidationError",
+      }),
+    );
+    const state = await f.handlers.create(await f.handlers.claim(f.initial));
+    expect(state.phase).toBe("ready");
+    expect(state.reference).toBeUndefined();
+    await f.handlers.finish(state);
+    expect(f.data.teardown?.status).toBe("DELETED");
+    expect(f.createStack).not.toHaveBeenCalled();
+    expect(f.deleteStack).not.toHaveBeenCalled();
+  });
+  it("refuses a new create reservation after the event closes even when the workflow was already claimed", async () => {
+    const f = fixture();
+    const state = await f.handlers.claim(INITIAL);
+    f.data.eventClosed = true;
+    await expect(f.handlers.create(state)).rejects.toThrow("could not complete");
+    expect(f.reserveCreation).toHaveBeenCalled();
+    expect(f.getParameter).not.toHaveBeenCalled();
+    expect(f.createStack).not.toHaveBeenCalled();
+    expect((await f.handlers.fail(state)).phase).toBe("failed");
+  });
+  it("does not let a rotated or withdrawn connection authorize deletion, but expiry alone does not orphan owned resources", async () => {
+    const f = teardownFixture();
+    let state = await f.handlers.claim(f.initial);
+    f.getConnection.mockResolvedValueOnce({ ...f.data.job.connection, version: 2 });
+    await expect(f.handlers.create(state)).rejects.toThrow("could not complete");
+    expect(f.deleteStack).not.toHaveBeenCalled();
+    f.data.job = { ...f.data.job, expiresAt: NOW / 1000 - 1 };
+    state = await f.handlers.create(state);
+    expect(state.deleteSubmitted).toBe(true);
+  });
+  it.each(["attempt", "generation", "owner", "event", "team"])(
+    "rejects stale teardown %s before any remote call",
+    async (changed) => {
+      const f = teardownFixture();
+      const state = await f.handlers.claim(f.initial);
+      const altered = { ...state, identity: { ...state.identity } };
+      if (changed === "attempt") altered.identity.attempt = 2;
+      if (changed === "generation") altered.identity.generation = 2;
+      if (changed === "owner") altered.owner = state.owner.replace("tc-delete", "tc-other");
+      if (changed === "event") altered.identity.eventId = TEAM;
+      if (changed === "team") altered.identity.teamId = EVENT;
+      await expect(f.handlers.create(altered)).rejects.toThrow("could not complete");
+      expect(f.deleteStack).not.toHaveBeenCalled();
+    },
+  );
+  it("reconciles an interrupted delete and retries with a new fenced execution and token", async () => {
+    const f = teardownFixture();
+    const state = await f.handlers.create(await f.handlers.claim(f.initial));
+    const originalToken = f.deleteStack.mock.calls[0]?.[0].ClientRequestToken;
+    const describeExecution = vi.fn<RecoveryDependencies["describeExecution"]>(async () => ({
+      stateMachineArn: MACHINE,
+      executionArn: state.owner,
+      status: "ABORTED",
+      input: serializeDispatchIdentity(state.identity),
+    }));
+    const deps: RecoveryDependencies = {
+      stateMachineArn: MACHINE,
+      repository: {
+        getJob: f.getJob,
+        getTeardown: f.getTeardown,
+        finishTeardown: f.finishTeardown,
+        finish: f.finish,
+        failPending: vi.fn(),
+      },
+      describeExecution,
+      now: () => NOW,
+    };
+    const event = {
+      source: "aws.states",
+      "detail-type": "Step Functions Execution Status Change",
+      detail: { stateMachineArn: MACHINE, executionArn: state.owner, status: "ABORTED" },
+    };
+    expect(await recoverTerminalExecution(event, deps)).toEqual({ outcome: "failed_owned" });
+    expect(f.data.teardown?.stackId).toBe(f.stackId);
+    const marker = f.data.teardown;
+    if (!marker) throw new Error("Missing marker");
+    f.data.teardown = { ...marker, generation: 2, status: "PENDING", owner: undefined };
+    const identity = { ...state.identity, generation: 2 };
+    const retry: WorkflowState = {
+      identity,
+      owner: `${MACHINE.replace(":stateMachine:", ":execution:")}:${dispatchExecutionName(identity)}`,
+      phase: "pending",
+      pollCount: 0,
+    };
+    f.stack.StackStatus = "DELETE_FAILED";
+    await f.handlers.create(await f.handlers.claim(retry));
+    expect(f.deleteStack.mock.calls[1]?.[0].ClientRequestToken).not.toBe(originalToken);
+    await expect(f.handlers.finish({ ...state, phase: "ready" })).rejects.toThrow(
+      "could not complete",
+    );
+  });
 });

@@ -1,5 +1,5 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ApiClient, createApiClient } from "../../../src/api/client";
 import type { EventDetail, TeamSummary } from "../../../src/api/events-client";
@@ -91,7 +91,10 @@ beforeEach(() => {
   mockRecurring.mockReset().mockResolvedValue({ items: [] });
   mockCancelRecurring.mockReset().mockResolvedValue({ ok: true });
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.useRealTimers();
+});
 
 describe("DisruptionsPanel", () => {
   it("should load and list the catalog", async () => {
@@ -252,6 +255,78 @@ describe("DisruptionsPanel", () => {
     expect(await screen.findByText(/removed-team/u)).toHaveTextContent(
       /^removed-team · #2: disruptions.status_inject_command_completed$/u,
     );
+  });
+
+  it("polls execution outcomes, preserves the last result on failure, and stops after leaving", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const execution = {
+      id: "execution-1",
+      teamId: "t1",
+      tick: 1,
+      status: "inject_pending",
+      dueAt: "2026-06-03T00:00:00Z",
+      updatedAt: "2026-06-03T00:00:00Z",
+    };
+    const audit = {
+      auditId: "a1",
+      problemId: "security-battle-royale",
+      disruptionId: "availability-flood",
+      firedBy: "operator",
+      firedAt: "2026-06-03T00:00:00Z",
+      scope: "all",
+      targetTeamIds: ["t1"],
+      parameters: {},
+      requestId: "fire-test-00000001",
+      executions: [execution],
+    };
+    mockAudit.mockResolvedValueOnce({ items: [audit] }).mockResolvedValueOnce({
+      items: [{ ...audit, executions: [{ ...execution, status: "inject_command_completed" }] }],
+    });
+    const view = renderPanel();
+    expect(await screen.findByText(/disruptions.status_inject_pending/u)).toBeInTheDocument();
+
+    await act(async () => vi.advanceTimersByTimeAsync(4999));
+    expect(mockAudit).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(mockAudit).toHaveBeenLastCalledWith(fakeApi, "EVT1", { limit: 20 });
+    expect(screen.getByText(/disruptions.status_inject_command_completed/u)).toBeInTheDocument();
+
+    mockAudit.mockRejectedValueOnce(new Error("Execution status unavailable"));
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(screen.getByText("Execution status unavailable")).toBeInTheDocument();
+    expect(screen.getByText(/disruptions.status_inject_command_completed/u)).toBeInTheDocument();
+    expect(mockAudit).toHaveBeenCalledTimes(3);
+
+    view.unmount();
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    expect(mockAudit).toHaveBeenCalledTimes(3);
+  });
+
+  it("reports a manual audit refresh failure without losing the loaded catalog", async () => {
+    renderPanel();
+    await screen.findByText("Availability flood");
+    mockAudit.mockRejectedValueOnce(new Error("Audit refresh unavailable"));
+
+    fireEvent.click(screen.getByRole("button", { name: "disruptions.refresh" }));
+
+    expect(await screen.findByText("Audit refresh unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Availability flood")).toBeInTheDocument();
+    expect(mockAudit).toHaveBeenCalledTimes(2);
+    expect(mockFire).not.toHaveBeenCalled();
+  });
+
+  it("preserves the successful fire notice if reloading its audit fails", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "disruptions.fire_button" }));
+    mockAudit.mockRejectedValueOnce(new Error("New audit unavailable"));
+
+    fireEvent.click(screen.getByRole("button", { name: "disruptions.confirm_fire" }));
+
+    expect(await screen.findByText("New audit unavailable")).toBeInTheDocument();
+    expect(screen.getByText(/disruptions.fired_flash/u)).toBeInTheDocument();
+    expect(modal()).toBeNull();
+    expect(mockFire).toHaveBeenCalledTimes(1);
+    expect(mockAudit).toHaveBeenCalledTimes(2);
   });
 
   it("should show the empty state when no disruptions are declared", async () => {

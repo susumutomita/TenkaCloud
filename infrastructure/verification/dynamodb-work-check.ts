@@ -19,6 +19,7 @@ import { POLL_INTERVAL_MS } from "../../apps/participant-portal/src/constants/po
 import { createCoreApiClient } from "../../packages/web-kit/src/api-client.js";
 import {
   contentDigest,
+  type DeploymentIdentity,
   type DeploymentJob,
   deploymentStackName,
   flagDigest,
@@ -164,41 +165,46 @@ async function createTables(): Promise<void> {
 
 const work = () => new DynamoDeploymentWork(document, tables);
 const jobs: DeploymentJob[] = [];
-function makeJob(team: TeamRecord, index: number): DeploymentJob {
+function makeJob(team: TeamRecord, index: number, sourceEvent = event): DeploymentJob {
   const problemId = `problem-${index}`;
   return {
     jobId: ulid(),
-    eventId: event.eventId,
+    eventId: sourceEvent.eventId,
     teamId: team.teamId,
     problemId,
     region: "us-east-1",
     awsAccountId: "123456789012",
     status: "PENDING",
-    expiresAt: event.expiresAt,
+    expiresAt: sourceEvent.expiresAt,
     score: 0,
     attempt: 1,
     revision: 0,
     createdAt: at,
     updatedAt: at,
-    stackName: deploymentStackName(event.eventId, team.teamId, problemId),
+    stackName: deploymentStackName(sourceEvent.eventId, team.teamId, problemId),
     problemDir: `problems/challenges/${problemId}`,
     artifactDigest: contentDigest("synthetic-template"),
     connection: {
-      eventId: event.eventId,
+      eventId: sourceEvent.eventId,
       teamId: team.teamId,
       accountId: "123456789012",
       region: "us-east-1",
       roleArn: "arn:aws:iam::123456789012:role/VerifiedFixtureRole",
-      externalIdParameter: `arn:aws:ssm:us-east-1:123456789012:parameter/tenkacloud/${event.eventId}/${team.teamId}/external-id`,
+      externalIdParameter: `arn:aws:ssm:us-east-1:123456789012:parameter/tenkacloud/${sourceEvent.eventId}/${team.teamId}/external-id`,
       version: 1,
       verifiedAt: at,
     },
     scoring: { kind: "flag", points: 100, flagOutputKey: "Flag", wrongPenalty: 0 },
   };
 }
-function acceptance(job: DeploymentJob, team: TeamRecord, key = `deploy-${job.problemId}`) {
+function acceptance(
+  job: DeploymentJob,
+  team: TeamRecord,
+  key = `deploy-${job.problemId}`,
+  sourceEvent = event,
+) {
   return {
-    event,
+    event: sourceEvent,
     team,
     job,
     requestKey: key,
@@ -847,6 +853,604 @@ async function verifyRollbackAndGate(): Promise<void> {
     }),
   );
 }
+
+function teardownRequest(eventId: string, role = "Admin") {
+  return httpApp().request(
+    `/events/${eventId}`,
+    { method: "DELETE" },
+    {
+      event: {
+        requestContext: {
+          authorizer: {
+            claims: {
+              sub: "synthetic-teardown-organizer",
+              iss: AUTH.issuer,
+              aud: AUTH.audience,
+              exp: now / 1000 + 3600,
+              token_use: "id",
+              "custom:userRole": role,
+            },
+          },
+        },
+      },
+    },
+  );
+}
+function deletionIdentity(job: DeploymentJob, generation = 1): DeploymentIdentity {
+  return {
+    eventId: job.eventId,
+    teamId: job.teamId,
+    jobId: job.jobId,
+    attempt: job.attempt,
+    operation: "delete",
+    generation,
+  };
+}
+function syntheticReference(job: DeploymentJob) {
+  return {
+    stackId: completion(job).stackId,
+    fingerprint: contentDigest(`synthetic-immutable-input-${job.jobId}`),
+  };
+}
+async function partitionRows(PK: string) {
+  const output = await document.send(
+    new QueryCommand({
+      TableName: tables.deployments,
+      ConsistentRead: true,
+      KeyConditionExpression: "PK = :pk",
+      ExpressionAttributeValues: { ":pk": PK },
+    }),
+  );
+  assert.equal(
+    output.LastEvaluatedKey,
+    undefined,
+    "Synthetic preservation snapshot must not truncate",
+  );
+  return output.Items ?? [];
+}
+async function retainedDeploymentHistory(targets: readonly DeploymentJob[]) {
+  return Promise.all(
+    targets.map(async (job) => ({
+      jobId: job.jobId,
+      rows: (await partitionRows(`DEPLOYMENT#${job.jobId}`)).filter(
+        (row) => row.SK !== "META" && row.SK !== "TEARDOWN",
+      ),
+    })),
+  );
+}
+async function retainedReceipts(eventId: string, members: readonly TeamRecord[]) {
+  return Promise.all(
+    members.map(async (team) => ({
+      teamId: team.teamId,
+      rows: (await partitionRows(`EVENT#${eventId}#TEAM#${team.teamId}`)).filter(
+        (row) => typeof row.SK === "string" && row.SK.startsWith("RECEIPT#"),
+      ),
+    })),
+  );
+}
+async function assertTeardownEvent(
+  eventId: string,
+  status: "TEARDOWN" | "ARCHIVED",
+  completed: number,
+  expected = 28,
+) {
+  const current = await repository().getEvent(eventId);
+  assert.ok(current);
+  assert.equal(current.status, status);
+  assert.equal(current.scoringLocked, true);
+  assert.equal(current.teardownExpected, expected);
+  assert.equal(current.teardownCompleted, completed);
+}
+async function verifyEventTeardown(): Promise<void> {
+  const started = performance.now();
+  const closing: EventRecord = {
+    ...event,
+    eventId: ulid(),
+    name: "Synthetic durable event teardown acceptance",
+    problems: event.problems.slice(0, 3),
+  };
+  const members = teams.map(
+    (team, index): TeamRecord => ({
+      ...team,
+      eventId: closing.eventId,
+      teamId: ulid(),
+      internalSlug: `teardown-team-${index}`,
+      teamLoginKey: randomBytes(32).toString("base64url"),
+    }),
+  );
+  assert.equal(await repository().createEventWithTeams(closing, members), "created");
+  const completeJobs = await Promise.all(
+    members.map(async (team) => {
+      const job = makeJob(team, 0, closing);
+      await work().saveVerifiedConnection(job.connection);
+      assert.equal(
+        (await work().accept(acceptance(job, team, "teardown-deploy", closing))).kind,
+        "accepted",
+      );
+      assert.equal((await work().getCreation(job))?.state, "NOT_STARTED");
+      const owner = `source-${job.jobId}`;
+      assert.equal(await work().begin(job, owner, at), "started");
+      await work().reserveCreation(job, owner, now);
+      assert.equal((await work().getCreation(job))?.state, "REQUESTED");
+      await work().recordCreation(job, owner, syntheticReference(job));
+      assert.equal((await work().getCreation(job))?.state, "ACKNOWLEDGED");
+      assert.equal(await work().finish(job, owner, completion(job), at), "updated");
+      assert.equal(
+        (
+          await work().submitFlag({
+            event: closing,
+            team,
+            jobId: job.jobId,
+            attempt: job.attempt,
+            requestKey: "teardown-scored",
+            flag: `flag-${job.jobId}`,
+            now,
+          })
+        ).kind,
+        "ok",
+      );
+      return job;
+    }),
+  );
+  const first = members[0];
+  const second = members[1];
+  const third = members[2];
+  assert.ok(first && second && third);
+  const pending = makeJob(first, 1, closing);
+  const unreserved = makeJob(second, 1, closing);
+  const uncertain = makeJob(third, 1, closing);
+  for (const [job, team] of [
+    [pending, first],
+    [unreserved, second],
+    [uncertain, third],
+  ] as const) {
+    assert.equal(
+      (await work().accept(acceptance(job, team, "teardown-extra", closing))).kind,
+      "accepted",
+    );
+  }
+  await work().begin(unreserved, "unreserved-source", at);
+  await work().begin(uncertain, "uncertain-source", at);
+  await work().reserveCreation(uncertain, "uncertain-source", now);
+  assert.equal((await work().getCreation(unreserved))?.state, "NOT_STARTED");
+  assert.equal((await work().getCreation(uncertain))?.state, "REQUESTED");
+  assert.equal((await work().getCreation(uncertain))?.stackId, undefined);
+  const all = [...completeJobs, pending, unreserved, uncertain];
+  const scoresBefore = await repository().listTeamScores(closing.eventId);
+  const historyBefore = await retainedDeploymentHistory(all);
+  const receiptsBefore = await retainedReceipts(closing.eventId, members);
+  assert.equal(
+    scoresBefore.reduce((sum, row) => sum + row.score, 0),
+    2500,
+  );
+  assert.equal(
+    historyBefore
+      .flatMap((entry) => entry.rows)
+      .filter((row) => typeof row.SK === "string" && row.SK.startsWith("EVENT#")).length,
+    25,
+  );
+  assert.equal(receiptsBefore.flatMap((entry) => entry.rows).length, 53);
+
+  let strongTargetQueries = 0;
+  document.middlewareStack.add(
+    (next) => async (args) => {
+      const input = z
+        .object({
+          TableName: z.string().optional(),
+          IndexName: z.string().optional(),
+          ConsistentRead: z.boolean().optional(),
+          ExpressionAttributeValues: z.record(z.unknown()).optional(),
+        })
+        .passthrough()
+        .parse(args.input);
+      if (
+        input.TableName === tables.deployments &&
+        input.ExpressionAttributeValues?.[":prefix"] === "TARGET#"
+      ) {
+        assert.equal(
+          input.ConsistentRead,
+          true,
+          "Teardown must enumerate authoritative base-table TARGET rows",
+        );
+        assert.equal(
+          input.IndexName,
+          undefined,
+          "An eventually consistent index cannot prove all targets are gone",
+        );
+        strongTargetQueries++;
+      }
+      return next(args);
+    },
+    { step: "initialize", name: "syntheticTeardownTargetConsistency" },
+  );
+  try {
+    assert.equal((await teardownRequest(closing.eventId, "Viewer")).status, 403);
+    assert.equal((await repository().getEvent(closing.eventId))?.status, "DRAFT");
+    const deleted = await teardownRequest(closing.eventId);
+    assert.equal(deleted.status, 202, await deleted.clone().text());
+    assert.deepEqual(await deleted.json(), {
+      eventId: closing.eventId,
+      enqueued: 28,
+      skipped: 0,
+      failed: 0,
+    });
+    assert.ok(strongTargetQueries >= 25);
+    const repeated = await teardownRequest(closing.eventId);
+    assert.equal(repeated.status, 202, await repeated.clone().text());
+    assert.deepEqual(await repeated.json(), {
+      eventId: closing.eventId,
+      enqueued: 0,
+      skipped: 28,
+      failed: 0,
+    });
+    await assertTeardownEvent(closing.eventId, "TEARDOWN", 1);
+    assert.equal(await work().closeEvent(closing, at), "closing");
+    assert.equal(await work().archiveTeardown(closing.eventId), false);
+    await assert.rejects(
+      () => work().setTeardownExpected(closing.eventId, 27),
+      /teardown_target_set_changed/u,
+    );
+    assert.equal((await work().getJob(pending.jobId))?.status, "DELETED");
+    assert.equal((await work().getCreation(pending))?.state, "NOT_STARTED");
+    assert.equal((await work().getTeardown(pending))?.status, "DELETED");
+    assert.equal(
+      (await work().listDispatch(1000)).some((intent) => intent.jobId === pending.jobId),
+      false,
+    );
+    assert.equal(await work().requestTeardown(pending, at), "skipped");
+    await assertTeardownEvent(closing.eventId, "TEARDOWN", 1);
+
+    const blocked = makeJob(first, 2, closing);
+    await assert.rejects(
+      () => work().accept(acceptance(blocked, first, "closed-new-work", closing)),
+      /deployment_acceptance_conflict/u,
+    );
+    assert.equal(await work().getJob(blocked.jobId), undefined);
+    await assert.rejects(
+      () => work().reserveCreation(unreserved, "unreserved-source", now),
+      /creation_closed_or_owner_changed/u,
+    );
+    await assert.rejects(
+      () => work().reserveCreation(uncertain, "uncertain-source", now + 120_001),
+      /creation_closed_or_owner_changed/u,
+    );
+    assert.equal((await work().getCreation(unreserved))?.state, "NOT_STARTED");
+    assert.equal((await work().getCreation(uncertain))?.state, "REQUESTED");
+
+    const unknownDelete = deletionIdentity(uncertain);
+    const unreservedDelete = deletionIdentity(unreserved);
+    await work().beginTeardown(unreservedDelete, "unreserved-delete", at);
+    await work().beginTeardown(unknownDelete, "uncertain-delete-1", at);
+    for (const instant of [now, now + 120_001]) {
+      assert.equal(
+        await work().prepareDeletion(unreservedDelete, "unreserved-delete", instant),
+        false,
+      );
+      assert.equal(
+        await work().prepareDeletion(unknownDelete, "uncertain-delete-1", instant),
+        false,
+      );
+    }
+    await assert.rejects(
+      () => work().finishTeardown(unknownDelete, "uncertain-delete-1", { status: "DELETED" }, at),
+      /teardown_not_deleting/u,
+    );
+    assert.equal((await work().getJob(uncertain.jobId))?.status, "IN_PROGRESS");
+    await assertTeardownEvent(closing.eventId, "TEARDOWN", 1);
+    await work().finish(
+      unreserved,
+      "unreserved-source",
+      { status: "FAILED", failureReason: "synthetic source stopped before create" },
+      at,
+    );
+    assert.equal(await work().prepareDeletion(unreservedDelete, "unreserved-delete", now), true);
+    assert.equal(
+      await work().finishTeardown(unreservedDelete, "unreserved-delete", { status: "DELETED" }, at),
+      "updated",
+    );
+    assert.equal(
+      await work().finishTeardown(unreservedDelete, "unreserved-delete", { status: "DELETED" }, at),
+      "replay",
+    );
+    await assertTeardownEvent(closing.eventId, "TEARDOWN", 2);
+    await work().finish(
+      uncertain,
+      "uncertain-source",
+      { status: "FAILED", failureReason: "synthetic CreateStack response loss" },
+      at,
+    );
+    assert.equal(await work().prepareDeletion(unknownDelete, "uncertain-delete-1", now), false);
+    assert.equal(
+      await work().prepareDeletion(unknownDelete, "uncertain-delete-1", now + 120_001),
+      true,
+    );
+    assert.equal((await work().getCreation(uncertain))?.state, "REQUESTED");
+    assert.equal((await work().getCreation(uncertain))?.stackId, undefined);
+    assert.equal((await work().getJob(uncertain.jobId))?.status, "DELETING");
+    await assertTeardownEvent(closing.eventId, "TEARDOWN", 2);
+    const discovered = syntheticReference(uncertain);
+    await work().recordTeardownReference(unknownDelete, "uncertain-delete-1", discovered);
+    await work().recordTeardownReference(unknownDelete, "uncertain-delete-1", discovered);
+    await assert.rejects(
+      () =>
+        work().recordTeardownReference(unknownDelete, "uncertain-delete-1", {
+          ...discovered,
+          stackId: `${discovered.stackId}-replacement`,
+        }),
+      /teardown_reference_changed/u,
+    );
+    assert.equal(
+      await work().finishTeardown(
+        unknownDelete,
+        "uncertain-delete-1",
+        { status: "FAILED", failureReason: "synthetic DELETE_FAILED: retained resource" },
+        at,
+      ),
+      "updated",
+    );
+    assert.equal((await work().getJob(uncertain.jobId))?.teardownStatus, "FAILED");
+    await assertTeardownEvent(closing.eventId, "TEARDOWN", 2);
+
+    const retry = await teardownRequest(closing.eventId);
+    assert.equal(retry.status, 202, await retry.clone().text());
+    assert.deepEqual(await retry.json(), {
+      eventId: closing.eventId,
+      enqueued: 1,
+      skipped: 27,
+      failed: 0,
+    });
+    const retried = deletionIdentity(uncertain, 2);
+    const marker = await work().getTeardown(retried);
+    assert.equal(marker?.generation, 2);
+    assert.equal(
+      marker?.stackId,
+      discovered.stackId,
+      "Retry must retain the discovered physical stack identity",
+    );
+    assert.equal(marker?.fingerprint, discovered.fingerprint);
+    assert.equal(await work().beginTeardown(retried, "uncertain-delete-2", at), "started");
+    assert.equal(await work().beginTeardown(retried, "uncertain-delete-2", at), "replay");
+    assert.equal(await work().prepareDeletion(retried, "uncertain-delete-2", now + 120_001), true);
+    await assert.rejects(
+      () => work().finishTeardown(unknownDelete, "uncertain-delete-1", { status: "DELETED" }, at),
+      /teardown_scope_or_generation_changed/u,
+    );
+    await assert.rejects(
+      () => work().finishTeardown(retried, "uncertain-delete-1", { status: "DELETED" }, at),
+      /teardown_owner_changed/u,
+    );
+    await assert.rejects(
+      () =>
+        work().finishTeardown(
+          { ...retried, attempt: 2 },
+          "uncertain-delete-2",
+          { status: "DELETED" },
+          at,
+        ),
+      /teardown_scope_or_generation_changed/u,
+    );
+
+    const prepared = await Promise.all(
+      completeJobs.map(async (job) => {
+        const identity = deletionIdentity(job);
+        const owner = `terminal-delete-${job.jobId}`;
+        assert.equal(await work().beginTeardown(identity, owner, at), "started");
+        assert.equal(
+          await work().prepareDeletion(identity, owner, now),
+          false,
+          "A live create lease must remain fenced",
+        );
+        assert.equal(await work().prepareDeletion(identity, owner, now + 120_001), true);
+        await work().recordTeardownReference(identity, owner, syntheticReference(job));
+        return { job, identity, owner };
+      }),
+    );
+    const finished = await Promise.all(
+      prepared.map(({ identity, owner, job }) =>
+        work().finishTeardown(
+          identity,
+          owner,
+          { status: "DELETED", stackId: completion(job).stackId },
+          at,
+        ),
+      ),
+    );
+    assert.equal(finished.filter((result) => result === "updated").length, 25);
+    assert.equal(
+      (
+        await Promise.all(
+          prepared.map(({ identity, owner, job }) =>
+            work().finishTeardown(
+              identity,
+              owner,
+              { status: "DELETED", stackId: completion(job).stackId },
+              at,
+            ),
+          ),
+        )
+      ).every((result) => result === "replay"),
+      true,
+    );
+    await assertTeardownEvent(closing.eventId, "TEARDOWN", 27);
+    assert.equal(await work().archiveTeardown(closing.eventId), false);
+    assert.equal(
+      await work().finishTeardown(
+        retried,
+        "uncertain-delete-2",
+        { status: "DELETED", stackId: discovered.stackId },
+        at,
+      ),
+      "updated",
+    );
+    assert.equal(
+      await work().finishTeardown(
+        retried,
+        "uncertain-delete-2",
+        { status: "DELETED", stackId: discovered.stackId },
+        at,
+      ),
+      "replay",
+    );
+    await assertTeardownEvent(closing.eventId, "ARCHIVED", 28);
+    const archived = await teardownRequest(closing.eventId);
+    assert.equal(archived.status, 200, await archived.clone().text());
+    assert.deepEqual(await archived.json(), {
+      eventId: closing.eventId,
+      enqueued: 0,
+      skipped: 28,
+      failed: 0,
+    });
+    await assertTeardownEvent(closing.eventId, "ARCHIVED", 28);
+    assert.equal(
+      (await work().listDispatch(1000)).some((intent) => intent.eventId === closing.eventId),
+      false,
+    );
+    assert.deepEqual(await repository().listTeamScores(closing.eventId), scoresBefore);
+    assert.deepEqual(await retainedDeploymentHistory(all), historyBefore);
+    assert.deepEqual(await retainedReceipts(closing.eventId, members), receiptsBefore);
+    for (const job of completeJobs) {
+      const saved = await work().getJob(job.jobId);
+      assert.equal(saved?.status, "DELETED");
+      assert.equal(saved?.score, 100);
+      assert.equal(saved?.flagDigest, completion(job).flagDigest);
+      assert.deepEqual(saved?.publicOutputs, completion(job).publicOutputs);
+      assert.equal(saved?.flagSubmitted, true);
+    }
+    console.log(
+      JSON.stringify({
+        milestone: "durable-event-teardown",
+        teams: 25,
+        targets: 28,
+        concurrentTerminalFinishes: 25,
+        strongTargetQueries,
+        pendingCancellation: "counted once, original dispatch removed",
+        createStates: "NOT_STARTED, REQUESTED, ACKNOWLEDGED preserved",
+        createAndExpiredLeaseFence: "passed",
+        httpDeleteReplayAndPartialFailure: "passed",
+        retryGenerationAndDurableReference:
+          "preserved; stale owner, generation and attempt rejected",
+        eventCompletion: "28 unique targets; archive only after final target",
+        retainedScores: 2500,
+        retainedScoreLedgerEntries: 25,
+        retainedReceipts: 53,
+        durationMs: Math.round(performance.now() - started),
+      }),
+    );
+  } finally {
+    document.middlewareStack.remove("syntheticTeardownTargetConsistency");
+  }
+}
+
+async function verifyHistoricalTeardownBlocker(): Promise<void> {
+  for (const mode of ["recorded-old-account", "uncertain-create", "never-started"] as const) {
+    const sourceEvent: EventRecord = {
+      ...event,
+      eventId: ulid(),
+      name: `Synthetic history ${mode}`,
+      teamCount: 1,
+      problems: event.problems.slice(0, 1),
+    };
+    const base = teams[0];
+    assert.ok(base);
+    const team: TeamRecord = {
+      ...base,
+      eventId: sourceEvent.eventId,
+      teamId: ulid(),
+      teamLoginKey: randomBytes(32).toString("base64url"),
+    };
+    assert.equal(await repository().createEventWithTeams(sourceEvent, [team]), "created");
+    const original = makeJob(team, 0, sourceEvent);
+    await work().saveVerifiedConnection(original.connection);
+    await work().accept(acceptance(original, team, "history-first", sourceEvent));
+    await work().begin(original, "history-source", at);
+    if (mode !== "never-started") await work().reserveCreation(original, "history-source", now);
+    if (mode === "recorded-old-account")
+      await work().recordCreation(original, "history-source", syntheticReference(original));
+    await work().finish(
+      original,
+      "history-source",
+      {
+        status: "FAILED",
+        failureReason: "synthetic source failed",
+        ...(mode === "recorded-old-account" ? { stackId: completion(original).stackId } : {}),
+      },
+      at,
+    );
+    const replacement = makeJob(team, 0, sourceEvent);
+    await assert.rejects(
+      () => work().accept(acceptance(replacement, team, "illegal-new-job", sourceEvent)),
+      /deployment_acceptance_conflict/u,
+    );
+    assert.equal(
+      await work().getJob(replacement.jobId),
+      undefined,
+      "An existing target cannot be replaced with a different job ID",
+    );
+    let retry: DeploymentJob = { ...original, attempt: 2 };
+    if (mode === "recorded-old-account") {
+      const connection = {
+        ...original.connection,
+        accountId: "999999999999",
+        roleArn: "arn:aws:iam::999999999999:role/VerifiedFixtureRole",
+        version: 2,
+      };
+      await work().saveVerifiedConnection(connection, 1);
+      retry = { ...retry, awsAccountId: connection.accountId, connection };
+    }
+    await work().accept({ ...acceptance(retry, team, "history-retry", sourceEvent), retryOf: 1 });
+    assert.equal(
+      retry.stackName,
+      original.stackName,
+      "Logical names are stable but account changes still identify different physical stacks",
+    );
+    if (mode === "uncertain-create")
+      await document.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: tables.deployments,
+                Key: { PK: `DEPLOYMENT#${original.jobId}`, SK: "CREATE#1" },
+                UpdateExpression: "SET leaseUntil = :expired",
+                ExpressionAttributeValues: { ":expired": now - 1 },
+              },
+            },
+          ],
+        }),
+      );
+    const response = await teardownRequest(sourceEvent.eventId);
+    const saved = await repository().getEvent(sourceEvent.eventId);
+    assert.ok(saved);
+    if (mode === "never-started") {
+      assert.equal(response.status, 202, await response.clone().text());
+      assert.equal(saved.status, "ARCHIVED");
+      assert.equal(saved.teardownCompleted, 1);
+    } else {
+      assert.equal(response.status, 409, await response.clone().text());
+      assert.deepEqual(await response.json(), { error: "historical_attempt_resources_unresolved" });
+      assert.equal(saved.status, "TEARDOWN");
+      assert.equal(saved.teardownExpected, undefined);
+      assert.equal(saved.teardownCompleted, 0);
+      assert.equal(await work().archiveTeardown(sourceEvent.eventId), false);
+      assert.equal(
+        await work().getTeardown(retry),
+        undefined,
+        "No current-target cleanup is enqueued after an unresolved history blocker",
+      );
+      assert.equal((await work().getJob(retry.jobId))?.status, "PENDING");
+    }
+  }
+  console.log(
+    JSON.stringify({
+      milestone: "historical-attempt-teardown-boundary",
+      oldAccountArn: "blocks before any teardown acceptance or archive",
+      expiredUncertainCreate: "blocks",
+      provenNeverStarted: "may complete",
+      newJobTargetReplacement: "rejected",
+    }),
+  );
+}
+
 try {
   await createTables();
   await acceptAndComplete();
@@ -856,6 +1460,8 @@ try {
   await verifyRealPolling();
   await verifyActualClientContracts();
   await verifyRollbackAndGate();
+  await verifyEventTeardown();
+  await verifyHistoricalTeardownBlocker();
   console.log(
     JSON.stringify({
       outcome: "passed",

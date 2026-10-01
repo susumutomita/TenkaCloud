@@ -428,10 +428,40 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     async (command) => {
       const f = fixture();
       expect(await f.run([command])).toBe(0);
+      expect(f.calls[0]?.args).toContain("get-caller-identity");
       expect(
-        f.calls.every((call) => call.command === "aws" && call.args.includes("describe-stacks")),
+        f.calls
+          .slice(1)
+          .every((call) => call.command === "aws" && call.args.includes("describe-stacks")),
       ).toBe(true);
-      expect(f.calls.every((call) => call.args.some((arg) => arg.endsWith("-staging")))).toBe(true);
+      expect(
+        f.calls.slice(1).every((call) => call.args.some((arg) => arg.endsWith("-staging"))),
+      ).toBe(true);
+    },
+  );
+  it.each(["status", "console-url", "portal-url"])(
+    "%s uses the deployment's explicit region and rejects a different caller account",
+    async (command) => {
+      const f = fixture();
+      const env = { ...f.env, REGION: "us-east-1", AWS_REGION: "ap-northeast-1" };
+      expect(await runCloudCli([command], f.io, { root: ROOT, env })).toBe(0);
+      expect(f.calls[0]?.args.slice(-2)).toEqual(["--region", "us-east-1"]);
+      for (const call of f.calls.slice(1)) {
+        expect(call.env.AWS_REGION).toBe("us-east-1");
+        expect(call.env.AWS_DEFAULT_REGION).toBe("us-east-1");
+      }
+      expect(env.AWS_REGION).toBe("ap-northeast-1");
+      expect(f.calls.some((call) => call.inherit)).toBe(false);
+
+      const wrongAccount = fixture({
+        fail: (request) =>
+          request.args.includes("get-caller-identity")
+            ? { code: 0, stdout: "210987654321", stderr: "" }
+            : undefined,
+      });
+      expect(await wrongAccount.run([command])).toBe(1);
+      expect(wrongAccount.calls).toHaveLength(1);
+      expect(wrongAccount.errors.join("")).toContain("credentials do not match");
     },
   );
   it.each([

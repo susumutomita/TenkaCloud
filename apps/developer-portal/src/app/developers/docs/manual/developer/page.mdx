@@ -2,7 +2,7 @@ export const metadata = { title: "Developer manual" };
 
 # Developer manual
 
-The current branch is an unpublished host-only candidate. Start with the
+The current branch is a draft local/cloud integration candidate. Start with the
 `CONTRIBUTING.md`
 and `docs/host-retirement.md`.
 Existing SaaS/Lite installations use a pinned old checkout; this branch does not
@@ -20,7 +20,7 @@ make local LOCAL_ARGS="--no-build"
 Bun 1.3.11 is pinned. The host serves the organizer and participant applications
 and persists competition state in SQLite. Use a private dedicated data directory.
 Docker problem execution requires Docker; the built-in Battle runs in Bun.
-AWS problem execution requires separately authorized competitor accounts.
+AWS-service problems are cloud-only. Lambda/DynamoDB hosting and the full cloud lifecycle remain under verification.
 
 ## Code ownership
 
@@ -29,6 +29,7 @@ AWS problem execution requires separately authorized competitor accounts.
 | HTTP host, durable state, authentication and runtime adapters | `scripts/local-host/` |
 | Docker verifier/scoring/Compose helpers | `scripts/local-host/container/` |
 | Shared pure helpers and ExternalId boundary | `scripts/lib/` |
+| Cloud API, durable work and CDK resources | `infrastructure/lib/cloud-hosting/`, `infrastructure/lib/problem-deploy/` |
 | Organizer application | `apps/application-admin-console/` |
 | Participant application | `apps/participant-portal/` |
 | Pack authoring and immutable local store | `scripts/problem-pack/` |

@@ -12,14 +12,14 @@ export const metadata = { title: "起動と配置の境界" };
 
 <h2 id="cloud-platform">クラウド基盤は未実装</h2>
 
-公開するコマンド名は `make deploy` と `make destroy` です。現行 candidate では両方とも未実装を示すエラーで終了し、リソースの作成、削除、移行を行いません。Turso、配置先、永続的な識別情報、単一実行の保証は実装と検証が必要です。コンテナの build 成功は、配置済みや費用ゼロの証明ではありません。
+公開するコマンド名は `make deploy` と `make destroy` です。現行 candidate では両方とも未実装を示すエラーで終了し、リソースの作成、削除、移行を行いません。Lambda/DynamoDB の初期設定、競技者アカウントの導線、協調撤収は実装と検証が必要です。復元した `infrastructure/templates/cloud-pipeline.yaml` は固定した旧版のソースを実行し、この未完成な経路は実行しません。コンテナの build 成功は、配置済みや費用ゼロの証明ではありません。
 
 <h2 id="exercise-deployment">問題環境の配置は別の操作</h2>
 
-開催者は大会から選択した問題環境を配置します。Docker では所有情報付きの Compose project、確認対象の AWS adapter では検証済み競技者アカウントの CloudFormation を使います。AWS には明示した region、認証情報、必須の ExternalId が必要です。基盤をローカルで動かしても問題リソースには費用が発生する場合があります。大会終了やローカル停止だけでは AWS stack を削除しません。
+ローカル大会では所有情報付きの Docker Compose project と組み込み Battle を使います。AWS サービスの問題はクラウド開催専用で、確認した競技者アカウント、region、role、必須の ExternalId を使います。非 AWS 問題のクラウド実行には別の runner が必要です。問題リソースには費用が発生する場合があります。ローカル停止では、以前の AWS 対応版が作成した stack を削除しません。
 
 <h2 id="legacy-installations">既存の旧版環境</h2>
 
 SaaS/Lite と旧個人練習の手順は[固定した旧版](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9)を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。
 
-SaaS tenant の rollout、CodePipeline、Lite launcher、CodeBuild による撤収は旧版の契約です。現在の構築手順ではありません。既存環境の操作には、その環境を作成した正確な旧版を使ってください。
+SaaS tenant の rollout は旧版の契約です。改名した cloud pipeline は固定したソースに対する元の CodePipeline/CodeBuild 配置・撤収を維持します。既存環境の操作には、その環境を作成した正確な旧版を使ってください。

@@ -68,7 +68,7 @@
 <main class="doc">
 <article>
 <h1>開発者マニュアル</h1>
-<p>現在のブランチは未公開の host 専用 candidate です。
+<p>現在のブランチはローカル・クラウド開催を統合検証中の Draft です。
 <code>CONTRIBUTING.md</code>と
 <code>docs/host-retirement.md</code>を確認してください。
 既存 SaaS/Lite 環境は固定した旧版で運用します。このブランチは移行や撤収を行いません。</p>
@@ -80,7 +80,8 @@ make local LOCAL_ARGS=&quot;--no-build&quot;
 </code></pre>
 <p>Bun 1.3.11 を使います。host は開催者・参加者アプリを配信し、競技状態を SQLite に保存します。
 専用の非公開データディレクトリを用意してください。
-Docker 問題には Docker、AWS 問題には承認された競技者アカウントが必要です。
+ローカルの Docker 問題には Docker が必要です。AWS サービスの問題はクラウド開催専用です。
+Lambda/DynamoDB によるクラウド開催と配置・撤収は検証中です。
 組み込みの Battle は Bun で動作します。</p>
 <h2>担当コード</h2>
 <table>
@@ -101,6 +102,10 @@ Docker 問題には Docker、AWS 問題には承認された競技者アカウ�
 <tr>
 <td>共通の純粋な処理と ExternalId</td>
 <td><code>scripts/lib/</code></td>
+</tr>
+<tr>
+<td>クラウド API、永続化した処理、CDK 基盤</td>
+<td><code>infrastructure/lib/cloud-hosting/</code>、<code>infrastructure/lib/problem-deploy/</code></td>
 </tr>
 <tr>
 <td>開催者アプリ</td>
