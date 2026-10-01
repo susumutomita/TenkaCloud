@@ -2,6 +2,7 @@ import { isIPv4 } from "node:net";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { DEFAULT_CONTAINER_LIMITS } from "./container-budget";
+import { parseDockerNetworkPool } from "./docker-networks";
 import { DEFAULT_GATEWAY_PORTS, gatewayPortsOverlap, parseGatewayPorts } from "./gateway-ports";
 
 export function parseOptions(
@@ -29,6 +30,7 @@ export function parseOptions(
         type: "string",
         default: String(DEFAULT_CONTAINER_LIMITS.memoryMiB),
       },
+      "docker-network-pool": { type: "string" },
       "no-build": { type: "boolean", default: false },
       "public-admin-origin": { type: "string" },
       "public-participant-origin": { type: "string" },
@@ -84,6 +86,9 @@ export function parseOptions(
       global: positiveLimit(values["max-active-environments"], 40),
       memoryMiB: positiveLimit(values["container-memory-mib"], 1024 * 1024),
     },
+    ...(values["docker-network-pool"]
+      ? { dockerNetworkPool: parseDockerNetworkPool(values["docker-network-pool"]) }
+      : {}),
     hostname,
     adminPort,
     participantPort,

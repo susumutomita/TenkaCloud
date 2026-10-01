@@ -64,7 +64,7 @@ export async function runLocalHost(
   const options = parseOptions(args, root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n  --aws-region <region>   Offer AWS problems, deployed into each team's competitor account with the AWS SDK's default credentials\n\nThe host application and Cryptography Battle need Bun and SQLite only. The local Challenge catalog requires Docker Compose. The hello-world problem requires --aws-region.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
+      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n  --aws-region <region>   Offer AWS problems, deployed into each team's competitor account with the AWS SDK's default credentials\n\nThe host application and Cryptography Battle need Bun and SQLite only. The local Challenge catalog requires Docker Compose. The hello-world problem requires --aws-region.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
     );
     return;
   }
@@ -86,6 +86,7 @@ export async function runLocalHost(
         directory,
         !options.public,
         cloud?.engine((job) => store.team(job.teamId)),
+        options.dockerNetworkPool,
       ),
   );
   try {

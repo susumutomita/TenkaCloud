@@ -33,6 +33,13 @@ import {
   dockerDefinitionOf as definitionOf,
   loadDockerCatalog,
 } from "./docker-catalog";
+import {
+  allocateNetworkSubnets,
+  applyNetworkSubnets,
+  DockerNetworkInventoryError,
+  type NetworkSubnets,
+  occupiedDockerSubnets,
+} from "./docker-networks";
 import { privateDirectory } from "./files";
 import {
   type Context,
@@ -118,7 +125,7 @@ async function compose(
       else if (/all predefined address pools have been fully subnetted/iu.test(tail))
         reject(
           new Error(
-            "Docker has no free network address pool. Review unused Docker networks on the host and remove only those no longer needed, then retry the failed deployment. Existing team environments are unchanged.",
+            "Docker has no free network address pool. Stopping an environment preserves its network and unfinished work. Configure a non-overlapping --docker-network-pool for new environments, or explicitly retire completed environments. No unrelated networks or retained team data were removed.",
           ),
         );
       else
@@ -152,9 +159,11 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   private readonly problems: Problem[];
   private readonly running = new Map<string, StartedContainer>();
+  private readonly networkReservations = new Map<string, readonly string[]>();
   constructor(
     repositoryRoot: string,
     private readonly dataDirectory: string,
+    private readonly networkPool?: string,
   ) {
     this.problems = loadDockerCatalog(repositoryRoot);
   }
@@ -168,6 +177,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   private plan(
     job: Job,
     verifySources = true,
+    newSubnets?: NetworkSubnets,
   ): {
     started: StartedContainer;
     composeText: string;
@@ -180,7 +190,11 @@ export class DockerHostingEngine implements RuntimeEngine {
       composePath: problem.composePath,
     });
     const remapped = remapRuntimeComposePorts(source, job.offset, job.runtimePorts);
-    const plannedCompose = job.runtimePorts ? boundedCompose(remapped.text).text : remapped.text;
+    let plannedCompose = job.runtimePorts ? boundedCompose(remapped.text).text : remapped.text;
+    const networkSubnets =
+      newSubnets ??
+      (job.unit ? (JSON.parse(job.unit) as LocalComposeUnit).networkSubnets : undefined);
+    if (networkSubnets) plannedCompose = applyNetworkSubnets(plannedCompose, networkSubnets);
     const directory = privateDirectory(join(this.dataDirectory, "runtimes", job.jobId));
     const composePath = join(directory, `${problem.composeProjectName}.compose.yml`);
     const unit: LocalComposeUnit = {
@@ -191,6 +205,7 @@ export class DockerHostingEngine implements RuntimeEngine {
       secretEnv: problem.secretEnv,
       projectDirectory: dirname(problem.composePath),
       remappedComposePath: composePath,
+      ...(networkSubnets ? { networkSubnets } : {}),
     };
     return {
       started: { unit, problem: remapContainerProblem(problem, remapped.portMap) },
@@ -198,10 +213,26 @@ export class DockerHostingEngine implements RuntimeEngine {
       directory,
     };
   }
+  private allocateNetworks(job: Job): NetworkSubnets | undefined {
+    if (!this.networkPool || !job.runtimePorts) return undefined;
+    try {
+      return allocateNetworkSubnets(definitionOf(job, true).composeText, this.networkPool, [
+        ...occupiedDockerSubnets(),
+        ...[...this.networkReservations.values()].flat(),
+      ]);
+    } catch (cause) {
+      if (cause instanceof DockerNetworkInventoryError && cause.daemonUnavailable)
+        throw new DockerDaemonUnavailableError();
+      throw cause;
+    }
+  }
   async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
     // Readiness of the CLI is checked on deploy, never on host startup.
     resolveComposeCli();
-    const plan = this.plan(job);
+    if (job.unit) throw new Error("A retained environment must be resumed, never recreated.");
+    const networkSubnets = this.allocateNetworks(job);
+    const plan = this.plan(job, true, networkSubnets);
+    if (networkSubnets) this.networkReservations.set(job.jobId, Object.values(networkSubnets));
     const unit = plan.started.unit;
     writeFileSync(unit.composePath, plan.composeText, { mode: 0o600 });
     retain(JSON.stringify(unit));
@@ -216,6 +247,7 @@ export class DockerHostingEngine implements RuntimeEngine {
         await compose(unit, "down", { ...process.env, ...generated });
         unlinkSync(unit.composePath);
         retain(null);
+        this.networkReservations.delete(job.jobId);
       } catch (cleanup) {
         throw startupCleanupFailure(error, cleanup);
       }
@@ -225,6 +257,8 @@ export class DockerHostingEngine implements RuntimeEngine {
   async recover(job: Job): Promise<void> {
     const plan = this.plan(job);
     const unit = this.validatedUnit(job, plan.started.unit);
+    if (unit.networkSubnets)
+      this.networkReservations.set(job.jobId, Object.values(unit.networkSubnets));
     if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
       throw new Error("Recorded runtime composition changed; refusing to adopt it.");
     if (!isComposeUnitRunning(unit))
@@ -271,6 +305,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     );
     await compose(unit, "down", { ...process.env, ...cleanupEnvironment });
     this.running.delete(job.jobId);
+    this.networkReservations.delete(job.jobId);
     unlinkSync(unit.composePath);
   }
   /** Validated, unchanged private plan of an owned environment. */

@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   prepareDatabase(databasePath);
   const masterKey = persistentKey(join(directory, "host-key"));
   let store = new HostStore(new Database(databasePath, { create: true, strict: true }));
-  let engine = new DockerHostingEngine(root, directory);
+  let engine = new DockerHostingEngine(root, directory, process.env.HOST_DOCKER_NETWORK_POOL);
   const gatewayPorts = smokeGatewayPorts();
   let service = new HostingService(store, engine, masterKey);
   service.gatewayPorts = gatewayPorts;
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
     await surfaces.close();
     store.close();
     store = new HostStore(new Database(databasePath, { create: true, strict: true }));
-    engine = new DockerHostingEngine(root, directory);
+    engine = new DockerHostingEngine(root, directory, process.env.HOST_DOCKER_NETWORK_POOL);
     service = new HostingService(store, engine, masterKey);
     service.gatewayPorts = gatewayPorts;
     await service.recover();
@@ -264,6 +264,28 @@ async function main(): Promise<void> {
     const scoresBefore = scores();
     const containersB = projectContainers(jobB);
     assert.ok(containersB.length > 0);
+    const retainedUnit = store.job(jobA).unit;
+    if (process.env.HOST_DOCKER_NETWORK_POOL) {
+      const networkA = JSON.parse(retainedUnit ?? "{}").networkSubnets;
+      const networkB = JSON.parse(store.job(jobB).unit ?? "{}").networkSubnets;
+      assert.ok(networkA?.default && networkB?.default, "Compact subnet allocations are durable.");
+      assert.notEqual(networkA.default, networkB.default, "Teams never share a subnet.");
+      const cli = resolveComposeCli();
+      assert.equal(cli.command, "docker");
+      const inspected = spawnSync(
+        cli.command,
+        [
+          "network",
+          "inspect",
+          "--format",
+          "{{json .IPAM.Config}}",
+          `tch-${jobA.toLowerCase()}_default`,
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(inspected.status, 0);
+      assert.equal(JSON.parse(inspected.stdout)[0].Subnet, networkA.default);
+    }
     const operate = async (method: string, suffix: string) => {
       await api("host", `/events/${eventId}/deployments/${jobA}${suffix}`, method, {});
       await service.drain();
@@ -282,6 +304,11 @@ async function main(): Promise<void> {
     await operate("POST", "/restart");
     assert.equal(store.job(jobA).status, "COMPLETE", store.job(jobA).error ?? "");
     assert.equal(await solve(first), flagA);
+    assert.equal(
+      store.job(jobA).unit,
+      retainedUnit,
+      "Stop/resume preserves the exact owned network and container plan.",
+    );
     await expectTeamBUntouched();
     await operate("DELETE", "");
     assert.equal(store.job(jobA).status, "DELETED", store.job(jobA).error ?? "");

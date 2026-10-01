@@ -223,10 +223,9 @@ even if one environment was lost, so the scoring gate is not closed, or kept fro
 opening at the scheduled time, for every team; restart that environment from the
 **Teams** tab. Only an event without a start time returns to its deployment state. The
 event-level deploy never redeploys a stopped environment (redeploying discards its
-data), and **Retry failed** redeploys failed environments only. A consequence: an
-event that is still being prepared does not become ready while one of its
-environments is stopped; the **Schedule** tab says so, and restarting that
-environment from the **Teams** tab completes the preparation.
+data), and **Retry failed** redeploys failed environments only. New on-demand
+events are ready while Docker jobs remain stopped: participants start them when needed.
+Older eager events still require every prepared environment to be running.
 
 An organizer login expires after eight hours or 15 minutes without a request.
 Sign in again with the organizer password after expiration. Changing a user's
@@ -288,6 +287,31 @@ Compose publishes them.
 
 Battle teams do not reserve or probe exercise-gateway ports. New events support up
 to 512 team/problem entries; the active Docker budget is separate.
+
+### Docker network address capacity
+
+Stopping a container preserves its private network as well as its unfinished work.
+The active CPU/memory limit therefore does not bound retained Docker network count.
+A host can run out of Docker's default address pools after visiting many problems,
+even when only a few environments are active. The host does not prune networks or
+silently delete stopped work to make room.
+
+For a larger event, an organizer can supply a private IPv4 pool with
+`--docker-network-pool <CIDR>` in `LOCAL_ARGS`. It must be an aligned `/16` through
+`/24` range that does not overlap the organizer's LAN, VPN, or other routed networks.
+Do not copy a subnet from an example without checking the local network.
+
+New environments then get separate project-owned `/28` subnets. The allocator
+checks existing Docker networks, local interface ranges and current reservations;
+it fails when no free subnet remains. It preserves declared network separation
+and internal-network settings. Subnets are saved with runtime ownership and kept
+on stop/resume; only explicit teardown releases the owned environment. Existing
+Docker daemon settings and unrelated networks are not changed. Older environments
+keep their original plans. VPN routes not visible as local interface ranges still
+need the organizer's review before choosing the pool.
+
+This is capacity planning, not a guarantee that 100 running containers fit the host.
+See Docker's [per-project IPAM options](https://docs.docker.com/reference/compose-file/networks/#ipam).
 
 The exercise containers' verifier ports remain loopback-only; do not expose them
 or rewrite their Compose bindings to `0.0.0.0`.

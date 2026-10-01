@@ -51,8 +51,9 @@ export class CompetitionEngine extends DockerHostingEngine {
     private readonly dockerProblems = true,
     /** Present only when the host was started with `--aws-region`. */
     private readonly cloud?: CloudFormationEngine,
+    networkPool?: string,
   ) {
-    super(root, dataDirectory);
+    super(root, dataDirectory, networkPool);
     this.battles = coordinationCatalog(root);
     this.loader = new LocalPluginLoader(dataDirectory);
   }

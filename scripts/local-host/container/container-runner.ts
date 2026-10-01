@@ -24,6 +24,8 @@ export interface LocalComposeUnit {
   readonly composePath: string;
   readonly composeProjectName: string;
   readonly secretEnv: readonly string[];
+  /** Host-assigned compact subnets; retained across stop/resume. */
+  readonly networkSubnets?: Readonly<Record<string, string>>;
   /** Original problem `local/` dir; set when running a remapped copy so relative paths resolve. */
   readonly projectDirectory?: string;
   /** Temp remapped compose to delete on teardown (absent for an unremapped, offset-0 problem). */

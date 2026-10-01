@@ -52,6 +52,9 @@ jobs:
           docker info
           docker compose version
       - name: Production adapter and existing sqli-demo with two teams
+        env:
+          # Isolated runner fixture; only this test's owned Compose projects use compact IPAM.
+          HOST_DOCKER_NETWORK_POOL: 10.240.0.0/16
         run: bun run test:host:docker
       - name: Hosted image plays a Cryptography Battle at its advertised origins
         run: |
