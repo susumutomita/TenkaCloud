@@ -2,11 +2,8 @@
  * Cognito JWT (id_token) の payload を読む util。署名検証は API gateway authorizer 側で
  * 行うので frontend ではデコードのみ。秘匿情報は出さない (mask 画面表示用)。
  *
- * provision-tenant.sh が admin-create-user で設定する custom 属性:
- *   - custom:tenantId  (常時)
- *   - custom:userRole  (常時 = "TenantAdmin")
- *   - custom:tenantTier (常時 = "BASIC" / "ADVANCED" / "PLATINUM")
- *   - custom:tenantName (将来追加予定。現状は無いので undefined になる)
+ * 現行のクラウド開催は custom:userRole の Admin / Operator / Viewer を使用する。
+ * 旧 claim の型と別名は既存 token の表示互換用であり、API の認可には使わない。
  */
 export interface IdTokenClaims {
   sub?: string;
@@ -75,9 +72,10 @@ export function resolveTenantConsoleAccess(claims: IdTokenClaims | null): Tenant
 
 export function decodeIdToken(idToken: string): IdTokenClaims | null {
   const parts = idToken.split(".");
-  if (parts.length !== 3) return null;
+  const encodedPayload = parts[1];
+  if (parts.length !== 3 || !encodedPayload) return null;
   try {
-    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = encodedPayload.replace(/-/g, "+").replace(/_/g, "/");
     const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
     // atob は binary string を返すので、日本語等の multi-byte 文字を正しく
     // 復号するため UTF-8 でデコードする (Cognito JWT は UTF-8 / base64url)。

@@ -1,9 +1,9 @@
 # イベント運用 Runbook
 
-未公開の統合 candidate 用です。`make local` で同じ大会・チームのシステムを起動し、
+リリース前の統合 candidate 用です。`make local` で同じ大会・チームのシステムを起動し、
 `make down` でデータを保持して停止します。SaaS/Lite の基盤構築手順ではありません。
 `make deploy` と `make destroy` は現在、未実装のエラーで終了し、リソースを変更しません。
-クラウド用 Turso と配置先の対応は進行中です。
+Lambda / DynamoDB によるクラウド開催を復旧中です。AWS サービスの問題はクラウド開催専用です。
 
 ## 開催前
 
@@ -12,14 +12,14 @@
 - private なデータディレクトリと整合したバックアップを用意し、1 つのプロセスだけが所有する
 - 実際の問題・チーム数で環境を配置し、正答、誤答、ヒント、得点、再起動、撤収を確認する
 - Docker カタログの表示件数だけを全問のプレイ確認として扱わない。terminal と実 Docker・ブラウザの未確認経路を記録する
-- AWS 問題は対象アカウント、region、資源、費用、障害操作、削除を事前に承認する
+- クラウド開催が完成した後の AWS 問題リハーサルでは、対象アカウント、region、資源、費用、障害操作、削除を事前に承認する
 - 競技者アカウントに `templates/competitor-bootstrap.yaml` を使い、表示された運営アカウント、role 名、ExternalId を合わせて接続を検証する
 - 参加者用 role と配置 role を分離し、初期設定の AdministratorAccess を参加者へ配らない
 - 大会・チームの参加キーを安全に配布する。任意の[自己登録](participant-self-registration.md)は準備済みチームの割り当てであり、環境の自動作成ではない
 
 ## 開催中
 
-1. 各チームの停止状態の Docker jobs と AWS の配置結果を確認してから Schedule で開始する
+1. 各チームの停止状態の Docker jobs を確認してから Schedule で開始する。AWS の競技はクラウド開催の完成後に別途確認する
 2. 参加者のログイン、Start / resume と Stop (keep data)、最初の解答・得点を確認する
 3. 障害は承認した対象だけへ実行し、SSM の結果と実際のサービス状態を分けて確認する
 4. 失敗時はエラー、対象、時刻を記録し、所有情報を保持したまま対象の操作を再試行する
@@ -36,7 +36,8 @@
 受付制限の変更は `LOCAL_ARGS` の `--max-active-per-team`、`--max-active-environments`、
 `--container-memory-mib` を使います。詳細は[容量の前提](../local-play-requirements.md)を参照してください。
 100 jobs・105 runtime ports の synthetic テストは割り当てと lifecycle の確認であり、実 Docker の性能測定ではありません。
-terminal は synthetic shell で HTTP/WebSocket の 11 tests・96 assertions が成功していますが、実 Docker exec は未確認です。
+PostgreSQL terminal は実 Docker とブラウザで接続・3 checkpoints の採点・チーム分離・停止再開後の 7 行の保持を確認済みです。
+全 106 問と terminal 全 15 種の確認を意味しません。
 
 ## 採点と障害の切り分け
 

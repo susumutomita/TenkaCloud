@@ -1,6 +1,6 @@
 # Local event competitions
 
-This page describes the unpublished integration candidate. The former standalone
+This page describes the integration candidate, which has not been released. The former standalone
 individual-practice backend has been replaced by one organizer/participant
 competition system. The command remains `make local`, but its event/team workflow
 and shutdown contract have changed.
@@ -18,7 +18,8 @@ Create an event and teams in the organizer console, prepare the selected jobs,
 start the schedule, then use the correct team key in the participant portal.
 New Docker jobs are dormant until the participant chooses **Start / resume**.
 Use **Stop (keep data)** to release active capacity without resetting the exercise.
-Existing events retain their legacy lifecycle; AWS exercises keep their deployment flow.
+Existing Docker events retain their legacy lifecycle. AWS service problems require
+cloud hosting; the local entrypoint cannot create or resume AWS environments.
 A participant cannot select another team's environment by supplying a team ID.
 
 From another terminal in the same checkout:
@@ -36,7 +37,8 @@ Docker volume removal or AWS stack deletion. Explicit event teardown is separate
 keep ownership records until it succeeds.
 
 `make deploy` and `make destroy` currently report unimplemented and change no
-cloud resources. Cloud Turso integration is not a completed deployment route.
+cloud resources. Lambda / DynamoDB cloud hosting is being restored; it is not yet
+a completed deployment route.
 
 ## Admission limits
 
@@ -52,12 +54,13 @@ All 106 former Compose problems are intended to run as Challenge competitions.
 The pinned catalog contains 8 verify and 98 multi-verify definitions, including
 4 whose source category is Battle. A generic runtime should preserve their
 checker semantics and normalize the competition presentation. Catalog and
-workbench restoration are in progress; listing all IDs is not playability proof.
+workbench integration is implemented; listing all IDs is not playability proof.
 
 Fifteen problems declare terminal access. That is a separate runtime capability
-whose HTTP/WebSocket boundary passed 11 tests with 96 assertions using a synthetic
-shell. Actual Docker exec and complete browser playability are unverified. A visible
-Terminal control alone is not evidence of a working Docker connection. Native-only
+whose HTTP/WebSocket boundary and a real Docker PostgreSQL exercise have been
+verified. Browser checks covered three checkpoints, team isolation and restarting
+the same container with its seven inserted rows intact. Other terminal and problem
+variants still need representative coverage. Native-only
 problems must reject incompatible hosts rather than silently use emulation.
 
 ## Verifier and checkpoint boundary

@@ -1,7 +1,7 @@
 """Generate current, explicitly scoped architecture pages using Draw.io XML.
 
-This source describes the unpublished integration candidate. It deliberately does
-not reproduce the retired SaaS/Lite architecture; that is available at the fixed
+This source describes the unreleased integration candidate. It deliberately does
+not reproduce the retired SaaS architecture; that is available at the fixed
 legacy source linked in docs/architecture/README.md. No external tools required.
 """
 from pathlib import Path
@@ -29,18 +29,18 @@ def diagram(doc, identity, title, nodes, edges):
 def main():
     doc = ET.Element("mxfile", host="app.diagrams.net", type="device")
     diagram(doc, "community-local", "01 Local competition candidate", [
-        ("title", "Unpublished candidate: one event/team competition system", 60, 30, 1080, 50),
+        ("title", "Unreleased candidate: one event/team competition system", 60, 30, 1080, 50),
         ("organizer", "Organizer browser\nAdmin / Operator / Viewer", 60, 150, 250, 80),
         ("participant", "Participant browser\nEvent-owned team key", 60, 350, 250, 80),
         ("host", "Single Bun process\nHTTP authorization, events, scoring, ownership", 430, 235, 330, 110),
         ("db", "Local SQLite + original private keys\nDurable state and recovery", 880, 150, 260, 100),
         ("runtime", "On-demand Compose / workbench\n512 dormant jobs; team 3 / host 12 active\n4096 MiB cap budget; 40 active gateways", 880, 360, 260, 100),
         ("lifecycle", "make down stops owned Docker; make local waits for participant resume\nWritable layers and volumes survive, not RAM; no automatic eviction or reset\nExisting events keep legacy lifecycle; AWS stacks and event clock remain", 210, 540, 780, 90),
-        ("coverage", "106 entries are not full playability proof; synthetic 100 jobs / 105 ports is not a benchmark\nTerminal HTTP/WS tested with synthetic shell; actual Docker exec / browser checks incomplete", 210, 655, 780, 80),
+        ("coverage", "106 entries are not full playability proof; synthetic 100 jobs / 105 ports is not a benchmark\nReal Docker/browser: SQL access, PostgreSQL terminal, isolation and state-preserving resume verified", 210, 655, 780, 80),
     ], [("organizer", "host", "Organizer authentication"), ("participant", "host", "Team authentication"), ("host", "db", "Transactional state"), ("host", "runtime", "Owned lifecycle / private verifier")])
-    diagram(doc, "exercise-aws", "02 Optional AWS exercises", [
+    diagram(doc, "exercise-aws", "02 Cloud-only AWS exercises", [
         ("title", "AWS exercises are separate from cloud platform deployment", 60, 30, 1080, 50),
-        ("host", "Local event host\nApproved AWS SDK credentials", 60, 200, 250, 100),
+        ("host", "Cloud event service (restoration pending)\nScoped execution role", 60, 200, 250, 100),
         ("deploy", "Competitor deployment role\nRequired persisted host ExternalId", 430, 120, 320, 100),
         ("viewer", "Saved participant viewer role\nDeployment ExternalId", 430, 360, 320, 100),
         ("stack", "Owned CloudFormation stack\nhello-world / hello-world-battle", 870, 120, 280, 100),
@@ -50,8 +50,8 @@ def main():
     diagram(doc, "cloud-status", "03 Cloud platform: incomplete", [
         ("title", "Cloud platform integration is in progress", 60, 30, 1080, 50),
         ("commands", "make deploy / make destroy\nCurrently exit unimplemented\nNo resource changes", 80, 180, 360, 150),
-        ("requirements", "Required deployment contract\nCloud Turso storage\nOriginal keys and persistent identity\nSingle active owner and recovery", 710, 150, 400, 230),
-        ("gates", "Not established by a container build or a driver experiment\nActual provider, lifecycle, runtime placement, billing and full participant route need evidence", 170, 510, 860, 120),
+        ("requirements", "Required deployment contract\nAPI Gateway / Lambda + DynamoDB\nCognito + private S3 / CloudFront\nDurable deployment and scoring coordination", 710, 150, 400, 230),
+        ("gates", "Not established by a container build or a driver experiment\nInitial permissions, lifecycle, non-AWS runner, billing and full participant route still need evidence", 170, 510, 860, 120),
     ], [("commands", "requirements", "Implementation and verification required")])
     ET.indent(doc, space="  ")
     ET.ElementTree(doc).write(HERE / "system-architecture.drawio", encoding="utf-8", xml_declaration=True)

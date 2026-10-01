@@ -10,7 +10,7 @@ const env = {
 
 describe("loadConfig", () => {
   describe("when /runtime-config.json returns all required fields", () => {
-    async function loadWithFullRuntime() {
+    async function loadWithFullRuntime(eventLimits?: unknown) {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation(() =>
@@ -19,6 +19,7 @@ describe("loadConfig", () => {
               JSON.stringify({
                 cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
                 userClientId: "prod-client-id",
+                eventLimits,
                 tenantId: "tenant-prod-1",
                 tenantName: "Acme Manufacturing Division",
                 apiUrl: "https://prod-api.example.com/prod",
@@ -30,6 +31,25 @@ describe("loadConfig", () => {
       );
       return loadConfig(env);
     }
+
+    it("loads cloud limits from the same runtime configuration as the API URL", async () => {
+      const limits = { maxTeams: 49, maxProblems: 50 };
+      expect((await loadWithFullRuntime(limits)).eventLimits).toEqual(limits);
+    });
+
+    it.each([
+      undefined,
+      null,
+      {},
+      [],
+      { maxTeams: 0, maxProblems: 50 },
+      { maxTeams: 49.5, maxProblems: 50 },
+      { maxTeams: 49, maxProblems: "50" },
+      { maxTeams: 100, maxProblems: 50 },
+      { maxTeams: 49, maxProblems: 0 },
+    ])("keeps creation unavailable for missing or invalid cloud limits %j", async (limits) => {
+      expect((await loadWithFullRuntime(limits)).eventLimits).toBeUndefined();
+    });
 
     it("should take cognitoDomain from runtime-config", async () => {
       expect((await loadWithFullRuntime()).cognitoDomain).toBe(
@@ -95,7 +115,7 @@ describe("loadConfig", () => {
       expect(config.cognitoDomain).toBe("https://dev-cognito.example.com");
       expect(config.cognitoClientId).toBe("dev-client-id");
       expect(config.tenantId).toBe("dev-local");
-      expect(config.tenantName).toBe("Local Dev Tenant");
+      expect(config.tenantName).toBe("Local development");
       expect(config.apiBaseUrl).toBe("http://localhost:3999");
     });
 

@@ -16,9 +16,10 @@ instructions include legacy local-practice and Lite paths.
 | ACTION=destroy-all | Legacy-only; make destroy currently exits unimplemented and deletes nothing |
 | pack activate for a tenant | Retained local record only; does not add problems to current events |
 
-Local SQLite is implemented. Cloud Turso and platform deployment are in progress.
-AWS exercise deployment from an approved local host is a separate capability and
-may incur AWS charges. Ordinary local shutdown does not remove those stacks.
+Local SQLite is implemented. Cloud Lambda / DynamoDB hosting is being restored.
+AWS service problems are cloud-only. Non-AWS problems are intended for both hosting
+options; the cloud problem runner is still incomplete. Ordinary local shutdown
+does not remove AWS resources created by an earlier revision.
 
 ## Teaching examples and verification
 
@@ -26,10 +27,10 @@ Keep sqli-demo, hello-world, hello-world-battle and wp-exposed-backup as explici
 book regression scenarios, including correct/wrong answers, hints, team isolation,
 restart and cleanup. Renamed starter authoring must have its own runtime evidence.
 All 106 former local Compose problems are intended to work as Challenge competitions
-through shared runner capabilities. Catalog/workbench restoration is in progress;
-15 terminal problems and complete real Docker/browser playability are incomplete.
-Terminal HTTP/WebSocket tests pass with a synthetic shell (11 tests, 96 assertions);
-actual Docker exec remains unverified. New Docker events allocate up to 512 dormant
+through shared runner capabilities. Catalog/workbench integration is implemented.
+Real Docker/browser checks covered SQL exercise access and a PostgreSQL terminal,
+three checkpoints, team isolation and data-preserving stop/restart. This does not
+prove all 106 problems or all 15 terminal variants. New Docker events allocate up to 512 dormant
 jobs, with active defaults of 3 per team, 12 per host and 4096 MiB of summed memory
 caps. A synthetic 100-job / 105-port plan proves allocation and lifecycle behavior,
 not concurrent Docker capacity. Stop preserves writable layers and volumes without

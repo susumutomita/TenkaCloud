@@ -4,7 +4,7 @@ flowchart TB
   subgraph Host["One community host process"]
     Auth["Separate organizer and team authorization"]
     Event["Events, teams, schedules, invitations"]
-    Runtime["Dormant Docker jobs; participant start / stop; owned AWS lifecycle"]
+    Runtime["Dormant Docker jobs; participant start / stop; coordination runtime"]
     Score["Verifier, checkpoints, uptime and Battle scoring"]
     Store["Persistent event/team state"]
   end

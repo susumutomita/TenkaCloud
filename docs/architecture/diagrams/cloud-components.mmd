@@ -1,16 +1,21 @@
 flowchart LR
-  Host["Current local Bun event host"]
-  SDK["AWS SDK: approved operator credentials"]
-  DeployRole["Competitor deployment role + required host ExternalId"]
-  Stack["Owned CloudFormation exercise stack"]
-  Viewer["Participant viewer role + deployment ExternalId"]
-  Participant["Authenticated team: short-lived access"]
-  Host --> SDK
-  SDK --> DeployRole
-  DeployRole --> Stack
-  SDK --> Viewer
-  Viewer --> Participant
-  Participant --> Stack
-  Plan["Cloud platform / Turso integration: in progress"]
-  Commands["make deploy / make destroy: unimplemented, no resource changes"]
-  Commands -.-> Plan
+  Organizer["Organizer browser"]
+  Participant["Participant browser"]
+  CDN["Private S3 / CloudFront"]
+  Auth["Cognito: organizer roles"]
+  API["API Gateway / Lambda"]
+  DB["DynamoDB: events, teams, deployments"]
+  Deploy["AWS exercise lifecycle: restoration pending"]
+  NonAWS["Non-AWS problem runner: incomplete"]
+  Organizer --> CDN
+  Participant --> CDN
+  Organizer --> Auth
+  Auth --> API
+  Participant -->|"Event-owned team key"| API
+  API --> DB
+  API -.-> Deploy
+  API -.-> NonAWS
+  Commands["make deploy / make destroy: not enabled until complete"]
+  Commands -.-> API
+  Note["AWS service problems are cloud-only; no live AWS acceptance yet"]
+  Deploy -.-> Note

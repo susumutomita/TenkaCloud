@@ -33,13 +33,12 @@ import {
   type ProblemRow,
   resizeTeamRows,
   resolveEventProviderMode,
-  TEAMS_MAX,
   type TeamRow,
   validateTeamRows,
 } from "./event-create/helpers";
 import {
+  EventCreateCapacityNotice,
   eventCapacity,
-  LocalHostEventCreateNotice,
   useHostCatalog,
 } from "./event-create/LocalHostEventCreate";
 import { useCompetitorAccountsLoader } from "./event-create/useCompetitorAccountsLoader";
@@ -188,13 +187,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   // shallow identity で再 render 判定するので、毎 render 新 array を渡すと無駄に重い
   // (= 99 行 × 2 column の Input が全部 reconcile される)。
   const teamTableItems = useMemo(() => teamRows.map((tr, i) => ({ ...tr, idx: i })), [teamRows]);
-  const { maxTeams, teamCountInvalid, jobCountInvalid } = eventCapacity(
+  const capacity = eventCapacity(
     localHost,
     hostCatalog,
     teamRows.length,
     problemRows.length,
-    TEAMS_MAX,
+    config.eventLimits,
   );
+  const { maxTeams, teamCountInvalid, jobCountInvalid, problemCountInvalid } = capacity;
   const nameInvalid = name.length === 0 || name.length > NAME_MAX;
   const canSubmit =
     !!apiClient &&
@@ -203,6 +203,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     !nameInvalid &&
     !teamCountInvalid &&
     !jobCountInvalid &&
+    !problemCountInvalid &&
     problemRows.length > 0 &&
     teamValidation.allSlugsValid &&
     teamValidation.allAccountsValid &&
@@ -339,9 +340,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             maxTeams={maxTeams}
           />
 
-          {localHost && (
-            <LocalHostEventCreateNotice catalog={hostCatalog} jobCountInvalid={jobCountInvalid} />
-          )}
+          <EventCreateCapacityNotice local={localHost} catalog={hostCatalog} capacity={capacity} />
 
           {/* #528 / Phase 2.2 (Issue #459): Teams 入力の上に置く 3 種 Alert。
            *   load error / loading / 0-verified hint をまとめた小 component。 */}

@@ -3,7 +3,14 @@ import { resolveFeatureFlags } from "@tenkacloud/web-kit";
 import { type AppFeatures, FEATURE_REGISTRY } from "./features";
 import { LOCAL_HOST_BUILD } from "./local-host-build";
 
+export interface EventLimits {
+  readonly maxTeams: number;
+  readonly maxProblems: number;
+}
+
 export interface AppConfig {
+  /** Backend-advertised creation bounds; absent means creation is unavailable. */
+  readonly eventLimits?: EventLimits;
   readonly cognitoDomain: string;
   readonly cognitoClientId: string;
   readonly redirectUri: string;
@@ -73,6 +80,7 @@ export function isLocalHost(config: Pick<AppConfig, "mode">): boolean {
 }
 
 interface RuntimeConfig {
+  readonly eventLimits?: EventLimits;
   readonly cognitoDomain: string;
   readonly userClientId: string;
   readonly tenantId: string;
@@ -84,6 +92,23 @@ interface RuntimeConfig {
   readonly samlIdpDirectory?: Readonly<Record<string, readonly string[]>>;
   /** Raw `features` override object from runtime-config.json; resolved against the registry in loadConfig. */
   readonly features?: Readonly<Record<string, unknown>>;
+}
+
+function cloudEventLimits(value: unknown): EventLimits | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const limits = value as Record<string, unknown>;
+  if (
+    typeof limits.maxTeams !== "number" ||
+    !Number.isSafeInteger(limits.maxTeams) ||
+    limits.maxTeams < 1 ||
+    limits.maxTeams > 99 ||
+    typeof limits.maxProblems !== "number" ||
+    !Number.isSafeInteger(limits.maxProblems) ||
+    limits.maxProblems < 1 ||
+    limits.maxProblems > 512
+  )
+    return undefined;
+  return { maxTeams: limits.maxTeams, maxProblems: limits.maxProblems };
 }
 
 // Issue #871 / #1246: runtime-config.json URL validators (isHttpsUrl / isCognitoDomain) are
@@ -116,6 +141,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       return null;
     }
     return {
+      eventLimits: cloudEventLimits(data.eventLimits),
       cognitoDomain: data.cognitoDomain,
       userClientId: data.userClientId,
       tenantId: data.tenantId,
@@ -145,7 +171,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
 }
 
 const DEV_FALLBACK_TENANT_ID = "dev-local";
-const DEV_FALLBACK_TENANT_NAME = "Local Dev Tenant";
+const DEV_FALLBACK_TENANT_NAME = "Local development";
 const DEV_FALLBACK_API_BASE_URL = "http://localhost:3999";
 
 /**
@@ -177,7 +203,7 @@ function buildDemoConfig(
     cognitoDomain: "demo.auth.tenkacloud.example",
     cognitoClientId: "demo-client",
     tenantId: "demo-tenant",
-    tenantName: "Demo Tenant",
+    tenantName: "Demo competition",
     apiBaseUrl: "https://demo.invalid",
     isolation: "pooled",
     samlIdpDirectory: {},
@@ -185,6 +211,7 @@ function buildDemoConfig(
     redirectUri,
     scope,
     mode: "demo",
+    eventLimits: { maxTeams: 49, maxProblems: 50 },
     // 参加者 demo (participant-portal) への hand-off 先。 per-team の招待リンク
     // (EventTeamsPanel) とバナーの「参加者として見る」導線が使う。 ホスティング時は
     // VITE_DEMO_PARTICIPANT_URL で上書き、 既定は participant-portal の `/portal-demo/`。
@@ -262,6 +289,7 @@ export async function loadConfig(
   const runtime = await fetchRuntimeConfig();
   if (runtime) {
     return {
+      eventLimits: runtime.eventLimits,
       cognitoDomain: runtime.cognitoDomain,
       cognitoClientId: runtime.userClientId,
       tenantId: runtime.tenantId,

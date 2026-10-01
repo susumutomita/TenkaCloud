@@ -1,6 +1,5 @@
 import { fileURLToPath } from "node:url";
 import { buildHosting } from "./build";
-import { connectCloudHosting } from "./cloud-hosting";
 import { CompetitionEngine } from "./competition-engine";
 import { DEFAULT_GATEWAY_PORTS, formatGatewayPorts } from "./gateway-ports";
 import { parseOptions } from "./options";
@@ -24,7 +23,6 @@ function waitForStop(signal?: AbortSignal): Promise<void> {
 function announceHost(
   options: ReturnType<typeof parseOptions>,
   host: Awaited<ReturnType<typeof startLocalHost>>,
-  cloud: Awaited<ReturnType<typeof connectCloudHosting>> | undefined,
   stopLocalEnvironments: boolean,
 ): void {
   if (options.public) {
@@ -36,13 +34,6 @@ function announceHost(
     const gateways = `http://${options.hostname}:${formatGatewayPorts(options.gatewayPorts)}`;
     console.log(
       `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (active local environments only)\nHost login key: ${host.masterKey}\nState: ${host.databasePath}\n`,
-    );
-  }
-  if (cloud) {
-    // Like the host key: kept out of container logs, which platforms retain.
-    const externalId = options.public ? `stored in ${cloud.externalIdPath}` : cloud.externalId;
-    console.log(
-      `AWS problems: region ${cloud.region}, operator account ${cloud.operatorAccountId}\nCompetitor ExternalId: ${externalId}`,
     );
   }
   if (!options.public && options.hostname !== "127.0.0.1")
@@ -64,7 +55,7 @@ export async function runLocalHost(
   const options = parseOptions(args, root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n  --aws-region <region>   Offer AWS problems, deployed into each team's competitor account with the AWS SDK's default credentials\n\nThe host application and Cryptography Battle need Bun and SQLite only. The local Challenge catalog requires Docker Compose. The hello-world problem requires --aws-region.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
+      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nThe host application and Cryptography Battle need Bun and SQLite only. The local Challenge catalog requires Docker Compose. AWS service problems are available only with cloud hosting.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
     );
     return;
   }
@@ -72,25 +63,16 @@ export async function runLocalHost(
     throw new Error("Native Windows is not supported; use WSL2 or a macOS/Linux host.");
   process.umask(0o077);
   if (lifecycle.signal?.aborted) return;
-  const cloud = options.awsRegion
-    ? await connectCloudHosting(root, options.dataDirectory, options.awsRegion)
-    : undefined;
   if (options.build) await buildHosting(root);
   if (lifecycle.signal?.aborted) return;
   const host = await startLocalHost(
     root,
-    { ...options, ...(cloud ? { accountConnection: cloud } : {}) },
-    (directory, store) =>
-      new CompetitionEngine(
-        root,
-        directory,
-        !options.public,
-        cloud?.engine((job) => store.team(job.teamId)),
-        options.dockerNetworkPool,
-      ),
+    options,
+    (directory) =>
+      new CompetitionEngine(root, directory, !options.public, undefined, options.dockerNetworkPool),
   );
   try {
-    announceHost(options, host, cloud, lifecycle.stopLocalEnvironments === true);
+    announceHost(options, host, lifecycle.stopLocalEnvironments === true);
     await waitForStop(lifecycle.signal);
     console.log("Closing listeners; waiting for in-flight environment operations to finish.");
   } finally {

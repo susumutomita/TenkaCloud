@@ -13,16 +13,14 @@ for identity-provider configuration, NameID links and revocation.
 ## Supported problems
 
 The application server uses Bun and a local SQLite file. There is no Cognito,
-external database, or application container to provision, and AWS is needed only
-for the optional [AWS problem](#aws-problems). The browser interfaces are built
+external database, or application container to provision. The local entrypoint does
+not use AWS credentials; [AWS problems require cloud hosting](#aws-problems-use-cloud-hosting). The browser interfaces are built
 using the repository's existing Vite pipelines.
 
 | Problem | Runtime | Requirements |
 | --- | --- | --- |
 | 106 local Compose exercises, including `sqli-demo` | One isolated, on-demand Compose project per team/problem; workbenches and 15 opted-in terminals | Docker |
 | Cryptography Battle (`battles/ac26-crypto-battle`) | Shared match on the host; private view per team | Bun + SQLite, no Docker or AWS |
-| Hello World (`challenges/hello-world`) | One CloudFormation stack in each team's own AWS account | `--aws-region`, AWS credentials and a competitor account per team |
-| Hello World Battle (`battles/hello-world-battle`) | One CloudFormation stack per team, with registered frontend/API URLs and uptime scoring | `--aws-region`, AWS credentials, a competitor account and two public endpoints per team |
 
 The local exercises reuse their catalog statements, verifiers, hints and scoring.
 The four former local Battle-shaped exercises are offered as Challenges; native
@@ -321,105 +319,28 @@ and single-use, and each browser receives its own HttpOnly Cookie. Different
 teammates can open independent links concurrently. Team-key rotation revokes
 old team access, including existing exercise-gateway sessions.
 
-## AWS problems
+## AWS problems use cloud hosting
 
-`hello-world` deploys one CloudFormation stack into each team's own AWS account.
-Start the host with a region to offer it:
+AWS-service problems belong to cloud hosting. `make local` refuses the old
+`--aws-region` option before initializing AWS clients. Local hosting offers the
+non-AWS Compose catalog and native Battle games; it does not create AWS resources.
 
-```sh
-make local LOCAL_ARGS="--aws-region ap-northeast-1"
-```
+Cloud hosting is being restored with Lambda and DynamoDB. Its deployment, scoring
+and non-AWS runner are not yet complete. `make deploy` and `make destroy` still
+fail without changing resources until that complete path is enabled and verified.
+The presence of a problem in repository metadata is not a cloud playability claim.
 
-- **Credentials.** The host uses the AWS SDK's default credential chain:
-  environment variables, a profile, or an instance or task role. No flag takes
-  keys. At startup the host calls STS `GetCallerIdentity` and prints the operator
-  account ID. Without usable credentials it refuses to start.
-- **ExternalId.** The host creates `competitor-external-id` in its data directory
-  once, with the same file permissions as `host-key`, and prints its value. In
-  public mode it prints the file path instead. Every competitor role requires this
-  ExternalId, as `competitor-bootstrap.yaml` does.
-- **Competitor accounts.** Open **Competitor Accounts** in the host console, register
-  each account, and use the displayed operator account ID, ExternalId and exact RoleName
-  with `competitor-bootstrap.yaml`. Download the template from the modal and create
-  its stack manually in the competitor account; the local host has no public S3
-  TemplateURL for CloudFormation Quick Create. Then select **Verify**. Verification
-  assumes the registered role with the required ExternalId; only verified accounts
-  appear in the cloud event team picker. The form proposes a host-scoped role name,
-  while API registration without `competitorRoleName` uses the template's inherited
-  `TenkaCloud-CompetitorDeploy-Role` default. An event stores the registered role,
-  not an `awsRoleName` supplied in its request. The API equivalent is:
-
-  ```sh
-  TOKEN=$(curl -s -X POST http://127.0.0.1:5174/api/host/login \
-    -H 'content-type: application/json' -d '{"username":"<organizer username>","password":"<password>"}' | jq -r .idToken)
-  curl -s -X POST http://127.0.0.1:5174/api/admin/competitor-accounts \
-    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-    -d '{"awsAccountId":"111111111111"}'
-  curl -s -X POST http://127.0.0.1:5174/api/admin/competitor-accounts/111111111111/verify \
-    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'
-  curl -s -X POST http://127.0.0.1:5174/api/admin/competitor-accounts \
-    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-    -d '{"awsAccountId":"222222222222"}'
-  curl -s -X POST http://127.0.0.1:5174/api/admin/competitor-accounts/222222222222/verify \
-    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'
-  curl -s -X POST http://127.0.0.1:5174/api/events \
-    -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-    -d '{"name":"Cloud day","problems":[{"problemId":"ac26-crypto-battle"},{"problemId":"hello-world"}],
-         "teams":[{"internalSlug":"team-a","awsAccountId":"111111111111"},
-                  {"internalSlug":"team-b","awsAccountId":"222222222222"}]}'
-  ```
-
-  Register and verify every target account before creating the event. Deploy,
-  start and end it in the host console as usual. An account assigned to an active
-  event or an environment awaiting cleanup cannot be deleted.
-  Each deployment uses a separate stack name, including when events reuse a team
-  account and slug. Recovery and teardown verify ownership before using or deleting
-  a stack. A missing or blank scoring output fails deployment.
-- **Playing.** Participants see the stack's outputs except the flag output, submit
-  the flag and reveal hints in the normal portal. The host compares the answer with
-  the flag output it read when the stack was created; scoring makes no AWS call.
-- **Hello World Battle.** After deployment, each team registers public frontend
-  and API URLs in the participant portal. Both registrations and initial EC2
-  readiness are required before the first uptime point. The host records at most
-  one score observation per minute in SQLite; a restart does not backfill missed
-  minutes. The Disruptions tab can fire the declared SSM fault and tracks its
-  revert command separately from observed application health.
-- **Regions.** Only regions of the standard AWS partition are accepted; GovCloud,
-  China and ISO regions are refused at startup.
-- **Restarting.** Without the flag, recovery marks the event's stacks failed with
-  a message asking for `--aws-region`, and restarting with it recovers them. A stack
-  that finished creating while the host was stopped has no recorded outputs, so it
-  is marked failed. **Restart** on that environment in the **Teams** tab deletes and
-  recreates it, as does **Retry failed** while the event is being prepared.
-- **Participant AWS access.** During play, choose **Open AWS Console** in the portal,
-  or open **Tools > SSO Credentials** to issue CLI credentials. Both use the
-  environment's `ParticipantViewerRoleArn` from the saved stack outputs. The host
-  first rechecks the competitor deploy role with its host ExternalId, then assumes
-  the viewer role with the saved job ID as ExternalId. Both calls use the operator
-  credentials, which need `sts:AssumeRole` permission on the registered deployment
-  role and the problem's viewer role. Participants receive only the
-  viewer credentials, with the permissions defined by the problem template.
-  The host requests one-hour credentials and returns the actual STS expiry for CLI
-  credentials. Credentials stay in browser memory and disappear when cleared or
-  the page reloads. Console sign-in uses the fixed AWS federation endpoint and
-  the region's console home page. This flow supports commercial AWS accounts.
-- **Access gates.** Before and after AWS calls, the host checks team membership,
-  event start, lock, end and expiry, and whether the environment is running.
-  Rotating a team key or starting an environment operation blocks a pending
-  request. Ending the event blocks new credentials and console links. Sessions
-  already issued remain valid until AWS expires or revokes them.
-
-The access checks and built portal flows are covered by local HTTP, SQLite and
-Chromium tests with STS and federation mocks. A real AWS rehearsal requires
-separate approval and is optional for development completion.
-
-The container image accepts the same flag. Give it credentials through the
-platform's role or environment variables.
+If an earlier integration revision created AWS resources, keep its private state
+and account records. Use that exact reviewed revision for an explicitly authorized
+cleanup, or a verified cloud migration procedure. The new local entrypoint does not
+adopt, delete or reset those AWS resources. It reports unsupported legacy jobs
+without losing their resource references or tournament results.
 
 ## Hosting behind a TLS proxy
 
-The same host runs as one container image on a VM or container platform. A
-TLS-terminating proxy publishes the host console and the participant portal at two
+This optional local-runtime rehearsal image is separate from Lambda-based cloud
+hosting and is not the implementation of `make deploy`. It can run behind a
+TLS-terminating proxy, which publishes the host console and participant portal at two
 HTTPS origins, and the host checks every request's Host and Origin against them:
 
 ```sh
@@ -456,8 +377,8 @@ docker run --read-only --tmpfs /tmp --cap-drop ALL \
   and returns only a status.
 - **Supported problems.** Docker Compose problems are not offered. Their sibling
   containers publish on the host's loopback, which the container cannot reach. The
-  Cryptography Battle runs in-process and is offered, and so is `hello-world` with
-  `--aws-region`. To use Docker problems on a VM, run `make local` directly on that VM.
+  Cryptography Battle runs in-process and is offered. AWS service problems are not
+  offered by this entrypoint. The image is a native-Battle rehearsal target.
 
 `bun run test:host:container` runs a built image, logs in, and plays a started
 Cryptography Battle for two teams at the advertised origins.

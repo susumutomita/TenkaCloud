@@ -49,7 +49,7 @@ export class CompetitionEngine extends DockerHostingEngine {
     dataDirectory: string,
     /** False in a container: Docker Compose problems publish on a loopback it cannot reach. */
     private readonly dockerProblems = true,
-    /** Present only when the host was started with `--aws-region`. */
+    /** Explicit adapter seam for cloud contracts and legacy-state rehearsals; never enabled by make local. */
     private readonly cloud?: CloudFormationEngine,
     networkPool?: string,
   ) {
@@ -125,7 +125,7 @@ export class CompetitionEngine extends DockerHostingEngine {
     if (!this.cloud)
       throw new HostError(
         503,
-        "This event has AWS problems. Restart the host with --aws-region and AWS credentials.",
+        "This event contains AWS resources from an older hosting revision. They are not operated by local hosting. Keep their state and use the reviewed cloud or legacy cleanup workflow; no AWS resources were changed.",
         "aws_not_configured",
       );
     return this.cloud;

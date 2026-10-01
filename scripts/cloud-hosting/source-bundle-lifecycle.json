@@ -1,0 +1,11 @@
+{
+  "Rules": [
+    {
+      "ID": "BoundNoncurrentSourceArchives",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "" },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 1, "NewerNoncurrentVersions": 5 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}

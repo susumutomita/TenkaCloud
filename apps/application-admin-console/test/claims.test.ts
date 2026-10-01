@@ -51,6 +51,7 @@ describe("decodeIdToken", () => {
     expect(decodeIdToken("only.two")).toBeNull();
     expect(decodeIdToken("a.b.c.d")).toBeNull();
     expect(decodeIdToken("")).toBeNull();
+    expect(decodeIdToken("header..signature")).toBeNull();
   });
 
   it("should return null when the payload segment is not valid base64", () => {

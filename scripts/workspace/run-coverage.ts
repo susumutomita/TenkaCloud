@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Run coverage for the 17 entries in COVERAGE_WORKSPACES.
+ * Run coverage for the 18 entries in COVERAGE_WORKSPACES.
  * --shard selects portal, app-admin or packages; without it, all entries run sequentially.
  * Each failure stops the run after writing its timing summary. Successful runs normalize
  * LCOV source paths using the same workspace registry before returning.
@@ -22,7 +22,7 @@ export interface CoverageWorkspace {
   readonly shard: ShardName;
 }
 
-// The root suite and CI shards share this registry. run-coverage.test.ts pins all 17 entries.
+// The root suite and CI shards share this registry. run-coverage.test.ts pins all 18 entries.
 // A shard containing one workspace can split its test files with --part.
 export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   {
@@ -62,6 +62,7 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   // schema, finding/patch verdict engine). Pure and AWS-independent, so it sits on the packages
   // shard with the other dependency-light packages.
   { dir: "packages/security-harness", filter: "@tenkacloud/security-harness", shard: "packages" },
+  { dir: "infrastructure", filter: "@tenkacloud/infrastructure", shard: "packages" },
 ];
 
 function shardDirs(shard: ShardName): readonly string[] {

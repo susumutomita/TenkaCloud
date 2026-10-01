@@ -95,7 +95,11 @@ describe("docs registry — role manuals (#2818)", () => {
       expect(source).not.toContain("CDK_PARAM_CONTROL_DATA_BACKEND");
     }
     expect(ORGANIZER_MANUAL_SOURCE).toContain("has not been established");
-    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("ライブ検証は未実施");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("まだ大会に使える完成状態ではありません");
+    for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
+      expect(source).toMatch(/Lambda\s*\/\s*DynamoDB/);
+      expect(source).not.toContain("Cloud Turso");
+    }
   });
 
   it("should keep WordPress out of participant onboarding", () => {

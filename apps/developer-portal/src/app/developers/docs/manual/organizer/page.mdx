@@ -14,21 +14,19 @@ Follow [getting started](/developers/docs/getting-started/) with `make local`. K
 
 Create teams and select problems, prepare dormant Docker jobs, inspect failures, then start the schedule. Participants start each Docker environment when needed; AWS deployment remains a separate operation. Distribute each team's invitation only to that team. Rehearse correct and incorrect submissions, hints, scores, one team's failure, restart and teardown. End Event stops scoring; it does not prove resources were removed.
 
-All 106 former local problems are intended to become Challenge competitions. Generic catalog/workbench work is in progress; terminal access and complete real Docker/browser verification remain incomplete. Use the actual selected problem's evidence, not its presence in a picker, to decide event readiness.
+All 106 former local problems are intended to become Challenge competitions. The generic catalog/workbench is implemented. Real Docker/browser checks covered SQL access and a PostgreSQL terminal, three checkpoints, team isolation and data-preserving restart. Other problem and terminal variants remain unverified. Use the actual selected problem's evidence, not its presence in a picker, to decide event readiness.
 
-<h2 id="aws-problems">Optional AWS problems</h2>
+<h2 id="aws-problems">AWS problems use cloud hosting</h2>
 
-`make local LOCAL_ARGS="--aws-region ap-northeast-1"` enables the reviewed AWS adapters. Obtain approval for credentials, target accounts, resources and cleanup before live use. Register each competitor account, download `templates/competitor-bootstrap.yaml` from the console, use the displayed operator account, exact role name and persisted ExternalId, then verify the account. The bootstrap AdministratorAccess exception must not spread to participant roles.
-
-`hello-world` uses flag scoring. `hello-world-battle` requires both endpoint registrations and readiness before uptime scoring. Both healthy means +100 per cycle; either failing means -100. Disruptions need their own revert and health check. Existing AWS sessions may outlive event end.
+AWS-service problems are for cloud hosting only. Local hosting rejects the old AWS-region switch. The cloud Lambda/DynamoDB path, competitor-account setup, deployment, scoring and non-AWS runner are being restored and are not yet ready for a competition. Do not use a local command as an alternative cloud launcher. Existing AWS resources require their original reviewed cleanup procedure; keep their ownership records.
 
 <h2 id="storage-and-shutdown">Storage and shutdown</h2>
 
 The local database is SQLite. Back up the complete private data directory consistently, including key files. `make down` preserves event data and stopped Docker state; use the same data directory on restart. New on-demand Docker environments stay stopped after `make local` until a participant resumes them. It does not delete AWS resources or reset the event clock. Never delete state that still owns environments.
 
-Cloud Turso is in progress; `make deploy` and `make destroy` currently fail without changing resources. A zero-fixed-cost cloud platform has not been established. AWS exercise charges are separate.
+Cloud Lambda/DynamoDB hosting is in progress; `make deploy` and `make destroy` currently fail without changing resources. A zero-fixed-cost cloud platform has not been established. AWS exercise charges are separate.
 
-Historical SaaS/Lite and individual-practice instructions are available in the [pinned legacy source](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9). Do not use them against this candidate or assume data migrates automatically.
+Historical SaaS and individual-practice instructions are available in the [pinned legacy source](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9). Do not use them against this candidate or assume data migrates automatically.
 
 New Docker events prepare dormant team/problem jobs, up to 512 per event. Participants use **Start / resume** and **Stop (keep data)**. Stop retains the existing writable layer and volumes, not RAM; there is no automatic eviction or reset. Existing events retain their legacy lifecycle.
 

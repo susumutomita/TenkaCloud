@@ -54,13 +54,20 @@ export function EventCreateBasicInfoSection({
         </FormField>
         <FormField
           label={t("event_create.team_count_label")}
-          description={t("event_create.team_count_description", {
-            min: TEAMS_MIN,
-            max: maxTeams,
-          })}
-          errorText={getTeamCountErrorText(t, teamCountInvalid, maxTeams)}
+          description={
+            maxTeams > 0
+              ? t("event_create.team_count_description", {
+                  min: TEAMS_MIN,
+                  max: maxTeams,
+                })
+              : t("event_create.limits_unavailable")
+          }
+          errorText={
+            maxTeams > 0 ? getTeamCountErrorText(t, teamCountInvalid, maxTeams) : undefined
+          }
         >
           <Input
+            disabled={maxTeams < 1}
             type="number"
             inputMode="numeric"
             value={String(teamCount)}

@@ -7,6 +7,7 @@
     "tenkacloud": "scripts/tenkacloud.ts"
   },
   "workspaces": [
+    "infrastructure",
     "apps/*",
     "packages/*"
   ],
@@ -25,7 +26,7 @@
     "build:pages": "bun run generate:landing-locales && bun run generate:landing-docs && bun run stamp:landing-assets && bun run --filter @TenkaCloud/participant-portal build:pages && mkdir -p landing/portal-demo && cp -r apps/participant-portal/dist/. landing/portal-demo/ && bun run scripts/ops/participant-portal-runtime-config.ts --cloud-mode mock --event-title 'TenkaCloud Battle Demo' --out landing/portal-demo/runtime-config.json && bun run --filter @TenkaCloud/application-admin-console build:pages && mkdir -p landing/admin-demo && cp -r apps/application-admin-console/dist/. landing/admin-demo/",
     "typecheck": "bun run typecheck:scripts && bun run scripts/workspace/run-workspaces.ts typecheck",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json && bun run typecheck:host",
-    "test:root": "bun run release:check && bun run scripts/landing/generate-landing-locales.ts --check && bun run scripts/landing/generate-landing-docs.ts --check && bun test ./scripts/landing/*.test.ts ./scripts/form/*.test.ts ./scripts/workspace/*.test.ts ./scripts/release/*.test.ts ./scripts/quality/*.test.ts ./scripts/ops/*.test.ts ./scripts/tests/*.test.ts ./scripts/security/*.test.ts && bun run test:authoring && bun run test:host",
+    "test:root": "bun run release:check && bun run scripts/landing/generate-landing-locales.ts --check && bun run scripts/landing/generate-landing-docs.ts --check && bun test ./scripts/landing/*.test.ts ./scripts/form/*.test.ts ./scripts/workspace/*.test.ts ./scripts/release/*.test.ts ./scripts/quality/*.test.ts ./scripts/ops/*.test.ts ./scripts/tests/*.test.ts ./scripts/cloud-hosting/*.test.ts ./scripts/security/*.test.ts && bun run test:authoring && bun run test:host",
     "test": "bun run test:root && bun run scripts/workspace/run-workspaces.ts test",
     "test:coverage": "bun run scripts/workspace/run-coverage.ts",
     "audit:dependencies": "bun run scripts/security/audit-dependencies.ts",

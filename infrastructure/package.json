@@ -1,0 +1,33 @@
+{
+  "name": "@tenkacloud/infrastructure",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='test/**' --coverage.exclude='cdk.out/**'",
+    "test:dynamodb-local": "bun test/cloud-hosting/dynamodb-local-check.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "3.1140.0",
+    "@aws-sdk/client-dynamodb": "3.1140.0",
+    "@aws-sdk/lib-dynamodb": "3.1140.0",
+    "@tenkacloud/portal-contracts": "workspace:*",
+    "aws-cdk-lib": "2.262.1",
+    "constructs": "10.8.1",
+    "hono": "4.13.9",
+    "ulid": "3.0.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "8.10.162",
+    "@types/node": "^26.1.0",
+    "aws-cdk": "2.1141.0",
+    "esbuild": "^0.28.2",
+    "tsx": "4.22.4",
+    "typescript": "~6.0.3",
+    "vitest": "4.1.9"
+  }
+}

@@ -1,95 +1,69 @@
-# Optional host event rehearsal
+# Event rehearsal checklist
 
-A live rehearsal checks the final host image with a disposable competitor account
-and an external identity provider. It is optional for development completion.
-Local tests and CI use explicit AWS adapters and a local signed SAML provider;
-they do not prove a real AWS or external IdP connection.
+Record the platform commit and pinned catalog for each rehearsal. Use a disposable
+event and synthetic participant data. Keep passwords, invitation keys, handoff
+tickets, SAML responses and AWS credentials out of screenshots and reports.
 
-## Before starting
+## Local hosting
 
-Get the owner's approval for the AWS accounts, region, temporary resources,
-disruption commands and cleanup. Record the Git commit and image digest being
-rehearsed. Use a new host data volume and a new event. Do not reuse an ongoing
-competition or migrate a Lite/SaaS database.
+1. Start the reviewed checkout with `make local`. Follow its printed organizer URL,
+   complete initial setup, and verify Admin, Operator and Viewer permissions.
+2. Create separate teams and select the actual problems planned for the event.
+   Preparing an on-demand event must leave Docker jobs stopped until a participant
+   starts them. Native Battle games use the shared competition runtime.
+3. Join in separate browser contexts. Check instructions, access links, a correct
+   and incorrect submission, hints and scoring. One team must not reach another
+   team's environment or terminal.
+4. Exercise the active-environment and memory limits. Stopping preserves work and
+   networks; it does not guarantee free Docker address capacity. For a larger
+   catalog, configure an explicitly reviewed non-overlapping network pool as
+   described in [local hosting](local-hosting.md#docker-network-address-capacity).
+5. Use `make down`, then restart with the same private data directory. Confirm
+   scores, hints, checkpoint state and unfinished container work survive. Resume
+   must retain the owned environment rather than silently rebuilding it.
+6. Verify only this event's resources are affected by stop or explicit teardown.
+   Check the difference between retained work and deletion before approving a
+   destructive action. Do not prune unrelated Docker networks or containers.
+7. If using registration, progression gates, SAML or audit collection, rehearse
+   their failure, retry, revocation and restart paths as well. Audit is off by
+   default. Keep a working local password Admin when testing an external IdP.
 
-The host needs a local, attached persistent disk for its SQLite database and key
-files. Run one host process against that database. Put the two public origins
-behind a TLS proxy and pass their original Host headers. Use the deployment
-platform's AWS role or another approved credential source. Do not put credentials
-in the image, command history, screenshots or rehearsal report.
+The old local AWS-region switch is rejected. A local rehearsal must not create AWS
+resources. Existing AWS resources from an earlier integration revision need that
+revision's reviewed cleanup procedure and retained ownership records.
 
-Build the exact reviewed checkout after initializing its pinned problem catalog:
+## Cloud hosting: pending full integration
 
-```sh
-git submodule update --init --recursive
-bun install --frozen-lockfile --ignore-scripts
-bun run build:host
-docker build -f docker/host/Dockerfile -t tenkacloud-host:rehearsal .
-```
+The Lambda/DynamoDB setup and API are being restored. Cloud problem deployment,
+scoring, shared Battle state and the non-AWS runner must be connected before this
+candidate can host a cloud competition. The current `make deploy` and `make destroy`
+fail safely rather than presenting the partial implementation as complete.
 
-Use the command and proxy requirements in [local hosting](local-hosting.md), adding
-`--aws-region` for the approved commercial AWS region. Keep the admin and
-participant ports reachable only by the proxy. Mount a dedicated `/data` volume.
-The container does not run Docker exercises through the host's Docker socket;
-use the direct host process when rehearsing Docker problems.
+When that path is ready, obtain approval for the target account, region, initial
+IAM setup, temporary exercise resources, expected charges and cleanup. Keep the
+project's toolkit separate from other CDK installations. Verify its execution
+policy and ownership instead of falling back to administrator permissions.
 
-## Exercise the event
+The cloud rehearsal must cover:
 
-1. Read the new host's bootstrap key through the approved administrative path.
-   Create its first local Admin, then an Operator and Viewer. Confirm that the
-   host key cannot sign in again and that the Viewer cannot change an event.
-2. Register the disposable competitor accounts. Use the displayed operator
-   account, ExternalId and exact role name with `competitor-bootstrap.yaml`.
-   Verify each account and select it for a separate event team. Keep the template's
-   AdministratorAccess exception confined to competitor bootstrap.
-3. Create and deploy an event containing the reviewed Hello World cloud problem.
-   Confirm separate stacks, correct team assignment, participant instructions,
-   flag submission, hints and the resulting scores. Team A must not retrieve
-   Team B's deployment or credentials.
-4. Open the participant AWS console and reveal short-lived CLI credentials.
-   Confirm the viewer role's allowed resources. End the event or rotate a team
-   key while an access request is pending and confirm that no new credentials
-   are returned. Already issued AWS sessions remain valid until AWS expires or
-   revokes them.
-5. In a separate Hello World Battle event, register both endpoint URLs. Confirm
-   that initial preparation precedes scoring and that each scoring minute is
-   counted once. Run the reviewed disruption only against the approved team.
-   Compare command status, endpoint health and score history. Revert-command
-   completion alone is not evidence that the service recovered.
-6. Enable a progression gate and check both teams independently. A locked problem
-   must withhold its metadata, gameplay operations and new AWS credentials.
-   Complete prerequisites and verify that the completion bonus is awarded once,
-   including after host restart. Previously issued AWS credentials are not revoked
-   by the gate.
-7. Enable participant registration and claim a prepared team. Retry with the same
-   receipt, including after a deliberately lost response. Stop new registrations
-   and confirm that the existing receipt can still retrieve its original team.
-   Rotate that team's key and confirm that the old receipt cannot retrieve the
-   replacement key.
-8. Configure the external SAML provider and explicitly link an existing organizer.
-   Sign in through the provider. Disable SAML while a login is pending and confirm
-   rejection. Re-enable it and confirm that old sessions stay invalid. Keep a local
-   password Admin available throughout the rehearsal.
-9. With audit collection initially OFF, confirm that no audit history is created.
-   Enable collection, change an event, then inspect and export the record. Stop
-   collection and confirm that retained history remains readable. Do not include
-   passwords, keys, SAML responses or temporary AWS credentials in the report.
-10. Restart only this rehearsal host with its existing volume. Confirm that users,
-    accepted operations, team assignments, scores and registration receipts survive.
-    Finish the event and remove its environments. Verify actual CloudFormation
-    deletion and any retained-resource state before closing the rehearsal.
+- Organizer sign-in and roles, event/team creation, key rotation and revocation
+- 100 participants in 25 teams, including concurrent requests, retries and scoring
+  without lost or duplicate awards; local database timing is not an AWS benchmark
+- AWS problems in the reviewed competitor-account isolation model, mandatory
+  ExternalId and least-privilege participant access; already-issued AWS sessions
+  may remain valid after event end
+- Non-AWS problems using the shared catalog and a separate, correctly isolated
+  execution runner; Lambda hosting alone does not run Docker exercises
+- Interrupted deployment, durable recovery, scoring locks, event end and actual
+  resource teardown, with retained data and remaining charges clearly identified
+
+No live cloud deployment or cleanup is implied by a unit test, CDK synthesis,
+DynamoDB Local run, or this checklist. Those stages and a live rehearsal must be
+reported separately.
 
 ## Record results
 
-Use one row per observed result:
-
-| Commit / image digest | Area | Expected result | Actual result | Evidence without credentials |
-| --- | --- | --- | --- | --- |
-| To be recorded | AWS deployment and cleanup | Team stacks created and removed | Not run | None |
-| To be recorded | Participant AWS access | Correct viewer role and expiry | Not run | None |
-| To be recorded | Disruption and scoring | Command, health and score agree | Not run | None |
-| To be recorded | External SAML | Linked user and revocation work | Not run | None |
-
-Record failures and resources that still need cleanup. A failed rehearsal is not
-a successful deployment. An unrun rehearsal is not a claim of live compatibility
-and, by itself, does not keep a completed development Issue open.
+Use the exact commit, scenario, expected result, observed result and sanitized
+evidence. Mark unrun scenarios explicitly. A catalog entry is not proof that a
+problem is playable, and testing representative problems is not an all-catalog
+runtime claim.

@@ -7,7 +7,7 @@ import type { ProblemSummary } from "../../src/data/problems";
 /**
  * Issue #3226: the normal event-creation page on the local competition host. The host's own
  * catalog decides which problems are selectable, no AWS account or competitor-account data is
- * requested, teams carry only their slug, and "Deploy now" prepares the local environments.
+ * requested, teams carry only their slug, and preparation leaves Docker environments stopped.
  */
 const mocks = vi.hoisted(() => ({
   useApiClient: vi.fn(),
@@ -91,6 +91,7 @@ describe("EventCreatePage on the local competition host", () => {
   it("creates a slug-only event from a host-supported problem and deploys it", async () => {
     const { container } = render(<EventCreatePage config={config} />);
     expect(screen.getByText("local_host.create_header")).toBeInTheDocument();
+    expect(screen.getByText("local_host.create_body")).toBeInTheDocument();
     await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
     // No AWS competitor accounts are requested on the local host.
     expect(get).not.toHaveBeenCalledWith("admin/competitor-accounts");
@@ -118,7 +119,7 @@ describe("EventCreatePage on the local competition host", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/events/01HZX0K3M3K9ZQHB3MRQHBA1B2");
   });
 
-  it("creates an AWS event with a verified account in the configured host region", async () => {
+  it("keeps the explicit legacy adapter fixture separate from production local startup", async () => {
     get.mockImplementation(async (path: string) => {
       if (path === "host/catalog")
         return { items: [{ problemId: "cloud-only", runtime: "cloudformation" }] };

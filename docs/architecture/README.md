@@ -1,6 +1,6 @@
 # Community host architecture
 
-This describes the unpublished integration candidate. It does not describe a
+This describes the unreleased integration candidate. It does not describe a
 released cloud service or claim that every restored catalog entry is playable.
 
 ## Current responsibilities
@@ -17,7 +17,7 @@ released cloud service or claim that every restored catalog entry is playable.
 - New Compose plans preserve authored caps and fill missing memory/CPU/PID limits
   with 512 MiB, 1 CPU and 256 PIDs per service; old events keep their legacy lifecycle
 - Runtime adapters manage owned Docker environments, the in-process Battle and
-  reviewed AWS exercises; HTTP boundaries do not trust a submitted team identity
+  coordination exercises; HTTP boundaries do not trust a submitted team identity
 - Accepted operation/ownership state is retained before external work; uncertain
   outcomes remain visible and recoverable
 - Verifiers judge submissions; the platform serializes and persists scoring,
@@ -31,12 +31,16 @@ stacks. Explicit event teardown and ordinary shutdown are separate operations.
 
 ## Storage and cloud boundary
 
-Local SQLite is implemented. Cloud Turso and platform deployment are in progress.
+Local SQLite is implemented. Cloud hosting is being restored with Lambda and
+DynamoDB, reusing the former serverless deployment path without SaaS / SBT.
+AWS service problems require cloud hosting. Non-AWS problems are intended for
+both options; the separate cloud problem runner is still incomplete.
 `make deploy` and `make destroy` currently exit unimplemented without modifying
 resources. A container build, remote-driver experiment or schema declaration is
 not an end-to-end cloud deployment or zero-fixed-cost guarantee.
 
-The AWS exercise adapter is separate from platform deployment. It uses operator
+The retained AWS exercise adapter is not enabled by local startup. Its cloud
+connection is still being restored. It uses operator
 credentials to assume a verified competitor deployment role with the required
 host ExternalId. Participant access uses the saved viewer role and its deployment
 ExternalId, never deployment-role credentials. Keep the bootstrap AdministratorAccess
@@ -46,10 +50,10 @@ event end; new access issuance is checked against current event/team state.
 ## Runtime coverage
 
 The target is all 106 former local Compose problems as Challenge competitions.
-Generic catalog/workbench integration is being restored. The 15 terminal problems,
-real Docker routes and full browser playability are incomplete. Terminal HTTP/WS
-passed 11 tests and 96 assertions with a synthetic shell; actual Docker exec is
-unverified. A synthetic 100-job / 105-port event proves allocation and lifecycle,
+Generic catalog/workbench integration is implemented. Real Docker/browser checks
+covered SQL access and a PostgreSQL terminal, three checkpoints, team isolation,
+and stop/restart with the same container and seven inserted rows intact.
+Other problem and terminal variants remain unverified. A synthetic 100-job / 105-port event proves allocation and lifecycle,
 not Docker performance or machine capacity. Preserve capability
 failures, per-team verifier separation, safe endpoint routing and native hardware
 requirements. Catalog visibility alone is not execution evidence.
@@ -73,7 +77,7 @@ current guides do not embed those stale architecture images as current evidence.
 
 ## Historical architecture
 
-SaaS tenant onboarding, Lite, the old Lambda/Step Functions backend and DynamoDB
-operation belong to the [pinned legacy architecture](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/architecture/README.md).
-Do not restore those systems solely to retain a diagram, or assume an automatic
-data migration. The old tenant-onboarding filename is a legacy pointer only.
+SaaS tenant onboarding and the former named deployment modes belong to the [pinned legacy architecture](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/architecture/README.md).
+Cloud hosting selectively reuses Lambda / DynamoDB code; it does not restore
+SaaS / SBT or imply an automatic data migration. The old tenant-onboarding filename
+is a legacy pointer only.

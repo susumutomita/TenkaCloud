@@ -28,14 +28,25 @@ function temporary(): string {
   return directory;
 }
 
-test("--aws-region enables cloud problems and must name a standard-partition region", () => {
-  expect(parseOptions(["--aws-region", "ap-northeast-1"], root).awsRegion).toBe("ap-northeast-1");
-  expect(parseOptions(["--aws-region", "us-east-2"], root).awsRegion).toBe("us-east-2");
-  expect("awsRegion" in parseOptions([], root)).toBe(false);
-  for (const region of ["tokyo", "us-gov-west-1", "cn-north-1", "us-isob-east-1"])
+test("local startup rejects every AWS-region switch, including commercial and public-mode requests", () => {
+  for (const region of ["ap-northeast-1", "us-east-2", "us-gov-west-1", "cn-north-1", "invalid"])
     expect(() => parseOptions(["--aws-region", region], root)).toThrow(
-      `--aws-region ${region} is not a region of the standard AWS partition, such as ap-northeast-1.`,
+      "AWS problems require cloud hosting",
     );
+  expect(() =>
+    parseOptions(
+      [
+        "--aws-region",
+        "ap-northeast-1",
+        "--public-admin-origin",
+        "https://admin.example.test",
+        "--public-participant-origin",
+        "https://play.example.test",
+      ],
+      root,
+    ),
+  ).toThrow("AWS problems require cloud hosting");
+  expect(parseOptions([], root, { AWS_REGION: "ap-northeast-1" })).not.toHaveProperty("awsRegion");
 });
 
 test("version 1 host sessions are revoked while account-registry data remains readable", () => {

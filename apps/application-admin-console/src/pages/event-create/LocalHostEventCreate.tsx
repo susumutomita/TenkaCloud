@@ -9,6 +9,7 @@ import Alert from "@cloudscape-design/components/alert";
 import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useEffect, useState } from "react";
 import type { ApiClient } from "../../api/client";
+import type { EventLimits } from "../../config";
 import { useT } from "../../i18n";
 
 interface HostLimits {
@@ -65,7 +66,7 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
   return { supported, cloud, error, limits };
 }
 
-export function LocalHostEventCreateNotice({
+function LocalHostEventCreateNotice({
   catalog,
   jobCountInvalid,
 }: {
@@ -98,12 +99,43 @@ export function eventCapacity(
   catalog: HostCatalog,
   teams: number,
   problems: number,
-  cloudMaxTeams: number,
+  cloudLimits: EventLimits | undefined,
 ) {
-  const maxTeams = local ? catalog.limits.maxTeams : cloudMaxTeams;
+  const maxTeams = local ? catalog.limits.maxTeams : (cloudLimits?.maxTeams ?? 0);
+  const maxProblems = local
+    ? Math.max(40, catalog.supported.size)
+    : (cloudLimits?.maxProblems ?? 0);
   return {
     maxTeams,
+    maxProblems,
+    available: local || cloudLimits !== undefined,
+    problemCountInvalid: problems > maxProblems,
     teamCountInvalid: teams < 1 || teams > maxTeams,
     jobCountInvalid: local && teams * problems > catalog.limits.maxEventJobs,
   };
+}
+
+export function EventCreateCapacityNotice({
+  local,
+  catalog,
+  capacity,
+}: {
+  readonly local: boolean;
+  readonly catalog: HostCatalog;
+  readonly capacity: ReturnType<typeof eventCapacity>;
+}) {
+  const t = useT();
+  return (
+    <>
+      {local && (
+        <LocalHostEventCreateNotice catalog={catalog} jobCountInvalid={capacity.jobCountInvalid} />
+      )}
+      {!capacity.available && <Alert type="error">{t("event_create.limits_unavailable")}</Alert>}
+      {capacity.available && capacity.problemCountInvalid && (
+        <Alert type="error">
+          {t("event_create.problem_count_invalid", { max: capacity.maxProblems })}
+        </Alert>
+      )}
+    </>
+  );
 }

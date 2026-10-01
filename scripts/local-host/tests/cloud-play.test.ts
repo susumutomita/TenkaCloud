@@ -620,7 +620,7 @@ test("a Docker answer keeps the team's Battle and cloud points and cloud solves"
   }
 });
 
-test("without --aws-region the host offers no cloud problem and fails an old stack clearly", async () => {
+test("local hosting offers no AWS problem and preserves an old stack with a clear refusal", async () => {
   const fixture = await host();
   const created = await fixture.admin("POST", "/events", {
     name: "cloud then local",
@@ -646,7 +646,7 @@ test("without --aws-region the host offers no cloud problem and fails an old sta
   const [job] = fixture.store.jobs(event.eventId);
   expect(job?.status).toBe("FAILED");
   expect(job?.error).toBe(
-    "This event has AWS problems. Restart the host with --aws-region and AWS credentials.",
+    "This event contains AWS resources from an older hosting revision. They are not operated by local hosting. Keep their state and use the reviewed cloud or legacy cleanup workflow; no AWS resources were changed.",
   );
   expect(withoutAws.requiresGateway(required(job).definition)).toBe(false);
 

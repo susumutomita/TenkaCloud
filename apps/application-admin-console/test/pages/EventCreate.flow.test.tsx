@@ -98,7 +98,7 @@ const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
     ...over,
   }) as ProblemSummary;
 
-let config: AppConfig = {} as AppConfig;
+let config: AppConfig = { eventLimits: { maxTeams: 99, maxProblems: 50 } } as AppConfig;
 const renderPage = () => render(<EventCreatePage config={config} />);
 const w = (c: HTMLElement) => createWrapper(c);
 // #1776: 問題選択 Multiselect の前に filter 用 Multiselect (difficulty / scoring kind / tags)
@@ -119,7 +119,7 @@ function fillValidForm(container: HTMLElement) {
 }
 
 beforeEach(() => {
-  config = {} as AppConfig;
+  config = { eventLimits: { maxTeams: 99, maxProblems: 50 } } as AppConfig;
   window.localStorage.clear();
   mockApiClient.mockReturnValue({ post: vi.fn() });
   mockNav.mockClear();
@@ -155,7 +155,7 @@ describe("EventCreatePage flow", () => {
   });
 
   it("should mark the first-event-created drill checkpoint shown once revealed in Lite mode (#2696)", async () => {
-    config = { tenantId: "local" } as AppConfig;
+    config = { tenantId: "local", eventLimits: { maxTeams: 99, maxProblems: 50 } } as AppConfig;
     const { container } = renderPage();
     fillValidForm(container);
     fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));

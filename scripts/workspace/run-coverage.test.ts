@@ -22,7 +22,7 @@ import {
 const root = join(import.meta.dir, "../..");
 
 // Issue #2513 / #2756 / #2951 / #3036: hardcode the expected set so an accidental drop from the
-// 21-workspace chain (e.g. someone forgetting to port a workspace when editing this file) fails
+// workspace chain (e.g. someone forgetting to port a workspace when editing this file) fails
 // loudly instead of silently shrinking the coverage matrix.
 const EXPECTED_DIRS = [
   "apps/application-admin-console",
@@ -42,10 +42,11 @@ const EXPECTED_DIRS = [
   "apps/developer-portal",
   "packages/ai-eval",
   "packages/security-harness",
+  "infrastructure",
 ];
 
 describe("COVERAGE_WORKSPACES", () => {
-  it("should match the 21 workspaces currently in the coverage matrix", () => {
+  it("should match the 18 workspaces currently in the coverage matrix", () => {
     expect(COVERAGE_WORKSPACES.map((ws) => ws.dir)).toEqual(EXPECTED_DIRS);
   });
 
@@ -87,7 +88,7 @@ describe("SHARDS", () => {
     expect(SHARDS.portal).toEqual(["apps/participant-portal"]);
   });
 
-  it("should assign every remaining package + developer-portal to the packages shard", () => {
+  it("should assign packages, developer-portal and cloud infrastructure to the packages shard", () => {
     expect(SHARDS.packages).toEqual([
       "packages/trust-bridge",
       "packages/auth-client",
@@ -104,6 +105,7 @@ describe("SHARDS", () => {
       "apps/developer-portal",
       "packages/ai-eval",
       "packages/security-harness",
+      "infrastructure",
     ]);
   });
 });
@@ -183,6 +185,7 @@ describe("resolveLcovPaths", () => {
       "./apps/developer-portal/coverage/lcov.info",
       "./packages/ai-eval/coverage/lcov.info",
       "./packages/security-harness/coverage/lcov.info",
+      "./infrastructure/coverage/lcov.info",
     ]);
   });
 });

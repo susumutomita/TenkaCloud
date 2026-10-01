@@ -70,14 +70,9 @@ export function parseOptions(
     throw new Error(
       "--gateway-ports must not include the host console or participant portal port.",
     );
-  const awsRegion = values["aws-region"];
-  // Stack role ARNs and console links assume the standard partition (`arn:aws:`).
-  if (
-    awsRegion !== undefined &&
-    !/^(?!(?:us-gov|cn|us-iso[a-z]?|eu-iso[a-z]?)-)[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/u.test(awsRegion)
-  )
+  if (values["aws-region"] !== undefined)
     throw new Error(
-      `--aws-region ${awsRegion} is not a region of the standard AWS partition, such as ap-northeast-1.`,
+      "AWS problems require cloud hosting. --aws-region is no longer accepted by make local; use the reviewed make deploy workflow when cloud hosting is ready.",
     );
   return {
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
@@ -94,7 +89,6 @@ export function parseOptions(
     participantPort,
     gatewayPorts,
     ...(exposure ? { public: exposure } : {}),
-    ...(awsRegion ? { awsRegion } : {}),
     build: !values["no-build"],
     help: values.help,
   };

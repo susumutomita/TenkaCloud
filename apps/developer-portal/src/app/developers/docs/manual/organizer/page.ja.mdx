@@ -14,21 +14,19 @@ export const metadata = { title: "競技開催者マニュアル" };
 
 チームと問題を選び、停止状態の Docker jobs の準備結果を確認して Schedule から開始します。Docker 環境は参加者が必要なときに起動します。AWS の配置は別の操作です。参加リンクは対象チームだけに渡します。正答、誤答、ヒント、得点、一つのチームの障害、再起動、撤収までリハーサルしてください。End Event は採点を止めますが、リソース削除の完了を意味しません。
 
-旧ローカル 106 問はすべて Challenge 形式の競技にする方針です。汎用カタログと workbench は対応中で、terminal と全問の実 Docker・ブラウザ検証は未完了です。問題が選択欄に出ることだけで大会に使えると判断しないでください。
+旧ローカル 106 問はすべて Challenge 形式の競技にする方針です。汎用カタログと workbench は実装済みです。実 Docker とブラウザで SQL へのアクセス、PostgreSQL terminal の 3 checkpoints、チーム分離、データを保持した再起動を確認しました。他の問題と terminal の全種類は未確認です。問題が選択欄に出ることだけで大会に使えると判断しないでください。
 
-<h2 id="aws-problems">任意の AWS 問題</h2>
+<h2 id="aws-problems">AWS 問題はクラウド開催へ</h2>
 
-`make local LOCAL_ARGS="--aws-region ap-northeast-1"` で確認対象の AWS adapter を有効にします。実行前に認証情報、対象アカウント、リソース、削除の承認を得てください。競技者アカウントを登録し、コンソールから `templates/competitor-bootstrap.yaml` を取得します。表示された運営アカウント、正確な role 名、保存された ExternalId を使って初期設定し、接続を検証します。初期設定用 AdministratorAccess を参加者 role へ広げないでください。
-
-`hello-world` は flag 採点です。`hello-world-battle` は両方の URL 登録と準備完了を確認してから継続採点します。両方が正常なら周期ごとに +100、どちらかが失敗したら -100 です。障害には revert と復旧確認が必要です。発行済み AWS session は大会終了後も期限まで有効な場合があります。実 AWS のライブ検証は未実施として別途記録します。
+AWS サービスを使う問題はクラウド開催専用です。ローカル開催では旧 AWS リージョン指定を拒否します。Lambda / DynamoDB によるクラウド開催と、競技者アカウントの設定、問題の配置・採点、非 AWS 問題の実行基盤は復旧中です。まだ大会に使える完成状態ではありません。ローカルのコマンドで代用しないでください。既存の AWS リソースは作成時の確認済み手順で片付ける必要があるため、所有情報を保持します。
 
 <h2 id="storage-and-shutdown">データベースと停止</h2>
 
 ローカルのデータベースは SQLite です。キーを含む非公開ディレクトリ全体を整合した状態でバックアップします。`make down` は大会データと停止した Docker の状態を保持します。再開には同じディレクトリを使います。新しいオンデマンドの Docker 環境は `make local` 後も停止したままで、参加者が再開します。AWS リソースの削除や大会時刻のリセットは行いません。環境を所有している保存領域を先に消さないでください。
 
-クラウド用 Turso と配置パラメータは対応中です。`make deploy` と `make destroy` は現在リソースを変更せず失敗します。固定費ゼロのクラウド基盤は確立していません。AWS 問題の費用は別に確認します。
+Lambda / DynamoDB のクラウド開催を復旧中です。`make deploy` と `make destroy` は現在リソースを変更せず失敗します。固定費ゼロのクラウド基盤は確立していません。AWS 問題の費用は別に確認します。
 
-SaaS/Lite と旧個人練習の手順は[固定した旧版](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9)を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。
+SaaS と旧個人練習の手順は[固定した旧版](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9)を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。
 
 新しい Docker 大会は、停止状態のチーム・問題 jobs を大会ごとに最大 512 件準備します。参加者が **Start / resume** と **Stop (keep data)** を使います。停止は既存の書き込みレイヤーと volume を保持しますが、RAM は保持しません。自動退避や初期化は行いません。既存大会は従来の lifecycle を維持します。
 

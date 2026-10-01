@@ -18,7 +18,7 @@ sequenceDiagram
     Participant->>Host: Stop (keep data)
     Host->>Runtime: Stop; retain writable layer and volumes, not RAM
     Host->>DB: Persist stopped status and retained runtime ports
-  else AWS exercise or legacy event
+  else Legacy Docker event
     Host->>Runtime: Existing deployment lifecycle
     Runtime-->>Host: Outputs or failure
     Host->>DB: Persist status and private runtime data

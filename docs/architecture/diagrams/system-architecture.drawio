@@ -5,7 +5,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" value="Unpublished candidate: one event/team competition system" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
+        <mxCell id="title" value="Unreleased candidate: one event/team competition system" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="60" y="30" width="1080" height="50" as="geometry" />
         </mxCell>
         <mxCell id="organizer" value="Organizer browser&#10;Admin / Operator / Viewer" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
@@ -26,7 +26,7 @@
         <mxCell id="lifecycle" value="make down stops owned Docker; make local waits for participant resume&#10;Writable layers and volumes survive, not RAM; no automatic eviction or reset&#10;Existing events keep legacy lifecycle; AWS stacks and event clock remain" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="210" y="540" width="780" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="coverage" value="106 entries are not full playability proof; synthetic 100 jobs / 105 ports is not a benchmark&#10;Terminal HTTP/WS tested with synthetic shell; actual Docker exec / browser checks incomplete" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
+        <mxCell id="coverage" value="106 entries are not full playability proof; synthetic 100 jobs / 105 ports is not a benchmark&#10;Real Docker/browser: SQL access, PostgreSQL terminal, isolation and state-preserving resume verified" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="210" y="655" width="780" height="80" as="geometry" />
         </mxCell>
         <mxCell id="edge-0" value="Organizer authentication" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;html=0;strokeColor=#405a78;fontSize=13;" edge="1" parent="1" source="organizer" target="host">
@@ -44,7 +44,7 @@
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram id="exercise-aws" name="02 Optional AWS exercises">
+  <diagram id="exercise-aws" name="02 Cloud-only AWS exercises">
     <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" page="1" pageWidth="1200" pageHeight="800">
       <root>
         <mxCell id="0" />
@@ -52,7 +52,7 @@
         <mxCell id="title" value="AWS exercises are separate from cloud platform deployment" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="60" y="30" width="1080" height="50" as="geometry" />
         </mxCell>
-        <mxCell id="host" value="Local event host&#10;Approved AWS SDK credentials" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
+        <mxCell id="host" value="Cloud event service (restoration pending)&#10;Scoped execution role" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="60" y="200" width="250" height="100" as="geometry" />
         </mxCell>
         <mxCell id="deploy" value="Competitor deployment role&#10;Required persisted host ExternalId" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
@@ -99,10 +99,10 @@
         <mxCell id="commands" value="make deploy / make destroy&#10;Currently exit unimplemented&#10;No resource changes" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="80" y="180" width="360" height="150" as="geometry" />
         </mxCell>
-        <mxCell id="requirements" value="Required deployment contract&#10;Cloud Turso storage&#10;Original keys and persistent identity&#10;Single active owner and recovery" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
+        <mxCell id="requirements" value="Required deployment contract&#10;API Gateway / Lambda + DynamoDB&#10;Cognito + private S3 / CloudFront&#10;Durable deployment and scoring coordination" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="710" y="150" width="400" height="230" as="geometry" />
         </mxCell>
-        <mxCell id="gates" value="Not established by a container build or a driver experiment&#10;Actual provider, lifecycle, runtime placement, billing and full participant route need evidence" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
+        <mxCell id="gates" value="Not established by a container build or a driver experiment&#10;Initial permissions, lifecycle, non-AWS runner, billing and full participant route still need evidence" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#eaf2ff;strokeColor=#405a78;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="170" y="510" width="860" height="120" as="geometry" />
         </mxCell>
         <mxCell id="edge-0" value="Implementation and verification required" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=block;html=0;strokeColor=#405a78;fontSize=13;" edge="1" parent="1" source="commands" target="requirements">

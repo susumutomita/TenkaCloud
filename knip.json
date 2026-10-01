@@ -62,7 +62,8 @@
         "scripts/local-host/tests/participant-aws-browser-e2e.ts",
         "scripts/local-host/tests/saml-browser-e2e.ts",
         "scripts/local-host/tests/audit-browser-e2e.ts",
-        "scripts/local-host/tests/registration-browser-e2e.ts"
+        "scripts/local-host/tests/registration-browser-e2e.ts",
+        "scripts/cloud-hosting/main.ts"
       ],
       "project": ["scripts/**/*.ts"]
     },
@@ -92,6 +93,10 @@
     "packages/*": {
       "entry": ["test/**/*.ts"],
       "project": ["src/**", "test/**"]
+    },
+    "infrastructure": {
+      "entry": ["bin/**/*.ts", "lib/problem-deploy/handlers/*/index.ts", "test/**/*.ts"],
+      "project": ["bin/**/*.ts", "lib/**/*.ts", "test/**/*.ts"]
     }
   }
 }

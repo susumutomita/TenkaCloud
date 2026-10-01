@@ -183,16 +183,16 @@ describe("repo parity (the reviewable seam)", () => {
     "packages/web-kit",
   ];
 
-  const allWorkspaces = [...appsAlphabetical, ...packagesAlphabetical];
+  const allWorkspaces = ["infrastructure", ...appsAlphabetical, ...packagesAlphabetical];
 
-  it("should discover exactly 17 workspaces from the root package.json", () => {
-    expect(workspaces).toHaveLength(17);
+  it("should discover exactly 18 workspaces from the root package.json", () => {
+    expect(workspaces).toHaveLength(18);
     expect(workspaces.map((w) => w.dir).sort()).toEqual([...allWorkspaces].sort());
   });
 
-  it("should plan build as every apps/* workspace (packages/* excluded)", () => {
+  it("should plan build as infrastructure and every apps/* workspace (packages/* excluded)", () => {
     const plan = planTask("build", workspaces);
-    expect(plan.included.map((w) => w.dir)).toEqual(appsAlphabetical);
+    expect(plan.included.map((w) => w.dir)).toEqual(["infrastructure", ...appsAlphabetical]);
   });
 
   it("should plan typecheck across every workspace", () => {
