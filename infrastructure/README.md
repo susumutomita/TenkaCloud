@@ -58,45 +58,34 @@ existing creation/explicit-reveal contract; neither listing nor participant view
 include them. Rotation/revocation uses one conditional transaction and invalidates
 the prior lookup immediately.
 
-## Setup and teardown boundary
+## Cloud deployment pipeline
 
-The source-only CLI is `scripts/cloud-hosting/main.ts`. There is intentionally no
-new public Make target while the remaining acceptance items are unfinished.
+The complete launcher is
+[`templates/cloud-pipeline.yaml`](templates/cloud-pipeline.yaml), renamed from
+`lite-pipeline.yaml`. There is one published pipeline template. Startup,
+`destroy`, `destroy-all`, automatic CDK bootstrap, independent catalog selection,
+capacity/retention parameters, release classification and onboarding checkpoints
+are preserved. Existing resource names, parameter IDs and checkpoint values stay
+unchanged so the rename does not replace resources or break existing tutorials.
 
-The current CodeBuild onboarding template is
-[`templates/cloud-hosting-pipeline.yaml`](templates/cloud-hosting-pipeline.yaml).
-It restores the historical CodeBuild launcher shape and invokes the same guarded
-CLI. It requires an existing reviewed same-account CodeBuild service-role ARN,
-CloudFormation execution-policy ARN, organizer email, and immutable platform
-commit. The problem catalog comes from that commit's pinned submodule. A custom
-catalog must be recorded in the reviewed platform commit, so source preparation
-cannot silently replace an independently selected catalog.
+The defaults execute platform commit
+`949a40a9ed9199331d928ad5cf9397dbb4ba3f81` and catalog commit
+`363a7c9b83969e20d63b74fd0410a354da5e202b`. They run the code at those fixed refs,
+not this checkout. The existing `candidate/unverified` classification is retained;
+pointing the template at the current branch does not establish compatibility.
+The original backend selectors are preserved for those refs, not a change to the
+current local SQLite / cloud DynamoDB direction.
 
-Creating the launcher stack does not start a build. After reviewing the IAM
-prerequisites and costs, an operator can explicitly start the project from its
-`StartBuildUrl` output. The build verifies both commits, installs pinned Bun and
-workspace dependencies without lifecycle hooks, and runs the cloud CLI `up` path.
-It creates no IAM roles/policies and never performs an independent bare CDK
-bootstrap. The empty runner-binding default creates only the foundation; reviewed
-bindings must be explicitly supplied for the narrow AWS flag execution slice.
-The template's optional binding JSON is limited to CloudFormation's 4,096-character
-parameter size. Larger reviewed binding sets must use the direct CLI environment
-until a file-based launcher input is implemented; the launcher does not truncate them.
-Deleting this launcher does not delete the platform, retained logs/data, toolkit,
-or independently deployed exercise resources.
+The original broad CodeBuild permissions, bootstrap behavior and teardown
+consequences are also preserved and must be reviewed before execution. Template
+creation does not start a build. No AWS action was executed as part of this rename.
+See [permission boundaries](BOOTSTRAP-IAM.md).
 
-Historical paths at `825415fc` map as follows:
+## Current checkout's setup and teardown boundary
 
-- `infrastructure/templates/lite-pipeline.yaml` to the current-cloud template above
-- `scripts/tenkacloud-lite.ts` to `scripts/cloud-hosting/main.ts` and `cli.ts`
-- `infrastructure/bin/tenkacloud-lite.ts` to `infrastructure/bin/cloud-hosting.ts`
-- `infrastructure/lib/tenkacloud-lite/` to `infrastructure/lib/cloud-hosting/`
-
-The restored old `lite-pipeline.yaml` is a historical compatibility artifact. Its
-original CLI/backend dependencies and broad IAM behavior are not the current-cloud
-route. The old SaaS `scripts/install.sh` and tenant bootstrap stacks are not reused.
-Initial least-privilege IAM setup and coordinated competition teardown remain
-unfinished acceptance items for the current launcher.
+The source CLI is `scripts/cloud-hosting/main.ts`. Its implementation is separate
+from the pipeline's fixed historical checkout. Public Make deployment remains
+guarded while the current competition lifecycle is unfinished.
 
 `up` requires `TENKACLOUD_ADMIN_EMAIL`, a commercial AWS region, and a reviewed
 `TENKACLOUD_CFN_EXECUTION_POLICY_ARN`. See [bootstrap permissions](BOOTSTRAP-IAM.md).

@@ -1,148 +1,179 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { App, Stack } from "aws-cdk-lib";
+import { App, BootstraplessSynthesizer, Stack } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { CfnInclude } from "aws-cdk-lib/cloudformation-include";
 import { afterAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 
 const directory = mkdtempSync(join(tmpdir(), "tenkacloud-cloud-launcher-"));
+const templateFile = resolve(import.meta.dirname, "../../templates/cloud-pipeline.yaml");
+const raw = readFileSync(templateFile, "utf8");
 const app = new App({ outdir: join(directory, "cdk.out") });
-const stack = new Stack(app, "CloudLauncher");
-new CfnInclude(stack, "Launcher", {
-  templateFile: resolve(import.meta.dirname, "../../templates/cloud-hosting-pipeline.yaml"),
-});
+const stack = new Stack(app, "CloudLauncher", { synthesizer: new BootstraplessSynthesizer() });
+new CfnInclude(stack, "Launcher", { templateFile });
 const template = Template.fromStack(stack);
 const source = z
   .object({ Properties: z.object({ Source: z.object({ BuildSpec: z.string() }) }) })
   .parse(template.findResources("AWS::CodeBuild::Project").CodeBuildProject);
-const buildSpec = z
-  .object({
-    phases: z.object({
-      install: z.object({
-        commands: z.array(z.string()),
-        "runtime-versions": z.object({ nodejs: z.number() }),
-      }),
-      build: z.object({ commands: z.array(z.string()) }),
-    }),
-  })
-  .parse(JSON.parse(source.Properties.Source.BuildSpec));
-const install = buildSpec.phases.install.commands.join("\n");
-const build = buildSpec.phases.build.commands.join("\n");
-const PLATFORM = "a".repeat(40);
-const CATALOG = "b".repeat(40);
-const POLICY = "arn:aws:iam::123456789012:policy/tenkacloud/cloud-hosting/reviewed";
+const buildSpec = source.Properties.Source.BuildSpec;
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-/** Executes the actual template shell with every external tool replaced by a synthetic stub. */
-function runPhases(overrides: NodeJS.ProcessEnv = {}) {
-  const root = mkdtempSync(join(directory, "build-"));
+function preservedSection(start: string, end: string): string {
+  const section = raw.split(`\n${start}:\n`)[1]?.split(`\n${end}:\n`)[0];
+  if (!section) throw new Error(`Missing ${start} section`);
+  return section;
+}
+function buildActionScript(): string {
+  const phase = buildSpec.split("\n  build:\n")[1]?.split("\n  post_build:\n")[0];
+  const block = phase?.split("\n      - |\n")[1];
+  if (!block) throw new Error("Missing preserved build action script");
+  return block
+    .split("\n")
+    .map((line) => line.replace(/^ {8}/u, ""))
+    .join("\n");
+}
+/** Only the preserved action selector runs, with make replaced by a synthetic executable. */
+function action(actionName: string, exitCode = 0) {
+  const root = mkdtempSync(join(directory, "action-"));
   const bin = join(root, "bin");
   mkdirSync(bin);
-  const log = join(root, "calls");
-  writeFileSync(log, "");
-  const stub = `#!/bin/bash
-set -eu
-command="$(basename "$0")"
-printf '%s|%s|runner=%s|policy=%s\\n' "$command" "$*" "\${TENKACLOUD_RUNNER_BINDINGS-unset}" "\${TENKACLOUD_CFN_EXECUTION_POLICY_ARN-unset}" >> "$CALL_LOG"
-case "$command:$*" in
-  'git:init --quiet '*) mkdir -p "$CODEBUILD_SRC_DIR/repo/scripts/cloud-hosting"; touch "$CODEBUILD_SRC_DIR/repo/scripts/cloud-hosting/main.ts" ;;
-  'git:-c protocol.file.allow=never fetch '*) [ "\${FAIL_FETCH:-0}" = 0 ] ;;
-  'git:rev-parse --verify '*) printf '%s\\n' "\${RESOLVED_PLATFORM:-$REPO_REF}" ;;
-  'git:ls-tree HEAD problems') printf '160000 commit %s\\tproblems\\n' "$CATALOG" ;;
-  'git:-C problems rev-parse HEAD') printf '%s\\n' "\${RESOLVED_CATALOG:-$CATALOG}" ;;
-  'npm:root --global') printf '%s\\n' "$CODEBUILD_SRC_DIR/npm" ;;
-  'bun:--version') printf '%s\\n' "\${BUN_VERSION:-1.3.11}" ;;
-  'bun:run scripts/cloud-hosting/main.ts up') exit "\${CLI_EXIT:-0}" ;;
-  aws:*) echo 'No AWS operation is permitted by this test.' >&2; exit 99 ;;
-esac
-`;
-  for (const name of ["git", "npm", "bun", "aws"]) {
-    const file = join(bin, name);
-    writeFileSync(file, stub);
-    chmodSync(file, 0o700);
-  }
-  const result = spawnSync("/bin/bash", ["-c", `${install}\n${build}`], {
+  const calls = join(root, "calls");
+  writeFileSync(calls, "");
+  const make = join(bin, "make");
+  writeFileSync(
+    make,
+    `#!/bin/sh\nprintf "%s|confirm=%s\\n" "$*" "\${TENKACLOUD_LITE_DOWN_YES-unset}" >> "$CALL_LOG"\nexit "$MAKE_EXIT"\n`,
+  );
+  chmodSync(make, 0o700);
+  const result = spawnSync("/bin/bash", ["-c", buildActionScript()], {
     cwd: root,
     encoding: "utf8",
     env: {
-      PATH: `${bin}:/usr/bin:/bin`,
-      CODEBUILD_SRC_DIR: root,
-      CALL_LOG: log,
-      CATALOG,
-      REPO_URL: "https://github.com/susumutomita/TenkaCloud.git",
-      REPO_REF: PLATFORM,
-      AWS_DEFAULT_REGION: "us-east-1",
-      TENKACLOUD_ADMIN_EMAIL: "organizer@example.test",
-      TENKACLOUD_CFN_EXECUTION_POLICY_ARN: POLICY,
-      TENKACLOUD_RUNNER_BINDINGS: "",
-      ...overrides,
+      PATH: bin,
+      ACTION: actionName,
+      ENVIRONMENT: "staging",
+      CALL_LOG: calls,
+      MAKE_EXIT: String(exitCode),
     },
   });
-  return { ...result, calls: readFileSync(log, "utf8") };
+  return { ...result, calls: readFileSync(calls, "utf8") };
 }
 
-describe("current-cloud CodeBuild onboarding source contract; no AWS execution", () => {
-  it("restores the launcher without creating IAM grants or automatically starting a build", () => {
+describe("complete cloud pipeline rename compatibility; no AWS execution", () => {
+  it("changes the displayed mode without changing any historical resource or build instruction", () => {
+    // Original resource bytes and condition expressions are pinned to 825415fc; comments may clarify provenance.
+    expect(
+      createHash("sha256").update(preservedSection("Resources", "Outputs")).digest("hex"),
+    ).toBe("22277ff4a9f2602b338fc519bd93f98c5a10315f91c34e3594e8a14f239caa03");
+    expect(
+      createHash("sha256")
+        .update(preservedSection("Conditions", "Resources").replace(/^ *#.*\n/gmu, ""))
+        .digest("hex"),
+    ).toBe("2c05063686a45b0bc6cad504fe8b79c2f0ec4ad03bc37a1825c1799413b66b56");
+    const parsed = z.object({ Description: z.string() }).parse(template.toJSON());
+    expect(parsed.Description).toContain("cloud hosting");
+    expect(parsed.Description).toContain("fixed historical platform/catalog refs");
+    expect(parsed.Description).not.toContain("Lite mode");
     template.resourceCountIs("AWS::CodeBuild::Project", 1);
+    template.resourceCountIs("AWS::IAM::Role", 1);
     template.resourceCountIs("AWS::Logs::LogGroup", 1);
-    expect(buildSpec.phases.install["runtime-versions"].nodejs).toBe(24);
-    expect(Object.keys(template.findResources("AWS::IAM::Role"))).toHaveLength(0);
-    expect(Object.keys(template.findResources("AWS::IAM::Policy"))).toHaveLength(0);
-    expect(Object.keys(template.findResources("AWS::CloudFormation::CustomResource"))).toHaveLength(
-      0,
-    );
-    template.hasResourceProperties("AWS::CodeBuild::Project", {
-      ServiceRole: { Ref: "CodeBuildServiceRoleArn" },
-      ConcurrentBuildLimit: 1,
-      Environment: { PrivilegedMode: false },
-    });
-    template.hasParameter("RepoRef", { Type: "String", AllowedPattern: "^[a-f0-9]{40}$" });
+  });
+  it("keeps all parameter IDs, pinned source refs and deploy/destroy/retention options", () => {
     const parsed = z
       .object({ Parameters: z.record(z.record(z.unknown())) })
       .parse(template.toJSON());
-    for (const name of ["RepoRef", "CodeBuildServiceRoleArn", "CloudFormationExecutionPolicyArn"])
-      expect(parsed.Parameters[name]).not.toHaveProperty("Default");
-    expect(source.Properties.Source.BuildSpec).not.toMatch(
-      /cdk bootstrap|AdministratorAccess|destroy-all|TURSO/u,
+    expect(Object.keys(parsed.Parameters).sort()).toEqual(
+      [
+        "Environment",
+        "Action",
+        "TenantAdminEmail",
+        "RepoUrl",
+        "RepoRef",
+        "ProblemsRepoUrl",
+        "ProblemsRepoRef",
+        "DeployExternalId",
+        "ControlDataBackend",
+        "TursoDatabaseUrl",
+        "TursoAuthTokenParameterName",
+        "DynamoReadCapacity",
+        "DynamoWriteCapacity",
+        "RetainDataTables",
+        "BunVersion",
+        "CodeBuildTimeoutMinutes",
+      ].sort(),
     );
+    template.hasParameter("RepoRef", { Default: "949a40a9ed9199331d928ad5cf9397dbb4ba3f81" });
+    template.hasParameter("ProblemsRepoRef", {
+      Default: "363a7c9b83969e20d63b74fd0410a354da5e202b",
+    });
+    template.hasParameter("Action", { AllowedValues: ["deploy", "destroy", "destroy-all"] });
+    template.hasParameter("RetainDataTables", {
+      Default: "false",
+      AllowedValues: ["false", "true"],
+    });
+    template.hasParameter("ControlDataBackend", {
+      Default: "dynamodb",
+      AllowedValues: ["dynamodb", "turso"],
+    });
+    template.hasParameter("DeployExternalId", { NoEcho: true });
   });
-  it("checks out the exact source and catalog, installs without hooks, and calls the shared guarded CLI", () => {
-    const result = runPhases();
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.calls).toContain(`fetch --depth 1 origin ${PLATFORM}`);
-    expect(result.calls).toContain("submodule update --init --recursive problems");
-    expect(result.calls).toContain(
-      "npm|install --global --ignore-scripts @oven/bun-linux-x64@1.3.11",
+  it("keeps physical identities, output links and existing onboarding checkpoint values", () => {
+    template.hasResourceProperties("AWS::CodeBuild::Project", {
+      Name: { "Fn::Sub": `tenkacloud-lite-\${Environment}` },
+    });
+    template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: { "Fn::Sub": `tenkacloud-lite-\${Environment}-codebuild-role` },
+    });
+    template.hasResourceProperties("AWS::Logs::LogGroup", {
+      LogGroupName: { "Fn::Sub": `/tenkacloud/codebuild/lite-launcher-\${Environment}` },
+    });
+    template.hasOutput("OnboardingDrillCheckpoint", { Value: "TC{LITE-LAUNCHER-READY}" });
+    template.hasOutput("StartBuildConsoleUrl", {
+      Value: {
+        "Fn::Sub": `https://\${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-\${Environment}?region=\${AWS::Region}`,
+      },
+    });
+    expect(buildSpec).toContain("TC{LITE-CLEANUP-COMPLETE}");
+  });
+  it("preserves source verification, installation, automatic bootstrap and explicit release classification", () => {
+    expect(buildSpec).toContain("rev-parse --verify 'FETCH_HEAD^{commit}'");
+    expect(buildSpec).toContain("refusing to fall back to another ref");
+    expect(buildSpec).toContain(
+      `checkout_repo_ref "\${PROBLEMS_REPO_URL}" "\${PROBLEMS_REPO_REF}" repo/problems catalog`,
     );
-    expect(result.calls).toContain("bun|install --frozen-lockfile --ignore-scripts");
-    expect(result.calls).toContain(
-      `bun|run scripts/cloud-hosting/main.ts up|runner=unset|policy=${POLICY}`,
-    );
-    expect(result.calls).not.toContain("aws|");
+    expect(buildSpec).toContain("bun install --frozen-lockfile --ignore-scripts");
+    expect(buildSpec).toContain(`cdk bootstrap "aws://\${AWS_ACCOUNT_ID}/\${AWS_REGION}"`);
+    for (const status of ["candidate/unverified", "development/unreleased", "custom/unverified"])
+      expect(buildSpec).toContain(status);
   });
-  it("preserves explicitly reviewed runner bindings instead of silently deleting an existing runner", () => {
-    const bindings = '[{"id":"reviewed-synthetic-binding"}]';
-    const result = runPhases({ TENKACLOUD_RUNNER_BINDINGS: bindings });
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.calls).toContain(`bun|run scripts/cloud-hosting/main.ts up|runner=${bindings}`);
-  });
-  it.each([
-    { REPO_REF: "main" },
-    { REPO_REF: "$(touch /tmp/unexpected)" },
-    { REPO_URL: "file:///unrelated" },
-    { FAIL_FETCH: "1" },
-    { RESOLVED_PLATFORM: "c".repeat(40) },
-    { RESOLVED_CATALOG: "c".repeat(40) },
-    { BUN_VERSION: "unexpected" },
-  ])("refuses source or toolchain drift without invoking cloud deployment: %j", (overrides) => {
-    const result = runPhases(overrides);
-    expect(result.status).not.toBe(0);
-    expect(result.calls).not.toContain("bun|run scripts/cloud-hosting/main.ts up");
-  });
-  it("propagates a failed CLI deployment instead of reporting success", () => {
-    expect(runPhases({ CLI_EXIT: "17" }).status).toBe(17);
+  it.each(["deploy", "destroy", "destroy-all"])(
+    "keeps the %s action and its confirmation/checkpoint contract",
+    (command) => {
+      const result = action(command);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.calls).toBe(
+        `${command} ENV=staging|confirm=${command === "deploy" ? "unset" : "1"}\n`,
+      );
+      if (command === "destroy-all")
+        expect(result.stdout).toContain("Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}");
+      else expect(result.stdout).not.toContain("Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}");
+    },
+  );
+  it.each(["deploy", "destroy", "destroy-all"])(
+    "does not report cleanup success after %s fails",
+    (command) => {
+      const result = action(command, 17);
+      expect(result.status).not.toBe(0);
+      expect(result.stdout).not.toContain("Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}");
+    },
+  );
+  it("refuses an unknown action before invoking make", () => {
+    const result = action("unexpected");
+    expect(result.status).toBe(2);
+    expect(result.calls).toBe("");
   });
 });

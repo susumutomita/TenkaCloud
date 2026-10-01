@@ -1,12 +1,19 @@
 # TenkaCloud — Deployment guide
 
-Start with the [README Quickstart](./README.md#quickstart). For AWS Lite, choose
-local `make deploy` to build without CodeBuild, or the console launcher to avoid
-installing local tools. Both create the same platform and incur AWS resource costs.
+The AWS console launcher is [cloud-pipeline.yaml](./infrastructure/templates/cloud-pipeline.yaml).
+It preserves the previous complete deployment and teardown flow, using its fixed
+platform/catalog refs. Renaming the file does not switch it to the unfinished
+Lambda/DynamoDB restoration in this checkout. The detailed steps below describe
+that pinned implementation and its compatibility identifiers.
 
-## What gets deployed (Lite mode)
+For the current checkout, use [README Quickstart](./README.md#quickstart) for
+`make local` / `make down`. Current `make deploy` / `make destroy` still stop as
+unimplemented; see [cloud restoration status](./infrastructure/README.md).
+AWS deployment through the pinned console launcher can incur charges.
 
-Lite mode deploys the application plane with `tenantId="local"`:
+## What the pinned cloud deployment creates
+
+The pinned implementation uses the compatibility identifier `tenantId="local"`:
 
 - **Application Admin Console** — organizers create events, register teams, select
   problems, start deploy jobs, and watch progress.
@@ -31,7 +38,7 @@ rotation, and removal procedure is in the
 Participant Portal authentication is separate: participants use per-team login keys,
 not Cognito or SAML accounts.
 
-## Lite mode — local terminal
+## Pinned implementation — local terminal
 
 Use this to build on your computer and avoid CodeBuild build charges. You need Git,
 Make, Bash, zip, rsync, Python 3 (`python3`), AWS CLI v2, and the Bun/Node.js versions
@@ -119,7 +126,7 @@ stack and backend steps.
 
 For the **console launcher**, set `ProblemsRepoUrl` to your public catalog fork
 and `ProblemsRepoRef` to its reviewed commit. Both parameters belong to
-`lite-pipeline.yaml`; they do not configure local `make deploy`.
+`cloud-pipeline.yaml`; they do not configure local `make deploy`.
 
 For **local `make deploy`**, preserve any existing changes in `problems/` first.
 Commit and publish your catalog changes to your fork. From the TenkaCloud root,
@@ -201,7 +208,7 @@ These are the access boundaries to review, not a tested minimal IAM policy for
 every optional configuration. See the actual calls in
 [tenkacloud-lite.ts](./scripts/tenkacloud-lite.ts),
 [prepare-source-bundle.sh](./scripts/prepare-source-bundle.sh), and the service-role
-policy in [lite-pipeline.yaml](./infrastructure/templates/lite-pipeline.yaml).
+policy in [cloud-pipeline.yaml](./infrastructure/templates/cloud-pipeline.yaml).
 The launcher policy is broad; do not copy it as a general participant policy.
 
 AWS documents the [bootstrap permissions](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping-env.html#bootstrapping-env-permissions).

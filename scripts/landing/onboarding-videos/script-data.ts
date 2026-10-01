@@ -220,12 +220,12 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         titleJa: "Launcher スタックを作成",
         titleEn: "Create the launcher stack",
         bulletsJa: [
-          "lite-pipeline.yaml を CloudFormation へ",
+          "cloud-pipeline.yaml を CloudFormation へ",
           "必須入力は TenantAdminEmail のみ",
           "スタックの Outputs にチェックポイント 1",
         ],
         bulletsEn: [
-          "Create lite-pipeline.yaml in CloudFormation",
+          "Create cloud-pipeline.yaml in CloudFormation",
           "Only TenantAdminEmail is required",
           "Checkpoint 1 appears in the stack Outputs",
         ],

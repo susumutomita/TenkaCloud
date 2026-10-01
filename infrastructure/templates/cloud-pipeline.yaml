@@ -1,15 +1,18 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  TenkaCloud Lite mode one-click deployment. Provisions a single CodeBuild project
+  TenkaCloud cloud hosting one-click deployment. Provisions a single CodeBuild project
   that git-clones the (public) TenkaCloud repo + a problem-catalog repo and runs
-  `make deploy` (Lite mode) to stand up TenkaCloud in this AWS account. It does NOT
-  create the TenkaCloud stacks itself; the build step does.
+  `make deploy` (cloud hosting) to stand up TenkaCloud in this AWS account. It does NOT
+  create the TenkaCloud stacks itself; the build step does. Defaults execute the
+  fixed historical platform/catalog refs below, not code from the current checkout.
 
 
-  Cost note: build minutes for a handful of Lite deploys cost under a dollar.
-  Separately, while deployed, the default DynamoDB profile is a standing cost of
-  about $7.06 per month. `destroy` removes those tables by default; `destroy-all`
-  also removes explicitly retained tables and logs (see docs/running-costs.md).
+  Cost note: the pinned implementation originally estimated under a dollar for
+  a handful of builds and about $7.06 per month for its default DynamoDB profile.
+  These are historical estimates, not current prices or a zero-cost guarantee.
+  Actual charges depend on region, usage and account allowances. `destroy` removes
+  those tables by default; `destroy-all` also removes explicitly retained tables
+  and logs (see the pinned implementation's docs/running-costs.md).
 
 
   IAM note: creating this stack also creates a CodeBuild role with broad,
@@ -29,7 +32,7 @@ Description: >-
 # data and the two app stacks, then delete the launcher stack created from this template.
 # ACTION=destroy removes the stacks; DynamoDB tables go with them unless the deploy set
 # RetainDataTables=true (#2959). The deploy itself creates the platform (Lambda +
-# Cognito + DynamoDB + S3 + CloudFront + ...); a handful of Lite deploys cost under a dollar.
+# Cognito + DynamoDB + S3 + CloudFront + ...); a handful of cloud deployments cost under a dollar.
 #
 # IAM Role / Policy "Description" fields only accept ASCII (0x20-0x7E) + Latin-1 (0xA1-0xFF);
 # CJK causes CREATE_FAILED. All comments in this file are ASCII so the quality-gates
@@ -90,7 +93,7 @@ Parameters:
       - destroy
       - destroy-all
     Description: >-
-      What this build does. `deploy` stands up Lite; `destroy` removes the stacks;
+      What this build does. `deploy` starts cloud hosting; `destroy` removes the stacks;
       `destroy-all` additionally removes stack-owned retained data first. The cleanup
       tutorial uses ACTION=destroy-all. Note that `destroy` no longer preserves DynamoDB
       history by default (#2959): tables are deployed with DeletionPolicy: Delete unless
@@ -100,7 +103,7 @@ Parameters:
   TenantAdminEmail:
     Type: String
     Description: >-
-      Application Admin Console initial user (Tenant Admin). After the Lite deploy,
+      Application Admin Console initial user (Tenant Admin). After the cloud deployment,
       tenkacloud-lite.ts creates this Cognito user and emails an invitation.
     AllowedPattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
     ConstraintDescription: Must be a valid email address.
@@ -141,11 +144,11 @@ Parameters:
     NoEcho: true
     AllowedPattern: '^$|^[A-Za-z0-9_=,.@:/-]{16,128}$'
     ConstraintDescription: >-
-      Leave empty for a same-account Lite trial, or enter 16-128 ASCII letters,
+      Leave empty for a same-account cloud hosting trial, or enter 16-128 ASCII letters,
       digits, and _ = , . @ : / -.
     Description: >-
       Optional CDK_PARAM_DEPLOY_EXTERNAL_ID for AssumeRole into competitor accounts
-      (problem deploy backend). Leave empty for a local-only Lite trial.
+      (problem deploy backend). Leave empty for a same-account cloud hosting trial.
 
   ControlDataBackend:
     Type: String
@@ -225,14 +228,13 @@ Parameters:
     Default: 90
     MinValue: 15
     MaxValue: 480
-    Description: CodeBuild timeout in minutes (a Lite deploy usually finishes in 15-30).
+    Description: CodeBuild timeout in minutes (a cloud deployment usually finishes in 15-30).
 
 Conditions:
   HasExternalId: !Not [!Equals [!Ref DeployExternalId, ""]]
-  # CloudFormation cannot import repository files at runtime. These deployable-artifact
-  # literals are generated, not hand-maintained: release/launcher-defaults.json is the single
-  # authoring point, scripts/release/generate-launcher-defaults.ts stamps every literal site,
-  # and `bun run release:check` rejects drift between that file and this template.
+  # Historical fixed refs are preserved for the existing launcher contract.
+  # release/launcher-defaults.json records this original pair. This checkout has no
+  # launcher-default generator; changing refs requires explicit compatibility review.
   UsesAnyMainRef: !Or
     - !Equals [!Ref RepoRef, main]
     - !Equals [!Ref ProblemsRepoRef, main]
@@ -583,7 +585,7 @@ Outputs:
   StartBuildConsoleUrl:
     Description: >-
       Open the CodeBuild project: "Start build" deploys; "Start build with overrides" with
-      ACTION=destroy-all completely removes Lite; ACTION=destroy removes the stacks, taking
+      ACTION=destroy-all completely removes cloud hosting; ACTION=destroy removes the stacks, taking
       the DynamoDB tables with them unless the deploy set RetainDataTables=true.
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-${Environment}?region=${AWS::Region}
 
@@ -595,5 +597,5 @@ Outputs:
   OnboardingDrillCheckpoint:
     Description: >-
       Onboarding drill checkpoint 1. Paste this code into the "Deploy your own TenkaCloud
-      Lite" drill in the landing demo portal to score the "launcher created" step.
+      cloud hosting" drill in the landing demo portal to score the "launcher created" step.
     Value: TC{LITE-LAUNCHER-READY}

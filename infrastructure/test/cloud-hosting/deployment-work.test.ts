@@ -346,3 +346,286 @@ describe("historical flag verification and event gates", () => {
     expect(scoringBlock({ ...f.event, ...changes }, NOW)).toBe(expected);
   });
 });
+
+function conditionalFailure() {
+  return Object.assign(new Error("Synthetic CAS conflict"), {
+    name: "TransactionCanceledException",
+    CancellationReasons: [{ Code: "ConditionalCheckFailed" }],
+  });
+}
+describe("durable work recovery with intercepted SDK responses", () => {
+  it("conditionally changes only requested schedule fields and rejects a stale event revision", async () => {
+    const f = fixture();
+    f.send.mockImplementationOnce(async () => ({}));
+    await f.work.setSchedule(f.event, { startsAt: AT, endsAt: undefined, scoringLocked: true }, AT);
+    const update = transaction(f.send.mock.calls[0]?.[0])[0]?.Update;
+    expect(update?.UpdateExpression).toContain("scoringLocked = :scoringLocked");
+    expect(update?.UpdateExpression).not.toContain("endsAt");
+    expect(update?.ConditionExpression).toContain("updatedAt = :previous");
+    f.send.mockRejectedValueOnce(conditionalFailure());
+    await expect(f.work.setSchedule(f.event, { scoringLocked: false }, AT)).rejects.toThrow(
+      "event_schedule_changed",
+    );
+  });
+  it("recovers the immutable winning batch reservation after a concurrent writer", async () => {
+    const f = fixture();
+    const proposal = { targets: ["synthetic"] };
+    f.send
+      .mockImplementationOnce(async () => ({}))
+      .mockRejectedValueOnce(conditionalFailure())
+      .mockImplementationOnce(async () => ({ Item: { requestHash: "same", response: proposal } }));
+    expect(await f.work.pinRequest(f.event.eventId, "operation", "same", {})).toEqual(proposal);
+    f.send.mockImplementationOnce(async () => ({
+      Item: { requestHash: "same", response: proposal },
+    }));
+    expect(await f.work.pinRequest(f.event.eventId, "operation", "same", {})).toEqual(proposal);
+    f.send.mockImplementationOnce(async () => ({})).mockImplementationOnce(async () => ({}));
+    expect(await f.work.pinRequest(f.event.eventId, "new", "new", proposal)).toEqual(proposal);
+    f.send
+      .mockImplementationOnce(async () => ({}))
+      .mockRejectedValueOnce(conditionalFailure())
+      .mockImplementationOnce(async () => ({}));
+    await expect(f.work.pinRequest(f.event.eventId, "lost", "same", proposal)).rejects.toThrow(
+      "batch_reservation_conflict",
+    );
+    await expect(
+      f.work.pinRequest(f.event.eventId, "big", "same", "x".repeat(131073)),
+    ).rejects.toThrow("bounds");
+  });
+  it("strongly reads the target and rejects corrupt target-to-job ownership", async () => {
+    const f = fixture();
+    f.send.mockImplementationOnce(async () => ({}));
+    expect(await f.work.getTarget(f.event.eventId, f.team.teamId, f.job.problemId)).toBeUndefined();
+    f.send
+      .mockImplementationOnce(async () => ({ Item: { jobId: f.job.jobId } }))
+      .mockImplementationOnce(async () => ({ Item: f.job }));
+    expect(await f.work.getTarget(f.event.eventId, f.team.teamId, f.job.problemId)).toEqual(f.job);
+    f.send
+      .mockImplementationOnce(async () => ({ Item: { jobId: f.job.jobId } }))
+      .mockImplementationOnce(async () => ({ Item: { ...f.job, teamId: ulid() } }));
+    await expect(f.work.getTarget(f.event.eventId, f.team.teamId, f.job.problemId)).rejects.toThrow(
+      "Corrupt deployment target ownership",
+    );
+  });
+  it("checks connection scope, requires consecutive versions and preserves a winning concurrent registration", async () => {
+    const f = fixture();
+    const connection = f.job.connection;
+    f.send.mockImplementationOnce(async () => ({ Item: connection }));
+    expect(await f.work.getConnection(f.event.eventId, f.team.teamId)).toEqual(connection);
+    f.send.mockImplementationOnce(async () => ({}));
+    expect(await f.work.getConnection(f.event.eventId, f.team.teamId)).toBeUndefined();
+    f.send.mockImplementationOnce(async () => ({ Item: { ...connection, teamId: ulid() } }));
+    await expect(f.work.getConnection(f.event.eventId, f.team.teamId)).rejects.toThrow(
+      "scope mismatch",
+    );
+    await expect(f.work.saveVerifiedConnection({ ...connection, version: 3 }, 1)).rejects.toThrow(
+      "version",
+    );
+    f.send.mockImplementationOnce(async () => ({}));
+    await f.work.saveVerifiedConnection(connection);
+    expect(transaction(f.send.mock.calls.at(-1)?.[0])[0]?.Put?.ConditionExpression).toBe(
+      "attribute_not_exists(PK)",
+    );
+    f.send.mockRejectedValueOnce(conditionalFailure());
+    await expect(f.work.saveVerifiedConnection({ ...connection, version: 2 }, 1)).rejects.toThrow(
+      "connection_changed",
+    );
+    expect(transaction(f.send.mock.calls.at(-1)?.[0])[0]?.Put?.ExpressionAttributeValues).toEqual({
+      ":version": 1,
+    });
+  });
+  it("atomically retains the failed attempt when accepting a retry, but rejects a changed attempt", async () => {
+    const f = fixture();
+    const input = { ...f.accept, job: { ...f.job, attempt: 2 }, retryOf: 1 };
+    f.send
+      .mockImplementationOnce(async () => ({}))
+      .mockImplementationOnce(async () => ({ Item: { ...f.job, status: "FAILED" } }))
+      .mockImplementationOnce(async () => ({}));
+    expect((await f.work.accept(input)).kind).toBe("accepted");
+    const writes = transaction(f.send.mock.calls[2]?.[0]);
+    expect(writes.find((write) => write.Put?.Item?.SK === "ATTEMPT#1")?.Put?.Item?.status).toBe(
+      "FAILED",
+    );
+    expect(writes[3]?.Put?.ConditionExpression).toContain("score = :zero");
+    f.send
+      .mockImplementationOnce(async () => ({}))
+      .mockImplementationOnce(async () => ({ Item: { ...f.job, attempt: 3 } }));
+    await expect(f.work.accept(input)).rejects.toThrow("retry_attempt_changed");
+  });
+  it("returns the winning acceptance receipt after a transaction conflict without retrying a second job", async () => {
+    const f = fixture();
+    f.send
+      .mockImplementationOnce(async () => ({}))
+      .mockRejectedValueOnce(conditionalFailure())
+      .mockImplementationOnce(async () => ({
+        Item: { requestHash: f.accept.requestHash, response: { jobId: f.job.jobId, attempt: 1 } },
+      }));
+    expect((await f.work.accept(f.accept)).kind).toBe("replay");
+    expect(f.send).toHaveBeenCalledTimes(3);
+  });
+  it("bounds retries and rejects a persistently conflicting acceptance", async () => {
+    const f = fixture();
+    f.send.mockImplementation(async (command) => {
+      if (command instanceof TransactWriteCommand) throw conditionalFailure();
+      return {};
+    });
+    await expect(f.work.accept(f.accept)).rejects.toThrow("deployment_acceptance_conflict");
+    expect(
+      f.send.mock.calls.filter(([command]) => command instanceof TransactWriteCommand),
+    ).toHaveLength(12);
+  });
+  it("queries only team-owned public score history and rejects rows from a different owner", async () => {
+    const f = fixture();
+    const row = {
+      eventId: f.event.eventId,
+      teamId: f.team.teamId,
+      jobId: f.job.jobId,
+      problemId: f.job.problemId,
+      points: 100,
+      source: "flag",
+      result: "ok",
+      occurredAt: AT,
+      privateSecret: "not-public",
+    };
+    f.send.mockImplementationOnce(async () => ({ Items: [row] }));
+    const history = await f.work.listScoreEvents(f.event.eventId, f.team.teamId, 7);
+    expect(history).toHaveLength(1);
+    expect(history[0]).not.toHaveProperty("privateSecret");
+    expect(history[0]).not.toHaveProperty("eventId");
+    f.send.mockImplementationOnce(async () => ({ Items: [{ ...row, teamId: ulid() }] }));
+    await expect(f.work.listScoreEvents(f.event.eventId, f.team.teamId)).rejects.toThrow(
+      "ownership mismatch",
+    );
+    f.send.mockImplementationOnce(async () => ({}));
+    expect(await f.work.listScoreEvents(f.event.eventId, f.team.teamId)).toEqual([]);
+    await expect(f.work.listScoreEvents(f.event.eventId, f.team.teamId, 101)).rejects.toThrow(
+      "history limit",
+    );
+  });
+  it("reads durable pending dispatch without leaking extra fields", async () => {
+    const f = fixture();
+    f.send.mockImplementationOnce(async () => ({ Items: [{ ...f.job, secret: "not-returned" }] }));
+    expect(await f.work.listDispatch()).toEqual([
+      {
+        jobId: f.job.jobId,
+        eventId: f.event.eventId,
+        teamId: f.team.teamId,
+        attempt: 1,
+        createdAt: AT,
+      },
+    ]);
+    f.send.mockImplementationOnce(async () => ({}));
+    expect(await f.work.listDispatch()).toEqual([]);
+  });
+  it("replays an owned claim and rejects invalid ownership or a lost claim race", async () => {
+    const f = fixture();
+    await expect(f.work.begin(f.job, "", AT)).rejects.toThrow("workflow owner");
+    f.send.mockImplementationOnce(async () => ({
+      Item: { ...f.job, status: "IN_PROGRESS", owner: "same" },
+    }));
+    expect(await f.work.begin(f.job, "same", AT)).toBe("replay");
+    f.send
+      .mockImplementationOnce(async () => ({ Item: f.job }))
+      .mockRejectedValueOnce(conditionalFailure());
+    await expect(f.work.begin(f.job, "other", AT)).rejects.toThrow("claim_conflict");
+  });
+  it("fails a pre-claim execution only with pending-attempt CAS and removes its dispatch in the same commit", async () => {
+    const f = fixture();
+    await expect(f.work.failPending(f.job, "", AT)).rejects.toThrow("bounded");
+    f.send
+      .mockImplementationOnce(async () => ({ Item: f.job }))
+      .mockImplementationOnce(async () => ({}));
+    expect(await f.work.failPending(f.job, "synthetic workflow failed", AT)).toBe("updated");
+    const writes = transaction(f.send.mock.calls.at(-1)?.[0]);
+    expect(writes[0]?.Update?.ConditionExpression).toContain("#status = :pending");
+    expect(writes[1]?.Delete?.Key?.PK).toBe("DISPATCH#PENDING");
+    f.send.mockImplementationOnce(async () => ({ Item: { ...f.job, status: "FAILED" } }));
+    expect(await f.work.failPending(f.job, "same", AT)).toBe("replay");
+    f.send
+      .mockImplementationOnce(async () => ({ Item: f.job }))
+      .mockRejectedValueOnce(conditionalFailure());
+    await expect(f.work.failPending(f.job, "same", AT)).rejects.toThrow("pending_failure_conflict");
+  });
+  it("recovers matching terminal writes but never overwrites another owner's result", async () => {
+    const f = fixture();
+    const completion = { status: "FAILED" as const, failureReason: "synthetic" };
+    const done = {
+      ...f.job,
+      ...completion,
+      owner: "owner",
+      completionDigest: contentDigest(JSON.stringify(completion)),
+    };
+    f.send.mockImplementationOnce(async () => ({ Item: done }));
+    expect(await f.work.finish(f.job, "owner", completion, AT)).toBe("replay");
+    f.send.mockImplementationOnce(async () => ({ Item: done }));
+    await expect(
+      f.work.finish(f.job, "owner", { ...completion, failureReason: "different" }, AT),
+    ).rejects.toThrow("payload_changed");
+    f.send
+      .mockImplementationOnce(async () => ({
+        Item: { ...f.job, owner: "owner", status: "IN_PROGRESS" },
+      }))
+      .mockRejectedValueOnce(conditionalFailure())
+      .mockImplementationOnce(async () => ({ Item: done }));
+    expect(await f.work.finish(f.job, "owner", completion, AT)).toBe("replay");
+    f.send
+      .mockImplementationOnce(async () => ({
+        Item: { ...f.job, owner: "owner", status: "IN_PROGRESS" },
+      }))
+      .mockRejectedValueOnce(conditionalFailure())
+      .mockImplementationOnce(async () => ({ Item: { ...done, owner: "other" } }));
+    await expect(f.work.finish(f.job, "owner", completion, AT)).rejects.toThrow(
+      "transition_conflict",
+    );
+  });
+  it("refuses invalid or unready flag requests and does not bypass revoked access through a receipt", async () => {
+    const f = fixture();
+    await expect(f.work.submitFlag({ ...f.flag, attempt: 0 })).rejects.toThrow("invalid_scoring");
+    await expect(
+      f.work.submitFlag({ ...f.flag, event: { ...f.event, scoringLocked: true } }),
+    ).rejects.toThrow("scoring_locked");
+    f.send.mockImplementationOnce(async () => ({ Item: f.job }));
+    await expect(f.work.submitFlag(f.flag)).rejects.toThrow("not_ready");
+    const done = {
+      ...f.job,
+      status: "COMPLETE",
+      flagDigest: flagDigest("correct"),
+      flagSubmitted: true,
+      score: 100,
+    };
+    f.send
+      .mockImplementationOnce(async () => ({ Item: done }))
+      .mockImplementationOnce(async () => ({
+        Item: {
+          requestHash: contentDigest(JSON.stringify([f.job.jobId, 1, "correct"])),
+          response: { kind: "ok", scoreDelta: 100, totalScore: 100 },
+        },
+      }))
+      .mockRejectedValueOnce(conditionalFailure());
+    await expect(f.work.submitFlag(f.flag)).rejects.toThrow("scope_or_access_changed");
+    f.send
+      .mockImplementationOnce(async () => ({ Item: done }))
+      .mockImplementationOnce(async () => ({}))
+      .mockImplementationOnce(async () => ({}));
+    expect(await f.work.submitFlag({ ...f.flag, requestKey: "new" })).toEqual({
+      kind: "already_scored",
+      totalScore: 100,
+    });
+    expect(transaction(f.send.mock.calls.at(-1)?.[0])).toHaveLength(4);
+  });
+  it("bounds scoring contention instead of claiming uncertain success", async () => {
+    const f = fixture();
+    let reads = 0;
+    f.send.mockImplementation(async (command) => {
+      if (command instanceof TransactWriteCommand) throw conditionalFailure();
+      reads++;
+      return reads % 2 === 1
+        ? { Item: { ...f.job, status: "COMPLETE", flagDigest: flagDigest("correct") } }
+        : {};
+    });
+    await expect(f.work.submitFlag(f.flag)).rejects.toThrow("scoring_scope_or_access_changed");
+    expect(
+      f.send.mock.calls.filter(([command]) => command instanceof TransactWriteCommand),
+    ).toHaveLength(24);
+  });
+});

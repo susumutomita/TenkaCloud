@@ -1,8 +1,15 @@
-# Cloud bootstrap permission prerequisite
+# Cloud deployment permission boundaries
 
-The installed CDK default bootstrap template assigns broad administrator access
-when no CloudFormation execution policy is supplied. TenkaCloud does not use that
-default. Initial least-privilege setup remains an unfinished acceptance item.
+The complete `templates/cloud-pipeline.yaml` launcher preserves the original
+CodeBuild role and bootstrap instructions for its fixed historical source refs.
+That role has broad, administrator-equivalent deployment permissions. The rename
+does not create a new grant, narrow the old policy, or authorize AWS execution.
+Review those permissions and teardown consequences before running the launcher.
+
+The sections below describe `scripts/cloud-hosting/main.ts` in the current
+checkout. This CLI is not the code executed by the launcher's default fixed refs.
+It requires an explicit reviewed execution policy instead of CDK's broad default.
+Initial least-privilege setup remains an unfinished acceptance item.
 
 ## Fail-safe behavior
 
@@ -91,25 +98,15 @@ separate review. Platform teardown must coordinate active/pending executions bef
 removing the runner; the current CLI refuses runner-enabled teardown. Independently
 deployed exercise resources and retained data/artifact buckets are not purged.
 
-## CodeBuild launcher prerequisite
+## Preserved launcher contract
 
-`templates/cloud-hosting-pipeline.yaml` reuses the single-project onboarding flow.
-It accepts an existing CodeBuild service-role ARN under
-`role/tenkacloud/cloud-hosting/` and the reviewed execution policy above. It creates
-no IAM policy or role and starts no build automatically. Parameter ARN patterns do
-not prove least privilege: both policies and the service trust require review.
+The pipeline rename keeps resource definitions and BuildSpec instructions exactly
+as in `825415fc:infrastructure/templates/lite-pipeline.yaml`. This includes the
+existing CodeBuild role, physical names, pinned platform/catalog refs, backend
+parameters and `deploy` / `destroy` / `destroy-all` behavior. The launcher tests
+check resource and condition hashes, parameter/output contracts and synthetic
+success/failure paths without running AWS commands.
 
-Scope the CodeBuild trust to `codebuild.amazonaws.com`, this deployment account,
-and the exact `tenkacloud-cloud-hosting-<environment>` project ARN. Its execution
-permissions need only the reviewed project bootstrap/CloudFormation operations,
-project asset and source-bucket access, organizer invitation calls, and log writes
-to `/tenkacloud/codebuild/cloud-hosting-<environment>`. Constrain PassRole and CDK
-role assumption to this installation's project qualifier and intended services.
-Creating the launcher itself requires permission to pass only that reviewed
-CodeBuild role. None of these setup permissions belong to organizer/participant
-sessions, and the template supplies no broad fallback policy.
-
-The selected platform commit runs with that role. Only use a reviewed immutable
-commit and its pinned catalog; arbitrary repository overrides and build overrides
-must receive the same review. The launcher has no teardown/purge action. Removing
-it does not drain a runner or remove deployed platform/exercise resources.
+The parameter IDs and checkpoint values retain their historical spelling for
+compatibility. Only the public filename and displayed hosting name change.
+There is no second, reduced-functionality launcher in the published tree.

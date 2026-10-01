@@ -1,5 +1,5 @@
 {
-  "$comment": "The launcher default pair last published for infrastructure/templates/lite-pipeline.yaml. Single authoring point (#3024 PR 2): scripts/release/generate-launcher-defaults.ts stamps every template literal from these values and release:check rejects drift. Advance it with 'bun run release:launcher-defaults --from-tag v<major>.<minor>.<patch>' once that tag's published Release passes release:verify-published (#3024 PR 5), which derives all three values from the tag's resolved identity. Never edit these values or the template literals by hand.",
+  "$comment": "Historical default platform/catalog pair preserved by infrastructure/templates/cloud-pipeline.yaml. These values identify the previous pinned launcher flow, not the current integration release. Keep its parameter defaults and classification literals aligned when deliberately advancing a reviewed release.",
   "manifestVersion": "1.11.0",
   "platformCommit": "949a40a9ed9199331d928ad5cf9397dbb4ba3f81",
   "catalogCommit": "363a7c9b83969e20d63b74fd0410a354da5e202b"
