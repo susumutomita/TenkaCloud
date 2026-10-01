@@ -51,8 +51,8 @@ Docker 問題は一斉起動せず、参加者が必要な問題をポータル�
 
 クラウドのコマンドは `make deploy` と `make destroy` です。
 [必要な AWS 権限の準備](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を確認して、
-この版の Lambda/DynamoDB CLI を実行します。現在のクラウド問題は、限定した CLI アクセスを使う hello-world です。
-非 AWS 問題のクラウド実行と Battle は未完成です。撤収時はアカウント、リージョン、所有する対象を表示して確認し、
+この版の Lambda/DynamoDB CLI を実行します。現在のクラウド問題は、限定した CLI アクセスを使う hello-world と、
+DynamoDB に状態を保存する Cryptography Battle です。コンテナー問題のクラウド実行は未実装で、Battle の負荷目標は検証中です。撤収時はアカウント、リージョン、所有する対象を表示して確認し、
 記録済みの問題環境を撤収します。大会データは保持します。保持ストレージや AWS の利用には料金が発生する場合があります。
 `CLOUD_ARGS="--help"` を付けると、AWS に接続せずヘルプを表示します。
 復元した[クラウド pipeline](infrastructure/README.md#cloud-deployment-pipeline)は固定した旧版を実行する別の配置経路です。

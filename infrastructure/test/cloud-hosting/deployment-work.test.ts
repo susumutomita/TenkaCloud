@@ -534,6 +534,27 @@ function conditionalFailure() {
   });
 }
 describe("durable work recovery with intercepted SDK responses", () => {
+  it("ends AWS-only scoring with one event CAS and leaves deployment resources untouched", async () => {
+    const f = fixture();
+    f.send.mockImplementationOnce(async () => ({}));
+    await f.work.setSchedule(f.event, { status: "ENDED", endsAt: AT, scoringLocked: true }, AT);
+    const writes = transaction(f.send.mock.calls[0]?.[0]);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.Update).toMatchObject({
+      TableName: "events",
+      Key: { PK: `EVENT#${f.event.eventId}`, SK: "META" },
+      UpdateExpression:
+        "SET updatedAt = :at, #status = :status, endsAt = :endsAt, scoringLocked = :scoringLocked",
+      ConditionExpression: "updatedAt = :previous AND #status IN (:draft, :deploying, :ready)",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: expect.objectContaining({
+        ":status": "ENDED",
+        ":endsAt": AT,
+        ":scoringLocked": true,
+        ":previous": f.event.updatedAt,
+      }),
+    });
+  });
   it("conditionally changes only requested schedule fields and rejects a stale event revision", async () => {
     const f = fixture();
     f.send.mockImplementationOnce(async () => ({}));

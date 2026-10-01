@@ -12,7 +12,7 @@ import type {
 import { installationScopeDigest } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
 import { assertOwnedBootstrap } from "./bootstrap-check";
 import { runCloudCli } from "./cli";
-import type { CloudInstallation } from "./installation";
+import type { CloudInstallation, InstallationLocation } from "./installation";
 import type { CloudCliIo, ProcessRequest, ProcessResult } from "./process";
 import "./main";
 
@@ -103,6 +103,7 @@ function fixture(
   const errors: string[] = [];
   const confirmations: string[] = [];
   const storageCalls: string[] = [];
+  const locations: InstallationLocation[] = [];
   let control: InstallationControl | undefined;
   const installation: CloudInstallation = options.installation ?? {
     repository: {
@@ -148,7 +149,10 @@ function fixture(
       confirmations.push(question);
       return options.confirmed ?? false;
     },
-    openInstallation: () => installation,
+    openInstallation: (location) => {
+      locations.push(location);
+      return installation;
+    },
     now: () => Date.parse("2026-10-01T14:00:00.000Z"),
     wait: async () => {
       throw new Error("Unexpected wait in CLI fixture");
@@ -168,6 +172,7 @@ function fixture(
     errors,
     confirmations,
     storageCalls,
+    locations,
     installation,
     env,
     run: (args: readonly string[]) => runCloudCli(args, io, { root: ROOT, env }),
@@ -849,5 +854,68 @@ describe("cloud CLI durable teardown recovery and registry updates", () => {
     expect(await f.run(["up"])).toBe(1);
     expect(f.errors.join("")).toContain("differs from the deployed legacy bindings");
     expect(f.calls.some((call) => call.inherit || call.command === "bun")).toBe(false);
+  });
+});
+
+describe("native-aware cloud teardown contract", () => {
+  function nativeStackResponse(
+    request: ProcessRequest,
+    alter?: (outputs: { OutputKey: string; OutputValue: string }[]) => void,
+  ): ProcessResult | undefined {
+    if (!platformInspection(request)) return undefined;
+    const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+    const stack = ownedStack(name);
+    if (name === cloudStackNames("staging").app) {
+      stack.Outputs = stack.Outputs.filter(
+        (item) => item.OutputKey !== "CloudInstallationControlVersion",
+      );
+      stack.Outputs.push(
+        { OutputKey: "CloudInstallationControlVersion", OutputValue: "2" },
+        { OutputKey: "CloudExecutionArtifactBucket", OutputValue: "owned-native-artifacts" },
+        { OutputKey: "CloudExecutionCatalogKey", OutputValue: `catalogs/${"a".repeat(64)}.json` },
+      );
+      alter?.(stack.Outputs);
+    }
+    return { code: 0, stdout: JSON.stringify(stack), stderr: "" };
+  }
+  it("passes the exact reviewed artifact identity and resolved account to native settlement", async () => {
+    const f = fixture({ confirmed: true, fail: (request) => nativeStackResponse(request) });
+    expect(await f.run(["down"])).toBe(0);
+    expect(f.locations[0]?.native).toEqual({
+      artifactBucket: "owned-native-artifacts",
+      catalogKey: `catalogs/${"a".repeat(64)}.json`,
+      expectedBucketOwner: "123456789012",
+    });
+    expect(f.storageCalls).toContain("drained");
+    expect(f.calls.filter((call) => call.args.includes("delete-stack"))).toHaveLength(2);
+  });
+  it.each([
+    ["CloudExecutionArtifactBucket", ""],
+    ["CloudExecutionArtifactBucket", "https://outside.example"],
+    ["CloudExecutionArtifactBucket", "bucket..name"],
+    ["CloudExecutionCatalogKey", ""],
+    ["CloudExecutionCatalogKey", "catalogs/not-pinned.json"],
+    ["CloudExecutionCatalogKey", `other/${"a".repeat(64)}.json`],
+  ])(
+    "rejects invalid native %s before stopping intake or deleting resources",
+    async (key, value) => {
+      const f = fixture({
+        confirmed: true,
+        fail: (request) =>
+          nativeStackResponse(request, (outputs) => {
+            const item = outputs.find((entry) => entry.OutputKey === key);
+            if (item) item.OutputValue = value;
+          }),
+      });
+      expect(await f.run(["down"])).toBe(1);
+      expect(f.locations).toEqual([]);
+      expect(f.storageCalls).not.toContain("stop");
+      expect(f.calls.some((call) => call.args.includes("delete-stack"))).toBe(false);
+    },
+  );
+  it("does not invent a native artifact requirement for the prior AWS-only control version", async () => {
+    const f = fixture({ confirmed: true });
+    expect(await f.run(["down"])).toBe(0);
+    expect(f.locations[0]?.native).toBeUndefined();
   });
 });

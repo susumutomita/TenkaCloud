@@ -275,6 +275,7 @@ export function EventCreateProblemsetSection({
                 id: "region",
                 header: t("event_create.col_region"),
                 cell: (r) => {
+                  if (r.runtimeProvider === "native") return t("event_create.native_execution");
                   const options = resolveRegionOptions(r.supportedRegions, REGION_OPTIONS);
                   return (
                     <Select
@@ -297,9 +298,12 @@ export function EventCreateProblemsetSection({
               {
                 id: "estimatedCost",
                 header: t("event_create.col_estimated_cost"),
-                cell: (r) => (
-                  <ProblemCostSummary estimate={r.costEstimate} showResourceTypes={false} t={t} />
-                ),
+                cell: (r) =>
+                  r.runtimeProvider === "native" ? (
+                    "—"
+                  ) : (
+                    <ProblemCostSummary estimate={r.costEstimate} showResourceTypes={false} t={t} />
+                  ),
               },
             ]}
           />

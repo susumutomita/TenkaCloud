@@ -76,6 +76,28 @@ describe("SsoCredentialsPage render branches", () => {
     expect(screen.getByText("sso_credentials.howto_body")).toBeInTheDocument();
   });
 
+  it("does not advertise cloud accounts or credentials for a native Battle", () => {
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [
+          {
+            jobId: "native-run",
+            problemId: "ac26-crypto-battle",
+            runtimeKind: "coordination",
+            coordination: true,
+            accessCapabilities: [],
+          },
+        ],
+      },
+      error: undefined,
+    });
+    renderPage();
+    expect(screen.getByText("sso_credentials.empty_problems")).toBeInTheDocument();
+    expect(screen.queryByText("ac26-crypto-battle")).not.toBeInTheDocument();
+    expect(screen.queryByText("sso_credentials.label_aws_account")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("cli-native-run")).not.toBeInTheDocument();
+  });
+
   it("should show a team-view error alert", () => {
     mockTeamView.mockReturnValue({ view: undefined, error: "boom" });
     renderPage();

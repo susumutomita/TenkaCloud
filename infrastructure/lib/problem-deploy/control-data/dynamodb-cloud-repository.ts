@@ -10,6 +10,7 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import type { CloudRepository, EventCreationReceipt } from "./cloud-repository.js";
+import { NATIVE_COORDINATION_PROBLEM } from "./domain/coordination.js";
 import { DeploymentConflict } from "./domain/deployment-work.js";
 import type { DeploymentRecord } from "./domain/deployments.js";
 import { CLOUD_EVENT_LIMITS, type EventRecord } from "./domain/events.js";
@@ -252,6 +253,19 @@ export class DynamoCloudRepository implements CloudRepository {
       )
     )
       throw new DeploymentConflict("installation_events_not_drained");
+    // Archived events and their closed native HEADs are immutable. Validate all chunks,
+    // not merely the event counters, before declaring retained data fully settled.
+    for (const event of events) {
+      if (!event.problems.some((problem) => problem.problemId === NATIVE_COORDINATION_PROBLEM))
+        continue;
+      const { DynamoDeploymentsCoordination } = await import(
+        "./dynamodb-deployments-coordination.js"
+      );
+      await new DynamoDeploymentsCoordination(this.ddb, this.tables).closeFence(
+        event.eventId,
+        NATIVE_COORDINATION_PROBLEM,
+      );
+    }
     const control = await this.installationControl();
     if (!control || control.scopeDigest !== installationScopeDigest(scope))
       throw new DeploymentConflict("installation_scope_changed");

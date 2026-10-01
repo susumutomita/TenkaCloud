@@ -64,8 +64,8 @@ const baseProps = {
 afterEach(() => {
   mockLoadPluginSlot.mockReset();
   mockBuildCoordination.mockReset();
-  mockSubmitOp.mockClear();
-  mockGetProjection.mockClear();
+  mockSubmitOp.mockReset().mockResolvedValue({ kind: "ok", projection: {} });
+  mockGetProjection.mockReset().mockResolvedValue({ kind: "ok", projection: {} });
 });
 
 describe("PortalPluginSlots", () => {
@@ -197,12 +197,158 @@ describe("PortalPluginSlots", () => {
     await captured!.submitOp({ kind: "register-route", url: "https://svc" });
     // biome-ignore lint/style/noNonNullAssertion: render asserted the client is bound
     await captured!.getProjection();
-    expect(mockSubmitOp).toHaveBeenCalledWith("https://coord.example", "key-1", {
-      kind: "register-route",
-      url: "https://svc",
-    });
+    expect(mockSubmitOp).toHaveBeenCalledWith(
+      "https://coord.example",
+      "key-1",
+      { kind: "register-route", url: "https://svc" },
+      undefined,
+      expect.any(String),
+    );
     expect(mockRefresh).toHaveBeenCalled();
     expect(mockGetProjection).toHaveBeenCalledWith("https://coord.example", "key-1");
+  });
+
+  it("retains separate uncertain payload keys across rerenders and clears only acknowledged intents", async () => {
+    let captured: { submitOp: (op: unknown) => Promise<unknown> } | undefined;
+    function Panel(props: { coordinationClient?: typeof captured }) {
+      captured = props.coordinationClient;
+      return <div data-testid="retry-client">bound</div>;
+    }
+    mockLoadPluginSlot.mockImplementation((_p, slot) =>
+      slot === "StatusPanel" ? Panel : undefined,
+    );
+    const props = {
+      ...baseProps,
+      coordinationApiUrl: "https://coord.example",
+      sessionToken: "key-1",
+    };
+    const rendered = render(<PortalPluginSlots {...props} />);
+    await screen.findByTestId("retry-client");
+    if (!captured) throw new Error("Expected live client");
+    mockSubmitOp.mockRejectedValueOnce(new Error("response lost"));
+    await expect(captured.submitOp({ move: "A" })).rejects.toThrow("response lost");
+    mockSubmitOp.mockResolvedValueOnce({ kind: "unavailable" });
+    await captured.submitOp({ move: "B" });
+    rendered.rerender(<PortalPluginSlots {...props} score={10} />);
+    await captured.submitOp({ move: "A" });
+    expect(mockSubmitOp.mock.calls[2]?.[4]).toBe(mockSubmitOp.mock.calls[0]?.[4]);
+    await captured.submitOp({ move: "A" });
+    expect(mockSubmitOp.mock.calls[3]?.[4]).not.toBe(mockSubmitOp.mock.calls[0]?.[4]);
+    await captured.submitOp({ move: "B" });
+    expect(mockSubmitOp.mock.calls[4]?.[4]).toBe(mockSubmitOp.mock.calls[1]?.[4]);
+    mockSubmitOp.mockResolvedValueOnce({ kind: "conflict" });
+    await captured.submitOp({ move: "C" });
+    rendered.rerender(<PortalPluginSlots {...props} sessionToken="key-2" jobId="new-run" />);
+    await captured.submitOp({ move: "C" });
+    expect(mockSubmitOp.mock.calls[6]?.[4]).not.toBe(mockSubmitOp.mock.calls[5]?.[4]);
+  });
+
+  it("does not let a late duplicate response clear a newer intent for the same payload", async () => {
+    let captured: { submitOp: (op: unknown) => Promise<unknown> } | undefined;
+    function Panel(props: { coordinationClient?: typeof captured }) {
+      captured = props.coordinationClient;
+      return <div data-testid="concurrent-client">bound</div>;
+    }
+    mockLoadPluginSlot.mockImplementation((_p, slot) =>
+      slot === "StatusPanel" ? Panel : undefined,
+    );
+    const resolve: ((value: { kind: "ok"; projection: object }) => void)[] = [];
+    mockSubmitOp.mockImplementation(() => new Promise((done) => resolve.push(done)));
+    render(
+      <PortalPluginSlots
+        {...baseProps}
+        coordinationApiUrl="https://coord.example"
+        sessionToken="key"
+      />,
+    );
+    await screen.findByTestId("concurrent-client");
+    if (!captured) throw new Error("Expected live client");
+    const first = captured.submitOp({ move: "A" });
+    const duplicate = captured.submitOp({ move: "A" });
+    expect(mockSubmitOp.mock.calls[1]?.[4]).toBe(mockSubmitOp.mock.calls[0]?.[4]);
+    resolve[0]?.({ kind: "ok", projection: {} });
+    await first;
+    const next = captured.submitOp({ move: "A" });
+    expect(mockSubmitOp.mock.calls[2]?.[4]).not.toBe(mockSubmitOp.mock.calls[0]?.[4]);
+    resolve[1]?.({ kind: "ok", projection: {} });
+    await duplicate;
+    const retry = captured.submitOp({ move: "A" });
+    expect(mockSubmitOp.mock.calls[3]?.[4]).toBe(mockSubmitOp.mock.calls[2]?.[4]);
+    resolve[2]?.({ kind: "ok", projection: {} });
+    resolve[3]?.({ kind: "ok", projection: {} });
+    await Promise.all([next, retry]);
+  });
+
+  it("coalesces concurrent slot polls without retaining a completed response or crossing sessions", async () => {
+    let client: { getProjection: () => Promise<unknown> } | undefined;
+    function Panel(props: { coordinationClient?: typeof client }) {
+      client = props.coordinationClient;
+      return <div data-testid="shared-poll-client">bound</div>;
+    }
+    mockLoadPluginSlot.mockImplementation((_p, slot) =>
+      slot === "StatusPanel" ? Panel : undefined,
+    );
+    const pending: { resolve: (value: unknown) => void; reject: (error: Error) => void }[] = [];
+    mockGetProjection.mockImplementation(
+      () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+    );
+    const props = {
+      ...baseProps,
+      coordinationApiUrl: "https://coord.example",
+      sessionToken: "key-1",
+    };
+    const rendered = render(<PortalPluginSlots {...props} />);
+    await screen.findByTestId("shared-poll-client");
+    if (!client) throw new Error("Expected live client");
+    const initialClient = client;
+    const polls = Array.from({ length: 4 }, () => initialClient.getProjection());
+    expect(mockGetProjection).toHaveBeenCalledTimes(1);
+    expect(polls.every((poll) => poll === polls[0])).toBe(true);
+    pending[0]?.resolve({ kind: "ok", projection: { revision: 1 } });
+    await Promise.all(polls);
+    const next = client.getProjection();
+    expect(mockGetProjection).toHaveBeenCalledTimes(2);
+    const rejected = expect(next).rejects.toThrow("offline");
+    pending[1]?.reject(new Error("offline"));
+    await rejected;
+    const oldSession = client.getProjection();
+    rendered.rerender(<PortalPluginSlots {...props} sessionToken="key-2" jobId="run-2" />);
+    const newSession = client.getProjection();
+    expect(mockGetProjection).toHaveBeenCalledTimes(4);
+    pending[2]?.resolve({ kind: "ok", projection: { old: true } });
+    await oldSession;
+    expect(client.getProjection()).toBe(newSession);
+    expect(mockGetProjection).toHaveBeenCalledTimes(4);
+    pending[3]?.resolve({ kind: "ok", projection: { new: true } });
+    await newSession;
+  });
+
+  it("bounds uncertain operations without evicting their retry keys", async () => {
+    let captured: { submitOp: (op: unknown) => Promise<unknown> } | undefined;
+    function Panel(props: { coordinationClient?: typeof captured }) {
+      captured = props.coordinationClient;
+      return <div data-testid="bounded-client">bound</div>;
+    }
+    mockLoadPluginSlot.mockImplementation((_p, slot) =>
+      slot === "StatusPanel" ? Panel : undefined,
+    );
+    render(
+      <PortalPluginSlots
+        {...baseProps}
+        coordinationApiUrl="https://coord.example"
+        sessionToken="key"
+      />,
+    );
+    await screen.findByTestId("bounded-client");
+    if (!captured) throw new Error("Expected live client");
+    expect(await captured.submitOp(undefined)).toEqual({ kind: "rejected", error: "invalid_op" });
+    expect(mockSubmitOp).not.toHaveBeenCalled();
+    mockSubmitOp.mockResolvedValue({ kind: "unavailable" });
+    for (let i = 0; i < 32; i++) await captured.submitOp({ move: i });
+    expect(await captured.submitOp({ move: 32 })).toEqual({ kind: "unavailable" });
+    expect(mockSubmitOp).toHaveBeenCalledTimes(32);
+    await captured.submitOp({ move: 0 });
+    expect(mockSubmitOp.mock.calls[32]?.[4]).toBe(mockSubmitOp.mock.calls[0]?.[4]);
   });
 
   it("should NOT bind a coordination client when the dispatcher URL or session is missing (#1420)", async () => {

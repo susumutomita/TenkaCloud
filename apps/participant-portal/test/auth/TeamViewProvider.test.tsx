@@ -317,6 +317,20 @@ afterEach(() => {
 });
 
 describe("TeamViewProvider polling", () => {
+  it("does not call an unavailable notification endpoint on mount or later polls", async () => {
+    const disabled = ({ children }: { children: ReactNode }) => (
+      <TeamViewProvider config={{ ...config, notificationsEnabled: false }}>
+        {children}
+      </TeamViewProvider>
+    );
+    const { result } = renderHook(() => useTeamView(), { wrapper: disabled });
+    await flush(120_000);
+    expect(mockGetMe).toHaveBeenCalled();
+    expect(mockGetNotifications).not.toHaveBeenCalled();
+    expect(result.current.notificationsNoEvent).toBe(false);
+    expect(result.current.notificationsError).toBeNull();
+  });
+
   it("should expose safe no-op defaults outside the provider", async () => {
     const { result } = renderHook(() => useTeamView());
     await act(async () => {

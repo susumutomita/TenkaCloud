@@ -416,6 +416,32 @@ describe("loadConfig", () => {
         );
       },
     );
+    it("loads native IDs only as a subset of the supported cloud catalog", async () => {
+      const loaded = await loadWithRuntime({
+        mode: "cloud-host",
+        supportedProblemIds: ["hello-world", "ac26-crypto-battle"],
+        nativeProblemIds: ["ac26-crypto-battle"],
+      });
+      expect(loaded.nativeProblemIds).toEqual(["ac26-crypto-battle"]);
+      expect(Object.isFrozen(loaded.nativeProblemIds)).toBe(true);
+      expect(
+        (await loadWithRuntime({ mode: "cloud-host", supportedProblemIds: ["hello-world"] }))
+          .nativeProblemIds,
+      ).toEqual([]);
+    });
+    it.each([
+      { nativeProblemIds: ["unavailable"] },
+      { nativeProblemIds: null },
+      { nativeProblemIds: ["hello-world", "hello-world"] },
+    ])("rejects invalid native capabilities %j", async ({ nativeProblemIds }) => {
+      await expect(
+        loadWithRuntime({
+          mode: "cloud-host",
+          supportedProblemIds: ["hello-world"],
+          nativeProblemIds,
+        }),
+      ).rejects.toThrow();
+    });
     it("loads only the fixed installation competitor role format", async () => {
       const role = `TenkaCloud-${"a".repeat(24)}-deploy-Role`;
       expect((await loadWithRuntime({ competitorRoleName: role })).competitorRoleName).toBe(role);

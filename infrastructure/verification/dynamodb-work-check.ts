@@ -1,12 +1,17 @@
 /** Explicit local-only acceptance. Uses official DynamoDB Local, never AWS or ambient credentials. */
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { CreateTableCommand, DeleteTableCommand, DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DynamoDBDocumentClient,
   GetCommand,
   QueryCommand,
   TransactWriteCommand,
+  UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { z } from "zod";
@@ -22,10 +27,17 @@ import {
   bulkTeardownEvent as clientBulkTeardown,
   createEvent as clientCreateEvent,
 } from "../../apps/application-admin-console/src/api/events-client.js";
+import { submitCoordinationOp as clientCoordinationOp } from "../../apps/participant-portal/src/api/coordination-client.js";
 import { submitFlag as clientSubmitFlag } from "../../apps/participant-portal/src/api/portal-client/scoring.js";
 import { POLL_INTERVAL_MS } from "../../apps/participant-portal/src/constants/polling.js";
 import { type CoreApiClient, createCoreApiClient } from "../../packages/web-kit/src/api-client.js";
+import type { HostPlugin } from "../../scripts/local-host/coordination-core.js";
+import { nativeBattleArtifact } from "../lib/cloud-hosting/execution-artifacts.js";
 import type { CompetitorAccountRecord } from "../lib/problem-deploy/control-data/domain/competitor-accounts.js";
+import {
+  coordinationHeadKey,
+  type NativeCoordinationArtifact,
+} from "../lib/problem-deploy/control-data/domain/coordination.js";
 import {
   contentDigest,
   type DeploymentIdentity,
@@ -38,8 +50,13 @@ import type { TeamRecord } from "../lib/problem-deploy/control-data/domain/teams
 import { DynamoCloudRepository } from "../lib/problem-deploy/control-data/dynamodb-cloud-repository.js";
 import { DynamoDbCompetitorAccountsRepository } from "../lib/problem-deploy/control-data/dynamodb-competitor-accounts-repository.js";
 import { DynamoDeploymentWork } from "../lib/problem-deploy/control-data/dynamodb-deployment-work.js";
+import {
+  type CoordinationWriteMeasurement,
+  DynamoDeploymentsCoordination,
+} from "../lib/problem-deploy/control-data/dynamodb-deployments-coordination.js";
 import { createCloudApp } from "../lib/problem-deploy/handlers/cloud-api/app.js";
 import { createRegisteredConnectionPreparer } from "../lib/problem-deploy/handlers/cloud-api/connection-routes.js";
+import type { NativeProblem } from "../lib/problem-deploy/handlers/cloud-api/execution-config.js";
 import type { CloudParticipantAccess } from "../lib/problem-deploy/handlers/cloud-api/participant-access.js";
 import {
   dispatchExecutionName,
@@ -146,6 +163,7 @@ const teams: TeamRecord[] = Array.from({ length: 25 }, (_, index) => ({
   expiresAt: event.expiresAt,
 }));
 const createdTables: string[] = [];
+let nativeCapacityMet = true;
 async function createTables(names = tables): Promise<void> {
   for (const [kind, TableName] of Object.entries(names)) {
     const indexed = kind !== "teams";
@@ -2825,27 +2843,1157 @@ async function verifyInstallationStopAndDrain() {
   }
 }
 
-try {
-  await createTables();
-  await acceptAndComplete();
-  await scoreConcurrently();
-  await verifyRejections();
-  await verifyHttpDeployment();
-  await verifyRealPolling();
-  await verifyActualClientContracts();
-  await verifyRollbackAndGate();
-  await verifyEventTeardown();
-  await verifyHistoricalTeardownBlocker();
-  await verifyHistoricalTeardownConcurrency();
-  await verifyAccountClients();
-  await verifyParticipantCliAuthorization();
-  await verifyInstallationStopAndDrain();
+interface NativeFixture {
+  readonly clock: () => number;
+  readonly timings: Record<string, number>;
+  readonly io: {
+    readBinaryBytes: number;
+    attemptedWriteBinaryBytes: number;
+    failedCommands: number;
+    commands: number;
+  };
+  readonly repo: DynamoCloudRepository;
+  readonly operations: DynamoDeploymentWork;
+  readonly names: typeof tables;
+  readonly source: EventRecord;
+  readonly roster: TeamRecord[];
+  readonly artifact: NativeCoordinationArtifact;
+  readonly descriptor: NativeProblem;
+  readonly measurements: CoordinationWriteMeasurement[];
+  readonly store: () => DynamoDeploymentsCoordination;
+  readonly app: () => ReturnType<typeof createCloudApp>;
+}
+interface SyntheticNativeState {
+  padding: string;
+  scores: Record<string, number>;
+  operations: number;
+}
+function syntheticNativePlugin(padding: number): HostPlugin {
+  return {
+    initialState: (context) => ({
+      padding: "x".repeat(padding),
+      operations: 0,
+      scores: Object.fromEntries(context.teamIds.map((id) => [id, 0])),
+    }),
+    validateOp: (_state, _id, op) =>
+      (op as { kind: string }).kind === "reject"
+        ? { ok: false, error: "synthetic_rejected" }
+        : { ok: true },
+    applyOp: (raw, id, op) => {
+      const state = raw as SyntheticNativeState;
+      const kind = (op as { kind: string }).kind;
+      const delta = kind === "penalty" ? -2 : 1;
+      return {
+        ...state,
+        operations: state.operations + 1,
+        scores: Object.fromEntries(
+          Object.entries(state.scores).map(([teamId, score]) => [
+            teamId,
+            score + (kind === "all" || teamId === id ? delta : 0),
+          ]),
+        ),
+      };
+    },
+    projectForTeam: (raw, id) => ({ teamId: id, score: (raw as SyntheticNativeState).scores[id] }),
+    teamScores: (raw) => (raw as SyntheticNativeState).scores,
+    tickOnRequest: true,
+    tick: (state) => state,
+  };
+}
+async function nativeFixture(
+  names: typeof tables,
+  count: number,
+  plugin: HostPlugin,
+  descriptor?: NativeProblem,
+  clock: () => number = () => Date.now(),
+): Promise<NativeFixture> {
+  const repo = new DynamoCloudRepository(document, names);
+  const operations = new DynamoDeploymentWork(document, names);
+  const source: EventRecord = {
+    ...event,
+    eventId: ulid(),
+    name: "Synthetic native transaction acceptance",
+    teamCount: count,
+    status: "DRAFT",
+    problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "us-east-1" }],
+  };
+  const roster = Array.from(
+    { length: count },
+    (_, index): TeamRecord => ({
+      eventId: source.eventId,
+      teamId: ulid(),
+      internalSlug: `native-${index}`,
+      teamLoginKey: randomBytes(32).toString("base64url"),
+      authVersion: 1,
+      accessRevoked: false,
+      createdAt: at,
+      updatedAt: at,
+      expiresAt: source.expiresAt,
+    }),
+  );
+  assert.equal(await repo.createEventWithTeams(source, roster), "created");
+  const artifactDigest = contentDigest("synthetic-native-capacity-plugin");
+  descriptor ??= {
+    kind: "coordination",
+    problemId: "ac26-crypto-battle",
+    problemDir: "problems/battles/ac26-crypto-battle",
+    artifactDigest,
+    pluginKey: `plugins/${artifactDigest}.mjs`,
+    catalogKey: `catalogs/${contentDigest("synthetic-native-catalog")}.json`,
+    stateBudget: { bytesPerTeam: 31744, baseBytes: 1536 },
+    name: "Synthetic native Battle",
+    description: "Offline acceptance",
+    instructions: "Play",
+  };
+  const artifact = { ...descriptor, plugin };
+  const measurements: CoordinationWriteMeasurement[] = [];
+  const timings: Record<string, number> = {};
+  const io = { readBinaryBytes: 0, attemptedWriteBinaryBytes: 0, failedCommands: 0, commands: 0 };
+  const store = () =>
+    new DynamoDeploymentsCoordination(
+      document,
+      names,
+      (sample) => measurements.push(sample),
+      (sample) => {
+        timings[sample.phase] = (timings[sample.phase] ?? 0) + sample.elapsedMs;
+      },
+    );
+  document.middlewareStack.add(
+    (next) => async (args) => {
+      // Only this native run's keys; totals include retry attempts and exclude other fixtures.
+      const serializedKeys = JSON.stringify(args.input, (key, value: unknown) =>
+        key === "data" ? undefined : value,
+      );
+      if (!serializedKeys.includes(source.eventId)) return next(args);
+      io.commands++;
+      io.attemptedWriteBinaryBytes += binaryBytes(args.input);
+      const start = performance.now();
+      try {
+        const result = await next(args);
+        io.readBinaryBytes += binaryBytes(result.output);
+        return result;
+      } catch (error) {
+        io.failedCommands++;
+        throw error;
+      } finally {
+        timings.sdkAwait = (timings.sdkAwait ?? 0) + performance.now() - start;
+      }
+    },
+    { step: "initialize", name: `nativeMetrics${source.eventId}` },
+  );
+  const app = () =>
+    createCloudApp({
+      repository: repo,
+      now: clock,
+      organizerAuth: AUTH,
+      allowedOrigins: [],
+      deployment: {
+        work: operations,
+        catalog: async () => ({}),
+        controlPlaneAccount: "123456789012",
+      },
+      coordination: {
+        store: store(),
+        catalog: async () => ({ [artifact.problemId]: artifact }),
+        resolve: async () => ({ descriptor: artifact, plugin }),
+      },
+    });
+  return {
+    clock,
+    timings,
+    io,
+    repo,
+    operations,
+    names,
+    source,
+    roster,
+    artifact,
+    descriptor,
+    measurements,
+    store,
+    app,
+  };
+}
+function binaryBytes(value: unknown): number {
+  if (value instanceof Uint8Array) return value.byteLength;
+  if (Array.isArray(value)) return value.reduce((sum, item) => sum + binaryBytes(item), 0);
+  if (value && typeof value === "object")
+    return Object.values(value).reduce<number>((sum, item) => sum + binaryBytes(item), 0);
+  return 0;
+}
+function nativeMeasurement(fixture: NativeFixture) {
+  return {
+    phaseTotalMs: Object.fromEntries(
+      Object.entries(fixture.timings).map(([key, value]) => [key, Math.round(value)]),
+    ),
+    readBinaryBytes: fixture.io.readBinaryBytes,
+    attemptedWriteBinaryBytes: fixture.io.attemptedWriteBinaryBytes,
+    failedCommandsCumulative: fixture.io.failedCommands,
+    sdkCommandsCumulative: fixture.io.commands,
+    timingScope:
+      "Cumulative per-phase wall time across concurrent requests; SDK awaits include serialization and overlap, not additive latency",
+  };
+}
+
+async function nativeOrganizer(
+  fixture: NativeFixture,
+  suffix: string,
+  method = "POST",
+  data: unknown = {},
+) {
+  return fixture.app().request(
+    `/events/${fixture.source.eventId}${suffix}`,
+    {
+      method,
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": `native-${suffix.replace(/\W/gu, "_")}`,
+      },
+      body: JSON.stringify(data),
+    },
+    {
+      event: {
+        requestContext: {
+          authorizer: {
+            claims: {
+              sub: "synthetic-native-organizer",
+              iss: AUTH.issuer,
+              aud: AUTH.audience,
+              exp: now / 1000 + 3600,
+              token_use: "id",
+              "custom:userRole": "Admin",
+            },
+          },
+        },
+      },
+    },
+  );
+}
+async function nativeCurrent(fixture: NativeFixture) {
+  const source = await fixture.repo.getEvent(fixture.source.eventId);
+  assert.ok(source);
+  return source;
+}
+async function nativeRows(fixture: NativeFixture) {
+  const rows: Record<string, unknown>[] = [];
+  let cursor: Record<string, unknown> | undefined;
+  do {
+    const page = await document.send(
+      new QueryCommand({
+        TableName: fixture.names.deployments,
+        ConsistentRead: true,
+        KeyConditionExpression: "PK = :pk",
+        ExpressionAttributeValues: {
+          ":pk": coordinationHeadKey(fixture.source.eventId, fixture.artifact.problemId).PK,
+        },
+        ...(cursor ? { ExclusiveStartKey: cursor } : {}),
+      }),
+    );
+    rows.push(...(page.Items ?? []));
+    cursor = page.LastEvaluatedKey;
+  } while (cursor);
+  return rows;
+}
+async function nativeMove(
+  fixture: NativeFixture,
+  team: TeamRecord,
+  op: unknown,
+  key: string,
+  clock = fixture.clock,
+) {
+  return fixture.store().request({
+    event: await nativeCurrent(fixture),
+    team,
+    artifact: fixture.artifact,
+    now: clock,
+    operation: { key, hash: contentDigest(JSON.stringify({ op })), op },
+  });
+}
+async function initializeNative(fixture: NativeFixture) {
+  const response = await nativeOrganizer(fixture, "/deploy");
+  assert.equal(response.status, 202, await response.clone().text());
+  const body = (await response.json()) as { initialized: number; enqueued: number };
+  assert.equal(body.initialized, 1);
+  assert.equal(body.enqueued, 0);
+  assert.equal((await nativeCurrent(fixture)).status, "READY");
+  const run = await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId);
+  assert.ok(run);
+  assert.equal(run.roster.length, fixture.roster.length);
+  return run;
+}
+async function nativeClientLoad(fixture: NativeFixture) {
+  const originalFetch = globalThis.fetch;
+  let conflicts = 0;
+  const latencies: number[] = [];
+  const responses: unknown[] = [];
+  const attempts = Array.from({ length: 100 }, () => 0);
+  const errorCodes: Record<string, number> = {};
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const request = new Request(input, init);
+    const response = await fixture.app().request(new URL(request.url).pathname, request);
+    if (response.status !== 200) {
+      const body = z.object({ error: z.string() }).parse(await response.clone().json());
+      errorCodes[body.error] = (errorCodes[body.error] ?? 0) + 1;
+    }
+    return response;
+  }) as typeof fetch;
+  const begin = performance.now();
+  try {
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 100 }, async (_, index) => {
+        const team = fixture.roster[index % 25];
+        assert.ok(team);
+        const start = performance.now();
+        for (let attempt = 0; attempt < 12; attempt++) {
+          attempts[index] = attempt + 1;
+          const result = await clientCoordinationOp(
+            "https://native.invalid",
+            team.teamLoginKey,
+            { kind: "point" },
+            undefined,
+            `native-client-${index}`,
+          );
+          if (result.kind === "conflict") {
+            conflicts++;
+            await new Promise((resolve) => setTimeout(resolve, 30 + (index % 29)));
+            continue;
+          }
+          assert.equal(result.kind, "ok", JSON.stringify(result));
+          responses[index] = result;
+          latencies.push(performance.now() - start);
+          return;
+        }
+        assert.fail("Native client exhausted bounded conflict retry");
+      }),
+    );
+    const elapsedMs = Math.round(performance.now() - begin);
+    const before = await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId);
+    assert.ok(before);
+    const committed = (before.match.state as SyntheticNativeState).operations;
+    const receipts = new Set(
+      (await nativeRows(fixture)).filter((row) => row.requestHash).map((row) => row.SK),
+    );
+    const receiptIndices = Array.from({ length: 100 }, (_, index) => index).filter((index) => {
+      const team = fixture.roster[index % 25];
+      assert.ok(team);
+      const operationDigest = contentDigest(`native-client-${index}`);
+      return receipts.has(`RECEIPT#${before.runId}#${team.teamId}#${operationDigest}`);
+    });
+    assert.equal(receiptIndices.length, committed);
+    assert.equal(
+      Object.values(before.match.scores).reduce((a, b) => a + b, 0),
+      committed,
+    );
+    for (const index of receiptIndices) {
+      const team = fixture.roster[index % 25];
+      assert.ok(team);
+      const replay = await clientCoordinationOp(
+        "https://native.invalid",
+        team.teamLoginKey,
+        { kind: "point" },
+        undefined,
+        `native-client-${index}`,
+      );
+      assert.equal(replay.kind, "ok");
+      if (responses[index] !== undefined) assert.deepEqual(replay, responses[index]);
+    }
+    const failed = outcomes.filter((outcome) => outcome.status === "rejected");
+    const unexpected = failed.filter(
+      (outcome) =>
+        !(outcome.reason instanceof Error) ||
+        !outcome.reason.message.includes("exhausted bounded conflict retry"),
+    );
+    const finalHead = await document.send(
+      new GetCommand({
+        TableName: fixture.names.deployments,
+        Key: coordinationHeadKey(fixture.source.eventId, fixture.artifact.problemId),
+        ConsistentRead: true,
+      }),
+    );
+    const capacityMet = failed.length === 0 && committed === 100;
+    nativeCapacityMet &&= capacityMet;
+    assert.equal(
+      (await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId))?.revision,
+      before.revision,
+    );
+    assert.equal(
+      (await fixture.repo.listTeamScores(fixture.source.eventId)).reduce(
+        (sum, row) => sum + row.score,
+        0,
+      ),
+      committed,
+    );
+    latencies.sort((a, b) => a - b);
+    console.log(
+      JSON.stringify({
+        milestone: "real-dynamodb-native-100-client-operations",
+        teams: 25,
+        participants: 100,
+        successfulOperations: committed,
+        exactReceiptReplays: receiptIndices.length,
+        totalScore: committed,
+        allOperationIntentsEventuallyAcknowledged: capacityMet,
+        finalSnapshotBytes: Buffer.byteLength(JSON.stringify(before.match)),
+        outcomeCounts: {
+          acknowledged: latencies.length,
+          retryExhaustions: failed.length - unexpected.length,
+          unexpectedErrors: unexpected.length,
+        },
+        errorCodes,
+        admissionHeld: typeof finalHead.Item?.admissionOwner === "string",
+        remainingLeaseMs:
+          typeof finalHead.Item?.admissionExpiresAt === "number"
+            ? finalHead.Item.admissionExpiresAt - fixture.clock()
+            : 0,
+        retryAttemptHistogram: Object.fromEntries(
+          [...new Set(attempts)]
+            .sort((a, b) => a - b)
+            .map((count) => [String(count), attempts.filter((value) => value === count).length]),
+        ),
+        conflictsRetriedByActualClient: conflicts,
+        elapsedMs,
+        p95Ms: Math.round(latencies[94] ?? 0),
+        scope:
+          "Real Dynamo transactions through existing SPA client and Hono; synthetic large state plugin",
+        ...nativeMeasurement(fixture),
+      }),
+    );
+    for (const outcome of unexpected) throw outcome.reason;
+    return before;
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+async function nativePolling(fixture: NativeFixture, canonical = false) {
+  const counts = {
+    commands: 0,
+    readRows: 0,
+    writes: 0,
+    deploymentEventQueries: 0,
+    projectionConflicts: 0,
+    successfulProjections: 0,
+  };
+  document.middlewareStack.add(
+    (next, context) => async (args) => {
+      const result = await next(args);
+      counts.commands++;
+      const out = z
+        .object({
+          Items: z.array(z.unknown()).optional(),
+          Responses: z.array(z.unknown()).optional(),
+          Item: z.unknown().optional(),
+        })
+        .passthrough()
+        .parse(result.output);
+      counts.readRows += out.Items?.length ?? out.Responses?.length ?? (out.Item ? 1 : 0);
+      const input = z
+        .object({
+          TransactItems: z.array(z.record(z.unknown())).optional(),
+          IndexName: z.string().optional(),
+          KeyConditionExpression: z.string().optional(),
+          TableName: z.string().optional(),
+        })
+        .passthrough()
+        .parse(args.input);
+      if (["TransactWriteCommand", "TransactWriteItemsCommand"].includes(context.commandName ?? ""))
+        counts.writes += (input.TransactItems ?? []).filter(
+          (item) => item.Put || item.Update || item.Delete,
+        ).length;
+      if (
+        input.TableName === fixture.names.deployments &&
+        input.IndexName === "GSI1" &&
+        !input.KeyConditionExpression?.includes("begins_with")
+      )
+        counts.deploymentEventQueries++;
+      return result;
+    },
+    { step: "initialize", name: "nativePollingMeasurement" },
+  );
+  const started = performance.now();
+  try {
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 100 }, async (_, index) => {
+        const team = fixture.roster[index % 25];
+        assert.ok(team);
+        for (const route of [
+          "/portal/me",
+          "/portal/me/coordination/projection",
+          "/portal/leaderboard",
+        ]) {
+          const response = await fixture
+            .app()
+            .request(route, { headers: { authorization: `Bearer ${team.teamLoginKey}` } });
+          if (canonical && route.endsWith("/projection") && response.status === 409) {
+            counts.projectionConflicts++;
+            continue;
+          }
+          assert.equal(response.status, 200, await response.clone().text());
+          if (route.endsWith("/projection")) counts.successfulProjections++;
+          if (route === "/portal/me") {
+            const body = (await response.json()) as {
+              problems: { runtimeKind?: string; jobId: string; awsAccountId?: string }[];
+            };
+            assert.equal(body.problems[0]?.runtimeKind, "coordination");
+            assert.equal(body.problems[0]?.awsAccountId, undefined);
+          }
+        }
+      }),
+    );
+    for (const outcome of outcomes) if (outcome.status === "rejected") throw outcome.reason;
+    if (canonical) assert.ok(counts.successfulProjections > 0);
+    if (!canonical)
+      assert.equal(counts.writes, 0, "Semantic no-op polling must not republish large snapshots");
+    assert.equal(counts.deploymentEventQueries, 0);
+    console.log(
+      JSON.stringify({
+        milestone: canonical
+          ? "real-dynamodb-canonical-http-polling"
+          : "real-dynamodb-native-http-polling",
+        participants: 100,
+        teams: 25,
+        requests: 300,
+        configuredShellPollIntervalMs: POLL_INTERVAL_MS,
+        configuredCryptoPollIntervalMs: 5000,
+        elapsedMs: Math.round(performance.now() - started),
+        ...counts,
+        authority: "Dynamo HEAD/chunks and team SCORE rows; fresh repository per request",
+        ...nativeMeasurement(fixture),
+      }),
+    );
+  } finally {
+    document.middlewareStack.remove("nativePollingMeasurement");
+  }
+}
+async function nativeFailureBoundaries(fixture: NativeFixture) {
+  const team = fixture.roster[0];
+  assert.ok(team);
+  const before = await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId);
+  assert.ok(before);
+  let failure: "before" | "after" | undefined = "before";
+  document.middlewareStack.add(
+    (next, context) => async (args) => {
+      if (
+        !["TransactWriteCommand", "TransactWriteItemsCommand"].includes(
+          context.commandName ?? "",
+        ) ||
+        !failure
+      )
+        return next(args);
+      const candidates = z
+        .object({
+          TransactItems: z.array(
+            z.object({ Put: z.object({ Item: z.record(z.unknown()) }).optional() }).passthrough(),
+          ),
+        })
+        .parse(args.input);
+      if (!candidates.TransactItems.some((item) => item.Put?.Item.SK === "HEAD")) return next(args);
+      const when = failure;
+      failure = undefined;
+      if (when === "before") throw new Error("synthetic interruption before commit");
+      await next(args);
+      throw new Error("synthetic lost response after commit");
+    },
+    { step: "initialize", name: "nativeCommitInterruption" },
+  );
+  try {
+    await assert.rejects(
+      () => nativeMove(fixture, team, { kind: "penalty" }, "native-before-commit"),
+      /before commit/u,
+    );
+    assert.equal(
+      (await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId))?.revision,
+      before.revision,
+    );
+    failure = "after";
+    await assert.rejects(
+      () => nativeMove(fixture, team, { kind: "penalty" }, "native-after-commit"),
+      /after commit/u,
+    );
+    const replay = await nativeMove(fixture, team, { kind: "penalty" }, "native-after-commit");
+    assert.equal(replay.status, 200);
+    assert.equal(
+      (await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId))?.match
+        .scores[team.teamId],
+      2,
+    );
+    await assert.rejects(
+      () => nativeMove(fixture, team, { kind: "point" }, "native-after-commit"),
+      /idempotency_key_reused/u,
+    );
+    const rejected = await nativeMove(fixture, team, { kind: "reject" }, "native-rejected-op");
+    assert.equal(rejected.status, 422);
+    assert.deepEqual(
+      await nativeMove(fixture, team, { kind: "reject" }, "native-rejected-op"),
+      rejected,
+    );
+  } finally {
+    document.middlewareStack.remove("nativeCommitInterruption");
+  }
+  assert.equal(
+    await fixture.repo.rotateTeamAccess(team, randomBytes(32).toString("base64url"), at),
+    "updated",
+  );
+  const rotated = await fixture.repo.getTeam(team.eventId, team.teamId);
+  assert.ok(rotated);
+  await assert.rejects(
+    () => nativeMove(fixture, team, { kind: "point" }, "native-revoked-key"),
+    /unauthorized/u,
+  );
+  fixture.roster[0] = rotated;
+  const lock = await nativeOrganizer(fixture, "/lock-scoring");
+  assert.equal(lock.status, 200, await lock.clone().text());
+  await assert.rejects(
+    () => nativeMove(fixture, rotated, { kind: "point" }, "native-locked-op"),
+    /scoring_locked/u,
+  );
+  assert.equal((await nativeOrganizer(fixture, "/lock-scoring", "DELETE")).status, 200);
+  const rows = await nativeRows(fixture);
+  const chunks = rows.filter((row) => String(row.SK).startsWith("SNAPSHOT#"));
+  assert.equal(chunks.length, 4);
+  assert.ok(rows.some((row) => String(row.SK).startsWith("SCORE#")));
+  const history = await fixture
+    .store()
+    .listScoreEvents(fixture.source.eventId, fixture.artifact.problemId, rotated.teamId);
+  assert.ok(history.some((row) => row.points === -2));
   console.log(
     JSON.stringify({
-      outcome: "passed",
+      milestone: "real-dynamodb-native-recovery-boundaries",
+      beforeCommit: "no partial writes",
+      lostResponse: "one signed penalty and exact receipt replay",
+      changedBody: "rejected",
+      rejectedOperation: "durable422 receipt",
+      revokedKey: "rejected",
+      scoringLock: "rejected; unlock resumes",
+      fixedSnapshotChunks: chunks.length,
+      hiddenMatchSecret: "not returned in participant projections",
+    }),
+  );
+}
+function isNativePublication(input: unknown): boolean {
+  const parsed = z
+    .object({
+      TransactItems: z
+        .array(
+          z.object({ Put: z.object({ Item: z.record(z.unknown()) }).optional() }).passthrough(),
+        )
+        .optional(),
+    })
+    .passthrough()
+    .parse(input);
+  return parsed.TransactItems?.some((item) => item.Put?.Item.SK === "HEAD") ?? false;
+}
+async function beforeNativePublication<T>(
+  before: () => Promise<void>,
+  action: () => Promise<T>,
+): Promise<T> {
+  let pending = true;
+  document.middlewareStack.add(
+    (next) => async (args) => {
+      if (pending && isNativePublication(args.input)) {
+        pending = false;
+        await before();
+      }
+      return next(args);
+    },
+    { step: "initialize", name: "nativePublicationRace" },
+  );
+  try {
+    return await action();
+  } finally {
+    document.middlewareStack.remove("nativePublicationRace");
+  }
+}
+async function nativeAdmissionBoundaries(fixture: NativeFixture, advance: () => void) {
+  let team = fixture.roster[0];
+  assert.ok(team);
+  const key = coordinationHeadKey(fixture.source.eventId, fixture.artifact.problemId);
+  const crashedOwner = randomUUID();
+  await document.send(
+    new UpdateCommand({
+      TableName: fixture.names.deployments,
+      Key: key,
+      UpdateExpression: "SET admissionOwner = :owner, admissionExpiresAt = :until",
+      ExpressionAttributeValues: { ":owner": crashedOwner, ":until": fixture.clock() + 5000 },
+    }),
+  );
+  advance();
+  await nativeMove(fixture, team, { kind: "point" }, "native-expired-admission");
+  const reclaimed = await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId);
+  assert.ok(reclaimed);
+  let raw = await document.send(
+    new GetCommand({ TableName: fixture.names.deployments, Key: key, ConsistentRead: true }),
+  );
+  assert.equal(raw.Item?.admissionOwner, undefined);
+  const replacement = randomUUID();
+  const staleTeam = team;
+  const staleClock = fixture.clock();
+  await assert.rejects(
+    () =>
+      beforeNativePublication(
+        async () => {
+          await document.send(
+            new UpdateCommand({
+              TableName: fixture.names.deployments,
+              Key: key,
+              UpdateExpression: "SET admissionOwner = :owner, admissionExpiresAt = :until",
+              ExpressionAttributeValues: {
+                ":owner": replacement,
+                ":until": fixture.clock() + 5000,
+              },
+            }),
+          );
+        },
+        () =>
+          nativeMove(
+            fixture,
+            staleTeam,
+            { kind: "point" },
+            "native-replaced-owner",
+            () => staleClock,
+          ),
+      ),
+    /coordination_conflict/u,
+  );
+  raw = await document.send(
+    new GetCommand({ TableName: fixture.names.deployments, Key: key, ConsistentRead: true }),
+  );
+  assert.equal(
+    raw.Item?.admissionOwner,
+    replacement,
+    "Stale release must not erase replacement ownership",
+  );
+  assert.equal(
+    (await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId))?.revision,
+    reclaimed.revision,
+  );
+  await document.send(
+    new UpdateCommand({
+      TableName: fixture.names.deployments,
+      Key: key,
+      UpdateExpression: "REMOVE admissionOwner, admissionExpiresAt",
+      ConditionExpression: "admissionOwner = :owner",
+      ExpressionAttributeValues: { ":owner": replacement },
+    }),
+  );
+  await nativeMove(fixture, team, { kind: "point" }, "native-replaced-owner");
+  const beforeRevocation = await fixture
+    .store()
+    .read(fixture.source.eventId, fixture.artifact.problemId);
+  const revoked = team;
+  await assert.rejects(
+    () =>
+      beforeNativePublication(
+        async () => {
+          assert.equal(
+            await fixture.repo.rotateTeamAccess(revoked, randomBytes(32).toString("base64url"), at),
+            "updated",
+          );
+        },
+        () => nativeMove(fixture, revoked, { kind: "point" }, "native-admitted-revocation"),
+      ),
+    /unauthorized/u,
+  );
+  assert.equal(
+    (await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId))?.revision,
+    beforeRevocation?.revision,
+  );
+  team = await fixture.repo.getTeam(team.eventId, team.teamId);
+  assert.ok(team);
+  fixture.roster[0] = team;
+  const currentTeam = team;
+  await assert.rejects(
+    () =>
+      beforeNativePublication(
+        async () => {
+          await fixture.store().changeSchedule({
+            event: await nativeCurrent(fixture),
+            artifact: fixture.artifact,
+            patch: {
+              status: "TEARDOWN",
+              endsAt: new Date(fixture.clock()).toISOString(),
+              scoringLocked: true,
+            },
+            now: fixture.clock,
+            close: true,
+          });
+        },
+        () => nativeMove(fixture, currentTeam, { kind: "point" }, "native-admitted-close"),
+      ),
+    /event_changed/u,
+  );
+  const closed = await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId);
+  assert.ok(closed?.closed);
+  assert.deepEqual(closed.match.scores, beforeRevocation?.match.scores);
+  raw = await document.send(
+    new GetCommand({ TableName: fixture.names.deployments, Key: key, ConsistentRead: true }),
+  );
+  assert.equal(raw.Item?.admissionOwner, undefined);
+  console.log(
+    JSON.stringify({
+      milestone: "real-dynamodb-native-admission-fences",
+      interruptedOwner: "expired claim reacquired",
+      replacedOwner: "late publication rejected; replacement lease preserved",
+      revocationBeforeCommit: "rejected without score/receipt",
+      closeBeforeCommit: "settles run and fences admitted writer",
+      successfulRelease: "same transaction as state/score/receipt",
+      syntheticDataOnly: true,
+    }),
+  );
+}
+
+async function nativeStaggeredPolling(
+  fixture: NativeFixture,
+  slotsPerParticipant = 1,
+): Promise<void> {
+  const streams = 100 * slotsPerParticipant;
+  const requestCount = streams * 3;
+  const offsetStep = 5000 / streams;
+  const started = performance.now();
+  const before = { ...fixture.io };
+  const latencies: number[] = [];
+  const statuses: Record<string, number> = {};
+  let responseBytes = 0;
+  const outcomes = await Promise.allSettled(
+    Array.from({ length: requestCount }, async (_, index) => {
+      const stream = index % streams;
+      const participant = stream % 100;
+      const round = Math.floor(index / streams);
+      const team = fixture.roster[participant % 25];
+      assert.ok(team);
+      const due = round * 5000 + stream * offsetStep;
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.max(0, due - (performance.now() - started))),
+      );
+      const at = performance.now();
+      const result = await fixture.app().request("/portal/me/coordination/projection", {
+        headers: { authorization: `Bearer ${team.teamLoginKey}` },
+      });
+      latencies.push(performance.now() - at);
+      statuses[String(result.status)] = (statuses[String(result.status)] ?? 0) + 1;
+      responseBytes += Buffer.byteLength(await result.text());
+      assert.ok(
+        result.status === 200 || result.status === 409,
+        `Unexpected canonical poll status${result.status}`,
+      );
+    }),
+  );
+  for (const outcome of outcomes) if (outcome.status === "rejected") throw outcome.reason;
+  nativeCapacityMet &&= (statuses["200"] ?? 0) === requestCount;
+  latencies.sort((a, b) => a - b);
+  const run = await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId);
+  assert.ok(run);
+  const total = Object.values(run.match.scores).reduce((a, b) => a + b, 0);
+  assert.equal(total, 10, "Polling cannot duplicate the one legitimate LEAK award");
+  assert.equal(
+    (await fixture.repo.listTeamScores(fixture.source.eventId)).reduce(
+      (a, row) => a + row.score,
+      0,
+    ),
+    total,
+  );
+  console.log(
+    JSON.stringify({
+      milestone:
+        slotsPerParticipant === 1
+          ? "real-dynamodb-canonical-staggered-polling"
+          : "real-dynamodb-canonical-help-open-polling",
+      participants: 100,
+      teams: 25,
+      cycles: 3,
+      slotsPerParticipant,
+      perClientIntervalMs: 5000,
+      deterministicOffsetStepMs: offsetStep,
+      requests: requestCount,
+      elapsedMs: Math.round(performance.now() - started),
+      p50Ms: Math.round(latencies[Math.ceil(requestCount * 0.5) - 1] ?? 0),
+      p95Ms: Math.round(latencies[Math.ceil(requestCount * 0.95) - 1] ?? 0),
+      p99Ms: Math.round(latencies[Math.ceil(requestCount * 0.99) - 1] ?? 0),
+      statuses,
+      responseBytes,
+      readBinaryBytes: fixture.io.readBinaryBytes - before.readBinaryBytes,
+      attemptedWriteBinaryBytes:
+        fixture.io.attemptedWriteBinaryBytes - before.attemptedWriteBinaryBytes,
+      sdkCommands: fixture.io.commands - before.commands,
+      failedSdkCommands: fixture.io.failedCommands - before.failedCommands,
+      exactlyOnceTotalScore: total,
+      scope:
+        "Steady staggered profile; independent of the simultaneous-refresh burst result; no AWS capacity/cost claim",
+    }),
+  );
+}
+
+function verifyCanonicalClockSemantics(plugin: HostPlugin, raw: unknown, teamId: string): void {
+  const tick = plugin.tick;
+  const scores = plugin.teamScores;
+  assert.ok(tick && scores);
+  const start = z.object({ startedAtMs: z.number() }).passthrough().parse(raw).startedAtMs;
+  const first = tick(structuredClone(raw), start + 5000);
+  const clockChained = tick(first, start + 10000);
+  const clockDirect = tick(structuredClone(raw), start + 10000);
+  assert.equal(
+    contentDigest(JSON.stringify(clockChained)),
+    contentDigest(JSON.stringify(clockDirect)),
+  );
+  const chained = tick(tick(structuredClone(raw), start + 60000), start + 600000);
+  const direct = tick(structuredClone(raw), start + 600000);
+  assert.equal(scores(chained)[teamId], 0);
+  assert.equal(scores(direct)[teamId], 10);
+  console.log(
+    JSON.stringify({
+      milestone: "canonical-tick-semigroup-counterexample",
+      clockOnlySampleEqual: true,
+      meaningfulIntermediateTickMs: 60000,
+      finalTickMs: 600000,
+      chainedScore: 0,
+      skippedTickScore: 10,
+      guardrail: "Do not round time or elide meaningful ticks; unseen-Order expiry changes scoring",
+    }),
+  );
+}
+
+async function nativeCanonicalGame(names: typeof tables) {
+  const bundled = nativeBattleArtifact(new URL("../..", import.meta.url).pathname);
+  const scratch = mkdtempSync(join(tmpdir(), "tenkacloud-canonical-native-"));
+  const moduleFile = join(scratch, `${bundled.descriptor.artifactDigest}.mjs`);
+  writeFileSync(moduleFile, bundled.source);
+  let loaded: { default: HostPlugin };
+  try {
+    loaded = (await import(pathToFileURL(moduleFile).href)) as { default: HostPlugin };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+  const fixture = await nativeFixture(
+    names,
+    25,
+    loaded.default,
+    {
+      ...bundled.descriptor,
+      problemDir: "problems/battles/ac26-crypto-battle",
+      catalogKey: `catalogs/${contentDigest("canonical-native-acceptance")}.json`,
+    },
+    () => Date.now(),
+  );
+  await initializeNative(fixture);
+  // Exercise the unchanged real reducer against the real transactional adapter.
+  for (const [index, team] of fixture.roster.entries())
+    assert.equal(
+      (await nativeMove(fixture, team, { kind: "ready" }, `canonical-ready-${index}`)).status,
+      200,
+    );
+  const team = fixture.roster[0];
+  assert.ok(team);
+  const projection = await fixture.store().request({
+    event: await nativeCurrent(fixture),
+    team,
+    artifact: fixture.artifact,
+    now: fixture.clock,
+  });
+  assert.equal(projection.status, 200);
+  const serialized = JSON.stringify(projection.body);
+  const state = await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId);
+  assert.ok(state);
+  assert.ok(!serialized.includes(state.match.matchSecret));
+  assert.equal(state.roster.length, 25);
+  console.log(
+    JSON.stringify({
+      milestone: "real-dynamodb-canonical-initial-state",
+      teams: 25,
+      readyOperations: 25,
+      actualStateBytes: Buffer.byteLength(JSON.stringify(state.match)),
+      ...nativeMeasurement(fixture),
+    }),
+  );
+  const contracts = z
+    .object({
+      contracts: z.array(
+        z.object({ id: z.string(), teamId: z.string(), allowedMethods: z.array(z.string()) }),
+      ),
+    })
+    .parse(state.match.state).contracts;
+  const own = contracts.find(
+    (contract) => contract.teamId === team.teamId && contract.allowedMethods.includes("leak"),
+  );
+  assert.ok(own, "The canonical opening share Order must remain playable");
+  const leak = { kind: "leak", contractId: own.id };
+  const result = await nativeMove(fixture, team, leak, "canonical-first-leak");
+  assert.equal(result.status, 200);
+  assert.equal(
+    contentDigest(JSON.stringify(await nativeMove(fixture, team, leak, "canonical-first-leak"))),
+    contentDigest(JSON.stringify(result)),
+  );
+  const after = await fixture.store().read(fixture.source.eventId, fixture.artifact.problemId);
+  assert.ok(after);
+  const awarded = after.match.scores[team.teamId];
+  assert.ok(awarded !== undefined && awarded > 0);
+  verifyCanonicalClockSemantics(loaded.default, after.match.state, team.teamId);
+  assert.equal(
+    (await fixture.repo.listTeamScores(fixture.source.eventId)).find(
+      (row) => row.teamId === team.teamId,
+    )?.score,
+    awarded,
+  );
+  const other = fixture.roster[1];
+  assert.ok(other);
+  assert.equal((await nativeMove(fixture, other, leak, "canonical-foreign-order")).status, 422);
+  await nativePolling(fixture, true);
+  await nativeStaggeredPolling(fixture);
+  await nativeStaggeredPolling(fixture, 2);
+  assert.equal((await nativeOrganizer(fixture, "/end")).status, 200);
+  await assert.rejects(
+    () => nativeMove(fixture, team, { kind: "ready" }, "canonical-after-end"),
+    /event_ended/u,
+  );
+  console.log(
+    JSON.stringify({
+      milestone: "real-dynamodb-canonical-crypto-battle",
+      teams: 25,
+      readyOperations: 25,
+      pluginBundleBytes: Buffer.byteLength(bundled.source),
+      stateBytes: Buffer.byteLength(JSON.stringify(state.match)),
+      declared25TeamBudget: 31744 * 25 + 1536,
+      schemaVersion: state.match.stateSchemaVersion,
+      revision: state.revision,
+      pluginDigest: bundled.descriptor.artifactDigest,
+      operations:
+        "canonical ready, own LEAK, duplicate receipt, foreign Order refusal, organizer END and final projection",
+      firstLeakAward: awarded,
+      ...nativeMeasurement(fixture),
+    }),
+  );
+  return fixture;
+}
+async function closeNative(fixture: NativeFixture) {
+  const result = await nativeOrganizer(fixture, "", "DELETE");
+  assert.equal(result.status, 202, await result.clone().text());
+  const source = await nativeCurrent(fixture);
+  assert.equal(source.status, "ARCHIVED");
+  assert.equal(source.teardownExpected, 0);
+  assert.equal(source.teardownCompleted, 0);
+  assert.equal(
+    (await fixture.store().read(source.eventId, fixture.artifact.problemId))?.closed,
+    true,
+  );
+  assert.equal((await nativeOrganizer(fixture, "", "DELETE")).status, 200);
+}
+async function verifyNativeCoordination(): Promise<void> {
+  const names = {
+    events: `${prefix}-native-events`,
+    teams: `${prefix}-native-teams`,
+    deployments: `${prefix}-native-deployments`,
+  };
+  await createTables(names);
+  const canonical = await nativeCanonicalGame(names);
+  let nativeOffset = 0;
+  const fixture = await nativeFixture(
+    names,
+    25,
+    syntheticNativePlugin(795136),
+    undefined,
+    () => Date.now() + nativeOffset,
+  );
+  const initial = await initializeNative(fixture);
+  const snapshotBytes = Buffer.byteLength(JSON.stringify(initial.match));
+  assert.ok(snapshotBytes > 795136);
+  await nativeClientLoad(fixture);
+  await nativePolling(fixture);
+  await nativeFailureBoundaries(fixture);
+  await nativeAdmissionBoundaries(fixture, () => {
+    nativeOffset += 6000;
+  });
+  const maximum = await nativeFixture(names, 48, syntheticNativePlugin(1536 + 31744 * 48));
+  await initializeNative(maximum);
+  const team = maximum.roster[0];
+  assert.ok(team);
+  assert.equal(
+    (await nativeMove(maximum, team, { kind: "all" }, "native-maximum-roster")).status,
+    200,
+  );
+  assert.equal((await maximum.repo.listTeamScores(maximum.source.eventId)).length, 48);
+  const largest = maximum.measurements.reduce((a, b) =>
+    a.bytesUpperBound > b.bytesUpperBound ? a : b,
+  );
+  assert.ok(
+    largest.items <= 100 &&
+      largest.maxItemBytes < 400 * 1024 &&
+      largest.bytesUpperBound < 4 * 1024 * 1024,
+  );
+  console.log(
+    JSON.stringify({
+      milestone: "real-dynamodb-native-transaction-bounds",
+      synthetic25TeamSnapshotBytes: snapshotBytes,
+      maximumSupportedTeams: 48,
+      changedScoreRows: 48,
+      ...largest,
+      snapshot: "fixed slots, HEAD CAS, score map ledger and response receipt commit together",
+    }),
+  );
+  const scope = {
+    environment: "dev",
+    account: "123456789012",
+    region: "us-east-1",
+    applicationStackId:
+      "arn:aws:cloudformation:us-east-1:123456789012:stack/tenkacloud-cloud-dev/00000000-0000-0000-0000-000000000001",
+    backendStackId:
+      "arn:aws:cloudformation:us-east-1:123456789012:stack/tenkacloud-cloud-problem-deploy-dev/00000000-0000-0000-0000-000000000002",
+  };
+  await fixture.repo.stopAcceptingInstallation(scope, at);
+  await assert.rejects(
+    () => nativeMove(maximum, team, { kind: "point" }, "native-after-stop"),
+    /coordination_conflict/u,
+  );
+  const stillOpen = await nativeCurrent(maximum);
+  await assert.rejects(
+    () => maximum.operations.closeEvent(stillOpen, at),
+    /coordination_not_settled/u,
+  );
+  for (const current of [fixture, maximum, canonical]) await closeNative(current);
+  await fixture.repo.confirmInstallationDrained(scope, at);
+  await fixture.repo.confirmInstallationDrained(scope, at);
+  assert.equal((await fixture.repo.installationControl())?.status, "DRAINED");
+  console.log(
+    JSON.stringify({
+      milestone: "real-dynamodb-native-global-drain",
+      nativeEvents: 3,
+      awsTargets: 0,
+      retainedScores: (await fixture.repo.listTeamScores(fixture.source.eventId)).reduce(
+        (sum, row) => sum + row.score,
+        0,
+      ),
+      outcome:
+        "all native snapshots settled before ARCHIVED and DRAINED; interrupted/repeated DELETE safe",
+      scope: "Synthetic data, existing three-table schema, no AWS exercise or account connection",
+    }),
+  );
+}
+
+const nativeOnly = process.argv[3] === "--native-only";
+if (process.argv.length > 4 || (process.argv[3] !== undefined && !nativeOnly))
+  throw new Error("Only the optional --native-only focused acceptance selector is supported.");
+try {
+  if (!nativeOnly) {
+    await createTables();
+    await acceptAndComplete();
+    await scoreConcurrently();
+    await verifyRejections();
+    await verifyHttpDeployment();
+    await verifyRealPolling();
+    await verifyActualClientContracts();
+    await verifyRollbackAndGate();
+    await verifyEventTeardown();
+    await verifyHistoricalTeardownBlocker();
+    await verifyHistoricalTeardownConcurrency();
+    await verifyAccountClients();
+    await verifyParticipantCliAuthorization();
+    await verifyInstallationStopAndDrain();
+  }
+  await verifyNativeCoordination();
+  console.log(
+    JSON.stringify({
+      outcome: nativeCapacityMet ? "passed" : "consistency-passed-capacity-unmet",
       target: "official DynamoDB Local, synthetic work, no AWS execution",
     }),
   );
+  if (!nativeCapacityMet) process.exitCode = 2;
 } finally {
   try {
     for (const TableName of createdTables) await client.send(new DeleteTableCommand({ TableName }));

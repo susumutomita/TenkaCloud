@@ -10,7 +10,7 @@ import { EVENT_ID_RE, type EventDetail } from "../api/events-client";
 import { EventDangerZone } from "../components/event-detail/EventDangerZone";
 import { EventHeaderActions } from "../components/event-detail/EventHeaderActions";
 import { buildEventDangerZoneController } from "../components/event-detail/event-danger-zone-models";
-import { type AppConfig, isLocalHost } from "../config";
+import { type AppConfig, isCloudHost, isLocalHost } from "../config";
 import { useEventDetail } from "../hooks/useEventDetail";
 import { useEventOperations, validateEndsAtInput } from "../hooks/useEventOperations";
 import { useT } from "../i18n";
@@ -65,6 +65,10 @@ function summarizeDeployments(detail: EventDetail): DeploymentCounts {
     },
     { completeCount: 0, failedCount: 0, inFlightCount: 0, totalDeployCount: 0 },
   );
+  for (const run of detail.nativeRuns ?? []) {
+    counts.totalDeployCount++;
+    if (run.status === "COMPLETE" || run.status === "CLOSED") counts.completeCount++;
+  }
   return {
     ...counts,
     allDoneCount: counts.completeCount + counts.failedCount,
@@ -134,6 +138,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const operations = useEventOperations({
     apiClient,
     canMutateTenant: canMutate,
+    cloudHost: isCloudHost(config),
     detail,
     eventId: eventIdForOperations,
     refresh,
@@ -290,13 +295,15 @@ function renderTabs({
   } as const;
   // The red-team Disruptions tab is feature-flagged (config.features.redTeam) — hidden until the
   // cross-account executor is verified live, so operators don't fire into an unproven path.
-  return EVENT_TAB_IDS.filter((id) => id !== "disruptions" || config.features?.redTeam).map(
-    (id) => ({
-      id,
-      label: t(`event_detail.tab_${id}`),
-      content: <SpaceBetween size="l">{contentByTab[id]}</SpaceBetween>,
-    }),
-  );
+  return EVENT_TAB_IDS.filter(
+    (id) =>
+      (id !== "disruptions" || config.features?.redTeam) &&
+      (!isCloudHost(config) || (id !== "notifications" && id !== "gate")),
+  ).map((id) => ({
+    id,
+    label: t(`event_detail.tab_${id}`),
+    content: <SpaceBetween size="l">{contentByTab[id]}</SpaceBetween>,
+  }));
 }
 
 function EventDetailLoaded({
@@ -386,6 +393,13 @@ function EventDetailLoaded({
             enqueued: operations.bulkResult.enqueued,
             skipped: operations.bulkResult.skipped,
           })}
+          {(operations.bulkResult.initialized ?? 0) > 0 && (
+            <p>
+              {t("event_detail.bulk_native_initialized", {
+                count: operations.bulkResult.initialized ?? 0,
+              })}
+            </p>
+          )}
           {(operations.bulkResult.failed ?? 0) > 0 && (
             <p>
               {t("event_detail.bulk_result_failed", { failed: operations.bulkResult.failed ?? 0 })}
@@ -395,7 +409,11 @@ function EventDetailLoaded({
       )}
 
       <Tabs
-        activeTabId={activeTab}
+        activeTabId={
+          isCloudHost(config) && (activeTab === "notifications" || activeTab === "gate")
+            ? "overview"
+            : activeTab
+        }
         onChange={({ detail: d }) => {
           // Cloudscape の TabChangeDetail.activeTabId は string。 既知 id にのみ反映。
           const next = d.activeTabId;

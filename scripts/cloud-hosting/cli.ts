@@ -11,7 +11,11 @@ import type { CloudTableNames } from "../../infrastructure/lib/problem-deploy/co
 import type { InstallationScope } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
 import { parseRunnerBindings } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/execution-config";
 import { assertOwnedBootstrap } from "./bootstrap-check";
-import { type CloudInstallation, drainInstallation } from "./installation";
+import {
+  type CloudInstallation,
+  drainInstallation,
+  type InstallationLocation,
+} from "./installation";
 import type { CloudCliIo, ProcessResult } from "./process";
 import { assertOwnedStack, assertRunnerChange, isMissingStack } from "./stack-check";
 
@@ -322,6 +326,27 @@ function installationTables(backend: OwnedPlatformStack): CloudTableNames {
     throw new Error("Cloud table outputs must be distinct.");
   return result;
 }
+function nativeInstallationArtifacts(
+  context: Context,
+  stacks: readonly OwnedPlatformStack[],
+): InstallationLocation["native"] {
+  const app = stacks.find((stack) => stack.name === context.stacks.app);
+  if (app?.outputs.CloudInstallationControlVersion !== "2") return undefined;
+  const artifactBucket = app.outputs.CloudExecutionArtifactBucket;
+  const catalogKey = app.outputs.CloudExecutionCatalogKey;
+  if (
+    !artifactBucket ||
+    !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(artifactBucket) ||
+    artifactBucket.includes("..") ||
+    !catalogKey ||
+    !/^catalogs\/[a-f0-9]{64}\.json$/u.test(catalogKey)
+  )
+    throw new Error(
+      "Native coordination artifact outputs are missing or invalid; no resources were removed.",
+    );
+  return { artifactBucket, catalogKey, expectedBucketOwner: context.env.ACCOUNT_ID ?? "" };
+}
+
 async function teardownScope(
   context: Context,
   stacks: readonly OwnedPlatformStack[],
@@ -335,7 +360,7 @@ async function teardownScope(
     );
   if (
     app &&
-    (app.outputs.CloudInstallationControlVersion !== "1" ||
+    (!["1", "2"].includes(app.outputs.CloudInstallationControlVersion ?? "") ||
       !["true", "false"].includes(app.outputs.CloudRunnerEnabled ?? ""))
   )
     throw new Error(
@@ -387,6 +412,7 @@ async function down(context: Context, yes: boolean): Promise<void> {
   const installation = resolved.io.openInstallation({
     region: resolved.env.REGION ?? "",
     tables: installationTables(backend),
+    native: nativeInstallationArtifacts(resolved, stacks),
   });
   try {
     const scope = await teardownScope(resolved, stacks, installation);

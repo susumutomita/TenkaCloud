@@ -19,6 +19,7 @@ import {
   loadExecutionBindings,
   registeredRunnerBinding,
 } from "./execution-config.js";
+import { createProductionNativeCoordination } from "./native-production.js";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -48,6 +49,14 @@ async function compose() {
 }
 async function composeExecution() {
   if (!process.env.CLOUD_CATALOG_KEY) return {};
+  const coordination = createProductionNativeCoordination({
+    documentClient: document,
+    tables,
+    artifactBucket: required("CLOUD_ARTIFACT_BUCKET"),
+    expectedBucketOwner: required("CONTROL_PLANE_ACCOUNT"),
+    region: required("AWS_REGION"),
+    catalogKey: required("CLOUD_CATALOG_KEY"),
+  });
   const bindings = await loadExecutionBindings();
   const work = new DynamoDeploymentWork(document, tables);
   const catalog = createExecutionCatalogProvider();
@@ -73,6 +82,7 @@ async function composeExecution() {
   };
   if (!config)
     return {
+      coordination,
       deployment: { work, catalog, controlPlaneAccount: required("CONTROL_PLANE_ACCOUNT") },
       connections: { bindings, verify },
       participantAccess,
@@ -85,6 +95,7 @@ async function composeExecution() {
     recordUse: () => accounts.observeExternalId(config.externalIdParameterArn),
   });
   return {
+    coordination,
     participantAccess,
     deployment: {
       work,

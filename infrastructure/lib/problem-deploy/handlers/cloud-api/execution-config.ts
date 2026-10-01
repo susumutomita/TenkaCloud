@@ -1,6 +1,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
+import type { CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
 import { assertCommercialRegion } from "../../../cloud-hosting/regions.js";
 import type {
@@ -57,8 +58,44 @@ const artifactSchema = z
     publicOutputKeys: z.array(z.string()).max(16),
   })
   .strict();
+export const nativeArtifactSchema = z
+  .object({
+    kind: z.literal("coordination"),
+    problemId: z.literal("ac26-crypto-battle"),
+    problemDir: z.literal("problems/battles/ac26-crypto-battle"),
+    artifactDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+    pluginKey: z.string().regex(/^plugins\/[a-f0-9]{64}\.mjs$/u),
+    stateBudget: z
+      .object({
+        bytesPerTeam: z.number().int().positive(),
+        baseBytes: z.number().int().nonnegative(),
+      })
+      .strict(),
+    name: z.string(),
+    description: z.string(),
+    instructions: z.string(),
+    i18n: z
+      .object({
+        en: z
+          .object({
+            name: z.string().optional(),
+            description: z.string().optional(),
+            instructions: z.string().optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export type NativeProblem = z.infer<typeof nativeArtifactSchema> & { readonly catalogKey: string };
 export const executionCatalogSchema = z
-  .object({ version: z.literal(1), problems: z.array(artifactSchema).min(1).max(50) })
+  .object({
+    version: z.literal(1),
+    problems: z.array(artifactSchema).max(50),
+    nativeProblems: z.array(nativeArtifactSchema).max(1).optional(),
+  })
   .strict();
 export type ExecutionCatalog = z.infer<typeof executionCatalogSchema>;
 function setting(name: string): string {
@@ -67,10 +104,30 @@ function setting(name: string): string {
   return value;
 }
 /** Content-addressed catalog objects pin the actual template and verifier through retries/redeploys. */
-function createObjectLoader() {
-  const bucket = setting("CLOUD_ARTIFACT_BUCKET");
-  const region = setting("AWS_REGION");
+export interface NativeExecutionSettings {
+  readonly artifactBucket: string;
+  readonly region: string;
+  readonly catalogKey: string;
+  readonly expectedBucketOwner?: string;
+}
+function nativeSettings(): NativeExecutionSettings {
+  return {
+    artifactBucket: setting("CLOUD_ARTIFACT_BUCKET"),
+    region: setting("AWS_REGION"),
+    catalogKey: setting("CLOUD_CATALOG_KEY"),
+    ...(process.env.CONTROL_PLANE_ACCOUNT
+      ? { expectedBucketOwner: process.env.CONTROL_PLANE_ACCOUNT }
+      : {}),
+  };
+}
+function createObjectLoader(
+  config?: Pick<NativeExecutionSettings, "artifactBucket" | "region" | "expectedBucketOwner">,
+) {
+  const bucket = config?.artifactBucket ?? setting("CLOUD_ARTIFACT_BUCKET");
+  const region = config?.region ?? setting("AWS_REGION");
   assertCommercialRegion(region);
+  if (config?.expectedBucketOwner !== undefined && !/^\d{12}$/u.test(config.expectedBucketOwner))
+    throw new Error("Invalid artifact bucket owner.");
   const client = new S3Client({ region, ignoreConfiguredEndpointUrls: true });
   const pending = new Map<string, Promise<string>>();
   return async (key: string): Promise<string> => {
@@ -79,7 +136,15 @@ function createObjectLoader() {
     const previous = pending.get(key);
     if (previous) return previous;
     const request = client
-      .send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+      .send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          ...(config?.expectedBucketOwner
+            ? { ExpectedBucketOwner: config.expectedBucketOwner }
+            : {}),
+        }),
+      )
       .then(async (output) => {
         if ((output.ContentLength ?? 0) > 1024 * 1024 || !output.Body)
           throw new Error("Invalid catalog object.");
@@ -102,8 +167,10 @@ function createObjectLoader() {
     }
   };
 }
-export function createCatalogLoader() {
-  const load = createObjectLoader();
+export function createCatalogLoader(
+  config?: Pick<NativeExecutionSettings, "artifactBucket" | "region" | "expectedBucketOwner">,
+) {
+  const load = createObjectLoader(config);
   return async (key: string): Promise<ExecutionCatalog> => parseCatalog(await load(key));
 }
 export async function loadExecutionBindings(): Promise<readonly RunnerBinding[]> {
@@ -119,7 +186,132 @@ function parseCatalog(raw: string): ExecutionCatalog {
     )
       throw new Error("Unsafe catalog output or template digest.");
   }
+  const ids = [...catalog.problems, ...(catalog.nativeProblems ?? [])].map(
+    (problem) => problem.problemId,
+  );
+  if (!ids.length || new Set(ids).size !== ids.length) throw new Error("Invalid catalog problems.");
+  for (const problem of catalog.nativeProblems ?? []) {
+    if (problem.pluginKey !== `plugins/${problem.artifactDigest}.mjs`)
+      throw new Error("Native artifact identity mismatch.");
+  }
   return catalog;
+}
+export function createNativeCatalogProvider(config: NativeExecutionSettings = nativeSettings()) {
+  const load = createCatalogLoader(config);
+  const key = config.catalogKey;
+  return async (): Promise<Readonly<Record<string, NativeProblem>>> =>
+    Object.fromEntries(
+      ((await load(key)).nativeProblems ?? []).map((problem) => [
+        problem.problemId,
+        { ...problem, catalogKey: key },
+      ]),
+    );
+}
+function assertNativePlugin(
+  plugin: CoordinationPlugin<unknown, unknown> | undefined,
+): asserts plugin is CoordinationPlugin<unknown, unknown> {
+  if (!plugin) throw new Error("Invalid native coordination plugin.");
+  if (
+    ![
+      plugin.initialState,
+      plugin.validateOp,
+      plugin.applyOp,
+      plugin.projectForTeam,
+      plugin.teamScores,
+    ].every((hook) => typeof hook === "function")
+  )
+    throw new Error("Invalid native coordination plugin hooks.");
+  const version = plugin.stateSchemaVersion ?? 1;
+  if (
+    !Number.isSafeInteger(version) ||
+    version < 1 ||
+    (version > 1 && typeof plugin.migrateState !== "function")
+  )
+    throw new Error("Invalid native coordination plugin schema.");
+}
+/** Only the currently configured, reviewed pin can execute; retained mismatches fail closed. */
+export function createNativePluginResolver(config: NativeExecutionSettings = nativeSettings()) {
+  const load = createCatalogLoader(config);
+  const bucket = config.artifactBucket;
+  const client = new S3Client({ region: config.region, ignoreConfiguredEndpointUrls: true });
+  const pending = new Map<string, Promise<CoordinationPlugin<unknown, unknown>>>();
+  return async (pin: {
+    readonly catalogKey: string;
+    readonly problemId: string;
+    readonly artifactDigest: string;
+    readonly pluginKey: string;
+  }) => {
+    if (pin.catalogKey !== config.catalogKey || pin.problemId !== "ac26-crypto-battle")
+      throw new Error("Native run is not the currently reviewed artifact.");
+    const descriptor = (await load(config.catalogKey)).nativeProblems?.find(
+      (item) => item.problemId === "ac26-crypto-battle",
+    );
+    if (
+      !descriptor ||
+      descriptor.artifactDigest !== pin.artifactDigest ||
+      descriptor.pluginKey !== pin.pluginKey
+    )
+      throw new Error("Pinned native artifact changed.");
+    let request = pending.get(pin.pluginKey);
+    if (!request) {
+      request = (async () => {
+        const output = await client.send(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: pin.pluginKey,
+            ...(config.expectedBucketOwner
+              ? { ExpectedBucketOwner: config.expectedBucketOwner }
+              : {}),
+          }),
+        );
+        if (!output.Body || (output.ContentLength ?? 0) > 1024 * 1024)
+          throw new Error("Invalid native plugin object.");
+        const source = await output.Body.transformToString("utf8");
+        if (
+          Buffer.byteLength(source, "utf8") > 1024 * 1024 ||
+          contentDigest(source) !== pin.artifactDigest
+        )
+          throw new Error("Native plugin integrity mismatch.");
+        const module = (await import(
+          `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
+        )) as { default?: CoordinationPlugin<unknown, unknown> };
+        const plugin = module.default;
+        assertNativePlugin(plugin);
+        return plugin;
+      })();
+      if (pending.size >= 16) pending.clear();
+      pending.set(pin.pluginKey, request);
+    }
+    try {
+      return await request;
+    } catch (error) {
+      pending.delete(pin.pluginKey);
+      throw error;
+    }
+  };
+}
+export function createNativeArtifactResolver(config: NativeExecutionSettings = nativeSettings()) {
+  const load = createCatalogLoader(config);
+  const plugin = createNativePluginResolver(config);
+  return async (pin: {
+    readonly catalogKey: string;
+    readonly problemId: string;
+    readonly artifactDigest: string;
+    readonly pluginKey: string;
+  }) => {
+    if (pin.catalogKey !== config.catalogKey || pin.problemId !== "ac26-crypto-battle")
+      throw new Error("Native run is not the currently reviewed artifact.");
+    const descriptor = (await load(config.catalogKey)).nativeProblems?.find(
+      (item) => item.problemId === "ac26-crypto-battle",
+    );
+    if (
+      !descriptor ||
+      descriptor.artifactDigest !== pin.artifactDigest ||
+      descriptor.pluginKey !== pin.pluginKey
+    )
+      throw new Error("Pinned native artifact changed.");
+    return { descriptor: { ...descriptor, catalogKey: pin.catalogKey }, plugin: await plugin(pin) };
+  };
 }
 export function createExecutionCatalogProvider() {
   const load = createCatalogLoader();

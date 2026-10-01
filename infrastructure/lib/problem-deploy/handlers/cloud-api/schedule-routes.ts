@@ -1,8 +1,14 @@
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
+import type { EventRecord } from "../../control-data/domain/events.js";
 import type { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
 import { ApiError, type OrganizerAuthConfig, requireOrganizer } from "./auth.js";
+import {
+  type CloudCoordinationApi,
+  nativeProblem,
+  settleNativeEvent,
+} from "./coordination-routes.js";
 import { body, identifier } from "./schema.js";
 
 interface ScheduleInput {
@@ -35,6 +41,7 @@ export function registerCloudScheduleRoutes(
   options: {
     readonly repository: CloudRepository;
     readonly work: DynamoDeploymentWork;
+    readonly coordination?: CloudCoordinationApi;
     readonly organizerAuth: OrganizerAuthConfig;
     readonly now: () => number;
   },
@@ -55,15 +62,48 @@ export function registerCloudScheduleRoutes(
       .parse(await body(context));
     const { startsAt, endsAt } = validatedSchedule(input, event, now);
     const updatedAt = new Date(Math.max(now, Date.parse(event.updatedAt) + 1)).toISOString();
-    await options.work.setSchedule(
-      event,
-      { startsAt, endsAt, scoreboardFreezeMinutes: input.scoreboardFreezeMinutes },
-      updatedAt,
-    );
+    const patch = { startsAt, endsAt, scoreboardFreezeMinutes: input.scoreboardFreezeMinutes };
+    const native = options.coordination
+      ? await settleNativeEvent(options.coordination, event, options.now, patch)
+      : undefined;
+    if (!native) await options.work.setSchedule(event, patch, updatedAt);
     return context.json({
       startsAt,
       endsAt,
       scoreboardFreezeMinutes: input.scoreboardFreezeMinutes ?? event.scoreboardFreezeMinutes,
+      updatedDeployments: 0,
+    });
+  });
+  app.post("/events/:eventId/end", async (context) => {
+    const now = options.now();
+    requireOrganizer(context, ["Admin", "Operator"], options.organizerAuth, now);
+    const event = await options.repository.getEvent(identifier.parse(context.req.param("eventId")));
+    if (!event) throw new ApiError(404, "not_found");
+    if (event.status === "TEARDOWN" || event.status === "ARCHIVED")
+      throw new ApiError(409, "event_closed");
+    const patch = {
+      status: "ENDED" as const,
+      endsAt: new Date(now).toISOString(),
+      scoringLocked: true,
+    };
+    let updated: EventRecord | undefined;
+    if (nativeProblem(event)) {
+      updated = options.coordination
+        ? await settleNativeEvent(options.coordination, event, options.now, patch, true)
+        : undefined;
+      if (!updated) throw new ApiError(409, "coordination_not_initialized");
+    } else {
+      await options.work.setSchedule(
+        event,
+        patch,
+        new Date(Math.max(now, Date.parse(event.updatedAt) + 1)).toISOString(),
+      );
+      updated = { ...event, ...patch };
+    }
+    return context.json({
+      eventId: event.eventId,
+      status: updated.status,
+      endsAt: updated.endsAt,
       updatedDeployments: 0,
     });
   });
@@ -76,11 +116,15 @@ export function registerCloudScheduleRoutes(
       );
       if (!event) throw new ApiError(404, "not_found");
       const scoringLocked = method === "post";
-      await options.work.setSchedule(
-        event,
-        { scoringLocked },
-        new Date(Math.max(now, Date.parse(event.updatedAt) + 1)).toISOString(),
-      );
+      const native = options.coordination
+        ? await settleNativeEvent(options.coordination, event, options.now, { scoringLocked })
+        : undefined;
+      if (!native)
+        await options.work.setSchedule(
+          event,
+          { scoringLocked },
+          new Date(Math.max(now, Date.parse(event.updatedAt) + 1)).toISOString(),
+        );
       return context.json({ eventId: event.eventId, scoringLocked });
     });
 }

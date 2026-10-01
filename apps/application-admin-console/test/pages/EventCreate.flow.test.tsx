@@ -166,6 +166,52 @@ describe("EventCreatePage flow", () => {
       expect(mockCreate).not.toHaveBeenCalled();
     },
   );
+  it("creates and initializes a native-only cloud event without a competitor account", async () => {
+    config = {
+      ...config,
+      mode: "cloud-host",
+      supportedProblemIds: ["p1", "p2"],
+      nativeProblemIds: ["p1"],
+    };
+    mockLoader.mockReturnValue({
+      competitorAccounts: [],
+      accountsLoadError: null,
+      accountsLoading: false,
+      fetchAccounts,
+    });
+    const { container } = renderPage();
+    w(container).findAllInputs()[1]?.setInputValue("1");
+    w(container).findAllInputs()[0]?.setInputValue("Native event");
+    const selector = problemSelect(container);
+    selector?.openDropdown();
+    selector?.selectOptionByValue("p1");
+    expect(screen.getByText("event_create.teams_description_native")).toBeInTheDocument();
+    expect(screen.queryByText("event_create.col_aws_account")).not.toBeInTheDocument();
+    expect(screen.getByText("event_create.native_execution")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    expect(mockCreate.mock.calls[0]?.[1].teams).toEqual([{ internalSlug: "team-1" }]);
+    fireEvent.click(screen.getByTestId("deploy-prompt-now"));
+    await waitFor(() => expect(mockBulk).toHaveBeenCalled());
+  });
+  it("still requires the AWS account when a native problem is mixed with AWS", () => {
+    config = {
+      ...config,
+      mode: "cloud-host",
+      supportedProblemIds: ["p1", "p2"],
+      nativeProblemIds: ["p1"],
+    };
+    const { container } = renderPage();
+    w(container).findAllInputs()[1]?.setInputValue("1");
+    w(container).findAllInputs()[0]?.setInputValue("Mixed event");
+    const selector = problemSelect(container);
+    selector?.openDropdown();
+    selector?.selectOptionByValue("p1");
+    selector?.selectOptionByValue("p2");
+    expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+  });
   it("should create the event then bulk-deploy and navigate on 'deploy now'", async () => {
     const { container } = renderPage();
     fillValidForm(container);

@@ -1,3 +1,4 @@
+import Alert from "@cloudscape-design/components/alert";
 /**
  * Issue #1318: Event Detail 画面を 7 workflow tabs に再編する構造。
  *
@@ -24,7 +25,7 @@ import { EventTeamsPanel } from "../../components/event-detail/EventTeamsPanel";
 import { LocalEnvironmentsPanel } from "../../components/event-detail/LocalEnvironmentsPanel";
 import { TeamRankingPanel } from "../../components/TeamRankingPanel";
 import { TeamScoreEventsPanel } from "../../components/TeamScoreEventsPanel";
-import { isLocalHost } from "../../config";
+import { isCloudHost, isLocalHost } from "../../config";
 import { DisruptionsPanel } from "./DisruptionsPanel";
 import type { EventTabContentProps } from "./tab-content-props";
 
@@ -89,6 +90,7 @@ export function ScheduleTab({
       freezeMinutesInFlight={operations.freezeMinutesInFlight}
       freezeMinutesInput={operations.freezeMinutesInput}
       localHost={isLocalHost(config)}
+      cloudHost={isCloudHost(config)}
       onBulkDeploy={(b) => void operations.handleBulkDeploy(b)}
       onConfirmTeardown={() => operations.setConfirmTeardown(true)}
       onEndNowSchedule={() => void operations.handleEndNowSchedule()}
@@ -109,7 +111,14 @@ export function ScheduleTab({
 }
 
 export function ProblemsTab({ config, detail, t }: EventTabContentProps) {
-  return <EventProblemSetPanel detail={detail} localHost={isLocalHost(config)} t={t} />;
+  return (
+    <EventProblemSetPanel
+      detail={detail}
+      localHost={isLocalHost(config)}
+      nativeProblemIds={config.nativeProblemIds}
+      t={t}
+    />
+  );
 }
 
 export function TeamsTab({
@@ -133,29 +142,37 @@ export function TeamsTab({
           t={t}
         />
       )}
-      <EventRegistrationPanel
-        key={detail.eventId}
-        apiClient={apiClient}
-        config={config}
-        detail={detail}
-        canMutateTenant={canMutateTenant}
-      />
+      {!isCloudHost(config) && (
+        <EventRegistrationPanel
+          key={detail.eventId}
+          apiClient={apiClient}
+          config={config}
+          detail={detail}
+          canMutateTenant={canMutateTenant}
+        />
+      )}
       <EventTeamsPanel
         apiClient={apiClient}
         canMutateTenant={canMutateTenant}
         detail={detail}
         onRefresh={manualRefresh}
-        showAccount={!localHost}
+        showAccount={
+          !localHost &&
+          detail.problems.some((problem) => !config.nativeProblemIds?.includes(problem.problemId))
+        }
         t={t}
       />
     </>
   );
 }
 
-export function ScoreboardTab({ detail }: EventTabContentProps) {
+export function ScoreboardTab({ detail, t }: EventTabContentProps) {
   return (
     <>
-      {detail.scoreEventsByTeam && (
+      {detail.scoreHistoryAvailable === false && (
+        <Alert type="info">{t("event_detail.score_history_unavailable")}</Alert>
+      )}
+      {detail.scoreEventsByTeam && detail.scoreHistoryAvailable !== false && (
         <TeamScoreEventsPanel teams={detail.scoreEventsByTeam} startsAt={detail.startsAt} />
       )}
       {detail.scoreEventsByTeam && <TeamRankingPanel teams={detail.scoreEventsByTeam} />}

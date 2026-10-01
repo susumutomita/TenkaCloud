@@ -243,6 +243,7 @@ export class CloudApplicationStack extends Stack {
         actions: ["s3:GetObject"],
         resources: [
           execution.bucket.arnForObjects(execution.catalogKey),
+          execution.bucket.arnForObjects(execution.pluginKey),
           execution.bucket.arnForObjects(execution.bindingsKey),
         ],
       }),
@@ -276,6 +277,8 @@ export class CloudApplicationStack extends Stack {
       catalogKey: execution.catalogKey,
       bindingsKey: execution.bindingsKey,
     });
+    new CfnOutput(this, "CloudExecutionArtifactBucket", { value: execution.bucket.bucketName });
+    new CfnOutput(this, "CloudExecutionCatalogKey", { value: execution.catalogKey });
     new CfnOutput(this, "CloudDeploymentStateMachineArn", {
       value: pipeline.stateMachine.stateMachineArn,
     });
@@ -309,6 +312,14 @@ export class CloudApplicationStack extends Stack {
       // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- These read-only routes verify the 256-bit team bearer in Lambda and derive event scope server-side; absent/revoked keys are tested.
       route.addMethod("GET", integration, { authorizationType: AuthorizationType.NONE });
     }
+    const coordination = portal.getResource("me")?.addResource("coordination");
+    if (!coordination) throw new Error("Participant coordination route is missing.");
+    const projection = coordination.addResource("projection");
+    // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- Native requests revalidate bearer, event clock, authVersion and installation fences inside the state/score transaction.
+    projection.addMethod("GET", integration, { authorizationType: AuthorizationType.NONE });
+    const operation = coordination.addResource("op");
+    // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- Every operation is authenticated and idempotent in the same atomic native state/score transaction.
+    operation.addMethod("POST", integration, { authorizationType: AuthorizationType.NONE });
     const accounts = api.root.addResource("admin").addResource("competitor-accounts");
     accounts.addMethod("GET", integration, protectedMethod);
     accounts.addMethod("POST", integration, protectedMethod);
@@ -319,6 +330,7 @@ export class CloudApplicationStack extends Stack {
     event.addResource("deploy").addMethod("POST", integration, protectedMethod);
     event.addMethod("DELETE", integration, protectedMethod);
     event.addResource("schedule").addMethod("PATCH", integration, protectedMethod);
+    event.addResource("end").addMethod("POST", integration, protectedMethod);
     const scoringLock = event.addResource("lock-scoring");
     scoringLock.addMethod("POST", integration, protectedMethod);
     scoringLock.addMethod("DELETE", integration, protectedMethod);
@@ -345,6 +357,7 @@ export class CloudApplicationStack extends Stack {
           cognitoDomain: domain.baseUrl(),
           mode: "cloud-host",
           supportedProblemIds: execution.problemIds,
+          nativeProblemIds: execution.nativeProblemIds,
           features: {
             samlSso: false,
             nonAwsRuntime: false,
@@ -375,6 +388,8 @@ export class CloudApplicationStack extends Stack {
           mode: "backend",
           cloudMode: "real",
           hasAws: true,
+          notificationsEnabled: false,
+          scoreTimelineEnabled: false,
         }),
       ],
       prune: false,
@@ -388,7 +403,7 @@ export class CloudApplicationStack extends Stack {
     new CfnOutput(this, "CognitoDomainUrl", { value: domain.baseUrl() });
     new CfnOutput(this, "ApiUrl", { value: api.url });
     new CfnOutput(this, "CloudRunnerEnabled", { value: "true" });
-    new CfnOutput(this, "CloudInstallationControlVersion", { value: "1" });
+    new CfnOutput(this, "CloudInstallationControlVersion", { value: "2" });
     new CfnOutput(this, "CloudRunnerMode", {
       value: legacyBindings.length ? "registry-with-legacy-bindings" : "registry",
     });

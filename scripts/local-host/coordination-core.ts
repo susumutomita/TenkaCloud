@@ -4,7 +4,10 @@ import {
   type CoordinationPlugin,
   dispatchOp,
 } from "@tenkacloud/coordination-plugin-sdk";
-import { pluginStateSchemaVersion, reconcileStateSchema } from "../lib/coordination-state-schema";
+import {
+  pluginStateSchemaVersion,
+  reconcileStateSchema,
+} from "../lib/coordination-state-schema.js";
 
 export type HostPlugin = CoordinationPlugin<unknown, unknown>;
 export interface LocalMatch {

@@ -142,3 +142,14 @@ describe("EventHeaderActions", () => {
     expect(btn("event_detail.scoring_lock")).toBeDisabled(); // !apiClient
   });
 });
+
+it("does not offer reopening a settled native match", () => {
+  renderActions({
+    detail: detail({
+      status: "ENDED",
+      scoringLocked: true,
+      nativeRuns: [{ runId: "r1", problemId: "ac26-crypto-battle", status: "CLOSED", revision: 8 }],
+    }),
+  });
+  expect(queryBtn("event_detail.scoring_unlock")).not.toBeInTheDocument();
+});

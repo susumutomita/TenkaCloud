@@ -5,6 +5,20 @@ import { CLOUD_EVENT_LIMITS } from "../../control-data/domain/events.js";
 import { ApiError } from "./auth.js";
 
 export const identifier = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/u);
+/** Cloud exposes durable totals separately from history, which is not available in organizer detail. */
+export const organizerScoreTotalsSchema = z.object({
+  scoreHistoryAvailable: z.literal(false),
+  scoreEventsByTeam: z
+    .array(
+      z.object({
+        teamId: identifier,
+        teamName: z.string().min(1),
+        projectedTotal: z.number().finite(),
+        events: z.tuple([]),
+      }),
+    )
+    .max(CLOUD_EVENT_LIMITS.maxTeams),
+});
 /** Adapted from the historical create-event schema; 48 teams allow durable access rows, a replay receipt and the global intake fence. */
 export const createEventSchema = z
   .object({

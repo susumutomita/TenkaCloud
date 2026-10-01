@@ -534,6 +534,55 @@ describe("verified connection and schedule routes", () => {
       (await f.organizer(`${f.path}/schedule`, "PATCH", { startNow: true }, "Viewer")).status,
     ).toBe(403);
   });
+  it("ends AWS-only scoring at server time without changing or deleting deployments", async () => {
+    const f = fixture();
+    const response = await f.organizer(`${f.path}/end`, "POST", {}, "Operator");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      eventId: f.event.eventId,
+      status: "ENDED",
+      endsAt: AT,
+      updatedDeployments: 0,
+    });
+    expect(f.schedule).toHaveBeenCalledWith(
+      f.event,
+      { status: "ENDED", endsAt: AT, scoringLocked: true },
+      new Date(NOW + 1).toISOString(),
+    );
+    expect(f.close).not.toHaveBeenCalled();
+    expect(f.teardown).not.toHaveBeenCalled();
+    expect(f.accept).not.toHaveBeenCalled();
+    expect(f.sdk).not.toHaveBeenCalled();
+  });
+  it("protects End with organizer authorization, event existence, and schedule CAS", async () => {
+    const f = fixture();
+    expect((await f.organizer(`${f.path}/end`, "POST", {}, "Viewer")).status).toBe(403);
+    expect(f.schedule).not.toHaveBeenCalled();
+    f.schedule.mockRejectedValueOnce(new DeploymentConflict("event_schedule_changed"));
+    expect((await f.organizer(`${f.path}/end`)).status).toBe(409);
+    f.repository.events.clear();
+    expect((await f.organizer(`${f.path}/end`)).status).toBe(404);
+  });
+  it.each(["TEARDOWN", "ARCHIVED"] as const)(
+    "does not reopen an event in %s through End",
+    async (status) => {
+      const f = fixture();
+      f.repository.events.set(f.event.eventId, { ...f.event, status });
+      expect((await f.organizer(`${f.path}/end`)).status).toBe(409);
+      expect(f.schedule).not.toHaveBeenCalled();
+    },
+  );
+  it("does not mistake a native-selected event for AWS-only when native composition is absent", async () => {
+    const f = fixture();
+    f.repository.events.set(f.event.eventId, {
+      ...f.event,
+      problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "us-east-1" }],
+    });
+    const response = await f.organizer(`${f.path}/end`);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "coordination_not_initialized" });
+    expect(f.schedule).not.toHaveBeenCalled();
+  });
   it.each([
     {},
     { startNow: true, startsAt: AT },

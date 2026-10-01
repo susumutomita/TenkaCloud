@@ -202,11 +202,11 @@ describe("cloud organizer SPA journey", () => {
       await screen.findByRole("heading", { name: "Cloud acceptance event" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Schedule" }));
-    fireEvent.click(screen.getByRole("button", { name: "Deploy now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare competition" }));
 
     expect(await screen.findByText(/deployment_acceptance_unavailable/u)).toBeInTheDocument();
     expect(screen.queryByText("Deploy / Delete accepted")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Deploy now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prepare competition" }));
     expect(await screen.findByText(/Accepted: 2 \/ skipped: 0/u)).toBeInTheDocument();
     expect(screen.queryByText(/deployment_acceptance_unavailable/u)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Overview" }));

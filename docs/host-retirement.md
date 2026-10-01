@@ -14,9 +14,9 @@ these verification results.
 | Local organizer and participant hosting | One Bun process and persistent SQLite; `make local` / `make down` preserve event data and stopped exercise work | `scripts/local-host`, existing console and portal |
 | 106 local Compose exercises | Generic per-team Challenge runner with on-demand start/stop, original verifiers, hints and scoring; not all 106 have completed real Docker rehearsals | `scripts/local-host/docker-catalog.ts`, `problems/` |
 | 15 declared participant terminals | Authenticated, team/job-owned terminal transport; PostgreSQL terminal play and restart were exercised with real Docker | `scripts/local-host/terminal-http.ts`, `scripts/local-host/container/terminal-shell.ts` |
-| Native Cryptography Battle | Local shared match with private team views and persisted competition state | `scripts/local-host/coordination.ts` |
+| Native Cryptography Battle | Shared reducer: local SQLite and cloud DynamoDB, private team projections and atomic scoring. Cloud capacity remains under verification | `scripts/local-host/coordination.ts`, [cloud status](../infrastructure/README.md) |
 | Cloud platform | Lambda, Cognito and DynamoDB foundation with durable flag-deployment/scoring work; full setup, teardown and UI wiring remain incomplete | `infrastructure/lib/cloud-hosting`, `infrastructure/lib/problem-deploy` |
-| AWS-service problems | Cloud hosting only; the current reviewed flag slice is not support for every catalog problem or Battle | [Cloud status](../infrastructure/README.md) |
+| AWS-service problems | Cloud hosting only; the reviewed flag slice does not cover every AWS catalog problem or endpoint-based Battle | [Cloud status](../infrastructure/README.md) |
 | Non-AWS problems in cloud hosting | Required direction; separate exercise runner remains incomplete because Lambda cannot run the local Docker engine | [Cloud status](../infrastructure/README.md) |
 | Organizer accounts, explicit SAML, optional audit, progression and participant registration | Local implementations and their behavior tests retained; do not infer cloud parity from retained local code | `scripts/local-host` |
 | Competitor bootstrap and trust | Template retained; ExternalId and viewer-role boundaries remain required. Cloud onboarding and account-isolation conditions still need acceptance | `templates/competitor-bootstrap.yaml` |

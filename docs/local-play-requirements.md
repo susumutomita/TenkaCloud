@@ -1,6 +1,6 @@
 # Local competition system requirements
 
-This is an unpublished integration candidate. Use macOS or Linux (including
+This is an unreleased integration candidate. Use macOS or Linux (including
 WSL2), the repository-pinned Bun version, and Docker Engine with Compose for
 Docker exercises. Native Windows is not a supported entrypoint. See
 [local hosting](local-hosting.md) for startup and trusted-network restrictions.
@@ -58,9 +58,11 @@ Increasing admission limits does not establish capacity.
 - Stop / resume writable-layer and volume retention, admission rejection and no automatic eviction
 - State-preserving make down / make local, participant resume and explicit environment teardown
 
-Generic catalog/workbench restoration is in progress. Full real Docker/browser
-verification remains incomplete. Terminal HTTP/WebSocket tests use a synthetic
-shell (11 tests, 96 assertions); actual Docker exec is unverified. Use the selected problem set's
+Full real Docker/browser verification remains incomplete. In addition to synthetic
+terminal HTTP/WebSocket checks, a real PostgreSQL terminal was used to create data
+and complete three scored checkpoints. Its container and seven rows survived
+make down, restart and resume; a second team could not access it. This verifies
+that representative terminal, not every terminal implementation. Use the selected problem set's
 recorded evidence rather than claiming all 106 are tested playable.
 
 ## Native compatibility

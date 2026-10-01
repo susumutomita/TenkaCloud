@@ -12,13 +12,14 @@ instructions include legacy local-practice and Lite paths.
 | make local for individual practice | make local starts one event/team competition system; prepare dormant Docker jobs, start the event, then use participant Start / resume |
 | make local-down clears progress | make down preserves DB, scores, keys, writable layers and volumes; new Docker jobs remain stopped until participant resume, with no RAM retention |
 | make host | Removed public target; use make local |
-| Lite launcher / CodeBuild platform setup | Renamed cloud-pipeline.yaml retains the complete fixed-old-ref flow; current Lambda/DynamoDB make deploy remains incomplete |
-| ACTION=destroy-all | Retained only by the fixed-old-ref pipeline; current make destroy remains incomplete and deletes nothing |
+| Lite launcher / CodeBuild platform setup | Renamed cloud-pipeline.yaml retains the complete fixed-old-ref flow; current make deploy uses the source Lambda/DynamoDB CLI after reviewed IAM setup; exercise coverage remains partial |
+| ACTION=destroy-all | Retained only by the fixed-old-ref pipeline; current make destroy confirms owned targets, drains recorded exercises, removes the platform stacks and retains data |
 | pack activate for a tenant | Retained local record only; does not add problems to current events |
 
 Local SQLite is implemented. Cloud Lambda / DynamoDB hosting is being restored.
 AWS service problems are cloud-only. Non-AWS problems are intended for both hosting
-options; the cloud problem runner is still incomplete. Ordinary local shutdown
+options; the container-based cloud problem runner is still incomplete. Native Cryptography
+Battle uses the platform itself and is under capacity verification. Ordinary local shutdown
 does not remove AWS resources created by an earlier revision.
 
 ## Teaching examples and verification

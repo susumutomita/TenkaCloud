@@ -64,6 +64,26 @@ describe("loadConfig", () => {
     );
     expect((await loadConfig()).hasAws).toBe(expected);
   });
+  it.each([
+    { value: false, expected: false },
+    { value: true, expected: true },
+    { value: "false", expected: false },
+    { value: undefined, expected: undefined },
+  ])("honors explicit optional endpoint capabilities: $value", async ({ value, expected }) => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          mode: "backend",
+          apiBaseUrl: "https://api.example.test",
+          notificationsEnabled: value,
+          scoreTimelineEnabled: value,
+        }),
+      ),
+    );
+    const result = await loadConfig();
+    expect(result.notificationsEnabled).toBe(expected);
+    expect(result.scoreTimelineEnabled).toBe(expected);
+  });
   it("should extract values when /runtime-config.json returns 200", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,

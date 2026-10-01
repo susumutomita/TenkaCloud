@@ -46,4 +46,4 @@ Lambda/DynamoDB によるクラウド開催と配置・撤収は検証中です�
 `docs/host-build-verification.md`
 も確認します。ブラウザ検証と任意の実 AWS・IdP 検証は、ローカルテストと分けて報告します。
 
-`make down` は大会と Docker のデータを保持します。クラウドの `make deploy` / `make destroy` は、権限設定と所有対象を確認する既存 CLI を実行します。現在は hello-world に対応し、非 AWS 問題のクラウド実行と Battle は未実装です。`CLOUD_ARGS="--help"` で AWS に接続せず説明を確認できます。
+`make down` は大会と Docker のデータを保持します。クラウドの `make deploy` / `make destroy` は、権限設定と所有対象を確認する既存 CLI を実行します。現在は hello-world と組み込みの Cryptography Battle に対応し、コンテナー問題のクラウド実行は未実装です。Battle の負荷目標は検証中です。`CLOUD_ARGS="--help"` で AWS に接続せず説明を確認できます。

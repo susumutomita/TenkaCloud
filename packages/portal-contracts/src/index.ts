@@ -241,7 +241,11 @@ export type ProblemRuntimeKind = "docker" | "simulated-cloud";
  * Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
  */
 export interface ParticipantProblemView {
+  /** Native runs use their persisted run ID here for the existing Portal route. */
   readonly jobId: string;
+  /** Native in-platform execution; it has no AWS account, region or external console. */
+  readonly runtimeKind?: "coordination";
+  readonly coordination?: true;
   readonly problemId: string;
   /** Host-owned Docker terminal capability, independent of legacy practice lifecycle controls. */
   readonly terminal?: true;
@@ -314,10 +318,11 @@ export interface ParticipantProblemView {
    * sends this field.
    */
   readonly recommended?: true;
-  readonly region: string;
+  /** Present for cloud-resource exercises; native runs omit it. */
+  readonly region?: string;
   /** 競技アカウント ID。 SSO Credentials の AWS Console federation で使う。
    *  (機密ではない — IAM role 信頼ポリシーや CFn template にも露出する。) */
-  readonly awsAccountId: string;
+  readonly awsAccountId?: string;
   /**
    * [#2233] 問題が動く cloud provider。 canonical 値は "aws" | "sakura" | "azure" | "gcp"。
    * 現行 backend (participant-handler lookup) は常に返すが、 旧 backend 応答との互換のため

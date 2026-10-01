@@ -1,5 +1,5 @@
 import { handle, type LambdaEvent } from "hono/aws-lambda";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCloudApp } from "../../lib/problem-deploy/handlers/cloud-api/app.js";
 import { FakeRepository } from "./fake-repository.js";
 
@@ -60,6 +60,70 @@ function fixture() {
 }
 
 describe("restored cloud HTTP contract with explicit mocked Cognito-authorizer context", () => {
+  it("returns requested durable score totals with zero-score teams and explicit unavailable history", async () => {
+    const f = fixture();
+    const created = await f.create();
+    const team = created.teams[0];
+    if (!team) throw new Error("Expected team");
+    const saved = f.repository.teams.get(`${created.eventId}/${team.teamId}`);
+    if (!saved) throw new Error("Expected saved team");
+    f.repository.teams.set(`${created.eventId}/${team.teamId}`, {
+      ...saved,
+      displayName: "Named team",
+    });
+    const scores = vi
+      .spyOn(f.repository, "listTeamScores")
+      .mockResolvedValue([
+        { eventId: created.eventId, teamId: team.teamId, score: 73, completedProblems: 0 },
+      ]);
+    const regular = await (await f.organizer(`/events/${created.eventId}`)).json();
+    expect(regular).not.toHaveProperty("scoreEventsByTeam");
+    expect(regular).not.toHaveProperty("scoreHistoryAvailable");
+    expect(scores).not.toHaveBeenCalled();
+    const response = await f.organizer(
+      `/events/${created.eventId}?withScoreEvents=true`,
+      "GET",
+      undefined,
+      "Viewer",
+    );
+    expect(response.status).toBe(200);
+    const detail = await response.json();
+    expect(detail.scoreHistoryAvailable).toBe(false);
+    expect(detail.scoreEventsByTeam).toEqual([
+      { teamId: team.teamId, teamName: "Named team", projectedTotal: 73, events: [] },
+      { teamId: created.teams[1]?.teamId, teamName: "team-b", projectedTotal: 0, events: [] },
+    ]);
+    expect(detail.scoreEventsByTeam[0]).not.toHaveProperty("projectedByProblem");
+    expect(scores).toHaveBeenCalledExactlyOnceWith(created.eventId);
+    expect(JSON.stringify(detail)).not.toContain(team.teamLoginKey);
+  });
+  it("does not fabricate organizer scores after repository failure or cross-event data", async () => {
+    const f = fixture();
+    const created = await f.create();
+    const team = created.teams[0];
+    if (!team) throw new Error("Expected team");
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const scores = vi
+      .spyOn(f.repository, "listTeamScores")
+      .mockRejectedValueOnce(new Error("Synthetic unavailable scores"));
+    expect((await f.organizer(`/events/${created.eventId}?withScoreEvents=true`)).status).toBe(500);
+    scores.mockResolvedValueOnce([
+      { eventId: "another-event", teamId: team.teamId, score: 500, completedProblems: 0 },
+    ]);
+    expect((await f.organizer(`/events/${created.eventId}?withScoreEvents=true`)).status).toBe(500);
+    scores.mockRestore();
+    errorLog.mockRestore();
+  });
+  it("preserves the AWS-only participant polling read budget without an extra event lookup", async () => {
+    const f = fixture();
+    const created = await f.create();
+    const team = created.teams[0];
+    if (!team) throw new Error("Expected team");
+    const event = vi.spyOn(f.repository, "getEvent");
+    expect((await f.participant("/portal/me", team.teamLoginKey)).status).toBe(200);
+    expect(event).not.toHaveBeenCalled();
+  });
+
   it("passes the actual REST API Gateway v1 event through the Hono Lambda adapter", async () => {
     const f = fixture();
     const event: LambdaEvent = {

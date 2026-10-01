@@ -16,7 +16,7 @@ import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-cli
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
 import { type AppConfig, type CloudMode, hasAwsFeatures, showsCourseTracks } from "../config";
-import { hasAwsAccessCapability } from "../data/providers";
+import { hasAwsAccessCapability, problemProvider } from "../data/providers";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
 import {
@@ -259,6 +259,7 @@ export function buildSideNavItems(
   cloudMode: CloudMode,
   locale: LocaleCode,
   showsAwsFeatures: boolean,
+  notificationsEnabled = true,
 ): SideNavigationProps.Item[] {
   const isLocal = cloudMode === "local";
   const eventItems: SideNavigationProps.Item[] = [
@@ -266,7 +267,7 @@ export function buildSideNavItems(
     { type: "link", href: "/scoreboard", text: t("nav.scoreboard") },
     { type: "link", href: "/score-events", text: t("nav.score_events") },
   ];
-  if (!isLocal) {
+  if (!isLocal && notificationsEnabled) {
     eventItems.push({
       type: "link",
       href: "/notifications",
@@ -328,7 +329,11 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
 
   const { locale, setLocale, t } = useI18n();
   const consoleAccess = useConsoleAccess(config);
-  const showsAwsFeatures = hasAwsFeatures(config);
+  const showsAwsFeatures =
+    hasAwsFeatures(config) &&
+    (!teamView.view ||
+      teamView.view.problems.length === 0 ||
+      teamView.view.problems.some((problem) => problemProvider(problem) !== "native"));
   const showsConsole =
     showsAwsFeatures &&
     (!teamView.view ||
@@ -395,8 +400,16 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
         config.cloudMode,
         locale,
         showsAwsFeatures,
+        config.notificationsEnabled !== false,
       ),
-    [teamView.unreadNotificationCount, t, config.cloudMode, locale, showsAwsFeatures],
+    [
+      teamView.unreadNotificationCount,
+      t,
+      config.cloudMode,
+      config.notificationsEnabled,
+      locale,
+      showsAwsFeatures,
+    ],
   );
 
   return (

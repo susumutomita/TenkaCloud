@@ -357,6 +357,12 @@ const linkHrefs = (section: SideNavigationProps.Section | undefined) =>
   (section?.items ?? []).map((i) => ("href" in i ? i.href : undefined));
 
 describe("buildSideNavItems (Issue #2474 local nav pruning)", () => {
+  it("hides notification navigation when the hosting API does not provide it", () => {
+    const items = buildSideNavItems(10, (key) => key, "real", "en", true, false);
+    expect(linkHrefs(sectionByText(items, "nav.event_section"))).not.toContain("/notifications");
+    expect(linkHrefs(sectionByText(items, "nav.event_section"))).toContain("/score-events");
+  });
+
   it("should omit the Tools section and the notifications link in local cloud mode", () => {
     const items = buildSideNavItems(0, (k) => k, "local", "ja", false);
     // Tools (SSO 資格情報) セクションは丸ごと省く。
@@ -522,6 +528,28 @@ describe("ShellLayout", () => {
       expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
     },
   );
+  it("hides irrelevant external-cloud tools for a native-only event", () => {
+    const view = teamView([10]);
+    mockTeamView.mockReturnValue(
+      tv({
+        view: {
+          ...view,
+          problems: view.problems.map((problem) => ({
+            ...problem,
+            runtimeKind: "coordination",
+            coordination: true,
+            region: undefined,
+            awsAccountId: undefined,
+            accessCapabilities: [],
+          })),
+        },
+      }),
+    );
+    renderShell();
+    expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+    expect(screen.queryByText("nav.sso_credentials")).not.toBeInTheDocument();
+    expect(screen.getByText("nav.problems")).toBeInTheDocument();
+  });
   it("should not render the AWS Console entry when signed out", () => {
     mockAuth.mockReturnValue({ session: null, logout: vi.fn() });
     renderShell();

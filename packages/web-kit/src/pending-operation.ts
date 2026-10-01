@@ -1,8 +1,17 @@
+/** Non-authentication receipt identifier; getRandomValues also works in opt-in HTTP LAN hosting.
+ * https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues
+ */
+export function newOperationKey(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 /** One in-memory mutation intent. A lost response keeps its key; an acknowledged result ends it. */
 export class PendingOperation {
   private pending?: { readonly scope: string; readonly body: string; readonly key: string };
 
-  constructor(private readonly newKey: () => string = () => crypto.randomUUID()) {}
+  constructor(private readonly newKey: () => string = newOperationKey) {}
 
   keyFor(scope: string, payload: unknown): string {
     const body = JSON.stringify(payload);

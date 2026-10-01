@@ -5,6 +5,7 @@ import { DynamoCloudRepository } from "../../infrastructure/lib/problem-deploy/c
 import { DynamoDeploymentWork } from "../../infrastructure/lib/problem-deploy/control-data/dynamodb-deployment-work";
 import type { InstallationScope } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
 import { requestEventTeardown } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/deployment-routes";
+import { createProductionNativeCoordination } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/native-production";
 
 export interface CloudInstallation {
   readonly repository: Pick<
@@ -21,6 +22,11 @@ export interface CloudInstallation {
 export interface InstallationLocation {
   readonly region: string;
   readonly tables: CloudTableNames;
+  readonly native?: {
+    readonly artifactBucket: string;
+    readonly catalogKey: string;
+    readonly expectedBucketOwner: string;
+  };
 }
 /** Uses the same operator credential chain as the CLI; never accepts alternate service endpoints. */
 export function openCloudInstallation(location: InstallationLocation): CloudInstallation {
@@ -33,10 +39,26 @@ export function openCloudInstallation(location: InstallationLocation): CloudInst
   });
   const repository = new DynamoCloudRepository(document, location.tables);
   const work = new DynamoDeploymentWork(document, location.tables);
+  const native = location.native
+    ? createProductionNativeCoordination({
+        documentClient: document,
+        tables: location.tables,
+        region: location.region,
+        ...location.native,
+      })
+    : undefined;
   return {
     repository,
     requestEventTeardown: async (eventId, now) =>
-      (await requestEventTeardown({ repository, work, eventId, now })).body,
+      (
+        await requestEventTeardown({
+          repository,
+          work,
+          eventId,
+          now,
+          ...(native ? { beforeClose: () => native.closeEvent(eventId, now) } : {}),
+        })
+      ).body,
     close: () => client.destroy(),
   };
 }

@@ -65,17 +65,19 @@ export function EventHeaderActions({
       >
         {t("event_detail.end_event")}
       </Button>
-      {detail && (detail.status === "READY" || detail.status === "ENDED") && (
-        <Button
-          loading={scoringLockInFlight !== null}
-          disabled={!apiClient || !canMutateTenant}
-          onClick={detail.scoringLocked === true ? onUnlockScoring : onLockScoring}
-        >
-          {detail.scoringLocked === true
-            ? t("event_detail.scoring_unlock")
-            : t("event_detail.scoring_lock")}
-        </Button>
-      )}
+      {detail &&
+        (detail.status === "READY" || detail.status === "ENDED") &&
+        !detail.nativeRuns?.some((run) => run.status === "CLOSED") && (
+          <Button
+            loading={scoringLockInFlight !== null}
+            disabled={!apiClient || !canMutateTenant}
+            onClick={detail.scoringLocked === true ? onUnlockScoring : onLockScoring}
+          >
+            {detail.scoringLocked === true
+              ? t("event_detail.scoring_unlock")
+              : t("event_detail.scoring_lock")}
+          </Button>
+        )}
       {/* Issue: header の "Delete" (実体は teardown) は削除。 破壊的な teardown は
         「スケジュール」 tab の「即座に撤去」に 1 箇所だけ置く (= header とタブで重複させない)。 */}
       {isReportReady(detail) && detail && (

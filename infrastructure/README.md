@@ -19,6 +19,7 @@ SQL backend is included.
 - Existing competitor-account registration, verification and event-selection flow
 - AWS flag deployment intake, durable dispatch, fenced lifecycle, and atomic scoring
 - Standard Step Functions polling plus owner-fenced terminal-execution reconciliation
+- Native Cryptography Battle using the pinned shared reducer, durable snapshots and atomic score/receipt updates
 
 The actual frontend selects the ID token. `Admin` and `Operator` can create events
 and rotate keys; only `Admin` revokes access. `Viewer` can read ordinary event
@@ -88,8 +89,9 @@ See [permission boundaries](BOOTSTRAP-IAM.md).
 `make deploy` and `make destroy` call the existing `scripts/cloud-hosting/main.ts`
 implementation in this checkout. They do not run the pipeline's fixed historical
 checkout. The current cloud exercise catalog supports hello-world with scoped CLI
-access. Non-AWS cloud execution, Battle, and automatic first-account IAM preparation
-remain incomplete. These commands can create chargeable AWS resources; they do not
+access and native Cryptography Battle. Container-based cloud execution and automatic
+first-account IAM preparation remain incomplete. Battle capacity is still under
+verification; the presence of its routes is not a 100-participant capacity claim. These commands can create chargeable AWS resources; they do not
 promise a zero-cost platform.
 
 Start with `make deploy CLOUD_ARGS="--help"` or `make destroy CLOUD_ARGS="--help"`;
@@ -119,8 +121,11 @@ It also refuses to reopen an installation with a durable teardown marker.
 
 The source CLI's `down` first validates account, region, installation tags, physical
 stack ARNs and stack-scoped table outputs. It requires
-`CloudInstallationControlVersion=1` on a live application: an older deployment
-cannot honor the new intake fence merely because its table received a marker.
+`CloudInstallationControlVersion=1` for the prior AWS-only application, or version
+`2` plus the pinned artifact-bucket/catalog outputs for native coordination. The
+version-2 CLI closes and settles native runs before requesting resource teardown;
+older CLIs refuse an unknown control version. An older deployment cannot honor a
+new intake fence merely because its table received a marker.
 A stack update still in progress blocks teardown. After showing the exact targets
 and retained-data consequences, the command asks for confirmation (`--yes` is an
 explicit noninteractive alternative).
@@ -202,8 +207,9 @@ not AWS latency measurements or scoring-capacity validation.
 
 The narrow source-wired path reuses the old deploy/flag HTTP contracts and the
 CloudFormation Lambda plus Step Functions sequence. It does not restore the old
-backend wholesale. Only the real `hello-world` flag challenge is in the initial
-execution catalog. Non-AWS, Battle, multi-flag, hints and force-redeploy are not
+backend wholesale. The real `hello-world` flag challenge and native `ac26-crypto-battle` are in the
+execution catalog. Container execution, AWS endpoint Battles, multi-flag AWS
+challenges, hints and force-redeploy are not
 silently mapped to this implementation.
 
 The existing Competitor Accounts screen uses the restored
@@ -346,17 +352,53 @@ No participant refresh queries all 500 event deployments. These are actual local
 DynamoDB/HTTP observations, not AWS latency, RCU or billing guarantees. Notification
 and Battle polling are outside this flag slice.
 
+## Native Cryptography Battle
+
+The selected `ac26-crypto-battle` problem uses the existing shared coordination
+reducer, without a VM or a competitor AWS account. The execution catalog pins its
+plugin digest and schema. Native runs are separate from AWS deployment jobs and do
+not fabricate account IDs, regions, stack ARNs, or AWS access controls. Mixed events
+still need verified competitor accounts for their AWS problems.
+
+The existing Deployments table stores a small versioned HEAD and bounded snapshot
+chunks. A successful transition atomically writes the snapshot, team score deltas,
+ledger and operation receipt, with current event/team/intake checks. One event has
+one authoritative shared match; it is not split into independent per-team games.
+Short expiring admission on that same HEAD reduces conflicting snapshot writes.
+Expired/replaced owners cannot commit; interruption does not require a permanent
+manual claim reset. Read-only no-op/replay paths recheck authorization atomically.
+No game-clock rounding or tick coalescing is used, because tick spacing can change
+this problem's scoring outcomes.
+
+Organizer Prepare initializes the native run. Start, scheduled end, scoring lock,
+End Event and coordinated teardown use the same durable state. End settles and
+closes the match; it does not delete AWS resources in a mixed event. Full platform
+teardown verifies native closure as well as AWS cleanup before recording DRAINED.
+An old CLI cannot tear down a version-2 application without this step.
+
+The organizer scoreboard returns authoritative current team totals. Complete score
+history, solved counts and per-problem averages are currently unavailable in that
+cloud view and its report; they are identified as unavailable instead of inferred
+as zero. Notifications, self-registration, progression-gate administration, capacity
+controls, force archive and scheduled deployment/teardown are not offered by this
+cloud console. Local-host capabilities retain their existing behavior.
+
+The actual DynamoDB Local harness measures both staggered 100-participant/25-team
+polling and simultaneous refresh/operation bursts. Staggered polling and durable
+exactly-once scoring have passed; a synchronized 100-client burst still exceeds the
+5-second plugin refresh interval. This is a documented capacity limitation, not an
+AWS latency or cost guarantee. See the checked-in measurement evidence for the
+final run, state sizes, p50/p95/p99, conflicts and request amplification.
+
 ## Remaining acceptance work
 
 - Reviewed least-privilege initial bootstrap policy and first-account setup path
 - AWS account-isolation decision and reviewed exercise permissions
-- Complete the CLI-only participant UI
 - Participant AWS Console access without cross-team metadata disclosure
-- Catalog expansion, non-AWS runners, Battle/coordination, hints and disruptions
+- Catalog expansion, container runners, AWS endpoint Battles, hints and disruptions
 - Public registration/claiming, audit, notifications and full organizer UI flows
-- Coordinated destroy: stop intake, drain dispatcher/pending/active workflows,
-  verify and withdraw owned problem stacks, then remove platform resources while
-  explicitly preserving or recovering retained data/artifact buckets
+- Native Battle burst latency under the target participant load
+- Shared problem-pack/drill progression and final tutorial alignment
 
 Cloud hosting is still not competition-ready. No live AWS connection, bootstrap,
 permission change, deployment, or billing action was executed for these checks.

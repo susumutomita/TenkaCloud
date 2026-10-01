@@ -253,7 +253,9 @@
     "credential_unregistered": "Credential is not registered.",
     "mixed_provider_error": "AWS and non-AWS providers cannot be mixed in one event yet. For v1, create separate events per provider.",
     "col_team_region": "Region (blank = the problem's)",
-    "team_region_inherit": "Use the problem's region"
+    "team_region_inherit": "Use the problem's region",
+    "teams_description_native": "This event uses only exercises that run inside TenkaCloud. Set each team’s internal ID; no competitor AWS account is required.",
+    "native_execution": "Runs inside TenkaCloud"
   },
   "lite_drill": {
     "checkpoint_header": "Onboarding drill: checkpoint earned!",
@@ -297,7 +299,7 @@
     "rescue_body": "If a stack on a competitor account is stuck in ROLLBACK_COMPLETE etc., the delete does not proceed and the Event stays in TEARDOWN. If nothing moves for 5+ minutes, either ask the competitor to manually delete the stack in the CloudFormation console, or force the Event to ARCHIVED (its deployments are treated as deleted / failed and removed from the Event view). Stacks on the competitor account still need manual deletion by the competitor.",
     "error_header": "Error",
     "bulk_result_header": "Deploy / Delete accepted",
-    "bulk_result_body": "Accepted: {enqueued} / skipped: {skipped} (actual deploy / delete is run asynchronously by the State Machine. Reload in a few minutes.)",
+    "bulk_result_body": "Accepted: {enqueued} / skipped: {skipped}. Background work may still be running; check progress before continuing.",
     "bulk_result_failed": "Acceptance failed or is unconfirmed for {failed} targets. Review their current status and retry the operation. Accepted work is not the same as completed work.",
     "deploy_progress_header": "Deploy progress",
     "deploy_progress_description": "Complete {complete} / In-flight {inFlight} of {total}",
@@ -487,7 +489,16 @@
     "modal_teardown_blast_radius_header": "Blast radius",
     "modal_teardown_blast_radius_body": "{teamCount} team(s) × {problemCount} problem(s) — all CloudFormation stacks will be deleted on the competitor accounts. Cannot be undone.",
     "modal_teardown_confirm_input_label": "Type DELETE to confirm",
-    "modal_teardown_confirm_input_description": "Destructive action gate — the button activates only when you type DELETE."
+    "modal_teardown_confirm_input_description": "Destructive action gate — the button activates only when you type DELETE.",
+    "native_run_ready": "Ready (inside TenkaCloud)",
+    "native_run_closed": "Closed (inside TenkaCloud)",
+    "native_run_pending": "Not initialized (inside TenkaCloud)",
+    "bulk_native_initialized": "Initialized {count} platform-native runs.",
+    "cloud_manual_lifecycle": "Prepare initializes native competitions and deploys missing AWS exercises. It does not recreate existing resources. Automatic deploy/teardown schedules are unavailable; request teardown explicitly when finished.",
+    "cloud_prepare": "Prepare competition",
+    "cloud_schedule_description": "Start/end times control scoring. End now settles scoring using the server clock and ends the competition. Ending does not remove AWS resources; request teardown separately.",
+    "cloud_operations_limits": "This cloud installation does not provide capacity controls or force-archive. Request teardown on the Schedule tab; unresolved cleanup remains visible until ownership and deletion are verified.",
+    "score_history_unavailable": "Current team totals are available. Complete score history, solved counts and per-problem averages are not available in this cloud view; unavailable values are shown as —."
   },
   "send_notification": {
     "header": "Send notification",
@@ -544,7 +555,7 @@
     "section_problems": "Per-problem breakdown",
     "section_disruptions": "Disruption / Red Team log",
     "section_footer": "Footer",
-    "field_organizer": "Organizer (Tenant)",
+    "field_organizer": "Organizer",
     "field_event_id": "Event ID",
     "field_schedule": "Schedule (UTC)",
     "field_status": "Status",

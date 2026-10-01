@@ -248,10 +248,9 @@ export function EventCreateTeamsSection({
     });
   }
 
-  const descriptionKey =
-    providerMode?.kind === "local"
-      ? "event_create.teams_description_local"
-      : "event_create.teams_description";
+  let descriptionKey = "event_create.teams_description";
+  if (providerMode?.kind === "local") descriptionKey = "event_create.teams_description_local";
+  if (providerMode?.kind === "native") descriptionKey = "event_create.teams_description_native";
   return (
     <Container
       header={

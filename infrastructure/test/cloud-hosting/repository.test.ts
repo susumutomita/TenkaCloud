@@ -68,6 +68,26 @@ function canceled(codes: string[] | undefined) {
 }
 
 describe("DynamoDB repository command/error contract with mocked SDK send", () => {
+  it("reads all 48 durable team totals in one strongly consistent event-scoped SCORE query", async () => {
+    const f = fixture();
+    const scores = Array.from({ length: 48 }, (_, index) => ({
+      eventId: f.event.eventId,
+      teamId: ulid(),
+      score: index,
+      completedProblems: 0,
+    }));
+    f.send.mockImplementationOnce(async () => ({ Items: scores }));
+    expect(await f.repository.listTeamScores(f.event.eventId)).toEqual(scores);
+    expect(f.send).toHaveBeenCalledTimes(1);
+    const command = f.send.mock.calls[0]?.[0];
+    if (!(command instanceof QueryCommand)) throw new Error("Expected score query");
+    expect(command.input).toEqual({
+      TableName: "teams",
+      ConsistentRead: true,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+      ExpressionAttributeValues: { ":pk": `EVENT#${f.event.eventId}`, ":prefix": "SCORE#" },
+    });
+  });
   it("creates historical event/team records and a hash-only lookup in one transaction", async () => {
     const f = fixture();
     f.send.mockImplementationOnce(() => Promise.resolve({}));

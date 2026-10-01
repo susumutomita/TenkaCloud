@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -23,7 +25,10 @@ import {
   installationCompetitorConfig,
 } from "../../lib/cloud-hosting/competitor-accounts.js";
 import { CloudDataStack } from "../../lib/cloud-hosting/data-stack.js";
-import { cloudExecutionArtifacts } from "../../lib/cloud-hosting/execution-artifacts.js";
+import {
+  cloudExecutionArtifacts,
+  nativeBattleArtifact,
+} from "../../lib/cloud-hosting/execution-artifacts.js";
 import { CloudHosting } from "../../lib/cloud-hosting/hosting.js";
 import { cloudStackTags } from "../../lib/cloud-hosting/stack-names.js";
 import { projectSynthesizer } from "../../lib/cloud-hosting/synthesizer.js";
@@ -70,6 +75,14 @@ beforeAll(() => {
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 describe("cloud CDK synth-only security and frontend wiring", () => {
+  it("marks native-aware installation control so older destroy clients fail closed", () => {
+    expect(application.toJSON().Outputs.CloudInstallationControlVersion.Value).toBe("2");
+    application.hasOutput("CloudExecutionArtifactBucket", { Value: Match.anyValue() });
+    application.hasOutput("CloudExecutionCatalogKey", {
+      Value: Match.stringLikeRegexp("^catalogs/[a-f0-9]{64}\\.json$"),
+    });
+  });
+
   it("emits project and environment ownership tags on both CloudFormation stack artifacts", () => {
     expect(stackTags).toEqual([cloudStackTags("test"), cloudStackTags("test")]);
   });
@@ -93,7 +106,8 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
       expect.objectContaining({
         eventLimits: CLOUD_EVENT_LIMITS,
         mode: "cloud-host",
-        supportedProblemIds: ["hello-world"],
+        supportedProblemIds: ["hello-world", "ac26-crypto-battle"],
+        nativeProblemIds: ["ac26-crypto-battle"],
         features: {
           samlSso: false,
           nonAwsRuntime: false,
@@ -103,7 +117,13 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
       }),
     );
     expect(configs).toContainEqual(
-      expect.objectContaining({ mode: "backend", cloudMode: "real", hasAws: true }),
+      expect.objectContaining({
+        mode: "backend",
+        cloudMode: "real",
+        hasAws: true,
+        notificationsEnabled: false,
+        scoreTimelineEnabled: false,
+      }),
     );
   });
   it("retains all event/team/deployment data by default and does not TTL-delete history", () => {
@@ -130,7 +150,7 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
     const writes = methods.filter((method) =>
       ["POST", "DELETE", "PATCH"].includes(method.Properties.HttpMethod),
     );
-    expect(writes).toHaveLength(14);
+    expect(writes).toHaveLength(16);
     const flagId = Object.entries(application.findResources("AWS::ApiGateway::Resource")).find(
       ([, resource]) => resource.Properties.PathPart === "submit-flag",
     )?.[0];
@@ -138,12 +158,25 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
     const publicWrites = writes.filter(
       (method) => method.Properties.AuthorizationType !== "COGNITO_USER_POOLS",
     );
-    expect(publicWrites).toHaveLength(1);
-    expect(publicWrites[0]?.Properties).toMatchObject({
-      HttpMethod: "POST",
-      ResourceId: { Ref: flagId },
-      AuthorizationType: "NONE",
-    });
+    expect(publicWrites).toHaveLength(2);
+    const operationId = Object.entries(application.findResources("AWS::ApiGateway::Resource")).find(
+      ([, resource]) => resource.Properties.PathPart === "op",
+    )?.[0];
+    expect(operationId).toBeDefined();
+    expect(publicWrites.map((method) => method.Properties)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          HttpMethod: "POST",
+          ResourceId: { Ref: flagId },
+          AuthorizationType: "NONE",
+        }),
+        expect.objectContaining({
+          HttpMethod: "POST",
+          ResourceId: { Ref: operationId },
+          AuthorizationType: "NONE",
+        }),
+      ]),
+    );
     application.resourceCountIs("AWS::Lambda::Url", 0);
     application.hasResourceProperties("AWS::Lambda::Function", {
       Environment: {
@@ -243,6 +276,16 @@ function artifactFixture() {
   });
   writeFileSync(join(folder, "metadata.json"), metadata);
   writeFileSync(join(folder, "template.yaml"), "Resources: {} # synthetic artifact test");
+  const battle = join(root, "problems/battles/ac26-crypto-battle");
+  const sdk = join(root, "packages/coordination-plugin-sdk");
+  cpSync(resolve(import.meta.dirname, "../../../problems/battles/ac26-crypto-battle"), battle, {
+    recursive: true,
+  });
+  cpSync(resolve(import.meta.dirname, "../../../packages/coordination-plugin-sdk"), sdk, {
+    recursive: true,
+  });
+  mkdirSync(join(root, "node_modules/@tenkacloud"), { recursive: true });
+  symlinkSync(sdk, join(root, "node_modules/@tenkacloud/coordination-plugin-sdk"), "dir");
   const stack = new Stack(new App({ outdir: join(base, "cdk.out") }), "ArtifactBoundary");
   return { base, root, folder, stack };
 }
@@ -401,7 +444,7 @@ describe("existing competitor bootstrap and registry IAM source boundaries", () 
   it("publishes the current registry mode, digest, and existing modal configuration", () => {
     const outputs = application.toJSON().Outputs;
     expect(outputs.CloudRunnerEnabled.Value).toBe("true");
-    expect(outputs.CloudInstallationControlVersion.Value).toBe("1");
+    expect(outputs.CloudInstallationControlVersion.Value).toBe("2");
     expect(outputs.CloudRunnerMode.Value).toBe("registry");
     expect(outputs.CloudLegacyBindingsDigest.Value).toMatch(/^[a-f0-9]{64}$/u);
     expect(outputs.CompetitorRoleName.Value).toBe(config.roleName);
@@ -619,5 +662,51 @@ describe("existing competitor bootstrap and registry IAM source boundaries", () 
     expect(allowed[0]?.Action).toBe("s3:GetObject");
     expect(JSON.stringify(allowed[0]?.Resource)).toContain("competitor-bootstrap.yaml");
     expect(JSON.stringify(allowed[0]?.Resource)).not.toContain("/*");
+  });
+});
+
+describe("canonical native Battle artifact", () => {
+  it("rejects a linked native entry rather than uploading mutable source", () => {
+    const f = artifactFixture();
+    const entry = join(f.root, "problems/battles/ac26-crypto-battle/coordination/crypto-battle.ts");
+    const target = join(f.root, "synthetic-plugin.ts");
+    renameSync(entry, target);
+    symlinkSync(target, entry);
+    expect(() => nativeBattleArtifact(f.root)).toThrow("symbolic links");
+  });
+  it("rejects imports outside the reviewed pure closure", () => {
+    const f = artifactFixture();
+    const entry = join(f.root, "problems/battles/ac26-crypto-battle/coordination/crypto-battle.ts");
+    writeFileSync(
+      entry,
+      `${readFileSync(entry, "utf8")}\nimport fs from "node:fs"; console.log(fs);`,
+    );
+    expect(() => nativeBattleArtifact(f.root)).toThrow("unreviewed external import");
+  });
+
+  it("bundles canonical plugin without CloudFormation, external packages or local host services", async () => {
+    const artifact = nativeBattleArtifact(resolve(import.meta.dirname, "../../.."));
+    expect(artifact.descriptor).toMatchObject({
+      kind: "coordination",
+      problemId: "ac26-crypto-battle",
+      stateBudget: { bytesPerTeam: 31744, baseBytes: 1536 },
+    });
+    expect(artifact.descriptor.pluginKey).toBe(
+      `plugins/${createHash("sha256").update(artifact.source).digest("hex")}.mjs`,
+    );
+    expect(artifact.descriptor).not.toHaveProperty("templateBody");
+    expect(artifact.source).not.toMatch(/bun:sqlite|HostingService|DynamoDB|from ["']@tenkacloud/u);
+    const module = await import(
+      `data:text/javascript;base64,${Buffer.from(artifact.source).toString("base64")}`
+    );
+    const plugin = module.default;
+    const state = plugin.initialState({
+      eventId: "synthetic-event",
+      teamIds: ["a", "b"],
+      matchSecret: "d".repeat(64),
+    });
+    const projection = plugin.projectForTeam(state, "a");
+    expect(projection).toBeDefined();
+    expect(JSON.stringify(projection)).not.toContain("d".repeat(64));
   });
 });

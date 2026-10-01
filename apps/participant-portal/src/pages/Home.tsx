@@ -91,9 +91,13 @@ export function HomePage({ config }: { config: AppConfig }) {
       {view && <TeamScorePanel view={view} leaderboard={leaderboard} />}
 
       {/* Audit table #12: 競技開始からのスコア推移を 折れ線グラフで可視化 (= dashboard 中段)。 */}
-      {!isMock && sessionToken && view && view.problems.length > 0 && (
-        <ScoreTimelineChart apiBaseUrl={config.apiBaseUrl} sessionToken={sessionToken} />
-      )}
+      {!isMock &&
+        config.scoreTimelineEnabled !== false &&
+        sessionToken &&
+        view &&
+        view.problems.length > 0 && (
+          <ScoreTimelineChart apiBaseUrl={config.apiBaseUrl} sessionToken={sessionToken} />
+        )}
 
       {/* Audit table #10: ホームは dashboard。 問題詳細 (ProblemPanel) を embed しない (=
        *  「一等地に何を出すか」 のティアリング、 問題の deep dive は /problems から)。 */}

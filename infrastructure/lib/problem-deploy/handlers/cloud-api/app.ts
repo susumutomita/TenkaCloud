@@ -3,7 +3,15 @@ import { type Context, Hono } from "hono";
 import { ulid } from "ulid";
 import { z } from "zod";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
-import { contentDigest, DeploymentConflict } from "../../control-data/domain/deployment-work.js";
+import {
+  NativeCoordinationError,
+  type NativeCoordinationRun,
+} from "../../control-data/domain/coordination.js";
+import {
+  contentDigest,
+  DeploymentConflict,
+  scoringBlock,
+} from "../../control-data/domain/deployment-work.js";
 import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
 import { ApiError, type OrganizerAuthConfig, participantKey, requireOrganizer } from "./auth.js";
@@ -12,6 +20,12 @@ import {
   registerCloudCompetitorAccountRoutes,
 } from "./competitor-account-routes.js";
 import { type CloudConnectionApi, registerCloudConnectionRoutes } from "./connection-routes.js";
+import {
+  type CloudCoordinationApi,
+  nativeParticipantProblems,
+  nativeRun,
+  registerCloudCoordinationRoutes,
+} from "./coordination-routes.js";
 import { type CloudDeploymentApi, registerCloudDeploymentRoutes } from "./deployment-routes.js";
 import {
   type CloudParticipantAccess,
@@ -19,7 +33,13 @@ import {
 } from "./participant-access.js";
 import { registerCloudScheduleRoutes } from "./schedule-routes.js";
 import { body, createEventSchema, identifier } from "./schema.js";
-import { eventSummary, leaderboard, participantView, teamSummary } from "./views.js";
+import {
+  eventSummary,
+  leaderboard,
+  organizerScoreTotals,
+  participantView,
+  teamSummary,
+} from "./views.js";
 
 export interface CloudApiOptions {
   readonly repository: CloudRepository;
@@ -30,6 +50,7 @@ export interface CloudApiOptions {
   readonly connections?: CloudConnectionApi;
   readonly accounts?: CloudCompetitorAccountsApi;
   readonly participantAccess?: CloudParticipantAccess;
+  readonly coordination?: CloudCoordinationApi;
 }
 const readRoles = ["Admin", "Operator", "Viewer"] as const;
 const writeRoles = ["Admin", "Operator"] as const;
@@ -53,7 +74,7 @@ async function create(
   context: Context,
   now: number,
   auth: OrganizerAuthConfig,
-  catalog?: CloudDeploymentApi["catalog"],
+  catalog?: () => Promise<Readonly<Record<string, unknown>>>,
 ) {
   const actor = requireOrganizer(context, writeRoles, auth, now);
   const input = createEventSchema.parse(await body(context));
@@ -121,16 +142,40 @@ async function create(
   }
   return context.json(response, 201);
 }
+function nativeRunSummary(run: NativeCoordinationRun | undefined) {
+  if (!run) return {};
+  return {
+    nativeRuns: [
+      {
+        runId: run.runId,
+        problemId: run.problemId,
+        status: run.closed ? "CLOSED" : "COMPLETE",
+        revision: run.revision,
+      },
+    ],
+  };
+}
+async function requestedScoreTotals(
+  repo: CloudRepository,
+  event: EventRecord,
+  teams: readonly TeamRecord[],
+  requested: boolean,
+) {
+  if (!requested) return {};
+  return organizerScoreTotals(event, teams, await repo.listTeamScores(event.eventId));
+}
 async function detail(
   repo: CloudRepository,
   context: Context,
   now: number,
   auth: OrganizerAuthConfig,
+  coordination?: CloudCoordinationApi,
 ) {
   requireOrganizer(context, readRoles, auth, now);
   const reveal = context.req.query("withTeamLoginKeys") === "true";
   if (reveal) requireOrganizer(context, writeRoles, auth, now);
   const event = await eventOr404(repo, context.req.param("eventId") ?? "");
+  const withScores = context.req.query("withScoreEvents") === "true";
   const [teams, deployments] = await Promise.all([
     repo.listTeamsByEvent(event.eventId),
     repo.listDeploymentsByEvent(event.eventId),
@@ -151,11 +196,17 @@ async function detail(
       ...(job.teardownFailureReason ? { failureReason: job.teardownFailureReason } : {}),
     });
   }
+  const [run, totals] = await Promise.all([
+    coordination ? nativeRun(coordination, event) : undefined,
+    requestedScoreTotals(repo, event, teams, withScores),
+  ]);
   return context.json({
     ...eventSummary(event),
     problems: event.problems,
     teams: teams.map((team) => teamSummary(team, reveal)),
     deploymentsByProblem,
+    ...nativeRunSummary(run),
+    ...totals,
   });
 }
 async function changeAccess(
@@ -206,7 +257,8 @@ export function createCloudApp(options: CloudApiOptions): Hono {
     return undefined;
   });
   app.onError((error, context) => {
-    if (error instanceof ApiError) return context.json({ error: error.code }, error.status);
+    if (error instanceof ApiError || error instanceof NativeCoordinationError)
+      return context.json({ error: error.code }, error.status);
     if (error instanceof DeploymentConflict)
       return context.json(
         { error: error.code },
@@ -245,10 +297,17 @@ export function createCloudApp(options: CloudApiOptions): Hono {
       ...(last && previous + 1 + page.length < events.length ? { nextCursor: last.eventId } : {}),
     });
   });
-  app.post("/events", (context) =>
-    create(repo, context, now(), options.organizerAuth, options.deployment?.catalog),
+  const catalog =
+    options.deployment || options.coordination
+      ? async () => ({
+          ...(options.deployment ? await options.deployment.catalog() : {}),
+          ...(options.coordination ? await options.coordination.catalog() : {}),
+        })
+      : undefined;
+  app.post("/events", (context) => create(repo, context, now(), options.organizerAuth, catalog));
+  app.get("/events/:eventId", (context) =>
+    detail(repo, context, now(), options.organizerAuth, options.coordination),
   );
-  app.get("/events/:eventId", (context) => detail(repo, context, now(), options.organizerAuth));
   app.post("/events/:eventId/teams/:teamId/rotate-login-key", (context) =>
     changeAccess(repo, context, now(), false, options.organizerAuth),
   );
@@ -257,13 +316,29 @@ export function createCloudApp(options: CloudApiOptions): Hono {
   );
   app.get("/portal/me", async (context) => {
     const team = await authenticate(repo, context, now());
-    return context.json(
-      participantView(
-        team,
-        await repo.listDeploymentsByTeam(team.eventId, team.teamId),
-        options.participantAccess !== undefined,
-      ),
+    const event = options.coordination ? await eventOr404(repo, team.eventId) : undefined;
+    const native =
+      options.coordination && event
+        ? await nativeParticipantProblems(options.coordination, event, team)
+        : [];
+    const view = participantView(
+      team,
+      await repo.listDeploymentsByTeam(team.eventId, team.teamId),
+      options.participantAccess !== undefined,
+      native,
     );
+    return context.json({
+      ...view,
+      ...(native.length && event
+        ? {
+            eventGate: {
+              kind: scoringBlock(event, now()) ?? "ok",
+              ...(event.startsAt ? { startsAt: event.startsAt } : {}),
+              ...(event.endsAt ? { endsAt: event.endsAt } : {}),
+            },
+          }
+        : {}),
+    });
   });
   app.get("/portal/leaderboard", async (context) => {
     const team = await authenticate(repo, context, now());
@@ -277,6 +352,7 @@ export function createCloudApp(options: CloudApiOptions): Hono {
   if (options.deployment)
     registerCloudDeploymentRoutes(app, {
       ...options.deployment,
+      coordination: options.coordination,
       repository: repo,
       organizerAuth: options.organizerAuth,
       now,
@@ -285,9 +361,12 @@ export function createCloudApp(options: CloudApiOptions): Hono {
     registerCloudScheduleRoutes(app, {
       repository: repo,
       work: options.deployment.work,
+      coordination: options.coordination,
       organizerAuth: options.organizerAuth,
       now,
     });
+  if (options.coordination)
+    registerCloudCoordinationRoutes(app, { ...options.coordination, repository: repo, now });
   if (options.connections && options.deployment)
     registerCloudConnectionRoutes(app, {
       ...options.connections,

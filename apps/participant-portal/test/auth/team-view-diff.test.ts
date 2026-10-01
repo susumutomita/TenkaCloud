@@ -43,6 +43,11 @@ describe("team-view-diff (Issue #2222)", () => {
     expect(viewIsUnchanged(cliOnly, unavailable)).toBe(false);
     expect(viewIsUnchanged(unavailable, structuredClone(unavailable))).toBe(true);
   });
+  it("refreshes native runtime identity even when the score and run ID are unchanged", () => {
+    const previous = view();
+    for (const native of [{ runtimeKind: "coordination" }, { coordination: true }])
+      expect(viewIsUnchanged(previous, view({ problems: [prob(native)] }))).toBe(false);
+  });
   it("should distinguish view / notifications / leaderboard changes independent of the Provider", () => {
     const a = view();
     const b = view({ problems: [prob({ status: "FAILED" }) as ParticipantProblemView] });

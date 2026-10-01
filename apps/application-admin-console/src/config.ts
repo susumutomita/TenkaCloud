@@ -76,6 +76,7 @@ export interface AppConfig {
   readonly mode?: "demo" | "local-host" | "cloud-host";
   /** IDs in this installation's actual execution catalog, not the static authoring catalog. */
   readonly supportedProblemIds?: readonly string[];
+  readonly nativeProblemIds?: readonly string[];
 }
 
 /** Issue #3226: `bun start` のローカル大会 console で動いているか。 */
@@ -112,6 +113,7 @@ function supportedCloudProblems(value: unknown): readonly string[] {
 interface RuntimeConfig {
   readonly mode?: "cloud-host";
   readonly supportedProblemIds?: readonly string[];
+  readonly nativeProblemIds?: readonly string[];
   readonly eventLimits?: EventLimits;
   readonly cognitoDomain: string;
   readonly userClientId: string;
@@ -150,10 +152,16 @@ function cloudEventLimits(value: unknown): EventLimits | undefined {
 function cloudRuntimeCapabilities(data: Partial<RuntimeConfig>) {
   if (data.mode !== undefined && data.mode !== "cloud-host")
     throw new CloudRuntimeConfigError("Unsupported cloud hosting runtime mode.");
+  const supportedProblemIds =
+    data.mode === "cloud-host" ? supportedCloudProblems(data.supportedProblemIds) : undefined;
+  const nativeProblemIds =
+    data.nativeProblemIds === undefined ? [] : supportedCloudProblems(data.nativeProblemIds);
+  if (nativeProblemIds.some((id) => !supportedProblemIds?.includes(id)))
+    throw new CloudRuntimeConfigError("Native problem is not in the supported cloud catalog.");
   return {
     mode: data.mode,
-    supportedProblemIds:
-      data.mode === "cloud-host" ? supportedCloudProblems(data.supportedProblemIds) : undefined,
+    supportedProblemIds,
+    nativeProblemIds: Object.freeze(nativeProblemIds),
   };
 }
 
@@ -347,6 +355,7 @@ export async function loadConfig(
     return {
       mode: runtime.mode,
       supportedProblemIds: runtime.supportedProblemIds,
+      nativeProblemIds: runtime.nativeProblemIds,
       eventLimits: runtime.eventLimits,
       cognitoDomain: runtime.cognitoDomain,
       cognitoClientId: runtime.userClientId,

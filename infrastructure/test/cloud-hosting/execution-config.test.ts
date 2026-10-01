@@ -1,4 +1,4 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,8 @@ import {
   createConnectionVerifier,
   createExecutionArtifactResolver,
   createExecutionCatalogProvider,
+  createNativeArtifactResolver,
+  createNativeCatalogProvider,
   installationAccountConfig,
   loadExecutionBindings,
   parseRunnerBindings,
@@ -302,5 +304,113 @@ describe("installation-scoped registry configuration", () => {
     expect(() =>
       registeredRunnerBinding({ ...record, awsAccountId: "123456789012" }, config, ["hello-world"]),
     ).toThrow("Control-plane account");
+  });
+});
+
+describe("native execution current-pin boundary", () => {
+  const source =
+    "export default { initialState:()=>({}), validateOp:()=>({ok:true}), applyOp:s=>s, projectForTeam:()=>({safe:true}), teamScores:()=>({}) };";
+  const artifactDigest = contentDigest(source);
+  const native = {
+    kind: "coordination",
+    problemId: "ac26-crypto-battle",
+    problemDir: "problems/battles/ac26-crypto-battle",
+    artifactDigest,
+    pluginKey: `plugins/${artifactDigest}.mjs`,
+    stateBudget: { bytesPerTeam: 31744, baseBytes: 1536 },
+    name: "Battle",
+    description: "Reviewed native game",
+    instructions: "Play",
+  };
+  const nativeRaw = JSON.stringify({ version: 1, problems: [], nativeProblems: [native] });
+  const catalogKey = `catalogs/${contentDigest(nativeRaw)}.json`;
+  const config = {
+    artifactBucket: "synthetic-artifacts",
+    region: "us-east-1",
+    catalogKey,
+    expectedBucketOwner: "123456789012",
+  };
+  it("loads the exact reviewed native bundle and exposes no fake CloudFormation problem", async () => {
+    vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) =>
+      object(
+        command instanceof GetObjectCommand && command.input.Key === catalogKey
+          ? nativeRaw
+          : source,
+      ),
+    );
+    const catalog = await createNativeCatalogProvider(config)();
+    const pin = catalog["ac26-crypto-battle"];
+    if (!pin) throw new Error("Native fixture missing.");
+    expect(pin).toMatchObject({ ...native, catalogKey });
+    const result = await createNativeArtifactResolver(config)(pin);
+    expect(result.plugin.projectForTeam({}, "a")).toEqual({ safe: true });
+    expect(result.descriptor).not.toHaveProperty("templateBody");
+    const calls = vi.mocked(S3Client.prototype.send).mock.calls;
+    expect(calls.map(([command]) => command.input)).toEqual(
+      expect.arrayContaining([
+        { Bucket: "synthetic-artifacts", Key: catalogKey, ExpectedBucketOwner: "123456789012" },
+        {
+          Bucket: "synthetic-artifacts",
+          Key: native.pluginKey,
+          ExpectedBucketOwner: "123456789012",
+        },
+      ]),
+    );
+    expect(
+      calls.every(
+        ([command]) =>
+          command instanceof GetObjectCommand &&
+          command.input.ExpectedBucketOwner === "123456789012",
+      ),
+    ).toBe(true);
+  });
+  it.each(["catalog", "digest", "key", "problem"])(
+    "rejects changed %s without reading an unreviewed bundle",
+    async (change) => {
+      const send = vi
+        .spyOn(S3Client.prototype, "send")
+        .mockImplementation(async () => object(nativeRaw));
+      const pin = { ...native, catalogKey };
+      if (change === "catalog") pin.catalogKey = `catalogs/${"0".repeat(64)}.json`;
+      else if (change === "digest") pin.artifactDigest = "0".repeat(64);
+      else if (change === "key") pin.pluginKey = `plugins/${"0".repeat(64)}.mjs`;
+      else pin.problemId = "other";
+      await expect(createNativeArtifactResolver(config)(pin)).rejects.toThrow();
+      expect(
+        send.mock.calls.every(
+          ([command]) => command instanceof GetObjectCommand && command.input.Key === catalogKey,
+        ),
+      ).toBe(true);
+    },
+  );
+  it("checks downloaded bytes before evaluating code and permits a correct retry", async () => {
+    const send = vi
+      .spyOn(S3Client.prototype, "send")
+      .mockImplementation(async (command) =>
+        object(
+          command instanceof GetObjectCommand && command.input.Key === catalogKey
+            ? nativeRaw
+            : `${source} /* changed */`,
+        ),
+      );
+    const resolve = createNativeArtifactResolver(config);
+    await expect(resolve({ ...native, catalogKey })).rejects.toThrow("integrity mismatch");
+    send.mockImplementation(async (command) =>
+      object(
+        command instanceof GetObjectCommand && command.input.Key === catalogKey
+          ? nativeRaw
+          : source,
+      ),
+    );
+    expect((await resolve({ ...native, catalogKey })).plugin.projectForTeam({}, "a")).toEqual({
+      safe: true,
+    });
+  });
+  it("rejects an invalid expected bucket owner before requesting any object", () => {
+    const send = vi.spyOn(S3Client.prototype, "send");
+    expect(() =>
+      createNativeArtifactResolver({ ...config, expectedBucketOwner: "not-an-account" }),
+    ).toThrow("Invalid artifact bucket owner");
+    expect(send).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,13 @@ import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
 import type { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
 import { ApiError, type OrganizerAuthConfig, participantKey, requireOrganizer } from "./auth.js";
+import {
+  type CloudCoordinationApi,
+  nativeArtifact,
+  nativeProblem,
+  settleNativeEvent,
+} from "./coordination-routes.js";
+import type { NativeProblem } from "./execution-config.js";
 import { body, identifier } from "./schema.js";
 
 export interface CloudProblem {
@@ -30,6 +37,7 @@ export interface CloudDeploymentApi {
   readonly prepareConnection?: (event: EventRecord, team: TeamRecord, now: number) => Promise<void>;
 }
 interface RouteOptions extends CloudDeploymentApi {
+  readonly coordination?: CloudCoordinationApi;
   readonly repository: CloudRepository;
   readonly organizerAuth: OrganizerAuthConfig;
   readonly now: () => number;
@@ -99,14 +107,7 @@ async function boundedMap<T>(
     }),
   );
 }
-async function deploy(context: Context, options: RouteOptions) {
-  const now = options.now();
-  const actor = requireOrganizer(context, ["Admin", "Operator"], options.organizerAuth, now);
-  if (!(await options.work.acceptingNewDeployments()))
-    throw new ApiError(409, "installation_draining");
-  const event = await currentEvent(options, context.req.param("eventId") ?? "");
-  if (!["DRAFT", "DEPLOYING", "READY"].includes(event.status))
-    throw new ApiError(409, "event_closed");
+async function deploymentInput(context: Context) {
   const text = await context.req.text();
   if (Buffer.byteLength(text, "utf8") > 64 * 1024) throw new ApiError(400, "request_too_large");
   let json: unknown;
@@ -115,7 +116,46 @@ async function deploy(context: Context, options: RouteOptions) {
   } catch {
     throw new ApiError(400, "invalid_request");
   }
-  const input = selection.parse(json);
+  return selection.parse(json);
+}
+async function initializeNativeRuns(
+  options: RouteOptions,
+  event: EventRecord,
+  teams: readonly TeamRecord[],
+  ids: readonly string[],
+  catalog: Readonly<Record<string, NativeProblem>>,
+  retry: boolean,
+  now: number,
+) {
+  const coordination = options.coordination;
+  if (!coordination || retry || !ids.length) return { event, initialized: 0 };
+  for (const id of ids) {
+    const descriptor = catalog[id];
+    if (!descriptor) throw new ApiError(409, "unsupported_runtime_problem");
+    await coordination.store.initialize({
+      event,
+      teams,
+      artifact: await nativeArtifact(coordination, descriptor),
+      now,
+    });
+  }
+  return { event: await currentEvent(options, event.eventId), initialized: ids.length };
+}
+function nativeInitializationSummary(ids: readonly string[], initialized: number) {
+  return ids.length ? { initialized } : {};
+}
+async function currentNativeCatalog(options: RouteOptions) {
+  return options.coordination ? options.coordination.catalog() : {};
+}
+async function deploy(context: Context, options: RouteOptions) {
+  const now = options.now();
+  const actor = requireOrganizer(context, ["Admin", "Operator"], options.organizerAuth, now);
+  if (!(await options.work.acceptingNewDeployments()))
+    throw new ApiError(409, "installation_draining");
+  let event = await currentEvent(options, context.req.param("eventId") ?? "");
+  if (!["DRAFT", "DEPLOYING", "READY"].includes(event.status))
+    throw new ApiError(409, "event_closed");
+  const input = await deploymentInput(context);
   const teams = await options.repository.listTeamsByEvent(event.eventId);
   const selectedTeams = input.teamIds
     ? teams.filter((team) => input.teamIds?.includes(team.teamId))
@@ -123,8 +163,13 @@ async function deploy(context: Context, options: RouteOptions) {
   const ids = input.problemIds ?? event.problems.map((problem) => problem.problemId);
   validateSelection(input, selectedTeams, ids, event);
   const catalog = await options.catalog();
-  if (ids.some((id) => !Object.hasOwn(catalog, id)))
+  const nativeCatalog = await currentNativeCatalog(options);
+  const nativeIds = ids.filter((id) => Object.hasOwn(nativeCatalog, id));
+  const awsIds = ids.filter((id) => Object.hasOwn(catalog, id));
+  if (nativeIds.length + awsIds.length !== ids.length)
     throw new ApiError(409, "unsupported_runtime_problem");
+  if (nativeIds.length && selectedTeams.length !== teams.length)
+    throw new ApiError(400, "native_battle_requires_full_roster");
   const key = requestKey(context);
   const hash = contentDigest(
     JSON.stringify([
@@ -134,11 +179,32 @@ async function deploy(context: Context, options: RouteOptions) {
       input.retryFailedOnly ?? false,
     ]),
   );
+  const native = await initializeNativeRuns(
+    options,
+    event,
+    teams,
+    nativeIds,
+    nativeCatalog,
+    input.retryFailedOnly ?? false,
+    now,
+  );
+  const initialized = native.initialized;
+  event = native.event;
+  if (!awsIds.length)
+    return context.json(
+      {
+        eventId: event.eventId,
+        enqueued: 0,
+        initialized,
+        skipped: input.retryFailedOnly ? nativeIds.length : 0,
+      },
+      202,
+    );
   const proposal = await planTargets(
     options,
     event,
     selectedTeams,
-    ids,
+    awsIds,
     catalog,
     input.retryFailedOnly ?? false,
     now,
@@ -171,7 +237,12 @@ async function deploy(context: Context, options: RouteOptions) {
     });
   });
   return context.json(
-    { eventId: event.eventId, enqueued: plan.targets.length, skipped: plan.skipped },
+    {
+      eventId: event.eventId,
+      enqueued: plan.targets.length,
+      skipped: plan.skipped,
+      ...nativeInitializationSummary(nativeIds, initialized),
+    },
     202,
   );
 }
@@ -189,7 +260,12 @@ async function planTargets(
   const targets: z.infer<typeof planned>["targets"] = [];
   let skipped = 0;
   for (const team of teams) {
-    await options.prepareConnection?.(event, team, now);
+    // Native runs have no account or region; only actual AWS targets influence account preparation.
+    const nativeId = nativeProblem(event);
+    const connectionEvent = nativeId
+      ? { ...event, problems: event.problems.filter((problem) => problem.problemId !== nativeId) }
+      : event;
+    await options.prepareConnection?.(connectionEvent, team, now);
     const connection = await options.work.getConnection(event.eventId, team.teamId);
     assertConnection(connection, team, ids, event);
     for (const problemId of ids) {
@@ -337,11 +413,24 @@ async function submit(context: Context, options: RouteOptions) {
 async function teardown(context: Context, options: RouteOptions) {
   const now = options.now();
   requireOrganizer(context, ["Admin", "Operator"], options.organizerAuth, now);
+  const coordination = options.coordination;
   const result = await requestEventTeardown({
     repository: options.repository,
     work: options.work,
     eventId: identifier.parse(context.req.param("eventId")),
     now,
+    ...(coordination
+      ? {
+          beforeClose: async (event: EventRecord) =>
+            (await settleNativeEvent(
+              coordination,
+              event,
+              options.now,
+              { status: "TEARDOWN", endsAt: new Date(now).toISOString(), scoringLocked: true },
+              true,
+            )) ?? event,
+        }
+      : {}),
   });
   return context.json(result.body, result.status);
 }
@@ -351,10 +440,12 @@ export async function requestEventTeardown(options: {
   readonly work: DynamoDeploymentWork;
   readonly eventId: string;
   readonly now: number;
+  readonly beforeClose?: (event: EventRecord) => Promise<EventRecord>;
 }) {
   const now = options.now;
-  const event = await options.repository.getEvent(identifier.parse(options.eventId));
+  let event = await options.repository.getEvent(identifier.parse(options.eventId));
   if (!event) throw new ApiError(404, "not_found");
+  if (options.beforeClose) event = await options.beforeClose(event);
   const at = new Date(Math.max(now, Date.parse(event.updatedAt) + 1)).toISOString();
   if ((await options.work.closeEvent(event, at)) === "archived")
     return {
@@ -400,8 +491,22 @@ export function registerCloudDeploymentRoutes(app: Hono, options: RouteOptions):
       .min(1)
       .max(100)
       .parse(context.req.query("limit") ?? 100);
+    const entries = await options.work.listScoreEvents(team.eventId, team.teamId, limit);
+    const event = await currentEvent(options, team.eventId);
+    const nativeId = nativeProblem(event);
+    const native =
+      options.coordination && nativeId
+        ? await options.coordination.store.listScoreEvents(
+            team.eventId,
+            nativeId,
+            team.teamId,
+            limit,
+          )
+        : [];
     return context.json({
-      entries: await options.work.listScoreEvents(team.eventId, team.teamId, limit),
+      entries: [...entries, ...native]
+        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+        .slice(0, limit),
     });
   });
 }

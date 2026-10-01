@@ -84,7 +84,8 @@ export type EventProviderMode =
   | { readonly kind: "composite"; readonly providers: readonly string[] }
   | { readonly kind: "mixed" }
   /** Issue #3226: the local competition host runs Docker environments; no cloud destination. */
-  | { readonly kind: "local" };
+  | { readonly kind: "local" }
+  | { readonly kind: "native" };
 
 export type TeamTableItem = TeamRow & { idx: number };
 
@@ -202,14 +203,16 @@ function requiredCompositeProviders(
 export function resolveEventProviderMode(
   problemRows: readonly Pick<ProblemRow, "runtimeProvider" | "runtimeProviders" | "composite">[],
 ): EventProviderMode {
-  if (problemRows.some((problem) => problem.composite)) {
-    const providers = problemRows.flatMap((problem) =>
+  const externalRows = problemRows.filter((problem) => problem.runtimeProvider !== "native");
+  if (problemRows.length > 0 && externalRows.length === 0) return { kind: "native" };
+  if (externalRows.some((problem) => problem.composite)) {
+    const providers = externalRows.flatMap((problem) =>
       problem.composite ? requiredCompositeProviders(problem) : [problem.runtimeProvider ?? "aws"],
     );
     return { kind: "composite", providers: [...new Set(providers)] };
   }
   // 未宣言 runtime は aws/cloudformation に正規化 (ProblemSummary と同じ規約)。
-  const providers = problemRows.map((p) => p.runtimeProvider ?? "aws");
+  const providers = externalRows.map((p) => p.runtimeProvider ?? "aws");
   const nonAws = new Set(providers.filter((p) => p !== "aws"));
   if (nonAws.size === 0) return { kind: "aws" };
   if (!providers.includes("aws") && nonAws.size === 1) {

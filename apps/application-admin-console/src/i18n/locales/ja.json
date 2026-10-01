@@ -253,7 +253,9 @@
     "credential_unregistered": "認証情報が未登録です。",
     "mixed_provider_error": "v1 では AWS と非 AWS provider を同一 Event に混在できません。provider ごとに Event を分けてください。",
     "col_team_region": "Region (未指定は問題の既定)",
-    "team_region_inherit": "問題の既定に従う"
+    "team_region_inherit": "問題の既定に従う",
+    "teams_description_native": "この大会は TenkaCloud 内で動く問題だけを使います。チームの内部識別子を設定してください。競技者用の AWS アカウントは不要です。",
+    "native_execution": "TenkaCloud 内で実行"
   },
   "lite_drill": {
     "checkpoint_header": "オンボーディングドリル: チェックポイント獲得!",
@@ -297,7 +299,7 @@
     "rescue_body": "競技者アカウント側で stack が ROLLBACK_COMPLETE などの状態のまま残っていると、 削除が進まず Event が TEARDOWN のまま止まることがあります。 5 分以上進まない場合は、 競技者に CloudFormation コンソールで該当 stack の手動削除を依頼するか、 この Event を強制的に ARCHIVED にしてください (該当する deployment は削除済み / 失敗として扱われ、 Event の表示から外れます)。 競技者アカウント上の stack は別途、 競技者による手動削除が必要です。",
     "error_header": "エラー",
     "bulk_result_header": "Deploy / Delete 受付",
-    "bulk_result_body": "受付: {enqueued} 件 / skipped: {skipped} 件 (実 deploy / delete は State Machine が非同期に進めます。 数分後に再読み込みしてください)",
+    "bulk_result_body": "受付: {enqueued} 件 / スキップ: {skipped} 件。処理が継続中の場合があります。進捗を確認してから次の操作へ進んでください。",
     "bulk_result_failed": "{failed} 件は受付に失敗したか、受付結果を確認できていません。対象の現在の状態を確認し、操作を再試行してください。受付済みでも処理完了とは限りません。",
     "deploy_progress_header": "Deploy 進捗",
     "deploy_progress_description": "{total} 件中 完了 {complete} / 進行中 {inFlight}",
@@ -487,7 +489,16 @@
     "modal_teardown_blast_radius_header": "影響範囲",
     "modal_teardown_blast_radius_body": "{teamCount} team × {problemCount} 問題分の CloudFormation stack を競技者アカウント上で全削除します。 取り消しできません。",
     "modal_teardown_confirm_input_label": "確認のため DELETE と入力してください",
-    "modal_teardown_confirm_input_description": "Undo 不可な操作のため、 DELETE と入力されたときだけ confirm button が活性化します。"
+    "modal_teardown_confirm_input_description": "Undo 不可な操作のため、 DELETE と入力されたときだけ confirm button が活性化します。",
+    "native_run_ready": "準備済み（TenkaCloud 内）",
+    "native_run_closed": "終了済み（TenkaCloud 内）",
+    "native_run_pending": "未初期化（TenkaCloud 内）",
+    "bulk_native_initialized": "内部実行の問題を {count} 件初期化しました。",
+    "cloud_manual_lifecycle": "準備すると組み込み競技を初期化し、未配置の AWS 問題を配置します。既存リソースは再作成しません。配置・撤収の予約は未対応のため、終了後は明示的に撤収してください。",
+    "cloud_prepare": "競技を準備",
+    "cloud_schedule_description": "開始・終了時刻で採点期間を設定します。「即座に終了」はサーバー時刻で採点を確定し、競技を終了します。AWS リソースは残るため、撤収は別途実行してください。",
+    "cloud_operations_limits": "このクラウド構成ではキャパシティ操作と強制アーカイブは未対応です。スケジュールから撤収を実行してください。削除と所有確認が完了するまで未解決の撤収は表示に残ります。",
+    "score_history_unavailable": "チームの現在の得点を表示しています。このクラウド画面では完全な得点履歴、正解問題数、問題別平均点は未対応です。取得できない値は「—」で表示します。"
   },
   "send_notification": {
     "header": "通知を送る",
@@ -544,7 +555,7 @@
     "section_problems": "問題別ブレークダウン",
     "section_disruptions": "Disruption / Red Team ログ",
     "section_footer": "フッタ",
-    "field_organizer": "主催 (テナント)",
+    "field_organizer": "主催",
     "field_event_id": "Event ID",
     "field_schedule": "スケジュール (UTC)",
     "field_status": "ステータス",

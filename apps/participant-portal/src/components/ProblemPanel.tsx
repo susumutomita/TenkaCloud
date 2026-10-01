@@ -195,7 +195,9 @@ function ProblemFacts({
   return (
     <KeyValuePairs
       items={[
-        { label: t("problem_panel.region_label"), value: <code>{problem.region}</code> },
+        ...(problem.region
+          ? [{ label: t("problem_panel.region_label"), value: <code>{problem.region}</code> }]
+          : []),
         { label: t("problem_panel.current_score_label"), value: `${problem.score} pt` },
         // Issue #1917: uptime のみ。 「Score が下がった = サービスが degraded/down」 を
         // 同じ行群で結びつけ、 減点理由を競技者が把握できるようにする (per-endpoint は非露出)。

@@ -36,6 +36,8 @@ export function viewIsUnchanged(
       p.failureReason !== n.failureReason ||
       p.accessError !== n.accessError ||
       p.provider !== n.provider ||
+      p.runtimeKind !== n.runtimeKind ||
+      p.coordination !== n.coordination ||
       p.awsAccountId !== n.awsAccountId ||
       p.region !== n.region ||
       JSON.stringify(p.accessCapabilities) !== JSON.stringify(n.accessCapabilities) ||

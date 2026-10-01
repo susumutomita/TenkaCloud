@@ -75,3 +75,20 @@ describe("explicit AWS access capabilities", () => {
     ).toBe(false);
   });
 });
+
+describe("native Battle capabilities", () => {
+  it.each([{ runtimeKind: "coordination" }, { coordination: true }])(
+    "does not infer an AWS provider from a native run: %j",
+    (runtime) => {
+      expect(problemProvider(runtime)).toBe("native");
+      expect(providerLabel(problemProvider(runtime))).toBe("TenkaCloud");
+      expect(hasAwsAccessCapability(runtime, "console")).toBe(false);
+      expect(
+        hasAwsAccessCapability(
+          { ...runtime, provider: "aws", accessCapabilities: ["cli-credentials"] },
+          "cli-credentials",
+        ),
+      ).toBe(false);
+    },
+  );
+});

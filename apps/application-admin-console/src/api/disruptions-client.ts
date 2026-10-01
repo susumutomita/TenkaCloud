@@ -1,3 +1,4 @@
+import { newOperationKey } from "@tenkacloud/web-kit";
 import type { ApiClient } from "./client";
 
 /**
@@ -144,7 +145,7 @@ export function fetchDisruptionAudit(
 
 /** A fresh idempotency key for a fire request (>= 8 chars). */
 export function newFireRequestId(): string {
-  return `fire-${crypto.randomUUID()}`;
+  return `fire-${newOperationKey()}`;
 }
 
 /** One active recurring disruption (an aws-scheduler rate schedule still running). */

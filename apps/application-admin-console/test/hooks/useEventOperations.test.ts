@@ -151,7 +151,7 @@ describe("useEventOperations — bulk deploy / teardown", () => {
       await result.current.handleBulkDeploy();
     });
     const firstKey = ops.bulkDeployEvent.mock.calls[0]?.[3];
-    expect(firstKey).toMatch(/^[a-f0-9-]{36}$/);
+    expect(firstKey).toMatch(/^[a-f0-9]{32}$/);
     await act(async () => {
       await result.current.handleBulkDeploy();
     });
@@ -261,6 +261,24 @@ describe("useEventOperations — scheduling", () => {
       await result.current.handleScheduleEnd();
     });
     expect(result.current.endsAtModalOpen).toBe(false);
+  });
+
+  it("ends cloud events with the server clock and surfaces failures without a false refresh", async () => {
+    ops.endEvent
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("settlement failed"));
+    const { result, refresh, setError } = setup({ cloudHost: true });
+    await act(async () => {
+      await result.current.handleEndNowSchedule();
+    });
+    expect(ops.endEvent).toHaveBeenCalledWith(CLIENT, "evt-1");
+    expect(ops.setEventSchedule).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledOnce();
+    await act(async () => {
+      await result.current.handleEndNowSchedule();
+    });
+    expect(setError).toHaveBeenCalledWith("settlement failed");
+    expect(refresh).toHaveBeenCalledOnce();
   });
 
   it("should end-now schedule and surface its error", async () => {

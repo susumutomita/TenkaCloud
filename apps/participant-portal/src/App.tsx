@@ -48,7 +48,13 @@ export function App({ config }: { config: AppConfig }) {
           path="/score-events"
           element={guarded(config, <ScoreEventsPage config={config} />)}
         />
-        <Route path="/notifications" element={guarded(config, <NotificationsPage />)} />
+        <Route
+          path="/notifications"
+          element={guarded(
+            config,
+            <NotificationsPage enabled={config.notificationsEnabled !== false} />,
+          )}
+        />
         <Route path="/problems" element={guarded(config, <QuestsPage />)} />
         {/* Issue #2786: 週・章順の学習経路。 /problems の flat 一覧と併存する。
             自習経路なので local だけに出す — nav の link を消すだけでは URL が生きたまま

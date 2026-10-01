@@ -1,8 +1,37 @@
-import type { LeaderboardResponse, ParticipantTeamView } from "@tenkacloud/portal-contracts";
+import type {
+  LeaderboardResponse,
+  ParticipantProblemView,
+  ParticipantTeamView,
+} from "@tenkacloud/portal-contracts";
 import type { TeamScoreProjection } from "../../control-data/domain/deployment-work.js";
 import type { DeploymentRecord } from "../../control-data/domain/deployments.js";
 import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
+import { organizerScoreTotalsSchema } from "./schema.js";
+
+export function organizerScoreTotals(
+  event: EventRecord,
+  teams: readonly TeamRecord[],
+  scores: readonly TeamScoreProjection[],
+) {
+  const roster = new Set(teams.map((team) => team.teamId));
+  if (
+    teams.some((team) => team.eventId !== event.eventId) ||
+    scores.some((score) => score.eventId !== event.eventId || !roster.has(score.teamId)) ||
+    new Set(scores.map((score) => score.teamId)).size !== scores.length
+  )
+    throw new Error("Organizer score projection scope mismatch.");
+  const byTeam = new Map(scores.map((score) => [score.teamId, score.score]));
+  return organizerScoreTotalsSchema.parse({
+    scoreHistoryAvailable: false,
+    scoreEventsByTeam: teams.map((team) => ({
+      teamId: team.teamId,
+      teamName: team.displayName ?? team.internalSlug,
+      projectedTotal: byTeam.get(team.teamId) ?? 0,
+      events: [],
+    })),
+  });
+}
 
 export function eventSummary(event: EventRecord) {
   const { problems, ...summary } = event;
@@ -22,6 +51,7 @@ export function participantView(
   team: TeamRecord,
   deployments: readonly DeploymentRecord[],
   participantAwsCli = false,
+  native: readonly ParticipantProblemView[] = [],
 ): ParticipantTeamView {
   return {
     team: {
@@ -30,41 +60,44 @@ export function participantView(
       eventId: team.eventId,
       teamId: team.teamId,
     },
-    problems: deployments
-      .filter(
-        (row) =>
-          row.eventId === team.eventId && row.teamId === team.teamId && !inactive.has(row.status),
-      )
-      .map((row) => ({
-        jobId: row.jobId,
-        problemId: row.problemId,
-        region: row.region,
-        awsAccountId: row.awsAccountId,
-        status: row.status,
-        expiresAt: row.expiresAt,
-        score: row.score,
-        // Endpoint/answer projection is supplied with runner wiring; never expose arbitrary raw outputs.
-        stackOutputs: { ...row.publicOutputs },
-        ...(row.scoring
-          ? {
-              scoring: {
-                kind: row.scoring.kind,
-                points: row.scoring.points,
-                flagSubmitted: row.flagSubmitted === true,
-              },
-            }
-          : {}),
-        ...(row.failureReason ? { failureReason: row.failureReason } : {}),
-        ...(row.createdAt ? { createdAt: row.createdAt } : {}),
-        accessCapabilities:
-          participantAwsCli &&
-          row.problemId === "hello-world" &&
-          row.status === "COMPLETE" &&
-          !row.teardownStatus
-            ? ["cli-credentials"]
-            : [],
-        deployLog: { cursor: row.jobId, entries: [] },
-      })),
+    problems: [
+      ...deployments
+        .filter(
+          (row) =>
+            row.eventId === team.eventId && row.teamId === team.teamId && !inactive.has(row.status),
+        )
+        .map<ParticipantProblemView>((row) => ({
+          jobId: row.jobId,
+          problemId: row.problemId,
+          region: row.region,
+          awsAccountId: row.awsAccountId,
+          status: row.status,
+          expiresAt: row.expiresAt,
+          score: row.score,
+          // Endpoint/answer projection is supplied with runner wiring; never expose arbitrary raw outputs.
+          stackOutputs: { ...row.publicOutputs },
+          ...(row.scoring
+            ? {
+                scoring: {
+                  kind: row.scoring.kind,
+                  points: row.scoring.points,
+                  flagSubmitted: row.flagSubmitted === true,
+                },
+              }
+            : {}),
+          ...(row.failureReason ? { failureReason: row.failureReason } : {}),
+          ...(row.createdAt ? { createdAt: row.createdAt } : {}),
+          accessCapabilities:
+            participantAwsCli &&
+            row.problemId === "hello-world" &&
+            row.status === "COMPLETE" &&
+            !row.teardownStatus
+              ? ["cli-credentials"]
+              : [],
+          deployLog: { cursor: row.jobId, entries: [] },
+        })),
+      ...native,
+    ],
   };
 }
 /** Historical leaderboard projection from deployment scores, with the same freeze response contract. */

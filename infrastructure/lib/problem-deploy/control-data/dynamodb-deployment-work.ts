@@ -28,6 +28,7 @@ import {
   teardownSchema,
   type Write,
 } from "./deployment-storage.js";
+import { coordinationHeadKey, NATIVE_COORDINATION_PROBLEM } from "./domain/coordination.js";
 import {
   type AcceptDeployment,
   type CreationReservation,
@@ -117,9 +118,20 @@ export class DynamoDeploymentWork {
     event: import("./domain/events.js").EventRecord,
     at: string,
   ): Promise<"closing" | "archived"> {
+    const nativeFence = event.problems.some(
+      (problem) => problem.problemId === NATIVE_COORDINATION_PROBLEM,
+    )
+      ? await new (
+          await import("./dynamodb-deployments-coordination.js")
+        ).DynamoDeploymentsCoordination(this.ddb, this.tables).closeFence(
+          event.eventId,
+          NATIVE_COORDINATION_PROBLEM,
+        )
+      : undefined;
     if (event.status === "ARCHIVED") return "archived";
     if (event.status === "TEARDOWN") return "closing";
     const closed = await this.commit([
+      ...(nativeFence ? [nativeFence] : []),
       {
         Update: {
           TableName: this.tables.events,
@@ -180,6 +192,16 @@ export class DynamoDeploymentWork {
             "#status = :closing AND attribute_exists(teardownExpected) AND teardownCompleted = teardownExpected",
           ExpressionAttributeNames: { "#status": "status" },
           ExpressionAttributeValues: { ":closing": "TEARDOWN", ":archived": "ARCHIVED" },
+        },
+      },
+      {
+        ConditionCheck: {
+          TableName: this.tables.deployments,
+          Key: coordinationHeadKey(eventId, NATIVE_COORDINATION_PROBLEM),
+          ConditionExpression:
+            "attribute_not_exists(PK) OR (#closed = :yes AND attribute_exists(snapshotDigest) AND attribute_exists(revision) AND chunkCount > :zero)",
+          ExpressionAttributeNames: { "#closed": "closed" },
+          ExpressionAttributeValues: { ":yes": true, ":zero": 0 },
         },
       },
     ]);
@@ -1229,6 +1251,7 @@ export class DynamoDeploymentWork {
       readonly endsAt?: string;
       readonly scoreboardFreezeMinutes?: number;
       readonly scoringLocked?: boolean;
+      readonly status?: "ENDED";
     },
     at: string,
   ): Promise<void> {
@@ -1242,7 +1265,7 @@ export class DynamoDeploymentWork {
     };
     for (const [name, value] of Object.entries(patch)) {
       if (value !== undefined) {
-        sets.push(`${name} = :${name}`);
+        sets.push(`${name === "status" ? "#status" : name} = :${name}`);
         values[`:${name}`] = value;
       }
     }

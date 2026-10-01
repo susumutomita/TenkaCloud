@@ -34,6 +34,7 @@ export { validateDeployAtInput, validateEndsAtInput, validateTeardownAtInput };
 export function useEventOperations(args: {
   readonly apiClient: ApiClient | null;
   readonly canMutateTenant: boolean;
+  readonly cloudHost?: boolean;
   readonly detail: EventDetail | null;
   readonly eventId: string;
   readonly refresh: () => Promise<void>;
@@ -180,7 +181,11 @@ export function useEventOperations(args: {
     setEndsAtInFlight(true);
     setError(null);
     try {
-      await setEventSchedule(apiClient, eventId, { endsAt: new Date(Date.now()).toISOString() });
+      // Cloud scheduling rejects client timestamps already in the past. End uses the server
+      // clock and atomically settles native scoring before marking the event ended.
+      if (args.cloudHost) await endEvent(apiClient, eventId);
+      else
+        await setEventSchedule(apiClient, eventId, { endsAt: new Date(Date.now()).toISOString() });
       await refresh();
     } catch (err) {
       setError(toErrorMessage(err));

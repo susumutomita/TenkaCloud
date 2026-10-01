@@ -165,11 +165,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             // selected options are built from this exact catalog, so a miss is unreachable.
             /* v8 ignore next */
             if (!meta) throw new Error(`selected problem is missing from catalog: ${opt.value}`);
-            return newProblemRow(meta, opt.value);
+            const row = newProblemRow(meta, opt.value);
+            return cloudHost && config.nativeProblemIds?.includes(opt.value)
+              ? { ...row, runtimeProvider: "native", composite: false }
+              : row;
           });
       });
     },
-    [allProblems],
+    [allProblems, cloudHost, config.nativeProblemIds],
   );
 
   const updateProblemRow = useCallback((problemId: string, patch: Partial<ProblemRow>) => {
@@ -407,7 +410,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         visible={deployPromptTarget !== null}
         canMutateTenant={canMutate}
         deployStarting={deployStarting}
-        bulkDeploySupported={providerMode.kind === "aws" || providerMode.kind === "local"}
+        bulkDeploySupported={["aws", "local", "native"].includes(providerMode.kind)}
         participantPortalUrl={config.participantPortalUrl}
         teams={deployPromptTarget?.teams ?? []}
         capacityWarnings={deployPromptTarget?.warnings ?? []}

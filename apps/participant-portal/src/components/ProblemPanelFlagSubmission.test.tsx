@@ -128,7 +128,7 @@ describe("FlagSubmissionPanel submit flow", () => {
     await user.click(screen.getByRole("button", { name: SUBMIT }));
     await screen.findByText(/response lost/);
     const firstKey = apiMocks.submitFlag.mock.calls[0]?.[6];
-    expect(firstKey).toMatch(/^[a-f0-9-]{36}$/);
+    expect(firstKey).toMatch(/^[a-f0-9]{32}$/);
     await user.click(screen.getByRole("button", { name: SUBMIT }));
     await screen.findByText("Wrong (-5 pt) — total -5 pt");
     expect(apiMocks.submitFlag.mock.calls[1]?.[6]).toBe(firstKey);

@@ -20,9 +20,13 @@ import {
   type PortalLocale,
   type PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { PendingOperation, toErrorMessage } from "@tenkacloud/web-kit";
 import { Component, type ErrorInfo, type ReactNode, Suspense, useMemo } from "react";
-import { getCoordinationProjection, submitCoordinationOp } from "../api/coordination-client";
+import {
+  type CoordinationOutcome,
+  getCoordinationProjection,
+  submitCoordinationOp,
+} from "../api/coordination-client";
 import type { ParticipantEndpointView } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { loadPluginSlot } from "./loader";
@@ -59,6 +63,47 @@ interface PortalPluginSlotsProps {
   readonly eventEndsAt?: string;
 }
 
+interface CoordinationOperationScope {
+  readonly id: string;
+  readonly pending: Map<string, PendingOperation>;
+  projection?: ReturnType<typeof getCoordinationProjection>;
+}
+
+async function submitPluginOperation(
+  scope: CoordinationOperationScope,
+  coordinationApiUrl: string,
+  sessionToken: string,
+  op: unknown,
+): Promise<CoordinationOutcome> {
+  const body = JSON.stringify(op);
+  if (body === undefined) return { kind: "rejected", error: "invalid_op" };
+  let intent = scope.pending.get(body);
+  if (!intent) {
+    // Never evict an uncertain mutation and accidentally retry it with a new key.
+    if (scope.pending.size >= 32) return { kind: "unavailable" };
+    intent = new PendingOperation();
+    scope.pending.set(body, intent);
+  }
+  const key = intent.keyFor(scope.id, op);
+  const result = await submitCoordinationOp(coordinationApiUrl, sessionToken, op, undefined, key);
+  if (result.kind === "ok" || result.kind === "rejected") {
+    intent.acknowledge(key);
+    if (scope.pending.get(body) === intent) scope.pending.delete(body);
+  }
+  return result;
+}
+
+/** Concurrent slots share the in-flight read only; the next completed poll always reads anew. */
+function readPluginProjection(scope: CoordinationOperationScope, url: string, token: string) {
+  if (!scope.projection) {
+    const request = getCoordinationProjection(url, token).finally(() => {
+      if (scope.projection === request) scope.projection = undefined;
+    });
+    scope.projection = request;
+  }
+  return scope.projection;
+}
+
 export function PortalPluginSlots({
   problemId,
   jobId,
@@ -87,20 +132,34 @@ export function PortalPluginSlots({
     [problemId, stackOutputs, registeredEndpoints],
   );
   const teamProp = useMemo(() => buildPortalTeam(team), [team]);
+  // Keep each unacknowledged payload's key across retries and polling rerenders.
+  // A different run or session gets a separate bounded intent set.
+  const operationScope = useMemo<CoordinationOperationScope>(
+    () => ({
+      id: JSON.stringify([coordinationApiUrl, sessionToken, jobId]),
+      pending: new Map(),
+    }),
+    [coordinationApiUrl, sessionToken, jobId],
+  );
   // [#1420] dispatcher URL + session が揃ったときだけ live coordination client を束縛する
   // (= plugin は URL/token を知らず op 投入 + projection 取得できる)。 どちらか無ければ undefined。
   const coordinationClient = useMemo<PortalCoordinationClient | undefined>(() => {
     if (!coordinationApiUrl || !sessionToken) return undefined;
     return {
       submitOp: async (op: unknown) => {
-        const result = await submitCoordinationOp(coordinationApiUrl, sessionToken, op);
+        const result = await submitPluginOperation(
+          operationScope,
+          coordinationApiUrl,
+          sessionToken,
+          op,
+        );
         // A rejected move can still incur a penalty; always refresh the official totals.
         void refreshAfterMutation();
         return result;
       },
-      getProjection: () => getCoordinationProjection(coordinationApiUrl, sessionToken),
+      getProjection: () => readPluginProjection(operationScope, coordinationApiUrl, sessionToken),
     };
-  }, [coordinationApiUrl, sessionToken, refreshAfterMutation]);
+  }, [coordinationApiUrl, sessionToken, operationScope, refreshAfterMutation]);
   // mount 時刻を pin (= 5s polling 由来の re-render で plugin が clock change を見ない方が
   // surprise が少ない、 「nowIso が動く」 ことに依存した plugin は plugin 内で自前
   // setInterval を持つべき)。 [] で intentional mount-pin。 problemId / jobId が変われば

@@ -32,6 +32,27 @@ describe("submitCoordinationOp", () => {
     expect((init as RequestInit).body).toBe(JSON.stringify({ op: { kind: "ally" } }));
   });
 
+  it("forwards a caller-owned operation key unchanged for safe retries", async () => {
+    const f = mockFetch(200, { projection: {} });
+    vi.stubGlobal("fetch", f);
+    await submitCoordinationOp(
+      URL_BASE,
+      "key-1",
+      { kind: "move" },
+      undefined,
+      "same-operation-key",
+    );
+    await submitCoordinationOp(
+      URL_BASE,
+      "key-1",
+      { kind: "move" },
+      undefined,
+      "same-operation-key",
+    );
+    for (const [, init] of f.mock.calls)
+      expect(init.headers["Idempotency-Key"]).toBe("same-operation-key");
+  });
+
   it("should map 422 to rejected with the backend error", async () => {
     vi.stubGlobal("fetch", mockFetch(422, { error: "bad_op" }));
     expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({
@@ -65,8 +86,8 @@ describe("submitCoordinationOp", () => {
     expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({ kind: "conflict" });
   });
 
-  it("should map 503 to unavailable", async () => {
-    vi.stubGlobal("fetch", mockFetch(503));
+  it.each([429, 500, 502, 503, 504])("maps transient HTTP %s to unavailable", async (status) => {
+    vi.stubGlobal("fetch", mockFetch(status));
     expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({ kind: "unavailable" });
   });
 

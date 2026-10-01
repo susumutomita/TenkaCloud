@@ -152,8 +152,17 @@ export interface EventDetail extends EventSummary {
    * 旧 jobId-based deployment は eventId が無いので含まれない。
    */
   deploymentsByProblem: Readonly<Record<string, readonly EventDeploymentSummary[]>>;
+  /** Persisted platform-native matches, separate from cloud deployment jobs. */
+  nativeRuns?: readonly {
+    readonly runId: string;
+    readonly problemId: string;
+    readonly status: "COMPLETE" | "CLOSED";
+    readonly revision: number;
+  }[];
   /** Issue #1038 P1 #7: opt-in で全 team の累計 score event timeline を含む。 */
   scoreEventsByTeam?: readonly TeamScoreEvents[];
+  /** False means totals are authoritative but the complete event history was not returned. */
+  scoreHistoryAvailable?: boolean;
   /** Issue #2283: Progression Gate 設定。未設定 (= Gate 無し) は undefined。 */
   progressionGate?: ProgressionGateConfig;
 }
@@ -210,6 +219,7 @@ export interface CoordinationCapacityWarning {
 export interface BulkResult {
   eventId: string;
   enqueued: number;
+  initialized?: number;
   skipped: number;
   /** Requests that were not durably accepted; accepted work may still be running. */
   failed?: number;

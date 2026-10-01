@@ -95,7 +95,7 @@ export interface ScoreboardRow {
   readonly teamName: string;
   readonly totalScore: number;
   /** 「solved 数」 = correct flag (= source: "flag", result: "ok") の問題種類数 (重複排除済)。 */
-  readonly problemsSolved: number;
+  readonly problemsSolved: number | null;
 }
 
 /**
@@ -107,6 +107,7 @@ export interface ScoreboardRow {
 export function buildScoreboard(
   teams: readonly TeamSummary[],
   scoreEvents: readonly TeamScoreEvents[] | undefined,
+  historyAvailable = true,
 ): readonly ScoreboardRow[] {
   const eventsByTeam = new Map<string, TeamScoreEvents>();
   if (scoreEvents) {
@@ -132,7 +133,7 @@ export function buildScoreboard(
       teamId: team.teamId,
       teamName: team.displayName ?? team.internalSlug,
       totalScore,
-      problemsSolved: solvedSet.size,
+      problemsSolved: historyAvailable ? solvedSet.size : null,
       lastUpdateMs,
     };
   });
@@ -164,9 +165,9 @@ export interface ProblemBreakdownRow {
    */
   readonly defaultRegion: string;
   /** 「この problem を 1 つでも flag 解いた team の数」。 */
-  readonly solvedCount: number;
+  readonly solvedCount: number | null;
   /** この problem に対する全 team の累計得点を team 数で割った平均 (= 0 team 時は 0)。 */
-  readonly avgScore: number;
+  readonly avgScore: number | null;
   /** この problem 配下の deployment 行数 (= 全 team 分の deploy attempt 数)。 */
   readonly deploymentsCount: number;
   /** deploy に成功した deployment 数 (= COMPLETE / AUTO_DELETED / DELETED / DELETING)。 */
@@ -204,11 +205,14 @@ export function buildProblemBreakdown(detail: EventDetail): readonly ProblemBrea
     const totalPoints = aggs.reduce((acc, a) => acc + a.points, 0);
     const deployments: readonly EventDeploymentSummary[] =
       detail.deploymentsByProblem[problem.problemId] ?? [];
+    const average = teamCount === 0 ? 0 : Math.round((totalPoints / teamCount) * 10) / 10;
     return {
       problemId: problem.problemId,
-      defaultRegion: problem.defaultRegion,
-      solvedCount,
-      avgScore: teamCount === 0 ? 0 : Math.round((totalPoints / teamCount) * 10) / 10,
+      defaultRegion: detail.nativeRuns?.some((run) => run.problemId === problem.problemId)
+        ? "—"
+        : problem.defaultRegion,
+      solvedCount: detail.scoreHistoryAvailable === false ? null : solvedCount,
+      avgScore: detail.scoreHistoryAvailable === false ? null : average,
       deploymentsCount: deployments.length,
       successfulCount: countSuccessful(deployments),
     };

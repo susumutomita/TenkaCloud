@@ -184,7 +184,8 @@
     "empty_header": "No notifications yet",
     "empty_hint": "Notifications sent by the operator from the application admin console will appear here.",
     "severity_info": "Info",
-    "severity_warning": "Warning"
+    "severity_warning": "Warning",
+    "unavailable": "Portal notifications are not available in this hosting environment. Use the contact method provided by the organizer."
   },
   "scoreboard": {
     "title": "Scoreboard",

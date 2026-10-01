@@ -1,6 +1,7 @@
 import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
 import { useNavigate } from "react-router";
 import type { EventDetail, EventProblemTarget } from "../../api/events-client";
@@ -13,6 +14,7 @@ type Translate = (key: string, params?: Readonly<Record<string, string | number>
 export function EventProblemSetPanel({
   detail,
   localHost = false,
+  nativeProblemIds = [],
   t,
 }: {
   readonly detail: EventDetail;
@@ -21,10 +23,23 @@ export function EventProblemSetPanel({
    * deployment-detail page; its environments are listed per team in the Teams tab.
    */
   readonly localHost?: boolean;
+  readonly nativeProblemIds?: readonly string[];
   readonly t: Translate;
 }) {
   const navigate = useNavigate();
   type Column = TableProps.ColumnDefinition<EventProblemTarget>;
+  const nativeRun = (problemId: string) =>
+    detail.nativeRuns?.find((run) => run.problemId === problemId);
+  const isNative = (problemId: string) =>
+    nativeProblemIds.includes(problemId) || nativeRun(problemId) !== undefined;
+  const nativeStatus = (problemId: string) => {
+    const status = nativeRun(problemId)?.status;
+    if (status === "COMPLETE")
+      return <StatusIndicator type="success">{t("event_detail.native_run_ready")}</StatusIndicator>;
+    if (status === "CLOSED")
+      return <StatusIndicator type="info">{t("event_detail.native_run_closed")}</StatusIndicator>;
+    return <StatusIndicator type="pending">{t("event_detail.native_run_pending")}</StatusIndicator>;
+  };
   const idColumn: Column = {
     id: "id",
     header: t("event_detail.problemset_col_id"),
@@ -33,36 +48,47 @@ export function EventProblemSetPanel({
   const statusColumn: Column = {
     id: "status",
     header: t("event_detail.problemset_col_status"),
-    cell: (p) => renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId], t),
+    cell: (p) =>
+      isNative(p.problemId)
+        ? nativeStatus(p.problemId)
+        : renderProblemDeployStatus(detail.deploymentsByProblem[p.problemId], t),
   };
   const cloudColumns: Column[] = [
     idColumn,
     {
       id: "account",
       header: t("event_detail.problemset_col_account"),
-      cell: (p) => p.defaultAwsAccountId,
+      cell: (p) => (isNative(p.problemId) ? "—" : p.defaultAwsAccountId),
     },
     {
       id: "region",
       header: t("event_detail.problemset_col_region"),
-      cell: (p) => p.defaultRegion,
+      cell: (p) => (isNative(p.problemId) ? t("event_create.native_execution") : p.defaultRegion),
     },
     {
       id: "estimatedCost",
       header: t("event_detail.problemset_col_estimated_cost"),
-      cell: (p) => (
-        <ProblemCostSummary
-          estimate={findProblem(p.problemId)?.costEstimate}
-          showResourceTypes={false}
-          t={t}
-        />
-      ),
+      cell: (p) =>
+        isNative(p.problemId) ? (
+          "—"
+        ) : (
+          <ProblemCostSummary
+            estimate={findProblem(p.problemId)?.costEstimate}
+            showResourceTypes={false}
+            t={t}
+          />
+        ),
     },
     statusColumn,
     {
       id: "jobs",
       header: t("event_detail.problemset_col_jobs"),
-      cell: (p) => renderProblemJobLinks(detail.deploymentsByProblem[p.problemId], navigate),
+      cell: (p) =>
+        isNative(p.problemId) ? (
+          <code>{nativeRun(p.problemId)?.runId ?? "—"}</code>
+        ) : (
+          renderProblemJobLinks(detail.deploymentsByProblem[p.problemId], navigate)
+        ),
     },
   ];
   return (

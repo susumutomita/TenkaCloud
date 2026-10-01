@@ -61,10 +61,15 @@ export interface AppConfig {
   readonly coordinationApiUrl?: string;
   /** False when the host has no cloud engine. Absent means true for legacy hosting configurations. */
   readonly hasAws?: boolean;
+  /** Omitted preserves legacy/local endpoints; false means this host does not serve them. */
+  readonly notificationsEnabled?: boolean;
+  readonly scoreTimelineEnabled?: boolean;
 }
 
 interface RuntimeConfig {
   readonly hasAws?: unknown;
+  readonly notificationsEnabled?: unknown;
+  readonly scoreTimelineEnabled?: unknown;
   readonly apiBaseUrl?: string;
   readonly eventTitle?: string;
   readonly eventRegion?: string;
@@ -83,6 +88,8 @@ const ProductionRuntimeConfigSchema = z.object({
   localTeamLoginKey: z.string().optional(),
   coordinationApiUrl: z.string().optional(),
   hasAws: z.unknown().optional(),
+  notificationsEnabled: z.unknown().optional(),
+  scoreTimelineEnabled: z.unknown().optional(),
 });
 
 function readRuntimeConfig(value: unknown): RuntimeConfig {
@@ -146,7 +153,7 @@ function isCloudMode(value: unknown): value is CloudMode {
   return value === "real" || value === "mock" || value === "local";
 }
 
-function advertisedAwsCapability(value: unknown): boolean | undefined {
+function advertisedCapability(value: unknown): boolean | undefined {
   return value === undefined ? undefined : value === true;
 }
 
@@ -200,7 +207,9 @@ export async function loadConfig(): Promise<AppConfig> {
       eventRegion: runtime.eventRegion ?? DEV_FALLBACK.eventRegion,
       mode,
       cloudMode,
-      hasAws: advertisedAwsCapability(runtime.hasAws),
+      hasAws: advertisedCapability(runtime.hasAws),
+      notificationsEnabled: advertisedCapability(runtime.notificationsEnabled),
+      scoreTimelineEnabled: advertisedCapability(runtime.scoreTimelineEnabled),
       ...(cloudMode === "local" && runtime.localTeamLoginKey
         ? { localTeamLoginKey: runtime.localTeamLoginKey }
         : {}),

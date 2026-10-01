@@ -1,3 +1,4 @@
+import { newOperationKey } from "@tenkacloud/web-kit/pending-operation";
 import { StatusCodes } from "http-status-codes";
 
 /**
@@ -33,6 +34,10 @@ async function mapResponse(res: Response): Promise<CoordinationOutcome> {
     }
     case StatusCodes.CONFLICT:
       return { kind: "conflict" };
+    case StatusCodes.TOO_MANY_REQUESTS:
+    case StatusCodes.INTERNAL_SERVER_ERROR:
+    case StatusCodes.BAD_GATEWAY:
+    case StatusCodes.GATEWAY_TIMEOUT:
     case StatusCodes.SERVICE_UNAVAILABLE:
       return { kind: "unavailable" };
     case StatusCodes.UNAUTHORIZED:
@@ -49,17 +54,22 @@ export async function submitCoordinationOp(
   teamLoginKey: string,
   op: unknown,
   signal?: AbortSignal,
+  operationKey: string = newOperationKey(),
 ): Promise<CoordinationOutcome> {
   const res = await fetch(coordinationUrl(coordinationApiUrl, "portal/me/coordination/op"), {
     method: "POST",
-    headers: { authorization: `Bearer ${teamLoginKey}`, "content-type": "application/json" },
+    headers: {
+      authorization: `Bearer ${teamLoginKey}`,
+      "content-type": "application/json",
+      "Idempotency-Key": operationKey,
+    },
     body: JSON.stringify({ op }),
     signal,
   });
   return mapResponse(res);
 }
 
-/** 自チームの現在 projection を読む (= 書き込みなし、 polling 用)。 */
+/** Reads the private team projection; the authoritative server tick may persist state/scoring. */
 export async function getCoordinationProjection(
   coordinationApiUrl: string,
   teamLoginKey: string,

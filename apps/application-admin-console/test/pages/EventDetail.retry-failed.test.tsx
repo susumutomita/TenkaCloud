@@ -132,7 +132,7 @@ describe("EventDetailPage #555 retry-failed button", () => {
       expect.anything(),
       EVENT_ID,
       { retryFailedOnly: true },
-      expect.stringMatching(/^[0-9a-f-]{36}$/u),
+      expect.stringMatching(/^[0-9a-f]{32}$/u),
     );
   });
 
@@ -176,7 +176,7 @@ describe("EventDetailPage #756 re-deploy (即座にデプロイ on the Schedule 
       expect.anything(),
       EVENT_ID,
       { forceRedeploy: true },
-      expect.stringMatching(/^[0-9a-f-]{36}$/u),
+      expect.stringMatching(/^[0-9a-f]{32}$/u),
     );
   });
 

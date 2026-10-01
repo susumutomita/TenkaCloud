@@ -184,7 +184,8 @@
     "empty_header": "まだ通知はありません",
     "empty_hint": "運営者が application admin console から発信した通知をここに表示します。",
     "severity_info": "Info",
-    "severity_warning": "Warning"
+    "severity_warning": "Warning",
+    "unavailable": "この開催環境はポータル通知に対応していません。開催者から案内された連絡方法を使ってください。"
   },
   "scoreboard": {
     "title": "Scoreboard",

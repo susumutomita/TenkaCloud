@@ -37,8 +37,9 @@ Docker volume removal or AWS stack deletion. Explicit event teardown is separate
 keep ownership records until it succeeds.
 
 `make deploy` and `make destroy` call the current Lambda/DynamoDB CLI after
-reviewed AWS setup. The supported cloud problem is hello-world with scoped CLI
-access; non-AWS cloud execution and Battle remain incomplete. Destroy confirms
+reviewed AWS setup. The current cloud catalog includes hello-world with scoped CLI
+access and native Cryptography Battle. Container-based cloud execution remains
+incomplete and Battle capacity is under verification. Destroy confirms
 owned targets and drains recorded exercises while retaining data. See the
 [cloud setup boundary](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 

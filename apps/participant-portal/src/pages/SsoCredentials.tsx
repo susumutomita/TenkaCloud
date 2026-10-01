@@ -45,6 +45,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
   const sessionToken = auth.session?.sessionToken ?? null;
   const { view, error } = useTeamView();
   const isMock = useIsMock();
+  const accessProblems = view?.problems.filter((problem) => problemProvider(problem) !== "native");
   const { openConsole, pending, error: openError, dismissError } = useConsoleAccess(config);
 
   return (
@@ -79,7 +80,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
 
       {!isMock && !view && !error && <Box>{t("app.loading")}</Box>}
 
-      {view && view.problems.length === 0 && (
+      {view && accessProblems?.length === 0 && (
         <Container>
           <Box textAlign="center" padding="l">
             <Box variant="strong">{t("sso_credentials.empty_problems")}</Box>
@@ -91,7 +92,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
           して external-portal 対象として表示する (アクセス導線の配信は RC-32 第3弾)。
           以前の `.filter((p) => p.awsAccountId)` は非 AWS 行 (deploy request 由来の
           awsAccountId を持つ) に AWS Console ボタンを誤表示していた。 */}
-      {view?.problems.map((problem) =>
+      {accessProblems?.map((problem) =>
         problemProvider(problem) === "aws" ? (
           <Container
             key={problem.jobId}
