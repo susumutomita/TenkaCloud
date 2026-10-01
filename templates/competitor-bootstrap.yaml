@@ -8,6 +8,10 @@ Description: >
 # After deploying this stack, share the RoleArn output with the TenkaCloud
 # operator. The operator can then deploy problem CFn templates into this account.
 # Deleting the stack removes the role and revokes TenkaCloud access in one shot.
+# Organizations: use this same template with service-managed StackSets; see
+# docs/competitor-account-onboarding.md for explicit account/OU targeting.
+# Deploy in only one region per account: the named IAM role is global, even when
+# teams deploy their problem stacks into different regions of the same account.
 
 # NOTE: IAM Role / Policy Description fields only allow tab/LF/CR + printable
 # ASCII (0x20-0x7E) + Latin-1 supplement (0xA1-0xFF). CJK characters cause

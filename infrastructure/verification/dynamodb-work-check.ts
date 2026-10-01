@@ -2069,6 +2069,7 @@ async function exerciseAccountClients(
     assert.equal(connection.registrationId, record?.registrationId);
   }
   await verifyRegistryAuthorizationCommit(api, accounts, first);
+  await verifySharedAccountRegions(api, accounts, first);
   await assert.rejects(() => deleteCompetitorAccount(api, first), { status: 409 });
   const teardown = await clientBulkTeardown(api, createdEvent.eventId);
   assert.equal(z.object({ failed: z.number() }).parse(teardown).failed, 0);
@@ -2096,6 +2097,63 @@ async function exerciseAccountClients(
         "accept and CREATE reservation roll back after concurrent revocation; reverify retries succeed",
       scope:
         "Existing SPA clients, Hono and real DynamoDB Local; ExternalId/STS injected; no AWS operations",
+    }),
+  );
+}
+async function verifySharedAccountRegions(
+  api: CoreApiClient,
+  accounts: DynamoDbCompetitorAccountsRepository,
+  accountId: string,
+) {
+  const registration = await accounts.getAccount(accountId);
+  assert.ok(registration?.verified);
+  const regions = ["us-west-2", "ap-northeast-1"];
+  const created = await clientCreateEvent(
+    api,
+    {
+      name: "Shared account regional assignment",
+      teams: regions.map((region, index) => ({
+        internalSlug: `regional-${index}`,
+        awsAccountId: accountId,
+        region,
+      })),
+      problems: [{ problemId: "hello-world", defaultRegion: "us-east-1" }],
+    },
+    "registry-regional-event",
+  );
+  const accepted = await clientBulkDeploy(api, created.eventId, {}, "registry-regional-deploy");
+  assert.equal(accepted.enqueued, 2);
+  assert.deepEqual(
+    await clientBulkDeploy(api, created.eventId, {}, "registry-regional-deploy"),
+    accepted,
+  );
+  for (const [index, team] of created.teams.entries()) {
+    const connection = await work().getConnection(created.eventId, team.teamId);
+    const job = await work().getTarget(created.eventId, team.teamId, "hello-world");
+    assert.ok(connection && job);
+    assert.equal(connection.registrationId, registration.registrationId);
+    assert.equal(connection.accountId, accountId);
+    assert.equal(connection.region, regions[index]);
+    assert.equal(job.region, regions[index]);
+    assert.equal(job.connection.teamId, team.teamId);
+    assert.equal(job.connection.region, regions[index]);
+  }
+  assert.equal((await accounts.getAccount(accountId))?.region, registration.region);
+  const teardown = await clientBulkTeardown(api, created.eventId);
+  assert.equal(z.object({ failed: z.number() }).parse(teardown).failed, 0);
+  assert.equal((await repository().getEvent(created.eventId))?.status, "ARCHIVED");
+  console.log(
+    JSON.stringify({
+      milestone: "real-dynamodb-shared-account-regions",
+      accounts: 1,
+      teams: 2,
+      regions,
+      registrationRegion: registration.region,
+      durableConnectionsAndJobs: 2,
+      deployReplay: "identical",
+      pendingTeardown: "both canceled; event archived",
+      scope:
+        "Existing SPA clients, Hono and real DynamoDB transactions; STS/SSM injected; no AWS execution",
     }),
   );
 }
@@ -3978,10 +4036,16 @@ async function verifyNativeCoordination(): Promise<void> {
 }
 
 const nativeOnly = process.argv[3] === "--native-only";
-if (process.argv.length > 4 || (process.argv[3] !== undefined && !nativeOnly))
-  throw new Error("Only the optional --native-only focused acceptance selector is supported.");
+const accountsOnly = process.argv[3] === "--accounts-only";
+if (process.argv.length > 4 || (process.argv[3] !== undefined && !nativeOnly && !accountsOnly))
+  throw new Error(
+    "Only --native-only or --accounts-only focused acceptance selectors are supported.",
+  );
 try {
-  if (!nativeOnly) {
+  if (accountsOnly) {
+    await createTables();
+    await verifyAccountClients();
+  } else if (!nativeOnly) {
     await createTables();
     await acceptAndComplete();
     await scoreConcurrently();
@@ -3997,7 +4061,7 @@ try {
     await verifyParticipantCliAuthorization();
     await verifyInstallationStopAndDrain();
   }
-  await verifyNativeCoordination();
+  if (!accountsOnly) await verifyNativeCoordination();
   console.log(
     JSON.stringify({
       outcome: nativeCapacityMet ? "passed" : "consistency-passed-capacity-unmet",

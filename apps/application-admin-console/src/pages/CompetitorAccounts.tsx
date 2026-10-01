@@ -14,7 +14,10 @@ import { FriendlyErrorAlert } from "../components/FriendlyErrorAlert";
 import { LiteDrillCheckpointAlert } from "../components/LiteDrillCheckpointAlert";
 import { type AppConfig, isLocalHost } from "../config";
 import { useT } from "../i18n";
-import { isBootstrapUrlMissing } from "../lib/competitor-bootstrap";
+import {
+  COMPETITOR_ACCOUNT_ONBOARDING_URL,
+  isBootstrapUrlMissing,
+} from "../lib/competitor-bootstrap";
 import { liteDrillCheckpointCode, markLiteDrillCheckpointShown } from "../lib/lite-drill";
 import { AddAccountModal } from "./competitor-accounts/AddAccountModal";
 import { BulkImportModal } from "./competitor-accounts/BulkImportModal";
@@ -114,11 +117,14 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         </Alert>
       )}
 
-      {isLocalHost(config) && (
-        <Alert type="info" header={t("competitor_accounts.host_bootstrap_header")}>
+      <Alert type="info" header={t("competitor_accounts.host_bootstrap_header")}>
+        <SpaceBetween size="xs">
           {t("competitor_accounts.host_bootstrap_info")}
-        </Alert>
-      )}
+          <a href={COMPETITOR_ACCOUNT_ONBOARDING_URL} target="_blank" rel="noreferrer noopener">
+            {t("competitor_accounts.bootstrap_guide_link")}
+          </a>
+        </SpaceBetween>
+      </Alert>
 
       {error && <FriendlyErrorAlert error={error} />}
 

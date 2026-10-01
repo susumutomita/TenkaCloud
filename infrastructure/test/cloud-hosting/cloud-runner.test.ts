@@ -378,6 +378,39 @@ describe("read-only participant viewer ownership", () => {
 });
 
 describe("required ExternalId and assumed target credentials", () => {
+  it("isolates same-account teams by selected region, owned stack and allowlisted outputs", async () => {
+    const first = fixture();
+    const second = fixture({
+      ...INPUT,
+      teamId: "team-b",
+      jobId: "job-b",
+      target: { ...INPUT.target, region: "ap-northeast-1" },
+    });
+    for (const current of [first, second]) {
+      const created = await createDeployment(current.input, current.deps);
+      expect(current.createStack).toHaveBeenCalledWith(
+        expect.objectContaining({ TemplateBody: INPUT.templateBody }),
+      );
+      expect(current.createStack.mock.calls[0]?.[0]).not.toHaveProperty("TemplateURL");
+      current.describeStacks.mockResolvedValue({ Stacks: [current.ownedStack()] });
+      const result = await describeDeployment(current.input, created.reference, current.deps);
+      expect(current.cloudFormation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountId: INPUT.target.accountId,
+          region: current.input.target.region,
+        }),
+      );
+      expect(current.ssm).toHaveBeenCalledWith("us-west-2");
+      expect(current.assumeRole).toHaveBeenCalledWith(
+        expect.objectContaining({ RoleArn: INPUT.target.roleArn, ExternalId: EXTERNAL_ID }),
+      );
+      expect(result.outputs).toEqual({ ChallengeUrl: "https://challenge.example.test" });
+    }
+    expect(first.identity.stackName).not.toBe(second.identity.stackName);
+    second.describeStacks.mockResolvedValue({ Stacks: [first.ownedStack()] });
+    await expect(createDeployment(second.input, second.deps)).rejects.toThrow("identity");
+    expect(second.createStack).toHaveBeenCalledTimes(1);
+  });
   it("uses the explicit SSM region and ARN, requires ExternalId, and never supplies ambient credentials", async () => {
     const f = fixture();
     const result = await createDeployment(serializeDeploymentInput(INPUT), f.deps);

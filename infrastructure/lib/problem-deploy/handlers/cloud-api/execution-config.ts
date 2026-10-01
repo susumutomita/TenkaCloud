@@ -403,6 +403,7 @@ export function registeredRunnerBinding(
   record: CompetitorAccountRecord,
   config: InstallationCompetitorConfig,
   reviewedProblemIds: readonly string[],
+  region = record.region,
 ): RunnerBinding {
   if (record.awsAccountId === config.externalIdParameterArn.split(":")[4])
     throw new Error("Control-plane account cannot host competitor resources.");
@@ -411,7 +412,8 @@ export function registeredRunnerBinding(
   return runnerBindingSchema.parse({
     id: `account-${record.registrationId.toLowerCase()}`,
     accountId: record.awsAccountId,
-    region: record.region,
+    // IAM verification is account-scoped; each event/team pins its own commercial region.
+    region,
     roleArn: `arn:aws:iam::${record.awsAccountId}:role/${config.roleName}`,
     externalIdParameterArn: config.externalIdParameterArn,
     reviewedProblemIds,
@@ -428,13 +430,25 @@ export function createJobBindingAuthorizer(options: {
   return async (job: DeploymentJob): Promise<void> => {
     if (job.awsAccountId === options.controlPlaneAccount)
       throw new Error("Control-plane account cannot host competitor resources.");
+    if (
+      job.connection.eventId !== job.eventId ||
+      job.connection.teamId !== job.teamId ||
+      job.connection.accountId !== job.awsAccountId ||
+      job.connection.region !== job.region
+    )
+      throw new Error("Deployment connection scope mismatch.");
     let allowed = options.bindings;
     if (job.connection.registrationId !== undefined) {
       const record = await options.accounts.getAccount(job.awsAccountId);
       if (!options.config || !record || job.connection.registrationId !== record.registrationId)
         throw new Error("Competitor registration changed.");
       allowed = [
-        registeredRunnerBinding(record, options.config, job.connection.reviewedProblemIds ?? []),
+        registeredRunnerBinding(
+          record,
+          options.config,
+          job.connection.reviewedProblemIds ?? [],
+          job.connection.region,
+        ),
       ];
     }
     if (

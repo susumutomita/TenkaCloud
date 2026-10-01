@@ -293,8 +293,9 @@ export class DynamoDbCompetitorAccountsRepository implements CompetitorAccountsR
       connection.teamId !== team.teamId ||
       connection.accountId !== record.awsAccountId ||
       (team.awsAccountId !== undefined && team.awsAccountId !== record.awsAccountId) ||
-      (team.region !== undefined && team.region !== record.region) ||
-      connection.region !== record.region ||
+      (team.region !== undefined && team.region !== connection.region) ||
+      (team.region === undefined &&
+        event.problems.some((problem) => problem.defaultRegion !== connection.region)) ||
       connection.roleArn !==
         `arn:aws:iam::${record.awsAccountId}:role/${record.competitorRoleName}` ||
       connection.bindingId !== `account-${record.registrationId.toLowerCase()}` ||
@@ -391,6 +392,7 @@ export async function registeredAccountGuard(
   connection: DeploymentConnection,
 ): Promise<Write | undefined> {
   if (connection.registrationId === undefined) return undefined;
+  connectionSchema.parse(connection);
   const record = await new DynamoDbCompetitorAccountsRepository(ddb, tables).getAccount(
     connection.accountId,
   );
@@ -398,7 +400,6 @@ export async function registeredAccountGuard(
     !record?.verified ||
     connection.bindingId !== `account-${record.registrationId.toLowerCase()}` ||
     connection.registrationId !== record.registrationId ||
-    connection.region !== record.region ||
     connection.roleArn !== `arn:aws:iam::${record.awsAccountId}:role/${record.competitorRoleName}`
   )
     throw new DeploymentConflict("competitor_account_changed");

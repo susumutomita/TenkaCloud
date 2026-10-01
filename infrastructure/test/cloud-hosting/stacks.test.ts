@@ -558,6 +558,43 @@ describe("existing competitor bootstrap and registry IAM source boundaries", () 
       config.roleName,
     );
   });
+  it("keeps the shared bootstrap compatible with service-managed StackSets and requires ExternalId", () => {
+    const stack = new Stack(
+      new App({ outdir: join(directory, "competitor-stackset-template-synth") }),
+      "SyntheticStackSetInstance",
+    );
+    new CfnInclude(stack, "Template", {
+      templateFile: resolve(import.meta.dirname, "../../../templates/competitor-bootstrap.yaml"),
+    });
+    const template = Template.fromStack(stack);
+    template.resourceCountIs("AWS::IAM::Role", 1);
+    template.resourceCountIs("AWS::CloudFormation::Stack", 0);
+    expect(template.toJSON().Transform).toBeUndefined();
+    expect(Object.keys(template.toJSON().Resources)).toEqual(["CompetitorDeployRole"]);
+    template.hasParameter("ExternalId", {
+      Type: "String",
+      NoEcho: true,
+      MinLength: 16,
+      MaxLength: 128,
+    });
+    expect(template.toJSON().Parameters.ExternalId.Default).toBeUndefined();
+    template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: { Ref: "RoleName" },
+      MaxSessionDuration: 3600,
+      AssumeRolePolicyDocument: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Sid: "AllowTenkaCloudControlPlaneToAssume",
+            Effect: "Allow",
+            Principal: { AWS: { "Fn::Sub": `arn:aws:iam::\${TenkaCloudAccountId}:root` } },
+            Action: "sts:AssumeRole",
+            Condition: { StringEquals: { "sts:ExternalId": { Ref: "ExternalId" } } },
+          },
+        ],
+      },
+    });
+  });
   it("reuses the three bootstrap parameters, exact account/ExternalId trust, and competitor-only AdministratorAccess exception", () => {
     const app = new App({ outdir: join(directory, "competitor-template-synth") });
     const stack = new Stack(app, "SyntheticCompetitor", {

@@ -151,7 +151,7 @@ describe("EventCreatePage on the local competition host", () => {
     await waitFor(() =>
       expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument(),
     );
-    expect(screen.queryByText("event_create.col_team_region")).toBeNull();
+    expect(screen.getByText("event_create.col_team_region")).toBeInTheDocument();
     const accountSelect = wrapper.findAllSelects()[0];
     accountSelect?.openDropdown();
     await waitFor(() =>

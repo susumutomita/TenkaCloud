@@ -1,6 +1,7 @@
 /** Historical competitor-account wire fields, scoped to one installation rather than a tenant. */
 export interface CompetitorAccountRecord {
   readonly awsAccountId: string;
+  /** Registration/bootstrap region; the account's global IAM role also serves other team regions. */
   readonly region: string;
   readonly competitorRoleName: string;
   readonly alias?: string;

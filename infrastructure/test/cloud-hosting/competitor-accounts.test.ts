@@ -325,6 +325,50 @@ describe("competitor registry storage with intercepted SDK commands (not Dynamo 
     f.send.mockRejectedValueOnce(failure("AccessDeniedException"));
     await expect(f.accounts.saveConnection(source)).rejects.toThrow();
   });
+  it("links one verified account to separate team regions and preserves each deletion reference", async () => {
+    const f = storage();
+    const source = connectionFixture();
+    for (const region of ["us-east-1", "ap-northeast-1"]) {
+      const team = {
+        ...source.team,
+        teamId: ulid(),
+        awsAccountId: source.record.awsAccountId,
+        region,
+      };
+      const connection = { ...source.connection, teamId: team.teamId, region };
+      f.send.mockImplementationOnce(() => Promise.resolve({}));
+      expect(await f.accounts.saveConnection({ ...source, team, connection })).toBe("saved");
+      const command = f.send.mock.calls.at(-1)?.[0];
+      if (!(command instanceof TransactWriteCommand)) throw new Error("Expected transaction");
+      expect(command.input.TransactItems?.[4]?.Put?.Item).toMatchObject({
+        awsAccountId: source.record.awsAccountId,
+        eventId: source.event.eventId,
+        teamId: team.teamId,
+        registrationId: source.record.registrationId,
+      });
+      expect(command.input.TransactItems?.[5]?.Put?.Item).toMatchObject(connection);
+    }
+    expect(f.send).toHaveBeenCalledTimes(2);
+  });
+  it("rejects a connection outside the team's explicit or inherited region", async () => {
+    const f = storage();
+    const source = connectionFixture();
+    for (const target of [
+      { team: { ...source.team, region: "ap-northeast-1" }, event: source.event },
+      {
+        team: source.team,
+        event: {
+          ...source.event,
+          problems: [{ problemId: "hello-world", defaultRegion: "ap-northeast-1" }],
+        },
+      },
+    ]) {
+      await expect(f.accounts.saveConnection({ ...source, ...target })).rejects.toThrow(
+        "scope mismatch",
+      );
+    }
+    expect(f.send).not.toHaveBeenCalled();
+  });
   it.each([
     "eventId",
     "teamId",
@@ -687,18 +731,48 @@ describe("registry connection composition and atomic authorization guard", () =>
       ),
     ).rejects.toMatchObject({ code: "connection_target_mismatch" });
   });
-  it("requires current verification and the selected region", async () => {
+  it("requires current account verification", async () => {
     const f = prepared();
-    for (const record of [
-      undefined,
-      { ...f.record, verified: false },
-      { ...f.record, region: "eu-west-1" },
-    ]) {
+    for (const record of [undefined, { ...f.record, verified: false }]) {
       f.get.mockResolvedValue(record);
       await expect(f.prepare(f.event, f.team, NOW)).rejects.toMatchObject({
         code: "unverified_competitor_account",
       });
     }
+    expect(f.save).not.toHaveBeenCalled();
+  });
+  it("prepares the same registered account for multiple team regions, preserving the installation ExternalId", async () => {
+    const f = prepared();
+    for (const region of ["us-east-1", "ap-northeast-1"]) {
+      const team = { ...f.team, teamId: ulid(), region };
+      await f.prepare(f.event, team, NOW);
+      expect(f.save).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          record: f.record,
+          team,
+          connection: { ...f.connection, teamId: team.teamId, region },
+        }),
+      );
+    }
+    await f.prepare(
+      { ...f.event, problems: [{ problemId: "hello-world", defaultRegion: "eu-west-1" }] },
+      { ...f.team, region: undefined },
+      NOW,
+    );
+    expect(f.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        connection: { ...f.connection, region: "eu-west-1" },
+      }),
+    );
+    expect(f.save).toHaveBeenCalledTimes(3);
+    expect(f.send).not.toHaveBeenCalled();
+  });
+  it("does not retarget an existing team's connection to another commercial region", async () => {
+    const f = prepared();
+    f.getConnection.mockResolvedValue(f.connection);
+    await expect(
+      f.prepare(f.event, { ...f.team, region: "ap-northeast-1" }, NOW),
+    ).rejects.toMatchObject({ code: "connection_registration_changed" });
     expect(f.save).not.toHaveBeenCalled();
   });
   it("reuses identical current registration but never overwrites changed registration identity", async () => {
@@ -767,7 +841,6 @@ describe("registry connection composition and atomic authorization guard", () =>
       undefined,
       { ...source.record, verified: false },
       { ...source.record, registrationId: ulid() },
-      { ...source.record, region: "eu-west-1" },
       { ...source.record, competitorRoleName: "Other" },
     ]) {
       f.send.mockImplementationOnce(() => Promise.resolve(record ? { Item: row(record) } : {}));
@@ -775,6 +848,16 @@ describe("registry connection composition and atomic authorization guard", () =>
         registeredAccountGuard(f.document, tables, source.connection),
       ).rejects.toMatchObject({ code: "competitor_account_changed" });
     }
+    f.send.mockImplementationOnce(() => Promise.resolve({ Item: row(source.record) }));
+    expect(
+      await registeredAccountGuard(f.document, tables, {
+        ...source.connection,
+        region: "ap-northeast-1",
+      }),
+    ).toHaveProperty("ConditionCheck");
+    await expect(
+      registeredAccountGuard(f.document, tables, { ...source.connection, region: "cn-north-1" }),
+    ).rejects.toThrow("commercial AWS regions");
     expect(
       await registeredAccountGuard(f.document, tables, {
         ...source.connection,

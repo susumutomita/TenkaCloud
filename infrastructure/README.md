@@ -220,16 +220,36 @@ registrations use the installation's fixed `competitorRoleName` from runtime
 config. The existing [competitor bootstrap template](../templates/competitor-bootstrap.yaml)
 is served as one public, secret-free S3 object for the screen's CloudFormation
 Quick-create link. No second bootstrap template or account-management app exists.
+The [account setup guide](../docs/competitor-account-onboarding.md) covers the
+existing individual-account path and centralized Organizations StackSets rollout
+to an explicitly selected set of accounts, with automatic deployment disabled.
+Both paths use this same template; the named global IAM role is created in one
+bootstrap region per account.
 
 Each remote operation requires the exact installation role name, Purpose and
 Installation tags, mandatory ExternalId and current verification. The platform
 account is refused by the API/worker and by explicit role-assumption IAM denies.
 Registration verification establishes the connection's identity and trust; it
 is not a certification that sharing an AWS account safely isolates participants.
-Shared versus dedicated competitor accounts remains an open review item. In
-particular, hello-world's metadata-listing permission has a documented
-dedicated-account assumption. The participant CLI slice below explicitly denies
-that permission; it does not approve a general shared-account deployment model.
+Teams may use separate accounts or the same account in different deployment
+regions. Registration verifies the global IAM role once; each event/team pins its
+own supported commercial region for the connection and job. The host keeps its
+ExternalId parameter and pinned artifacts in the hosting region, then submits
+the verified template body to CloudFormation in the team's region.
+
+Region assignment alone does not isolate global IAM or every AWS service.
+Hello-world's legacy metadata-listing permission has a documented dedicated-account
+assumption; the cloud participant CLI slice below explicitly denies that permission
+and restricts reads to the owned parameter ARN. Console/CloudShell access and
+arbitrary problems require their own permission review.
+
+The focused local check, `bun run --cwd infrastructure test:dynamodb-work
+http://127.0.0.1:18657 --accounts-only`, exercises the existing SPA clients and
+actual DynamoDB Local transactions. It verifies one account registered in
+`us-east-1` with separate teams in `us-west-2` and `ap-northeast-1`, two durable
+connections/jobs, exact deployment replay and pending-job teardown. It also keeps
+the 25-account registration, revocation and concurrent deletion checks. STS/SSM
+are injected for this test; it does not deploy AWS exercise resources.
 
 ### Participant hello-world CLI access
 
@@ -405,12 +425,13 @@ original event, team and intake transaction guards before running the reducer.
 ## Remaining acceptance work
 
 - Reviewed least-privilege initial bootstrap policy and first-account setup path
-- AWS account-isolation decision and reviewed exercise permissions
+- Reviewed exercise permissions for each supported account/region arrangement
 - Participant AWS Console access without cross-team metadata disclosure
 - Cloud-native catalog expansion, AWS endpoint Battles, hints and disruptions
 - Public registration/claiming, audit, notifications and full organizer UI flows
 - Native Battle burst latency under the target participant load
-- Shared problem-pack/drill progression and final tutorial alignment
+- External problem-pack execution and final tutorial alignment; built-in local
+  course tracks already reuse the event's team progress and existing gates
 
 Cloud hosting is still not competition-ready. No live AWS connection, bootstrap,
 permission change, deployment, or billing action was executed for these checks.

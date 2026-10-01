@@ -11,6 +11,7 @@ import {
   createConnectionVerifier,
   createExecutionArtifactResolver,
   createExecutionCatalogProvider,
+  createJobBindingAuthorizer,
   createNativeArtifactResolver,
   createNativeCatalogProvider,
   installationAccountConfig,
@@ -292,6 +293,17 @@ describe("installation-scoped registry configuration", () => {
       externalIdParameterArn: parameter,
       reviewedProblemIds: ["hello-world"],
     });
+    expect(
+      registeredRunnerBinding(record, config, ["hello-world"], "ap-northeast-1"),
+    ).toMatchObject({
+      accountId: record.awsAccountId,
+      region: "ap-northeast-1",
+      roleArn: `arn:aws:iam::${record.awsAccountId}:role/${roleName}`,
+      externalIdParameterArn: parameter,
+    });
+    expect(() => registeredRunnerBinding(record, config, ["hello-world"], "cn-north-1")).toThrow(
+      "commercial AWS regions",
+    );
     expect(() =>
       registeredRunnerBinding({ ...record, verified: false }, config, ["hello-world"]),
     ).toThrow();
@@ -304,6 +316,83 @@ describe("installation-scoped registry configuration", () => {
     expect(() =>
       registeredRunnerBinding({ ...record, awsAccountId: "123456789012" }, config, ["hello-world"]),
     ).toThrow("Control-plane account");
+  });
+  it("authorizes registered jobs in their pinned team region while retaining registration and scope fences", async () => {
+    const record = {
+      awsAccountId: "222222222222",
+      region: "us-east-1",
+      competitorRoleName: roleName,
+      registrationId: "01ARZ3NDEKTSV4RRFFQ69G5FA0",
+      revision: 1,
+      verified: true,
+      verifiedAt: "2026-10-01T00:00:00.000Z",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+      createdBy: "synthetic",
+    };
+    const config = { roleName, externalIdParameterArn: parameter };
+    const getAccount = vi.fn(async () => record);
+    const authorize = createJobBindingAuthorizer({
+      bindings: [],
+      accounts: { getAccount },
+      config,
+      controlPlaneAccount: "123456789012",
+    });
+    const eventId = "01ARZ3NDEKTSV4RRFFQ69G5FA1";
+    const teamId = "01ARZ3NDEKTSV4RRFFQ69G5FA2";
+    const reviewed = registeredRunnerBinding(record, config, ["hello-world"], "ap-northeast-1");
+    const job: DeploymentJob = {
+      ...artifact,
+      scoring: { ...artifact.scoring, kind: "flag" },
+      catalogKey: key,
+      jobId: "01ARZ3NDEKTSV4RRFFQ69G5FA3",
+      eventId,
+      teamId,
+      status: "PENDING",
+      awsAccountId: record.awsAccountId,
+      region: reviewed.region,
+      expiresAt: 1800000000,
+      score: 0,
+      attempt: 1,
+      revision: 0,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      stackName: `tc-cloud-${"a".repeat(40)}`,
+      connection: {
+        eventId,
+        teamId,
+        accountId: reviewed.accountId,
+        region: reviewed.region,
+        roleArn: reviewed.roleArn,
+        externalIdParameter: parameter,
+        bindingId: reviewed.id,
+        registrationId: record.registrationId,
+        reviewedProblemIds: ["hello-world"],
+        version: 1,
+        verifiedAt: record.verifiedAt,
+      },
+    };
+    await expect(authorize(job)).resolves.toBeUndefined();
+    for (const connection of [
+      { ...job.connection, eventId: "other-event" },
+      { ...job.connection, teamId: "other-team" },
+      { ...job.connection, accountId: "333333333333" },
+      { ...job.connection, region: "us-east-1" },
+      { ...job.connection, roleArn: `arn:aws:iam::${record.awsAccountId}:role/Other` },
+      { ...job.connection, externalIdParameter: `${parameter}-other` },
+      { ...job.connection, reviewedProblemIds: ["other"] },
+      { ...job.connection, registrationId: "01ARZ3NDEKTSV4RRFFQ69G5FA4" },
+    ])
+      await expect(authorize({ ...job, connection })).rejects.toThrow();
+    await expect(
+      authorize({
+        ...job,
+        region: "cn-north-1",
+        connection: { ...job.connection, region: "cn-north-1" },
+      }),
+    ).rejects.toThrow("commercial AWS regions");
+    getAccount.mockResolvedValue({ ...record, verified: false });
+    await expect(authorize(job)).rejects.toThrow("not verified");
   });
 });
 

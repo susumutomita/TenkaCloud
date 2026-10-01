@@ -126,9 +126,13 @@ async function registerConnection(
   const catalog = await options.catalog();
   for (let attempt = 0; attempt < 8; attempt++) {
     const record = await options.accounts.getAccount(target.accountId);
-    if (!record?.verified || record.region !== target.region)
-      throw new ApiError(409, "unverified_competitor_account");
-    const binding = registeredRunnerBinding(record, options.config, Object.keys(catalog));
+    if (!record?.verified) throw new ApiError(409, "unverified_competitor_account");
+    const binding = registeredRunnerBinding(
+      record,
+      options.config,
+      Object.keys(catalog),
+      target.region,
+    );
     if (previous) {
       if (bindingMatches(previous, binding, record.registrationId)) return;
       throw new ApiError(409, "connection_registration_changed");

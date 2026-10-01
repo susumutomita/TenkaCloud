@@ -143,6 +143,35 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("EventCreatePage flow", () => {
+  it("submits two cloud teams in the same AWS account with independent regions", async () => {
+    config = {
+      ...config,
+      mode: "cloud-host",
+      hostAwsRegion: "ap-northeast-1",
+      supportedProblemIds: ["p1"],
+    };
+    const { container } = renderPage();
+    w(container).findAllInputs()[1]?.setInputValue("2");
+    w(container).findAllInputs()[0]?.setInputValue("Shared account event");
+    const selector = problemSelect(container);
+    selector?.openDropdown();
+    selector?.selectOptionByValue("p1");
+    expect(screen.getByText("event_create.col_team_region")).toBeInTheDocument();
+    for (const [index, region] of ["ap-northeast-1", "us-east-1"].entries()) {
+      const selects = w(container).findAllSelects();
+      selects[index * 2]?.openDropdown();
+      selects[index * 2]?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
+      selects[index * 2 + 1]?.openDropdown();
+      selects[index * 2 + 1]?.selectOptionByValue(region, { expandToViewport: true });
+    }
+    expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledOnce());
+    expect(mockCreate.mock.calls[0]?.[1].teams).toEqual([
+      { internalSlug: "team-1", awsAccountId: ACCOUNT_ID, region: "ap-northeast-1" },
+      { internalSlug: "team-2", awsAccountId: ACCOUNT_ID, region: "us-east-1" },
+    ]);
+  });
   it("shows only problems advertised by the cloud execution catalog", () => {
     config = { ...config, mode: "cloud-host", supportedProblemIds: ["p1"] };
     const { container } = renderPage();

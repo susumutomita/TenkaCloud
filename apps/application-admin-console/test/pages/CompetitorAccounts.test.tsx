@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BulkCreateCompetitorAccountsResponse } from "../../src/api/competitor-accounts-client";
 import type { AppConfig } from "../../src/config";
+import { COMPETITOR_ACCOUNT_ONBOARDING_URL } from "../../src/lib/competitor-bootstrap";
 
 /**
  * CompetitorAccountsPage: useCompetitorAccounts の state を受けて header/table/modals を配線する
@@ -196,10 +197,12 @@ describe("CompetitorAccountsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("explains manual account setup on a local AWS host", () => {
-    renderPage(config({ mode: "local-host", hostAwsRegion: "ap-northeast-1" }));
-    expect(screen.getByText("competitor_accounts.host_description")).toBeInTheDocument();
+  it.each(["local-host", "cloud-host"] as const)("links both bootstrap paths on %s", (mode) => {
+    renderPage(config({ mode, hostAwsRegion: "ap-northeast-1" }));
     expect(screen.getByText("competitor_accounts.host_bootstrap_info")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "competitor_accounts.bootstrap_guide_link" }),
+    ).toHaveAttribute("href", COMPETITOR_ACCOUNT_ONBOARDING_URL);
     expect(
       screen.queryByText("competitor_accounts.bootstrap_url_missing_body"),
     ).not.toBeInTheDocument();

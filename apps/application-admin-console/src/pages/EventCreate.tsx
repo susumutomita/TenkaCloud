@@ -376,7 +376,6 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             accountById={accountById}
             noVerifiedAccounts={noVerifiedAccounts}
             apiClient={apiClient}
-            hostAwsRegion={config.hostAwsRegion}
             onUpdateTeamRow={updateTeamRow}
           />
 

@@ -1,7 +1,10 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CreateCompetitorAccountResponse } from "../../../src/api/competitor-accounts-client";
-import { COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK } from "../../../src/lib/competitor-bootstrap";
+import {
+  COMPETITOR_ACCOUNT_ONBOARDING_URL,
+  COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK,
+} from "../../../src/lib/competitor-bootstrap";
 import { SecretRevealModal } from "../../../src/pages/competitor-accounts/SecretRevealModal";
 
 /**
@@ -105,7 +108,9 @@ describe("SecretRevealModal", () => {
           "ExternalId: ext-abc",
           "RoleName: TenkaCompetitorRole",
           `Download competitor-bootstrap.yaml: ${COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK}`,
-          "Create the stack manually in the competitor AWS account, then ask the organizer to verify the role.",
+          `Organizations StackSets or individual-account setup: ${COMPETITOR_ACCOUNT_ONBOARDING_URL}`,
+          "Use the same template and all 3 parameters. Deploy the bootstrap in only one region per account; IAM roles are global.",
+          "Without Organizations, create the stack manually in each competitor AWS account. After either setup path, ask the organizer to verify the roles.",
         ].join("\n"),
       ),
     );

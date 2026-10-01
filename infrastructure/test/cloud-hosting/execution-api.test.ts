@@ -211,6 +211,51 @@ async function acceptedJob(f: ReturnType<typeof fixture>): Promise<DeploymentJob
 }
 
 describe("cloud execution HTTP authorization, replay and lifecycle contracts", () => {
+  it("creates and plans independent team regions in one AWS account", async () => {
+    const f = fixture();
+    const response = await f.organizer("/events", "POST", {
+      name: "Shared account regions",
+      teams: [
+        { internalSlug: "tokyo", awsAccountId: f.binding.accountId, region: "ap-northeast-1" },
+        { internalSlug: "virginia", awsAccountId: f.binding.accountId, region: "us-east-1" },
+      ],
+      problems: [{ problemId: "hello-world", defaultRegion: "us-east-1" }],
+    });
+    expect(response.status).toBe(201);
+    const created = (await response.json()) as { eventId: string };
+    const teams = await f.repository.listTeamsByEvent(created.eventId);
+    f.getConnection.mockImplementation(async (eventId, teamId) => {
+      const team = teams.find((item) => item.teamId === teamId);
+      if (!team?.region) throw new Error("Missing selected team region");
+      return { ...f.connection, eventId, teamId, region: team.region };
+    });
+    expect(
+      (
+        await f.organizer(
+          `/events/${created.eventId}/deploy`,
+          "POST",
+          {},
+          "Operator",
+          "shared-regions",
+        )
+      ).status,
+    ).toBe(202);
+    const jobs = f.accept.mock.calls.map(([input]) => input.job);
+    expect(jobs).toHaveLength(2);
+    expect(jobs.map((job) => job.region).sort()).toEqual(["ap-northeast-1", "us-east-1"]);
+    expect(new Set(jobs.map((job) => job.awsAccountId))).toEqual(new Set([f.binding.accountId]));
+    expect(new Set(jobs.map((job) => job.stackName)).size).toBe(2);
+    for (const job of jobs) {
+      expect(job.connection).toMatchObject({
+        eventId: created.eventId,
+        teamId: job.teamId,
+        accountId: job.awsAccountId,
+        region: job.region,
+      });
+      expect(job.parameters?.ExternalId).toBe(job.jobId);
+    }
+    expect(f.sdk).not.toHaveBeenCalled();
+  });
   it.each(["unavailable", "constructor", "sqli-demo", "db-a1-table-primary-key"])(
     "rejects %s outside the real execution catalog before event creation",
     async (problemId) => {

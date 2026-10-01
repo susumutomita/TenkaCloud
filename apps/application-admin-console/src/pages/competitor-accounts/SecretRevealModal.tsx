@@ -13,6 +13,7 @@ import { useT } from "../../i18n";
 import {
   buildLaunchStackUrl,
   buildShareablePayload,
+  COMPETITOR_ACCOUNT_ONBOARDING_URL,
   COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK,
 } from "../../lib/competitor-bootstrap";
 
@@ -46,7 +47,9 @@ export function SecretRevealModal({
         `ExternalId: ${secret.externalId}`,
         `RoleName: ${secret.competitorRoleName}`,
         `Download competitor-bootstrap.yaml: ${effectiveTemplateUrl}`,
-        "Create the stack manually in the competitor AWS account, then ask the organizer to verify the role.",
+        `Organizations StackSets or individual-account setup: ${COMPETITOR_ACCOUNT_ONBOARDING_URL}`,
+        "Use the same template and all 3 parameters. Deploy the bootstrap in only one region per account; IAM roles are global.",
+        "Without Organizations, create the stack manually in each competitor AWS account. After either setup path, ask the organizer to verify the roles.",
       ].join("\n")
     : buildShareablePayload({
         tenkaCloudAccountId: secret.tenkaCloudAccountId,

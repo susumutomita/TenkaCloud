@@ -17,6 +17,9 @@ const TEMPLATE_PATH = "templates/competitor-bootstrap.yaml";
 const DEFAULT_REGION = "ap-northeast-1";
 const DEFAULT_STACK_NAME = "tenkacloud-competitor-bootstrap";
 
+export const COMPETITOR_ACCOUNT_ONBOARDING_URL =
+  "https://github.com/susumutomita/TenkaCloud/blob/main/docs/competitor-account-onboarding.md";
+
 /**
  * dev 環境 / runtime-config 未配線時の fallback URL。 CFn console から fetch すると
  * "TemplateURL must be a supported URL" で reject されるので、 production では config 経由で
@@ -88,7 +91,11 @@ export function buildShareablePayload(input: LaunchStackUrlInput): string {
     `ExternalId:          ${input.externalId}`,
     `RoleName:            ${input.competitorRoleName}`,
     "",
-    "deploy 手順:",
+    "AWS Organizations: 同じテンプレートを service-managed StackSets で選択したアカウント / OU に一括配布できます。",
+    `一括配布 / 個別設定の手順: ${COMPETITOR_ACCOUNT_ONBOARDING_URL}`,
+    "IAM ロールはアカウント共通です。チームの利用リージョンにかかわらず、bootstrap は各アカウントの 1 リージョンにだけ作成します。",
+    "",
+    "個別の deploy 手順:",
     `1. CFn テンプレ: ${resolveTemplateUrl(input.templateUrl)}`,
     "2. 競技者 AWS account にログインし、 上記 3 値を Parameter として CFn create-stack",
     "3. Quick-create リンク (= 確認画面に pre-fill 済で直接遷移):",

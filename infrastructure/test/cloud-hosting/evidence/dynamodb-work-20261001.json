@@ -712,5 +712,53 @@
       }
     ],
     "diagnosticLimits": "Intermediate runs were interrupted or externally timed out; the final full run completed all native lifecycle checks. Results are local observations, not AWS latency, throughput or billing guarantees."
+  },
+  "accountRegionRecheck": {
+    "sourceBase": "d7a5c13a12c85142992fee05f3f2b60a8e6addaa",
+    "command": "bun run --cwd infrastructure test:dynamodb-work http://127.0.0.1:18657 --accounts-only",
+    "scope": "Official DynamoDB Local3.3.1, existing SPA clients and Hono; synthetic role verification only, no AWS or IAM operations",
+    "outcome": "passed",
+    "measurements": [
+      {
+        "milestone": "real-dynamodb-shared-account-regions",
+        "accounts": 1,
+        "teams": 2,
+        "regions": ["us-west-2", "ap-northeast-1"],
+        "registrationRegion": "us-east-1",
+        "durableConnectionsAndJobs": 2,
+        "deployReplay": "identical",
+        "pendingTeardown": "both canceled; event archived",
+        "scope": "Existing SPA clients, Hono and real DynamoDB transactions; STS/SSM injected; no AWS execution"
+      },
+      {
+        "milestone": "actual-spa-account-onboarding-client",
+        "accounts": 25,
+        "duplicateConflicts": 25,
+        "verifiedSelections": 25,
+        "automaticTeamConnections": 25,
+        "durableJobs": 25,
+        "deployReplay": "identical",
+        "activeAccountDeletion": "409",
+        "pendingJobsTeardown": "25 canceled; event archived",
+        "accountDeletionAfterTeardown": "25 success",
+        "staleVerificationAndRecreate": "rejected",
+        "controlPlaneAccount": "rejected",
+        "registryCommitFence": "accept and CREATE reservation roll back after concurrent revocation; reverify retries succeed",
+        "scope": "Existing SPA clients, Hono and real DynamoDB Local; ExternalId/STS injected; no AWS operations"
+      },
+      {
+        "milestone": "real-dynamodb-registry-reference-races",
+        "races": 25,
+        "winners": {
+          "linked": 25,
+          "deleted": 0,
+          "conflict": 0
+        },
+        "orphanedConnections": 0,
+        "activeReferenceDeletion": "rejected",
+        "cleanupAfterArchive": "passed",
+        "scope": "Real Dynamo transactions; no SSM, STS or CloudFormation"
+      }
+    ]
   }
 }

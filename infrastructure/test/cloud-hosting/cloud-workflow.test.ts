@@ -567,7 +567,8 @@ describe("registry-backed production worker with intercepted SDKs", () => {
     const parameter = `arn:aws:ssm:us-east-1:123456789012:parameter/tenkacloud/cloud/${"a".repeat(24)}/external-id`;
     const original = {
       awsAccountId: f.data.job.awsAccountId,
-      region: "us-east-1",
+      // Account/bootstrap verification is independent of this job's us-east-1 target.
+      region: "ap-northeast-1",
       competitorRoleName: roleName,
       registrationId: JOB,
       revision: 2,
@@ -646,7 +647,6 @@ describe("registry-backed production worker with intercepted SDKs", () => {
       undefined,
       { ...original, verified: false },
       { ...original, registrationId: EVENT },
-      { ...original, region: "eu-west-1" },
       { ...original, competitorRoleName: "Administrator" },
     ]) {
       record = changed;
@@ -655,6 +655,9 @@ describe("registry-backed production worker with intercepted SDKs", () => {
     }
     record = original;
     const safe = f.data.job;
+    f.data.job = { ...safe, region: "eu-west-1" };
+    await expect(handlers.create(INITIAL)).rejects.toThrow("could not complete");
+    expect([sts.mock.calls.length, ssm.mock.calls.length, cfn.mock.calls.length]).toEqual(before);
     f.data.job = {
       ...safe,
       awsAccountId: "123456789012",

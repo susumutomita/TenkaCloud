@@ -74,7 +74,7 @@ function credentials(): AssumeRoleCommandOutput {
   };
 }
 
-function fixture(enabled = true) {
+function fixture(enabled = true, region = "us-east-1") {
   const repository = new FakeRepository();
   const event: EventRecord = {
     eventId: EVENT,
@@ -92,6 +92,7 @@ function fixture(enabled = true) {
     eventId: EVENT,
     teamId: TEAM,
     internalSlug: "team-a",
+    region,
     teamLoginKey: KEY,
     authVersion: 1,
     accessRevoked: false,
@@ -105,7 +106,7 @@ function fixture(enabled = true) {
     eventId: EVENT,
     teamId: TEAM,
     accountId: ACCOUNT,
-    region: "us-east-1",
+    region,
     roleArn: `arn:aws:iam::${ACCOUNT}:role/SyntheticDeploy`,
     externalIdParameter: `arn:aws:ssm:us-east-1:${CONTROL_ACCOUNT}:parameter/synthetic/team`,
     version: 1,
@@ -114,7 +115,7 @@ function fixture(enabled = true) {
     reviewedProblemIds: ["hello-world"],
   };
   const stackName = deploymentStackName(EVENT, TEAM, "hello-world");
-  const stackId = `arn:aws:cloudformation:us-east-1:${ACCOUNT}:stack/${stackName}/original-stack`;
+  const stackId = `arn:aws:cloudformation:${region}:${ACCOUNT}:stack/${stackName}/original-stack`;
   const job: DeploymentJob = {
     eventId: EVENT,
     teamId: TEAM,
@@ -122,7 +123,7 @@ function fixture(enabled = true) {
     problemId: "hello-world",
     problemDir: "problems/challenges/hello-world",
     awsAccountId: ACCOUNT,
-    region: "us-east-1",
+    region,
     status: "COMPLETE",
     attempt: 1,
     revision: 2,
@@ -362,6 +363,49 @@ afterEach(() => {
 });
 
 describe("cloud participant CLI HTTP and existing frontend contract", () => {
+  it("issues only the owned team's regional parameter permission when the deployment differs from the host region", async () => {
+    const f = fixture(true, "ap-northeast-1");
+    const response = await f.request();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      credentials: { region: "ap-northeast-1", awsAccountId: ACCOUNT },
+    });
+    expect(f.cloudFormation).toHaveBeenCalledWith(
+      expect.objectContaining({ region: "ap-northeast-1", accountId: ACCOUNT }),
+    );
+    expect(f.getParameter).toHaveBeenCalledWith({
+      Name: f.connection.externalIdParameter,
+      WithDecryption: true,
+    });
+    expect(f.connection.externalIdParameter).toContain(":ssm:us-east-1:");
+    const command = f.viewerSend.mock.calls[0]?.[0];
+    expect(command?.input).toMatchObject({ ExternalId: JOB, DurationSeconds: 900 });
+    const policy = JSON.parse(command?.input.Policy ?? "{}");
+    const parameterArn = `arn:aws:ssm:ap-northeast-1:${ACCOUNT}:parameter/${f.job.stackName}/hello`;
+    expect(policy.Statement).toEqual([
+      {
+        Effect: "Allow",
+        Action: ["ssm:GetParameter", "ssm:GetParameters"],
+        Resource: parameterArn,
+      },
+      { Effect: "Deny", NotAction: ["ssm:GetParameter", "ssm:GetParameters"], Resource: "*" },
+      {
+        Effect: "Deny",
+        Action: ["ssm:GetParameter", "ssm:GetParameters"],
+        NotResource: parameterArn,
+      },
+      {
+        Effect: "Deny",
+        Action: "*",
+        Resource: "*",
+        Condition: {
+          DateGreaterThanEquals: { "aws:CurrentTime": new Date(NOW + 900_000).toISOString() },
+        },
+      },
+    ]);
+    expect(f.createStack).not.toHaveBeenCalled();
+    expect(f.deleteStack).not.toHaveBeenCalled();
+  });
   it("returns only CLI credentials with no-store and uses distinct deployment and operator viewer transports", async () => {
     const f = fixture();
     const response = await f.request();
