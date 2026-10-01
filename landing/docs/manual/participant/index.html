@@ -77,7 +77,7 @@
 <li>判定と得点を確認します。ヒントや誤答で点数が変わる場合があります。環境を使えないときは、起動を繰り返す前に開催者へ伝えます。</li>
 </ol>
 <p><strong>Stop (keep data)</strong> で停止すると同時起動枠を空けられます。同じ環境を再開すると書き込みレイヤーと volume は残りますが、RAM は残りません。自動退避や初期化は行いません。デフォルトではチームごとに 3 環境、host 全体で 12 環境まで起動でき、メモリー上限の合計でも制限されます。上限に達したら不要な環境を停止するか、開催者へ相談してください。<code>make down</code> / <code>make local</code> の後も、新しい Docker jobs は参加者が再開するまで停止したままです。既存大会は従来の lifecycle を維持します。</p>
-<p>terminal の HTTP/WebSocket は synthetic shell を使う 11 tests・96 assertions が成功しています。実 Docker exec と全問の Docker・ブラウザ操作は未確認です。問題が一覧にあっても、すべての操作が確認済みとは限りません。</p>
+<p>PostgreSQL terminal は実 Docker とブラウザで接続・3 checkpoints の採点・チーム分離・停止再開後の 7 行の保持を確認しています。全 15 種の terminal と全問題を通して確認したわけではありません。問題が一覧にあっても、すべての操作が確認済みとは限りません。</p>
 <h2 id="practice-without-a-cloud-account">自分でローカル大会を試す</h2><p>自分が開催者も兼ねる場合は<a href="/docs/getting-started/">はじめに</a>へ進みます。<code>make local</code> で同じ大会・チームのシステムを起動し、<code>make down</code> でデータを保持して停止します。個人練習専用のログインや、自動で進捗を消す動作はありません。</p>
 <h2 id="words-you-will-see">画面の用語</h2><ul>
 <li>Docker: アプリと必要なソフトをまとめ、同じ練習環境を再現しやすくする仕組み</li>

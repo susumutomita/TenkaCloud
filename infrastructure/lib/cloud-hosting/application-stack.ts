@@ -34,6 +34,7 @@ import {
   installationCompetitorConfig,
 } from "./competitor-accounts.js";
 import type { CloudDataStack } from "./data-stack.js";
+import { applyDeploymentBoundary } from "./deployment-boundary.js";
 import { CloudDeploymentPipeline } from "./deployment-pipeline.js";
 import { cloudExecutionArtifacts } from "./execution-artifacts.js";
 import { CloudHosting } from "./hosting.js";
@@ -51,6 +52,7 @@ export interface CloudApplicationStackProps extends StackProps {
 export class CloudApplicationStack extends Stack {
   constructor(scope: Construct, id: string, props: CloudApplicationStackProps) {
     super(scope, id, props);
+    applyDeploymentBoundary(this, props.environment);
     const consoleSite = new CloudHosting(this, "OrganizerConsole", props.consoleAssets);
     const pool = new UserPool(this, "OrganizerUserPool", {
       removalPolicy: RemovalPolicy.RETAIN,
@@ -283,6 +285,8 @@ export class CloudApplicationStack extends Stack {
       value: pipeline.stateMachine.stateMachineArn,
     });
     const api = new RestApi(this, "Api", {
+      // No API execution/access logs are configured; avoid changing the regional logging role.
+      cloudWatchRole: false,
       endpointTypes: [EndpointType.REGIONAL],
       deployOptions: { throttlingBurstLimit: 200, throttlingRateLimit: 100 },
       defaultCorsPreflightOptions: {

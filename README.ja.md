@@ -56,7 +56,7 @@ DynamoDB に状態を保存する Cryptography Battle です。Docker / Compose 
 Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。撤収時はアカウント、リージョン、所有する対象を表示して確認し、
 記録済みの問題環境を撤収します。大会データは保持します。保持ストレージや AWS の利用には料金が発生する場合があります。
 `CLOUD_ARGS="--help"` を付けると、AWS に接続せずヘルプを表示します。
-復元した[クラウド pipeline](infrastructure/README.md#cloud-deployment-pipeline)は固定した旧版を実行する別の配置経路です。
+[クラウド pipeline](infrastructure/README.md#cloud-deployment-pipeline)は、明示的な[初回 IAM 設定](infrastructure/BOOTSTRAP-IAM.md#first-account-setup)後に現行の配置経路を使います。旧版を使う詳細設定では元の完全な処理を維持します。`make -s deploy CLOUD_ARGS="--show-setup"` は権限をオフラインで表示するだけですが、`--setup` は IAM を変更するため内容の確認が必要です。
 
 106 件の Compose 問題を Challenge として表示し、エディターと明示的に許可された
 15 件の参加者ターミナルに接続します。カタログと模擬ライフサイクルの検証は、

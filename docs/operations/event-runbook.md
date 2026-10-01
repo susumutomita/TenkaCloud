@@ -2,7 +2,7 @@
 
 リリース前の統合 candidate 用です。`make local` で同じ大会・チームのシステムを起動し、
 `make down` でデータを保持して停止します。SaaS/Lite の基盤構築手順ではありません。
-`make deploy` は権限設定を確認して現行 CLI を実行します。`make destroy` は所有対象を確認して記録済み問題を撤収し、大会データを保持します。現行クラウドは hello-world の限定 CLI アクセスと組み込みの Cryptography Battle に対応します。コンテナー問題は未実装で、Battle の負荷目標は検証中です。
+`make deploy` は権限設定を確認して現行 CLI を実行します。`make destroy` は所有対象を確認して記録済み問題を撤収し、大会データを保持します。現行クラウドは hello-world の限定 CLI アクセスと組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドの候補には表示しません。DynamoDB Local での Battle 一斉更新は 100 人で 5.910 秒となり、5 秒の更新間隔を超えています。AWS の測定値ではありません。
 Lambda / DynamoDB によるクラウド開催を復旧中です。AWS サービスの問題はクラウド開催専用です。
 
 ## 開催前
@@ -12,14 +12,15 @@ Lambda / DynamoDB によるクラウド開催を復旧中です。AWS サービ�
 - private なデータディレクトリと整合したバックアップを用意し、1 つのプロセスだけが所有する
 - 実際の問題・チーム数で環境を配置し、正答、誤答、ヒント、得点、再起動、撤収を確認する
 - Docker カタログの表示件数だけを全問のプレイ確認として扱わない。terminal と実 Docker・ブラウザの未確認経路を記録する
-- クラウド開催が完成した後の AWS 問題リハーサルでは、対象アカウント、region、資源、費用、障害操作、削除を事前に承認する
+- 実 AWS で任意のリハーサルを行う場合は、対象アカウント、region、資源、費用、権限変更と削除を事前に承認する。未実施だけを開発完了の阻害とは扱わない
 - 競技者アカウントに `templates/competitor-bootstrap.yaml` を使い、表示された運営アカウント、role 名、ExternalId を合わせて接続を検証する
+- Organizations の一括配布と個別設定は[導入手順](../competitor-account-onboarding.md)を使う。別アカウント、または同一アカウントの別 region をチームへ割り当てる。IAM role は global のため bootstrap を複数 region に重複配置しない
 - 参加者用 role と配置 role を分離し、初期設定の AdministratorAccess を参加者へ配らない
 - 大会・チームの参加キーを安全に配布する。任意の[自己登録](participant-self-registration.md)は準備済みチームの割り当てであり、環境の自動作成ではない
 
 ## 開催中
 
-1. 各チームの停止状態の Docker jobs を確認してから Schedule で開始する。AWS の競技はクラウド開催の完成後に別途確認する
+1. ローカルでは各チームの停止状態の Docker jobs を確認してから Schedule で開始する。クラウドでは現行 catalog の hello-world または組み込み Cryptography Battle を使う
 2. 参加者のログイン、Start / resume と Stop (keep data)、最初の解答・得点を確認する
 3. 障害は承認した対象だけへ実行し、SSM の結果と実際のサービス状態を分けて確認する
 4. 失敗時はエラー、対象、時刻を記録し、所有情報を保持したまま対象の操作を再試行する

@@ -15,7 +15,10 @@ export function assertOwnedBootstrap(output: string, environment: string, policy
     tag("TenkaCloudProject") !== "cloud-hosting" ||
     tag("Environment") !== environment ||
     parameter("Qualifier") !== projectBootstrap(environment).qualifier ||
-    parameter("CloudFormationExecutionPolicies") !== policyArn
+    parameter("CloudFormationExecutionPolicies") !== policyArn ||
+    parameter("BootstrapVariant") !== "TenkaCloud cloud-hosting v1" ||
+    parameter("TrustedAccounts") !== "" ||
+    parameter("TrustedAccountsForLookup") !== ""
   ) {
     throw new Error(
       "Existing toolkit ownership or execution policy does not match; refusing to modify it.",

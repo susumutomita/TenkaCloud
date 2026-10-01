@@ -18,7 +18,7 @@ export const metadata = { title: "競技参加者マニュアル" };
 
 **Stop (keep data)** で停止すると同時起動枠を空けられます。同じ環境を再開すると書き込みレイヤーと volume は残りますが、RAM は残りません。自動退避や初期化は行いません。デフォルトではチームごとに 3 環境、host 全体で 12 環境まで起動でき、メモリー上限の合計でも制限されます。上限に達したら不要な環境を停止するか、開催者へ相談してください。`make down` / `make local` の後も、新しい Docker jobs は参加者が再開するまで停止したままです。既存大会は従来の lifecycle を維持します。
 
-terminal の HTTP/WebSocket は synthetic shell を使う 11 tests・96 assertions が成功しています。実 Docker exec と全問の Docker・ブラウザ操作は未確認です。問題が一覧にあっても、すべての操作が確認済みとは限りません。
+PostgreSQL terminal は実 Docker とブラウザで接続・3 checkpoints の採点・チーム分離・停止再開後の 7 行の保持を確認しています。全 15 種の terminal と全問題を通して確認したわけではありません。問題が一覧にあっても、すべての操作が確認済みとは限りません。
 
 <h2 id="practice-without-a-cloud-account">自分でローカル大会を試す</h2>
 

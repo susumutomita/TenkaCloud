@@ -1,53 +1,30 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  TenkaCloud cloud hosting one-click deployment. Provisions a single CodeBuild project
-  that git-clones the (public) TenkaCloud repo + a problem-catalog repo and runs
-  `make deploy` (cloud hosting) to stand up TenkaCloud in this AWS account. It does NOT
-  create the TenkaCloud stacks itself; the build step does. Defaults execute the
-  fixed historical platform/catalog refs below, not code from the current checkout.
+  TenkaCloud cloud hosting launcher: Lambda, DynamoDB, Cognito and both existing web
+  applications. First review and install the project toolkit with make deploy
+  CLOUD_ARGS="--show-setup" / "--setup". Then this CodeBuild project uses only its
+  ordinary operator policy. Default current sources are explicitly development/unreleased
+  until CurrentPlatformCommit is pinned. Current destroy coordinates event cleanup and
+  retains history, identity and asset storage, which may continue to incur charges.
+  Advanced historical-source compatibility preserves the original fixed implementation,
+  including its broad deployment role and destructive destroy-all contract. It does not
+  migrate data or accept current hosting options.
 
-
-  Cost note: the pinned implementation originally estimated under a dollar for
-  a handful of builds and about $7.06 per month for its default DynamoDB profile.
-  These are historical estimates, not current prices or a zero-cost guarantee.
-  Actual charges depend on region, usage and account allowances. `destroy` removes
-  those tables by default; `destroy-all` also removes explicitly retained tables
-  and logs (see the pinned implementation's docs/running-costs.md).
-
-
-  IAM note: creating this stack also creates a CodeBuild role with broad,
-  administrator-equivalent permissions so the build can deploy every TenkaCloud
-  stack; this is why the console asks you to acknowledge IAM capabilities below.
-
-# Single-file ("perapeti") template launched from the console. Because TenkaCloud is a
-# PUBLIC OSS repo, CodeBuild git-clones it directly -- there is NO GitHub
-# CodeStar/CodeConnections connection to set up, and no CodePipeline. After the stack is
-# created, press "Start build" on the CodeBuild project (see the Outputs link) to deploy.
-#
-# The problem catalog is chosen by parameter (ProblemsRepoUrl), not bonded as a git
-# submodule -- so a third party can deploy with their OWN catalog (fork TenkaCloudChallenge,
-# author with its scripts/new-problem.ts, then pass ProblemsRepoUrl=<their fork>).
-#
-# Teardown: "Start build with overrides" + ACTION=destroy-all removes stack-owned retained
-# data and the two app stacks, then delete the launcher stack created from this template.
-# ACTION=destroy removes the stacks; DynamoDB tables go with them unless the deploy set
-# RetainDataTables=true (#2959). The deploy itself creates the platform (Lambda +
-# Cognito + DynamoDB + S3 + CloudFront + ...); a handful of cloud deployments cost under a dollar.
-#
-# IAM Role / Policy "Description" fields only accept ASCII (0x20-0x7E) + Latin-1 (0xA1-0xFF);
-# CJK causes CREATE_FAILED. All comments in this file are ASCII so the quality-gates
-# template-ascii check (walks infrastructure/templates/) passes.
+# One complete launcher. Historical parameter IDs, physical names, checkpoints and
+# action semantics remain available only under the explicit historical source contract.
+# No AWS execution or IAM change is performed by generating or reviewing this file.
 
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: "Required (only field you need to fill in)"
+          default: "Organizer (requires reviewed one-time project setup)"
         Parameters:
           - TenantAdminEmail
       - Label:
           default: "Advanced: repository sources and release classification"
         Parameters:
+          - SourceContract
           - RepoUrl
           - RepoRef
           - ProblemsRepoUrl
@@ -71,9 +48,21 @@ Metadata:
           - CodeBuildTimeoutMinutes
     ParameterLabels:
       TenantAdminEmail:
-        default: "Tenant Admin email (receives the Cognito invite after deploy)"
+        default: "Organizer email (receives the Cognito invite after deploy)"
 
 Parameters:
+  SourceContract:
+    Type: String
+    Default: current-cloud-v1
+    AllowedValues:
+      - current-cloud-v1
+      - historical-949a40a9
+    Description: >-
+      Current Lambda/DynamoDB hosting uses the reviewed project toolkit and operator
+      policy installed by make deploy CLOUD_ARGS="--setup". The advanced historical
+      contract preserves the original complete launcher, broad IAM and destroy-all
+      behavior for its pinned old source pair. No automatic data migration is performed.
+
   Environment:
     Type: String
     Default: development
@@ -83,7 +72,8 @@ Parameters:
       - production
     Description: >-
       Target environment. Selects infrastructure/environments/{env}/config.json
-      and writes infrastructure/environments/{env}/.env during the build.
+      in the historical contract. Current hosting uses the same selected environment
+      for its project toolkit, application and backend stacks.
 
   Action:
     Type: String
@@ -93,7 +83,9 @@ Parameters:
       - destroy
       - destroy-all
     Description: >-
-      What this build does. `deploy` starts cloud hosting; `destroy` removes the stacks;
+      Current deploy starts hosting and destroy drains recorded event resources before
+      removing platform stacks, retaining data. destroy-all is historical-only.
+      Historical behavior: deploy starts hosting; destroy removes the stacks;
       `destroy-all` additionally removes stack-owned retained data first. The cleanup
       tutorial uses ACTION=destroy-all. Note that `destroy` no longer preserves DynamoDB
       history by default (#2959): tables are deployed with DeletionPolicy: Delete unless
@@ -104,7 +96,7 @@ Parameters:
     Type: String
     Description: >-
       Application Admin Console initial user (Tenant Admin). After the cloud deployment,
-      tenkacloud-lite.ts creates this Cognito user and emails an invitation.
+      the selected implementation creates this Cognito user and emails an invitation.
     AllowedPattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
     ConstraintDescription: Must be a valid email address.
 
@@ -117,26 +109,26 @@ Parameters:
 
   RepoRef:
     Type: String
-    Default: 949a40a9ed9199331d928ad5cf9397dbb4ba3f81
+    Default: ""
     Description: >-
-      Full 40-hex commit SHA, branch, or tag of the platform repo to deploy. The exact
-      default platform/catalog pair is candidate/unverified; selecting main in either
-      ref is development/unreleased; every other combination is custom/unverified.
+      Optional full commit SHA, branch or tag. Empty uses the source-contract default
+      in SourceDefaults below. Current sources must implement current-cloud-v1; an
+      incompatible ref fails before AWS changes. main is development/unreleased.
 
   ProblemsRepoUrl:
     Type: String
     Default: https://github.com/susumutomita/TenkaCloudChallenge.git
     Description: >-
-      Public git URL of the problem-catalog repo to ship (cloned into problems/).
-      Point this at your own fork to deploy your own internal problems.
+      Public git URL cloned into problems/. Custom catalogs remain selectable; current
+      hosting executes only compatible hello-world and ac26-crypto-battle artifacts.
 
   ProblemsRepoRef:
     Type: String
-    Default: 363a7c9b83969e20d63b74fd0410a354da5e202b
+    Default: ""
     Description: >-
-      Full 40-hex commit SHA, branch, or tag of the problem-catalog repo to ship. The
-      exact default platform/catalog pair is candidate/unverified; selecting main in
-      either ref is development/unreleased; every other combination is custom/unverified.
+      Optional full commit SHA, branch or tag. Empty uses the source-contract default.
+      Current catalogs must contain the reviewed hello-world and ac26-crypto-battle
+      artifacts and their supported contracts; arbitrary additional runtimes are not enabled.
 
   DeployExternalId:
     Type: String
@@ -157,7 +149,8 @@ Parameters:
       - dynamodb
       - turso
     Description: >-
-      Control-plane data backend (CDK_PARAM_CONTROL_DATA_BACKEND). `dynamodb` (default)
+      Current hosting supports DynamoDB only. Historical-source behavior
+      (CDK_PARAM_CONTROL_DATA_BACKEND): `dynamodb` (default)
       keeps every table on DynamoDB. `turso` is the pure-SQL zero-cost backend -
       CDK synthesizes ZERO DynamoDB tables - and requires TursoDatabaseUrl +
       TursoAuthTokenParameterName. See docs/running-costs.md.
@@ -184,6 +177,7 @@ Parameters:
     MinValue: 1
     MaxValue: 200
     Description: >-
+      Historical-source option; current on-demand tables require the unchanged value 1.
       Provisioned read capacity units applied to every DynamoDB table AND every GSI
       (CDK_PARAM_DYNAMODB_READ_CAPACITY, fanned out by the DynamoDbLowCapacity aspect).
       Default 1 keeps the standing cost at the practical minimum for a personal trial;
@@ -199,18 +193,22 @@ Parameters:
     MinValue: 1
     MaxValue: 200
     Description: >-
+      Historical-source option; current on-demand tables require the unchanged value 1.
       Provisioned write capacity units applied to every DynamoDB table AND every GSI
       (CDK_PARAM_DYNAMODB_WRITE_CAPACITY). Same default/cost/ceiling/behavior notes as
       DynamoReadCapacity, including being ignored when ControlDataBackend is turso.
 
   RetainDataTables:
     Type: String
-    Default: "false"
+    Default: auto
     AllowedValues:
+      - auto
       - "false"
       - "true"
     Description: >-
-      Whether DynamoDB tables survive stack deletion (CDK_PARAM_RETAIN_DATA_TABLES).
+      Current hosting always retains data; false is rejected. auto selects true for
+      current hosting and preserves the historical default false for historical sources.
+      Historical behavior (CDK_PARAM_RETAIN_DATA_TABLES):
       Default false, so ACTION=destroy removes them along with the stacks. Set true only
       if you want the history kept: retained tables keep billing at their provisioned
       capacity forever, and nothing deletes them for you - you have to run
@@ -230,17 +228,29 @@ Parameters:
     MaxValue: 480
     Description: CodeBuild timeout in minutes (a cloud deployment usually finishes in 15-30).
 
+Mappings:
+  SourceDefaults:
+    current-cloud-v1:
+      # Publication replaces this field with the tested helper-source commit.
+      CurrentPlatformCommit: main
+      CatalogCommit: 915fe862fe09bf6b63bb96edcf0cb3deddd54d37
+      Classification: development/unreleased
+    historical-949a40a9:
+      CurrentPlatformCommit: 949a40a9ed9199331d928ad5cf9397dbb4ba3f81
+      CatalogCommit: 363a7c9b83969e20d63b74fd0410a354da5e202b
+      Classification: historical/unverified
+
 Conditions:
+  UsesCurrentSources: !Equals [!Ref SourceContract, current-cloud-v1]
+  HasPlatformOverride: !Not [!Equals [!Ref RepoRef, ""]]
+  HasCatalogOverride: !Not [!Equals [!Ref ProblemsRepoRef, ""]]
+  HasAnyOverride: !Or
+    - !Condition HasPlatformOverride
+    - !Condition HasCatalogOverride
   HasExternalId: !Not [!Equals [!Ref DeployExternalId, ""]]
-  # Historical fixed refs are preserved for the existing launcher contract.
-  # release/launcher-defaults.json records this original pair. This checkout has no
-  # launcher-default generator; changing refs requires explicit compatibility review.
   UsesAnyMainRef: !Or
     - !Equals [!Ref RepoRef, main]
     - !Equals [!Ref ProblemsRepoRef, main]
-  UsesCandidateReleasePair: !And
-    - !Equals [!Ref RepoRef, 949a40a9ed9199331d928ad5cf9397dbb4ba3f81]
-    - !Equals [!Ref ProblemsRepoRef, 363a7c9b83969e20d63b74fd0410a354da5e202b]
 
 Resources:
   LauncherLogGroup:
@@ -272,6 +282,18 @@ Resources:
         PrivilegedMode: true
         ImagePullCredentialsType: CODEBUILD
         EnvironmentVariables:
+          - Name: SOURCE_CONTRACT
+            Value: !Ref SourceContract
+            Type: PLAINTEXT
+          - Name: DEFAULT_CLASSIFICATION
+            Value: !FindInMap [SourceDefaults, !Ref SourceContract, Classification]
+            Type: PLAINTEXT
+          - Name: DEFAULT_REPO_REF
+            Value: !FindInMap [SourceDefaults, !Ref SourceContract, CurrentPlatformCommit]
+            Type: PLAINTEXT
+          - Name: DEFAULT_PROBLEMS_REPO_REF
+            Value: !FindInMap [SourceDefaults, !Ref SourceContract, CatalogCommit]
+            Type: PLAINTEXT
           - Name: ENVIRONMENT
             Value: !Ref Environment
             Type: PLAINTEXT
@@ -285,13 +307,13 @@ Resources:
             Value: !Ref RepoUrl
             Type: PLAINTEXT
           - Name: REPO_REF
-            Value: !Ref RepoRef
+            Value: !If [HasPlatformOverride, !Ref RepoRef, !FindInMap [SourceDefaults, !Ref SourceContract, CurrentPlatformCommit]]
             Type: PLAINTEXT
           - Name: PROBLEMS_REPO_URL
             Value: !Ref ProblemsRepoUrl
             Type: PLAINTEXT
           - Name: PROBLEMS_REPO_REF
-            Value: !Ref ProblemsRepoRef
+            Value: !If [HasCatalogOverride, !Ref ProblemsRepoRef, !FindInMap [SourceDefaults, !Ref SourceContract, CatalogCommit]]
             Type: PLAINTEXT
           - Name: DEPLOY_EXTERNAL_ID
             Value: !If [HasExternalId, !Ref DeployExternalId, ""]
@@ -336,11 +358,11 @@ Resources:
                 nodejs: 22
               commands:
                 - |
-                  echo "Release manifest version: 1.11.0 (baseline for the exact candidate ref pair)"
+                  echo "Source contract: ${SOURCE_CONTRACT}"
                   if [ "${REPO_REF}" = "main" ] || [ "${PROBLEMS_REPO_REF}" = "main" ]; then
                     release_classification="development/unreleased"
-                  elif [ "${REPO_REF}" = "949a40a9ed9199331d928ad5cf9397dbb4ba3f81" ] && [ "${PROBLEMS_REPO_REF}" = "363a7c9b83969e20d63b74fd0410a354da5e202b" ]; then
-                    release_classification="candidate/unverified"
+                  elif [ "${REPO_REF}" = "${DEFAULT_REPO_REF}" ] && [ "${PROBLEMS_REPO_REF}" = "${DEFAULT_PROBLEMS_REPO_REF}" ]; then
+                    release_classification="${DEFAULT_CLASSIFICATION}"
                   else
                     release_classification="custom/unverified"
                   fi
@@ -393,6 +415,10 @@ Resources:
                   checkout_repo_ref "${REPO_URL}" "${REPO_REF}" repo platform || exit 1
                   # Replace the platform's catalog submodule with the independently selected
                   # problem catalog so third parties can ship their own repository.
+                  if [ "${SOURCE_CONTRACT}" = "current-cloud-v1" ] && [ ! -f repo/scripts/cloud-hosting/launcher-check.ts ]; then
+                    echo "Selected platform ref does not implement current-cloud-v1; refusing incompatible deployment."
+                    exit 1
+                  fi
                   rm -rf repo/problems
                   checkout_repo_ref "${PROBLEMS_REPO_URL}" "${PROBLEMS_REPO_REF}" repo/problems catalog || exit 1
                 - cd repo
@@ -404,77 +430,102 @@ Resources:
             pre_build:
               commands:
                 - cd "${CODEBUILD_SRC_DIR}/repo"
-                - export AWS_REGION="${AWS_DEFAULT_REGION}"
-                - export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-                - ENV_DIR="infrastructure/environments/${ENVIRONMENT}"
-                - mkdir -p "${ENV_DIR}"
                 - |
-                  {
-                    echo "TENANT_ADMIN_EMAIL=${TENANT_ADMIN_EMAIL}"
-                    echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}"
-                    echo "AWS_REGION=${AWS_REGION}"
-                    if [ -n "${DEPLOY_EXTERNAL_ID}" ]; then
-                      echo "CDK_PARAM_DEPLOY_EXTERNAL_ID=${DEPLOY_EXTERNAL_ID}"
+                  export AWS_REGION="${AWS_DEFAULT_REGION}"
+                  if [ "${SOURCE_CONTRACT}" = "current-cloud-v1" ]; then
+                    bun scripts/cloud-hosting/launcher-check.ts || exit 1
+                    export TENKACLOUD_ADMIN_EMAIL="${TENANT_ADMIN_EMAIL}"
+                    export CDK_PARAM_ENVIRONMENT="${ENVIRONMENT}"
+                    export ENV="${ENVIRONMENT}"
+                  elif [ "${SOURCE_CONTRACT}" = "historical-949a40a9" ]; then
+                    if [ "${RETAIN_DATA_TABLES}" = "auto" ]; then export RETAIN_DATA_TABLES=false; fi
+                    export AWS_REGION="${AWS_DEFAULT_REGION}"
+                    export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+                    ENV_DIR="infrastructure/environments/${ENVIRONMENT}"
+                    mkdir -p "${ENV_DIR}"
+                    {
+                      echo "TENANT_ADMIN_EMAIL=${TENANT_ADMIN_EMAIL}"
+                      echo "AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}"
+                      echo "AWS_REGION=${AWS_REGION}"
+                      if [ -n "${DEPLOY_EXTERNAL_ID}" ]; then
+                        echo "CDK_PARAM_DEPLOY_EXTERNAL_ID=${DEPLOY_EXTERNAL_ID}"
+                      fi
+                      # Zero-cost Turso backend (docs/running-costs.md). Only emit the
+                      # CDK_PARAM_* when a non-DynamoDB backend is chosen; env-check-lite
+                      # then enforces that the URL + token-parameter-name are both set.
+                      if [ "${CONTROL_DATA_BACKEND}" != "dynamodb" ]; then
+                        echo "CDK_PARAM_CONTROL_DATA_BACKEND=${CONTROL_DATA_BACKEND}"
+                        echo "CDK_PARAM_TURSO_DATABASE_URL=${TURSO_DATABASE_URL}"
+                        echo "CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=${TURSO_AUTH_TOKEN_PARAMETER_NAME}"
+                      fi
+                      # DynamoDB capacity knob (#2679). Emitted unconditionally: with the
+                      # default (1/1) it resolves to the same synth as before, and a turso
+                      # backend synthesizes zero DynamoDB tables so the value is ignored.
+                      echo "CDK_PARAM_DYNAMODB_READ_CAPACITY=${DYNAMO_READ_CAPACITY}"
+                      echo "CDK_PARAM_DYNAMODB_WRITE_CAPACITY=${DYNAMO_WRITE_CAPACITY}"
+                      # Retention knob (#2959). Default "false" -> tables carry DeletionPolicy:
+                      # Delete, so ACTION=destroy leaves nothing billing behind.
+                      echo "CDK_PARAM_RETAIN_DATA_TABLES=${RETAIN_DATA_TABLES}"
+                    } > "${ENV_DIR}/.env"
+                    echo "Wrote ${ENV_DIR}/.env (TENANT_ADMIN_EMAIL / AWS_ACCOUNT_ID / AWS_REGION)"
+                    # Bootstrap is only needed to deploy (idempotent); skip it for both teardown modes.
+                    if [ "${ACTION}" = "deploy" ]; then
+                      ./node_modules/aws-cdk/bin/cdk bootstrap "aws://${AWS_ACCOUNT_ID}/${AWS_REGION}"
                     fi
-                    # Zero-cost Turso backend (docs/running-costs.md). Only emit the
-                    # CDK_PARAM_* when a non-DynamoDB backend is chosen; env-check-lite
-                    # then enforces that the URL + token-parameter-name are both set.
-                    if [ "${CONTROL_DATA_BACKEND}" != "dynamodb" ]; then
-                      echo "CDK_PARAM_CONTROL_DATA_BACKEND=${CONTROL_DATA_BACKEND}"
-                      echo "CDK_PARAM_TURSO_DATABASE_URL=${TURSO_DATABASE_URL}"
-                      echo "CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=${TURSO_AUTH_TOKEN_PARAMETER_NAME}"
-                    fi
-                    # DynamoDB capacity knob (#2679). Emitted unconditionally: with the
-                    # default (1/1) it resolves to the same synth as before, and a turso
-                    # backend synthesizes zero DynamoDB tables so the value is ignored.
-                    echo "CDK_PARAM_DYNAMODB_READ_CAPACITY=${DYNAMO_READ_CAPACITY}"
-                    echo "CDK_PARAM_DYNAMODB_WRITE_CAPACITY=${DYNAMO_WRITE_CAPACITY}"
-                    # Retention knob (#2959). Default "false" -> tables carry DeletionPolicy:
-                    # Delete, so ACTION=destroy leaves nothing billing behind.
-                    echo "CDK_PARAM_RETAIN_DATA_TABLES=${RETAIN_DATA_TABLES}"
-                  } > "${ENV_DIR}/.env"
-                - echo "Wrote ${ENV_DIR}/.env (TENANT_ADMIN_EMAIL / AWS_ACCOUNT_ID / AWS_REGION)"
-                # Bootstrap is only needed to deploy (idempotent); skip it for both teardown modes.
-                - |
-                  if [ "${ACTION}" = "deploy" ]; then
-                    ./node_modules/aws-cdk/bin/cdk bootstrap "aws://${AWS_ACCOUNT_ID}/${AWS_REGION}"
+                  else
+                    echo "Unsupported source contract"; exit 2
                   fi
             build:
               commands:
                 - cd "${CODEBUILD_SRC_DIR}/repo"
                 - |
-                  if [ "${ACTION}" = "destroy-all" ]; then
-                    echo "ACTION=destroy-all -> removing stack-owned data, logs, and Lite stacks"
-                    # TENKACLOUD_LITE_DOWN_YES bypasses the interactive confirm in this non-TTY build.
-                    if ! TENKACLOUD_LITE_DOWN_YES=1 make destroy-all ENV="${ENVIRONMENT}"; then
-                      echo "Lite complete teardown failed; cleanup checkpoint will not be emitted."
-                      exit 1
+                  if [ "${SOURCE_CONTRACT}" = "current-cloud-v1" ]; then
+                    if [ "${ACTION}" = "deploy" ]; then
+                      make deploy ENV="${ENVIRONMENT}" || exit $?
+                    elif [ "${ACTION}" = "destroy" ]; then
+                      make destroy ENV="${ENVIRONMENT}" CLOUD_ARGS="--yes" || exit $?
+                    else
+                      echo "Current hosting supports deploy/destroy; retained data is not purged."; exit 2
                     fi
-                    # Public onboarding checkpoint: complete teardown only, never preserve mode.
-                    echo "Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}"
-                  elif [ "${ACTION}" = "destroy" ]; then
-                    echo "ACTION=destroy -> removing Lite stacks (DynamoDB tables go with them unless RetainDataTables=true was set at deploy time)"
-                    if ! TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="${ENVIRONMENT}"; then
-                      echo "Lite teardown failed."
-                      exit 1
+                  elif [ "${SOURCE_CONTRACT}" = "historical-949a40a9" ]; then
+                    if [ "${ACTION}" = "destroy-all" ]; then
+                      echo "ACTION=destroy-all -> removing stack-owned data, logs, and Lite stacks"
+                      # TENKACLOUD_LITE_DOWN_YES bypasses the interactive confirm in this non-TTY build.
+                      if ! TENKACLOUD_LITE_DOWN_YES=1 make destroy-all ENV="${ENVIRONMENT}"; then
+                        echo "Lite complete teardown failed; cleanup checkpoint will not be emitted."
+                        exit 1
+                      fi
+                      # Public onboarding checkpoint: complete teardown only, never preserve mode.
+                      echo "Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}"
+                    elif [ "${ACTION}" = "destroy" ]; then
+                      echo "ACTION=destroy -> removing Lite stacks (DynamoDB tables go with them unless RetainDataTables=true was set at deploy time)"
+                      if ! TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="${ENVIRONMENT}"; then
+                        echo "Lite teardown failed."
+                        exit 1
+                      fi
+                      echo "No complete-cleanup checkpoint is emitted for ACTION=destroy. If this stack was deployed with RetainDataTables=true, the tables are still there and still billing."
+                    elif [ "${ACTION}" = "deploy" ]; then
+                      # `make deploy` builds the SPAs (ships the cloned catalog) then runs the Lite deploy.
+                      make deploy ENV="${ENVIRONMENT}"
+                    else
+                      echo "Unsupported ACTION: ${ACTION}"
+                      exit 2
                     fi
-                    echo "No complete-cleanup checkpoint is emitted for ACTION=destroy. If this stack was deployed with RetainDataTables=true, the tables are still there and still billing."
-                  elif [ "${ACTION}" = "deploy" ]; then
-                    # `make deploy` builds the SPAs (ships the cloned catalog) then runs the Lite deploy.
-                    make deploy ENV="${ENVIRONMENT}"
                   else
-                    echo "Unsupported ACTION: ${ACTION}"
-                    exit 2
+                    echo "Unsupported source contract"; exit 2
                   fi
             post_build:
               commands:
                 - |
+                  if [ "${CODEBUILD_BUILD_SUCCEEDING}" != "1" ]; then
+                    echo "Build failed; no deployment or cleanup success is claimed."; exit 1
+                  fi
                   if [ "${ACTION}" = "destroy" ] || [ "${ACTION}" = "destroy-all" ]; then
                     echo "Teardown finished. Finally, delete the launcher stack you created from this"
                     echo "template to remove the CodeBuild project, its role, and its log group."
                   elif [ "${ACTION}" = "deploy" ]; then
                     echo "Deploy finished. The Admin Console + Participant Portal URLs are in the"
-                    echo "CloudFormation Outputs of the tenkacloud-lite / tenkacloud-lite-problem-deploy stacks."
+                    echo "CloudFormation Outputs of the selected implementation (current: tenkacloud-cloud / tenkacloud-cloud-problem-deploy, with environment suffix outside development)."
                   else
                     echo "No supported launcher action completed."
                   fi
@@ -487,11 +538,8 @@ Resources:
   # =====================================
   # IAM role for the deploy build
   # =====================================
-  # `make deploy` (Lite) drives `cdk deploy`, which stands up the whole platform (Lambda +
-  # Cognito + DynamoDB + S3 + CloudFront + API Gateway + Step Functions + EventBridge + the
-  # in-app CodeBuild for problem deploy + SSM). cdk also bootstraps and assumes the cdk-*
-  # execution roles, so the role needs broad service access. This is the deploy operator,
-  # distinct from competitor-bootstrap.yaml which stays least-privilege.
+  # Current builds use only the installed operator policy and this launcher's logs.
+  # The original broad inline role is retained solely under historical-source compatibility.
   CodeBuildRole:
     Type: AWS::IAM::Role
     Properties:
@@ -503,63 +551,73 @@ Resources:
             Principal:
               Service: codebuild.amazonaws.com
             Action: sts:AssumeRole
+      ManagedPolicyArns: !If
+        - UsesCurrentSources
+        - - !Sub arn:aws:iam::${AWS::AccountId}:policy/tenkacloud/cloud-hosting/${Environment}-${AWS::Region}-operator
+        - !Ref AWS::NoValue
       Policies:
         - PolicyName: CodeBuildPolicy
           PolicyDocument:
             Version: "2012-10-17"
-            Statement:
-              # Services that `cdk deploy` (Lite) and `cdk bootstrap` create/manage.
-              - Sid: DeployServices
-                Effect: Allow
-                Action:
-                  - cloudformation:*
-                  - iam:*
-                  - lambda:*
-                  - apigateway:*
-                  - cognito-idp:*
-                  - cognito-identity:*
-                  - dynamodb:*
-                  - s3:*
-                  - cloudfront:*
-                  - states:*
-                  - events:*
-                  - sns:*
-                  - sqs:*
-                  - ecr:*
-                  - codebuild:*
-                  - logs:*
-                Resource: "*"
-              # Cost-zero principle: secrets live in SSM Parameter Store, not Secrets Manager.
-              - Sid: SsmParameters
-                Effect: Allow
-                Action:
-                  - ssm:GetParameter
-                  - ssm:GetParameters
-                  - ssm:GetParametersByPath
-                  - ssm:PutParameter
-                  - ssm:DeleteParameter
-                  - ssm:AddTagsToResource
-                Resource:
-                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/TenkaCloud/*
-                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cdk-bootstrap/*
-              - Sid: KmsForBootstrapAndAssets
-                Effect: Allow
-                Action:
-                  - kms:Decrypt
-                  - kms:GenerateDataKey
-                Resource: "*"
-              # cdk deploy assumes the bootstrap roles to publish assets / run the change set.
-              - Sid: AssumeCdkRoles
-                Effect: Allow
-                Action:
-                  - sts:AssumeRole
-                Resource:
-                  - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-*
-              - Sid: Identity
-                Effect: Allow
-                Action:
-                  - sts:GetCallerIdentity
-                Resource: "*"
+            Statement: !If
+              - UsesCurrentSources
+              - - Sid: LauncherLogs
+                  Effect: Allow
+                  Action: [logs:CreateLogStream, logs:PutLogEvents]
+                  Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/tenkacloud/codebuild/lite-launcher-${Environment}:*
+              -
+                # Services that `cdk deploy` (Lite) and `cdk bootstrap` create/manage.
+                - Sid: DeployServices
+                  Effect: Allow
+                  Action:
+                    - cloudformation:*
+                    - iam:*
+                    - lambda:*
+                    - apigateway:*
+                    - cognito-idp:*
+                    - cognito-identity:*
+                    - dynamodb:*
+                    - s3:*
+                    - cloudfront:*
+                    - states:*
+                    - events:*
+                    - sns:*
+                    - sqs:*
+                    - ecr:*
+                    - codebuild:*
+                    - logs:*
+                  Resource: "*"
+                # Cost-zero principle: secrets live in SSM Parameter Store, not Secrets Manager.
+                - Sid: SsmParameters
+                  Effect: Allow
+                  Action:
+                    - ssm:GetParameter
+                    - ssm:GetParameters
+                    - ssm:GetParametersByPath
+                    - ssm:PutParameter
+                    - ssm:DeleteParameter
+                    - ssm:AddTagsToResource
+                  Resource:
+                    - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/TenkaCloud/*
+                    - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cdk-bootstrap/*
+                - Sid: KmsForBootstrapAndAssets
+                  Effect: Allow
+                  Action:
+                    - kms:Decrypt
+                    - kms:GenerateDataKey
+                  Resource: "*"
+                # cdk deploy assumes the bootstrap roles to publish assets / run the change set.
+                - Sid: AssumeCdkRoles
+                  Effect: Allow
+                  Action:
+                    - sts:AssumeRole
+                  Resource:
+                    - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-*
+                - Sid: Identity
+                  Effect: Allow
+                  Action:
+                    - sts:GetCallerIdentity
+                  Resource: "*"
 
 Outputs:
   ReleaseManifestVersion:
@@ -569,14 +627,11 @@ Outputs:
     Value: 1.11.0
 
   ReleaseClassification:
-    Description: >-
-      Classification of the ref parameters saved on this launcher stack. candidate/unverified is
-      the default pair; development/unreleased means at least one saved ref is main; custom/unverified
-      means another pair is saved. A one-build CodeBuild override is classified in that build's log.
+    Description: Saved source classification; build logs also classify one-build overrides.
     Value: !If
       - UsesAnyMainRef
       - development/unreleased
-      - !If [UsesCandidateReleasePair, candidate/unverified, custom/unverified]
+      - !If [HasAnyOverride, custom/unverified, !FindInMap [SourceDefaults, !Ref SourceContract, Classification]]
 
   CodeBuildProjectName:
     Description: CodeBuild project name. Press "Start build" to deploy.
@@ -585,8 +640,8 @@ Outputs:
   StartBuildConsoleUrl:
     Description: >-
       Open the CodeBuild project: "Start build" deploys; "Start build with overrides" with
-      ACTION=destroy-all completely removes cloud hosting; ACTION=destroy removes the stacks, taking
-      the DynamoDB tables with them unless the deploy set RetainDataTables=true.
+      ACTION=destroy coordinates current event cleanup and retains data. destroy-all
+      is available only for the explicitly selected historical source contract.
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-${Environment}?region=${AWS::Region}
 
   # Issue #2696: onboarding drill checkpoint 1 ("launcher created"). Deliberately a fixed,

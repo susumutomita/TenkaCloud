@@ -53,6 +53,7 @@ beforeAll(() => {
   const app = new App({ outdir: join(directory, "cdk.out") });
   const env = { account: "123456789012", region: "us-east-1" };
   const backend = new CloudDataStack(app, "CloudBackend", {
+    environment: "test",
     env,
     tags: cloudStackTags("test"),
     synthesizer: projectSynthesizer("test"),
@@ -84,7 +85,23 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
   });
 
   it("emits project and environment ownership tags on both CloudFormation stack artifacts", () => {
-    expect(stackTags).toEqual([cloudStackTags("test"), cloudStackTags("test")]);
+    expect(stackTags).toEqual([
+      { ...cloudStackTags("test"), TenkaCloudRegion: "us-east-1" },
+      { ...cloudStackTags("test"), TenkaCloudRegion: "us-east-1" },
+    ]);
+  });
+  it("bounds every generated IAM role, including static-asset providers", () => {
+    for (const source of [data, application]) {
+      for (const role of Object.values(source.findResources("AWS::IAM::Role"))) {
+        expect(role.Properties.PermissionsBoundary).toMatch(
+          /^arn:aws:iam::123456789012:policy\/tenkacloud\/cloud-hosting\//u,
+        );
+        expect(role.Properties.Tags).toContainEqual({
+          Key: "TenkaCloudRegion",
+          Value: "us-east-1",
+        });
+      }
+    }
   });
   it("uses the project qualifier rather than the default/shared CDK toolkit", () => {
     const templates = JSON.stringify([data.toJSON(), application.toJSON()]);
@@ -139,6 +156,12 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
         { AttributeName: "SK", KeyType: "RANGE" },
       ]);
     }
+  });
+  it("does not change the regional API Gateway logging account setting", () => {
+    application.resourceCountIs("AWS::ApiGateway::Account", 0);
+    expect(JSON.stringify(application.toJSON())).not.toContain(
+      "AmazonAPIGatewayPushToCloudWatchLogs",
+    );
   });
   it("uses signature-validating REST Cognito ID-token authorization with audience pinning", () => {
     application.hasResourceProperties("AWS::ApiGateway::Authorizer", {

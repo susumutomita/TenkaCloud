@@ -1,5 +1,5 @@
 {
-  "$comment": "Historical default platform/catalog pair preserved by infrastructure/templates/cloud-pipeline.yaml. These values identify the previous pinned launcher flow, not the current integration release. Keep its parameter defaults and classification literals aligned when deliberately advancing a reviewed release.",
+  "$comment": "Historical default platform/catalog pair preserved by infrastructure/templates/cloud-pipeline.yaml. These values identify the previous pinned launcher flow, not the current integration release. Keep its historical SourceDefaults mapping and classification aligned when deliberately advancing a reviewed release.",
   "manifestVersion": "1.11.0",
   "platformCommit": "949a40a9ed9199331d928ad5cf9397dbb4ba3f81",
   "catalogCommit": "363a7c9b83969e20d63b74fd0410a354da5e202b"

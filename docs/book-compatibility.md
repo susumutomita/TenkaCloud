@@ -12,7 +12,7 @@ instructions include legacy local-practice and Lite paths.
 | make local for individual practice | make local starts one event/team competition system; prepare dormant Docker jobs, start the event, then use participant Start / resume |
 | make local-down clears progress | make down preserves DB, scores, keys, writable layers and volumes; new Docker jobs remain stopped until participant resume, with no RAM retention |
 | make host | Removed public target; use make local |
-| Lite launcher / CodeBuild platform setup | Renamed cloud-pipeline.yaml retains the complete fixed-old-ref flow; current make deploy uses the source Lambda/DynamoDB CLI after reviewed IAM setup; exercise coverage remains partial |
+| Lite launcher / CodeBuild platform setup | cloud-pipeline.yaml defaults to the reviewed current source after explicit IAM setup; its advanced historical-source contract retains the original fixed-ref flow; exercise coverage remains partial |
 | ACTION=destroy-all | Retained only by the fixed-old-ref pipeline; current make destroy confirms owned targets, drains recorded exercises, removes the platform stacks and retains data |
 | pack activate for a tenant | Retained local record only; does not add problems to current events |
 
@@ -25,9 +25,29 @@ does not remove AWS resources created by an earlier revision.
 
 ## Teaching examples and verification
 
-Keep sqli-demo, hello-world, hello-world-battle and wp-exposed-backup as explicit
-book regression scenarios, including correct/wrong answers, hints, team isolation,
-restart and cleanup. Renamed starter authoring must have its own runtime evidence.
+Use the following scope when revising the teaching examples. A historical example
+is not silently reclassified as a current cloud exercise.
+
+| Example | Current scope and evidence |
+| --- | --- |
+| sqli-demo | Local Docker Challenge; the real SQL/browser rehearsal covers the supported competition path |
+| hello-world | Cloud AWS flag Challenge with scoped 15-minute CLI access; API/storage/worker contracts verified offline, live AWS rehearsal remains separate |
+| ac26-crypto-battle | Native local/cloud Battle; shared reducer, private team state, scoring and replay verified; synchronized local-DB load remains above the five-second refresh interval |
+| hello-world-battle | Historical AWS endpoint Battle; absent from the current cloud catalog and refused for local hosting. The retained uptime browser test injects Fake AWS/probes into the local engine; it is not proof of a current cloud runtime |
+| wp-exposed-backup and renamed starter | Local catalog/authoring coverage is not a complete reader walkthrough. Verify the actual instructions, answers, hints, team isolation, restart and cleanup before presenting the new recipe as tested |
+
+Keep the endpoint-Battle book chapter linked to its pinned historical release until
+its cloud lifecycle is implemented or the chapter is deliberately rewritten around
+a supported scenario. Do not present the Cryptography Battle as the same AWS uptime
+lesson. Likewise, validating or installing an external Pack does not make its
+problems executable in a current event.
+
+Built-in local Course tracks now shows only the team's assigned problems, uses
+their saved checkpoints/completion state and the existing event gate, and links to
+the correct job. A one-team event provides solo practice using that same runtime.
+The real Chromium rehearsal covers links, progress, gate, team separation and
+restart with seeded saved checkpoint data; it does not execute every verifier.
+
 All 106 former local Compose problems are intended to work as Challenge competitions
 through shared runner capabilities. Catalog/workbench integration is implemented.
 Real Docker/browser checks covered SQL exercise access and a PostgreSQL terminal,
@@ -49,7 +69,7 @@ an authorized book revision rather than silently changing the score engine.
 
 - Execution modes and local chapters: event/team flow, Bun setup, actual exercise links and state-preserving shutdown
 - AWS access: cloud-only execution, configured deployment-role ExternalId in SSM, separate participant role and exact bootstrap region; no local AWS startup option
-- Cloud setup and cleanup: preserve the complete renamed pipeline while identifying its fixed legacy refs; update to the current path only after implementation
+- Cloud setup and cleanup: review explicit first-account IAM setup, current source pins and the separate historical-source compatibility path; distinguish retained-data teardown from old destroy-all
 - Authoring/private packs: distinguish validation/install from executable catalog integration
 - Codespaces and appendix: require new forwarded-origin, gateway and terminal evidence; update the shutdown checklist
 

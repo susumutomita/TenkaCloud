@@ -1,38 +1,70 @@
 # Cloud deployment permission boundaries
 
-The complete `templates/cloud-pipeline.yaml` launcher preserves the original
-CodeBuild role and bootstrap instructions for its fixed historical source refs.
-That role has broad, administrator-equivalent deployment permissions. The rename
-does not create a new grant, narrow the old policy, or authorize AWS execution.
-Review those permissions and teardown consequences before running the launcher.
+Current cloud hosting has an inspectable first-account path. It transforms the pinned
+CDK bootstrap template, preserves its resource/output/qualifier/version contract and
+replaces broad deployment/lookup grants. Shared `CDKToolkit` is never adopted and
+`AdministratorAccess` is never a current-control-plane fallback.
 
-The sections below describe `scripts/cloud-hosting/main.ts` in the current
-checkout. This CLI is not the code executed by the launcher's default fixed refs.
-It requires an explicit reviewed execution policy instead of CDK's broad default.
-Initial least-privilege setup remains an unfinished acceptance item.
+## First-account setup
+
+The account/region below are placeholders. No live AWS, IAM or billing operation was
+performed during implementation or tests. Use the intended AWS profile throughout.
+
+```bash
+export ACCOUNT_ID=123456789012
+export AWS_REGION=ap-northeast-1
+export ENV=development
+make -s deploy CLOUD_ARGS="--show-setup" > /tmp/tenkacloud-setup.json
+```
+
+`--show-setup` is offline. Review the template's IAM documents, names and
+`Metadata.TenkaCloudSetupPermissions`: the latter is the exact initial-caller policy.
+An IAM administrator prepares that temporary setup principal. Setup creates or
+updates only the owned `TenkaCloudToolkit-<environment>`, qualifier-scoped asset
+resources, roles and managed policies. It does not attach policies to the caller,
+change credentials, activate trusted access or grant cross-account bootstrap trust.
+
+```bash
+# Initial-setup principal; the command asks for confirmation after review.
+make deploy CLOUD_ARGS="--setup"
+# Switch to the intended ordinary deployment operator's AWS profile/role.
+export TENKACLOUD_ADMIN_EMAIL=organizer@example.com
+make deploy
+```
+
+`--setup` installs and verifies the toolkit only; it does not deploy the application.
+Its output names the generated operator policy. An IAM administrator attaches that
+policy only to the intended deployment operator. The CodeBuild launcher references
+that same policy after setup. Ordinary `make deploy` performs no toolkit/IAM setup;
+missing or mismatched setup stops before application builds. `make destroy` uses the
+operator policy to coordinate cleanup while retaining data. Cognito organizers need
+no AWS policy. Neither policy is automatically attached to a user or existing role.
 
 ## Fail-safe behavior
 
-Before builds or setup, the CLI requires `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` in this
-shape:
+Both synthesizers and the CLI use the same project qualifier. Existing toolkits must
+match ownership/environment tags, qualifier, execution-policy list, versioned
+bootstrap variant and empty trusted-account parameters. Earlier unbounded project
+toolkits and unrelated configurations are not automatically migrated or adopted.
+Previously deployed resources missing ownership or `TenkaCloudRegion` tags need an
+explicitly privileged, separately reviewed migration before the new execution policy
+can update them. The documented setup route is for a fresh installation.
 
-```text
-arn:aws:iam::<deployment-account>:policy/tenkacloud/cloud-hosting/<reviewed-policy>
-```
+Default execution policies are generated from the reviewed source for this account,
+region and environment. Leave `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` unset for fresh
+setup. Its optional comma-separated value is only an assertion of the already installed
+execution-policy list, not an installer for arbitrary custom policies. ARNs must belong
+to the deployment account, use `policy/tenkacloud/cloud-hosting/`, and exactly match
+the toolkit list. ARN/ownership validation does not replace policy-content review.
+Bootstrap roles use rewritten scoped policies; application/provider roles additionally
+carry the generated permissions boundary.
 
-The account must match the current caller/deployment identity. This validates identity and
-namespace, not the policy's contents; the policy must be reviewed separately.
-The CLI does not create, attach, or silently expand that policy.
-
-Bootstrap uses `TenkaCloudToolkit-<environment>` and a deterministic project
-qualifier. The same qualifier is used by both stack synthesizers. Existing project
-toolkits must have matching ownership/environment tags, qualifier, and execution
-policy. Missing/mismatched metadata stops the operation before builds or setup. The shared
-`CDKToolkit` and unrelated toolkit configurations are never adopted.
-
-The future approved first-account flow should create only the reviewed project
-policy and scoped toolkit. It should not introduce a general IAM-management layer.
-No bootstrap, IAM, deployment, or billing action was executed during development.
+The stock-template transform fails closed if an upstream change introduces an
+unexpected IAM resource. Every application/provider role receives the installation's
+application boundary. The execution policy can apply only that boundary and cannot
+remove or edit it. Managed policies are split at statement boundaries to meet IAM
+size limits; oversized legacy binding sets fail explicitly rather than broadening
+permissions. The generated template and setup policy are reviewable artifacts.
 
 ## Derivation from the synthesized resources
 
@@ -51,24 +83,29 @@ The current two synthesized stacks contain the following resource families:
 - One public, secret-free competitor bootstrap template object and an installation
   SSM SecureString initialized through the existing account-registration flow
 
-The setup policy therefore needs the corresponding CloudFormation lifecycle APIs,
-scoped to these project resources wherever the API supports resource-level control.
-Creation/discovery APIs that require `Resource: *` must be individually reviewed,
-with supported account, region, request-tag, and resource-tag conditions. They are
-not a reason to grant a service-wide wildcard action set.
+`lib/cloud-hosting/deployment-policy.ts` inventories these synthesized resource types
+and defines explicit actions and account/region/project scopes. Tests compare both
+actual synths with that inventory, cover all generated application roles and the
+stock-template transform, and reject broad action wildcards/default administrator
+grants. No AWS policy simulator or live create/update/delete was run.
 
-IAM permissions require particular care: scope role creation and policy updates
-to generated project roles, constrain `iam:PassRole` to those roles and their
-intended service, and validate any required permissions boundary. The CDK asset
-bucket/repositories and bootstrap roles must be limited to the project qualifier.
-Derive the final actions from the exact synthesized templates and provider assets,
-then test updates and teardown as well as creation before calling onboarding ready.
-A broad execution policy is not supplied as a convenience fallback.
+Residual scopes are listed in the generated policy module: CloudFront origin access
+controls, APIs lacking resource-level/tag authorization, regional log-delivery and
+CloudFormation validation/export discovery. Generated/truncated S3 and PassRole
+names use the bounded TenkaCloud project namespace. Deployment operators are
+TenkaCloud project administrators across environments in this account/region where
+these actions cannot be isolated. Environment names are not an IAM security boundary.
+CloudFormation stack targets remain exact; supported ownership tags and participant/team
+restrictions remain enforced. Deployers can change project code, data and identity. Use a dedicated hosting account when that trust boundary is
+needed. API Gateway account-wide logging configuration is not changed; Lambda
+operation logs remain. Previously generated retained API logging roles/settings
+are not deleted when that unused construct is removed.
 
 ## One-time setup versus ordinary use
 
-The operator running initial setup needs the reviewed bootstrap/IAM permissions,
-CDK asset publishing, and CloudFormation operations. There is no additional
+The initial caller needs the generated setup policy; the ordinary deployment
+operator uses the distinct operator policy with asset-publishing and owned-stack
+CloudFormation operations. There is no additional
 source-bundle bucket or source archive upload in the current path. These setup
 credentials are never placed in SPA configuration or participant responses.
 
@@ -128,8 +165,8 @@ are limited to the exact content-addressed binding object. No ambient credential
 are passed to CloudFormation. Recovery can DescribeExecution only for executions
 of this state machine and uses ownership-qualified deployment writes.
 
-This does not create the competitor trust policy or provide a broad CloudFormation
-execution role. The initial reviewed bootstrap/competitor setup remains unfinished.
+This does not create competitor-account trust automatically or broaden the existing
+competitor-bootstrap exception. Each account follows its explicit registration flow.
 Problem-template permissions, including any dedicated-account assumptions, require
 separate review. Platform teardown coordinates active/pending event work before removing the runner.
 The operator running this CLI needs the actions used by its direct storage path:
@@ -139,22 +176,34 @@ The operator running this CLI needs the actions used by its direct storage path:
 - Deployments: `GetItem`, `Query`, `PutItem`, `UpdateItem`, `DeleteItem`
 
 Each action above has the `dynamodb:` prefix and is scoped to that exact owned table.
-These direct
-operator permissions are distinct from the CloudFormation execution policy and
-ordinary Cognito roles; the CLI does not create or grant them. Scope their resources
-to the exact verified table ARNs. CloudFormation deletion and waiting use exact
+These direct operator permissions are in the generated operator policy, distinct
+from CloudFormation execution and Cognito roles. The CLI verifies table ownership
+before use; native settlement also reads owned catalog/plugin artifacts. Setup
+creates the policy but does not attach it to the caller. CloudFormation deletion and waiting use exact
 physical stack ARNs. Permission errors preserve the platform and durable stop state.
 Independently deployed exercises and retained data/artifact buckets are not purged.
 
-## Preserved launcher contract
+## One launcher, explicit source compatibility
 
-The pipeline rename keeps resource definitions and BuildSpec instructions exactly
-as in `825415fc:infrastructure/templates/lite-pipeline.yaml`. This includes the
-existing CodeBuild role, physical names, pinned platform/catalog refs, backend
-parameters and `deploy` / `destroy` / `destroy-all` behavior. The launcher tests
-check resource and condition hashes, parameter/output contracts and synthetic
-success/failure paths without running AWS commands.
+`templates/cloud-pipeline.yaml` keeps one CodeBuild project, platform/catalog source
+selection, invitations, deployment/teardown paths, original physical names, output
+links and checkpoint values. The default `current-cloud-v1` contract uses the current
+CLI and installed operator policy. Published
+`SourceDefaults.current-cloud-v1.CurrentPlatformCommit` points to a tested source
+commit containing `scripts/cloud-hosting/launcher-check.ts`; incompatible refs fail
+before AWS use. Custom repositories remain selectable. Current catalogs must contain
+the reviewed `hello-world` and `ac26-crypto-battle` artifacts and supported contracts;
+selecting a catalog does not enable arbitrary runtimes.
 
-The parameter IDs and checkpoint values retain their historical spelling for
-compatibility. Only the public filename and displayed hosting name change.
-There is no second, reduced-functionality launcher in the published tree.
+Advanced `historical-949a40a9` compatibility preserves the original fixed source pair
+and full old behavior: Turso, provisioned capacity, old `.env`, shared bootstrap and
+`destroy-all`. Its broad role is conditional on that explicit historical choice.
+No current-stack adoption or automatic data migration is promised. Empty ref inputs
+select the chosen contract's defaults.
+
+Current builds reject Turso, a custom shared ExternalId, nondefault provisioned
+capacities, `RetainDataTables=false` and `destroy-all` before AWS operations.
+`RetainDataTables=auto` preserves current retention and the historical false default.
+Current `destroy` drains recorded event work before platform removal, retaining
+history, accounts, ExternalId, toolkit and assets. It never emits a complete-purge
+checkpoint. Historical cleanup checkpoints require successful historical `destroy-all`.

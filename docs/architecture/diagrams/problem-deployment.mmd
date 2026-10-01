@@ -18,6 +18,16 @@ sequenceDiagram
     Participant->>Host: Stop (keep data)
     Host->>Runtime: Stop; retain writable layer and volumes, not RAM
     Host->>DB: Persist stopped status and retained runtime ports
+  else Cloud AWS problem
+    Host->>DB: Atomically retain owned deployment and dispatch outbox
+    Host-->>Organizer: Accepted job reference
+    Runtime->>DB: Dispatcher claims pending work
+    Runtime->>Runtime: Step Functions invokes owned CloudFormation workers
+    Runtime->>Runtime: Assume verified competitor role with required ExternalId
+    Runtime->>DB: Persist progress, exact stack identity and terminal result
+  else Native Cryptography Battle
+    Host->>DB: Retain plugin identity and native state
+    Host-->>Organizer: Ready without Docker or a competitor stack
   else Legacy Docker event
     Host->>Runtime: Existing deployment lifecycle
     Runtime-->>Host: Outputs or failure

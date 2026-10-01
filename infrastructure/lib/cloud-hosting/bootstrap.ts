@@ -13,13 +13,21 @@ export function requireExecutionPolicy(value: string | undefined): {
   arn: string;
   account: string;
 } {
-  const match =
-    /^arn:aws:iam::(\d{12}):policy\/tenkacloud\/cloud-hosting\/[A-Za-z0-9_+=.@/-]+$/u.exec(
-      value ?? "",
-    );
-  if (!match?.[1] || !value || value.length > 2048)
+  const arns = value?.split(",") ?? [];
+  const matches = arns.map((arn) =>
+    /^arn:aws:iam::(\d{12}):policy\/tenkacloud\/cloud-hosting\/[A-Za-z0-9_+=.@/-]+$/u.exec(arn),
+  );
+  const account = matches[0]?.[1];
+  if (
+    !account ||
+    !value ||
+    value.length > 2048 ||
+    arns.length > 10 ||
+    new Set(arns).size !== arns.length ||
+    matches.some((match) => match?.[1] !== account)
+  )
     throw new Error(
-      "Set TENKACLOUD_CFN_EXECUTION_POLICY_ARN to a reviewed, least-privilege account policy under policy/tenkacloud/cloud-hosting/. No AdministratorAccess fallback is allowed.",
+      "Set TENKACLOUD_CFN_EXECUTION_POLICY_ARN to reviewed account policy ARNs under policy/tenkacloud/cloud-hosting/. No AdministratorAccess fallback is allowed.",
     );
-  return { arn: value, account: match[1] };
+  return { arn: value, account };
 }

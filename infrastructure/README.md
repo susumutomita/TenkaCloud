@@ -1,9 +1,10 @@
-# Cloud hosting restoration
+# Cloud hosting
 
-This is an in-progress restoration of the former single-installation Lambda,
-DynamoDB, Cognito, CloudFront, and CDK path. It is not ready to run a competition.
-Local hosting remains SQLite. No SBT, tenant provisioning, tier plans, or remote
-SQL backend is included.
+This unreleased integration candidate uses Lambda, DynamoDB, Cognito, CloudFront
+and CDK for the supported cloud exercises described below. Local hosting remains
+SQLite. No SBT, tenant provisioning, tier plans or remote SQL backend is included.
+Source, synth and local rehearsals do not establish live AWS authorization, costs
+or the capacity of a particular event.
 
 ## Implemented vertical slice
 
@@ -63,56 +64,72 @@ the prior lookup immediately.
 
 ## Cloud deployment pipeline
 
-The complete launcher is
-[`templates/cloud-pipeline.yaml`](templates/cloud-pipeline.yaml), renamed from
-`lite-pipeline.yaml`. There is one published pipeline template. Startup,
-`destroy`, `destroy-all`, automatic CDK bootstrap, independent catalog selection,
-capacity/retention parameters, release classification and onboarding checkpoints
-are preserved. Existing resource names, parameter IDs and checkpoint values stay
-unchanged so the rename does not replace resources or break existing tutorials.
+[`templates/cloud-pipeline.yaml`](templates/cloud-pipeline.yaml) remains the one
+complete launcher. Its default `current-cloud-v1` source contract runs the current
+`make deploy` / coordinated `make destroy` through the reviewed operator policy
+after one-time project setup. The final template pins its tested helper-source
+commit and catalog `915fe862fe09bf6b63bb96edcf0cb3deddd54d37`; the exact values and
+release classification are in `Mappings.SourceDefaults`. Creating the launcher
+also creates its CodeBuild role and log group; it does not start a build.
 
-The defaults execute platform commit
-`949a40a9ed9199331d928ad5cf9397dbb4ba3f81` and catalog commit
-`363a7c9b83969e20d63b74fd0410a354da5e202b`. They run the code at those fixed refs,
-not this checkout. The existing `candidate/unverified` classification is retained;
-pointing the template at the current branch does not establish compatibility.
-The original backend selectors are preserved for those refs, not a change to the
-current local SQLite / cloud DynamoDB direction.
+Custom platform/catalog repositories and refs remain selectable. Current catalogs
+must contain the reviewed hello-world and ac26-crypto-battle artifacts. The build
+checks the selected source protocol and rejects incompatible current settings
+before application deployment. It does not make arbitrary pack runtimes executable.
+Current builds do not bootstrap IAM, use Turso/provisioned-Dynamo settings, accept a
+shared ExternalId override, or offer historical `destroy-all` semantics.
 
-The original broad CodeBuild permissions, bootstrap behavior and teardown
-consequences are also preserved and must be reviewed before execution. Template
-creation does not start a build. No AWS action was executed as part of this rename.
-See [permission boundaries](BOOTSTRAP-IAM.md).
+The advanced `historical-949a40a9` contract preserves the full original launcher at
+platform `949a40a9ed9199331d928ad5cf9397dbb4ba3f81` and catalog
+`363a7c9b83969e20d63b74fd0410a354da5e202b`, including historical backend/capacity
+parameters, bootstrap, destroy/destroy-all, physical resource names and cleanup
+checkpoints. Its original broad CodeBuild permissions and data-deletion behavior
+require separate review. Selecting historical sources is not a migration to the
+current cloud architecture. See [permission boundaries](BOOTSTRAP-IAM.md).
 
 ## Current checkout's setup and teardown boundary
 
 `make deploy` and `make destroy` call the existing `scripts/cloud-hosting/main.ts`
-implementation in this checkout. They do not run the pipeline's fixed historical
-checkout. The current cloud exercise catalog supports hello-world with scoped CLI
+implementation in this checkout. They use this checkout, rather than an implicitly selected historical source. The current cloud exercise catalog supports hello-world with scoped CLI
 access and native Cryptography Battle. Docker/Compose exercises are local-only and
-are not listed in the cloud catalog. Automatic first-account IAM preparation remains
-incomplete. Synchronized Battle bursts still exceed the five-second refresh interval;
+are not listed in the cloud catalog. First-account IAM preparation is explicit and inspectable, as described below. Synchronized Battle bursts still exceed the five-second refresh interval;
 the presence of its routes is not a 100-participant capacity claim. These commands can create chargeable AWS resources; they do not
 promise a zero-cost platform.
 
-Start with `make deploy CLOUD_ARGS="--help"` or `make destroy CLOUD_ARGS="--help"`;
-help performs no AWS operation. After reviewing the permissions below, use an
-already configured AWS profile, `AWS_REGION`, `ENV` (default `development`),
-`TENKACLOUD_ADMIN_EMAIL`, and `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` for deployment.
-Run `make destroy` with the same account, region and environment for coordinated
-teardown. It prints the targets and asks before changing them. `CLOUD_ARGS="--yes"`
-is an explicit noninteractive teardown confirmation, not a data-purge option.
-No command in this documentation was run against a live AWS account during verification.
+Start with `make deploy CLOUD_ARGS="--help"`; help makes no AWS request. For a
+fresh installation, follow [first-account setup](BOOTSTRAP-IAM.md#first-account-setup):
 
-`up` requires `TENKACLOUD_ADMIN_EMAIL`, a commercial AWS region, and a reviewed
-`TENKACLOUD_CFN_EXECUTION_POLICY_ARN`. See [bootstrap permissions](BOOTSTRAP-IAM.md).
-It refuses the missing policy before setup/upload and never falls back to broad
-administrator permissions. Both stacks use the same environment-specific project
-qualifier. The default/shared `CDKToolkit` is not adopted or modified.
-Before builds or bootstrap, existing platform stacks must match the current AWS
-caller account, resolved region, exact stack ARN/name, and project/environment
-tags. Only an explicit CloudFormation not-found response permits creation.
-Access denial, malformed metadata, or mismatched ownership stops the operation.
+1. Set `ACCOUNT_ID`, `AWS_REGION` and `ENV` (default `development`). Run
+   `make -s deploy CLOUD_ARGS="--show-setup"` to inspect the account-specific JSON
+   without credentials or AWS calls. Review all IAM documents and the initial
+   caller permissions in `Metadata.TenkaCloudSetupPermissions`.
+2. An authorized initial-setup principal runs `make deploy CLOUD_ARGS="--setup"`.
+   Confirmation identifies the account, region, project toolkit and residual
+   authority. This creates/updates the owned toolkit and policies only. It does
+   not attach a policy to the caller or deploy the application.
+3. An IAM administrator grants the returned operator policy only to the intended
+   deployment profile/role. Switch to that profile, set `TENKACLOUD_ADMIN_EMAIL`,
+   then run ordinary `make deploy`. Fresh setup leaves the advanced
+   `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` compatibility input unset.
+
+The operator administers TenkaCloud resources across environments where S3 and
+PassRole cannot be isolated. Some generated-ID or untaggable APIs, including
+CloudFront OAC lifecycle, retain account-level scope. Environment names are not
+an IAM security boundary. The review/confirmation exposes these limits; it is not
+approval to apply them. Actual AWS setup/deployment was not executed in verification.
+
+Ordinary deployment performs no toolkit-policy setup; CloudFormation still creates
+and updates the application's roles within the supplied permissions. Missing or
+mismatched setup stops before builds. Existing toolkits require the exact project,
+environment, qualifier, policy list and source-contract variant. Shared `CDKToolkit`,
+earlier unbounded toolkits and untagged installations are not silently adopted;
+review their migration separately. Only explicit CloudFormation not-found responses
+permit fresh creation. Access denial, malformed metadata or ownership mismatch stops
+the operation.
+
+Use `make destroy` with the same account, region and environment for coordinated
+teardown. It prints targets and retained-data consequences before confirmation.
+`CLOUD_ARGS="--yes"` is an explicit noninteractive teardown confirmation, not a purge.
 
 An existing app stack must explicitly publish `CloudRunnerEnabled=true|false`.
 Registry deployments also publish `CloudRunnerMode` and the digest of retained
@@ -424,7 +441,6 @@ original event, team and intake transaction guards before running the reducer.
 
 ## Remaining acceptance work
 
-- Reviewed least-privilege initial bootstrap policy and first-account setup path
 - Reviewed exercise permissions for each supported account/region arrangement
 - Participant AWS Console access without cross-team metadata disclosure
 - Cloud-native catalog expansion, AWS endpoint Battles, hints and disruptions

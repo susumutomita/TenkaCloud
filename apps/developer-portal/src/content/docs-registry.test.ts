@@ -95,7 +95,9 @@ describe("docs registry — role manuals (#2818)", () => {
       expect(source).not.toContain("CDK_PARAM_CONTROL_DATA_BACKEND");
     }
     expect(ORGANIZER_MANUAL_SOURCE).toContain("has not been established");
-    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("初回アカウント設定は未完了");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("environment names are not an IAM security boundary");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("環境名は IAM の分離境界になりません");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("実 AWS への配置は未検証");
     for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
       expect(source).toMatch(/Lambda\s*\/\s*DynamoDB/);
       expect(source).not.toContain("Cloud Turso");
@@ -158,21 +160,17 @@ describe("docs registry — role manuals (#2818)", () => {
     expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("データを保持");
   });
 
-  it("should distinguish participant resume, disk retention and synthetic terminal evidence", () => {
+  it("should distinguish participant resume, disk retention and representative real terminal evidence", () => {
     for (const source of [PARTICIPANT_MANUAL_SOURCE, PARTICIPANT_MANUAL_JA_SOURCE]) {
-      for (const detail of [
-        "Start / resume",
-        "Stop (keep data)",
-        "RAM",
-        "synthetic",
-        "11",
-        "96",
-        "Docker exec",
-      ]) {
+      for (const detail of ["Start / resume", "Stop (keep data)", "RAM", "PostgreSQL", "15"]) {
         expect(source).toContain(detail);
       }
     }
     expect(PARTICIPANT_MANUAL_SOURCE).toContain("does not automatically evict or reset");
+    expect(PARTICIPANT_MANUAL_SOURCE).toContain("real Docker/browser rehearsal");
+    expect(PARTICIPANT_MANUAL_SOURCE).toContain("does not verify every one");
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("実 Docker とブラウザ");
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("全問題を通して確認したわけではありません");
     expect(PARTICIPANT_MANUAL_SOURCE).toContain("remain stopped until you resume");
     expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("自動退避や初期化は行いません");
     expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("再開するまで停止したまま");

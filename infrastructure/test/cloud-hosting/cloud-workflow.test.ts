@@ -1135,7 +1135,11 @@ describe("optional deployment pipeline offline synthesis", () => {
     );
     const app = new App({ outdir: directory });
     const env = { account: "123456789012", region: "us-east-1" };
-    const backend = new CloudDataStack(app, "ApplicationData", { env, participantAssets: assets });
+    const backend = new CloudDataStack(app, "ApplicationData", {
+      env,
+      participantAssets: assets,
+      environment: "workflow-test",
+    });
     const bindings = Array.from({ length: 25 }, (_, index) => ({
       id: `team-${index}`,
       accountId: "111111111111",

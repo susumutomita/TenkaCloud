@@ -256,22 +256,25 @@ describe("cloud execution HTTP authorization, replay and lifecycle contracts", (
     }
     expect(f.sdk).not.toHaveBeenCalled();
   });
-  it.each(["unavailable", "constructor", "sqli-demo", "db-a1-table-primary-key"])(
-    "rejects %s outside the real execution catalog before event creation",
-    async (problemId) => {
-      const f = fixture();
-      const count = f.repository.events.size;
-      const response = await f.organizer("/events", "POST", {
-        name: "Unavailable problem",
-        teams: [{ internalSlug: "new-team", awsAccountId: "123456789012", region: "us-east-1" }],
-        problems: [{ problemId, defaultRegion: "us-east-1" }],
-      });
-      expect(response.status).toBe(409);
-      expect(await response.json()).toMatchObject({ error: "unsupported_runtime_problem" });
-      expect(f.repository.events.size).toBe(count);
-      expect(f.accept).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    "unavailable",
+    "constructor",
+    "sqli-demo",
+    "db-a1-table-primary-key",
+    "hello-world-battle",
+  ])("rejects %s outside the real execution catalog before event creation", async (problemId) => {
+    const f = fixture();
+    const count = f.repository.events.size;
+    const response = await f.organizer("/events", "POST", {
+      name: "Unavailable problem",
+      teams: [{ internalSlug: "new-team", awsAccountId: "123456789012", region: "us-east-1" }],
+      problems: [{ problemId, defaultRegion: "us-east-1" }],
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "unsupported_runtime_problem" });
+    expect(f.repository.events.size).toBe(count);
+    expect(f.accept).not.toHaveBeenCalled();
+  });
   it.each(["sqli-demo", "db-a1-table-primary-key"])(
     "refuses a retained Docker problem %s before preparing any cloud work",
     async (problemId) => {

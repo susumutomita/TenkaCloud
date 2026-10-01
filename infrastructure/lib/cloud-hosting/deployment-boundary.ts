@@ -1,0 +1,37 @@
+import { Aspects, CfnResource, type Stack, Tags } from "aws-cdk-lib";
+import { CfnRole, ManagedPolicy, PermissionsBoundary } from "aws-cdk-lib/aws-iam";
+import { deploymentPolicies } from "./deployment-policy.js";
+
+/** Covers CDK provider roles as well as API/workflow roles, including future constructs. */
+export function applyDeploymentBoundary(stack: Stack, environment: string): void {
+  const { applicationBoundaryArn } = deploymentPolicies({
+    account: stack.account,
+    region: stack.region,
+    environment,
+  }).identities;
+  PermissionsBoundary.of(stack).apply(
+    ManagedPolicy.fromManagedPolicyArn(
+      stack,
+      "ApplicationPermissionsBoundary",
+      applicationBoundaryArn,
+    ),
+  );
+  Tags.of(stack).add("TenkaCloudRegion", stack.region);
+  Aspects.of(stack).add({
+    visit(node) {
+      if (node instanceof CfnRole) {
+        node.tags.setTag("TenkaCloudProject", "cloud-hosting");
+        node.tags.setTag("Environment", environment);
+        node.tags.setTag("TenkaCloudRegion", stack.region);
+      } else if (node instanceof CfnResource && node.cfnResourceType === "AWS::IAM::Role") {
+        // CDK's built-in S3 cleanup provider creates a generic CfnResource role,
+        // which the normal role TagManager does not visit.
+        node.addPropertyOverride("Tags", [
+          { Key: "TenkaCloudProject", Value: "cloud-hosting" },
+          { Key: "Environment", Value: environment },
+          { Key: "TenkaCloudRegion", Value: stack.region },
+        ]);
+      }
+    },
+  });
+}

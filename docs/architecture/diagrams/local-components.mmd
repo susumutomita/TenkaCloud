@@ -5,6 +5,7 @@ flowchart TB
   subgraph Machine["Organizer-controlled computer"]
     Bun["Single Bun process: HTTP and authorization"]
     SQLite["Private SQLite + original key files"]
+    Native["Native Cryptography Battle: Bun + SQLite; no Docker required"]
     Runner["On-demand Compose: team 3 / host 12 / 4096 MiB defaults"]
     Gateway["40 active-only slots; authorized per-team access"]
     Docker["Docker daemon"]
@@ -14,6 +15,8 @@ flowchart TB
   Admin --> Bun
   Player --> Bun
   Bun --> SQLite
+  Bun --> Native
+  Native --> SQLite
   Bun --> Runner
   Runner --> Docker
   Docker --> Problem

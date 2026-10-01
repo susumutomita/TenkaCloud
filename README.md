@@ -56,7 +56,7 @@ five-second refresh interval. Destroy confirms the account,
 region and owned resources, drains recorded exercises, and retains event data.
 Retained storage and AWS usage can incur charges. `CLOUD_ARGS="--help"` shows help
 without contacting AWS. The preserved [cloud pipeline](infrastructure/README.md#cloud-deployment-pipeline)
-uses fixed historical source refs and is a separate deployment path.
+uses the current source contract after explicit [first-account IAM setup](infrastructure/BOOTSTRAP-IAM.md#first-account-setup). Its advanced historical-source option retains the old complete flow. Inspect permissions offline with `make -s deploy CLOUD_ARGS="--show-setup"`; actual `--setup` changes IAM and requires your review.
 
 The host exposes all 106 Compose exercise definitions as Challenges, including
 workbenches and the 15 explicitly declared participant terminals. Catalog coverage

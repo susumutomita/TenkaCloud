@@ -16,6 +16,7 @@ if (!/^\d{12}$/u.test(account)) throw new Error("An explicit 12-digit AWS accoun
 const root = resolve(import.meta.dirname, "../..");
 const app = new App();
 const backend = new CloudDataStack(app, names.backend, {
+  environment,
   env: { account, region },
   tags: cloudStackTags(environment),
   synthesizer: projectSynthesizer(environment),

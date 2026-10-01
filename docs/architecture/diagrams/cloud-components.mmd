@@ -1,21 +1,50 @@
-flowchart LR
+flowchart TB
   Organizer["Organizer browser"]
   Participant["Participant browser"]
-  CDN["Private S3 / CloudFront"]
-  Auth["Cognito: organizer roles"]
-  API["API Gateway / Lambda"]
-  DB["DynamoDB: events, teams, deployments"]
-  Deploy["AWS exercise lifecycle: restoration pending"]
-  NonAWS["Non-AWS problem runner: incomplete"]
+  subgraph Platform["AWS platform account"]
+    CDN["CloudFront: organizer and participant apps"]
+    subgraph Region["Selected platform region"]
+      Static["Private S3 apps + runtime-config.json; OAC"]
+      Auth["Cognito: organizer roles + MFA"]
+      API["API Gateway / Lambda: event and team authorization"]
+      DB["DynamoDB: Events / Teams / Deployments; scores + native state"]
+      Artifacts["Retained S3: pinned hello-world template + native CryptoBattle plugin"]
+      Outbox["Lambda dispatcher: durable deployment queue"]
+      Timer["EventBridge: every minute"]
+      Workflow["Step Functions + Lambda: owned CloudFormation lifecycle"]
+      Recovery["EventBridge terminal failures + recovery Lambda"]
+      ExternalId["SSM Parameter Store: installation ExternalId"]
+    end
+  end
+  subgraph Competitor["Separate competitor AWS account; teams may share an account in different regions"]
+    DeployRole["Global IAM deployment role; common required ExternalId"]
+    Viewer["Deployment-bound IAM viewer; ExternalId = job ID"]
+    Stack["CloudFormation: hello-world per team / problem / attempt"]
+    Parameter["Only the assigned hello-world Parameter"]
+  end
+  Commands["make deploy / make destroy: current cloud CLI; reviewed IAM + project CDK toolkit"]
   Organizer --> CDN
   Participant --> CDN
+  CDN --> Static
   Organizer --> Auth
-  Auth --> API
+  Organizer -->|"Organizer JWT"| API
+  Auth -.->|"JWT validation"| API
   Participant -->|"Event-owned team key"| API
-  API --> DB
-  API -.-> Deploy
-  API -.-> NonAWS
-  Commands["make deploy / make destroy: not enabled until complete"]
-  Commands -.-> API
-  Note["AWS service problems are cloud-only; no live AWS acceptance yet"]
-  Deploy -.-> Note
+  API -->|"State, score and operation transactions"| DB
+  API --> Artifacts
+  API -->|"First-use create / read"| ExternalId
+  Timer --> Outbox
+  Outbox -->|"Read durable queue"| DB
+  Outbox --> Workflow
+  Workflow -->|"Persist owned progress"| DB
+  Workflow --> Artifacts
+  Workflow --> ExternalId
+  Workflow -.-> Recovery
+  Recovery --> DB
+  Workflow -->|"AssumeRole"| DeployRole
+  DeployRole --> Stack
+  Stack --> Parameter
+  API -->|"Verified event / team / attempt; AssumeRole"| Viewer
+  Viewer -.->|"15-minute CLI credentials: read only the assigned Parameter"| Participant
+  Participant -->|"Scoped AWS CLI"| Parameter
+  Commands -.-> Platform

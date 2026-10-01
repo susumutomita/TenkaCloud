@@ -1,14 +1,16 @@
 flowchart TB
   Organizer["Organizer account: Admin / Operator / Viewer"]
   Team["Participant: event-owned team key"]
-  subgraph Host["One community host process"]
+  subgraph Host["Shared competition responsibilities: local Bun or cloud Lambda"]
     Auth["Separate organizer and team authorization"]
-    Event["Events, teams, schedules, invitations"]
-    Runtime["Dormant Docker jobs; participant start / stop; coordination runtime"]
-    Score["Verifier, checkpoints, uptime and Battle scoring"]
-    Store["Persistent event/team state"]
+    Event["Events, teams, schedules and owned operations"]
+    Runtime["Hosting-specific runtime adapter"]
+    Score["Supported verifier or native Battle scoring"]
+    Store["Persistent event/team state, scores and receipts"]
   end
-  Catalog["Pinned problem catalog / safe participant projection"]
+  Catalog["Hosting-specific pinned catalog / safe participant projection"]
+  Local["Local: on-demand Docker / Compose + native CryptoBattle; SQLite"]
+  Cloud["Cloud: hello-world CloudFormation + native CryptoBattle; DynamoDB"]
   Organizer --> Auth
   Team --> Auth
   Auth --> Event
@@ -17,3 +19,5 @@ flowchart TB
   Catalog --> Event
   Runtime --> Store
   Score --> Store
+  Runtime --> Local
+  Runtime --> Cloud

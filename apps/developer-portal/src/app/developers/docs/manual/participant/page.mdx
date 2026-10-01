@@ -18,7 +18,7 @@ Use the participant URL and team invitation or key supplied by the organizer. Ke
 
 Use **Stop (keep data)** to free active capacity. Resuming the same environment retains its writable layer and volumes, but not RAM. The host does not automatically evict or reset it. Defaults allow 3 active environments per team and 12 across the host, subject to the configured memory-cap budget. If a limit is reached, stop an environment you no longer need or contact the organizer. After `make down` / `make local`, new Docker jobs remain stopped until you resume them. Existing events keep their legacy lifecycle.
 
-Terminal HTTP/WebSocket tests have passed using a synthetic shell (11 tests, 96 assertions). Actual Docker exec and complete Docker/browser playability remain unverified. A listed problem does not guarantee every interaction is ready.
+A real Docker/browser rehearsal verified PostgreSQL terminal access, three scored checkpoints, team isolation, and seven saved rows after stop/resume. This does not verify every one of the 15 terminal variants or every problem. A listed problem does not guarantee every interaction is ready.
 
 <h2 id="practice-without-a-cloud-account">Try the local event flow</h2>
 

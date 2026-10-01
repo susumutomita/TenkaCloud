@@ -1,11 +1,13 @@
 import { CfnOutput, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import type { Construct } from "constructs";
+import { applyDeploymentBoundary } from "./deployment-boundary.js";
 import { CloudHosting } from "./hosting.js";
 import { scopeInvalidationPermissions } from "./invalidation-permissions.js";
 
 export interface CloudDataStackProps extends StackProps {
   readonly participantAssets: string;
+  readonly environment: string;
 }
 /** Historical Events/Teams/Deployments shapes, retained by default, with no tenant or SQL backend. */
 export class CloudDataStack extends Stack {
@@ -15,6 +17,7 @@ export class CloudDataStack extends Stack {
   readonly portal: CloudHosting;
   constructor(scope: Construct, id: string, props: CloudDataStackProps) {
     super(scope, id, props);
+    applyDeploymentBoundary(this, props.environment);
     const table = (name: string) =>
       new Table(this, name, {
         partitionKey: { name: "PK", type: AttributeType.STRING },

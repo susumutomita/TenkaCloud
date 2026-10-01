@@ -17,6 +17,7 @@ import {
   type InstallationLocation,
 } from "./installation";
 import type { CloudCliIo, ProcessResult } from "./process";
+import { setupArtifacts, setupCloudToolkit } from "./setup";
 import { assertOwnedStack, assertRunnerChange, isMissingStack } from "./stack-check";
 
 export interface CloudCliOptions {
@@ -219,7 +220,7 @@ async function ensureOrganizer(context: Context, email: string): Promise<void> {
   ]);
   assertSuccess(created, "Create organizer account");
 }
-async function bootstrapPreflight(context: Context, policyArn: string): Promise<string[]> {
+async function bootstrapPreflight(context: Context, policyArn: string): Promise<void> {
   const environment = context.env.CDK_PARAM_ENVIRONMENT ?? "development";
   const toolkit = projectBootstrap(environment);
   const result = await run(context, "aws", [
@@ -232,23 +233,12 @@ async function bootstrapPreflight(context: Context, policyArn: string): Promise<
     "--output",
     "json",
   ]);
-  if (result.code === 0) assertOwnedBootstrap(result.stdout, environment, policyArn);
-  else if (!isMissingStack(result.stderr, toolkit.stackName))
-    assertSuccess(result, "Inspect project toolkit");
-  return [
-    "bootstrap",
-    "--toolkit-stack-name",
-    toolkit.stackName,
-    "--qualifier",
-    toolkit.qualifier,
-    "--cloudformation-execution-policies",
-    policyArn,
-    "--tags",
-    "TenkaCloudProject=cloud-hosting",
-    "--tags",
-    `Environment=${environment}`,
-    "--termination-protection",
-  ];
+  if (result.code !== 0 && isMissingStack(result.stderr, toolkit.stackName))
+    throw new Error(
+      'Project setup is missing. Review make deploy CLOUD_ARGS="--show-setup", then use make deploy CLOUD_ARGS="--setup" with initial setup permissions.',
+    );
+  assertSuccess(result, "Inspect project toolkit");
+  assertOwnedBootstrap(result.stdout, environment, policyArn);
 }
 async function up(context: Context): Promise<number> {
   const email = context.env.TENKACLOUD_ADMIN_EMAIL?.trim() ?? "";
@@ -263,12 +253,19 @@ async function up(context: Context): Promise<number> {
     throw new Error("Set TENKACLOUD_ADMIN_EMAIL before cloud deployment.");
   if (context.env.TENKACLOUD_RUNNER_BINDINGS !== undefined)
     parseRunnerBindings(context.env.TENKACLOUD_RUNNER_BINDINGS);
-  const executionPolicy = requireExecutionPolicy(context.env.TENKACLOUD_CFN_EXECUTION_POLICY_ARN);
+  const explicitPolicy = context.env.TENKACLOUD_CFN_EXECUTION_POLICY_ARN
+    ? requireExecutionPolicy(context.env.TENKACLOUD_CFN_EXECUTION_POLICY_ARN)
+    : undefined;
   context.io.stdout(
     "[cloud] AWS resources and retained storage can incur charges. Only the explicitly configured, reviewed AWS flag slice can execute; the full competition lifecycle remains incomplete.\n",
   );
-  context.io.stdout("[cloud] [1/4] Building both web applications for CDK asset publishing\n");
+
   const resolved = await resolveCloudContext(context);
+  const executionPolicy =
+    explicitPolicy ??
+    requireExecutionPolicy(
+      setupArtifacts(resolved.env).policies.identities.executionPolicyArns.join(","),
+    );
   if (resolved.env.ACCOUNT_ID !== executionPolicy.account)
     throw new Error("Execution policy must belong to the deployment account.");
   const deployed = await platformPreflight(resolved, "up");
@@ -284,11 +281,10 @@ async function up(context: Context): Promise<number> {
       installation.close();
     }
   }
-  const bootstrapArgs = await bootstrapPreflight(resolved, executionPolicy.arn);
+  await bootstrapPreflight(resolved, executionPolicy.arn);
+  context.io.stdout("[cloud] [1/3] Building both web applications for CDK asset publishing\n");
   await buildApplications(resolved);
-  context.io.stdout("[cloud] [2/4] Bootstrapping CDK (safe to repeat)\n");
-  assertSuccess(await cdk(resolved, bootstrapArgs), "CDK bootstrap");
-  context.io.stdout("[cloud] [3/4] Deploying cloud application and backend stacks\n");
+  context.io.stdout("[cloud] [2/3] Deploying cloud application and backend stacks\n");
   assertSuccess(
     await cdk(resolved, [
       "deploy",
@@ -299,7 +295,7 @@ async function up(context: Context): Promise<number> {
     ]),
     "CDK deploy",
   );
-  context.io.stdout("[cloud] [4/4] Preparing organizer sign-in and access URLs\n");
+  context.io.stdout("[cloud] [3/3] Preparing organizer sign-in and access URLs\n");
   await ensureOrganizer(resolved, email);
   const consoleUrl = await output(resolved, context.stacks.app, "ApplicationAdminConsoleUrl");
   const portalUrl = await output(resolved, context.stacks.backend, "ParticipantPortalApiUrl");
@@ -431,7 +427,13 @@ async function down(context: Context, yes: boolean): Promise<void> {
       const args = ["--stack-name", stack.arn, "--region", scope.region];
       if (stack.status !== "DELETE_IN_PROGRESS")
         assertSuccess(
-          await run(resolved, "aws", ["cloudformation", "delete-stack", ...args]),
+          await run(resolved, "aws", [
+            "cloudformation",
+            "delete-stack",
+            ...args,
+            "--role-arn",
+            setupArtifacts(resolved.env).policies.identities.executionRoleArn,
+          ]),
           `Delete ${name}`,
         );
       assertSuccess(
@@ -464,7 +466,19 @@ async function status(context: Context): Promise<number> {
   return 0;
 }
 const HELP =
-  'TenkaCloud cloud hosting\nUsage: make deploy | make destroy [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSet TENKACLOUD_ADMIN_EMAIL, TENKACLOUD_CFN_EXECUTION_POLICY_ARN, AWS_REGION, and AWS credentials for up. down accepts --yes.\n';
+  'TenkaCloud cloud hosting\nUsage: make deploy | make destroy [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSet TENKACLOUD_ADMIN_EMAIL, AWS_REGION, and AWS credentials for up. First inspect ACCOUNT_ID=... make deploy CLOUD_ARGS="--show-setup", then make deploy CLOUD_ARGS="--setup" with initial setup permissions (setup only, no application deploy). Ordinary up only uses the installed project toolkit. down accepts --yes.\n';
+function assertCommandArguments(command: string, args: readonly string[]): void {
+  let permitted: readonly string[] = [];
+  if (command === "up") permitted = ["--setup", "--show-setup", "--yes", "-y"];
+  if (command === "down") permitted = ["--yes", "-y"];
+  if (
+    args.some((arg) => !permitted.includes(arg)) ||
+    (command === "up" &&
+      ((args.includes("--show-setup") && args.length !== 1) ||
+        (args.some((arg) => ["--yes", "-y"].includes(arg)) && !args.includes("--setup"))))
+  )
+    throw new Error("Unknown or conflicting cloud command argument.");
+}
 export async function runCloudCli(
   argv: readonly string[],
   io: CloudCliIo,
@@ -482,8 +496,7 @@ export async function runCloudCli(
       io.stdout(HELP);
       return 0;
     }
-    if (args.some((arg) => command !== "down" || !["--yes", "-y"].includes(arg)))
-      throw new Error("Unknown cloud command argument.");
+    assertCommandArguments(command, args);
     if (
       options.env.ENV &&
       options.env.CDK_PARAM_ENVIRONMENT &&
@@ -499,6 +512,19 @@ export async function runCloudCli(
     };
     switch (command) {
       case "up":
+        if (args.includes("--show-setup")) {
+          io.stdout(`${JSON.stringify(setupArtifacts(context.env).template, null, 2)}\n`);
+          return 0;
+        }
+        if (args.includes("--setup")) {
+          const resolved = await resolveCloudContext(context);
+          await setupCloudToolkit(
+            { cwd: resolved.root, env: resolved.env },
+            io,
+            args.some((arg) => ["--yes", "-y"].includes(arg)),
+          );
+          return 0;
+        }
         return await up(context);
       case "down":
         await down(context, args.length > 0);

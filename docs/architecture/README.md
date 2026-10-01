@@ -31,8 +31,10 @@ stacks. Explicit event teardown and ordinary shutdown are separate operations.
 
 ## Storage and cloud boundary
 
-Local SQLite is implemented. Cloud hosting is being restored with Lambda and
-DynamoDB, reusing the former serverless deployment path without SaaS / SBT.
+Local hosting uses SQLite. Cloud hosting uses API Gateway, Lambda, Cognito and
+three DynamoDB tables (Events, Teams and Deployments), reusing reviewed serverless
+components without SaaS / SBT. Both SPAs and their runtime configuration are served
+from private S3 origins through CloudFront origin access control.
 AWS service problems require cloud hosting. Docker/Compose exercises are local-only
 and are not listed in the cloud catalog. Native Cryptography Battle runs on both
 hosting options; synchronized cloud bursts still exceed the five-second refresh interval.
@@ -42,13 +44,24 @@ access and native Cryptography Battle. Teardown confirms the exact installation 
 A container build, remote-driver experiment or schema declaration is not an
 end-to-end cloud rehearsal or zero-fixed-cost guarantee.
 
-The retained AWS exercise adapter is not enabled by local startup. Its cloud
-connection is still being restored. It uses operator
-credentials to assume a verified competitor deployment role with the required
-host ExternalId. Participant access uses the saved viewer role and its deployment
-ExternalId, never deployment-role credentials. Keep the bootstrap AdministratorAccess
-exception confined to competitor initialization. Existing STS sessions can outlive
+AWS exercise execution is enabled only in cloud hosting. Accepted jobs and the
+dispatch queue are saved before a one-minute dispatcher starts the Step Functions
+workflow. Lambda workers claim, create, describe and finish the exact owned
+CloudFormation attempt; terminal failures have a recovery path. Workers assume a
+verified competitor deployment role with the required installation ExternalId.
+
+Participant access uses the verified deployment-bound viewer role with the job ID
+as ExternalId. The currently supported hello-world access is a 15-minute CLI credential set
+restricted to its Parameter. Native Cryptography Battle executes in the platform
+and persists its state and scoring in the same DynamoDB transaction boundary. Keep the bootstrap AdministratorAccess exception confined to competitor initialization. Existing STS sessions can outlive
 event end; new access issuance is checked against current event/team state.
+
+Competitor accounts are separate from the platform account. Teams may use separate
+competitor accounts or different regions within the same competitor account. IAM
+roles are global, so the latter share the installation role and ExternalId.
+Organizations / StackSets is an additional manual bootstrap procedure; ordinary
+platform deployment does not activate trusted access. Cloud Docker/Compose and the
+AWS endpoint-based hello-world-battle are outside the current supported catalog.
 
 ## Runtime coverage
 
@@ -71,15 +84,28 @@ The Mermaid sources below describe the current boundaries:
 - [Problem deployment](diagrams/problem-deployment.mmd)
 - [Participant scoring](diagrams/participant-scoring.mmd)
 - [State-preserving local lifecycle](diagrams/local-play-sequence.mmd)
-- [Editable Draw.io document](diagrams/system-architecture.drawio): restored unchanged
-  from commit `825415fc` (the diagram originally landed in `98f4a286`). Its five
-  AWS-icon pages preserve the previous architecture and visual layout; they are
-  historical and have not yet been updated to the integration candidate.
+- [Editable Draw.io document](diagrams/system-architecture.drawio): five current
+  pages for cloud infrastructure, AWS exercise execution, the unified local runtime,
+  use cases and system boundaries. Existing page IDs, AWS4 official icons and the
+  original frame/connector style are retained; obsolete SaaS/Lite cells are replaced
+  and remaining nodes are moved only to fit the current boundaries.
 
 Regenerate Draw.io with `python3 docs/architecture/diagrams/system-architecture.gen.py`.
+Its first two page IDs (`saas-physical`, `lite-physical`) remain stable identifiers,
+not supported product modes. Regions are chosen by the operator; the diagrams do
+not imply a fixed production region. The three DynamoDB tables share one service
+icon, and worker operations share one Lambda icon. Page 02 expands the exercise
+execution path; logs in page 01 summarize Lambda handler/worker diagnostics.
+Step Functions logs use ERROR level without execution data. The AWS4
+icon and connector conventions follow the requested
+[aws-drawio-diagram skill](https://github.com/sagochiko/aws-drawio-diagram-skill),
+while retaining the original frame styles.
+
 Mermaid sources can be rendered with `diagrams/render.sh` when its documented
-Mermaid CLI is available. Previously generated SVG/slide exports are historical;
-current guides do not embed those stale architecture images as current evidence.
+Mermaid CLI is available. Previously generated Mermaid/JAWS slide exports are
+historical; current guides do not embed those stale images as current evidence.
+The JAWS exporter reads its preserved landing-page Draw.io copy, so regenerating
+that historical talk cannot overwrite the current diagram or mix architectures.
 
 ## Historical architecture
 
