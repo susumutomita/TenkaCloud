@@ -109,7 +109,7 @@ describe("createEvent", () => {
     const body = {
       name: "Replay",
       teams: [{ internalSlug: "team-1" }],
-      problems: [{ problemId: "sqli-demo" }],
+      problems: [{ problemId: "sqli-demo", defaultRegion: "ap-northeast-1" }],
     };
     await createEvent(client, body, "synthetic-create-operation");
     expect(post).toHaveBeenCalledWith("events", body, "synthetic-create-operation");
