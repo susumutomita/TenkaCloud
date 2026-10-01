@@ -36,9 +36,11 @@ is no automatic eviction or reset. Event time is not reset. An ordinary stop is 
 Docker volume removal or AWS stack deletion. Explicit event teardown is separate;
 keep ownership records until it succeeds.
 
-`make deploy` and `make destroy` currently report unimplemented and change no
-cloud resources. Lambda / DynamoDB cloud hosting is being restored; it is not yet
-a completed deployment route.
+`make deploy` and `make destroy` call the current Lambda/DynamoDB CLI after
+reviewed AWS setup. The supported cloud problem is hello-world with scoped CLI
+access; non-AWS cloud execution and Battle remain incomplete. Destroy confirms
+owned targets and drains recorded exercises while retaining data. See the
+[cloud setup boundary](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 
 ## Admission limits
 

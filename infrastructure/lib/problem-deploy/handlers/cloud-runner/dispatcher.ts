@@ -11,7 +11,12 @@ import { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-wor
 import { identitySchema, serializeDispatchIdentity } from "./workflow.js";
 
 export interface DispatchDependencies {
-  readonly repository: Pick<DynamoDeploymentWork, "listDispatch" | "acceptingNewDeployments">;
+  readonly repository: Pick<
+    DynamoDeploymentWork,
+    "listDispatch" | "acceptingNewDeployments" | "getDeletionJob" | "getTeardown" | "finishTeardown"
+  >;
+  readonly describeExecution: RecoveryDependencies["describeExecution"];
+  readonly now?: () => number;
   readonly stateMachineArn: string;
   readonly startExecution: (input: {
     readonly stateMachineArn: string;
@@ -46,7 +51,10 @@ const terminalEventSchema = z.object({
 });
 
 /** Verify the authoritative execution before fenced reconciliation; event payload is not authority. */
-async function verifiedTerminalExecution(value: unknown, deps: RecoveryDependencies) {
+async function verifiedTerminalExecution(
+  value: unknown,
+  deps: Pick<RecoveryDependencies, "stateMachineArn" | "describeExecution">,
+) {
   const event = terminalEventSchema.parse(value);
   const prefix = `${deps.stateMachineArn.replace(":stateMachine:", ":execution:")}:`;
   if (
@@ -77,7 +85,10 @@ async function verifiedTerminalExecution(value: unknown, deps: RecoveryDependenc
 
 async function recoverTeardownExecution(
   execution: NonNullable<Awaited<ReturnType<typeof verifiedTerminalExecution>>>,
-  deps: RecoveryDependencies,
+  deps: {
+    readonly repository: Pick<DynamoDeploymentWork, "getTeardown" | "finishTeardown">;
+    readonly now?: () => number;
+  },
 ) {
   const { identity } = execution;
   let marker: Awaited<ReturnType<RecoveryDependencies["repository"]["getTeardown"]>>;
@@ -90,7 +101,17 @@ async function recoverTeardownExecution(
   if (!marker) return { outcome: "stale" };
   if (marker.status === "DELETED" || marker.status === "FAILED")
     return { outcome: "already_terminal" };
-  if (marker.owner && marker.owner !== execution.executionArn) return { outcome: "stale" };
+  if (
+    marker.eventId !== identity.eventId ||
+    marker.teamId !== identity.teamId ||
+    marker.jobId !== identity.jobId ||
+    marker.attempt !== identity.attempt ||
+    marker.generation !== identity.generation ||
+    (marker.status === "PENDING"
+      ? marker.owner !== undefined
+      : marker.owner !== execution.executionArn)
+  )
+    return { outcome: "stale" };
   await deps.repository.finishTeardown(
     identity,
     marker.owner,
@@ -142,12 +163,37 @@ export function dispatchExecutionName(value: DeploymentIdentity): string {
     : `tc-${identity.jobId}-${identity.attempt}`;
 }
 
+/** A c091 worker/recovery can reject historical work without leaving a retryable failure.
+ * Reconcile only a verified negative terminal execution; never take over running work. */
+async function reconcileHistoricalDuplicate(
+  deps: DispatchDependencies,
+  identity: DeploymentIdentity,
+) {
+  if (identity.operation !== "delete") return;
+  const source = await deps.repository.getDeletionJob(identity);
+  if (!source.historical) return;
+  const executionArn = `${deps.stateMachineArn.replace(":stateMachine:", ":execution:")}:${dispatchExecutionName(identity)}`;
+  const execution = await verifiedTerminalExecution(
+    {
+      source: "aws.states",
+      "detail-type": "Step Functions Execution Status Change",
+      detail: { stateMachineArn: deps.stateMachineArn, executionArn, status: "FAILED" },
+    },
+    deps,
+  );
+  if (!execution) return;
+  if (serializeDispatchIdentity(execution.identity) !== serializeDispatchIdentity(identity))
+    throw new Error("Duplicate execution input does not match its dispatch intent");
+  await recoverTeardownExecution(execution, deps);
+}
+
 async function dispatchOne(
   deps: DispatchDependencies,
   value: DeploymentIdentity,
 ): Promise<"started" | "duplicate" | "uncertain"> {
+  let identity: DeploymentIdentity | undefined;
   try {
-    const identity = identitySchema.parse({
+    identity = identitySchema.parse({
       eventId: value.eventId,
       teamId: value.teamId,
       jobId: value.jobId,
@@ -164,13 +210,18 @@ async function dispatchOne(
     if (result.executionArn !== expected) throw new Error("Execution identity mismatch");
     return "started";
   } catch (error) {
-    return error instanceof Error && error.name === "ExecutionAlreadyExists"
-      ? "duplicate"
-      : "uncertain";
+    if (!(error instanceof Error) || error.name !== "ExecutionAlreadyExists" || !identity)
+      return "uncertain";
+    try {
+      await reconcileHistoricalDuplicate(deps, identity);
+      return "duplicate";
+    } catch {
+      return "uncertain";
+    }
   }
 }
 
-/** Start only. The claim transaction, never this dispatcher, removes an accepted intent. */
+/** Claims remove accepted intents. Historical duplicates may reconcile an already-terminal execution. */
 export async function dispatchPending(
   deps: DispatchDependencies,
   options: { readonly limit?: number; readonly concurrency?: number } = {},
@@ -229,6 +280,7 @@ export function createAwsDispatcherDependencies(): DispatchDependencies {
     }),
     stateMachineArn: required("DEPLOYMENT_STATE_MACHINE_ARN"),
     startExecution: (input) => client.send(new StartExecutionCommand(input)),
+    describeExecution: (input) => client.send(new DescribeExecutionCommand(input)),
   };
 }
 

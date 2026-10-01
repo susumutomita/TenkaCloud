@@ -2,7 +2,7 @@
 
 リリース前の統合 candidate 用です。`make local` で同じ大会・チームのシステムを起動し、
 `make down` でデータを保持して停止します。SaaS/Lite の基盤構築手順ではありません。
-`make deploy` と `make destroy` は現在、未実装のエラーで終了し、リソースを変更しません。
+`make deploy` は権限設定を確認して現行 CLI を実行します。`make destroy` は所有対象を確認して記録済み問題を撤収し、大会データを保持します。現行クラウドは hello-world の限定 CLI アクセスに対応し、非 AWS 問題と Battle は未実装です。
 Lambda / DynamoDB によるクラウド開催を復旧中です。AWS サービスの問題はクラウド開催専用です。
 
 ## 開催前

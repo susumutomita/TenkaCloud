@@ -1,6 +1,6 @@
 # Running costs
 
-> Historical SaaS/Lite/local-practice reference. These commands do not describe the current host-only candidate. Use the [host guide](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md) or the [pinned legacy checkout](https://github.com/susumutomita/TenkaCloud/blob/main/docs/legacy-operations.md).
+> Historical SaaS/Lite/local-practice reference. These commands do not describe the current local/cloud integration candidate. Use the [host guide](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md) or the [pinned legacy checkout](https://github.com/susumutomita/TenkaCloud/blob/main/docs/legacy-operations.md).
 
 This is the full detail behind the [README's Running costs summary](../README.md#running-costs): what each profile costs, the opt-in walkthrough for the zero-cost profile, the migration path for an existing stack, measured numbers, and what has and has not been live-verified.
 

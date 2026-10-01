@@ -215,7 +215,7 @@ export class DynamoDeploymentWork {
           targetKey(eventId, teamId, job.problemId).SK !== target.SK
         )
           throw new Error("Corrupt teardown target ownership.");
-        await this.assertHistoricalAttemptsEmpty(job);
+        await this.listHistoricalAttempts(job);
         jobs.push(job);
       }
       cursor = page.LastEvaluatedKey;
@@ -223,7 +223,8 @@ export class DynamoDeploymentWork {
     return jobs;
   }
   /** A current target cannot certify cleanup in an older account/region. Unknown historical sends remain explicit blockers. */
-  private async assertHistoricalAttemptsEmpty(job: DeploymentJob): Promise<void> {
+  private async listHistoricalAttempts(job: DeploymentJob): Promise<DeploymentJob[]> {
+    const history: DeploymentJob[] = [];
     let cursor: Record<string, unknown> | undefined;
     const seen = new Set<number>();
     do {
@@ -252,24 +253,87 @@ export class DynamoDeploymentWork {
         )
           throw new DeploymentConflict("historical_attempt_record_invalid");
         seen.add(previous.attempt);
-        await this.assertNeverCreated(previous);
+        history.push(previous);
       }
       cursor = page.LastEvaluatedKey;
     } while (cursor);
     if (seen.size !== job.attempt - 1)
       throw new DeploymentConflict("historical_attempt_history_incomplete");
+    return history;
   }
-  private async assertNeverCreated(previous: DeploymentJob): Promise<void> {
-    if (previous.stackId) throw new DeploymentConflict("historical_attempt_resources_unresolved");
+  /** A closed event freezes the attempt set; DELETED child proofs can never be reset. */
+  private async assertHistoryResolved(
+    job: DeploymentJob,
+    completingAttempt?: number,
+  ): Promise<void> {
+    if (job.attempt === 1) return;
+    for (const previous of await this.listHistoricalAttempts(job)) {
+      if (previous.attempt === completingAttempt) continue;
+      await this.assertHistoricalProof(previous, job.attempt);
+    }
+  }
+  private async assertHistoricalProof(
+    previous: DeploymentJob,
+    parentAttempt: number,
+  ): Promise<void> {
     const creation = await this.getCreation(previous);
-    if (
-      creation?.state !== "NOT_STARTED" ||
-      creation.stackId ||
-      creation.fingerprint ||
-      creation.owner ||
-      creation.leaseUntil !== 0
-    )
+    if (pristineCreation(previous, creation)) return;
+    const marker = await this.historicalMarker(previous, parentAttempt);
+    if (marker?.status !== "DELETED" || !marker.owner || !marker.stackId || !marker.fingerprint)
       throw new DeploymentConflict("historical_attempt_resources_unresolved");
+    const reference = { stackId: marker.stackId, fingerprint: marker.fingerprint };
+    verifyReferenceForJob(previous, reference);
+    if (!sameCreationReference(previous, creation, reference))
+      throw new DeploymentConflict("historical_attempt_resources_unresolved");
+  }
+
+  /** Only deletion may resolve immutable history; CREATE and participant ownership stay current-only. */
+  async getDeletionJob(
+    identity: DeploymentIdentity,
+  ): Promise<{ job: DeploymentJob; historical: boolean }> {
+    const current = await this.getJob(identity.jobId);
+    if (
+      !current ||
+      current.jobId !== identity.jobId ||
+      current.eventId !== identity.eventId ||
+      current.teamId !== identity.teamId ||
+      identity.attempt > current.attempt
+    )
+      throw new DeploymentConflict("deployment_scope_or_attempt_changed");
+    if (identity.attempt === current.attempt) return { job: current, historical: false };
+    const row = await this.read(this.tables.deployments, {
+      ...jobKey(identity.jobId),
+      SK: `ATTEMPT#${identity.attempt}`,
+    });
+    const parsed = jobSchema.safeParse(row);
+    if (
+      !parsed.success ||
+      parsed.data.jobId !== current.jobId ||
+      parsed.data.eventId !== current.eventId ||
+      parsed.data.teamId !== current.teamId ||
+      parsed.data.problemId !== current.problemId ||
+      parsed.data.attempt !== identity.attempt ||
+      row?.SK !== `ATTEMPT#${identity.attempt}`
+    )
+      throw new DeploymentConflict("historical_attempt_record_invalid");
+    return { job: parsed.data, historical: true };
+  }
+  private async historicalMarker(
+    job: DeploymentIdentity,
+    parentAttempt: number,
+  ): Promise<TeardownRecord | undefined> {
+    const row = await this.read(this.tables.deployments, teardownKey(job.jobId, job.attempt));
+    if (!row) return undefined;
+    const marker = teardownSchema.parse(row);
+    checkTeardownScope(marker, job);
+    if (
+      marker.parentAttempt !== parentAttempt ||
+      marker.attempt >= parentAttempt ||
+      marker.historyExpected !== undefined ||
+      marker.historyCompleted !== undefined
+    )
+      throw new DeploymentConflict("teardown_history_scope_changed");
+    return marker;
   }
   async getCreation(identity: DeploymentIdentity): Promise<CreationReservation | undefined> {
     const row = await this.read(
@@ -359,16 +423,27 @@ export class DynamoDeploymentWork {
     if (!row) return undefined;
     const record = teardownSchema.parse(row);
     if (
-      record.jobId !== identity.jobId ||
-      record.eventId !== identity.eventId ||
-      record.teamId !== identity.teamId ||
-      record.attempt !== identity.attempt ||
-      (identity.generation !== undefined && identity.generation !== record.generation)
-    )
-      throw new DeploymentConflict("teardown_scope_or_generation_changed");
+      record.attempt > identity.attempt &&
+      record.jobId === identity.jobId &&
+      record.eventId === identity.eventId &&
+      record.teamId === identity.teamId
+    ) {
+      const child = await this.historicalMarker(identity, record.attempt);
+      if (!child) throw new DeploymentConflict("teardown_scope_or_generation_changed");
+      return child;
+    }
+    checkTeardownScope(record, identity);
+    validateHistoryCounts(record);
     return record;
   }
   async requestTeardown(identity: DeploymentIdentity, at: string): Promise<"enqueued" | "skipped"> {
+    if (identity.attempt > 1) return this.requestWithHistory(identity, at);
+    return this.requestCurrentTeardown(identity, at);
+  }
+  private async requestCurrentTeardown(
+    identity: DeploymentIdentity,
+    at: string,
+  ): Promise<"enqueued" | "skipped"> {
     for (let retry = 0; retry < 8; retry++) {
       const job = await this.ownedJob(identity);
       const previous = await this.getTeardown(identity);
@@ -385,6 +460,270 @@ export class DynamoDeploymentWork {
     }
     throw new DeploymentConflict("teardown_request_conflict");
   }
+
+  private async requestWithHistory(
+    identity: DeploymentIdentity,
+    at: string,
+  ): Promise<"enqueued" | "skipped"> {
+    let changed = false;
+    let root: TeardownRecord | undefined;
+    let job: DeploymentJob | undefined;
+    for (let retry = 0; retry < 8; retry++) {
+      job = await this.ownedJob(identity);
+      await this.listHistoricalAttempts(job);
+      root = await this.getTeardown(identity);
+      if (root) break;
+      const proposed: TeardownRecord = {
+        ...this.nextTeardown(job, undefined, 1, false, at),
+        historyExpected: job.attempt - 1,
+        historyCompleted: 0,
+      };
+      if (await this.commit(this.teardownRequestWrites(job, proposed, undefined, false, false))) {
+        root = proposed;
+        changed = true;
+        break;
+      }
+      await pause(retry);
+    }
+    if (!root || !job) throw new DeploymentConflict("teardown_request_conflict");
+    // c091 workers can remove additive fields in a final marker Put. Re-prove the
+    // monotonic history rather than resetting counters or assuming pristine creation.
+    if (root.historyExpected === undefined || root.historyCompleted === root.historyExpected) {
+      await this.assertHistoryResolved(job);
+      return this.requestCurrentTeardown(identity, at);
+    }
+    if (root.status !== "PENDING") throw new DeploymentConflict("teardown_history_not_ready");
+    for (const previous of await this.listHistoricalAttempts(job)) {
+      if (await this.requestHistoricalTeardown(previous, job.attempt, at)) changed = true;
+    }
+    return changed ? "enqueued" : "skipped";
+  }
+
+  private async requestHistoricalTeardown(
+    job: DeploymentJob,
+    parentAttempt: number,
+    at: string,
+  ): Promise<boolean> {
+    for (let retry = 0; retry < 16; retry++) {
+      const result = await this.requestHistoricalOnce(job, parentAttempt, at);
+      if (result !== undefined) return result;
+      await pause(retry);
+    }
+    throw new DeploymentConflict("historical_teardown_request_conflict");
+  }
+  private async requestHistoricalOnce(
+    job: DeploymentJob,
+    parentAttempt: number,
+    at: string,
+  ): Promise<boolean | undefined> {
+    const previous = await this.historicalMarker(job, parentAttempt);
+    if (previous?.status === "DELETED") return false;
+    if (previous && previous.status !== "FAILED") {
+      // A c091 recovery may have consumed a historical terminal event as stale.
+      // Re-publish the exact identity, never a new owner or generation. The
+      // dispatcher authoritatively reconciles a duplicate terminal execution.
+      return (await this.requeueHistoricalCheck(previous)) ? false : undefined;
+    }
+    const marker: TeardownRecord = {
+      ...this.nextTeardown(job, previous, (previous?.generation ?? 0) + 1, false, at),
+      parentAttempt,
+    };
+    const creation = await this.getCreation(job);
+    if (pristineCreation(job, creation)) return this.completePristineHistory(job, marker, previous);
+    const writes: Write[] = [
+      closingEventGuard(this.tables.events, job.eventId),
+      this.historyRootCheck(job, parentAttempt),
+      this.historicalMarkerPut(marker, previous),
+      this.teardownIntentPut(marker),
+    ];
+    return (await this.commit(writes)) ? true : undefined;
+  }
+  private async completePristineHistory(
+    job: DeploymentJob,
+    marker: TeardownRecord,
+    previous?: TeardownRecord,
+  ): Promise<boolean | undefined> {
+    if (previous?.stackId !== undefined || previous?.fingerprint !== undefined)
+      throw new DeploymentConflict("teardown_reference_changed");
+    const terminal = { ...marker, status: "DELETED" as const };
+    const writes = await this.historicalCompletionWrites(job, terminal, previous);
+    if (!writes) return false;
+    writes.push({
+      ConditionCheck: {
+        TableName: this.tables.deployments,
+        Key: creationKey(job.jobId, job.attempt),
+        ConditionExpression:
+          "#state = :never AND leaseUntil = :zero AND attribute_not_exists(#owner) AND attribute_not_exists(stackId) AND attribute_not_exists(fingerprint)",
+        ExpressionAttributeNames: { "#state": "state", "#owner": "owner" },
+        ExpressionAttributeValues: { ":never": "NOT_STARTED", ":zero": 0 },
+      },
+    });
+    return (await this.commit(writes)) ? true : undefined;
+  }
+
+  private historyRootCheck(job: DeploymentIdentity, parentAttempt: number): Write {
+    return {
+      ConditionCheck: {
+        TableName: this.tables.deployments,
+        Key: teardownKey(job.jobId),
+        ConditionExpression:
+          "attempt = :parent AND historyExpected = :expected AND historyCompleted < :expected AND #status = :pending",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":parent": parentAttempt,
+          ":expected": parentAttempt - 1,
+          ":pending": "PENDING",
+        },
+      },
+    };
+  }
+
+  private historicalMarkerPut(marker: TeardownRecord, previous?: TeardownRecord): Write {
+    const ownerCondition = previous?.owner ? "#owner = :owner" : "attribute_not_exists(#owner)";
+    return {
+      Put: {
+        TableName: this.tables.deployments,
+        Item: { ...marker, ...teardownKey(marker.jobId, marker.attempt) },
+        ConditionExpression: previous
+          ? `generation = :generation AND #status = :previous AND ${ownerCondition}`
+          : "attribute_not_exists(PK)",
+        ...(previous
+          ? {
+              ExpressionAttributeNames: { "#status": "status", "#owner": "owner" },
+              ExpressionAttributeValues: {
+                ":generation": previous.generation,
+                ":previous": previous.status,
+                ...(previous.owner ? { ":owner": previous.owner } : {}),
+              },
+            }
+          : {}),
+      },
+    };
+  }
+
+  private teardownIntentPut(marker: TeardownRecord): Write {
+    return {
+      Put: {
+        TableName: this.tables.deployments,
+        Item: {
+          ...teardownDispatchKey(marker.jobId, marker.attempt, marker.generation),
+          eventId: marker.eventId,
+          teamId: marker.teamId,
+          jobId: marker.jobId,
+          attempt: marker.attempt,
+          operation: "delete",
+          generation: marker.generation,
+          createdAt: marker.requestedAt,
+        },
+        ConditionExpression: "attribute_not_exists(PK)",
+      },
+    };
+  }
+
+  private async requeueHistoricalCheck(marker: TeardownRecord): Promise<boolean> {
+    const intent = this.teardownIntentPut(marker);
+    if (!intent.Put) throw new Error("Missing teardown intent.");
+    intent.Put.ConditionExpression =
+      "attribute_not_exists(PK) OR (eventId = :event AND teamId = :team AND jobId = :job AND attempt = :attempt AND generation = :generation AND #operation = :delete)";
+    intent.Put.ExpressionAttributeNames = { "#operation": "operation" };
+    intent.Put.ExpressionAttributeValues = {
+      ":event": marker.eventId,
+      ":team": marker.teamId,
+      ":job": marker.jobId,
+      ":attempt": marker.attempt,
+      ":generation": marker.generation,
+      ":delete": "delete",
+    };
+    return this.commit([
+      {
+        ConditionCheck: {
+          TableName: this.tables.deployments,
+          Key: teardownKey(marker.jobId, marker.attempt),
+          ConditionExpression:
+            "generation = :generation AND #status = :previous AND " +
+            (marker.owner ? "#owner = :owner" : "attribute_not_exists(#owner)"),
+          ExpressionAttributeNames: { "#status": "status", "#owner": "owner" },
+          ExpressionAttributeValues: {
+            ":generation": marker.generation,
+            ":previous": marker.status,
+            ...(marker.owner ? { ":owner": marker.owner } : {}),
+          },
+        },
+      },
+      intent,
+    ]);
+  }
+
+  private async historicalCompletionWrites(
+    job: DeploymentJob,
+    terminal: TeardownRecord,
+    previous?: TeardownRecord,
+  ): Promise<Write[] | undefined> {
+    const current = await this.getJob(job.jobId);
+    if (
+      !current ||
+      current.attempt !== terminal.parentAttempt ||
+      current.eventId !== job.eventId ||
+      current.teamId !== job.teamId ||
+      current.problemId !== job.problemId
+    )
+      throw new DeploymentConflict("teardown_history_scope_changed");
+    const root = await this.getTeardown(current);
+    if (
+      root?.status !== "PENDING" ||
+      root.historyExpected !== current.attempt - 1 ||
+      root.historyCompleted === undefined ||
+      root.historyCompleted >= root.historyExpected
+    ) {
+      const winner = await this.historicalMarker(job, current.attempt);
+      if (
+        winner?.status === "DELETED" &&
+        winner.generation === terminal.generation &&
+        winner.owner === terminal.owner &&
+        winner.stackId === terminal.stackId &&
+        winner.fingerprint === terminal.fingerprint
+      )
+        return undefined;
+      throw new DeploymentConflict("teardown_history_not_ready");
+    }
+    const next = root.historyCompleted + 1;
+    const last = next === root.historyExpected;
+    if (last) await this.assertHistoryResolved(current, job.attempt);
+    const writes: Write[] = [
+      this.historicalMarkerPut(terminal, previous),
+      {
+        Update: {
+          TableName: this.tables.deployments,
+          Key: teardownKey(job.jobId),
+          UpdateExpression: "SET historyCompleted = :next",
+          ConditionExpression:
+            "attempt = :parent AND historyExpected = :expected AND historyCompleted = :completed AND #status = :pending",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: {
+            ":parent": current.attempt,
+            ":expected": root.historyExpected,
+            ":completed": root.historyCompleted,
+            ":next": next,
+            ":pending": "PENDING",
+          },
+        },
+      },
+    ];
+    if (last) {
+      writes.push(this.teardownIntentPut(root));
+      writes.push({
+        Update: {
+          TableName: this.tables.deployments,
+          Key: jobKey(job.jobId),
+          UpdateExpression: "SET teardownStatus = :pending REMOVE teardownFailureReason",
+          ConditionExpression: "attempt = :attempt",
+          ExpressionAttributeValues: { ":pending": "PENDING", ":attempt": current.attempt },
+        },
+      });
+    }
+    return writes;
+  }
+
   private nextTeardown(
     job: DeploymentJob,
     previous: TeardownRecord | undefined,
@@ -403,6 +742,9 @@ export class DynamoDeploymentWork {
       updatedAt: at,
       ...(previous?.stackId ? { stackId: previous.stackId } : {}),
       ...(previous?.fingerprint ? { fingerprint: previous.fingerprint } : {}),
+      ...(previous?.historyExpected !== undefined
+        ? { historyExpected: previous.historyExpected, historyCompleted: previous.historyCompleted }
+        : {}),
     };
   }
   private teardownRequestWrites(
@@ -410,6 +752,7 @@ export class DynamoDeploymentWork {
     marker: TeardownRecord,
     previous: TeardownRecord | undefined,
     cancelled: boolean,
+    publish = true,
   ): Write[] {
     const writes: Write[] = [
       closingEventGuard(this.tables.events, job.eventId),
@@ -455,7 +798,7 @@ export class DynamoDeploymentWork {
       writes.push({
         Delete: { TableName: this.tables.deployments, Key: dispatchKey(job.jobId, job.attempt) },
       });
-    } else
+    } else if (publish)
       writes.push({
         Put: {
           TableName: this.tables.deployments,
@@ -481,6 +824,12 @@ export class DynamoDeploymentWork {
   ): Promise<"started" | "replay"> {
     if (!owner || owner.length > 512) throw new Error("An immutable teardown owner is required.");
     const marker = await this.requireTeardown(identity);
+    if (
+      marker.parentAttempt === undefined &&
+      marker.historyExpected !== undefined &&
+      marker.historyCompleted !== marker.historyExpected
+    )
+      throw new DeploymentConflict("teardown_history_not_ready");
     if (marker.status === "IN_PROGRESS" && marker.owner === owner) return "replay";
     if (
       !(await this.commit([
@@ -488,7 +837,7 @@ export class DynamoDeploymentWork {
         {
           Update: {
             TableName: this.tables.deployments,
-            Key: teardownKey(identity.jobId),
+            Key: teardownKey(identity.jobId, marker.parentAttempt ? identity.attempt : undefined),
             UpdateExpression: "SET #status = :running, #owner = :owner, updatedAt = :at",
             ConditionExpression: "generation = :generation AND #status = :pending",
             ExpressionAttributeNames: { "#status": "status", "#owner": "owner" },
@@ -517,16 +866,34 @@ export class DynamoDeploymentWork {
     owner: string,
     now: number,
   ): Promise<boolean> {
-    const job = await this.ownedJob(identity);
+    const { job, historical } = await this.getDeletionJob(identity);
     const creation = await this.getCreation(identity);
     if (job.status === "IN_PROGRESS" || (creation && creation.leaseUntil > now)) return false;
-    if (!["COMPLETE", "FAILED", "DELETING"].includes(job.status))
+    if (!historical) await this.assertHistoryResolved(job);
+    if (historical && job.status !== "FAILED")
       throw new DeploymentConflict("teardown_source_not_terminal");
     if (
-      !(await this.commit([
-        closingEventGuard(this.tables.events, identity.eventId),
-        this.teardownOwnerCheck(identity, owner),
-        {
+      !["COMPLETE", "FAILED", "DELETING"].includes(job.status) &&
+      !(job.status === "PENDING" && pristineCreation(job, creation))
+    )
+      throw new DeploymentConflict("teardown_source_not_terminal");
+    const sourceGuard: Write = historical
+      ? {
+          ConditionCheck: {
+            TableName: this.tables.deployments,
+            Key: { ...jobKey(job.jobId), SK: `ATTEMPT#${job.attempt}` },
+            ConditionExpression:
+              "attempt = :attempt AND eventId = :event AND teamId = :team AND #status = :failed",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: {
+              ":attempt": job.attempt,
+              ":event": job.eventId,
+              ":team": job.teamId,
+              ":failed": "FAILED",
+            },
+          },
+        }
+      : {
           Update: {
             TableName: this.tables.deployments,
             Key: jobKey(job.jobId),
@@ -540,7 +907,12 @@ export class DynamoDeploymentWork {
               ":previous": job.status,
             },
           },
-        },
+        };
+    if (
+      !(await this.commit([
+        closingEventGuard(this.tables.events, identity.eventId),
+        this.teardownOwnerCheck(identity, owner, historical),
+        sourceGuard,
       ]))
     )
       throw new DeploymentConflict("teardown_prepare_conflict");
@@ -551,16 +923,20 @@ export class DynamoDeploymentWork {
     owner: string,
     reference: { readonly stackId: string; readonly fingerprint: string },
   ): Promise<void> {
-    await this.verifyStoredReference(identity, reference);
+    const { job, historical } = await this.getDeletionJob(identity);
+    verifyReferenceForJob(job, reference);
+    if (historical && !sameCreationReference(job, await this.getCreation(identity), reference))
+      throw new DeploymentConflict("teardown_reference_changed");
+
     if (
       !(await this.commit([
         {
           Update: {
             TableName: this.tables.deployments,
-            Key: teardownKey(identity.jobId),
+            Key: teardownKey(identity.jobId, historical ? identity.attempt : undefined),
             UpdateExpression: "SET stackId = :stack, fingerprint = :fingerprint",
             ConditionExpression:
-              "generation = :generation AND #status = :running AND #owner = :owner AND (attribute_not_exists(stackId) OR (stackId = :stack AND fingerprint = :fingerprint))",
+              "generation = :generation AND #status = :running AND #owner = :owner AND (attribute_not_exists(stackId) OR stackId = :stack) AND (attribute_not_exists(fingerprint) OR fingerprint = :fingerprint)",
             ExpressionAttributeNames: { "#status": "status", "#owner": "owner" },
             ExpressionAttributeValues: {
               ":generation": identity.generation,
@@ -602,13 +978,14 @@ export class DynamoDeploymentWork {
     if (marker.owner !== owner) throw new DeploymentConflict("teardown_owner_changed");
     if (result.stackId && marker.stackId && result.stackId !== marker.stackId)
       throw new DeploymentConflict("teardown_reference_changed");
-    if (marker.status === result.status) {
-      if (result.status === "DELETED") await this.archiveTeardown(identity.eventId);
-      return "replay";
-    }
+    if (marker.parentAttempt !== undefined)
+      return this.finishHistoricalTeardownOnce(identity, owner, marker, result, at);
+    if (marker.status === result.status)
+      return this.replayTeardownCompletion(identity, result.status);
     const job = await this.ownedJob(identity);
     const deleted = result.status === "DELETED";
     if (deleted && job.status !== "DELETING") throw new DeploymentConflict("teardown_not_deleting");
+    if (deleted) await this.assertHistoryResolved(job);
     const completion = await this.checkedTeardownCompletion(identity, job, marker, result);
     const writes = this.teardownFinishWrites(identity, owner, marker, job, completion, at);
     if (deleted) writes.push(this.completedTeardownUpdate(identity.eventId));
@@ -622,6 +999,75 @@ export class DynamoDeploymentWork {
     if (!(await this.commit(writes))) return undefined;
     if (deleted) await this.archiveTeardown(identity.eventId);
     return "updated";
+  }
+  private async replayTeardownCompletion(
+    identity: DeploymentIdentity,
+    status: TeardownCompletion["status"],
+  ): Promise<"replay"> {
+    if (status === "DELETED") {
+      if (identity.attempt > 1) await this.assertHistoryResolved(await this.ownedJob(identity));
+      await this.archiveTeardown(identity.eventId);
+    }
+    return "replay";
+  }
+  private async finishHistoricalTeardownOnce(
+    identity: DeploymentIdentity,
+    owner: string | undefined,
+    marker: TeardownRecord,
+    result: TeardownCompletion,
+    at: string,
+  ): Promise<"updated" | "replay" | undefined> {
+    if (marker.status === result.status) return "replay";
+    if (marker.status !== (owner ? "IN_PROGRESS" : "PENDING"))
+      throw new DeploymentConflict("teardown_owner_changed");
+    const { job, historical } = await this.getDeletionJob(identity);
+    if (!historical || job.status !== "FAILED")
+      throw new DeploymentConflict("historical_attempt_record_invalid");
+    const completion = await this.checkedTeardownCompletion(identity, job, marker, result);
+    const terminal: TeardownRecord = {
+      ...marker,
+      ...completion,
+      updatedAt: at,
+    };
+    let writes: Write[];
+    if (result.status === "DELETED") {
+      if (!terminal.stackId || !terminal.fingerprint)
+        throw new DeploymentConflict("teardown_absence_unconfirmed");
+      verifyReferenceForJob(job, { stackId: terminal.stackId, fingerprint: terminal.fingerprint });
+      const completionWrites = await this.historicalCompletionWrites(job, terminal, marker);
+      if (!completionWrites) return "replay";
+      writes = completionWrites;
+    } else {
+      // This is a display projection only. Historical snapshots and the current
+      // deployment result/score remain immutable; the root stays held PENDING.
+      writes = [
+        this.historicalMarkerPut(terminal, marker),
+        {
+          Update: {
+            TableName: this.tables.deployments,
+            Key: jobKey(job.jobId),
+            UpdateExpression: "SET teardownStatus = :failed, teardownFailureReason = :reason",
+            ConditionExpression: "attempt = :parent AND eventId = :event AND teamId = :team",
+            ExpressionAttributeValues: {
+              ":parent": marker.parentAttempt,
+              ":event": job.eventId,
+              ":team": job.teamId,
+              ":failed": "FAILED",
+              ":reason": `historical_attempt_${job.attempt}: ${result.failureReason}`,
+            },
+          },
+        },
+      ];
+    }
+    // Explicit resumption may republish an IN_PROGRESS identity for terminal
+    // reconciliation; terminalization removes only that exact generation.
+    writes.push({
+      Delete: {
+        TableName: this.tables.deployments,
+        Key: teardownDispatchKey(job.jobId, job.attempt, marker.generation),
+      },
+    });
+    return (await this.commit(writes)) ? "updated" : undefined;
   }
   private async checkedTeardownCompletion(
     identity: DeploymentIdentity,
@@ -637,7 +1083,7 @@ export class DynamoDeploymentWork {
     }
     if (result.stackId !== undefined && result.stackId !== known)
       throw new DeploymentConflict("teardown_reference_changed");
-    if (result.status === "DELETED" && !known && creation?.state !== "NOT_STARTED")
+    if (result.status === "DELETED" && !known && !pristineCreation(job, creation))
       throw new DeploymentConflict("teardown_absence_unconfirmed");
     return {
       status: result.status,
@@ -698,13 +1144,7 @@ export class DynamoDeploymentWork {
     reference: { readonly stackId: string; readonly fingerprint: string },
   ): Promise<void> {
     const job = await this.ownedJob(identity);
-    const prefix = `arn:aws:cloudformation:${job.region}:${job.awsAccountId}:stack/${job.stackName}/`;
-    if (
-      !reference.stackId.startsWith(prefix) ||
-      !/^[A-Za-z0-9-]+$/u.test(reference.stackId.slice(prefix.length)) ||
-      !/^[a-f0-9]{64}$/u.test(reference.fingerprint)
-    )
-      throw new DeploymentConflict("stack_reference_scope_changed");
+    verifyReferenceForJob(job, reference);
   }
   private async requireTeardown(identity: DeploymentIdentity): Promise<TeardownRecord> {
     if (identity.operation !== "delete" || !identity.generation)
@@ -713,11 +1153,15 @@ export class DynamoDeploymentWork {
     if (!marker) throw new DeploymentConflict("teardown_missing");
     return marker;
   }
-  private teardownOwnerCheck(identity: DeploymentIdentity, owner: string): Write {
+  private teardownOwnerCheck(
+    identity: DeploymentIdentity,
+    owner: string,
+    historical = false,
+  ): Write {
     return {
       ConditionCheck: {
         TableName: this.tables.deployments,
-        Key: teardownKey(identity.jobId),
+        Key: teardownKey(identity.jobId, historical ? identity.attempt : undefined),
         ConditionExpression: "generation = :generation AND #status = :running AND #owner = :owner",
         ExpressionAttributeNames: { "#status": "status", "#owner": "owner" },
         ExpressionAttributeValues: {
@@ -1464,6 +1908,61 @@ export class DynamoDeploymentWork {
       );
     return writes;
   }
+}
+function pristineCreation(job: DeploymentJob, creation: CreationReservation | undefined): boolean {
+  return (
+    job.stackId === undefined &&
+    creation?.state === "NOT_STARTED" &&
+    creation.leaseUntil === 0 &&
+    creation.owner === undefined &&
+    creation.stackId === undefined &&
+    creation.fingerprint === undefined
+  );
+}
+function sameCreationReference(
+  job: DeploymentJob,
+  creation: CreationReservation | undefined,
+  reference: { readonly stackId: string; readonly fingerprint: string },
+): boolean {
+  return (
+    (job.stackId === undefined || job.stackId === reference.stackId) &&
+    (creation?.stackId === undefined || creation.stackId === reference.stackId) &&
+    (creation?.fingerprint === undefined || creation.fingerprint === reference.fingerprint)
+  );
+}
+
+function checkTeardownScope(record: TeardownRecord, identity: DeploymentIdentity): void {
+  if (
+    record.jobId !== identity.jobId ||
+    record.eventId !== identity.eventId ||
+    record.teamId !== identity.teamId ||
+    record.attempt !== identity.attempt ||
+    (identity.generation !== undefined && identity.generation !== record.generation)
+  )
+    throw new DeploymentConflict("teardown_scope_or_generation_changed");
+}
+function validateHistoryCounts(record: TeardownRecord): void {
+  if (
+    record.parentAttempt !== undefined ||
+    (record.historyExpected === undefined) !== (record.historyCompleted === undefined) ||
+    (record.historyExpected !== undefined &&
+      (record.historyExpected !== record.attempt - 1 ||
+        record.historyCompleted === undefined ||
+        record.historyCompleted > record.historyExpected))
+  )
+    throw new DeploymentConflict("teardown_history_scope_changed");
+}
+function verifyReferenceForJob(
+  job: DeploymentJob,
+  reference: { readonly stackId: string; readonly fingerprint: string },
+): void {
+  const prefix = `arn:aws:cloudformation:${job.region}:${job.awsAccountId}:stack/${job.stackName}/`;
+  if (
+    !reference.stackId.startsWith(prefix) ||
+    !/^[A-Za-z0-9-]+$/u.test(reference.stackId.slice(prefix.length)) ||
+    !/^[a-f0-9]{64}$/u.test(reference.fingerprint)
+  )
+    throw new DeploymentConflict("stack_reference_scope_changed");
 }
 function validateCompletion(job: DeploymentJob, completion: DeploymentCompletion): void {
   if (completion.status === "FAILED") {

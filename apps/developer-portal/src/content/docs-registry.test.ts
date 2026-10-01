@@ -126,7 +126,7 @@ describe("docs registry — role manuals (#2818)", () => {
     }
   });
 
-  it("should document the unified local flow and fail-closed cloud commands", () => {
+  it("should document the unified local flow and scoped cloud commands", () => {
     for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
       for (const command of ["make local", "make down", "make deploy", "make destroy"]) {
         expect(source).toContain(command);
@@ -152,8 +152,10 @@ describe("docs registry — role manuals (#2818)", () => {
       expect(source).not.toContain("40 total jobs");
       expect(source).not.toContain("100 jobs のため拒否");
     }
-    expect(ORGANIZER_MANUAL_SOURCE).toContain("fail without changing resources");
-    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("リソースを変更せず失敗");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("reviewed IAM setup");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("retains data");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("権限設定");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("データを保持");
   });
 
   it("should distinguish participant resume, disk retention and synthetic terminal evidence", () => {
@@ -366,7 +368,9 @@ describe("integration candidate documentation contract", () => {
       expect(source).not.toContain("make host");
       expect(source).not.toContain("make local-down");
       expect(source).toMatch(/preserv|保持/);
-      expect(source).toMatch(/unimplemented|未実装/);
+      expect(source).toMatch(/incomplete|未実装/);
+      expect(source).toMatch(/reviewed IAM|権限設定/);
+      expect(source).toContain("hello-world");
       expect(source).toContain("106");
       expect(source).toMatch(/in progress|進行中/);
     }

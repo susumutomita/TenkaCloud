@@ -11,7 +11,7 @@
       "duplicateAwards": 0,
       "ledgerEntries": 25,
       "solvedProjection": "0 after deploy; 1 after first solve and repeated submissions",
-      "durationMs": 2066
+      "durationMs": 1480
     },
     {
       "milestone": "durable-replay-and-ownership",
@@ -42,9 +42,9 @@
       "rounds": [
         {
           "round": 0,
-          "durationMs": 865,
-          "p50Ms": 789,
-          "p95Ms": 814,
+          "durationMs": 721,
+          "p50Ms": 641,
+          "p95Ms": 681,
           "commands": 1000,
           "queryRows": 7000,
           "pointReads": 700,
@@ -52,9 +52,9 @@
         },
         {
           "round": 1,
-          "durationMs": 1233,
-          "p50Ms": 631,
-          "p95Ms": 1172,
+          "durationMs": 1194,
+          "p50Ms": 662,
+          "p95Ms": 1166,
           "commands": 1000,
           "queryRows": 7000,
           "pointReads": 700,
@@ -93,14 +93,34 @@
       "retainedScores": 2500,
       "retainedScoreLedgerEntries": 25,
       "retainedReceipts": 53,
-      "durationMs": 2456
+      "durationMs": 2149
     },
     {
       "milestone": "historical-attempt-teardown-boundary",
-      "oldAccountArn": "blocks before any teardown acceptance or archive",
+      "oldAccountArn": "cleaned from immutable snapshot before current root dispatch",
       "expiredUncertainCreate": "blocks",
-      "provenNeverStarted": "may complete",
+      "provenNeverStarted": "local cancellation after historical proof",
+      "c091CounterStripping": "failed root resumes from monotonic historical proofs",
       "newJobTargetReplacement": "rejected"
+    },
+    {
+      "milestone": "historical-attempt-concurrent-cleanup",
+      "strongHistoricalQueryPages": 1785,
+      "teams": 25,
+      "deploymentAttempts": 75,
+      "historicalTargets": 50,
+      "eventCounter": {
+        "expected": 25,
+        "completed": 25
+      },
+      "duplicateCompletions": "one terminal commit per marker",
+      "oldRecoveryEventsConsumed": 2,
+      "beforeCommitInterrupted": true,
+      "afterCommitAcknowledgementLost": true,
+      "partialFailureRetried": true,
+      "retainedScore": 2500,
+      "retainedSnapshotsCreationProofsLedgersReceipts": true,
+      "scope": "Real DynamoDB Local transactions; synthetic CFN completion observations, no AWS calls"
     },
     {
       "milestone": "actual-spa-account-onboarding-client",
@@ -156,7 +176,7 @@
       ],
       "lateCreationResult": "preserved after intake stop",
       "eventScanPages": 12,
-      "emptyEventPages": 8,
+      "emptyEventPages": 4,
       "emptyDeletePages": 25,
       "completeState": "DRAINED; repeated confirmation succeeds",
       "scoresRetained": 100,
@@ -168,6 +188,6 @@
       "target": "official DynamoDB Local, synthetic work, no AWS execution"
     }
   ],
-  "scope": "Actual Dynamo transactions and Hono HTTP, including existing SPA create/bulk/flag/account clients, solved-problem projection, durable event teardown and historical-attempt blockers, account registration/verification state, concurrent revocation and account-delete/connection-reference fences, retained ExternalId initialization/use markers, installation stop/drain across empty filtered pages, and participant CLI issuance with real team-revocation transactions during STS and during the final sequential connection read, fenced by an atomic condition-only credential-release transaction. Participant STS/SSM/CloudFormation are injected; the revoked response contains no credentials. ExternalId provisioning and STS verification are injected in the Local harness; their SDK contracts, CloudFormation and Step Functions are intercepted in separate unit/synth tests. Not AWS latency or RCU capacity guarantees.",
+  "scope": "Actual Dynamo transactions and Hono HTTP, including existing SPA create/bulk/flag/account clients, solved-problem projection, durable event and historical-attempt teardown (25 teams, 75 attempts), original-account/region snapshots, partial failure, c091 counter-stripping and consumed terminal events, concurrent completion retries, and interruptions before/after the final child commit, account registration/verification state, concurrent revocation and account-delete/connection-reference fences, retained ExternalId initialization/use markers, installation stop/drain across empty filtered pages, and participant CLI issuance with real team-revocation transactions during STS and during the final sequential connection read, fenced by an atomic condition-only credential-release transaction. Participant STS/SSM/CloudFormation are injected; the revoked response contains no credentials. ExternalId provisioning and STS verification are injected in the Local harness; their SDK contracts, CloudFormation and Step Functions are intercepted in separate unit/synth tests. Not AWS latency or RCU capacity guarantees.",
   "cleanup": "All six unique synthetic tables deleted; loopback-only Java process stopped"
 }

@@ -85,9 +85,21 @@ See [permission boundaries](BOOTSTRAP-IAM.md).
 
 ## Current checkout's setup and teardown boundary
 
-The source CLI is `scripts/cloud-hosting/main.ts`. Its implementation is separate
-from the pipeline's fixed historical checkout. Public Make deployment remains
-guarded while the current competition lifecycle is unfinished.
+`make deploy` and `make destroy` call the existing `scripts/cloud-hosting/main.ts`
+implementation in this checkout. They do not run the pipeline's fixed historical
+checkout. The current cloud exercise catalog supports hello-world with scoped CLI
+access. Non-AWS cloud execution, Battle, and automatic first-account IAM preparation
+remain incomplete. These commands can create chargeable AWS resources; they do not
+promise a zero-cost platform.
+
+Start with `make deploy CLOUD_ARGS="--help"` or `make destroy CLOUD_ARGS="--help"`;
+help performs no AWS operation. After reviewing the permissions below, use an
+already configured AWS profile, `AWS_REGION`, `ENV` (default `development`),
+`TENKACLOUD_ADMIN_EMAIL`, and `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` for deployment.
+Run `make destroy` with the same account, region and environment for coordinated
+teardown. It prints the targets and asks before changing them. `CLOUD_ARGS="--yes"`
+is an explicit noninteractive teardown confirmation, not a data-purge option.
+No command in this documentation was run against a live AWS account during verification.
 
 `up` requires `TENKACLOUD_ADMIN_EMAIL`, a commercial AWS region, and a reviewed
 `TENKACLOUD_CFN_EXECUTION_POLICY_ARN`. See [bootstrap permissions](BOOTSTRAP-IAM.md).
@@ -122,6 +134,15 @@ empty filtered query pages. Partial acceptance, unresolved resources or uncertai
 creation keep the platform available for cleanup and leave intake closed.
 A 30-minute CLI wait timeout does not erase the marker or imply success; correct
 the event diagnostics and repeat the command to resume.
+
+A retried problem may have older attempts in another account or region. Teardown
+uses each immutable attempt snapshot and its original physical ARN, connection and
+catalog. It records a separate completion proof for each historical attempt before
+starting the current target's final cleanup. Unknown creation is never resolved by
+a timeout alone. Partial failure and interrupted dispatch remain retryable; event
+counts advance once per team/problem target, not once per historical attempt.
+Synthetic DynamoDB tests covered 25 teams and 75 attempts, parallel retry, response
+loss and older-worker recovery while retaining scores, snapshots and receipts.
 
 Only archived events with matching expected/completed counts permit a durable
 `DRAINED` marker. The CLI then calls CloudFormation deletion and its waiter with

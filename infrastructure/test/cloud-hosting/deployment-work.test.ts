@@ -1134,7 +1134,9 @@ describe("durable creation proof and immutable stack references with intercepted
       expect(update?.Key?.SK).toBe(kind === "creation" ? "CREATE#1" : "TEARDOWN");
       expect(update?.ConditionExpression).toContain("#owner = :owner");
       expect(update?.ConditionExpression).toContain(
-        "attribute_not_exists(stackId) OR (stackId = :stack AND fingerprint = :fingerprint)",
+        kind === "creation"
+          ? "attribute_not_exists(stackId) OR (stackId = :stack AND fingerprint = :fingerprint)"
+          : "(attribute_not_exists(stackId) OR stackId = :stack) AND (attribute_not_exists(fingerprint) OR fingerprint = :fingerprint)",
       );
       expect(update?.ExpressionAttributeValues).toMatchObject({
         ":stack": f.reference.stackId,
@@ -1186,6 +1188,7 @@ describe("teardown requests and source convergence with intercepted SDK", () => 
       f.send.mockImplementationOnce(async () => ({
         Item: { ...f.marker, [field]: ["attempt", "generation"].includes(field) ? 2 : ulid() },
       }));
+      if (field === "attempt") f.send.mockImplementationOnce(async () => ({}));
       await expect(f.work.getTeardown(f.identity)).rejects.toThrow(
         "teardown_scope_or_generation_changed",
       );
@@ -1734,7 +1737,7 @@ it("requires an immutable claimed owner for a successful teardown, reserving own
   expect(f.send).not.toHaveBeenCalled();
 });
 
-describe("historical attempt blockers before claiming event teardown completeness", () => {
+describe("historical attempt discovery before claiming event teardown completeness", () => {
   it.each([
     "recorded-arn",
     "requested",
@@ -1744,7 +1747,7 @@ describe("historical attempt blockers before claiming event teardown completenes
     "old-event",
     "old-team",
     "old-problem",
-  ])("rejects %s history before any cleanup mutation", async (reason) => {
+  ])("validates %s history before any cleanup mutation", async (reason) => {
     const f = fixture();
     const current = { ...f.job, attempt: 2 };
     const old = {
@@ -1778,11 +1781,11 @@ describe("historical attempt blockers before claiming event teardown completenes
                 leaseUntil: 0,
               },
       }));
-    await expect(f.work.listTargetJobs(f.event.eventId, f.team.teamId)).rejects.toThrow(
-      reason.startsWith("old-")
-        ? "historical_attempt_record_invalid"
-        : "historical_attempt_resources_unresolved",
-    );
+    if (reason.startsWith("old-"))
+      await expect(f.work.listTargetJobs(f.event.eventId, f.team.teamId)).rejects.toThrow(
+        "historical_attempt_record_invalid",
+      );
+    else expect(await f.work.listTargetJobs(f.event.eventId, f.team.teamId)).toEqual([current]);
     expect(f.send.mock.calls.some(([command]) => command instanceof TransactWriteCommand)).toBe(
       false,
     );
@@ -1791,7 +1794,7 @@ describe("historical attempt blockers before claiming event teardown completenes
     expect(history.input.ConsistentRead).toBe(true);
     expect(history.input.ExpressionAttributeValues?.[":prefix"]).toBe("ATTEMPT#");
   });
-  it("accepts only complete paginated history whose previous attempts were durably never started", async () => {
+  it("discovers complete paginated immutable history without mistaking enumeration for cleanup proof", async () => {
     const f = fixture();
     const current = { ...f.job, attempt: 3 };
     const cursor = { PK: `DEPLOYMENT#${f.job.jobId}`, SK: "ATTEMPT#1" };
@@ -1802,15 +1805,9 @@ describe("historical attempt blockers before claiming event teardown completenes
         Items: [{ ...f.job, SK: "ATTEMPT#1" }],
         LastEvaluatedKey: cursor,
       }))
-      .mockImplementationOnce(async () => ({
-        Item: { ...f.job, state: "NOT_STARTED", leaseUntil: 0 },
-      }))
-      .mockImplementationOnce(async () => ({ Items: [{ ...f.job, attempt: 2, SK: "ATTEMPT#2" }] }))
-      .mockImplementationOnce(async () => ({
-        Item: { ...f.job, attempt: 2, state: "NOT_STARTED", leaseUntil: 0 },
-      }));
+      .mockImplementationOnce(async () => ({ Items: [{ ...f.job, attempt: 2, SK: "ATTEMPT#2" }] }));
     expect(await f.work.listTargetJobs(f.event.eventId, f.team.teamId)).toEqual([current]);
-    const next = f.send.mock.calls[4]?.[0];
+    const next = f.send.mock.calls[3]?.[0];
     if (!(next instanceof QueryCommand)) throw new Error("Expected second history page");
     expect(next.input.ExclusiveStartKey).toEqual(cursor);
   });
@@ -1839,4 +1836,620 @@ describe("historical attempt blockers before claiming event teardown completenes
       );
     },
   );
+});
+
+function applyHistoricalWrites(
+  writes: ReturnType<typeof transaction>,
+  rows: Map<string, Record<string, unknown>>,
+  intents: Map<string, Record<string, unknown>>,
+) {
+  for (const write of writes) {
+    if (write.Put?.Item) {
+      const target = write.Put.Item.PK === "DISPATCH#PENDING" ? intents : rows;
+      target.set(String(write.Put.Item.SK), structuredClone(write.Put.Item));
+    }
+    if (write.Update?.Key?.SK === "TEARDOWN") {
+      const root = rows.get("TEARDOWN");
+      const values = write.Update.ExpressionAttributeValues;
+      if (!root || values?.[":next"] === undefined)
+        throw new Error("Unexpected history root update");
+      rows.set("TEARDOWN", { ...root, historyCompleted: values[":next"] });
+    }
+    if (write.Delete?.Key?.PK === "DISPATCH#PENDING") intents.delete(String(write.Delete.Key.SK));
+  }
+}
+
+/** Intercept only this job's historical-cleanup rows; every other SDK request fails. */
+function historicalCleanupFixture() {
+  const f = fixture();
+  const current = { ...f.job, attempt: 3 };
+  const rows = new Map<string, Record<string, unknown>>([["META", current]]);
+  const intents = new Map<string, Record<string, unknown>>();
+  const hooks: {
+    beforeCommit?: (writes: ReturnType<typeof transaction>) => void;
+    afterCommit?: (writes: ReturnType<typeof transaction>) => void;
+    afterRead?: (key: string, row: Record<string, unknown> | undefined) => void;
+  } = {};
+  const histories = [1, 2].map((attempt) => ({
+    ...f.job,
+    attempt,
+    status: "FAILED" as const,
+    PK: `DEPLOYMENT#${f.job.jobId}`,
+    SK: `ATTEMPT#${attempt}`,
+    stackId: `arn:aws:cloudformation:${f.job.region}:${f.job.awsAccountId}:stack/${f.job.stackName}/physical-${attempt}`,
+  }));
+  for (const job of histories) {
+    rows.set(job.SK, job);
+    rows.set(`CREATE#${job.attempt}`, {
+      eventId: job.eventId,
+      teamId: job.teamId,
+      jobId: job.jobId,
+      attempt: job.attempt,
+      state: "ACKNOWLEDGED",
+      owner: `creator-${job.attempt}`,
+      leaseUntil: 0,
+      stackId: job.stackId,
+      fingerprint: "a".repeat(64),
+    });
+  }
+  f.send.mockImplementation(async (command) => {
+    if (command instanceof GetCommand) {
+      if (
+        command.input.TableName !== "deployments" ||
+        command.input.Key?.PK !== `DEPLOYMENT#${f.job.jobId}`
+      )
+        throw new Error("Unexpected historical fixture Get");
+      const key = String(command.input.Key.SK);
+      const Item = structuredClone(rows.get(key));
+      hooks.afterRead?.(key, Item);
+      return { Item };
+    }
+    if (command instanceof QueryCommand) {
+      expect(command.input.ConsistentRead).toBe(true);
+      expect(command.input.ExpressionAttributeValues).toEqual({
+        ":pk": `DEPLOYMENT#${f.job.jobId}`,
+        ":prefix": "ATTEMPT#",
+      });
+      return {
+        Items: [...rows.entries()]
+          .filter(([key]) => key.startsWith("ATTEMPT#"))
+          .map(([, row]) => structuredClone(row)),
+      };
+    }
+    const writes = transaction(command);
+    hooks.beforeCommit?.(writes);
+    applyHistoricalWrites(writes, rows, intents);
+    hooks.afterCommit?.(writes);
+    return {};
+  });
+  const childIdentity = (attempt: number, generation = 1): DeploymentIdentity => ({
+    eventId: f.job.eventId,
+    teamId: f.job.teamId,
+    jobId: f.job.jobId,
+    attempt,
+    operation: "delete",
+    generation,
+  });
+  const claim = (attempt: number) => {
+    const child = rows.get(`TEARDOWN#${attempt}`);
+    if (!child) throw new Error("Missing historical child");
+    const creation = rows.get(`CREATE#${attempt}`);
+    rows.set(`TEARDOWN#${attempt}`, {
+      ...child,
+      status: "IN_PROGRESS",
+      owner: `cleanup-${attempt}`,
+      ...(creation?.stackId
+        ? { stackId: creation.stackId, fingerprint: creation.fingerprint }
+        : {}),
+    });
+  };
+  return { ...f, current, rows, intents, histories, hooks, childIdentity, claim };
+}
+
+describe("delayed current-root dispatch and atomic historical completion", () => {
+  it("publishes only child intents until the final child atomically increments the root and releases its original identity", async () => {
+    const f = historicalCleanupFixture();
+    expect(await f.work.requestTeardown(f.current, AT)).toBe("enqueued");
+    expect(f.rows.get("TEARDOWN")).toMatchObject({
+      attempt: 3,
+      status: "PENDING",
+      generation: 1,
+      historyExpected: 2,
+      historyCompleted: 0,
+    });
+    expect([...f.intents.keys()]).toEqual([
+      `${f.job.jobId}#1#DELETE#1`,
+      `${f.job.jobId}#2#DELETE#1`,
+    ]);
+    const rootInitialize = f.send.mock.calls
+      .map(([command]) => command)
+      .find(
+        (command) =>
+          command instanceof TransactWriteCommand &&
+          command.input.TransactItems?.some((write) => write.Put?.Item?.SK === "TEARDOWN"),
+      );
+    expect(
+      transaction(rootInitialize).some((write) => write.Put?.Item?.PK === "DISPATCH#PENDING"),
+    ).toBe(false);
+    for (const attempt of [1, 2]) {
+      f.claim(attempt);
+      await f.work.finishTeardown(
+        f.childIdentity(attempt),
+        `cleanup-${attempt}`,
+        {
+          status: "DELETED",
+          stackId: f.histories[attempt - 1]?.stackId,
+        },
+        AT,
+      );
+      expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(attempt);
+      expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(attempt === 2);
+    }
+    const commits = f.send.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command instanceof TransactWriteCommand);
+    const last = transaction(commits.at(-1));
+    expect(last[0]?.Put).toMatchObject({
+      Item: { SK: "TEARDOWN#2", status: "DELETED", parentAttempt: 3 },
+      ConditionExpression: "generation = :generation AND #status = :previous AND #owner = :owner",
+      ExpressionAttributeValues: {
+        ":generation": 1,
+        ":previous": "IN_PROGRESS",
+        ":owner": "cleanup-2",
+      },
+    });
+    expect(last[1]?.Update).toMatchObject({
+      Key: { SK: "TEARDOWN" },
+      ConditionExpression:
+        "attempt = :parent AND historyExpected = :expected AND historyCompleted = :completed AND #status = :pending",
+      ExpressionAttributeValues: { ":parent": 3, ":expected": 2, ":completed": 1, ":next": 2 },
+    });
+    expect(last.some((write) => write.Put?.Item?.SK === `${f.job.jobId}#3#DELETE#1`)).toBe(true);
+    expect(last.some((write) => write.Update?.TableName === "events")).toBe(false);
+    expect(f.rows.get("META")).toEqual(f.current);
+    expect(
+      f.histories.every((job) => JSON.stringify(f.rows.get(job.SK)) === JSON.stringify(job)),
+    ).toBe(true);
+    const before = commits.length;
+    expect(
+      await f.work.finishTeardown(
+        f.childIdentity(2),
+        "cleanup-2",
+        { status: "DELETED", stackId: f.histories[1]?.stackId },
+        AT,
+      ),
+    ).toBe("replay");
+    expect(
+      f.send.mock.calls.filter(([command]) => command instanceof TransactWriteCommand),
+    ).toHaveLength(before);
+    expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(2);
+  });
+
+  it("resumes partial initialization without publishing the root or replacing accepted children", async () => {
+    const f = historicalCleanupFixture();
+    f.hooks.afterCommit = (writes) => {
+      if (writes.some((write) => write.Put?.Item?.SK === "TEARDOWN#1"))
+        throw new Error("lost request acknowledgement");
+    };
+    await expect(f.work.requestTeardown(f.current, AT)).rejects.toThrow(
+      "lost request acknowledgement",
+    );
+    expect(f.rows.has("TEARDOWN#1")).toBe(true);
+    expect(f.rows.has("TEARDOWN#2")).toBe(false);
+    const accepted = structuredClone(f.rows.get("TEARDOWN#1"));
+    f.hooks.afterCommit = undefined;
+    expect(await f.work.requestTeardown(f.current, AT)).toBe("enqueued");
+    expect(f.rows.get("TEARDOWN#1")).toEqual(accepted);
+    expect(f.rows.get("TEARDOWN#2")?.generation).toBe(1);
+    expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(0);
+    expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(false);
+  });
+
+  it("records pristine never-started children through the same counter CAS and creation proof fence", async () => {
+    const f = historicalCleanupFixture();
+    for (const job of f.histories) {
+      f.rows.set(job.SK, { ...job, stackId: undefined });
+      f.rows.set(`CREATE#${job.attempt}`, {
+        ...job,
+        stackId: undefined,
+        state: "NOT_STARTED",
+        leaseUntil: 0,
+      });
+    }
+    expect(await f.work.requestTeardown(f.current, AT)).toBe("enqueued");
+    expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(2);
+    expect(f.rows.get("TEARDOWN#1")?.status).toBe("DELETED");
+    expect(f.rows.get("TEARDOWN#2")?.status).toBe("DELETED");
+    expect([...f.intents.keys()]).toEqual([`${f.job.jobId}#3#DELETE#1`]);
+    const commits = f.send.mock.calls
+      .filter(([command]) => command instanceof TransactWriteCommand)
+      .map(([command]) => transaction(command));
+    expect(
+      commits.filter((writes) =>
+        writes.some((write) =>
+          write.ConditionCheck?.ConditionExpression?.includes("#state = :never"),
+        ),
+      ),
+    ).toHaveLength(2);
+    expect(
+      commits.every((writes) => !writes.some((write) => write.Update?.TableName === "events")),
+    ).toBe(true);
+  });
+
+  it("does not mark an unknown CREATE and missing physical ARN deleted or release the root", async () => {
+    const f = historicalCleanupFixture();
+    f.rows.set("ATTEMPT#1", { ...f.histories[0], stackId: undefined });
+    f.rows.set("CREATE#1", {
+      ...f.job,
+      attempt: 1,
+      state: "REQUESTED",
+      leaseUntil: 0,
+      owner: "creator-1",
+    });
+    await f.work.requestTeardown(f.current, AT);
+    f.claim(1);
+    await expect(
+      f.work.finishTeardown(f.childIdentity(1), "cleanup-1", { status: "DELETED" }, AT),
+    ).rejects.toThrow("teardown_absence_unconfirmed");
+    expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(0);
+    expect(f.rows.get("TEARDOWN#1")?.status).toBe("IN_PROGRESS");
+    expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(false);
+  });
+
+  it("recomputes the last-child CAS after a competing completion instead of losing the root wake", async () => {
+    const f = historicalCleanupFixture();
+    await f.work.requestTeardown(f.current, AT);
+    f.claim(1);
+    f.hooks.beforeCommit = (writes) => {
+      if (!writes.some((write) => write.Put?.Item?.SK === "TEARDOWN#1")) return;
+      f.hooks.beforeCommit = undefined;
+      f.rows.set("TEARDOWN#2", {
+        ...f.rows.get("TEARDOWN#2"),
+        status: "DELETED",
+        owner: "cleanup-2",
+        stackId: f.histories[1]?.stackId,
+        fingerprint: "a".repeat(64),
+      });
+      f.rows.set("TEARDOWN", { ...f.rows.get("TEARDOWN"), historyCompleted: 1 });
+      throw conditionalFailure();
+    };
+    expect(
+      await f.work.finishTeardown(
+        f.childIdentity(1),
+        "cleanup-1",
+        { status: "DELETED", stackId: f.histories[0]?.stackId },
+        AT,
+      ),
+    ).toBe("updated");
+    expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(2);
+    expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(true);
+  });
+
+  it("does not double count after the terminal transaction commits but its acknowledgement is lost", async () => {
+    const f = historicalCleanupFixture();
+    await f.work.requestTeardown(f.current, AT);
+    f.claim(1);
+    f.hooks.afterCommit = (writes) => {
+      if (writes.some((write) => write.Put?.Item?.SK === "TEARDOWN#1"))
+        throw new Error("lost completion acknowledgement");
+    };
+    const completion = { status: "DELETED" as const, stackId: f.histories[0]?.stackId };
+    await expect(
+      f.work.finishTeardown(f.childIdentity(1), "cleanup-1", completion, AT),
+    ).rejects.toThrow("lost completion acknowledgement");
+    f.hooks.afterCommit = undefined;
+    expect(await f.work.finishTeardown(f.childIdentity(1), "cleanup-1", completion, AT)).toBe(
+      "replay",
+    );
+    expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(1);
+    expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(false);
+  });
+
+  it("recovers a promoted root after c091 drops additive counters in its failure marker", async () => {
+    const f = historicalCleanupFixture();
+    await f.work.requestTeardown(f.current, AT);
+    for (const attempt of [1, 2]) {
+      f.claim(attempt);
+      await f.work.finishTeardown(
+        f.childIdentity(attempt),
+        `cleanup-${attempt}`,
+        {
+          status: "DELETED",
+          stackId: f.histories[attempt - 1]?.stackId,
+        },
+        AT,
+      );
+    }
+    const root = f.rows.get("TEARDOWN");
+    if (!root) throw new Error("Missing promoted root");
+    // The c091 schema omits the two new counter properties when serializing failure.
+    const legacy = { ...root };
+    delete legacy.historyExpected;
+    delete legacy.historyCompleted;
+    f.rows.set("TEARDOWN", {
+      ...legacy,
+      status: "FAILED",
+      owner: "legacy-root-owner",
+      failureReason: "worker_failed",
+    });
+    f.rows.set("META", { ...f.current, status: "DELETING" });
+    f.intents.delete(`${f.job.jobId}#3#DELETE#1`);
+    expect(await f.work.requestTeardown(f.current, AT)).toBe("enqueued");
+    expect(f.rows.get("TEARDOWN")).toMatchObject({ generation: 2, status: "PENDING" });
+    expect(f.rows.get("TEARDOWN")).not.toHaveProperty("historyExpected");
+    expect(f.rows.get("TEARDOWN#1")?.status).toBe("DELETED");
+    expect(f.rows.get("TEARDOWN#2")?.status).toBe("DELETED");
+    expect([...f.intents.keys()]).toEqual([`${f.job.jobId}#3#DELETE#2`]);
+  });
+
+  it("does not use ready counters as a substitute for complete monotonic historical proof", async () => {
+    const f = historicalCleanupFixture();
+    await f.work.requestTeardown(f.current, AT);
+    f.rows.set("TEARDOWN", { ...f.rows.get("TEARDOWN"), historyCompleted: 2 });
+    const before = f.send.mock.calls.filter(
+      ([command]) => command instanceof TransactWriteCommand,
+    ).length;
+    await expect(f.work.requestTeardown(f.current, AT)).rejects.toThrow(
+      "historical_attempt_resources_unresolved",
+    );
+    expect(
+      f.send.mock.calls.filter(([command]) => command instanceof TransactWriteCommand),
+    ).toHaveLength(before);
+    expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(false);
+  });
+
+  it("refuses last-child promotion if another historical resource is still unresolved", async () => {
+    const f = historicalCleanupFixture();
+    await f.work.requestTeardown(f.current, AT);
+    f.rows.set("TEARDOWN", { ...f.rows.get("TEARDOWN"), historyCompleted: 1 });
+    f.claim(2);
+    await expect(
+      f.work.finishTeardown(
+        f.childIdentity(2),
+        "cleanup-2",
+        {
+          status: "DELETED",
+          stackId: f.histories[1]?.stackId,
+        },
+        AT,
+      ),
+    ).rejects.toThrow("historical_attempt_resources_unresolved");
+    expect(f.rows.get("TEARDOWN#2")?.status).toBe("IN_PROGRESS");
+    expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(false);
+  });
+
+  it("republishes an interrupted child's exact identity and retries only a FAILED child with a new generation", async () => {
+    const f = historicalCleanupFixture();
+    await f.work.requestTeardown(f.current, AT);
+    f.claim(1);
+    const original = structuredClone(f.rows.get("TEARDOWN#1"));
+    f.intents.delete(`${f.job.jobId}#1#DELETE#1`);
+    expect(await f.work.requestTeardown(f.current, AT)).toBe("skipped");
+    expect(f.rows.get("TEARDOWN#1")).toEqual(original);
+    expect(f.intents.get(`${f.job.jobId}#1#DELETE#1`)).toMatchObject({
+      attempt: 1,
+      generation: 1,
+      operation: "delete",
+    });
+    await f.work.finishTeardown(
+      f.childIdentity(1),
+      "cleanup-1",
+      { status: "FAILED", failureReason: "workflow_aborted" },
+      AT,
+    );
+    expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(0);
+    expect(await f.work.requestTeardown(f.current, AT)).toBe("enqueued");
+    expect(f.rows.get("TEARDOWN#1")).toMatchObject({ generation: 2, status: "PENDING" });
+    expect(f.rows.get("TEARDOWN#1")).not.toHaveProperty("owner");
+    expect(f.intents.has(`${f.job.jobId}#1#DELETE#2`)).toBe(true);
+    expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(false);
+  });
+
+  it.each(["PENDING", "IN_PROGRESS"])(
+    "replays the final child when a duplicate wins before reading the %s root",
+    async (rootStatus) => {
+      const f = historicalCleanupFixture();
+      await f.work.requestTeardown(f.current, AT);
+      f.claim(1);
+      await f.work.finishTeardown(
+        f.childIdentity(1),
+        "cleanup-1",
+        { status: "DELETED", stackId: f.histories[0]?.stackId },
+        AT,
+      );
+      f.claim(2);
+      f.hooks.afterRead = (key, row) => {
+        if (key !== "TEARDOWN#2" || row?.status !== "IN_PROGRESS") return;
+        f.hooks.afterRead = undefined;
+        f.rows.set(key, { ...row, status: "DELETED" });
+        f.rows.set("TEARDOWN", {
+          ...f.rows.get("TEARDOWN"),
+          status: rootStatus,
+          historyCompleted: 2,
+        });
+        f.intents.set(`${f.job.jobId}#3#DELETE#1`, { ...f.childIdentity(3), createdAt: AT });
+      };
+      const before = f.send.mock.calls.filter(
+        ([command]) => command instanceof TransactWriteCommand,
+      ).length;
+      expect(
+        await f.work.finishTeardown(
+          f.childIdentity(2),
+          "cleanup-2",
+          { status: "DELETED", stackId: f.histories[1]?.stackId },
+          AT,
+        ),
+      ).toBe("replay");
+      expect(
+        f.send.mock.calls.filter(([command]) => command instanceof TransactWriteCommand),
+      ).toHaveLength(before);
+      expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(2);
+      expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(true);
+    },
+  );
+
+  it("replays concurrent pristine final-child initialization without losing the root wake", async () => {
+    const f = historicalCleanupFixture();
+    for (const job of f.histories) {
+      f.rows.set(job.SK, { ...job, stackId: undefined });
+      f.rows.set(`CREATE#${job.attempt}`, {
+        ...job,
+        stackId: undefined,
+        state: "NOT_STARTED",
+        leaseUntil: 0,
+      });
+    }
+    f.hooks.afterRead = (key, row) => {
+      if (key !== "TEARDOWN#2" || row !== undefined) return;
+      f.hooks.afterRead = undefined;
+      f.rows.set(key, {
+        ...f.childIdentity(2),
+        parentAttempt: 3,
+        status: "DELETED",
+        requestedAt: AT,
+        updatedAt: AT,
+      });
+      f.rows.set("TEARDOWN", {
+        ...f.rows.get("TEARDOWN"),
+        status: "IN_PROGRESS",
+        historyCompleted: 2,
+      });
+      f.intents.set(`${f.job.jobId}#3#DELETE#1`, { ...f.childIdentity(3), createdAt: AT });
+    };
+    expect(await f.work.requestTeardown(f.current, AT)).toBe("enqueued");
+    expect(f.rows.get("TEARDOWN")?.historyCompleted).toBe(2);
+    expect(f.rows.get("TEARDOWN#2")?.status).toBe("DELETED");
+    const writes = f.send.mock.calls
+      .filter(([command]) => command instanceof TransactWriteCommand)
+      .flatMap(([command]) => transaction(command));
+    expect(writes.filter((write) => write.Put?.Item?.SK === "TEARDOWN#2")).toHaveLength(0);
+    expect([...f.intents.keys()]).toEqual([`${f.job.jobId}#3#DELETE#1`]);
+  });
+
+  it.each(["owner", "generation", "fingerprint"])(
+    "does not accept a conflicting %s winner as a terminal replay",
+    async (changed) => {
+      const f = historicalCleanupFixture();
+      await f.work.requestTeardown(f.current, AT);
+      f.claim(1);
+      f.hooks.afterRead = (key, row) => {
+        if (key !== "TEARDOWN#1" || row?.status !== "IN_PROGRESS") return;
+        f.hooks.afterRead = undefined;
+        f.rows.set(key, {
+          ...row,
+          status: "DELETED",
+          ...(changed === "owner" ? { owner: "foreign-owner" } : {}),
+          ...(changed === "generation" ? { generation: 2 } : {}),
+          ...(changed === "fingerprint" ? { fingerprint: "f".repeat(64) } : {}),
+        });
+        f.rows.set("TEARDOWN", { ...f.rows.get("TEARDOWN"), historyCompleted: 2 });
+      };
+      await expect(
+        f.work.finishTeardown(
+          f.childIdentity(1),
+          "cleanup-1",
+          { status: "DELETED", stackId: f.histories[0]?.stackId },
+          AT,
+        ),
+      ).rejects.toThrow("teardown_history_not_ready");
+      expect(f.intents.has(`${f.job.jobId}#3#DELETE#1`)).toBe(false);
+    },
+  );
+
+  it("allows an ARN-only recovery receipt to fill its matching immutable fingerprint", async () => {
+    const f = historicalCleanupFixture();
+    await f.work.requestTeardown(f.current, AT);
+    f.claim(1);
+    const child = { ...f.rows.get("TEARDOWN#1") };
+    delete child.fingerprint;
+    f.rows.set("TEARDOWN#1", child);
+    const reference = { stackId: String(child.stackId), fingerprint: "a".repeat(64) };
+    await f.work.recordTeardownReference(f.childIdentity(1), "cleanup-1", reference);
+    const last = f.send.mock.calls.at(-1)?.[0];
+    const update = transaction(last)[0]?.Update;
+    expect(update).toMatchObject({
+      Key: { SK: "TEARDOWN#1" },
+      ExpressionAttributeValues: {
+        ":owner": "cleanup-1",
+        ":generation": 1,
+        ":stack": reference.stackId,
+        ":fingerprint": reference.fingerprint,
+      },
+    });
+    expect(update?.ConditionExpression).toContain(
+      "(attribute_not_exists(stackId) OR stackId = :stack)",
+    );
+    expect(update?.ConditionExpression).toContain(
+      "(attribute_not_exists(fingerprint) OR fingerprint = :fingerprint)",
+    );
+  });
+
+  it.each(["snapshot-arn", "creation-arn", "creation-fingerprint"])(
+    "rejects a discovered reference contradicting %s",
+    async (changed) => {
+      const f = historicalCleanupFixture();
+      await f.work.requestTeardown(f.current, AT);
+      f.claim(1);
+      const reference = { stackId: String(f.histories[0]?.stackId), fingerprint: "a".repeat(64) };
+      if (changed === "snapshot-arn")
+        f.rows.set("ATTEMPT#1", {
+          ...f.rows.get("ATTEMPT#1"),
+          stackId: `${reference.stackId}-other`,
+        });
+      if (changed === "creation-arn")
+        f.rows.set("CREATE#1", {
+          ...f.rows.get("CREATE#1"),
+          stackId: `${reference.stackId}-other`,
+        });
+      if (changed === "creation-fingerprint")
+        f.rows.set("CREATE#1", { ...f.rows.get("CREATE#1"), fingerprint: "f".repeat(64) });
+      const before = f.send.mock.calls.filter(
+        ([command]) => command instanceof TransactWriteCommand,
+      ).length;
+      await expect(
+        f.work.recordTeardownReference(f.childIdentity(1), "cleanup-1", reference),
+      ).rejects.toThrow("teardown_reference_changed");
+      expect(
+        f.send.mock.calls.filter(([command]) => command instanceof TransactWriteCommand),
+      ).toHaveLength(before);
+    },
+  );
+
+  it("rejects contradictory CREATE and historical DELETED fingerprints even when their ARN matches", async () => {
+    const f = historicalCleanupFixture();
+    await f.work.requestTeardown(f.current, AT);
+    for (const attempt of [1, 2]) {
+      f.claim(attempt);
+      await f.work.finishTeardown(
+        f.childIdentity(attempt),
+        `cleanup-${attempt}`,
+        { status: "DELETED", stackId: f.histories[attempt - 1]?.stackId },
+        AT,
+      );
+    }
+    f.rows.set("CREATE#1", { ...f.rows.get("CREATE#1"), fingerprint: "f".repeat(64) });
+    await expect(f.work.requestTeardown(f.current, AT)).rejects.toThrow(
+      "historical_attempt_resources_unresolved",
+    );
+  });
+
+  it.each([
+    { historyExpected: 2 },
+    { historyCompleted: 0 },
+    { historyExpected: 1, historyCompleted: 0 },
+    { historyExpected: 2, historyCompleted: 3 },
+  ])("rejects malformed root counters %j", async (counts) => {
+    const f = historicalCleanupFixture();
+    f.rows.set("TEARDOWN", {
+      ...f.childIdentity(3),
+      status: "PENDING",
+      requestedAt: AT,
+      updatedAt: AT,
+      ...counts,
+    });
+    await expect(f.work.requestTeardown(f.current, AT)).rejects.toThrow("teardown_history");
+    expect(f.send.mock.calls.some(([command]) => command instanceof TransactWriteCommand)).toBe(
+      false,
+    );
+  });
 });

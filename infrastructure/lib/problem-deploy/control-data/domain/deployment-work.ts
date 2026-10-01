@@ -86,6 +86,11 @@ export interface TeardownRecord extends DeploymentIdentity {
   readonly updatedAt: string;
   readonly failureReason?: string;
   readonly stackId?: string;
+  /** Historical children keep their immutable source attempt and bind the current target. */
+  readonly parentAttempt?: number;
+  /** Absent on published c091 markers. Only the root counts resolved historical attempts. */
+  readonly historyExpected?: number;
+  readonly historyCompleted?: number;
 }
 export interface DispatchIntent extends DeploymentIdentity {
   readonly createdAt: string;

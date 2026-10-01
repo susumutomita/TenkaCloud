@@ -75,3 +75,20 @@ test("the four development targets retain safe installation and the complete ver
     }
   }
 });
+
+// Dry-run only: the CLI's injected subprocess suite verifies AWS and teardown semantics.
+test("cloud product commands reach the existing scoped CLI without replacing local shutdown", () => {
+  for (const [target, command] of [
+    ["deploy", "up"],
+    ["destroy", "down"],
+  ]) {
+    const result = make("-n", target ?? "", "CLOUD_ARGS=--help");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`bun run scripts/cloud-hosting/main.ts ${command} --help`);
+    expect(result.stdout).not.toContain("not implemented");
+  }
+  const local = make("-n", "down");
+  expect(local.status).toBe(0);
+  expect(local.stdout).toContain("scripts/local-host/local.ts down");
+  expect(local.stdout).not.toContain("cloud-hosting");
+});

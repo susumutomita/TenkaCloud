@@ -12,7 +12,7 @@ export const metadata = { title: "起動と配置の境界" };
 
 <h2 id="cloud-platform">クラウド基盤は未実装</h2>
 
-公開するコマンド名は `make deploy` と `make destroy` です。現行 candidate では両方とも未実装を示すエラーで終了し、リソースの作成、削除、移行を行いません。Lambda/DynamoDB の初期設定、競技者アカウントの導線、協調撤収は実装と検証が必要です。復元した `infrastructure/templates/cloud-pipeline.yaml` は固定した旧版のソースを実行し、この未完成な経路は実行しません。コンテナの build 成功は、配置済みや費用ゼロの証明ではありません。
+`make deploy` と `make destroy` は、この版の Lambda/DynamoDB 配置と協調撤収 CLI を実行します。AWS 権限の事前確認が必要です。現在のクラウド問題は限定 CLI を使う hello-world です。非 AWS 問題のクラウド実行と Battle は未実装です。撤収ではアカウント、リージョン、所有対象を表示し、記録済み問題の撤収後に基盤を削除します。データは保持し、保持リソースには料金が発生する場合があります。復元した `infrastructure/templates/cloud-pipeline.yaml` は固定した旧版のソースを実行し、この版の CLI は実行しません。コンテナの build 成功は、配置済みや費用ゼロの証明ではありません。
 
 <h2 id="exercise-deployment">問題環境の配置は別の操作</h2>
 

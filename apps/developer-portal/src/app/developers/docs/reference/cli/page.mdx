@@ -9,7 +9,7 @@ The `tenkacloud pack` CLI is the offline pack tool. Local-directory commands do 
 from the CLI's own usage strings, so the documented command names and options
 always match the code.
 
-Current launch commands are `make local` and state-preserving `make down`. `make deploy` and `make destroy` currently exit unimplemented without changing resources. Pack activate/deactivate retain legacy local records and do not add problems to the current event catalog.
+Current launch commands are `make local` and state-preserving `make down`. `make deploy` requires reviewed AWS setup. `make destroy` confirms targets, drains owned exercises, and retains data. The current cloud slice supports hello-world; non-AWS execution and Battle remain incomplete. Pack activate/deactivate retain legacy local records and do not add problems to the current event catalog.
 
 ## Commands
 

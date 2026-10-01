@@ -182,6 +182,14 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(f.messages.join("")).toContain("TenkaCloud cloud hosting");
     expect(f.messages.join("")).not.toContain("Lite");
   });
+  it.each(["up", "down"])("shows %s help without AWS or storage access", async (command) => {
+    const f = fixture();
+    expect(await f.run([command, "--help"])).toBe(0);
+    expect(f.calls).toEqual([]);
+    expect(f.storageCalls).toEqual([]);
+    expect(f.messages.join("")).toContain("make deploy");
+    expect(f.messages.join("")).toContain("make destroy");
+  });
   it("preserves prepare -> bootstrap -> deploy -> organizer setup ordering", async () => {
     const f = fixture();
     expect(await f.run(["up"])).toBe(0);

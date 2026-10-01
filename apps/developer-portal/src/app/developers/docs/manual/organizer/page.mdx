@@ -24,7 +24,7 @@ AWS-service problems are for cloud hosting only. Local hosting rejects the old A
 
 The local database is SQLite. Back up the complete private data directory consistently, including key files. `make down` preserves event data and stopped Docker state; use the same data directory on restart. New on-demand Docker environments stay stopped after `make local` until a participant resumes them. It does not delete AWS resources or reset the event clock. Never delete state that still owns environments.
 
-Cloud Lambda/DynamoDB hosting is in progress; `make deploy` and `make destroy` currently fail without changing resources. A zero-fixed-cost cloud platform has not been established. AWS exercise charges are separate.
+Cloud Lambda/DynamoDB hosting is in progress; `make deploy` requires reviewed IAM setup; `make destroy` confirms targets, drains recorded exercises, and retains data. Only the hello-world cloud slice is supported; non-AWS execution and Battle remain incomplete. A zero-fixed-cost cloud platform has not been established. AWS exercise charges are separate.
 
 Historical SaaS and individual-practice instructions are available in the [pinned legacy source](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9). Do not use them against this candidate or assume data migrates automatically.
 

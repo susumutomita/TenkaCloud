@@ -12,7 +12,7 @@ This documents the draft integration candidate. Local event/team operation is im
 
 <h2 id="cloud-platform">Cloud platform: integration in progress</h2>
 
-The final public command names are `make deploy` and `make destroy`. In this candidate both exit nonzero with an explicit unimplemented message; no resources are created, removed or migrated. Lambda/DynamoDB setup, competitor onboarding and coordinated teardown need completion and verification. The preserved `infrastructure/templates/cloud-pipeline.yaml` runs fixed historical source refs, not this unfinished path. A container build is not deployment evidence or a zero-cost promise.
+`make deploy` and `make destroy` execute the current Lambda/DynamoDB setup and coordinated teardown CLI. They require reviewed AWS permissions. The current cloud catalog supports hello-world with scoped CLI access; non-AWS execution and Battle remain incomplete. Destroy shows the account, region and owned targets, waits for recorded exercises to be removed, then removes hosting while retaining data. Retained resources can continue to incur charges. The preserved `infrastructure/templates/cloud-pipeline.yaml` runs fixed historical source refs, not this current CLI. A container build is not deployment evidence or a zero-cost promise.
 
 <h2 id="exercise-deployment">Exercise deployment is separate</h2>
 

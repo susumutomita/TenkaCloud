@@ -88,7 +88,7 @@ make local
 </code></pre>
 <p><code>make down</code> は管理対象のローカルプロセスと所有する Docker 環境を止め、DB、得点、キー、Docker のデータを保持します。大会の終了や AWS 問題 stack の削除は行いません。<code>make local</code> 後も、新しいオンデマンドの Docker jobs は参加者が再開するまで停止したままです。書き込みレイヤーと volume は保持しますが、RAM は保持しません。再起動しても大会の時刻はリセットされません。End Event は採点を止め、環境の teardown は所有する環境を削除します。削除が完了するまでデータディレクトリを消さないでください。</p>
 <p>起動オプションは <code>LOCAL_ARGS</code> へ渡します。例は <code>make local LOCAL_ARGS=&quot;--no-build&quot;</code> です。<code>--data</code> を指定した場合、<code>make down</code> にも同じディレクトリを指定します。</p>
-<h2 id="cloud-status">クラウド配置の状態</h2><p><code>make deploy</code> と <code>make destroy</code> は現在、未実装のエラーで終了し、リソースを変更しません。Lambda/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。非 AWS 問題のクラウド実行には別の runner が必要です。復元した cloud pipeline は固定した旧版のソースを実行し、この未完成な経路は実行しません。</p>
+<h2 id="cloud-status">クラウド配置の状態</h2><p><code>make deploy</code> と <code>make destroy</code> は権限設定を確認したうえで、この版の Lambda/DynamoDB CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world です。撤収時に対象を確認し、大会データは保持します。Lambda/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。非 AWS 問題のクラウド実行と Battle は未実装です。Docker 問題には別の runner が必要です。復元した cloud pipeline は固定した旧版のソースを実行し、この版の CLI は実行しません。</p>
 <p>Codespaces の転送 URL と問題接続は、この candidate では未確認です。確認記録ができるまでは上のローカル手順を使ってください。</p>
 <p>SaaS/Lite と旧個人練習の手順は<a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">固定した旧版</a>を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。</p>
 <p>次は<a href="/docs/manual/organizer/">開催者マニュアル</a>、<a href="/docs/manual/participant/">参加者マニュアル</a>、<a href="/docs/operate/deploy-paths/">配置の境界</a>です。</p>

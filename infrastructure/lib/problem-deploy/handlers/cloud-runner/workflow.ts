@@ -64,6 +64,7 @@ export type ArtifactResolver = (job: DeploymentJob) => Promise<DeploymentArtifac
 export type WorkflowRepository = Pick<
   DynamoDeploymentWork,
   | "getJob"
+  | "getDeletionJob"
   | "getConnection"
   | "begin"
   | "finish"
@@ -128,7 +129,9 @@ async function guardRemote(
   cleanup = false,
 ): Promise<void> {
   await deps.authorizeJob(job);
-  const connection = await deps.repository.getConnection(job.eventId, job.teamId);
+  const connection = cleanup
+    ? job.connection
+    : await deps.repository.getConnection(job.eventId, job.teamId);
   if (
     !connection ||
     !sameConnection(job.connection, connection) ||
@@ -239,6 +242,19 @@ function deletionState(state: WorkflowState, result: DeletionObservation): Workf
     ...(result.reference ? { reference: result.reference } : {}),
   };
 }
+async function deletionJob(state: WorkflowState, deps: WorkflowDependencies) {
+  const source = await deps.repository.getDeletionJob(state.identity);
+  const { job, historical } = source;
+  if (
+    job.eventId !== state.identity.eventId ||
+    job.teamId !== state.identity.teamId ||
+    job.jobId !== state.identity.jobId ||
+    job.attempt !== state.identity.attempt ||
+    (historical ? job.status !== "FAILED" : job.status !== "DELETING")
+  )
+    throw new CloudWorkflowError();
+  return source;
+}
 async function runTeardown(
   state: WorkflowState,
   deps: WorkflowDependencies,
@@ -246,17 +262,33 @@ async function runTeardown(
   const marker = await teardownState(state, deps);
   const done = terminalTeardown(state, marker.status);
   if (done) return done;
-  const job = await ownedJob(state, deps, false);
-  await guardRemote(job, deps, true);
   if (
     !(await deps.repository.prepareDeletion(state.identity, state.owner, (deps.now ?? Date.now)()))
   )
     return { ...state, phase: "pending" };
-  const { input } = await runnerInput(job, deps);
-  const latest = await ownedJob(state, deps, false);
-  if (latest.status !== "DELETING") throw new CloudWorkflowError();
-  await guardRemote(latest, deps, true);
+  const source = await deletionJob(state, deps);
+  const { job } = source;
   const creation = await deps.repository.getCreation(state.identity);
+  // Closed-event preparation fences late creates. A pristine durable reservation needs no
+  // artifact, current team connection, or remote credentials merely to cancel unused work.
+  if (
+    creation?.state === "NOT_STARTED" &&
+    creation.leaseUntil === 0 &&
+    creation.owner === undefined &&
+    creation.stackId === undefined &&
+    creation.fingerprint === undefined &&
+    job.stackId === undefined &&
+    marker.stackId === undefined &&
+    marker.fingerprint === undefined &&
+    state.reference === undefined &&
+    !state.deleteSubmitted
+  )
+    return { ...state, phase: "ready" };
+  await guardRemote(job, deps, true);
+  const { input } = await runnerInput(job, deps);
+  const latest = await deletionJob(state, deps);
+  if (JSON.stringify(latest) !== JSON.stringify(source)) throw new CloudWorkflowError();
+  await guardRemote(latest.job, deps, true);
   const stackId = marker.stackId ?? creation?.stackId ?? job.stackId;
   const reference =
     state.reference ??
@@ -275,7 +307,7 @@ async function runTeardown(
           reference,
           deps.runner,
           `tc-${state.identity.jobId}-${state.identity.attempt}-${state.identity.generation}`,
-          Boolean(reference) || creation?.state === "NOT_STARTED",
+          Boolean(reference),
           (resolved) =>
             deps.repository.recordTeardownReference(state.identity, state.owner, resolved),
         );

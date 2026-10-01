@@ -12,4 +12,4 @@ Cognito や DynamoDB を構築せず、データの自動移行も行いませ�
 - [任意の host SAML 設定](../host-saml.md)
 
 `make local` が起動、`make down` がデータを保持する停止です。
-クラウドの `make deploy` と `make destroy` は現在未実装で、リソースを変更しません。
+クラウドの `make deploy` / `make destroy` は現行 CLI に接続しますが、この旧版手順の機能をすべて復旧したものではありません。現行の対応範囲と権限設定は [infrastructure/README.md](../../infrastructure/README.md) を参照してください。

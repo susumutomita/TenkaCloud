@@ -35,9 +35,11 @@ Local SQLite is implemented. Cloud hosting is being restored with Lambda and
 DynamoDB, reusing the former serverless deployment path without SaaS / SBT.
 AWS service problems require cloud hosting. Non-AWS problems are intended for
 both options; the separate cloud problem runner is still incomplete.
-`make deploy` and `make destroy` currently exit unimplemented without modifying
-resources. A container build, remote-driver experiment or schema declaration is
-not an end-to-end cloud deployment or zero-fixed-cost guarantee.
+`make deploy` and `make destroy` call the current Lambda/DynamoDB CLI after
+reviewed IAM setup. The supported cloud catalog is hello-world with scoped CLI
+access. Teardown confirms the exact installation and preserves retained data.
+A container build, remote-driver experiment or schema declaration is not an
+end-to-end cloud rehearsal or zero-fixed-cost guarantee.
 
 The retained AWS exercise adapter is not enabled by local startup. Its cloud
 connection is still being restored. It uses operator

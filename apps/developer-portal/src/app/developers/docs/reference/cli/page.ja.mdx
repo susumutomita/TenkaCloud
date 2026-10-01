@@ -10,7 +10,7 @@ Git install は指定した HTTPS repository へ接続します。以下のコ�
 CLI 自身の usage 文字列から解析された**規範的リファレンス**であり、ドキュメントに
 記載されたコマンド名とオプションは常にコードと一致します。
 
-現在の起動は `make local`、データを保持する停止は `make down` です。`make deploy` と `make destroy` は未実装のエラーで終了し、リソースを変更しません。pack activate/deactivate は旧版向けのローカル記録であり、現在の大会カタログへ問題を追加しません。
+現在の起動は `make local`、データを保持する停止は `make down` です。`make deploy` は権限設定の事前確認が必要です。`make destroy` は対象を確認して問題環境を撤収し、データを保持します。クラウドは hello-world に対応し、非 AWS 問題の実行と Battle は未実装です。pack activate/deactivate は旧版向けのローカル記録であり、現在の大会カタログへ問題を追加しません。
 
 ## コマンド
 

@@ -50,9 +50,12 @@ Docker 問題は一斉起動せず、参加者が必要な問題をポータル�
 詳しくは[生成ファイルと保持データ](docs/local-hosting.md#generated-files-and-retained-data)を参照してください。
 
 クラウドのコマンドは `make deploy` と `make destroy` です。
-Lambda/DynamoDB の配置と協調撤収は検証中のため、現在はリソースを作成・削除せずエラーで止まります。
-復元した[クラウド pipeline](infrastructure/README.md#cloud-deployment-pipeline)は固定した旧版のソースを実行します。
-このブランチの未完成な配置経路を実行するものではありません。
+[必要な AWS 権限の準備](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を確認して、
+この版の Lambda/DynamoDB CLI を実行します。現在のクラウド問題は、限定した CLI アクセスを使う hello-world です。
+非 AWS 問題のクラウド実行と Battle は未完成です。撤収時はアカウント、リージョン、所有する対象を表示して確認し、
+記録済みの問題環境を撤収します。大会データは保持します。保持ストレージや AWS の利用には料金が発生する場合があります。
+`CLOUD_ARGS="--help"` を付けると、AWS に接続せずヘルプを表示します。
+復元した[クラウド pipeline](infrastructure/README.md#cloud-deployment-pipeline)は固定した旧版を実行する別の配置経路です。
 
 106 件の Compose 問題を Challenge として表示し、エディターと明示的に許可された
 15 件の参加者ターミナルに接続します。カタログと模擬ライフサイクルの検証は、

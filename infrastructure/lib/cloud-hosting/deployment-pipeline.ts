@@ -137,6 +137,25 @@ export class CloudDeploymentPipeline extends Construct {
         [props.events.tableArn, props.deployments.tableArn],
       );
     grant(workers.finish, ["dynamodb:UpdateItem"], [props.events.tableArn]);
+    workers.finish.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["dynamodb:DeleteItem"],
+        resources: [props.deployments.tableArn],
+        conditions: {
+          "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["DISPATCH#PENDING"] },
+        },
+      }),
+    );
+    for (const worker of [workers.create, workers.describe, workers.finish])
+      worker.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["dynamodb:Query"],
+          resources: [props.deployments.tableArn],
+          conditions: {
+            "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["DEPLOYMENT#*"] },
+          },
+        }),
+      );
     for (const worker of [workers.create, workers.describe, workers.finish]) {
       grantCompetitorAccess(worker, props);
       // Old pending jobs retain their immutable catalog key across application updates. The
@@ -248,6 +267,34 @@ export class CloudDeploymentPipeline extends Construct {
       }),
     );
     grant(this.dispatcher, ["states:StartExecution"], [this.stateMachine.stateMachineArn]);
+    this.dispatcher.addToRolePolicy(
+      new PolicyStatement({
+        actions: [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+        ],
+        resources: [props.deployments.tableArn],
+        conditions: {
+          "ForAllValues:StringLike": {
+            "dynamodb:LeadingKeys": ["DEPLOYMENT#*", "DISPATCH#PENDING"],
+          },
+        },
+      }),
+    );
+    grant(
+      this.dispatcher,
+      ["states:DescribeExecution"],
+      [
+        Stack.of(this).formatArn({
+          service: "states",
+          resource: "execution",
+          resourceName: `${this.stateMachine.stateMachineName}:*`,
+          arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+        }),
+      ],
+    );
     new Rule(this, "DispatchEveryMinute", {
       schedule: Schedule.rate(Duration.minutes(1)),
       targets: [

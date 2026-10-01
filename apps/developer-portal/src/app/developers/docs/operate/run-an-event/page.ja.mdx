@@ -22,7 +22,7 @@ AWS 問題にはアカウント、region、リソース、削除の合意が必�
 
 <h2 id="finish">安全に終了する</h2>
 
-End Event で採点を止め、コンソールの teardown で所有する環境を削除し、完了を確認します。結果を保持し、ディレクトリ全体をバックアップします。通常のローカル停止は `make down`、再開は同じディレクトリで `make local` です。停止は AWS の削除ではありません。クラウド基盤の `make deploy` と `make destroy` は現在未実装です。
+End Event で採点を止め、コンソールの teardown で所有する環境を削除し、完了を確認します。結果を保持し、ディレクトリ全体をバックアップします。通常のローカル停止は `make down`、再開は同じディレクトリで `make local` です。停止は AWS の削除ではありません。クラウドの `make deploy` は権限設定の確認が必要です。`make destroy` は対象を確認し、記録済み問題の撤収後もデータを保持します。現在は hello-world に対応し、非 AWS 問題のクラウド実行と Battle は未実装です。
 
 運用チェックリストはリポジトリの `docs/operations/event-runbook.md` を参照してください。
 

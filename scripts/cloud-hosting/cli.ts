@@ -438,7 +438,7 @@ async function status(context: Context): Promise<number> {
   return 0;
 }
 const HELP =
-  "TenkaCloud cloud hosting\nUsage: bun scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSet TENKACLOUD_ADMIN_EMAIL, TENKACLOUD_CFN_EXECUTION_POLICY_ARN, AWS_REGION, and AWS credentials for up. down accepts --yes.\n";
+  'TenkaCloud cloud hosting\nUsage: make deploy | make destroy [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSet TENKACLOUD_ADMIN_EMAIL, TENKACLOUD_CFN_EXECUTION_POLICY_ARN, AWS_REGION, and AWS credentials for up. down accepts --yes.\n';
 export async function runCloudCli(
   argv: readonly string[],
   io: CloudCliIo,
@@ -446,7 +446,13 @@ export async function runCloudCli(
 ): Promise<number> {
   try {
     const [command, ...args] = argv;
-    if (command === undefined || ["--help", "-h", "help"].includes(command)) {
+    if (
+      command === undefined ||
+      ["--help", "-h", "help"].includes(command) ||
+      (["up", "down"].includes(command) &&
+        args.length === 1 &&
+        ["--help", "-h"].includes(args[0] ?? ""))
+    ) {
       io.stdout(HELP);
       return 0;
     }

@@ -3,13 +3,13 @@
   "status": "unpublished",
   "sources": {
     "platformCommit": null,
-    "catalogCommit": "7e8a90c0c18895d6f2496a9a2bb6ee307f7f1129"
+    "catalogCommit": "915fe862fe09bf6b63bb96edcf0cb3deddd54d37"
   },
   "image": null,
   "limitations": [
     "This is an unbuilt integration candidate. No source release tag or registry image has been published.",
     "The existing v1.11.0 launcher release and release/tenkacloud-release files are historical records, not this integration release.",
-    "Cloud Lambda/DynamoDB hosting and the cloud problem runner are incomplete; deploy and destroy fail without creating or deleting resources.",
+    "Cloud commands connect the reviewed Lambda/DynamoDB CLI. Cloud hello-world CLI access is implemented; automatic first-account IAM setup, non-AWS cloud execution and Battle remain incomplete. Retained AWS resources can incur charges.",
     "The 106 local Compose problems share the competition runtime. Representative real Docker/browser flows passed; full-catalog variants and network-address capacity still require validation.",
     "Pack/drill and published-book alignment are still in progress."
   ]

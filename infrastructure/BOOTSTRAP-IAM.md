@@ -114,9 +114,13 @@ The final release decision uses a condition-only DynamoDB transaction over the
 existing Events, Teams and Deployments tables. Their existing API
 `dynamodb:ConditionCheckItem` grants cover it; no new table, marker or grant is needed.
 
-The dispatcher can Query only the pending-dispatch partition, strongly Get the
-Events table's `INSTALLATION` control key, and StartExecution only the installation's
-state machine. The control read is restricted with `dynamodb:LeadingKeys`. State-machine tasks invoke their own
+The dispatcher can Query only the pending-dispatch partition and strongly Get the
+Events table's `INSTALLATION` control key. It starts and describes executions only
+under the installation's state machine. Historical retry reconciliation adds
+Get/Put/Update/Delete on the existing Deployments table, restricted to
+`DEPLOYMENT#*` and `DISPATCH#PENDING` leading keys. Create/describe/finish workers
+can Query the same table's `DEPLOYMENT#*` history; finish can remove only pending
+dispatch intents. These grants add no competitor-account access. The control read is restricted with `dynamodb:LeadingKeys`. State-machine tasks invoke their own
 workers. Remote workers use the same installation role/tag restriction or explicit legacy
 binding, require ExternalId, and read only configured secret parameters. Historical catalog reads
 are limited to this installation bucket's catalogs prefix; current binding reads

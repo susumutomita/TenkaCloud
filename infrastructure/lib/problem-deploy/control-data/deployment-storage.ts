@@ -91,12 +91,23 @@ export const teardownSchema = z.object({
   updatedAt: z.string(),
   failureReason: z.string().optional(),
   stackId: z.string().optional(),
+  parentAttempt: z.number().int().positive().optional(),
+  historyExpected: z.number().int().nonnegative().optional(),
+  historyCompleted: z.number().int().nonnegative().optional(),
 });
 export function creationKey(jobId: string, attempt: number) {
   return { ...jobKey(jobId), SK: `CREATE#${attempt}` };
 }
-export function teardownKey(jobId: string) {
-  return { ...jobKey(jobId), SK: "TEARDOWN" };
+export function teardownKey(jobId: string, historicalAttempt?: number) {
+  if (
+    historicalAttempt !== undefined &&
+    (!Number.isSafeInteger(historicalAttempt) || historicalAttempt < 1)
+  )
+    throw new Error("Invalid historical teardown attempt.");
+  return {
+    ...jobKey(jobId),
+    SK: historicalAttempt === undefined ? "TEARDOWN" : `TEARDOWN#${historicalAttempt}`,
+  };
 }
 export function teardownDispatchKey(jobId: string, attempt: number, generation: number) {
   return { PK: "DISPATCH#PENDING", SK: `${id.parse(jobId)}#${attempt}#DELETE#${generation}` };

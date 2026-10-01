@@ -47,10 +47,14 @@ Normal shutdown retains SQLite, problem seeds and Compose plans. Successful expl
 teardown removes known generated runtime files; old or unknown temporary files are
 not swept automatically. See [generated-file ownership](docs/local-hosting.md#generated-files-and-retained-data).
 
-Cloud commands are `make deploy` and `make destroy`. They currently refuse before
-creating or deleting resources because the Lambda/DynamoDB deployment and coordinated teardown path is still
-under verification. The preserved [cloud pipeline](infrastructure/README.md#cloud-deployment-pipeline)
-runs its fixed historical source refs, not this unfinished path.
+Cloud commands are `make deploy` and `make destroy`. They use the current
+Lambda/DynamoDB CLI after [reviewed AWS setup](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
+The supported cloud exercise is currently hello-world with scoped CLI access;
+non-AWS cloud exercises and Battle remain incomplete. Destroy confirms the account,
+region and owned resources, drains recorded exercises, and retains event data.
+Retained storage and AWS usage can incur charges. `CLOUD_ARGS="--help"` shows help
+without contacting AWS. The preserved [cloud pipeline](infrastructure/README.md#cloud-deployment-pipeline)
+uses fixed historical source refs and is a separate deployment path.
 
 The host exposes all 106 Compose exercise definitions as Challenges, including
 workbenches and the 15 explicitly declared participant terminals. Catalog coverage

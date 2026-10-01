@@ -15,7 +15,7 @@ import { DescribeExecutionCommand, SFNClient, StartExecutionCommand } from "@aws
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
 import { DynamoDBDocumentClient, GetCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
-import { App, Stack } from "aws-cdk-lib";
+import { App, ArnFormat, Stack } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { AttributeType, Table } from "aws-cdk-lib/aws-dynamodb";
 import { BlockPublicAccess, Bucket } from "aws-cdk-lib/aws-s3";
@@ -26,6 +26,7 @@ import { CloudDeploymentPipeline } from "../../lib/cloud-hosting/deployment-pipe
 import {
   type CreationReservation,
   contentDigest,
+  DeploymentConflict,
   type DeploymentJob,
   deploymentStackName,
   flagDigest,
@@ -72,6 +73,7 @@ afterEach(() => {
 function fixture() {
   const data: {
     job: DeploymentJob;
+    historical?: DeploymentJob;
     creation?: CreationReservation;
     teardown?: TeardownRecord;
     now: number;
@@ -143,9 +145,14 @@ function fixture() {
     return "started";
   });
   const prepareDeletion = vi.fn<WorkflowRepository["prepareDeletion"]>(
-    async (_identity, _owner, now) => {
-      if (data.job.status === "IN_PROGRESS" || (data.creation?.leaseUntil ?? 0) > now) return false;
-      data.job = { ...data.job, status: "DELETING" };
+    async (identity, _owner, now) => {
+      const historical = identity.attempt !== data.job.attempt;
+      if (
+        (!historical && data.job.status === "IN_PROGRESS") ||
+        (data.creation?.leaseUntil ?? 0) > now
+      )
+        return false;
+      if (!historical) data.job = { ...data.job, status: "DELETING" };
       return true;
     },
   );
@@ -165,11 +172,25 @@ function fixture() {
       )
         throw new Error("teardown changed");
       data.teardown = { ...data.teardown, ...result };
-      if (result.status === "DELETED") data.job = { ...data.job, status: "DELETED" };
+      if (result.status === "DELETED" && identity.attempt === data.job.attempt)
+        data.job = { ...data.job, status: "DELETED" };
       return "updated";
     },
   );
   const getJob = vi.fn<WorkflowRepository["getJob"]>(async () => structuredClone(data.job));
+  const getDeletionJob = vi.fn<WorkflowRepository["getDeletionJob"]>(async (identity) => {
+    const historical = identity.attempt !== data.job.attempt;
+    const job = historical ? data.historical : data.job;
+    if (
+      !job ||
+      job.jobId !== identity.jobId ||
+      job.eventId !== identity.eventId ||
+      job.teamId !== identity.teamId ||
+      job.attempt !== identity.attempt
+    )
+      throw new DeploymentConflict("deployment_scope_or_attempt_changed");
+    return { job: structuredClone(job), historical };
+  });
   const getConnection = vi.fn<WorkflowRepository["getConnection"]>(async () =>
     structuredClone(data.job.connection),
   );
@@ -248,6 +269,7 @@ function fixture() {
   const deps: WorkflowDependencies = {
     repository: {
       getJob,
+      getDeletionJob,
       getConnection,
       begin,
       finish,
@@ -280,6 +302,7 @@ function fixture() {
     begin,
     finish,
     getJob,
+    getDeletionJob,
     getConnection,
     getParameter,
     assumeRole,
@@ -656,6 +679,14 @@ describe("registry-backed production worker with intercepted SDKs", () => {
   });
 });
 
+function unusedDispatchRecovery() {
+  return {
+    getDeletionJob: vi.fn<DispatchDependencies["repository"]["getDeletionJob"]>(),
+    getTeardown: vi.fn<DispatchDependencies["repository"]["getTeardown"]>(),
+    finishTeardown: vi.fn<DispatchDependencies["repository"]["finishTeardown"]>(),
+  };
+}
+
 describe("scheduled durable intent dispatcher", () => {
   it("uses byte-identical Standard execution input/name and leaves uncertain/duplicate intents intact", async () => {
     const intents = Array.from({ length: 3 }, (_, i) => ({
@@ -671,9 +702,14 @@ describe("scheduled durable intent dispatcher", () => {
       return { executionArn: `${MACHINE.replace(":stateMachine:", ":execution:")}:${input.name}` };
     });
     const deps = {
-      repository: { listDispatch, acceptingNewDeployments: async () => true },
+      repository: {
+        ...unusedDispatchRecovery(),
+        listDispatch,
+        acceptingNewDeployments: async () => true,
+      },
       stateMachineArn: MACHINE,
       startExecution,
+      describeExecution: vi.fn<DispatchDependencies["describeExecution"]>(),
     };
     expect(await dispatchPending(deps)).toEqual({
       pending: 3,
@@ -685,7 +721,9 @@ describe("scheduled durable intent dispatcher", () => {
     expect(startExecution.mock.calls.slice(0, 3)).toEqual(startExecution.mock.calls.slice(3));
     expect(startExecution.mock.calls[0]?.[0].input).toBe(serializeDispatchIdentity(IDENTITY));
     expect(intents).toHaveLength(3);
-    expect(Object.keys(deps.repository)).toEqual(["listDispatch", "acceptingNewDeployments"]);
+    expect(deps.repository.getDeletionJob).not.toHaveBeenCalled();
+    expect(deps.repository.getTeardown).not.toHaveBeenCalled();
+    expect(deps.describeExecution).not.toHaveBeenCalled();
   });
 
   it("dispatches only cleanup while the installation is closed and rejects stale creation results", async () => {
@@ -700,9 +738,14 @@ describe("scheduled durable intent dispatcher", () => {
       executionArn: `${MACHINE.replace(":stateMachine:", ":execution:")}:${input.name}`,
     }));
     const deps = {
-      repository: { listDispatch, acceptingNewDeployments: async () => false },
+      repository: {
+        ...unusedDispatchRecovery(),
+        listDispatch,
+        acceptingNewDeployments: async () => false,
+      },
       stateMachineArn: MACHINE,
       startExecution,
+      describeExecution: vi.fn<DispatchDependencies["describeExecution"]>(),
     };
     expect((await dispatchPending(deps)).started).toBe(1);
     expect(listDispatch).toHaveBeenCalledWith(100, { deletesOnly: true });
@@ -736,9 +779,14 @@ describe("scheduled durable intent dispatcher", () => {
       return { executionArn: `${MACHINE.replace(":stateMachine:", ":execution:")}:${name}` };
     };
     const deps = {
-      repository: { listDispatch, acceptingNewDeployments: async () => true },
+      repository: {
+        ...unusedDispatchRecovery(),
+        listDispatch,
+        acceptingNewDeployments: async () => true,
+      },
       stateMachineArn: MACHINE,
       startExecution,
+      describeExecution: vi.fn<DispatchDependencies["describeExecution"]>(),
     };
     expect((await dispatchPending(deps, { limit: 500, concurrency: 5 })).started).toBe(500);
     expect(peak).toBe(5);
@@ -961,6 +1009,7 @@ describe("optional deployment pipeline offline synthesis", () => {
           Action: string | string[];
           Effect: string;
           Resource: unknown;
+          Condition?: Record<string, Record<string, string[]>>;
         }[],
     );
     const assumes = statements.filter(
@@ -976,6 +1025,71 @@ describe("optional deployment pipeline offline synthesis", () => {
     const permissions = JSON.stringify(statements);
     expect(permissions).not.toMatch(
       /AdministratorAccess|cloudformation:|dynamodb:\*|ssm:\*|states:\*/,
+    );
+    const historyQueries = statements.filter(
+      (statement) =>
+        JSON.stringify(statement.Action).includes("dynamodb:Query") &&
+        statement.Condition?.["ForAllValues:StringLike"]?.["dynamodb:LeadingKeys"]?.includes(
+          "DEPLOYMENT#*",
+        ),
+    );
+    expect(historyQueries).toHaveLength(3);
+    expect(
+      historyQueries.every(
+        (statement) =>
+          JSON.stringify(statement.Resource) ===
+          JSON.stringify(stack.resolve(props.deployments.tableArn)),
+      ),
+    ).toBe(true);
+    const finishRole = JSON.stringify(stack.resolve(pipeline.workers.finish.role?.roleName));
+    const finishPolicies = Object.values(template.findResources("AWS::IAM::Policy"))
+      .filter((policy) =>
+        policy.Properties.Roles.some((role: unknown) => JSON.stringify(role) === finishRole),
+      )
+      .flatMap((policy) => policy.Properties.PolicyDocument.Statement as typeof statements);
+    expect(finishPolicies).toContainEqual(
+      expect.objectContaining({
+        Action: "dynamodb:DeleteItem",
+        Resource: stack.resolve(props.deployments.tableArn),
+        Condition: {
+          "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["DISPATCH#PENDING"] },
+        },
+      }),
+    );
+    const dispatcherRole = JSON.stringify(stack.resolve(pipeline.dispatcher.role?.roleName));
+    const dispatcherPolicies = Object.values(template.findResources("AWS::IAM::Policy"))
+      .filter((policy) =>
+        policy.Properties.Roles.some((role: unknown) => JSON.stringify(role) === dispatcherRole),
+      )
+      .flatMap((policy) => policy.Properties.PolicyDocument.Statement as typeof statements);
+    expect(dispatcherPolicies).toContainEqual(
+      expect.objectContaining({
+        Action: "states:DescribeExecution",
+        Resource: stack.resolve(
+          stack.formatArn({
+            service: "states",
+            resource: "execution",
+            resourceName: `${pipeline.stateMachine.stateMachineName}:*`,
+            arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+          }),
+        ),
+      }),
+    );
+    expect(dispatcherPolicies).toContainEqual(
+      expect.objectContaining({
+        Action: [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+        ],
+        Resource: stack.resolve(props.deployments.tableArn),
+        Condition: {
+          "ForAllValues:StringLike": {
+            "dynamodb:LeadingKeys": ["DEPLOYMENT#*", "DISPATCH#PENDING"],
+          },
+        },
+      }),
     );
     const objectReads = statements.filter((statement) =>
       JSON.stringify(statement.Action).includes("s3:GetObject"),
@@ -1259,15 +1373,18 @@ describe("event-owned teardown through the existing workflow handlers", () => {
     expect(f.createStack).not.toHaveBeenCalled();
     expect((await f.handlers.fail(state)).phase).toBe("failed");
   });
-  it("does not let a rotated or withdrawn connection authorize deletion, but expiry alone does not orphan owned resources", async () => {
+  it("requires current binding authorization for cleanup without adopting the latest team connection", async () => {
     const f = teardownFixture();
     let state = await f.handlers.claim(f.initial);
-    f.getConnection.mockResolvedValueOnce({ ...f.data.job.connection, version: 2 });
+    f.authorizeJob.mockRejectedValueOnce(new Error("binding withdrawn"));
     await expect(f.handlers.create(state)).rejects.toThrow("could not complete");
     expect(f.deleteStack).not.toHaveBeenCalled();
+    f.getConnection.mockResolvedValue({ ...f.data.job.connection, version: 2 });
     f.data.job = { ...f.data.job, expiresAt: NOW / 1000 - 1 };
     state = await f.handlers.create(state);
     expect(state.deleteSubmitted).toBe(true);
+    expect(f.getConnection).not.toHaveBeenCalled();
+    expect(f.authorizeJob).toHaveBeenLastCalledWith(f.data.job);
   });
   it.each(["attempt", "generation", "owner", "event", "team"])(
     "rejects stale teardown %s before any remote call",
@@ -1330,4 +1447,292 @@ describe("event-owned teardown through the existing workflow handlers", () => {
       "could not complete",
     );
   });
+});
+
+function historicalTeardownFixture() {
+  const f = teardownFixture();
+  const historical = { ...f.data.job, status: "FAILED" as const };
+  f.data.historical = historical;
+  f.data.job = {
+    ...f.data.job,
+    attempt: 2,
+    status: "COMPLETE",
+    awsAccountId: "222222222222",
+    region: "us-west-2",
+    catalogKey: `catalogs/${"c".repeat(64)}.json`,
+    connection: {
+      ...f.data.job.connection,
+      version: 2,
+      accountId: "222222222222",
+      region: "us-west-2",
+      roleArn: "arn:aws:iam::222222222222:role/TenkaCloudDeploy",
+      externalIdParameter: "arn:aws:ssm:us-east-1:123456789012:parameter/cloud/new-team",
+    },
+  };
+  f.getParameter.mockResolvedValue({
+    Parameter: {
+      ARN: historical.connection.externalIdParameter,
+      Type: "SecureString",
+      Value: "synthetic-external-id",
+    },
+  });
+  return { ...f, historical };
+}
+
+describe("historical cleanup without changing current deployment authority", () => {
+  it("uses the old account, region, catalog and physical ARN while preserving the immutable snapshot and current job", async () => {
+    const f = historicalTeardownFixture();
+    const current = structuredClone(f.data.job);
+    const historical = structuredClone(f.data.historical);
+    const cloudFormation = vi.fn(f.deps.runner.cloudFormation);
+    const handlers = createWorkflowHandlers({
+      ...f.deps,
+      runner: { ...f.deps.runner, cloudFormation },
+    });
+    let state = await handlers.create(await handlers.claim(f.initial));
+    expect(state.reference?.stackId).toBe(f.stackId);
+    expect(f.resolveArtifacts).toHaveBeenCalledWith(f.historical);
+    expect(f.authorizeJob).toHaveBeenCalledWith(f.historical);
+    expect(f.assumeRole).toHaveBeenCalledWith(
+      expect.objectContaining({
+        RoleArn: f.historical.connection.roleArn,
+        ExternalId: "synthetic-external-id",
+      }),
+    );
+    expect(cloudFormation).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: "111111111111", region: "us-east-1" }),
+    );
+    expect(f.deleteStack).toHaveBeenCalledWith(expect.objectContaining({ StackName: f.stackId }));
+    f.stack.StackStatus = "DELETE_COMPLETE";
+    state = await handlers.describe(state);
+    await handlers.finish(state);
+    expect(f.data.teardown?.status).toBe("DELETED");
+    expect(f.data.job).toEqual(current);
+    expect(f.data.historical).toEqual(historical);
+    expect(f.getConnection).not.toHaveBeenCalled();
+    expect(f.getJob).not.toHaveBeenCalled();
+    expect(f.createStack).not.toHaveBeenCalled();
+    expect(f.finish).not.toHaveBeenCalled();
+  });
+
+  it.each(["binding", "catalog", "snapshot"])(
+    "fails closed when historical %s changes",
+    async (changed) => {
+      const f = historicalTeardownFixture();
+      const state = await f.handlers.claim(f.initial);
+      if (changed === "binding") f.authorizeJob.mockRejectedValue(new Error("old binding revoked"));
+      if (changed === "catalog")
+        f.resolveArtifacts.mockResolvedValue({
+          templateBody: "Resources: {}",
+          artifactDigest: "f".repeat(64),
+          capabilities: [],
+          publicOutputKeys: [],
+        });
+      if (changed === "snapshot") {
+        f.resolveArtifacts.mockImplementation(async () => {
+          f.data.historical = { ...f.historical, artifactDigest: "f".repeat(64) };
+          return {
+            templateBody: "Resources: {}",
+            artifactDigest: f.historical.artifactDigest,
+            capabilities: [],
+            publicOutputKeys: ["ChallengeUrl"],
+          };
+        });
+      }
+      await expect(f.handlers.create(state)).rejects.toThrow("could not complete");
+      expect(f.getParameter).not.toHaveBeenCalled();
+      expect(f.deleteStack).not.toHaveBeenCalled();
+      expect(f.finishTeardown).not.toHaveBeenCalled();
+    },
+  );
+
+  it("cancels a prepared never-started current root without artifacts, authorization or STS", async () => {
+    const f = teardownFixture();
+    f.data.job = { ...f.data.job, status: "PENDING", stackId: undefined };
+    f.data.creation = { ...IDENTITY, state: "NOT_STARTED", leaseUntil: 0 };
+    f.resolveArtifacts.mockRejectedValue(new Error("artifact unavailable"));
+    f.authorizeJob.mockRejectedValue(new Error("connection unavailable"));
+    f.prepareDeletion.mockResolvedValueOnce(false);
+    let state = await f.handlers.create(await f.handlers.claim(f.initial));
+    expect(state.phase).toBe("pending");
+    expect(f.finishTeardown).not.toHaveBeenCalled();
+    state = await f.handlers.describe(state);
+    expect(state.phase).toBe("ready");
+    await f.handlers.finish(state);
+    expect(f.data.teardown?.status).toBe("DELETED");
+    expect(f.resolveArtifacts).not.toHaveBeenCalled();
+    expect(f.authorizeJob).not.toHaveBeenCalled();
+    expect(f.getParameter).not.toHaveBeenCalled();
+    expect(f.assumeRole).not.toHaveBeenCalled();
+    expect(f.describeStacks).not.toHaveBeenCalled();
+    expect(f.deleteStack).not.toHaveBeenCalled();
+  });
+
+  it.each(["owner", "lease", "fingerprint", "empty-owner", "empty-fingerprint", "empty-stack"])(
+    "does not accept non-pristine NOT_STARTED %s evidence",
+    async (changed) => {
+      const f = teardownFixture();
+      f.data.job = { ...f.data.job, status: "FAILED", stackId: undefined };
+      f.data.creation = {
+        ...IDENTITY,
+        state: "NOT_STARTED",
+        leaseUntil: changed === "lease" ? -1 : 0,
+        ...(changed === "owner" ? { owner: OWNER } : {}),
+        ...(changed === "fingerprint" ? { fingerprint: "f".repeat(64) } : {}),
+        ...(changed === "empty-owner" ? { owner: "" } : {}),
+        ...(changed === "empty-fingerprint" ? { fingerprint: "" } : {}),
+        ...(changed === "empty-stack" ? { stackId: "" } : {}),
+      };
+      f.describeStacks.mockRejectedValue(
+        Object.assign(new Error(`Stack with id ${f.data.job.stackName} does not exist`), {
+          name: "ValidationError",
+        }),
+      );
+      await expect(f.handlers.create(await f.handlers.claim(f.initial))).rejects.toThrow(
+        "could not complete",
+      );
+      expect(f.finishTeardown).not.toHaveBeenCalled();
+    },
+  );
+});
+
+function historicalDispatchFixture(claimed = false) {
+  const f = historicalTeardownFixture();
+  const marker = f.data.teardown;
+  if (!marker) throw new Error("Missing historical marker");
+  if (claimed) f.data.teardown = { ...marker, status: "IN_PROGRESS", owner: f.initial.owner };
+  const describeExecution = vi.fn<DispatchDependencies["describeExecution"]>(async () => ({
+    stateMachineArn: MACHINE,
+    executionArn: f.initial.owner,
+    status: "ABORTED",
+    input: serializeDispatchIdentity(f.initial.identity),
+  }));
+  const startExecution = vi.fn<DispatchDependencies["startExecution"]>(async () => {
+    throw Object.assign(new Error("already exists"), { name: "ExecutionAlreadyExists" });
+  });
+  const deps: DispatchDependencies = {
+    repository: {
+      getDeletionJob: f.getDeletionJob,
+      getTeardown: f.getTeardown,
+      finishTeardown: f.finishTeardown,
+      acceptingNewDeployments: async () => false,
+      listDispatch: async () => [{ ...f.initial.identity, createdAt: new Date(NOW).toISOString() }],
+    },
+    stateMachineArn: MACHINE,
+    startExecution,
+    describeExecution,
+    now: () => NOW,
+  };
+  return { ...f, workflowDependencies: f.deps, deps, startExecution, describeExecution };
+}
+
+describe("historical duplicate execution recovery across c091 workers", () => {
+  it.each([false, true])(
+    "rescues historical work after c091-style stale recovery, claimed=%s",
+    async (claimed) => {
+      const f = historicalDispatchFixture(claimed);
+      // c091 selects the job-level TEARDOWN, whose current attempt cannot match this child.
+      const legacyGetTeardown = vi.fn<WorkflowRepository["getTeardown"]>(async () => {
+        throw new DeploymentConflict("teardown_scope_or_generation_changed");
+      });
+      const legacyWorker = createWorkflowHandlers({
+        ...f.workflowDependencies,
+        repository: { ...f.workflowDependencies.repository, getTeardown: legacyGetTeardown },
+      });
+      await expect(legacyWorker.claim(f.initial)).rejects.toThrow("could not complete");
+      const event = {
+        source: "aws.states",
+        "detail-type": "Step Functions Execution Status Change",
+        detail: { stateMachineArn: MACHINE, executionArn: f.initial.owner, status: "ABORTED" },
+      };
+      expect(
+        await recoverTerminalExecution(event, {
+          ...f.deps,
+          repository: {
+            getJob: f.getJob,
+            finish: f.finish,
+            failPending: vi.fn(),
+            getTeardown: legacyGetTeardown,
+            finishTeardown: f.finishTeardown,
+          },
+        }),
+      ).toEqual({ outcome: "stale" });
+      expect(f.finishTeardown).not.toHaveBeenCalled();
+      // An explicit DELETE republishes the original generation; the dispatcher never takes it over.
+      expect(await dispatchPending(f.deps)).toEqual({
+        pending: 1,
+        started: 0,
+        duplicate: 1,
+        uncertain: 0,
+      });
+      expect(f.finishTeardown).toHaveBeenCalledExactlyOnceWith(
+        f.initial.identity,
+        claimed ? f.initial.owner : undefined,
+        { status: "FAILED", failureReason: "workflow_aborted" },
+        new Date(NOW).toISOString(),
+      );
+      expect(f.data.teardown?.generation).toBe(1);
+      expect(f.data.job.attempt).toBe(2);
+      expect(f.data.job.status).toBe("COMPLETE");
+      expect(f.startExecution.mock.calls[0]?.[0].input).toBe(
+        serializeDispatchIdentity(f.initial.identity),
+      );
+    },
+  );
+
+  it.each(["RUNNING", "SUCCEEDED", "PENDING_REDRIVE", undefined])(
+    "leaves %s execution ownership untouched",
+    async (status) => {
+      const f = historicalDispatchFixture(true);
+      f.describeExecution.mockResolvedValue({
+        stateMachineArn: MACHINE,
+        executionArn: f.initial.owner,
+        status,
+        input: serializeDispatchIdentity(f.initial.identity),
+      });
+      expect((await dispatchPending(f.deps)).duplicate).toBe(1);
+      expect(f.finishTeardown).not.toHaveBeenCalled();
+      expect(f.data.teardown?.owner).toBe(f.initial.owner);
+      expect(f.data.teardown?.status).toBe("IN_PROGRESS");
+    },
+  );
+
+  it.each(["machine", "arn", "input", "scope", "whitespace"])(
+    "rejects %s mismatch without changing a child",
+    async (changed) => {
+      const f = historicalDispatchFixture();
+      let input = serializeDispatchIdentity(f.initial.identity);
+      if (changed === "input")
+        input = serializeDispatchIdentity({ ...f.initial.identity, generation: 2 });
+      if (changed === "scope")
+        input = serializeDispatchIdentity({ ...f.initial.identity, eventId: TEAM });
+      if (changed === "whitespace") input = ` ${input}`;
+      f.describeExecution.mockResolvedValue({
+        stateMachineArn: changed === "machine" ? `${MACHINE}Other` : MACHINE,
+        executionArn: changed === "arn" ? `${f.initial.owner}-other` : f.initial.owner,
+        status: "FAILED",
+        input,
+      });
+      expect((await dispatchPending(f.deps)).uncertain).toBe(1);
+      expect(f.finishTeardown).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["owner", "generation", "pending-owner", "running-unowned"])(
+    "does not reconcile %s marker",
+    async (changed) => {
+      const f = historicalDispatchFixture(true);
+      const marker = f.data.teardown;
+      if (!marker) throw new Error("Missing historical marker");
+      f.data.teardown = {
+        ...marker,
+        ...(changed === "owner" ? { owner: `${f.initial.owner}-other` } : {}),
+        ...(changed === "generation" ? { generation: 2 } : {}),
+        ...(changed === "pending-owner" ? { status: "PENDING" } : {}),
+        ...(changed === "running-unowned" ? { owner: undefined } : {}),
+      };
+      await dispatchPending(f.deps);
+      expect(f.finishTeardown).not.toHaveBeenCalled();
+    },
+  );
 });

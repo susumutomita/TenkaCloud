@@ -175,12 +175,12 @@ local: ## Start the unified local competition console | ローカル競技コン
 	bun run scripts/local-host/local.ts start $(LOCAL_ARGS)
 down: ## Stop owned local runtimes and preserve event data | 所有するローカル環境を停止し大会データを保持
 	bun run scripts/local-host/local.ts down $(LOCAL_ARGS)
-deploy: ## Cloud deployment (not implemented yet) | クラウド配置（未実装）
-	@echo "Cloud deployment is not implemented in this integration candidate; no resources were created." >&2
-	@exit 1
-destroy: ## Cloud teardown (not implemented yet) | クラウド撤収（未実装）
-	@echo "Cloud destruction is not implemented in this integration candidate; no resources or data were removed." >&2
-	@exit 1
+# Current checkout's Lambda/DynamoDB path. See infrastructure/README.md for supported
+# problems, reviewed IAM setup, retained resources and the separate historical pipeline.
+deploy: ## Deploy cloud hosting with reviewed AWS setup | 権限設定を確認してクラウド開催を配置
+	bun run scripts/cloud-hosting/main.ts up $(CLOUD_ARGS)
+destroy: ## Confirm and remove owned cloud resources; retain event data | 対象を確認してクラウドを撤収し大会データを保持
+	bun run scripts/cloud-hosting/main.ts down $(CLOUD_ARGS)
 release-check: ## Validate the unpublished host candidate contract | 未公開 host candidate の契約を検証
 	bun run release:check
 release-candidate: ## Record an already built image digest and source pins | build 済み image digest と source pin を記録

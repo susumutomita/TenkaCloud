@@ -8,6 +8,47 @@ describe("loadConfig", () => {
   });
   afterEach(() => {
     globalThis.fetch = realFetch;
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    { label: "missing mode", runtime: {} },
+    { label: "unknown mode", runtime: { mode: "unexpected" } },
+    { label: "missing backend API", runtime: { mode: "backend" } },
+    { label: "insecure API", runtime: { mode: "backend", apiBaseUrl: "http://example.test" } },
+    { label: "wrong title type", runtime: { mode: "dev-mock", eventTitle: 5 } },
+    { label: "unknown cloud mode", runtime: { mode: "dev-mock", cloudMode: "unexpected" } },
+    { label: "null", runtime: null },
+  ])("fails visibly in production for $label", async ({ runtime }) => {
+    vi.stubEnv("PROD", true);
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify(runtime)));
+    await expect(loadConfig()).rejects.toThrow("Participant runtime configuration");
+  });
+
+  it.each([404, 500])("fails visibly on production configuration HTTP %s", async (status) => {
+    vi.stubEnv("PROD", true);
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response("missing", { status }));
+    await expect(loadConfig()).rejects.toThrow("Participant runtime configuration");
+  });
+
+  it("fails visibly for production network and JSON errors without exposing response content", async () => {
+    vi.stubEnv("PROD", true);
+    vi.mocked(globalThis.fetch).mockRejectedValueOnce(new Error("private failure detail"));
+    await expect(loadConfig()).rejects.toThrow("Check runtime-config.json.");
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(new Response("not JSON"));
+    await expect(loadConfig()).rejects.toThrow("Check runtime-config.json.");
+  });
+
+  it.each([
+    { mode: "dev-mock", cloudMode: "mock" },
+    { mode: "backend", apiBaseUrl: "https://api.example.test" },
+    { mode: "backend", cloudMode: "real", apiBaseUrl: "http://127.0.0.1:5175", hasAws: false },
+  ])("keeps explicitly configured production demos and hosting working: $mode", async (runtime) => {
+    vi.stubEnv("PROD", true);
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify(runtime)));
+    const config = await loadConfig();
+    expect(config.mode).toBe(runtime.mode);
+    expect(config.apiBaseUrl).toBe(runtime.apiBaseUrl ?? "http://localhost:3199/dev-mock");
   });
 
   it.each([

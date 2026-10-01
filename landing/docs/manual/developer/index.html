@@ -139,7 +139,7 @@ Lambda/DynamoDB によるクラウド開催と配置・撤収は検証中です�
 配布に関わる変更では
 <code>docs/host-build-verification.md</code>
 も確認します。ブラウザ検証と任意の実 AWS・IdP 検証は、ローカルテストと分けて報告します。</p>
-<p><code>make down</code> は大会と Docker のデータを保持します。クラウドの <code>make deploy</code> / <code>make destroy</code> は現在、未実装のエラーで終了します。配置済みとは扱わないでください。</p>
+<p><code>make down</code> は大会と Docker のデータを保持します。クラウドの <code>make deploy</code> / <code>make destroy</code> は、権限設定と所有対象を確認する既存 CLI を実行します。現在は hello-world に対応し、非 AWS 問題のクラウド実行と Battle は未実装です。<code>CLOUD_ARGS=&quot;--help&quot;</code> で AWS に接続せず説明を確認できます。</p>
 
 </article>
 </main>

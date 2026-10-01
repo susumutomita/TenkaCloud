@@ -300,10 +300,13 @@ AWS-service problems belong to cloud hosting. `make local` refuses the old
 `--aws-region` option before initializing AWS clients. Local hosting offers the
 non-AWS Compose catalog and native Battle games; it does not create AWS resources.
 
-Cloud hosting is being restored with Lambda and DynamoDB. Its deployment, scoring
-and non-AWS runner are not yet complete. `make deploy` and `make destroy` still
-fail without changing resources until that complete path is enabled and verified.
-The presence of a problem in repository metadata is not a cloud playability claim.
+`make deploy` and `make destroy` use the current Lambda/DynamoDB CLI after
+[reviewed AWS setup](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
+The supported cloud problem is currently hello-world with scoped CLI access.
+Destroy confirms the exact installation and drains its recorded exercise attempts
+before removing hosting; retained data and storage are not purged. Non-AWS cloud
+execution and Battle remain incomplete. AWS usage and retained storage can incur
+charges. Repository metadata alone is not a cloud playability claim.
 
 If an earlier integration revision created AWS resources, keep its private state
 and account records. Use that exact reviewed revision for an explicitly authorized
