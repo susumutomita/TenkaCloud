@@ -60,7 +60,7 @@ requirements. Catalog visibility alone is not execution evidence.
 
 ## Diagram sources
 
-The editable sources below describe the current boundaries:
+The Mermaid sources below describe the current boundaries:
 
 - [Logical responsibilities](diagrams/logical.mmd)
 - [Local components](diagrams/local-components.mmd)
@@ -68,7 +68,10 @@ The editable sources below describe the current boundaries:
 - [Problem deployment](diagrams/problem-deployment.mmd)
 - [Participant scoring](diagrams/participant-scoring.mmd)
 - [State-preserving local lifecycle](diagrams/local-play-sequence.mmd)
-- [Editable Draw.io document](diagrams/system-architecture.drawio)
+- [Editable Draw.io document](diagrams/system-architecture.drawio): restored unchanged
+  from commit `825415fc` (the diagram originally landed in `98f4a286`). Its five
+  AWS-icon pages preserve the previous architecture and visual layout; they are
+  historical and have not yet been updated to the integration candidate.
 
 Regenerate Draw.io with `python3 docs/architecture/diagrams/system-architecture.gen.py`.
 Mermaid sources can be rendered with `diagrams/render.sh` when its documented
