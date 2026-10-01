@@ -1,8 +1,13 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { assertCommercialRegion } from "../../../cloud-hosting/regions.js";
+import { DynamoDbCompetitorAccountsRepository } from "../../control-data/dynamodb-competitor-accounts-repository.js";
 import { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
-import { loadExecutionBindings } from "../cloud-api/execution-config.js";
+import {
+  installationAccountConfig,
+  loadExecutionBindings,
+  registeredRunnerBinding,
+} from "../cloud-api/execution-config.js";
 import { createAwsCloudRunnerDependencies } from "./sdk.js";
 import {
   type ArtifactResolver,
@@ -19,23 +24,38 @@ function required(name: string): string {
 
 export async function createProductionWorkflowHandlers(resolveArtifacts: ArtifactResolver) {
   const region = required("AWS_REGION");
+  const controlPlaneAccount = required("CONTROL_PLANE_ACCOUNT");
+  if (!/^\d{12}$/u.test(controlPlaneAccount)) throw new CloudWorkflowError();
   assertCommercialRegion(region);
   const bindings = await loadExecutionBindings();
   const client = DynamoDBDocumentClient.from(
     new DynamoDBClient({ region, ignoreConfiguredEndpointUrls: true }),
     { marshallOptions: { removeUndefinedValues: true } },
   );
+  const tables = {
+    events: required("EVENTS_TABLE_NAME"),
+    teams: required("TEAMS_TABLE_NAME"),
+    deployments: required("DEPLOYMENTS_TABLE_NAME"),
+  };
+  const accounts = new DynamoDbCompetitorAccountsRepository(client, tables);
+  const config = process.env.COMPETITOR_ROLE_NAME ? installationAccountConfig() : undefined;
   return createWorkflowHandlers({
-    repository: new DynamoDeploymentWork(client, {
-      events: required("EVENTS_TABLE_NAME"),
-      teams: required("TEAMS_TABLE_NAME"),
-      deployments: required("DEPLOYMENTS_TABLE_NAME"),
-    }),
+    repository: new DynamoDeploymentWork(client, tables),
     runner: createAwsCloudRunnerDependencies({ controlPlaneRegion: region }),
     resolveArtifacts,
     authorizeJob: async (job) => {
+      if (job.awsAccountId === controlPlaneAccount) throw new CloudWorkflowError();
+      let allowed = bindings;
+      if (job.connection.registrationId !== undefined) {
+        const record = await accounts.getAccount(job.awsAccountId);
+        if (!config || !record || job.connection.registrationId !== record.registrationId)
+          throw new CloudWorkflowError();
+        allowed = [
+          registeredRunnerBinding(record, config, job.connection.reviewedProblemIds ?? []),
+        ];
+      }
       if (
-        !bindings.some(
+        !allowed.some(
           (binding) =>
             binding.id === job.connection.bindingId &&
             binding.accountId === job.awsAccountId &&

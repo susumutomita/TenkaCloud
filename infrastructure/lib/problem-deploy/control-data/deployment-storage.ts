@@ -22,6 +22,7 @@ export const connectionSchema = z
     version: z.number().int().positive(),
     verifiedAt: z.string().datetime(),
     bindingId: z.string().optional(),
+    registrationId: id.optional(),
     reviewedProblemIds: z.array(z.string()).optional(),
   })
   .superRefine((value, ctx) => {

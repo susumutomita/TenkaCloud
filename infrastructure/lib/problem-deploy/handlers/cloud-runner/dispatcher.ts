@@ -11,7 +11,7 @@ import { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-wor
 import { identitySchema, serializeDispatchIdentity } from "./workflow.js";
 
 export interface DispatchDependencies {
-  readonly repository: Pick<DynamoDeploymentWork, "listDispatch">;
+  readonly repository: Pick<DynamoDeploymentWork, "listDispatch" | "acceptingNewDeployments">;
   readonly stateMachineArn: string;
   readonly startExecution: (input: {
     readonly stateMachineArn: string;
@@ -188,8 +188,11 @@ export async function dispatchPending(
     throw new Error("Invalid dispatcher bounds");
   if (!/^arn:aws:states:[a-z0-9-]+:\d{12}:stateMachine:[A-Za-z0-9_-]+$/u.test(deps.stateMachineArn))
     throw new Error("An explicit Standard state machine ARN is required");
-  const intents = await deps.repository.listDispatch(limit);
+  const deletesOnly = !(await deps.repository.acceptingNewDeployments());
+  const intents = await deps.repository.listDispatch(limit, { deletesOnly });
   if (intents.length > limit) throw new Error("Dispatcher repository exceeded the requested limit");
+  if (deletesOnly && intents.some((intent) => intent.operation !== "delete"))
+    throw new Error("Creation dispatch is closed for this installation");
   const summary = { pending: intents.length, started: 0, duplicate: 0, uncertain: 0 };
   let cursor = 0;
   await Promise.all(

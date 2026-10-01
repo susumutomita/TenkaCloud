@@ -16,17 +16,19 @@ SQL backend is included.
 - Invitation-only organizer sign-in with mandatory TOTP and no self-assigned role
 - Retained, deletion-protected event/team/deployment tables and private SPA hosting
 - Existing SPA builds and CDK asset publishing, scoped setup/deploy, and guarded foundation teardown
-- Opt-in AWS flag deployment intake, durable dispatch, fenced lifecycle, and atomic scoring
+- Existing competitor-account registration, verification and event-selection flow
+- AWS flag deployment intake, durable dispatch, fenced lifecycle, and atomic scoring
 - Standard Step Functions polling plus owner-fenced terminal-execution reconciliation
 
 The actual frontend selects the ID token. `Admin` and `Operator` can create events
 and rotate keys; only `Admin` revokes access. `Viewer` can read ordinary event
 information but cannot reveal keys. No token or missing role is promoted to Admin.
 
-The console runtime config advertises `eventLimits: { maxTeams: 49, maxProblems: 50 }`.
+The console runtime config advertises `eventLimits: { maxTeams: 48, maxProblems: 50 }`.
 These values share the API/repository source of truth. Event creation writes one
-event, two rows per team, and one creation receipt. Thus 49 teams use exactly
-100 transaction items; the target 25-team HTTP creation uses 52.
+event, two rows per team, one creation receipt and an installation-intake condition.
+Thus 48 teams use 99 transaction items; the target 25-team HTTP creation uses 53.
+Existing 49-team events remain readable and removable.
 
 ## Historical schema and reuse
 
@@ -98,17 +100,41 @@ tags. Only an explicit CloudFormation not-found response permits creation.
 Access denial, malformed metadata, or mismatched ownership stops the operation.
 
 An existing app stack must explicitly publish `CloudRunnerEnabled=true|false`.
-Missing or ambiguous state is refused. An enabled runner cannot be removed by an
-`up` invocation that omits `TENKACLOUD_RUNNER_BINDINGS`. A disabled foundation can
-be explicitly enabled with reviewed bindings.
+Registry deployments also publish `CloudRunnerMode` and the digest of retained
+legacy bindings. `up` does not require manual bindings for a registry-only
+installation, but refuses to omit or change a deployed legacy compatibility set.
+It also refuses to reopen an installation with a durable teardown marker.
 
-`down` refuses runner-enabled stacks before deletion, including with `--yes`:
-coordinated intake shutdown and pending/active workflow drain are not implemented.
-For a runner-disabled foundation, it validates both stacks and then confirms their
-resolved account, region, and full ARNs. A missing stack stops teardown rather
-than claiming destruction succeeded. The command leaves event data, organizer
-accounts, CDK asset and execution-artifact storage, the project toolkit, and separately
-deployed exercise resources intact. Those retained resources can continue to incur charges.
+The source CLI's `down` first validates account, region, installation tags, physical
+stack ARNs and stack-scoped table outputs. It requires
+`CloudInstallationControlVersion=1` on a live application: an older deployment
+cannot honor the new intake fence merely because its table received a marker.
+A stack update still in progress blocks teardown. After showing the exact targets
+and retained-data consequences, the command asks for confirmation (`--yes` is an
+explicit noninteractive alternative).
+
+The existing Events table stores a durable installation stop marker. Event
+creation, deployment acceptance/claim/create reservation and scoring include its
+condition in their transactions. Only after stopping intake does the CLI strongly
+scan the base table for every stored event and reuse the event teardown path.
+The dispatcher continues deletion work while skipping creation, including across
+empty filtered query pages. Partial acceptance, unresolved resources or uncertain
+creation keep the platform available for cleanup and leave intake closed.
+A 30-minute CLI wait timeout does not erase the marker or imply success; correct
+the event diagnostics and repeat the command to resume.
+
+Only archived events with matching expected/completed counts permit a durable
+`DRAINED` marker. The CLI then calls CloudFormation deletion and its waiter with
+the verified physical application ARN, followed by the backend ARN. It does not
+delete by a reusable stack name or rebuild/upload assets during teardown. A retry
+after application deletion requires the matching backend and completed drain
+marker before it can finish. Both stacks already absent is a no-op, not a data-purge
+claim. An unexplained missing stack or ambiguous state blocks destructive work.
+
+Event data, scores and receipts, organizer accounts, shared ExternalId, competitor
+bootstrap roles/stacks, CDK asset and execution-artifact storage, and the project
+toolkit are retained. Unrelated or separately deployed exercise resources are not
+adopted or removed. Retained resources can continue to incur charges.
 
 Current deployment builds the two existing SPAs and lets CDK publish their assets
 and the execution artifacts. It creates no additional source ZIP, staging tree or
@@ -124,6 +150,8 @@ fresh deployment; an explicit import/recovery procedure is still required.
 
 - CLI subprocess tests use injected calls; no AWS or CDK deployment executes
 - CLI tests assert that no extra source bucket, archive, or catalog checkout is invoked
+- Injected drain tests cover partial failure, interruption, physical-ARN deletion,
+  backend-only recovery, closed-intake updates and retained-data boundaries
 - API tests exercise role/key/event boundaries and the real REST Lambda adapter
 - Frontend contract tests use its real bearer client and role decoder
 - CDK tests synthesize and bundle the real API, inspect IAM/auth/retention, and read
@@ -149,7 +177,7 @@ On official DynamoDB Local 3.3.1, atomic creation/rotation/revocation tests and 
 concurrent authentications across 25 teams passed. These are storage/auth checks,
 not AWS latency measurements or scoring-capacity validation.
 
-## Opt-in AWS flag execution
+## AWS flag execution
 
 The narrow source-wired path reuses the old deploy/flag HTTP contracts and the
 CloudFormation Lambda plus Step Functions sequence. It does not restore the old
@@ -157,21 +185,65 @@ backend wholesale. Only the real `hello-world` flag challenge is in the initial
 execution catalog. Non-AWS, Battle, multi-flag, hints and force-redeploy are not
 silently mapped to this implementation.
 
-`TENKACLOUD_RUNNER_BINDINGS` is an explicit array of reviewed bindings: `id`,
-`accountId`, commercial `region`, exact `roleArn`, exact SecureString
-`externalIdParameterArn`, and `reviewedProblemIds`. Values are written to a
-content-addressed private S3 object, not a large Lambda environment variable.
-Templates/catalogs are also content-addressed and retained for pinned jobs.
-There is no same-account credential fallback. Every remote operation requires
-ExternalId and temporary assumed-role credentials.
+The existing Competitor Accounts screen uses the restored
+`/admin/competitor-accounts` list/create, bulk, verify and delete contracts. Only
+Admin can change registrations; the three organizer roles can list them. New
+registrations use the installation's fixed `competitorRoleName` from runtime
+config. The existing [competitor bootstrap template](../templates/competitor-bootstrap.yaml)
+is served as one public, secret-free S3 object for the screen's CloudFormation
+Quick-create link. No second bootstrap template or account-management app exists.
 
-An Admin verifies and binds one configured connection with
-`POST /events/:eventId/teams/:teamId/connection` and `{ bindingId }`. Neither a
-participant nor an arbitrary request-supplied ARN can register a connection. The
-verified row is durable and versioned. A shared versus dedicated AWS account
-policy is deliberately not inferred. The real hello-world template contains a
-metadata-listing IAM permission documented under a dedicated-account assumption;
-its account-isolation suitability must be reviewed before enabling that binding.
+Each remote operation requires the exact installation role name, Purpose and
+Installation tags, mandatory ExternalId and current verification. The platform
+account is refused by the API/worker and by explicit role-assumption IAM denies.
+Registration verification establishes the connection's identity and trust; it
+is not a certification that sharing an AWS account safely isolates participants.
+Shared versus dedicated competitor accounts remains an open review item. In
+particular, hello-world's metadata-listing permission has a documented
+dedicated-account assumption, and participant AWS credential access remains off.
+
+The existing EventCreate account selection now creates the durable team connection
+when deployment is requested. Its explicit `registrationId` distinguishes registry
+connections from old exact bindings, including old binding IDs starting `account-`.
+Connection/reference writes and account-deletion fences commit atomically. An
+account cannot be removed while any referenced event has unresolved resources;
+archived events must have matching expected/completed teardown counts. A delete
+never removes the shared ExternalId or the competitor-owned bootstrap role.
+
+`TENKACLOUD_RUNNER_BINDINGS` is retained only for existing exact-bound jobs. Its
+reviewed role/SSM grants and content-addressed private bindings object remain
+explicit, rather than silently falling back to another account or secret.
+`CloudRunnerMode` and `CloudLegacyBindingsDigest` identify the generated mode and
+compatibility set. Templates/catalogs are content-addressed and retained for
+pinned jobs. New installations use the registry and do not need a second manual
+binding-management step.
+
+### ExternalId recovery
+
+The shared SecureString remains in SSM; no value is stored in the registry,
+logs or verification artifacts. The Events table retains an `EXTERNAL_ID` marker
+under `INSTALLATION#ACCOUNTS`, even after every account is removed. First-time
+initialization reserves that marker before creating a parameter. Existing
+accounts, connection references or job snapshots prevent missing-key generation.
+The API's additional Scan permission is limited to the Events and Deployments
+tables and is used only for this missing-key recovery check, not participant polling.
+
+- If the exact SecureString still exists, retry the original registration. The
+  service records its use and reuses it, including after a marker-write interruption.
+- If only an `INITIALIZING` marker remains and the parameter is absent, stop new
+  registration attempts and establish that earlier initialization calls have ended.
+  An authorized operator must check the registry and retained connection/job
+  references. Only a confirmed never-used, empty store may be explicitly initialized
+  by that operator at the exact `CompetitorExternalIdParameterArn` output. Then retry
+  registration; there is no need to delete the marker.
+- If the marker is `INITIALIZED` or any registration/reference remains, restore the
+  original key through the approved secret-recovery process. If that is impossible,
+  all affected trust relationships need a separately reviewed recovery. Never erase
+  the marker or create a replacement value merely to make verification pass.
+
+No lease expiry, older parameter version, automatic secret rotation, or last-account
+cleanup can reset this boundary. These are recovery instructions, not AWS actions
+performed by this implementation task.
 
 `POST /events/:eventId/deploy` persists job/target/receipt/dispatch intent before
 execution. A scheduled dispatcher starts a Standard workflow with deterministic
@@ -221,7 +293,7 @@ and Battle polling are outside this flag slice.
 ## Remaining acceptance work
 
 - Reviewed least-privilege initial bootstrap policy and first-account setup path
-- AWS account-isolation decision, reviewed exercise permissions and connection UI
+- AWS account-isolation decision and reviewed exercise permissions
 - Participant AWS Console/credential access; `hasAws` remains false
 - Catalog expansion, non-AWS runners, Battle/coordination, hints and disruptions
 - Public registration/claiming, audit, notifications and full organizer UI flows

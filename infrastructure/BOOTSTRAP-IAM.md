@@ -45,9 +45,11 @@ The current two synthesized stacks contain the following resource families:
 - S3/CloudFront: two private SPA buckets, origin access controls, distributions,
   asset deployment and cache invalidation
 - IAM/Logs: execution roles/policies and function log groups for those resources
-- When explicitly enabled: one Standard Step Functions workflow, scoped Lambda
-  workers/dispatcher/recovery, scheduled and terminal-status EventBridge rules,
-  and one private retained execution-artifact bucket
+- One Standard Step Functions workflow, scoped Lambda workers/dispatcher/recovery,
+  scheduled and terminal-status EventBridge rules, and a private retained
+  execution-artifact bucket
+- One public, secret-free competitor bootstrap template object and an installation
+  SSM SecureString initialized through the existing account-registration flow
 
 The setup policy therefore needs the corresponding CloudFormation lifecycle APIs,
 scoped to these project resources wherever the API supports resource-level control.
@@ -77,15 +79,22 @@ ConditionCheckItem permissions for atomic intent, scoring and receipt writes.
 DynamoDB transactions are authorized through their underlying actions, not an
 invented `dynamodb:TransactWriteItems` IAM action.
 
-Connection verification grants the API only exact configured competitor role
-ARNs for STS AssumeRole and exact ExternalId parameter ARNs for SSM GetParameter,
-plus the installation artifact bucket's current catalog/binding objects. It cannot
-manage IAM or CloudFormation. No secret values are stored in runtime-config.json.
+Connection verification uses the installation's fixed role name and required
+Purpose/Installation resource tags, mandatory ExternalId, and current verified
+registry identity. Its account component varies only through Admin registration;
+API and worker IAM policies explicitly deny assuming roles in the platform account.
+Existing legacy jobs retain separate exact role and parameter grants. The API can
+read/create only the fixed installation SSM parameter, with no overwrite/delete
+path, and accesses current catalog/binding objects in the installation bucket.
+A durable registry marker prevents silently replacing a missing, previously used
+ExternalId. The missing-key recovery check may Scan only the installation's Events
+and Deployments tables. No secret values enter runtime-config.json or logs.
 
-The dispatcher can Query only the pending-dispatch partition and StartExecution
-only the installation's state machine. State-machine tasks invoke their own
-workers. Remote workers assume only configured competitor roles, require
-ExternalId, and read only configured secret parameters. Historical catalog reads
+The dispatcher can Query only the pending-dispatch partition, strongly Get the
+Events table's `INSTALLATION` control key, and StartExecution only the installation's
+state machine. The control read is restricted with `dynamodb:LeadingKeys`. State-machine tasks invoke their own
+workers. Remote workers use the same installation role/tag restriction or explicit legacy
+binding, require ExternalId, and read only configured secret parameters. Historical catalog reads
 are limited to this installation bucket's catalogs prefix; current binding reads
 are limited to the exact content-addressed binding object. No ambient credentials
 are passed to CloudFormation. Recovery can DescribeExecution only for executions
@@ -94,9 +103,20 @@ of this state machine and uses ownership-qualified deployment writes.
 This does not create the competitor trust policy or provide a broad CloudFormation
 execution role. The initial reviewed bootstrap/competitor setup remains unfinished.
 Problem-template permissions, including any dedicated-account assumptions, require
-separate review. Platform teardown must coordinate active/pending executions before
-removing the runner; the current CLI refuses runner-enabled teardown. Independently
-deployed exercise resources and retained data/artifact buckets are not purged.
+separate review. Platform teardown coordinates active/pending event work before removing the runner.
+The operator running this CLI needs the actions used by its direct storage path:
+
+- Events: `GetItem`, `Scan`, `PutItem`, `UpdateItem`, `ConditionCheckItem`
+- Teams: `Query`
+- Deployments: `GetItem`, `Query`, `PutItem`, `UpdateItem`, `DeleteItem`
+
+Each action above has the `dynamodb:` prefix and is scoped to that exact owned table.
+These direct
+operator permissions are distinct from the CloudFormation execution policy and
+ordinary Cognito roles; the CLI does not create or grant them. Scope their resources
+to the exact verified table ARNs. CloudFormation deletion and waiting use exact
+physical stack ARNs. Permission errors preserve the platform and durable stop state.
+Independently deployed exercises and retained data/artifact buckets are not purged.
 
 ## Preserved launcher contract
 

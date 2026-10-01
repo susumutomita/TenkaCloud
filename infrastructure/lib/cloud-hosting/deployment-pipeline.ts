@@ -26,7 +26,9 @@ import {
 } from "aws-cdk-lib/aws-stepfunctions";
 import { LambdaInvoke } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
+import type { InstallationCompetitorConfig } from "../problem-deploy/control-data/domain/competitor-accounts.js";
 import type { RunnerBinding } from "../problem-deploy/handlers/cloud-api/execution-config.js";
+import { competitorAssumeRolePolicy, denyControlPlaneAssumeRole } from "./competitor-accounts.js";
 
 export interface CloudDeploymentPipelineProps {
   readonly repositoryRoot: string;
@@ -42,9 +44,10 @@ export interface CloudDeploymentPipelineProps {
   readonly catalogBucket: IBucket;
   readonly catalogKey: string;
   readonly bindingsKey: string;
+  readonly competitorConfig?: InstallationCompetitorConfig;
 }
 
-/** Explicit opt-in only: without verified exact role/secret allowlists no runner is created. */
+/** Registry-backed runner with installation-scoped roles; old exact bindings remain explicit compatibility grants. */
 export class CloudDeploymentPipeline extends Construct {
   readonly stateMachine: StateMachine;
   readonly dispatcher: NodejsFunction;
@@ -55,12 +58,19 @@ export class CloudDeploymentPipeline extends Construct {
     super(scope, id);
     validateAllowlist(props);
     const environment = {
+      CONTROL_PLANE_ACCOUNT: Stack.of(this).account,
       EVENTS_TABLE_NAME: props.events.tableName,
       TEAMS_TABLE_NAME: props.teams.tableName,
       DEPLOYMENTS_TABLE_NAME: props.deployments.tableName,
       CLOUD_ARTIFACT_BUCKET: props.catalogBucket.bucketName,
       CLOUD_CATALOG_KEY: props.catalogKey,
       CLOUD_RUNNER_BINDINGS_KEY: props.bindingsKey,
+      ...(props.competitorConfig
+        ? {
+            COMPETITOR_ROLE_NAME: props.competitorConfig.roleName,
+            COMPETITOR_EXTERNAL_ID_PARAMETER_ARN: props.competitorConfig.externalIdParameterArn,
+          }
+        : {}),
     };
     const makeWorker = (
       name: string,
@@ -128,8 +138,7 @@ export class CloudDeploymentPipeline extends Construct {
       );
     grant(workers.finish, ["dynamodb:UpdateItem"], [props.events.tableArn]);
     for (const worker of [workers.create, workers.describe, workers.finish]) {
-      grant(worker, ["sts:AssumeRole"], [...props.allowedRoleArns]);
-      grant(worker, ["ssm:GetParameter"], [...props.externalIdParameterArns]);
+      grantCompetitorAccess(worker, props);
       // Old pending jobs retain their immutable catalog key across application updates. The
       // loader permits only catalogs/<sha256>.json and verifies the content hash before use.
       grant(worker, ["s3:GetObject"], [props.catalogBucket.arnForObjects("catalogs/*")]);
@@ -216,6 +225,15 @@ export class CloudDeploymentPipeline extends Construct {
       120,
       1,
     );
+    this.dispatcher.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["dynamodb:GetItem"],
+        resources: [props.events.tableArn],
+        conditions: {
+          "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["INSTALLATION"] },
+        },
+      }),
+    );
     this.dispatcher.addEnvironment(
       "DEPLOYMENT_STATE_MACHINE_ARN",
       this.stateMachine.stateMachineArn,
@@ -279,19 +297,30 @@ export class CloudDeploymentPipeline extends Construct {
   }
 }
 
+function grantCompetitorAccess(worker: NodejsFunction, props: CloudDeploymentPipelineProps) {
+  worker.addToRolePolicy(denyControlPlaneAssumeRole(Stack.of(worker).account));
+  if (props.allowedRoleArns.length) grant(worker, ["sts:AssumeRole"], [...props.allowedRoleArns]);
+  if (props.externalIdParameterArns.length)
+    grant(worker, ["ssm:GetParameter"], [...props.externalIdParameterArns]);
+  if (props.competitorConfig) {
+    worker.addToRolePolicy(competitorAssumeRolePolicy(props.competitorConfig));
+    grant(worker, ["ssm:GetParameter"], [props.competitorConfig.externalIdParameterArn]);
+  }
+}
+
 function grant(worker: NodejsFunction, actions: string[], resources: string[]) {
   worker.addToRolePolicy(new PolicyStatement({ actions, resources }));
 }
 function validateAllowlist(props: CloudDeploymentPipelineProps): void {
   if (
-    !props.runnerBindings.length ||
+    (!props.competitorConfig && !props.runnerBindings.length) ||
     props.runnerBindings.some(
       (binding) =>
         !props.allowedRoleArns.includes(binding.roleArn) ||
         !props.externalIdParameterArns.includes(binding.externalIdParameterArn),
     ) ||
-    !props.allowedRoleArns.length ||
-    !props.externalIdParameterArns.length ||
+    (!props.competitorConfig && !props.allowedRoleArns.length) ||
+    (!props.competitorConfig && !props.externalIdParameterArns.length) ||
     props.allowedRoleArns.some((arn) => !/^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/u.test(arn)) ||
     props.externalIdParameterArns.some(
       (arn) => !/^arn:aws:ssm:[a-z0-9-]+:\d{12}:parameter\/[\w./-]+$/u.test(arn),

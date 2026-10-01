@@ -1,6 +1,11 @@
 import { spawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
+
+import {
+  type CloudInstallation,
+  type InstallationLocation,
+  openCloudInstallation,
+} from "./installation";
 
 export interface ProcessRequest {
   readonly command: string;
@@ -19,12 +24,17 @@ export interface CloudCliIo {
   stdout(text: string): void;
   stderr(text: string): void;
   confirm(question: string): Promise<boolean>;
-  ensureDir(path: string): Promise<void>;
+  openInstallation(location: InstallationLocation): CloudInstallation;
+  now(): number;
+  wait(ms: number): Promise<void>;
 }
 
 /** Subprocesses use argument arrays; only CDK's documented --app value is a command string. */
 export function systemCloudIo(): CloudCliIo {
   return {
+    openInstallation: openCloudInstallation,
+    now: Date.now,
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     run: (request) =>
       new Promise((resolve) => {
         const process = spawn(request.command, [...request.args], {
@@ -45,9 +55,6 @@ export function systemCloudIo(): CloudCliIo {
       }),
     stdout: (text) => process.stdout.write(text),
     stderr: (text) => process.stderr.write(text),
-    ensureDir: async (path) => {
-      await mkdir(path, { recursive: true });
-    },
     confirm: async (question) => {
       if (!process.stdin.isTTY || process.env.CI) return false;
       const reader = createInterface({ input: process.stdin, output: process.stdout });

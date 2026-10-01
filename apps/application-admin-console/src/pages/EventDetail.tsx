@@ -377,7 +377,7 @@ function EventDetailLoaded({
       )}
       {operations.bulkResult && (
         <Alert
-          type="success"
+          type={(operations.bulkResult.failed ?? 0) > 0 ? "warning" : "success"}
           dismissible
           onDismiss={() => operations.setBulkResult(null)}
           header={t("event_detail.bulk_result_header")}
@@ -386,6 +386,11 @@ function EventDetailLoaded({
             enqueued: operations.bulkResult.enqueued,
             skipped: operations.bulkResult.skipped,
           })}
+          {(operations.bulkResult.failed ?? 0) > 0 && (
+            <p>
+              {t("event_detail.bulk_result_failed", { failed: operations.bulkResult.failed ?? 0 })}
+            </p>
+          )}
         </Alert>
       )}
 

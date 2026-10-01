@@ -27,6 +27,7 @@ export interface CloudDeploymentApi {
   readonly work: DynamoDeploymentWork;
   readonly catalog: () => Promise<Readonly<Record<string, CloudProblem>>>;
   readonly controlPlaneAccount: string;
+  readonly prepareConnection?: (event: EventRecord, team: TeamRecord, now: number) => Promise<void>;
 }
 interface RouteOptions extends CloudDeploymentApi {
   readonly repository: CloudRepository;
@@ -101,6 +102,8 @@ async function boundedMap<T>(
 async function deploy(context: Context, options: RouteOptions) {
   const now = options.now();
   const actor = requireOrganizer(context, ["Admin", "Operator"], options.organizerAuth, now);
+  if (!(await options.work.acceptingNewDeployments()))
+    throw new ApiError(409, "installation_draining");
   const event = await currentEvent(options, context.req.param("eventId") ?? "");
   if (!["DRAFT", "DEPLOYING", "READY"].includes(event.status))
     throw new ApiError(409, "event_closed");
@@ -185,6 +188,7 @@ async function planTargets(
   const targets: z.infer<typeof planned>["targets"] = [];
   let skipped = 0;
   for (const team of teams) {
+    await options.prepareConnection?.(event, team, now);
     const connection = await options.work.getConnection(event.eventId, team.teamId);
     assertConnection(connection, team, ids, event);
     for (const problemId of ids) {
@@ -332,15 +336,35 @@ async function submit(context: Context, options: RouteOptions) {
 async function teardown(context: Context, options: RouteOptions) {
   const now = options.now();
   requireOrganizer(context, ["Admin", "Operator"], options.organizerAuth, now);
-  const event = await currentEvent(options, context.req.param("eventId") ?? "");
+  const result = await requestEventTeardown({
+    repository: options.repository,
+    work: options.work,
+    eventId: identifier.parse(context.req.param("eventId")),
+    now,
+  });
+  return context.json(result.body, result.status);
+}
+/** Shared by the authenticated organizer route and the ownership-checked operator CLI. */
+export async function requestEventTeardown(options: {
+  readonly repository: CloudRepository;
+  readonly work: DynamoDeploymentWork;
+  readonly eventId: string;
+  readonly now: number;
+}) {
+  const now = options.now;
+  const event = await options.repository.getEvent(identifier.parse(options.eventId));
+  if (!event) throw new ApiError(404, "not_found");
   const at = new Date(Math.max(now, Date.parse(event.updatedAt) + 1)).toISOString();
   if ((await options.work.closeEvent(event, at)) === "archived")
-    return context.json({
-      eventId: event.eventId,
-      enqueued: 0,
-      skipped: event.teardownExpected ?? 0,
-      failed: 0,
-    });
+    return {
+      status: 200 as const,
+      body: {
+        eventId: event.eventId,
+        enqueued: 0,
+        skipped: event.teardownExpected ?? 0,
+        failed: 0,
+      },
+    };
   const teams = await options.repository.listTeamsByEvent(event.eventId);
   const jobs: DeploymentJob[] = [];
   await boundedMap(teams, async (team) => {
@@ -356,7 +380,7 @@ async function teardown(context: Context, options: RouteOptions) {
     }
   });
   await options.work.archiveTeardown(event.eventId);
-  return context.json(result, 202);
+  return { body: result, status: 202 as const };
 }
 /** Existing event-deploy/participant-flag wire paths; no tenant claims or process-local locks. */
 export function registerCloudDeploymentRoutes(app: Hono, options: RouteOptions): void {

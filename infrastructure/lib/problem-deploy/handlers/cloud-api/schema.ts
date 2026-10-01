@@ -5,7 +5,7 @@ import { CLOUD_EVENT_LIMITS } from "../../control-data/domain/events.js";
 import { ApiError } from "./auth.js";
 
 export const identifier = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/u);
-/** Adapted from the historical create-event schema; 49 teams account for durable access rows. */
+/** Adapted from the historical create-event schema; 48 teams allow durable access rows, a replay receipt and the global intake fence. */
 export const createEventSchema = z
   .object({
     name: z.string().trim().min(1).max(120),

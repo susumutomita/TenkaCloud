@@ -11,12 +11,21 @@ import {
 import { ulid } from "ulid";
 import { z } from "zod";
 import {
+  bulkCreateCompetitorAccounts,
+  createCompetitorAccount,
+  deleteCompetitorAccount,
+  listCompetitorAccounts,
+  verifyCompetitorAccount,
+} from "../../apps/application-admin-console/src/api/competitor-accounts-client.js";
+import {
   bulkDeployEvent as clientBulkDeploy,
+  bulkTeardownEvent as clientBulkTeardown,
   createEvent as clientCreateEvent,
 } from "../../apps/application-admin-console/src/api/events-client.js";
 import { submitFlag as clientSubmitFlag } from "../../apps/participant-portal/src/api/portal-client/scoring.js";
 import { POLL_INTERVAL_MS } from "../../apps/participant-portal/src/constants/polling.js";
-import { createCoreApiClient } from "../../packages/web-kit/src/api-client.js";
+import { type CoreApiClient, createCoreApiClient } from "../../packages/web-kit/src/api-client.js";
+import type { CompetitorAccountRecord } from "../lib/problem-deploy/control-data/domain/competitor-accounts.js";
 import {
   contentDigest,
   type DeploymentIdentity,
@@ -27,8 +36,10 @@ import {
 import type { EventRecord } from "../lib/problem-deploy/control-data/domain/events.js";
 import type { TeamRecord } from "../lib/problem-deploy/control-data/domain/teams.js";
 import { DynamoCloudRepository } from "../lib/problem-deploy/control-data/dynamodb-cloud-repository.js";
+import { DynamoDbCompetitorAccountsRepository } from "../lib/problem-deploy/control-data/dynamodb-competitor-accounts-repository.js";
 import { DynamoDeploymentWork } from "../lib/problem-deploy/control-data/dynamodb-deployment-work.js";
 import { createCloudApp } from "../lib/problem-deploy/handlers/cloud-api/app.js";
+import { createRegisteredConnectionPreparer } from "../lib/problem-deploy/handlers/cloud-api/connection-routes.js";
 
 const rawEndpoint = process.argv[2];
 if (!rawEndpoint) throw new Error("Pass explicit http://127.0.0.1:<port> DynamoDB Local endpoint.");
@@ -122,8 +133,8 @@ const teams: TeamRecord[] = Array.from({ length: 25 }, (_, index) => ({
   expiresAt: event.expiresAt,
 }));
 const createdTables: string[] = [];
-async function createTables(): Promise<void> {
-  for (const [kind, TableName] of Object.entries(tables)) {
+async function createTables(names = tables): Promise<void> {
+  for (const [kind, TableName] of Object.entries(names)) {
     const indexed = kind !== "teams";
     await client.send(
       new CreateTableCommand({
@@ -1451,6 +1462,688 @@ async function verifyHistoricalTeardownBlocker(): Promise<void> {
   );
 }
 
+const registryConfig = {
+  roleName: `TenkaCloud-${"a".repeat(24)}-deploy-Role`,
+  externalIdParameterArn: `arn:aws:ssm:us-east-1:123456789012:parameter/tenkacloud/cloud/${"a".repeat(24)}/external-id`,
+};
+function registryApp(accounts: DynamoDbCompetitorAccountsRepository) {
+  const repo = repository();
+  const deployments = work();
+  const catalog = async () => ({
+    "hello-world": {
+      problemId: "hello-world",
+      problemDir: "problems/challenges/hello-world",
+      artifactDigest: contentDigest("synthetic-reviewed-template"),
+      catalogKey: `catalogs/${contentDigest("synthetic-reviewed-catalog")}.json`,
+      scoring: {
+        kind: "flag" as const,
+        points: 100,
+        wrongPenalty: 0,
+        flagOutputKey: "ExpectedFlag",
+      },
+      parameters: {},
+    },
+  });
+  return createCloudApp({
+    repository: repo,
+    organizerAuth: AUTH,
+    allowedOrigins: [],
+    now: () => now,
+    accounts: {
+      accounts,
+      tenkaCloudAccountId: "123456789012",
+      competitorRoleName: registryConfig.roleName,
+      defaultRegion: "us-east-1",
+      assertAccepting: () => repo.assertAcceptingInstallation(),
+      // SSM/STS have separate intercepted-SDK tests. This test exercises real Dynamo and existing SPA clients.
+      ensureExternalId: async () => {
+        await accounts.observeExternalId(registryConfig.externalIdParameterArn);
+        return "SYNTHETIC-EXTERNAL-ID-ONLY";
+      },
+      verify: async () => undefined,
+    },
+    deployment: {
+      work: deployments,
+      catalog,
+      controlPlaneAccount: "123456789012",
+      prepareConnection: createRegisteredConnectionPreparer({
+        accounts,
+        work: deployments,
+        config: registryConfig,
+        catalog,
+        legacyBindings: [],
+      }),
+    },
+  });
+}
+async function exerciseAccountClients(
+  api: CoreApiClient,
+  accounts: DynamoDbCompetitorAccountsRepository,
+) {
+  const ids = Array.from({ length: 25 }, (_, index) => String(300000000000 + index));
+  const first = ids[0];
+  assert.ok(first);
+  const created = await createCompetitorAccount(api, {
+    awsAccountId: first,
+    competitorRoleName: registryConfig.roleName,
+  });
+  assert.equal(created.externalId, "SYNTHETIC-EXTERNAL-ID-ONLY");
+  const imported = await bulkCreateCompetitorAccounts(api, {
+    defaults: { competitorRoleName: registryConfig.roleName, region: "us-east-1" },
+    accounts: ids.slice(1).map((awsAccountId) => ({ awsAccountId })),
+  });
+  assert.equal(imported.created, 24);
+  const snapshots = await Promise.all(
+    ids.map(async (id) => {
+      const row = await accounts.getAccount(id);
+      assert.ok(row);
+      return row;
+    }),
+  );
+  assert.deepEqual(
+    await Promise.all(snapshots.map((row) => accounts.createAccount(row))),
+    Array.from({ length: 25 }, () => "conflict"),
+  );
+  for (const id of ids) assert.equal((await verifyCompetitorAccount(api, id)).verified, true);
+  const original = snapshots[0];
+  assert.ok(original);
+  assert.equal(await accounts.setVerified(original, true, at), undefined);
+  const listed = await listCompetitorAccounts(api);
+  assert.equal(
+    listed.items.filter((row) => ids.includes(row.awsAccountId) && row.verified).length,
+    25,
+  );
+  assert.equal(JSON.stringify(listed).includes("externalId"), false);
+  await assert.rejects(
+    () =>
+      createCompetitorAccount(api, {
+        awsAccountId: "123456789012",
+        competitorRoleName: registryConfig.roleName,
+      }),
+    { status: 400 },
+  );
+  const createdEvent = await clientCreateEvent(
+    api,
+    {
+      name: "Existing account onboarding",
+      teams: ids.map((awsAccountId, index) => ({
+        internalSlug: `registry-team-${index}`,
+        awsAccountId,
+      })),
+      problems: [{ problemId: "hello-world", defaultRegion: "us-east-1" }],
+    },
+    "registry-event-create",
+  );
+  const accepted = await clientBulkDeploy(api, createdEvent.eventId, {}, "registry-bulk-deploy");
+  assert.equal(accepted.enqueued, 25);
+  assert.deepEqual(
+    await clientBulkDeploy(api, createdEvent.eventId, {}, "registry-bulk-deploy"),
+    accepted,
+  );
+  for (const team of createdEvent.teams) {
+    const connection = await work().getConnection(createdEvent.eventId, team.teamId);
+    assert.ok(connection?.registrationId);
+    const record = await accounts.getAccount(connection.accountId);
+    assert.equal(connection.registrationId, record?.registrationId);
+  }
+  await verifyRegistryAuthorizationCommit(api, accounts, first);
+  await assert.rejects(() => deleteCompetitorAccount(api, first), { status: 409 });
+  const teardown = await clientBulkTeardown(api, createdEvent.eventId);
+  assert.equal(z.object({ failed: z.number() }).parse(teardown).failed, 0);
+  assert.equal((await repository().getEvent(createdEvent.eventId))?.status, "ARCHIVED");
+  for (const id of ids) await deleteCompetitorAccount(api, id);
+  const replacement = { ...original, registrationId: ulid() };
+  assert.equal(await accounts.createAccount(replacement), "created");
+  assert.equal(await accounts.setVerified(original, true, at), undefined);
+  assert.equal(await accounts.deleteAccount(replacement), "deleted");
+  console.log(
+    JSON.stringify({
+      milestone: "actual-spa-account-onboarding-client",
+      accounts: 25,
+      duplicateConflicts: 25,
+      verifiedSelections: 25,
+      automaticTeamConnections: 25,
+      durableJobs: 25,
+      deployReplay: "identical",
+      activeAccountDeletion: "409",
+      pendingJobsTeardown: "25 canceled; event archived",
+      accountDeletionAfterTeardown: "25 success",
+      staleVerificationAndRecreate: "rejected",
+      controlPlaneAccount: "rejected",
+      registryCommitFence:
+        "accept and CREATE reservation roll back after concurrent revocation; reverify retries succeed",
+      scope:
+        "Existing SPA clients, Hono and real DynamoDB Local; ExternalId/STS injected; no AWS operations",
+    }),
+  );
+}
+async function revokeAtAccountCheck(
+  accounts: DynamoDbCompetitorAccountsRepository,
+  accountId: string,
+  action: () => Promise<unknown>,
+) {
+  let injected = false;
+  document.middlewareStack.add(
+    (next) => async (args) => {
+      const request = z
+        .object({
+          TransactItems: z
+            .array(
+              z
+                .object({
+                  ConditionCheck: z
+                    .object({ Key: z.record(z.unknown()) })
+                    .passthrough()
+                    .optional(),
+                })
+                .passthrough(),
+            )
+            .optional(),
+        })
+        .passthrough()
+        .safeParse(args.input);
+      const touchesAccount =
+        request.success &&
+        request.data.TransactItems?.some(
+          (item) =>
+            item.ConditionCheck?.Key.PK === "INSTALLATION#ACCOUNTS" &&
+            item.ConditionCheck.Key.SK === `ACCOUNT#${accountId}`,
+        );
+      if (!injected && touchesAccount) {
+        injected = true;
+        const current = await accounts.getAccount(accountId);
+        assert.ok(current);
+        assert.ok(await accounts.setVerified(current, false, at));
+      }
+      return next(args);
+    },
+    { step: "initialize", name: "syntheticRegistryRevocationBeforeCommit" },
+  );
+  try {
+    await action();
+    assert.equal(
+      injected,
+      true,
+      "The actual transaction must include the current account condition",
+    );
+  } finally {
+    document.middlewareStack.remove("syntheticRegistryRevocationBeforeCommit");
+  }
+}
+async function verifyRegistryAuthorizationCommit(
+  api: CoreApiClient,
+  accounts: DynamoDbCompetitorAccountsRepository,
+  accountId: string,
+) {
+  const created = await clientCreateEvent(
+    api,
+    {
+      name: "Registry commit boundary",
+      teams: [{ internalSlug: "guarded", awsAccountId: accountId }],
+      problems: [{ problemId: "hello-world", defaultRegion: "us-east-1" }],
+    },
+    "registry-fenced-event",
+  );
+  const team = created.teams[0];
+  assert.ok(team);
+  await revokeAtAccountCheck(accounts, accountId, () =>
+    assert.rejects(() => clientBulkDeploy(api, created.eventId, {}, "registry-fenced-deploy"), {
+      status: 409,
+    }),
+  );
+  assert.equal(
+    await work().getTarget(created.eventId, team.teamId, "hello-world"),
+    undefined,
+    "Rejected authorization must not publish a job or target",
+  );
+  assert.equal(
+    (await work().listDispatch(1000)).some((intent) => intent.eventId === created.eventId),
+    false,
+  );
+  await verifyCompetitorAccount(api, accountId);
+  assert.equal(
+    (await clientBulkDeploy(api, created.eventId, {}, "registry-fenced-deploy")).enqueued,
+    1,
+  );
+  const job = await work().getTarget(created.eventId, team.teamId, "hello-world");
+  assert.ok(job);
+  const owner = "synthetic-registry-source";
+  await work().begin(job, owner, at);
+  await revokeAtAccountCheck(accounts, accountId, () =>
+    assert.rejects(
+      () => work().reserveCreation(job, owner, now),
+      /creation_closed_or_owner_changed/u,
+    ),
+  );
+  assert.equal(
+    (await work().getCreation(job))?.state,
+    "NOT_STARTED",
+    "Failed reservation must retain proof that no CreateStack was sent",
+  );
+  await work().finish(
+    job,
+    owner,
+    { status: "FAILED", failureReason: "synthetic_registry_revoked" },
+    at,
+  );
+  await verifyCompetitorAccount(api, accountId);
+  const requested = await clientBulkTeardown(api, created.eventId);
+  assert.equal(z.object({ failed: z.number() }).parse(requested).failed, 0);
+  const identity = deletionIdentity(job);
+  await work().beginTeardown(identity, "synthetic-registry-delete", at);
+  assert.equal(await work().prepareDeletion(identity, "synthetic-registry-delete", now), true);
+  await work().finishTeardown(identity, "synthetic-registry-delete", { status: "DELETED" }, at);
+  assert.equal((await repository().getEvent(created.eventId))?.status, "ARCHIVED");
+}
+async function verifyAccountClients() {
+  const accounts = new DynamoDbCompetitorAccountsRepository(document, tables);
+  assert.equal(
+    await accounts.reserveExternalIdInitialization(registryConfig.externalIdParameterArn),
+    true,
+  );
+  assert.equal(
+    await accounts.reserveExternalIdInitialization(registryConfig.externalIdParameterArn),
+    false,
+    "An uncertain initialization must not be restarted with new key material",
+  );
+  const app = registryApp(accounts);
+  const originalFetch = globalThis.fetch;
+  const localFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    assert.equal(new URL(request.url).origin, "https://registry-fixture.test");
+    const gateway =
+      request.headers.get("Authorization") === "Bearer synthetic-id-token"
+        ? {
+            event: {
+              requestContext: {
+                authorizer: {
+                  claims: {
+                    sub: "registry-organizer",
+                    iss: AUTH.issuer,
+                    aud: AUTH.audience,
+                    token_use: "id",
+                    exp: now / 1000 + 3600,
+                    "custom:userRole": "Admin",
+                  },
+                },
+              },
+            },
+          }
+        : undefined;
+    return app.request(request, undefined, gateway);
+  };
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    writable: true,
+    value: localFetch,
+  });
+  try {
+    await exerciseAccountClients(
+      createCoreApiClient("https://registry-fixture.test", "synthetic-id-token"),
+      accounts,
+    );
+  } finally {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      writable: true,
+      value: originalFetch,
+    });
+  }
+  await verifyRegistryDeletionRaces(accounts);
+  assert.equal(
+    await accounts.reserveExternalIdInitialization(registryConfig.externalIdParameterArn),
+    false,
+    "Deleting all account rows must not erase key-use history",
+  );
+}
+async function verifyRegistryDeletionRaces(accounts: DynamoDbCompetitorAccountsRepository) {
+  const raceEvent: EventRecord = {
+    ...event,
+    eventId: ulid(),
+    name: "Registry deletion races",
+    problems: event.problems.slice(0, 1),
+  };
+  const members = teams.map((team) => ({
+    ...team,
+    eventId: raceEvent.eventId,
+    teamId: ulid(),
+    teamLoginKey: randomBytes(32).toString("base64url"),
+  }));
+  assert.equal(await repository().createEventWithTeams(raceEvent, members), "created");
+  const records: CompetitorAccountRecord[] = members.map((_, index) => ({
+    awsAccountId: String(400000000000 + index),
+    region: "us-east-1",
+    competitorRoleName: registryConfig.roleName,
+    createdAt: at,
+    updatedAt: at,
+    createdBy: "synthetic-admin",
+    registrationId: ulid(),
+    revision: 1,
+    verified: false,
+  }));
+  const winners = { linked: 0, deleted: 0, conflict: 0 };
+  for (const [index, record] of records.entries()) {
+    assert.equal(await accounts.createAccount(record), "created");
+    const verified = await accounts.setVerified(record, true, at);
+    const team = members[index];
+    assert.ok(verified && team);
+    const connection = {
+      eventId: raceEvent.eventId,
+      teamId: team.teamId,
+      accountId: record.awsAccountId,
+      region: record.region,
+      roleArn: `arn:aws:iam::${record.awsAccountId}:role/${registryConfig.roleName}`,
+      externalIdParameter: registryConfig.externalIdParameterArn,
+      bindingId: `account-${record.registrationId.toLowerCase()}`,
+      registrationId: record.registrationId,
+      version: 1,
+      verifiedAt: at,
+      reviewedProblemIds: ["hello-world"],
+    };
+    const [saved, removed] = await Promise.all([
+      accounts.saveConnection({ record: verified, event: raceEvent, team, connection, now }),
+      accounts.deleteAccount(verified),
+    ]);
+    assert.equal(
+      saved === "saved" && removed === "deleted",
+      false,
+      "A linked account must not be deleted concurrently",
+    );
+    if (saved === "saved") {
+      winners.linked++;
+      const current = await accounts.getAccount(record.awsAccountId);
+      assert.ok(current);
+      assert.equal(await accounts.deleteAccount(current), "in_use");
+    } else if (removed === "deleted") {
+      winners.deleted++;
+      assert.equal(await work().getConnection(raceEvent.eventId, team.teamId), undefined);
+    } else winners.conflict++;
+  }
+  const closed = await teardownRequest(raceEvent.eventId);
+  assert.equal(closed.status, 202, await closed.clone().text());
+  assert.equal((await repository().getEvent(raceEvent.eventId))?.status, "ARCHIVED");
+  for (const record of records) {
+    const current = await accounts.getAccount(record.awsAccountId);
+    if (current) assert.equal(await accounts.deleteAccount(current), "deleted");
+  }
+  console.log(
+    JSON.stringify({
+      milestone: "real-dynamodb-registry-reference-races",
+      races: 25,
+      winners,
+      orphanedConnections: 0,
+      activeReferenceDeletion: "rejected",
+      cleanupAfterArchive: "passed",
+      scope: "Real Dynamo transactions; no SSM, STS or CloudFormation",
+    }),
+  );
+}
+
+async function seedGlobalPagination(names: typeof tables, source: EventRecord, team: TeamRecord) {
+  for (let offset = 0; offset < 205; offset += 100) {
+    await document.send(
+      new TransactWriteCommand({
+        TransactItems: Array.from({ length: Math.min(100, 205 - offset) }, (_, index) => ({
+          Put: {
+            TableName: names.events,
+            Item: { PK: `SYNTHETIC-NON-EVENT#${offset + index}`, SK: "DATA" },
+          },
+        })),
+      }),
+    );
+  }
+  await document.send(
+    new TransactWriteCommand({
+      TransactItems: Array.from({ length: 20 }, (_, index) => ({
+        Put: {
+          TableName: names.deployments,
+          Item: {
+            PK: "DISPATCH#PENDING",
+            SK: `${String(index).padStart(26, "0")}#1`,
+            eventId: source.eventId,
+            teamId: team.teamId,
+            jobId: String(index).padStart(26, "0"),
+            attempt: 1,
+            createdAt: at,
+          },
+        },
+      })),
+    }),
+  );
+}
+async function verifyInstallationStopAndDrain() {
+  const names = {
+    events: `${prefix}-global-events`,
+    teams: `${prefix}-global-teams`,
+    deployments: `${prefix}-global-deployments`,
+  };
+  await createTables(names);
+  const repo = new DynamoCloudRepository(document, names);
+  const operations = new DynamoDeploymentWork(document, names);
+  const scope = {
+    account: "210987654321",
+    region: "us-east-1",
+    environment: "verification",
+    applicationStackId:
+      "arn:aws:cloudformation:us-east-1:210987654321:stack/tenkacloud-cloud-verification/synthetic-app",
+    backendStackId:
+      "arn:aws:cloudformation:us-east-1:210987654321:stack/tenkacloud-cloud-problem-deploy-verification/synthetic-backend",
+  };
+  const source: EventRecord = {
+    ...event,
+    eventId: ulid(),
+    teamCount: 3,
+    problems: event.problems.slice(0, 3),
+  };
+  const members = teams.slice(0, 3).map((team) => ({
+    ...team,
+    eventId: source.eventId,
+    teamId: ulid(),
+    teamLoginKey: randomBytes(32).toString("base64url"),
+  }));
+  assert.equal(await repo.createEventWithTeams(source, members), "created");
+  const idle: EventRecord = { ...source, eventId: ulid(), teamCount: 1 };
+  const base = members[0];
+  assert.ok(base);
+  const idleTeam = {
+    ...base,
+    eventId: idle.eventId,
+    teamId: ulid(),
+    teamLoginKey: randomBytes(32).toString("base64url"),
+  };
+  assert.equal(await repo.createEventWithTeams(idle, [idleTeam]), "created");
+  const targets = members.map((team) => makeJob(team, 0, source));
+  for (const [index, job] of targets.entries()) {
+    const team = members[index];
+    assert.ok(team);
+    await operations.saveVerifiedConnection(job.connection);
+    await operations.accept(acceptance(job, team, `global-${index}`, source));
+  }
+  const pending = targets[0],
+    running = targets[1],
+    complete = targets[2],
+    scorer = members[2];
+  assert.ok(pending && running && complete && scorer);
+  for (const job of [running, complete]) {
+    await operations.begin(job, `owner-${job.jobId}`, at);
+    await operations.reserveCreation(job, `owner-${job.jobId}`, now);
+  }
+  await operations.recordCreation(
+    complete,
+    `owner-${complete.jobId}`,
+    syntheticReference(complete),
+  );
+  await operations.finish(complete, `owner-${complete.jobId}`, completion(complete), at);
+  const flag = {
+    event: source,
+    team: scorer,
+    jobId: complete.jobId,
+    attempt: 1,
+    requestKey: "global-before-stop",
+    flag: `flag-${complete.jobId}`,
+    now,
+  };
+  assert.equal((await operations.submitFlag(flag)).kind, "ok");
+  await seedGlobalPagination(names, source, base);
+  let eventScanPages = 0,
+    emptyEventPages = 0,
+    emptyDeletePages = 0;
+  document.middlewareStack.add(
+    (next, context) => async (args) => {
+      const response = await next(args);
+      const input = z
+        .object({
+          TableName: z.string().optional(),
+          ConsistentRead: z.boolean().optional(),
+          FilterExpression: z.string().optional(),
+        })
+        .passthrough()
+        .parse(args.input);
+      const output = z
+        .object({ Items: z.array(z.unknown()).optional() })
+        .passthrough()
+        .parse(response.output);
+      if (context.commandName === "ScanCommand" && input.TableName === names.events) {
+        assert.equal(input.ConsistentRead, true);
+        eventScanPages++;
+        if (output.Items?.length === 0) emptyEventPages++;
+      }
+      if (
+        context.commandName === "QueryCommand" &&
+        input.TableName === names.deployments &&
+        input.FilterExpression === "#operation = :delete" &&
+        output.Items?.length === 0
+      )
+        emptyDeletePages++;
+      return response;
+    },
+    { step: "initialize", name: "syntheticGlobalDrainPagination" },
+  );
+  try {
+    await assert.rejects(
+      () => repo.listStoppedInstallationEvents(scope),
+      /installation_not_stopped/u,
+    );
+    const stopped = await repo.stopAcceptingInstallation(scope, at);
+    assert.equal(stopped.status, "DRAINING");
+    assert.deepEqual(await repo.stopAcceptingInstallation(scope, at), stopped);
+    assert.equal(await operations.acceptingNewDeployments(), false);
+    await assert.rejects(
+      () =>
+        repo.stopAcceptingInstallation(
+          {
+            ...scope,
+            applicationStackId: scope.applicationStackId.replace("synthetic-app", "different-app"),
+          },
+          at,
+        ),
+      /installation_scope_changed/u,
+    );
+    const rejected = { ...idle, eventId: ulid() };
+    await assert.rejects(
+      () => repo.createEventWithTeams(rejected, [{ ...idleTeam, eventId: rejected.eventId }]),
+      /installation_draining/u,
+    );
+    await assert.rejects(
+      () =>
+        operations.accept(acceptance(makeJob(base, 1, source), base, "global-after-stop", source)),
+      /deployment_acceptance_conflict/u,
+    );
+    await assert.rejects(() => operations.begin(pending, "post-stop-owner", at));
+    await assert.rejects(
+      () => operations.reserveCreation(running, `owner-${running.jobId}`, now),
+      /creation_closed_or_owner_changed/u,
+    );
+    await assert.rejects(
+      () => operations.submitFlag({ ...flag, requestKey: "global-after-stop" }),
+      /scope_or_access_changed/u,
+    );
+    await assert.rejects(() => operations.submitFlag(flag), /scope_or_access_changed/u);
+    const listed = await repo.listStoppedInstallationEvents(scope);
+    assert.deepEqual(
+      listed.map((item) => item.eventId).sort(),
+      [source.eventId, idle.eventId].sort(),
+    );
+    assert.ok(eventScanPages >= 3 && emptyEventPages > 0);
+    await assert.rejects(() => repo.confirmInstallationDrained(scope, at), /events_not_drained/u);
+    // A previously reserved request may still report its immutable result after intake stops.
+    await operations.recordCreation(running, `owner-${running.jobId}`, syntheticReference(running));
+    await operations.finish(
+      running,
+      `owner-${running.jobId}`,
+      {
+        status: "FAILED",
+        stackId: completion(running).stackId,
+        failureReason: "synthetic-late-create-result",
+      },
+      at,
+    );
+    for (const current of [source, idle]) {
+      await operations.closeEvent(current, at);
+      const scopedTeams = await repo.listTeamsByEvent(current.eventId);
+      const jobs = (
+        await Promise.all(
+          scopedTeams.map((team) => operations.listTargetJobs(current.eventId, team.teamId)),
+        )
+      ).flat();
+      await operations.setTeardownExpected(current.eventId, jobs.length);
+      for (const job of jobs) await operations.requestTeardown(job, at);
+      await operations.archiveTeardown(current.eventId);
+    }
+    const firstDelete = await operations.listDispatch(1, { deletesOnly: true });
+    assert.equal(firstDelete.length, 1);
+    assert.equal(firstDelete[0]?.operation, "delete");
+    assert.ok(emptyDeletePages >= 20, "DELETE discovery must cross empty filtered CREATE pages");
+    const deletions = await operations.listDispatch(10, { deletesOnly: true });
+    assert.equal(deletions.length, 2);
+    for (const identity of deletions) {
+      const job = await operations.getJob(identity.jobId);
+      assert.ok(job);
+      const owner = `delete-${job.jobId}`;
+      await operations.beginTeardown(identity, owner, at);
+      assert.equal(await operations.prepareDeletion(identity, owner, now + 120001), true);
+      await operations.finishTeardown(
+        identity,
+        owner,
+        { status: "DELETED", stackId: completion(job).stackId },
+        at,
+      );
+    }
+    assert.equal((await repo.getEvent(source.eventId))?.status, "ARCHIVED");
+    assert.equal((await operations.getJob(complete.jobId))?.score, 100);
+    await repo.confirmInstallationDrained(scope, at);
+    await repo.confirmInstallationDrained(scope, at);
+    assert.equal((await repo.installationControl())?.status, "DRAINED");
+    assert.equal((await operations.listDispatch(10, { deletesOnly: true })).length, 0);
+    assert.equal(await operations.acceptingNewDeployments(), false);
+    console.log(
+      JSON.stringify({
+        milestone: "real-dynamodb-installation-stop-and-drain",
+        events: 2,
+        targets: 3,
+        blocked: [
+          "creation",
+          "deployment acceptance",
+          "CREATE claim/reservation",
+          "new scoring",
+          "receipt replay",
+          "foreign physical stack scope",
+        ],
+        lateCreationResult: "preserved after intake stop",
+        eventScanPages,
+        emptyEventPages,
+        emptyDeletePages,
+        completeState: "DRAINED; repeated confirmation succeeds",
+        scoresRetained: 100,
+        staleCreateIntents: "cannot execute or starve DELETE discovery",
+        scope: "Real Dynamo transactions and pagination; no AWS/CloudFormation calls",
+      }),
+    );
+  } finally {
+    document.middlewareStack.remove("syntheticGlobalDrainPagination");
+  }
+}
+
 try {
   await createTables();
   await acceptAndComplete();
@@ -1462,6 +2155,8 @@ try {
   await verifyRollbackAndGate();
   await verifyEventTeardown();
   await verifyHistoricalTeardownBlocker();
+  await verifyAccountClients();
+  await verifyInstallationStopAndDrain();
   console.log(
     JSON.stringify({
       outcome: "passed",

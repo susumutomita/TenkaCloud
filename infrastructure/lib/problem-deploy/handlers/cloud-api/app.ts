@@ -7,6 +7,10 @@ import { contentDigest, DeploymentConflict } from "../../control-data/domain/dep
 import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
 import { ApiError, type OrganizerAuthConfig, participantKey, requireOrganizer } from "./auth.js";
+import {
+  type CloudCompetitorAccountsApi,
+  registerCloudCompetitorAccountRoutes,
+} from "./competitor-account-routes.js";
 import { type CloudConnectionApi, registerCloudConnectionRoutes } from "./connection-routes.js";
 import { type CloudDeploymentApi, registerCloudDeploymentRoutes } from "./deployment-routes.js";
 import { registerCloudScheduleRoutes } from "./schedule-routes.js";
@@ -20,6 +24,7 @@ export interface CloudApiOptions {
   readonly now?: () => number;
   readonly deployment?: CloudDeploymentApi;
   readonly connections?: CloudConnectionApi;
+  readonly accounts?: CloudCompetitorAccountsApi;
 }
 const readRoles = ["Admin", "Operator", "Viewer"] as const;
 const writeRoles = ["Admin", "Operator"] as const;
@@ -200,6 +205,12 @@ export function createCloudApp(options: CloudApiOptions): Hono {
     console.error("[cloud-api] request failed", error.name);
     return context.json({ error: "internal_error" }, 500);
   });
+  if (options.accounts)
+    registerCloudCompetitorAccountRoutes(app, {
+      ...options.accounts,
+      organizerAuth: options.organizerAuth,
+      now,
+    });
   app.get("/events", async (context) => {
     requireOrganizer(context, readRoles, options.organizerAuth, now());
     const limit = z.coerce

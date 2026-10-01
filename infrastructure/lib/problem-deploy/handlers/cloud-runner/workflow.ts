@@ -103,6 +103,7 @@ function sameConnection(a: DeploymentConnection, b: DeploymentConnection): boole
     a.externalIdParameter === b.externalIdParameter &&
     a.verifiedAt === b.verifiedAt &&
     a.bindingId === b.bindingId &&
+    a.registrationId === b.registrationId &&
     JSON.stringify(a.reviewedProblemIds) === JSON.stringify(b.reviewedProblemIds)
   );
 }

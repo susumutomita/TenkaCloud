@@ -37,7 +37,9 @@ function fixture() {
   });
   clients.push(client);
   const document = DynamoDBDocumentClient.from(client);
-  const send = vi.spyOn(DynamoDBDocumentClient.prototype, "send");
+  const send = vi
+    .spyOn(DynamoDBDocumentClient.prototype, "send")
+    .mockRejectedValue(new Error("Unexpected SDK call in an intercepted test"));
   const tables = { events: "events", teams: "teams", deployments: "deployments" };
   const work = new DynamoDeploymentWork(document, tables);
   const repository = new DynamoCloudRepository(document, tables);
@@ -126,8 +128,13 @@ describe("deployment transaction shape with intercepted SDK only; actual Dynamo 
       attempt: 1,
     });
     const writes = transaction(f.send.mock.calls[1]?.[0]);
-    expect(writes).toHaveLength(9);
-    expect(writes.filter((write) => write.ConditionCheck)).toHaveLength(3);
+    expect(writes).toHaveLength(10);
+    expect(writes[0]?.ConditionCheck).toMatchObject({
+      TableName: "events",
+      Key: { PK: "INSTALLATION", SK: "CONTROL" },
+      ConditionExpression: "attribute_not_exists(PK)",
+    });
+    expect(writes.filter((write) => write.ConditionCheck)).toHaveLength(4);
     expect(writes.some((write) => write.Put?.Item?.PK === "DISPATCH#PENDING")).toBe(true);
     expect(writes.some((write) => write.Update?.Key?.SK === `SCORE#${f.team.teamId}`)).toBe(true);
     expect(writes.some((write) => write.Update?.Key?.SK === `TEAM#${f.team.teamId}`)).toBe(false);
@@ -144,22 +151,22 @@ describe("deployment transaction shape with intercepted SDK only; actual Dynamo 
       leaseUntil: 0,
     });
   });
-  it("keeps event creation plus 49 teams and replay receipt inside the real 100-item limit", async () => {
+  it("keeps the installation guard, event, 48 teams and replay receipt inside the real 100-item limit", async () => {
     const f = fixture();
     f.send.mockImplementation(async () => ({}));
-    const teams = Array.from({ length: 49 }, (_, index) => ({
+    const teams = Array.from({ length: 48 }, (_, index) => ({
       ...f.team,
       teamId: ulid(),
       internalSlug: `team-${index}`,
       teamLoginKey: `${index}`.padStart(43, "A"),
     }));
-    await f.repository.createEventWithTeams({ ...f.event, teamCount: 49 }, teams, {
+    await f.repository.createEventWithTeams({ ...f.event, teamCount: 48 }, teams, {
       scope: "organizer",
       key: "creation",
       requestHash: "hash",
       response: { eventId: f.event.eventId },
     });
-    expect(transaction(f.send.mock.calls[0]?.[0])).toHaveLength(100);
+    expect(transaction(f.send.mock.calls[0]?.[0])).toHaveLength(99);
   });
   it("replays the saved acceptance without creating another job and rejects a changed body", async () => {
     const f = fixture();
@@ -282,17 +289,17 @@ describe("deployment transaction shape with intercepted SDK only; actual Dynamo 
       totalScore: 100,
     });
     const writes = transaction(f.send.mock.calls[2]?.[0]);
-    expect(writes).toHaveLength(6);
-    expect(writes[0]?.ConditionCheck?.ConditionExpression).toContain("startsAt <= :iso");
-    expect(writes[1]?.ConditionCheck?.ConditionExpression).toContain("authVersion = :version");
-    expect(writes[2]?.Update?.ConditionExpression).toContain(
+    expect(writes).toHaveLength(7);
+    expect(writes[1]?.ConditionCheck?.ConditionExpression).toContain("startsAt <= :iso");
+    expect(writes[2]?.ConditionCheck?.ConditionExpression).toContain("authVersion = :version");
+    expect(writes[3]?.Update?.ConditionExpression).toContain(
       "revision = :revision AND attempt = :attempt",
     );
-    expect(writes[3]?.Put?.ConditionExpression).toBe("attribute_not_exists(PK)");
-    expect(writes[4]?.Put?.Item?.points).toBe(100);
-    expect(writes[5]?.Update?.Key?.SK).toBe(`SCORE#${f.team.teamId}`);
-    expect(writes[5]?.Update?.UpdateExpression).toBe("ADD score :delta, completedProblems :solved");
-    expect(writes[5]?.Update?.ExpressionAttributeValues?.[":solved"]).toBe(1);
+    expect(writes[4]?.Put?.ConditionExpression).toBe("attribute_not_exists(PK)");
+    expect(writes[5]?.Put?.Item?.points).toBe(100);
+    expect(writes[6]?.Update?.Key?.SK).toBe(`SCORE#${f.team.teamId}`);
+    expect(writes[6]?.Update?.UpdateExpression).toBe("ADD score :delta, completedProblems :solved");
+    expect(writes[6]?.Update?.ExpressionAttributeValues?.[":solved"]).toBe(1);
   });
   it("distinguishes intentional wrong resubmission from network replay", async () => {
     const f = fixture();
@@ -310,7 +317,7 @@ describe("deployment transaction shape with intercepted SDK only; actual Dynamo 
         totalScore: score - 5,
       });
       const writes = transaction(f.send.mock.calls.at(-1)?.[0]);
-      expect(writes[5]?.Update?.ExpressionAttributeValues?.[":solved"]).toBe(0);
+      expect(writes[6]?.Update?.ExpressionAttributeValues?.[":solved"]).toBe(0);
     }
     f.send
       .mockImplementationOnce(async () => ({
@@ -443,14 +450,14 @@ describe("durable work recovery with intercepted SDK responses", () => {
     );
     f.send.mockImplementationOnce(async () => ({}));
     await f.work.saveVerifiedConnection(connection);
-    expect(transaction(f.send.mock.calls.at(-1)?.[0])[0]?.Put?.ConditionExpression).toBe(
+    expect(transaction(f.send.mock.calls.at(-1)?.[0])[1]?.Put?.ConditionExpression).toBe(
       "attribute_not_exists(PK)",
     );
     f.send.mockRejectedValueOnce(conditionalFailure());
     await expect(f.work.saveVerifiedConnection({ ...connection, version: 2 }, 1)).rejects.toThrow(
       "connection_changed",
     );
-    expect(transaction(f.send.mock.calls.at(-1)?.[0])[0]?.Put?.ExpressionAttributeValues).toEqual({
+    expect(transaction(f.send.mock.calls.at(-1)?.[0])[1]?.Put?.ExpressionAttributeValues).toEqual({
       ":version": 1,
     });
   });
@@ -466,7 +473,7 @@ describe("durable work recovery with intercepted SDK responses", () => {
     expect(writes.find((write) => write.Put?.Item?.SK === "ATTEMPT#1")?.Put?.Item?.status).toBe(
       "FAILED",
     );
-    expect(writes[3]?.Put?.ConditionExpression).toContain("score = :zero");
+    expect(writes[4]?.Put?.ConditionExpression).toContain("score = :zero");
     f.send
       .mockImplementationOnce(async () => ({}))
       .mockImplementationOnce(async () => ({ Item: { ...f.job, attempt: 3 } }));
@@ -536,6 +543,52 @@ describe("durable work recovery with intercepted SDK responses", () => {
     ]);
     f.send.mockImplementationOnce(async () => ({}));
     expect(await f.work.listDispatch()).toEqual([]);
+  });
+  it("continues past empty filtered pages so creation backlog cannot starve cleanup", async () => {
+    const f = fixture();
+    const cursor = { PK: "DISPATCH#PENDING", SK: "CREATE#older" };
+    const intent = {
+      eventId: f.event.eventId,
+      teamId: f.team.teamId,
+      jobId: f.job.jobId,
+      attempt: 1,
+      operation: "delete",
+      generation: 1,
+      createdAt: AT,
+    };
+    f.send
+      .mockImplementationOnce(async () => ({ Items: [], LastEvaluatedKey: cursor }))
+      .mockImplementationOnce(async () => ({ Items: [intent] }));
+    expect(await f.work.listDispatch(1, { deletesOnly: true })).toEqual([intent]);
+    const command = f.send.mock.calls[1]?.[0];
+    if (!(command instanceof QueryCommand)) throw new Error("Expected paginated query");
+    expect(command.input).toMatchObject({
+      ConsistentRead: true,
+      Limit: 1,
+      ExclusiveStartKey: cursor,
+      FilterExpression: "#operation = :delete",
+    });
+    f.send.mockImplementationOnce(async () => ({ Items: [{ ...intent, operation: undefined }] }));
+    await expect(f.work.listDispatch(1, { deletesOnly: true })).rejects.toThrow(
+      "Unexpected creation",
+    );
+    await expect(f.work.listDispatch(0)).rejects.toThrow("Invalid dispatch limit");
+    await expect(f.work.listDispatch(1001)).rejects.toThrow("Invalid dispatch limit");
+  });
+  it("reads the installation fence strongly and never treats an unknown record as open", async () => {
+    const f = fixture();
+    f.send.mockImplementationOnce(async () => ({}));
+    expect(await f.work.acceptingNewDeployments()).toBe(true);
+    const command = f.send.mock.calls[0]?.[0];
+    if (!(command instanceof GetCommand)) throw new Error("Expected point read");
+    expect(command.input).toMatchObject({
+      ConsistentRead: true,
+      Key: { PK: "INSTALLATION", SK: "CONTROL" },
+    });
+    f.send.mockImplementationOnce(async () => ({ Item: { unknown: true } }));
+    expect(await f.work.acceptingNewDeployments()).toBe(false);
+    f.send.mockRejectedValueOnce(new Error("Uncertain read"));
+    await expect(f.work.acceptingNewDeployments()).rejects.toThrow("Uncertain read");
   });
   it("replays an owned claim and rejects invalid ownership or a lost claim race", async () => {
     const f = fixture();
@@ -631,7 +684,7 @@ describe("durable work recovery with intercepted SDK responses", () => {
       kind: "already_scored",
       totalScore: 100,
     });
-    expect(transaction(f.send.mock.calls.at(-1)?.[0])).toHaveLength(4);
+    expect(transaction(f.send.mock.calls.at(-1)?.[0])).toHaveLength(5);
   });
   it("bounds scoring contention instead of claiming uncertain success", async () => {
     const f = fixture();
@@ -864,29 +917,30 @@ describe("durable creation proof and immutable stack references with intercepted
         : undefined;
       f.send
         .mockImplementationOnce(async () => ({ Item: prior }))
+        .mockImplementationOnce(async () => ({ Item: f.job }))
         .mockImplementationOnce(async () => ({}));
       await f.work.reserveCreation(f.identity, "creator", NOW);
-      const writes = transaction(f.send.mock.calls[1]?.[0]);
-      expect(writes).toHaveLength(3);
-      expect(writes[0]?.ConditionCheck?.ConditionExpression).toBe(
+      const writes = transaction(f.send.mock.calls[2]?.[0]);
+      expect(writes).toHaveLength(4);
+      expect(writes[1]?.ConditionCheck?.ConditionExpression).toBe(
         "#status IN (:draft, :deploying, :ready) AND expiresAt > :now",
       );
-      expect(writes[1]?.ConditionCheck?.ExpressionAttributeValues).toMatchObject({
+      expect(writes[2]?.ConditionCheck?.ExpressionAttributeValues).toMatchObject({
         ":owner": "creator",
         ":status": "IN_PROGRESS",
         ":attempt": 1,
       });
-      expect(writes[2]?.Put?.Item).toMatchObject({
+      expect(writes[3]?.Put?.Item).toMatchObject({
         state: state === "ACKNOWLEDGED" ? state : "REQUESTED",
         owner: "creator",
         leaseUntil: NOW + 120_000,
         SK: "CREATE#1",
       });
       if (state) {
-        expect(writes[2]?.Put?.ConditionExpression).toContain("#state = :previous");
-        expect(writes[2]?.Put?.ExpressionAttributeValues?.[":previous"]).toBe(state);
-      } else expect(writes[2]?.Put?.ConditionExpression).toBe("attribute_not_exists(PK)");
-      if (state === "ACKNOWLEDGED") expect(writes[2]?.Put?.Item).toMatchObject(f.reference);
+        expect(writes[3]?.Put?.ConditionExpression).toContain("#state = :previous");
+        expect(writes[3]?.Put?.ExpressionAttributeValues?.[":previous"]).toBe(state);
+      } else expect(writes[3]?.Put?.ConditionExpression).toBe("attribute_not_exists(PK)");
+      if (state === "ACKNOWLEDGED") expect(writes[3]?.Put?.Item).toMatchObject(f.reference);
     },
   );
 
@@ -901,6 +955,7 @@ describe("durable creation proof and immutable stack references with intercepted
     expect(f.send).toHaveBeenCalledTimes(2);
     f.send
       .mockImplementationOnce(async () => ({ Item: f.creation }))
+      .mockImplementationOnce(async () => ({ Item: f.job }))
       .mockRejectedValueOnce(conditionalFailure());
     await expect(f.work.reserveCreation(f.identity, "creator", NOW)).rejects.toThrow(
       "creation_closed_or_owner_changed",

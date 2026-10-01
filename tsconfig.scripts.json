@@ -21,6 +21,7 @@
   },
   "include": [
     "scripts/security/audit-dependencies.ts",
+    "scripts/cloud-hosting/**/*.ts",
     "scripts/release/**/*.ts",
     "scripts/problem-pack/**/*.ts"
   ]

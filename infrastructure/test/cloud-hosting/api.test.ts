@@ -160,11 +160,11 @@ describe("restored cloud HTTP contract with explicit mocked Cognito-authorizer c
     expect((await f.organizer("/events", "POST", data)).status).toBe(400);
     expect(f.repository.events.size).toBe(0);
   });
-  it("accepts the advertised 49-team/50-problem creation limit and rejects the next problem", async () => {
+  it("accepts the advertised 48-team/50-problem creation limit and rejects the next problem", async () => {
     const f = fixture();
     const input = {
       ...createBody,
-      teams: Array.from({ length: 49 }, (_, index) => ({ internalSlug: `team-${index}` })),
+      teams: Array.from({ length: 48 }, (_, index) => ({ internalSlug: `team-${index}` })),
       problems: Array.from({ length: 50 }, (_, index) => ({
         problemId: `problem-${index}`,
         defaultRegion: "us-east-1",

@@ -32,7 +32,8 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
   const t = useT();
   // Issue #1314: Plane (= tenantId) scope を含む unique 名を default で提案する。
   // 同一競技者 AWS account を複数 Plane に並列接続できる (= 名前衝突しない)。
-  const suggestedRoleName = defaultCompetitorRoleName({ tenantId: config.tenantId });
+  const suggestedRoleName =
+    config.competitorRoleName ?? defaultCompetitorRoleName({ tenantId: config.tenantId });
   const [awsAccountId, setAwsAccountId] = useState("");
   const [alias, setAlias] = useState("");
   const [region, setRegion] = useState(config.hostAwsRegion ?? "ap-northeast-1");
@@ -76,7 +77,7 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
       const res = await createCompetitorAccount(apiClient, {
         awsAccountId,
         region,
-        competitorRoleName,
+        competitorRoleName: config.competitorRoleName ?? competitorRoleName,
         ...(alias.length > 0 ? { alias } : {}),
       });
       reset();
@@ -152,12 +153,16 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
         </FormField>
         <FormField
           label={t("competitor_accounts.add_modal_role_label")}
-          description={t("competitor_accounts.add_modal_role_description")}
+          description={t(
+            config.competitorRoleName
+              ? "competitor_accounts.configured_role_description"
+              : "competitor_accounts.add_modal_role_description",
+          )}
         >
           <Input
-            value={competitorRoleName}
+            value={config.competitorRoleName ?? competitorRoleName}
             onChange={(e) => setCompetitorRoleName(e.detail.value)}
-            disabled={inFlight}
+            disabled={inFlight || !!config.competitorRoleName}
           />
         </FormField>
       </SpaceBetween>

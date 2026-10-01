@@ -39,6 +39,8 @@ export interface AppConfig {
    * fallback する (= dev / 初回 deploy 用、 deeplink としては不正だが手 download 可能)。
    */
   readonly competitorBootstrapTemplateUrl?: string;
+  /** Fixed installation role used by the cloud competitor-account registry. */
+  readonly competitorRoleName?: string;
   /** Configured host AWS region; absent when local hosting runs only Docker/Battle. */
   readonly hostAwsRegion?: string;
   /**
@@ -88,6 +90,7 @@ interface RuntimeConfig {
   readonly apiUrl: string;
   readonly participantPortalUrl?: string;
   readonly competitorBootstrapTemplateUrl?: string;
+  readonly competitorRoleName?: string;
   readonly isolation?: "pooled" | "silo";
   readonly samlIdpDirectory?: Readonly<Record<string, readonly string[]>>;
   /** Raw `features` override object from runtime-config.json; resolved against the registry in loadConfig. */
@@ -152,6 +155,11 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       competitorBootstrapTemplateUrl:
         typeof data.competitorBootstrapTemplateUrl === "string"
           ? data.competitorBootstrapTemplateUrl
+          : undefined,
+      competitorRoleName:
+        typeof data.competitorRoleName === "string" &&
+        /^TenkaCloud-[a-f0-9]{24}-deploy-Role$/u.test(data.competitorRoleName)
+          ? data.competitorRoleName
           : undefined,
       isolation: data.isolation === "silo" ? "silo" : "pooled",
       // Issue #1340 Phase 2: SAML 未設定 stack も無音で動かすため空 object fallback。
@@ -297,6 +305,7 @@ export async function loadConfig(
       apiBaseUrl: runtime.apiUrl,
       participantPortalUrl: runtime.participantPortalUrl,
       competitorBootstrapTemplateUrl: runtime.competitorBootstrapTemplateUrl,
+      competitorRoleName: runtime.competitorRoleName,
       // fetchRuntimeConfig は isolation / samlIdpDirectory を常に populate する (= line 101 /
       // 103-106) ため、 ここの `??` fallback は到達不能。 値の解決自体は fetchRuntimeConfig 側の
       // テストで担保済。

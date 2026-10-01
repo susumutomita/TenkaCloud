@@ -20,6 +20,7 @@ export function createApiClient(baseUrl: string, idToken: string): ApiClient {
     ...createCoreApiClient(baseUrl, idToken),
     tenantAccess: resolveTenantConsoleAccess(claims),
     organizerRole: claims?.["custom:organizerRole"],
+    cloudOrganizerRole: claims?.["custom:userRole"],
   };
 }
 
@@ -30,7 +31,8 @@ export function canMutateTenant(apiClient: ApiClient | null): boolean {
 
 export function canManageConnections(config: AppConfig, apiClient: ApiClient | null): boolean {
   if (!canMutateTenant(apiClient)) return false;
-  return !isLocalHost(config) || apiClient?.organizerRole === "Admin";
+  if (isLocalHost(config)) return apiClient?.organizerRole === "Admin";
+  return config.mode === "demo" || apiClient?.cloudOrganizerRole === "Admin";
 }
 
 export function useApiClient(config: AppConfig): ApiClient | null {

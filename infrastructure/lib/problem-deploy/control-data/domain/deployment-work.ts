@@ -14,6 +14,8 @@ export interface DeploymentConnection {
   readonly version: number;
   readonly verifiedAt: string;
   readonly bindingId?: string;
+  /** Present only for registry-backed connections; legacy binding names are not a discriminator. */
+  readonly registrationId?: string;
   readonly reviewedProblemIds?: readonly string[];
 }
 export interface FlagDefinition {

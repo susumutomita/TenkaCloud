@@ -11,8 +11,10 @@ import {
   createConnectionVerifier,
   createExecutionArtifactResolver,
   createExecutionCatalogProvider,
+  installationAccountConfig,
   loadExecutionBindings,
   parseRunnerBindings,
+  registeredRunnerBinding,
 } from "../../lib/problem-deploy/handlers/cloud-api/execution-config.js";
 
 const binding = {
@@ -235,5 +237,70 @@ describe("connection verification exact secret and temporary credential boundari
       createConnectionVerifier()({ ...binding, externalIdParameterArn: "invalid" }),
     ).rejects.toThrow("Invalid parameter region");
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe("installation-scoped registry configuration", () => {
+  const hash = "a".repeat(24);
+  const roleName = `TenkaCloud-${hash}-deploy-Role`;
+  const parameter = `arn:aws:ssm:us-east-1:123456789012:parameter/tenkacloud/cloud/${hash}/external-id`;
+  it("accepts only the fixed role and matching installation secret namespace", () => {
+    vi.stubEnv("COMPETITOR_ROLE_NAME", roleName);
+    vi.stubEnv("COMPETITOR_EXTERNAL_ID_PARAMETER_ARN", parameter);
+    expect(installationAccountConfig()).toEqual({ roleName, externalIdParameterArn: parameter });
+    for (const value of [
+      "Administrator",
+      "TenkaCloud-*-deploy-Role",
+      roleName.replace(hash, "b".repeat(24)),
+    ]) {
+      vi.stubEnv("COMPETITOR_ROLE_NAME", value);
+      expect(() => installationAccountConfig()).toThrow("Invalid installation");
+    }
+  });
+  it("rejects platform-account verification before looking up any ExternalId or assuming a role", async () => {
+    const ssm = vi
+      .spyOn(SSMClient.prototype, "send")
+      .mockRejectedValue(new Error("Unexpected SSM access"));
+    const sts = vi
+      .spyOn(STSClient.prototype, "send")
+      .mockRejectedValue(new Error("Unexpected STS access"));
+    await expect(createConnectionVerifier(binding.accountId)(binding)).rejects.toThrow(
+      "Control-plane account",
+    );
+    expect(ssm).not.toHaveBeenCalled();
+    expect(sts).not.toHaveBeenCalled();
+  });
+  it("refuses unverified or wrong-role records and pins the immutable registration identity", () => {
+    const record = {
+      awsAccountId: "222222222222",
+      region: "us-east-1",
+      competitorRoleName: roleName,
+      registrationId: "01ARZ3NDEKTSV4RRFFQ69G5FA0",
+      revision: 3,
+      verified: true,
+      verifiedAt: "2026-10-01T00:00:00.000Z",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+      createdBy: "synthetic",
+    };
+    const config = { roleName, externalIdParameterArn: parameter };
+    expect(registeredRunnerBinding(record, config, ["hello-world"])).toMatchObject({
+      id: `account-${record.registrationId.toLowerCase()}`,
+      roleArn: `arn:aws:iam::${record.awsAccountId}:role/${roleName}`,
+      externalIdParameterArn: parameter,
+      reviewedProblemIds: ["hello-world"],
+    });
+    expect(() =>
+      registeredRunnerBinding({ ...record, verified: false }, config, ["hello-world"]),
+    ).toThrow();
+    expect(() =>
+      registeredRunnerBinding({ ...record, competitorRoleName: "Administrator" }, config, [
+        "hello-world",
+      ]),
+    ).toThrow();
+    expect(() => registeredRunnerBinding(record, config, [])).toThrow();
+    expect(() =>
+      registeredRunnerBinding({ ...record, awsAccountId: "123456789012" }, config, ["hello-world"]),
+    ).toThrow("Control-plane account");
   });
 });

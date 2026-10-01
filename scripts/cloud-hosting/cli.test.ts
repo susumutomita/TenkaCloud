@@ -4,8 +4,15 @@ import {
   cloudStackNames,
   cloudStackTags,
 } from "../../infrastructure/lib/cloud-hosting/stack-names";
+import { contentDigest } from "../../infrastructure/lib/problem-deploy/control-data/domain/deployment-work";
+import type {
+  InstallationControl,
+  InstallationScope,
+} from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
+import { installationScopeDigest } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
 import { assertOwnedBootstrap } from "./bootstrap-check";
 import { runCloudCli } from "./cli";
+import type { CloudInstallation } from "./installation";
 import type { CloudCliIo, ProcessRequest, ProcessResult } from "./process";
 import "./main";
 
@@ -15,7 +22,15 @@ function ownedStack(name: string) {
   return {
     StackId: `arn:aws:cloudformation:ap-northeast-1:123456789012:stack/${name}/synthetic-stack-id`,
     StackName: name,
-    Outputs: [{ OutputKey: "CloudRunnerEnabled", OutputValue: "false" }],
+    StackStatus: "CREATE_COMPLETE",
+    Outputs: [
+      { OutputKey: "CloudRunnerEnabled", OutputValue: "false" },
+      { OutputKey: "CloudInstallationControlVersion", OutputValue: "1" },
+      ...["Events", "Teams", "Deployments"].map((kind) => ({
+        OutputKey: `${kind}TableName`,
+        OutputValue: `${name}-${kind}ABC123-synthetic`,
+      })),
+    ],
     Tags: Object.entries(cloudStackTags("staging")).map(([Key, Value]) => ({ Key, Value })),
   };
 }
@@ -80,13 +95,46 @@ function fixture(
   options: {
     confirmed?: boolean;
     fail?: (request: ProcessRequest) => ProcessResult | undefined;
+    installation?: CloudInstallation;
   } = {},
 ) {
   const calls: ProcessRequest[] = [];
   const messages: string[] = [];
   const errors: string[] = [];
   const confirmations: string[] = [];
-  const directories: string[] = [];
+  const storageCalls: string[] = [];
+  let control: InstallationControl | undefined;
+  const installation: CloudInstallation = options.installation ?? {
+    repository: {
+      installationControl: async () => control,
+      assertAcceptingInstallation: async () => {
+        storageCalls.push("assert-accepting");
+        if (control) throw new Error("installation_draining");
+      },
+      stopAcceptingInstallation: async (scope: InstallationScope, at: string) => {
+        storageCalls.push("stop");
+        control ??= {
+          scope,
+          scopeDigest: installationScopeDigest(scope),
+          status: "DRAINING",
+          startedAt: at,
+          updatedAt: at,
+        };
+        return control;
+      },
+      listStoppedInstallationEvents: async () => {
+        storageCalls.push("list");
+        return [];
+      },
+      confirmInstallationDrained: async () => {
+        storageCalls.push("drained");
+        if (!control) throw new Error("Missing fence");
+        control = { ...control, status: "DRAINED" };
+      },
+    },
+    requestEventTeardown: async () => ({ failed: 0 }),
+    close: () => storageCalls.push("close"),
+  };
   const io: CloudCliIo = {
     run: async (request) => {
       calls.push(structuredClone(request));
@@ -100,8 +148,10 @@ function fixture(
       confirmations.push(question);
       return options.confirmed ?? false;
     },
-    ensureDir: async (path) => {
-      directories.push(path);
+    openInstallation: () => installation,
+    now: () => Date.parse("2026-10-01T14:00:00.000Z"),
+    wait: async () => {
+      throw new Error("Unexpected wait in CLI fixture");
     },
   };
   const env = {
@@ -117,7 +167,8 @@ function fixture(
     messages,
     errors,
     confirmations,
-    directories,
+    storageCalls,
+    installation,
     env,
     run: (args: readonly string[]) => runCloudCli(args, io, { root: ROOT, env }),
   };
@@ -238,7 +289,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(f.calls).toHaveLength(4);
     expect(f.calls.slice(2).every(platformInspection)).toBe(true);
     expect(f.calls.some((call) => call.inherit)).toBe(false);
-    expect(f.directories).toEqual([]);
+    expect(f.storageCalls).toEqual(["close"]);
     expect(f.confirmations[0]).toContain("123456789012");
     expect(f.confirmations[0]).toContain("ap-northeast-1");
     expect(f.confirmations[0]).toContain(ownedStack("tenkacloud-cloud-staging").StackId);
@@ -248,22 +299,19 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(f.confirmations[0]).toContain("separately deployed exercise resources");
   });
   it.each([{ args: [] }, { args: ["--yes"] }])(
-    "destroys application before backend and does not rebuild or upload: %s",
+    "drains recorded events before deleting verified app and backend ARNs: %s",
     async ({ args }) => {
       const f = fixture({ confirmed: true });
       expect(await f.run(["down", ...args])).toBe(0);
-      expect(f.calls).toHaveLength(6);
-      expect(f.calls[0]?.args).toContain("get-caller-identity");
-      expect(f.calls[4]?.args.slice(2)).toEqual(["destroy", "tenkacloud-cloud-staging", "--force"]);
-      expect(f.calls[5]?.args.slice(2)).toEqual([
-        "destroy",
-        "tenkacloud-cloud-problem-deploy-staging",
-        "--force",
+      expect(f.calls).toHaveLength(8);
+      expect(f.storageCalls).toEqual(["stop", "list", "list", "drained", "close"]);
+      const deletes = f.calls.filter((call) => call.args.includes("delete-stack"));
+      expect(deletes.map((call) => call.args[call.args.indexOf("--stack-name") + 1])).toEqual([
+        ownedStack("tenkacloud-cloud-staging").StackId,
+        ownedStack("tenkacloud-cloud-problem-deploy-staging").StackId,
       ]);
-      expect(f.directories).toEqual([
-        `${ROOT}/apps/application-admin-console/dist`,
-        `${ROOT}/apps/participant-portal/dist`,
-      ]);
+      expect(f.calls.filter((call) => call.args.includes("stack-delete-complete"))).toHaveLength(2);
+      expect(f.calls.some((call) => call.inherit || call.command === "bun")).toBe(false);
       expect(f.messages.join("")).toContain("not purged");
     },
   );
@@ -271,12 +319,13 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     const f = fixture({
       confirmed: true,
       fail: (request) =>
-        request.args.includes("destroy")
+        request.args.includes("delete-stack")
           ? { code: 3, stdout: "", stderr: "destroy failure" }
           : undefined,
     });
     expect(await f.run(["down"])).toBe(1);
     expect(f.calls).toHaveLength(5);
+    expect(f.storageCalls).toContain("drained");
   });
   it.each(["up", "down"])(
     "%s rejects a caller-account mismatch before inspecting or mutating stacks",
@@ -318,7 +367,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
           expect(f.calls.some((call) => call.inherit)).toBe(false);
           expect(f.calls.some((call) => phaseMatches(call, "prepare"))).toBe(false);
           expect(f.confirmations).toEqual([]);
-          expect(f.directories).toEqual([]);
+          expect(f.storageCalls).toEqual([]);
         }
       }
     },
@@ -338,9 +387,9 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
           };
         },
       });
-      expect(await f.run([command])).toBe(command === "up" ? 0 : 1);
+      expect(await f.run([command])).toBe(0);
       if (command === "down") {
-        expect(f.errors.join("")).toContain("not deployed; no platform stacks were destroyed");
+        expect(f.messages.join("")).toContain("already absent");
         expect(f.calls.some((call) => call.inherit)).toBe(false);
         expect(f.confirmations).toEqual([]);
       }
@@ -374,7 +423,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       }
     },
   );
-  it("refuses to remove an enabled runner on update or destroy, even with --yes", async () => {
+  it("refuses an unversioned legacy runner update or teardown, even with --yes", async () => {
     const f = fixture({
       confirmed: true,
       fail: (request) =>
@@ -390,9 +439,9 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
           : undefined,
     });
     expect(await f.run(["up"])).toBe(1);
-    expect(f.errors.join("")).toContain("without TENKACLOUD_RUNNER_BINDINGS");
+    expect(f.errors.join("")).toContain("CloudRunnerMode");
     expect(await f.run(["down", "--yes"])).toBe(1);
-    expect(f.errors.join("")).toContain("drain pending and active executions");
+    expect(f.errors.join("")).toContain("durable intake-fence version");
     expect(f.calls.some((call) => call.inherit)).toBe(false);
   });
   it("permits explicit activation from a runner-disabled foundation and rejects invalid configuration before reads", async () => {
@@ -619,5 +668,178 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       }),
     ).toBe(1);
     expect(conflict.calls).toEqual([]);
+  });
+});
+
+describe("cloud CLI durable teardown recovery and registry updates", () => {
+  const app = "tenkacloud-cloud-staging";
+  const backend = "tenkacloud-cloud-problem-deploy-staging";
+  function missing(name: string): ProcessResult {
+    return {
+      code: 1,
+      stdout: "",
+      stderr: `An error occurred (ValidationError) when calling the DescribeStacks operation: Stack with id ${name} does not exist`,
+    };
+  }
+  it("resumes backend deletion after the app was removed and the first backend delete failed", async () => {
+    let resumed = false;
+    const f = fixture({
+      confirmed: true,
+      fail: (request) => {
+        if (resumed && platformInspection(request) && request.args.includes(app))
+          return missing(app);
+        if (
+          !resumed &&
+          request.args.includes("delete-stack") &&
+          request.args.includes(ownedStack(backend).StackId)
+        )
+          return { code: 3, stdout: "", stderr: "Synthetic backend failure" };
+        return undefined;
+      },
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    expect((await f.installation.repository.installationControl())?.status).toBe("DRAINED");
+    resumed = true;
+    const before = f.calls.length;
+    expect(await f.run(["down", "--yes"])).toBe(0);
+    expect(
+      f.calls
+        .slice(before)
+        .filter((call) => call.args.includes("delete-stack"))
+        .map((call) => call.args[call.args.indexOf("--stack-name") + 1]),
+    ).toEqual([ownedStack(backend).StackId]);
+  });
+  it.each([app, backend])(
+    "does not infer cleanup from missing %s without the durable completion proof",
+    async (name) => {
+      const f = fixture({
+        confirmed: true,
+        fail: (request) =>
+          platformInspection(request) && request.args.includes(name) ? missing(name) : undefined,
+      });
+      expect(await f.run(["down", "--yes"])).toBe(1);
+      expect(f.calls.some((call) => call.args.includes("delete-stack"))).toBe(false);
+      expect(f.confirmations).toEqual([]);
+    },
+  );
+  it("waits for a deletion already in progress instead of submitting another delete", async () => {
+    const f = fixture({
+      confirmed: true,
+      fail: (request) =>
+        platformInspection(request) && request.args.includes(app)
+          ? {
+              code: 0,
+              stderr: "",
+              stdout: JSON.stringify({ ...ownedStack(app), StackStatus: "DELETE_IN_PROGRESS" }),
+            }
+          : undefined,
+    });
+    expect(await f.run(["down", "--yes"])).toBe(0);
+    expect(f.calls.filter((call) => call.args.includes("delete-stack"))).toHaveLength(1);
+    expect(f.calls.find((call) => call.args.includes("delete-stack"))?.args).toContain(
+      ownedStack(backend).StackId,
+    );
+    expect(f.calls.filter((call) => call.args.includes("stack-delete-complete"))).toHaveLength(2);
+  });
+  it("waits for an update to complete before stopping event intake", async () => {
+    const f = fixture({
+      confirmed: true,
+      fail: (request) =>
+        platformInspection(request) && request.args.includes(app)
+          ? {
+              code: 0,
+              stderr: "",
+              stdout: JSON.stringify({ ...ownedStack(app), StackStatus: "UPDATE_IN_PROGRESS" }),
+            }
+          : undefined,
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    expect(f.storageCalls).toEqual([]);
+    expect(f.calls.some((call) => call.args.includes("delete-stack"))).toBe(false);
+  });
+  it("does not let up reopen an installation after a teardown failure", async () => {
+    const f = fixture({
+      confirmed: true,
+      fail: (request) =>
+        request.args.includes("delete-stack")
+          ? { code: 3, stdout: "", stderr: "Synthetic delete failure" }
+          : undefined,
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    const before = f.calls.length;
+    expect(await f.run(["up"])).toBe(1);
+    expect(f.errors.join("")).toContain("installation_draining");
+    expect(f.calls.slice(before).some((call) => call.command === "bun" || call.inherit)).toBe(
+      false,
+    );
+  });
+  it.each(["Events", "Teams", "Deployments"])(
+    "rejects an unrelated %s table output",
+    async (kind) => {
+      const f = fixture({
+        confirmed: true,
+        fail: (request) =>
+          platformInspection(request) && request.args.includes(backend)
+            ? {
+                code: 0,
+                stderr: "",
+                stdout: JSON.stringify({
+                  ...ownedStack(backend),
+                  Outputs: ownedStack(backend).Outputs.map((entry) =>
+                    entry.OutputKey === `${kind}TableName`
+                      ? { ...entry, OutputValue: "unrelated-table" }
+                      : entry,
+                  ),
+                }),
+              }
+            : undefined,
+      });
+      expect(await f.run(["down", "--yes"])).toBe(1);
+      expect(f.storageCalls).toEqual([]);
+      expect(f.confirmations).toEqual([]);
+    },
+  );
+  it("updates registry hosting without manual bindings while retaining the deployed empty-binding digest", async () => {
+    const f = fixture({
+      fail: (request) =>
+        platformInspection(request) && request.args.includes(app)
+          ? {
+              code: 0,
+              stderr: "",
+              stdout: JSON.stringify({
+                ...ownedStack(app),
+                Outputs: [
+                  { OutputKey: "CloudRunnerEnabled", OutputValue: "true" },
+                  { OutputKey: "CloudRunnerMode", OutputValue: "registry" },
+                  { OutputKey: "CloudLegacyBindingsDigest", OutputValue: contentDigest("[]") },
+                ],
+              }),
+            }
+          : undefined,
+    });
+    expect(await f.run(["up"])).toBe(0);
+    expect(f.storageCalls).toContain("assert-accepting");
+  });
+  it("refuses to omit legacy bindings still required by the deployed runner", async () => {
+    const f = fixture({
+      fail: (request) =>
+        platformInspection(request) && request.args.includes(app)
+          ? {
+              code: 0,
+              stderr: "",
+              stdout: JSON.stringify({
+                ...ownedStack(app),
+                Outputs: [
+                  { OutputKey: "CloudRunnerEnabled", OutputValue: "true" },
+                  { OutputKey: "CloudRunnerMode", OutputValue: "registry-with-legacy-bindings" },
+                  { OutputKey: "CloudLegacyBindingsDigest", OutputValue: "a".repeat(64) },
+                ],
+              }),
+            }
+          : undefined,
+    });
+    expect(await f.run(["up"])).toBe(1);
+    expect(f.errors.join("")).toContain("differs from the deployed legacy bindings");
+    expect(f.calls.some((call) => call.inherit || call.command === "bun")).toBe(false);
   });
 });

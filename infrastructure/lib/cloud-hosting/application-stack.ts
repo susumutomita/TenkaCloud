@@ -24,8 +24,15 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
+import { contentDigest } from "../problem-deploy/control-data/domain/deployment-work.js";
 import { CLOUD_EVENT_LIMITS } from "../problem-deploy/control-data/domain/events.js";
 import type { RunnerBinding } from "../problem-deploy/handlers/cloud-api/execution-config.js";
+import {
+  CompetitorBootstrapHosting,
+  competitorAssumeRolePolicy,
+  denyControlPlaneAssumeRole,
+  installationCompetitorConfig,
+} from "./competitor-accounts.js";
 import type { CloudDataStack } from "./data-stack.js";
 import { CloudDeploymentPipeline } from "./deployment-pipeline.js";
 import { cloudExecutionArtifacts } from "./execution-artifacts.js";
@@ -37,6 +44,7 @@ export interface CloudApplicationStackProps extends StackProps {
   readonly consoleAssets: string;
   readonly environment: string;
   readonly backend: CloudDataStack;
+  /** Retained exact bindings for already-persisted legacy jobs; new onboarding uses the registry. */
   readonly runnerBindings?: readonly RunnerBinding[];
 }
 /** Restored single-installation Cognito/API/hosting composition, without SBT or tenant stack factories. */
@@ -92,9 +100,16 @@ export class CloudApplicationStack extends Stack {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
     });
     apiLogs.grantWrite(apiRole);
-    const execution = props.runnerBindings?.length
-      ? cloudExecutionArtifacts(this, props.repositoryRoot, props.runnerBindings)
-      : undefined;
+    const legacyBindings = props.runnerBindings ?? [];
+    if (legacyBindings.some((binding) => binding.accountId === this.account))
+      throw new Error("Control-plane account cannot host competitor resources.");
+    const competitor = installationCompetitorConfig(this.account, this.region, props.environment);
+    const bootstrapTemplate = new CompetitorBootstrapHosting(
+      this,
+      "CompetitorBootstrap",
+      props.repositoryRoot,
+    );
+    const execution = cloudExecutionArtifacts(this, props.repositoryRoot, legacyBindings);
     const apiHandler = new NodejsFunction(this, "CloudApi", {
       runtime: Runtime.NODEJS_24_X,
       entry: join(
@@ -104,8 +119,8 @@ export class CloudApplicationStack extends Stack {
       handler: "handler",
       depsLockFilePath: join(props.repositoryRoot, "bun.lock"),
       projectRoot: props.repositoryRoot,
-      timeout: Duration.seconds(execution ? 28 : 15),
-      memorySize: execution ? 512 : 256,
+      timeout: Duration.seconds(28),
+      memorySize: 512,
       role: apiRole,
       logGroup: apiLogs,
       bundling: { bundleAwsSDK: true, minify: true, target: "node24" },
@@ -116,14 +131,12 @@ export class CloudApplicationStack extends Stack {
         COGNITO_ISSUER: issuer,
         COGNITO_CLIENT_ID: client.userPoolClientId,
         ALLOWED_ORIGINS: origins.join(","),
-        ...(execution
-          ? {
-              CLOUD_ARTIFACT_BUCKET: execution.bucket.bucketName,
-              CLOUD_CATALOG_KEY: execution.catalogKey,
-              CLOUD_RUNNER_BINDINGS_KEY: execution.bindingsKey,
-              CONTROL_PLANE_ACCOUNT: this.account,
-            }
-          : {}),
+        COMPETITOR_ROLE_NAME: competitor.roleName,
+        COMPETITOR_EXTERNAL_ID_PARAMETER_ARN: competitor.externalIdParameterArn,
+        CLOUD_ARTIFACT_BUCKET: execution.bucket.bucketName,
+        CLOUD_CATALOG_KEY: execution.catalogKey,
+        CLOUD_RUNNER_BINDINGS_KEY: execution.bindingsKey,
+        CONTROL_PLANE_ACCOUNT: this.account,
       },
     });
     apiHandler.addToRolePolicy(
@@ -147,71 +160,104 @@ export class CloudApplicationStack extends Stack {
         ],
       }),
     );
-    if (execution && props.runnerBindings) {
-      apiHandler.node.addDependency(execution.deployment);
-      apiHandler.addToRolePolicy(
-        new PolicyStatement({
-          actions: [
-            "dynamodb:GetItem",
-            "dynamodb:Query",
-            "dynamodb:PutItem",
-            "dynamodb:UpdateItem",
-            "dynamodb:ConditionCheckItem",
-          ],
-          resources: [
-            props.backend.events.tableArn,
-            props.backend.teams.tableArn,
-            props.backend.deployments.tableArn,
-          ],
-        }),
-      );
-      apiHandler.addToRolePolicy(
-        new PolicyStatement({
-          actions: ["dynamodb:DeleteItem"],
-          resources: [props.backend.deployments.tableArn],
-        }),
-      );
-      apiHandler.addToRolePolicy(
-        new PolicyStatement({
-          actions: ["s3:GetObject"],
-          resources: [
-            execution.bucket.arnForObjects(execution.catalogKey),
-            execution.bucket.arnForObjects(execution.bindingsKey),
-          ],
-        }),
-      );
+    apiHandler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["dynamodb:ConditionCheckItem"],
+        resources: [props.backend.events.tableArn],
+      }),
+    );
+    // Only a missing first-use ExternalId needs authoritative checks of retained registry/job references.
+    apiHandler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["dynamodb:Scan"],
+        resources: [props.backend.events.tableArn, props.backend.deployments.tableArn],
+      }),
+    );
+    apiHandler.addToRolePolicy(competitorAssumeRolePolicy(competitor));
+    apiHandler.addToRolePolicy(denyControlPlaneAssumeRole(this.account));
+    apiHandler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["ssm:GetParameter"],
+        resources: [competitor.externalIdParameterArn],
+      }),
+    );
+    apiHandler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["ssm:PutParameter"],
+        resources: [competitor.externalIdParameterArn],
+        conditions: { StringEquals: { "ssm:Overwrite": "false" } },
+      }),
+    );
+    apiHandler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["dynamodb:DeleteItem"],
+        resources: [props.backend.events.tableArn],
+      }),
+    );
+    apiHandler.node.addDependency(execution.deployment);
+    apiHandler.addToRolePolicy(
+      new PolicyStatement({
+        actions: [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:ConditionCheckItem",
+        ],
+        resources: [
+          props.backend.events.tableArn,
+          props.backend.teams.tableArn,
+          props.backend.deployments.tableArn,
+        ],
+      }),
+    );
+    apiHandler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["dynamodb:DeleteItem"],
+        resources: [props.backend.deployments.tableArn],
+      }),
+    );
+    apiHandler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: [
+          execution.bucket.arnForObjects(execution.catalogKey),
+          execution.bucket.arnForObjects(execution.bindingsKey),
+        ],
+      }),
+    );
+    if (legacyBindings.length) {
       apiHandler.addToRolePolicy(
         new PolicyStatement({
           actions: ["sts:AssumeRole"],
-          resources: [...new Set(props.runnerBindings.map((binding) => binding.roleArn))],
+          resources: [...new Set(legacyBindings.map((binding) => binding.roleArn))],
         }),
       );
       apiHandler.addToRolePolicy(
         new PolicyStatement({
           actions: ["ssm:GetParameter"],
-          resources: [
-            ...new Set(props.runnerBindings.map((binding) => binding.externalIdParameterArn)),
-          ],
+          resources: [...new Set(legacyBindings.map((binding) => binding.externalIdParameterArn))],
         }),
       );
-      const pipeline = new CloudDeploymentPipeline(this, "DeploymentPipeline", {
-        repositoryRoot: props.repositoryRoot,
-        events: props.backend.events,
-        teams: props.backend.teams,
-        deployments: props.backend.deployments,
-        allowedRoleArns: [...new Set(props.runnerBindings.map((binding) => binding.roleArn))],
-        externalIdParameterArns: [
-          ...new Set(props.runnerBindings.map((binding) => binding.externalIdParameterArn)),
-        ],
-        runnerBindings: props.runnerBindings,
-        catalogBucket: execution.bucket,
-        catalogKey: execution.catalogKey,
-        bindingsKey: execution.bindingsKey,
-      });
-      new CfnOutput(this, "CloudDeploymentStateMachineArn", {
-        value: pipeline.stateMachine.stateMachineArn,
-      });
     }
+    const pipeline = new CloudDeploymentPipeline(this, "DeploymentPipeline", {
+      repositoryRoot: props.repositoryRoot,
+      events: props.backend.events,
+      teams: props.backend.teams,
+      deployments: props.backend.deployments,
+      allowedRoleArns: [...new Set(legacyBindings.map((binding) => binding.roleArn))],
+      externalIdParameterArns: [
+        ...new Set(legacyBindings.map((binding) => binding.externalIdParameterArn)),
+      ],
+      runnerBindings: legacyBindings,
+      competitorConfig: competitor,
+      catalogBucket: execution.bucket,
+      catalogKey: execution.catalogKey,
+      bindingsKey: execution.bindingsKey,
+    });
+    new CfnOutput(this, "CloudDeploymentStateMachineArn", {
+      value: pipeline.stateMachine.stateMachineArn,
+    });
     const api = new RestApi(this, "Api", {
       endpointTypes: [EndpointType.REGIONAL],
       deployOptions: { throttlingBurstLimit: 200, throttlingRateLimit: 100 },
@@ -242,23 +288,28 @@ export class CloudApplicationStack extends Stack {
       // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- These read-only routes verify the 256-bit team bearer in Lambda and derive event scope server-side; absent/revoked keys are tested.
       route.addMethod("GET", integration, { authorizationType: AuthorizationType.NONE });
     }
-    if (execution) {
-      event.addResource("deploy").addMethod("POST", integration, protectedMethod);
-      event.addMethod("DELETE", integration, protectedMethod);
-      event.addResource("schedule").addMethod("PATCH", integration, protectedMethod);
-      const scoringLock = event.addResource("lock-scoring");
-      scoringLock.addMethod("POST", integration, protectedMethod);
-      scoringLock.addMethod("DELETE", integration, protectedMethod);
-      team.addResource("connection").addMethod("POST", integration, protectedMethod);
-      const history = portal.getResource("me")?.addResource("score-events");
-      if (!history) throw new Error("Participant history route is missing.");
-      // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- Fresh team bearer authentication derives the history partition; request-supplied team/event identifiers are not accepted.
-      history.addMethod("GET", integration, { authorizationType: AuthorizationType.NONE });
-      const flag = portal.getResource("me")?.addResource("submit-flag");
-      if (!flag) throw new Error("Participant route is missing.");
-      // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- The Lambda revalidates the team bearer, event/attempt ownership and current authVersion in the scoring transaction; no Cognito participant identity exists.
-      flag.addMethod("POST", integration, { authorizationType: AuthorizationType.NONE });
-    }
+    const accounts = api.root.addResource("admin").addResource("competitor-accounts");
+    accounts.addMethod("GET", integration, protectedMethod);
+    accounts.addMethod("POST", integration, protectedMethod);
+    accounts.addResource("bulk").addMethod("POST", integration, protectedMethod);
+    const account = accounts.addResource("{awsAccountId}");
+    account.addMethod("DELETE", integration, protectedMethod);
+    account.addResource("verify").addMethod("POST", integration, protectedMethod);
+    event.addResource("deploy").addMethod("POST", integration, protectedMethod);
+    event.addMethod("DELETE", integration, protectedMethod);
+    event.addResource("schedule").addMethod("PATCH", integration, protectedMethod);
+    const scoringLock = event.addResource("lock-scoring");
+    scoringLock.addMethod("POST", integration, protectedMethod);
+    scoringLock.addMethod("DELETE", integration, protectedMethod);
+    team.addResource("connection").addMethod("POST", integration, protectedMethod);
+    const history = portal.getResource("me")?.addResource("score-events");
+    if (!history) throw new Error("Participant history route is missing.");
+    // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- Fresh team bearer authentication derives the history partition; request-supplied team/event identifiers are not accepted.
+    history.addMethod("GET", integration, { authorizationType: AuthorizationType.NONE });
+    const flag = portal.getResource("me")?.addResource("submit-flag");
+    if (!flag) throw new Error("Participant route is missing.");
+    // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- The Lambda revalidates the team bearer, event/attempt ownership and current authVersion in the scoring transaction; no Cognito participant identity exists.
+    flag.addMethod("POST", integration, { authorizationType: AuthorizationType.NONE });
     new BucketDeployment(this, "ConsoleRuntime", {
       destinationBucket: consoleSite.bucket,
       distribution: consoleSite.distribution,
@@ -271,6 +322,8 @@ export class CloudApplicationStack extends Stack {
           tenantId: "local",
           tenantName: "TenkaCloud",
           eventLimits: CLOUD_EVENT_LIMITS,
+          competitorRoleName: competitor.roleName,
+          competitorBootstrapTemplateUrl: bootstrapTemplate.templateUrl,
           participantPortalUrl: props.backend.portal.url,
         }),
       ],
@@ -299,6 +352,17 @@ export class CloudApplicationStack extends Stack {
     new CfnOutput(this, "OrganizerUserPoolId", { value: pool.userPoolId });
     new CfnOutput(this, "CognitoDomainUrl", { value: domain.baseUrl() });
     new CfnOutput(this, "ApiUrl", { value: api.url });
-    new CfnOutput(this, "CloudRunnerEnabled", { value: execution ? "true" : "false" });
+    new CfnOutput(this, "CloudRunnerEnabled", { value: "true" });
+    new CfnOutput(this, "CloudInstallationControlVersion", { value: "1" });
+    new CfnOutput(this, "CloudRunnerMode", {
+      value: legacyBindings.length ? "registry-with-legacy-bindings" : "registry",
+    });
+    new CfnOutput(this, "CloudLegacyBindingsDigest", {
+      value: contentDigest(JSON.stringify(legacyBindings)),
+    });
+    new CfnOutput(this, "CompetitorRoleName", { value: competitor.roleName });
+    new CfnOutput(this, "CompetitorExternalIdParameterArn", {
+      value: competitor.externalIdParameterArn,
+    });
   }
 }

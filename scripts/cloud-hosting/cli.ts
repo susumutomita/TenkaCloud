@@ -1,12 +1,17 @@
 import { join } from "node:path";
+import { z } from "zod";
 import {
   projectBootstrap,
   requireExecutionPolicy,
 } from "../../infrastructure/lib/cloud-hosting/bootstrap";
 import { assertCommercialRegion } from "../../infrastructure/lib/cloud-hosting/regions";
 import { cloudStackNames } from "../../infrastructure/lib/cloud-hosting/stack-names";
+import { contentDigest } from "../../infrastructure/lib/problem-deploy/control-data/domain/deployment-work";
+import type { CloudTableNames } from "../../infrastructure/lib/problem-deploy/control-data/dynamodb-cloud-repository";
+import type { InstallationScope } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
 import { parseRunnerBindings } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/execution-config";
 import { assertOwnedBootstrap } from "./bootstrap-check";
+import { type CloudInstallation, drainInstallation } from "./installation";
 import type { CloudCliIo, ProcessResult } from "./process";
 import { assertOwnedStack, assertRunnerChange, isMissingStack } from "./stack-check";
 
@@ -93,7 +98,23 @@ async function buildApplications(context: Context): Promise<void> {
       `Build ${application}`,
     );
 }
-async function platformPreflight(context: Context, allowMissing: boolean): Promise<string[]> {
+interface OwnedPlatformStack {
+  readonly name: string;
+  readonly arn: string;
+  readonly outputs: Readonly<Record<string, string>>;
+  readonly status: string;
+}
+const outputsSchema = z.array(z.object({ OutputKey: z.string(), OutputValue: z.string() }));
+function stackOutputs(text: string): Readonly<Record<string, string>> {
+  const raw = z.object({ Outputs: outputsSchema }).parse(JSON.parse(text) as unknown);
+  if (new Set(raw.Outputs.map((entry) => entry.OutputKey)).size !== raw.Outputs.length)
+    throw new Error("Ambiguous stack outputs");
+  return Object.fromEntries(raw.Outputs.map((entry) => [entry.OutputKey, entry.OutputValue]));
+}
+async function platformPreflight(
+  context: Context,
+  mode: "up" | "down",
+): Promise<OwnedPlatformStack[]> {
   const account = context.env.ACCOUNT_ID ?? "";
   const region = context.env.REGION ?? "";
   const caller = await run(context, "aws", [
@@ -109,7 +130,7 @@ async function platformPreflight(context: Context, allowMissing: boolean): Promi
   assertSuccess(caller, "Verify deployment account");
   if (caller.stdout.trim() !== account)
     throw new Error("Current AWS credentials do not match the resolved deployment account.");
-  const stackArns: string[] = [];
+  const stacks: OwnedPlatformStack[] = [];
   for (const name of [context.stacks.app, context.stacks.backend]) {
     const result = await run(context, "aws", [
       "cloudformation",
@@ -124,34 +145,36 @@ async function platformPreflight(context: Context, allowMissing: boolean): Promi
       "json",
     ]);
     if (result.code !== 0 && isMissingStack(result.stderr, name)) {
-      if (!allowMissing)
-        throw new Error(`Stack ${name} is not deployed; no platform stacks were destroyed.`);
       continue;
     }
     assertSuccess(result, `Inspect platform stack ${name}`);
-    stackArns.push(
-      assertOwnedStack(result.stdout, {
+    stacks.push({
+      name,
+      arn: assertOwnedStack(result.stdout, {
         account,
         region,
         name,
         environment: context.env.CDK_PARAM_ENVIRONMENT ?? "development",
       }),
-    );
-    validateRunnerTransition(context, name, result.stdout, allowMissing);
+      outputs: stackOutputs(result.stdout),
+      status: z.object({ StackStatus: z.string() }).parse(JSON.parse(result.stdout) as unknown)
+        .StackStatus,
+    });
+    if (mode === "up") validateRunnerTransition(context, name, result.stdout);
   }
-  return stackArns;
+  return stacks;
 }
-function validateRunnerTransition(
-  context: Context,
-  name: string,
-  output: string,
-  allowMissing: boolean,
-): void {
+function validateRunnerTransition(context: Context, name: string, output: string): void {
   if (name !== context.stacks.app) return;
   assertRunnerChange(
     output,
-    allowMissing ? "up" : "down",
-    Boolean(context.env.TENKACLOUD_RUNNER_BINDINGS?.trim()),
+    contentDigest(
+      JSON.stringify(
+        context.env.TENKACLOUD_RUNNER_BINDINGS === undefined
+          ? []
+          : parseRunnerBindings(context.env.TENKACLOUD_RUNNER_BINDINGS),
+      ),
+    ),
   );
 }
 async function output(context: Context, stack: string, name: string): Promise<string> {
@@ -244,7 +267,19 @@ async function up(context: Context): Promise<number> {
   const resolved = await resolveCloudContext(context);
   if (resolved.env.ACCOUNT_ID !== executionPolicy.account)
     throw new Error("Execution policy must belong to the deployment account.");
-  await platformPreflight(resolved, true);
+  const deployed = await platformPreflight(resolved, "up");
+  const backend = deployed.find((stack) => stack.name === context.stacks.backend);
+  if (backend) {
+    const installation = resolved.io.openInstallation({
+      region: resolved.env.REGION ?? "",
+      tables: installationTables(backend),
+    });
+    try {
+      await installation.repository.assertAcceptingInstallation();
+    } finally {
+      installation.close();
+    }
+  }
   const bootstrapArgs = await bootstrapPreflight(resolved, executionPolicy.arn);
   await buildApplications(resolved);
   context.io.stdout("[cloud] [2/4] Bootstrapping CDK (safe to repeat)\n");
@@ -269,29 +304,121 @@ async function up(context: Context): Promise<number> {
   );
   return 0;
 }
+function installationTables(backend: OwnedPlatformStack): CloudTableNames {
+  const result = {
+    events: backend.outputs.EventsTableName ?? "",
+    teams: backend.outputs.TeamsTableName ?? "",
+    deployments: backend.outputs.DeploymentsTableName ?? "",
+  };
+  for (const [kind, value] of Object.entries(result)) {
+    const resource = kind[0]?.toUpperCase() + kind.slice(1);
+    // CDK-generated physical names are stack-scoped. Never adopt an arbitrary table output.
+    if (!value.startsWith(`${backend.name}-${resource}`) || !/^[A-Za-z0-9_.-]{3,255}$/u.test(value))
+      throw new Error(
+        `Missing or unowned ${resource} table output; no platform stacks were destroyed.`,
+      );
+  }
+  if (new Set(Object.values(result)).size !== 3)
+    throw new Error("Cloud table outputs must be distinct.");
+  return result;
+}
+async function teardownScope(
+  context: Context,
+  stacks: readonly OwnedPlatformStack[],
+  installation: CloudInstallation,
+): Promise<InstallationScope> {
+  const backend = stacks.find((stack) => stack.name === context.stacks.backend);
+  const app = stacks.find((stack) => stack.name === context.stacks.app);
+  if (!backend)
+    throw new Error(
+      "Backend is missing; unable to prove event cleanup. No hosting resources were removed.",
+    );
+  if (
+    app &&
+    (app.outputs.CloudInstallationControlVersion !== "1" ||
+      !["true", "false"].includes(app.outputs.CloudRunnerEnabled ?? ""))
+  )
+    throw new Error(
+      "Deployed application does not advertise the durable intake-fence version. Update the matching installation before coordinated destroy; no resources were removed.",
+    );
+  if (app)
+    return {
+      account: context.env.ACCOUNT_ID ?? "",
+      region: context.env.REGION ?? "",
+      environment: context.env.CDK_PARAM_ENVIRONMENT ?? "development",
+      applicationStackId: app.arn,
+      backendStackId: backend.arn,
+    };
+  const control = await installation.repository.installationControl();
+  if (
+    control?.status !== "DRAINED" ||
+    control.scope.backendStackId !== backend.arn ||
+    control.scope.account !== context.env.ACCOUNT_ID ||
+    control.scope.region !== context.env.REGION ||
+    control.scope.environment !== context.env.CDK_PARAM_ENVIRONMENT
+  )
+    throw new Error(
+      "Application stack is absent without a matching completed drain; refusing to infer cleanup.",
+    );
+  return control.scope;
+}
 async function down(context: Context, yes: boolean): Promise<void> {
   const resolved = await resolveCloudContext(context);
-  const stackArns = await platformPreflight(resolved, false);
-  const consequences = `Destroy platform hosting in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stackArns.join("\n")}\nEvent data, organizer sign-in accounts, CDK asset and execution-artifact S3 storage, the project CDK toolkit, and separately deployed exercise resources are retained and may continue to incur charges.`;
-  context.io.stdout(`${consequences}\n`);
-  if (!yes && !(await context.io.confirm(`${consequences} [y/N] `))) {
-    context.io.stdout("Cloud teardown cancelled\n");
+  const stacks = await platformPreflight(resolved, "down");
+  if (stacks.length === 0) {
+    context.io.stdout(
+      "[cloud] Both platform stacks are already absent. Retained data, assets and competitor bootstrap resources were not changed.\n",
+    );
     return;
   }
-  // Destroy also synthesizes assets. Empty directories are sufficient; no builds/uploads happen.
-  for (const app of ["application-admin-console", "participant-portal"])
-    await context.io.ensureDir(join(context.root, "apps", app, "dist"));
-  assertSuccess(
-    await cdk(resolved, ["destroy", context.stacks.app, "--force"]),
-    "Application stack destroy",
-  );
-  assertSuccess(
-    await cdk(resolved, ["destroy", context.stacks.backend, "--force"]),
-    "Backend stack destroy",
-  );
-  context.io.stdout(
-    "Cloud stacks destroyed. Retained data and organizer accounts, CDK asset and execution-artifact S3 storage, the project CDK bootstrap stack, and separately deployed exercise resources are not purged by this command.\n",
-  );
+  const backend = stacks.find((stack) => stack.name === context.stacks.backend);
+  if (!backend)
+    throw new Error(
+      "Backend is missing; event cleanup cannot be verified. No resources were removed.",
+    );
+  if (
+    stacks.some(
+      (stack) => stack.status.endsWith("_IN_PROGRESS") && stack.status !== "DELETE_IN_PROGRESS",
+    )
+  )
+    throw new Error(
+      "A platform stack update is still running; wait for it to finish before destroy.",
+    );
+  const installation = resolved.io.openInstallation({
+    region: resolved.env.REGION ?? "",
+    tables: installationTables(backend),
+  });
+  try {
+    const scope = await teardownScope(resolved, stacks, installation);
+    const consequences = `Stop new competition work, remove recorded event exercise resources, then destroy platform hosting in account ${scope.account}, region ${scope.region}, environment ${scope.environment}?\n${stacks.map((stack) => stack.arn).join("\n")}\nEvent data, scores and receipts, organizer sign-in accounts, shared ExternalId, competitor-owned bootstrap stacks/IAM roles, CDK asset and execution-artifact S3 storage, and the project CDK toolkit are retained and may continue to incur charges. Unrelated or separately deployed exercise resources are untouched.`;
+    context.io.stdout(`${consequences}\n`);
+    if (!yes && !(await context.io.confirm(`${consequences} [y/N] `))) {
+      context.io.stdout("Cloud teardown cancelled\n");
+      return;
+    }
+    await drainInstallation(installation, scope, context.io);
+    // Delete the verified physical ARN, never a reusable stack name. CloudFormation still
+    // runs custom-resource cleanup and honors each template's retention policies.
+    for (const name of [context.stacks.app, context.stacks.backend]) {
+      const stack = stacks.find((candidate) => candidate.name === name);
+      if (!stack) continue;
+      const args = ["--stack-name", stack.arn, "--region", scope.region];
+      if (stack.status !== "DELETE_IN_PROGRESS")
+        assertSuccess(
+          await run(resolved, "aws", ["cloudformation", "delete-stack", ...args]),
+          `Delete ${name}`,
+        );
+      assertSuccess(
+        await run(resolved, "aws", ["cloudformation", "wait", "stack-delete-complete", ...args]),
+        `Wait for ${name} deletion`,
+      );
+    }
+    context.io.stdout(
+      "Cloud hosting and recorded event exercise resources destroyed. Retained data, accounts, shared ExternalId, bootstrap resources and asset storage are not purged.\n",
+    );
+  } finally {
+    installation.close();
+  }
 }
 async function status(context: Context): Promise<number> {
   for (const stack of [context.stacks.app, context.stacks.backend]) {

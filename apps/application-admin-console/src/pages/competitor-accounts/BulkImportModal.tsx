@@ -49,11 +49,11 @@ const OUTCOME_INDICATOR: Record<
  * 結果は **行ごと**に出す。 backend が部分的な成功を正常系として返すので、 画面側で
  * 「全部成功」 か 「全部失敗」 に丸めると、 どの行が入ったのか分からなくなる。
  */
-export function BulkImportModal({ config, visible, onDismiss, onCompleted }: BulkImportModalProps) {
+function useBulkForm({ config, onDismiss, onCompleted }: Omit<BulkImportModalProps, "visible">) {
   const apiClient = useApiClient(config);
   const canMutate = canManageConnections(config, apiClient);
-  const t = useT();
-  const suggestedRoleName = defaultCompetitorRoleName({ tenantId: config.tenantId });
+  const suggestedRoleName =
+    config.competitorRoleName ?? defaultCompetitorRoleName({ tenantId: config.tenantId });
   const [text, setText] = useState("");
   const [region, setRegion] = useState(config.hostAwsRegion ?? "ap-northeast-1");
   const [competitorRoleName, setCompetitorRoleName] = useState(suggestedRoleName);
@@ -61,7 +61,9 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
   const [error, setError] = useState<FriendlyError | null>(null);
   const [response, setResponse] = useState<BulkCreateCompetitorAccountsResponse | null>(null);
 
-  const input = deriveBulkInputState(text, competitorRoleName);
+  const input = deriveBulkInputState(text, config.competitorRoleName ?? competitorRoleName);
+  const configuredRoleMismatch =
+    input.canSubmit && !!config.competitorRoleName && input.roleName !== config.competitorRoleName;
 
   const reset = () => {
     setText("");
@@ -80,13 +82,14 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
     onDismiss();
   };
 
-  const submitDisabled = !apiClient || !canMutate || inFlight || !input.canSubmit;
+  const submitDisabled =
+    !apiClient || !canMutate || inFlight || !input.canSubmit || configuredRoleMismatch;
 
   const handleSubmit = async () => {
     // submit button は disabled={submitDisabled} なので、 client 未取得や未 parse の
     // 状態では呼ばれない (= 防御的不到達)。
     /* v8 ignore next */
-    if (!apiClient || !input.canSubmit) return;
+    if (!apiClient || !input.canSubmit || configuredRoleMismatch || !canMutate) return;
     setInFlight(true);
     setError(null);
     try {
@@ -111,6 +114,42 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
     }
   };
 
+  return {
+    text,
+    setText,
+    region,
+    setRegion,
+    competitorRoleName,
+    setCompetitorRoleName,
+    inFlight,
+    error,
+    response,
+    input,
+    configuredRoleMismatch,
+    handleDismiss,
+    handleSubmit,
+    submitDisabled,
+  };
+}
+
+export function BulkImportModal({ config, visible, onDismiss, onCompleted }: BulkImportModalProps) {
+  const t = useT();
+  const {
+    text,
+    setText,
+    region,
+    setRegion,
+    competitorRoleName,
+    setCompetitorRoleName,
+    inFlight,
+    error,
+    response,
+    input,
+    configuredRoleMismatch,
+    handleDismiss,
+    handleSubmit,
+    submitDisabled,
+  } = useBulkForm({ config, onDismiss, onCompleted });
   return (
     <Modal
       visible={visible}
@@ -142,43 +181,7 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
         {error && <FriendlyErrorAlert error={error} />}
 
         {response ? (
-          <SpaceBetween size="m">
-            <Alert
-              type={response.created > 0 ? "success" : "warning"}
-              header={t("competitor_accounts.bulk_result_header")}
-            >
-              {t("competitor_accounts.bulk_result_summary", {
-                created: String(response.created),
-                duplicate: String(response.duplicate),
-                invalid: String(response.invalid + response.failed),
-              })}
-            </Alert>
-            <Table
-              variant="embedded"
-              items={[...response.results]}
-              columnDefinitions={[
-                {
-                  id: "awsAccountId",
-                  header: "AWS Account ID",
-                  cell: (item) => <code>{item.awsAccountId}</code>,
-                },
-                {
-                  id: "outcome",
-                  header: t("competitor_accounts.col_status"),
-                  cell: (item) => (
-                    <StatusIndicator type={OUTCOME_INDICATOR[item.outcome]}>
-                      {t(`competitor_accounts.bulk_outcome_${item.outcome}`)}
-                    </StatusIndicator>
-                  ),
-                },
-                {
-                  id: "message",
-                  header: t("competitor_accounts.bulk_col_detail"),
-                  cell: (item) => item.message ?? "",
-                },
-              ]}
-            />
-          </SpaceBetween>
+          <BulkImportResults response={response} />
         ) : (
           <SpaceBetween size="m">
             <FormField
@@ -186,7 +189,7 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
               description={t("competitor_accounts.bulk_modal_input_description")}
               errorText={input.errors.length > 0 ? input.errors.join(" / ") : undefined}
               constraintText={
-                input.canSubmit && input.accounts.length > 0
+                input.canSubmit
                   ? t("competitor_accounts.bulk_modal_parsed", {
                       count: String(input.accounts.length),
                     })
@@ -214,17 +217,75 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
             </FormField>
             <FormField
               label={t("competitor_accounts.add_modal_role_label")}
-              description={t("competitor_accounts.bulk_modal_role_description")}
+              description={t(
+                config.competitorRoleName
+                  ? "competitor_accounts.configured_role_description"
+                  : "competitor_accounts.bulk_modal_role_description",
+              )}
+              errorText={
+                configuredRoleMismatch
+                  ? t("competitor_accounts.configured_role_mismatch", {
+                      role: config.competitorRoleName ?? "",
+                    })
+                  : undefined
+              }
             >
               <Input
-                value={competitorRoleName}
+                value={config.competitorRoleName ?? competitorRoleName}
                 onChange={(e) => setCompetitorRoleName(e.detail.value)}
-                disabled={inFlight}
+                disabled={inFlight || !!config.competitorRoleName}
               />
             </FormField>
           </SpaceBetween>
         )}
       </SpaceBetween>
     </Modal>
+  );
+}
+
+function BulkImportResults({
+  response,
+}: {
+  readonly response: BulkCreateCompetitorAccountsResponse;
+}) {
+  const t = useT();
+  return (
+    <SpaceBetween size="m">
+      <Alert
+        type={response.created > 0 ? "success" : "warning"}
+        header={t("competitor_accounts.bulk_result_header")}
+      >
+        {t("competitor_accounts.bulk_result_summary", {
+          created: String(response.created),
+          duplicate: String(response.duplicate),
+          invalid: String(response.invalid + response.failed),
+        })}
+      </Alert>
+      <Table
+        variant="embedded"
+        items={[...response.results]}
+        columnDefinitions={[
+          {
+            id: "awsAccountId",
+            header: "AWS Account ID",
+            cell: (item) => <code>{item.awsAccountId}</code>,
+          },
+          {
+            id: "outcome",
+            header: t("competitor_accounts.col_status"),
+            cell: (item) => (
+              <StatusIndicator type={OUTCOME_INDICATOR[item.outcome]}>
+                {t(`competitor_accounts.bulk_outcome_${item.outcome}`)}
+              </StatusIndicator>
+            ),
+          },
+          {
+            id: "message",
+            header: t("competitor_accounts.bulk_col_detail"),
+            cell: (item) => item.message ?? "",
+          },
+        ]}
+      />
+    </SpaceBetween>
   );
 }

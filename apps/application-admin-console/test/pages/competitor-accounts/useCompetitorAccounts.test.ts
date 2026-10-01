@@ -27,7 +27,7 @@ vi.mock("../../../src/api/competitor-accounts-client", () => ({
 }));
 
 const config = {} as AppConfig;
-const FAKE_CLIENT = { get: vi.fn(), post: vi.fn(), del: vi.fn() };
+const FAKE_CLIENT = { get: vi.fn(), post: vi.fn(), del: vi.fn(), cloudOrganizerRole: "Admin" };
 const READ_ONLY_CLIENT = {
   get: vi.fn(),
   post: vi.fn(),

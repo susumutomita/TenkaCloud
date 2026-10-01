@@ -3,6 +3,10 @@ import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import { z } from "zod";
 import { assertCommercialRegion } from "../../../cloud-hosting/regions.js";
+import type {
+  CompetitorAccountRecord,
+  InstallationCompetitorConfig,
+} from "../../control-data/domain/competitor-accounts.js";
 import { contentDigest, type DeploymentJob } from "../../control-data/domain/deployment-work.js";
 import type { CloudProblem } from "./deployment-routes.js";
 
@@ -102,7 +106,8 @@ export function createCatalogLoader() {
   return async (key: string): Promise<ExecutionCatalog> => parseCatalog(await load(key));
 }
 export async function loadExecutionBindings(): Promise<readonly RunnerBinding[]> {
-  return parseRunnerBindings(await createObjectLoader()(setting("CLOUD_RUNNER_BINDINGS_KEY")));
+  const raw = await createObjectLoader()(setting("CLOUD_RUNNER_BINDINGS_KEY"));
+  return raw === "[]" ? [] : parseRunnerBindings(raw);
 }
 function parseCatalog(raw: string): ExecutionCatalog {
   const catalog = executionCatalogSchema.parse(JSON.parse(raw) as unknown);
@@ -149,9 +154,11 @@ export function createExecutionArtifactResolver() {
   };
 }
 /** Historical verify.ts's ExternalId-bearing STS sanity check, restricted to an explicit configured binding. */
-export function createConnectionVerifier() {
+export function createConnectionVerifier(controlPlaneAccount?: string) {
   const sts = new STSClient({ region: setting("AWS_REGION"), ignoreConfiguredEndpointUrls: true });
   return async (binding: RunnerBinding): Promise<void> => {
+    if (binding.accountId === controlPlaneAccount)
+      throw new Error("Control-plane account cannot host competitor resources.");
     const region = binding.externalIdParameterArn.split(":")[3];
     if (!region) throw new Error("Invalid parameter region.");
     const ssm = new SSMClient({ region, ignoreConfiguredEndpointUrls: true });
@@ -182,4 +189,38 @@ export function createConnectionVerifier() {
     )
       throw new Error("Connection verification returned incomplete credentials.");
   };
+}
+
+export function installationAccountConfig(): InstallationCompetitorConfig {
+  const roleName = setting("COMPETITOR_ROLE_NAME");
+  const externalIdParameterArn = setting("COMPETITOR_EXTERNAL_ID_PARAMETER_ARN");
+  const hash = /^TenkaCloud-([a-f0-9]{24})-deploy-Role$/u.exec(roleName)?.[1];
+  if (
+    !hash ||
+    !new RegExp(
+      `^arn:aws:ssm:[a-z0-9-]+:\\d{12}:parameter/tenkacloud/cloud/${hash}/external-id$`,
+      "u",
+    ).test(externalIdParameterArn)
+  )
+    throw new Error("Invalid installation account configuration.");
+  return { roleName, externalIdParameterArn };
+}
+
+export function registeredRunnerBinding(
+  record: CompetitorAccountRecord,
+  config: InstallationCompetitorConfig,
+  reviewedProblemIds: readonly string[],
+): RunnerBinding {
+  if (record.awsAccountId === config.externalIdParameterArn.split(":")[4])
+    throw new Error("Control-plane account cannot host competitor resources.");
+  if (!record.verified || record.competitorRoleName !== config.roleName)
+    throw new Error("Competitor registration is not verified for this installation.");
+  return runnerBindingSchema.parse({
+    id: `account-${record.registrationId.toLowerCase()}`,
+    accountId: record.awsAccountId,
+    region: record.region,
+    roleArn: `arn:aws:iam::${record.awsAccountId}:role/${config.roleName}`,
+    externalIdParameterArn: config.externalIdParameterArn,
+    reviewedProblemIds,
+  });
 }

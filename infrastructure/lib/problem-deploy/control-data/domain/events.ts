@@ -1,4 +1,5 @@
-export const CLOUD_EVENT_LIMITS = { maxTeams: 49, maxProblems: 50 } as const;
+// Event + installation intake fence + replay receipt + two durable rows per team <= 100.
+export const CLOUD_EVENT_LIMITS = { maxTeams: 48, maxProblems: 50 } as const;
 
 /** Restored event wire/domain fields from 825415fc; one installation has no tenant axis. */
 export type EventStatus = "DRAFT" | "DEPLOYING" | "READY" | "ENDED" | "TEARDOWN" | "ARCHIVED";

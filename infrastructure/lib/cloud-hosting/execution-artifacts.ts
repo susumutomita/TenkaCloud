@@ -11,7 +11,7 @@ import {
   type RunnerBinding,
 } from "../problem-deploy/handlers/cloud-api/execution-config.js";
 
-function repositoryArtifactFile(repositoryRoot: string, artifact: string): string {
+export function repositoryArtifactFile(repositoryRoot: string, artifact: string): string {
   const selectedRoot = resolve(repositoryRoot);
   const selected = lstatSync(selectedRoot);
   if (selected.isSymbolicLink()) {

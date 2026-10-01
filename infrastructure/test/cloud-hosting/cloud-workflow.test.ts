@@ -467,12 +467,12 @@ describe("production Lambda factory with every SDK send intercepted", () => {
       expiresAt: Date.now() / 1000 + 86400,
       connection: {
         ...f.data.job.connection,
-        bindingId: "approved",
+        bindingId: "account-approved",
         reviewedProblemIds: ["hello-world"],
       },
     };
     const binding = {
-      id: "approved",
+      id: "account-approved",
       accountId: f.data.job.awsAccountId,
       region: f.data.job.region,
       roleArn: f.data.job.connection.roleArn,
@@ -482,6 +482,7 @@ describe("production Lambda factory with every SDK send intercepted", () => {
     let raw = JSON.stringify([binding]);
     for (const [key, value] of Object.entries({
       AWS_REGION: "us-east-1",
+      CONTROL_PLANE_ACCOUNT: "123456789012",
       EVENTS_TABLE_NAME: "synthetic-events",
       TEAMS_TABLE_NAME: "synthetic-teams",
       DEPLOYMENTS_TABLE_NAME: "synthetic-deployments",
@@ -536,6 +537,125 @@ describe("production Lambda factory with every SDK send intercepted", () => {
   });
 });
 
+describe("registry-backed production worker with intercepted SDKs", () => {
+  it("checks the current registry before STS, rejects revoked/recreated/foreign records, and never falls back to legacy bindings", async () => {
+    const f = fixture();
+    const roleName = `TenkaCloud-${"a".repeat(24)}-deploy-Role`;
+    const parameter = `arn:aws:ssm:us-east-1:123456789012:parameter/tenkacloud/cloud/${"a".repeat(24)}/external-id`;
+    const original = {
+      awsAccountId: f.data.job.awsAccountId,
+      region: "us-east-1",
+      competitorRoleName: roleName,
+      registrationId: JOB,
+      revision: 2,
+      verified: true,
+      verifiedAt: new Date(NOW).toISOString(),
+      createdAt: new Date(NOW).toISOString(),
+      updatedAt: new Date(NOW).toISOString(),
+      createdBy: "synthetic-organizer",
+    };
+    let record: typeof original | undefined = original;
+    f.data.job = {
+      ...f.data.job,
+      status: "IN_PROGRESS",
+      owner: OWNER,
+      expiresAt: Date.now() / 1000 + 86400,
+      connection: {
+        ...f.data.job.connection,
+        bindingId: `account-${JOB.toLowerCase()}`,
+        registrationId: JOB,
+        roleArn: `arn:aws:iam::${original.awsAccountId}:role/${roleName}`,
+        externalIdParameter: parameter,
+        reviewedProblemIds: ["hello-world"],
+      },
+    };
+    const raw = "[]";
+    for (const [key, value] of Object.entries({
+      AWS_REGION: "us-east-1",
+      CONTROL_PLANE_ACCOUNT: "123456789012",
+      EVENTS_TABLE_NAME: "events",
+      TEAMS_TABLE_NAME: "teams",
+      DEPLOYMENTS_TABLE_NAME: "deployments",
+      CLOUD_ARTIFACT_BUCKET: "artifacts",
+      CLOUD_RUNNER_BINDINGS_KEY: `bindings/${contentDigest(raw)}.json`,
+      COMPETITOR_ROLE_NAME: roleName,
+      COMPETITOR_EXTERNAL_ID_PARAMETER_ARN: parameter,
+    }))
+      vi.stubEnv(key, value);
+    vi.spyOn(S3Client.prototype, "send").mockImplementation(async () => ({
+      ContentLength: raw.length,
+      Body: { transformToString: async () => raw },
+    }));
+    const registryRow = () =>
+      record
+        ? { Item: { ...record, PK: "INSTALLATION#ACCOUNTS", SK: `ACCOUNT#${record.awsAccountId}` } }
+        : {};
+    vi.spyOn(DynamoDBDocumentClient.prototype, "send").mockImplementation(async (command) => {
+      if (command instanceof TransactWriteCommand) return {};
+      if (!(command instanceof GetCommand)) throw new Error("Unexpected Dynamo command");
+      if (command.input.Key?.PK === "INSTALLATION#ACCOUNTS") return registryRow();
+      if (String(command.input.Key?.SK).startsWith("CREATE#")) return { Item: f.data.creation };
+      return { Item: command.input.TableName === "events" ? f.data.job.connection : f.data.job };
+    });
+    const sts = vi.spyOn(STSClient.prototype, "send").mockImplementation(async () => ({
+      Credentials: {
+        AccessKeyId: "synthetic",
+        SecretAccessKey: "synthetic",
+        SessionToken: "synthetic",
+        Expiration: new Date(Date.now() + 900000),
+      },
+    }));
+    const ssm = vi.spyOn(SSMClient.prototype, "send").mockImplementation(async () => ({
+      Parameter: { ARN: parameter, Type: "SecureString", Value: "synthetic-external-id" },
+    }));
+    const cfn = vi
+      .spyOn(CloudFormationClient.prototype, "send")
+      .mockImplementation(async (command) => {
+        if (command.constructor.name === "CreateStackCommand") return { StackId: f.stackId };
+        throw Object.assign(new Error(`Stack with id ${f.data.job.stackName} does not exist`), {
+          name: "ValidationError",
+        });
+      });
+    const handlers = await createProductionWorkflowHandlers(f.resolveArtifacts);
+    expect((await handlers.create(INITIAL)).phase).toBe("pending");
+    const before = [sts.mock.calls.length, ssm.mock.calls.length, cfn.mock.calls.length];
+    for (const changed of [
+      undefined,
+      { ...original, verified: false },
+      { ...original, registrationId: EVENT },
+      { ...original, region: "eu-west-1" },
+      { ...original, competitorRoleName: "Administrator" },
+    ]) {
+      record = changed;
+      await expect(handlers.create(INITIAL)).rejects.toThrow("could not complete");
+      expect([sts.mock.calls.length, ssm.mock.calls.length, cfn.mock.calls.length]).toEqual(before);
+    }
+    record = original;
+    const safe = f.data.job;
+    f.data.job = {
+      ...safe,
+      awsAccountId: "123456789012",
+      connection: {
+        ...safe.connection,
+        accountId: "123456789012",
+        roleArn: `arn:aws:iam::123456789012:role/${roleName}`,
+      },
+    };
+    await expect(handlers.create(INITIAL)).rejects.toThrow("could not complete");
+    expect([sts.mock.calls.length, ssm.mock.calls.length, cfn.mock.calls.length]).toEqual(before);
+    f.data.job = safe;
+    f.data.job = {
+      ...f.data.job,
+      connection: {
+        ...f.data.job.connection,
+        externalIdParameter: `${parameter}-foreign`,
+      },
+    };
+    await expect(handlers.create(INITIAL)).rejects.toThrow("could not complete");
+    expect([sts.mock.calls.length, ssm.mock.calls.length, cfn.mock.calls.length]).toEqual(before);
+  });
+});
+
 describe("scheduled durable intent dispatcher", () => {
   it("uses byte-identical Standard execution input/name and leaves uncertain/duplicate intents intact", async () => {
     const intents = Array.from({ length: 3 }, (_, i) => ({
@@ -550,7 +670,11 @@ describe("scheduled durable intent dispatcher", () => {
       if (input.name.endsWith("-3")) throw new Error("uncertain transport result");
       return { executionArn: `${MACHINE.replace(":stateMachine:", ":execution:")}:${input.name}` };
     });
-    const deps = { repository: { listDispatch }, stateMachineArn: MACHINE, startExecution };
+    const deps = {
+      repository: { listDispatch, acceptingNewDeployments: async () => true },
+      stateMachineArn: MACHINE,
+      startExecution,
+    };
     expect(await dispatchPending(deps)).toEqual({
       pending: 3,
       started: 1,
@@ -561,7 +685,37 @@ describe("scheduled durable intent dispatcher", () => {
     expect(startExecution.mock.calls.slice(0, 3)).toEqual(startExecution.mock.calls.slice(3));
     expect(startExecution.mock.calls[0]?.[0].input).toBe(serializeDispatchIdentity(IDENTITY));
     expect(intents).toHaveLength(3);
-    expect(Object.keys(deps.repository)).toEqual(["listDispatch"]);
+    expect(Object.keys(deps.repository)).toEqual(["listDispatch", "acceptingNewDeployments"]);
+  });
+
+  it("dispatches only cleanup while the installation is closed and rejects stale creation results", async () => {
+    const identity = {
+      ...IDENTITY,
+      operation: "delete" as const,
+      generation: 1,
+      createdAt: new Date(NOW).toISOString(),
+    };
+    const listDispatch = vi.fn(async () => [identity]);
+    const startExecution = vi.fn<DispatchDependencies["startExecution"]>(async (input) => ({
+      executionArn: `${MACHINE.replace(":stateMachine:", ":execution:")}:${input.name}`,
+    }));
+    const deps = {
+      repository: { listDispatch, acceptingNewDeployments: async () => false },
+      stateMachineArn: MACHINE,
+      startExecution,
+    };
+    expect((await dispatchPending(deps)).started).toBe(1);
+    expect(listDispatch).toHaveBeenCalledWith(100, { deletesOnly: true });
+    expect(startExecution.mock.calls[0]?.[0].name).toContain("tc-delete-");
+    const stale = {
+      ...deps,
+      repository: {
+        ...deps.repository,
+        listDispatch: async () => [{ ...IDENTITY, createdAt: new Date(NOW).toISOString() }],
+      },
+    };
+    await expect(dispatchPending(stale)).rejects.toThrow("Creation dispatch is closed");
+    expect(startExecution).toHaveBeenCalledTimes(1);
   });
 
   it("bounds a 500-intent batch to five concurrent starts and rejects invalid limits", async () => {
@@ -581,10 +735,14 @@ describe("scheduled durable intent dispatcher", () => {
       active -= 1;
       return { executionArn: `${MACHINE.replace(":stateMachine:", ":execution:")}:${name}` };
     };
-    const deps = { repository: { listDispatch }, stateMachineArn: MACHINE, startExecution };
+    const deps = {
+      repository: { listDispatch, acceptingNewDeployments: async () => true },
+      stateMachineArn: MACHINE,
+      startExecution,
+    };
     expect((await dispatchPending(deps, { limit: 500, concurrency: 5 })).started).toBe(500);
     expect(peak).toBe(5);
-    expect(listDispatch).toHaveBeenCalledWith(500);
+    expect(listDispatch).toHaveBeenCalledWith(500, { deletesOnly: false });
     await expect(dispatchPending(deps, { limit: 501 })).rejects.toThrow("bounds");
     await expect(dispatchPending(deps, { concurrency: 11 })).rejects.toThrow("bounds");
   });
@@ -714,6 +872,7 @@ describe("terminal Standard execution reconciliation", () => {
   it("constructs real SFN commands with every send intercepted and no AWS network calls", async () => {
     for (const [key, value] of Object.entries({
       AWS_REGION: "us-east-1",
+      CONTROL_PLANE_ACCOUNT: "123456789012",
       EVENTS_TABLE_NAME: "synthetic-events",
       TEAMS_TABLE_NAME: "synthetic-teams",
       DEPLOYMENTS_TABLE_NAME: "synthetic-deployments",
@@ -800,11 +959,13 @@ describe("optional deployment pipeline offline synthesis", () => {
       (policy) =>
         policy.Properties.PolicyDocument.Statement as {
           Action: string | string[];
+          Effect: string;
           Resource: unknown;
         }[],
     );
-    const assumes = statements.filter((statement) =>
-      JSON.stringify(statement.Action).includes("sts:AssumeRole"),
+    const assumes = statements.filter(
+      (statement) =>
+        JSON.stringify(statement.Action).includes("sts:AssumeRole") && statement.Effect === "Allow",
     );
     expect(assumes).toHaveLength(3);
     expect(
@@ -900,15 +1061,38 @@ describe("optional deployment pipeline offline synthesis", () => {
       (policy) =>
         policy.Properties.PolicyDocument.Statement as {
           Action: string | string[];
+          Effect: string;
           Resource: unknown;
         }[],
     );
-    const assumptions = policies.filter((policy) =>
-      JSON.stringify(policy.Action).includes("sts:AssumeRole"),
+    const assumptions = policies.filter(
+      (policy) =>
+        JSON.stringify(policy.Action).includes("sts:AssumeRole") && policy.Effect === "Allow",
     );
-    expect(assumptions).toHaveLength(4);
-    for (const assumption of assumptions)
+    expect(assumptions).toHaveLength(8);
+    const legacy = assumptions.filter((assumption) => Array.isArray(assumption.Resource));
+    expect(legacy).toHaveLength(4);
+    for (const assumption of legacy)
       expect(assumption.Resource).toEqual(bindings.map((binding) => binding.roleArn));
+    const registry = assumptions.filter((assumption) => !Array.isArray(assumption.Resource));
+    expect(registry).toHaveLength(4);
+    for (const assumption of registry) {
+      expect(assumption.Resource).toMatch(
+        /^arn:aws:iam::\*:role\/TenkaCloud-[a-f0-9]{24}-deploy-Role$/u,
+      );
+      expect(assumption).toMatchObject({
+        Condition: {
+          StringEquals: {
+            "aws:ResourceTag/TenkaCloud:Purpose": "competitor-deploy",
+            "aws:ResourceTag/TenkaCloud:Installation": String(assumption.Resource).split("/")[1],
+          },
+        },
+      });
+    }
+    expect(template.toJSON().Outputs.CloudRunnerMode.Value).toBe("registry-with-legacy-bindings");
+    expect(template.toJSON().Outputs.CloudLegacyBindingsDigest.Value).toBe(
+      contentDigest(JSON.stringify(bindings)),
+    );
     const functions = Object.values(template.findResources("AWS::Lambda::Function"));
     for (const fn of functions) {
       const variables = fn.Properties.Environment?.Variables ?? {};

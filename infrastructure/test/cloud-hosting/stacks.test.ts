@@ -14,14 +14,20 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { App, Stack } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
+import { CfnInclude } from "aws-cdk-lib/cloudformation-include";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CloudApplicationStack } from "../../lib/cloud-hosting/application-stack.js";
 import { projectBootstrap } from "../../lib/cloud-hosting/bootstrap.js";
+import {
+  competitorAssumeRolePolicy,
+  installationCompetitorConfig,
+} from "../../lib/cloud-hosting/competitor-accounts.js";
 import { CloudDataStack } from "../../lib/cloud-hosting/data-stack.js";
 import { cloudExecutionArtifacts } from "../../lib/cloud-hosting/execution-artifacts.js";
 import { CloudHosting } from "../../lib/cloud-hosting/hosting.js";
 import { cloudStackTags } from "../../lib/cloud-hosting/stack-names.js";
 import { projectSynthesizer } from "../../lib/cloud-hosting/synthesizer.js";
+import { CLOUD_EVENT_LIMITS } from "../../lib/problem-deploy/control-data/domain/events.js";
 
 vi.mock("node:fs", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:fs")>();
@@ -83,9 +89,7 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
             readFileSync(path, "utf8").replace(/<<marker:[^>]+>>/gu, '"SYNTHESIZED_TOKEN"'),
           ) as unknown,
       );
-    expect(configs).toContainEqual(
-      expect.objectContaining({ eventLimits: { maxTeams: 49, maxProblems: 50 } }),
-    );
+    expect(configs).toContainEqual(expect.objectContaining({ eventLimits: CLOUD_EVENT_LIMITS }));
   });
   it("retains all event/team/deployment data by default and does not TTL-delete history", () => {
     data.resourceCountIs("AWS::DynamoDB::Table", 3);
@@ -109,12 +113,22 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
     });
     const methods = Object.values(application.findResources("AWS::ApiGateway::Method"));
     const writes = methods.filter((method) =>
-      ["POST", "DELETE"].includes(method.Properties.HttpMethod),
+      ["POST", "DELETE", "PATCH"].includes(method.Properties.HttpMethod),
     );
-    expect(writes).toHaveLength(3);
-    expect(
-      writes.every((method) => method.Properties.AuthorizationType === "COGNITO_USER_POOLS"),
-    ).toBe(true);
+    expect(writes).toHaveLength(14);
+    const flagId = Object.entries(application.findResources("AWS::ApiGateway::Resource")).find(
+      ([, resource]) => resource.Properties.PathPart === "submit-flag",
+    )?.[0];
+    expect(flagId).toBeDefined();
+    const publicWrites = writes.filter(
+      (method) => method.Properties.AuthorizationType !== "COGNITO_USER_POOLS",
+    );
+    expect(publicWrites).toHaveLength(1);
+    expect(publicWrites[0]?.Properties).toMatchObject({
+      HttpMethod: "POST",
+      ResourceId: { Ref: flagId },
+      AuthorizationType: "NONE",
+    });
     application.resourceCountIs("AWS::Lambda::Url", 0);
     application.hasResourceProperties("AWS::Lambda::Function", {
       Environment: {
@@ -142,14 +156,18 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
     expect(text).not.toContain("DEFAULT_USER_ROLE");
     expect(text).not.toContain("DEFAULT_TENANT_ID");
   });
-  it("has no tenant billing tiers, broad DDB permissions, or exercise role assumption", () => {
+  it("keeps the registry runner free of tenant billing, broad DDB grants, or platform AdministratorAccess", () => {
     application.resourceCountIs("AWS::ApiGateway::UsagePlan", 0);
     application.resourceCountIs("AWS::ApiGateway::ApiKey", 0);
     const text = JSON.stringify(application.toJSON());
     expect(text).not.toContain("AdministratorAccess");
     expect(text).not.toContain("dynamodb:*");
     const identityPolicies = JSON.stringify(application.findResources("AWS::IAM::Policy"));
-    expect(identityPolicies).not.toContain("sts:AssumeRole");
+    expect(identityPolicies).toContain("sts:AssumeRole");
+    expect(identityPolicies).toContain("aws:ResourceTag/TenkaCloud:Installation");
+    expect(identityPolicies).toContain(
+      installationCompetitorConfig("123456789012", "us-east-1", "test").roleName,
+    );
     expect(text).not.toContain("TURSO");
     expect(text).not.toContain("SBT");
   });
@@ -360,5 +378,156 @@ describe("hosted SPA asset boundary", () => {
         ),
       ).toBe(false);
     }
+  });
+});
+
+describe("existing competitor bootstrap and registry IAM source boundaries", () => {
+  const config = installationCompetitorConfig("123456789012", "us-east-1", "test");
+  it("publishes the current registry mode, digest, and existing modal configuration", () => {
+    const outputs = application.toJSON().Outputs;
+    expect(outputs.CloudRunnerEnabled.Value).toBe("true");
+    expect(outputs.CloudInstallationControlVersion.Value).toBe("1");
+    expect(outputs.CloudRunnerMode.Value).toBe("registry");
+    expect(outputs.CloudLegacyBindingsDigest.Value).toMatch(/^[a-f0-9]{64}$/u);
+    expect(outputs.CompetitorRoleName.Value).toBe(config.roleName);
+    const configs = readdirSync(join(directory, "cdk.out"))
+      .map((name) => join(directory, "cdk.out", name, "runtime-config.json"))
+      .filter(existsSync)
+      .map((path) => readFileSync(path, "utf8"));
+    const runtime = configs.find((value) => value.includes("competitorRoleName"));
+    expect(runtime).toContain(config.roleName);
+    expect(runtime).toContain("competitorBootstrapTemplateUrl");
+    expect(JSON.stringify(application.findResources("Custom::CDKBucketDeployment"))).toContain(
+      ".s3.us-east-1.amazonaws.com/competitor-bootstrap.yaml",
+    );
+  });
+  it("grants role assumption only for the installation's fixed role name and both immutable trust tags", () => {
+    const statements = Object.values(application.findResources("AWS::IAM::Policy")).flatMap(
+      (policy) =>
+        policy.Properties.PolicyDocument.Statement as {
+          Action: string | string[];
+          Effect: string;
+          Resource: unknown;
+          Condition?: unknown;
+        }[],
+    );
+    const assumptions = statements.filter(
+      (statement) =>
+        JSON.stringify(statement.Action).includes("sts:AssumeRole") && statement.Effect === "Allow",
+    );
+    expect(assumptions).toHaveLength(4);
+    for (const statement of assumptions)
+      expect(statement).toMatchObject({
+        Resource: `arn:aws:iam::*:role/${config.roleName}`,
+        Condition: {
+          Null: { "sts:ExternalId": "false" },
+          StringEquals: {
+            "aws:ResourceTag/TenkaCloud:Purpose": "competitor-deploy",
+            "aws:ResourceTag/TenkaCloud:Installation": config.roleName,
+          },
+        },
+      });
+    const selfDenials = statements.filter(
+      (statement) =>
+        JSON.stringify(statement.Action).includes("sts:AssumeRole") && statement.Effect === "Deny",
+    );
+    expect(selfDenials).toHaveLength(4);
+    for (const statement of selfDenials)
+      expect(statement.Resource).toBe("arn:aws:iam::123456789012:role/*");
+    const dispatcherReads = statements.filter((statement) =>
+      JSON.stringify(statement.Condition ?? {}).includes('"dynamodb:LeadingKeys":["INSTALLATION"]'),
+    );
+    expect(dispatcherReads).toHaveLength(1);
+    expect(dispatcherReads[0]?.Action).toBe("dynamodb:GetItem");
+    expect(JSON.stringify(dispatcherReads[0]?.Resource)).not.toContain("*");
+    const puts = statements.filter((statement) =>
+      JSON.stringify(statement.Action).includes("ssm:PutParameter"),
+    );
+    expect(puts).toEqual([
+      {
+        Action: "ssm:PutParameter",
+        Effect: "Allow",
+        Resource: config.externalIdParameterArn,
+        Condition: { StringEquals: { "ssm:Overwrite": "false" } },
+      },
+    ]);
+    expect(JSON.stringify(statements)).not.toContain("ssm:DeleteParameter");
+  });
+  it("rejects caller-chosen role or secret scope rather than trusting a matching role tag alone", () => {
+    for (const roleName of [
+      "Administrator",
+      "TenkaCloud-*-deploy-Role",
+      `TenkaCloud-${"f".repeat(24)}-deploy-Role`,
+      `${config.roleName}/Other`,
+    ])
+      expect(() => competitorAssumeRolePolicy({ ...config, roleName })).toThrow();
+    expect(() =>
+      competitorAssumeRolePolicy({
+        ...config,
+        externalIdParameterArn: config.externalIdParameterArn.replace("/cloud/", "/other/"),
+      }),
+    ).toThrow();
+    expect(() => installationCompetitorConfig("*", "us-east-1", "test")).toThrow();
+    expect(() => installationCompetitorConfig("123456789012", "cn-north-1", "test")).toThrow();
+    expect(() => installationCompetitorConfig("123456789012", "us-east-1", "../other")).toThrow();
+    expect(installationCompetitorConfig("123456789012", "us-east-1", "other").roleName).not.toBe(
+      config.roleName,
+    );
+  });
+  it("reuses the three bootstrap parameters, exact account/ExternalId trust, and competitor-only AdministratorAccess exception", () => {
+    const app = new App({ outdir: join(directory, "competitor-template-synth") });
+    const stack = new Stack(app, "SyntheticCompetitor", {
+      env: { account: "222222222222", region: "us-east-1" },
+    });
+    new CfnInclude(stack, "Template", {
+      templateFile: resolve(import.meta.dirname, "../../../templates/competitor-bootstrap.yaml"),
+      parameters: {
+        TenkaCloudAccountId: "123456789012",
+        ExternalId: "SYNTHETIC-EXTERNAL-ID-ONLY",
+        RoleName: config.roleName,
+      },
+    });
+    const template = Template.fromStack(stack);
+    template.resourceCountIs("AWS::IAM::Role", 1);
+    template.hasResourceProperties("AWS::IAM::Role", {
+      RoleName: config.roleName,
+      ManagedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"],
+      AssumeRolePolicyDocument: {
+        Version: "2012-10-17",
+        Statement: [
+          Match.objectLike({
+            Action: "sts:AssumeRole",
+            Condition: { StringEquals: { "sts:ExternalId": "SYNTHETIC-EXTERNAL-ID-ONLY" } },
+          }),
+        ],
+      },
+      Tags: Match.arrayWith([
+        { Key: "TenkaCloud:Installation", Value: config.roleName },
+        { Key: "TenkaCloud:Purpose", Value: "competitor-deploy" },
+      ]),
+    });
+    const text = JSON.stringify(template.toJSON());
+    expect(text).toContain("123456789012");
+    expect(text).not.toContain('"AWS":"*"');
+    expect(JSON.stringify(application.toJSON())).not.toContain("AdministratorAccess");
+  });
+  it("makes only the known secret-free bootstrap object public, with no bucket listing", () => {
+    const statements = Object.values(application.findResources("AWS::S3::BucketPolicy")).flatMap(
+      (policy) =>
+        policy.Properties.PolicyDocument.Statement as {
+          Effect: string;
+          Principal: unknown;
+          Action: unknown;
+          Resource: unknown;
+        }[],
+    );
+    const allowed = statements.filter(
+      (statement) =>
+        statement.Effect === "Allow" && JSON.stringify(statement.Principal).includes('"*"'),
+    );
+    expect(allowed).toHaveLength(1);
+    expect(allowed[0]?.Action).toBe("s3:GetObject");
+    expect(JSON.stringify(allowed[0]?.Resource)).toContain("competitor-bootstrap.yaml");
+    expect(JSON.stringify(allowed[0]?.Resource)).not.toContain("/*");
   });
 });

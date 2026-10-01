@@ -29,7 +29,7 @@ Parameters:
     AllowedPattern: "^[A-Za-z0-9_=,.@:/-]+$"
     Description: >-
       ExternalId secret passed by TenkaCloud when assuming the role.
-      Tenant-specific secret used to defend against Confused Deputy attacks.
+      Installation-specific secret used to defend against Confused Deputy attacks.
       Shared by the operator in advance and must be kept secret.
   RoleName:
     Type: String
@@ -81,6 +81,8 @@ Resources:
       Tags:
         - Key: TenkaCloud:Purpose
           Value: competitor-deploy
+        - Key: TenkaCloud:Installation
+          Value: !Ref RoleName
         - Key: TenkaCloud:ManagedBy
           Value: competitor-bootstrap.yaml
 

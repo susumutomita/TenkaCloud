@@ -211,6 +211,8 @@ export interface BulkResult {
   eventId: string;
   enqueued: number;
   skipped: number;
+  /** Requests that were not durably accepted; accepted work may still be running. */
+  failed?: number;
 }
 
 export async function listEvents(

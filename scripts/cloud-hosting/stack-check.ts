@@ -38,27 +38,34 @@ export function isMissingStack(stderr: string, name: string): boolean {
   );
 }
 
-/** Never infer a runner-less deployment from missing metadata or an accidentally omitted setting. */
-export function assertRunnerChange(output: string, mode: "up" | "down", configured: boolean): void {
+/** Registry configuration is durable. Never drop or replace legacy bindings by omission. */
+export function assertRunnerChange(output: string, bindingsDigest: string): void {
   const stack = z
-    .object({
-      StackId: z.string(),
-      Outputs: z.array(z.object({ OutputKey: z.string(), OutputValue: z.string() })),
-    })
+    .object({ Outputs: z.array(z.object({ OutputKey: z.string(), OutputValue: z.string() })) })
     .parse(JSON.parse(output) as unknown);
-  const settings = stack.Outputs.filter((entry) => entry.OutputKey === "CloudRunnerEnabled");
-  const enabled = settings[0]?.OutputValue;
-  if (settings.length !== 1 || (enabled !== "true" && enabled !== "false"))
-    throw new Error(
-      "Existing CloudRunnerEnabled is missing or ambiguous; review the stack before changing it.",
-    );
+  const value = (key: string) => {
+    const entries = stack.Outputs.filter((entry) => entry.OutputKey === key);
+    if (entries.length !== 1)
+      throw new Error(
+        `Existing ${key} is missing or ambiguous; review the stack before changing it.`,
+      );
+    return entries[0]?.OutputValue;
+  };
+  const enabled = value("CloudRunnerEnabled");
+  if (enabled !== "true" && enabled !== "false")
+    throw new Error("Invalid CloudRunnerEnabled output.");
   if (enabled === "false") return;
-  if (mode === "up" && !configured)
+  const mode = value("CloudRunnerMode");
+  const digest = value("CloudLegacyBindingsDigest");
+  if (
+    !["registry", "registry-with-legacy-bindings"].includes(mode ?? "") ||
+    !/^[a-f0-9]{64}$/u.test(digest ?? "")
+  )
     throw new Error(
-      "Existing runner is enabled; refusing an update without TENKACLOUD_RUNNER_BINDINGS before it can remove the runner.",
+      "Existing runner configuration cannot be safely compared. Preserve the deployed runner and review its legacy bindings.",
     );
-  if (mode === "down")
+  if (digest !== bindingsDigest)
     throw new Error(
-      `Runner-enabled stack ${stack.StackId} cannot be destroyed by this command yet. Stop acceptance, drain pending and active executions, then review owned problem stacks and retained data, CDK asset and execution-artifact buckets before coordinated platform teardown. No resources were removed.`,
+      "TENKACLOUD_RUNNER_BINDINGS differs from the deployed legacy bindings. Refusing to remove or change credentials needed by stored event work.",
     );
 }

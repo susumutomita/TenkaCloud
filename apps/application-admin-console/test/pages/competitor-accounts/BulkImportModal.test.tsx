@@ -8,7 +8,7 @@ vi.mock("../../../src/i18n", () => ({ useT: () => (key: string) => key }));
 
 const mocks = vi.hoisted(() => ({
   bulkCreateCompetitorAccounts: vi.fn(),
-  apiClient: { post: vi.fn() },
+  apiClient: { post: vi.fn(), cloudOrganizerRole: "Admin" },
 }));
 
 vi.mock("../../../src/api/client", async (importOriginal) => {
@@ -73,6 +73,30 @@ const submit = () =>
 
 describe("BulkImportModal", () => {
   beforeEach(() => vi.clearAllMocks());
+  it("keeps the installation role fixed and refuses a conflicting pasted role", async () => {
+    const role = `TenkaCloud-${"a".repeat(24)}-deploy-Role`;
+    mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce(response());
+    renderModal({ config: { ...config, competitorRoleName: role } });
+    expect(screen.getByDisplayValue(role)).toBeDisabled();
+    typeAccounts(
+      JSON.stringify({
+        defaults: { competitorRoleName: "OtherRole" },
+        accounts: [{ awsAccountId: "222222222222" }],
+      }),
+    );
+    expect(screen.getByText("competitor_accounts.configured_role_mismatch")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "competitor_accounts.bulk_modal_submit" }),
+    ).toBeDisabled();
+    expect(mocks.bulkCreateCompetitorAccounts).not.toHaveBeenCalled();
+    typeAccounts("222222222222");
+    submit();
+    await waitFor(() => expect(mocks.bulkCreateCompetitorAccounts).toHaveBeenCalledTimes(1));
+    expect(mocks.bulkCreateCompetitorAccounts).toHaveBeenCalledWith(
+      mocks.apiClient,
+      expect.objectContaining({ defaults: expect.objectContaining({ competitorRoleName: role }) }),
+    );
+  });
 
   it("should send the pasted account IDs with the screen's region and role name as defaults", async () => {
     mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce(response());

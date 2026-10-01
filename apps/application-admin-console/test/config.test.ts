@@ -373,6 +373,13 @@ describe("loadConfig", () => {
       expect(config.competitorBootstrapTemplateUrl).toBe("https://s3.example/bootstrap.yaml");
       expect(config.isolation).toBe("silo");
     });
+    it("loads only the fixed installation competitor role format", async () => {
+      const role = `TenkaCloud-${"a".repeat(24)}-deploy-Role`;
+      expect((await loadWithRuntime({ competitorRoleName: role })).competitorRoleName).toBe(role);
+      for (const competitorRoleName of [false, "OtherRole", `${role}/suffix`, ""]) {
+        expect((await loadWithRuntime({ competitorRoleName })).competitorRoleName).toBeUndefined();
+      }
+    });
 
     it("should drop non-string optional URLs to undefined and non-silo isolation to pooled", async () => {
       const config = await loadWithRuntime({

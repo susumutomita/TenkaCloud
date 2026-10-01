@@ -89,6 +89,7 @@ function fixture() {
   const sdk = vi
     .spyOn(DynamoDBDocumentClient.prototype, "send")
     .mockRejectedValue(new Error("Unexpected SDK access in HTTP contract test"));
+  const accepting = vi.spyOn(work, "acceptingNewDeployments").mockResolvedValue(true);
   const getConnection = vi.spyOn(work, "getConnection").mockResolvedValue(connection);
   const getTarget = vi.spyOn(work, "getTarget").mockResolvedValue(undefined);
   const pin = vi
@@ -181,6 +182,7 @@ function fixture() {
     getTarget,
     pin,
     accept,
+    accepting,
     save,
     schedule,
     submit,
@@ -209,6 +211,16 @@ async function acceptedJob(f: ReturnType<typeof fixture>): Promise<DeploymentJob
 }
 
 describe("cloud execution HTTP authorization, replay and lifecycle contracts", () => {
+  it("rejects known installation shutdown before planning or binding work", async () => {
+    const f = fixture();
+    f.accepting.mockResolvedValue(false);
+    const response = await f.organizer(`${f.path}/deploy`);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "installation_draining" });
+    expect(f.pin).not.toHaveBeenCalled();
+    expect(f.getConnection).not.toHaveBeenCalled();
+    expect(f.accept).not.toHaveBeenCalled();
+  });
   it("pins an operation before accepting a scoped job, generating only private persisted parameters", async () => {
     const f = fixture();
     const response = await f.organizer(`${f.path}/deploy`, "POST", {}, "Operator", "operation");

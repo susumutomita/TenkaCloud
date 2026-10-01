@@ -4,6 +4,7 @@ import {
   GetCommand,
   QueryCommand,
   type QueryCommandInput,
+  ScanCommand,
   TransactWriteCommand,
   type TransactWriteCommandInput,
 } from "@aws-sdk/lib-dynamodb";
@@ -13,6 +14,14 @@ import { DeploymentConflict } from "./domain/deployment-work.js";
 import type { DeploymentRecord } from "./domain/deployments.js";
 import { CLOUD_EVENT_LIMITS, type EventRecord } from "./domain/events.js";
 import type { TeamRecord } from "./domain/teams.js";
+import {
+  type InstallationControl,
+  type InstallationScope,
+  installationControlKey,
+  installationControlSchema,
+  installationIntakeGuard,
+  installationScopeDigest,
+} from "./installation-control.js";
 
 const scoreSchema = z.object({
   eventId: z.string(),
@@ -149,19 +158,140 @@ export class DynamoCloudRepository implements CloudRepository {
     } while (cursor && Object.keys(cursor).length > 0);
     return items;
   }
+  async installationControl(): Promise<InstallationControl | undefined> {
+    const result = await this.ddb.send(
+      new GetCommand({
+        TableName: this.tables.events,
+        Key: installationControlKey,
+        ConsistentRead: true,
+      }),
+    );
+    if (!result.Item) return undefined;
+    const control = installationControlSchema.parse(result.Item);
+    if (control.scopeDigest !== installationScopeDigest(control.scope))
+      throw new DeploymentConflict("installation_scope_corrupt");
+    return control;
+  }
+  async assertAcceptingInstallation(): Promise<void> {
+    if (await this.installationControl()) throw new DeploymentConflict("installation_draining");
+  }
+  /** Idempotent stop intent survives CLI interruption; no lease expiry can reopen intake. */
+  async stopAcceptingInstallation(
+    scope: InstallationScope,
+    at: string,
+  ): Promise<InstallationControl> {
+    const scopeDigest = installationScopeDigest(scope);
+    const previous = await this.installationControl();
+    if (previous) {
+      if (previous.scopeDigest !== scopeDigest)
+        throw new DeploymentConflict("installation_scope_changed");
+      return previous;
+    }
+    const control = installationControlSchema.parse({
+      scope,
+      scopeDigest,
+      status: "DRAINING",
+      startedAt: at,
+      updatedAt: at,
+    });
+    if (
+      await this.transact({
+        TransactItems: [
+          {
+            Put: {
+              TableName: this.tables.events,
+              Item: { ...control, ...installationControlKey },
+              ConditionExpression: "attribute_not_exists(PK)",
+            },
+          },
+        ],
+      })
+    )
+      return control;
+    const current = await this.installationControl();
+    if (!current || current.scopeDigest !== scopeDigest)
+      throw new DeploymentConflict("installation_stop_conflict");
+    return current;
+  }
+  /** A GSI cannot prove that every event was drained. Intake must already be fenced. */
+  async listStoppedInstallationEvents(scope: InstallationScope): Promise<EventRecord[]> {
+    const control = await this.installationControl();
+    if (!control || control.scopeDigest !== installationScopeDigest(scope))
+      throw new DeploymentConflict("installation_not_stopped");
+    const events: EventRecord[] = [];
+    let cursor: Record<string, unknown> | undefined;
+    do {
+      const page = await this.ddb.send(
+        new ScanCommand({
+          TableName: this.tables.events,
+          ConsistentRead: true,
+          FilterExpression: "begins_with(PK, :event) AND SK = :meta",
+          ExpressionAttributeValues: { ":event": "EVENT#", ":meta": "META" },
+          Limit: 100,
+          ...(cursor ? { ExclusiveStartKey: cursor } : {}),
+        }),
+      );
+      for (const item of page.Items ?? []) {
+        const event = eventSchema.parse(item);
+        if (item.PK !== eventKey(event.eventId).PK || item.SK !== "META")
+          throw new DeploymentConflict("installation_event_scope_invalid");
+        events.push(event);
+      }
+      cursor = page.LastEvaluatedKey;
+    } while (cursor && Object.keys(cursor).length > 0);
+    return events;
+  }
+  async confirmInstallationDrained(scope: InstallationScope, at: string): Promise<void> {
+    const events = await this.listStoppedInstallationEvents(scope);
+    if (
+      events.some(
+        (event) =>
+          event.status !== "ARCHIVED" ||
+          event.teardownExpected === undefined ||
+          event.teardownExpected !== event.teardownCompleted,
+      )
+    )
+      throw new DeploymentConflict("installation_events_not_drained");
+    const control = await this.installationControl();
+    if (!control || control.scopeDigest !== installationScopeDigest(scope))
+      throw new DeploymentConflict("installation_scope_changed");
+    if (control.status === "DRAINED") return;
+    if (
+      !(await this.transact({
+        TransactItems: [
+          {
+            Update: {
+              TableName: this.tables.events,
+              Key: installationControlKey,
+              UpdateExpression: "SET #status = :drained, updatedAt = :at",
+              ConditionExpression: "scopeDigest = :scope AND #status = :closing",
+              ExpressionAttributeNames: { "#status": "status" },
+              ExpressionAttributeValues: {
+                ":drained": "DRAINED",
+                ":closing": "DRAINING",
+                ":scope": control.scopeDigest,
+                ":at": at,
+              },
+            },
+          },
+        ],
+      }))
+    )
+      throw new DeploymentConflict("installation_drain_conflict");
+  }
   async createEventWithTeams(
     event: EventRecord,
     teams: readonly TeamRecord[],
     receipt?: EventCreationReceipt,
   ): Promise<"created" | "conflict"> {
     eventSchema.parse(event);
-    // One event + one metadata and one hash lookup row per team. 25 teams use 51 writes.
+    // Event + intake fence + two rows per team, plus the optional replay receipt.
     if (
       teams.length === 0 ||
       teams.length > CLOUD_EVENT_LIMITS.maxTeams ||
       event.teamCount !== teams.length
     )
-      throw new Error("Event creation supports 1-49 teams.");
+      throw new Error(`Event creation supports 1-${CLOUD_EVENT_LIMITS.maxTeams} teams.`);
     const ids = new Set<string>();
     const keys = new Set<string>();
     const slugs = new Set<string>();
@@ -179,6 +309,7 @@ export class DynamoCloudRepository implements CloudRepository {
       slugs.add(team.internalSlug);
     }
     const writes: NonNullable<TransactWriteCommandInput["TransactItems"]> = [
+      installationIntakeGuard(this.tables.events),
       {
         Put: {
           TableName: this.tables.events,
@@ -228,7 +359,9 @@ export class DynamoCloudRepository implements CloudRepository {
           ConditionExpression: "attribute_not_exists(PK)",
         },
       });
-    return (await this.transact({ TransactItems: writes })) ? "created" : "conflict";
+    if (await this.transact({ TransactItems: writes })) return "created";
+    await this.assertAcceptingInstallation();
+    return "conflict";
   }
   async replayEventCreation(
     scope: string,

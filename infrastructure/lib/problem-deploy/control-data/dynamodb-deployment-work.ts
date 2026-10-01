@@ -45,6 +45,25 @@ import {
   type TeardownRecord,
 } from "./domain/deployment-work.js";
 import { type CloudTableNames, conflict, eventKey } from "./dynamodb-cloud-repository.js";
+import { registeredAccountGuard } from "./dynamodb-competitor-accounts-repository.js";
+import { installationControlKey, installationIntakeGuard } from "./installation-control.js";
+
+function parseDispatchIntent(row: unknown, deletesOnly: boolean): DispatchIntent {
+  const intent = z
+    .object({
+      eventId: z.string(),
+      teamId: z.string(),
+      jobId: z.string(),
+      attempt: z.number().int().positive(),
+      operation: z.literal("delete").optional(),
+      generation: z.number().int().positive().optional(),
+      createdAt: z.string(),
+    })
+    .parse(row);
+  if (deletesOnly && intent.operation !== "delete")
+    throw new Error("Unexpected creation in closed-installation dispatch");
+  return intent;
+}
 
 interface Accepted {
   readonly kind: "accepted" | "replay";
@@ -271,6 +290,8 @@ export class DynamoDeploymentWork {
     const prior = await this.getCreation(identity);
     if (prior?.owner && prior.owner !== owner)
       throw new DeploymentConflict("creation_owner_changed");
+    const job = await this.ownedJob(identity);
+    const registryGuard = await registeredAccountGuard(this.ddb, this.tables, job.connection);
     const item: CreationReservation = {
       ...identity,
       ...prior,
@@ -280,8 +301,10 @@ export class DynamoDeploymentWork {
     };
     if (
       !(await this.commit([
+        installationIntakeGuard(this.tables.events),
         this.openEventCheck(identity.eventId, now),
         this.jobOwnerCheck(identity, owner, "IN_PROGRESS"),
+        ...(registryGuard ? [registryGuard] : []),
         {
           Put: {
             TableName: this.tables.deployments,
@@ -731,6 +754,10 @@ export class DynamoDeploymentWork {
       },
     };
   }
+  /** Dispatcher may skip new creation while continuing the same installation's delete work. */
+  async acceptingNewDeployments(): Promise<boolean> {
+    return (await this.read(this.tables.events, installationControlKey)) === undefined;
+  }
   private jobOwnerCheck(identity: DeploymentIdentity, owner: string, status: string): Write {
     return {
       ConditionCheck: {
@@ -850,6 +877,7 @@ export class DynamoDeploymentWork {
     if (connection.version !== (previousVersion ?? 0) + 1)
       throw new Error("Invalid connection version.");
     const stored = await this.commit([
+      installationIntakeGuard(this.tables.events),
       {
         Put: {
           TableName: this.tables.events,
@@ -879,6 +907,8 @@ export class DynamoDeploymentWork {
     if (previous) return { kind: "replay", ...acceptedSchema.parse(previous) };
     const result = { jobId: job.jobId, attempt: job.attempt };
     const writes = this.acceptanceWrites(input);
+    const registryGuard = await registeredAccountGuard(this.ddb, this.tables, job.connection);
+    if (registryGuard) writes.push(registryGuard);
     if (input.retryOf !== undefined) {
       const prior = await this.getJob(job.jobId);
       if (!prior || prior.attempt !== input.retryOf)
@@ -945,6 +975,7 @@ export class DynamoDeploymentWork {
     const { job, event, team, retryOf } = input;
     const target = targetKey(job.eventId, job.teamId, job.problemId);
     return [
+      installationIntakeGuard(this.tables.events),
       eventGuard(this.tables.events, event, input.now),
       teamGuard(this.tables.teams, team, input.now),
       connectionGuard(this.tables.events, job.connection),
@@ -1046,29 +1077,42 @@ export class DynamoDeploymentWork {
       };
     });
   }
-  async listDispatch(limit = 25): Promise<readonly DispatchIntent[]> {
-    const result = await this.ddb.send(
-      new QueryCommand({
-        TableName: this.tables.deployments,
-        ConsistentRead: true,
-        KeyConditionExpression: "PK = :pk",
-        ExpressionAttributeValues: { ":pk": "DISPATCH#PENDING" },
-        Limit: limit,
-      }),
-    );
-    return (result.Items ?? []).map((row) =>
-      z
-        .object({
-          eventId: z.string(),
-          teamId: z.string(),
-          jobId: z.string(),
-          attempt: z.number().int().positive(),
-          operation: z.literal("delete").optional(),
-          generation: z.number().int().positive().optional(),
-          createdAt: z.string(),
-        })
-        .parse(row),
-    );
+  async listDispatch(
+    limit = 25,
+    options: { readonly deletesOnly?: boolean } = {},
+  ): Promise<readonly DispatchIntent[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000)
+      throw new Error("Invalid dispatch limit");
+    const intents: DispatchIntent[] = [];
+    let cursor: Record<string, unknown> | undefined;
+    do {
+      const result = await this.ddb.send(
+        new QueryCommand({
+          TableName: this.tables.deployments,
+          ConsistentRead: true,
+          KeyConditionExpression: "PK = :pk",
+          ExpressionAttributeValues: {
+            ":pk": "DISPATCH#PENDING",
+            ...(options.deletesOnly ? { ":delete": "delete" } : {}),
+          },
+          ...(options.deletesOnly
+            ? {
+                FilterExpression: "#operation = :delete",
+                ExpressionAttributeNames: { "#operation": "operation" },
+              }
+            : {}),
+          Limit: limit - intents.length,
+          ...(cursor ? { ExclusiveStartKey: cursor } : {}),
+        }),
+      );
+      intents.push(
+        ...(result.Items ?? []).map((row) =>
+          parseDispatchIntent(row, options.deletesOnly ?? false),
+        ),
+      );
+      cursor = result.LastEvaluatedKey;
+    } while (intents.length < limit && cursor && Object.keys(cursor).length > 0);
+    return intents;
   }
   async begin(
     identity: DeploymentIdentity,
@@ -1100,6 +1144,7 @@ export class DynamoDeploymentWork {
       },
       { Delete: { TableName: this.tables.deployments, Key: dispatchKey(job.jobId, job.attempt) } },
       connectionGuard(this.tables.events, job.connection),
+      installationIntakeGuard(this.tables.events),
       this.openEventCheck(job.eventId, Date.parse(at)),
     ]);
     if (!done) throw new DeploymentConflict("deployment_claim_conflict");
@@ -1234,6 +1279,7 @@ export class DynamoDeploymentWork {
       if (previous) {
         if (
           !(await this.commit([
+            installationIntakeGuard(this.tables.events),
             eventGuard(this.tables.events, input.event, input.now, true),
             teamGuard(this.tables.teams, input.team, input.now),
           ]))
@@ -1259,6 +1305,7 @@ export class DynamoDeploymentWork {
     const delta = outcome.kind === "already_scored" ? 0 : outcome.scoreDelta;
     const at = new Date(input.now).toISOString();
     const writes: Write[] = [
+      installationIntakeGuard(this.tables.events),
       eventGuard(this.tables.events, input.event, input.now, true),
       teamGuard(this.tables.teams, input.team, input.now),
       {
