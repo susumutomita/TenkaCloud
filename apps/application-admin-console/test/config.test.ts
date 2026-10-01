@@ -373,6 +373,49 @@ describe("loadConfig", () => {
       expect(config.competitorBootstrapTemplateUrl).toBe("https://s3.example/bootstrap.yaml");
       expect(config.isolation).toBe("silo");
     });
+    it("does not fall back to another hosting mode for invalid explicit runtime mode", async () => {
+      await expect(loadWithRuntime({ mode: "unsupported" })).rejects.toThrow(
+        "Unsupported cloud hosting runtime mode",
+      );
+    });
+    it("loads cloud hosting capabilities and keeps unsupported feature toggles off", async () => {
+      const loaded = await loadWithRuntime({
+        mode: "cloud-host",
+        supportedProblemIds: ["hello-world"],
+        features: {
+          redTeam: true,
+          samlSso: true,
+          nonAwsRuntime: true,
+          challengePrerequisiteGate: true,
+        },
+      });
+      expect(loaded.mode).toBe("cloud-host");
+      expect(loaded.supportedProblemIds).toEqual(["hello-world"]);
+      expect(loaded.features).toEqual({
+        redTeam: false,
+        samlSso: false,
+        nonAwsRuntime: false,
+        challengePrerequisiteGate: false,
+      });
+    });
+    it.each(
+      [
+        undefined,
+        null,
+        "hello-world",
+        ["hello-world", "hello-world"],
+        ["../escape"],
+        [2],
+        Array.from({ length: 513 }, (_, i) => `problem-${i}`),
+      ].map((supportedProblemIds) => ({ supportedProblemIds })),
+    )(
+      "reports invalid cloud catalog configuration rather than silently using an empty picker: %s",
+      async ({ supportedProblemIds }) => {
+        await expect(loadWithRuntime({ mode: "cloud-host", supportedProblemIds })).rejects.toThrow(
+          "Cloud execution catalog capability list is missing or invalid",
+        );
+      },
+    );
     it("loads only the fixed installation competitor role format", async () => {
       const role = `TenkaCloud-${"a".repeat(24)}-deploy-Role`;
       expect((await loadWithRuntime({ competitorRoleName: role })).competitorRoleName).toBe(role);

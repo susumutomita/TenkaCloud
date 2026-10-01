@@ -118,6 +118,159 @@ function transaction(value: unknown) {
   return value.input.TransactItems ?? [];
 }
 
+describe("participant credential release uses one condition-only Dynamo transaction", () => {
+  function ready(f: ReturnType<typeof fixture>) {
+    return {
+      team: f.team,
+      event: f.event,
+      now: NOW,
+      fingerprint: contentDigest("immutable-input"),
+      job: {
+        ...f.job,
+        status: "COMPLETE" as const,
+        completionDigest: contentDigest("completion"),
+        stackId: `arn:aws:cloudformation:us-east-1:123456789012:stack/${f.job.stackName}/original`,
+        parameters: { NamePrefix: f.job.stackName, ExternalId: f.job.jobId },
+      },
+    };
+  }
+  it("atomically checks installation, event, team, connection, current job, target and acknowledged creation without writing rows", async () => {
+    const f = fixture();
+    f.send.mockImplementation(async () => ({}));
+    const input = ready(f);
+    await f.work.assertParticipantAccessCurrent(input);
+    expect(f.send).toHaveBeenCalledTimes(1);
+    const checks = transaction(f.send.mock.calls[0]?.[0]);
+    expect(checks).toHaveLength(7);
+    expect(checks.every((check) => check.ConditionCheck && Object.keys(check).length === 1)).toBe(
+      true,
+    );
+    expect(checks.map((check) => check.ConditionCheck?.Key?.SK)).toEqual([
+      "CONTROL",
+      "META",
+      `TEAM#${f.team.teamId}`,
+      `CONNECTION#${f.team.teamId}`,
+      "META",
+      `TARGET#${contentDigest(f.job.problemId)}`,
+      "CREATE#1",
+    ]);
+    expect(checks[2]?.ConditionCheck?.ExpressionAttributeValues?.[":version"]).toBe(
+      f.team.authVersion,
+    );
+    expect(checks[4]?.ConditionCheck).toMatchObject({
+      ConditionExpression: expect.stringContaining("attribute_not_exists(teardownStatus)"),
+      ExpressionAttributeValues: {
+        ":complete": "COMPLETE",
+        ":stack": input.job.stackId,
+        ":connection": f.job.connection,
+        ":parameters": input.job.parameters,
+      },
+    });
+    expect(checks[6]?.ConditionCheck?.ExpressionAttributeValues?.[":fingerprint"]).toBe(
+      input.fingerprint,
+    );
+  });
+  it("treats any concurrent conditional change as a failed release, without retrying a stale snapshot", async () => {
+    const f = fixture();
+    f.send.mockRejectedValue(conditionalFailure());
+    await expect(f.work.assertParticipantAccessCurrent(ready(f))).rejects.toThrow(
+      "participant_access_changed",
+    );
+    expect(f.send).toHaveBeenCalledTimes(1);
+  });
+  it("includes the current verified registry revision in that same transaction", async () => {
+    const f = fixture(),
+      input = ready(f),
+      registrationId = ulid();
+    input.job.connection = {
+      ...input.job.connection,
+      registrationId,
+      bindingId: `account-${registrationId.toLowerCase()}`,
+    };
+    f.send.mockImplementation(async (command) =>
+      command instanceof GetCommand
+        ? {
+            Item: {
+              awsAccountId: f.job.awsAccountId,
+              competitorRoleName: "Fixture",
+              PK: "INSTALLATION#ACCOUNTS",
+              SK: `ACCOUNT#${f.job.awsAccountId}`,
+              region: f.job.region,
+              verified: true,
+              verifiedAt: AT,
+              registrationId,
+              revision: 7,
+              createdAt: AT,
+              updatedAt: AT,
+              createdBy: "synthetic-admin",
+            },
+          }
+        : {},
+    );
+    await f.work.assertParticipantAccessCurrent(input);
+    const checks = transaction(f.send.mock.calls[1]?.[0]);
+    expect(checks).toHaveLength(8);
+    expect(checks[7]?.ConditionCheck).toMatchObject({
+      TableName: "events",
+      Key: { PK: "INSTALLATION#ACCOUNTS", SK: `ACCOUNT#${f.job.awsAccountId}` },
+      ConditionExpression: expect.stringContaining("verified = :yes"),
+      ExpressionAttributeValues: { ":revision": 7, ":registration": registrationId, ":yes": true },
+    });
+  });
+  it.each([
+    "event",
+    "team",
+    "connection",
+    "pending",
+    "teardown",
+    "stack",
+    "digest",
+    "parameters",
+    "fingerprint",
+    "locked",
+  ])("rejects invalid %s input before SDK calls", async (change) => {
+    const f = fixture();
+    const input = ready(f);
+    const mutations: Record<string, () => void> = {
+      event: () => {
+        input.job.eventId = ulid();
+      },
+      team: () => {
+        input.job.teamId = ulid();
+      },
+      connection: () => {
+        input.job.connection = { ...input.job.connection, teamId: ulid() };
+      },
+      pending: () => {
+        Object.assign(input.job, { status: "PENDING" });
+      },
+      teardown: () => {
+        Object.assign(input.job, { teardownStatus: "PENDING" });
+      },
+      stack: () => {
+        input.job.stackId = "";
+      },
+      digest: () => {
+        input.job.completionDigest = "";
+      },
+      parameters: () => {
+        Object.assign(input.job, { parameters: undefined });
+      },
+      fingerprint: () => {
+        input.fingerprint = "invalid";
+      },
+      locked: () => {
+        input.event = { ...input.event, scoringLocked: true };
+      },
+    };
+    mutations[change]?.();
+    await expect(f.work.assertParticipantAccessCurrent(input)).rejects.toThrow(
+      "participant_access_changed",
+    );
+    expect(f.send).not.toHaveBeenCalled();
+  });
+});
+
 describe("deployment transaction shape with intercepted SDK only; actual Dynamo acceptance is separate", () => {
   it("atomically persists guarded job, target, pending dispatch, independent score row and acceptance receipt", async () => {
     const f = fixture();

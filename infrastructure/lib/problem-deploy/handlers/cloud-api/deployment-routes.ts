@@ -123,7 +123,8 @@ async function deploy(context: Context, options: RouteOptions) {
   const ids = input.problemIds ?? event.problems.map((problem) => problem.problemId);
   validateSelection(input, selectedTeams, ids, event);
   const catalog = await options.catalog();
-  if (ids.some((id) => !catalog[id])) throw new ApiError(409, "unsupported_runtime_problem");
+  if (ids.some((id) => !Object.hasOwn(catalog, id)))
+    throw new ApiError(409, "unsupported_runtime_problem");
   const key = requestKey(context);
   const hash = contentDigest(
     JSON.stringify([

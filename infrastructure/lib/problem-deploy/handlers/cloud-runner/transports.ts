@@ -46,6 +46,18 @@ export interface StackDescription {
 }
 
 export interface CloudFormationTransport {
+  describeStackResource?(input: {
+    readonly StackName: string;
+    readonly LogicalResourceId: "ParticipantViewerRole";
+  }): Promise<{
+    readonly StackResourceDetail?: {
+      readonly StackId?: string;
+      readonly LogicalResourceId?: string;
+      readonly PhysicalResourceId?: string;
+      readonly ResourceType?: string;
+      readonly ResourceStatus?: string;
+    };
+  }>;
   describeStacks(input: { readonly StackName: string }): Promise<{
     readonly Stacks?: readonly StackDescription[];
   }>;

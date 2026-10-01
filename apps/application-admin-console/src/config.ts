@@ -73,7 +73,9 @@ export interface AppConfig {
    * 通常の console をそのまま使い、 認証は host key → session 交換、 API は同一 origin の
    * `/api`。 local hosting build (`vite.host.config.ts`) だけがこの mode に入れる。
    */
-  readonly mode?: "demo" | "local-host";
+  readonly mode?: "demo" | "local-host" | "cloud-host";
+  /** IDs in this installation's actual execution catalog, not the static authoring catalog. */
+  readonly supportedProblemIds?: readonly string[];
 }
 
 /** Issue #3226: `bun start` のローカル大会 console で動いているか。 */
@@ -81,7 +83,35 @@ export function isLocalHost(config: Pick<AppConfig, "mode">): boolean {
   return config.mode === "local-host";
 }
 
+export function isCloudHost(config: Pick<AppConfig, "mode">): boolean {
+  return config.mode === "cloud-host";
+}
+const CLOUD_HOST_FEATURES = {
+  samlSso: false,
+  nonAwsRuntime: false,
+  redTeam: false,
+  challengePrerequisiteGate: false,
+} as const;
+class CloudRuntimeConfigError extends Error {}
+
+function supportedCloudProblems(value: unknown): readonly string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length > 512 ||
+    value.some(
+      (id) => typeof id !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u.test(id),
+    ) ||
+    new Set(value).size !== value.length
+  )
+    throw new CloudRuntimeConfigError(
+      "Cloud execution catalog capability list is missing or invalid.",
+    );
+  return Object.freeze([...value] as string[]);
+}
+
 interface RuntimeConfig {
+  readonly mode?: "cloud-host";
+  readonly supportedProblemIds?: readonly string[];
   readonly eventLimits?: EventLimits;
   readonly cognitoDomain: string;
   readonly userClientId: string;
@@ -117,6 +147,29 @@ function cloudEventLimits(value: unknown): EventLimits | undefined {
 // Issue #871 / #1246: runtime-config.json URL validators (isHttpsUrl / isCognitoDomain) are
 // imported from @tenkacloud/auth-client to keep the allowlist identical across admin SPAs.
 
+function cloudRuntimeCapabilities(data: Partial<RuntimeConfig>) {
+  if (data.mode !== undefined && data.mode !== "cloud-host")
+    throw new CloudRuntimeConfigError("Unsupported cloud hosting runtime mode.");
+  return {
+    mode: data.mode,
+    supportedProblemIds:
+      data.mode === "cloud-host" ? supportedCloudProblems(data.supportedProblemIds) : undefined,
+  };
+}
+
+function configuredCompetitorRole(value: unknown): string | undefined {
+  return typeof value === "string" && /^TenkaCloud-[a-f0-9]{24}-deploy-Role$/u.test(value)
+    ? value
+    : undefined;
+}
+
+function runtimeFeatures(data: Partial<RuntimeConfig>): RuntimeConfig["features"] {
+  if (data.mode === "cloud-host") return CLOUD_HOST_FEATURES;
+  return data.features && typeof data.features === "object" && !Array.isArray(data.features)
+    ? data.features
+    : undefined;
+}
+
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
   try {
     const res = await fetch("/runtime-config.json", { cache: "no-store" });
@@ -144,6 +197,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       return null;
     }
     return {
+      ...cloudRuntimeCapabilities(data),
       eventLimits: cloudEventLimits(data.eventLimits),
       cognitoDomain: data.cognitoDomain,
       userClientId: data.userClientId,
@@ -156,11 +210,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
         typeof data.competitorBootstrapTemplateUrl === "string"
           ? data.competitorBootstrapTemplateUrl
           : undefined,
-      competitorRoleName:
-        typeof data.competitorRoleName === "string" &&
-        /^TenkaCloud-[a-f0-9]{24}-deploy-Role$/u.test(data.competitorRoleName)
-          ? data.competitorRoleName
-          : undefined,
+      competitorRoleName: configuredCompetitorRole(data.competitorRoleName),
       isolation: data.isolation === "silo" ? "silo" : "pooled",
       // Issue #1340 Phase 2: SAML 未設定 stack も無音で動かすため空 object fallback。
       samlIdpDirectory:
@@ -168,12 +218,10 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
           ? data.samlIdpDirectory
           : {},
       // Raw feature overrides; resolved against the registry in loadConfig.
-      features:
-        data.features && typeof data.features === "object" && !Array.isArray(data.features)
-          ? data.features
-          : undefined,
+      features: runtimeFeatures(data),
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof CloudRuntimeConfigError) throw error;
     return null;
   }
 }
@@ -297,6 +345,8 @@ export async function loadConfig(
   const runtime = await fetchRuntimeConfig();
   if (runtime) {
     return {
+      mode: runtime.mode,
+      supportedProblemIds: runtime.supportedProblemIds,
       eventLimits: runtime.eventLimits,
       cognitoDomain: runtime.cognitoDomain,
       cognitoClientId: runtime.userClientId,

@@ -44,6 +44,8 @@ import {
   scoringBlock,
   type TeardownRecord,
 } from "./domain/deployment-work.js";
+import type { EventRecord } from "./domain/events.js";
+import type { TeamRecord } from "./domain/teams.js";
 import { type CloudTableNames, conflict, eventKey } from "./dynamodb-cloud-repository.js";
 import { registeredAccountGuard } from "./dynamodb-competitor-accounts-repository.js";
 import { installationControlKey, installationIntakeGuard } from "./installation-control.js";
@@ -1254,6 +1256,86 @@ export class DynamoDeploymentWork {
       throw new DeploymentConflict("deployment_transition_conflict");
     }
     return "updated";
+  }
+  /** One atomic authorization point immediately before releasing a participant STS session. */
+  async assertParticipantAccessCurrent(input: {
+    readonly team: TeamRecord;
+    readonly event: EventRecord;
+    readonly job: DeploymentJob;
+    readonly fingerprint: string;
+    readonly now: number;
+  }): Promise<void> {
+    const { team, event, job, now, fingerprint } = input;
+    if (
+      team.eventId !== event.eventId ||
+      job.eventId !== event.eventId ||
+      job.teamId !== team.teamId ||
+      job.connection.eventId !== event.eventId ||
+      job.connection.teamId !== team.teamId ||
+      job.status !== "COMPLETE" ||
+      job.teardownStatus ||
+      !job.stackId ||
+      !job.completionDigest ||
+      !job.parameters ||
+      !/^[a-f0-9]{64}$/u.test(fingerprint) ||
+      scoringBlock(event, now)
+    )
+      throw new DeploymentConflict("participant_access_changed");
+    const writes: Write[] = [
+      installationIntakeGuard(this.tables.events),
+      eventGuard(this.tables.events, event, now, true),
+      teamGuard(this.tables.teams, team, now),
+      connectionGuard(this.tables.events, job.connection),
+      {
+        ConditionCheck: {
+          TableName: this.tables.deployments,
+          Key: jobKey(job.jobId),
+          ConditionExpression:
+            "eventId = :event AND teamId = :team AND attempt = :attempt AND #status = :complete AND attribute_not_exists(teardownStatus) AND completionDigest = :digest AND stackId = :stack AND #connection = :connection AND #parameters = :parameters AND artifactDigest = :artifact AND expiresAt > :now",
+          ExpressionAttributeNames: {
+            "#status": "status",
+            "#connection": "connection",
+            "#parameters": "parameters",
+          },
+          ExpressionAttributeValues: {
+            ":event": event.eventId,
+            ":team": team.teamId,
+            ":attempt": job.attempt,
+            ":complete": "COMPLETE",
+            ":digest": job.completionDigest,
+            ":stack": job.stackId,
+            ":connection": job.connection,
+            ":parameters": job.parameters,
+            ":artifact": job.artifactDigest,
+            ":now": Math.floor(now / 1000),
+          },
+        },
+      },
+      {
+        ConditionCheck: {
+          TableName: this.tables.deployments,
+          Key: targetKey(event.eventId, team.teamId, job.problemId),
+          ConditionExpression: "jobId = :job AND attempt = :attempt",
+          ExpressionAttributeValues: { ":job": job.jobId, ":attempt": job.attempt },
+        },
+      },
+      {
+        ConditionCheck: {
+          TableName: this.tables.deployments,
+          Key: creationKey(job.jobId, job.attempt),
+          ConditionExpression: "#state = :ack AND stackId = :stack AND fingerprint = :fingerprint",
+          ExpressionAttributeNames: { "#state": "state" },
+          ExpressionAttributeValues: {
+            ":ack": "ACKNOWLEDGED",
+            ":stack": job.stackId,
+            ":fingerprint": fingerprint,
+          },
+        },
+      },
+    ];
+    const registry = await registeredAccountGuard(this.ddb, this.tables, job.connection);
+    if (registry) writes.push(registry);
+    if (!(await this.commit(writes))) throw new DeploymentConflict("participant_access_changed");
   }
   async submitFlag(input: FlagRequest): Promise<FlagOutcome> {
     if (

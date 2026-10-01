@@ -11,7 +11,7 @@
       "duplicateAwards": 0,
       "ledgerEntries": 25,
       "solvedProjection": "0 after deploy; 1 after first solve and repeated submissions",
-      "durationMs": 1757
+      "durationMs": 2066
     },
     {
       "milestone": "durable-replay-and-ownership",
@@ -42,9 +42,9 @@
       "rounds": [
         {
           "round": 0,
-          "durationMs": 886,
-          "p50Ms": 795,
-          "p95Ms": 835,
+          "durationMs": 865,
+          "p50Ms": 789,
+          "p95Ms": 814,
           "commands": 1000,
           "queryRows": 7000,
           "pointReads": 700,
@@ -52,9 +52,9 @@
         },
         {
           "round": 1,
-          "durationMs": 810,
-          "p50Ms": 724,
-          "p95Ms": 791,
+          "durationMs": 1233,
+          "p50Ms": 631,
+          "p95Ms": 1172,
           "commands": 1000,
           "queryRows": 7000,
           "pointReads": 700,
@@ -93,7 +93,7 @@
       "retainedScores": 2500,
       "retainedScoreLedgerEntries": 25,
       "retainedReceipts": 53,
-      "durationMs": 2331
+      "durationMs": 2456
     },
     {
       "milestone": "historical-attempt-teardown-boundary",
@@ -132,6 +132,17 @@
       "scope": "Real Dynamo transactions; no SSM, STS or CloudFormation"
     },
     {
+      "milestone": "real-dynamodb-participant-cli-authorization",
+      "ready": "existing CLI contract with no-store",
+      "crossTeam": "403 before issuance",
+      "console": "409 with no issuance",
+      "revokedDuringSts": "Dynamo transaction observed; credentials withheld",
+      "revokedDuringFinalConnectionRead": "atomic ConditionCheck release rejects stale authenticated snapshot; credentials withheld",
+      "subsequentRevokedRequests": "401 before issuance",
+      "sessionLimitSeconds": 900,
+      "scope": "Real DynamoDB authentication/ownership and Hono HTTP; STS/SSM/CloudFormation are injected, no AWS operations"
+    },
+    {
       "milestone": "real-dynamodb-installation-stop-and-drain",
       "events": 2,
       "targets": 3,
@@ -145,7 +156,7 @@
       ],
       "lateCreationResult": "preserved after intake stop",
       "eventScanPages": 12,
-      "emptyEventPages": 4,
+      "emptyEventPages": 8,
       "emptyDeletePages": 25,
       "completeState": "DRAINED; repeated confirmation succeeds",
       "scoresRetained": 100,
@@ -157,6 +168,6 @@
       "target": "official DynamoDB Local, synthetic work, no AWS execution"
     }
   ],
-  "scope": "Actual Dynamo transactions and Hono HTTP, including existing SPA create/bulk/flag/account clients, solved-problem projection, durable event teardown and historical-attempt blockers, account registration/verification state, concurrent revocation and account-delete/connection-reference fences, retained ExternalId initialization/use markers, and installation stop/drain across empty filtered pages. ExternalId provisioning and STS verification are injected in the Local harness; their SDK contracts, CloudFormation and Step Functions are intercepted in separate unit/synth tests. Not AWS latency or RCU capacity guarantees.",
+  "scope": "Actual Dynamo transactions and Hono HTTP, including existing SPA create/bulk/flag/account clients, solved-problem projection, durable event teardown and historical-attempt blockers, account registration/verification state, concurrent revocation and account-delete/connection-reference fences, retained ExternalId initialization/use markers, installation stop/drain across empty filtered pages, and participant CLI issuance with real team-revocation transactions during STS and during the final sequential connection read, fenced by an atomic condition-only credential-release transaction. Participant STS/SSM/CloudFormation are injected; the revoked response contains no credentials. ExternalId provisioning and STS verification are injected in the Local harness; their SDK contracts, CloudFormation and Step Functions are intercepted in separate unit/synth tests. Not AWS latency or RCU capacity guarantees.",
   "cleanup": "All six unique synthetic tables deleted; loopback-only Java process stopped"
 }

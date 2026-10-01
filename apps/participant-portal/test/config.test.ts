@@ -10,6 +10,19 @@ describe("loadConfig", () => {
     globalThis.fetch = realFetch;
   });
 
+  it.each([
+    { hasAws: true, expected: true },
+    { hasAws: false, expected: false },
+    { hasAws: "false", expected: false },
+    { hasAws: undefined, expected: undefined },
+  ])("honors the explicit AWS feature capability: $hasAws", async ({ hasAws, expected }) => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ apiBaseUrl: "https://api.example.test", mode: "backend", hasAws }),
+      ),
+    );
+    expect((await loadConfig()).hasAws).toBe(expected);
+  });
   it("should extract values when /runtime-config.json returns 200", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,

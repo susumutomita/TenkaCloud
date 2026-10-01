@@ -92,7 +92,7 @@ export class CloudWorkflowError extends Error {
   }
 }
 
-function sameConnection(a: DeploymentConnection, b: DeploymentConnection): boolean {
+export function sameConnection(a: DeploymentConnection, b: DeploymentConnection): boolean {
   return (
     a.eventId === b.eventId &&
     a.teamId === b.teamId &&
@@ -143,6 +143,11 @@ async function guardRemote(
 
 async function runnerInput(job: DeploymentJob, deps: WorkflowDependencies) {
   const artifact = await deps.resolveArtifacts(job);
+  return buildDeploymentInput(job, artifact);
+}
+
+/** Rebuild the persisted request without changing its fingerprint for read-only participant checks. */
+export function buildDeploymentInput(job: DeploymentJob, artifact: DeploymentArtifacts) {
   if (
     artifact.artifactDigest !== job.artifactDigest ||
     !job.parameters ||

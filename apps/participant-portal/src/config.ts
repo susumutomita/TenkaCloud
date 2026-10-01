@@ -57,11 +57,12 @@ export interface AppConfig {
    * portal slot は coordination-client 経由で呼び出す。
    */
   readonly coordinationApiUrl?: string;
-  /** False when the host has no cloud engine. Absent means true for existing SaaS configs. */
+  /** False when the host has no cloud engine. Absent means true for legacy hosting configurations. */
   readonly hasAws?: boolean;
 }
 
 interface RuntimeConfig {
+  readonly hasAws?: boolean;
   readonly apiBaseUrl?: string;
   readonly eventTitle?: string;
   readonly eventRegion?: string;
@@ -110,6 +111,10 @@ function isLoopbackHttpUrl(value: string): boolean {
 
 function isCloudMode(value: unknown): value is CloudMode {
   return value === "real" || value === "mock" || value === "local";
+}
+
+function advertisedAwsCapability(value: unknown): boolean | undefined {
+  return value === undefined ? undefined : value === true;
 }
 
 function defaultCloudMode(mode: AppMode): CloudMode {
@@ -169,6 +174,7 @@ export async function loadConfig(): Promise<AppConfig> {
       eventRegion: runtime.eventRegion ?? DEV_FALLBACK.eventRegion,
       mode,
       cloudMode,
+      hasAws: advertisedAwsCapability(runtime.hasAws),
       ...(cloudMode === "local" && runtime.localTeamLoginKey
         ? { localTeamLoginKey: runtime.localTeamLoginKey }
         : {}),

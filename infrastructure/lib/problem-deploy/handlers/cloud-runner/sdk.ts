@@ -2,6 +2,7 @@ import {
   CloudFormationClient,
   CreateStackCommand,
   DeleteStackCommand,
+  DescribeStackResourceCommand,
   DescribeStacksCommand,
 } from "@aws-sdk/client-cloudformation";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
@@ -56,6 +57,7 @@ export function createAwsCloudRunnerDependencies(options: {
         ignoreConfiguredEndpointUrls: true,
       });
       return {
+        describeStackResource: (input) => client.send(new DescribeStackResourceCommand(input)),
         describeStacks: (input) => client.send(new DescribeStacksCommand(input)),
         deleteStack: (input) => client.send(new DeleteStackCommand(input)),
         createStack: (input) =>

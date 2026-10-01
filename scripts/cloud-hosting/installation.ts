@@ -72,7 +72,7 @@ export async function drainInstallation(
   }
   if (failed > 0)
     throw new Error(
-      `Cleanup acceptance failed for ${failed} targets or events. Platform retained and new work remains stopped. Review event diagnostics, then repeat make destroy to resume.`,
+      `Cleanup acceptance failed for ${failed} targets or events. Platform retained and new work remains stopped. Review event diagnostics, then repeat the same teardown command to resume.`,
     );
   for (;;) {
     const current = await installation.repository.listStoppedInstallationEvents(scope);
@@ -95,7 +95,7 @@ export async function drainInstallation(
     }
     if (io.now() - started >= timeoutMs)
       throw new Error(
-        "Cleanup is still pending. Platform retained and new work remains stopped. Check event diagnostics and repeat make destroy to resume; no timeout reopens the installation.",
+        "Cleanup is still pending. Platform retained and new work remains stopped. Check event diagnostics and repeat the same teardown command to resume; no timeout reopens the installation.",
       );
     await io.wait(5_000);
   }

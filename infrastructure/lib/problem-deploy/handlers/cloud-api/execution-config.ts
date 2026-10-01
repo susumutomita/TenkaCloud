@@ -5,6 +5,7 @@ import { z } from "zod";
 import { assertCommercialRegion } from "../../../cloud-hosting/regions.js";
 import type {
   CompetitorAccountRecord,
+  CompetitorAccountsRepository,
   InstallationCompetitorConfig,
 } from "../../control-data/domain/competitor-accounts.js";
 import { contentDigest, type DeploymentJob } from "../../control-data/domain/deployment-work.js";
@@ -223,4 +224,39 @@ export function registeredRunnerBinding(
     externalIdParameterArn: config.externalIdParameterArn,
     reviewedProblemIds,
   });
+}
+
+/** The runner and participant issuance both use the current registry, including revocation/recreation. */
+export function createJobBindingAuthorizer(options: {
+  readonly bindings: readonly RunnerBinding[];
+  readonly accounts: Pick<CompetitorAccountsRepository, "getAccount">;
+  readonly config?: InstallationCompetitorConfig;
+  readonly controlPlaneAccount: string;
+}) {
+  return async (job: DeploymentJob): Promise<void> => {
+    if (job.awsAccountId === options.controlPlaneAccount)
+      throw new Error("Control-plane account cannot host competitor resources.");
+    let allowed = options.bindings;
+    if (job.connection.registrationId !== undefined) {
+      const record = await options.accounts.getAccount(job.awsAccountId);
+      if (!options.config || !record || job.connection.registrationId !== record.registrationId)
+        throw new Error("Competitor registration changed.");
+      allowed = [
+        registeredRunnerBinding(record, options.config, job.connection.reviewedProblemIds ?? []),
+      ];
+    }
+    if (
+      !allowed.some(
+        (binding) =>
+          binding.id === job.connection.bindingId &&
+          binding.accountId === job.awsAccountId &&
+          binding.region === job.region &&
+          binding.roleArn === job.connection.roleArn &&
+          binding.externalIdParameterArn === job.connection.externalIdParameter &&
+          binding.reviewedProblemIds.includes(job.problemId) &&
+          job.connection.reviewedProblemIds?.includes(job.problemId),
+      )
+    )
+      throw new Error("Deployment binding is no longer authorized.");
+  };
 }

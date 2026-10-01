@@ -89,7 +89,22 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
             readFileSync(path, "utf8").replace(/<<marker:[^>]+>>/gu, '"SYNTHESIZED_TOKEN"'),
           ) as unknown,
       );
-    expect(configs).toContainEqual(expect.objectContaining({ eventLimits: CLOUD_EVENT_LIMITS }));
+    expect(configs).toContainEqual(
+      expect.objectContaining({
+        eventLimits: CLOUD_EVENT_LIMITS,
+        mode: "cloud-host",
+        supportedProblemIds: ["hello-world"],
+        features: {
+          samlSso: false,
+          nonAwsRuntime: false,
+          redTeam: false,
+          challengePrerequisiteGate: false,
+        },
+      }),
+    );
+    expect(configs).toContainEqual(
+      expect.objectContaining({ mode: "backend", cloudMode: "real", hasAws: true }),
+    );
   });
   it("retains all event/team/deployment data by default and does not TTL-delete history", () => {
     data.resourceCountIs("AWS::DynamoDB::Table", 3);
@@ -415,8 +430,12 @@ describe("existing competitor bootstrap and registry IAM source boundaries", () 
       (statement) =>
         JSON.stringify(statement.Action).includes("sts:AssumeRole") && statement.Effect === "Allow",
     );
-    expect(assumptions).toHaveLength(4);
-    for (const statement of assumptions)
+    expect(assumptions).toHaveLength(5);
+    const competitorAssumptions = assumptions.filter(
+      (statement) => statement.Resource === `arn:aws:iam::*:role/${config.roleName}`,
+    );
+    expect(competitorAssumptions).toHaveLength(4);
+    for (const statement of competitorAssumptions)
       expect(statement).toMatchObject({
         Resource: `arn:aws:iam::*:role/${config.roleName}`,
         Condition: {
@@ -427,6 +446,28 @@ describe("existing competitor bootstrap and registry IAM source boundaries", () 
           },
         },
       });
+    expect(
+      assumptions.filter((statement) => statement.Resource === "arn:aws:iam::*:role/*"),
+    ).toEqual([
+      {
+        Effect: "Allow",
+        Action: "sts:AssumeRole",
+        Resource: "arn:aws:iam::*:role/*",
+        Condition: {
+          StringEquals: {
+            "aws:ResourceTag/TenkaCloud:Purpose": "participant-viewer",
+            "aws:ResourceTag/TenkaCloud:ProblemId": "hello-world",
+            "aws:ResourceTag/TenkaCloud:OperatorAccount": "123456789012",
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal IAM policy variable.
+            "sts:ExternalId": "${aws:ResourceTag/TenkaCloud:JobId}",
+          },
+          ArnLike: {
+            "aws:ResourceTag/TenkaCloud:StackId": "arn:aws:cloudformation:*:*:stack/tc-cloud-*/*",
+          },
+          Null: { "sts:ExternalId": "false", "aws:ResourceTag/TenkaCloud:JobId": "false" },
+        },
+      },
+    ]);
     const selfDenials = statements.filter(
       (statement) =>
         JSON.stringify(statement.Action).includes("sts:AssumeRole") && statement.Effect === "Deny",
@@ -510,6 +551,55 @@ describe("existing competitor bootstrap and registry IAM source boundaries", () 
     expect(text).toContain("123456789012");
     expect(text).not.toContain('"AWS":"*"');
     expect(JSON.stringify(application.toJSON())).not.toContain("AdministratorAccess");
+  });
+  it("pins the canonical viewer's explicit ownership tags without exposing the shared installation secret", () => {
+    const stack = new Stack(
+      new App({ outdir: join(directory, "viewer-template-synth") }),
+      "SyntheticHelloWorld",
+      {
+        env: { account: "222222222222", region: "us-east-1" },
+      },
+    );
+    const jobId = "01JTEST00000000000000000000";
+    new CfnInclude(stack, "Template", {
+      templateFile: resolve(
+        import.meta.dirname,
+        "../../../problems/challenges/hello-world/template.yaml",
+      ),
+      parameters: {
+        NamePrefix: `tc-cloud-${"a".repeat(40)}`,
+        TenkaCloudAccountId: "123456789012",
+        ExternalId: jobId,
+        FlagSeed: "SyntheticFlagOnly123",
+      },
+    });
+    const template = Template.fromStack(stack);
+    template.hasResourceProperties("AWS::IAM::Role", {
+      Tags: Match.arrayWith([
+        { Key: "TenkaCloud:JobId", Value: jobId },
+        { Key: "TenkaCloud:OperatorAccount", Value: "123456789012" },
+        { Key: "TenkaCloud:ProblemId", Value: "hello-world" },
+        { Key: "TenkaCloud:Purpose", Value: "participant-viewer" },
+        { Key: "TenkaCloud:StackId", Value: { Ref: "AWS::StackId" } },
+      ]),
+      AssumeRolePolicyDocument: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: { "Fn::Sub": "arn:aws:iam::123456789012:root" } },
+            Action: "sts:AssumeRole",
+            Condition: { StringEquals: { "sts:ExternalId": jobId } },
+          },
+        ],
+      },
+    });
+    const role = Object.values(template.findResources("AWS::IAM::Role"))[0];
+    expect(role?.Properties.RoleName).toBeUndefined();
+    expect(JSON.stringify(role?.Properties.Tags)).not.toContain("SyntheticFlagOnly123");
+    expect(JSON.stringify(role?.Properties.Tags)).not.toMatch(
+      /ssm|external-id|competitor-deploy/iu,
+    );
   });
   it("makes only the known secret-free bootstrap object public, with no bucket listing", () => {
     const statements = Object.values(application.findResources("AWS::S3::BucketPolicy")).flatMap(

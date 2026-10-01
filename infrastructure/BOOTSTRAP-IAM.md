@@ -90,6 +90,30 @@ A durable registry marker prevents silently replacing a missing, previously used
 ExternalId. The missing-key recovery check may Scan only the installation's Events
 and Deployments tables. No secret values enter runtime-config.json or logs.
 
+The hello-world participant CLI slice adds one API-side `sts:AssumeRole` permission
+for viewer roles. Generated names are not guessed: the statement requires explicit
+`TenkaCloud:Purpose=participant-viewer`, `ProblemId=hello-world`, the fixed
+`OperatorAccount`, a `StackId` under the `tc-cloud-*` stack namespace, and a
+`JobId` tag equal to the mandatory request ExternalId. These are custom template
+tags, not reserved `aws:cloudformation:*` tags. The canonical pinned problem
+contains them; older deployments missing the tags deny access.
+The existing platform-account explicit deny remains effective.
+
+Before viewer issuance, the API uses the current competitor connection for
+read-only `DescribeStacks` and `DescribeStackResource` against the original
+physical stack ARN. It verifies event/team/job/attempt ownership and binds the
+physical viewer role to that stack. It then assumes the viewer as the operator
+principal, with the job ID (never the shared bootstrap secret) as ExternalId.
+An inline STS policy explicitly denies every action except exact-parameter
+`ssm:GetParameter`/`ssm:GetParameters`, every other resource, and use beyond the
+event's effective expiry. Existing role permissions are not expanded. See the
+[STS session-policy contract](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html).
+Issuance uses STS's 900-second minimum duration; DynamoDB key revocation does not
+instantly revoke previously returned sessions. Console federation is not enabled.
+The final release decision uses a condition-only DynamoDB transaction over the
+existing Events, Teams and Deployments tables. Their existing API
+`dynamodb:ConditionCheckItem` grants cover it; no new table, marker or grant is needed.
+
 The dispatcher can Query only the pending-dispatch partition, strongly Get the
 Events table's `INSTALLATION` control key, and StartExecution only the installation's
 state machine. The control read is restricted with `dynamodb:LeadingKeys`. State-machine tasks invoke their own

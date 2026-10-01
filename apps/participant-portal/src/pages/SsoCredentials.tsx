@@ -12,7 +12,12 @@ import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
 import { useConsoleAccess } from "../components/useConsoleAccess";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
-import { externalPortalUrl, problemProvider, providerLabel } from "../data/providers";
+import {
+  externalPortalUrl,
+  hasAwsAccessCapability,
+  problemProvider,
+  providerLabel,
+} from "../data/providers";
 import { useT } from "../i18n";
 
 /**
@@ -94,18 +99,20 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
               <Header
                 variant="h2"
                 actions={
-                  <Button
-                    variant="primary"
-                    iconName="external"
-                    loading={pending === problem.jobId}
-                    disabled={pending !== null && pending !== problem.jobId}
-                    ariaLabel={t("sso_credentials.open_console_aria", {
-                      problemId: problem.problemId,
-                    })}
-                    onClick={() => void openConsole(problem.jobId)}
-                  >
-                    {t("sso_credentials.open_console_button")}
-                  </Button>
+                  hasAwsAccessCapability(problem, "console") && (
+                    <Button
+                      variant="primary"
+                      iconName="external"
+                      loading={pending === problem.jobId}
+                      disabled={pending !== null && pending !== problem.jobId}
+                      ariaLabel={t("sso_credentials.open_console_aria", {
+                        problemId: problem.problemId,
+                      })}
+                      onClick={() => void openConsole(problem.jobId)}
+                    >
+                      {t("sso_credentials.open_console_button")}
+                    </Button>
+                  )
                 }
               >
                 <code>{problem.problemId}</code>
@@ -113,6 +120,10 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
             }
           >
             <SpaceBetween size="m">
+              {!hasAwsAccessCapability(problem, "console") &&
+                !hasAwsAccessCapability(problem, "cli-credentials") && (
+                  <Box>{t("sso_credentials.aws_access_unavailable")}</Box>
+                )}
               <KeyValuePairs
                 columns={2}
                 items={[
@@ -123,7 +134,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
                   { label: t("sso_credentials.label_region"), value: problem.region },
                 ]}
               />
-              {sessionToken && (
+              {sessionToken && hasAwsAccessCapability(problem, "cli-credentials") && (
                 <CliCredentialsPanel
                   apiBaseUrl={config.apiBaseUrl}
                   sessionToken={sessionToken}

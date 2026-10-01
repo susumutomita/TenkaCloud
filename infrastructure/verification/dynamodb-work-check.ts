@@ -40,6 +40,12 @@ import { DynamoDbCompetitorAccountsRepository } from "../lib/problem-deploy/cont
 import { DynamoDeploymentWork } from "../lib/problem-deploy/control-data/dynamodb-deployment-work.js";
 import { createCloudApp } from "../lib/problem-deploy/handlers/cloud-api/app.js";
 import { createRegisteredConnectionPreparer } from "../lib/problem-deploy/handlers/cloud-api/connection-routes.js";
+import type { CloudParticipantAccess } from "../lib/problem-deploy/handlers/cloud-api/participant-access.js";
+import {
+  deploymentIdentity,
+  deploymentOwnershipTags,
+} from "../lib/problem-deploy/handlers/cloud-runner/index.js";
+import { buildDeploymentInput } from "../lib/problem-deploy/handlers/cloud-runner/workflow.js";
 
 const rawEndpoint = process.argv[2];
 if (!rawEndpoint) throw new Error("Pass explicit http://127.0.0.1:<port> DynamoDB Local endpoint.");
@@ -1879,6 +1885,223 @@ async function verifyRegistryDeletionRaces(accounts: DynamoDbCompetitorAccountsR
   );
 }
 
+async function verifyParticipantCliAuthorization() {
+  const source: EventRecord = {
+    ...event,
+    eventId: ulid(),
+    teamCount: 2,
+    problems: [{ problemId: "hello-world", defaultRegion: "us-east-1" }],
+  };
+  const members = teams.slice(0, 2).map((team) => ({
+    ...team,
+    eventId: source.eventId,
+    teamId: ulid(),
+    teamLoginKey: randomBytes(32).toString("base64url"),
+  }));
+  const team = members[0],
+    other = members[1];
+  assert.ok(team && other);
+  const repo = repository(),
+    operations = work();
+  assert.equal(await repo.createEventWithTeams(source, members), "created");
+  const base = makeJob(team, 0, source);
+  const stackName = deploymentStackName(source.eventId, team.teamId, "hello-world");
+  const job: DeploymentJob = {
+    ...base,
+    problemId: "hello-world",
+    problemDir: "problems/challenges/hello-world",
+    stackName,
+    parameters: {
+      NamePrefix: stackName,
+      TenkaCloudAccountId: "210987654321",
+      ExternalId: base.jobId,
+    },
+  };
+  const artifact = {
+    artifactDigest: job.artifactDigest,
+    templateBody: "synthetic-template",
+    capabilities: [],
+    publicOutputKeys: ["ParameterName"],
+  };
+  const { input } = buildDeploymentInput(job, artifact);
+  const fingerprint = deploymentIdentity(input).fingerprint;
+  const stackId = `arn:aws:cloudformation:${job.region}:${job.awsAccountId}:stack/${job.stackName}/synthetic-cli-stack`;
+  const owner = "synthetic-cli-owner";
+  await operations.saveVerifiedConnection(job.connection);
+  await operations.accept(acceptance(job, team, "participant-cli", source));
+  await operations.begin(job, owner, at);
+  await operations.reserveCreation(job, owner, now);
+  await operations.recordCreation(job, owner, { stackId, fingerprint });
+  await operations.finish(job, owner, { ...completion(job), stackId }, at);
+  const credentials = {
+    AccessKeyId: "ASIADUMMY00000000000",
+    SecretAccessKey: "SyntheticOnlySecret0000000000000000000000",
+    SessionToken: "SyntheticOnlySession000000000000000000000",
+    Expiration: new Date(now + 900_000),
+  };
+  const roleName = "SyntheticViewerRole";
+  let issued = 0,
+    revokeDuringIssue = false,
+    armFinalReadRace = false,
+    revokeDuringFinalRead = false;
+  const access: CloudParticipantAccess = {
+    work: {
+      getJob: operations.getJob.bind(operations),
+      getTarget: operations.getTarget.bind(operations),
+      getCreation: operations.getCreation.bind(operations),
+      acceptingNewDeployments: operations.acceptingNewDeployments.bind(operations),
+      assertParticipantAccessCurrent: operations.assertParticipantAccessCurrent.bind(operations),
+      getConnection: async (eventId, teamId) => {
+        const result = await operations.getConnection(eventId, teamId);
+        if (revokeDuringFinalRead) {
+          revokeDuringFinalRead = false;
+          const current = await repo.getTeam(source.eventId, team.teamId);
+          assert.ok(current);
+          assert.equal(await repo.rotateTeamAccess(current, undefined, at), "updated");
+        }
+        return result;
+      },
+    },
+    controlPlaneAccount: "210987654321",
+    resolveArtifacts: async () => artifact,
+    authorizeJob: async (current) => {
+      assert.equal(current.connection.roleArn, job.connection.roleArn);
+    },
+    runner: {
+      now: () => now,
+      ssm: () => ({
+        getParameter: async () => ({
+          Parameter: {
+            ARN: job.connection.externalIdParameter,
+            Type: "SecureString",
+            Value: "synthetic-external-id",
+          },
+        }),
+      }),
+      sts: { assumeRole: async () => ({ Credentials: credentials }) },
+      cloudFormation: () => ({
+        describeStacks: async () => ({
+          Stacks: [
+            {
+              StackId: stackId,
+              StackName: stackName,
+              StackStatus: "CREATE_COMPLETE",
+              Tags: deploymentOwnershipTags(input),
+              Outputs: [
+                {
+                  OutputKey: "ParticipantViewerRoleArn",
+                  OutputValue: `arn:aws:iam::${job.awsAccountId}:role/${roleName}`,
+                },
+                { OutputKey: "ParameterName", OutputValue: `/${stackName}/hello` },
+              ],
+            },
+          ],
+        }),
+        describeStackResource: async () => ({
+          StackResourceDetail: {
+            StackId: stackId,
+            LogicalResourceId: "ParticipantViewerRole",
+            ResourceType: "AWS::IAM::Role",
+            ResourceStatus: "CREATE_COMPLETE",
+            PhysicalResourceId: roleName,
+          },
+        }),
+        createStack: async () => {
+          throw new Error("CLI must never create resources");
+        },
+        deleteStack: async () => {
+          throw new Error("CLI must never delete resources");
+        },
+      }),
+    },
+    sts: {
+      send: async (command) => {
+        assert.equal(command.input.ExternalId, job.jobId);
+        assert.equal(command.input.DurationSeconds, 900);
+        assert.ok(command.input.Policy?.includes(`parameter/${stackName}/hello`));
+        if (revokeDuringIssue) {
+          revokeDuringIssue = false;
+          const current = await repo.getTeam(source.eventId, team.teamId);
+          assert.ok(current);
+          assert.equal(await repo.rotateTeamAccess(current, undefined, at), "updated");
+        }
+        if (armFinalReadRace) revokeDuringFinalRead = true;
+        issued++;
+        return {
+          $metadata: {},
+          Credentials: credentials,
+          AssumedRoleUser: {
+            AssumedRoleId: "SYNTHETIC",
+            Arn: `arn:aws:sts::${job.awsAccountId}:assumed-role/${roleName}/tc-view-${job.jobId}`,
+          },
+        };
+      },
+    },
+  };
+  const app = createCloudApp({
+    repository: repo,
+    organizerAuth: AUTH,
+    allowedOrigins: [],
+    now: () => now,
+    participantAccess: access,
+  });
+  const request = (member: TeamRecord, route = "cli-credentials") =>
+    app.request(`/portal/me/${route}?jobId=${job.jobId}`, {
+      headers: { Authorization: `Bearer ${member.teamLoginKey}` },
+    });
+  const ready = await request(team);
+  assert.equal(ready.status, 200, await ready.clone().text());
+  assert.equal(ready.headers.get("Cache-Control"), "no-store");
+  assert.equal(
+    z.object({ credentials: z.object({ awsAccountId: z.string() }) }).parse(await ready.json())
+      .credentials.awsAccountId,
+    job.awsAccountId,
+  );
+  assert.equal((await request(other)).status, 403);
+  const consoleResponse = await request(team, "console-signin-url");
+  assert.equal(consoleResponse.status, 409);
+  assert.equal(issued, 1);
+  armFinalReadRace = true;
+  const finalRace = await request(team);
+  assert.equal(
+    revokeDuringFinalRead,
+    false,
+    "the real revocation transaction ran inside the final connection read",
+  );
+  assert.equal(finalRace.status, 409, await finalRace.clone().text());
+  assert.equal((await finalRace.text()).includes(credentials.SecretAccessKey), false);
+  armFinalReadRace = false;
+  const expiredTeam = await repo.getTeam(source.eventId, team.teamId);
+  assert.ok(expiredTeam);
+  assert.equal(
+    await repo.rotateTeamAccess(expiredTeam, randomBytes(32).toString("base64url"), at),
+    "updated",
+  );
+  const currentTeam = await repo.getTeam(source.eventId, team.teamId);
+  assert.ok(currentTeam);
+  revokeDuringIssue = true;
+  const revoked = await request(currentTeam);
+  assert.equal(revoked.status, 401);
+  assert.equal((await revoked.text()).includes(credentials.SecretAccessKey), false);
+  assert.equal((await request(currentTeam)).status, 401);
+  assert.equal(issued, 3, "revocation suppresses both raced responses and all subsequent issuance");
+  console.log(
+    JSON.stringify({
+      milestone: "real-dynamodb-participant-cli-authorization",
+      ready: "existing CLI contract with no-store",
+      crossTeam: "403 before issuance",
+      console: "409 with no issuance",
+      revokedDuringSts: "Dynamo transaction observed; credentials withheld",
+      revokedDuringFinalConnectionRead:
+        "atomic ConditionCheck release rejects stale authenticated snapshot; credentials withheld",
+      subsequentRevokedRequests: "401 before issuance",
+      sessionLimitSeconds: 900,
+      scope:
+        "Real DynamoDB authentication/ownership and Hono HTTP; STS/SSM/CloudFormation are injected, no AWS operations",
+    }),
+  );
+}
+
 async function seedGlobalPagination(names: typeof tables, source: EventRecord, team: TeamRecord) {
   for (let offset = 0; offset < 205; offset += 100) {
     await document.send(
@@ -2156,6 +2379,7 @@ try {
   await verifyEventTeardown();
   await verifyHistoricalTeardownBlocker();
   await verifyAccountClients();
+  await verifyParticipantCliAuthorization();
   await verifyInstallationStopAndDrain();
   console.log(
     JSON.stringify({

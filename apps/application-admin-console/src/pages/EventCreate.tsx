@@ -15,7 +15,7 @@ import {
   type CreateEventResponse,
   createEvent,
 } from "../api/events-client";
-import { type AppConfig, isLocalHost } from "../config";
+import { type AppConfig, isCloudHost, isLocalHost } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
 import { useT } from "../i18n";
@@ -97,7 +97,13 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
   // 問題 option 化 (#1414 の disabled 出し分け) と検索 / filter (#1776) は
   // EventCreateProblemsetSection 側の責務。 ここは catalog 全件を渡すだけ。
-  const allProblems = useMemo(() => listProblemSummaries(), []);
+  const cloudHost = isCloudHost(config);
+  const allProblems = useMemo(() => {
+    const catalog = listProblemSummaries();
+    return cloudHost
+      ? catalog.filter((problem) => config.supportedProblemIds?.includes(problem.id))
+      : catalog;
+  }, [cloudHost, config.supportedProblemIds]);
 
   // Phase 2.2 (Issue #459): verified=true な CompetitorAccounts のみを Select の選択肢にする。
   // fetch + window focus 再取得は hook に切り出し済 (Issue #1241)。

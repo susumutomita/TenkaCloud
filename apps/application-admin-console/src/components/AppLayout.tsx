@@ -30,6 +30,7 @@ export function ShellLayout({
   demoMode = false,
   demoParticipantUrl,
   localHost = false,
+  cloudHost = false,
   hostAwsEnabled = false,
 }: {
   children: ReactNode;
@@ -41,6 +42,7 @@ export function ShellLayout({
   demoParticipantUrl?: string;
   /** Issue #3226: `bun start` のローカル大会。 cloud 専用の画面を nav に出さない。 */
   localHost?: boolean;
+  cloudHost?: boolean;
   hostAwsEnabled?: boolean;
 }) {
   const auth = useAuth();
@@ -110,6 +112,16 @@ export function ShellLayout({
       ],
     },
   ];
+  const cloudHostNavItems: SideNavigationProps.Item[] = [
+    {
+      type: "section",
+      text: t("nav.event_ops_section"),
+      items: [
+        { type: "link", href: "/events", text: t("nav.events") },
+        { type: "link", href: "/competitor-accounts", text: t("nav.competitor_accounts") },
+      ],
+    },
+  ];
   const organizerRole = claims?.["custom:organizerRole"];
   const localHostNavItems: SideNavigationProps.Item[] = [
     {
@@ -171,11 +183,12 @@ export function ShellLayout({
       </SpaceBetween>
     );
 
+  const hostedNavItems = cloudHost ? cloudHostNavItems : cloudNavItems;
   return (
     <WebKitShellLayout<LocaleCode>
       title={localHost ? t("local_host.app_title") : t("app.title")}
       navHeaderText={t("nav.menu")}
-      navItems={localHost ? localHostNavItems : cloudNavItems}
+      navItems={localHost ? localHostNavItems : hostedNavItems}
       activeHref={location.pathname}
       onNavigate={(href) => navigate(href)}
       isAuthenticated={Boolean(auth.tokens)}

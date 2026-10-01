@@ -1,16 +1,20 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { SSMClient } from "@aws-sdk/client-ssm";
+import { STSClient } from "@aws-sdk/client-sts";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { handle, type LambdaContext, type LambdaEvent } from "hono/aws-lambda";
 import { DynamoCloudRepository } from "../../control-data/dynamodb-cloud-repository.js";
 import { DynamoDbCompetitorAccountsRepository } from "../../control-data/dynamodb-competitor-accounts-repository.js";
 import { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
+import { createAwsCloudRunnerDependencies } from "../cloud-runner/sdk.js";
 import { createInstallationExternalIdStore } from "../shared/external-id-store.js";
 import { createCloudApp } from "./app.js";
 import { createRegisteredConnectionPreparer } from "./connection-routes.js";
 import {
   createConnectionVerifier,
+  createExecutionArtifactResolver,
   createExecutionCatalogProvider,
+  createJobBindingAuthorizer,
   installationAccountConfig,
   loadExecutionBindings,
   registeredRunnerBinding,
@@ -47,14 +51,32 @@ async function composeExecution() {
   const bindings = await loadExecutionBindings();
   const work = new DynamoDeploymentWork(document, tables);
   const catalog = createExecutionCatalogProvider();
-  const verify = createConnectionVerifier(required("CONTROL_PLANE_ACCOUNT"));
-  if (!process.env.COMPETITOR_ROLE_NAME)
+  const controlPlaneAccount = required("CONTROL_PLANE_ACCOUNT");
+  const verify = createConnectionVerifier(controlPlaneAccount);
+  const accounts = new DynamoDbCompetitorAccountsRepository(document, tables);
+  const config = process.env.COMPETITOR_ROLE_NAME ? installationAccountConfig() : undefined;
+  const resolvePinned = createExecutionArtifactResolver();
+  const participantAccess = {
+    work,
+    controlPlaneAccount,
+    runner: createAwsCloudRunnerDependencies({ controlPlaneRegion: required("AWS_REGION") }),
+    sts: new STSClient({ region: required("AWS_REGION"), ignoreConfiguredEndpointUrls: true }),
+    authorizeJob: createJobBindingAuthorizer({ bindings, accounts, config, controlPlaneAccount }),
+    resolveArtifacts: async (
+      job: import("../../control-data/domain/deployment-work.js").DeploymentJob,
+    ) => {
+      const current = (await catalog())[job.problemId];
+      if (!current || current.artifactDigest !== job.artifactDigest)
+        throw new Error("Participant access requires the currently reviewed catalog artifact.");
+      return resolvePinned(job);
+    },
+  };
+  if (!config)
     return {
       deployment: { work, catalog, controlPlaneAccount: required("CONTROL_PLANE_ACCOUNT") },
       connections: { bindings, verify },
+      participantAccess,
     };
-  const config = installationAccountConfig();
-  const accounts = new DynamoDbCompetitorAccountsRepository(document, tables);
   const externalIds = createInstallationExternalIdStore({
     ssm: new SSMClient({ region: required("AWS_REGION"), ignoreConfiguredEndpointUrls: true }),
     parameterArn: config.externalIdParameterArn,
@@ -63,6 +85,7 @@ async function composeExecution() {
     recordUse: () => accounts.observeExternalId(config.externalIdParameterArn),
   });
   return {
+    participantAccess,
     deployment: {
       work,
       catalog,

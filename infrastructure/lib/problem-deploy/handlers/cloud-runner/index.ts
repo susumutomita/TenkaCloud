@@ -264,6 +264,15 @@ export async function describeDeployment(
   deps: CloudRunnerDependencies,
 ): Promise<DeploymentObservation> {
   const input = parseDeploymentInput(value);
+  const { stack } = await ownedStack(input, reference, deps);
+  return observation(input, stack);
+}
+
+async function ownedStack(
+  input: CloudDeploymentInput,
+  reference: DeploymentReference,
+  deps: CloudRunnerDependencies,
+) {
   const stackId = assertStackId(input, reference.stackId);
   if (reference.fingerprint !== deploymentIdentity(input).fingerprint) {
     throw new Error("Deployment reference does not match the immutable input");
@@ -272,7 +281,55 @@ export async function describeDeployment(
   const stack = await lookupStack(cfn, stackId);
   if (!stack) throw new Error("Previously created CloudFormation stack is missing");
   if (stack.StackId !== stackId) throw new Error("CloudFormation replaced the deployment stack");
-  return observation(input, stack);
+  assertOwnership(input, stack);
+  return { cfn, stack };
+}
+
+/** Read-only access to the canonical hello-world viewer; never changes the pinned request. */
+export async function describeParticipantTarget(
+  value: unknown,
+  reference: DeploymentReference,
+  deps: CloudRunnerDependencies,
+) {
+  const input = parseDeploymentInput(value);
+  const name = deploymentIdentity(input).stackName;
+  if (
+    input.problemId !== "hello-world" ||
+    input.parameters.find((entry) => entry.key === "NamePrefix")?.value !== name ||
+    input.parameters.find((entry) => entry.key === "ExternalId")?.value !== input.jobId
+  )
+    throw new Error("Participant access requires the canonical hello-world deployment");
+  const { cfn, stack } = await ownedStack(input, reference, deps);
+  if (stack.StackStatus !== "CREATE_COMPLETE" || !cfn.describeStackResource)
+    throw new Error("Participant stack is not ready");
+  const result = await cfn.describeStackResource({
+    StackName: reference.stackId,
+    LogicalResourceId: "ParticipantViewerRole",
+  });
+  const role = result.StackResourceDetail;
+  if (
+    role?.StackId !== reference.stackId ||
+    role.LogicalResourceId !== "ParticipantViewerRole" ||
+    role.ResourceType !== "AWS::IAM::Role" ||
+    role.ResourceStatus !== "CREATE_COMPLETE" ||
+    !/^[A-Za-z0-9+=,.@_-]{1,64}$/u.test(role.PhysicalResourceId ?? "")
+  )
+    throw new Error("Participant role does not belong to the original stack");
+  const roleArn = `arn:aws:iam::${input.target.accountId}:role/${role.PhysicalResourceId}`;
+  const matching = (key: string, expected: string) => {
+    const outputs = (stack.Outputs ?? []).filter((entry) => entry.OutputKey === key);
+    return outputs.length === 1 && outputs[0]?.OutputValue === expected;
+  };
+  if (
+    roleArn === input.target.roleArn ||
+    !matching("ParticipantViewerRoleArn", roleArn) ||
+    !matching("ParameterName", `/${name}/hello`)
+  )
+    throw new Error("Participant access output does not match the owned resource");
+  return Object.freeze({
+    roleArn,
+    parameterArn: `arn:aws:ssm:${input.target.region}:${input.target.accountId}:parameter/${name}/hello`,
+  });
 }
 
 function boundDeletionReference(

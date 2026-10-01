@@ -40,3 +40,15 @@ export const EXTERNAL_PORTAL_URL: Record<string, string> = {
 export function externalPortalUrl(provider: string): string | undefined {
   return Object.hasOwn(EXTERNAL_PORTAL_URL, provider) ? EXTERNAL_PORTAL_URL[provider] : undefined;
 }
+
+/** Explicit capabilities are authoritative; an omitted list preserves the old backend contract. */
+export function hasAwsAccessCapability(
+  problem: { readonly provider?: string; readonly accessCapabilities?: readonly string[] },
+  capability: "console" | "cli-credentials",
+): boolean {
+  if (problemProvider(problem) !== "aws") return false;
+  return (
+    problem.accessCapabilities === undefined ||
+    (Array.isArray(problem.accessCapabilities) && problem.accessCapabilities.includes(capability))
+  );
+}

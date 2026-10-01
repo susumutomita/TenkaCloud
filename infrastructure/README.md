@@ -200,7 +200,42 @@ Registration verification establishes the connection's identity and trust; it
 is not a certification that sharing an AWS account safely isolates participants.
 Shared versus dedicated competitor accounts remains an open review item. In
 particular, hello-world's metadata-listing permission has a documented
-dedicated-account assumption, and participant AWS credential access remains off.
+dedicated-account assumption. The participant CLI slice below explicitly denies
+that permission; it does not approve a general shared-account deployment model.
+
+### Participant hello-world CLI access
+
+The existing `GET /portal/me/cli-credentials?jobId=...` contract issues only the
+owned hello-world viewer's temporary credentials. It rechecks the current team
+key/authVersion, event schedule, installation stop marker, target attempt,
+connection and verified registration before and after remote I/O. A completed
+creation receipt must bind the original physical stack ARN and immutable request
+fingerprint. CloudFormation ownership tags and `DescribeStackResource` bind the
+exact `ParticipantViewerRole` resource, without guessing its generated name.
+A final condition-only DynamoDB transaction checks all current authorization
+rows together immediately before credential release. Changes during the earlier
+sequential reads cannot authorize a stale response. Revocation after this atomic
+decision point has the already-issued credential lifetime described below.
+
+The operator principal assumes that viewer directly with the job ID as ExternalId.
+The deployment-role probe uses the retained installation ExternalId; its
+credentials and secret never reach participants. The fixed inline STS policy permits
+only `ssm:GetParameter` and `ssm:GetParameters` on the one exact
+`/<stack-name>/hello` parameter. Explicit denies exclude other resources and all
+other actions, including metadata listing, role chaining and CloudShell.
+The API returns `no-store` responses and fixed public errors, with no secret logs.
+
+STS sessions last at most 15 minutes; the inline policy also denies use past the
+known event/team/job expiry. Revoking a team key, registration or bootstrap role
+blocks new issuance but does not instantly revoke already-issued viewer sessions.
+Responses and UI must not claim otherwise. The participant projection advertises
+only `cli-credentials`; Console requests return `409 aws_console_unavailable`.
+
+This path requires five explicit viewer ownership tags in the pinned canonical
+hello-world template. Older deployments without these tags deny issuance; the
+platform does not silently change existing roles. The role's existing operator
+trust and problem permissions are unchanged; the additional inline STS policy
+narrows each set of issued credentials.
 
 The existing EventCreate account selection now creates the durable team connection
 when deployment is requested. Its explicit `registrationId` distinguishes registry
@@ -294,7 +329,8 @@ and Battle polling are outside this flag slice.
 
 - Reviewed least-privilege initial bootstrap policy and first-account setup path
 - AWS account-isolation decision and reviewed exercise permissions
-- Participant AWS Console/credential access; `hasAws` remains false
+- Complete the CLI-only participant UI
+- Participant AWS Console access without cross-team metadata disclosure
 - Catalog expansion, non-AWS runners, Battle/coordination, hints and disruptions
 - Public registration/claiming, audit, notifications and full organizer UI flows
 - Coordinated destroy: stop intake, drain dispatcher/pending/active workflows,

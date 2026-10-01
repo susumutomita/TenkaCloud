@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { externalPortalUrl, problemProvider, providerLabel } from "../../src/data/providers";
+import {
+  externalPortalUrl,
+  hasAwsAccessCapability,
+  problemProvider,
+  providerLabel,
+} from "../../src/data/providers";
 
 describe("providers (#2233)", () => {
   it("should map canonical providers to brand labels", () => {
@@ -49,5 +54,24 @@ describe("providers (#2233)", () => {
   it("should not resolve external portal URLs through the prototype chain", () => {
     expect(externalPortalUrl("toString")).toBeUndefined();
     expect(externalPortalUrl("constructor")).toBeUndefined();
+  });
+});
+
+describe("explicit AWS access capabilities", () => {
+  it("preserves omitted legacy capability lists but honors an explicit empty list", () => {
+    expect(hasAwsAccessCapability({}, "console")).toBe(true);
+    expect(hasAwsAccessCapability({ accessCapabilities: [] }, "console")).toBe(false);
+    expect(hasAwsAccessCapability({ accessCapabilities: [] }, "cli-credentials")).toBe(false);
+  });
+  it("separates CLI from Console and never maps another provider into AWS access", () => {
+    expect(
+      hasAwsAccessCapability({ accessCapabilities: ["cli-credentials"] }, "cli-credentials"),
+    ).toBe(true);
+    expect(hasAwsAccessCapability({ accessCapabilities: ["cli-credentials"] }, "console")).toBe(
+      false,
+    );
+    expect(
+      hasAwsAccessCapability({ provider: "gcp", accessCapabilities: ["console"] }, "console"),
+    ).toBe(false);
   });
 });

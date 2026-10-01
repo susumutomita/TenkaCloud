@@ -2,6 +2,7 @@ import {
   CloudFormationClient,
   CreateStackCommand,
   DeleteStackCommand,
+  DescribeStackResourceCommand,
   DescribeStacksCommand,
 } from "@aws-sdk/client-cloudformation";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
@@ -18,6 +19,7 @@ import {
   deploymentOwnershipTags,
   describeDeletion,
   describeDeployment,
+  describeParticipantTarget,
   MAX_DEPLOYMENT_INPUT_BYTES,
   parseDeploymentInput,
   pollDeployment,
@@ -239,6 +241,139 @@ describe("bounded immutable cloud deployment snapshots", () => {
     expect(changed.stackName).toBe(original.stackName);
     expect(changed.fingerprint).not.toBe(original.fingerprint);
     expect(changed.clientRequestToken).not.toBe(original.clientRequestToken);
+  });
+});
+
+describe("read-only participant viewer ownership", () => {
+  function participantFixture() {
+    const base = { ...INPUT, problemId: "hello-world" };
+    const name = deploymentIdentity(parseDeploymentInput(base)).stackName;
+    const f = fixture({
+      ...base,
+      parameters: [
+        { key: "NamePrefix", value: name },
+        { key: "ExternalId", value: INPUT.jobId },
+      ],
+    });
+    const physicalRole = "SyntheticTruncatedName-Viewer-A1B2C3";
+    const roleArn = `arn:aws:iam::${INPUT.target.accountId}:role/${physicalRole}`;
+    const detail = {
+      StackId: f.stackId,
+      LogicalResourceId: "ParticipantViewerRole",
+      PhysicalResourceId: physicalRole,
+      ResourceType: "AWS::IAM::Role",
+      ResourceStatus: "CREATE_COMPLETE",
+    };
+    const resource = vi.fn(async () => ({ StackResourceDetail: detail }));
+    const outputs = [
+      { OutputKey: "ParticipantViewerRoleArn", OutputValue: roleArn },
+      { OutputKey: "ParameterName", OutputValue: `/${name}/hello` },
+      { OutputKey: "PrivateFlag", OutputValue: "SYNTHETIC-MUST-NOT-ESCAPE" },
+    ];
+    f.describeStacks.mockResolvedValue({ Stacks: [f.ownedStack({ Outputs: outputs })] });
+    return {
+      ...f,
+      detail,
+      outputs,
+      resource,
+      roleArn,
+      name,
+      deps: {
+        ...f.deps,
+        cloudFormation: () => ({
+          describeStacks: f.describeStacks,
+          describeStackResource: resource,
+          createStack: f.createStack,
+          deleteStack: f.deleteStack,
+        }),
+      },
+    };
+  }
+  it("binds the physical viewer and exact parameter to the original stack without changing request fingerprint", async () => {
+    const f = participantFixture();
+    const result = await describeParticipantTarget(f.input, f.reference, f.deps);
+    expect(result).toEqual({
+      roleArn: f.roleArn,
+      parameterArn: `arn:aws:ssm:us-east-1:123456789012:parameter/${f.name}/hello`,
+    });
+    expect(f.resource).toHaveBeenCalledWith({
+      StackName: f.stackId,
+      LogicalResourceId: "ParticipantViewerRole",
+    });
+    expect(f.describeStacks).toHaveBeenCalledWith({ StackName: f.stackId });
+    expect(f.createStack).not.toHaveBeenCalled();
+    expect(f.deleteStack).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("SYNTHETIC-MUST-NOT-ESCAPE");
+    expect(f.input.allowedOutputKeys).not.toContain("ParticipantViewerRoleArn");
+  });
+  it.each([
+    { StackId: "another-stack" },
+    { LogicalResourceId: "AnotherRole" },
+    { ResourceType: "AWS::SSM::Parameter" },
+    { ResourceStatus: "DELETE_IN_PROGRESS" },
+    { PhysicalResourceId: "../role" },
+    { PhysicalResourceId: "x".repeat(65) },
+  ])("rejects a different physical resource: %j", async (change) => {
+    const f = participantFixture();
+    f.resource.mockResolvedValue({ StackResourceDetail: { ...f.detail, ...change } });
+    await expect(describeParticipantTarget(f.input, f.reference, f.deps)).rejects.toThrow(
+      "original stack",
+    );
+  });
+  it.each(["ParticipantViewerRoleArn", "ParameterName"])(
+    "rejects another team's %s output",
+    async (key) => {
+      const f = participantFixture();
+      f.describeStacks.mockResolvedValue({
+        Stacks: [
+          f.ownedStack({
+            Outputs: f.outputs.map((output) =>
+              output.OutputKey === key
+                ? { ...output, OutputValue: `${output.OutputValue}-another-team` }
+                : output,
+            ),
+          }),
+        ],
+      });
+      await expect(describeParticipantTarget(f.input, f.reference, f.deps)).rejects.toThrow(
+        "owned resource",
+      );
+    },
+  );
+  it("rejects stale attempts before reading any viewer resource", async () => {
+    const f = participantFixture();
+    f.describeStacks.mockResolvedValue({
+      Stacks: [f.ownedStack({ Tags: deploymentOwnershipTags({ ...f.input, attemptId: "old" }) })],
+    });
+    await expect(describeParticipantTarget(f.input, f.reference, f.deps)).rejects.toThrow(
+      "ownership",
+    );
+    expect(f.resource).not.toHaveBeenCalled();
+  });
+  it("uses an explicitly assumed competitor client for the SDK resource lookup", async () => {
+    const send = vi
+      .spyOn(CloudFormationClient.prototype, "send")
+      .mockImplementation(async () => ({}));
+    const deps = createAwsCloudRunnerDependencies({ controlPlaneRegion: "us-east-1" });
+    const client = deps.cloudFormation({
+      region: "us-east-1",
+      accountId: "123456789012",
+      credentials: {
+        accessKeyId: "SYNTHETICKEY",
+        secretAccessKey: "synthetic-secret",
+        sessionToken: "synthetic-token",
+        expiration: new Date(NOW + 900_000),
+      },
+    });
+    await client.describeStackResource?.({
+      StackName: "original-stack-arn",
+      LogicalResourceId: "ParticipantViewerRole",
+    });
+    expect(send).toHaveBeenCalledWith(expect.any(DescribeStackResourceCommand));
+    expect(send.mock.calls[0]?.[0].input).toEqual({
+      StackName: "original-stack-arn",
+      LogicalResourceId: "ParticipantViewerRole",
+    });
   });
 });
 

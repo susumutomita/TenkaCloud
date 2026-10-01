@@ -1069,12 +1069,27 @@ describe("optional deployment pipeline offline synthesis", () => {
       (policy) =>
         JSON.stringify(policy.Action).includes("sts:AssumeRole") && policy.Effect === "Allow",
     );
-    expect(assumptions).toHaveLength(8);
+    expect(assumptions).toHaveLength(9);
     const legacy = assumptions.filter((assumption) => Array.isArray(assumption.Resource));
     expect(legacy).toHaveLength(4);
     for (const assumption of legacy)
       expect(assumption.Resource).toEqual(bindings.map((binding) => binding.roleArn));
-    const registry = assumptions.filter((assumption) => !Array.isArray(assumption.Resource));
+    const registry = assumptions.filter(
+      (assumption) =>
+        !Array.isArray(assumption.Resource) && assumption.Resource !== "arn:aws:iam::*:role/*",
+    );
+    const participant = assumptions.filter(
+      (assumption) => assumption.Resource === "arn:aws:iam::*:role/*",
+    );
+    expect(participant).toHaveLength(1);
+    expect(participant[0]).toMatchObject({
+      Condition: {
+        StringEquals: {
+          "aws:ResourceTag/TenkaCloud:Purpose": "participant-viewer",
+          "aws:ResourceTag/TenkaCloud:OperatorAccount": "123456789012",
+        },
+      },
+    });
     expect(registry).toHaveLength(4);
     for (const assumption of registry) {
       expect(assumption.Resource).toMatch(
@@ -1110,7 +1125,7 @@ describe("optional deployment pipeline offline synthesis", () => {
       .map((name) => join(directory, name, "runtime-config.json"))
       .filter(existsSync)
       .map((path) => readFileSync(path, "utf8"));
-    expect(runtimeConfigs.some((raw) => raw.includes('"hasAws":false'))).toBe(true);
+    expect(runtimeConfigs.some((raw) => raw.includes('"hasAws":true'))).toBe(true);
     const catalogs = readdirSync(directory)
       .map((name) => join(directory, name, "catalogs"))
       .filter(existsSync)

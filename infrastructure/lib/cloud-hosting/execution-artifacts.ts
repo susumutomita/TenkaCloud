@@ -114,5 +114,11 @@ export function cloudExecutionArtifacts(
     sources: [Source.data(catalogKey, rawCatalog), Source.data(bindingsKey, rawBindings)],
     prune: false,
   });
-  return { bucket, catalogKey, bindingsKey, deployment };
+  return {
+    bucket,
+    catalogKey,
+    bindingsKey,
+    deployment,
+    problemIds: catalog.problems.map((problem) => problem.problemId),
+  };
 }

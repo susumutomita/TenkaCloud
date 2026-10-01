@@ -131,7 +131,7 @@ describe("installation drain orchestration with injected storage and clock only"
   it("times out without reopening intake and resumes the same durable scope", async () => {
     const f = fixture();
     await expect(drainInstallation(f.installation, scope, f.io, 0)).rejects.toThrow(
-      "repeat make destroy",
+      "repeat the same teardown command",
     );
     expect(f.control()?.status).toBe("DRAINING");
     await expect(f.installation.repository.assertAcceptingInstallation()).rejects.toThrow(

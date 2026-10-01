@@ -21,6 +21,7 @@ const inactive = new Set(["DELETING", "DELETED", "EXPIRED", "AUTO_DELETED"]);
 export function participantView(
   team: TeamRecord,
   deployments: readonly DeploymentRecord[],
+  participantAwsCli = false,
 ): ParticipantTeamView {
   return {
     team: {
@@ -55,7 +56,13 @@ export function participantView(
           : {}),
         ...(row.failureReason ? { failureReason: row.failureReason } : {}),
         ...(row.createdAt ? { createdAt: row.createdAt } : {}),
-        accessCapabilities: [],
+        accessCapabilities:
+          participantAwsCli &&
+          row.problemId === "hello-world" &&
+          row.status === "COMPLETE" &&
+          !row.teardownStatus
+            ? ["cli-credentials"]
+            : [],
         deployLog: { cursor: row.jobId, entries: [] },
       })),
   };

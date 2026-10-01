@@ -30,7 +30,7 @@ export function useEffectiveFeatures(config: AppConfig): AppFeatures | undefined
 
   useEffect(() => {
     // Demo mode has no real per-tenant flag store; keep the static baseline.
-    if (!apiClient || config.mode === "demo") return;
+    if (!apiClient || config.mode === "demo" || config.mode === "cloud-host") return;
     let cancelled = false;
     apiClient
       .get<{ flags: Readonly<Record<string, unknown>> }>("/feature-flags")

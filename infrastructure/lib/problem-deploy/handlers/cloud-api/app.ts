@@ -13,6 +13,10 @@ import {
 } from "./competitor-account-routes.js";
 import { type CloudConnectionApi, registerCloudConnectionRoutes } from "./connection-routes.js";
 import { type CloudDeploymentApi, registerCloudDeploymentRoutes } from "./deployment-routes.js";
+import {
+  type CloudParticipantAccess,
+  registerParticipantAccessRoutes,
+} from "./participant-access.js";
 import { registerCloudScheduleRoutes } from "./schedule-routes.js";
 import { body, createEventSchema, identifier } from "./schema.js";
 import { eventSummary, leaderboard, participantView, teamSummary } from "./views.js";
@@ -25,6 +29,7 @@ export interface CloudApiOptions {
   readonly deployment?: CloudDeploymentApi;
   readonly connections?: CloudConnectionApi;
   readonly accounts?: CloudCompetitorAccountsApi;
+  readonly participantAccess?: CloudParticipantAccess;
 }
 const readRoles = ["Admin", "Operator", "Viewer"] as const;
 const writeRoles = ["Admin", "Operator"] as const;
@@ -48,6 +53,7 @@ async function create(
   context: Context,
   now: number,
   auth: OrganizerAuthConfig,
+  catalog?: CloudDeploymentApi["catalog"],
 ) {
   const actor = requireOrganizer(context, writeRoles, auth, now);
   const input = createEventSchema.parse(await body(context));
@@ -60,6 +66,11 @@ async function create(
   const requestHash = contentDigest(JSON.stringify(input));
   const prior = await repo.replayEventCreation(actor.sub, requestKey, requestHash);
   if (prior !== undefined) return context.json(prior, 201);
+  if (catalog) {
+    const supported = await catalog();
+    if (input.problems.some((problem) => !Object.hasOwn(supported, problem.problemId)))
+      throw new ApiError(409, "unsupported_runtime_problem");
+  }
   const eventId = ulid(now);
   const createdAt = new Date(now).toISOString();
   const expiresAt = Math.floor(now / 1000) + 7 * 86400;
@@ -211,6 +222,8 @@ export function createCloudApp(options: CloudApiOptions): Hono {
       organizerAuth: options.organizerAuth,
       now,
     });
+  if (options.participantAccess)
+    registerParticipantAccessRoutes(app, { ...options.participantAccess, repository: repo, now });
   app.get("/events", async (context) => {
     requireOrganizer(context, readRoles, options.organizerAuth, now());
     const limit = z.coerce
@@ -232,7 +245,9 @@ export function createCloudApp(options: CloudApiOptions): Hono {
       ...(last && previous + 1 + page.length < events.length ? { nextCursor: last.eventId } : {}),
     });
   });
-  app.post("/events", (context) => create(repo, context, now(), options.organizerAuth));
+  app.post("/events", (context) =>
+    create(repo, context, now(), options.organizerAuth, options.deployment?.catalog),
+  );
   app.get("/events/:eventId", (context) => detail(repo, context, now(), options.organizerAuth));
   app.post("/events/:eventId/teams/:teamId/rotate-login-key", (context) =>
     changeAccess(repo, context, now(), false, options.organizerAuth),
@@ -243,7 +258,11 @@ export function createCloudApp(options: CloudApiOptions): Hono {
   app.get("/portal/me", async (context) => {
     const team = await authenticate(repo, context, now());
     return context.json(
-      participantView(team, await repo.listDeploymentsByTeam(team.eventId, team.teamId)),
+      participantView(
+        team,
+        await repo.listDeploymentsByTeam(team.eventId, team.teamId),
+        options.participantAccess !== undefined,
+      ),
     );
   });
   app.get("/portal/leaderboard", async (context) => {

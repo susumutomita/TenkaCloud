@@ -35,6 +35,10 @@ export function viewIsUnchanged(
       JSON.stringify(p.scoring) !== JSON.stringify(n.scoring) ||
       p.failureReason !== n.failureReason ||
       p.accessError !== n.accessError ||
+      p.provider !== n.provider ||
+      p.awsAccountId !== n.awsAccountId ||
+      p.region !== n.region ||
+      JSON.stringify(p.accessCapabilities) !== JSON.stringify(n.accessCapabilities) ||
       p.deployLog?.cursor !== n.deployLog?.cursor ||
       // Issue #2845: `lifecycle` was missing here, and it is the only field the
       // refetch right after Start changes (`stopped` -> `starting`). Treating

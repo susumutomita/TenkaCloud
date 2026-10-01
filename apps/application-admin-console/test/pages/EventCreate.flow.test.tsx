@@ -143,6 +143,29 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("EventCreatePage flow", () => {
+  it("shows only problems advertised by the cloud execution catalog", () => {
+    config = { ...config, mode: "cloud-host", supportedProblemIds: ["p1"] };
+    const { container } = renderPage();
+    const select = problemSelect(container);
+    select?.openDropdown();
+    expect(select?.findDropdown()?.findOptionByValue("p1")).not.toBeNull();
+    expect(select?.findDropdown()?.findOptionByValue("p2")).toBeNull();
+    select?.selectOptionByValue("p1");
+    expect(screen.getByText("Problem 1")).toBeInTheDocument();
+  });
+  it.each([{ supportedProblemIds: undefined }, { supportedProblemIds: [] }])(
+    "offers no cloud problem when its capability list is %s",
+    ({ supportedProblemIds }) => {
+      config = { ...config, mode: "cloud-host", supportedProblemIds };
+      const { container } = renderPage();
+      const select = problemSelect(container);
+      select?.openDropdown();
+      expect(select?.findDropdown()?.findOptionByValue("p1")).toBeNull();
+      expect(select?.findDropdown()?.findOptionByValue("p2")).toBeNull();
+      expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+      expect(mockCreate).not.toHaveBeenCalled();
+    },
+  );
   it("should create the event then bulk-deploy and navigate on 'deploy now'", async () => {
     const { container } = renderPage();
     fillValidForm(container);

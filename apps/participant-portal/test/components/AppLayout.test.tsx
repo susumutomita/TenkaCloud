@@ -503,6 +503,25 @@ describe("ShellLayout", () => {
     expect(screen.getAllByText("nav.open_console").length).toBeGreaterThan(0);
   });
 
+  it.each([{ capabilities: ["cli-credentials"] }, { capabilities: [] }])(
+    "hides the global Console shortcut for explicit capabilities %j",
+    ({ capabilities }) => {
+      const view = teamView([10]);
+      mockTeamView.mockReturnValue(
+        tv({
+          view: {
+            ...view,
+            problems: view.problems.map((problem) => ({
+              ...problem,
+              accessCapabilities: capabilities,
+            })),
+          },
+        }),
+      );
+      renderShell();
+      expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+    },
+  );
   it("should not render the AWS Console entry when signed out", () => {
     mockAuth.mockReturnValue({ session: null, logout: vi.fn() });
     renderShell();

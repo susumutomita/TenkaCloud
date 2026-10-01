@@ -174,6 +174,27 @@ export class CloudApplicationStack extends Stack {
       }),
     );
     apiHandler.addToRolePolicy(competitorAssumeRolePolicy(competitor));
+    apiHandler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["sts:AssumeRole"],
+        // Generated physical role names are deliberately not guessed. Runtime additionally
+        // binds DescribeStackResource's exact viewer to the original stack/attempt.
+        resources: ["arn:aws:iam::*:role/*"],
+        conditions: {
+          StringEquals: {
+            "aws:ResourceTag/TenkaCloud:Purpose": "participant-viewer",
+            "aws:ResourceTag/TenkaCloud:ProblemId": "hello-world",
+            "aws:ResourceTag/TenkaCloud:OperatorAccount": this.account,
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: IAM resolves this resource-tag policy variable, not JavaScript.
+            "sts:ExternalId": "${aws:ResourceTag/TenkaCloud:JobId}",
+          },
+          ArnLike: {
+            "aws:ResourceTag/TenkaCloud:StackId": "arn:aws:cloudformation:*:*:stack/tc-cloud-*/*",
+          },
+          Null: { "sts:ExternalId": "false", "aws:ResourceTag/TenkaCloud:JobId": "false" },
+        },
+      }),
+    );
     apiHandler.addToRolePolicy(denyControlPlaneAssumeRole(this.account));
     apiHandler.addToRolePolicy(
       new PolicyStatement({
@@ -310,12 +331,26 @@ export class CloudApplicationStack extends Stack {
     if (!flag) throw new Error("Participant route is missing.");
     // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- The Lambda revalidates the team bearer, event/attempt ownership and current authVersion in the scoring transaction; no Cognito participant identity exists.
     flag.addMethod("POST", integration, { authorizationType: AuthorizationType.NONE });
+    for (const route of ["cli-credentials", "console-signin-url"]) {
+      const access = portal.getResource("me")?.addResource(route);
+      if (!access) throw new Error("Participant access route is missing.");
+      // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- Fresh team/event/attempt/connection checks guard CLI issuance; the unsupported console route never issues credentials.
+      access.addMethod("GET", integration, { authorizationType: AuthorizationType.NONE });
+    }
     new BucketDeployment(this, "ConsoleRuntime", {
       destinationBucket: consoleSite.bucket,
       distribution: consoleSite.distribution,
       sources: [
         Source.jsonData("runtime-config.json", {
           cognitoDomain: domain.baseUrl(),
+          mode: "cloud-host",
+          supportedProblemIds: execution.problemIds,
+          features: {
+            samlSso: false,
+            nonAwsRuntime: false,
+            redTeam: false,
+            challengePrerequisiteGate: false,
+          },
           userClientId: client.userPoolClientId,
           apiUrl: api.url,
           // Fixed compatibility fields required by the existing SPA parser, never an authorization axis.
@@ -339,7 +374,7 @@ export class CloudApplicationStack extends Stack {
           eventRegion: this.region,
           mode: "backend",
           cloudMode: "real",
-          hasAws: false,
+          hasAws: true,
         }),
       ],
       prune: false,

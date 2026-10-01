@@ -4,9 +4,9 @@ import { assertCommercialRegion } from "../../../cloud-hosting/regions.js";
 import { DynamoDbCompetitorAccountsRepository } from "../../control-data/dynamodb-competitor-accounts-repository.js";
 import { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
 import {
+  createJobBindingAuthorizer,
   installationAccountConfig,
   loadExecutionBindings,
-  registeredRunnerBinding,
 } from "../cloud-api/execution-config.js";
 import { createAwsCloudRunnerDependencies } from "./sdk.js";
 import {
@@ -43,31 +43,7 @@ export async function createProductionWorkflowHandlers(resolveArtifacts: Artifac
     repository: new DynamoDeploymentWork(client, tables),
     runner: createAwsCloudRunnerDependencies({ controlPlaneRegion: region }),
     resolveArtifacts,
-    authorizeJob: async (job) => {
-      if (job.awsAccountId === controlPlaneAccount) throw new CloudWorkflowError();
-      let allowed = bindings;
-      if (job.connection.registrationId !== undefined) {
-        const record = await accounts.getAccount(job.awsAccountId);
-        if (!config || !record || job.connection.registrationId !== record.registrationId)
-          throw new CloudWorkflowError();
-        allowed = [
-          registeredRunnerBinding(record, config, job.connection.reviewedProblemIds ?? []),
-        ];
-      }
-      if (
-        !allowed.some(
-          (binding) =>
-            binding.id === job.connection.bindingId &&
-            binding.accountId === job.awsAccountId &&
-            binding.region === job.region &&
-            binding.roleArn === job.connection.roleArn &&
-            binding.externalIdParameterArn === job.connection.externalIdParameter &&
-            binding.reviewedProblemIds.includes(job.problemId) &&
-            job.connection.reviewedProblemIds?.includes(job.problemId),
-        )
-      )
-        throw new CloudWorkflowError();
-    },
+    authorizeJob: createJobBindingAuthorizer({ bindings, accounts, config, controlPlaneAccount }),
   });
 }
 

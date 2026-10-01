@@ -16,6 +16,8 @@ import type { AppConfig } from "../src/config";
 import { I18nProvider } from "../src/i18n";
 
 const config: AppConfig = {
+  mode: "cloud-host",
+  supportedProblemIds: ["hello-world"],
   cognitoDomain: "https://organizers.example.test",
   cognitoClientId: "synthetic-cloud-client",
   redirectUri: "https://console.example.test/callback",
@@ -42,7 +44,7 @@ function account(awsAccountId: string, alias: string): CompetitorAccountSummary 
   };
 }
 
-function cloudSession(role: "Admin" | "Operator" | "Viewer") {
+function cloudSession(role: "Admin" | "Operator" | "Viewer", destination = "/competitor-accounts") {
   const token = `a.${btoa(JSON.stringify({ sub: "organizer", "custom:userRole": role }))}.c`;
   const accounts: CompetitorAccountSummary[] = [
     { ...account("222222222222", "Beta account"), verified: true, verifiedAt: createdAt },
@@ -130,7 +132,7 @@ function cloudSession(role: "Admin" | "Operator" | "Viewer") {
   vi.stubGlobal("fetch", fetchMock);
   sessionStorage.setItem("TenkaCloud.pkce_verifier", "synthetic-pkce-verifier");
   sessionStorage.setItem("TenkaCloud.oauth_state", "synthetic-state");
-  sessionStorage.setItem("TenkaCloud.application_admin.login_return_path", "/competitor-accounts");
+  sessionStorage.setItem("TenkaCloud.application_admin.login_return_path", destination);
   render(
     <I18nProvider>
       <MemoryRouter initialEntries={["/callback?code=synthetic-code&state=synthetic-state"]}>
@@ -261,6 +263,39 @@ describe("cloud organizer SPA journey", () => {
         expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${token}`);
     expect(unexpected).toEqual([]);
   }, 15_000);
+
+  it("opens the authenticated root on Events and exposes only connected cloud navigation", async () => {
+    const f = cloudSession("Admin", "/");
+    expect(await screen.findByRole("link", { name: "Cloud acceptance event" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Competitor Accounts" })).toBeInTheDocument();
+    for (const label of ["Users", "Settings", "Audit log", "Deployments", "Problems"])
+      expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
+    expect(f.fetchMock.mock.calls.some(([input]) => String(input).endsWith("/feature-flags"))).toBe(
+      false,
+    );
+    expect(f.unexpected).toEqual([]);
+  });
+  it.each([
+    "/users",
+    "/settings",
+    "/audit-log",
+    "/deployments",
+    "/problems",
+    "/identity-providers",
+  ])("explains unavailable cloud route %s without sending a legacy API request", async (path) => {
+    const f = cloudSession("Admin", path);
+    expect(
+      await screen.findByRole("heading", {
+        name: "This function is not available in cloud hosting yet",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      f.fetchMock.mock.calls.filter(([input]) => String(input).startsWith(config.apiBaseUrl)),
+    ).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Go to events" }));
+    expect(await screen.findByRole("link", { name: "Cloud acceptance event" })).toBeInTheDocument();
+    expect(f.unexpected).toEqual([]);
+  });
 
   it.each(["Operator", "Viewer"] as const)(
     "keeps account mutations disabled for a cloud %s",

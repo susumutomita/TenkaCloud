@@ -35,6 +35,14 @@ const view = (over: Record<string, unknown> = {}): ParticipantTeamView =>
   }) as ParticipantTeamView;
 
 describe("team-view-diff (Issue #2222)", () => {
+  it("refreshes removed or newly constrained access even when score and deployment status are unchanged", () => {
+    const legacy = view({ problems: [prob()] });
+    const cliOnly = view({ problems: [prob({ accessCapabilities: ["cli-credentials"] })] });
+    const unavailable = view({ problems: [prob({ accessCapabilities: [] })] });
+    expect(viewIsUnchanged(legacy, cliOnly)).toBe(false);
+    expect(viewIsUnchanged(cliOnly, unavailable)).toBe(false);
+    expect(viewIsUnchanged(unavailable, structuredClone(unavailable))).toBe(true);
+  });
   it("should distinguish view / notifications / leaderboard changes independent of the Provider", () => {
     const a = view();
     const b = view({ problems: [prob({ status: "FAILED" }) as ParticipantProblemView] });
