@@ -246,6 +246,7 @@ describe("landing hero quest card (Issue #2711)", () => {
   it("should publish the same quest-card structure on the generated English landing page", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
+    expect(hero).toContain('href="./docs/manual/organizer/index.en.html"');
     expect(hero).not.toContain("cta-primary");
     expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
     expect(hero).toContain('data-cta="start-drill"');
