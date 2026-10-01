@@ -1,6 +1,11 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  type ProblemCourseMetadataInput,
+  toCourseAlignment,
+  toTrackPosition,
+} from "../../packages/portal-contracts/src/problem-course-projection";
 import { parseEndpointSlot } from "../../packages/problem-sdk/src/endpoints-metadata";
 
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -73,6 +78,10 @@ export function publicMetadata(code: string, id: string): string | null {
     estimatedDuration: raw.estimatedDuration,
     shortDescription: raw.shortDescription,
     learningGoals: [],
+    track: toTrackPosition(raw.track as ProblemCourseMetadataInput["track"]),
+    courseAlignment: toCourseAlignment(
+      raw.courseAlignment as ProblemCourseMetadataInput["courseAlignment"],
+    ),
     tags: Array.isArray(raw.tags) ? raw.tags : [],
     runtime:
       raw.id === "ac26-crypto-battle"

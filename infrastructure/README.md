@@ -391,6 +391,17 @@ exactly-once scoring have passed; a synchronized 100-client burst still exceeds 
 AWS latency or cost guarantee. See the checked-in measurement evidence for the
 final run, state sizes, p50/p95/p99, conflicts and request amplification.
 
+The follow-up local measurement reduced SDK commands for the synchronized refresh
+from 6,434 to 4,530, with all 300 HTTP responses successful. Completion took 5.910
+seconds (participant refresh p95 5.698 seconds), so the five-second target remains
+unmet. The harness now reports this as `consistency-passed-capacity-unmet` and exits
+with code 2 instead of treating successful responses alone as sufficient capacity.
+The complete run retained exactly-once scores through 100 operations, receipt
+replays, revocation, interrupted ownership and final installation drain. Atomic
+snapshot reads avoid retries for unrelated admission changes, and an exact
+HEAD-only collision hint skips diagnostic reads; every retry still passes the
+original event, team and intake transaction guards before running the reducer.
+
 ## Remaining acceptance work
 
 - Reviewed least-privilege initial bootstrap policy and first-account setup path

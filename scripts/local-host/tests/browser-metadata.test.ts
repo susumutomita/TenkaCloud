@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { metadataToEntry } from "../../../packages/portal-contracts/src/problem-catalog";
 import {
   assertHostingModule,
   hostBrowserProblemPaths,
@@ -100,4 +101,35 @@ test("native crypto remains a Battle and server-only game code stays excluded", 
   expect(() =>
     assertHostingModule("/repo/problems/battles/ac26-crypto-battle/portal/StatusPanel.tsx"),
   ).not.toThrow();
+});
+
+test("course metadata survives both browser projections without exposing author-only fields", () => {
+  const path = join(root, "problems/challenges/ac26-w5-lwe-rlwe/metadata.json");
+  const raw = JSON.parse(readFileSync(path, "utf8"));
+  raw.track.answer = "private-track-answer";
+  raw.courseAlignment.solution = "private-course-answer";
+  raw.courseAlignment.sources[0].answer = "private-source-answer";
+  const projected = publicMetadata(JSON.stringify(raw), path);
+  if (!projected) throw new Error("Missing course projection.");
+  const entry = metadataToEntry(JSON.parse(projected));
+  expect(entry.track).toEqual({
+    id: raw.track.id,
+    order: raw.track.order,
+    chapter: raw.track.chapter,
+  });
+  expect(entry.courseAlignment?.courseId).toBe(raw.courseAlignment.courseId);
+  expect(entry.courseAlignment?.week).toBe(raw.courseAlignment.week);
+  expect(entry.courseAlignment?.sources[0]).toEqual({
+    repository: raw.courseAlignment.sources[0].repository,
+    ref: raw.courseAlignment.sources[0].ref,
+    path: raw.courseAlignment.sources[0].path,
+    kind: raw.courseAlignment.sources[0].kind,
+  });
+  expect(projected).not.toContain("private-");
+  expect(entry.learningGoals).toEqual([]);
+  raw.courseAlignment.spoilerPolicy = "embargoed";
+  const embargoed = publicMetadata(JSON.stringify(raw), path);
+  if (!embargoed) throw new Error("Missing embargo projection.");
+  expect(JSON.parse(embargoed).courseAlignment).toBeUndefined();
+  expect(JSON.parse(embargoed).track).toEqual(entry.track);
 });

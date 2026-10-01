@@ -29,7 +29,7 @@ async function boot(root: HTMLElement): Promise<void> {
       "Invalid competition configuration. No demo or automatic-login fallback is permitted.",
     );
   // The normal competition portal and its real team-key login are reused. This
-  // entry cannot acquire localTeamLoginKey or activate the individual-practice UI.
+  // entry cannot acquire localTeamLoginKey. Its course view uses only assigned jobs.
   const config: AppConfig = {
     apiBaseUrl: expected,
     coordinationApiUrl: expected,
@@ -37,6 +37,7 @@ async function boot(root: HTMLElement): Promise<void> {
     eventRegion: "local",
     mode: "backend",
     cloudMode: "real",
+    courseTracksEnabled: true,
     hasAws: runtime.hasAws === true,
   };
   createRoot(root).render(

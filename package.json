@@ -53,7 +53,7 @@
     "release:candidate": "bun run scripts/release/host-candidate.ts",
     "test:host:saml": "bun run build:host && bun run scripts/local-host/tests/saml-browser-e2e.ts",
     "test:host:audit": "bun run build:host && bun run scripts/local-host/tests/audit-browser-e2e.ts",
-    "test:host:browser": "bun run scripts/local-host/tests/organizer-browser-e2e.ts && bun run scripts/local-host/tests/browser-e2e.ts && bun run scripts/local-host/tests/cloud-browser-e2e.ts && bun run scripts/local-host/tests/accounts-browser-e2e.ts && bun run scripts/local-host/tests/participant-aws-browser-e2e.ts && bun run scripts/local-host/tests/saml-browser-e2e.ts && bun run scripts/local-host/tests/audit-browser-e2e.ts && bun run scripts/local-host/tests/disruption-browser-e2e.ts && bun run scripts/local-host/tests/uptime-browser-e2e.ts && bun run scripts/local-host/tests/progression-browser-e2e.ts && bun run scripts/local-host/tests/registration-browser-e2e.ts"
+    "test:host:browser": "bun run scripts/local-host/tests/organizer-browser-e2e.ts && bun run scripts/local-host/tests/browser-e2e.ts && bun run scripts/local-host/tests/cloud-browser-e2e.ts && bun run scripts/local-host/tests/accounts-browser-e2e.ts && bun run scripts/local-host/tests/participant-aws-browser-e2e.ts && bun run scripts/local-host/tests/saml-browser-e2e.ts && bun run scripts/local-host/tests/audit-browser-e2e.ts && bun run scripts/local-host/tests/disruption-browser-e2e.ts && bun run scripts/local-host/tests/uptime-browser-e2e.ts && bun run scripts/local-host/tests/progression-browser-e2e.ts && bun run scripts/local-host/tests/registration-browser-e2e.ts && bun run scripts/local-host/tests/course-tracks-browser-e2e.ts"
   },
   "trustedDependencies": [],
   "keywords": [],

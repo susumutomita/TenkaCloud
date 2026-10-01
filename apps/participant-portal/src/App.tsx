@@ -56,10 +56,8 @@ export function App({ config }: { config: AppConfig }) {
           )}
         />
         <Route path="/problems" element={guarded(config, <QuestsPage />)} />
-        {/* Issue #2786: 週・章順の学習経路。 /problems の flat 一覧と併存する。
-            自習経路なので local だけに出す — nav の link を消すだけでは URL が生きたまま
-            残るので、route ごと登録しない (未登録 path は下の catch-all で `/` に戻る)。 */}
-        {showsCourseTracks(config.cloudMode) && (
+        {/* The local host opts into the guarded learning view separately from its provider mode. */}
+        {showsCourseTracks(config.cloudMode, config.courseTracksEnabled) && (
           <Route path="/course-tracks" element={guarded(config, <CourseTracksPage />)} />
         )}
         <Route

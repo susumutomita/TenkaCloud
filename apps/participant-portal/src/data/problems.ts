@@ -23,7 +23,6 @@ import { metadataToEntry, type ProblemMetadata } from "@tenkacloud/portal-contra
 export type {
   ProblemCatalogEntry,
   ProblemDashboardSlots,
-  ProblemTrackPosition,
 } from "@tenkacloud/portal-contracts";
 
 import type { ProblemCatalogEntry } from "@tenkacloud/portal-contracts";

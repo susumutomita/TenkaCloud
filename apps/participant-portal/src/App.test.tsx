@@ -31,10 +31,23 @@ vi.mock("./pages/SsoCredentials", () => ({
   SsoCredentialsPage: () => <div>sso-credentials-page</div>,
 }));
 
-function renderAt(path: string, cloudMode: CloudMode, hasAws?: boolean) {
+function renderAt(
+  path: string,
+  cloudMode: CloudMode,
+  hasAws?: boolean,
+  courseTracksEnabled = false,
+) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <App config={{ cloudMode, ...(hasAws !== undefined ? { hasAws } : {}) } as AppConfig} />
+      <App
+        config={
+          {
+            cloudMode,
+            courseTracksEnabled,
+            ...(hasAws !== undefined ? { hasAws } : {}),
+          } as AppConfig
+        }
+      />
     </MemoryRouter>,
   );
 }
@@ -42,6 +55,11 @@ function renderAt(path: string, cloudMode: CloudMode, hasAws?: boolean) {
 describe("App routing for the course tracks", () => {
   it("should serve /course-tracks in local mode", () => {
     renderAt("/course-tracks", "local");
+    expect(screen.getByText("course-tracks-page")).toBeTruthy();
+  });
+
+  it("serves the local-host course route without switching provider or authentication mode", () => {
+    renderAt("/course-tracks", "real", false, true);
     expect(screen.getByText("course-tracks-page")).toBeTruthy();
   });
 

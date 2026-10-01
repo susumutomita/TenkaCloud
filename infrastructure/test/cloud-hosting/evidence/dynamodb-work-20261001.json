@@ -449,5 +449,268 @@
     "observation": "The earlier full run after the 20-second request budget exhausted the unchanged bounded client retry limit during the large synthetic-state burst. Its raw failure is retained; it is not overwritten by the passing rerun.",
     "fixtureDiagnosis": "That synthetic load used a constant now() while admission expiry is based on wall time. A held claim could therefore remain artificially unexpired. Load now uses advancing Date.now(); the synthetic reducer remains clock-independent. Deterministic stale-clock safety tests remain separate. This fixture defect is not proof that it alone caused every failed retry.",
     "remainingCriterion": "The corrected canonical simultaneous burst still exceeds 5 seconds."
+  },
+  "nativeRecheck": {
+    "sourceBase": "d6fda725863551fab3e7216589ffd59ebc76a5d6",
+    "change": "Atomic snapshot read and guarded HEAD-collision retry; no time rounding or additional retry budget",
+    "scope": "Official DynamoDB Local 3.3.1, synthetic25-team/100-client data. Full native harness with additional private progress logging; no AWS calls",
+    "outcome": "consistency-passed-capacity-unmet",
+    "sameSessionBaseline": {
+      "synchronized100ClientRefreshMs": 6518,
+      "sdkCommands": 6434
+    },
+    "measurements": [
+      {
+        "milestone": "real-dynamodb-canonical-initial-state",
+        "teams": 25,
+        "readyOperations": 25,
+        "actualStateBytes": 22501,
+        "phaseTotalMs": {
+          "sdkAwait": 1578,
+          "encode": 5,
+          "commit": 813,
+          "decode": 7,
+          "reduce": 17,
+          "compare": 1
+        },
+        "readBinaryBytes": 424150,
+        "attemptedWriteBinaryBytes": 621376,
+        "failedCommandsCumulative": 0,
+        "sdkCommandsCumulative": 243,
+        "timingScope": "Cumulative per-phase wall time across concurrent requests; SDK awaits include serialization and overlap, not additive latency"
+      },
+      {
+        "milestone": "canonical-tick-semigroup-counterexample",
+        "clockOnlySampleEqual": true,
+        "meaningfulIntermediateTickMs": 60000,
+        "finalTickMs": 600000,
+        "chainedScore": 0,
+        "skippedTickScore": 10,
+        "guardrail": "Do not round time or elide meaningful ticks; unseen-Order expiry changes scoring"
+      },
+      {
+        "milestone": "real-dynamodb-canonical-http-polling",
+        "participants": 100,
+        "teams": 25,
+        "requests": 300,
+        "configuredShellPollIntervalMs": 30000,
+        "configuredCryptoPollIntervalMs": 5000,
+        "elapsedMs": 5910,
+        "refreshWithinPollInterval": false,
+        "refreshP50Ms": 4434,
+        "refreshP95Ms": 5698,
+        "refreshP99Ms": 5849,
+        "commands": 4530,
+        "readRows": 7030,
+        "writes": 300,
+        "deploymentEventQueries": 0,
+        "projectionConflicts": 0,
+        "successfulProjections": 100,
+        "authority": "Dynamo HEAD/chunks and team SCORE rows; fresh repository per request",
+        "phaseTotalMs": {
+          "sdkAwait": 202835,
+          "encode": 30,
+          "commit": 35919,
+          "decode": 87,
+          "reduce": 109,
+          "compare": 107,
+          "backoff": 209097
+        },
+        "readBinaryBytes": 9545627,
+        "attemptedWriteBinaryBytes": 2932014,
+        "failedCommandsCumulative": 583,
+        "sdkCommandsCumulative": 5084,
+        "timingScope": "Cumulative per-phase wall time across concurrent requests; SDK awaits include serialization and overlap, not additive latency"
+      },
+      {
+        "milestone": "real-dynamodb-canonical-staggered-polling",
+        "participants": 100,
+        "teams": 25,
+        "cycles": 3,
+        "slotsPerParticipant": 1,
+        "perClientIntervalMs": 5000,
+        "deterministicOffsetStepMs": 50,
+        "requests": 300,
+        "elapsedMs": 14984,
+        "p50Ms": 29,
+        "p95Ms": 36,
+        "p99Ms": 42,
+        "statuses": {
+          "200": 300
+        },
+        "responseBytes": 3005832,
+        "readBinaryBytes": 20321154,
+        "attemptedWriteBinaryBytes": 6766200,
+        "sdkCommands": 3603,
+        "failedSdkCommands": 0,
+        "exactlyOnceTotalScore": 10,
+        "scope": "Steady staggered profile; independent of the simultaneous-refresh burst result; no AWS capacity/cost claim"
+      },
+      {
+        "milestone": "real-dynamodb-canonical-help-open-polling",
+        "participants": 100,
+        "teams": 25,
+        "cycles": 3,
+        "slotsPerParticipant": 2,
+        "perClientIntervalMs": 5000,
+        "deterministicOffsetStepMs": 25,
+        "requests": 600,
+        "elapsedMs": 15077,
+        "p50Ms": 30,
+        "p95Ms": 54,
+        "p99Ms": 154,
+        "statuses": {
+          "200": 600
+        },
+        "responseBytes": 6099916,
+        "readBinaryBytes": 44532237,
+        "attemptedWriteBinaryBytes": 14842091,
+        "sdkCommands": 7289,
+        "failedSdkCommands": 17,
+        "exactlyOnceTotalScore": 10,
+        "scope": "Steady staggered profile; independent of the simultaneous-refresh burst result; no AWS capacity/cost claim"
+      },
+      {
+        "milestone": "real-dynamodb-canonical-crypto-battle",
+        "teams": 25,
+        "readyOperations": 25,
+        "pluginBundleBytes": 318228,
+        "stateBytes": 22501,
+        "declared25TeamBudget": 795136,
+        "schemaVersion": 23,
+        "revision": 26,
+        "pluginDigest": "8f7f6cce14b501b56ae1f28a6be93d0202bc431aef3c9394a2d8989502929413",
+        "operations": "canonical ready, own LEAK, duplicate receipt, foreign Order refusal, organizer END and final projection",
+        "firstLeakAward": 10,
+        "phaseTotalMs": {
+          "sdkAwait": 224232,
+          "encode": 240,
+          "commit": 44245,
+          "decode": 558,
+          "reduce": 838,
+          "compare": 991,
+          "backoff": 210728
+        },
+        "readBinaryBytes": 74460706,
+        "attemptedWriteBinaryBytes": 24571149,
+        "failedCommandsCumulative": 600,
+        "sdkCommandsCumulative": 15983,
+        "timingScope": "Cumulative per-phase wall time across concurrent requests; SDK awaits include serialization and overlap, not additive latency"
+      },
+      {
+        "milestone": "real-dynamodb-native-100-client-operations",
+        "teams": 25,
+        "participants": 100,
+        "successfulOperations": 100,
+        "exactReceiptReplays": 100,
+        "totalScore": 100,
+        "allOperationIntentsEventuallyAcknowledged": true,
+        "finalSnapshotBytes": 796867,
+        "outcomeCounts": {
+          "acknowledged": 100,
+          "retryExhaustions": 0,
+          "unexpectedErrors": 0
+        },
+        "errorCodes": {
+          "coordination_conflict": 1
+        },
+        "admissionHeld": false,
+        "remainingLeaseMs": 0,
+        "retryAttemptHistogram": {
+          "1": 99,
+          "2": 1
+        },
+        "conflictsRetriedByActualClient": 1,
+        "elapsedMs": 10609,
+        "p95Ms": 10125,
+        "scope": "Real Dynamo transactions through existing SPA client and Hono; synthetic large state plugin",
+        "phaseTotalMs": {
+          "sdkAwait": 179367,
+          "encode": 62,
+          "commit": 33255,
+          "decode": 165,
+          "reduce": 74,
+          "backoff": 430955
+        },
+        "readBinaryBytes": 322750493,
+        "attemptedWriteBinaryBytes": 80493339,
+        "failedCommandsCumulative": 890,
+        "sdkCommandsCumulative": 6732,
+        "timingScope": "Cumulative per-phase wall time across concurrent requests; SDK awaits include serialization and overlap, not additive latency"
+      },
+      {
+        "milestone": "real-dynamodb-native-http-polling",
+        "participants": 100,
+        "teams": 25,
+        "requests": 300,
+        "configuredShellPollIntervalMs": 30000,
+        "configuredCryptoPollIntervalMs": 5000,
+        "elapsedMs": 3537,
+        "refreshWithinPollInterval": true,
+        "refreshP50Ms": 3490,
+        "refreshP95Ms": 3520,
+        "refreshP99Ms": 3522,
+        "commands": 2200,
+        "readRows": 8400,
+        "writes": 0,
+        "deploymentEventQueries": 0,
+        "projectionConflicts": 0,
+        "successfulProjections": 100,
+        "authority": "Dynamo HEAD/chunks and team SCORE rows; fresh repository per request",
+        "phaseTotalMs": {
+          "sdkAwait": 493852,
+          "encode": 62,
+          "commit": 33255,
+          "decode": 371,
+          "reduce": 174,
+          "backoff": 430955,
+          "compare": 235
+        },
+        "readBinaryBytes": 561810593,
+        "attemptedWriteBinaryBytes": 80493339,
+        "failedCommandsCumulative": 890,
+        "sdkCommandsCumulative": 8632,
+        "timingScope": "Cumulative per-phase wall time across concurrent requests; SDK awaits include serialization and overlap, not additive latency"
+      },
+      {
+        "milestone": "real-dynamodb-native-recovery-boundaries",
+        "beforeCommit": "no partial writes",
+        "lostResponse": "one signed penalty and exact receipt replay",
+        "changedBody": "rejected",
+        "rejectedOperation": "durable422 receipt",
+        "revokedKey": "rejected",
+        "scoringLock": "rejected; unlock resumes",
+        "fixedSnapshotChunks": 4,
+        "hiddenMatchSecret": "not returned in participant projections"
+      },
+      {
+        "milestone": "real-dynamodb-native-admission-fences",
+        "interruptedOwner": "expired claim reacquired",
+        "replacedOwner": "late publication rejected; replacement lease preserved",
+        "revocationBeforeCommit": "rejected without score/receipt",
+        "closeBeforeCommit": "settles run and fences admitted writer",
+        "successfulRelease": "same transaction as state/score/receipt",
+        "syntheticDataOnly": true
+      },
+      {
+        "milestone": "real-dynamodb-native-transaction-bounds",
+        "synthetic25TeamSnapshotBytes": 796863,
+        "maximumSupportedTeams": 48,
+        "changedScoreRows": 48,
+        "items": 61,
+        "maxItemBytes": 262262,
+        "bytesUpperBound": 1833293,
+        "snapshot": "fixed slots, HEAD CAS, score map ledger and response receipt commit together"
+      },
+      {
+        "milestone": "real-dynamodb-native-global-drain",
+        "nativeEvents": 3,
+        "awsTargets": 0,
+        "retainedScores": 100,
+        "outcome": "all native snapshots settled before ARCHIVED and DRAINED; interrupted/repeated DELETE safe",
+        "scope": "Synthetic data, existing three-table schema, no AWS exercise or account connection"
+      }
+    ],
+    "diagnosticLimits": "Intermediate runs were interrupted or externally timed out; the final full run completed all native lifecycle checks. Results are local observations, not AWS latency, throughput or billing guarantees."
   }
 }

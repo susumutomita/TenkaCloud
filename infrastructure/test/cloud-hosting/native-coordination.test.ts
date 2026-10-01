@@ -464,6 +464,70 @@ describe("native DynamoDB SDK transaction contracts", () => {
       expect(sample.elapsedMs).toBeGreaterThanOrEqual(0);
     }
   });
+  it.each([
+    { codes: ["ConditionalCheckFailed", "None", "None", "None"], diagnosticReads: 0 },
+    { codes: ["ConditionalCheckFailed"], diagnosticReads: 1 },
+    {
+      codes: ["ConditionalCheckFailed", "None", "ConditionalCheckFailed", "None"],
+      diagnosticReads: 1,
+    },
+    { codes: ["None", "ConditionalCheckFailed", "None", "None"], diagnosticReads: 1 },
+  ])("keeps guarded admission on collision $codes", async ({ codes, diagnosticReads }) => {
+    const f = fixture();
+    await f.initialize();
+    let claims = 0;
+    f.setBeforeWrite((items) => {
+      if (!admissionClaim(items)) return;
+      expect(items).toHaveLength(4);
+      if (claims++ === 0)
+        throw Object.assign(cancelled(), {
+          CancellationReasons: codes.map((Code) => ({ Code })),
+        });
+    });
+    expect((await f.request()).status).toBe(200);
+    expect(claims).toBe(2);
+    expect(f.apply).toHaveBeenCalledTimes(1);
+    expect(
+      f.send.mock.calls.filter(
+        ([command]) => command instanceof GetCommand && command.input.TableName === "teams",
+      ),
+    ).toHaveLength(diagnosticReads);
+  });
+  it.each(["revoked", "intake"] as const)(
+    "does not run the reducer when a head collision is followed by %s closure",
+    async (closure) => {
+      const f = fixture();
+      await f.initialize();
+      let claims = 0;
+      let monotonic = 0;
+      vi.spyOn(performance, "now").mockImplementation(() => monotonic);
+      const close = () => {
+        if (closure === "intake") return drainingInstallation(f);
+        const row = f.rows.get(rowKey(f.tables.teams, teamKey(f.event.eventId, f.team.teamId)));
+        if (!row) throw new Error("Missing team");
+        row.accessRevoked = true;
+      };
+      f.setBeforeWrite((items) => {
+        if (!admissionClaim(items)) return;
+        if (claims++ === 0) {
+          close();
+          throw Object.assign(cancelled(), {
+            CancellationReasons: ["ConditionalCheckFailed", "None", "None", "None"].map((Code) => ({
+              Code,
+            })),
+          });
+        }
+        monotonic = 20001;
+      });
+      await expect(f.request()).rejects.toMatchObject({
+        code: closure === "revoked" ? "unauthorized" : "coordination_conflict",
+      });
+      expect(claims).toBe(2);
+      expect(f.apply).not.toHaveBeenCalled();
+      expect(f.writes).toHaveLength(1);
+      expect(currentHead(f)).not.toHaveProperty("admissionOwner");
+    },
+  );
   it("releases its own uncertain claim after a lost claim response and permits an ordinary retry", async () => {
     const f = fixture();
     await f.initialize();
@@ -713,6 +777,54 @@ describe("native DynamoDB SDK transaction contracts", () => {
     expect((await f.store.read(f.event.eventId, f.artifact.problemId))?.match).toEqual(run.match);
     expect(reads).toBe(2);
   });
+  it("accepts the atomic snapshot when only admission ownership changes after the sizing read", async () => {
+    const f = fixture();
+    const run = await f.initialize();
+    let reads = 0;
+    f.setAfterGet((key) => {
+      if (key?.SK !== "HEAD") return;
+      currentHead(f).admissionOwner =
+        `00000000-0000-4000-8000-${String(++reads).padStart(12, "0")}`;
+      currentHead(f).admissionExpiresAt = NOW + 5000;
+    });
+    expect((await f.store.read(f.event.eventId, f.artifact.problemId))?.match).toEqual(run.match);
+    expect(reads).toBe(1);
+    expect(f.writes).toHaveLength(1);
+  });
+  it("rejects a foreign event in the transactional HEAD despite matching chunk count and bytes", async () => {
+    const f = fixture();
+    await f.initialize();
+    f.setAfterRead((responses) => {
+      const head = responses.at(-1)?.Item;
+      if (head?.SK === "HEAD") head.eventId = ulid();
+    });
+    await expect(f.store.read(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 503,
+      code: "coordination_scope_invalid",
+    });
+    expect(f.writes).toHaveLength(1);
+  });
+  it.each([0, 400000])(
+    "uses the transaction's published revision and retries only when its chunk count changes (%i padding)",
+    async (padding) => {
+      const f = fixture(2, padding);
+      await f.initialize();
+      const before = structuredClone(f.rows);
+      await f.request(f.operation("snapshot-transition", "shrink"));
+      const after = structuredClone(f.rows);
+      const expected = await f.store.read(f.event.eventId, f.artifact.problemId);
+      f.rows.clear();
+      for (const [key, row] of before) f.rows.set(key, row);
+      let reads = 0;
+      f.setAfterGet((key) => {
+        if (key?.SK !== "HEAD" || ++reads !== 1) return;
+        f.rows.clear();
+        for (const [key, row] of after) f.rows.set(key, row);
+      });
+      expect(await f.store.read(f.event.eventId, f.artifact.problemId)).toEqual(expected);
+      expect(reads).toBe(padding === 0 ? 1 : 2);
+    },
+  );
   it("deletes no-longer-used fixed current chunks in the same state transition", async () => {
     const f = fixture(2, 795000);
     await f.initialize();

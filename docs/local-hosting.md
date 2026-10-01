@@ -28,6 +28,25 @@ Cryptography Battle retains its shared-match rules. Catalog/workbench/terminal
 boundary tests do not establish real Docker playability of every exercise.
 Installed pack activation records are not yet part of the host runtime catalog.
 
+### Structured local practice
+
+For individual practice, create a normal event with one team and select the built-in
+Docker exercises you want to study. The participant sidebar's **Course tracks** view
+groups only that team's assigned problems by their authored track/chapter order.
+Assigned drafts remain visible. Unassigned exercises are not offered as next steps;
+the ordinary **Problems** list still contains every assigned problem.
+
+Checkpoint and completion progress come from the same team scoring state as the
+competition pages and survive a host restart. The existing optional event progression
+gate remains authoritative: locked problems are labeled and are not recommended until
+unlocked. Track order is guidance, not an additional prerequisite graph. A one-team
+event retains the normal event timing, hint penalties and writeup disclosure rules.
+
+This reuses the local competition host and team-key sign-in. It does not restore the
+retired individual-practice backend, execute installed external Packs, or offer Docker
+courses in cloud hosting. Course source links omit embargoed alignment; problem answers,
+writeups, hints and executable Pack plugins remain outside the public metadata bundle.
+
 New Docker events prepare dormant jobs. Participants start or resume their own
 environments as needed. Stopping preserves container writable layers and volumes,
 not process memory. There is no automatic eviction of another problem or team.
@@ -570,6 +589,11 @@ The same command also runs a cloud rehearsal with a test-only AWS adapter. It
 creates a two-team event through the real HTTP API, then checks each participant
 portal in Chromium, submits the team's flag, checks the score, and tears down.
 This checks the host application without creating resources in AWS.
+
+The course rehearsal uses the real local HTTP/SQLite host, built participant UI
+and built-in Docker metadata. Saved checkpoints are seeded to check course order,
+assigned-problem visibility, gate state, team isolation and restart persistence;
+this rehearsal does not execute Docker verifiers.
 
 It uses an installed Chromium (`HOST_E2E_CHROMIUM`, or Playwright's browser under
 `PLAYWRIGHT_BROWSERS_PATH`) and never downloads one itself. Failure screenshots

@@ -3265,6 +3265,7 @@ async function nativeClientLoad(fixture: NativeFixture) {
   }
 }
 async function nativePolling(fixture: NativeFixture, canonical = false) {
+  const refreshLatencies: number[] = [];
   const counts = {
     commands: 0,
     readRows: 0,
@@ -3313,6 +3314,7 @@ async function nativePolling(fixture: NativeFixture, canonical = false) {
   try {
     const outcomes = await Promise.allSettled(
       Array.from({ length: 100 }, async (_, index) => {
+        const refreshStarted = performance.now();
         const team = fixture.roster[index % 25];
         assert.ok(team);
         for (const route of [
@@ -3337,6 +3339,7 @@ async function nativePolling(fixture: NativeFixture, canonical = false) {
             assert.equal(body.problems[0]?.awsAccountId, undefined);
           }
         }
+        refreshLatencies.push(performance.now() - refreshStarted);
       }),
     );
     for (const outcome of outcomes) if (outcome.status === "rejected") throw outcome.reason;
@@ -3344,6 +3347,10 @@ async function nativePolling(fixture: NativeFixture, canonical = false) {
     if (!canonical)
       assert.equal(counts.writes, 0, "Semantic no-op polling must not republish large snapshots");
     assert.equal(counts.deploymentEventQueries, 0);
+    const elapsedMs = Math.round(performance.now() - started);
+    refreshLatencies.sort((a, b) => a - b);
+    const refreshWithinPollInterval = elapsedMs < 5000 && counts.successfulProjections === 100;
+    if (canonical) nativeCapacityMet &&= refreshWithinPollInterval;
     console.log(
       JSON.stringify({
         milestone: canonical
@@ -3354,7 +3361,11 @@ async function nativePolling(fixture: NativeFixture, canonical = false) {
         requests: 300,
         configuredShellPollIntervalMs: POLL_INTERVAL_MS,
         configuredCryptoPollIntervalMs: 5000,
-        elapsedMs: Math.round(performance.now() - started),
+        elapsedMs,
+        refreshWithinPollInterval,
+        refreshP50Ms: Math.round(refreshLatencies[49] ?? 0),
+        refreshP95Ms: Math.round(refreshLatencies[94] ?? 0),
+        refreshP99Ms: Math.round(refreshLatencies[98] ?? 0),
         ...counts,
         authority: "Dynamo HEAD/chunks and team SCORE rows; fresh repository per request",
         ...nativeMeasurement(fixture),

@@ -13,7 +13,7 @@
  * 壊れた入力に対する挙動をテストで固定できる。
  */
 
-import type { ProblemCatalogEntry, ProblemTrackPosition } from "./problems";
+import type { ProblemCatalogEntry, ProblemTrackPosition } from "@tenkacloud/portal-contracts";
 
 /** `ProblemCatalogEntry["track"]` の non-optional 版。 track 有無の分岐を 1 か所に閉じる。 */
 type ProblemTrack = ProblemTrackPosition;

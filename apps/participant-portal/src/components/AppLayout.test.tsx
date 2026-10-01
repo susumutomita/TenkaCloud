@@ -10,8 +10,8 @@ import { buildSideNavItems } from "./AppLayout";
  * 出ていた。デモは AC26 の講座を受講していない人が触る導線なので、そこに講座前提の
  * 学習経路が並ぶと、デモが何の画面なのか読めなくなる。
  *
- * `mock` だけを外すのではなく `local` のときだけ出す形にしている。実イベント
- * (`real`) は主催者が問題を選んで出すもので、受講者ごとの自習経路とは別物のため。
+ * 統合 local host は `real` の認証を保ったまま capability で有効化する。
+ * cloud と公開 demo は opt-in せず、従来の navigation を保つ。
  */
 
 const t = (key: string) => key;
@@ -39,6 +39,13 @@ describe("buildSideNavItems", () => {
 
   it("should offer the course tracks in local mode", () => {
     expect(hrefsOf(buildSideNavItems(0, t, "local", "ja", true))).toContain("/course-tracks");
+  });
+
+  it("offers local-host courses alongside its competition problem list", () => {
+    const hrefs = hrefsOf(buildSideNavItems(0, t, "real", "ja", false, true, true));
+    expect(hrefs).toContain("/course-tracks");
+    expect(hrefs).toContain("/problems");
+    expect(hrefs).not.toContain("/tools/sso");
   });
 
   it.each(["real", "mock"] as const)("should not offer the course tracks in %s mode", (mode) => {

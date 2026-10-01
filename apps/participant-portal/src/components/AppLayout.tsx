@@ -260,6 +260,7 @@ export function buildSideNavItems(
   locale: LocaleCode,
   showsAwsFeatures: boolean,
   notificationsEnabled = true,
+  courseTracksEnabled = false,
 ): SideNavigationProps.Item[] {
   const isLocal = cloudMode === "local";
   const eventItems: SideNavigationProps.Item[] = [
@@ -282,10 +283,10 @@ export function buildSideNavItems(
       type: "section",
       text: t("nav.quests_section"),
       items: [
-        // 講座トラックは自習経路なので local だけ (判定は `showsCourseTracks`)。
+        // The local host can offer the course view alongside the competition's flat list.
         // 一覧を先に置く順は採らない — 2 項目しかない並びでは順番が案内そのもので、
         // 先に出るほうに着いた学習者は 71 件のフラットな一覧の前で止まる。
-        ...(showsCourseTracks(cloudMode)
+        ...(showsCourseTracks(cloudMode, courseTracksEnabled)
           ? [{ type: "link" as const, href: "/course-tracks", text: t("nav.course_tracks") }]
           : []),
         { type: "link", href: "/problems", text: t("nav.problems") },
@@ -401,12 +402,14 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
         locale,
         showsAwsFeatures,
         config.notificationsEnabled !== false,
+        config.courseTracksEnabled,
       ),
     [
       teamView.unreadNotificationCount,
       t,
       config.cloudMode,
       config.notificationsEnabled,
+      config.courseTracksEnabled,
       locale,
       showsAwsFeatures,
     ],

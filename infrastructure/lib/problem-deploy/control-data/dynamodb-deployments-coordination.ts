@@ -161,7 +161,7 @@ export class DynamoDeploymentsCoordination {
       )
     ).Item;
   }
-  private async commit(writes: Write[]): Promise<boolean> {
+  private async commit(writes: Write[], onConflict?: (error: unknown) => void): Promise<boolean> {
     const measurement = measureWrites(writes);
     this.observe?.(measurement);
     if (
@@ -175,7 +175,10 @@ export class DynamoDeploymentsCoordination {
       await this.ddb.send(new TransactWriteCommand({ TransactItems: writes }));
       return true;
     } catch (error) {
-      if (conflict(error)) return false;
+      if (conflict(error)) {
+        onConflict?.(error);
+        return false;
+      }
       throw error;
     } finally {
       this.timing?.({ phase: "commit", elapsedMs: performance.now() - start });
@@ -209,14 +212,23 @@ export class DynamoDeploymentsCoordination {
         }),
       );
       const after = headSchema.safeParse(values.Responses?.at(-1)?.Item);
-      if (!after.success || JSON.stringify(after.data) !== JSON.stringify(head)) continue;
-      const chunks = values.Responses?.slice(0, head.chunkCount).map((item) => item.Item) ?? [];
-      const bytes = decodedChunks(chunks, head.runId, head.revision);
-      if (!bytes || bytes.byteLength !== head.byteLength || hash(bytes) !== head.snapshotDigest) {
+      if (!after.success || after.data.chunkCount !== head.chunkCount) continue;
+      // HEAD and every selected chunk share this transaction's snapshot. The first
+      // read only sizes the transaction; an intervening admission or publication
+      // does not invalidate an otherwise complete, internally consistent result.
+      const current = after.data;
+      assertSnapshotScope(current, eventId, problemId);
+      const chunks = values.Responses?.slice(0, current.chunkCount).map((item) => item.Item) ?? [];
+      const bytes = decodedChunks(chunks, current.runId, current.revision);
+      if (
+        !bytes ||
+        bytes.byteLength !== current.byteLength ||
+        hash(bytes) !== current.snapshotDigest
+      ) {
         if (attempt < 7) continue;
         throw new NativeCoordinationError(503, "coordination_snapshot_invalid");
       }
-      return this.timed("decode", () => parsedRun(head, bytes));
+      return this.timed("decode", () => parsedRun(current, bytes));
     }
     throw new NativeCoordinationError(409, "coordination_snapshot_changed");
   }
@@ -365,30 +377,38 @@ export class DynamoDeploymentsCoordination {
         continue;
       }
       admission.attempted = true;
-      const claimed = await this.commit([
-        {
-          Update: {
-            TableName: this.tables.deployments,
-            Key: key,
-            UpdateExpression: "SET admissionOwner = :owner, admissionExpiresAt = :until",
-            ConditionExpression:
-              "runId = :run AND revision = :revision AND closed = :no AND (attribute_not_exists(admissionOwner) OR admissionExpiresAt <= :now)",
-            ExpressionAttributeValues: {
-              ":owner": admission.owner,
-              ":until": now + 5000,
-              ":run": head.runId,
-              ":revision": head.revision,
-              ":no": false,
-              ":now": now,
+      let headCollision = false;
+      const claimed = await this.commit(
+        [
+          {
+            Update: {
+              TableName: this.tables.deployments,
+              Key: key,
+              UpdateExpression: "SET admissionOwner = :owner, admissionExpiresAt = :until",
+              ConditionExpression:
+                "runId = :run AND revision = :revision AND closed = :no AND (attribute_not_exists(admissionOwner) OR admissionExpiresAt <= :now)",
+              ExpressionAttributeValues: {
+                ":owner": admission.owner,
+                ":until": now + 5000,
+                ":run": head.runId,
+                ":revision": head.revision,
+                ":no": false,
+                ":now": now,
+              },
             },
           },
+          this.eventCheck(input.event, now, true),
+          teamGuard(this.tables.teams, input.team, now),
+          installationIntakeGuard(this.tables.events),
+        ],
+        (error) => {
+          headCollision = admissionHeadCollision(error);
         },
-        this.eventCheck(input.event, now, true),
-        teamGuard(this.tables.teams, input.team, now),
-        installationIntakeGuard(this.tables.events),
-      ]);
+      );
       if (claimed) return true;
-      await this.assertActorUnchanged(input, input.now());
+      // This is only a collision hint, never authorization. A retry must pass
+      // all four guarded claim conditions before the reducer may run.
+      if (!headCollision) await this.assertActorUnchanged(input, input.now());
       await this.backoff(attempt, true);
     }
     throw new NativeCoordinationError(409, "coordination_conflict");
@@ -926,6 +946,21 @@ export class DynamoDeploymentsCoordination {
 function assertRequestBudget(input: BoundedRequest): void {
   if (performance.now() >= input.deadline)
     throw new NativeCoordinationError(409, "coordination_conflict");
+}
+
+function admissionHeadCollision(error: unknown): boolean {
+  const parsed = z
+    .object({
+      name: z.literal("TransactionCanceledException"),
+      CancellationReasons: z.tuple([
+        z.object({ Code: z.literal("ConditionalCheckFailed") }),
+        z.object({ Code: z.literal("None") }),
+        z.object({ Code: z.literal("None") }),
+        z.object({ Code: z.literal("None") }),
+      ]),
+    })
+    .safeParse(error);
+  return parsed.success;
 }
 
 function admissionCommitTime(writes: readonly Write[], now: number): void {
