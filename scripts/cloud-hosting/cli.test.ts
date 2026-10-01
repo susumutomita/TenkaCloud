@@ -5,14 +5,12 @@ import {
   cloudStackTags,
 } from "../../infrastructure/lib/cloud-hosting/stack-names";
 import { assertOwnedBootstrap } from "./bootstrap-check";
-import { parseBundleEnvironment, runCloudCli } from "./cli";
+import { runCloudCli } from "./cli";
 import type { CloudCliIo, ProcessRequest, ProcessResult } from "./process";
 import "./main";
 
 const POLICY = "arn:aws:iam::123456789012:policy/tenkacloud/cloud-hosting/execution";
 const ROOT = "/fixture/TenkaCloud";
-const BUNDLE =
-  "REGION=ap-northeast-1\nACCOUNT_ID=123456789012\nCDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-123456789012-ap-northeast-1-1234abcd\nCDK_SOURCE_NAME=source.zip\n";
 function ownedStack(name: string) {
   return {
     StackId: `arn:aws:cloudformation:ap-northeast-1:123456789012:stack/${name}/synthetic-stack-id`,
@@ -41,8 +39,8 @@ function mockResponse(request: ProcessRequest): ProcessResult {
       stdout: "",
       stderr: `An error occurred (ValidationError) when calling the DescribeStacks operation: Stack with id ${request.args[request.args.indexOf("--stack-name") + 1]} does not exist`,
     };
-  if (request.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY === "1")
-    return { code: 0, stdout: BUNDLE, stderr: "" };
+  if (request.args.join(" ") === "configure get region")
+    return { code: 0, stdout: "ap-northeast-1\n", stderr: "" };
   if (request.args.includes("admin-get-user"))
     return { code: 1, stdout: "", stderr: "UserNotFoundException" };
   return outputResponse(request);
@@ -74,11 +72,8 @@ function invalidStackResponse(name: string, change: string): ProcessResult {
   return { code: 0, stdout: change === "malformed" ? "{}" : JSON.stringify(stack), stderr: "" };
 }
 function phaseMatches(request: ProcessRequest, phase: string): boolean {
-  if (phase === "resolve") return request.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY === "1";
-  if (phase === "prepare")
-    return (
-      request.command === "bash" && request.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY === undefined
-    );
+  if (phase === "resolve") return request.args.includes("get-caller-identity");
+  if (phase === "prepare") return request.command === "bun";
   return request.args.includes(phase);
 }
 function fixture(
@@ -113,6 +108,8 @@ function fixture(
     TENKACLOUD_ADMIN_EMAIL: "organizer@example.test",
     TENKACLOUD_CFN_EXECUTION_POLICY_ARN: POLICY,
     CDK_PARAM_ENVIRONMENT: "staging",
+    AWS_REGION: "ap-northeast-1",
+    ACCOUNT_ID: "123456789012",
   };
   return {
     io,
@@ -137,13 +134,15 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
   it("preserves prepare -> bootstrap -> deploy -> organizer setup ordering", async () => {
     const f = fixture();
     expect(await f.run(["up"])).toBe(0);
-    expect(f.calls[0]?.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY).toBe("1");
+    expect(f.calls[0]?.args).toContain("get-caller-identity");
     expect(f.calls[1]?.args).toContain("get-caller-identity");
     expect(f.calls.slice(2, 4).every(platformInspection)).toBe(true);
     expect(f.calls[4]?.command).toBe("aws");
-    expect(f.calls[5]?.command).toBe("bash");
-    expect(f.calls[5]?.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY).toBeUndefined();
-    expect(f.calls[6]?.args).toEqual([
+    expect(f.calls.slice(5, 7).map((call) => [call.command, ...call.args])).toEqual([
+      ["bun", "run", "--cwd", `${ROOT}/apps/application-admin-console`, "build"],
+      ["bun", "run", "--cwd", `${ROOT}/apps/participant-portal`, "build"],
+    ]);
+    expect(f.calls[7]?.args).toEqual([
       "--app",
       `"${ROOT}/node_modules/.bin/tsx" "${ROOT}/infrastructure/bin/cloud-hosting.ts"`,
       "bootstrap",
@@ -159,16 +158,18 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       "Environment=staging",
       "--termination-protection",
     ]);
-    expect(f.calls[7]?.args.slice(2)).toEqual([
+    expect(f.calls[8]?.args.slice(2)).toEqual([
       "deploy",
       "tenkacloud-cloud-problem-deploy-staging",
       "tenkacloud-cloud-staging",
       "--require-approval",
       "never",
     ]);
-    expect(
-      f.calls.slice(1).every((call) => call.env.CDK_PARAM_S3_BUCKET_NAME?.endsWith("1234abcd")),
-    ).toBe(true);
+    expect(f.calls.every((call) => !["bash", "git", "zip", "rsync"].includes(call.command))).toBe(
+      true,
+    );
+    expect(f.calls.some((call) => call.args.includes("s3api"))).toBe(false);
+    expect(f.calls.some((call) => call.env.CDK_PARAM_S3_BUCKET_NAME !== undefined)).toBe(false);
     expect(f.calls.slice(1).every((call) => call.env.AWS_DEFAULT_REGION === "ap-northeast-1")).toBe(
       true,
     );
@@ -181,6 +182,8 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       TENKACLOUD_ADMIN_EMAIL: "organizer@example.test",
       TENKACLOUD_CFN_EXECUTION_POLICY_ARN: POLICY,
       CDK_PARAM_ENVIRONMENT: "staging",
+      AWS_REGION: "ap-northeast-1",
+      ACCOUNT_ID: "123456789012",
     });
   });
   it("requires the organizer identity before any remote setup", async () => {
@@ -250,7 +253,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       const f = fixture({ confirmed: true });
       expect(await f.run(["down", ...args])).toBe(0);
       expect(f.calls).toHaveLength(6);
-      expect(f.calls[0]?.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY).toBe("1");
+      expect(f.calls[0]?.args).toContain("get-caller-identity");
       expect(f.calls[4]?.args.slice(2)).toEqual(["destroy", "tenkacloud-cloud-staging", "--force"]);
       expect(f.calls[5]?.args.slice(2)).toEqual([
         "destroy",
@@ -286,7 +289,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
             : undefined,
       });
       expect(await f.run([command])).toBe(1);
-      expect(f.calls).toHaveLength(2);
+      expect(f.calls).toHaveLength(1);
       expect(f.errors.join("")).toContain("credentials do not match");
       expect(f.confirmations).toEqual([]);
     },
@@ -502,7 +505,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       }),
     ).toBe(1);
     expect(f.calls).toHaveLength(1);
-    expect(f.calls[0]?.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY).toBe("1");
+    expect(f.calls[0]?.args).toContain("get-caller-identity");
   });
   it("refuses to modify unrelated project toolkit configuration", () => {
     expect(() =>
@@ -525,18 +528,66 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       ),
     ).not.toThrow();
   });
-  it("rejects unsafe environments and source-bucket identity", () => {
+  it("rejects unsafe environment names", () => {
     expect(cloudStackNames("development")).toEqual({
       app: "tenkacloud-cloud",
       backend: "tenkacloud-cloud-problem-deploy",
     });
     expect(() => cloudStackNames("development;bad")).toThrow();
-    expect(() => parseBundleEnvironment("")).toThrow();
-    expect(() =>
-      parseBundleEnvironment(BUNDLE.replace("ACCOUNT_ID=123456789012", "ACCOUNT_ID=invalid")),
-    ).toThrow();
+  });
+  it.each(["invalid", "123456789012\nAWS_SECRET_ACCESS_KEY=synthetic"])(
+    "rejects malformed account output instead of copying arbitrary environment data: %s",
+    async (value) => {
+      const f = fixture({
+        fail: (request) =>
+          request.args.includes("get-caller-identity")
+            ? { code: 0, stdout: value, stderr: "" }
+            : undefined,
+      });
+      expect(await f.run(["up"])).toBe(1);
+      expect(f.calls.some((call) => call.inherit)).toBe(false);
+      expect(f.errors.join("")).toContain("invalid deployment account");
+    },
+  );
+  it("resolves a profile region only when an explicit region is absent", async () => {
+    const f = fixture();
     expect(
-      parseBundleEnvironment(`${BUNDLE}AWS_SECRET_ACCESS_KEY=not-copied\n`).AWS_SECRET_ACCESS_KEY,
-    ).toBeUndefined();
+      await runCloudCli(["up"], f.io, { root: ROOT, env: { ...f.env, AWS_REGION: undefined } }),
+    ).toBe(0);
+    expect(f.calls[0]?.args).toEqual(["configure", "get", "region"]);
+    expect(f.calls[1]?.args).toContain("ap-northeast-1");
+  });
+  it.each(["", "us-gov-west-1", "not-a-region"])(
+    "rejects an absent or unsupported profile region: %s",
+    async (region) => {
+      const f = fixture({
+        fail: (request) =>
+          request.args.join(" ") === "configure get region"
+            ? { code: 0, stdout: region, stderr: "" }
+            : undefined,
+      });
+      expect(
+        await runCloudCli(["up"], f.io, { root: ROOT, env: { ...f.env, AWS_REGION: undefined } }),
+      ).toBe(1);
+      expect(f.calls).toHaveLength(1);
+    },
+  );
+  it("preserves the pipeline's selected environment and refuses conflicting selectors", async () => {
+    const f = fixture();
+    expect(
+      await runCloudCli(["up"], f.io, {
+        root: ROOT,
+        env: { ...f.env, CDK_PARAM_ENVIRONMENT: undefined, ENV: "staging" },
+      }),
+    ).toBe(0);
+    expect(f.calls.every((call) => call.env.ENV === "staging")).toBe(true);
+    const conflict = fixture();
+    expect(
+      await runCloudCli(["up"], conflict.io, {
+        root: ROOT,
+        env: { ...conflict.env, ENV: "production" },
+      }),
+    ).toBe(1);
+    expect(conflict.calls).toEqual([]);
   });
 });

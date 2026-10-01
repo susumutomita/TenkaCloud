@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { lstatSync, readFileSync, realpathSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { RemovalPolicy } from "aws-cdk-lib";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
@@ -11,13 +11,59 @@ import {
   type RunnerBinding,
 } from "../problem-deploy/handlers/cloud-api/execution-config.js";
 
+function repositoryArtifactFile(repositoryRoot: string, artifact: string): string {
+  const selectedRoot = resolve(repositoryRoot);
+  const selected = lstatSync(selectedRoot);
+  if (selected.isSymbolicLink()) {
+    throw new Error("Execution artifact paths must not contain symbolic links");
+  }
+  if (!selected.isDirectory()) {
+    throw new Error("Execution artifacts require a repository directory");
+  }
+  // Resolve filesystem aliases above the selected root (for example macOS /tmp and /var).
+  // The root itself and every repository-controlled artifact component must remain unlinked.
+  const root = realpathSync(selectedRoot);
+  const file = resolve(root, artifact);
+  const withinRoot = relative(root, file);
+  if (
+    !withinRoot ||
+    withinRoot === ".." ||
+    withinRoot.startsWith(`..${sep}`) ||
+    isAbsolute(withinRoot)
+  ) {
+    throw new Error("Execution artifacts must be inside the repository");
+  }
+  // Checking only realpath containment would admit links to internal files or directories.
+  let current = root;
+  const components = relative(current, file).split(sep);
+  for (const [index, component] of components.entries()) {
+    current = join(current, component);
+    const entry = lstatSync(current);
+    if (entry.isSymbolicLink()) {
+      throw new Error("Execution artifact paths must not contain symbolic links");
+    }
+    if (index === components.length - 1 ? !entry.isFile() : !entry.isDirectory()) {
+      throw new Error("Execution artifacts must be regular files with directory path components");
+    }
+  }
+  return file;
+}
+
 /** Initial vertical slice uses the real, reviewed hello-world flag challenge, never a synthetic production fixture. */
 export function cloudExecutionArtifacts(
   scope: Construct,
   repositoryRoot: string,
   bindings: readonly RunnerBinding[],
 ) {
-  const folder = join(repositoryRoot, "problems/challenges/hello-world");
+  // Validate both paths before reading either artifact, even when only the template is unsafe.
+  const metadataFile = repositoryArtifactFile(
+    repositoryRoot,
+    "problems/challenges/hello-world/metadata.json",
+  );
+  const templateFile = repositoryArtifactFile(
+    repositoryRoot,
+    "problems/challenges/hello-world/template.yaml",
+  );
   const metadata = z
     .object({
       id: z.literal("hello-world"),
@@ -30,8 +76,8 @@ export function cloudExecutionArtifacts(
       }),
     })
     .passthrough()
-    .parse(JSON.parse(readFileSync(join(folder, "metadata.json"), "utf8")) as unknown);
-  const templateBody = readFileSync(join(folder, "template.yaml"), "utf8");
+    .parse(JSON.parse(readFileSync(metadataFile, "utf8")) as unknown);
+  const templateBody = readFileSync(templateFile, "utf8");
   const catalog = executionCatalogSchema.parse({
     version: 1,
     problems: [

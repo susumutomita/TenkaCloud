@@ -13,21 +13,21 @@ Initial least-privilege setup remains an unfinished acceptance item.
 
 ## Fail-safe behavior
 
-Before setup/upload, the CLI requires `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` in this
+Before builds or setup, the CLI requires `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` in this
 shape:
 
 ```text
 arn:aws:iam::<deployment-account>:policy/tenkacloud/cloud-hosting/<reviewed-policy>
 ```
 
-The account must match source/deployment identity. This validates identity and
+The account must match the current caller/deployment identity. This validates identity and
 namespace, not the policy's contents; the policy must be reviewed separately.
 The CLI does not create, attach, or silently expand that policy.
 
 Bootstrap uses `TenkaCloudToolkit-<environment>` and a deterministic project
 qualifier. The same qualifier is used by both stack synthesizers. Existing project
 toolkits must have matching ownership/environment tags, qualifier, and execution
-policy. Missing/mismatched metadata stops the operation before upload. The shared
+policy. Missing/mismatched metadata stops the operation before builds or setup. The shared
 `CDKToolkit` and unrelated toolkit configurations are never adopted.
 
 The future approved first-account flow should create only the reviewed project
@@ -66,9 +66,9 @@ A broad execution policy is not supplied as a convenience fallback.
 ## One-time setup versus ordinary use
 
 The operator running initial setup needs the reviewed bootstrap/IAM permissions,
-asset upload, and CloudFormation operations. Source preparation additionally uses
-only its account/environment source bucket. These setup credentials are never
-placed in SPA configuration or participant responses.
+CDK asset publishing, and CloudFormation operations. There is no additional
+source-bundle bucket or source archive upload in the current path. These setup
+credentials are never placed in SPA configuration or participant responses.
 
 Ordinary organizers use Cognito and the application API. They receive no AWS IAM
 credentials or bootstrap policy. The foundation API has table-scoped storage

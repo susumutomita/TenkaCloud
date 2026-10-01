@@ -4,19 +4,29 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
+  renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { App } from "aws-cdk-lib";
+import { App, Stack } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CloudApplicationStack } from "../../lib/cloud-hosting/application-stack.js";
 import { projectBootstrap } from "../../lib/cloud-hosting/bootstrap.js";
 import { CloudDataStack } from "../../lib/cloud-hosting/data-stack.js";
+import { cloudExecutionArtifacts } from "../../lib/cloud-hosting/execution-artifacts.js";
+import { CloudHosting } from "../../lib/cloud-hosting/hosting.js";
 import { cloudStackTags } from "../../lib/cloud-hosting/stack-names.js";
 import { projectSynthesizer } from "../../lib/cloud-hosting/synthesizer.js";
+
+vi.mock("node:fs", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:fs")>();
+  return { ...original, readFileSync: vi.fn(original.readFileSync) };
+});
 
 const directory = mkdtempSync(join(tmpdir(), "tenkacloud-cloud-synth-"));
 let data: Template;
@@ -185,5 +195,170 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
           RestrictPublicBuckets: true,
         },
       });
+  });
+});
+
+function artifactFixture() {
+  const base = mkdtempSync(join(directory, "artifact-boundary-"));
+  const root = join(base, "repository");
+  const folder = join(root, "problems/challenges/hello-world");
+  mkdirSync(folder, { recursive: true });
+  const metadata = JSON.stringify({
+    id: "hello-world",
+    cfnParameters: { NamePrefix: "synthetic" },
+    scoring: { kind: "flag", points: 100, flagOutputKey: "ExpectedFlag", wrongAnswerPenalty: 5 },
+  });
+  writeFileSync(join(folder, "metadata.json"), metadata);
+  writeFileSync(join(folder, "template.yaml"), "Resources: {} # synthetic artifact test");
+  const stack = new Stack(new App({ outdir: join(base, "cdk.out") }), "ArtifactBoundary");
+  return { base, root, folder, stack };
+}
+
+describe("direct synth execution artifact filesystem boundary", () => {
+  it("accepts repository regular files and still creates content-addressed artifacts", () => {
+    const f = artifactFixture();
+    const result = cloudExecutionArtifacts(f.stack, f.root, []);
+    expect(result.catalogKey).toMatch(/^catalogs\/[a-f0-9]{64}\.json$/u);
+    expect(result.bindingsKey).toMatch(/^bindings\/[a-f0-9]{64}\.json$/u);
+    Template.fromStack(f.stack).resourceCountIs("AWS::S3::Bucket", 1);
+  });
+
+  it.each([
+    ["metadata.json", "internal"],
+    ["metadata.json", "external"],
+    ["template.yaml", "internal"],
+    ["template.yaml", "external"],
+  ])("rejects %s symlinks to %s files before any artifact content is read", (name, location) => {
+    const f = artifactFixture();
+    const file = join(f.folder, name);
+    const target =
+      location === "internal" ? join(f.root, "synthetic-target") : join(f.base, "outside-target");
+    // Only synthetic bytes are ever placed outside the repository fixture.
+    writeFileSync(target, "synthetic symlink target; must never be read");
+    rmSync(file);
+    symlinkSync(target, file);
+    vi.mocked(readFileSync).mockClear();
+    expect(() => cloudExecutionArtifacts(f.stack, f.root, [])).toThrow("symbolic links");
+    expect(readFileSync).not.toHaveBeenCalled();
+    expect(f.stack.node.tryFindChild("ExecutionArtifacts")).toBeUndefined();
+  });
+
+  it.each([
+    ["problems", "internal"],
+    ["problems", "external"],
+    ["problems/challenges", "internal"],
+    ["problems/challenges", "external"],
+    ["problems/challenges/hello-world", "internal"],
+    ["problems/challenges/hello-world", "external"],
+  ])("rejects linked %s directory components targeting %s paths", (component, location) => {
+    const f = artifactFixture();
+    const original = join(f.root, component);
+    const target =
+      location === "internal"
+        ? join(f.root, "synthetic-linked-directory")
+        : join(f.base, "outside-directory");
+    renameSync(original, target);
+    symlinkSync(target, original, "dir");
+    vi.mocked(readFileSync).mockClear();
+    expect(() => cloudExecutionArtifacts(f.stack, f.root, [])).toThrow("symbolic links");
+    expect(readFileSync).not.toHaveBeenCalled();
+    expect(f.stack.node.tryFindChild("ExecutionArtifacts")).toBeUndefined();
+  });
+
+  it("rejects a symlink repository root without reading its otherwise valid contents", () => {
+    const f = artifactFixture();
+    const linkedRoot = join(f.base, "repository-link");
+    symlinkSync(f.root, linkedRoot, "dir");
+    vi.mocked(readFileSync).mockClear();
+    expect(() => cloudExecutionArtifacts(f.stack, linkedRoot, [])).toThrow("symbolic links");
+    expect(readFileSync).not.toHaveBeenCalled();
+  });
+
+  it("accepts a synthetic OS-style ancestor alias above a regular repository root", () => {
+    const f = artifactFixture();
+    const alias = join(directory, "synthetic-ancestor-link");
+    symlinkSync(f.base, alias, "dir");
+    vi.mocked(readFileSync).mockClear();
+    const result = cloudExecutionArtifacts(f.stack, join(alias, "repository"), []);
+    expect(result.catalogKey).toMatch(/^catalogs\/[a-f0-9]{64}\.json$/u);
+    expect(readFileSync).toHaveBeenCalledWith(
+      join(realpathSync(f.folder), "metadata.json"),
+      "utf8",
+    );
+    expect(readFileSync).toHaveBeenCalledWith(
+      join(realpathSync(f.folder), "template.yaml"),
+      "utf8",
+    );
+  });
+
+  it.each(["metadata.json", "template.yaml"])("requires %s to be a regular file", (name) => {
+    const f = artifactFixture();
+    const file = join(f.folder, name);
+    rmSync(file);
+    mkdirSync(file);
+    vi.mocked(readFileSync).mockClear();
+    expect(() => cloudExecutionArtifacts(f.stack, f.root, [])).toThrow("regular files");
+    expect(readFileSync).not.toHaveBeenCalled();
+  });
+
+  it("requires every intermediate component to be a directory", () => {
+    const f = artifactFixture();
+    rmSync(join(f.root, "problems"), { recursive: true });
+    writeFileSync(join(f.root, "problems"), "synthetic non-directory path component");
+    vi.mocked(readFileSync).mockClear();
+    expect(() => cloudExecutionArtifacts(f.stack, f.root, [])).toThrow("directory path components");
+    expect(readFileSync).not.toHaveBeenCalled();
+  });
+});
+
+describe("hosted SPA asset boundary", () => {
+  it("stages public files and .well-known while excluding root and nested .env files and .git", () => {
+    const base = mkdtempSync(join(directory, "hosting-boundary-"));
+    const assets = join(base, "assets");
+    const outdir = join(base, "cdk.out");
+    for (const folder of [
+      ".well-known",
+      ".git",
+      "nested/.git",
+      "worktree",
+      "nested/.env-directory",
+    ]) {
+      mkdirSync(join(assets, folder), { recursive: true });
+    }
+    const publicFiles = ["index.html", ".well-known/security.txt", "nested/app.js"];
+    const privateFiles = [
+      ".env",
+      ".env.local",
+      ".env.production",
+      ".git/config",
+      "nested/.env",
+      "nested/.env.local",
+      "nested/.git/config",
+      "worktree/.git",
+      "nested/.env-directory/synthetic.txt",
+    ];
+    for (const name of publicFiles)
+      writeFileSync(join(assets, name), `synthetic public content: ${name}`);
+    for (const name of privateFiles)
+      writeFileSync(join(assets, name), "synthetic excluded content, no real secrets");
+    const app = new App({ outdir });
+    const stack = new Stack(app, "HostingBoundary");
+    const site = new CloudHosting(stack, "Site", assets);
+    expect(site.bucket.stack).toBe(stack);
+    app.synth();
+    const staged = readdirSync(outdir)
+      .map((name) => join(outdir, name))
+      .filter((path) => existsSync(join(path, "index.html")));
+    expect(staged).toHaveLength(1);
+    for (const path of staged) {
+      for (const name of publicFiles)
+        expect(readFileSync(join(path, name), "utf8")).toBe(`synthetic public content: ${name}`);
+      for (const name of privateFiles) expect(existsSync(join(path, name))).toBe(false);
+      expect(
+        readdirSync(path, { recursive: true, encoding: "utf8" }).some((name) =>
+          /(^|[/\\])(?:\.env[^/\\]*|\.git)([/\\]|$)/u.test(name),
+        ),
+      ).toBe(false);
+    }
   });
 });

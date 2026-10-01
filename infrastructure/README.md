@@ -15,7 +15,7 @@ SQL backend is included.
 - Lambda issuer, audience, ID-token, expiry, and explicit role validation
 - Invitation-only organizer sign-in with mandatory TOTP and no self-assigned role
 - Retained, deletion-protected event/team/deployment tables and private SPA hosting
-- Injected source preparation, scoped CDK setup/deploy, and guarded foundation teardown
+- Existing SPA builds and CDK asset publishing, scoped setup/deploy, and guarded foundation teardown
 - Opt-in AWS flag deployment intake, durable dispatch, fenced lifecycle, and atomic scoring
 - Standard Step Functions polling plus owner-fenced terminal-execution reconciliation
 
@@ -92,7 +92,7 @@ guarded while the current competition lifecycle is unfinished.
 It refuses the missing policy before setup/upload and never falls back to broad
 administrator permissions. Both stacks use the same environment-specific project
 qualifier. The default/shared `CDKToolkit` is not adopted or modified.
-Before upload or bootstrap, existing platform stacks must match the current AWS
+Before builds or bootstrap, existing platform stacks must match the current AWS
 caller account, resolved region, exact stack ARN/name, and project/environment
 tags. Only an explicit CloudFormation not-found response permits creation.
 Access denial, malformed metadata, or mismatched ownership stops the operation.
@@ -107,14 +107,15 @@ coordinated intake shutdown and pending/active workflow drain are not implemente
 For a runner-disabled foundation, it validates both stacks and then confirms their
 resolved account, region, and full ARNs. A missing stack stops teardown rather
 than claiming destruction succeeded. The command leaves event data, organizer
-accounts, source-bundle and execution-artifact storage, the project toolkit, and separately deployed
-exercise resources intact. Those retained resources can continue to incur charges.
-Source-bundle cleanup is restricted to the repository's marked
-`.cache/source-bundle` directory. Unmarked nonempty directories are not adopted.
-Source buckets require the canonical account/region/environment name and matching
-project/purpose/account/environment tags before retention changes. Source and
-compiled-asset symlinks are rejected before archiving, and the archive stores no
-outside-root symlink targets.
+accounts, CDK asset and execution-artifact storage, the project toolkit, and separately
+deployed exercise resources intact. Those retained resources can continue to incur charges.
+
+Current deployment builds the two existing SPAs and lets CDK publish their assets
+and the execution artifacts. It creates no additional source ZIP, staging tree or
+source-bundle bucket: the current stacks have no consumer for that former path.
+It does not replace the selected problem catalog with a submodule checkout.
+Historical pinned launchers still run their own source preparation. Any buckets
+created by those older paths are not silently adopted or deleted by this CLI.
 
 There is no purge flag. Retention does not imply automatic reattachment on a later
 fresh deployment; an explicit import/recovery procedure is still required.
@@ -122,7 +123,7 @@ fresh deployment; an explicit import/recovery procedure is still required.
 ## Verification
 
 - CLI subprocess tests use injected calls; no AWS or CDK deployment executes
-- Source-bundle tests use temporary synthetic files and inspect the actual ZIP
+- CLI tests assert that no extra source bucket, archive, or catalog checkout is invoked
 - API tests exercise role/key/event boundaries and the real REST Lambda adapter
 - Frontend contract tests use its real bearer client and role decoder
 - CDK tests synthesize and bundle the real API, inspect IAM/auth/retention, and read

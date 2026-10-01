@@ -39,48 +39,59 @@ function assertSuccess(result: ProcessResult, phase: string): void {
   if (result.code !== 0)
     throw new Error(`${phase} failed (exit ${result.code}). ${result.stderr.trim()}`);
 }
-export function parseBundleEnvironment(output: string): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  const names = new Set(["REGION", "ACCOUNT_ID", "CDK_PARAM_S3_BUCKET_NAME", "CDK_SOURCE_NAME"]);
-  for (const line of output.split("\n")) {
-    const index = line.indexOf("=");
-    if (index < 0) continue;
-    const key = line.slice(0, index);
-    if (names.has(key)) env[key] = line.slice(index + 1).trim();
-  }
-  if (
-    !/^\d{12}$/u.test(env.ACCOUNT_ID ?? "") ||
-    !/^[a-z]{2}(?:-[a-z]+)+-\d+$/u.test(env.REGION ?? "") ||
-    !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(env.CDK_PARAM_S3_BUCKET_NAME ?? "") ||
-    !env.CDK_SOURCE_NAME
-  ) {
-    throw new Error(
-      "Source-bundle identity could not be resolved; refusing to bootstrap or deploy.",
+/** Resolve only deployment identity; CDK already owns application/catalog asset publishing. */
+async function resolveCloudContext(context: Context): Promise<Context> {
+  let region = context.env.REGION ?? context.env.AWS_REGION ?? context.env.AWS_DEFAULT_REGION;
+  if (!region?.trim()) {
+    const configured = await run(context, "aws", ["configure", "get", "region"]);
+    assertSuccess(
+      configured,
+      "Read configured AWS region; set AWS_REGION if no profile region exists",
     );
+    region = configured.stdout;
   }
-  assertCommercialRegion(env.REGION ?? "");
-  return env;
-}
-async function resolveBundle(context: Context): Promise<Context> {
-  const result = await context.io.run({
-    command: "bash",
-    args: [join(context.root, "scripts/cloud-hosting/prepare-source-bundle.sh")],
-    cwd: context.root,
-    env: { ...context.env, PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY: "1" },
-  });
-  assertSuccess(result, "Source-bundle resolution");
-  const resolved = parseBundleEnvironment(result.stdout);
+  region = region.trim();
+  assertCommercialRegion(region);
+  const caller = await run(context, "aws", [
+    "sts",
+    "get-caller-identity",
+    "--query",
+    "Account",
+    "--output",
+    "text",
+    "--region",
+    region,
+  ]);
+  assertSuccess(caller, "Resolve deployment account");
+  const account = caller.stdout.trim();
+  if (!/^\d{12}$/u.test(account)) throw new Error("AWS returned an invalid deployment account.");
+  const expected = context.env.ACCOUNT_ID?.trim() || context.env.CDK_DEFAULT_ACCOUNT?.trim();
+  if (expected && expected !== account)
+    throw new Error("Current AWS credentials do not match the configured deployment account.");
   return {
     ...context,
     env: {
       ...context.env,
-      ...resolved,
-      AWS_REGION: resolved.REGION,
-      AWS_DEFAULT_REGION: resolved.REGION,
-      CDK_DEFAULT_REGION: resolved.REGION,
-      CDK_DEFAULT_ACCOUNT: resolved.ACCOUNT_ID,
+      REGION: region,
+      ACCOUNT_ID: account,
+      AWS_REGION: region,
+      AWS_DEFAULT_REGION: region,
+      CDK_DEFAULT_REGION: region,
+      CDK_DEFAULT_ACCOUNT: account,
     },
   };
+}
+async function buildApplications(context: Context): Promise<void> {
+  for (const application of ["application-admin-console", "participant-portal"])
+    assertSuccess(
+      await run(
+        context,
+        "bun",
+        ["run", "--cwd", join(context.root, "apps", application), "build"],
+        true,
+      ),
+      `Build ${application}`,
+    );
 }
 async function platformPreflight(context: Context, allowMissing: boolean): Promise<string[]> {
   const account = context.env.ACCOUNT_ID ?? "";
@@ -229,21 +240,13 @@ async function up(context: Context): Promise<number> {
   context.io.stdout(
     "[cloud] AWS resources and retained storage can incur charges. Only the explicitly configured, reviewed AWS flag slice can execute; the full competition lifecycle remains incomplete.\n",
   );
-  context.io.stdout("[cloud] [1/4] Preparing the source bundle and both web applications\n");
-  const resolved = await resolveBundle(context);
+  context.io.stdout("[cloud] [1/4] Building both web applications for CDK asset publishing\n");
+  const resolved = await resolveCloudContext(context);
   if (resolved.env.ACCOUNT_ID !== executionPolicy.account)
     throw new Error("Execution policy must belong to the deployment account.");
   await platformPreflight(resolved, true);
   const bootstrapArgs = await bootstrapPreflight(resolved, executionPolicy.arn);
-  assertSuccess(
-    await run(
-      resolved,
-      "bash",
-      [join(context.root, "scripts/cloud-hosting/prepare-source-bundle.sh")],
-      true,
-    ),
-    "Source-bundle preparation",
-  );
+  await buildApplications(resolved);
   context.io.stdout("[cloud] [2/4] Bootstrapping CDK (safe to repeat)\n");
   assertSuccess(await cdk(resolved, bootstrapArgs), "CDK bootstrap");
   context.io.stdout("[cloud] [3/4] Deploying cloud application and backend stacks\n");
@@ -267,9 +270,9 @@ async function up(context: Context): Promise<number> {
   return 0;
 }
 async function down(context: Context, yes: boolean): Promise<void> {
-  const resolved = await resolveBundle(context);
+  const resolved = await resolveCloudContext(context);
   const stackArns = await platformPreflight(resolved, false);
-  const consequences = `Destroy platform hosting in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stackArns.join("\n")}\nEvent data, organizer sign-in accounts, source-bundle and execution-artifact S3 storage, the project CDK toolkit, and separately deployed exercise resources are retained and may continue to incur charges.`;
+  const consequences = `Destroy platform hosting in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stackArns.join("\n")}\nEvent data, organizer sign-in accounts, CDK asset and execution-artifact S3 storage, the project CDK toolkit, and separately deployed exercise resources are retained and may continue to incur charges.`;
   context.io.stdout(`${consequences}\n`);
   if (!yes && !(await context.io.confirm(`${consequences} [y/N] `))) {
     context.io.stdout("Cloud teardown cancelled\n");
@@ -287,7 +290,7 @@ async function down(context: Context, yes: boolean): Promise<void> {
     "Backend stack destroy",
   );
   context.io.stdout(
-    "Cloud stacks destroyed. Retained data and organizer accounts, source-bundle and execution-artifact S3 storage, the project CDK bootstrap stack, and separately deployed exercise resources are not purged by this command.\n",
+    "Cloud stacks destroyed. Retained data and organizer accounts, CDK asset and execution-artifact S3 storage, the project CDK bootstrap stack, and separately deployed exercise resources are not purged by this command.\n",
   );
 }
 async function status(context: Context): Promise<number> {
@@ -322,7 +325,13 @@ export async function runCloudCli(
     }
     if (args.some((arg) => command !== "down" || !["--yes", "-y"].includes(arg)))
       throw new Error("Unknown cloud command argument.");
-    const environment = options.env.CDK_PARAM_ENVIRONMENT ?? "development";
+    if (
+      options.env.ENV &&
+      options.env.CDK_PARAM_ENVIRONMENT &&
+      options.env.ENV !== options.env.CDK_PARAM_ENVIRONMENT
+    )
+      throw new Error("ENV and CDK_PARAM_ENVIRONMENT must select the same cloud environment.");
+    const environment = options.env.CDK_PARAM_ENVIRONMENT ?? options.env.ENV ?? "development";
     const context: Context = {
       ...options,
       env: { ...options.env, CDK_PARAM_ENVIRONMENT: environment, ENV: environment },

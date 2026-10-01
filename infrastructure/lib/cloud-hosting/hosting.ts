@@ -1,4 +1,4 @@
-import { RemovalPolicy } from "aws-cdk-lib";
+import { IgnoreMode, RemovalPolicy } from "aws-cdk-lib";
 import { Distribution, ViewerProtocolPolicy } from "aws-cdk-lib/aws-cloudfront";
 import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
@@ -33,7 +33,9 @@ export class CloudHosting extends Construct {
       })),
     });
     new BucketDeployment(this, "Assets", {
-      sources: [Source.asset(assetPath)],
+      sources: [
+        Source.asset(assetPath, { exclude: [".env*", ".git"], ignoreMode: IgnoreMode.GIT }),
+      ],
       destinationBucket: this.bucket,
       distribution: this.distribution,
       retainOnDelete: false,
