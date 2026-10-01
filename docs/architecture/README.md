@@ -33,11 +33,12 @@ stacks. Explicit event teardown and ordinary shutdown are separate operations.
 
 Local SQLite is implemented. Cloud hosting is being restored with Lambda and
 DynamoDB, reusing the former serverless deployment path without SaaS / SBT.
-AWS service problems require cloud hosting. Non-AWS problems are intended for
-both options; the separate cloud problem runner is still incomplete.
+AWS service problems require cloud hosting. Docker/Compose exercises are local-only
+and are not listed in the cloud catalog. Native Cryptography Battle runs on both
+hosting options; synchronized cloud bursts still exceed the five-second refresh interval.
 `make deploy` and `make destroy` call the current Lambda/DynamoDB CLI after
-reviewed IAM setup. The supported cloud catalog is hello-world with scoped CLI
-access. Teardown confirms the exact installation and preserves retained data.
+reviewed IAM setup. The supported cloud catalog includes hello-world with scoped CLI
+access and native Cryptography Battle. Teardown confirms the exact installation and preserves retained data.
 A container build, remote-driver experiment or schema declaration is not an
 end-to-end cloud rehearsal or zero-fixed-cost guarantee.
 

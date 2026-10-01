@@ -139,7 +139,7 @@ HTTP/SQLite path for state and authorization changes. Follow the
 <code>docs/host-build-verification.md</code>
 for distribution changes. Record browser and optional live AWS/IdP evidence
 separately; local tests do not prove external account access.</p>
-<p><code>make down</code> preserves local event and Docker data. Cloud <code>make deploy</code> / <code>make destroy</code> call the existing CLI with reviewed AWS setup and ownership-checked teardown. The current cloud catalog includes hello-world and native Cryptography Battle; container-based cloud execution remains incomplete and Battle capacity is under verification. Use <code>CLOUD_ARGS=&quot;--help&quot;</code> to inspect either command without AWS access.</p>
+<p><code>make down</code> preserves local event and Docker data. Cloud <code>make deploy</code> / <code>make destroy</code> call the existing CLI with reviewed AWS setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval. Use <code>CLOUD_ARGS=&quot;--help&quot;</code> to inspect either command without AWS access.</p>
 
 </article>
 </main>

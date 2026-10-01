@@ -57,8 +57,8 @@ The current integration uses local SQLite and restores Lambda/DynamoDB for cloud
 hosting without SaaS/SBT. Its `make deploy` and `make destroy` use the current CLI
 after reviewed IAM setup, with ownership-checked coordinated teardown and retained
 data. The current cloud catalog includes hello-world with scoped CLI access and
-native Cryptography Battle. Container-based cloud execution remains incomplete,
-and synchronized Battle load exceeds the five-second refresh interval. Read
+native Cryptography Battle. Docker/Compose exercises are local-only and are not
+listed in the cloud catalog. Synchronized Battle load exceeds the five-second refresh interval. Read
 [the implementation status](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/README.md)
 before describing any cloud capability as working. The historical launcher's older
 backend options are not additional current hosting modes. Do not print credentials

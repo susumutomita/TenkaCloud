@@ -95,7 +95,7 @@ describe("docs registry — role manuals (#2818)", () => {
       expect(source).not.toContain("CDK_PARAM_CONTROL_DATA_BACKEND");
     }
     expect(ORGANIZER_MANUAL_SOURCE).toContain("has not been established");
-    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("まだ大会に使える完成状態ではありません");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("初回アカウント設定は未完了");
     for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
       expect(source).toMatch(/Lambda\s*\/\s*DynamoDB/);
       expect(source).not.toContain("Cloud Turso");
@@ -360,7 +360,7 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
 });
 
 describe("integration candidate documentation contract", () => {
-  it("should keep both quickstarts explicit about safe shutdown and incomplete cloud execution", () => {
+  it("should keep both quickstarts explicit about safe shutdown and local-only Docker scope", () => {
     for (const filename of ["page.mdx", "page.ja.mdx"]) {
       const source = readFileSync(`src/app/developers/docs/getting-started/${filename}`, "utf8");
       for (const command of ["make local", "make down", "make deploy", "make destroy"])
@@ -368,7 +368,12 @@ describe("integration candidate documentation contract", () => {
       expect(source).not.toContain("make host");
       expect(source).not.toContain("make local-down");
       expect(source).toMatch(/preserv|保持/);
-      expect(source).toMatch(/incomplete|未実装/);
+      expect(source).toMatch(
+        /Docker\/Compose exercises are local-only|Docker \/ Compose 問題はローカル開催専用/,
+      );
+      expect(source).toMatch(/not listed in the cloud catalog|クラウドのカタログには表示しません/);
+      expect(source).toContain("Cryptography Battle");
+      expect(source).toMatch(/exceed.*five-second|5 秒の更新間隔を超え/);
       expect(source).toMatch(/reviewed IAM|権限設定/);
       expect(source).toContain("hello-world");
       expect(source).toContain("106");

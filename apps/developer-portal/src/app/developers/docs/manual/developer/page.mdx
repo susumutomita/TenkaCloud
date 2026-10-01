@@ -46,4 +46,4 @@ HTTP/SQLite path for state and authorization changes. Follow the
 for distribution changes. Record browser and optional live AWS/IdP evidence
 separately; local tests do not prove external account access.
 
-`make down` preserves local event and Docker data. Cloud `make deploy` / `make destroy` call the existing CLI with reviewed AWS setup and ownership-checked teardown. The current cloud catalog includes hello-world and native Cryptography Battle; container-based cloud execution remains incomplete and Battle capacity is under verification. Use `CLOUD_ARGS="--help"` to inspect either command without AWS access.
+`make down` preserves local event and Docker data. Cloud `make deploy` / `make destroy` call the existing CLI with reviewed AWS setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval. Use `CLOUD_ARGS="--help"` to inspect either command without AWS access.

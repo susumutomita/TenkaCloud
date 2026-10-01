@@ -211,7 +211,7 @@ async function acceptedJob(f: ReturnType<typeof fixture>): Promise<DeploymentJob
 }
 
 describe("cloud execution HTTP authorization, replay and lifecycle contracts", () => {
-  it.each(["unavailable", "constructor"])(
+  it.each(["unavailable", "constructor", "sqli-demo", "db-a1-table-primary-key"])(
     "rejects %s outside the real execution catalog before event creation",
     async (problemId) => {
       const f = fixture();
@@ -225,6 +225,23 @@ describe("cloud execution HTTP authorization, replay and lifecycle contracts", (
       expect(await response.json()).toMatchObject({ error: "unsupported_runtime_problem" });
       expect(f.repository.events.size).toBe(count);
       expect(f.accept).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["sqli-demo", "db-a1-table-primary-key"])(
+    "refuses a retained Docker problem %s before preparing any cloud work",
+    async (problemId) => {
+      const f = fixture();
+      f.repository.events.set(f.event.eventId, {
+        ...f.event,
+        problems: [...f.event.problems, { problemId, defaultRegion: "local" }],
+      });
+      const response = await f.organizer(`${f.path}/deploy`);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ error: "unsupported_runtime_problem" });
+      expect(f.pin).not.toHaveBeenCalled();
+      expect(f.getConnection).not.toHaveBeenCalled();
+      expect(f.accept).not.toHaveBeenCalled();
+      expect(f.sdk).not.toHaveBeenCalled();
     },
   );
   it("rejects known installation shutdown before planning or binding work", async () => {

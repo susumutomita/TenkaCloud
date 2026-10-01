@@ -17,7 +17,8 @@ import { I18nProvider } from "../src/i18n";
 
 const config: AppConfig = {
   mode: "cloud-host",
-  supportedProblemIds: ["hello-world"],
+  supportedProblemIds: ["hello-world", "ac26-crypto-battle"],
+  nativeProblemIds: ["ac26-crypto-battle"],
   cognitoDomain: "https://organizers.example.test",
   cognitoClientId: "synthetic-cloud-client",
   redirectUri: "https://console.example.test/callback",
@@ -155,6 +156,22 @@ afterEach(() => {
 });
 
 describe("cloud organizer SPA journey", () => {
+  it("offers AWS and native cloud exercises without local Docker problems", async () => {
+    const f = cloudSession("Admin", "/events/new");
+    await screen.findByTestId("problem-select");
+    const picker = createWrapper(document.body).findMultiselect('[data-testid="problem-select"]');
+    if (!picker) throw new Error("Missing cloud problem picker");
+    picker.openDropdown();
+    expect(picker.findDropdown().findOptions()).toHaveLength(2);
+    expect(picker.findDropdown().findOptionByValue("hello-world")).not.toBeNull();
+    expect(picker.findDropdown().findOptionByValue("ac26-crypto-battle")).not.toBeNull();
+    for (const id of ["sqli-demo", "db-a1-table-primary-key"])
+      expect(picker.findDropdown().findOptionByValue(id)).toBeNull();
+    picker.selectOptionByValue("ac26-crypto-battle");
+    expect(screen.getByText("Runs inside TenkaCloud")).toBeInTheDocument();
+    expect(screen.queryByText("AWS Account ID")).not.toBeInTheDocument();
+    expect(f.unexpected).toEqual([]);
+  });
   // Full Cloudscape journey crosses several routes/dialogs; parallel workspace runs exceed the 5s unit-test default.
   it("registers and verifies an account, retries cloud deployment, and reports partial teardown", async () => {
     const { fetchMock, token, unexpected } = cloudSession("Admin");
@@ -281,6 +298,8 @@ describe("cloud organizer SPA journey", () => {
     "/audit-log",
     "/deployments",
     "/problems",
+    "/problems/sqli-demo",
+    "/problems/db-a1-table-primary-key",
     "/identity-providers",
   ])("explains unavailable cloud route %s without sending a legacy API request", async (path) => {
     const f = cloudSession("Admin", path);

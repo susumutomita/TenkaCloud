@@ -42,7 +42,7 @@ make local
 
 <h2 id="cloud-status">クラウド配置の状態</h2>
 
-`make deploy` と `make destroy` は権限設定を確認したうえで、この版の Lambda/DynamoDB CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world です。撤収時に対象を確認し、大会データは保持します。Lambda/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。非 AWS 問題のクラウド実行と Battle は未実装です。Docker 問題には別の runner が必要です。復元した cloud pipeline は固定した旧版のソースを実行し、この版の CLI は実行しません。
+`make deploy` と `make destroy` は権限設定を確認したうえで、この版の Lambda/DynamoDB CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world と組み込みの Cryptography Battle です。撤収時に対象を確認し、大会データは保持します。Lambda/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。復元した cloud pipeline は固定した旧版のソースを実行し、この版の CLI は実行しません。
 
 Codespaces の転送 URL と問題接続は、この candidate では未確認です。確認記録ができるまでは上のローカル手順を使ってください。
 

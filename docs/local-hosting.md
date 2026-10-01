@@ -302,10 +302,12 @@ non-AWS Compose catalog and native Battle games; it does not create AWS resource
 
 `make deploy` and `make destroy` use the current Lambda/DynamoDB CLI after
 [reviewed AWS setup](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
-The supported cloud problem is currently hello-world with scoped CLI access.
+The supported cloud problems are hello-world with scoped CLI access and native
+Cryptography Battle backed by DynamoDB.
 Destroy confirms the exact installation and drains its recorded exercise attempts
-before removing hosting; retained data and storage are not purged. Non-AWS cloud
-execution and Battle remain incomplete. AWS usage and retained storage can incur
+before removing hosting; retained data and storage are not purged. Docker/Compose
+exercises are local-only and are not listed in the cloud catalog. Synchronized
+Battle bursts still exceed the five-second refresh interval. AWS usage and retained storage can incur
 charges. Repository metadata alone is not a cloud playability claim.
 
 If an earlier integration revision created AWS resources, keep its private state

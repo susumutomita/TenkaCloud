@@ -17,9 +17,10 @@ instructions include legacy local-practice and Lite paths.
 | pack activate for a tenant | Retained local record only; does not add problems to current events |
 
 Local SQLite is implemented. Cloud Lambda / DynamoDB hosting is being restored.
-AWS service problems are cloud-only. Non-AWS problems are intended for both hosting
-options; the container-based cloud problem runner is still incomplete. Native Cryptography
-Battle uses the platform itself and is under capacity verification. Ordinary local shutdown
+AWS service problems are cloud-only. Docker/Compose exercises are local-only and
+are not listed in the cloud catalog. Native Cryptography Battle runs on both hosting
+options using the platform itself; synchronized cloud Battle bursts still exceed
+the five-second refresh interval. Ordinary local shutdown
 does not remove AWS resources created by an earlier revision.
 
 ## Teaching examples and verification

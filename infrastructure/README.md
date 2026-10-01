@@ -89,9 +89,10 @@ See [permission boundaries](BOOTSTRAP-IAM.md).
 `make deploy` and `make destroy` call the existing `scripts/cloud-hosting/main.ts`
 implementation in this checkout. They do not run the pipeline's fixed historical
 checkout. The current cloud exercise catalog supports hello-world with scoped CLI
-access and native Cryptography Battle. Container-based cloud execution and automatic
-first-account IAM preparation remain incomplete. Battle capacity is still under
-verification; the presence of its routes is not a 100-participant capacity claim. These commands can create chargeable AWS resources; they do not
+access and native Cryptography Battle. Docker/Compose exercises are local-only and
+are not listed in the cloud catalog. Automatic first-account IAM preparation remains
+incomplete. Synchronized Battle bursts still exceed the five-second refresh interval;
+the presence of its routes is not a 100-participant capacity claim. These commands can create chargeable AWS resources; they do not
 promise a zero-cost platform.
 
 Start with `make deploy CLOUD_ARGS="--help"` or `make destroy CLOUD_ARGS="--help"`;
@@ -395,7 +396,7 @@ final run, state sizes, p50/p95/p99, conflicts and request amplification.
 - Reviewed least-privilege initial bootstrap policy and first-account setup path
 - AWS account-isolation decision and reviewed exercise permissions
 - Participant AWS Console access without cross-team metadata disclosure
-- Catalog expansion, container runners, AWS endpoint Battles, hints and disruptions
+- Cloud-native catalog expansion, AWS endpoint Battles, hints and disruptions
 - Public registration/claiming, audit, notifications and full organizer UI flows
 - Native Battle burst latency under the target participant load
 - Shared problem-pack/drill progression and final tutorial alignment

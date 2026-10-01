@@ -18,13 +18,13 @@ All 106 former local problems are intended to become Challenge competitions. The
 
 <h2 id="aws-problems">AWS problems use cloud hosting</h2>
 
-AWS-service problems are for cloud hosting only. Local hosting rejects the old AWS-region switch. The cloud Lambda/DynamoDB path, competitor-account setup, deployment, scoring and non-AWS runner are being restored and are not yet ready for a competition. Do not use a local command as an alternative cloud launcher. Existing AWS resources require their original reviewed cleanup procedure; keep their ownership records.
+AWS-service problems are for cloud hosting only. Local hosting rejects the old AWS-region switch. The current cloud Lambda/DynamoDB path implements hello-world deployment/scoring with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. First-account setup and Battle burst capacity remain acceptance work; synchronized Battle bursts still exceed the five-second refresh interval. Do not use a local command as an alternative cloud launcher. Existing AWS resources require their original reviewed cleanup procedure; keep their ownership records.
 
 <h2 id="storage-and-shutdown">Storage and shutdown</h2>
 
 The local database is SQLite. Back up the complete private data directory consistently, including key files. `make down` preserves event data and stopped Docker state; use the same data directory on restart. New on-demand Docker environments stay stopped after `make local` until a participant resumes them. It does not delete AWS resources or reset the event clock. Never delete state that still owns environments.
 
-Cloud Lambda/DynamoDB hosting is in progress; `make deploy` requires reviewed IAM setup; `make destroy` confirms targets, drains recorded exercises, and retains data. The cloud catalog includes hello-world and native Cryptography Battle; container-based cloud execution remains incomplete and Battle capacity is under verification. A zero-fixed-cost cloud platform has not been established. AWS exercise charges are separate.
+Cloud Lambda/DynamoDB hosting is in progress; `make deploy` requires reviewed IAM setup; `make destroy` confirms targets, drains recorded exercises, and retains data. The cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval. A zero-fixed-cost cloud platform has not been established. AWS exercise charges are separate.
 
 Historical SaaS and individual-practice instructions are available in the [pinned legacy source](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9). Do not use them against this candidate or assume data migrates automatically.
 

@@ -50,8 +50,9 @@ not swept automatically. See [generated-file ownership](docs/local-hosting.md#ge
 Cloud commands are `make deploy` and `make destroy`. They use the current
 Lambda/DynamoDB CLI after [reviewed AWS setup](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 The current cloud catalog includes hello-world with scoped CLI access and native
-Cryptography Battle backed by DynamoDB. Container-based cloud exercises remain
-unimplemented; the Battle capacity target is still under verification. Destroy confirms the account,
+Cryptography Battle backed by DynamoDB. Docker/Compose exercises are local-only and
+are not listed in the cloud catalog. Synchronized Battle bursts still exceed the
+five-second refresh interval. Destroy confirms the account,
 region and owned resources, drains recorded exercises, and retains event data.
 Retained storage and AWS usage can incur charges. `CLOUD_ARGS="--help"` shows help
 without contacting AWS. The preserved [cloud pipeline](infrastructure/README.md#cloud-deployment-pipeline)
@@ -62,8 +63,8 @@ workbenches and the 15 explicitly declared participant terminals. Catalog covera
 and synthetic lifecycle tests are not a claim that all 106 have passed real Docker
 rehearsals. Local Docker exercises need Docker; the built-in Cryptography Battle
 requires neither AWS nor the Docker daemon. AWS-service problems are not offered
-by `make local`. Container-based exercises in cloud hosting still need the separate runner
-implementation described in the compatibility matrix. Native Cryptography Battle
+by `make local`. Docker/Compose exercises remain local-only, as described in the
+compatibility matrix. Native Cryptography Battle
 runs inside the platform without a problem VM.
 
 Default local admission limits are three active environments per team, twelve

@@ -18,7 +18,7 @@ New Docker events prepare up to 512 dormant jobs, then participants Start / resu
 
 AWS-service problems are restricted to cloud hosting. The opt-in cloud flag runner deploys owned CloudFormation stacks through configured competitor roles and mandatory ExternalId parameters in SSM. Participant access uses a scoped hello-world viewer session; Console/CloudShell and automatic first-account IAM setup remain incomplete. Deployment-role credentials never become participant credentials.
 
-The cloud foundation uses Lambda, Cognito and DynamoDB, with durable dispatch and Step Functions work. `make deploy` and `make destroy` use the scoped CLI with reviewed IAM setup and ownership-checked teardown. The current cloud catalog is hello-world with CLI access; Battle remains incomplete. Non-AWS cloud exercises need a separate runner; the local Docker process is not a Lambda deployment.
+The cloud foundation uses Lambda, Cognito and DynamoDB, with durable dispatch and Step Functions work. `make deploy` and `make destroy` use the scoped CLI with reviewed IAM setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle backed by DynamoDB. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval.
 
 <h2 id="problem-deployment">Problem deployment and scoring</h2>
 

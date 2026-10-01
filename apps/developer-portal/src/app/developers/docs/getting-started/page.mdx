@@ -42,7 +42,7 @@ Options use `LOCAL_ARGS`, for example `make local LOCAL_ARGS="--no-build"`. When
 
 <h2 id="cloud-status">Cloud deployment status</h2>
 
-`make deploy` and `make destroy` use the current Lambda/DynamoDB CLI after reviewed IAM setup. The supported cloud problem is hello-world with scoped CLI access; destroy confirms targets and retains event data. Lambda/DynamoDB hosting is in progress; this is not a verified zero-cost deployment. AWS-service problems are cloud-only. Non-AWS cloud execution and Battle remain incomplete; Docker exercises need a separate runner. The preserved cloud pipeline uses fixed historical source refs rather than the current CLI.
+`make deploy` and `make destroy` use the current Lambda/DynamoDB CLI after reviewed IAM setup. The supported cloud problems are hello-world with scoped CLI access and native Cryptography Battle; destroy confirms targets and retains event data. Lambda/DynamoDB hosting is in progress; this is not a verified zero-cost deployment. AWS-service problems are cloud-only. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval. The preserved cloud pipeline uses fixed historical source refs rather than the current CLI.
 
 Codespaces forwarded-origin and exercise routing have not been verified for this candidate. Use the local checkout procedure above until that path has its own evidence.
 

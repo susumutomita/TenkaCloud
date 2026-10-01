@@ -12,11 +12,11 @@ This documents the draft integration candidate. Local event/team operation is im
 
 <h2 id="cloud-platform">Cloud platform: integration in progress</h2>
 
-`make deploy` and `make destroy` execute the current Lambda/DynamoDB setup and coordinated teardown CLI. They require reviewed AWS permissions. The current cloud catalog supports hello-world with scoped CLI access; non-AWS execution and Battle remain incomplete. Destroy shows the account, region and owned targets, waits for recorded exercises to be removed, then removes hosting while retaining data. Retained resources can continue to incur charges. The preserved `infrastructure/templates/cloud-pipeline.yaml` runs fixed historical source refs, not this current CLI. A container build is not deployment evidence or a zero-cost promise.
+`make deploy` and `make destroy` execute the current Lambda/DynamoDB setup and coordinated teardown CLI. They require reviewed AWS permissions. The current cloud catalog supports hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval. Destroy shows the account, region and owned targets, waits for recorded exercises to be removed, then removes hosting while retaining data. Retained resources can continue to incur charges. The preserved `infrastructure/templates/cloud-pipeline.yaml` runs fixed historical source refs, not this current CLI. A container build is not deployment evidence or a zero-cost promise.
 
 <h2 id="exercise-deployment">Exercise deployment is separate</h2>
 
-Local events use owned Docker Compose projects or native Battle execution. AWS-service problems are cloud-only and require reviewed competitor account/region/role configuration with ExternalId. Cloud execution of non-AWS exercises still needs a separate runner. Exercise resources can incur charges; stopping a local process does not remove resources created by an older AWS-enabled revision.
+Local events use owned Docker Compose projects or native Battle execution. AWS-service problems are cloud-only and require reviewed competitor account/region/role configuration with ExternalId. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Native Cryptography Battle runs on both hosting options. Exercise resources can incur charges; stopping a local process does not remove resources created by an older AWS-enabled revision.
 
 <h2 id="legacy-installations">Legacy installations</h2>
 

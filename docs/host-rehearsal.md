@@ -32,14 +32,15 @@ The old local AWS-region switch is rejected. A local rehearsal must not create A
 resources. Existing AWS resources from an earlier integration revision need that
 revision's reviewed cleanup procedure and retained ownership records.
 
-## Cloud hosting: pending full integration
+## Cloud hosting: supported scope and capacity checks
 
-The Lambda/DynamoDB setup and API are being restored. Cloud problem deployment,
-scoring, shared Battle state and the non-AWS runner must be connected before this
-candidate can host a cloud competition. The current `make deploy` and `make destroy`
-fail safely rather than presenting the partial implementation as complete.
+The current Lambda/DynamoDB CLI supports `make deploy`, coordinated `make destroy`,
+hello-world with scoped CLI access, and native Cryptography Battle with durable
+shared state and scoring. Docker/Compose exercises are local-only and are not
+listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second
+refresh interval; implementation and local measurements do not establish event capacity.
 
-When that path is ready, obtain approval for the target account, region, initial
+Before a live rehearsal, obtain approval for the target account, region, initial
 IAM setup, temporary exercise resources, expected charges and cleanup. Keep the
 project's toolkit separate from other CDK installations. Verify its execution
 policy and ownership instead of falling back to administrator permissions.
@@ -52,8 +53,8 @@ The cloud rehearsal must cover:
 - AWS problems in the reviewed competitor-account isolation model, mandatory
   ExternalId and least-privilege participant access; already-issued AWS sessions
   may remain valid after event end
-- Non-AWS problems using the shared catalog and a separate, correctly isolated
-  execution runner; Lambda hosting alone does not run Docker exercises
+- Native Cryptography Battle shared state, private team views, exactly-once scoring
+  and measured refresh/operation capacity; Docker/Compose exercises stay local-only
 - Interrupted deployment, durable recovery, scoring locks, event end and actual
   resource teardown, with retained data and remaining charges clearly identified
 

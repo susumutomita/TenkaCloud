@@ -18,7 +18,7 @@ export const metadata = { title: "アーキテクチャ" };
 
 AWS サービスの問題はクラウド開催専用です。明示設定した cloud flag runner は、競技者 role と SSM に保存した必須の ExternalId を使い、所有情報付きの CloudFormation stack を配置します。参加者には hello-world だけに限定した viewer の資格情報を発行します。Console / CloudShell と初回 IAM 設定の自動化は未完了です。配置 role の認証情報を参加者へ渡してはいけません。
 
-クラウド基盤は Lambda、Cognito、DynamoDB を使い、配置受付と Step Functions の処理を永続化します。`make deploy` と `make destroy` は、権限設定と所有対象を確認する既存 CLI を実行します。現在のクラウド問題は hello-world で、Battle は未実装です。非 AWS 問題のクラウド実行には別の runner が必要です。ローカルの Docker プロセスを Lambda に配置する構成ではありません。
+クラウド基盤は Lambda、Cognito、DynamoDB を使い、配置受付と Step Functions の処理を永続化します。`make deploy` と `make destroy` は、権限設定と所有対象を確認する既存 CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world と、DynamoDB に状態を保存する組み込みの Cryptography Battle です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。
 
 <h2 id="problem-deployment">問題の配置と採点</h2>
 

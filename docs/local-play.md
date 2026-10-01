@@ -38,8 +38,9 @@ keep ownership records until it succeeds.
 
 `make deploy` and `make destroy` call the current Lambda/DynamoDB CLI after
 reviewed AWS setup. The current cloud catalog includes hello-world with scoped CLI
-access and native Cryptography Battle. Container-based cloud execution remains
-incomplete and Battle capacity is under verification. Destroy confirms
+access and native Cryptography Battle. Docker/Compose exercises are local-only and
+are not listed in the cloud catalog. Synchronized Battle bursts still exceed the
+five-second refresh interval. Destroy confirms
 owned targets and drains recorded exercises while retaining data. See the
 [cloud setup boundary](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 
