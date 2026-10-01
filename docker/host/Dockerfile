@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# Host mode (`make host`) as one image, for a VM or container platform behind a
+# Local-runtime rehearsal as one image, for a VM or container platform behind a
 # TLS-terminating proxy (#3299). Build from the repository root with the catalog
 # checked out:
 #
@@ -19,6 +19,7 @@ WORKDIR /app
 # Manifests first, so the install layer is keyed on the dependency tree. Every
 # workspace in package.json needs its manifest for --frozen-lockfile.
 COPY package.json bun.lock ./
+COPY infrastructure/package.json ./infrastructure/
 COPY packages ./packages
 COPY apps/application-admin-console/package.json ./apps/application-admin-console/
 COPY apps/developer-portal/package.json ./apps/developer-portal/
@@ -33,6 +34,7 @@ RUN bun run build:host
 FROM oven/bun:1.3.11-alpine AS runtime-deps
 WORKDIR /app
 COPY package.json bun.lock ./
+COPY infrastructure/package.json ./infrastructure/
 COPY packages ./packages
 COPY apps/application-admin-console/package.json ./apps/application-admin-console/
 COPY apps/developer-portal/package.json ./apps/developer-portal/
@@ -49,6 +51,7 @@ LABEL org.opencontainers.image.source="https://github.com/susumutomita/TenkaClou
       io.tenkacloud.catalog.revision=$TENKACLOUD_CATALOG_COMMIT
 COPY --from=runtime-deps /app/node_modules /app/node_modules
 COPY --from=runtime-deps /app/package.json /app/package.json
+COPY --from=runtime-deps /app/infrastructure/package.json /app/infrastructure/package.json
 COPY packages /app/packages
 COPY scripts/lib /app/scripts/lib
 COPY scripts/local-host /app/scripts/local-host

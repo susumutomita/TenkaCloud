@@ -9,6 +9,26 @@ const entries = readFileSync(
   .map((line) => line.trim())
   .filter((line) => line.length > 0 && !line.startsWith("#"));
 
+test("every install stage includes explicit workspace manifests before using the frozen lock", () => {
+  const root = new URL("../../../", import.meta.url);
+  const manifest = JSON.parse(readFileSync(new URL("package.json", root), "utf8")) as {
+    workspaces: string[];
+  };
+  const dockerfile = readFileSync(new URL("docker/host/Dockerfile", root), "utf8");
+  const stages = dockerfile.split(/^FROM /mu).filter((stage) => stage.includes("bun install"));
+  expect(stages).toHaveLength(2);
+  for (const workspace of manifest.workspaces.filter((path) => !path.includes("*"))) {
+    expect(existsSync(new URL(`${workspace}/package.json`, root))).toBe(true);
+    for (const stage of stages) {
+      const beforeInstall = stage.slice(0, stage.indexOf("bun install"));
+      expect(beforeInstall).toContain(`COPY ${workspace}/package.json ./${workspace}/`);
+    }
+    expect(dockerfile).toContain(
+      `COPY --from=runtime-deps /app/${workspace}/package.json /app/${workspace}/package.json`,
+    );
+  }
+});
+
 test("the host build context excludes live and backup participant credentials", () => {
   expect(entries).toContain("apps/participant-portal/public/runtime-config.json");
   expect(entries).toContain("apps/participant-portal/public/runtime-config.backup.json");
