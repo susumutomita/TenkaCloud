@@ -54,9 +54,11 @@ because a deployment failed. In the pinned flow, `ACTION=destroy` and
 guide instead of treating either as a simple stop command.
 
 The current integration uses local SQLite and restores Lambda/DynamoDB for cloud
-hosting without SaaS/SBT. Its `make deploy` and `make destroy` remain fail-safe
-placeholders while initial IAM setup, coordinated exercise teardown and remaining
-runtimes are unfinished. Read
+hosting without SaaS/SBT. Its `make deploy` and `make destroy` use the current CLI
+after reviewed IAM setup, with ownership-checked coordinated teardown and retained
+data. The current cloud catalog includes hello-world with scoped CLI access and
+native Cryptography Battle. Container-based cloud execution remains incomplete,
+and synchronized Battle load exceeds the five-second refresh interval. Read
 [the implementation status](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/README.md)
 before describing any cloud capability as working. The historical launcher's older
 backend options are not additional current hosting modes. Do not print credentials
@@ -88,7 +90,7 @@ shared-environment changes, or secret access. Read-only investigation can procee
 ## Prompts a user can give their assistant
 
 - 「TenkaCloud をローカルで試したい。この端末の前提条件を確認して、問題を1つ開始し、回答の結果が見えるところまで進めて。」
-- 「TenkaCloud を AWS に構築したい。DB 費用を抑える Turso の手順を使い、既存環境の有無と必要な設定を調べて。構成・費用・撤去方法を提示してからデプロイする。」
+- 「TenkaCloud を AWS に構築したい。現行 Lambda/DynamoDB の対応範囲、既存環境の有無と必要な設定を調べて。構成・費用・撤去方法を提示してからデプロイする。」
 - 「この不具合について、画面から API、保存、得点表示までの関係を該当ファイルで説明して。根拠を確認してから修正し、実行した検証と未確認事項を分けて報告して。」
 
 ## Book

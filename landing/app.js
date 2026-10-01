@@ -7,28 +7,27 @@
     ja: {
       title: "TenkaCloud | AWSクラウド実戦演習・競技プラットフォーム",
       description:
-        "TenkaCloudは、本物のAWS環境でBattleとChallengeを開催できるOSSのクラウド実戦演習・競技プラットフォームです。チーム別環境、毎分採点、ランキング、問題カタログ、運営画面を提供します。",
+        "TenkaCloudはローカルとAWSクラウドで開催するOSSの競技基盤です。チーム、問題、得点を共通の画面で管理します。対応する実行環境と検証状況は運営ガイドで確認できます。",
       socialDescription:
-        "本物のAWSでBattleとChallengeを開催。チーム別環境、毎分採点、ランキング、再利用できる問題カタログを備えたApache 2.0のOSSです。",
+        "ローカルとAWSクラウドで開催するApache 2.0のOSS競技基盤。対応する問題、実行環境、費用と検証状況は運営ガイドで確認できます。",
       canonical: "https://tenkacloud.com/?lang=ja",
       locale: "ja_JP",
       alternateLocale: "en_US",
       imageAlt: "TenkaCloud — AWSクラウド実戦演習・競技プラットフォーム",
       softwareDescription:
-        "本物のAWS環境でBattleとChallengeを開催できる、Apache 2.0のクラウド実戦演習・競技プラットフォーム。",
+        "ローカルとAWSクラウドで問題と得点を共有する、Apache 2.0の競技プラットフォーム。",
     },
     en: {
       title: "TenkaCloud | Open-source AWS cloud competition platform",
       description:
-        "TenkaCloud is an open-source platform for hands-on AWS cloud drills and competitions. Run isolated team environments, automated scoring, live leaderboards, and reusable Battle and Challenge catalogs.",
+        "TenkaCloud is an open-source platform for local and AWS cloud competitions. Manage teams, problems and scores in shared consoles; check the guide for supported runtimes and verification status.",
       socialDescription:
-        "Run hands-on AWS Battles and self-paced Challenges with isolated team environments, automated scoring, live leaderboards, and reusable problem catalogs.",
+        "Host local and AWS cloud competitions with shared consoles for teams, problems and scores. Check current runtime support, costs and verification status.",
       canonical: "https://tenkacloud.com/index.en.html",
       locale: "en_US",
       alternateLocale: "ja_JP",
       imageAlt: "TenkaCloud — Open-source AWS cloud competition platform",
-      softwareDescription:
-        "An Apache 2.0 platform for running hands-on AWS cloud drills as real-time Battles and self-paced Challenges.",
+      softwareDescription: "An Apache 2.0 competition platform for local and AWS cloud hosting.",
     },
   };
 
@@ -143,19 +142,19 @@
       "hero.h1a": "クラウドエンジニアの、",
       "hero.h1b": "天下一武道会。",
       "hero.sub":
-        "本物の AWS で競う、OSS の競技プラットフォーム。 「ローカルでは動く」アプリを本番品質へ ── <strong>認証・公開範囲・監査・可用性</strong>の仕上がりを毎分自動採点し、 順位がリアルタイムに動く。 主催者はイベント・採点・再利用できる問題カタログを 1 画面で運営。",
+        "ローカルと AWS クラウドで開催する、OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。現行版はローカルの Compose 問題と、クラウドの hello-world / Cryptography Battle に対応しています。",
       "hero.vibe":
-        "<strong>AI と作ったアプリ、公開する前に。</strong> 無料・AWS アカウント不要・ブラウザで始める。 本物の AWS は最後の 1 問だけ。",
+        '<strong>まずは、手元で競技を。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。クラウド開催の対応範囲と費用は <a href="/docs/manual/organizer/">運営ガイド</a>で確認できます。',
       "hero.quest_meta": "最初の 1 問 · 登録不要 · 約 3 分",
       "hero.quest_badge": "チュートリアル",
       "hero.quest_diff": "難易度: 入門",
       "hero.quest_title": "TenkaCloud とは? を、触って知る。",
       "hero.quest_desc":
-        "説明を読むのではなく、1 問解く。プロダクトの仕組みもモードの違いも問題の中で分かり、クリアすると次の問題 <code>deploy-tenkacloud-lite</code> が開く。",
+        "ブラウザだけで触れる旧版の紹介デモです。実際の大会とは認証・得点・操作が異なります。現在の開催手順はドキュメントから確認してください。",
       "hero.quest_cta": "この問題で始める",
       "hero.cta_video": "▶ 30 秒でわかる",
       "hero.host_prefix": "主催者の方へ:",
-      "hero.cta_host": "自分のイベントを開く",
+      "hero.cta_host": "開催ガイド",
       "hero.cta_quote": "Hosted Event の見積もり",
       "hero.trust": "合同会社 BULL 運営 · Apache 2.0",
       "app.lang": "◉ 日本語 ▼",
@@ -192,17 +191,17 @@
       "product.sidebar.2": "イベント",
       "product.sidebar.3": "ドキュメント",
 
-      "modes.eyebrow": "2 つのモード",
+      "modes.eyebrow": "2 つの競技形式",
       "modes.h2": "対戦か、演習か。両方か。",
       "modes.lead":
-        "リアルタイムの Battle と、じっくり解く Challenge。1 つのイベントに混ぜて使える。",
+        "共有状態で競う Battle と、問題を解く Challenge。下の画面は旧版の表示例です。現行の対応問題は運営ガイドで確認してください。",
       "modes.battle.kicker": "Battle",
       "modes.battle.p":
-        "稼働率で競う、リアルタイム対戦。毎分のヘルスチェックを生き残ったチームが、勝つ。",
+        "Cryptography Battle はチーム共通の試合状態を使い、行動に応じて得点します。AWS endpoint の稼働率型 Battle はクラウド復旧の残件です。",
       "modes.battle.live": "ROUND 03 · LIVE",
       "modes.challenge.kicker": "Challenge",
       "modes.challenge.p":
-        "問題を解き、フラグを提出する。AWS の一つひとつのサービスを、ひとつずつ理解していく。",
+        "問題を解き、指定された回答やチェックポイントを提出します。ローカルの Compose 問題もチーム競技に使えます。",
       "modes.challenge.input": "Hello from tc-iam-…",
       "preview.score_events.title": "Score events",
       "preview.score_events.desc":
@@ -226,11 +225,11 @@
       "preview.quests.unsolved_status": "未解答",
       "preview.quests.cleared": "⌄ 解決済み (0)",
       "preview.sso.desc":
-        "AWS Console にワンクリックで federate ログイン。 参加者個人の AWS アカウントは不要 — 主催者が用意した環境へ、 ポータルから安全にアクセスできます。",
+        "旧版の AWS Console 接続画面の例です。現行クラウドでは hello-world 向けの限定 CLI 接続を提供します。",
       "preview.sso.howto": "使い方",
       "preview.sso.body":
-        "下のボタンを押すと新しいタブで AWS Console (CloudFormation スタック画面) が自動でログイン状態で開きます。session の TTL は 1 時間です。",
-      "preview.sso.button": "AWS Console を開く",
+        "現行 CLI の資格情報は最大 15 分です。画面に実際の期限を表示します。Console 接続は対応条件の確認が必要です。",
+      "preview.sso.button": "旧版: AWS Console",
 
       "aud.eyebrow": "誰のための",
       "aud.h2": "クラウド実戦力を、組織で育てる。",
@@ -244,27 +243,27 @@
       "aud.b.role": "Platform / SRE",
       "aud.b.h": "演習設計を、 1 画面で。",
       "aud.b.p":
-        "チームごとに隔離された AWS 環境を自動で配り、 採点 / 進捗 / Console アクセス を集約。 1 週間かかっていた準備が半日に短縮。 facilitator の負荷も下げる。",
+        "イベント、チーム、問題、得点を共通の画面で管理します。現行クラウドの hello-world は限定した CLI 接続を使います。Console 接続や未対応の問題は検証状況をご確認ください。",
       "aud.b.more": "運営ガイド",
       "aud.c.role": "エンジニア / 個人参加",
       "aud.c.h": "実戦で、腕を上げる。",
       "aud.c.p":
-        "本物の AWS で問題を解き、 ランクを上げる。 OSS なので、 勉強会 / 学校 / コミュニティが 自前 AWS 環境で無料開催することも可能。",
+        "問題を解いて学ぶ OSS の競技基盤です。勉強会・学校・コミュニティでローカル開催でき、AWS 問題はクラウド開催で扱います。OSS ライセンスは無料ですが、クラウド資源の利用料は別です。",
       "aud.c.more": "問題を作る",
 
       "onboard.eyebrow": "オンボーディング",
-      "onboard.h2": "AWS との接続は、3 ステップ。",
+      "onboard.h2": "クラウドの接続と競技運営。",
       "onboard.lead":
-        "「自分のアカウントに何をされるか」をなくす設計。最小権限の AssumeRole 一本だけで、すべてが動く。",
-      "onboard.s1.h": "テンプレートを、1 度だけ。",
+        "主催者基盤と競技者アカウントの権限を確認してから進めます。現行 CLI と、固定した旧版を使う pipeline は別の配置経路です。",
+      "onboard.s1.h": "主催者の基盤を準備。",
       "onboard.s1.p":
-        "CloudFormation を自分のアカウントに 1 回デプロイ。それで IAM Role が用意される。",
+        "AWS アカウント・リージョン・必要な権限を確認し、運営ガイドに沿って make deploy を実行します。",
       "onboard.s2.h": "ExternalId で、固く守る。",
       "onboard.s2.p":
-        "TenkaCloud は固有の ExternalId 付きでしか、その Role を引き受けられない。Role ARN だけでは入れない。",
+        "AWS 問題を使う場合は競技者側の bootstrap を用意し、登録した Role と ExternalId を検証します。",
       "onboard.s3.h": "ポータルから、競技へ。",
       "onboard.s3.p":
-        "ログインすれば、問題環境が自動で立ち上がる。エンドポイントと点数は、その瞬間から見える。",
+        "大会とチームを作成し、対応する問題を準備して開始します。ローカルの Docker 問題は、参加者が必要なときに起動します。",
       "onboard.s3.line2": "問題が割り当てられました",
 
       "trust.eyebrow": "セキュリティ",
@@ -272,36 +271,52 @@
       "trust.bullets": [
         [
           "クロスアカウント AssumeRole + ExternalId。",
-          "競技者アカウントへの操作は、すべて固有 ExternalId 付き。Role ARN を知っているだけでは、何もできない。",
+          "登録した Role と ExternalId を検証し、競技者アカウントへの操作を行います。",
         ],
         [
-          "撤収は、いつでも自分の手で。",
-          "ポータルから 1 クリックでスタックごと削除。リソースの取り残しも、想定外の請求もない。",
+          "所有を確認して撤収。",
+          "撤収結果を確認してください。大会データ、保持ストレージ、競技者側 bootstrap などは残るため、AWS の請求確認も必要です。",
         ],
         [
           "コードは全部、GitHub にある。",
-          "Lambda、Step Functions、IaC。何が動いているか、自分の目で読める。Apache License 2.0。",
+          "Lambda、Step Functions、IaC。何が動くかを確認できます。Apache License 2.0。",
         ],
         [
-          "アイドル中は、お金がかからない。",
-          "Lambda / DynamoDB / API Gateway すべて従量課金。 イベントを開催しない期間は、 実質ゼロで維持できる。",
+          "利用量と保持資源を確認。",
+          "常駐サーバーを必要としない構成ですが、API・DB の利用や保持ストレージの料金がゼロになる保証はありません。",
         ],
       ],
 
       stats: [
-        { n: "≈0", u: "$/h", l: "アイドル時の運用コストはほぼゼロを目指した設計。" },
-        { n: "100", u: "%", l: "OSS / Apache 2.0。すべて読める。" },
-        { n: "2", u: "files", l: "metadata.json + template.yaml で 1 問追加。" },
-        { n: "1", u: "click", l: "競技者は AWS Console に federation ログイン。" },
+        {
+          n: "0",
+          u: "円",
+          l: "OSS ライセンス料。クラウド利用料は別です。",
+        },
+        {
+          n: "100",
+          u: "%",
+          l: "OSS / Apache 2.0。すべて読める。",
+        },
+        {
+          n: "2",
+          u: "files",
+          l: "AWS 問題の基本定義: metadata.json + template.yaml。",
+        },
+        {
+          n: "2",
+          u: "ways",
+          l: "ローカル開催 / クラウド開催。",
+        },
       ],
 
       "extend.eyebrow": "問題は、増やせる",
       "extend.h2": "足りない問題は、自分で作ればいい。",
       "extend.lead":
-        '問題カタログは <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> リポジトリで完全に開かれていて、 metadata.json + template.yaml の 2 ファイルを書けば 1 問追加できます。 Claude Code 等のコーディングエージェント向けに 問題作成 skill (<code>new-problem</code>) も同梱されているので、 「こういう問題を作りたい」 とアイデアを話すだけで、 初めてでも 1 問が形になります。 社内限定やイベント専用で公開したくない問題は、 <a href="https://github.com/susumutomita/TenkaCloud#自分の問題を追加する" target="_blank" rel="noopener noreferrer">Problem Pack</a> を使えばカタログに公開せず、自分のテナントだけに追加できます。',
+        '問題の正本は <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> です。形式に応じた定義・実行環境・採点方法を用意し、作問ガイドで検証します。Problem Pack の検証・インストール機能は保持していますが、現在の大会カタログへの activation と drill の統合は未完成です。',
       "extend.cta1": "問題カタログを見る",
       "extend.cta2": "new-problem skill",
-      "extend.cta3": "非公開のまま追加する (Problem Pack)",
+      "extend.cta3": "Problem Pack の対応状況",
       "extend.agent_title": "AI エージェントで始める",
       "extend.agent_lead":
         'Claude Code や Codex に下のプロンプトを貼り付けると、エージェントが TenkaCloud の説明から「遊ぶ / 立てる」の案内までやってくれます。中身は LLM 向けブリーフィング <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a> です。',
@@ -309,8 +324,8 @@
       "extend.agent_video": "▶ YouTube で見る",
       "extend.agent_video_href": "https://www.youtube.com/watch?v=nLsSJ3npdfw",
       "extend.agent_video_embed_src": "https://www.youtube.com/embed/nLsSJ3npdfw",
-      "extend.agent_video_title": "AI エージェントで TenkaCloud を Mac にワンショット起動",
-      "extend.agent_tutorial": "チュートリアルで確認する →",
+      "extend.agent_video_title": "以前のローカル起動手順の動画（現行手順はガイド参照）",
+      "extend.agent_tutorial": "旧版の紹介デモを見る →",
 
       "book.eyebrow": "本で読む",
       "book.h2": "作り方を、一冊にまとめてあります。",
@@ -340,7 +355,7 @@
       "pricing.eyebrow": "料金",
       "pricing.h2": "単発イベントから、 年間プログラムへ。",
       "pricing.p":
-        "プラットフォーム本体は Apache 2.0 の OSS なので、 <strong>自前 AWS アカウントに deploy して開催すれば無料</strong>。 構築や当日運営を任せたい / 継続開催したい方向けに、 規模に合わせた有料プランをご用意しています。",
+        "プラットフォーム本体の <strong>OSS ライセンス料は無料</strong>です。AWS の利用と保持ストレージには別途料金が発生する場合があります。構築や当日運営を任せたい方向けのサービス料金は以下のとおりです。",
       "pricing.starter.tier": "Starter",
       "pricing.starter.price": "50万円",
       "pricing.starter.unit": "/ 回",
@@ -442,19 +457,19 @@
       "hero.h1a": "The cloud engineer's ",
       "hero.h1b": "Tenka-Ichi.",
       "hero.sub":
-        'An OSS competition platform on real AWS. Take an app that "only works locally" and make it production-grade — <strong>auth, exposure, audit, and availability</strong> are auto-scored every minute, and the leaderboard moves in real time. Organizers run events, scoring, and a reusable problem catalog from one console.',
+        "An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. The current version supports local Compose exercises and cloud hello-world / Cryptography Battle.",
       "hero.vibe":
-        "<strong>Built your app with AI? Before you ship it —</strong> free, no AWS account, starts in your browser. Real AWS is only the finale.",
+        '<strong>Start with a local competition.</strong> Local hosting uses SQLite and needs no AWS account. Check the <a href="/docs/manual/organizer/index.en.html">organizer guide</a> for cloud capabilities and costs.',
       "hero.quest_meta": "First quest · No signup · ~3 min",
       "hero.quest_badge": "Tutorial",
       "hero.quest_diff": "Difficulty: Intro",
       "hero.quest_title": "Learn what TenkaCloud is — by playing it.",
       "hero.quest_desc":
-        "Don't read the pitch — solve one quest. You'll learn the product and its modes inside the problem; clearing it unlocks <code>deploy-tenkacloud-lite</code>.",
+        "An introductory browser demo of the earlier interface. Authentication, scores and operations differ from a real event. Use the documentation for current hosting instructions.",
       "hero.quest_cta": "Start with this quest",
       "hero.cta_video": "▶ Watch the 30-second tour",
       "hero.host_prefix": "Hosting an event?",
-      "hero.cta_host": "Host your own event",
+      "hero.cta_host": "Hosting guide",
       "hero.cta_quote": "Get a Hosted Event quote",
       "hero.trust": "Operated by BULL LLC · Apache 2.0",
       "app.lang": "◉ English ▼",
@@ -491,16 +506,17 @@
       "product.sidebar.2": "Events",
       "product.sidebar.3": "Docs",
 
-      "modes.eyebrow": "Two modes",
+      "modes.eyebrow": "Two competition formats",
       "modes.h2": "Live battles. Solo challenges. Or both.",
-      "modes.lead": "Real-time Battles and patient Challenges, in a single event if you want.",
+      "modes.lead":
+        "Battles share a live match; Challenges score problem-solving. The screens below show the earlier interface. Check the organizer guide for currently supported problems.",
       "modes.battle.kicker": "Battle",
       "modes.battle.p":
-        "Uptime, in real time. A health check probes every team every minute — the last one standing wins.",
+        "Cryptography Battle keeps shared match state and scores player actions. AWS endpoint-uptime Battles remain part of the cloud restoration work.",
       "modes.battle.live": "ROUND 03 · LIVE",
       "modes.challenge.kicker": "Challenge",
       "modes.challenge.p":
-        "Solve the problem, submit the flag, earn the points. Learn one AWS service at a time, in depth.",
+        "Solve a problem and submit its specified answer or checkpoints. Local Compose exercises can also be used in team competitions.",
       "modes.challenge.input": "Hello from tc-iam-…",
       "preview.score_events.title": "Score events",
       "preview.score_events.desc":
@@ -524,11 +540,11 @@
       "preview.quests.unsolved_status": "Unanswered",
       "preview.quests.cleared": "⌄ Cleared (0)",
       "preview.sso.desc":
-        "One-click federated login to AWS Console. No personal AWS account required — participants access the environment the host has prepared, safely from the portal.",
+        "Example of the earlier AWS Console interface. Current cloud hosting provides scoped CLI access for hello-world.",
       "preview.sso.howto": "How to use",
       "preview.sso.body":
-        "Press a button below to open AWS Console, already signed in, in a new tab. The session TTL is one hour.",
-      "preview.sso.button": "Open AWS Console",
+        "Current CLI credentials last at most 15 minutes; the actual expiry is shown in the portal. Console access remains subject to the implementation requirements.",
+      "preview.sso.button": "Earlier UI: AWS Console",
 
       "aud.eyebrow": "Who it's for",
       "aud.h2": "Build cloud capability across the org.",
@@ -542,27 +558,27 @@
       "aud.b.role": "Platform / SRE",
       "aud.b.h": "Design drills from one screen.",
       "aud.b.p":
-        "Each team gets an isolated AWS environment, automatically provisioned. Scoring, progress, and Console access are aggregated. A week of setup collapses to an afternoon, freeing up facilitators.",
+        "Manage events, teams, problems and scores in shared consoles. The current cloud hello-world exercise uses scoped CLI access. Check implementation status for Console access and other exercises.",
       "aud.b.more": "Operator guide",
       "aud.c.role": "Engineers / individual learners",
       "aud.c.h": "Sharpen on the real thing.",
       "aud.c.p":
-        "Solve problems on live AWS infrastructure and climb the rank. The platform is OSS, so meetups, schools, and communities can also self-host on their own AWS account for free.",
+        "An open-source platform for learning through competitions. Communities and schools can host locally; AWS exercises use cloud hosting. The OSS license is free; cloud resources are billed separately.",
       "aud.c.more": "Author a problem",
 
       "onboard.eyebrow": "Onboarding",
-      "onboard.h2": "Connect AWS in three steps.",
+      "onboard.h2": "Connect and run a cloud competition.",
       "onboard.lead":
-        'We designed away the "what\'s it going to do in my account?" question. One least-privilege AssumeRole — nothing more, nothing less.',
-      "onboard.s1.h": "Deploy the bootstrap, once.",
+        "Review platform and competitor-account permissions before starting. The current CLI and the pipeline pinned to an earlier release are separate deployment paths.",
+      "onboard.s1.h": "Prepare the platform.",
       "onboard.s1.p":
-        "One CloudFormation template, deployed once into your account. An IAM Role is provisioned for us.",
+        "Check the AWS account, region and required permissions, then follow the organizer guide for make deploy.",
       "onboard.s2.h": "Locked with ExternalId.",
       "onboard.s2.p":
-        "TenkaCloud can only AssumeRole with a unique ExternalId. A leaked Role ARN gets you nowhere.",
+        "For AWS exercises, prepare the competitor bootstrap and verify its registered role and ExternalId.",
       "onboard.s3.h": "Compete from the portal.",
       "onboard.s3.p":
-        "Log in. Your problem stack deploys itself. Endpoints and scores are live the moment you land.",
+        "Create the event and teams, prepare supported problems and start the competition. Participants start local Docker exercises when needed.",
       "onboard.s3.line2": "Problem assigned",
 
       "trust.eyebrow": "Security",
@@ -570,37 +586,53 @@
       "trust.bullets": [
         [
           "Cross-account AssumeRole + ExternalId.",
-          "Every call into a player account carries a unique ExternalId. Knowing the Role ARN gets an attacker nothing.",
+          "Operations use a registered role and verified ExternalId in the competitor account.",
         ],
         [
-          "Tear it down whenever, yourself.",
-          "One click in the portal removes the stack. No orphans, no surprise charges.",
+          "Verify ownership and cleanup.",
+          "Check teardown results. Event data, retained storage and competitor bootstrap resources remain; review AWS billing as well.",
         ],
         [
           "The code is on GitHub.",
-          "Lambdas, Step Functions, the IaC — read what runs, line by line. Apache License 2.0.",
+          "Inspect the Lambda functions, Step Functions and infrastructure code. Apache License 2.0.",
         ],
         [
-          "Near-zero idle cost.",
-          "Lambda / DynamoDB / API Gateway are all pay-per-use. Between events, the platform sits at near-zero spend (subject to AWS minimum service charges).",
+          "Review usage and retained resources.",
+          "The platform needs no always-running server, but API/database usage and retained storage are not guaranteed to cost zero.",
         ],
       ],
 
       stats: [
-        { n: "≈0", u: "$/h", l: "Designed for near-zero idle cost." },
-        { n: "100", u: "%", l: "Open source. Apache 2.0. End to end." },
-        { n: "2", u: "files", l: "metadata.json + template.yaml to ship a problem." },
-        { n: "1", u: "click", l: "Participants federate into the AWS Console." },
+        {
+          n: "0",
+          u: "$",
+          l: "OSS license fee. Cloud usage is billed separately.",
+        },
+        {
+          n: "100",
+          u: "%",
+          l: "Open source. Apache 2.0. End to end.",
+        },
+        {
+          n: "2",
+          u: "files",
+          l: "Basic AWS problem definition: metadata.json + template.yaml.",
+        },
+        {
+          n: "2",
+          u: "ways",
+          l: "Local hosting / cloud hosting.",
+        },
       ],
 
       "extend.eyebrow": "Catalog grows with you",
       "extend.h2": "Missing a problem? Author your own.",
       "extend.lead":
-        'The problem catalog lives in the open <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> repo — write two files (metadata.json + template.yaml) and you have a new problem. A <code>new-problem</code> skill is shipped for Claude Code and other coding agents, so even first-timers can ship a problem just by describing the idea. For internal-only or one-off event problems you never want published, a <a href="https://github.com/susumutomita/TenkaCloud#add-your-own-problems" target="_blank" rel="noopener noreferrer">Problem Pack</a> installs and activates for your own tenant without ever going through the catalog.',
+        'Canonical problem content lives in <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a>. Follow the authoring guide to define and verify the runtime and scoring for each format. Problem Pack validation and installation remain available; activation into the current event catalog and drill integration are incomplete.',
       "extend.cta1": "Browse the catalog",
       "extend.cta2": "new-problem skill",
-      "extend.cta3": "Add it privately (Problem Pack)",
-      "extend.cta3Href": "https://github.com/susumutomita/TenkaCloud#add-your-own-problems",
+      "extend.cta3": "Problem Pack support status",
+      "extend.cta3Href": "./docs/manual/problem-author/index.en.html",
       "extend.agent_title": "Start with an AI agent",
       "extend.agent_lead":
         'Paste the prompt below into Claude Code or Codex and the agent will explain TenkaCloud and guide you through playing or hosting. It reads the LLM briefing <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a>.',
@@ -608,8 +640,9 @@
       "extend.agent_video": "▶ Watch on YouTube",
       "extend.agent_video_href": "https://www.youtube.com/watch?v=GDu9FhWrQns",
       "extend.agent_video_embed_src": "https://www.youtube.com/embed/GDu9FhWrQns",
-      "extend.agent_video_title": "Launch TenkaCloud on a Mac with one AI prompt",
-      "extend.agent_tutorial": "Check it in the tutorial →",
+      "extend.agent_video_title":
+        "Earlier local startup walkthrough; use the guide for current steps",
+      "extend.agent_tutorial": "View the earlier introductory demo →",
 
       "book.eyebrow": "Read the book",
       "book.h2": "The whole method, in one book.",
@@ -639,7 +672,7 @@
       "pricing.eyebrow": "Pricing",
       "pricing.h2": "Start small. Move to a yearly program.",
       "pricing.p":
-        "The platform itself is Apache 2.0 OSS, so <strong>self-hosting on your own AWS account is free</strong>. Pay only when you want setup, day-of operations, or a multi-event program run for you.",
+        "The platform’s <strong>OSS license is free</strong>. AWS usage and retained storage can incur separate charges. Service fees for setup and event operations are listed below.",
       "pricing.starter.tier": "Starter",
       "pricing.starter.price": "¥500K",
       "pricing.starter.unit": "/ event",

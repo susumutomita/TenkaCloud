@@ -222,10 +222,10 @@ describe("landing hero quest card (Issue #2711)", () => {
     expect(hero).not.toContain("Codespaces");
   });
 
-  it("should demote the organizer links to a text row with data-cta and hrefs preserved", () => {
+  it("routes the organizer CTA to the current hosting guide while preserving the pricing CTA", () => {
     const hero = heroSection(index);
     expect(hero).toContain('data-cta="deploy-aws"');
-    expect(hero).toContain('href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws"');
+    expect(hero).toContain('href="./docs/manual/organizer/"');
     expect(hero).toContain('data-cta="get-quote"');
     expect(hero).toContain('href="#pricing"');
   });

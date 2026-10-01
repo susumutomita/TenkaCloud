@@ -1,16 +1,16 @@
 # TenkaCloud
 
-> Open-source cloud competitions and practice. Two starting paths: local Docker drills without AWS, or an AWS Lite deployment for an organizer's events. Problem content is maintained in a separate catalog.
+> Open-source cloud competitions and practice. Local hosting uses SQLite and optional Docker; cloud hosting uses Lambda and DynamoDB. Problem content is maintained in a separate catalog.
 
-> 日本語: ローカルで問題を試す、または AWS にデプロイしてイベントを開く。DB 費用を抑えたい場合は Turso を選べます。AWS 全体が無料になるという意味ではありません。
+> 日本語: ローカルで問題を試す、または AWS にデプロイしてイベントを開く。ローカルは SQLite、クラウドは Lambda/DynamoDB です。AWS 全体が無料になるという意味ではありません。
 
 [公式サイト](https://tenkacloud.com/?lang=ja) · [English site](https://tenkacloud.com/index.en.html)
 
 ## Choose by the user's goal
 
-- [Local practice](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md): `make local`, Docker requirements, starting a problem, and stopping with progress deletion.
-- [Host on AWS](https://tenkacloud.com/docs/manual/organizer/index.en.html): Lite setup, event and team registration, scoring, and teardown.
-- [Reduce database cost with Turso](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md): remove Lite's DynamoDB tables/indexes; setup, migration boundaries, remaining costs, and verification status.
+- [Local practice](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md): `make local` / `make down`, Docker requirements, and state-preserving stop/resume.
+- [Host on AWS](https://tenkacloud.com/docs/manual/organizer/index.en.html): reviewed setup, current problem coverage, event/team operations, scoring and teardown.
+- [Cloud status and costs](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/README.md): implemented capabilities, unfinished runners, retained resources, load measurements and cost limits.
 - [Join an existing event](https://tenkacloud.com/docs/manual/participant/index.en.html): use the organizer's Portal URL and team key; answer in the format requested by the problem.
 - [Change platform code](https://tenkacloud.com/docs/manual/developer/index.en.html): code ownership, setup, and validation.
 - [Author a problem](https://tenkacloud.com/docs/manual/problem-author/index.en.html): catalog and private Problem Pack workflows.

@@ -28,7 +28,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TenkaCloud | Open-source AWS cloud competition platform</title>
-<meta name="description" content="TenkaCloud is an open-source platform for hands-on AWS cloud drills and competitions. Run isolated team environments, automated scoring, live leaderboards, and reusable Battle and Challenge catalogs." />
+<meta name="description" content="TenkaCloud is an open-source platform for local and AWS cloud competitions. Manage teams, problems and scores in shared consoles; check the guide for supported runtimes and verification status." />
 <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
 <meta name="author" content="合同会社BULL (BULL LLC)" />
 <meta name="application-name" content="TenkaCloud" />
@@ -37,7 +37,7 @@
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/index.en.html" />
 <link rel="alternate" hreflang="x-default" href="https://tenkacloud.com/" />
 <meta property="og:title" content="TenkaCloud | Open-source AWS cloud competition platform" />
-<meta property="og:description" content="Run hands-on AWS Battles and self-paced Challenges with isolated team environments, automated scoring, live leaderboards, and reusable problem catalogs." />
+<meta property="og:description" content="Host local and AWS cloud competitions with shared consoles for teams, problems and scores. Check current runtime support, costs and verification status." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://tenkacloud.com/index.en.html" />
 <meta property="og:site_name" content="TenkaCloud" />
@@ -49,7 +49,7 @@
 <meta property="og:image:alt" content="TenkaCloud — Open-source AWS cloud competition platform" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="TenkaCloud | Open-source AWS cloud competition platform" />
-<meta name="twitter:description" content="Run hands-on AWS Battles and self-paced Challenges with isolated team environments, automated scoring, live leaderboards, and reusable problem catalogs." />
+<meta name="twitter:description" content="Host local and AWS cloud competitions with shared consoles for teams, problems and scores. Check current runtime support, costs and verification status." />
 <meta name="twitter:image" content="https://tenkacloud.com/assets/og-image.png" />
 <meta name="twitter:image:alt" content="TenkaCloud — Open-source AWS cloud competition platform" />
 <meta name="theme-color" content="#1d1d1f" />
@@ -89,7 +89,7 @@
       "@id": "https://tenkacloud.com/#software",
       "name": "TenkaCloud",
       "url": "https://tenkacloud.com/index.en.html",
-      "description": "An Apache 2.0 platform for running hands-on AWS cloud drills as real-time Battles and self-paced Challenges.",
+      "description": "An Apache 2.0 competition platform for local and AWS cloud hosting.",
       "applicationCategory": "EducationalApplication",
       "applicationSubCategory": "Cloud training and competition platform",
       "operatingSystem": "Web",
@@ -106,7 +106,7 @@
       "@id": "https://tenkacloud.com/index.en.html#webpage",
       "url": "https://tenkacloud.com/index.en.html",
       "name": "TenkaCloud | Open-source AWS cloud competition platform",
-      "description": "TenkaCloud is an open-source platform for hands-on AWS cloud drills and competitions. Run isolated team environments, automated scoring, live leaderboards, and reusable Battle and Challenge catalogs.",
+      "description": "TenkaCloud is an open-source platform for local and AWS cloud competitions. Manage teams, problems and scores in shared consoles; check the guide for supported runtimes and verification status.",
       "inLanguage": "en",
       "isPartOf": {
         "@id": "https://tenkacloud.com/#website"
@@ -164,8 +164,8 @@
       <h1>
         <span data-i18n="hero.h1a">The cloud engineer's </span><em data-i18n="hero.h1b">Tenka-Ichi.</em>
       </h1>
-      <p class="sub" data-i18n="hero.sub">An OSS competition platform on real AWS. Take an app that "only works locally" and make it production-grade — <strong>auth, exposure, audit, and availability</strong> are auto-scored every minute, and the leaderboard moves in real time. Organizers run events, scoring, and a reusable problem catalog from one console.</p>
-      <p class="hero-vibe" data-i18n="hero.vibe"><strong>Built your app with AI? Before you ship it —</strong> free, no AWS account, starts in your browser. Real AWS is only the finale.</p>
+      <p class="sub" data-i18n="hero.sub">An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. The current version supports local Compose exercises and cloud hello-world / Cryptography Battle.</p>
+      <p class="hero-vibe" data-i18n="hero.vibe"><strong>Start with a local competition.</strong> Local hosting uses SQLite and needs no AWS account. Check the <a href="/docs/manual/organizer/index.en.html">organizer guide</a> for cloud capabilities and costs.</p>
       <!-- #2711 follow-up: /portal-demo/start の deep link は静的ホスティングの rewrite が
            効かない環境で 404 fallback に崩れるため、 実在する index.html に着地して
            SPA 側 (`goto=start`) で /start へ遷移する。 -->
@@ -177,14 +177,14 @@
           <span class="hero-quest-badge" data-i18n="hero.quest_diff">Difficulty: Intro</span>
         </span>
         <span class="hero-quest-title" data-i18n="hero.quest_title">Learn what TenkaCloud is — by playing it.</span>
-        <span class="hero-quest-desc" data-i18n="hero.quest_desc">Don't read the pitch — solve one quest. You'll learn the product and its modes inside the problem; clearing it unlocks <code>deploy-tenkacloud-lite</code>.</span>
+        <span class="hero-quest-desc" data-i18n="hero.quest_desc">An introductory browser demo of the earlier interface. Authentication, scores and operations differ from a real event. Use the documentation for current hosting instructions.</span>
         <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">Start with this quest</span> →</span>
       </a>
       <p class="hero-secondary">
         <a href="/videos/lp/tenkacloud-30s.mp4" target="_blank" rel="noopener noreferrer" data-cta="watch-30s"><span data-i18n="hero.cta_video">▶ Watch the 30-second tour</span></a>
         ·
         <span data-i18n="hero.host_prefix">Hosting an event?</span>
-        <a href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws" target="_blank" rel="noopener noreferrer" data-cta="deploy-aws"><span data-i18n="hero.cta_host">Host your own event</span> →</a>
+        <a href="./docs/manual/organizer/" target="_blank" rel="noopener noreferrer" data-cta="deploy-aws"><span data-i18n="hero.cta_host">Hosting guide</span> →</a>
         ·
         <a href="#pricing" data-cta="get-quote"><span data-i18n="hero.cta_quote">Get a Hosted Event quote</span> →</a>
       </p>
@@ -266,13 +266,13 @@
 
 <section class="alt" id="modes">
   <div class="wrap">
-    <div class="eyebrow" data-i18n="modes.eyebrow">Two modes</div>
+    <div class="eyebrow" data-i18n="modes.eyebrow">Two competition formats</div>
     <h2 data-i18n="modes.h2">Live battles. Solo challenges. Or both.</h2>
-    <p class="lead" data-i18n="modes.lead">Real-time Battles and patient Challenges, in a single event if you want.</p>
+    <p class="lead" data-i18n="modes.lead">Battles share a live match; Challenges score problem-solving. The screens below show the earlier interface. Check the organizer guide for currently supported problems.</p>
     <div class="twoup">
       <div class="tile">
         <h3 class="kicker" data-i18n="modes.battle.kicker">Battle</h3>
-        <p data-i18n="modes.battle.p">Uptime, in real time. A health check probes every team every minute — the last one standing wins.</p>
+        <p data-i18n="modes.battle.p">Cryptography Battle keeps shared match state and scores player actions. AWS endpoint-uptime Battles remain part of the cloud restoration work.</p>
         <div class="demo">
           <div class="portal-preview score-events-preview">
             <div class="portal-page-title" data-i18n="preview.score_events.title">Score events</div>
@@ -324,7 +324,7 @@
       </div>
       <div class="tile">
         <h3 class="kicker" data-i18n="modes.challenge.kicker">Challenge</h3>
-        <p data-i18n="modes.challenge.p">Solve the problem, submit the flag, earn the points. Learn one AWS service at a time, in depth.</p>
+        <p data-i18n="modes.challenge.p">Solve a problem and submit its specified answer or checkpoints. Local Compose exercises can also be used in team competitions.</p>
         <div class="demo">
           <div class="portal-preview">
             <div class="portal-page-title" data-i18n="preview.quests.title">Problem list (Quests)</div>
@@ -381,13 +381,13 @@
     <div class="col">
       <div class="role" data-i18n="aud.b.role">Platform / SRE</div>
       <h3 data-i18n="aud.b.h">Design drills from one screen.</h3>
-      <p data-i18n="aud.b.p">Each team gets an isolated AWS environment, automatically provisioned. Scoring, progress, and Console access are aggregated. A week of setup collapses to an afternoon, freeing up facilitators.</p>
+      <p data-i18n="aud.b.p">Manage events, teams, problems and scores in shared consoles. The current cloud hello-world exercise uses scoped CLI access. Check implementation status for Console access and other exercises.</p>
       <a class="more" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.b.more">Operator guide</span> ›</a>
     </div>
     <div class="col">
       <div class="role" data-i18n="aud.c.role">Engineers / individual learners</div>
       <h3 data-i18n="aud.c.h">Sharpen on the real thing.</h3>
-      <p data-i18n="aud.c.p">Solve problems on live AWS infrastructure and climb the rank. The platform is OSS, so meetups, schools, and communities can also self-host on their own AWS account for free.</p>
+      <p data-i18n="aud.c.p">An open-source platform for learning through competitions. Communities and schools can host locally; AWS exercises use cloud hosting. The OSS license is free; cloud resources are billed separately.</p>
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.c.more">Author a problem</span> ›</a>
     </div>
   </div>
@@ -398,26 +398,26 @@
     <div class="onboard-layout">
       <div>
         <div class="eyebrow" data-i18n="onboard.eyebrow">Onboarding</div>
-        <h2 data-i18n="onboard.h2">Connect AWS in three steps.</h2>
-        <p class="lead" data-i18n="onboard.lead">We designed away the "what's it going to do in my account?" question. One least-privilege AssumeRole — nothing more, nothing less.</p>
+        <h2 data-i18n="onboard.h2">Connect and run a cloud competition.</h2>
+        <p class="lead" data-i18n="onboard.lead">Review platform and competitor-account permissions before starting. The current CLI and the pipeline pinned to an earlier release are separate deployment paths.</p>
       </div>
       <div class="steps">
         <div class="step">
           <div class="n">01</div>
-          <h4 data-i18n="onboard.s1.h">Deploy the bootstrap, once.</h4>
-          <p data-i18n="onboard.s1.p">One CloudFormation template, deployed once into your account. An IAM Role is provisioned for us.</p>
+          <h4 data-i18n="onboard.s1.h">Prepare the platform.</h4>
+          <p data-i18n="onboard.s1.p">Check the AWS account, region and required permissions, then follow the organizer guide for make deploy.</p>
           <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><path d="M21 43H17a10 10 0 0 1 0-20 15 15 0 0 1 28-5 12 12 0 0 1 2 24h-5" fill="none" stroke="#a855f7" stroke-width="3"/><path d="M32 48V29m0 0-8 8m8-8 8 8" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
         <div class="step">
           <div class="n">02</div>
           <h4 data-i18n="onboard.s2.h">Locked with ExternalId.</h4>
-          <p data-i18n="onboard.s2.p">TenkaCloud can only AssumeRole with a unique ExternalId. A leaked Role ARN gets you nowhere.</p>
+          <p data-i18n="onboard.s2.p">For AWS exercises, prepare the competitor bootstrap and verify its registered role and ExternalId.</p>
           <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><circle cx="32" cy="23" r="10" fill="none" stroke="#22c55e" stroke-width="4"/><path d="M15 53c3-11 10-17 17-17s14 6 17 17" fill="none" stroke="#07111f" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="23" r="16" fill="none" stroke="#a855f7" stroke-width="2" opacity=".45"/></svg></div>
         </div>
         <div class="step">
           <div class="n">03</div>
           <h4 data-i18n="onboard.s3.h">Compete from the portal.</h4>
-          <p data-i18n="onboard.s3.p">Log in. Your problem stack deploys itself. Endpoints and scores are live the moment you land.</p>
+          <p data-i18n="onboard.s3.p">Create the event and teams, prepare supported problems and start the competition. Participants start local Docker exercises when needed.</p>
           <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><rect x="12" y="14" width="40" height="31" rx="3" fill="none" stroke="#07111f" stroke-width="3"/><path d="M20 50h24" stroke="#07111f" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="30" r="8" fill="none" stroke="#2563eb" stroke-width="3"/></svg></div>
         </div>
       </div>
@@ -431,20 +431,20 @@
       <div class="copy">
         <div class="eyebrow" data-i18n="trust.eyebrow">Security</div>
         <h2 data-i18n="trust.h2">Your AWS account, still yours.</h2>
-        <ul id="trust-bullets"><li><span><b>Cross-account AssumeRole + ExternalId.</b> Every call into a player account carries a unique ExternalId. Knowing the Role ARN gets an attacker nothing.</span></li><li><span><b>Tear it down whenever, yourself.</b> One click in the portal removes the stack. No orphans, no surprise charges.</span></li><li><span><b>The code is on GitHub.</b> Lambdas, Step Functions, the IaC — read what runs, line by line. Apache License 2.0.</span></li><li><span><b>Near-zero idle cost.</b> Lambda / DynamoDB / API Gateway are all pay-per-use. Between events, the platform sits at near-zero spend (subject to AWS minimum service charges).</span></li></ul>
+        <ul id="trust-bullets"><li><span><b>Cross-account AssumeRole + ExternalId.</b> Operations use a registered role and verified ExternalId in the competitor account.</span></li><li><span><b>Verify ownership and cleanup.</b> Check teardown results. Event data, retained storage and competitor bootstrap resources remain; review AWS billing as well.</span></li><li><span><b>The code is on GitHub.</b> Inspect the Lambda functions, Step Functions and infrastructure code. Apache License 2.0.</span></li><li><span><b>Review usage and retained resources.</b> The platform needs no always-running server, but API/database usage and retained storage are not guaranteed to cost zero.</span></li></ul>
       </div>
       <div class="flow sso-preview">
         <div class="credential-title">SSO Credentials</div>
-        <div class="credential-sub" data-i18n="preview.sso.desc">One-click federated login to AWS Console. No personal AWS account required — participants access the environment the host has prepared, safely from the portal.</div>
+        <div class="credential-sub" data-i18n="preview.sso.desc">Example of the earlier AWS Console interface. Current cloud hosting provides scoped CLI access for hello-world.</div>
         <div class="sso-alert">
           <b data-i18n="preview.sso.howto">How to use</b>
-          <span data-i18n="preview.sso.body">Press a button below to open AWS Console, already signed in, in a new tab. The session TTL is one hour.</span>
+          <span data-i18n="preview.sso.body">Current CLI credentials last at most 15 minutes; the actual expiry is shown in the portal. Console access remains subject to the implementation requirements.</span>
         </div>
         <div class="credential-list">
           <div class="credential-row">
             <div class="credential-row-head">
               <code>microservice-migration-battle</code>
-              <button type="button"><span data-i18n="preview.sso.button">Open AWS Console</span> ↗</button>
+              <button type="button"><span data-i18n="preview.sso.button">Earlier UI: AWS Console</span> ↗</button>
             </div>
             <div class="credential-kv">
               <div><span>AWS Account</span><code>c7782015332</code></div>
@@ -454,7 +454,7 @@
           <div class="credential-row">
             <div class="credential-row-head">
               <code>hello-world</code>
-              <button type="button"><span data-i18n="preview.sso.button">Open AWS Console</span> ↗</button>
+              <button type="button"><span data-i18n="preview.sso.button">Earlier UI: AWS Console</span> ↗</button>
             </div>
             <div class="credential-kv">
               <div><span>AWS Account</span><code>677c9285832</code></div>
@@ -464,7 +464,7 @@
           <div class="credential-row">
             <div class="credential-row-head">
               <code>hello-world-battle</code>
-              <button type="button"><span data-i18n="preview.sso.button">Open AWS Console</span> ↗</button>
+              <button type="button"><span data-i18n="preview.sso.button">Earlier UI: AWS Console</span> ↗</button>
             </div>
             <div class="credential-kv">
               <div><span>AWS Account</span><code>677c9285832</code></div>
@@ -479,7 +479,7 @@
 
 <section class="alt">
   <div class="wrap">
-    <div class="stats" id="stats-grid"><div class="stat"><div class="n">≈0<span class="u">$/h</span></div><div class="l">Designed for near-zero idle cost.</div></div><div class="stat"><div class="n">100<span class="u">%</span></div><div class="l">Open source. Apache 2.0. End to end.</div></div><div class="stat"><div class="n">2<span class="u">files</span></div><div class="l">metadata.json + template.yaml to ship a problem.</div></div><div class="stat"><div class="n">1<span class="u">click</span></div><div class="l">Participants federate into the AWS Console.</div></div></div>
+    <div class="stats" id="stats-grid"><div class="stat"><div class="n">0<span class="u">$</span></div><div class="l">OSS license fee. Cloud usage is billed separately.</div></div><div class="stat"><div class="n">100<span class="u">%</span></div><div class="l">Open source. Apache 2.0. End to end.</div></div><div class="stat"><div class="n">2<span class="u">files</span></div><div class="l">Basic AWS problem definition: metadata.json + template.yaml.</div></div><div class="stat"><div class="n">2<span class="u">ways</span></div><div class="l">Local hosting / cloud hosting.</div></div></div>
   </div>
 </section>
 
@@ -487,11 +487,11 @@
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="extend.eyebrow">Catalog grows with you</div>
     <h2 data-i18n="extend.h2">Missing a problem? Author your own.</h2>
-    <p class="lead" data-i18n="extend.lead">The problem catalog lives in the open <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> repo — write two files (metadata.json + template.yaml) and you have a new problem. A <code>new-problem</code> skill is shipped for Claude Code and other coding agents, so even first-timers can ship a problem just by describing the idea. For internal-only or one-off event problems you never want published, a <a href="https://github.com/susumutomita/TenkaCloud#add-your-own-problems" target="_blank" rel="noopener noreferrer">Problem Pack</a> installs and activates for your own tenant without ever going through the catalog.</p>
+    <p class="lead" data-i18n="extend.lead">Canonical problem content lives in <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a>. Follow the authoring guide to define and verify the runtime and scoring for each format. Problem Pack validation and installation remain available; activation into the current event catalog and drill integration are incomplete.</p>
     <div class="extend-cta">
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta1">Browse the catalog</span> ›</a>
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/.claude/skills/new-problem/SKILL.md#new-problem--scaffold-a-tenkacloudchallenge-problem" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta2">new-problem skill</span> ›</a>
-      <a class="more" href="https://github.com/susumutomita/TenkaCloud#add-your-own-problems" target="_blank" rel="noopener noreferrer" data-i18n-href="extend.cta3Href"><span data-i18n="extend.cta3">Add it privately (Problem Pack)</span> ›</a>
+      <a class="more" href="./docs/manual/problem-author/index.en.html" target="_blank" rel="noopener noreferrer" data-i18n-href="extend.cta3Href"><span data-i18n="extend.cta3">Problem Pack support status</span> ›</a>
     </div>
     <!-- #2711 follow-up: AI エージェントへの貼り付けプロンプト。 プロンプト本文は LLM 向け
          なので言語切替しない (data-i18n を付けない)。 正本は /llms-full.txt。 -->
@@ -503,11 +503,11 @@
       <p class="agent-prompt-lead" data-i18n="extend.agent_lead">Paste the prompt below into Claude Code or Codex and the agent will explain TenkaCloud and guide you through playing or hosting. It reads the LLM briefing <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a>.</p>
       <pre class="agent-prompt-text" id="agent-prompt-text">Fetch https://tenkacloud.com/llms-full.txt and read it — it is the canonical AI-agent briefing for TenkaCloud. If you cannot fetch URLs, ask me to paste its contents instead. Then, in my language: (1) explain what TenkaCloud is in about five sentences, (2) ask whether I want to PLAY (no AWS account needed) or HOST my own event on AWS, and (3) guide me step by step through the matching quick start from the briefing, stating costs and teardown before anything touches a real AWS account.</pre>
       <div class="agent-prompt-video">
-        <iframe src="https://www.youtube.com/embed/GDu9FhWrQns" title="Launch TenkaCloud on a Mac with one AI prompt" data-i18n-src="extend.agent_video_embed_src" data-i18n-title="extend.agent_video_title" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+        <iframe src="https://www.youtube.com/embed/GDu9FhWrQns" title="Earlier local startup walkthrough; use the guide for current steps" data-i18n-src="extend.agent_video_embed_src" data-i18n-title="extend.agent_video_title" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
       </div>
       <div class="agent-prompt-actions">
         <a href="https://www.youtube.com/watch?v=GDu9FhWrQns" target="_blank" rel="noopener noreferrer" data-cta="watch-ai-local-mac" data-i18n-href="extend.agent_video_href"><span data-i18n="extend.agent_video">▶ Watch on YouTube</span></a>
-        <a href="/portal-demo/?demo=1&amp;goto=/problems/01HZX0M2A1AGENTMACTENKA0003" data-cta="try-ai-local-mac"><span data-i18n="extend.agent_tutorial">Check it in the tutorial →</span></a>
+        <a href="/portal-demo/?demo=1&amp;goto=/problems/01HZX0M2A1AGENTMACTENKA0003" data-cta="try-ai-local-mac"><span data-i18n="extend.agent_tutorial">View the earlier introductory demo →</span></a>
       </div>
     </div>
   </div>
@@ -563,7 +563,7 @@
     <div class="pricing-head">
       <div class="eyebrow" data-i18n="pricing.eyebrow">Pricing</div>
       <h2 data-i18n="pricing.h2">Start small. Move to a yearly program.</h2>
-      <p data-i18n="pricing.p">The platform itself is Apache 2.0 OSS, so <strong>self-hosting on your own AWS account is free</strong>. Pay only when you want setup, day-of operations, or a multi-event program run for you.</p>
+      <p data-i18n="pricing.p">The platform’s <strong>OSS license is free</strong>. AWS usage and retained storage can incur separate charges. Service fees for setup and event operations are listed below.</p>
     </div>
     <div class="pricing-grid">
       <div class="pricing-card">
@@ -731,7 +731,7 @@
 
 <script src="./ink-bg.js" defer></script>
 <script src="./contact-form.js?v=7301ba7ae8" defer></script>
-<script src="./app.js?v=e466c0f38c" defer></script>
+<script src="./app.js?v=f94e5e5605" defer></script>
 
 </body>
 </html>
