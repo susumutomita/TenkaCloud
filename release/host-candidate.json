@@ -3,13 +3,14 @@
   "status": "unpublished",
   "sources": {
     "platformCommit": null,
-    "catalogCommit": "363a7c9b83969e20d63b74fd0410a354da5e202b"
+    "catalogCommit": "e5be1062f8c7657b7fa9bed3fa6e7a2771343352"
   },
   "image": null,
   "limitations": [
-    "This is an unbuilt host-only candidate. No source release tag or registry image has been published.",
-    "The existing v1.11.0 launcher release and release/tenkacloud-release files are historical records, not a host release.",
-    "Standalone POST /problems/{id}/deploy compatibility is unresolved and requires an explicit review decision before merge.",
-    "Individual practice and terminal workflows are retired; see docs/host-retirement.md for missing host capabilities."
+    "This is an unbuilt integration candidate. No source release tag or registry image has been published.",
+    "The existing v1.11.0 launcher release and release/tenkacloud-release files are historical records, not this integration release.",
+    "Cloud Lambda/DynamoDB hosting and the cloud problem runner are incomplete; deploy and destroy fail without creating or deleting resources.",
+    "The 106 local Compose problems share the competition runtime. Representative real Docker/browser flows passed; full-catalog variants and network-address capacity still require validation.",
+    "Pack/drill and published-book alignment are still in progress."
   ]
 }
