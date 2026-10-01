@@ -41,7 +41,11 @@ export interface TenantGateFlagState {
  * 同じ行だけを見るため、 判定源を一致させないと「UI は編集可なのに保存が 409」の
  * ちぐはぐが起きる (Issue #2283)。
  */
-export function useTenantGateFlag(apiClient: ApiClient | null, t: Translate): TenantGateFlagState {
+export function useTenantGateFlag(
+  apiClient: ApiClient | null,
+  t: Translate,
+  localHost = false,
+): TenantGateFlagState {
   const [flags, setFlags] = useState<Readonly<Record<string, boolean>> | null>(null);
   const [flagsError, setFlagsError] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
@@ -69,6 +73,9 @@ export function useTenantGateFlag(apiClient: ApiClient | null, t: Translate): Te
     };
   }, [apiClient]);
 
+  const toggleForbiddenKey = localHost
+    ? "gate.host_error_toggle_forbidden"
+    : "gate.error_toggle_forbidden";
   const toggleFlag = async (next: boolean) => {
     // Toggle の disabled が同条件 (!apiClient || toggleInFlight) を mirror するため guard は不到達 (防御的)。
     /* v8 ignore next */
@@ -79,16 +86,22 @@ export function useTenantGateFlag(apiClient: ApiClient | null, t: Translate): Te
       // #2283: PUT /admin/feature-flags は full-replace。 mount 時 snapshot (state の flags) に
       // merge すると、 他 admin / 他 tab がその後に変えた flag を黙って巻き戻すため、
       // 直前に最新 flags を再取得してそちらへ merge する。
-      const current = await getTenantFeatureFlags(apiClient);
-      const updated = await putTenantFeatureFlags(apiClient, {
-        ...current,
-        [GATE_FLAG]: next,
-      });
+      const updated = localHost
+        ? (
+            await apiClient.put<{ flags: Record<string, boolean> }>("feature-flags", {
+              key: GATE_FLAG,
+              enabled: next,
+            })
+          ).flags
+        : await putTenantFeatureFlags(apiClient, {
+            ...(await getTenantFeatureFlags(apiClient)),
+            [GATE_FLAG]: next,
+          });
       setFlags(updated);
     } catch (err) {
       setToggleError(
         err instanceof ApiError && err.status === StatusCodes.FORBIDDEN
-          ? t("gate.error_toggle_forbidden")
+          ? t(toggleForbiddenKey)
           : toErrorMessage(err),
       );
     } finally {

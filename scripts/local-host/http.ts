@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { extname, resolve, sep } from "node:path";
 import { HostError } from "./model";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
+import { installTerminalTransport } from "./terminal-http";
 export const MAX_BODY = 64 * 1024;
 
 export function json(response: ServerResponse, status: number, body: unknown): void {
@@ -50,10 +51,11 @@ function pageNavigation(request: IncomingMessage): boolean {
   );
 }
 
-function validOrigin(request: IncomingMessage, origin: string): void {
+function validOrigin(request: IncomingMessage, origin: string, samlPost = false): void {
   const host = new URL(origin).host;
   if (request.headers.host !== host)
     throw new HostError(403, `Untrusted Host header. Expected ${host}.`);
+  if (samlPost) return;
   if (request.headers.origin && request.headers.origin !== origin)
     throw new HostError(403, "Cross-origin requests are not allowed.");
   if (request.headers["sec-fetch-site"] === "cross-site" && !pageNavigation(request))
@@ -76,6 +78,8 @@ export async function listen(server: Server, hostname: string, port: number): Pr
 }
 
 export async function closeServer(server: Server): Promise<void> {
+  // Bun closeAllConnections also stops an upgraded listener; do not close it twice.
+  if (!server.listening) return;
   server.closeIdleConnections();
   await new Promise<void>((accept, reject) =>
     server.close((error) => (error ? reject(error) : accept())),
@@ -188,9 +192,9 @@ function requestTarget(request: IncomingMessage, origin: string): URL {
   return url;
 }
 
-async function jsonBody(request: IncomingMessage): Promise<unknown> {
+async function jsonBody(request: IncomingMessage, limit = MAX_BODY): Promise<unknown> {
   if (!["POST", "PATCH", "PUT", "DELETE"].includes(request.method ?? "")) return {};
-  const raw = await readBody(request);
+  const raw = await readBody(request, limit);
   if (!raw) return {};
   if (!request.headers["content-type"]?.toLowerCase().startsWith("application/json"))
     throw new HostError(415, "Use application/json.");
@@ -217,6 +221,19 @@ function idempotencyKey(request: IncomingMessage): string | undefined {
  * Distinct origins: the admin listener has no participant routes, and binds loopback unless a
  * TLS-terminating proxy publishes it at an advertised origin.
  */
+function sendApiResponse(response: ServerResponse, result: ApiResponse): void {
+  if (result.contentType) {
+    response.writeHead(result.status, {
+      "content-type": result.contentType,
+      "cache-control": "no-store",
+      "content-disposition": 'attachment; filename="host-audit.csv"',
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+    });
+    response.end(result.body);
+  } else json(response, result.status, result.body);
+}
+
 export async function startHttpHost(options: {
   kind: "admin" | "participant";
   hostname: string;
@@ -243,25 +260,36 @@ export async function startHttpHost(options: {
   server.requestTimeout = 15_000;
   server.maxHeadersCount = 40;
   server.setTimeout(15_000, (socket) => socket.destroy());
+  const runtimeAwsRegion =
+    options.kind === "admin" ? options.service.accountConnection?.region : undefined;
+  function runtimeConfiguration() {
+    return {
+      mode: "local-host",
+      apiBaseUrl: `${origin}/api`,
+      participantPortalUrl: options.participantOrigin,
+      role: options.kind,
+      hasAws: options.service.engine.hasAws === true,
+      ...(runtimeAwsRegion ? { awsRegion: runtimeAwsRegion } : {}),
+    };
+  }
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     // Platform health checks reach the container directly, with its own Host header.
     if (options.advertised && request.method === "GET" && request.url === "/healthz") {
       json(response, 200, { status: "ok", mode: "local-host", role: options.kind });
       return;
     }
-    validOrigin(request, origin);
     const url = requestTarget(request, origin);
+    const samlPost =
+      options.kind === "admin" &&
+      request.method === "POST" &&
+      url.pathname === "/api/host/saml/acs";
+    validOrigin(request, origin, samlPost);
     if (url.pathname === "/healthz" && request.method === "GET") {
       json(response, 200, { status: "ok", mode: "local-host", role: options.kind });
       return;
     }
     if (url.pathname === "/runtime-config.json" && request.method === "GET") {
-      json(response, 200, {
-        mode: "local-host",
-        apiBaseUrl: `${origin}/api`,
-        participantPortalUrl: options.participantOrigin,
-        role: options.kind,
-      });
+      json(response, 200, runtimeConfiguration());
       return;
     }
     if (!url.pathname.startsWith("/api/")) {
@@ -284,8 +312,14 @@ export async function startHttpHost(options: {
       if (!request.headers["content-type"]?.startsWith("application/x-www-form-urlencoded"))
         throw new HostError(415, "Use form-encoded token revocation.");
       const token = new URLSearchParams(await readBody(request)).get("token") ?? "";
-      options.service.store.revokeSession(token);
-      json(response, 200, { revoked: true });
+      const result = await options.service.admin({
+        method: "POST",
+        path: "/host/logout",
+        query: new URLSearchParams(),
+        body: { refreshToken: token },
+        token: bearerToken(request),
+      });
+      json(response, result.status, result.body);
       return true;
     }
     if (path === "/host/logout" && request.method === "GET") {
@@ -307,6 +341,62 @@ export async function startHttpHost(options: {
       ? options.service.admin(apiRequest)
       : options.service.participant(apiRequest);
   }
+  async function handleSaml(
+    request: IncomingMessage,
+    response: ServerResponse,
+    path: string,
+  ): Promise<boolean> {
+    if (options.kind !== "admin") return false;
+    if (path === "/host/saml/metadata" && request.method === "GET") {
+      const metadata = options.service.saml.metadata();
+      response.writeHead(200, {
+        "content-type": "application/samlmetadata+xml; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      });
+      response.end(metadata);
+      return true;
+    }
+    if (path !== "/host/saml/acs" || request.method !== "POST") return false;
+    if (
+      request.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() !==
+      "application/x-www-form-urlencoded"
+    )
+      throw new HostError(415, "Use a form-encoded SAML response.");
+    const form = new URLSearchParams(await readBody(request, 320 * 1024));
+    if (
+      Array.from(form.keys()).length !== 2 ||
+      form.getAll("SAMLResponse").length !== 1 ||
+      form.getAll("RelayState").length !== 1
+    )
+      throw new HostError(400, "Provide one SAMLResponse and one RelayState.");
+    const ticket = await options.service.saml.consume(
+      form.get("SAMLResponse") ?? "",
+      form.get("RelayState") ?? "",
+    );
+    response.writeHead(303, {
+      location: `/login#samlTicket=${encodeURIComponent(ticket)}`,
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    });
+    response.end();
+    return true;
+  }
+  function recordCredentialFailure(error: unknown, remote: string, path: string): void {
+    if (error instanceof HostError && error.status === 401) {
+      limiter.record(remote);
+      if (path === "/host/saml/acs")
+        options.service.audit.observe({
+          operationId: crypto.randomUUID(),
+          actor: { kind: "anonymous" },
+          action: "organizer.login",
+          resource: { kind: "host" },
+          phase: "request",
+          outcome: "denied",
+          reason: "invalid_credentials",
+        });
+    }
+  }
   async function handleApi(
     request: IncomingMessage,
     response: ServerResponse,
@@ -317,23 +407,39 @@ export async function startHttpHost(options: {
     assertRoleRoute(path);
     const remote = clientAddress(request, options.behindProxy ?? false);
     limiter.assertAllowed(remote);
-    const apiRequest: ApiRequest = {
-      method: request.method ?? "GET",
-      path,
-      query,
-      body: await jsonBody(request),
-      token: bearerToken(request),
-      nonce: idempotencyKey(request),
-    };
     try {
+      if (await handleSaml(request, response, path)) return;
+      const apiRequest: ApiRequest = {
+        method: request.method ?? "GET",
+        path,
+        query,
+        body: await jsonBody(request, path.startsWith("/portal/registration/") ? 1024 : MAX_BODY),
+        token: bearerToken(request),
+        nonce: idempotencyKey(request),
+      };
       const result = await dispatch(apiRequest);
-      json(response, result.status, result.body);
+      sendApiResponse(response, result);
     } catch (error) {
-      if (error instanceof HostError && error.status === 401) limiter.record(remote);
+      recordCredentialFailure(error, remote, path);
       throw error;
     }
   }
+  if (options.kind === "admin")
+    server.on("upgrade", (_request, socket) => {
+      socket.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+    });
   const bound = await listen(server, options.hostname, options.port);
   origin = options.advertised ?? bound;
-  return { origin, close: () => closeServer(server) };
+  if (options.kind === "admin") options.service.saml.bindOrigin(origin);
+  const terminalTransport =
+    options.kind === "participant"
+      ? installTerminalTransport(server, options.service.terminals, () => origin)
+      : undefined;
+  return {
+    origin,
+    close: async () => {
+      terminalTransport?.close();
+      await closeServer(server);
+    },
+  };
 }

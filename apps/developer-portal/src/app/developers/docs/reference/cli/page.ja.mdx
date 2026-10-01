@@ -5,10 +5,12 @@ export const metadata = { title: "CLI リファレンス" };
 
 # CLI リファレンス <MaturityBadge level="stable" />
 
-`tenkacloud pack` CLI はオフラインのパックツールです。すべてのコマンドは、
-クラウドやリモートへの呼び出しを行わずローカルで実行されます。以下のコマンド表は
+`bun run pack` は作問用 CLI です。ローカルディレクトリの操作はクラウドを使いません。
+Git install は指定した HTTPS repository へ接続します。以下のコマンド表は
 CLI 自身の usage 文字列から解析された**規範的リファレンス**であり、ドキュメントに
 記載されたコマンド名とオプションは常にコードと一致します。
+
+現在の起動は `make local`、データを保持する停止は `make down` です。`make deploy` と `make destroy` は未実装のエラーで終了し、リソースを変更しません。pack activate/deactivate は旧版向けのローカル記録であり、現在の大会カタログへ問題を追加しません。
 
 ## コマンド
 
@@ -32,9 +34,9 @@ CLI 自身の usage 文字列から解析された**規範的リファレンス*
 以下の例は説明用であり、規範的なものではありません。
 
 ```bash
-tenkacloud pack init ./my-pack --runtime aws/cloudformation
-tenkacloud pack validate ./my-pack --json
-tenkacloud pack install ./my-pack
+bun run pack init ./my-pack --runtime aws/cloudformation
+bun run pack validate ./my-pack --json
+bun run pack install ./my-pack
 ```
 
 関連: [検証エラーリファレンス](/developers/docs/reference/validation-errors/)。

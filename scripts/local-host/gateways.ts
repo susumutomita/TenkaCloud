@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { proxyApplication } from "./application-proxy";
 import { randomToken } from "./auth";
-import { type GatewayPortRange, gatewayPort } from "./gateway-ports";
+import { type GatewayPortRange, gatewayOffset, gatewayPort } from "./gateway-ports";
 import { closeServer, errorResponse, listen, readBody } from "./http";
 import { HostError, type Job, type Team } from "./model";
 import type { HostingService } from "./service";
@@ -9,6 +10,7 @@ import { digest } from "./store";
 interface Grant {
   keyHash: string;
   expires: number;
+  returnPath?: string;
 }
 
 interface Gateway {
@@ -16,7 +18,8 @@ interface Gateway {
   /** The runtime slot and upstream this gateway was opened for. */
   readonly offset: number;
   readonly upstreamOrigin: string;
-  link(team: Team): string;
+  matches(job: Job): boolean;
+  link(team: Team, path?: string): string;
   close(): Promise<void>;
 }
 
@@ -98,17 +101,33 @@ class JobGateway implements Gateway {
   get upstreamOrigin(): string {
     return this.upstream.origin;
   }
+  matches(job: Job): boolean {
+    return (
+      this.job.offset === job.offset &&
+      this.job.unit === job.unit &&
+      this.job.definition === job.definition &&
+      this.job.deployedAt === job.deployedAt &&
+      this.job.gatewaySlot === job.gatewaySlot
+    );
+  }
   close(): Promise<void> {
     return closeServer(this.server);
   }
-  link(team: Team): string {
+  link(team: Team, path = "/"): string {
     this.expire();
     const keyHash = digest(team.loginKey);
     this.service.authorizeSurface(this.job.jobId, keyHash);
     if (this.pending.size >= SESSION_LIMIT)
       throw new HostError(429, "Too many pending challenge handoffs; retry in one minute.");
     const ticket = randomToken();
-    this.pending.set(ticket, { keyHash, expires: this.service.now() + 60_000 });
+    const target = new URL(path, this.upstream.origin);
+    if (target.origin !== this.upstream.origin || target.pathname === "/__join")
+      throw new HostError(400, "Invalid challenge entry path.");
+    this.pending.set(ticket, {
+      keyHash,
+      expires: this.service.now() + 60_000,
+      returnPath: target.pathname + target.search,
+    });
     return `${this.origin}/__join?ticket=${ticket}`;
   }
   private expire(): void {
@@ -129,6 +148,22 @@ class JobGateway implements Gateway {
       return;
     }
     this.authenticate(request);
+    const policy = this.service.engine.gatewayPolicy?.(this.job);
+    if (policy?.applicationRoutes) {
+      await proxyApplication({
+        request,
+        response,
+        upstream: this.upstream,
+        origin: this.origin,
+        deniedPaths: policy.deniedPaths,
+        keyHash: digest(this.service.store.team(this.job.teamId).loginKey),
+        authorize: () => {
+          this.assertCurrent();
+          return this.authenticate(request);
+        },
+      });
+      return;
+    }
     const route = ROUTES.find(
       (candidate) => candidate.method === request.method && candidate.path === url.pathname,
     );
@@ -147,7 +182,14 @@ class JobGateway implements Gateway {
     } catch {
       upstream = "";
     }
-    if (current.offset !== this.job.offset || upstream !== this.upstream.origin)
+    if (
+      current.offset !== this.job.offset ||
+      upstream !== this.upstream.origin ||
+      current.definition !== this.job.definition ||
+      current.unit !== this.job.unit ||
+      current.deployedAt !== this.job.deployedAt ||
+      current.gatewaySlot !== this.job.gatewaySlot
+    )
       throw new HostError(
         409,
         "This environment changed. Open it again from your team's participant portal.",
@@ -171,14 +213,14 @@ class JobGateway implements Gateway {
       expires: this.service.now() + 60 * 60_000,
     });
     response.writeHead(303, {
-      location: "/",
+      location: grant.returnPath ?? "/",
       "cache-control": "no-store",
       "referrer-policy": "no-referrer",
       "set-cookie": `${this.cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600`,
     });
     response.end();
   }
-  private authenticate(request: IncomingMessage): void {
+  private authenticate(request: IncomingMessage): Job {
     const prefix = `${this.cookieName}=`;
     const token =
       (request.headers.cookie ?? "")
@@ -189,9 +231,10 @@ class JobGateway implements Gateway {
     const grant = this.sessions.get(digest(token));
     if (!grant)
       throw new HostError(401, "Open this environment from your team's participant portal.");
-    this.service.authorizeSurface(this.job.jobId, grant.keyHash);
+    const job = this.service.authorizeSurface(this.job.jobId, grant.keyHash);
     if (request.headers.origin && request.headers.origin !== this.origin)
       throw new HostError(403, "Cross-origin challenge requests are forbidden.");
+    return job;
   }
   private async proxy(
     request: IncomingMessage,
@@ -209,7 +252,7 @@ class JobGateway implements Gateway {
     // Reading the body can take seconds: re-check the environment and the team's access
     // immediately before anything is forwarded.
     this.assertCurrent();
-    this.authenticate(request);
+    const forwarded = this.authenticate(request);
     const result = await fetch(new URL(route.path, this.upstream.origin), {
       method: route.method,
       body,
@@ -221,6 +264,18 @@ class JobGateway implements Gateway {
     if (!outputTypes.test(responseType))
       throw new HostError(502, "Unsupported challenge response type.");
     const payload = await collectUpstream(result);
+    // Buffer the response until access is checked again; no headers or body have been sent.
+    this.assertCurrent();
+    const current = this.authenticate(request);
+    if (
+      current.unit !== forwarded.unit ||
+      current.definition !== forwarded.definition ||
+      current.deployedAt !== forwarded.deployedAt
+    )
+      throw new HostError(
+        409,
+        "This environment changed. Open it again from the participant portal.",
+      );
     response.writeHead(result.status, {
       "content-type": responseType,
       "cache-control": "no-store",
@@ -251,14 +306,14 @@ export class SurfaceGateways {
     private readonly ports: GatewayPortRange,
     private readonly announce: (message: string) => void = () => undefined,
   ) {}
-  async link(job: Job, team: Team): Promise<string> {
+  async link(job: Job, team: Team, path?: string): Promise<string> {
     // The caller's job object may be a snapshot from before an await: use the stored job.
     const current = this.service.store.job(job.jobId);
     const existing = await this.existing(current);
     const entry = existing ? Promise.resolve(existing) : this.open(current);
     const gateway = await entry;
     try {
-      return gateway.link(team);
+      return gateway.link(team, path);
     } catch (error) {
       // A gateway opened for a request that is not authorized must not keep its port.
       if (!existing) await this.closeJob(current.jobId);
@@ -277,7 +332,7 @@ export class SurfaceGateways {
     } catch {
       upstream = "";
     }
-    if (gateway.offset === job.offset && gateway.upstreamOrigin === upstream) return gateway;
+    if (gateway.matches(job) && gateway.upstreamOrigin === upstream) return gateway;
     await this.closeJob(job.jobId);
     return undefined;
   }
@@ -310,7 +365,7 @@ export class SurfaceGateways {
     )
       throw new Error("Challenge surface must be an explicit loopback HTTP endpoint.");
     const gateway = new JobGateway(job, upstream, this.service);
-    await gateway.listen(this.hostname, gatewayPort(this.ports, job.offset));
+    await gateway.listen(this.hostname, gatewayPort(this.ports, gatewayOffset(job)));
     const team = this.service.store.team(job.teamId);
     this.announce(`Exercise gateway for ${team.internalSlug} / ${job.problemId}: ${gateway.url}`);
     return gateway;

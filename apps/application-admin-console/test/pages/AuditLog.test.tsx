@@ -51,7 +51,7 @@ describe("AuditLog helpers", () => {
 
   it("should map tenant audit errors / generic errors / unknown to display text", () => {
     expect(describeError(new TenantAuditApiError(StatusCodes.FORBIDDEN, undefined))).toBe(
-      "TenantAdmin role が必要です",
+      "監査ログを閲覧できる管理者ロールが必要です",
     );
     expect(describeError(new Error("network down"))).toBe("network down");
     expect(describeError("weird")).toBe("audit log の取得に失敗しました");
@@ -153,10 +153,12 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("AuditLogPage", () => {
-  it("should show the not-wired alert when there are no tokens", () => {
+  it("asks for sign-in when the session is missing", () => {
     mockAuth.mockReturnValue({ tokens: null });
     renderPage();
-    expect(screen.getByText(/audit log API は配線されていません/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/セッションが切れました。再ログインしてください。/),
+    ).toBeInTheDocument();
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -247,4 +249,69 @@ describe("AuditLogPage", () => {
     renderPage();
     expect(await screen.findByText(/該当する監査ログはありません/)).toBeInTheDocument();
   });
+});
+
+it("shows host audit history and collection limits while recording is stopped", async () => {
+  mockList.mockResolvedValue({
+    items: [
+      {
+        id: "1",
+        tenantId: "local-host",
+        actor: "admin-id",
+        actorRole: "Admin",
+        action: "event.deploy",
+        outcome: "succeeded",
+        target: "job-id",
+        resourceKind: "job",
+        operationId: "operation-id",
+        phase: "result",
+        occurredAt: "2026-09-30T10:00:00.000Z",
+      },
+      {
+        id: "2",
+        tenantId: "local-host",
+        actor: "anonymous",
+        action: "organizer.login",
+        outcome: "denied",
+        resourceKind: "host",
+        occurredAt: "2026-09-30T10:01:00.000Z",
+      },
+      {
+        id: "3",
+        tenantId: "local-host",
+        actor: "admin-id",
+        action: "event.teardown",
+        outcome: "failed",
+        occurredAt: "2026-09-30T10:02:00.000Z",
+      },
+    ],
+    collection: {
+      enabled: false,
+      retentionDays: 30,
+      maxRows: 10000,
+      missed: 1,
+      firstGapAt: 1,
+      lastGapAt: 1,
+      gapStatusDurable: false,
+      discarded: 2,
+    },
+  });
+  render(<AuditLogPage config={{ ...config, mode: "local-host" }} />);
+  expect(await screen.findByText("Recording stopped")).toBeInTheDocument();
+  expect(screen.getByText("admin-id (Admin)")).toBeInTheDocument();
+  expect(screen.getByText("job: job-id")).toBeInTheDocument();
+  expect(screen.getByText("host: -")).toBeInTheDocument();
+  expect(screen.getByText("operation-id / result")).toBeInTheDocument();
+  expect(screen.getAllByText("- / -")).toHaveLength(2);
+  expect(screen.getByText("Some audit records are missing")).toBeInTheDocument();
+  expect(screen.getByText(/count is currently held by this process/)).toBeInTheDocument();
+  expect(screen.getByText(/2 old records were removed/)).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("実行者ID / anonymous / system")).toBeInTheDocument();
+  for (const outcome of ["success", "forbidden", "error"])
+    expect(screen.getByText(outcome)).toBeInTheDocument();
+  mockExport.mockRejectedValue(new TenantAuditApiError(413, "audit_export_too_large"));
+  fireEvent.click(screen.getByRole("button", { name: "CSV エクスポート" }));
+  expect(
+    await screen.findByText("出力が5,000件を超えます。期間や実行者を絞ってください"),
+  ).toBeInTheDocument();
 });

@@ -13,7 +13,7 @@
 
 const TEMPLATE_REPO = "susumutomita/TenkaCloud";
 const TEMPLATE_BRANCH = "main";
-const TEMPLATE_PATH = "infrastructure/templates/competitor-bootstrap.yaml";
+const TEMPLATE_PATH = "templates/competitor-bootstrap.yaml";
 const DEFAULT_REGION = "ap-northeast-1";
 const DEFAULT_STACK_NAME = "tenkacloud-competitor-bootstrap";
 

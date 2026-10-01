@@ -9,7 +9,7 @@ import SegmentedControl from "@cloudscape-design/components/segmented-control";
 import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { toErrorMessage } from "@tenkacloud/web-kit";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ApiClient } from "../../api/client";
 import {
   type DisruptionCatalogEntry,
@@ -44,6 +44,7 @@ function buildFireRequest(
   target: FireTarget,
   scope: DisruptionScope,
   selectedTeamIds: readonly string[],
+  randomCount: number,
   timing: DisruptionTiming,
   afterMinutes: number,
   intervalMinutes: number,
@@ -54,7 +55,7 @@ function buildFireRequest(
     disruptionId: target.item.id,
     scope,
     ...(scope === "team" ? { targetTeamIds: selectedTeamIds } : {}),
-    ...(scope === "random-n" ? { randomCount: Math.max(selectedTeamIds.length, 1) } : {}),
+    ...(scope === "random-n" ? { randomCount } : {}),
     ...(target.item.parameters ? { parameters: target.item.parameters } : {}),
     ...(timing === "scheduled" ? { timing: "scheduled" as const, afterMinutes } : {}),
     ...(timing === "recurring" ? { timing: "recurring" as const, intervalMinutes, maxFires } : {}),
@@ -65,6 +66,17 @@ function buildFireRequest(
 /** 1〜1440 分の整数でなければ true (= scheduled / recurring interval の共通バリデーション)。 */
 function isMinutesInvalid(minutes: number): boolean {
   return !Number.isInteger(minutes) || minutes < 1 || minutes > MAX_AFTER_MINUTES;
+}
+
+function randomCountError(
+  scope: DisruptionScope,
+  count: number,
+  teamCount: number,
+  t: Translate,
+): string | undefined {
+  return scope === "random-n" && (!Number.isInteger(count) || count < 1 || count > teamCount)
+    ? t("disruptions.random_error", { count: teamCount })
+    : undefined;
 }
 
 /** recurring の interval (分) / maxFires のどちらかが範囲外なら true。 */
@@ -88,7 +100,9 @@ function firedFlash(
     readonly intervalMinutes: number;
     readonly maxFires: number;
   },
+  status?: "accepted",
 ): string {
+  if (status === "accepted") return t("disruptions.accepted_flash");
   if (timing === "scheduled") {
     return t("disruptions.scheduled_flash", { name, minutes: nums.afterMinutes });
   }
@@ -126,8 +140,10 @@ export function FireModal({
   readonly onClose: () => void;
   readonly onFired: (flash: string) => void;
 }) {
+  const requestIds = useRef(new Map<string, string>());
   const [scope, setScope] = useState<DisruptionScope>("all");
   const [selectedTeamIds, setSelectedTeamIds] = useState<readonly string[]>([]);
+  const [randomCount, setRandomCount] = useState(1);
   const [timing, setTiming] = useState<DisruptionTiming>("immediate");
   const [afterMinutes, setAfterMinutes] = useState<number>(
     target.item.defaultAfterMinutes ?? DEFAULT_AFTER_MINUTES,
@@ -139,38 +155,44 @@ export function FireModal({
 
   const scheduleInvalid = timing === "scheduled" && isMinutesInvalid(afterMinutes);
   const recurringInvalid = timing === "recurring" && isRecurringInvalid(intervalMinutes, maxFires);
+  const randomError = randomCountError(scope, randomCount, teamOptions.length, t);
   const fireDisabled =
     !canMutateTenant ||
     firing ||
+    Boolean(randomError) ||
     (scope === "team" && selectedTeamIds.length === 0) ||
     scheduleInvalid ||
     recurringInvalid;
 
   const confirmFire = async () => {
-    /* v8 ignore next -- defensive: the Fire button is disabled={fireDisabled} and fireDisabled already includes !canMutateTenant, so the !canMutateTenant side is unreachable here */
-    if (!canMutateTenant || fireDisabled) return;
+    /* v8 ignore next -- the disabled Fire button cannot invoke this handler. */
+    if (fireDisabled) return;
     setFiring(true);
     setFireError(null);
     try {
-      const result = await fireDisruption(
-        apiClient,
-        eventId,
-        buildFireRequest(
-          target,
-          scope,
-          selectedTeamIds,
-          timing,
-          afterMinutes,
-          intervalMinutes,
-          maxFires,
-        ),
+      const request = buildFireRequest(
+        target,
+        scope,
+        selectedTeamIds,
+        randomCount,
+        timing,
+        afterMinutes,
+        intervalMinutes,
+        maxFires,
       );
+      const fingerprint = JSON.stringify({ ...request, requestId: "" });
+      const requestId = requestIds.current.get(fingerprint) ?? request.requestId;
+      requestIds.current.set(fingerprint, requestId);
+      const result = await fireDisruption(apiClient, eventId, { ...request, requestId });
       onFired(
-        firedFlash(t, timing, target.item.name, result.affectedTeamIds.length, {
-          afterMinutes,
-          intervalMinutes,
-          maxFires,
-        }),
+        firedFlash(
+          t,
+          timing,
+          target.item.name,
+          result.affectedTeamIds.length,
+          { afterMinutes, intervalMinutes, maxFires },
+          result.status,
+        ),
       );
     } catch (err) {
       setFireError(toErrorMessage(err));
@@ -227,9 +249,20 @@ export function FireModal({
           />
         </FormField>
         {scope === "team" ? teamPicker(t("disruptions.teams_label")) : null}
-        {scope === "random-n"
-          ? teamPicker(t("disruptions.random_label"), t("disruptions.random_description"))
-          : null}
+        {scope === "random-n" ? (
+          <FormField
+            label={t("disruptions.random_label")}
+            description={t("disruptions.random_description")}
+            errorText={randomError}
+          >
+            <Input
+              type="number"
+              value={String(randomCount)}
+              onChange={(event) => setRandomCount(Number(event.detail.value))}
+              ariaLabel={t("disruptions.random_label")}
+            />
+          </FormField>
+        ) : null}
         <FormField
           label={t("disruptions.timing_label")}
           description={t("disruptions.timing_description")}

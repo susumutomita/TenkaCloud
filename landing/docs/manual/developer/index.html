@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/" aria-current="page">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,117 +43,98 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
+<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
+<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>開発者マニュアル <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>TenkaCloud本体、インフラコード、共通パッケージ、各Portal、リポジトリのツールを変更
-する人のためのマニュアルです。本体のコードを変えずに競技をデプロイする作業は
-競技開催者の役割です。</p>
-<h2>あなたのゴール</h2>
-<p>プラットフォームの契約を壊さず、必要なリポジトリ検査に通る、範囲の明確な変更を
-1つ作ります。</p>
-<h2>リポジトリを準備する</h2>
-<p><a href="https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md">Contributing</a>に沿って固定バージョンのツールを用意してから実行します。</p>
-<pre><code class="language-bash">mise exec -- make install
-git submodule update --init --recursive problems
+<h1>開発者マニュアル</h1>
+<p>現在のブランチは未公開の host 専用 candidate です。
+<code>CONTRIBUTING.md</code>と
+<code>docs/host-retirement.md</code>を確認してください。
+既存 SaaS/Lite 環境は固定した旧版で運用します。このブランチは移行や撤収を行いません。</p>
+<h2>準備と起動</h2>
+<pre><code class="language-sh">git submodule update --init --recursive
+bun install --frozen-lockfile --ignore-scripts
+bun run build:host
+make local LOCAL_ARGS=&quot;--no-build&quot;
 </code></pre>
-<p>ローカルプレイの開発では <code>mise exec -- make doctor-dev</code> で Bun・Docker CLI・Compose・
-daemon を診断できます。設定変更は行いません。ローカルプレイを使わない文書・API・
-インフラの変更では、この Docker 診断は不要です。別の <code>make doctor</code> は Bun 不要の
-参加者向け Docker 経路を診断します。<a href="/docs/getting-started/">Getting started</a>から
-必要な実行経路だけを選びます。</p>
-<h2>変更前に担当場所を見つける</h2>
+<p>Bun 1.3.11 を使います。host は開催者・参加者アプリを配信し、競技状態を SQLite に保存します。
+専用の非公開データディレクトリを用意してください。
+Docker 問題には Docker、AWS 問題には承認された競技者アカウントが必要です。
+組み込みの Battle は Bun で動作します。</p>
+<h2>担当コード</h2>
 <table>
 <thead>
 <tr>
-<th>パス</th>
-<th>担当</th>
+<th>領域</th>
+<th>ソース</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><code>apps/</code></td>
-<td>管理者・参加者・開発者向けWebアプリ</td>
+<td>HTTP、永続化、認証、実行アダプター</td>
+<td><code>scripts/local-host/</code></td>
 </tr>
 <tr>
-<td><code>infrastructure/</code></td>
-<td>AWS CDK stack、環境設定、デプロイ経路</td>
+<td>Docker の検証・採点・Compose</td>
+<td><code>scripts/local-host/container/</code></td>
 </tr>
 <tr>
+<td>共通の純粋な処理と ExternalId</td>
+<td><code>scripts/lib/</code></td>
+</tr>
+<tr>
+<td>開催者アプリ</td>
+<td><code>apps/application-admin-console/</code></td>
+</tr>
+<tr>
+<td>参加者アプリ</td>
+<td><code>apps/participant-portal/</code></td>
+</tr>
+<tr>
+<td>pack 作成・検証・保存</td>
+<td><code>scripts/problem-pack/</code></td>
+</tr>
+<tr>
+<td>公開 SDK と作者向けツール</td>
 <td><code>packages/</code></td>
-<td>共通contract、SDK、runtime adapter、CLI</td>
 </tr>
 <tr>
-<td><code>scripts/</code></td>
-<td>リポジトリ検査、デプロイ補助、生成物</td>
+<td>問題コンテンツと CloudFormation</td>
+<td>pin した <code>problems/</code> submodule</td>
 </tr>
 <tr>
-<td><code>problems/</code></td>
-<td>commitを固定した公式問題カタログsubmodule</td>
+<td>競技者アカウントの初期設定</td>
+<td><code>templates/competitor-bootstrap.yaml</code></td>
 </tr>
 </tbody></table>
-<p>ローカル大会(<code>make host</code>、Bun + SQLite)は<code>scripts/local-host/</code>が API と Docker 環境を担当し、
-画面は通常の管理コンソールと参加者ポータルを local-host mode で使います。
-手順、ポート、検証コマンドは<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md">ローカル大会の開催</a>にあります。</p>
-<p>契約を変える前に、最寄りのテストとリポジトリ内の指示を読みます。
-<a href="/docs/concepts/architecture/">プラットフォーム構成</a>はplane間の責務とevent
-契約を説明しています。</p>
-<p>LLMに調査や修正を頼むときは、<a href="https://tenkacloud.com/llms-full.txt">目的別ガイドとコードの見取り図</a>
-から担当ファイルを探します。画面の入力→処理→保存→結果表示の順に、1つの症状を追います。
-必要な文書だけを読みます。</p>
-<h2>変更の流れ</h2>
-<ol>
-<li>依頼やIssueから、何を確認できれば完了かを決める。</li>
-<li>最小の担当moduleと既存テストを見つける。</li>
-<li>実装と利用者向け文書を同時に更新する。</li>
-<li>作業中は範囲を絞ったテストを実行する。</li>
-<li>commit前に<code>make before-commit</code>を通す。pre-commit hookが自動で実行する。</li>
-<li>最終差分を確認し、対象ファイルだけをstageする。</li>
-</ol>
-<p><code>.env</code>、認証情報、生成されたsecret、無関係な変更をcommitしません。単体テストが
-greenでも、実AWSデプロイやブラウザ操作まで証明したことにはなりません。未確認の
-境界は正確に報告します。</p>
-<h2>コード変更か環境設定か</h2>
-<ul>
-<li>対応済みの値へ開催者が変えるだけなら、既存の<code>.env</code>パラメータを使い、説明を
-更新します。<a href="/docs/manual/organizer/">競技開催者マニュアル</a>を参照。</li>
-<li>受け付ける値、検証、生成リソース、実行時の挙動を変えるなら、担当コード、テスト、
-<code>.env.example</code>、マニュアルを同じPull Requestで更新します。</li>
-<li>データベース保存先の変更では、データ移行とロールバックの境界を明示します。
-暗黙のdual writeを追加しません。</li>
-</ul>
-<h2>レビュー依頼前の確認</h2>
-<ul>
-<li>新しい挙動を確認する範囲の絞られたテストがある。</li>
-<li>利用者向けの英語と日本語が一致している。</li>
-<li>生成物と索引が最新である。</li>
-<li>link、type、format、関係するbuildが通る。</li>
-<li>未実施のライブ検証を<strong>Not run</strong>と書く。</li>
-<li>IssueとPull Requestがコード差分だけでなく利用者への影響を説明している。</li>
-</ul>
-<p>問題内容を変更する作業はpackの担当です。その場合は
-<a href="/docs/manual/problem-author/">問題作成者マニュアル</a>を使ってください。</p>
+<h2>確認</h2>
+<p><code>bun run test:host</code>、<code>bun run test:authoring</code>、<code>bun run typecheck</code> と
+<code>make before-commit</code> を実行します。既存の lint と coverage の基準を維持してください。
+永続化や認証の変更は実 HTTP/SQLite 経路で確認します。
+配布に関わる変更では
+<code>docs/host-build-verification.md</code>
+も確認します。ブラウザ検証と任意の実 AWS・IdP 検証は、ローカルテストと分けて報告します。</p>
+<p><code>make down</code> は大会と Docker のデータを保持します。クラウドの <code>make deploy</code> / <code>make destroy</code> は現在、未実装のエラーで終了します。配置済みとは扱わないでください。</p>
 
 </article>
 </main>

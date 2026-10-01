@@ -1,6 +1,6 @@
 {
   "format": ["typescript", "tsx", "javascript"],
-  "pattern": "{apps,packages,infrastructure,scripts,.claude}/**/*.{ts,tsx,js}",
+  "pattern": "{apps,packages,scripts,.claude}/**/*.{ts,tsx,js}",
   "ignore": [
     "**/node_modules/**",
     "**/dist/**",

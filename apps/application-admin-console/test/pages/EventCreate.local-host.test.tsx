@@ -118,6 +118,97 @@ describe("EventCreatePage on the local competition host", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/events/01HZX0K3M3K9ZQHB3MRQHBA1B2");
   });
 
+  it("creates an AWS event with a verified account in the configured host region", async () => {
+    get.mockImplementation(async (path: string) => {
+      if (path === "host/catalog")
+        return { items: [{ problemId: "cloud-only", runtime: "cloudformation" }] };
+      if (path === "admin/competitor-accounts")
+        return {
+          items: [
+            {
+              awsAccountId: "111111111111",
+              region: "ap-northeast-1",
+              competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+              verified: true,
+              createdAt: "2026-09-30T00:00:00.000Z",
+              updatedAt: "2026-09-30T00:00:00.000Z",
+            },
+          ],
+        };
+      throw new Error(`Unexpected host API path: ${path}`);
+    });
+    const { container } = render(
+      <EventCreatePage config={{ ...config, hostAwsRegion: "ap-northeast-1" }} />,
+    );
+    await waitFor(() => expect(get).toHaveBeenCalledWith("admin/competitor-accounts"));
+    const wrapper = createWrapper(container);
+    wrapper.findAllInputs()[1]?.setInputValue("1");
+    wrapper.findAllInputs()[0]?.setInputValue("Cloud Cup");
+    const picker = multiselect(container);
+    picker?.openDropdown();
+    picker?.selectOptionByValue("cloud-only");
+    await waitFor(() =>
+      expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("event_create.col_team_region")).toBeNull();
+    const accountSelect = wrapper.findAllSelects()[0];
+    accountSelect?.openDropdown();
+    await waitFor(() =>
+      expect(
+        accountSelect
+          ?.findDropdown({ expandToViewport: true })
+          .findOptions()
+          .some((option) => option.getElement().textContent?.includes("111111111111")),
+      ).toBe(true),
+    );
+    accountSelect?.selectOptionByValue("111111111111", { expandToViewport: true });
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
+    const request = mocks.createEvent.mock.calls[0]?.[1];
+    expect(request.teams).toEqual([{ internalSlug: "team-1", awsAccountId: "111111111111" }]);
+    expect(request.problems).toEqual([
+      { problemId: "cloud-only", defaultRegion: "ap-northeast-1" },
+    ]);
+  });
+
+  it.each([
+    { maxTeams: 40, maxEventJobs: 512, enabled: true },
+    { maxTeams: 40, maxEventJobs: 99, enabled: false },
+    { maxTeams: 4, maxEventJobs: 512, enabled: false },
+  ])("validates a 5-team × 20-problem event against host limits %j", async (limits) => {
+    const problems = Array.from({ length: 20 }, (_, i) =>
+      problem(`exercise-${i}`, "docker", "compose"),
+    );
+    mocks.listProblemSummaries.mockReturnValue(problems);
+    get.mockResolvedValue({
+      limits: { maxTeams: limits.maxTeams, maxEventJobs: limits.maxEventJobs },
+      items: problems.map((item) => ({ problemId: item.id, runtime: "docker" })),
+    });
+    const { container } = render(<EventCreatePage config={config} />);
+    await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
+    const wrapper = createWrapper(container);
+    wrapper.findAllInputs()[0]?.setInputValue("100 entries");
+    wrapper.findAllInputs()[1]?.setInputValue("5");
+    const picker = multiselect(container);
+    picker?.openDropdown();
+    await waitFor(() => expect(picker?.findDropdown().findOptions()).toHaveLength(20));
+    for (const item of problems) picker?.selectOptionByValue(item.id);
+    const submit = screen.getByRole("button", { name: "event_create.submit" });
+    if (limits.enabled) {
+      expect(submit).toBeEnabled();
+      fireEvent.click(submit);
+      await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
+      const body = mocks.createEvent.mock.calls[0]?.[1];
+      expect(body.teams).toHaveLength(5);
+      expect(body.problems).toHaveLength(20);
+    } else {
+      expect(submit).toBeDisabled();
+      expect(mocks.createEvent).not.toHaveBeenCalled();
+    }
+    if (limits.maxEventJobs < 100)
+      expect(screen.getByText("local_host.job_count_invalid")).toBeInTheDocument();
+  });
+
   it("says so when the host catalog cannot be loaded", async () => {
     get.mockRejectedValue(new Error("host unreachable"));
     render(<EventCreatePage config={config} />);

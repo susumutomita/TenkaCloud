@@ -9,7 +9,7 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table from "@cloudscape-design/components/table";
 import Textarea from "@cloudscape-design/components/textarea";
 import { useState } from "react";
-import { canMutateTenant, useApiClient } from "../../api/client";
+import { canManageConnections, useApiClient } from "../../api/client";
 import {
   type BulkCompetitorAccountResult,
   type BulkCreateCompetitorAccountsResponse,
@@ -51,11 +51,11 @@ const OUTCOME_INDICATOR: Record<
  */
 export function BulkImportModal({ config, visible, onDismiss, onCompleted }: BulkImportModalProps) {
   const apiClient = useApiClient(config);
-  const canMutate = canMutateTenant(apiClient);
+  const canMutate = canManageConnections(config, apiClient);
   const t = useT();
   const suggestedRoleName = defaultCompetitorRoleName({ tenantId: config.tenantId });
   const [text, setText] = useState("");
-  const [region, setRegion] = useState("ap-northeast-1");
+  const [region, setRegion] = useState(config.hostAwsRegion ?? "ap-northeast-1");
   const [competitorRoleName, setCompetitorRoleName] = useState(suggestedRoleName);
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
@@ -65,7 +65,7 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
 
   const reset = () => {
     setText("");
-    setRegion("ap-northeast-1");
+    setRegion(config.hostAwsRegion ?? "ap-northeast-1");
     setCompetitorRoleName(suggestedRoleName);
     setError(null);
     setResponse(null);

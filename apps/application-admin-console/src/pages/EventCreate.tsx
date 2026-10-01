@@ -34,11 +34,14 @@ import {
   resizeTeamRows,
   resolveEventProviderMode,
   TEAMS_MAX,
-  TEAMS_MIN,
   type TeamRow,
   validateTeamRows,
 } from "./event-create/helpers";
-import { LocalHostEventCreateNotice, useHostCatalog } from "./event-create/LocalHostEventCreate";
+import {
+  eventCapacity,
+  LocalHostEventCreateNotice,
+  useHostCatalog,
+} from "./event-create/LocalHostEventCreate";
 import { useCompetitorAccountsLoader } from "./event-create/useCompetitorAccountsLoader";
 
 // 既存テストが `from "./EventCreate"` で import している pure helpers / 型は
@@ -171,10 +174,12 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   // Issue #3226: the local competition host deploys Docker environments on this computer.
   const localHost = isLocalHost(config);
   const hostCatalog = useHostCatalog(localHost ? apiClient : null);
-  const providerMode = useMemo<ReturnType<typeof resolveEventProviderMode>>(
-    () => (localHost ? { kind: "local" } : resolveEventProviderMode(problemRows)),
-    [localHost, problemRows],
-  );
+  const providerMode = useMemo<ReturnType<typeof resolveEventProviderMode>>(() => {
+    if (!localHost) return resolveEventProviderMode(problemRows);
+    return problemRows.some((row) => hostCatalog.cloud.has(row.problemId))
+      ? { kind: "aws" }
+      : { kind: "local" };
+  }, [localHost, problemRows, hostCatalog.cloud]);
   const teamValidation = useMemo(
     () => validateTeamRows(teamRows, providerMode),
     [teamRows, providerMode],
@@ -183,7 +188,13 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   // shallow identity で再 render 判定するので、毎 render 新 array を渡すと無駄に重い
   // (= 99 行 × 2 column の Input が全部 reconcile される)。
   const teamTableItems = useMemo(() => teamRows.map((tr, i) => ({ ...tr, idx: i })), [teamRows]);
-  const teamCountInvalid = teamRows.length < TEAMS_MIN || teamRows.length > TEAMS_MAX;
+  const { maxTeams, teamCountInvalid, jobCountInvalid } = eventCapacity(
+    localHost,
+    hostCatalog,
+    teamRows.length,
+    problemRows.length,
+    TEAMS_MAX,
+  );
   const nameInvalid = name.length === 0 || name.length > NAME_MAX;
   const canSubmit =
     !!apiClient &&
@@ -191,6 +202,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     !submitting &&
     !nameInvalid &&
     !teamCountInvalid &&
+    !jobCountInvalid &&
     problemRows.length > 0 &&
     teamValidation.allSlugsValid &&
     teamValidation.allAccountsValid &&
@@ -324,9 +336,12 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             teamCount={teamRows.length}
             onTeamCountChange={handleTeamCountChange}
             teamCountInvalid={teamCountInvalid}
+            maxTeams={maxTeams}
           />
 
-          {localHost && <LocalHostEventCreateNotice catalog={hostCatalog} />}
+          {localHost && (
+            <LocalHostEventCreateNotice catalog={hostCatalog} jobCountInvalid={jobCountInvalid} />
+          )}
 
           {/* #528 / Phase 2.2 (Issue #459): Teams 入力の上に置く 3 種 Alert。
            *   load error / loading / 0-verified hint をまとめた小 component。 */}
@@ -334,7 +349,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             accountsLoadError={accountsLoadError}
             accountsLoading={accountsLoading}
             showLoadingHint={competitorAccounts === null && accountsLoading && !accountsLoadError}
-            showNoVerifiedAccountsHint={showNoVerifiedAccountsHint}
+            showNoVerifiedAccountsHint={showNoVerifiedAccountsHint && providerMode.kind === "aws"}
             onReload={() => void fetchAccounts()}
           />
 
@@ -346,6 +361,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             accountById={accountById}
             noVerifiedAccounts={noVerifiedAccounts}
             apiClient={apiClient}
+            hostAwsRegion={config.hostAwsRegion}
             onUpdateTeamRow={updateTeamRow}
           />
 

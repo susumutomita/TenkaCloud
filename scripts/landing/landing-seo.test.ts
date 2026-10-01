@@ -145,12 +145,18 @@ describe("documentation home by role", () => {
     expect(english).not.toContain("<h1>Developer docs</h1>");
   });
 
-  it("should publish the problem-author flow diagram and Lite references", () => {
+  it("should publish the author diagram and pinned legacy Lite guidance", () => {
     const author = read("landing/docs/manual/problem-author/index.html");
     expect(author).toContain("/docs/assets/problem-author-flow.ja.svg");
     expect(read("landing/docs/assets/problem-author-flow.ja.svg")).toContain("<title");
-    expect(read("landing/docs/reference/lite-settings/index.html")).toContain("16〜128文字");
-    expect(read("landing/docs/reference/lite-messages/index.html")).toContain("システムの処置");
+    const settings = read("landing/docs/reference/lite-settings/index.html");
+    expect(settings).toContain("16–128");
+    expect(settings).toContain("ExternalId");
+    for (const page of [settings, read("landing/docs/reference/lite-messages/index.html")]) {
+      expect(page).toContain("825415fcda5075ad723daf9e4514eac47d7b8bb9");
+      expect(page).toContain("/docs/getting-started/");
+      expect(page).toContain("旧");
+    }
   });
 });
 

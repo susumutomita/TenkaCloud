@@ -27,7 +27,7 @@ describe("isBootstrapUrlMissing (Issue #1055)", () => {
     // raw URL 自体が CFn で reject される問題は #1053 で別途解決される。
     expect(
       isBootstrapUrlMissing(
-        "https://raw.githubusercontent.com/susumutomita/TenkaCloud/main/infrastructure/templates/competitor-bootstrap.yaml",
+        "https://raw.githubusercontent.com/susumutomita/TenkaCloud/main/templates/competitor-bootstrap.yaml",
       ),
     ).toBe(false);
   });

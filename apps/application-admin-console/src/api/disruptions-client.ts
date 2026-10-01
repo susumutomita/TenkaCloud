@@ -32,6 +32,7 @@ export type DisruptionTrigger =
 
 /** One declared disruption as surfaced by the catalog (a problem's metadata.json declaration). */
 export interface DisruptionCatalogItem {
+  readonly unavailableReason?: string;
   readonly id: string;
   readonly name: string;
   readonly description: string;
@@ -77,12 +78,23 @@ export interface FireDisruptionRequest {
 }
 
 export interface FireDisruptionResult {
+  readonly status?: "accepted";
   readonly auditId: string;
   readonly firedAt: string;
   readonly affectedTeamIds: readonly string[];
 }
 
 export interface DisruptionAuditRow {
+  readonly executions?: readonly {
+    id: string;
+    teamId: string;
+    tick: number;
+    status: string;
+    reason?: string;
+    dueAt: string;
+    updatedAt: string;
+    revertAt?: string;
+  }[];
   readonly auditId: string;
   readonly problemId: string;
   readonly disruptionId: string;

@@ -17,6 +17,7 @@ export interface IdTokenClaims {
   "custom:tenantId"?: string;
   "custom:tenantName"?: string;
   "custom:userRole"?: string;
+  "custom:organizerRole"?: "Admin" | "Operator" | "Viewer";
   "custom:tenantTier"?: string;
 }
 

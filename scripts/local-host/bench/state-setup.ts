@@ -2,6 +2,11 @@ import type { ApiRequest, ApiResponse, HostingService } from "../service";
 
 export const PROBLEM_ID = "ac26-crypto-battle";
 export const HOST_KEY = "bench-host-key";
+export const BENCH_ORGANIZER = {
+  username: "bench-admin",
+  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- A disposable benchmark database.
+  password: "benchmark organizer password 2026",
+} as const;
 
 export interface CreatedTeam {
   readonly teamId: string;
@@ -29,11 +34,17 @@ async function expectOk(promise: Promise<ApiResponse>, context: string): Promise
 }
 
 async function loginAdmin(service: HostingService): Promise<string> {
+  const bootstrapCompleted = service.store.bootstrapCompleted();
   const response = await expectOk(
     service.admin(
-      apiRequest({ method: "POST", path: "/host/login", token: "", body: { key: HOST_KEY } }),
+      apiRequest({
+        method: "POST",
+        path: bootstrapCompleted ? "/host/login" : "/host/bootstrap",
+        token: "",
+        body: { ...(bootstrapCompleted ? {} : { key: HOST_KEY }), ...BENCH_ORGANIZER },
+      }),
     ),
-    "host login",
+    "organizer login",
   );
   const body = response.body as { idToken: string };
   return body.idToken;

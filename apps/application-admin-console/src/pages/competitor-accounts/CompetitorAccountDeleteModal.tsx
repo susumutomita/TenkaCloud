@@ -9,6 +9,7 @@ interface CompetitorAccountDeleteModalProps {
   target: CompetitorAccountSummary | null;
   inFlight: boolean;
   canMutateTenant: boolean;
+  localHost?: boolean;
   onDismiss: () => void;
   onConfirm: () => void;
 }
@@ -17,6 +18,7 @@ export function CompetitorAccountDeleteModal({
   target,
   inFlight,
   canMutateTenant,
+  localHost = false,
   onDismiss,
   onConfirm,
 }: CompetitorAccountDeleteModalProps) {
@@ -49,7 +51,13 @@ export function CompetitorAccountDeleteModal({
           accountId: target?.awsAccountId ?? "",
         })}
       </p>
-      <p>{t("competitor_accounts.delete_modal_body_2")}</p>
+      <p>
+        {t(
+          localHost
+            ? "competitor_accounts.host_delete_body"
+            : "competitor_accounts.delete_modal_body_2",
+        )}
+      </p>
     </Modal>
   );
 }

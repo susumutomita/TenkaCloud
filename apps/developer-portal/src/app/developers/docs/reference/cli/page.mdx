@@ -5,10 +5,11 @@ export const metadata = { title: "CLI reference" };
 
 # CLI reference <MaturityBadge level="stable" />
 
-The `tenkacloud pack` CLI is the offline pack tool. Every command runs locally with
-no cloud or remote calls. The command table below is **normative reference** parsed
+The `tenkacloud pack` CLI is the offline pack tool. Local-directory commands do not call cloud services; Git installation contacts its HTTPS source. The command table below is **normative reference** parsed
 from the CLI's own usage strings, so the documented command names and options
 always match the code.
+
+Current launch commands are `make local` and state-preserving `make down`. `make deploy` and `make destroy` currently exit unimplemented without changing resources. Pack activate/deactivate retain legacy local records and do not add problems to the current event catalog.
 
 ## Commands
 
@@ -31,9 +32,9 @@ There is deliberately no `update` command: a new version is a separate `install`
 The example below is illustrative, not normative.
 
 ```bash
-tenkacloud pack init ./my-pack --runtime aws/cloudformation
-tenkacloud pack validate ./my-pack --json
-tenkacloud pack install ./my-pack
+bun run pack init ./my-pack --runtime aws/cloudformation
+bun run pack validate ./my-pack --json
+bun run pack install ./my-pack
 ```
 
 Related: [validation error reference](/developers/docs/reference/validation-errors/).

@@ -23,9 +23,15 @@ interface SecretRevealModalProps {
   secret: CreateCompetitorAccountResponse | null;
   onDismiss: () => void;
   templateUrl?: string;
+  localHost?: boolean;
 }
 
-export function SecretRevealModal({ secret, onDismiss, templateUrl }: SecretRevealModalProps) {
+export function SecretRevealModal({
+  secret,
+  onDismiss,
+  templateUrl,
+  localHost = false,
+}: SecretRevealModalProps) {
   const t = useT();
   const [allCopied, setAllCopied] = useState(false);
   if (!secret) return null;
@@ -33,17 +39,31 @@ export function SecretRevealModal({ secret, onDismiss, templateUrl }: SecretReve
     templateUrl && templateUrl.length > 0
       ? templateUrl
       : COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK;
-  const payload = buildShareablePayload({
-    tenkaCloudAccountId: secret.tenkaCloudAccountId,
-    externalId: secret.externalId,
-    competitorRoleName: secret.competitorRoleName,
-    templateUrl,
-  });
+  const payload = localHost
+    ? [
+        "TenkaCloud competitor bootstrap",
+        `TenkaCloudAccountId: ${secret.tenkaCloudAccountId}`,
+        `ExternalId: ${secret.externalId}`,
+        `RoleName: ${secret.competitorRoleName}`,
+        `Download competitor-bootstrap.yaml: ${effectiveTemplateUrl}`,
+        "Create the stack manually in the competitor AWS account, then ask the organizer to verify the role.",
+      ].join("\n")
+    : buildShareablePayload({
+        tenkaCloudAccountId: secret.tenkaCloudAccountId,
+        externalId: secret.externalId,
+        competitorRoleName: secret.competitorRoleName,
+        templateUrl,
+      });
   const onCopyAll = async () => {
     await navigator.clipboard.writeText(payload);
     setAllCopied(true);
     setTimeout(() => setAllCopied(false), COPIED_FEEDBACK_RESET_MS);
   };
+  const copyAllLabel = t(
+    localHost
+      ? "competitor_accounts.host_secret_copy_all"
+      : "competitor_accounts.secret_modal_copy_all",
+  );
   return (
     <Modal
       visible
@@ -58,44 +78,61 @@ export function SecretRevealModal({ secret, onDismiss, templateUrl }: SecretReve
       }
     >
       <SpaceBetween size="m">
-        <Alert type="warning" header={t("competitor_accounts.secret_modal_warning_header")}>
-          {t("competitor_accounts.secret_modal_warning_body")}
+        <Alert
+          type="warning"
+          header={t(
+            localHost
+              ? "competitor_accounts.host_secret_warning_header"
+              : "competitor_accounts.secret_modal_warning_header",
+          )}
+        >
+          {t(
+            localHost
+              ? "competitor_accounts.host_secret_warning_body"
+              : "competitor_accounts.secret_modal_warning_body",
+          )}
         </Alert>
-        <SpaceBetween size="s">
-          <Header variant="h3">{t("competitor_accounts.secret_modal_launch_header")}</Header>
-          <Button
-            variant="primary"
-            href={buildLaunchStackUrl({
-              tenkaCloudAccountId: secret.tenkaCloudAccountId,
-              externalId: secret.externalId,
-              competitorRoleName: secret.competitorRoleName,
-              templateUrl,
-            })}
-            target="_blank"
-            iconName="external"
-            iconAlign="right"
-          >
-            {t("competitor_accounts.secret_modal_launch_button")}
-          </Button>
-          <Box variant="small" color="text-status-inactive">
-            {t("competitor_accounts.secret_modal_launch_hint")}
-          </Box>
-        </SpaceBetween>
+        {!localHost && (
+          <SpaceBetween size="s">
+            <Header variant="h3">{t("competitor_accounts.secret_modal_launch_header")}</Header>
+            <Button
+              variant="primary"
+              href={buildLaunchStackUrl({
+                tenkaCloudAccountId: secret.tenkaCloudAccountId,
+                externalId: secret.externalId,
+                competitorRoleName: secret.competitorRoleName,
+                templateUrl,
+              })}
+              target="_blank"
+              iconName="external"
+              iconAlign="right"
+            >
+              {t("competitor_accounts.secret_modal_launch_button")}
+            </Button>
+            <Box variant="small" color="text-status-inactive">
+              {t("competitor_accounts.secret_modal_launch_hint")}
+            </Box>
+          </SpaceBetween>
+        )}
         <SpaceBetween size="s">
           <Header variant="h3">{t("competitor_accounts.secret_modal_copy_header")}</Header>
           <Button
             iconName={allCopied ? "status-positive" : "copy"}
             onClick={() => void onCopyAll()}
           >
-            {allCopied
-              ? t("competitor_accounts.secret_modal_copy_done")
-              : t("competitor_accounts.secret_modal_copy_all")}
+            {allCopied ? t("competitor_accounts.secret_modal_copy_done") : copyAllLabel}
           </Button>
         </SpaceBetween>
         <div>
           <Box variant="awsui-key-label">{t("competitor_accounts.secret_modal_steps_header")}</Box>
           <ol>
-            <li>{t("competitor_accounts.secret_modal_step_1")}</li>
+            <li>
+              {t(
+                localHost
+                  ? "competitor_accounts.host_secret_step_1"
+                  : "competitor_accounts.secret_modal_step_1",
+              )}
+            </li>
             <li>{t("competitor_accounts.secret_modal_step_2")}</li>
           </ol>
         </div>

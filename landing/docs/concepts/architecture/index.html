@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>プラットフォームアーキテクチャ — TenkaCloud Docs</title>
+<title>アーキテクチャ — TenkaCloud Docs</title>
 <link rel="canonical" href="https://tenkacloud.com/docs/concepts/architecture/" />
 <link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/concepts/architecture/" />
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/concepts/architecture/index.en.html" />
@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,71 +43,40 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/" aria-current="page">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/" aria-current="page">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
+<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
+<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>プラットフォームアーキテクチャ <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>TenkaCloud の構造を、利用者、責務、実行担当、操作順の順に説明します。
-図はコードに基づく設計の説明です。実 AWS のリソース一覧や稼働確認とは異なります。</p>
-<h2 id="reading-order">読む順番</h2><p><a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio">Draw.io 原本</a>の
-<strong>05 システムコンテキスト → 04 ユースケース</strong>で、利用者と外部システムを確認してください。
-次にこのページの責務・操作順を読み、最後に原本の <strong>01 SaaS / 02 Lite / 03 Local</strong> で配置と配線を確認します。</p>
-<p><a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/README.md">開発者向けガイド</a>には、
-各図の対象モード、主要ファイル、完了条件、失敗時の確認先をまとめています。</p>
-<h2 id="cloud-responsibilities">クラウド開催の責務</h2><p><a href="/docs/assets/architecture/logical.svg"><img src="/docs/assets/architecture/logical.svg" alt="クラウド開催の論理アーキテクチャ"></a></p>
-<p>SaaS は SBT で利用組織を管理します。Lite にはこの組織管理を置きません。
-pooled / silo は開催管理環境の配置方法であり、図の箱の数はスタック数ではありません。</p>
-<h2 id="cloud-components">クラウドのコンポーネント</h2><p><a href="/docs/assets/architecture/cloud-components.svg"><img src="/docs/assets/architecture/cloud-components.svg" alt="クラウド側の処理担当"></a></p>
-<p>開催 API、配置ワークフロー、参加者 API、独自競技の Dispatcher、定期採点は担当が異なります。
-テナント分離は、API の認証・scope 検証、保存先のキー設計、スタック境界を組み合わせます。
-対応する Turso 構成では StatusWriter Lambda を経由して配置状態を更新します。</p>
-<h2 id="local-play-and-docker">Local play の Docker 構成</h2><p><a href="/docs/assets/architecture/local-components.svg"><img src="/docs/assets/architecture/local-components.svg" alt="Local play のコンポーネント"></a></p>
-<p><code>make local</code> は個人練習用です。制御用コンテナと問題コンテナは同じ Docker daemon 上で動きます。
-問題の正誤判定は HTTP の <code>/verify</code>、進捗保存は SQLite、起動・停止は Docker ソケットを使います。
-ソケットの <code>:ro</code> マウントは Docker API の操作権限を読み取り専用にはしません。</p>
-<p>開発中の複数チーム向け local-host と暗号バトル専用ハーネスは、この経路に含めません。
-<code>make local-dev</code> の Simulator は明示的に有効化したときだけ使います。</p>
-<h2 id="saas-tenant-onboarding">SaaS のテナント登録</h2><p><a href="/docs/assets/architecture/tenant-onboarding.svg"><img src="/docs/assets/architecture/tenant-onboarding.svg" alt="テナント登録のシーケンス"></a></p>
-<p>登録 API の受付と利用準備の完了は別です。SBT のライフサイクル結果まで確認します。</p>
-<h2 id="problem-deployment">問題の配置</h2><p><a href="/docs/assets/architecture/problem-deployment.svg"><img src="/docs/assets/architecture/problem-deployment.svg" alt="AWS Lambda 経路の問題配置"></a></p>
-<p>対象はクラウド問題の Lambda 配置経路です。HTTP の受付件数ではなく、配置ジョブの COMPLETE / FAILED を確認します。
-クロスアカウントの配置と状態確認では、各 Lambda 呼び出しで SSM SecureString から ExternalId を取得します。必須の ExternalId を付けた STS AssumeRole で競技用ロールを引き受け、一時認証情報で CloudFormation を呼びます。
-同一アカウントの開発経路ではロール ARN と ExternalId パラメーターを両方省略できますが、片方だけの指定はエラーです。
-Distributed Map と CodeBuild の詳細経路は開発者向けガイドで補足しています。</p>
-<h2 id="cloud-answers-and-scoring">クラウドでの回答と採点</h2><p><a href="/docs/assets/architecture/participant-scoring.svg"><img src="/docs/assets/architecture/participant-scoring.svg" alt="クラウド参加者の回答と採点"></a></p>
-<p>flag 提出と独自競技の操作は別経路です。独自競技の状態保存と得点反映も別で、未反映の得点を保存して再試行します。
-定期採点は、参加者の回答とは別に起動します。</p>
-<h2 id="local-play-startup-and-scoring">Local play の開始と採点</h2><p><a href="/docs/assets/architecture/local-play-sequence.svg"><img src="/docs/assets/architecture/local-play-sequence.svg" alt="Docker 問題の開始・回答・保存"></a></p>
-<p>開始要求は 202 で受け付け、起動結果を後から取得します。回答時には正誤照会後に進捗を保存します。
-検証器への接続失敗を、不正解や成功に置き換えません。</p>
-<h2 id="next-steps">次に読む</h2><ul>
-<li><a href="/docs/operate/run-an-event/">イベントを開催する</a></li>
-<li><a href="/docs/operate/deploy-paths/">起動・デプロイ経路</a></li>
-<li><a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md">費用と検証範囲</a></li>
-</ul>
-<p>Turso 対応のテスト成功は、実開催や請求確認の代わりではありません。
-SaaS の SBT 用 DynamoDB と Lite の制御データ構成も区別してください。</p>
+<h1>アーキテクチャ <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<h2 id="reading-order">読む順番</h2><p>配置先を選ぶ前に責務と信頼境界を確認します。未公開 candidate はコミュニティの競技を一つのプロセスで運営します。SaaS tenant の作成基盤は含みません。</p>
+<h2 id="local-play-and-docker">ローカル競技と Docker</h2><p><code>make local</code> は一つの Bun プロセスで開催者・参加者の画面を配信します。開催者 role と大会・チームのキーは異なる HTTP 面を認証します。SQLite と非公開キーに大会状態と環境の所有情報を保持します。<code>make down</code> は所有するローカル環境を止め、データを残します。明示的な teardown は別です。</p>
+<p>新しい Docker 大会は最大 512 件の停止中 jobs を準備し、参加者が Start / resume と Stop (keep data) を使います。デフォルトはチーム 3、host 全体 12 環境、メモリー上限の合計 4096 MiB です。40 個の gateway 枠は起動中だけに使い、runtime port は停止後も保持します。書き込みレイヤーと volume は保持しますが、RAM は保持しません。自動退避や初期化は行わず、既存大会は従来の lifecycle を維持します。汎用 Docker カタログと workbench は復旧中です。旧ローカル 106 問すべてを Challenge 競技にする方針ですが、terminal と実 Docker・ブラウザの検証は未完了です。verifier は公開画面や他チームから分離しなければなりません。</p>
+<h2 id="cloud-components">AWS 問題とクラウド基盤</h2><p>確認対象の AWS adapter は、検証済み競技者アカウントへ所有情報付きの CloudFormation stack を配置します。配置 role は host の ExternalId を要求します。参加者アクセスは保存した別の viewer role と配置ごとの ExternalId を使います。運営用の認証情報は参加者へ渡しません。</p>
+<p>クラウド用 Turso と配置先は対応中です。<code>make deploy</code> と <code>make destroy</code> は現在、リソースを変えず明示的に失敗します。常駐プロセス、定期処理、永続的な識別情報には、実際に確認した配置契約が必要です。</p>
+<h2 id="problem-deployment">問題の配置と採点</h2><p>認証済み開催者が大会の操作を要求し、外部作成前に所有情報を保存します。状態、エラー、復旧情報を保持します。参加者の要求ではチーム、大会、問題、時刻を検証し、得点、進捗、再試行受付票を一緒に確定してから成功を返します。verifier の失敗や不明なクラウド操作を成功にしません。</p>
+<h2 id="diagram-sources">編集可能な図のソース</h2><p>リポジトリの <code>docs/architecture/README.md</code> から現在の Mermaid と <code>system-architecture.drawio</code> を開けます。以前生成した図は旧実装の資料であり、このページでは現行の証拠として表示しません。</p>
+<h2 id="legacy-reference">旧版資料</h2><p>旧 control plane、tenant、Lite、Step Functions は以下の固定した旧版だけで参照します。大会・チームの責務を保ち、将来の SaaS のためだけの抽象化は追加しません。</p>
+<p><a href="https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/architecture/README.md">Legacy architecture / 固定した旧版</a>.</p>
 
 </article>
 </main>

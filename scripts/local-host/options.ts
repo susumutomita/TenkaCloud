@@ -1,6 +1,7 @@
 import { isIPv4 } from "node:net";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { DEFAULT_GATEWAY_PORTS, gatewayPortsOverlap, parseGatewayPorts } from "./gateway-ports";
 
 export function parseOptions(
@@ -19,11 +20,21 @@ export function parseOptions(
       "admin-port": { type: "string", default: "5174" },
       "participant-port": { type: "string", default: "5175" },
       "gateway-ports": { type: "string", default: DEFAULT_GATEWAY_PORTS },
+      "max-active-per-team": { type: "string", default: String(DEFAULT_CONTAINER_LIMITS.perTeam) },
+      "max-active-environments": {
+        type: "string",
+        default: String(DEFAULT_CONTAINER_LIMITS.global),
+      },
+      "container-memory-mib": {
+        type: "string",
+        default: String(DEFAULT_CONTAINER_LIMITS.memoryMiB),
+      },
       "no-build": { type: "boolean", default: false },
       "public-admin-origin": { type: "string" },
       "public-participant-origin": { type: "string" },
       "behind-proxy": { type: "boolean", default: false },
       "unsafe-http": { type: "boolean", default: false },
+      "aws-region": { type: "string" },
       help: {
         type: "boolean",
         short: "h",
@@ -57,13 +68,28 @@ export function parseOptions(
     throw new Error(
       "--gateway-ports must not include the host console or participant portal port.",
     );
+  const awsRegion = values["aws-region"];
+  // Stack role ARNs and console links assume the standard partition (`arn:aws:`).
+  if (
+    awsRegion !== undefined &&
+    !/^(?!(?:us-gov|cn|us-iso[a-z]?|eu-iso[a-z]?)-)[a-z]{2}(?:-[a-z]+)+-\d{1,2}$/u.test(awsRegion)
+  )
+    throw new Error(
+      `--aws-region ${awsRegion} is not a region of the standard AWS partition, such as ap-northeast-1.`,
+    );
   return {
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
+    containerLimits: {
+      perTeam: positiveLimit(values["max-active-per-team"], 40),
+      global: positiveLimit(values["max-active-environments"], 40),
+      memoryMiB: positiveLimit(values["container-memory-mib"], 1024 * 1024),
+    },
     hostname,
     adminPort,
     participantPort,
     gatewayPorts,
     ...(exposure ? { public: exposure } : {}),
+    ...(awsRegion ? { awsRegion } : {}),
     build: !values["no-build"],
     help: values.help,
   };
@@ -140,4 +166,10 @@ function listenAddress(lan: string | undefined, unsafeLan: boolean): string {
 
 function joinDefault(root: string): string {
   return resolve(root, ".tenkacloud/host");
+}
+
+function positiveLimit(raw: string, maximum: number): number {
+  if (!/^\d+$/u.test(raw) || Number(raw) < 1 || Number(raw) > maximum)
+    throw new Error(`Resource limit must be an integer from 1 to ${maximum}.`);
+  return Number(raw);
 }

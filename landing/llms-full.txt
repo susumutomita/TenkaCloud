@@ -27,7 +27,7 @@ make doctor
 make local
 ```
 
-Open the printed URL. `make local-down` stops the environment and deletes local
+Open the printed URL. `make down` stops the environment and deletes local
 progress. Docker Desktop requires host networking; diagnose through the linked
 manual rather than changing platform code. Codespaces runs this same path and
 opens the port 5175 preview automatically: [create a Codespace](https://codespaces.new/susumutomita/TenkaCloud).

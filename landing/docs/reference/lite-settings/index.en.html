@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Lite setting reference — TenkaCloud Docs</title>
+<title>Legacy Lite settings — TenkaCloud Docs</title>
 <link rel="canonical" href="https://tenkacloud.com/docs/reference/lite-settings/index.en.html" />
 <link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/reference/lite-settings/" />
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/reference/lite-settings/index.en.html" />
@@ -49,267 +49,28 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html" aria-current="page">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
+<li><a href="/docs/reference/lite-settings/index.en.html" aria-current="page">Legacy Lite settings</a></li>
+<li><a href="/docs/reference/lite-messages/index.en.html">Legacy Lite messages</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Lite setting reference <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>This page defines the values used to deploy and operate Lite. For the task
-sequence, use the <a href="/docs/manual/organizer/index.en.html">competition organizer manual</a>.</p>
-<h2>How to read the tables</h2>
-<ul>
-<li><strong>Purpose</strong> states what changes.</li>
-<li><strong>Format and range</strong> states accepted characters, choices, or numeric range.</li>
-<li><strong>If omitted</strong> states the default behavior.</li>
-<li><strong>Invalid input</strong> states where processing stops. Look up exact text in the
-<a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a>.</li>
-</ul>
-<p>“No TenkaCloud length limit” means the repository does not perform a dedicated
-length check. It does not override a limit imposed by AWS or an external service.</p>
-<h2>First setup</h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Purpose</th>
-<th>Format and range</th>
-<th>If omitted</th>
-<th>Example</th>
-<th>Invalid input</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>TENANT_ADMIN_EMAIL</code></td>
-<td>First organizer sign-in</td>
-<td>The console launcher accepts a non-space <code>name@domain.suffix</code> shape. No TenkaCloud length limit</td>
-<td>Setup stops</td>
-<td><code>organizer@example.com</code></td>
-<td>CloudFormation checks console input; <code>make env-init</code> checks for <code>@</code></td>
-</tr>
-<tr>
-<td><code>AWS_ACCOUNT_ID</code></td>
-<td>Guard against deploying to the wrong account</td>
-<td>Exactly 12 ASCII digits</td>
-<td>The console launcher derives it from the active account; explicit value is recommended for a manual setup</td>
-<td><code>123456789012</code></td>
-<td>The Turso preflight stops when it is not 12 digits</td>
-</tr>
-<tr>
-<td><code>AWS_REGION</code></td>
-<td>AWS Region that contains TenkaCloud</td>
-<td>A Region such as <code>ap-northeast-1</code>. <code>make env-init</code> checks <code>two letters-word-one digit</code>. No length limit</td>
-<td>Depends on the AWS CLI default</td>
-<td><code>ap-northeast-1</code></td>
-<td>The wizard reports a format error; a later AWS command can also fail</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DEPLOY_EXTERNAL_ID</code></td>
-<td>Match TenkaCloud to a competitor-account role</td>
-<td><strong>16–128 characters</strong> from ASCII letters, digits, <code>_ = , . @ : / -</code></td>
-<td>A same-account trial can run; cross-account deployment cannot</td>
-<td><code>tc-school-2026-a91f</code></td>
-<td>Problem deployment stops below 16 characters; competitor CloudFormation checks the same bounds</td>
-</tr>
-</tbody></table>
-<h2>Control-data storage</h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Purpose</th>
-<th>Format and range</th>
-<th>If omitted</th>
-<th>Example</th>
-<th>Invalid input</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>CDK_PARAM_CONTROL_DATA_BACKEND</code></td>
-<td>Store events, teams, and scores</td>
-<td><code>dynamodb</code> or <code>turso</code>, case-insensitive</td>
-<td><code>dynamodb</code></td>
-<td><code>dynamodb</code></td>
-<td>Any other value stops CDK synth</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_TURSO_DATABASE_URL</code></td>
-<td>Turso database endpoint</td>
-<td>Non-empty URL string; no TenkaCloud URL or length validation</td>
-<td>Required when Turso is selected</td>
-<td><code>https://db-org.turso.io</code></td>
-<td>Empty stops <code>make env-check-lite</code>; malformed input fails at the external connection</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME</code></td>
-<td>Name of the SSM parameter that stores the Turso token</td>
-<td>Non-empty parameter name, not the token itself</td>
-<td>Required when Turso is selected</td>
-<td><code>/TenkaCloud/development/turso/auth-token</code></td>
-<td>Empty stops <code>make env-check-lite</code>; a missing parameter fails at AWS access</td>
-</tr>
-</tbody></table>
-<p>DynamoDB and Turso do not synchronize. Export required data before changing the
-backend and keep the existing data until the new path is verified.</p>
-<h2>DynamoDB and logs</h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Purpose</th>
-<th>Format and range</th>
-<th>If omitted</th>
-<th>Example</th>
-<th>Invalid input</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>DYNAMODB_BILLING_MODE</code></td>
-<td>DynamoDB billing mode</td>
-<td><code>PROVISIONED</code> or <code>PAY_PER_REQUEST</code></td>
-<td><code>PROVISIONED</code></td>
-<td><code>PROVISIONED</code></td>
-<td>Current code treats an unknown value as <code>PROVISIONED</code>; no dedicated error</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DYNAMODB_READ_CAPACITY</code></td>
-<td>Read capacity for every table and GSI</td>
-<td>Console launcher integer <code>1</code>–<code>200</code></td>
-<td><code>1</code></td>
-<td><code>5</code></td>
-<td>Console rejects out-of-range input; the <code>.env</code> path has no dedicated range error</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DYNAMODB_WRITE_CAPACITY</code></td>
-<td>Write capacity for every table and GSI</td>
-<td>Console launcher integer <code>1</code>–<code>200</code></td>
-<td><code>1</code></td>
-<td><code>5</code></td>
-<td>Console rejects out-of-range input; the <code>.env</code> path has no dedicated range error</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_LOG_RETENTION_DAYS</code></td>
-<td>CloudWatch Logs retention</td>
-<td>One of <code>1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653</code></td>
-<td><code>1</code></td>
-<td><code>30</code></td>
-<td>Unsupported positive values stop CDK synth; zero, negative, and non-numeric input fall back to <code>1</code></td>
-</tr>
-</tbody></table>
-<p>Increasing capacity also increases cost. Measure the need in a test event and
-return it to <code>1</code> afterward.</p>
-<h2>Scoring and cost warning email</h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Purpose</th>
-<th>Format and range</th>
-<th>If omitted</th>
-<th>Example</th>
-<th>Invalid input</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>CDK_PARAM_OPS_ALERT_EMAIL</code></td>
-<td>Receive scoring-error, scoring-stopped, and monthly-cost warnings</td>
-<td>Non-empty email string; no TenkaCloud format or length validation</td>
-<td>No warning email setup</td>
-<td><code>ops@example.com</code></td>
-<td>No dedicated error; AWS can fail to create the subscription or no confirmation arrives</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD</code></td>
-<td>Monthly actual-spend threshold in USD</td>
-<td>Number greater than 0; no maximum</td>
-<td><code>10</code> when email is set</td>
-<td><code>25</code></td>
-<td>Zero, negative, or non-numeric input stops CDK synth</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT</code></td>
-<td>Percentage of the amount that triggers the warning</td>
-<td>Number greater than 0 and at most 100</td>
-<td><code>100</code></td>
-<td><code>80</code></td>
-<td>Out-of-range or non-numeric input stops CDK synth</td>
-</tr>
-</tbody></table>
-<p>The recipient must confirm the AWS subscription email. This setting does not
-report every failure in problem start, stop, or cleanup.</p>
-<h2>Problem deployment and feature switches</h2>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Purpose</th>
-<th>Format and range</th>
-<th>If omitted</th>
-<th>Example</th>
-<th>Invalid input</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>CDK_PARAM_DEPLOY_ALLOWED_CIDRS</code></td>
-<td>Source networks passed to compatible problems</td>
-<td>Comma-separated IPv4 or IPv6 CIDRs; no count or length limit</td>
-<td>No allowlist value is passed</td>
-<td><code>198.51.100.10/32,203.0.113.0/24</code></td>
-<td>Invalid IP, slash, or prefix stops CDK synth</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DEPLOY_VIA_LAMBDA</code></td>
-<td>Roll back from Lambda deployment to legacy CodeBuild</td>
-<td>Only lowercase <code>false</code> selects legacy CodeBuild</td>
-<td>Lambda</td>
-<td><code>false</code></td>
-<td>Every other value, including <code>FALSE</code>, <code>0</code>, and <code>no</code>, selects Lambda; no error</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_FEATURES</code></td>
-<td>Enable or disable optional UI and runtime features</td>
-<td>JSON object with boolean values; no length limit</td>
-<td>No <code>features</code> key</td>
-<td><code>{&quot;samlSso&quot;:true}</code></td>
-<td>Non-JSON, non-object, or non-boolean values stop CDK synth</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_AUDIT_LOG_ENABLED</code></td>
-<td>Stop recording administrator actions</td>
-<td>Only lowercase <code>false</code> stops recording</td>
-<td>Record actions</td>
-<td><code>false</code></td>
-<td>Every other value records actions; no error</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_SOURCE_BUCKET_VERSIONING</code></td>
-<td>Keep previous SaaS source-bundle versions</td>
-<td><code>true</code>, <code>enabled</code>, or <code>1</code>, case-insensitive</td>
-<td>Suspended</td>
-<td><code>true</code></td>
-<td>Every other value silently selects suspended</td>
-</tr>
-</tbody></table>
-<p>Leave deployment, feature, and audit switches unset for an ordinary Lite event.</p>
-<h2>Related pages</h2>
-<ul>
-<li><a href="/docs/manual/organizer/index.en.html">Competition organizer manual</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
-</ul>
+<h1>Legacy Lite settings <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<p>This route is retained only for historical links. Historical SaaS/Lite and individual-practice instructions are available in the <a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">pinned legacy source</a>. Do not use them against this candidate or assume data migrates automatically.</p>
+<h2 id="legacy-reference">Pinned reference</h2><p>Read the <a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9/apps/developer-portal/src/app/developers/docs/reference/lite-settings">original settings and messages</a>. They describe the old CDK/Lambda deployment, not the current local event host. Old DynamoDB/Turso settings do not synchronize or migrate data into the new store.</p>
+<h2 id="current-guidance">Current guidance</h2><p>Use <a href="/docs/getting-started/index.en.html">getting started</a>, <a href="/docs/manual/organizer/index.en.html">organizer manual</a> and <a href="/docs/operate/deploy-paths/index.en.html">deployment boundaries</a>. The current AWS deployment-role ExternalId is mandatory, persisted per host and validated as 16–128 characters using letters, digits and <code>_ = , . @ : / -</code>. Follow the exact bootstrap values displayed by the current console.</p>
 
 </article>
 </main>

@@ -49,12 +49,15 @@ const SETTLED: ReadonlySet<EventDeploymentStatus> = new Set([
  */
 export function allowedLocalOperations(
   eventStatus: EventDetail["status"],
-  row: Pick<EventDeploymentSummary, "status" | "operation">,
+  row: Pick<EventDeploymentSummary, "status" | "operation" | "stopSupported">,
 ): Readonly<Record<LocalEnvironmentOperation, boolean>> {
   if (row.operation || !SETTLED.has(row.status))
     return { stop: false, restart: false, teardown: false };
   return {
-    stop: ["DEPLOYING", "READY", "ENDED"].includes(eventStatus) && row.status === "COMPLETE",
+    stop:
+      row.stopSupported !== false &&
+      ["DEPLOYING", "READY", "ENDED"].includes(eventStatus) &&
+      row.status === "COMPLETE",
     restart: eventStatus === "DEPLOYING" || eventStatus === "READY",
     teardown: eventStatus !== "ARCHIVED" && row.status !== "DELETED",
   };
@@ -154,6 +157,11 @@ export function LocalEnvironmentsPanel({
                   {row.error && (
                     <Box variant="small" color="text-status-error">
                       {row.error}
+                    </Box>
+                  )}
+                  {row.stopSupported === false && row.status === "COMPLETE" && (
+                    <Box variant="small" color="text-body-secondary">
+                      {t("local_host.env_stop_unsupported")}
                     </Box>
                   )}
                 </SpaceBetween>

@@ -15,10 +15,6 @@ interface CoordinationDefinition {
 }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
-export function isCoordination(definition: string): boolean {
-  return (JSON.parse(definition) as { kind?: string }).kind === "coordination";
-}
-
 /** Reviewed local compatibility list. Game rules remain in the catalog's SDK plugin. */
 export function coordinationCatalog(root: string): Problem[] {
   const problemId = "ac26-crypto-battle";

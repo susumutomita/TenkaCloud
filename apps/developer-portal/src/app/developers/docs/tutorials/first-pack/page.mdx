@@ -2,301 +2,54 @@ import { MaturityBadge } from "@/components/MaturityBadge";
 
 export const metadata = { title: "First pack tutorial" };
 
-# First pack tutorial <MaturityBadge level="stable" />
+# First pack tutorial <MaturityBadge level="preview" />
 
-This tutorial walks the main developer path in a single pass: starting from an
-empty directory, you scaffold one problem pack, validate it, publish it pinned to
-an immutable Git revision, install it, activate it for a tenant, and pin it to an
-event. It uses only one minimal pack (`com.example.starter`, containing a single
-problem, `hello-world`).
-
-For the pack concept itself, see [problem packs](/developers/docs/concepts/problem-packs/);
-for the full first-deploy picture, see [getting started](/developers/docs/getting-started/).
-This page does not restate the contracts (schemas and the diagnostic-code list) —
-it links to each reference instead.
+Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate's event catalog. The retained tenant-scoped activation command is a legacy local record, not a current hosting workflow.
 
 Just want to run an existing pack? → [Use an existing pack](/developers/docs/operate/use-existing-pack/).
 
 ## Prerequisites
 
-Everything in this tutorial up through scaffold → validate → install → activate
-completes fully offline, with no cloud credentials. Only the step that reaches an
-actual platform deploy (the final section) requires an AWS account.
+Run from the TenkaCloud repository root with Bun 1.3.11 and installed dependencies. Local-directory operations need no cloud credentials. Installing from Git contacts the given HTTPS repository.
 
-- [Bun](https://bun.sh) 1.3.11
-- A checkout of the repository (`git clone` done). Invoke the `pack` CLI **from the
-  repository root** via the `make pack-*` targets (under the hood it runs
-  `./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts`; the CLI's default
-  store `./.tenkacloud/pack-store` resolves against the CWD, so repo-root execution
-  is assumed).
-- `git` 2.x or later (used in the step that obtains the pinned revision's SHA)
+<h2 id="scaffold">Scaffold a pack</h2>
 
-The CLI is fully offline. It uses no network, no CDK synth, and no cloud credentials.
-
-## 1. Scaffold the pack
-
-Start from an empty working directory. `pack init <dir>` generates a pack that
-passes validation with zero diagnostics (a manifest, one problem, a provider
-artifact placeholder, and a README).
-
-```bash
+```sh
 make pack-init ARGS="./my-first-pack"
 ```
 
-Expected output:
+This writes a manifest, one starter problem, an artifact placeholder and README. The placeholder is not a completed runnable exercise.
 
-```text
-Pack scaffolded at ./my-first-pack (4 files). Run 'pack validate ./my-first-pack' to check it.
-```
+<h2 id="validate">Validate the contract</h2>
 
-Pass `--runtime <provider/engine>` to choose the runtime (default: `aws/cloudformation`).
-The supported runtimes are `aws/cloudformation` / `gcp/infra-manager` / `azure/bicep` / `sakura/apprun`.
-
-### The generated manifest (`tenkacloud-pack.json`)
-
-This is the pack's single entry point. Complete minimal example:
-
-```json
-{
-  "schemaVersion": 1,
-  "id": "com.example.starter",
-  "version": "0.1.0",
-  "core": "^1.0.0",
-  "title": "Starter pack",
-  "description": "A scaffolded TenkaCloud problem pack. Edit the metadata and artifact, then validate.",
-  "license": "Apache-2.0",
-  "problemsRoot": "problems",
-  "requiredRuntimes": [
-    {
-      "provider": "aws",
-      "engine": "cloudformation"
-    }
-  ]
-}
-```
-
-### The generated problem metadata (`problems/challenges/hello-world/metadata.json`)
-
-Complete minimal example:
-
-```json
-{
-  "id": "hello-world",
-  "title": "Hello World",
-  "category": "challenges",
-  "description": "A starter problem. Replace this with your own challenge.",
-  "runtime": {
-    "provider": "aws",
-    "engine": "cloudformation",
-    "entry": "template.yaml"
-  }
-}
-```
-
-For what each field in the manifest and metadata.json means, see
-[problem packs](/developers/docs/concepts/problem-packs/).
-
-## 2. Validate the pack
-
-`pack validate <dir>` is the offline validator. It checks the schema, problem-ID
-uniqueness, artifact presence, runtime consistency, and more.
-
-```bash
+```sh
 make pack-validate ARGS="./my-first-pack"
 ```
 
-Expected output:
+Validation checks metadata, runtime declarations and files. It does not deploy, score or prove participant playability. Complete the problem and its own tests before making those claims.
 
-```text
-Pack is valid: 1 problem.
-  - hello-world
-```
+<h2 id="install">Install and inspect locally</h2>
 
-Pass `--json` when you need machine-readable output.
-Exit codes are 0 (success) / 1 (validation failure) / 2 (tool failure: missing directory, missing manifest, misuse).
-
-## 3. Publish pinned to an immutable Git revision
-
-Publishing means pinning the pack to an immutable Git commit and sharing it.
-**Branch names, tags, `HEAD`, and abbreviated hashes are rejected by design.**
-Only a full 40-hex SHA can be pinned, which guarantees the same pack content can
-never change in the future (immutability).
-
-Commit and push the pack to a separate Git repository (outside this core
-repository's `problems/` tree), then obtain the full SHA of the revision you want
-to pin:
-
-```bash
-git -C ./my-first-pack init
-git -C ./my-first-pack add .
-git -C ./my-first-pack commit -m "First pack"
-git -C ./my-first-pack rev-parse HEAD
-```
-
-Expected output (a 40-digit hex string; the value differs per commit):
-
-```text
-3f1c226be0565fa2c90df44e9b1acd5a90e84be2
-```
-
-This SHA is the unit of publication. Push to a remote and distribute the HTTPS URL
-plus the SHA. The operational procedure for pinned revisions corresponds to the
-runbook in `infrastructure/lib/problem-pack/README-external-git-pack.md`.
-
-## 4. Install the pack
-
-You can install from a local directory. Install runs validate → snapshot →
-lock → dry-run compose atomically and does not activate. A failed install leaves
-no residue behind.
-
-```bash
+```sh
 make pack-install ARGS="./my-first-pack"
-```
-
-Expected output (`digest` is a hash of the pack contents; the value shown here is
-one example for the generated scaffold):
-
-```text
-Pack installed: com.example.starter@0.1.0
-  source: local
-  digest: b1acd5a90e84be2a2e1ca78f77396ee6c447c9c3f1c226be0565fa2c90df44e9
-  problems: 1
-```
-
-To install from a pinned Git revision, use `install git`. An HTTPS URL and a full
-40-hex SHA are required:
-
-```bash
-make pack-install ARGS="git https://github.com/<you>/my-first-pack.git --commit <full-40-hex-sha>"
-```
-
-The lock file (`packs-lock.json`) records `sourceKind: "git"`, the resolved commit,
-the optional subdir, and the content digest. Check installed packs with `list`:
-
-```bash
 make pack-list
+bun run pack inspect com.example.starter@0.1.0
 ```
 
-Expected output:
+For a Git install use an HTTPS URL and full immutable 40-hex commit SHA. Keep source provenance and content digest. Do not use a moving branch as the revision.
 
-```text
-Installed packs: 1
-  - com.example.starter@0.1.0 (local, 1 problem, b1acd5a90e84be2a2e1ca78f77396ee6c447c9c3f1c226be0565fa2c90df44e9)
+<h2 id="runtime-boundary">Runtime boundary</h2>
+
+There is no complete pack activate → event → deployment path in this candidate. Use its supported pinned core catalog to rehearse an event. Generic local catalog/workbench restoration is separate work. Do not run a deleted Lite launcher or invent a tenant to bridge this gap.
+
+<h2 id="common-failures">Common failures and diagnostic codes</h2>
+
+`PACK_DIR_MISSING`, `MANIFEST_INVALID`, duplicate IDs and missing artifacts need corrections in the pack, not a cloud deployment. See [validation errors](/developers/docs/reference/validation-errors/).
+
+<h2 id="teardown">Remove a stored revision</h2>
+
+```sh
+bun run pack remove com.example.starter@0.1.0
 ```
 
-## 5. Activate for a tenant
-
-Activate an installed immutable revision for a single tenant. Duplicate problem
-IDs, unavailable runtimes, digest mismatches, and not-installed packs are rejected
-(exit code 1).
-
-```bash
-make pack-activate ARGS="com.example.starter@0.1.0 --tenant acme"
-```
-
-Expected output:
-
-```text
-Pack activated for tenant 'acme': com.example.starter@0.1.0
-```
-
-Other tenants cannot see it (tenant isolation). Use `deactivate` to undo.
-
-## 6. Create an event <MaturityBadge level="preview" />
-
-Creating an event **pins the tenant's effective catalog (core + activated pack
-revisions) into an immutable snapshot at creation time**. Once pinned, an event's
-catalog is never rewritten by a later `deactivate` / `install` / `activate`.
-
-The component that actually pins the event snapshot is the event-creation API (the
-Lambda in `handlers/event-handler/create.ts`). At creation time it burns the
-`catalogSnapshotId` and the pack provenance directly into that event row. The
-provenance it uses comes from the provenance map burned in at synth time from the
-packs activated at that point (embedded as the `BATTLE_PROBLEMS_PROVENANCE`
-environment variable). `createEventSnapshot` / `EventSnapshotStore` in the library
-`infrastructure/lib/problem-pack/event-pin.ts` are an equivalent implementation
-that reproduces the same contract offline from the CLI and tests — they are not
-the path that actually gets deployed. Every CLI step so far (scaffold → validate →
-install → activate) is implemented (stable), but the browser event-creation UI is
-platform-layer and is treated as preview on this page.
-
-## 7. Verify in the organizer console <MaturityBadge level="preview" />
-
-After creating an event, confirm in the organizer console that the event
-references the pinned snapshot and that deployments resolve that event's pinned
-pack provenance. As the offline equivalent check,
-`infrastructure/test/problem-pack/external-git-pack-e2e.test.ts` verifies the same
-contract against an injected fake transport. In addition,
-`infrastructure/test/problem-pack/pack-lite-full-chain-e2e.test.ts` is a broader
-offline E2E that chains everything — from the CLI's scaffold, validate, install,
-and activate through Lite's synth wiring, the real event-creation handler, and the
-stamping of deploy provenance — as one link of real code only.
-
-## 8. Teardown
-
-Remove a revision you no longer need with `remove`. **It is refused while an event
-or an activation pins that revision** (protecting the immutable catalog).
-`deactivate` first, release the pinned references, and then remove.
-
-```bash
-make pack-deactivate ARGS="com.example.starter@0.1.0 --tenant acme"
-./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts remove com.example.starter@0.1.0
-```
-
-Expected output:
-
-```text
-Pack deactivated for tenant 'acme': com.example.starter@0.1.0
-Removed com.example.starter@0.1.0.
-```
-
-The `pack` CLI has no `update` command. A new version is treated as a separate install.
-
-## Common failures → diagnostic codes
-
-On validation failure the CLI prints diagnostics in the `[CODE] file:path` form.
-The code is the contract; the message string is not. For the complete list of
-diagnostic codes and their mapping to the public namespaced codes, see
-[problem packs](/developers/docs/concepts/problem-packs/). Examples you can
-actually observe:
-
-| Symptom | Code | Meaning |
-| --- | --- | --- |
-| The directory does not exist | `PACK_DIR_MISSING` | The path you passed contains no pack. Pass a directory that contains `tenkacloud-pack.json`. |
-| No `tenkacloud-pack.json` | `MANIFEST_MISSING` | No manifest at the root. Every pack declares exactly one. |
-| `version` is not SemVer | `MANIFEST_INVALID` | e.g. `version must be a valid SemVer`. Fix `tenkacloud-pack.json:version`. |
-| Duplicate problem IDs | `DUPLICATE_PROBLEM_ID` | Problem IDs are not unique within the pack. |
-| A missing artifact (template etc.) | `ARTIFACT_MISSING` | The file the metadata's `runtime.entry` points to does not exist. |
-| Runtime disagrees with the manifest | `RUNTIME_MISMATCH` | The problem's runtime is not in `requiredRuntimes`. |
-
-For example, breaking `version` and validating prints:
-
-```text
-Pack validation failed: 1 diagnostic(s).
-  [MANIFEST_INVALID] tenkacloud-pack.json:version
-      version must be a valid SemVer
-```
-
-`PACK_DIR_MISSING` / `MANIFEST_MISSING` / `MANIFEST_UNREADABLE` exit with code 2
-(tool failure); every other validation diagnostic exits with code 1 (validation failure).
-
-## Deploy to the platform <MaturityBadge level="preview" />
-
-From here on you need an AWS account. To put the pinned pack on the platform and
-take it all the way to the participant portal, follow Lite mode (`make deploy`) in
-[getting started](/developers/docs/getting-started/).
-
-Packs are Lite-mode only. Lite's fixed tenantId is `local`, so activate with
-`--tenant local` (`make pack-activate ARGS="com.example.starter@0.1.0
---tenant local"`). If you used `--tenant acme` in the steps above, that was for
-offline verification and is not reflected in the cloud deploy as-is. SaaS mode
-(`make deploy-saas`) does not support packs. It explicitly refuses to synth while
-even a single activation remains (the escape hatch is
-`CDK_PARAM_SAAS_IGNORE_PACKS=true`, but pack problems then do not appear in the
-deploy).
-
-## Next steps
-
-- Read about [problem packs](/developers/docs/concepts/problem-packs/).
-- Start from [getting started](/developers/docs/getting-started/).
-- Browse the [API reference](/developers/api/).
+Removal may refuse a retained activation/reference; inspect it first. Removing a pack is not exercise or cloud teardown. Historical SaaS/Lite and individual-practice instructions are available in the [pinned legacy source](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9). Do not use them against this candidate or assume data migrates automatically.

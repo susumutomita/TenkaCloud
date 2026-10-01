@@ -29,25 +29,12 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# The wall-clock shape of this workflow (measured on a 4-core runner, run #33602954027):
-# the old single `ci` job ran 7 gates + typecheck + build serially for 4m15s while the 3-shard
-# `coverage` matrix ran 6m27s, so a green run took ~6m30s. Nothing here was waiting on I/O — the
-# gates simply queued behind each other, and the `spas` shard was paced by its slowest app.
-# Every job below is now an independent leg that starts at t=0; the only thing that waits is the
-# final aggregation. A leg pays ~15-25s of checkout + Bun + install before its own work starts.
-#
-# The job COUNT is a budget, not a free parameter: this account runs at most 17 Actions jobs at
-# once, and the 18th waits for a runner. Run 33624913783 proved what that costs — `build` queued
-# 42s behind the 14-leg coverage matrix and finished last, so the extra split made the run slower
-# than the work required. 13 coverage legs + gates + lint-ts + typecheck + build = 17 keeps
-# everything on a runner from t=0. `COVERAGE_PARTS` in scripts/workspace/run-coverage.ts carries
-# the same reasoning next to the numbers.
+# Coverage parts are defined in scripts/workspace/run-coverage.ts. Independent jobs run
+# concurrently; the final ci job requires every surviving gate to succeed.
 jobs:
   # Cheap contract gates: dependency lifecycle audit, dead code, submodule pin, catalog schema,
   # prose, formatting, and the repo-root script tests. Together ~25s, so they share one leg.
-  # This is the only leg that needs full history + tags: the release-manifest parity check in
-  # `test-root` resolves the platform display tag and its historical catalog gitlink, and the
-  # submodule pin guard diffs against origin/main.
+  # Full history is required by the submodule ancestry guard.
   gates:
     runs-on: ubuntu-latest
     steps:
@@ -83,8 +70,7 @@ jobs:
       - name: Submodule pin guard (problems must not roll back)
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main
-          # Release-manifest parity resolves an optional catalog display tag and checks the exact
-          # catalog commit object locally, so retain tags when deepening the submodule checkout.
+          # Deepen the catalog checkout so the ancestry guard can compare the pinned commits.
           git -C problems fetch --tags --unshallow origin 2>/dev/null || git -C problems fetch --tags origin || true
           make submodule-not-behind
 
@@ -107,7 +93,7 @@ jobs:
       # whose entire job is to fail when a workspace is added, sat red on main and nothing said so.
       # `make before-commit` catches it locally; this makes CI say the same thing.
       - name: Repo-root script tests (#2964)
-        run: make test-root
+        run: bun run test:root
 
   # #2862: ESLint。 Biome は format と構文寄りの rule を見るが、型情報が要る検査
   # (no-floating-promises / await-thenable / sonarjs の型ベース rule) はここでしか走らない。
@@ -165,13 +151,7 @@ jobs:
       - name: Build
         run: make build WORKSPACE_JOBS=4
 
-  # Issue #2513 / this change: coverage started as a serial `make test-coverage` (17 workspaces,
-  # ~17m13s) inside the `ci` job, then became a 3-shard matrix (~6m27s). The remaining cost is not
-  # orchestration — it is that one workspace's suite is bigger than a shard: infrastructure alone
-  # is 538 test files and application-admin-console is ~4.7x admin-console, so the `spas` leg
-  # finished when its slowest app did. The matrix legs are therefore (shard, part) pairs, where a
-  # single-workspace shard is split further with Vitest's own `--shard` via `--part <i>/<N>`.
-  #
+  # Split the larger application suites with Vitest --shard while preserving workspace gates.
   # The matrix below must match `coverageMatrixLegs()` in scripts/workspace/run-coverage.ts —
   # scripts/workspace/run-coverage.test.ts fails when the two drift, and codecov.yml's
   # `after_n_builds` counts these legs.
@@ -181,18 +161,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { shard: infrastructure, part: 1, parts: 6 }
-          - { shard: infrastructure, part: 2, parts: 6 }
-          - { shard: infrastructure, part: 3, parts: 6 }
-          - { shard: infrastructure, part: 4, parts: 6 }
-          - { shard: infrastructure, part: 5, parts: 6 }
-          - { shard: infrastructure, part: 6, parts: 6 }
           - { shard: portal, part: 1, parts: 2 }
           - { shard: portal, part: 2, parts: 2 }
           - { shard: app-admin, part: 1, parts: 3 }
           - { shard: app-admin, part: 2, parts: 3 }
           - { shard: app-admin, part: 3, parts: 3 }
-          - { shard: admin, part: 1, parts: 1 }
           - { shard: packages, part: 1, parts: 1 }
     env:
       # A leg now runs one workspace's slice, so it can use the whole runner. The default of 2
@@ -222,19 +195,6 @@ jobs:
         id: lcov
         run: |
           echo "files=$(bun run scripts/workspace/run-coverage.ts --shard ${{ matrix.shard }} --print-lcov-paths)" >> "$GITHUB_OUTPUT"
-
-      # Issue #2758's ratchet needs the infrastructure workspace's coverage as a WHOLE, and each
-      # part only executed its slice of the tests. The parts are handed to the final `ci` job,
-      # which merges them per line before judging (see scripts/workspace/merge-lcov.ts).
-      - name: Upload the infrastructure lcov part
-        if: matrix.shard == 'infrastructure'
-        # actions/upload-artifact v4.6.2
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: infra-lcov-part-${{ matrix.part }}
-          path: infrastructure/coverage/lcov.info
-          retention-days: 1
-          if-no-files-found: error
 
       # 3rd-party action は tag (mutable) ではなく commit SHA (immutable) で pin する
       # (= supply-chain attack 防御、 maintainer / attacker が tag を移動できなくする)。 v5.5.4 SHA。
@@ -268,10 +228,7 @@ jobs:
           fi
           echo "coverage matrix succeeded"
 
-  # The single required check, and the one gate that cannot run in parallel with the rest: the
-  # infra critical-path coverage ratchet needs every infrastructure part's lcov merged back into
-  # one report. It deliberately does NOT install dependencies — merging lcov and reading the
-  # baseline are plain Bun + node:fs — so it costs a checkout and a few seconds rather than a leg.
+  # Stable required check: fail when any surviving gate fails or is skipped.
   ci:
     needs: [gates, lint-ts, typecheck, build, coverage]
     if: always()
@@ -295,36 +252,3 @@ jobs:
             exit 1
           fi
           echo "every gate succeeded"
-
-      - name: Check out the code
-        # actions/checkout v4.3.1
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-
-      - name: Setup Bun
-        # oven-sh/setup-bun v2.0.2
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
-        with:
-          bun-version: "1.3.11"
-
-      - name: Download the infrastructure lcov parts
-        # actions/download-artifact v4.3.0
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          pattern: infra-lcov-part-*
-          path: .lcov-parts
-
-      # Concatenating the parts would double-count every `LF:` and halve the reported percentage,
-      # so they are merged per line / branch / function first.
-      - name: Merge the infrastructure lcov parts
-        run: |
-          bun run scripts/workspace/merge-lcov.ts \
-            --out infrastructure/coverage/lcov.info \
-            .lcov-parts/infra-lcov-part-*/lcov.info
-
-      # Issue #2758: infrastructure 全体はまだ #1424 の 100% gate 対象外 (report-only) だが、
-      # AssumeRole/ExternalId・tenant isolation・deploy state machine・scoring・delete
-      # lifecycle・auth boundary (scripts/quality/infra-critical-paths.ts) は壊れると越境/
-      # 不正スコアリングに直結するため、jscpd と同じ baseline ratchet 方式 (make dup-check) で
-      # coverage の後退だけを検出する。テストは再実行しない (merge した lcov.info を読むだけ)。
-      - name: Infra critical-path coverage ratchet
-        run: make infra-coverage-check

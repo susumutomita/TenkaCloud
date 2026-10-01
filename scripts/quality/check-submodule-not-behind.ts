@@ -24,6 +24,37 @@ import { execFileSync } from "node:child_process";
 const SUBMODULE_PATH = "problems";
 const DEFAULT_BASE_REF = "origin/main";
 
+// Git hooks export these repository-local variables. A separate repository passed with -C
+// must not inherit the caller's git dir, index, object store, or config overrides.
+const LOCAL_GIT_ENV_KEYS = new Set([
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CEILING_DIRECTORIES",
+  "GIT_COMMON_DIR",
+  "GIT_CONFIG",
+  "GIT_CONFIG_COUNT",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_DIR",
+  "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+  "GIT_GRAFT_FILE",
+  "GIT_IMPLICIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_NAMESPACE",
+  "GIT_NO_REPLACE_OBJECTS",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_PREFIX",
+  "GIT_REPLACE_REF_BASE",
+  "GIT_SHALLOW_FILE",
+  "GIT_WORK_TREE",
+]);
+
+export function isolatedGitEnv(environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(environment).filter(
+      ([key]) => !LOCAL_GIT_ENV_KEYS.has(key) && !/^GIT_CONFIG_(?:KEY|VALUE)_\d+$/u.test(key),
+    ),
+  );
+}
+
 export type PinVerdict = "unchanged" | "untouched" | "ahead" | "integrated" | "behind-or-diverged";
 
 /**
@@ -130,16 +161,18 @@ export function containsPinnedChanges(
   proposed: string,
 ): boolean {
   try {
+    const env = isolatedGitEnv();
     const merged = execFileSync(
       // eslint-disable-next-line sonarjs/no-os-command-from-path -- git supplies the guard's tree evidence
       "git",
       ["-C", repository, "merge-tree", "--write-tree", proposed, existing],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], env },
     ).trim();
     // eslint-disable-next-line sonarjs/no-os-command-from-path -- git supplies the guard's tree evidence
     const tree = execFileSync("git", ["-C", repository, "rev-parse", `${proposed}^{tree}`], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      env,
     }).trim();
     return merged === tree;
   } catch {
@@ -149,10 +182,11 @@ export function containsPinnedChanges(
 
 /** 実 git を叩く GitIO 実装。 */
 function realGitIO(): GitIO {
+  const env = isolatedGitEnv();
   const tryGit = (args: readonly string[]): string | undefined => {
     try {
       // eslint-disable-next-line sonarjs/no-os-command-from-path -- git is this gate's input source
-      const out = execFileSync("git", [...args], { encoding: "utf8" }).trim();
+      const out = execFileSync("git", [...args], { encoding: "utf8", env }).trim();
       return out.length > 0 ? out : undefined;
     } catch {
       return undefined;
@@ -180,7 +214,7 @@ function realGitIO(): GitIO {
             "origin",
             ...uniquePins,
           ],
-          { stdio: "ignore" },
+          { stdio: "ignore", env },
         );
       } catch {
         // fetch 失敗は致命ではない (= 既に必要 commit を持つ可能性)。 ancestry 判定に委ねる。
@@ -192,7 +226,7 @@ function realGitIO(): GitIO {
           // eslint-disable-next-line sonarjs/no-os-command-from-path -- git is this gate's input source
           "git",
           ["-C", SUBMODULE_PATH, "merge-base", "--is-ancestor", maybeAncestor, descendant],
-          { stdio: "ignore" },
+          { stdio: "ignore", env },
         );
         return true; // exit 0 = ancestor
       } catch {

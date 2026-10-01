@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { canMutateTenant, useApiClient } from "../../api/client";
+import { canManageConnections, useApiClient } from "../../api/client";
 import {
   type CompetitorAccountSummary,
   deleteCompetitorAccount,
@@ -35,7 +35,7 @@ export interface UseCompetitorAccountsResult {
 
 export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsResult {
   const apiClient = useApiClient(config);
-  const canMutate = canMutateTenant(apiClient);
+  const canMutate = canManageConnections(config, apiClient);
   const [items, setItems] = useState<readonly CompetitorAccountSummary[] | null>(null);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [verifyInFlight, setVerifyInFlight] = useState<string | null>(null);

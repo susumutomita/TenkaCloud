@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,44 +43,39 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/" aria-current="page">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
+<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
+<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>問題パック <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p><strong>問題パック</strong>は、TenkaCloud における競技コンテンツの単位です。</p>
+<h1>問題パック <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<p>pack は競技の内容を version ごとに確認・保存する単位です。manifest に識別情報、必要な runtime、問題ファイルを記述します。artifact は runtime によって異なり、CloudFormation template はその一例です。</p>
 <h2>問題パックとは</h2>
-<p>各パックには、メタデータ、競技者アカウントへ直接デプロイされる単一ページの
-CloudFormation テンプレート、およびオプションのポータルプラグインが含まれます。</p>
+<p>現在の CLI は雛形作成、検証、内容確認、不変 revision の保存を行えます。install や activate では現在の大会カタログへ追加されません。残っている tenant 単位の activation は旧版向けのローカル記録であり、現行の競技実行手順ではありません。</p>
 <h2>Battle と Challenge</h2>
-<ul>
-<li><strong>Battle</strong> パックは、リアルタイムの対戦形式です。</li>
-<li><strong>Challenge</strong> パックは、自分のペースで取り組める常設形式です。</li>
-</ul>
-<h2>スコアリング種別</h2>
-<p>スコアリングは、6 つの組み込み種別 — <code>flag</code>、<code>multi-flag</code>、<code>uptime-flat</code>、
-<code>uptime-multi</code>、<code>phased-polling</code>、<code>attack-detection</code> — のいずれか 1 つを問題ごとに使用します。</p>
-<p><a href="/docs/getting-started/">はじめに</a>に戻る。</p>
+<p>Challenge と Battle は操作と採点の形式であり、実行場所とは別です。旧ローカル Compose 問題はすべて Challenge 競技へ対応させる方針です。汎用カタログ・workbench の復旧と terminal・ブラウザ検証は進行中です。</p>
+<h2>採点方式</h2>
+<p>schema の受理だけでは実行対応を証明できません。ローカルカタログは verify / multi-verify、確認対象の AWS 例は flag / uptime-flat を使います。他の SDK の形式や外部 pack の runtime を、検証成功だけでプレイ可能と案内しないでください。<a href="/docs/reference/runtime-matrix/">実行状況</a>を参照します。</p>
+<p><a href="/docs/tutorials/first-pack/">最初の pack</a>または<a href="/docs/operate/use-existing-pack/">既存 pack</a>へ進んでください。</p>
 
 </article>
 </main>

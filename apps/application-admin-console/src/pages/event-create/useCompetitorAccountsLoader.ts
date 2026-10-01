@@ -11,7 +11,7 @@ import {
   type CompetitorAccountSummary,
   listCompetitorAccounts,
 } from "../../api/competitor-accounts-client";
-import { type AppConfig, isLocalHost } from "../../config";
+import type { AppConfig } from "../../config";
 import { formatCompetitorAccountsLoadError } from "../../lib/competitor-accounts-filter";
 
 export interface CompetitorAccountsLoaderState {
@@ -31,10 +31,8 @@ export function useCompetitorAccountsLoader(config: AppConfig): CompetitorAccoun
   const [accountsLoadError, setAccountsLoadError] = useState<string | null>(null);
   const [accountsLoading, setAccountsLoading] = useState(false);
 
-  // Issue #3226: the local competition host has no AWS competitor accounts to load.
-  const localHost = isLocalHost(config);
   const fetchAccounts = useCallback(async () => {
-    if (!apiClient || localHost) return;
+    if (!apiClient || (config.mode === "local-host" && !config.hostAwsRegion)) return;
     setAccountsLoading(true);
     setAccountsLoadError(null);
     try {
@@ -47,7 +45,7 @@ export function useCompetitorAccountsLoader(config: AppConfig): CompetitorAccoun
     } finally {
       setAccountsLoading(false);
     }
-  }, [apiClient, localHost]);
+  }, [apiClient, config.mode, config.hostAwsRegion]);
 
   useEffect(() => {
     void fetchAccounts();

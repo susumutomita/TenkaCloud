@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,305 +43,61 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
+<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
+<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>はじめに <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>TenkaCloud にはいくつかの実行モードがあります。今日やりたいことに合う行を
-選んでください。ローカル、Codespaces、Liteは実行手順です。SaaSはコード構成を
-説明する参考情報であり、現在のセルフサービス導入手順ではありません。</p>
-<p>プラットフォーム開発、競技開催、競技参加、問題作成のどれを行うか決まっている場合は、
-<a href="/docs/manual/">役割別マニュアル</a>から始めてください。</p>
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>モード</th>
-<th>必要なもの</th>
-<th>得られるもの</th>
-<th>所要時間の目安</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>1</td>
-<td>ローカルドリル</td>
-<td>Git + Make + Docker、<strong>Bun・AWS アカウント不要</strong></td>
-<td>コンテナ型のドリル問題をローカルで即時採点</td>
-<td>約 5 分</td>
-</tr>
-<tr>
-<td>2</td>
-<td>GitHub Codespaces</td>
-<td>GitHub アカウントのみ、<strong>インストール不要</strong></td>
-<td>同じローカルドリルを、すべてブラウザ内で実行</td>
-<td>約 3 分</td>
-</tr>
-<tr>
-<td>3</td>
-<td>AWS 上の Lite モード — コンソールランチャー</td>
-<td>AWS アカウント、<strong>インストール不要</strong></td>
-<td>単一主催者向けプラットフォーム（Admin Console + Participant Portal）</td>
-<td>約 20〜30 分</td>
-</tr>
-<tr>
-<td>4</td>
-<td>AWS 上の Lite モード — CLI</td>
-<td>AWS アカウント + ローカルツールチェーン</td>
-<td>3 と同じ構成を、シェルからデプロイ・反復</td>
-<td>約 20 分</td>
-</tr>
-<tr>
-<td>5</td>
-<td>AWS 上の SaaS モード</td>
-<td>専用の検証環境と障害対応できる運営チーム</td>
-<td>複数組織向けのマルチテナント構成</td>
-<td><strong>最近の一連の実環境確認なし</strong></td>
-</tr>
-</tbody></table>
-<p>モード 4〜5 の概念的な背景（各スタックが何であるか、テナントがどのように
-プロビジョニングされるか）は
-<a href="/docs/operate/deploy-paths/">デプロイモードと起動パス</a>にまとめています。</p>
-<h2>1. ローカルドリル — Docker、AWS 不要</h2>
-<p>クラウドに依存しないドリル問題は、ローカル採点 API を備えた自己完結型の
-Docker コンテナとして動作します。AWS には一切触れず、費用もかかりません。</p>
-<p><strong>前提条件:</strong> Git・Make・Docker Engine・Docker Compose v2 のみです。ホストに
-Bun・Node・<code>node_modules</code> は不要です。<code>make doctor</code> は何もインストールせず、
-この参加者向け Docker-only 経路の起動前要件を診断します。実コンテナ起動後、<code>curl</code>
-または <code>wget</code> があれば <code>make local</code> が Portal のホスト到達性を検証します。どちらも
-なければ起動自体は成功しますが、到達性を未検証と明示し、表示した URL を開いて確認する
-よう案内します。CPU・メモリ・Docker への割り当て・空きディスクは 3 つの実行
-プロファイルとして実測値付きで
-<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play-requirements.md"><code>docs/local-play-requirements.md</code></a>
-に公開しています。<code>make doctor PROFILE=recommended</code> で手元のマシンと比較できます。</p>
-<pre><code class="language-bash">git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
-cd TenkaCloud
-make doctor PROFILE=recommended
+<h1>はじめに <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<p>未公開の統合 candidate の手順です。ローカルの大会・チーム運用は実装されていますが、クラウド基盤の配置や全カタログのプレイ確認が完了した公開版ではありません。</p>
+<h2 id="local-start">ローカル競技を起動する</h2><p>確認対象の checkout、Bun 1.3.11、固定した問題 submodule を使います。macOS または Linux（WSL2 を含む）が対象です。Docker 問題には Docker Engine と Compose が必要です。リポジトリのルートで実行します。</p>
+<pre><code class="language-sh">git submodule update --init --recursive
+bun install --frozen-lockfile --ignore-scripts
 make local
 </code></pre>
-<p><code>make local</code> はローカル採点 API を起動し、Participant Portal の URL（ポート 5175）を
-表示します。ドリルの選択と開始はポータル画面から行います。参加者向けの補助コマンド:</p>
-<pre><code class="language-bash">make local-status # 起動状況を確認
-make local-down   # すべて停止し、ローカルの進捗を消去
-</code></pre>
-<p>この Docker 経路では、問題の選択と起動を Portal から行います。下位の
-<code>tenkacloud local</code> CLI、<code>make local-dev</code>、<code>make local-list</code> などの高度な補助コマンドは
-Bun / Vite を使う開発者向け経路です。<code>make doctor-dev</code> で診断するか、同意に基づく
-セットアップには <code>make local-onboard</code> を使います。</p>
-<p>ローカルプレイの完全なマニュアル — <code>/verify</code> 採点コントラクトや、独自の
-コンテナドリルの作成方法 — は
-<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md"><code>docs/local-play.md</code></a>
-にあります。</p>
-<h2>2. GitHub Codespaces — インストール不要</h2>
-<p>同じローカルドリルを、codespace をマシンとして実行します。セットアップは
-自動です（初回ビルドで Bun のインストール、ドリルカタログの初期化、Docker の
-起動が行われます）。</p>
-<ol>
-<li><a href="https://codespaces.new/susumutomita/TenkaCloud">このリポジトリの github.com/codespaces/new</a>
-を開き、<strong>Create codespace on main</strong> を選択します。</li>
-<li><strong>「▷ ローカルプレイ開始」</strong> タスクを実行します（コマンドパレット →
-<strong>Tasks: Run Task</strong>、または <code>Cmd/Ctrl+Shift+B</code>）。<code>make local</code> が自動で
-実行されます。</li>
-<li>Participant Portal が起動したら、<strong>PORTS</strong> タブを開き、ポート <strong>5175</strong> の
-横にあるプレビューアイコンをクリックします。</li>
+<p>既定の開催者 URL は <code>http://127.0.0.1:5174</code>、参加者 URL は <code>http://127.0.0.1:5175</code> です。実際にはプロセスが表示した URL を使います。最初の開催者は、端末に表示される非公開の初期キーでローカル Admin のユーザー名とパスワードを作ります。以後はそのユーザー名とパスワードで入ります。</p>
+<h2 id="first-event">大会を作成して参加する</h2><ol>
+<li>開催者コンソールで大会、チーム、出題する問題を選びます。</li>
+<li>jobs を準備し、チームごとの結果を確認します。新しい Docker jobs は参加者が起動するまで停止状態です。AWS 問題は配置手順を使います。</li>
+<li>Schedule から大会を開始し、各チームへ専用の参加リンクまたはキーを渡します。</li>
+<li>参加者ポータルへそのキーで入ります。Docker は <strong>Start / resume</strong> で起動し、問題文、操作、得点まで確認します。使い終えた環境は <strong>Stop (keep data)</strong> で停止します。</li>
 </ol>
-<p>Codespaces セッションを快適に保つためのルールは 2 つです。</p>
-<ul>
-<li><strong>codespace の中で完結させてください。</strong> ドリルのリンクはポート <code>5175</code> の
-プレビュー URL 経由でのみ機能します。手元のマシンのブラウザタブに
-<code>127.0.0.1</code> の生 URL を貼り付けても解決できません。</li>
-<li><strong>API 型のドリルには codespace のターミナルから回答します</strong>（例:
-<code>curl http://localhost:&lt;port&gt;/...</code>）。フォワードされたポートは codespace 内
-だけのプライベートなものだからです。いずれの場合も、ポータルにはドリルの
-エンドポイントが表示されます。</li>
-</ul>
-<p>Codespaces でプレイできるのはクラウド非依存のドリルのみです。AWS にデプロイ
-する問題にはモード 3、4、5 のいずれかが必要です。</p>
-<h2>3. AWS 上の Lite モード — コンソールランチャー、ローカルインストール不要</h2>
-<p>Lite モードは単一主催者向けのプラットフォームです。Admin Console、
-Participant Portal、問題デプロイバックエンドを、固定の単一テナントを持つ
-2 つの CloudFormation スタックとしてデプロイします。このパスでは
-<strong>AWS コンソールだけで</strong>構築が完結します。ランチャースタックが CodeBuild
-プロジェクトを作成し、それがリポジトリをクローンしてデプロイを実行して
-くれます。</p>
-<p><strong>実環境での検証状態は candidate/unverified(候補・未検証)です。</strong> launcher の初期設定は
-公開済み v1.11.0 の本体・問題カタログを参照しています。現在の manifest でも認証済みの
-モード・AWS リージョンはありません。開催前に<a href="https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md">参照先と検証状況</a>を確認してください。</p>
-<p><strong>Start build</strong> の権限は、デプロイ先の管理を任せられる担当者だけに付与してください。
-ソースやコマンドを上書きして、デプロイ用ロールの AWS 権限で実行できます。
-<strong>Turso</strong> を使う場合は、DB の <strong>HTTPS URL</strong>(<code>https://…</code>)と読み書きできる DB 用トークンを用意し、
-<strong>Start build の前に</strong>、デプロイ先と同じ AWS アカウント・リージョンの SSM に
-<strong>SecureString</strong> としてトークンを保存します。launcher はこれを作成しません。
-<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher">ダッシュボードと AWS コンソールでの手順</a>。</p>
-<ol>
-<li><a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml"><code>infrastructure/templates/lite-pipeline.yaml</code></a>
-をダウンロードします。</li>
-<li>CloudFormation の <strong>Create stack</strong> ページを開き（カタログのデフォルトは
-<code>ap-northeast-1</code> を対象としています）、<strong>Upload a template file</strong> で
-アップロードして、スタック名を <code>tenkacloud-lite-launcher</code> にします。</li>
-<li><strong><code>TenantAdminEmail</code></strong> に、Admin Console の招待メールを受け取るメールアドレスを
-設定します。Turso を使う場合は <strong><code>ControlDataBackend=turso</code></strong>、
-HTTPS URL を入れる <strong><code>TursoDatabaseUrl</code></strong>、作成済みの SSM 名を入れる <strong><code>TursoAuthTokenParameterName</code></strong>
-も設定します。デフォルトは DynamoDB です。</li>
-<li>IAM ケーパビリティのチェックボックスを承認し、スタックを作成します。</li>
-<li>スタックの <strong><code>StartBuildConsoleUrl</code></strong> 出力から CodeBuild プロジェクトを
-開き、<strong>Start build</strong> を押します。</li>
-</ol>
-<p>約 15〜30 分後、ビルドが作成した <code>tenkacloud-lite</code> スタックと
-<code>tenkacloud-lite-problem-deploy</code> スタックの <strong>Outputs</strong> に <strong>Admin Console</strong>
-と <strong>Participant Portal</strong> の URL が表示されます。<code>TenantAdminEmail</code> に届いた
-一時パスワードでサインインしてください。</p>
-<p><strong>完全に破棄する場合:</strong> 同じ CodeBuild プロジェクトで
-<code>ACTION=destroy-all</code> を指定して <strong>Start build with overrides</strong> を実行します。
-これにより Lite スタックが所有する DynamoDB テーブルと問題デプロイ用ログも
-削除されます。成功後に <code>tenkacloud-lite-launcher</code> スタック自体を削除して
-ください。<code>ACTION=destroy</code> も既定では DynamoDB データを削除します。保持する場合は、
-削除前のデプロイで <code>RetainDataTables=true</code> を設定しておく必要があります。
-<code>destroy-all</code> 追加前の launcher は、先に CloudFormation のスタック更新で
-最新版のテンプレートを適用してください。旧 buildspec は未知の ACTION を
-deploy として扱うため、旧 launcher に <code>destroy-all</code> を直接指定してはいけません。</p>
-<p>CodeBuild の実行時間に応じて料金がかかります。手元でビルドしたい場合は、次の
-CLI 経路を選んでください。どちらも、構築した AWS リソースには利用料がかかります。
-<a href="https://aws.amazon.com/codebuild/pricing/">CodeBuild の料金</a>と
-<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#aws-permissions">必要な AWS 権限</a>を確認してください。</p>
-<h2>4. AWS 上の Lite モード — CLI</h2>
-<p>モード 3 と同じ 2 つのスタックを、手元でビルドしてデプロイします。CodeBuild の
-ビルド費用を抑えたい場合や、プラットフォーム自体を開発する場合に選んでください。</p>
-<p><strong>前提条件:</strong> Git・Make・Bash・zip・rsync・Python 3(<code>python3</code>)・AWS CLI v2・Bun 1.3.11・Node.js 24 と、
-対象アカウントの AWS 認証情報（プロファイルまたは SSO）が必要です。
-ソースの梱包に rsync と Python 3 を使います。
-<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#aws-permissions">必要な権限</a>を確認し、
-<code>aws sts get-caller-identity</code> でデプロイ先のアカウントを照合してください。<code>cdk bootstrap</code> を別のステップ
-として実行する必要は<strong>ありません</strong> — デプロイが冪等に実行します。また
-Lambda のバンドルにはローカルの esbuild を使うため、Docker は不要です。</p>
-<pre><code class="language-bash">git clone https://github.com/susumutomita/TenkaCloud.git
-cd TenkaCloud
-make install
-git submodule update --init problems
-
-# 1. 環境ファイルを作成します（対話式ウィザード）…
-make env-init
-# …または example をコピーして AWS_ACCOUNT_ID と TENANT_ADMIN_EMAIL を記入します:
-#   cp infrastructure/environments/development/.env.example \
-#      infrastructure/environments/development/.env
-
-# .env の AWS_ACCOUNT_ID・AWS_REGION・TENANT_ADMIN_EMAIL と DB 設定を確認します。
-# 2. デプロイ（SPA のビルド、必要なら CDK bootstrap、2 スタックのデプロイ）
-make deploy
+<p>開催者と参加者が使う一つの競技システムです。個人練習専用のログインはありません。Docker カタログと workbench の復旧は進行中です。106 問が一覧に出ることと、terminal や実 Docker のブラウザ操作まで全問確認済みであることは別です。</p>
+<h2 id="stop-and-resume">データを消さず停止・再開する</h2><p>同じ checkout の別端末で実行します。</p>
+<pre><code class="language-sh">make down
+make local
 </code></pre>
-<p>コマンドが完了すると、Admin Console と Participant Portal の URL が表示
-されます。環境の切り替えは <code>make deploy ENV=production</code> で行い（環境ごとに
-専用の <code>infrastructure/environments/&lt;env&gt;/.env</code> があります）。Liteスタックと保持された管理データの削除は
-<code>make destroy-all</code> で行います。通常の <code>make destroy</code> でも DynamoDB テーブルは
-デフォルトで削除されます。履歴を残す場合は、先に
-<code>CDK_PARAM_RETAIN_DATA_TABLES=true</code> でデプロイしてから <code>make destroy</code> を実行してください。</p>
-<p>どちらのコマンドでも、ソース用S3バケットは残ります。現在のファイルと保持された
-旧バージョンの保管料が続くため、対象バケットと他の環境で使っていないことを確認し、
-不要なら全バージョンとバケットを削除します。
-<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#source-storage-after-teardown">ソース保管場所の撤去手順</a>を参照してください。</p>
-<h3>コントロールデータのバックエンドを選ぶ: DynamoDB か Turso か</h3>
-<p>Lite モードはコントロールデータ（イベント、チーム、デプロイメント、スコア）を
-2 つのバックエンドのいずれかに保存します。選択は <code>.env</code> の
-<code>CDK_PARAM_CONTROL_DATA_BACKEND</code> で行います。</p>
-<table>
-<thead>
-<tr>
-<th>バックエンド</th>
-<th>設定値</th>
-<th>常時コスト</th>
-<th>向いている用途</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><strong>DynamoDB</strong>（デフォルト）</td>
-<td>未設定、または <code>dynamodb</code></td>
-<td>テーブルと索引の確保容量。料金は使用量とアカウントの利用枠による</td>
-<td>すべてを AWS 内に収めたいチーム</td>
-</tr>
-<tr>
-<td><strong>Turso (libSQL)</strong></td>
-<td><code>turso</code></td>
-<td>DynamoDBのテーブルと索引を作らない。Tursoの利用枠と、ほかのAWS費用は別途確認</td>
-<td>個人、お試し利用、個人イベント</td>
-</tr>
-</tbody></table>
-<p>設定値はこの 2 つだけです。2 つのストアが同期することはないため、最初の本番
-イベントの前に環境ごとにバックエンドを決めてください（後からの切り替えは
-フラグの変更ではなくデータ移行になります）。</p>
-<p>Turso経路は単体テストとCDK synthでは確認されていますが、実Turso、新規AWSデプロイ、
-請求までを組み合わせたライブ検証は未実施です。DB費用を抑えたい場合はTursoを選び、
-イベント前に構成をリハーサルしてください。Tursoの利用枠と、ほかのAWS費用は別途確認が必要です。</p>
-<p>Turso へのオプトインは 4 ステップです。Turso データベースを作成し、その認証
-トークンを <code>SecureString</code> として SSM に保存し、<code>.env</code> に 3 行
-（<code>CDK_PARAM_CONTROL_DATA_BACKEND=turso</code> に加えて
-<code>CDK_PARAM_TURSO_DATABASE_URL</code> と
-<code>CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME</code>）を追加して、<code>make deploy</code> を
-実行します。SQL スキーマは Lambda の初回コールドスタート時に自動作成され、
-バックエンドが設定されているのに Turso のいずれかの値が欠けている場合は
-デプロイゲートが即座に失敗します。
-完全なウォークスルー、既存の DynamoDB バックエンドのスタックからの移行パス、
-実測の月額コスト、現在のライブ検証ステータスは
-<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md"><code>docs/running-costs.md</code></a>
-にあります。</p>
-<h2>5. SaaS モード — マルチテナント</h2>
-<p>SaaS モードはフルマルチテナントプラットフォームを構築します。System Admin
-招待を備えた SBT コントロールプレーン、pooled の BASIC/ADVANCED テナント、
-専用の PLATINUM silo スタックが立ち上がります。複数の組織が同じ
-デプロイメント上でイベントを運営する場合に選択してください。そうでなければ
-Lite モードが適切なデフォルトです。</p>
-<blockquote>
-<p><strong>現在の状態:</strong> <code>make deploy-saas</code>と関連コードは存在しますが、最近の新規AWS環境で、
-導入、テナント作成、問題起動、採点、削除までを通した確認は記録されていません。
-以下は構成を読むための参考であり、本番開催向けの確認済み手順ではありません。</p>
-</blockquote>
-<p><strong>前提条件:</strong> モード 4 と同じツールチェーンに加え、
-<code>infrastructure/environments/&lt;env&gt;/.env</code> に <code>SYSTEM_ADMIN_EMAIL</code> と
-<code>AWS_ACCOUNT_ID</code> が必要です。</p>
-<pre><code class="language-bash">make deploy-saas
-</code></pre>
-<p>この 1 コマンドで 3 つのフェーズがすべて実行されます。コントロールプレーンと
-pooled アプリケーションプレーンのデプロイ（フェーズ 1）、Admin Console の
-ビルドと CloudFront での配信（フェーズ 2）、そして CloudFront オリジンを
-Cognito のコールバック/CORS に組み込んだ上でのコントロールプレーンの再デプロイ
-（フェーズ 3）です。System Admin の招待メールは <code>SYSTEM_ADMIN_EMAIL</code> に
-届きます。Admin Console からテナントを作成すれば、あとはテナント管理者が
-引き継ぎます。</p>
-<p>破棄は <code>make destroy-saas</code> で行います。どの部分的な状態からでも冪等に動作
-します。テナントがどのようにプロビジョニングされるか（pooled と silo の違い、
-CodePipeline が実際に何のためにあるのか）は
-<a href="/docs/operate/deploy-paths/">デプロイモードと起動パス</a>で解説して
-います。</p>
-<h2>次のステップ</h2>
-<ul>
-<li>問題を出す: <a href="/docs/tutorials/first-pack/">初めてのパックのチュートリアル</a>
-と<a href="/docs/concepts/problem-packs/">問題パックのコンセプト</a>。</li>
-<li>競技をエンドツーエンドで運営する: <a href="/docs/operate/run-an-event/">イベントを運営する</a>。</li>
-<li>スタックを理解する: <a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a>。</li>
-<li><strong>なぜ</strong>この形なのかを理解する: 書籍<a href="https://zenn.dev/bull/books/cloud-competition">『自分で作るクラウド競技』</a>
-(English: <a href="https://leanpub.com/build-your-own-cloud-competition">Build Your Own Cloud Competition</a>)。書籍は設計判断と構築の
-過程を記録したもので、現行の挙動の正本はこのドキュメントです。食い違う場合は
-ドキュメントが正しいです。</li>
-</ul>
+<p><code>make down</code> は管理対象のローカルプロセスと所有する Docker 環境を止め、DB、得点、キー、Docker のデータを保持します。大会の終了や AWS 問題 stack の削除は行いません。<code>make local</code> 後も、新しいオンデマンドの Docker jobs は参加者が再開するまで停止したままです。書き込みレイヤーと volume は保持しますが、RAM は保持しません。再起動しても大会の時刻はリセットされません。End Event は採点を止め、環境の teardown は所有する環境を削除します。削除が完了するまでデータディレクトリを消さないでください。</p>
+<p>起動オプションは <code>LOCAL_ARGS</code> へ渡します。例は <code>make local LOCAL_ARGS=&quot;--no-build&quot;</code> です。<code>--data</code> を指定した場合、<code>make down</code> にも同じディレクトリを指定します。</p>
+<h2 id="cloud-status">クラウド配置の状態</h2><p><code>make deploy</code> と <code>make destroy</code> は現在、未実装のエラーで終了し、リソースを変更しません。クラウド用 Turso への対応は進行中です。管理クラウドや固定費ゼロでの配置が確認済みとは扱わないでください。AWS 問題の実行は別です。ローカルの host から AWS SDK と承認済みの競技者アカウントを使えますが、問題リソースには費用が発生する場合があります。</p>
+<p>Codespaces の転送 URL と問題接続は、この candidate では未確認です。確認記録ができるまでは上のローカル手順を使ってください。</p>
+<p>SaaS/Lite と旧個人練習の手順は<a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">固定した旧版</a>を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。</p>
+<p>次は<a href="/docs/manual/organizer/">開催者マニュアル</a>、<a href="/docs/manual/participant/">参加者マニュアル</a>、<a href="/docs/operate/deploy-paths/">配置の境界</a>です。</p>
+<h2>書籍と互換性</h2>
+<p><a href="https://zenn.dev/bull/books/cloud-competition">自分で作るクラウド競技</a>と
+<a href="https://leanpub.com/build-your-own-cloud-competition">Build Your Own Cloud Competition</a>は、
+教材と設計の背景を説明します。現行の挙動の正本はこのドキュメントと対応する checkout です。
+公開済み書籍には旧版の構築手順が残っています。<code>docs/book-compatibility.md</code> に
+コマンド、採点、runtime の修正点を記録しています。外部の書籍は変更していません。</p>
 
 </article>
 </main>

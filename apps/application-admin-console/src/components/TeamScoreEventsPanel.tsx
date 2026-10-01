@@ -48,7 +48,7 @@ function buildCumulative(
   const points: SeriesPoint[] = [];
   let cum = 0;
   for (const e of team.events) {
-    cum += e.points;
+    cum = e.projectedTotal ?? cum + e.points;
     const ts = Date.parse(e.occurredAt);
     if (!Number.isFinite(ts)) continue;
     points.push({ x: new Date(ts), y: cum });

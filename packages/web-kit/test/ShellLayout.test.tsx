@@ -73,6 +73,16 @@ describe("ShellLayout", () => {
     expect(topNav.findLogo()?.getElement()).toHaveAttribute("alt", "");
   });
 
+  it("keeps brand navigation inside the SPA without losing memory-only authentication", () => {
+    const { topNav, props } = renderShell();
+    const link = topNav.findTitle()?.getElement().closest("a");
+    expect(link).not.toBeNull();
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link?.dispatchEvent(event);
+    expect(props.onNavigate).toHaveBeenCalledWith("/");
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it("should show only the locale switcher when unauthenticated", () => {
     const { topNav } = renderShell({ isAuthenticated: false });
     expect(topNav.findUtilities()).toHaveLength(1);

@@ -1,0 +1,123 @@
+import { describe, expect, it } from "bun:test";
+import type { ProblemEndpointSlot } from "@tenkacloud/problem-sdk/internal";
+import type { EndpointOverride } from "./resolve-endpoints";
+import { resolveEndpoints } from "./resolve-endpoints";
+
+/**
+ * resolveEndpoints は純関数なので vi.mock 不要。metadata + stackOutputs (= CFn output JSON) +
+ * override 行を merge して effective URL を組む。
+ */
+
+const slot = (
+  name: string,
+  key: string,
+  opts: Partial<ProblemEndpointSlot> = {},
+): ProblemEndpointSlot => ({
+  slot: name,
+  default: { from: "cfn-output", key },
+  overridable: false,
+  ...opts,
+});
+
+const override = (slotName: string, url: string): EndpointOverride => ({
+  slot: slotName,
+  overrideUrl: url,
+});
+
+describe("resolveEndpoints", () => {
+  it("should adopt the CFn output value as the default URL (array form)", () => {
+    const stackOutputs = JSON.stringify([
+      { OutputKey: "FrontendUrl", OutputValue: "https://front.example.com/" },
+    ]);
+    const result = resolveEndpoints({
+      slots: [slot("frontend", "FrontendUrl")],
+      stackOutputs,
+      overrides: [],
+    });
+    expect(result).toEqual([
+      {
+        slot: "frontend",
+        overridable: false,
+        defaultKey: "FrontendUrl",
+        defaultUrl: "https://front.example.com/",
+        effectiveUrl: "https://front.example.com/",
+      },
+    ]);
+  });
+
+  it("should return defaultUrl and effectiveUrl as undefined when the CFn output key is missing", () => {
+    const result = resolveEndpoints({
+      slots: [slot("api", "MissingKey")],
+      stackOutputs: JSON.stringify([]),
+      overrides: [],
+    });
+    // #703: defaultKey は metadata 由来なので stackOutputs に無くても露出して UI 側 hint に使う
+    expect(result).toEqual([{ slot: "api", overridable: false, defaultKey: "MissingKey" }]);
+  });
+
+  it("effectiveUrl should be populated by override for slots with an override", () => {
+    const stackOutputs = JSON.stringify([
+      { OutputKey: "FrontendUrl", OutputValue: "https://front.example.com/" },
+    ]);
+    const result = resolveEndpoints({
+      slots: [slot("frontend", "FrontendUrl", { overridable: true })],
+      stackOutputs,
+      overrides: [override("frontend", "https://my-host.example.com/")],
+    });
+    expect(result[0]).toMatchObject({
+      defaultUrl: "https://front.example.com/",
+      overrideUrl: "https://my-host.example.com/",
+      effectiveUrl: "https://my-host.example.com/",
+    });
+  });
+
+  it("should keep the default URL when a stored endpoint row has no override URL", () => {
+    const result = resolveEndpoints({
+      slots: [slot("frontend", "FrontendUrl", { overridable: true })],
+      stackOutputs: JSON.stringify({ FrontendUrl: "https://front.example.com/" }),
+      overrides: [{ slot: "frontend" }],
+    });
+    expect(result).toEqual([
+      {
+        slot: "frontend",
+        overridable: true,
+        defaultKey: "FrontendUrl",
+        defaultUrl: "https://front.example.com/",
+        effectiveUrl: "https://front.example.com/",
+      },
+    ]);
+  });
+
+  it("should assemble the default URL including appendPath", () => {
+    const stackOutputs = JSON.stringify([
+      { OutputKey: "BaseUrl", OutputValue: "https://api.example.com/" },
+    ]);
+    const result = resolveEndpoints({
+      slots: [
+        slot("users", "BaseUrl", {
+          default: { from: "cfn-output", key: "BaseUrl", appendPath: "/users" },
+        }),
+      ],
+      stackOutputs,
+      overrides: [],
+    });
+    expect(result[0]?.defaultUrl).toBe("https://api.example.com/users");
+  });
+
+  it("should preserve label / description", () => {
+    const result = resolveEndpoints({
+      slots: [slot("frontend", "FrontendUrl", { label: "Frontend", description: "nginx" })],
+      stackOutputs: undefined,
+      overrides: [],
+    });
+    expect(result[0]).toMatchObject({
+      label: "Frontend",
+      description: "nginx",
+      overridable: false,
+    });
+  });
+
+  it("should return an empty array when metadata.endpoints[] is empty", () => {
+    expect(resolveEndpoints({ slots: [], stackOutputs: undefined, overrides: [] })).toEqual([]);
+  });
+});

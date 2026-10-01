@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,24 +43,24 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/" aria-current="page">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
+<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
+<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -68,47 +68,16 @@
 <main class="doc">
 <article>
 <h1>既存パックを使う <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>これは、他の誰かがすでに作成したパックを使うための、5 分で終わる主催者向けの手順です。パックを自分で書いたり公開したりする場合は、<a href="/docs/tutorials/first-pack/">最初のパックのチュートリアル</a>から始めてください。モデルの全体像は<a href="/docs/concepts/problem-packs/">問題パック</a>を、コマンドの正式な一覧は <a href="/docs/reference/cli/">CLI リファレンス</a>を参照してください。</p>
-<h2>前提条件</h2>
-<p>次のいずれかを用意してください。</p>
-<ul>
-<li>パックの HTTPS Git URL と、実行対象となるイミュータブルな 40 桁 16 進の完全なコミット SHA。</li>
-<li>ローカルのパックディレクトリ。パックが Git にピン留めされる前に、ローカルでリハーサルする場合に使います。</li>
-</ul>
-<p>以下の CLI コマンドは、TenkaCloud リポジトリのチェックアウトから <code>infrastructure</code> ワークスペースを通して実行します。主催者コンソールで実際のイベントを作成してデプロイするまで、AWS 認証情報は不要です。</p>
-<h2>1. ピン留めした Git リビジョンをインストールする</h2>
-<p>イベントで使う場合は Git 形式を推奨します。<code>sourceKind: &quot;git&quot;</code>、リポジトリ URL、解決されたコミット、サブディレクトリ（あれば）、コンテンツダイジェストが <code>packs-lock.json</code> に記録されます。<code>--commit</code> の値は 40 桁 16 進の完全な SHA でなければなりません。ブランチ、タグ、<code>HEAD</code>、短縮ハッシュは意図的に拒否されます。</p>
-<pre><code class="language-bash">make pack-install ARGS=&quot;git https://github.com/example/acme-pack.git --commit &lt;40-hex-commit-sha&gt;&quot;
+<p>pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。残っている tenant 単位の activate は旧版向けのローカル記録であり、現行の競技実行手順ではありません。</p>
+<h2 id="prerequisites">前提条件</h2><p>信頼する pack のローカルディレクトリ、または HTTPS Git URL と完全な 40 桁 commit SHA を用意します。runtime、ファイル、provenance を確認してください。</p>
+<h2 id="install-the-pinned-git-revision">固定した revision を保存する</h2><pre><code class="language-sh">make pack-install ARGS=&quot;git &lt;https-url&gt; --commit &lt;40-hex-commit-sha&gt;&quot;
+make pack-list
+bun run pack inspect &lt;id@version&gt;
 </code></pre>
-<p>期待される出力:</p>
-<pre><code class="language-text">Pack installed: com.example.event-pack@1.0.0
-  source: git
-  digest: &lt;sha256-content-digest&gt;
-  problems: 3
-</code></pre>
-<p>リハーサル用にローカルのパックディレクトリを渡された場合は、代わりにローカル形式でインストールし、主催者に共有する前にピン留めした Git インストールへ移行してください。</p>
-<pre><code class="language-bash">make pack-install ARGS=&quot;./path/to/pack&quot;
-</code></pre>
-<h2>2. テナントに対してアクティベートする</h2>
-<p>アクティベーションは、インストール済みのイミュータブルな 1 つのリビジョンを、1 つのテナントから見えるようにします。この操作もスナップショットストアに対してローカルで実行され、重複する問題 ID、利用できないランタイム、ダイジェストの不一致、未インストールのパックは拒否されます。</p>
-<pre><code class="language-bash">make pack-activate ARGS=&quot;com.example.event-pack@1.0.0 --tenant acme&quot;
-</code></pre>
-<p>期待される出力:</p>
-<pre><code class="language-text">Pack activated for tenant &#39;acme&#39;: com.example.event-pack@1.0.0
-</code></pre>
-<h2>3. インストール済みリビジョンを確認する</h2>
-<p><code>pack list</code> は、アクティベーションが指しているローカルのロックエントリを検証します。テナント単位のアクティベーション一覧ではないため、上のアクティベーション成功メッセージと合わせて確認してください。</p>
-<pre><code class="language-bash">make pack-list
-</code></pre>
-<p>期待される出力:</p>
-<pre><code class="language-text">Installed packs: 1
-  - com.example.event-pack@1.0.0 (git, 3 problems, &lt;sha256-content-digest&gt;)
-</code></pre>
-<h2>4. イベントを作成する <span class="doc-badge doc-badge--preview">Preview</span></h2>
-<p><code>application-admin-console</code> で、同じテナントのイベントを作成します。イベントピッカーは公式カタログとそのテナントのアクティベート済みパックリビジョンを合成するため、アクティベートしたパックの問題が公式カタログの問題と並んで表示されます。</p>
-<p>イベント作成の時点で、プラットフォームはその時点で有効なカタログスナップショットをピン留めします。その後の <code>install</code>、<code>activate</code>、<code>deactivate</code> 操作がそのイベントを書き換えることはありません。主催者が選択した問題をデプロイすると、デプロイメントはイベントにピン留めされたスナップショットに対して解決され、可変なカタログ参照ではなく、その問題のパック来歴 (provenance) を保持します。</p>
-<p>このブラウザーでのイベント作成経路は、まだライブでの一括検証が済んでいないため、最初のパックのチュートリアルのイベント手順と同じ preview バッジが付いています。運営フローの全体像は<a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a>に進んでください。</p>
-<p>パックが実際のデプロイに到達するのは Lite モード (<code>make deploy</code>) だけです。Lite は固定のテナント id <code>local</code> のアクティベーションを読み取るため、上のローカルリハーサルを終えたら、任意のテナント名ではなく <code>--tenant local</code> でアクティベートしてください。SaaS モード (<code>make deploy-saas</code>) は、パックのアクティベーションが 1 つでも存在する間は synth 自体を拒否します。プール型カタログから黙って除外することはありません。</p>
+<p>リポジトリのルートで実行します。既定の保存先は <code>.tenkacloud/pack-store</code> です。Git install はネットワークを使います。ローカルディレクトリの検証や保存はリソースを配置しません。</p>
+<h2 id="verify-the-installed-revision">保存結果を確認する</h2><p>取得元、解決済み commit、digest を確認します。install 成功は、任意コードの実行、endpoint の公開、クラウド作成の承認ではありません。</p>
+<h2 id="create-the-event">大会への接続は未対応</h2><p>activate しても現在の大会選択欄へ pack の問題は追加されません。実装上の不足であり、実環境テストだけが未実施という状態ではありません。大会には対応する core catalog の問題を使い、pack の経路は Not run と記録します。<a href="/docs/tutorials/first-pack/">最初の pack</a>も参照してください。</p>
+<p>SaaS/Lite と旧個人練習の手順は<a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">固定した旧版</a>を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。</p>
 
 </article>
 </main>

@@ -1,5 +1,7 @@
 /** Thin fetch wrapper matching the real portal/host-console request shape (see
  * scripts/local-host/tests/coordination-http.test.ts for the reference contract). */
+import { BENCH_ORGANIZER } from "./state-setup";
+
 export interface HttpCall {
   readonly status: number;
 }
@@ -41,10 +43,21 @@ export interface CreatedEvent {
 }
 
 export async function adminLogin(origin: string, key: string): Promise<string> {
-  const response = await fetch(`${origin}/api/host/login`, {
+  const status = await fetch(`${origin}/api/host/bootstrap-status`);
+  if (!status.ok) throw new Error(`Host bootstrap status failed with HTTP ${status.status}`);
+  const bootstrap: unknown = await status.json();
+  if (
+    !bootstrap ||
+    typeof bootstrap !== "object" ||
+    !("bootstrapCompleted" in bootstrap) ||
+    typeof bootstrap.bootstrapCompleted !== "boolean"
+  )
+    throw new Error("Host bootstrap status is invalid.");
+  const firstVisit = bootstrap.bootstrapCompleted === false;
+  const response = await fetch(`${origin}/api${firstVisit ? "/host/bootstrap" : "/host/login"}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key }),
+    body: JSON.stringify({ ...(firstVisit ? { key } : {}), ...BENCH_ORGANIZER }),
   });
   if (response.status >= 300)
     throw new Error(`Host login failed with HTTP ${String(response.status)}`);

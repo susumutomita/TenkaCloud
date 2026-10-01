@@ -7,8 +7,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveComposeCli } from "../../local-play/docker-adapter";
 import { randomToken } from "../auth";
+import { resolveComposeCli } from "../container/compose-cli";
 import { DAEMON_UNAVAILABLE_MESSAGE, DockerHostingEngine } from "../docker-engine";
 import { persistentKey, prepareDatabase, privateDirectory } from "../files";
 import { DEFAULT_GATEWAY_PORTS, parseGatewayPorts } from "../gateway-ports";
@@ -17,6 +17,7 @@ import { type HttpHost, startHttpHost } from "../http";
 import { object, type Team } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 interface CreatedEvent {
   eventId: string;
@@ -84,7 +85,7 @@ async function main(): Promise<void> {
   let failed = false;
   async function attach(): Promise<void> {
     const currentSurfaces = surfaces;
-    service.surfaceLink = (job, team) => currentSurfaces.link(job, team);
+    service.surfaceLink = (job, team, path) => currentSurfaces.link(job, team, path);
     service.closeSurface = (jobId) => currentSurfaces.closeJob(jobId);
     const staticRoot = join(directory, "static");
     mkdirSync(staticRoot, { recursive: true });
@@ -132,11 +133,16 @@ async function main(): Promise<void> {
     return payload as Body;
   }
   async function login(): Promise<void> {
+    const status = await api<{ bootstrapCompleted: boolean }>("host", "/host/bootstrap-status");
+    const firstVisit = !status.bootstrapCompleted;
     const session = await api<{ idToken: string }>(
       "host",
-      "/host/login",
+      firstVisit ? "/host/bootstrap" : "/host/login",
       "POST",
-      { key: masterKey },
+      {
+        ...(firstVisit ? { key: masterKey } : {}),
+        ...REHEARSAL_ORGANIZER,
+      },
       "",
     );
     accessToken = session.idToken;
@@ -164,6 +170,18 @@ async function main(): Promise<void> {
     const result = object(await response.json());
     assert.equal(typeof result.flag, "string");
     return String(result.flag);
+  }
+  async function startTeams(teams: CreatedEvent["teams"]): Promise<void> {
+    for (const team of teams) {
+      await api(
+        "portal",
+        "/portal/me/problems/sqli-demo/container/start",
+        "POST",
+        {},
+        team.teamLoginKey,
+      );
+      await service.drain();
+    }
   }
   async function restart(): Promise<void> {
     await service.drain();
@@ -194,6 +212,15 @@ async function main(): Promise<void> {
       });
       await api("host", `/events/${unavailable.eventId}/deploy`, "POST", {});
       await service.drain();
+      await api("host", `/events/${unavailable.eventId}/schedule`, "PATCH", { startNow: true });
+      await api(
+        "portal",
+        "/portal/me/problems/sqli-demo/container/start",
+        "POST",
+        {},
+        unavailable.teams[0]?.teamLoginKey,
+      );
+      await service.drain();
     } finally {
       if (saved === undefined) delete process.env.DOCKER_HOST;
       else process.env.DOCKER_HOST = saved;
@@ -202,7 +229,13 @@ async function main(): Promise<void> {
     assert.equal(failedJob?.status, "FAILED");
     assert.equal(failedJob?.error, DAEMON_UNAVAILABLE_MESSAGE);
     assert.ok(failedJob?.unit, "Ownership is retained while cleanup could not run.");
-    await api("host", `/events/${unavailable.eventId}/deploy`, "POST", {});
+    await api(
+      "portal",
+      "/portal/me/problems/sqli-demo/container/start",
+      "POST",
+      {},
+      unavailable.teams[0]?.teamLoginKey,
+    );
     await service.drain();
     assert.equal(
       store.job(failedJob.jobId).status,
@@ -276,13 +309,20 @@ async function main(): Promise<void> {
     assert.ok(first && second);
     await api("host", `/events/${eventId}/deploy`, "POST", {});
     await service.drain();
+    assert.ok(store.jobs(eventId).every((job) => job.status === "STOPPED" && job.runtimePorts));
+    await api("host", `/events/${eventId}/schedule`, "PATCH", {
+      startNow: true,
+      endsAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+    });
+    await startTeams([first, second]);
     const jobs = store.jobs(eventId);
     assert.equal(jobs.length, 2);
     assert.ok(
       jobs.every((job) => job.status === "COMPLETE" && job.unit),
       JSON.stringify(jobs.map((job) => ({ status: job.status, error: job.error }))),
     );
-    assert.notEqual(jobs[0]?.offset, jobs[1]?.offset);
+    assert.notDeepEqual(jobs[0]?.runtimePorts, jobs[1]?.runtimePorts);
+    assert.notEqual(jobs[0]?.gatewaySlot, jobs[1]?.gatewaySlot);
     checks.push(
       "Two production Docker environments, separate projects/ports and durable ownership",
     );

@@ -20,6 +20,7 @@ import { type LocaleCode, useLang, useT } from "../i18n";
 import { describeAgo, type SupportedLang } from "../lib/format";
 import { AttackProbesPanel } from "./AttackProbesPanel";
 import { ContainerWorkbenchPanel } from "./ContainerWorkbenchPanel";
+import { HostContainerControls } from "./HostContainerControls";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
 import {
   buildAutoDeleteNotice,
@@ -218,6 +219,11 @@ function ProblemFacts({
  * handoff で足りる) / AWS mode (lifecycle 不在) には出さない。 `ProblemStatement` などと同じ
  * 「早期 null return」 の流儀に揃え、 gating の `&&` を `ProblemPanel` 本体から追い出す。
  */
+function hasContainerWorkbench(problem: ParticipantProblemView): boolean {
+  // Host-owned competition runtimes deliberately omit participant lifecycle controls.
+  return problem.provider === "docker" || problem.lifecycle?.runtimeKind === "docker";
+}
+
 function ContainerTerminal({
   problem,
   apiBaseUrl,
@@ -396,6 +402,14 @@ export function ProblemPanel({
         <ProblemStatement hidden={isIntroTutorial} problem={problem} t={t} />
         <ProblemWriteupHandoff problem={problem} flags={multiFlagScoring?.flags ?? []} t={t} />
         <ProblemWriteup problem={problem} t={t} />
+        <HostContainerControls
+          key={problem.problemId}
+          session={problem.containerSession}
+          problemId={problem.problemId}
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          onScored={onScored}
+        />
         {/* [#2392 Phase 2] on-demand start / stop control。 lifecycle 不在 (= AWS mode) は出さない。 */}
         {lifecycleStatus !== undefined && (
           <ProblemLifecyclePanel
@@ -488,7 +502,7 @@ export function ProblemPanel({
             )}
             {multiFlagScoring && (
               <MultiFlagPlaySurface
-                localDocker={problem.lifecycle?.runtimeKind === "docker"}
+                localDocker={hasContainerWorkbench(problem)}
                 apiBaseUrl={apiBaseUrl}
                 sessionToken={sessionToken}
                 problemId={problem.problemId}

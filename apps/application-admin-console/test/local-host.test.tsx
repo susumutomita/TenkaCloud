@@ -3,7 +3,7 @@
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import { AuthProvider } from "../src/auth/AuthProvider";
 import { type AppConfig, isLocalHost, loadConfig } from "../src/config";
@@ -25,6 +25,10 @@ const runtime = {
   participantPortalUrl: "http://127.0.0.1:5175",
 };
 
+beforeEach(() => {
+  window.localStorage.setItem("tenkacloud.application-admin.locale", "en");
+});
+
 function stubRuntime(body: unknown, status = 200) {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status }));
   vi.stubGlobal("fetch", fetchMock);
@@ -37,18 +41,41 @@ async function localConfig(): Promise<AppConfig> {
 }
 
 describe("loadConfig in the local hosting build", () => {
-  it("uses the same-origin host API and turns cloud-only features off", async () => {
+  it("uses the same-origin host API and exposes supported host features", async () => {
     const config = await localConfig();
     expect(isLocalHost(config)).toBe(true);
     expect(config.apiBaseUrl).toBe(`${origin}/api`);
     expect(config.cognitoDomain).toBe(`${origin}/api/host`);
     expect(config.participantPortalUrl).toBe("http://127.0.0.1:5175");
     expect(config.features).toMatchObject({
-      redTeam: false,
+      redTeam: true,
       samlSso: false,
       nonAwsRuntime: false,
       challengePrerequisiteGate: false,
     });
+  });
+
+  it.each(["https://play.example.com", "https://play.example.com:8443"])(
+    "accepts the public host's HTTPS participant origin: %s",
+    async (participantPortalUrl) => {
+      const publicOrigin = "https://admin.example.com";
+      vi.stubGlobal("window", { location: { origin: publicOrigin } });
+      stubRuntime({ ...runtime, apiBaseUrl: `${publicOrigin}/api`, participantPortalUrl });
+
+      const config = await loadConfig({}, { localHostBuild: true });
+
+      expect(isLocalHost(config)).toBe(true);
+      expect(config.apiBaseUrl).toBe(`${publicOrigin}/api`);
+      expect(config.cognitoDomain).toBe(`${publicOrigin}/api/host`);
+      expect(config.participantPortalUrl).toBe(participantPortalUrl);
+    },
+  );
+
+  it("exposes only a valid host AWS region from the same-origin runtime configuration", async () => {
+    stubRuntime({ ...runtime, awsRegion: "ap-northeast-1" });
+    expect((await loadConfig({}, { localHostBuild: true })).hostAwsRegion).toBe("ap-northeast-1");
+    stubRuntime({ ...runtime, awsRegion: "https://attacker.example" });
+    expect((await loadConfig({}, { localHostBuild: true })).hostAwsRegion).toBeUndefined();
   });
 
   it.each([
@@ -56,6 +83,10 @@ describe("loadConfig in the local hosting build", () => {
     { ...runtime, role: "participant" },
     { ...runtime, apiBaseUrl: "https://evil.example/api" },
     { ...runtime, participantPortalUrl: "ftp://127.0.0.1:5175" },
+    { ...runtime, participantPortalUrl: "https://play.example.com/path" },
+    { ...runtime, participantPortalUrl: "//play.example.com" },
+    // eslint-disable-next-line sonarjs/code-eval -- Rejected protocol fixture; never evaluated.
+    { ...runtime, participantPortalUrl: "javascript:alert(1)" },
   ])("refuses a configuration that does not describe this host: %o", async (body) => {
     stubRuntime(body);
     await expect(loadConfig({}, { localHostBuild: true })).rejects.toThrow(/No demo or cloud/u);
@@ -101,36 +132,87 @@ function renderLogin(config: AppConfig) {
   );
 }
 
+function stubLogin(
+  bootstrapCompleted: boolean,
+  exchange: () => Response = () =>
+    new Response(
+      JSON.stringify({
+        idToken: "a.b.c",
+        accessToken: "a.b.c",
+        refreshToken: "refresh",
+        expiresAt: Date.now() + 60_000,
+      }),
+    ),
+) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/api/host/bootstrap-status")
+      return new Response(JSON.stringify({ bootstrapCompleted }));
+    if (path === "/api/host/saml") return new Response(JSON.stringify({ enabled: false }));
+    if (path === "/api/host/bootstrap" || path === "/api/host/login") return exchange();
+    return new Response("{}", { status: 404 });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 describe("LocalHostLoginPage", () => {
-  it("exchanges the host key for a session and opens the events page", async () => {
+  it("uses the host key once to create the first local Admin account", async () => {
     const config = await localConfig();
-    const fetchMock = stubRuntime({
-      idToken: "a.b.c",
-      accessToken: "a.b.c",
-      refreshToken: "refresh",
-      expiresAt: Date.now() + 60_000,
-    });
+    const fetchMock = stubLogin(false);
+    const secret = "bootstrap-password";
     renderLogin(config);
-    fireEvent.change(document.getElementById("local-host-key") as HTMLInputElement, {
+    fireEvent.change(await screen.findByLabelText("Host key"), {
       target: { value: "host-key" },
+    });
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "owner" } });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: secret },
+    });
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+    await waitFor(() => expect(screen.getByText("events page")).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${origin}/api/host/bootstrap`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ key: "host-key", username: "owner", password: secret }),
+      }),
+    );
+  });
+
+  it("uses a username and password without asking for the key after bootstrap", async () => {
+    const config = await localConfig();
+    const fetchMock = stubLogin(true);
+    const secret = "new-password";
+    renderLogin(config);
+    fireEvent.change(await screen.findByLabelText("Username"), { target: { value: "owner" } });
+    expect(screen.queryByLabelText("Host key")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: secret },
     });
     fireEvent.submit(document.querySelector("form") as HTMLFormElement);
     await waitFor(() => expect(screen.getByText("events page")).toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalledWith(
       `${origin}/api/host/login`,
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ key: "host-key" }) }),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ username: "owner", password: secret }),
+      }),
     );
   });
 
-  it("says when the key is wrong instead of signing in", async () => {
+  it("shows the host's invalid-password response without signing in", async () => {
     const config = await localConfig();
-    stubRuntime({ message: "Invalid host key." }, 401);
+    stubLogin(
+      true,
+      () => new Response(JSON.stringify({ message: "Invalid credentials." }), { status: 401 }),
+    );
     renderLogin(config);
-    fireEvent.change(document.getElementById("local-host-key") as HTMLInputElement, {
-      target: { value: "wrong" },
-    });
+    fireEvent.change(await screen.findByLabelText("Username"), { target: { value: "owner" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "wrong" } });
     fireEvent.submit(document.querySelector("form") as HTMLFormElement);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Invalid credentials.");
     expect(screen.queryByText("events page")).toBeNull();
   });
 });
@@ -138,17 +220,13 @@ describe("LocalHostLoginPage", () => {
 describe("LocalHostLoginPage error bodies", () => {
   it("shows the sign-in failure message for a non-JSON error response", async () => {
     const config = await localConfig();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response("<html>Bad gateway</html>", { status: 502 })),
-    );
+    stubLogin(true, () => new Response("<html>Bad gateway</html>", { status: 502 }));
     renderLogin(config);
-    fireEvent.change(document.getElementById("local-host-key") as HTMLInputElement, {
-      target: { value: "host-key" },
-    });
+    fireEvent.change(await screen.findByLabelText("Username"), { target: { value: "owner" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password" } });
     fireEvent.submit(document.querySelector("form") as HTMLFormElement);
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Sign-in failed|サインインできませんでした/u);
+    expect(alert.textContent).toMatch(/Host sign-in failed|サインインできませんでした/u);
     expect(alert.textContent).not.toMatch(/JSON|Unexpected token/u);
   });
 });
@@ -156,21 +234,21 @@ describe("LocalHostLoginPage error bodies", () => {
 describe("LocalHostLoginPage null bodies", () => {
   it("shows the sign-in failure message for a JSON null error body", async () => {
     const config = await localConfig();
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("null", { status: 500 })));
+    stubLogin(true, () => new Response("null", { status: 500 }));
     renderLogin(config);
-    fireEvent.change(document.getElementById("local-host-key") as HTMLInputElement, {
-      target: { value: "host-key" },
-    });
+    fireEvent.change(await screen.findByLabelText("Username"), { target: { value: "owner" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password" } });
     fireEvent.submit(document.querySelector("form") as HTMLFormElement);
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Sign-in failed|サインインできませんでした/u);
+    expect(alert.textContent).toMatch(/Host sign-in failed|サインインできませんでした/u);
     expect(alert.textContent).not.toMatch(/null|TypeError/u);
   });
 });
 
 describe("local-host routes", () => {
-  it("sends an unauthenticated organizer to the host-key sign-in, not Cognito", async () => {
+  it("sends an unauthenticated organizer to local password sign-in, not Cognito", async () => {
     const config = await localConfig();
+    stubLogin(true);
     window.history.pushState({}, "", "/competitor-accounts");
     render(
       <I18nProvider>
@@ -179,7 +257,9 @@ describe("local-host routes", () => {
         </MemoryRouter>
       </I18nProvider>,
     );
-    expect(await screen.findByLabelText(/主催者キー|Host key/u)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/ユーザー名|Username/u)).toBeInTheDocument();
+    expect(screen.getByLabelText(/パスワード|Password/u)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/主催者キー|Host key/u)).toBeNull();
   });
 });
 

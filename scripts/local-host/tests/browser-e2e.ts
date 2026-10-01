@@ -3,7 +3,7 @@
  * organizer and participants see: the built host console and participant portal, served by
  * `e2e-host.ts` (production wiring over a temporary data directory).
  *
- * Organizer: host-key sign-in → normal event creation page (2 teams) → deploy → start.
+ * Organizer: one-time Admin bootstrap, password sign-in, event creation, deploy, and start.
  * Participants: two independent browser contexts sign in with their team keys, open their own
  * exercise through the portal link, obtain the flag through that exercise's login form, submit
  * it in the portal, and see the ranking. Organizer: end the event and tear the environments down.
@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
+import { signInOrganizer } from "./organizer-login";
 
 interface HostInfo {
   admin: string;
@@ -51,11 +52,26 @@ async function startHost(): Promise<{ info: HostInfo; child: ChildProcess }> {
   return { info, child };
 }
 
-async function signInOrganizer(page: Page, info: HostInfo): Promise<void> {
-  await page.goto(`${info.admin}/events`);
-  await page.locator("#local-host-key").fill(info.key);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByText("Local competition mode").first().waitFor();
+async function stopHost(child: ChildProcess): Promise<void> {
+  let code = child.exitCode;
+  let signal = child.signalCode;
+  if (code === null && signal === null) {
+    const completed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (accept) =>
+        child.once("exit", (exitCode, exitSignal) =>
+          accept({ code: exitCode, signal: exitSignal }),
+        ),
+    );
+    if (!child.kill("SIGTERM") && child.exitCode === null && child.signalCode === null)
+      throw new Error("Could not signal the browser fixture host to clean up its jobs.");
+    ({ code, signal } = await completed);
+  }
+  if (code !== 0) {
+    const status = code === null ? `signal ${String(signal)}` : `code ${String(code)}`;
+    throw new Error(
+      `Browser fixture host exited with ${status}. Check stderr for retained SQLite ownership.`,
+    );
+  }
 }
 
 async function createEvent(page: Page, name: string): Promise<Map<string, string>> {
@@ -82,19 +98,19 @@ async function createEvent(page: Page, name: string): Promise<Map<string, string
   return keys;
 }
 
-async function waitForReady(page: Page): Promise<void> {
+async function waitForEnvironmentState(page: Page, expected: "Stopped" | "Running"): Promise<void> {
   await page.getByRole("tab", { name: "Teams" }).click();
   const panel = page.getByText("Problem environments per team").first();
   await panel.waitFor();
   await page
     .getByRole("row")
     .filter({ hasText: "team-1" })
-    .getByText("Running")
+    .getByText(expected)
     .waitFor({ timeout: STEP_TIMEOUT });
   await page
     .getByRole("row")
     .filter({ hasText: "team-2" })
-    .getByText("Running")
+    .getByText(expected)
     .waitFor({ timeout: STEP_TIMEOUT });
 }
 
@@ -102,6 +118,14 @@ async function startEvent(page: Page): Promise<void> {
   await page.getByRole("tab", { name: "Schedule" }).click();
   await page.getByRole("button", { name: "Start now" }).click();
   await page.getByText("Scoring", { exact: true }).first().waitFor({ timeout: STEP_TIMEOUT });
+}
+
+async function captureFailure(page: Page, filename: string): Promise<void> {
+  try {
+    await page.screenshot({ path: join(artifacts, filename), fullPage: true });
+  } catch (error) {
+    console.error("Could not capture the browser failure:", error);
+  }
 }
 
 async function participantSolves(
@@ -113,10 +137,7 @@ async function participantSolves(
   try {
     return await solveAs(page, context, info, teamKey);
   } catch (error) {
-    await page.screenshot({
-      path: join(artifacts, `participant-${teamKey.slice(0, 6)}.png`),
-      fullPage: true,
-    });
+    await captureFailure(page, `participant-${teamKey.slice(0, 6)}.png`);
     throw error;
   }
 }
@@ -135,6 +156,17 @@ async function solveAs(
     .getByText(/Staff-Only Login|スタッフ専用ログイン|SQL injection exercise/u)
     .first()
     .click();
+  if (info.engine === "docker") {
+    assert.equal(
+      await page.locator('a[href*="/__join?ticket="]').count(),
+      0,
+      "Preparation leaves the team's problem dormant until it requests Start / resume.",
+    );
+    await page.getByRole("button", { name: "Start / resume", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Stop (keep data)", exact: true })
+      .waitFor({ timeout: STEP_TIMEOUT });
+  }
   // "Access URLs → Web": a one-use handoff to this team's own exercise gateway.
   const web = page.locator('a[href*="/__join?ticket="]').first();
   await web.waitFor({ timeout: STEP_TIMEOUT });
@@ -189,14 +221,17 @@ async function main(): Promise<void> {
   const { info, child } = await startHost();
   let browser: Browser | undefined;
   let organizer: Page | undefined;
+  const failures: unknown[] = [];
   try {
     browser = await chromium.launch({ executablePath: chromiumPath() });
     const admin = await browser.newContext({ locale: "en-US" });
     admin.setDefaultTimeout(STEP_TIMEOUT);
     organizer = await admin.newPage();
     await signInOrganizer(organizer, info);
+    // A page navigation drops the memory-only token; the second sign-in uses the password.
+    await signInOrganizer(organizer, info);
     const keys = await createEvent(organizer, "Browser rehearsal");
-    await waitForReady(organizer);
+    await waitForEnvironmentState(organizer, info.engine === "docker" ? "Stopped" : "Running");
     await startEvent(organizer);
     // Two independent participant browsers (separate cookies and storage).
     const [teamOne, teamTwo] = await Promise.all([
@@ -210,23 +245,29 @@ async function main(): Promise<void> {
       participantSolves(teamTwo, info, keys.get("team-2") ?? ""),
     ]);
     assert.notEqual(flagOne, flagTwo, "Each team has its own environment and flag.");
+    await waitForEnvironmentState(organizer, "Running");
     await organizer.getByRole("tab", { name: "Scoreboard" }).click();
     await endAndTearDown(organizer);
-    console.log(
-      `PASS local competition browser rehearsal (${info.engine === "docker" ? "real Docker exercise" : "test-only exercise adapter, not Docker"})`,
-    );
   } catch (error) {
-    if (organizer)
-      await organizer.screenshot({
-        path: join(artifacts, "organizer-failure.png"),
-        fullPage: true,
-      });
-    throw error;
+    failures.push(error);
+    if (organizer) await captureFailure(organizer, "organizer-failure.png");
   } finally {
-    await browser?.close();
-    child.kill("SIGTERM");
-    await new Promise((accept) => child.once("exit", accept));
+    for (const close of [() => browser?.close(), () => stopHost(child)]) {
+      try {
+        await close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
   }
+  if (failures.length > 0) {
+    for (const error of failures.slice(1))
+      console.error("Additional fixture cleanup failure:", error);
+    throw failures[0];
+  }
+  console.log(
+    `PASS local competition browser rehearsal (${info.engine === "docker" ? "real Docker exercise" : "test-only exercise adapter, not Docker"})`,
+  );
 }
 void main().catch((error) => {
   console.error(error);

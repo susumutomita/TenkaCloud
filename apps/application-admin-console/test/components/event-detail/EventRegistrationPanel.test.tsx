@@ -481,3 +481,104 @@ describe("event invitation settings", () => {
     expect(screen.queryByRole("textbox", { name: "registration.link" })).not.toBeInTheDocument();
   });
 });
+
+describe("host registration feature and permissions", () => {
+  it("explains a rejected host team pool without issuing an invitation", async () => {
+    const api = makeApi();
+    api.get.mockRejectedValue(new ApiError(409, JSON.stringify({ error: "invalid_pool" })));
+    fixture({ api, config: { mode: "local-host" } });
+
+    expect(await screen.findByText("registration.host_error_invalid_pool")).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("allows Admin to enable the default-off flag before opening registration", async () => {
+    const api = makeApi();
+    api.get.mockResolvedValue({
+      ...summary,
+      enabled: false,
+      featureEnabled: false,
+      canConfigure: true,
+    });
+    fixture({ api, config: { mode: "local-host" } });
+    expect(await screen.findByText("registration.feature_off")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    api.get.mockResolvedValue({
+      ...summary,
+      enabled: false,
+      featureEnabled: true,
+      canConfigure: true,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "registration.enable_feature" }));
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith("/feature-flags", {
+        key: "registration",
+        enabled: true,
+      }),
+    );
+    expect(await screen.findByText("registration.feature_on")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeEnabled();
+    expect(screen.getByText("registration.host_description")).toBeInTheDocument();
+  });
+  it("keeps settings read-only when the current host principal cannot configure, even if the tenant claim allows mutation", async () => {
+    const api = makeApi();
+    api.get.mockResolvedValue({ ...summary, featureEnabled: true, canConfigure: false });
+    fixture({ api, config: { mode: "local-host" }, canMutateTenant: true });
+    expect(
+      await screen.findByRole("button", { name: "registration.disable_feature" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "registration.close_button" })).toBeDisabled();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("does not refresh registration after leaving while the feature toggle is pending", async () => {
+    const api = makeApi();
+    api.get.mockResolvedValue({
+      ...summary,
+      enabled: false,
+      featureEnabled: false,
+      canConfigure: true,
+    });
+    const toggle = deferred<unknown>();
+    api.put.mockReturnValue(toggle.promise);
+    const view = fixture({ api, config: { mode: "local-host" } });
+    fireEvent.click(await screen.findByRole("button", { name: "registration.enable_feature" }));
+    expect(api.put).toHaveBeenCalledWith("/feature-flags", {
+      key: "registration",
+      enabled: true,
+    });
+    const loads = api.get.mock.calls.length;
+
+    view.unmount();
+    await act(async () => toggle.resolve(undefined));
+
+    expect(api.get).toHaveBeenCalledTimes(loads);
+  });
+});
+
+describe("leaving registration while a save is pending", () => {
+  it.each(["succeeds", "fails"])(
+    "ignores a save response that %s after leaving",
+    async (outcome) => {
+      const api = makeApi();
+      const saving = deferred<typeof summary & { invitation: string }>();
+      api.put.mockReturnValue(saving.promise);
+      const view = fixture({ api });
+      fireEvent.click(await screen.findByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "registration.reissue" }));
+      expect(api.put).toHaveBeenCalledWith("/events/e1/registration", {
+        enabled: true,
+        teamIds: ["t1"],
+        closesAt: summary.closesAt,
+      });
+
+      view.unmount();
+      await act(async () => {
+        if (outcome === "succeeds") saving.resolve({ ...summary, invitation: "late-invitation" });
+        else saving.reject(new Error("connection lost"));
+      });
+      expect(screen.queryByRole("textbox", { name: "registration.link" })).not.toBeInTheDocument();
+    },
+  );
+});

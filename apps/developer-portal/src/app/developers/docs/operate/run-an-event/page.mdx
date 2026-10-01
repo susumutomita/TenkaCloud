@@ -4,186 +4,30 @@ export const metadata = { title: "Run an event end to end" };
 
 # Run an event end to end <MaturityBadge level="preview" />
 
-This operator walkthrough presents Lite as the current event procedure. SaaS
-tenant creation and multi-cloud are separated as architecture reference.
+<h2 id="prepare">Prepare and rehearse</h2>
 
-## Learning and meeting teammates at one venue
+Use the [organizer manual](/developers/docs/manual/organizer/) and `make local`. Choose the actual problem set and team count. Record the source/catalog revisions, supported hardware, runtime evidence, responsible organizer, schedule, communication route and cleanup owner. Catalog coverage is in progress; do not call every Docker or terminal problem tested.
 
-Engineers who usually work at different offices meet at one venue to learn AWS and get to know each other. Mix offices and AWS experience in teams of four. [Office Link](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/office-link-battle) follows **real-AWS Preparation Challenge → Gate completion → Recovery Battle**. Teammates share a table, discuss what they see and take turns operating and explaining; the shared work creates a reason to talk.
+<h2 id="connect-a-competitor-account">Connect an optional competitor account</h2>
 
-| Stage | Team activity | Scoring and progression |
-| --- | --- | --- |
-| Preparation | Launch EC2 → attach internet gateway → route → Session Manager → permit HTTP; one operation and short explanation at a time | All five completed: submit one 100-point flag to unlock Battle. No interim scoring |
-| Recovery Battle | Repair gateway, route, management-role and HTTP faults one at a time on a separate Battle EC2 | Register the endpoint first. Healthy ticks earn +100; unreachable or missing management access costs 100. Explanation gates the next round |
-| Reflection | Share one thing a teammate helped explain | Speaking frequency is not graded |
+For AWS exercises, agree on accounts, region, resources and cleanup. Use `templates/competitor-bootstrap.yaml`, the displayed operator account, exact role name and persisted ExternalId. Verify each competitor account before selecting it for a team. Never distribute deployment-role credentials to participants.
 
-For Battle, the host gives **one private A–D card to each person**. Combine clues and confirm from all four cards; the assigned operator checks recovery and a different teammate answers the explanation. Roles rotate each round. Clues change from a sum to a network route and paired pieces. AI may solve a clue, but individual card confirmations and role handoffs still apply. The host can assist absent members; card possession is not proof of a person's identity.
+<h2 id="deploy-a-problem">Deploy, start and score</h2>
 
-Teams can also exchange private codes. Both teams must submit the other's code to receive **20 points each, up to three different partners and 60 points total**. Waiting or declining costs nothing. A team that reached the limit can still help a late arrival exchange.
+1. Create an event with its teams and problems.
+2. Prepare and inspect each team's dormant Docker jobs; retry failed ownership-aware operations. Deploy AWS exercises separately.
+3. Start the schedule and distribute the correct team invitations.
+4. Rehearse participant Start / resume and Stop (keep data), capacity rejection, correct/wrong answers, hints, leaderboard, team separation and a failed environment.
+5. For AWS Battle, register both endpoints, observe scoring, test a selected-team disruption and verify revert plus actual service health.
 
-Initially reserve **90–120 minutes**: intro 5, Preparation about 40, Battle about 30–45, reflection 10; adjust from rehearsal. Battle scoring normally runs each minute. Early Preparation finishers explain the architecture; the host aligns Battle registration and start. Board checks and hints are free. A wrong Preparation flag costs 5 points. Battle points depend on uptime, so this is not a fixed 200-point event.
+<h2 id="finish">Finish safely</h2>
 
-Add **only office-link-gate and office-link-battle**. A TenantAdmin enables the Gate feature (default OFF), selects Preparation as Gate and only Battle as unlock target, required policy, zero bonus and inherited team policies. Save and verify the lock from an unfinished team. Each problem also advances one internal stage at a time, leaving one unfinished task. The [host runbook](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/battles/office-link-battle/OPERATOR.md) covers operator fault introduction, recovery and teardown.
+End Event to stop scoring. Remove owned environments using the organizer teardown actions and verify completion. Retain results and back up the full data directory. For an ordinary local pause use `make down`; restart with `make local` and the same directory. Stop is not AWS cleanup. Cloud platform `make deploy` and `make destroy` are currently unimplemented.
 
-Seven optional, independent difficulty1 Challenges cover **S3 save, S3 restore, Lambda execution, log investigation, DynamoDB handover, SQS handover and CloudWatch alarms**. Choose suitable topics for separate events; do not add all to the first event.
+See the repository's `docs/operations/event-runbook.md` for the operating checklist.
 
-These exercises operate real AWS. Budget competitor accounts, EC2, EBS, public IPv4, functions, logs and teardown ownership. Battle state also uses a problem-owned DynamoDB table. Choosing Turso for the platform does not remove problem-side AWS costs. Local previews use labelled UI fixtures and do not verify AWS permissions, connectivity or official scores. Start with a real-AWS rehearsal of 2–4 teams, measuring propagation delays and role rotation.
+New Docker events prepare dormant team/problem jobs, up to 512 per event. Participants use **Start / resume** and **Stop (keep data)**. Stop retains the existing writable layer and volumes, not RAM; there is no automatic eviction or reset. Existing events retain their legacy lifecycle.
 
-The public platform and standard problems are available for self-hosting. Event design, preparation and facilitation can be provided as paid support; organization-specific problems are quoted separately. Social-event scores alone are not a hiring or certification rubric: design separate criteria for those uses.
+Defaults allow 3 active environments per team, 12 across the host and a 4096 MiB sum of configured container-memory caps. These are admission limits, not measured usage or machine-size guarantees. New Compose plans preserve authored caps and add 512 MiB memory, 1 CPU and 256 PIDs where missing. Override admission limits with `make local LOCAL_ARGS="--max-active-per-team 3 --max-active-environments 12 --container-memory-mib 4096"` after reviewing the workload.
 
-### Pin the catalog version being deployed
-
-The Lite launcher default `ProblemsRepoRef` points to the last published release and may not contain this new set. Read `sources.catalog.commit` from `release/tenkacloud-release.json` in the platform checkout selected for rehearsal and supply it as **ProblemsRepoRef**. Pin **RepoRef** to the platform commit being rehearsed too. Until included in a published release, this is a candidate for event preparation.
-
-For local `make deploy`, align `problems` with that checkout's gitlink. Before deploying, confirm both `challenges/office-link-gate/metadata.json` and `battles/office-link-battle/metadata.json` exist. Updating the version does not automatically register these problems or configure a Gate in an existing event.
-
-## From an idea to a hosted event
-
-Start with a willing owner and helpers, even if nobody has hosted before. The lead times and effort below are **initial estimates**, not measured promises. Move them earlier for venue booking or internal approval; update them after each event.
-
-**Plan → people and venue → environment → rehearsal → event → teardown and review**
-
-Configure signup under **Let participants claim their environment** in the event's Teams tab. Select organizer-prepared AWS team slots, set a deadline and issue an invitation link. One representative claims one slot; after all problem deployments are ready, they continue to the existing team setup. Register once per team. This does not create AWS accounts or automatically issue Free Projects. Follow the [signup, resume and closing procedure](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/participant-self-registration.en.md).
-
-[Practise as a problem: First-time event host](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/event-host-rehearsal). This Docker-based exercise runs locally and is not listed in the AWS problem picker. Complete four checkpoints for a fictional event. Passing does not certify a real event or AWS environment.
-
-### Timeline, ownership and quantities
-
-| Target time | Owner and estimated effort | Deliverable and quantity | Completion / fallback |
-| --- | --- | --- | --- |
-| 4 weeks before | Owner + helpers, 60 min | One brief: purpose, audience, date, budget limit | Assign an accountable owner before recruiting participants |
-| 3 weeks before | Venue + recruitment leads, 60–120 min each | One venue or online meeting, capacity, power/network check, invitation | Confirm location and capacity; change date or size if unavailable |
-| 2 weeks before | Technical + facilitation leads, 60–120 min each | Team plan, problem list, version, equipment and role lists | Match problems to participants; reduce scope if necessary |
-| 1 week before | All event staff, competition duration + 60 min | Test teams, actual settings, script, incident contacts | Rehearse login, practice, answers, scoring, ending and teardown; unresolved scoring/connectivity prevents sign-off |
-| Day before | Technical + reception leads, 30–60 min | Final roster, team handouts, spares, contacts, pinned commit IDs | Verify distribution and appoint backups |
-| 60 min before | Technical + venue leads, 30 min | Check network, power, screens and help channel | Owner decides whether unresolved failures require a delay |
-| 30 min before | Reception + facilitator, 30 min | Check-in, team login details, practice time | Confirm every team's connection before announcing the start |
-| During play | Facilitator + support + technical staff, event duration | Time announcements, questions, incident log | Give consistent information; one owner decides interruptions/resumption |
-| After play | Owner + technical lead, 30–60 min | Reconciled scores, results, survey, teardown record | Confirm deletion results and cost status, not merely deletion requests |
-| Following week | All staff, 30 min | Actual effort, questions, incidents, improvements | Update the next event's estimates, quantities and responsibilities |
-
-### One-page plan and helper roster
-
-Copy this table into the organizer's private workspace. Do not put personal contacts or login keys in public issues or documents.
-
-| Field | Fill in for this event |
-| --- | --- |
-| Purpose and audience | Intended experience; cryptography/AWS background; accessibility needs |
-| Date, format, venue | Check-in, practice, competition, presentation and teardown times; online or in person |
-| Capacity and teams | Participants, people per team, team count, absence/reallocation policy |
-| Owner and backup | Who decides start, interruption, resumption and final scores |
-| Recruitment, venue, reception | Lead, availability, backup and private contact method |
-| Facilitation, support, technical operations | Lead, availability, backup and simultaneous workload |
-| Budget and environment | Limit, environment, cost reviewer, teardown owner and deadline |
-| Content and version | Problems, duration, settings and rehearsed commit IDs |
-
-People may hold multiple roles, but reception and incident response can happen simultaneously. Choose staffing from your scope and rehearsal evidence.
-
-### Quantities: 23 participants, four per team
-
-Divide participants by four and round up: 23 people need six teams. This is planning arithmetic, not a platform capacity guarantee.
-
-| Item | Rule | Example |
-| --- | --- | --- |
-| Team login details and recipients | One per team; name a redistribution owner instead of publishing a key list | 6 sets |
-| Computers | One per participant plus spares if everyone operates; announce shared-device arrangements beforehand | 23 + 2 spares = 25 for this example |
-| Power and network | Participant and staff computers; check outlets, connectivity and venue rules on site | Give the actual device count to the venue lead |
-| Paper and pens | One set per person doing hand calculations, plus spares | 23 sets plus spares |
-| Script and incident contacts | One current source accessible by all staff | 1 shared master |
-
-AWS account requirements depend on the chosen problem and event mode. Consult the deployment steps and problem README rather than inferring them from team count alone.
-
-### Facilitator script
-
-1. **Check-in:** “Confirm your team and login URL. Do not share keys across teams. Tell reception if you cannot connect.”
-2. **Practice:** “Use the first problem to find the answer field and score display. We will explain how practice time and points differ from this event's competition settings.”
-3. **Before starting:** “Confirm correct-answer, wrong-answer and deadline rules. This is the help channel. We start after checking every team's readiness.”
-4. **During play:** “Check remaining time on screen. Common changes and incident updates will be announced to all teams here.”
-5. **Finish:** “Answer collection has ended. We will reconcile the records before confirming scores and rankings. Raise discrepancies with the help desk.”
-
-### Incident decisions
-
-| Situation | First check | Owner and action |
-| --- | --- | --- |
-| Lead absent | Backup's contacts, permissions and runbook | Owner reallocates roles or changes scope/start time |
-| One team cannot connect | URL, team login details, device, network | Reception escalates to technical lead; never broadcast the key |
-| All teams disconnected | Shared network, Portal, environment status | Technical lead investigates; owner delays start and announces the next update time |
-| Score mismatch | Order ID, time, screen and scoring records | Technical lead reconciles before repeated submissions or manual score changes |
-| Interruption needed | Impact, records, current time and scores | Owner informs all teams; do not assume pause support exists—use the procedure verified for the selected mode |
-| Teardown failed | Remaining resources and deletion failure | Technical lead records owner/deadline for remaining work and continues cost checks |
-
-### Improve the template after each event
-
-| Stage | Estimated / actual effort | Participants / teams | Staffing gaps and common questions | Incidents and response | Next change, owner and deadline |
-| --- | --- | --- | --- | --- | --- |
-| Event record | Fill in | Fill in | Fill in | Fill in | Fill in |
-
-Mark unmeasured stages explicitly. See the [technical event runbook](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/event-runbook.md) for operational troubleshooting and teardown, and the [crypto-battle README](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/battles/ac26-crypto-battle/README.md) for problem-specific settings.
-
-## Run an event with Lite
-
-1. Sign in to Lite's Application Admin Console.
-2. Create an event, a test team, and the problem selection.
-3. Connect a test competitor AWS account with the procedure below.
-4. Start a problem and open its endpoint.
-5. Solve it, submit a real `TC{...}` flag, and confirm the score.
-6. Reset it and confirm a second start.
-7. Stop it and confirm the problem stack is gone from the competitor account.
-8. Give participants the Participant Portal URL, team key, and start time.
-
-## Connect administrator SSO to a corporate IdP
-
-Administrator SSO is separate from the Participant Portal team-login-key flow. TenkaCloud uses a Cognito User Pool as the SAML Service Provider and can connect to SAML 2.0 IdPs such as Microsoft Entra ID, Google Workspace, and AWS IAM Identity Center.
-
-SAML SSO in the Application Admin Console is an experimental feature and is disabled by default. Tenant-level IdP configuration is for Lite or silo-tier deployments with a dedicated User Pool; do not use it for pooled tenants. Complete an end-to-end login rehearsal in a non-production environment before the event.
-
-1. Open **Identity providers** in the Application Admin Console and copy the displayed ACS URL, SP Entity ID, and email attribute mapping. Treat the values rendered by the console as the source of truth rather than copying examples from documentation.
-2. Create a SAML 2.0 application in the IdP and configure the ACS URL and SP Entity ID. Keep `NameID` stable for the same user; email is the usual choice.
-3. Assign a test user or group to the IdP application and obtain the IdP metadata XML. Configure AWS IAM Identity Center through the generic SAML path.
-4. Register the metadata XML in TenkaCloud and verify the email attribute mapping. Leave group-to-role mapping empty for the first test, then add authorization mapping after basic authentication succeeds.
-5. Start sign-in from the TenkaCloud URL in a private-browsing window and verify the complete SP-initiated flow: IdP authentication, Cognito callback, and return to the Application Admin Console. Opening the application only from the IdP portal does not validate TenkaCloud's routing and callback path.
-6. Verify that the normal login path routes to the same IdP and that the resulting email, tenant, and role are correct. IdP registration and normal-login routing are separate configuration paths, so successful registration alone is not sufficient.
-7. Keep at least one existing Cognito local administrator as a break-glass path. SAML assertions, ID tokens, and metadata XML can contain organization and user information; do not paste them unredacted into issues or chat.
-
-For certificate rotation, troubleshooting, and IdP removal, see the [Cognito / SAML IdP connection playbook](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/cognito-saml-idp-playbook.md).
-
-## Create a SaaS tenant (architecture reference)
-
-The repository contains code for a System Admin to create a tenant from
-`admin-console`. There is no recent recorded fresh-AWS run from tenant creation
-through scoring and teardown. Re-verify it in a dedicated environment rather
-than treating this section as a production procedure.
-
-## Connect a competitor account
-
-Each team deploys `infrastructure/templates/competitor-bootstrap.yaml` once in
-its AWS account. Use the same ExternalId configured by the organizer: 16–128
-ASCII letters, digits, and `_ = , . @ : / -`. Share the resulting role ARN,
-never an administrator credential or secret key. The full competitor-side steps live in the
-[competitor setup guide](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md).
-
-When the participating accounts sit in one AWS Organizations OU, the same template
-can be rolled out to the whole OU with a StackSet — all three parameters are
-constant within a tenant. The steps are in the setup guide under
-[bulk bootstrap](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md#複数アカウントを一括で-bootstrap-する-aws-organizations--stacksets).
-On the TenkaCloud side, paste the account IDs into Competitor Accounts' bulk
-import and then run the bulk verify over the unverified rows.
-
-## Deploy a problem
-
-In the `application-admin-console`, create an event, pick problems from the catalog
-(the picker only offers cloud-deployable problems — local-only container problems
-are excluded, and non-AWS problems appear once multi-cloud is enabled), assign each
-team's account and region, and deploy. Each deploy assumes the team's role with the
-ExternalId and runs CloudFormation in their account. Watch status by polling the
-deployment until it reaches a terminal state, then tear it down from the same
-console when the event ends.
-
-## Enable multi-cloud (architecture reference)
-
-Sakura, Azure, and GCP are not uniformly executable. Check the
-[runtime capability matrix](/developers/docs/reference/runtime-matrix/) first,
-then use only a runtime explicitly marked executable in a dedicated test event.
-
-Related: [deploy modes and launch paths](/developers/docs/operate/deploy-paths/)
-and the [platform architecture](/developers/docs/concepts/architecture/).
+The 40 gateway slots apply only to active environments. Dense runtime-port assignments survive Stop. A synthetic 20-problem × 5-team plan allocated 100 jobs using 105 runtime ports; this proves allocation and lifecycle behavior, not concurrent Docker performance. See `docs/local-play-requirements.md` for measurement guidance.

@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,24 +43,24 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/" aria-current="page">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
+<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
+<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -68,10 +68,11 @@
 <main class="doc">
 <article>
 <h1>CLI リファレンス <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p><code>tenkacloud pack</code> CLI はオフラインのパックツールです。すべてのコマンドは、
-クラウドやリモートへの呼び出しを行わずローカルで実行されます。以下のコマンド表は
+<p><code>bun run pack</code> は作問用 CLI です。ローカルディレクトリの操作はクラウドを使いません。
+Git install は指定した HTTPS repository へ接続します。以下のコマンド表は
 CLI 自身の usage 文字列から解析された<strong>規範的リファレンス</strong>であり、ドキュメントに
 記載されたコマンド名とオプションは常にコードと一致します。</p>
+<p>現在の起動は <code>make local</code>、データを保持する停止は <code>make down</code> です。<code>make deploy</code> と <code>make destroy</code> は未実装のエラーで終了し、リソースを変更しません。pack activate/deactivate は旧版向けのローカル記録であり、現在の大会カタログへ問題を追加しません。</p>
 <h2>コマンド</h2>
 <table class="reference-table"><thead><tr><th>Command</th><th>Usage</th></tr></thead><tbody>
 <tr><td><code>activate</code></td><td><code>tenkacloud pack activate &lt;id@version&gt; --tenant &lt;t&gt; [--store &lt;dir&gt;]</code></td></tr>
@@ -95,9 +96,9 @@ CLI 自身の usage 文字列から解析された<strong>規範的リファレ�
 <p><code>update</code> コマンドは意図的に存在しません。新しいバージョンは別個の <code>install</code> として扱います。</p>
 <h2>例</h2>
 <p>以下の例は説明用であり、規範的なものではありません。</p>
-<pre><code class="language-bash">tenkacloud pack init ./my-pack --runtime aws/cloudformation
-tenkacloud pack validate ./my-pack --json
-tenkacloud pack install ./my-pack
+<pre><code class="language-bash">bun run pack init ./my-pack --runtime aws/cloudformation
+bun run pack validate ./my-pack --json
+bun run pack install ./my-pack
 </code></pre>
 <p>関連: <a href="/docs/reference/validation-errors/">検証エラーリファレンス</a>。</p>
 

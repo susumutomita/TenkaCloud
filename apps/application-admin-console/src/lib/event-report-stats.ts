@@ -116,7 +116,8 @@ export function buildScoreboard(
   }
   const aggregated = teams.map((team) => {
     const events = eventsByTeam.get(team.teamId)?.events ?? [];
-    const totalScore = events.reduce((acc, e) => acc + e.points, 0);
+    const totalScore =
+      eventsByTeam.get(team.teamId)?.projectedTotal ?? events.reduce((acc, e) => acc + e.points, 0);
     const solvedSet = new Set<string>();
     for (const ev of events) {
       if (ev.source === "flag" && ev.result === "ok") {
@@ -187,7 +188,7 @@ function aggregateTeamForProblem(team: TeamScoreEvents, problemId: string): PerT
     points += ev.points;
     if (ev.source === "flag" && ev.result === "ok") solved = true;
   }
-  return { solved, points };
+  return { solved, points: team.projectedByProblem?.[problemId] ?? points };
 }
 
 function countSuccessful(deployments: readonly EventDeploymentSummary[]): number {

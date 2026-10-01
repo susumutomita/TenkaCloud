@@ -25,6 +25,7 @@ export interface EventCreateBasicInfoSectionProps {
   teamCount: number;
   onTeamCountChange: (next: number) => void;
   teamCountInvalid: boolean;
+  maxTeams?: number;
 }
 
 export function EventCreateBasicInfoSection({
@@ -34,6 +35,7 @@ export function EventCreateBasicInfoSection({
   teamCount,
   onTeamCountChange,
   teamCountInvalid,
+  maxTeams = TEAMS_MAX,
 }: EventCreateBasicInfoSectionProps) {
   const t = useT();
   return (
@@ -54,9 +56,9 @@ export function EventCreateBasicInfoSection({
           label={t("event_create.team_count_label")}
           description={t("event_create.team_count_description", {
             min: TEAMS_MIN,
-            max: TEAMS_MAX,
+            max: maxTeams,
           })}
-          errorText={getTeamCountErrorText(t, teamCountInvalid)}
+          errorText={getTeamCountErrorText(t, teamCountInvalid, maxTeams)}
         >
           <Input
             type="number"

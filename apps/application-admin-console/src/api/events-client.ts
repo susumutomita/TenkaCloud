@@ -13,6 +13,7 @@ export interface EventProblemTarget {
 }
 
 export interface EventSummary {
+  progressionGateError?: "invalid_progression_gate";
   eventId: string;
   name: string;
   status: EventStatus;
@@ -79,6 +80,8 @@ export interface EventDeploymentSummary {
   readonly error?: string;
   /** Issue #3226: an in-flight single-environment operation (local competition host). */
   readonly operation?: LocalEnvironmentOperation;
+  /** Whether the pinned local-host runtime supports pausing this environment. */
+  readonly stopSupported?: boolean;
   /** Issue #3226: the fixed exercise-gateway port of this environment (local competition host). */
   readonly gatewayPort?: number;
 }
@@ -96,6 +99,8 @@ export interface TeamScoreEventView {
   points: number;
   result: "ok" | "wrong";
   occurredAt: string;
+  /** Host-only projected event total at this point; signed points remain the raw ledger. */
+  projectedTotal?: number;
 }
 
 export interface TeamScoreEvents {
@@ -103,6 +108,9 @@ export interface TeamScoreEvents {
   teamName: string;
   /** occurredAt 昇順 (= chart の cumulative 計算に向く)。 */
   events: readonly TeamScoreEventView[];
+  /** Host-only per-problem projection from the event's pinned policy. */
+  projectedTotal?: number;
+  projectedByProblem?: Readonly<Record<string, number>>;
 }
 
 /** Issue #2283: Progression Gate の team 単位 policy。 "required" = Gate 完了まで unlock target を lock / "off" = bypass。 */

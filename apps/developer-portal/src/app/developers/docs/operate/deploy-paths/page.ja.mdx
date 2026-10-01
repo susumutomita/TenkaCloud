@@ -1,47 +1,25 @@
 import { MaturityBadge } from "@/components/MaturityBadge";
 
-export const metadata = { title: "デプロイモードと起動経路" };
+export const metadata = { title: "起動と配置の境界" };
 
-# デプロイモードと起動経路 <MaturityBadge level="preview" />
+# 起動と配置の境界 <MaturityBadge level="preview" />
 
-LiteとSaaSは、対象利用者、入口、使うAWSサービス、現在の検証状態が異なります。
-Liteの実行手順は[競技開催者マニュアル](/developers/docs/manual/organizer/)を使います。
-このページのSaaS節はコード構成の参考であり、最近の実環境で確認済みの導入手順ではありません。
+未公開の統合 candidate の手順です。ローカルの大会・チーム運用は実装されていますが、クラウド基盤の配置や全カタログのプレイ確認が完了した公開版ではありません。
 
-## 2 つのデプロイモード
+<h2 id="local-platform">ローカル基盤</h2>
 
-- **Lite モード** — 1つの運営グループが自分のAWSで競技を開くモードです。推奨入口の`lite-pipeline.yaml`はCloudFormationでCodeBuildを作り、CodeBuildが`make deploy`を実行します。AWS CodePipelineは使いません。ローカルcheckoutから`make deploy`を直接実行することもできます。
-- **SaaS モード** — 複数組織へテナントを提供するコード構成です。`make deploy-saas`、プール型・サイロ型テナント、System Admin、既存テナント更新用CodePipelineがありますが、最近の新規AWS環境で導入から削除までを通した記録はありません。
+`make local` は Bun のサーバーと二つの画面を起動し、SQLite へ状態を保存します。`make down` は所有するローカル環境を止め、大会データを保持します。旧 host target は別モードとして残しません。[はじめに](/developers/docs/getting-started/)で初期管理者、大会作成、参加者ログインを確認してください。
 
-Liteは現在の開催手順、SaaSは専用環境で再検証が必要な構成参考として扱います。
+<h2 id="cloud-platform">クラウド基盤は未実装</h2>
 
-## 新しいテナントがプロビジョニングされる流れ
+公開するコマンド名は `make deploy` と `make destroy` です。現行 candidate では両方とも未実装を示すエラーで終了し、リソースの作成、削除、移行を行いません。Turso、配置先、永続的な識別情報、単一実行の保証は実装と検証が必要です。コンテナの build 成功は、配置済みや費用ゼロの証明ではありません。
 
-> **SaaS構成参考:** ここから「SaaSパイプラインの役割」までは、現在のLite開催では
-> 使用しません。
+<h2 id="exercise-deployment">問題環境の配置は別の操作</h2>
 
-新規テナントのプロビジョニングと、パイプラインによるロールアウトは**別々の経路**です。旧ドキュメントが取り違えていたのがこの区別です。
+開催者は大会から選択した問題環境を配置します。Docker では所有情報付きの Compose project、確認対象の AWS adapter では検証済み競技者アカウントの CloudFormation を使います。AWS には明示した region、認証情報、必須の ExternalId が必要です。基盤をローカルで動かしても問題リソースには費用が発生する場合があります。大会終了やローカル停止だけでは AWS stack を削除しません。
 
-- テナント作成イベント (`onboardingRequest`) を SBT の `BashJobRunner` が受け取り、`provision-tenant.sh` を実行します。デフォルトではテナントは**プール型**（プール型スタックを共有）で、`PLATINUM` ティアのテナントだけが専用のサイロスタックを直接デプロイされます (`bun run cdk -- deploy tenkacloud-tenant-template-<id>`)。
+<h2 id="legacy-installations">既存の旧版環境</h2>
 
-つまり、テナントを 1 つ作成しても CodePipeline は実行されません。実行されるのはプロビジョニングジョブです。
+SaaS/Lite と旧個人練習の手順は[固定した旧版](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9)を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。
 
-## SaaS パイプラインの役割
-
-`tenkacloud-saas-pipeline` (CodePipeline) は、テナントを作成するためではなく、**既存の全テナントへテナントスタックをロールアウトする**ために存在します。ソースは S3 オブジェクト（`source.zip`。`make deploy-saas` 中に `prepare-source-bundle.sh` がアップロードします）で、パイプラインはこれをポーリングします。変更を検知すると、DynamoDB のテナント一覧をたどり、各テナントスタックをウェーブ単位でデプロイ / 更新します（Step Functions の WaveIterator が CodeBuild を駆動します）。このように、新規テナントの作成と既存テナントへのロールアウトは別のルートを通ります。
-
-## 問題がデプロイされる流れ
-
-主催者がコンソールで **Deploy** をクリックすると、次のように進みます。
-
-1. コンソールが Deploy API を呼び出します。API はリクエストを検証し、Deployments テーブルに行を書き込み、`DeployCreateRequested` イベントをバスに発行します。
-2. Step Functions の実行が CodeBuild ジョブを開始します (`.sync`)。
-3. ワーカーがテナントの **ExternalId**（常に必須です）を使って競技者アカウントのロールを AssumeRole し、そのアカウント内で CloudFormation の `CreateStack` を実行します。
-
-その後、コンソールはスタックが終了状態に達するまでデプロイのステータスをポーリングします。
-
-## 問題パック
-
-問題パック（[最初のパックのチュートリアル](/developers/docs/tutorials/first-pack/)を参照）は Lite 経路だけを通ります。Lite は synth 時に固定のテナント id `local` のアクティベーションを読み取るため、`make deploy` の前に `--tenant local` でアクティベートしてください。一方 SaaS モードは、パックのアクティベーションが 1 つでも存在すると synth 時に明示的に失敗します。プール型カタログから黙って除外することはありません。`CDK_PARAM_SAAS_IGNORE_PACKS=true` を設定するとこれを上書きしてそのまま進められますが、その場合、アクティベーションは単にどのテナントのカタログにも現れなくなります。
-
-関連: [イベントをエンドツーエンドで運営する](/developers/docs/operate/run-an-event/)、[プラットフォームアーキテクチャ](/developers/docs/concepts/architecture/)。
+SaaS tenant の rollout、CodePipeline、Lite launcher、CodeBuild による撤収は旧版の契約です。現在の構築手順ではありません。既存環境の操作には、その環境を作成した正確な旧版を使ってください。

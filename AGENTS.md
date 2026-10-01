@@ -12,10 +12,10 @@
 
 ## 守ること
 
-- テナント分離、Cognito/JWT 認証、必須の `ExternalId`、必要最小限の IAM 権限を保つ。
+- host の大会・チーム分離、開催者と参加者の認証、必須の `ExternalId`、必要最小限の IAM 権限を保つ。
 - `competitor-bootstrap.yaml` の `AdministratorAccess` は競技者アカウントの初期設定だけの例外。他のロールへ広げない。
-- EventBridge、テナント作成、`DeployCreateRequested`、`runtime-config.json` の契約を変えるときは、送信側と受信側を同じ PR で確認する。
-- Lite/SaaS、DynamoDB/Turso の違いと継続費用を確認する。保存先の切り替えでデータが自動移行されると考えない。
+- host HTTP API、SQLite 保存形式、`runtime-config.json` の契約を変えるときは、保存側・配信側と利用側を同じ PR で確認する。
+- host は単一プロセスと永続 SQLite を使う。廃止した SaaS/Lite の運用は固定した旧版へ案内する。データが自動移行されると考えない。
 - 破壊的操作、リリース、共有環境の変更、秘密情報へのアクセスは明示的な承認の範囲内で行う。
 - テスト・型・lint・coverage・設定を、通すためだけに弱めない。規則自体が原因なら、根拠と回帰確認を伴って直す。
 - エラーを空値・mock・黙った代替処理・偽の成功で隠さない。

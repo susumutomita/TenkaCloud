@@ -19,7 +19,9 @@ import { EventReportPage } from "./pages/EventReport";
 import { HomePage } from "./pages/Home";
 import { IdentityProvidersPage } from "./pages/IdentityProviders";
 import { LocalHostLoginPage } from "./pages/LocalHostLogin";
+import { LocalHostSettingsPage } from "./pages/LocalHostSettings";
 import { LocalHostUnavailablePage } from "./pages/LocalHostUnavailable";
+import { LocalHostUsersPage } from "./pages/LocalHostUsers";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { ProblemsPage } from "./pages/Problems";
@@ -43,6 +45,7 @@ function guarded(element: React.ReactNode, config: AppConfig) {
         samlSsoEnabled={config.features?.samlSso}
         demoMode={config.mode === "demo"}
         localHost={isLocalHost(config)}
+        hostAwsEnabled={Boolean(config.hostAwsRegion)}
         // The banner only renders the link when demoMode is true, so passing the URL
         // unconditionally is safe (and avoids an untested non-demo ternary branch).
         demoParticipantUrl={config.participantPortalUrl}
@@ -56,7 +59,7 @@ function guarded(element: React.ReactNode, config: AppConfig) {
 function LoginRoute({ config }: { config: AppConfig }) {
   const location = useLocation();
   const returnPath = readLoginReturnPathState(location.state);
-  // Issue #3226: the local competition host signs in with its host key, not Cognito.
+  // Local hosting bootstraps its first Admin with the host key, then uses organizer sign-in.
   return isLocalHost(config) ? (
     <LocalHostLoginPage config={config} returnPath={returnPath} />
   ) : (
@@ -65,8 +68,8 @@ function LoginRoute({ config }: { config: AppConfig }) {
 }
 
 /**
- * Issue #3226: a local host session has an absolute lifetime (the host issues 15 minutes) in
- * addition to the shared idle logout. Sign out when it ends instead of letting every later
+ * A local host session has an absolute lifetime in addition to the shared idle logout.
+ * Sign out when it ends instead of letting every later
  * request fail with 401; the event and its results are unaffected.
  */
 function LocalHostSessionExpiry() {
@@ -150,8 +153,7 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
 
 /**
  * Issue #3226: the local competition host serves the normal event pages against its own API.
- * Screens that need cloud infrastructure (AWS accounts, Cognito users, audit log, SAML, the
- * catalog's cloud deployments) explain that instead of calling an API that does not exist.
+ * Screens that need cloud infrastructure explain that instead of calling an API that does not exist.
  */
 function LocalHostRoutes({ config }: { config: AppConfig }) {
   return (
@@ -160,6 +162,18 @@ function LocalHostRoutes({ config }: { config: AppConfig }) {
       <Route path="/" element={<Navigate to="/events" replace />} />
       <Route path="/events" element={guarded(<EventListPage config={config} />, config)} />
       <Route path="/events/new" element={guarded(<EventCreatePage config={config} />, config)} />
+      <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />, config)} />
+      <Route path="/users" element={guarded(<LocalHostUsersPage config={config} />, config)} />
+      <Route
+        path="/settings"
+        element={guarded(<LocalHostSettingsPage config={config} />, config)}
+      />
+      {config.hostAwsRegion && (
+        <Route
+          path="/competitor-accounts"
+          element={guarded(<CompetitorAccountsPage config={config} />, config)}
+        />
+      )}
       <Route
         path="/events/:eventId"
         element={guarded(<EventDetailPage config={config} />, config)}

@@ -1,10 +1,8 @@
 {
   ".claude": 302,
-  "apps/admin-console": 1114,
   "apps/application-admin-console": 1368,
   "apps/developer-portal": 32,
   "apps/participant-portal": 256,
-  "infrastructure": 4338,
   "packages/portal-contracts": 22,
   "packages/portal-plugin-sdk": 7,
   "packages/problem-sdk": 40,

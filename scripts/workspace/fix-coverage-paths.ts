@@ -16,36 +16,39 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { COVERAGE_WORKSPACES } from "./run-coverage.ts";
 
-const WORKSPACES = [
-  "infrastructure",
-  "apps/admin-console",
-  "apps/application-admin-console",
-  "apps/participant-portal",
-  "packages/trust-bridge",
-] as const;
-
-let fixed = 0;
-let skipped = 0;
-for (const ws of WORKSPACES) {
-  const path = resolve(process.cwd(), ws, "coverage/lcov.info");
-  if (!existsSync(path)) {
-    console.log(`  skip: ${ws}/coverage/lcov.info (not found)`);
-    skipped++;
-    continue;
-  }
-  const content = readFileSync(path, "utf8");
-  // SF: が既に "apps/" / "infrastructure/" / "packages/" で始まっている場合は skip
-  // (= 二重 prefix 防止、 idempotent)
-  if (/^SF:(apps|infrastructure|packages)\//m.test(content)) {
-    console.log(`  skip: ${ws}/coverage/lcov.info (already prefixed)`);
-    skipped++;
-    continue;
-  }
-  const updated = content.replace(/^SF:/gm, `SF:${ws}/`);
-  writeFileSync(path, updated, "utf8");
-  console.log(`  fix:  ${ws}/coverage/lcov.info`);
-  fixed++;
+/** Vitest emits workspace-relative SF paths; Codecov reads them from the repository root. */
+export function prefixCoveragePaths(content: string, workspace: string): string {
+  return content.replace(/^SF:(.+)$/gm, (record, source: string) => {
+    if (/^(?:apps|infrastructure|packages)\//u.test(source) || source.startsWith("/"))
+      return record;
+    return `SF:${workspace}/${source}`;
+  });
 }
 
-console.log(`fix-coverage-paths: ${fixed} fixed, ${skipped} skipped`);
+function main(): void {
+  let fixed = 0;
+  let skipped = 0;
+  for (const { dir } of COVERAGE_WORKSPACES) {
+    const path = resolve(process.cwd(), dir, "coverage/lcov.info");
+    if (!existsSync(path)) {
+      console.log(`  skip: ${dir}/coverage/lcov.info (not found)`);
+      skipped++;
+      continue;
+    }
+    const content = readFileSync(path, "utf8");
+    const updated = prefixCoveragePaths(content, dir);
+    if (updated === content) {
+      console.log(`  skip: ${dir}/coverage/lcov.info (already prefixed)`);
+      skipped++;
+      continue;
+    }
+    writeFileSync(path, updated, "utf8");
+    console.log(`  fix:  ${dir}/coverage/lcov.info`);
+    fixed++;
+  }
+  console.log(`fix-coverage-paths: ${fixed} fixed, ${skipped} skipped`);
+}
+
+if (import.meta.main) main();

@@ -11,6 +11,18 @@
 
 // Pack-validator + diagnostics.
 export type { PackDiagnostic, PackDiagnosticCode } from "./diagnostics.js";
+export {
+  buildDisruptionDispatch,
+  buildRevertDispatch,
+  type DisruptionDispatch,
+} from "./disruption-dispatch.js";
+export { type DisruptionFireRequest, DisruptionFireRequestSchema } from "./disruption-request.js";
+export {
+  type DisruptionTriggerContext,
+  evaluateDisruptionTriggers,
+  type FiredDisruption,
+  triggerMatches,
+} from "./disruption-triggers.js";
 // Pure endpoints-metadata section parser + types.
 export {
   type ProblemEndpointSlot,
@@ -18,6 +30,17 @@ export {
   parseEndpointSlot,
   resolveDefaultUrl,
 } from "./endpoints-metadata.js";
+export {
+  type RegistrationConfigInput,
+  RegistrationConfigSchema,
+  type RegistrationInfo,
+  type RegistrationProgress,
+  registrationEventActive,
+  registrationInfoSchema,
+  registrationProgressSchema,
+  registrationSecretSchema,
+  validRegistrationSelection,
+} from "./event-registration.js";
 export type {
   PackManifest,
   PackManifestIssue,
@@ -53,10 +76,33 @@ export {
 } from "./metadata-parser.js";
 export { type ProblemMetadataView, validateMetadataSections } from "./metadata-sections.js";
 export type { PackProblem } from "./problem-metadata.js";
+export {
+  CHALLENGE_PREREQUISITE_GATE_FLAG,
+  computeLockedProblemIds,
+  GATE_PROBLEM_ID_RE,
+  isGateCompleted,
+  MAX_COMPLETION_BONUS,
+  type ProgressionGateConfig,
+  ProgressionGateConfigSchema,
+  type ProgressionGateTeamOverride,
+  ProgressionGateTeamOverrideSchema,
+  type ProgressionGateTeamPolicy,
+  ProgressionGateTeamPolicySchema,
+  parseProgressionGate,
+  type ResolvedTeamGatePolicy,
+  resolveTeamGatePolicy,
+} from "./progression-gate.js";
 // Pack-file walk shared with the Core snapshot installer, so the copied file set
 // is exactly the digested file set (#2866).
 export { type CollectedPackFile, collectPackFiles } from "./report.js";
 export { isExistingDirectory, isInside, readDirNames, resolveInside } from "./safe-path.js";
+export {
+  type PinnedScorePolicy,
+  projectScore,
+  projectScoreTimeline,
+  type ScoreLedgerEntry,
+  type ScoreProjection,
+} from "./score-projection.js";
 // Pure scoring-metadata section parsers + types.
 export {
   type AttackDetectionCategory,

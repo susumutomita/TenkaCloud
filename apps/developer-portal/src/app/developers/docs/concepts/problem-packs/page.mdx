@@ -2,23 +2,20 @@ import { MaturityBadge } from "@/components/MaturityBadge";
 
 export const metadata = { title: "Problem packs" };
 
-# Problem packs <MaturityBadge level="stable" />
+# Problem packs <MaturityBadge level="preview" />
 
-A **problem pack** is the unit of competition content on TenkaCloud.
+A pack is a versioned, inspectable unit of competition content. Its manifest declares identity, runtime requirements and problem files. The artifact depends on the runtime; a CloudFormation template is only one possibility.
 
 ## What is a problem pack
 
-Each pack carries metadata, a single-page CloudFormation template deployed
-straight into a competitor account, and an optional portal plugin.
+The current pack CLI can scaffold, validate, inspect and store immutable revisions. Installing or activating a pack does not add it to the current event catalog. Retained tenant-scoped activation is a legacy local record, not a current hosting workflow.
 
 ## Battle versus Challenge
 
-- **Battle** packs are real-time and head-to-head.
-- **Challenge** packs are self-paced and evergreen.
+Challenge and Battle describe a problem's interaction and scoring model. Runtime placement is a separate concern. All former local Compose problems are intended to run as Challenge competitions; generic catalog/workbench restoration and terminal/browser verification are still in progress.
 
 ## Scoring kinds
 
-Scoring uses one of six built-in kinds — `flag`, `multi-flag`, `uptime-flat`,
-`uptime-multi`, `phased-polling`, or `attack-detection` — one per problem.
+Schema declarations are not proof of execution. The local catalog uses verify and multi-verify; the reviewed AWS examples use flag and uptime-flat. Other SDK kinds and external-pack runtimes must not be advertised as playable merely because validation accepts them. See [runtime status](/developers/docs/reference/runtime-matrix/).
 
-Back to [getting started](/developers/docs/getting-started/).
+Continue with [first pack](/developers/docs/tutorials/first-pack/) or [existing packs](/developers/docs/operate/use-existing-pack/).

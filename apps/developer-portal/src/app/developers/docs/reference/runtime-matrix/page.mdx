@@ -1,38 +1,20 @@
 import { MaturityBadge } from "@/components/MaturityBadge";
-import { RuntimeMatrixTable } from "@/components/ReferenceTables";
 
-export const metadata = { title: "Runtime capability matrix" };
+export const metadata = { title: "Runtime execution status" };
 
-# Runtime capability matrix <MaturityBadge level="preview" />
+# Runtime execution status <MaturityBadge level="preview" />
 
-A pack declares the `(provider, engine)` runtimes it requires. The matrix below is a
-**normative reference** generated from `RUNTIME_CAPABILITIES` in
-`@tenkacloud/problem-runtime/capabilities`.
+<h2 id="matrix">Current candidate</h2>
 
-## Matrix
+| Runtime | Current boundary |
+| --- | --- |
+| Local Docker Compose | New events prepare up to 512 dormant jobs; participant Start / resume and Stop (keep data). Defaults: team 3, host 12 active environments, 4096 MiB summed memory caps. 106 catalog entries are not 106 verified playable exercises |
+| Terminal inside a Docker problem | 15 declared problems; synthetic-shell HTTP/WebSocket tests pass (11 tests, 96 assertions), actual Docker exec and full browser verification unverified |
+| In-process Cryptography Battle | Adapter and local tests retained; no Docker or AWS required |
+| AWS CloudFormation | Reviewed hello-world and hello-world-battle adapters; live AWS is a separately authorized rehearsal |
+| Cloud platform with Turso | In progress; make deploy and make destroy are unimplemented |
+| External packs, Azure, GCP, Sakura and other scoring kinds | Schema/authoring declarations do not establish current event execution |
 
-<RuntimeMatrixTable />
+<h2 id="support-classes">Read the evidence precisely</h2>
 
-## Independent capability facts
-
-- **Recognized** — metadata and schema accept the exact provider/engine pair. This
-  does not imply that deployment code exists.
-- **Adapter wired** — a concrete adapter plus its credential/composition wiring ships
-  in the repository. This still does not prove artifact handling or provider API
-  correctness.
-- **Executable** — the complete materialization and provider wire path is expected to
-  run in its declared mode (`cloud` or `local`).
-- **Live verified** — a real lifecycle has been demonstrated. Mock and unit tests are
-  required regression evidence, but they never count as live verification.
-
-Azure, GCP, and Sakura are adapter-wired. Their live verification remains false while
-[multicloud acceptance #2081](https://github.com/susumutomita/TenkaCloud/issues/2081)
-is open. Azure and GCP also remain non-executable until their artifact/output blockers
-shown in the table are closed. Sakura's API contract is executable after #2746, but it
-is not competition-ready until the real-account lifecycle is attached to #2081.
-
-The local `docker/compose` runtime is independently executable and verified in the
-`make local` mode; it is not a cloud runtime. AWS CloudFormation is the default stable,
-live-verified cloud runtime.
-
-Related: [problem metadata reference](/developers/docs/reference/problem-metadata/).
+Recognized metadata, a loaded catalog row, a wired adapter, fixture tests, a real Docker/browser route and live cloud verification are separate facts. None implies the next. See [deployment boundaries](/developers/docs/operate/deploy-paths/) and record Not run when a route has not been exercised.

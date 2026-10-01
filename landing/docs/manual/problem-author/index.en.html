@@ -49,28 +49,29 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
+<li><a href="/docs/reference/lite-settings/index.en.html">Legacy Lite settings</a></li>
+<li><a href="/docs/reference/lite-messages/index.en.html">Legacy Lite messages</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Problem author manual <span class="doc-badge doc-badge--stable">Stable</span></h1>
+<h1>Problem author manual <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>Use this manual when you create or maintain the content participants solve:
 the scenario, deployable environment, verifier, scoring metadata, and hints.
-You do not need to operate a TenkaCloud tenant or change platform code.</p>
+You do not need to operate a TenkaCloud event or change platform code.</p>
+<p>Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate&#39;s event catalog. The retained tenant-scoped activation command is a legacy local record, not a current hosting workflow.</p>
 <h2>Your goal</h2>
 <p>A pack is ready to publish when these three outcomes are reproducible:</p>
 <ol>
@@ -93,7 +94,7 @@ make pack-validate ARGS=&quot;./my-first-pack&quot;
 </code></pre>
 <p>The <a href="/docs/tutorials/first-pack/index.en.html">first pack tutorial</a> follows one
 minimal pack from scaffold to validation, immutable Git pin, install,
-activation, and removal.</p>
+local inspection, and removal.</p>
 <h2>Author the participant experience</h2>
 <p>Every problem should answer these questions before introducing technical
 detail:</p>
@@ -181,6 +182,7 @@ defines what a pack may contain. Validator messages are listed in
 <p>If the pack requires a new platform capability rather than problem content,
 open a platform Issue and switch to the
 <a href="/docs/manual/developer/index.en.html">developer manual</a>.</p>
+<p>All 106 former local problems are intended to support Challenge competitions, but catalog/workbench restoration, terminal access and real Docker/browser evidence are incomplete. Record each missing participant path as Not run; do not advertise it as playable.</p>
 
 </article>
 </main>

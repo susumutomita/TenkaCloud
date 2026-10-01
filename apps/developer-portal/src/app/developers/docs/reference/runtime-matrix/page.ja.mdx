@@ -1,37 +1,20 @@
 import { MaturityBadge } from "@/components/MaturityBadge";
-import { RuntimeMatrixTable } from "@/components/ReferenceTables";
 
-export const metadata = { title: "ランタイム対応マトリクス" };
+export const metadata = { title: "runtime の実行状況" };
 
-# ランタイム対応マトリクス <MaturityBadge level="preview" />
+# runtime の実行状況 <MaturityBadge level="preview" />
 
-パックは、必要とする `(provider, engine)` ランタイムを宣言します。以下のマトリクスは、
-`@tenkacloud/problem-runtime/capabilities` の `RUNTIME_CAPABILITIES` から生成される
-**規範的リファレンス**です。
+<h2 id="matrix">現行 candidate</h2>
 
-## マトリクス
+| Runtime | 現在の境界 |
+| --- | --- |
+| ローカル Docker Compose | 新しい大会は最大 512 件の停止中 jobs を準備。参加者が起動・再開・停止する。デフォルトはチーム 3、host 全体 12 環境、メモリー上限の合計 4096 MiB。106 問の表示は全問のプレイ確認ではない |
+| Docker 問題内の terminal | 15 問が宣言。synthetic shell の HTTP/WebSocket 11 tests・96 assertions は成功。実 Docker exec と全経路のブラウザ検証は未確認 |
+| プロセス内 Cryptography Battle | adapter とローカルテストを継続。Docker・AWS は不要 |
+| AWS CloudFormation | hello-world と hello-world-battle の確認対象 adapter。実 AWS は別途承認したリハーサル |
+| Turso を使うクラウド基盤 | 対応中。make deploy と make destroy は未実装 |
+| 外部 pack、Azure、GCP、Sakura、その他の採点方式 | schema・作問用の宣言だけでは大会での実行対応になりません |
 
-<RuntimeMatrixTable />
+<h2 id="support-classes">確認結果を区別する</h2>
 
-## 独立した capability 事実
-
-- **Recognized** — メタデータと schema が正確な provider / engine の組を受理します。
-  デプロイ実装が存在することまでは意味しません。
-- **Adapter wired** — 具体的な adapter と credential / composition の配線が repository に
-  含まれます。artifact 処理や provider API 契約の正しさを証明するものではありません。
-- **Executable** — materialization から provider wire までの経路が、宣言された mode
-  (`cloud` または `local`) で実行可能です。
-- **Live verified** — mock ではなく実際の lifecycle が実証済みです。unit / mock test は
-  必須の回帰証拠ですが、live verification の代わりにはなりません。
-
-Azure、GCP、Sakura は adapter-wired です。
-[multicloud acceptance #2081](https://github.com/susumutomita/TenkaCloud/issues/2081)
-が open の間は live verified ではありません。Azure と GCP は、表に示す artifact / output の
-blocker が閉じるまで executable でもありません。Sakura は #2746 後に API 契約上 executable
-ですが、実 account lifecycle が #2081 に添付されるまでは競技 ready としません。
-
-ローカルの `docker/compose` は `make local` mode で独立に executable / verified ですが、
-クラウドランタイムではありません。AWS CloudFormation は既定の stable / live-verified
-クラウドランタイムです。
-
-関連: [問題メタデータリファレンス](/developers/docs/reference/problem-metadata/)。
+metadata の受理、一覧への表示、adapter 接続、fixture テスト、実 Docker・ブラウザ、実クラウドの確認はそれぞれ別です。[配置の境界](/developers/docs/operate/deploy-paths/)を確認し、通していない経路は Not run と記録してください。

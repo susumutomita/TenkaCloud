@@ -243,6 +243,13 @@ export type ProblemRuntimeKind = "docker" | "simulated-cloud";
 export interface ParticipantProblemView {
   readonly jobId: string;
   readonly problemId: string;
+  /** Host-owned Docker terminal capability, independent of legacy practice lifecycle controls. */
+  readonly terminal?: true;
+  /** State-preserving on-demand Docker controls authorized by the competition host. */
+  readonly containerSession?: {
+    readonly status: "stopped" | "starting" | "running" | "stopping" | "error";
+    readonly error?: string;
+  };
   /**
    * #1975: 問題文 (metadata.json 由来)。 local mode の Participant API は同梱して返すので、
    * portal は「何の問題か / 何をすべきか」 を表示できる。 AWS mode の participant-handler は
@@ -473,4 +480,14 @@ export interface LeaderboardResponse {
   readonly scoreboardFrozen?: boolean;
   /** event の終了予定時刻 (ISO 8601、 UI で「あと N 分で公開」 表示用)。 */
   readonly endsAt?: string;
+}
+
+/** Temporary credentials for one participant viewer role, never the deploy role. */
+export interface CliCredentialsView {
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+  readonly sessionToken: string;
+  readonly expiration: string;
+  readonly region: string;
+  readonly awsAccountId: string;
 }

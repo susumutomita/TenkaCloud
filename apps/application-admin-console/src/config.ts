@@ -32,6 +32,8 @@ export interface AppConfig {
    * fallback する (= dev / 初回 deploy 用、 deeplink としては不正だが手 download 可能)。
    */
   readonly competitorBootstrapTemplateUrl?: string;
+  /** Configured host AWS region; absent when local hosting runs only Docker/Battle. */
+  readonly hostAwsRegion?: string;
   /**
    * Issue #897: テナント isolation mode。 "pooled" は UserPool 共有なので SAML SSO のような
    * UserPool mutate 機能は提供しない。 "silo" (= PLATINUM) のみ有効化する。
@@ -190,11 +192,11 @@ function buildDemoConfig(
   };
 }
 
-/** Features that need cloud infrastructure; the local host API has none of them. */
+/** Feature availability provided by the local host API. */
 const LOCAL_HOST_FEATURES = {
   samlSso: false,
   nonAwsRuntime: false,
-  redTeam: false,
+  redTeam: true,
   challengePrerequisiteGate: false,
 } as const;
 
@@ -212,13 +214,14 @@ async function loadLocalHostConfig(): Promise<AppConfig> {
     role?: unknown;
     apiBaseUrl?: unknown;
     participantPortalUrl?: unknown;
+    awsRegion?: unknown;
   };
   if (
     runtime.mode !== "local-host" ||
     runtime.role !== "admin" ||
     runtime.apiBaseUrl !== `${origin}/api` ||
     typeof runtime.participantPortalUrl !== "string" ||
-    !/^http:\/\/[^/]+$/u.test(runtime.participantPortalUrl)
+    !/^https?:\/\/[^/]+$/u.test(runtime.participantPortalUrl)
   )
     throw new Error("Invalid local hosting configuration. No demo or cloud fallback is permitted.");
   return {
@@ -234,6 +237,10 @@ async function loadLocalHostConfig(): Promise<AppConfig> {
     redirectUri: `${origin}/callback`,
     scope: "",
     participantPortalUrl: runtime.participantPortalUrl,
+    ...(typeof runtime.awsRegion === "string" &&
+    /^[a-z]{2}(?:-gov)?-[a-z]+-\d$/u.test(runtime.awsRegion)
+      ? { hostAwsRegion: runtime.awsRegion }
+      : {}),
     features: resolveFeatureFlags(FEATURE_REGISTRY, LOCAL_HOST_FEATURES),
     mode: "local-host",
   };

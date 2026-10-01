@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>デプロイモードと起動経路 — TenkaCloud Docs</title>
+<title>起動と配置の境界 — TenkaCloud Docs</title>
 <link rel="canonical" href="https://tenkacloud.com/docs/operate/deploy-paths/" />
 <link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/operate/deploy-paths/" />
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/operate/deploy-paths/index.en.html" />
@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,63 +43,37 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/" aria-current="page">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/" aria-current="page">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
+<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
+<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>デプロイモードと起動経路 <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>LiteとSaaSは、対象利用者、入口、使うAWSサービス、現在の検証状態が異なります。
-Liteの実行手順は<a href="/docs/manual/organizer/">競技開催者マニュアル</a>を使います。
-このページのSaaS節はコード構成の参考であり、最近の実環境で確認済みの導入手順ではありません。</p>
-<h2>2 つのデプロイモード</h2>
-<ul>
-<li><strong>Lite モード</strong> — 1つの運営グループが自分のAWSで競技を開くモードです。推奨入口の<code>lite-pipeline.yaml</code>はCloudFormationでCodeBuildを作り、CodeBuildが<code>make deploy</code>を実行します。AWS CodePipelineは使いません。ローカルcheckoutから<code>make deploy</code>を直接実行することもできます。</li>
-<li><strong>SaaS モード</strong> — 複数組織へテナントを提供するコード構成です。<code>make deploy-saas</code>、プール型・サイロ型テナント、System Admin、既存テナント更新用CodePipelineがありますが、最近の新規AWS環境で導入から削除までを通した記録はありません。</li>
-</ul>
-<p>Liteは現在の開催手順、SaaSは専用環境で再検証が必要な構成参考として扱います。</p>
-<h2>新しいテナントがプロビジョニングされる流れ</h2>
-<blockquote>
-<p><strong>SaaS構成参考:</strong> ここから「SaaSパイプラインの役割」までは、現在のLite開催では
-使用しません。</p>
-</blockquote>
-<p>新規テナントのプロビジョニングと、パイプラインによるロールアウトは<strong>別々の経路</strong>です。旧ドキュメントが取り違えていたのがこの区別です。</p>
-<ul>
-<li>テナント作成イベント (<code>onboardingRequest</code>) を SBT の <code>BashJobRunner</code> が受け取り、<code>provision-tenant.sh</code> を実行します。デフォルトではテナントは<strong>プール型</strong>（プール型スタックを共有）で、<code>PLATINUM</code> ティアのテナントだけが専用のサイロスタックを直接デプロイされます (<code>bun run cdk -- deploy tenkacloud-tenant-template-&lt;id&gt;</code>)。</li>
-</ul>
-<p>つまり、テナントを 1 つ作成しても CodePipeline は実行されません。実行されるのはプロビジョニングジョブです。</p>
-<h2>SaaS パイプラインの役割</h2>
-<p><code>tenkacloud-saas-pipeline</code> (CodePipeline) は、テナントを作成するためではなく、<strong>既存の全テナントへテナントスタックをロールアウトする</strong>ために存在します。ソースは S3 オブジェクト（<code>source.zip</code>。<code>make deploy-saas</code> 中に <code>prepare-source-bundle.sh</code> がアップロードします）で、パイプラインはこれをポーリングします。変更を検知すると、DynamoDB のテナント一覧をたどり、各テナントスタックをウェーブ単位でデプロイ / 更新します（Step Functions の WaveIterator が CodeBuild を駆動します）。このように、新規テナントの作成と既存テナントへのロールアウトは別のルートを通ります。</p>
-<h2>問題がデプロイされる流れ</h2>
-<p>主催者がコンソールで <strong>Deploy</strong> をクリックすると、次のように進みます。</p>
-<ol>
-<li>コンソールが Deploy API を呼び出します。API はリクエストを検証し、Deployments テーブルに行を書き込み、<code>DeployCreateRequested</code> イベントをバスに発行します。</li>
-<li>Step Functions の実行が CodeBuild ジョブを開始します (<code>.sync</code>)。</li>
-<li>ワーカーがテナントの <strong>ExternalId</strong>（常に必須です）を使って競技者アカウントのロールを AssumeRole し、そのアカウント内で CloudFormation の <code>CreateStack</code> を実行します。</li>
-</ol>
-<p>その後、コンソールはスタックが終了状態に達するまでデプロイのステータスをポーリングします。</p>
-<h2>問題パック</h2>
-<p>問題パック（<a href="/docs/tutorials/first-pack/">最初のパックのチュートリアル</a>を参照）は Lite 経路だけを通ります。Lite は synth 時に固定のテナント id <code>local</code> のアクティベーションを読み取るため、<code>make deploy</code> の前に <code>--tenant local</code> でアクティベートしてください。一方 SaaS モードは、パックのアクティベーションが 1 つでも存在すると synth 時に明示的に失敗します。プール型カタログから黙って除外することはありません。<code>CDK_PARAM_SAAS_IGNORE_PACKS=true</code> を設定するとこれを上書きしてそのまま進められますが、その場合、アクティベーションは単にどのテナントのカタログにも現れなくなります。</p>
-<p>関連: <a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a>、<a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a>。</p>
+<h1>起動と配置の境界 <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<p>未公開の統合 candidate の手順です。ローカルの大会・チーム運用は実装されていますが、クラウド基盤の配置や全カタログのプレイ確認が完了した公開版ではありません。</p>
+<h2 id="local-platform">ローカル基盤</h2><p><code>make local</code> は Bun のサーバーと二つの画面を起動し、SQLite へ状態を保存します。<code>make down</code> は所有するローカル環境を止め、大会データを保持します。旧 host target は別モードとして残しません。<a href="/docs/getting-started/">はじめに</a>で初期管理者、大会作成、参加者ログインを確認してください。</p>
+<h2 id="cloud-platform">クラウド基盤は未実装</h2><p>公開するコマンド名は <code>make deploy</code> と <code>make destroy</code> です。現行 candidate では両方とも未実装を示すエラーで終了し、リソースの作成、削除、移行を行いません。Turso、配置先、永続的な識別情報、単一実行の保証は実装と検証が必要です。コンテナの build 成功は、配置済みや費用ゼロの証明ではありません。</p>
+<h2 id="exercise-deployment">問題環境の配置は別の操作</h2><p>開催者は大会から選択した問題環境を配置します。Docker では所有情報付きの Compose project、確認対象の AWS adapter では検証済み競技者アカウントの CloudFormation を使います。AWS には明示した region、認証情報、必須の ExternalId が必要です。基盤をローカルで動かしても問題リソースには費用が発生する場合があります。大会終了やローカル停止だけでは AWS stack を削除しません。</p>
+<h2 id="legacy-installations">既存の旧版環境</h2><p>SaaS/Lite と旧個人練習の手順は<a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">固定した旧版</a>を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。</p>
+<p>SaaS tenant の rollout、CodePipeline、Lite launcher、CodeBuild による撤収は旧版の契約です。現在の構築手順ではありません。既存環境の操作には、その環境を作成した正確な旧版を使ってください。</p>
 
 </article>
 </main>

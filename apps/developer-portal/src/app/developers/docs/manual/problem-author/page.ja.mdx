@@ -2,11 +2,13 @@ import { MaturityBadge } from "@/components/MaturityBadge";
 
 export const metadata = { title: "問題作成者マニュアル" };
 
-# 問題作成者マニュアル <MaturityBadge level="stable" />
+# 問題作成者マニュアル <MaturityBadge level="preview" />
 
 参加者が解く内容、つまり状況、実際に動く問題環境、verifier、採点metadata、hintを
-作成・保守する人のためのマニュアルです。TenkaCloud tenantの運用やplatform codeの
+作成・保守する人のためのマニュアルです。TenkaCloud 大会の運用やplatform codeの
 変更は必要ありません。
+
+pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。残っている tenant 単位の activate は旧版向けのローカル記録であり、現行の競技実行手順ではありません。
 
 ## あなたのゴール
 
@@ -32,7 +34,7 @@ make pack-validate ARGS="./my-first-pack"
 ```
 
 [最初のpackチュートリアル](/developers/docs/tutorials/first-pack/)では、最小構成の
-packを雛形作成、検証、不変Git commitへの固定、install、tenantへの有効化、削除まで
+packを雛形作成、検証、不変Git commitへの固定、install、ローカルでの内容確認、削除まで
 通して扱います。
 
 ## 参加者の体験を書く
@@ -102,3 +104,5 @@ validator messageは[validation error](/developers/docs/reference/validation-err
 
 問題内容ではなく新しいplatform機能が必要なら、platform Issueを作り、
 [開発者マニュアル](/developers/docs/manual/developer/)へ切り替えます。
+
+旧ローカル 106 問を Challenge 競技へ対応させる方針ですが、カタログ・workbench の復旧、terminal、実 Docker・ブラウザの検証は未完了です。参加者の経路を確認していない問題は Not run と記録し、プレイ確認済みとは表示しないでください。

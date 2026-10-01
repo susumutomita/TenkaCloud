@@ -281,8 +281,9 @@ export function getNameErrorText(
 export function getTeamCountErrorText(
   t: ReturnType<typeof useT>,
   teamCountInvalid: boolean,
+  maxTeams = TEAMS_MAX,
 ): string | undefined {
   return teamCountInvalid
-    ? t("event_create.team_count_invalid", { min: TEAMS_MIN, max: TEAMS_MAX })
+    ? t("event_create.team_count_invalid", { min: TEAMS_MIN, max: maxTeams })
     : undefined;
 }

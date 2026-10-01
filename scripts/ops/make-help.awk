@@ -9,10 +9,16 @@ BEGIN {
     print "HELP_LANG must be en or ja" > "/dev/stderr"
     exit 2
   }
+  if (scope == "") scope = "user"
+  if (scope != "user" && scope != "developer") {
+    print "HELP_SCOPE must be user or developer" > "/dev/stderr"
+    exit 2
+  }
   print (lang == "ja" ? "言語: 日本語（英語: make help HELP_LANG=en）" : "Language: English (Japanese: make help HELP_LANG=ja)")
 }
 
 /^# =====/ {
+  if (scope != "developer") next
   section = $0
   gsub(/^# ===== | =====$/, "", section)
   split(section, sections, " \\| ")
@@ -20,6 +26,12 @@ BEGIN {
 }
 
 /^[a-z][a-zA-Z0-9_-]*:.*## / {
+  if (scope == "user" && $1 !~ /^(local|down|deploy|destroy)$/) next
   split($2, descriptions, " \\| ")
   printf "  %-30s %s\n", $1, (lang == "ja" ? descriptions[2] : descriptions[1])
+}
+
+END {
+  if (scope == "user" && (lang == "en" || lang == "ja"))
+    print (lang == "ja" ? "\n開発用の検査: make help HELP_SCOPE=developer" : "\nDevelopment checks: make help HELP_SCOPE=developer")
 }

@@ -49,63 +49,33 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
+<li><a href="/docs/reference/lite-settings/index.en.html">Legacy Lite settings</a></li>
+<li><a href="/docs/reference/lite-messages/index.en.html">Legacy Lite messages</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Manuals by role <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>Start with the job you are doing today. You do not need to read the whole
-TenkaCloud documentation set before taking your first action.</p>
-<h2>Choose your role</h2>
-<h3>Developer</h3>
-<p>Choose this when you change the TenkaCloud platform itself. Your first success
-is a focused change that passes the repository checks.
-<a href="/docs/manual/developer/index.en.html">Open the developer manual →</a></p>
-<h3>Competition organizer</h3>
-<p>Choose this when you deploy TenkaCloud or run an event. Your first success is
-that organizers and participants can open the correct consoles.
-<a href="/docs/manual/organizer/index.en.html">Open the organizer manual →</a></p>
-<h3>Competition participant</h3>
-<p>Choose this when you solve a problem. Your first success is an accepted answer
-or game action, with its result shown in the portal.
-<a href="/docs/manual/participant/index.en.html">Open the participant manual →</a></p>
-<h3>Problem author</h3>
-<p>Choose this when you create or maintain problem content. Your first success is
-that a pack validates and the problem can be rehearsed locally.
-<a href="/docs/manual/problem-author/index.en.html">Open the problem author manual →</a></p>
-<h2>How the roles fit together</h2>
-<p>The organizer prepares an event and gives participants access. Problem authors
-provide the exercises used by that event. Developers maintain the TenkaCloud
-platform that connects those workflows.</p>
-<p>A person may hold more than one role, but each task still has one owner. For
-example, changing <code>CDK_PARAM_CONTROL_DATA_BACKEND</code> is an organizer task;
-changing the code that interprets the setting is a developer task.</p>
-<h2>If you are unsure</h2>
-<ul>
-<li>You received a Participant Portal link or team key: choose <strong>participant</strong>.</li>
-<li>You received an Admin Console invitation: choose <strong>organizer</strong>.</li>
-<li>You are editing <code>metadata.json</code>, a template, verifier, or hints: choose
-<strong>problem author</strong>.</li>
-<li>You are editing <code>apps/</code>, <code>infrastructure/</code>, <code>packages/</code>, or platform scripts:
-choose <strong>developer</strong>.</li>
+<h1>Manuals by role <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<h2 id="choose-your-role">Choose your role</h2><ul>
+<li><a href="/docs/manual/organizer/index.en.html">Organizer</a>: prepare teams, environments, invitations, scoring and cleanup</li>
+<li><a href="/docs/manual/participant/index.en.html">Participant</a>: join your team and solve its assigned problems</li>
+<li><a href="/docs/manual/problem-author/index.en.html">Problem author</a>: write content and verify the participant route</li>
+<li><a href="/docs/manual/developer/index.en.html">Developer</a>: change the implementation and its tests</li>
 </ul>
-<p>Do not begin with the architecture or parameter reference unless your current
-role requires it. Each role manual links to those details at the point where
-they become useful.</p>
+<h2 id="how-the-roles-fit-together">How the roles fit together</h2><p>One local process serves organizer and participant applications, persists event/team state and controls owned exercise environments. Organizer permissions and team authentication are separate. Authors own catalog content; schema acceptance alone does not establish runtime support.</p>
+<h2 id="if-you-are-unsure">If you are unsure</h2><p>Start with <a href="/docs/getting-started/index.en.html">getting started</a>. The candidate has no current SaaS/Lite setup path; cloud deploy/destroy remain unimplemented.</p>
 
 </article>
 </main>

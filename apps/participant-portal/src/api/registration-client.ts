@@ -1,23 +1,16 @@
+import {
+  registrationInfoSchema,
+  registrationProgressSchema,
+  registrationSecretSchema as secretSchema,
+} from "@tenkacloud/problem-sdk/internal/event-registration";
 import { z } from "zod";
 
-const secretSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
-export const registrationInfoSchema = z.object({
-  name: z.string(),
-  state: z.enum(["open", "closed", "full"]),
-  remaining: z.number().int().nonnegative(),
-});
-export const registrationProgressSchema = z
-  .object({
-    eventName: z.string(),
-    teamId: z.string(),
-    state: z.enum(["unprepared", "preparing", "failed", "ready"]),
-    ready: z.number().int().nonnegative(),
-    total: z.number().int().nonnegative(),
-    teamLoginKey: secretSchema.optional(),
-  })
-  .refine((data) => data.state !== "ready" || !!data.teamLoginKey);
-export type RegistrationInfo = z.infer<typeof registrationInfoSchema>;
-export type RegistrationProgress = z.infer<typeof registrationProgressSchema>;
+export {
+  type RegistrationInfo,
+  type RegistrationProgress,
+  registrationInfoSchema,
+  registrationProgressSchema,
+} from "@tenkacloud/problem-sdk/internal/event-registration";
 
 export async function registrationRequest<T>(
   base: string,
