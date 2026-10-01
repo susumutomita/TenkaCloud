@@ -51,7 +51,7 @@ jobs:
         run: |
           docker info
           docker compose version
-      - name: Production adapter and existing sqli-demo with two teams
+      - name: Production SQL and PostgreSQL terminal with two isolated teams
         env:
           # Isolated runner fixture; only this test's owned Compose projects use compact IPAM.
           HOST_DOCKER_NETWORK_POOL: 10.240.0.0/16

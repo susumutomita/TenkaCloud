@@ -1,6 +1,4 @@
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CloudFormationEngine } from "../cloudformation-engine";
@@ -8,6 +6,7 @@ import { CompetitionEngine } from "../competition-engine";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { FakeAws } from "./fake-aws";
 import { organizerToken } from "./organizer-login";
 
@@ -23,7 +22,7 @@ export async function progressionFixture(
   options: { adminBuild?: string; participantBuild?: string } = {},
 ) {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
-  const data = mkdtempSync(join(tmpdir(), "tenka-progression-"));
+  const data = createTemporaryDirectory(root, "tenka-progression-");
   const filename = join(data, "host.sqlite");
   let store = new HostStore(new Database(filename));
   const aws = new FakeAws();
@@ -159,7 +158,7 @@ export async function progressionFixture(
     },
     async close() {
       await stop();
-      rmSync(data, { recursive: true, force: true });
+      removeTemporaryDirectory(root, data);
     },
   };
 }

@@ -243,8 +243,11 @@ export async function getEvent(
 export async function createEvent(
   api: ApiClient,
   body: CreateEventRequest,
+  operationKey?: string,
 ): Promise<CreateEventResponse> {
-  return api.post<CreateEventResponse>("events", body);
+  return operationKey
+    ? api.post<CreateEventResponse>("events", body, operationKey)
+    : api.post<CreateEventResponse>("events", body);
 }
 
 export interface RotateTeamLoginKeyResponse {
@@ -285,8 +288,12 @@ export async function bulkDeployEvent(
   api: ApiClient,
   eventId: string,
   body: BulkDeployBody = {},
+  operationKey?: string,
 ): Promise<BulkResult> {
-  return api.post<BulkResult>(`events/${encodeURIComponent(eventId)}/deploy`, body);
+  const path = `events/${encodeURIComponent(eventId)}/deploy`;
+  return operationKey
+    ? api.post<BulkResult>(path, body, operationKey)
+    : api.post<BulkResult>(path, body);
 }
 
 export interface LocalEnvironmentOperationResult {

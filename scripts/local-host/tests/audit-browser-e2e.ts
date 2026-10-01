@@ -1,7 +1,6 @@
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
@@ -9,6 +8,7 @@ import { randomToken } from "../auth";
 import { parseGatewayPorts } from "../gateway-ports";
 import { type RunningLocalHost, startLocalHost } from "../server";
 import type { HostStore } from "../store";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { ExerciseFixture } from "./exercise-fixture";
 import { signInOrganizer } from "./organizer-login";
 
@@ -45,7 +45,7 @@ async function addViewer(page: Page, username: string, password: string, status:
   assert.equal((await response).status(), status);
 }
 async function main() {
-  const data = mkdtempSync(join(tmpdir(), "tenka-audit-browser-"));
+  const data = createTemporaryDirectory(root, "tenka-audit-browser-");
   const secret = randomToken();
   let browser: Browser | undefined;
   let page: Page | undefined;
@@ -141,7 +141,7 @@ async function main() {
   } finally {
     await browser?.close();
     await host?.stop();
-    rmSync(data, { recursive: true, force: true });
+    removeTemporaryDirectory(root, data);
   }
 }
 void main().catch((error) => {

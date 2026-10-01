@@ -110,8 +110,31 @@ describe("FlagSubmissionPanel submit flow", () => {
       "team-key",
       "hello-world",
       "stack-output-abc123",
+      undefined,
+      undefined,
+      expect.any(String),
     );
     expect(onScored).toHaveBeenCalled();
+  });
+
+  it("reuses a lost-response key, then starts a new intent after an acknowledged wrong answer", async () => {
+    const user = userEvent.setup();
+    const wrong = { kind: "wrong", scoreDelta: -5, totalScore: -5, wrongCount: 1 };
+    apiMocks.submitFlag
+      .mockRejectedValueOnce(new TypeError("response lost"))
+      .mockResolvedValue(wrong);
+    renderPanel();
+    await user.type(screen.getByRole("textbox"), "not-yet");
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    await screen.findByText(/response lost/);
+    const firstKey = apiMocks.submitFlag.mock.calls[0]?.[6];
+    expect(firstKey).toMatch(/^[a-f0-9-]{36}$/);
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    await screen.findByText("Wrong (-5 pt) — total -5 pt");
+    expect(apiMocks.submitFlag.mock.calls[1]?.[6]).toBe(firstKey);
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    await waitFor(() => expect(apiMocks.submitFlag).toHaveBeenCalledTimes(3));
+    expect(apiMocks.submitFlag.mock.calls[2]?.[6]).not.toBe(firstKey);
   });
 
   it("should show a penalty warning on a wrong backend flag", async () => {

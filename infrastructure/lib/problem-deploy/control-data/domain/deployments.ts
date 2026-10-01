@@ -17,4 +17,9 @@ export interface DeploymentRecord {
     | "AUTO_DELETED";
   readonly expiresAt: number;
   readonly score: number;
+  readonly publicOutputs?: Readonly<Record<string, string>>;
+  readonly scoring?: { readonly kind: "flag"; readonly points: number };
+  readonly flagSubmitted?: boolean;
+  readonly failureReason?: string;
+  readonly createdAt?: string;
 }

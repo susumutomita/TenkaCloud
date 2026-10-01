@@ -1,7 +1,5 @@
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostBuildDirectory } from "../build";
@@ -9,6 +7,7 @@ import { CompetitionEngine } from "../competition-engine";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 export const REGISTRATION_ORGANIZER = {
@@ -31,7 +30,7 @@ export interface RegistrationSummary {
 }
 /** Real Battle runtime, real HTTP listeners and a durable SQLite file; no external services. */
 export async function registrationFixture(options: { browser?: boolean } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), "tenka-registration-"));
+  const directory = createTemporaryDirectory(root, "tenka-registration-");
   const database = join(directory, "host.sqlite");
   const hostKey = "test-only-registration-host-key";
   let clock = Date.now();
@@ -180,7 +179,7 @@ export async function registrationFixture(options: { browser?: boolean } = {}) {
     },
     async close() {
       await detach();
-      rmSync(directory, { recursive: true, force: true });
+      removeTemporaryDirectory(root, directory);
     },
   };
 }

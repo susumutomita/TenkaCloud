@@ -5,6 +5,7 @@ import { CloudDataStack } from "../lib/cloud-hosting/data-stack.js";
 import { assertCommercialRegion } from "../lib/cloud-hosting/regions.js";
 import { cloudStackNames, cloudStackTags } from "../lib/cloud-hosting/stack-names.js";
 import { projectSynthesizer } from "../lib/cloud-hosting/synthesizer.js";
+import { parseRunnerBindings } from "../lib/problem-deploy/handlers/cloud-api/execution-config.js";
 
 const environment = process.env.CDK_PARAM_ENVIRONMENT ?? "development";
 const names = cloudStackNames(environment);
@@ -25,6 +26,9 @@ const application = new CloudApplicationStack(app, names.app, {
   tags: cloudStackTags(environment),
   synthesizer: projectSynthesizer(environment),
   environment,
+  ...(process.env.TENKACLOUD_RUNNER_BINDINGS
+    ? { runnerBindings: parseRunnerBindings(process.env.TENKACLOUD_RUNNER_BINDINGS) }
+    : {}),
   backend,
   repositoryRoot: root,
   consoleAssets: resolve(root, "apps/application-admin-console/dist"),

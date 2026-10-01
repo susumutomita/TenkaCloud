@@ -149,9 +149,23 @@ export function spawnHostProcess(options: SpawnHostOptions): Promise<HostProcess
 async function stopHostProcess(child: HostChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill("SIGINT");
-  const exited = await Promise.race([
-    new Promise<boolean>((accept) => child.once("exit", () => accept(true))),
-    new Promise<boolean>((accept) => setTimeout(() => accept(false), 10_000)),
-  ]);
-  if (!exited && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  if (await waitForExit(child, 10_000)) return;
+  child.kill("SIGKILL");
+  if (!(await waitForExit(child, 10_000)))
+    throw new Error("Benchmark child did not exit; retaining its temporary data.");
+}
+
+function waitForExit(child: HostChildProcess, timeoutMs: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise((accept) => {
+    const onExit = () => {
+      clearTimeout(timeout);
+      accept(true);
+    };
+    const timeout = setTimeout(() => {
+      child.off("exit", onExit);
+      accept(false);
+    }, timeoutMs);
+    child.once("exit", onExit);
+  });
 }

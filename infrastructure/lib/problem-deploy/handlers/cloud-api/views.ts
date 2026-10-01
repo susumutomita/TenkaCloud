@@ -1,4 +1,5 @@
 import type { LeaderboardResponse, ParticipantTeamView } from "@tenkacloud/portal-contracts";
+import type { TeamScoreProjection } from "../../control-data/domain/deployment-work.js";
 import type { DeploymentRecord } from "../../control-data/domain/deployments.js";
 import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
@@ -42,7 +43,19 @@ export function participantView(
         expiresAt: row.expiresAt,
         score: row.score,
         // Endpoint/answer projection is supplied with runner wiring; never expose arbitrary raw outputs.
-        stackOutputs: {},
+        stackOutputs: { ...row.publicOutputs },
+        ...(row.scoring
+          ? {
+              scoring: {
+                kind: row.scoring.kind,
+                points: row.scoring.points,
+                flagSubmitted: row.flagSubmitted === true,
+              },
+            }
+          : {}),
+        ...(row.failureReason ? { failureReason: row.failureReason } : {}),
+        ...(row.createdAt ? { createdAt: row.createdAt } : {}),
+        accessCapabilities: [],
         deployLog: { cursor: row.jobId, entries: [] },
       })),
   };
@@ -51,7 +64,7 @@ export function participantView(
 export function leaderboard(
   event: EventRecord,
   teams: readonly TeamRecord[],
-  deployments: readonly DeploymentRecord[],
+  scores: readonly TeamScoreProjection[],
   myTeamId: string,
   now: number,
 ): LeaderboardResponse {
@@ -61,16 +74,15 @@ export function leaderboard(
   const entries = teams
     .filter((team) => team.eventId === event.eventId)
     .map((team) => {
-      const jobs = deployments.filter(
-        (row) =>
-          row.eventId === event.eventId && row.teamId === team.teamId && !inactive.has(row.status),
+      const projection = scores.find(
+        (row) => row.eventId === event.eventId && row.teamId === team.teamId,
       );
       return {
         rank: 0,
         teamId: team.teamId,
         teamName: team.displayName ?? team.internalSlug,
-        score: jobs.reduce((sum, row) => sum + row.score, 0),
-        completedProblems: jobs.filter((row) => row.status === "COMPLETE").length,
+        score: projection?.score ?? 0,
+        completedProblems: projection?.completedProblems ?? 0,
         totalProblems: event.problems.length,
         isMyTeam: team.teamId === myTeamId,
       };

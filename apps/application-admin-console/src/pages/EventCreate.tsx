@@ -5,8 +5,8 @@ import Button from "@cloudscape-design/components/button";
 import Form from "@cloudscape-design/components/form";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { toErrorMessage } from "@tenkacloud/web-kit";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { PendingOperation, toErrorMessage } from "@tenkacloud/web-kit";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { canMutateTenant, useApiClient } from "../api/client";
 import {
@@ -92,6 +92,8 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const canMutate = canMutateTenant(apiClient);
   const navigate = useNavigate();
   const t = useT();
+  const creation = useRef(new PendingOperation());
+  const deployment = useRef(new PendingOperation());
 
   // 問題 option 化 (#1414 の disabled 出し分け) と検索 / filter (#1776) は
   // EventCreateProblemsetSection 側の責務。 ここは catalog 全件を渡すだけ。
@@ -252,7 +254,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await createEvent(apiClient, {
+      const body = {
         name,
         teams: teamRows.map((tr) => ({
           internalSlug: tr.internalSlug,
@@ -273,7 +275,10 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           problemId: r.problemId,
           defaultRegion: r.defaultRegion,
         })),
-      });
+      };
+      const operationKey = creation.current.keyFor(`${config.apiBaseUrl}/events`, body);
+      const res = await createEvent(apiClient, body, operationKey);
+      creation.current.acknowledge(operationKey);
       // Issue #1067: 即 navigate せず deploy 促し modal を出す。
       setDeployPromptTarget({
         eventId: res.eventId,
@@ -295,7 +300,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     setDeployStarting(true);
     try {
       // 全 team × 全 problem を bulk deploy (= 既存 Issue #910 経路)。
-      await bulkDeployEvent(apiClient, deployPromptTarget.eventId);
+      const operationKey = deployment.current.keyFor(deployPromptTarget.eventId, {});
+      await bulkDeployEvent(apiClient, deployPromptTarget.eventId, {}, operationKey);
+      deployment.current.acknowledge(operationKey);
       navigate(`/events/${deployPromptTarget.eventId}`);
     } catch (err) {
       // bulk deploy 失敗時も Event 自体は作成済なので EventDetail に navigate して

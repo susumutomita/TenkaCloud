@@ -17,6 +17,7 @@ function ownedStack(name: string) {
   return {
     StackId: `arn:aws:cloudformation:ap-northeast-1:123456789012:stack/${name}/synthetic-stack-id`,
     StackName: name,
+    Outputs: [{ OutputKey: "CloudRunnerEnabled", OutputValue: "false" }],
     Tags: Object.entries(cloudStackTags("staging")).map(([Key, Value]) => ({ Key, Value })),
   };
 }
@@ -342,6 +343,83 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       }
     },
   );
+  it.each(["up", "down"])(
+    "%s fails closed for missing, malformed or ambiguous runner metadata",
+    async (command) => {
+      for (const values of [[], ["unknown"], ["false", "true"]]) {
+        const f = fixture({
+          confirmed: true,
+          fail: (request) => {
+            if (!platformInspection(request) || !request.args.includes("tenkacloud-cloud-staging"))
+              return undefined;
+            return {
+              code: 0,
+              stderr: "",
+              stdout: JSON.stringify({
+                ...ownedStack("tenkacloud-cloud-staging"),
+                Outputs: values.map((OutputValue) => ({
+                  OutputKey: "CloudRunnerEnabled",
+                  OutputValue,
+                })),
+              }),
+            };
+          },
+        });
+        expect(await f.run([command])).toBe(1);
+        expect(f.calls.some((call) => call.inherit)).toBe(false);
+        expect(f.confirmations).toEqual([]);
+      }
+    },
+  );
+  it("refuses to remove an enabled runner on update or destroy, even with --yes", async () => {
+    const f = fixture({
+      confirmed: true,
+      fail: (request) =>
+        platformInspection(request) && request.args.includes("tenkacloud-cloud-staging")
+          ? {
+              code: 0,
+              stderr: "",
+              stdout: JSON.stringify({
+                ...ownedStack("tenkacloud-cloud-staging"),
+                Outputs: [{ OutputKey: "CloudRunnerEnabled", OutputValue: "true" }],
+              }),
+            }
+          : undefined,
+    });
+    expect(await f.run(["up"])).toBe(1);
+    expect(f.errors.join("")).toContain("without TENKACLOUD_RUNNER_BINDINGS");
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    expect(f.errors.join("")).toContain("drain pending and active executions");
+    expect(f.calls.some((call) => call.inherit)).toBe(false);
+  });
+  it("permits explicit activation from a runner-disabled foundation and rejects invalid configuration before reads", async () => {
+    const f = fixture();
+    const binding = [
+      {
+        id: "reviewed-fixture",
+        accountId: "123456789012",
+        region: "ap-northeast-1",
+        roleArn: "arn:aws:iam::123456789012:role/Fixture",
+        externalIdParameterArn:
+          "arn:aws:ssm:ap-northeast-1:123456789012:parameter/tenkacloud/fixture",
+        reviewedProblemIds: ["hello-world"],
+      },
+    ];
+    expect(
+      await runCloudCli(["up"], f.io, {
+        root: ROOT,
+        env: { ...f.env, TENKACLOUD_RUNNER_BINDINGS: JSON.stringify(binding) },
+      }),
+    ).toBe(0);
+    const invalid = fixture();
+    expect(
+      await runCloudCli(["up"], invalid.io, {
+        root: ROOT,
+        env: { ...invalid.env, TENKACLOUD_RUNNER_BINDINGS: "[]" },
+      }),
+    ).toBe(1);
+    expect(invalid.calls).toEqual([]);
+  });
   it.each(["status", "console-url", "portal-url"])(
     "supports read-only %s with matching environment stack names",
     async (command) => {

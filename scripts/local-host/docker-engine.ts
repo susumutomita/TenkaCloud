@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   type ComposeCli,
@@ -40,7 +40,6 @@ import {
   type NetworkSubnets,
   occupiedDockerSubnets,
 } from "./docker-networks";
-import { privateDirectory } from "./files";
 import {
   type Context,
   type EngineResult,
@@ -50,6 +49,7 @@ import {
   type Problem,
   type RuntimeEngine,
 } from "./model";
+import { prepareRuntimeDirectory, removeRuntimeFiles } from "./runtime-directory";
 import { type RuntimePorts, remapRuntimeComposePorts } from "./runtime-ports";
 
 type ComposeAction = "up" | "down" | "stop" | "restart";
@@ -178,6 +178,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     job: Job,
     verifySources = true,
     newSubnets?: NetworkSubnets,
+    claimNewDirectory = false,
   ): {
     started: StartedContainer;
     composeText: string;
@@ -195,7 +196,7 @@ export class DockerHostingEngine implements RuntimeEngine {
       newSubnets ??
       (job.unit ? (JSON.parse(job.unit) as LocalComposeUnit).networkSubnets : undefined);
     if (networkSubnets) plannedCompose = applyNetworkSubnets(plannedCompose, networkSubnets);
-    const directory = privateDirectory(join(this.dataDirectory, "runtimes", job.jobId));
+    const directory = prepareRuntimeDirectory(this.dataDirectory, job.jobId, claimNewDirectory);
     const composePath = join(directory, `${problem.composeProjectName}.compose.yml`);
     const unit: LocalComposeUnit = {
       problemId: job.problemId,
@@ -231,7 +232,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     resolveComposeCli();
     if (job.unit) throw new Error("A retained environment must be resumed, never recreated.");
     const networkSubnets = this.allocateNetworks(job);
-    const plan = this.plan(job, true, networkSubnets);
+    const plan = this.plan(job, true, networkSubnets, true);
     if (networkSubnets) this.networkReservations.set(job.jobId, Object.values(networkSubnets));
     const unit = plan.started.unit;
     writeFileSync(unit.composePath, plan.composeText, { mode: 0o600 });
@@ -245,7 +246,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     } catch (error) {
       try {
         await compose(unit, "down", { ...process.env, ...generated });
-        unlinkSync(unit.composePath);
+        removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
         retain(null);
         this.networkReservations.delete(job.jobId);
       } catch (cleanup) {
@@ -290,7 +291,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   async stop(job: Job): Promise<void> {
     // Cleanup must remain possible after a catalog update. The private persisted
     // compose text is the original creation plan, not the new checkout's file.
-    const plan = this.plan(job, false);
+    const plan = this.plan(job, false, undefined, true);
     const unit = this.validatedUnit(job, plan.started.unit);
     // Reconstruct only a missing file from the private pinned plan. A different
     // existing file is a conflict, never something we execute or overwrite.
@@ -306,7 +307,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     await compose(unit, "down", { ...process.env, ...cleanupEnvironment });
     this.running.delete(job.jobId);
     this.networkReservations.delete(job.jobId);
-    unlinkSync(unit.composePath);
+    removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
   }
   /** Validated, unchanged private plan of an owned environment. */
   private ownedUnit(

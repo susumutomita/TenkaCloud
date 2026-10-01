@@ -36,7 +36,7 @@ import { dirname, join } from "node:path";
  * not logged.
  */
 
-const MASTER_FILE = "problem-secrets.key";
+export const PROBLEM_SECRET_FILE = "problem-secrets.key";
 
 /** Read this deployment's master secret, creating it on first use. */
 export function loadOrCreateMasterSecret(
@@ -48,7 +48,7 @@ export function loadOrCreateMasterSecret(
     randomHex?: () => string;
   } = {},
 ): string {
-  const path = join(localDir, MASTER_FILE);
+  const path = join(localDir, PROBLEM_SECRET_FILE);
   const exists = io.exists ?? ((target: string) => existsSync(target));
   const read = io.read ?? ((target: string) => readFileSync(target, "utf8"));
   const randomHex = io.randomHex ?? (() => randomBytes(32).toString("hex"));

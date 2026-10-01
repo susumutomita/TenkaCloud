@@ -488,6 +488,48 @@ test("Real HTTP exercise, separate team flags and single award under concurrent 
     );
     assert.equal(forged.status, 400);
   }));
+test("Sealed workbench answers fit the bounded scoring request without widening other routes", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const team = required(event.teams[0]);
+    // A valid workbench input below 64 KiB can exceed 64 KiB after sealing.
+    const flag = `tcw1.${Buffer.from(JSON.stringify({ answer: "x".repeat(60_000) })).toString("base64url")}.synthetic`;
+    assert.ok(flag.length > 64 * 1024);
+    const submitted = await f.request(
+      "participant",
+      "/api/portal/me/submit-flag",
+      "POST",
+      { problemId: "sqli-demo", flag },
+      team.teamLoginKey,
+    );
+    assert.equal(submitted.status, 200);
+    assert.equal(
+      submitted.body.kind,
+      "wrong",
+      "The test verifier receives the answer; this is not a real code verdict.",
+    );
+    for (const oversized of ["x".repeat(128 * 1024), "あ".repeat(45_000)]) {
+      const rejected = await f.request(
+        "participant",
+        "/api/portal/me/submit-flag",
+        "POST",
+        { problemId: "sqli-demo", flag: oversized },
+        team.teamLoginKey,
+      );
+      assert.equal(rejected.status, 413);
+    }
+    assert.equal(f.store.team(team.teamId).score, -5, "Oversized requests never reach scoring.");
+    const ordinary = await f.request(
+      "participant",
+      "/api/portal/me",
+      "PATCH",
+      { teamName: "x".repeat(70_000) },
+      team.teamLoginKey,
+    );
+    assert.equal(ordinary.status, 413);
+  }));
 test("Idempotent wrong submissions, hint charges and payload conflict detection", () =>
   fixture(async (f) => {
     const event = await f.create();

@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium } from "playwright-core";
 import { connectCloudHosting } from "../cloud-hosting";
 import { CompetitionEngine } from "../competition-engine";
 import { parseGatewayPorts } from "../gateway-ports";
 import { startLocalHost } from "../server";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { FakeAws, fakeFlag } from "./fake-aws";
 import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
@@ -18,11 +17,11 @@ interface CreatedEvent {
 
 async function main(): Promise<void> {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
-  const data = mkdtempSync(join(tmpdir(), "tenkacloud-cloud-browser-"));
+  const data = createTemporaryDirectory(root, "tenkacloud-cloud-browser-");
   try {
     await rehearse(root, data);
   } finally {
-    rmSync(data, { recursive: true, force: true });
+    removeTemporaryDirectory(root, data);
   }
 }
 

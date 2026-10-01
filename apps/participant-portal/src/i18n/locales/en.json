@@ -516,7 +516,12 @@
     "action_failed": "Problem editor action failed",
     "inspect_error": "Failed to inspect the evidence",
     "test_error": "Failed to run the public tests",
-    "editor_keys": "Tab indents, Shift+Tab outdents, Cmd/Ctrl+/ toggles comments, Enter keeps the current indentation. Press Escape then Tab to move focus."
+    "editor_keys": "Tab indents, Shift+Tab outdents, Cmd/Ctrl+/ toggles comments, Enter keeps the current indentation. Press Escape then Tab to move focus.",
+    "draft_warning": "Code draft is not protected",
+    "draft_unscoped": "This environment has no draft storage identifier. You can edit, but copy your code before leaving or reloading this page.",
+    "draft_restore_failed": "The saved code draft could not be read. The starter is shown and the saved draft has been left untouched. Edits cannot be saved until you choose Restore starter. Copy your code before leaving this page.",
+    "draft_save_failed": "Your latest code could not be saved in this browser. Keep this page open or copy your code before leaving or reloading. Editing again will retry saving.",
+    "draft_local": "Code edits are saved only in this browser for this problem environment. They can be restored after a reload or stop/resume."
   },
   "onboarding_tutorial": {
     "panel_title": "Six steps from video to real action",

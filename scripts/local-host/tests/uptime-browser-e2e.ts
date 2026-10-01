@@ -1,9 +1,9 @@
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 /** Built-SPA rehearsal of hello-world-battle. Fake AWS and an injected probe never reach AWS. */
 
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AssumeRoleCommand } from "@aws-sdk/client-sts";
@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   const built = hostBuildDirectory(root, "participant-portal");
   if (!existsSync(join(built, "host.html"))) throw new Error("Run bun run build:host first.");
   mkdirSync(artifacts, { recursive: true });
-  const directory = mkdtempSync(join(tmpdir(), "tenka-uptime-browser-"));
+  const directory = createTemporaryDirectory(root, "tenka-uptime-browser-");
   const store = new HostStore(new Database(join(directory, "host.sqlite")));
   let listener: HttpHost | undefined;
   let browser: Browser | undefined;
@@ -139,7 +139,7 @@ async function main(): Promise<void> {
     await browser?.close();
     await listener?.close();
     store.close();
-    rmSync(directory, { recursive: true, force: true });
+    removeTemporaryDirectory(root, directory);
   }
 }
 

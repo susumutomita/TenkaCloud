@@ -124,7 +124,12 @@ describe("useEventOperations — bulk deploy / teardown", () => {
     await act(async () => {
       await result.current.handleBulkDeploy({ retryFailedOnly: true });
     });
-    expect(ops.bulkDeployEvent).toHaveBeenCalledWith(CLIENT, "evt-1", { retryFailedOnly: true });
+    expect(ops.bulkDeployEvent).toHaveBeenCalledWith(
+      CLIENT,
+      "evt-1",
+      { retryFailedOnly: true },
+      expect.any(String),
+    );
     expect(result.current.bulkResult).toEqual({ ok: 1 });
     expect(refresh).toHaveBeenCalled();
     // redeploy / default ラベルも通る。
@@ -135,6 +140,26 @@ describe("useEventOperations — bulk deploy / teardown", () => {
       await result.current.handleBulkDeploy();
     });
     expect(ops.bulkDeployEvent).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps an uncertain deployment operation for retry and rotates it after acknowledgment", async () => {
+    ops.bulkDeployEvent
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValue({ ok: 1 });
+    const { result } = setup();
+    await act(async () => {
+      await result.current.handleBulkDeploy();
+    });
+    const firstKey = ops.bulkDeployEvent.mock.calls[0]?.[3];
+    expect(firstKey).toMatch(/^[a-f0-9-]{36}$/);
+    await act(async () => {
+      await result.current.handleBulkDeploy();
+    });
+    expect(ops.bulkDeployEvent.mock.calls[1]?.[3]).toBe(firstKey);
+    await act(async () => {
+      await result.current.handleBulkDeploy();
+    });
+    expect(ops.bulkDeployEvent.mock.calls[2]?.[3]).not.toBe(firstKey);
   });
 
   it("should surface errors from bulk deploy / teardown", async () => {

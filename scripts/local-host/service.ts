@@ -66,6 +66,7 @@ import {
   type OrganizerUser,
   type OrganizerView,
 } from "./store";
+import { MAX_SUBMISSION_BODY } from "./submission-size";
 import { LocalUptime, uptimeGeneration } from "./uptime";
 
 export interface ApiRequest {
@@ -2132,7 +2133,7 @@ export class HostingService {
     if (
       !hintMatch &&
       (typeof body.flag !== "string" ||
-        body.flag.length > 16_384 ||
+        Buffer.byteLength(body.flag, "utf8") > MAX_SUBMISSION_BODY ||
         typeof body.problemId !== "string")
     )
       throw new HostError(400, "Invalid flag submission.");

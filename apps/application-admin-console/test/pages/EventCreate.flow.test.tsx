@@ -150,7 +150,9 @@ describe("EventCreatePage flow", () => {
     await waitFor(() => expect(mockCreate).toHaveBeenCalled());
     // deploy 促し modal の primary を押す。
     fireEvent.click(screen.getByTestId("deploy-prompt-now"));
-    await waitFor(() => expect(mockBulk).toHaveBeenCalledWith(expect.anything(), "e1"));
+    await waitFor(() =>
+      expect(mockBulk).toHaveBeenCalledWith(expect.anything(), "e1", {}, expect.any(String)),
+    );
     expect(mockNav).toHaveBeenCalledWith("/events/e1");
   });
 

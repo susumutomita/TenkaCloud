@@ -8,11 +8,18 @@ import {
   type TransactWriteCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
-import type { CloudRepository } from "./cloud-repository.js";
+import type { CloudRepository, EventCreationReceipt } from "./cloud-repository.js";
+import { DeploymentConflict } from "./domain/deployment-work.js";
 import type { DeploymentRecord } from "./domain/deployments.js";
 import { CLOUD_EVENT_LIMITS, type EventRecord } from "./domain/events.js";
 import type { TeamRecord } from "./domain/teams.js";
 
+const scoreSchema = z.object({
+  eventId: z.string(),
+  teamId: z.string(),
+  score: z.number().finite(),
+  completedProblems: z.number().int().nonnegative(),
+});
 const ID = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
 const KEY = /^[A-Za-z0-9_-]{43}$/u;
 const digest = (key: string): string => createHash("sha256").update(key).digest("hex");
@@ -50,7 +57,7 @@ const eventSchema = z.object({
   scoringLocked: z.boolean().optional(),
   scoreboardFreezeMinutes: z.number().optional(),
 });
-const deploymentSchema = z.object({
+export const deploymentSchema = z.object({
   jobId: z.string().regex(ID),
   eventId: z.string().regex(ID),
   teamId: z.string().regex(ID),
@@ -69,12 +76,17 @@ const deploymentSchema = z.object({
   ]),
   expiresAt: z.number().finite(),
   score: z.number().finite(),
+  publicOutputs: z.record(z.string()).optional(),
+  scoring: z.object({ kind: z.literal("flag"), points: z.number() }).optional(),
+  flagSubmitted: z.boolean().optional(),
+  failureReason: z.string().optional(),
+  createdAt: z.string().optional(),
 });
-function eventKey(eventId: string) {
+export function eventKey(eventId: string) {
   if (!ID.test(eventId)) throw new Error("Invalid event ID.");
   return { PK: `EVENT#${eventId}`, SK: "META" };
 }
-function teamKey(eventId: string, teamId: string) {
+export function teamKey(eventId: string, teamId: string) {
   if (!ID.test(teamId)) throw new Error("Invalid team ID.");
   return { ...eventKey(eventId), SK: `TEAM#${teamId}` };
 }
@@ -82,7 +94,7 @@ function accessKey(key: string) {
   if (!KEY.test(key)) throw new Error("Invalid team key.");
   return { PK: `ACCESS#${digest(key)}`, SK: "META" };
 }
-function conflict(error: unknown): boolean {
+export function conflict(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   if (error.name === "TransactionConflictException") return true;
   if (error.name !== "TransactionCanceledException" || !("CancellationReasons" in error))
@@ -136,6 +148,7 @@ export class DynamoCloudRepository implements CloudRepository {
   async createEventWithTeams(
     event: EventRecord,
     teams: readonly TeamRecord[],
+    receipt?: EventCreationReceipt,
   ): Promise<"created" | "conflict"> {
     eventSchema.parse(event);
     // One event + one metadata and one hash lookup row per team. 25 teams use 51 writes.
@@ -197,7 +210,39 @@ export class DynamoCloudRepository implements CloudRepository {
           },
         },
       );
+    if (receipt)
+      writes.push({
+        Put: {
+          TableName: this.tables.events,
+          Item: {
+            PK: `CREATE#${digest(JSON.stringify([receipt.scope, receipt.key]))}`,
+            SK: "META",
+            requestHash: receipt.requestHash,
+            response: receipt.response,
+            eventId: event.eventId,
+          },
+          ConditionExpression: "attribute_not_exists(PK)",
+        },
+      });
     return (await this.transact({ TransactItems: writes })) ? "created" : "conflict";
+  }
+  async replayEventCreation(
+    scope: string,
+    key: string,
+    requestHash: string,
+  ): Promise<unknown | undefined> {
+    const result = await this.ddb.send(
+      new GetCommand({
+        TableName: this.tables.events,
+        Key: { PK: `CREATE#${digest(JSON.stringify([scope, key]))}`, SK: "META" },
+        ConsistentRead: true,
+      }),
+    );
+    if (!result.Item) return undefined;
+    if (result.Item.requestHash !== requestHash)
+      throw new DeploymentConflict("idempotency_key_reused");
+    if (!result.Item.response) throw new Error("Corrupt event creation receipt.");
+    return result.Item.response;
   }
   async getEvent(eventId: string): Promise<EventRecord | undefined> {
     const result = await this.ddb.send(
@@ -317,6 +362,40 @@ export class DynamoCloudRepository implements CloudRepository {
         },
       });
     return (await this.transact({ TransactItems: writes })) ? "updated" : "conflict";
+  }
+  async listDeploymentsByTeam(
+    eventId: string,
+    teamId: string,
+  ): Promise<readonly DeploymentRecord[]> {
+    teamKey(eventId, teamId);
+    const items = await this.query({
+      TableName: this.tables.deployments,
+      IndexName: "GSI1",
+      KeyConditionExpression: "GSI1PK = :pk AND begins_with(GSI1SK, :team)",
+      ExpressionAttributeValues: {
+        ":pk": eventKey(eventId).PK,
+        ":team": `TEAM#${teamId}#PROBLEM#`,
+      },
+    });
+    return items.map((item) => {
+      const job = deploymentSchema.parse(item);
+      if (job.eventId !== eventId || job.teamId !== teamId)
+        throw new Error("Deployment team scope mismatch.");
+      return job;
+    });
+  }
+  async listTeamScores(eventId: string) {
+    const items = await this.query({
+      TableName: this.tables.teams,
+      ConsistentRead: true,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+      ExpressionAttributeValues: { ":pk": eventKey(eventId).PK, ":prefix": "SCORE#" },
+    });
+    return items.map((item) => {
+      const score = scoreSchema.parse(item);
+      if (score.eventId !== eventId) throw new Error("Score projection scope mismatch.");
+      return score;
+    });
   }
   async listDeploymentsByEvent(eventId: string): Promise<readonly DeploymentRecord[]> {
     const items = await this.query({

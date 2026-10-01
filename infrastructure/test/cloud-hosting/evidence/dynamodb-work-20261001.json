@@ -1,0 +1,88 @@
+{
+  "verifiedAt": "2026-10-01",
+  "target": "Official DynamoDB Local 3.3.1; actual SDK 3.1140.0; no live AWS",
+  "command": "bun run --cwd infrastructure test:dynamodb-work http://127.0.0.1:18655",
+  "measurements": [
+    {
+      "milestone": "real-dynamodb-deploy-and-score",
+      "acceptedJobs": 25,
+      "submissions": 100,
+      "scoringWinners": 25,
+      "duplicateAwards": 0,
+      "ledgerEntries": 25,
+      "solvedProjection": "0 after deploy; 1 after first solve and repeated submissions",
+      "durationMs": 1402
+    },
+    {
+      "milestone": "durable-replay-and-ownership",
+      "retryAfterFailure": "passed",
+      "staleAttempt": "rejected",
+      "staleCompletion": "rejected",
+      "crossTeamAndEvent": "rejected",
+      "revokedKeyReplay": "rejected",
+      "rotationPreservedScoreProjection": "passed"
+    },
+    {
+      "milestone": "http-deploy-and-flag",
+      "jobs": 500,
+      "problemsPerTeam": 20,
+      "simultaneousSubmissions": 100,
+      "winners": 25,
+      "batchReplay": "identical",
+      "batchKeyDifferentBody": "rejected",
+      "viewerDeploy": "rejected"
+    },
+    {
+      "milestone": "real-portal-polling",
+      "participants": 100,
+      "teams": 25,
+      "problemsPerTeam": 20,
+      "pollingIntervalMs": 30000,
+      "scope": "current opt-in me+leaderboard polling, actual local SDK I/O; not AWS latency/RCU capacity",
+      "rounds": [
+        {
+          "round": 0,
+          "durationMs": 1160,
+          "p50Ms": 579,
+          "p95Ms": 1136,
+          "commands": 1000,
+          "queryRows": 7000,
+          "pointReads": 700,
+          "eventWideDeploymentQueries": 0
+        },
+        {
+          "round": 1,
+          "durationMs": 775,
+          "p50Ms": 693,
+          "p95Ms": 744,
+          "commands": 1000,
+          "queryRows": 7000,
+          "pointReads": 700,
+          "eventWideDeploymentQueries": 0
+        }
+      ]
+    },
+    {
+      "milestone": "actual-spa-client-contract",
+      "createReplay": "identical",
+      "intentionalNewCreate": "distinct event",
+      "bulkReplay": "identical",
+      "wrongFlagNetworkLossReplay": "one -5 deduction",
+      "intentionalSameWrongFlagResubmit": "second -5 deduction",
+      "changedBodySameKey": "422",
+      "realClientKeysObserved": 10
+    },
+    {
+      "milestone": "transaction-rollback-and-event-fence",
+      "forcedLedgerCollision": "rolled back score and receipt and projection",
+      "staleUnlockedSnapshot": "rejected at commit",
+      "lockedEvent": "rejected"
+    },
+    {
+      "outcome": "passed",
+      "target": "official DynamoDB Local, synthetic work, no AWS execution"
+    }
+  ],
+  "scope": "Actual Dynamo transactions and Hono HTTP, including real SPA create/bulk/flag clients and solved-problem projection: 0 after deployment, 1 after first solve/replays, 2 after the second distinct solve among 20 deployed jobs. CloudFormation and Step Functions calls are intercepted in a separate unit/synth suite. Not AWS latency or RCU capacity guarantees.",
+  "cleanup": "All three unique synthetic tables deleted; loopback-only Java process stopped"
+}

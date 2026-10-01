@@ -1,7 +1,5 @@
 import { Database } from "bun:sqlite";
 import { spyOn } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AssumeRoleCommand, type AssumeRoleCommandInput, STSClient } from "@aws-sdk/client-sts";
@@ -13,6 +11,7 @@ import { startHttpHost } from "../http";
 import type { Job } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { TEST_ORGANIZER_PASSWORD } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -27,7 +26,7 @@ function roleStage(input: AssumeRoleCommandInput) {
 export async function createParticipantAwsFixture(
   options: { withAws?: boolean; staticRoot?: string } = {},
 ) {
-  const directory = mkdtempSync(join(tmpdir(), "tenka-console-"));
+  const directory = createTemporaryDirectory(root, "tenka-console-");
   const database = join(directory, "host.sqlite");
   const store = new HostStore(new Database(database));
   const expiry = new Date(Date.now() + 3_500_000);
@@ -124,7 +123,7 @@ export async function createParticipantAwsFixture(
     await Promise.all([participant.close(), admin.close()]);
     await service.drain();
     store.close();
-    rmSync(directory, { recursive: true, force: true });
+    removeTemporaryDirectory(root, directory);
   }
   async function request(origin: string, path: string, token = "", method = "GET", body?: unknown) {
     const response = await fetch(`${origin}${path}`, {

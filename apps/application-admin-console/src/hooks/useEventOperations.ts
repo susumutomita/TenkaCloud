@@ -1,6 +1,6 @@
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { PendingOperation, toErrorMessage } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { type ApiClient, ApiError } from "../api/client";
 import {
   archiveEvent,
@@ -41,6 +41,7 @@ export function useEventOperations(args: {
   readonly t: Translate;
 }) {
   const { apiClient, canMutateTenant, detail, eventId, refresh, setError, t } = args;
+  const deployment = useRef(new PendingOperation());
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   // #555/#756: deploy 系操作は同じ POST /deploy 経路。in-flight 状態だけ分けて表示する。
   const [bulkInFlight, setBulkInFlight] = useState<
@@ -86,7 +87,9 @@ export function useEventOperations(args: {
     );
     setError(null);
     try {
-      const res = await bulkDeployEvent(apiClient, eventId, body);
+      const operationKey = deployment.current.keyFor(eventId, body);
+      const res = await bulkDeployEvent(apiClient, eventId, body, operationKey);
+      deployment.current.acknowledge(operationKey);
       setBulkResult(res);
       await refresh();
     } catch (err) {

@@ -385,13 +385,12 @@ Cryptography Battle for two teams at the advertised origins.
 
 ## Stop, restart and teardown
 
-Ctrl+C closes the host's HTTP listeners first, waits for environment
-operations that are already in flight, and then closes SQLite. It preserves
-SQLite state and running problem environments. Restart using the same data
-directory to recover event state, team credentials, score history and
-environment ownership; recorded environments are re-adopted concurrently, so an
-unreachable environment delays startup by one readiness timeout, not one per
-environment.
+For a host started with `make local`, Ctrl+C or `make down` closes HTTP listeners,
+waits for in-flight operations, stops owned Docker environments and closes SQLite.
+SQLite state, runtime Compose plans, problem seeds, container writable layers and
+volumes are retained. Restart using the same data directory to recover event state,
+team credentials, scores and environment ownership. Participants resume on-demand
+problems from their portal; retained eager events keep their restart behavior.
 
 If an environment disappeared or recovery fails, the event returns to a
 retryable deployment state. The host console can retry failed environments.
@@ -417,6 +416,28 @@ contains the safe cleanup plan and per-deployment secrets.
 
 An archive request is refused while environments remain owned. Ending an event
 prevents further scoring but does not itself remove its Docker resources.
+
+## Generated files and retained data
+
+- `.tenkacloud/host/`, or the selected `--data` directory, holds resumable event
+  data. Its SQLite database, keys and `runtimes/<jobId>/` files are not a cache.
+  Normal `make down` retains them, including each problem's seed and Compose plan.
+- After a successful explicit Docker teardown, a newly marked runtime directory
+  loses only its known generated Compose file, seed and ownership marker. Failed
+  teardown retains those files. Unknown files, changed markers and symbolic links
+  stop file cleanup. Legacy unmarked runtime directories retain their other files;
+  they are not automatically adopted or recursively deleted.
+- Shared fixture helpers, browser-rehearsal data and host benchmarks use
+  `.tenkacloud/cache/tmp/`. Cleanup checks the owning process and run marker, then
+  waits for the run's children and resources to close. Interrupted runs, reused PIDs
+  and old or unmarked temporary directories are not automatically swept.
+- `.tenkacloud/host-build/` is replaced at its fixed paths by the next host build.
+  Screenshots in `.tenkacloud/*-e2e/` and reports in `.tenkacloud/bench/` remain as
+  diagnostic evidence. Docker images and shared build caches are not pruned.
+
+Do not delete the entire `.tenkacloud/` tree to clear temporary files. It also
+contains the event database and optional installed pack snapshots. Review retained
+ownership before removing old files; age or a `tmp`/`cache` name alone is insufficient.
 
 ## Persistence and trust boundaries
 

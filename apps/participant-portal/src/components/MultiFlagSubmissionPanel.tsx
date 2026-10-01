@@ -10,6 +10,7 @@ import Input from "@cloudscape-design/components/input";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
+import { PendingOperation } from "@tenkacloud/web-kit";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -507,6 +508,7 @@ const SubFlagRow = memo(function SubFlagRow({
   const isMock = useIsMock();
   const field = subFlagFieldPresentation(isStrictDrillProblem(problemId), isMock, label, t);
   const [submitting, setSubmitting] = useState(false);
+  const pendingSubmission = useRef(new PendingOperation());
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // HintsPanel の memo を保つため、 flagId を閉じ込める wrapper も安定参照で渡す。
@@ -531,9 +533,22 @@ const SubFlagRow = memo(function SubFlagRow({
     setOutcome(null);
     try {
       const submission = prepareSubmission ? await prepareSubmission(flag.id, getValues()) : value;
+      const operationKey = pendingSubmission.current.keyFor(
+        JSON.stringify([apiBaseUrl, sessionToken, problemId, flag.id]),
+        { flag: submission },
+      );
       const result = isMock
         ? evaluateMockSubFlag(problemId, flag.id, submission, flag.points)
-        : await submitFlag(apiBaseUrl, sessionToken, problemId, submission, flag.id);
+        : await submitFlag(
+            apiBaseUrl,
+            sessionToken,
+            problemId,
+            submission,
+            flag.id,
+            undefined,
+            operationKey,
+          );
+      pendingSubmission.current.acknowledge(operationKey);
       setOutcome(result);
       onSubmitted?.(flag.id, result);
       switch (result.kind) {

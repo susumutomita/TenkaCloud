@@ -1,14 +1,14 @@
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { parseGatewayPorts } from "../gateway-ports";
 import { closeServer, listen } from "../http";
 import { startLocalHost } from "../server";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { ExerciseFixture } from "./exercise-fixture";
 import { TestSamlIdP } from "./saml-idp-fixture";
 
@@ -90,7 +90,7 @@ async function configure(
   await page.getByRole("checkbox", { name: "saml", exact: true, checked: true }).waitFor();
 }
 async function main() {
-  const data = mkdtempSync(join(tmpdir(), "tenka-saml-browser-"));
+  const data = createTemporaryDirectory(root, "tenka-saml-browser-");
   let provider: TestSamlIdP | undefined;
   let browser: Browser | undefined;
   let adminPage: Page | undefined;
@@ -207,7 +207,7 @@ async function main() {
     await host?.stop();
     if (idpServer?.listening) await closeServer(idpServer);
     provider?.close();
-    rmSync(data, { recursive: true, force: true });
+    removeTemporaryDirectory(root, data);
   }
 }
 void main().catch((error) => {

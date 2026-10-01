@@ -4,8 +4,7 @@
  * No AWS credential chain or AWS endpoint is used.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
@@ -14,6 +13,7 @@ import { CompetitionEngine } from "../competition-engine";
 import { parseGatewayPorts } from "../gateway-ports";
 import { startLocalHost } from "../server";
 import type { HostStore } from "../store";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { FakeAws } from "./fake-aws";
 import { organizerToken, REHEARSAL_ORGANIZER, signInOrganizer } from "./organizer-login";
 
@@ -157,7 +157,7 @@ async function verifyReadOnlyAccountRoles(
 }
 
 async function main(): Promise<void> {
-  const dataDirectory = mkdtempSync(join(tmpdir(), "tenkacloud-host-accounts-e2e-"));
+  const dataDirectory = createTemporaryDirectory(root, "tenkacloud-host-accounts-e2e-");
   const fakeAws = new FakeAws();
   let browser: Browser | undefined;
   let page: Page | undefined;
@@ -226,7 +226,7 @@ async function main(): Promise<void> {
   } finally {
     await browser?.close();
     await host?.stop();
-    rmSync(dataDirectory, { recursive: true, force: true });
+    removeTemporaryDirectory(root, dataDirectory);
   }
 }
 

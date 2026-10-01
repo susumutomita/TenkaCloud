@@ -3,9 +3,13 @@ import { type Context, Hono } from "hono";
 import { ulid } from "ulid";
 import { z } from "zod";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
+import { contentDigest, DeploymentConflict } from "../../control-data/domain/deployment-work.js";
 import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
 import { ApiError, type OrganizerAuthConfig, participantKey, requireOrganizer } from "./auth.js";
+import { type CloudConnectionApi, registerCloudConnectionRoutes } from "./connection-routes.js";
+import { type CloudDeploymentApi, registerCloudDeploymentRoutes } from "./deployment-routes.js";
+import { registerCloudScheduleRoutes } from "./schedule-routes.js";
 import { body, createEventSchema, identifier } from "./schema.js";
 import { eventSummary, leaderboard, participantView, teamSummary } from "./views.js";
 
@@ -14,6 +18,8 @@ export interface CloudApiOptions {
   readonly organizerAuth: OrganizerAuthConfig;
   readonly allowedOrigins: readonly string[];
   readonly now?: () => number;
+  readonly deployment?: CloudDeploymentApi;
+  readonly connections?: CloudConnectionApi;
 }
 const readRoles = ["Admin", "Operator", "Viewer"] as const;
 const writeRoles = ["Admin", "Operator"] as const;
@@ -38,8 +44,17 @@ async function create(
   now: number,
   auth: OrganizerAuthConfig,
 ) {
-  requireOrganizer(context, writeRoles, auth, now);
+  const actor = requireOrganizer(context, writeRoles, auth, now);
   const input = createEventSchema.parse(await body(context));
+  const requestKey = z
+    .string()
+    .min(1)
+    .max(255)
+    .parse(context.req.header("Idempotency-Key") ?? ulid());
+  context.header("Idempotency-Key", requestKey);
+  const requestHash = contentDigest(JSON.stringify(input));
+  const prior = await repo.replayEventCreation(actor.sub, requestKey, requestHash);
+  if (prior !== undefined) return context.json(prior, 201);
   const eventId = ulid(now);
   const createdAt = new Date(now).toISOString();
   const expiresAt = Math.floor(now / 1000) + 7 * 86400;
@@ -64,23 +79,31 @@ async function create(
     updatedAt: createdAt,
     expiresAt,
   };
-  if ((await repo.createEventWithTeams(event, teams)) !== "created")
+  const response = {
+    eventId,
+    status: event.status,
+    createdAt,
+    expiresAt,
+    teams: teams.map((team) => ({
+      teamId: team.teamId,
+      internalSlug: team.internalSlug,
+      teamLoginKey: team.teamLoginKey,
+    })),
+    problems: input.problems,
+  };
+  if (
+    (await repo.createEventWithTeams(event, teams, {
+      scope: actor.sub,
+      key: requestKey,
+      requestHash,
+      response,
+    })) !== "created"
+  ) {
+    const winner = await repo.replayEventCreation(actor.sub, requestKey, requestHash);
+    if (winner !== undefined) return context.json(winner, 201);
     throw new ApiError(409, "creation_conflict");
-  return context.json(
-    {
-      eventId,
-      status: event.status,
-      createdAt,
-      expiresAt,
-      teams: teams.map((team) => ({
-        teamId: team.teamId,
-        internalSlug: team.internalSlug,
-        teamLoginKey: team.teamLoginKey,
-      })),
-      problems: input.problems,
-    },
-    201,
-  );
+  }
+  return context.json(response, 201);
 }
 async function detail(
   repo: CloudRepository,
@@ -151,8 +174,9 @@ export function createCloudApp(options: CloudApiOptions): Hono {
     if (origin) {
       context.header("Access-Control-Allow-Origin", origin);
       context.header("Vary", "Origin");
-      context.header("Access-Control-Allow-Headers", "Authorization,Content-Type");
-      context.header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
+      context.header("Access-Control-Allow-Headers", "Authorization,Content-Type,Idempotency-Key");
+      context.header("Access-Control-Expose-Headers", "Idempotency-Key");
+      context.header("Access-Control-Allow-Methods", "GET,POST,DELETE,PATCH,OPTIONS");
     }
     context.header("Cache-Control", "no-store");
     context.header("X-Content-Type-Options", "nosniff");
@@ -163,6 +187,11 @@ export function createCloudApp(options: CloudApiOptions): Hono {
   });
   app.onError((error, context) => {
     if (error instanceof ApiError) return context.json({ error: error.code }, error.status);
+    if (error instanceof DeploymentConflict)
+      return context.json(
+        { error: error.code },
+        error.code === "idempotency_key_reused" ? 422 : 409,
+      );
     if (error instanceof z.ZodError) return context.json({ error: "invalid_request" }, 400);
     console.error("[cloud-api] request failed", error.name);
     return context.json({ error: "internal_error" }, 500);
@@ -198,16 +227,40 @@ export function createCloudApp(options: CloudApiOptions): Hono {
   );
   app.get("/portal/me", async (context) => {
     const team = await authenticate(repo, context, now());
-    return context.json(participantView(team, await repo.listDeploymentsByEvent(team.eventId)));
+    return context.json(
+      participantView(team, await repo.listDeploymentsByTeam(team.eventId, team.teamId)),
+    );
   });
   app.get("/portal/leaderboard", async (context) => {
     const team = await authenticate(repo, context, now());
     const event = await eventOr404(repo, team.eventId);
-    const [teams, deployments] = await Promise.all([
+    const [teams, scores] = await Promise.all([
       repo.listTeamsByEvent(event.eventId),
-      repo.listDeploymentsByEvent(event.eventId),
+      repo.listTeamScores(event.eventId),
     ]);
-    return context.json(leaderboard(event, teams, deployments, team.teamId, now()));
+    return context.json(leaderboard(event, teams, scores, team.teamId, now()));
   });
+  if (options.deployment)
+    registerCloudDeploymentRoutes(app, {
+      ...options.deployment,
+      repository: repo,
+      organizerAuth: options.organizerAuth,
+      now,
+    });
+  if (options.deployment)
+    registerCloudScheduleRoutes(app, {
+      repository: repo,
+      work: options.deployment.work,
+      organizerAuth: options.organizerAuth,
+      now,
+    });
+  if (options.connections && options.deployment)
+    registerCloudConnectionRoutes(app, {
+      ...options.connections,
+      repository: repo,
+      work: options.deployment.work,
+      organizerAuth: options.organizerAuth,
+      now,
+    });
   return app;
 }

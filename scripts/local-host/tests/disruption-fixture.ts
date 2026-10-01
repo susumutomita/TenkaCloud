@@ -1,6 +1,5 @@
 import { Database } from "bun:sqlite";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -17,6 +16,7 @@ import { type HttpHost, startHttpHost } from "../http";
 import type { HostedEvent, Job, Problem, Team } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { TEST_ORGANIZER_PASSWORD } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -124,7 +124,7 @@ export class DisruptionAws {
 }
 
 export async function disruptionFixture(options: { staticRoot?: string } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), "tenka-disruption-"));
+  const directory = createTemporaryDirectory(root, "tenka-disruption-");
   const db = join(directory, "host.sqlite");
   const aws = new DisruptionAws();
   let store = new HostStore(new Database(db));
@@ -266,7 +266,7 @@ export async function disruptionFixture(options: { staticRoot?: string } = {}) {
     close: async () => {
       await http.close();
       store.close();
-      rmSync(directory, { recursive: true, force: true });
+      removeTemporaryDirectory(root, directory);
     },
   };
 }

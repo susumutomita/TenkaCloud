@@ -95,8 +95,15 @@
       "project": ["src/**", "test/**"]
     },
     "infrastructure": {
-      "entry": ["bin/**/*.ts", "lib/problem-deploy/handlers/*/index.ts", "test/**/*.ts"],
-      "project": ["bin/**/*.ts", "lib/**/*.ts", "test/**/*.ts"]
+      "entry": [
+        "bin/**/*.ts",
+        "lib/problem-deploy/handlers/*/index.ts",
+        "test/**/*.ts",
+        "lib/problem-deploy/handlers/cloud-runner/lambda.ts",
+        "lib/problem-deploy/handlers/cloud-runner/dispatcher.ts",
+        "verification/**/*.ts"
+      ],
+      "project": ["bin/**/*.ts", "lib/**/*.ts", "test/**/*.ts", "verification/**/*.ts"]
     }
   }
 }

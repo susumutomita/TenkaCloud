@@ -4,19 +4,21 @@
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomToken } from "../auth";
 import { resolveComposeCli } from "../container/compose-cli";
 import { DAEMON_UNAVAILABLE_MESSAGE, DockerHostingEngine } from "../docker-engine";
-import { persistentKey, prepareDatabase, privateDirectory } from "../files";
+import { persistentKey, prepareDatabase } from "../files";
 import { DEFAULT_GATEWAY_PORTS, parseGatewayPorts } from "../gateway-ports";
 import { SurfaceGateways } from "../gateways";
 import { type HttpHost, startHttpHost } from "../http";
 import { object, type Team } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
+import { verifyDockerTerminal } from "./docker-terminal-smoke";
 import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 interface CreatedEvent {
@@ -64,10 +66,7 @@ function projectContainers(jobId: string, includeStopped = false): string[] {
 
 async function main(): Promise<void> {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
-  const parent = join(root, ".tenkacloud");
-  mkdirSync(parent, { recursive: true });
-  // mkdtemp creates the directory with mode 0700; privateDirectory only verifies it.
-  const directory = privateDirectory(mkdtempSync(join(parent, "host-docker-smoke-")));
+  const directory = createTemporaryDirectory(root, "host-docker-smoke-");
   const databasePath = join(directory, "hosting.sqlite");
   prepareDatabase(databasePath);
   const masterKey = persistentKey(join(directory, "host-key"));
@@ -409,6 +408,19 @@ async function main(): Promise<void> {
     checks.push(
       "End state survives restart; physical teardown removes owned environments without deleting results",
     );
+    checks.push(
+      ...(await verifyDockerTerminal({
+        api,
+        drain: () => service.drain(),
+        restart,
+        store: () => store,
+        portalOrigin: () => {
+          assert.ok(portal);
+          return portal.origin;
+        },
+        containers: projectContainers,
+      })),
+    );
     console.log(checks.map((check) => `PASS ${check}`).join("\n"));
     if (process.env.HOST_DOCKER_REPORT)
       writeFileSync(
@@ -448,7 +460,7 @@ async function main(): Promise<void> {
     if (cleanupErrors.length) {
       console.error(`Cleanup failed; ownership records remain in ${directory}.`);
       if (!failed) process.exitCode = 1;
-    } else rmSync(directory, { recursive: true, force: true });
+    } else removeTemporaryDirectory(root, directory);
   }
 }
 void main().catch((error) => {

@@ -37,3 +37,28 @@ export function isMissingStack(stderr: string, name: string): boolean {
     stderr.includes("(ValidationError)") && stderr.includes(`Stack with id ${name} does not exist`)
   );
 }
+
+/** Never infer a runner-less deployment from missing metadata or an accidentally omitted setting. */
+export function assertRunnerChange(output: string, mode: "up" | "down", configured: boolean): void {
+  const stack = z
+    .object({
+      StackId: z.string(),
+      Outputs: z.array(z.object({ OutputKey: z.string(), OutputValue: z.string() })),
+    })
+    .parse(JSON.parse(output) as unknown);
+  const settings = stack.Outputs.filter((entry) => entry.OutputKey === "CloudRunnerEnabled");
+  const enabled = settings[0]?.OutputValue;
+  if (settings.length !== 1 || (enabled !== "true" && enabled !== "false"))
+    throw new Error(
+      "Existing CloudRunnerEnabled is missing or ambiguous; review the stack before changing it.",
+    );
+  if (enabled === "false") return;
+  if (mode === "up" && !configured)
+    throw new Error(
+      "Existing runner is enabled; refusing an update without TENKACLOUD_RUNNER_BINDINGS before it can remove the runner.",
+    );
+  if (mode === "down")
+    throw new Error(
+      `Runner-enabled stack ${stack.StackId} cannot be destroyed by this command yet. Stop acceptance, drain pending and active executions, then review owned problem stacks and retained data, source-bundle and execution-artifact buckets before coordinated platform teardown. No resources were removed.`,
+    );
+}

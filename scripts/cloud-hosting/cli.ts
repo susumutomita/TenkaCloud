@@ -5,9 +5,10 @@ import {
 } from "../../infrastructure/lib/cloud-hosting/bootstrap";
 import { assertCommercialRegion } from "../../infrastructure/lib/cloud-hosting/regions";
 import { cloudStackNames } from "../../infrastructure/lib/cloud-hosting/stack-names";
+import { parseRunnerBindings } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/execution-config";
 import { assertOwnedBootstrap } from "./bootstrap-check";
 import type { CloudCliIo, ProcessResult } from "./process";
-import { assertOwnedStack, isMissingStack } from "./stack-check";
+import { assertOwnedStack, assertRunnerChange, isMissingStack } from "./stack-check";
 
 export interface CloudCliOptions {
   readonly root: string;
@@ -125,8 +126,22 @@ async function platformPreflight(context: Context, allowMissing: boolean): Promi
         environment: context.env.CDK_PARAM_ENVIRONMENT ?? "development",
       }),
     );
+    validateRunnerTransition(context, name, result.stdout, allowMissing);
   }
   return stackArns;
+}
+function validateRunnerTransition(
+  context: Context,
+  name: string,
+  output: string,
+  allowMissing: boolean,
+): void {
+  if (name !== context.stacks.app) return;
+  assertRunnerChange(
+    output,
+    allowMissing ? "up" : "down",
+    Boolean(context.env.TENKACLOUD_RUNNER_BINDINGS?.trim()),
+  );
 }
 async function output(context: Context, stack: string, name: string): Promise<string> {
   const result = await run(context, "aws", [
@@ -208,9 +223,11 @@ async function up(context: Context): Promise<number> {
     /[\s,]/u.test(email)
   )
     throw new Error("Set TENKACLOUD_ADMIN_EMAIL before cloud deployment.");
+  if (context.env.TENKACLOUD_RUNNER_BINDINGS !== undefined)
+    parseRunnerBindings(context.env.TENKACLOUD_RUNNER_BINDINGS);
   const executionPolicy = requireExecutionPolicy(context.env.TENKACLOUD_CFN_EXECUTION_POLICY_ARN);
   context.io.stdout(
-    "[cloud] AWS resources and retained storage can incur charges. Competition runners are not wired in this restoration slice.\n",
+    "[cloud] AWS resources and retained storage can incur charges. Only the explicitly configured, reviewed AWS flag slice can execute; the full competition lifecycle remains incomplete.\n",
   );
   context.io.stdout("[cloud] [1/4] Preparing the source bundle and both web applications\n");
   const resolved = await resolveBundle(context);
@@ -245,14 +262,14 @@ async function up(context: Context): Promise<number> {
   const consoleUrl = await output(resolved, context.stacks.app, "ApplicationAdminConsoleUrl");
   const portalUrl = await output(resolved, context.stacks.backend, "ParticipantPortalApiUrl");
   context.io.stdout(
-    `Cloud control API and hosting deployed; competition runners remain unavailable\nOrganizer console: ${consoleUrl}\nParticipant portal: ${portalUrl}\n`,
+    `Cloud control API and hosting deployed; the full competition lifecycle remains incomplete\nOrganizer console: ${consoleUrl}\nParticipant portal: ${portalUrl}\n`,
   );
   return 0;
 }
 async function down(context: Context, yes: boolean): Promise<void> {
   const resolved = await resolveBundle(context);
   const stackArns = await platformPreflight(resolved, false);
-  const consequences = `Destroy platform hosting in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stackArns.join("\n")}\nEvent data, organizer sign-in accounts, source-bundle S3 storage, the project CDK toolkit, and separately deployed exercise resources are retained and may continue to incur charges.`;
+  const consequences = `Destroy platform hosting in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stackArns.join("\n")}\nEvent data, organizer sign-in accounts, source-bundle and execution-artifact S3 storage, the project CDK toolkit, and separately deployed exercise resources are retained and may continue to incur charges.`;
   context.io.stdout(`${consequences}\n`);
   if (!yes && !(await context.io.confirm(`${consequences} [y/N] `))) {
     context.io.stdout("Cloud teardown cancelled\n");
@@ -270,7 +287,7 @@ async function down(context: Context, yes: boolean): Promise<void> {
     "Backend stack destroy",
   );
   context.io.stdout(
-    "Cloud stacks destroyed. Retained data and organizer accounts, source-bundle S3 storage, the project CDK bootstrap stack, and separately deployed exercise resources are not purged by this command.\n",
+    "Cloud stacks destroyed. Retained data and organizer accounts, source-bundle and execution-artifact S3 storage, the project CDK bootstrap stack, and separately deployed exercise resources are not purged by this command.\n",
   );
 }
 async function status(context: Context): Promise<number> {

@@ -21,6 +21,8 @@ export interface PortalFetchOptions {
   readonly query?: Readonly<Record<string, string>>;
   readonly body?: unknown;
   readonly signal?: AbortSignal;
+  /** A caller-owned mutation intent; reuse only when the response is still unknown. */
+  readonly operationKey?: string;
   /** 400 を `PortalValidationError(error)` に変換する (応答 body の `error` フィールドを採用)。 */
   readonly throwOn400?: boolean;
   /** 409 (conflict、 例: slot_not_overridable) を validation error として扱う。 */
@@ -64,6 +66,7 @@ function applyPortalQuery(url: URL, query?: Readonly<Record<string, string>>): v
 
 function buildPortalFetchInit(teamLoginKey: string, options: PortalFetchOptions): RequestInit {
   const headers: Record<string, string> = { authorization: `Bearer ${teamLoginKey}` };
+  if (options.operationKey) headers["Idempotency-Key"] = options.operationKey;
   const hasBody = options.body !== undefined;
   if (hasBody) headers["content-type"] = "application/json";
   return {

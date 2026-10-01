@@ -89,6 +89,7 @@ function MultiFlagPlaySurface({
   apiBaseUrl,
   sessionToken,
   problemId,
+  jobId,
   scoring,
   onScored,
 }: {
@@ -96,6 +97,7 @@ function MultiFlagPlaySurface({
   readonly apiBaseUrl: string;
   readonly sessionToken: string;
   readonly problemId: string;
+  readonly jobId: string;
   readonly scoring: NonNullable<ReturnType<typeof getCompleteMultiFlagScoring>>;
   readonly onScored: () => Promise<void>;
 }) {
@@ -105,6 +107,7 @@ function MultiFlagPlaySurface({
         apiBaseUrl={apiBaseUrl}
         sessionToken={sessionToken}
         problemId={problemId}
+        jobId={jobId}
         flags={scoring.flags ?? []}
         onScored={onScored}
         revealOrder={scoring.hintReveal}
@@ -506,6 +509,7 @@ export function ProblemPanel({
                 apiBaseUrl={apiBaseUrl}
                 sessionToken={sessionToken}
                 problemId={problem.problemId}
+                jobId={problem.jobId}
                 scoring={multiFlagScoring}
                 onScored={onScored}
               />

@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { extname, resolve, sep } from "node:path";
 import { HostError } from "./model";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
+import { apiBodyLimit } from "./submission-size";
 import { installTerminalTransport } from "./terminal-http";
 export const MAX_BODY = 64 * 1024;
 
@@ -413,7 +414,7 @@ export async function startHttpHost(options: {
         method: request.method ?? "GET",
         path,
         query,
-        body: await jsonBody(request, path.startsWith("/portal/registration/") ? 1024 : MAX_BODY),
+        body: await jsonBody(request, apiBodyLimit(path, MAX_BODY)),
         token: bearerToken(request),
         nonce: idempotencyKey(request),
       };

@@ -47,6 +47,7 @@ export async function submitFlag(
   flag: string,
   flagId?: string,
   signal?: AbortSignal,
+  operationKey?: string,
 ): Promise<SubmitFlagOutcome> {
   return (await portalFetch<SubmitFlagOutcome>(apiBaseUrl, "portal/me/submit-flag", teamLoginKey, {
     method: "POST",
@@ -56,5 +57,6 @@ export async function submitFlag(
     // PortalScoringGateError として throw (= UI が startsAt 文言を出せる)。
     throwOn409: true,
     signal,
+    operationKey,
   })) as SubmitFlagOutcome;
 }

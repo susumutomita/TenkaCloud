@@ -40,6 +40,9 @@ After `make local`, participants resume on-demand exercises from their portal.
 Older eager events retain their existing restart behavior. In-memory state
 inside stopped exercise processes is not a persistence guarantee.
 Remove exercise resources through the event's Teardown action when appropriate.
+Normal shutdown retains SQLite, problem seeds and Compose plans. Successful explicit
+teardown removes known generated runtime files; old or unknown temporary files are
+not swept automatically. See [generated-file ownership](docs/local-hosting.md#generated-files-and-retained-data).
 
 Cloud commands are `make deploy` and `make destroy`. They currently refuse before
 creating or deleting resources because the cloud/Turso deployment profile is still

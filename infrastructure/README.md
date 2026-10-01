@@ -7,15 +7,17 @@ SQL backend is included.
 
 ## Implemented vertical slice
 
-- Event creation with atomic event, team, and access-key persistence
+- Event creation with atomic event, team, access-key, and response-receipt persistence
 - Organizer event list/detail, explicit credential expansion, rotation and revocation
-- Participant authentication and own-event state/leaderboard reads
+- Participant authentication, team-keyed state queries, and transactional scoreboard projections
 - Existing organizer and participant HTTP response contracts
 - REST API Gateway Cognito signature verification and client-audience pinning
 - Lambda issuer, audience, ID-token, expiry, and explicit role validation
 - Invitation-only organizer sign-in with mandatory TOTP and no self-assigned role
 - Retained, deletion-protected event/team/deployment tables and private SPA hosting
-- Injected one-command source preparation, CDK bootstrap, deploy, and destroy flow
+- Injected source preparation, scoped CDK setup/deploy, and guarded foundation teardown
+- Opt-in AWS flag deployment intake, durable dispatch, fenced lifecycle, and atomic scoring
+- Standard Step Functions polling plus owner-fenced terminal-execution reconciliation
 
 The actual frontend selects the ID token. `Admin` and `Operator` can create events
 and rotate keys; only `Admin` revokes access. `Viewer` can read ordinary event
@@ -23,8 +25,8 @@ information but cannot reveal keys. No token or missing role is promoted to Admi
 
 The console runtime config advertises `eventLimits: { maxTeams: 49, maxProblems: 50 }`.
 These values share the API/repository source of truth. Event creation writes one
-event plus two rows per team, so 49 teams fit DynamoDB's 100-item transaction limit.
-The target 25-team event uses 51 transaction items.
+event, two rows per team, and one creation receipt. Thus 49 teams use exactly
+100 transaction items; the target 25-team HTTP creation uses 52.
 
 ## Historical schema and reuse
 
@@ -43,7 +45,12 @@ The physical primary-key families are preserved, but this is not an automatic
 migration of a retired deployment. Tenant indexes are removed, auth versions and
 hash lookup rows are added, and access is checked against the current team row.
 Old deployment-GSI bearer authentication must not be reintroduced beside this path.
-There is no separate team-score storage model or replacement scoring calculation.
+Deployment score and ledger remain authoritative. Separate `SCORE#<teamId>` rows
+are derived scoreboard projections updated in the same scoring transaction. Key
+rotation only replaces `TEAM#` metadata and cannot erase a score projection.
+`completedProblems` means solved problems, matching the portal contract: deployment
+readiness leaves it at zero; the first correct flag increments it in the same
+score/ledger/receipt transaction; retries and already-solved submissions do not.
 
 History has no DynamoDB TTL. Expiry limits participant access without deleting
 results. Team plaintext keys remain private organizer credential material for the
@@ -56,6 +63,41 @@ the prior lookup immediately.
 The source-only CLI is `scripts/cloud-hosting/main.ts`. There is intentionally no
 new public Make target while the remaining acceptance items are unfinished.
 
+The current CodeBuild onboarding template is
+[`templates/cloud-hosting-pipeline.yaml`](templates/cloud-hosting-pipeline.yaml).
+It restores the historical CodeBuild launcher shape and invokes the same guarded
+CLI. It requires an existing reviewed same-account CodeBuild service-role ARN,
+CloudFormation execution-policy ARN, organizer email, and immutable platform
+commit. The problem catalog comes from that commit's pinned submodule. A custom
+catalog must be recorded in the reviewed platform commit, so source preparation
+cannot silently replace an independently selected catalog.
+
+Creating the launcher stack does not start a build. After reviewing the IAM
+prerequisites and costs, an operator can explicitly start the project from its
+`StartBuildUrl` output. The build verifies both commits, installs pinned Bun and
+workspace dependencies without lifecycle hooks, and runs the cloud CLI `up` path.
+It creates no IAM roles/policies and never performs an independent bare CDK
+bootstrap. The empty runner-binding default creates only the foundation; reviewed
+bindings must be explicitly supplied for the narrow AWS flag execution slice.
+The template's optional binding JSON is limited to CloudFormation's 4,096-character
+parameter size. Larger reviewed binding sets must use the direct CLI environment
+until a file-based launcher input is implemented; the launcher does not truncate them.
+Deleting this launcher does not delete the platform, retained logs/data, toolkit,
+or independently deployed exercise resources.
+
+Historical paths at `825415fc` map as follows:
+
+- `infrastructure/templates/lite-pipeline.yaml` to the current-cloud template above
+- `scripts/tenkacloud-lite.ts` to `scripts/cloud-hosting/main.ts` and `cli.ts`
+- `infrastructure/bin/tenkacloud-lite.ts` to `infrastructure/bin/cloud-hosting.ts`
+- `infrastructure/lib/tenkacloud-lite/` to `infrastructure/lib/cloud-hosting/`
+
+The restored old `lite-pipeline.yaml` is a historical compatibility artifact. Its
+original CLI/backend dependencies and broad IAM behavior are not the current-cloud
+route. The old SaaS `scripts/install.sh` and tenant bootstrap stacks are not reused.
+Initial least-privilege IAM setup and coordinated competition teardown remain
+unfinished acceptance items for the current launcher.
+
 `up` requires `TENKACLOUD_ADMIN_EMAIL`, a commercial AWS region, and a reviewed
 `TENKACLOUD_CFN_EXECUTION_POLICY_ARN`. See [bootstrap permissions](BOOTSTRAP-IAM.md).
 It refuses the missing policy before setup/upload and never falls back to broad
@@ -66,10 +108,17 @@ caller account, resolved region, exact stack ARN/name, and project/environment
 tags. Only an explicit CloudFormation not-found response permits creation.
 Access denial, malformed metadata, or mismatched ownership stops the operation.
 
-`down` validates both existing stacks before any deletion, then confirms their
+An existing app stack must explicitly publish `CloudRunnerEnabled=true|false`.
+Missing or ambiguous state is refused. An enabled runner cannot be removed by an
+`up` invocation that omits `TENKACLOUD_RUNNER_BINDINGS`. A disabled foundation can
+be explicitly enabled with reviewed bindings.
+
+`down` refuses runner-enabled stacks before deletion, including with `--yes`:
+coordinated intake shutdown and pending/active workflow drain are not implemented.
+For a runner-disabled foundation, it validates both stacks and then confirms their
 resolved account, region, and full ARNs. A missing stack stops teardown rather
 than claiming destruction succeeded. The command leaves event data, organizer
-accounts, source-bundle storage, the project toolkit, and separately deployed
+accounts, source-bundle and execution-artifact storage, the project toolkit, and separately deployed
 exercise resources intact. Those retained resources can continue to incur charges.
 Source-bundle cleanup is restricted to the repository's marked
 `.cache/source-bundle` directory. Unmarked nonempty directories are not adopted.
@@ -110,16 +159,85 @@ On official DynamoDB Local 3.3.1, atomic creation/rotation/revocation tests and 
 concurrent authentications across 25 teams passed. These are storage/auth checks,
 not AWS latency measurements or scoring-capacity validation.
 
+## Opt-in AWS flag execution
+
+The narrow source-wired path reuses the old deploy/flag HTTP contracts and the
+CloudFormation Lambda plus Step Functions sequence. It does not restore the old
+backend wholesale. Only the real `hello-world` flag challenge is in the initial
+execution catalog. Non-AWS, Battle, multi-flag, hints and force-redeploy are not
+silently mapped to this implementation.
+
+`TENKACLOUD_RUNNER_BINDINGS` is an explicit array of reviewed bindings: `id`,
+`accountId`, commercial `region`, exact `roleArn`, exact SecureString
+`externalIdParameterArn`, and `reviewedProblemIds`. Values are written to a
+content-addressed private S3 object, not a large Lambda environment variable.
+Templates/catalogs are also content-addressed and retained for pinned jobs.
+There is no same-account credential fallback. Every remote operation requires
+ExternalId and temporary assumed-role credentials.
+
+An Admin verifies and binds one configured connection with
+`POST /events/:eventId/teams/:teamId/connection` and `{ bindingId }`. Neither a
+participant nor an arbitrary request-supplied ARN can register a connection. The
+verified row is durable and versioned. A shared versus dedicated AWS account
+policy is deliberately not inferred. The real hello-world template contains a
+metadata-listing IAM permission documented under a dedicated-account assumption;
+its account-isolation suitability must be reviewed before enabling that binding.
+
+`POST /events/:eventId/deploy` persists job/target/receipt/dispatch intent before
+execution. A scheduled dispatcher starts a Standard workflow with deterministic
+name and input; uncertain sends retain the intent. Claiming atomically removes
+that intent and fences the current attempt/owner. Create/describe verifies stack
+ownership tags and the immutable request fingerprint. Different attempts cannot
+silently adopt, update, delete, or duplicate a prior stack. Failed resources remain
+for explicit owned cleanup, with prior attempt records retained on retry.
+
+Completion/failure is conditionally persisted. Global timeout, abort and failed
+execution events are checked against authoritative `DescribeExecution` and the
+current job owner/attempt before reconciliation. Event delivery and retry remain
+operational dependencies; this is not a substitute for an operator recovery view.
+
+`PATCH /events/:eventId/schedule` restores startNow/start/end/freeze controls, and
+lock-scoring retains the existing POST/DELETE paths. An absent/invalid start time,
+ended event, scoring lock, stale attempt or revoked key blocks flag scoring.
+`POST /portal/me/submit-flag` commits job score, ledger, receipt and derived team
+projection together with current event/team/auth-version checks. Private flag
+outputs are hashed server-side and never returned to the portal or workflow state.
+`GET /portal/me/score-events` queries the team-scoped ledger index with a bound.
+
+Creation, bulk deploy and flag submission accept `Idempotency-Key`. The same key
+and body replay the saved response; changed content returns 422. Header-less
+legacy requests receive fresh operation keys. A deliberate new wrong-answer
+submission uses a new key and applies its penalty again; a network retry keeps the
+original key. The AWS flag score has the challenge's explicit zero floor. This
+does not change the signed penalty model of local Docker problems.
+
+The executable acceptance suite is `bun run --cwd infrastructure test:dynamodb-work
+http://127.0.0.1:PORT` (use one line). Its browser-client imports use a separate
+strict Bundler-resolution verification project; backend NodeNext settings remain
+unchanged. Both projects run in the workspace build/typecheck commands. The
+verification alias for `@tenkacloud/web-kit` points to the actual API-client source,
+not replacement declarations or a mock client.
+
+The saved evidence is
+[test/cloud-hosting/evidence/dynamodb-work-20261001.json](test/cloud-hosting/evidence/dynamodb-work-20261001.json).
+At 100 participants, 25 teams and 20 problems per team, two actual HTTP polling
+rounds use the frontend's 30-second interval. Each round makes 200 HTTP requests
+and 1,000 SDK commands, reading 7,000 query rows plus 700 point reads. Participant
+state reads 20 team jobs; leaderboard reads 25 teams and 25 score projections.
+No participant refresh queries all 500 event deployments. These are actual local
+DynamoDB/HTTP observations, not AWS latency, RCU or billing guarantees. Notification
+and Battle polling are outside this flag slice.
+
 ## Remaining acceptance work
 
 - Reviewed least-privilege initial bootstrap policy and first-account setup path
-- Competitor account verification and mandatory ExternalId runner integration
-- Catalog/runtime projection, problem deployment/teardown dispatch, and recovery
-- Existing scoring, receipt/replay, multi-team coordination, and disruption wiring
-- Public registration/claiming, audit, notification, and full organizer UI flows
-- Full competition lifecycle and 25-team concurrent scoring validation
+- AWS account-isolation decision, reviewed exercise permissions and connection UI
+- Participant AWS Console/credential access; `hasAws` remains false
+- Catalog expansion, non-AWS runners, Battle/coordination, hints and disruptions
+- Public registration/claiming, audit, notifications and full organizer UI flows
+- Coordinated destroy: stop intake, drain dispatcher/pending/active workflows,
+  verify and withdraw owned problem stacks, then remove platform resources while
+  explicitly preserving or recovering retained data/artifact buckets
 
-The current source bundle step preserves the prior runner archive contract, but
-no problem runner consumes it yet. Unsupported runner routes remain absent. Do
-not advertise cloud hosting as competition-ready or run a live deployment as part
-of these checks.
+Cloud hosting is still not competition-ready. No live AWS connection, bootstrap,
+permission change, deployment, or billing action was executed for these checks.

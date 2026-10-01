@@ -1,10 +1,9 @@
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 /** Built console and production HTTP/SQLite wiring, with a test-only exercise engine. */
 
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { parseGatewayPorts } from "../gateway-ports";
@@ -13,7 +12,7 @@ import { ExerciseFixture } from "./exercise-fixture";
 import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const data = mkdtempSync(join(tmpdir(), "tenkacloud-organizers-"));
+const data = createTemporaryDirectory(root, "tenkacloud-organizers-");
 // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Test-only users in a temporary SQLite database.
 const operatorPassword = "operator rehearsal password 2026";
 // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Test-only users in a temporary SQLite database.
@@ -204,7 +203,7 @@ async function main() {
   } finally {
     await browser?.close();
     await host?.stop();
-    rmSync(data, { recursive: true, force: true });
+    removeTemporaryDirectory(root, data);
   }
 }
 
