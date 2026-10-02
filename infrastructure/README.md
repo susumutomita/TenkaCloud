@@ -16,7 +16,7 @@ or the capacity of a particular event.
 - Lambda issuer, audience, ID-token, expiry, and explicit role validation
 - Invitation-only organizer sign-in with mandatory TOTP and no self-assigned role
 - Retained, deletion-protected event/team/deployment tables and private SPA hosting
-- Existing SPA builds and CDK asset publishing, scoped setup/deploy, and guarded foundation teardown
+- Existing SPA builds and standard CDK bootstrap/asset publishing, deploy, and guarded foundation teardown
 - Existing competitor-account registration, verification and event-selection flow
 - AWS flag deployment intake, durable dispatch, fenced lifecycle, and atomic scoring
 - Standard Step Functions polling plus owner-fenced terminal-execution reconciliation
@@ -66,8 +66,10 @@ the prior lookup immediately.
 
 [`templates/cloud-pipeline.yaml`](templates/cloud-pipeline.yaml) remains the one
 complete launcher. Its default `current-cloud-v1` source contract runs the current
-`make deploy` / coordinated `make destroy` through the reviewed operator policy
-after one-time project setup. The final template pins its tested helper-source
+`make deploy` / coordinated `make destroy` with standard CDK bootstrap roles.
+The launcher retains the former broad CodeBuild caller policy; review its IAM,
+service access and selected source refs before creating it or starting a build.
+The final template pins its tested helper-source
 commit and catalog `915fe862fe09bf6b63bb96edcf0cb3deddd54d37`; the exact values and
 release classification are in `Mappings.SourceDefaults`. Creating the launcher
 also creates its CodeBuild role and log group; it does not start a build.
@@ -76,8 +78,12 @@ Custom platform/catalog repositories and refs remain selectable. Current catalog
 must contain the reviewed hello-world and ac26-crypto-battle artifacts. The build
 checks the selected source protocol and rejects incompatible current settings
 before application deployment. It does not make arbitrary pack runtimes executable.
-Current builds do not bootstrap IAM, use Turso/provisioned-Dynamo settings, accept a
-shared ExternalId override, or offer historical `destroy-all` semantics.
+Current deploy builds pass `--setup-if-needed --yes`: they reuse a compatible
+`CDKToolkit`, or create the missing standard toolkit and deploy with the reviewed
+build role. First bootstrap defaults to an `AdministratorAccess` CloudFormation
+execution role. The CodeBuild caller retains its broad permissions after bootstrap;
+this is not a least-privilege launcher. Current builds reject Turso/provisioned-Dynamo
+settings, shared ExternalId overrides and historical `destroy-all` semantics.
 
 The advanced `historical-949a40a9` contract preserves the full original launcher at
 platform `949a40a9ed9199331d928ad5cf9397dbb4ba3f81` and catalog
@@ -111,29 +117,32 @@ address, `ACCOUNT_ID` to the intended 12-digit AWS account, and `AWS_REGION` to
 the deployment region. The samples deliberately leave email/account empty.
 Use an existing AWS CLI profile or role for credentials; do not put access keys
 or tokens in this file. Run `make deploy ENV=development` (or the matching
-`staging` / `production` environment). If the project toolkit is missing, the same
-command displays the account, region, environment, IAM roles/policies, retained
-asset bucket and permission scope, then asks for initial-setup approval. Confirming
-installs and verifies the toolkit, then continues the application deployment using
-the same credentials. Declining stops before IAM writes or application builds.
-An installed toolkit is validated and reused without changing its policies.
+`staging` / `production` environment). A compatible standard `CDKToolkit` in the
+selected account/region is reused without changing it. If it is missing, the same
+command displays the bootstrap account/region and permission scope, asks for
+first-bootstrap approval, runs the pinned official `cdk bootstrap`, then continues
+the application deployment with the same credentials. Declining stops before
+bootstrap changes or application builds.
 
-The current profile must already have both the reviewed initial-setup permissions
-and ordinary operator permissions for first setup plus deployment. The CLI never
-attaches permissions to the caller or switches credentials. If your organization
-uses separate setup and deployment principals, use the optional
-`make deploy ENV=development CLOUD_ARGS="--setup"` for toolkit setup only, then
-switch to the authorized operator profile and run `make deploy ENV=development`.
-An IAM administrator grants the generated operator policy only to that intended
-operator. Fresh setup leaves `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` unset.
+Standard CDK bootstrap creates asset storage and publishing, lookup, deployment
+and CloudFormation execution roles. Its default execution role uses
+`AdministratorAccess`; the lookup role also has broad read access. These are
+privileged deployment credentials, not application or participant credentials.
+The first caller needs the official bootstrap permissions and ordinary deployment
+permissions. An existing installation needs permission to use its standard roles,
+read the toolkit/stacks and perform the CLI's direct invitation/teardown operations.
+The CLI never attaches policies to its caller or switches credentials.
 
-For a full offline review, `make -s deploy ENV=development CLOUD_ARGS="--show-setup"`
-prints the account-specific template without credentials or AWS calls. It includes
-the IAM documents and exact initial-caller permissions in
-`Metadata.TenkaCloudSetupPermissions`. CI or another noninteractive first deployment
-requires the separate, explicit opt-in `CLOUD_ARGS="--setup-if-needed --yes"` after
-review. `--yes` alone does not approve initial IAM setup. Existing installations
-need neither flag for ordinary deploy. See [permission boundaries](BOOTSTRAP-IAM.md#first-account-setup).
+Optional `make -s deploy ENV=development CLOUD_ARGS="--show-setup"` previews the
+standard bootstrap offline. `CLOUD_ARGS="--setup"` only creates a missing toolkit;
+it does not change an existing one or deploy the application. If your organization
+uses separate bootstrap and deployment principals, use that optional command with
+the authorized bootstrap profile, then switch profiles and run ordinary deploy.
+
+For unattended first deployment, use `CLOUD_ARGS="--setup-if-needed --yes"` after
+reviewing bootstrap and application IAM changes. `--yes` alone approves application
+deployment changes and does not approve a missing bootstrap. Interactive deployment
+uses CDK's normal security-change approval. See [permission boundaries](BOOTSTRAP-IAM.md#first-account-setup).
 
 `ENV` or `CDK_PARAM_ENVIRONMENT` selects the file before it is read; when both
 are present they must agree. The default is `development`. Custom names continue
@@ -153,21 +162,19 @@ Use single quotes around JSON values. The CLI never creates or rewrites `.env`.
 The Make targets disable Bun's automatic root `.env` loading; use
 `bun run --no-env-file scripts/cloud-hosting/main.ts` for direct CLI commands too.
 
-The operator administers TenkaCloud resources across environments where S3 and
-PassRole cannot be isolated. Some generated-ID or untaggable APIs, including
-CloudFront OAC lifecycle, retain account-level scope. Environment names are not
-an IAM security boundary. The review/confirmation exposes these limits; it is not
-approval to apply them. Actual AWS setup/deployment was not executed in verification.
+Standard bootstrap is shared by CDK applications in the same account/region;
+environment names are not an IAM security boundary. Review existing toolkit trust
+and execution policies before using it. The CLI does not rewrite those policies,
+upgrade an old bootstrap, create a TenkaCloud-specific qualifier, or migrate older
+custom toolkits. Existing `TenkaCloudToolkit-*` stacks and their assets remain
+untouched. Only a confirmed CloudFormation not-found response permits first
+bootstrap; access denial or incompatible standard bootstrap metadata stops the
+operation. Arrange any required standard toolkit upgrade separately.
 
-Ordinary deployment never updates an installed toolkit's policies; CloudFormation
-still creates and updates the application's roles within the supplied permissions.
-Missing setup requires separate approval within the command; mismatched setup
-stops before builds. Existing toolkits require the exact project,
-environment, qualifier, policy list and source-contract variant. Shared `CDKToolkit`,
-earlier unbounded toolkits and untagged installations are not silently adopted;
-review their migration separately. Only explicit CloudFormation not-found responses
-permit fresh creation. Access denial, malformed metadata or ownership mismatch stops
-the operation.
+Source tests and synthesis did not perform live AWS setup/deployment or establish
+least-privilege caller permissions. Application runtime policies, participant
+access restrictions, ExternalId requirements and owned-stack teardown checks remain
+separate from standard CDK deployment authority.
 
 Use `make destroy` with the same account, region and environment for coordinated
 teardown. It prints targets and retained-data consequences before confirmation.
@@ -218,8 +225,8 @@ marker before it can finish. Both stacks already absent is a no-op, not a data-p
 claim. An unexplained missing stack or ambiguous state blocks destructive work.
 
 Event data, scores and receipts, organizer accounts, shared ExternalId, competitor
-bootstrap roles/stacks, CDK asset and execution-artifact storage, and the project
-toolkit are retained. Unrelated or separately deployed exercise resources are not
+bootstrap roles/stacks, CDK asset and execution-artifact storage, and the shared
+standard `CDKToolkit` are retained. Unrelated or separately deployed exercise resources are not
 adopted or removed. Retained resources can continue to incur charges.
 
 Current deployment builds the two existing SPAs and lets CDK publish their assets

@@ -1,21 +1,8 @@
 import { Aspects, CfnResource, type Stack, Tags } from "aws-cdk-lib";
-import { CfnRole, ManagedPolicy, PermissionsBoundary } from "aws-cdk-lib/aws-iam";
-import { deploymentPolicies } from "./deployment-policy.js";
+import { CfnRole } from "aws-cdk-lib/aws-iam";
 
-/** Covers CDK provider roles as well as API/workflow roles, including future constructs. */
-export function applyDeploymentBoundary(stack: Stack, environment: string): void {
-  const { applicationBoundaryArn } = deploymentPolicies({
-    account: stack.account,
-    region: stack.region,
-    environment,
-  }).identities;
-  PermissionsBoundary.of(stack).apply(
-    ManagedPolicy.fromManagedPolicyArn(
-      stack,
-      "ApplicationPermissionsBoundary",
-      applicationBoundaryArn,
-    ),
-  );
+/** Preserve ownership metadata for application roles and built-in CDK providers. */
+export function applyOwnershipTags(stack: Stack, environment: string): void {
   Tags.of(stack).add("TenkaCloudRegion", stack.region);
   Aspects.of(stack).add({
     visit(node) {

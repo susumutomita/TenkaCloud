@@ -5,10 +5,10 @@ down old installations. Its new cloud DynamoDB records and local SQLite database
 are not a conversion of historical DynamoDB, Turso or local-play data. Installing
 this checkout does not change existing AWS resources or participant keys.
 
-The preserved `infrastructure/templates/cloud-pipeline.yaml` launcher runs its
-fixed historical source refs. It retains that old deployment/teardown path; it
-is separate from the current candidate's unfinished `make deploy` / `make destroy`
-implementation. See [the pipeline contract](../infrastructure/README.md#cloud-deployment-pipeline).
+The preserved `infrastructure/templates/cloud-pipeline.yaml` launcher defaults to
+the current source contract and standard CDK bootstrap. Select the explicit
+`historical-949a40a9` contract only for its fixed historical deployment/teardown
+path. Neither choice migrates an existing installation. See [the pipeline contract](../infrastructure/README.md#cloud-deployment-pipeline).
 
 Use the exact release that created your environment and its own documentation.
 The existing v1.11.0 release is a legacy launcher release, not a host release.

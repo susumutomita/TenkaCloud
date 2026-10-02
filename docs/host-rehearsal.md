@@ -43,9 +43,12 @@ listed in the cloud catalog. Synchronized Battle bursts still exceed the five-se
 refresh interval; implementation and local measurements do not establish event capacity.
 
 Before a live rehearsal, obtain approval for the target account, region, initial
-IAM setup, temporary exercise resources, expected charges and cleanup. Keep the
-project's toolkit separate from other CDK installations. Verify its execution
-policy and ownership instead of falling back to administrator permissions.
+IAM setup, temporary exercise resources, expected charges and cleanup. Reuse the
+existing standard `CDKToolkit` unchanged. Review its trust and execution policies,
+the caller's permissions, and CDK's application IAM changes. A missing standard
+toolkit is bootstrapped only after confirmation; its default CloudFormation
+execution role uses `AdministratorAccess`. Existing custom TenkaCloud toolkits
+remain untouched. See [deployment permission boundaries](../infrastructure/BOOTSTRAP-IAM.md).
 
 The cloud rehearsal must cover:
 

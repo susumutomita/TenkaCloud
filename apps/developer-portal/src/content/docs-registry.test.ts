@@ -299,7 +299,7 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
   });
 
   it("should find the deploy-paths page by current deployment status", () => {
-    const results = searchIndex("make deploy unimplemented");
+    const results = searchIndex("standard CDKToolkit");
     expect(results.some((r) => r.href === "/developers/docs/operate/deploy-paths/")).toBe(true);
   });
 

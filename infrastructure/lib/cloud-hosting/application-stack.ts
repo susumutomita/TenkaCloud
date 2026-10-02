@@ -34,11 +34,11 @@ import {
   installationCompetitorConfig,
 } from "./competitor-accounts.js";
 import type { CloudDataStack } from "./data-stack.js";
-import { applyDeploymentBoundary } from "./deployment-boundary.js";
 import { CloudDeploymentPipeline } from "./deployment-pipeline.js";
 import { cloudExecutionArtifacts } from "./execution-artifacts.js";
 import { CloudHosting } from "./hosting.js";
 import { scopeInvalidationPermissions } from "./invalidation-permissions.js";
+import { applyOwnershipTags } from "./ownership-tags.js";
 
 export interface CloudApplicationStackProps extends StackProps {
   readonly repositoryRoot: string;
@@ -52,7 +52,7 @@ export interface CloudApplicationStackProps extends StackProps {
 export class CloudApplicationStack extends Stack {
   constructor(scope: Construct, id: string, props: CloudApplicationStackProps) {
     super(scope, id, props);
-    applyDeploymentBoundary(this, props.environment);
+    applyOwnershipTags(this, props.environment);
     const consoleSite = new CloudHosting(this, "OrganizerConsole", props.consoleAssets);
     const pool = new UserPool(this, "OrganizerUserPool", {
       removalPolicy: RemovalPolicy.RETAIN,

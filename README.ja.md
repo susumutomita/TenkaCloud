@@ -51,9 +51,10 @@ Docker 問題は一斉起動せず、参加者が必要な問題をポータル�
 詳しくは[生成ファイルと保持データ](docs/local-hosting.md#generated-files-and-retained-data)を参照してください。
 
 クラウドのコマンドは `make deploy` と `make destroy` です。
-初回は同じコマンド内でアカウント、リージョン、作成する IAM と権限範囲を表示します。
-内容を確認して承認すると、現在の AWS 認証で Toolkit を作成し、そのまま配置を続けます。
-既存の Toolkit は検証して再利用します。必要な権限は自動付与しません。
+標準の `CDKToolkit` があれば検証してそのまま再利用します。存在しない場合だけ、
+同じコマンド内で初回 bootstrap を確認し、承認後に固定版の公式 `cdk bootstrap` を実行して配置を続けます。
+標準 CDK の CloudFormation 実行 role はデフォルトで `AdministratorAccess` を使います。
+この権限と呼び出し元の必要な権限を確認してください。呼び出し元へ権限を自動付与しません。
 詳しくは[必要な AWS 権限の準備](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を参照してください。
 現在のクラウド問題は、限定した CLI アクセスを使う hello-world と、
 DynamoDB に状態を保存する Cryptography Battle です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。
@@ -64,10 +65,13 @@ Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超�
 同じディレクトリの `.env` にコピーして、開催者のメールアドレス、AWS アカウント ID、リージョンを編集します。
 既存の `.env` は上書きしません。`make deploy ENV=development` で選んだ環境のファイルを読み込みます。
 詳しくは[環境設定と初回セットアップ](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を参照してください。
-[クラウド pipeline](infrastructure/README.md#cloud-deployment-pipeline)は、明示的な[初回 IAM 設定](infrastructure/BOOTSTRAP-IAM.md#first-account-setup)後に現行の配置経路を使います。旧版を使う詳細設定では元の完全な処理を維持します。
-任意の `make -s deploy CLOUD_ARGS="--show-setup"` で権限をオフライン表示できます。
-`--setup` は Toolkit だけを設定します。無人での初回配置は内容の確認後に
-`CLOUD_ARGS="--setup-if-needed --yes"` を明示してください。`--yes` だけでは初回 IAM 設定を承認しません。
+[クラウド pipeline](infrastructure/README.md#cloud-deployment-pipeline)は現行の配置経路を使います。
+作成する CodeBuild role は広い配置権限を持つため、launcher の作成・build 開始前に
+[bootstrap と呼び出し元の権限](infrastructure/BOOTSTRAP-IAM.md#first-account-setup)を確認してください。
+旧版を使う詳細設定では元の完全な処理を維持します。
+任意の `make -s deploy CLOUD_ARGS="--show-setup"` で標準 bootstrap をオフライン確認できます。
+`--setup` は標準 Toolkit がない場合だけ作成します。無人での初回配置は内容の確認後に
+`CLOUD_ARGS="--setup-if-needed --yes"` を明示してください。`--yes` だけではアプリケーション配置の権限変更を承認しますが、初回 bootstrap は承認しません。
 
 106 件の Compose 問題を Challenge として表示し、エディターと明示的に許可された
 15 件の参加者ターミナルに接続します。カタログと模擬ライフサイクルの検証は、

@@ -13,7 +13,7 @@
 ## 守ること
 
 - host の大会・チーム分離、開催者と参加者の認証、必須の `ExternalId`、必要最小限の IAM 権限を保つ。
-- `competitor-bootstrap.yaml` の `AdministratorAccess` は競技者アカウントの初期設定だけの例外。他のロールへ広げない。
+- アプリの実行ロールへ `AdministratorAccess` を付けない。`competitor-bootstrap.yaml` の競技者アカウント初期設定と、利用者が確認して実行する標準 CDK bootstrap の CloudFormation 実行ロールは例外。既存 `CDKToolkit` の権限・信頼設定を勝手に書き換えない。
 - HTTP API、SQLite / DynamoDB の保存形式、`runtime-config.json` の契約を変えるときは、保存側・配信側と利用側を同じ PR で確認する。
 - ローカル開催は単一プロセスと永続 SQLite を使う。クラウド開催は Lambda / DynamoDB で、旧 Lite の必要な処理を再利用する。SaaS / SBT は戻さない。クラウドの正本をプロセス内の状態に置かず、未結線の機能を対応済みと案内しない。
 - 旧版の運用は固定した旧版へ案内する。データが自動移行されると考えない。

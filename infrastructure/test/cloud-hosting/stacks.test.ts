@@ -19,7 +19,6 @@ import { Match, Template } from "aws-cdk-lib/assertions";
 import { CfnInclude } from "aws-cdk-lib/cloudformation-include";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { CloudApplicationStack } from "../../lib/cloud-hosting/application-stack.js";
-import { projectBootstrap } from "../../lib/cloud-hosting/bootstrap.js";
 import {
   competitorAssumeRolePolicy,
   installationCompetitorConfig,
@@ -30,8 +29,9 @@ import {
   nativeBattleArtifact,
 } from "../../lib/cloud-hosting/execution-artifacts.js";
 import { CloudHosting } from "../../lib/cloud-hosting/hosting.js";
+import { cloudDeploymentTarget } from "../../lib/cloud-hosting/regions.js";
 import { cloudStackTags } from "../../lib/cloud-hosting/stack-names.js";
-import { projectSynthesizer } from "../../lib/cloud-hosting/synthesizer.js";
+import { standardSynthesizer } from "../../lib/cloud-hosting/synthesizer.js";
 import { CLOUD_EVENT_LIMITS } from "../../lib/problem-deploy/control-data/domain/events.js";
 
 vi.mock("node:fs", async (importOriginal) => {
@@ -50,20 +50,23 @@ beforeAll(() => {
     join(assets, "index.html"),
     "<!doctype html><title>Synthetic static asset for CDK contract test</title>",
   );
-  const app = new App({ outdir: join(directory, "cdk.out") });
+  const app = new App({
+    outdir: join(directory, "cdk.out"),
+    context: { "@aws-cdk/core:bootstrapQualifier": "custom123" },
+  });
   const env = { account: "123456789012", region: "us-east-1" };
   const backend = new CloudDataStack(app, "CloudBackend", {
     environment: "test",
     env,
     tags: cloudStackTags("test"),
-    synthesizer: projectSynthesizer("test"),
+    synthesizer: standardSynthesizer(),
     participantAssets: assets,
   });
   const stack = new CloudApplicationStack(app, "CloudApplication", {
     env,
     tags: cloudStackTags("test"),
+    synthesizer: standardSynthesizer(),
     environment: "test",
-    synthesizer: projectSynthesizer("test"),
     backend,
     consoleAssets: assets,
     repositoryRoot: resolve(import.meta.dirname, "../../.."),
@@ -76,6 +79,35 @@ beforeAll(() => {
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 describe("cloud CDK synth-only security and frontend wiring", () => {
+  it("keeps the verified deployment account and region ahead of ambient CDK defaults", () => {
+    const defaults = { CDK_DEFAULT_ACCOUNT: "222222222222", CDK_DEFAULT_REGION: "eu-west-1" };
+    expect(
+      cloudDeploymentTarget({
+        ...defaults,
+        ACCOUNT_ID: "123456789012",
+        REGION: "us-east-1",
+        AWS_REGION: "ap-northeast-1",
+      }),
+    ).toEqual({ account: "123456789012", region: "us-east-1" });
+    expect(
+      cloudDeploymentTarget({
+        ...defaults,
+        ACCOUNT_ID: "123456789012",
+        AWS_REGION: "ap-northeast-1",
+      }),
+    ).toEqual({ account: "123456789012", region: "ap-northeast-1" });
+    expect(cloudDeploymentTarget({ ...defaults, AWS_DEFAULT_REGION: "us-west-2" })).toEqual({
+      account: "222222222222",
+      region: "us-west-2",
+    });
+    expect(cloudDeploymentTarget(defaults)).toEqual({
+      account: "222222222222",
+      region: "eu-west-1",
+    });
+    expect(() => cloudDeploymentTarget({ ...defaults, ACCOUNT_ID: "" })).toThrow("12-digit");
+    expect(() => cloudDeploymentTarget({ ...defaults, REGION: "" })).toThrow("commercial");
+    expect(() => cloudDeploymentTarget({})).toThrow("commercial");
+  });
   it("marks native-aware installation control so older destroy clients fail closed", () => {
     expect(application.toJSON().Outputs.CloudInstallationControlVersion.Value).toBe("2");
     application.hasOutput("CloudExecutionArtifactBucket", { Value: Match.anyValue() });
@@ -90,12 +122,10 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
       { ...cloudStackTags("test"), TenkaCloudRegion: "us-east-1" },
     ]);
   });
-  it("bounds every generated IAM role, including static-asset providers", () => {
+  it("retains ownership tags without requiring custom bootstrap IAM policies", () => {
     for (const source of [data, application]) {
       for (const role of Object.values(source.findResources("AWS::IAM::Role"))) {
-        expect(role.Properties.PermissionsBoundary).toMatch(
-          /^arn:aws:iam::123456789012:policy\/tenkacloud\/cloud-hosting\//u,
-        );
+        expect(role.Properties.PermissionsBoundary).toBeUndefined();
         expect(role.Properties.Tags).toContainEqual({
           Key: "TenkaCloudRegion",
           Value: "us-east-1",
@@ -103,10 +133,12 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
       }
     }
   });
-  it("uses the project qualifier rather than the default/shared CDK toolkit", () => {
+  it("uses the standard CDK toolkit without project-specific IAM dependencies", () => {
     const templates = JSON.stringify([data.toJSON(), application.toJSON()]);
-    expect(templates).toContain(projectBootstrap("test").qualifier);
-    expect(templates).not.toContain("hnb659fds");
+    expect(templates).toContain("hnb659fds");
+    expect(templates).not.toContain("TenkaCloudToolkit-");
+    expect(templates).not.toContain("custom123");
+    expect(templates).not.toContain("policy/tenkacloud/cloud-hosting/");
   });
   it("publishes authoritative creation limits in the actual organizer runtime-config asset", () => {
     const outdir = join(directory, "cdk.out");

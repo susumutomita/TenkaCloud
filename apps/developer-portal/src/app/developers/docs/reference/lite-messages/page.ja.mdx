@@ -12,4 +12,4 @@ export const metadata = { title: "旧 Lite メッセージ" };
 
 <h2 id="current-guidance">現在の手順</h2>
 
-[はじめに](/developers/docs/getting-started/)、[開催者マニュアル](/developers/docs/manual/organizer/)、[配置の境界](/developers/docs/operate/deploy-paths/)を使います。現行のローカル起動では AWS client を初期化しません。クラウド候補は設定済みの競技者 role と SSM の必須 ExternalId を使います。[初回 IAM 設定](https://github.com/susumutomita/TenkaCloud/blob/integration/host-only-20261001/infrastructure/BOOTSTRAP-IAM.md)では生成ポリシーの確認と明示的な実行が必要です。実 AWS の導入は未検証です。以前の host が保持する ExternalId ファイルを自動アップロード・移行しません。
+[はじめに](/developers/docs/getting-started/)、[開催者マニュアル](/developers/docs/manual/organizer/)、[配置の境界](/developers/docs/operate/deploy-paths/)を使います。現行のローカル起動では AWS client を初期化しません。クラウド候補は設定済みの競技者 role と SSM の必須 ExternalId を使います。[初回 IAM 設定](https://github.com/susumutomita/TenkaCloud/blob/integration/host-only-20261001/infrastructure/BOOTSTRAP-IAM.md)では標準 `CDKToolkit` を使い、bootstrap・呼び出し元の権限の確認と初回 bootstrap の承認が必要です。実 AWS の導入は未検証です。以前の host が保持する ExternalId ファイルを自動アップロード・移行しません。

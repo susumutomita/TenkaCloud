@@ -53,7 +53,10 @@ verified competitor deployment role with the required installation ExternalId.
 Participant access uses the verified deployment-bound viewer role with the job ID
 as ExternalId. The currently supported hello-world access is a 15-minute CLI credential set
 restricted to its Parameter. Native Cryptography Battle executes in the platform
-and persists its state and scoring in the same DynamoDB transaction boundary. Keep the bootstrap AdministratorAccess exception confined to competitor initialization. Existing STS sessions can outlive
+and persists its state and scoring in the same DynamoDB transaction boundary.
+The competitor-template AdministratorAccess grant stays confined to competitor
+initialization. Standard CDK platform execution authority is reviewed separately;
+application and participant runtime roles do not receive it. Existing STS sessions can outlive
 event end; new access issuance is checked against current event/team state.
 
 Competitor accounts are separate from the platform account. Teams may use separate

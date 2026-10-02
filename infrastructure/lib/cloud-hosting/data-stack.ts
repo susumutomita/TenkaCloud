@@ -1,9 +1,9 @@
 import { CfnOutput, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import type { Construct } from "constructs";
-import { applyDeploymentBoundary } from "./deployment-boundary.js";
 import { CloudHosting } from "./hosting.js";
 import { scopeInvalidationPermissions } from "./invalidation-permissions.js";
+import { applyOwnershipTags } from "./ownership-tags.js";
 
 export interface CloudDataStackProps extends StackProps {
   readonly participantAssets: string;
@@ -17,7 +17,7 @@ export class CloudDataStack extends Stack {
   readonly portal: CloudHosting;
   constructor(scope: Construct, id: string, props: CloudDataStackProps) {
     super(scope, id, props);
-    applyDeploymentBoundary(this, props.environment);
+    applyOwnershipTags(this, props.environment);
     const table = (name: string) =>
       new Table(this, name, {
         partitionKey: { name: "PK", type: AttributeType.STRING },

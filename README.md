@@ -50,10 +50,11 @@ teardown removes known generated runtime files; old or unknown temporary files a
 not swept automatically. See [generated-file ownership](docs/local-hosting.md#generated-files-and-retained-data).
 
 Cloud commands are `make deploy` and `make destroy`. They use the current
-Lambda/DynamoDB CLI. If the project toolkit is missing, `make deploy` displays
-the account, region, IAM resources and permission scope, asks for initial-setup
-approval, then installs the toolkit and continues deployment with the same AWS
-credentials. Existing toolkits are validated and reused. See
+Lambda/DynamoDB CLI and the standard `CDKToolkit`. An existing compatible toolkit
+is reused unchanged. Only when it is missing, `make deploy` asks for first-bootstrap
+approval, runs the pinned official `cdk bootstrap`, then continues with the same
+AWS credentials. Standard CDK bootstrap defaults to `AdministratorAccess` for its
+CloudFormation execution role; review that authority and the caller's permissions. See
 [setup and permission requirements](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 The current cloud catalog includes hello-world with scoped CLI access and native
 Cryptography Battle backed by DynamoDB. Docker/Compose exercises are local-only and
@@ -67,11 +68,14 @@ without contacting AWS. For cloud configuration, copy the matching
 and region. `make deploy ENV=development` loads that environment's file; see
 [configuration and setup](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 The preserved [cloud pipeline](infrastructure/README.md#cloud-deployment-pipeline)
-uses the current source contract after explicit [first-account IAM setup](infrastructure/BOOTSTRAP-IAM.md#first-account-setup). Its advanced historical-source option retains the old complete flow.
-Optional `make -s deploy CLOUD_ARGS="--show-setup"` prints permissions offline;
-`--setup` installs the toolkit only. Unattended first deployment requires
-`CLOUD_ARGS="--setup-if-needed --yes"` after review; `--yes` alone does not approve
-initial IAM setup. The CLI never grants permissions to the caller.
+uses the current source contract and a privileged CodeBuild deployment role that
+must be reviewed before creating the launcher or starting a build. Its advanced
+historical-source option retains the old complete flow. See [bootstrap and caller
+permissions](infrastructure/BOOTSTRAP-IAM.md#first-account-setup).
+Optional `make -s deploy CLOUD_ARGS="--show-setup"` previews standard bootstrap offline;
+`--setup` only creates a missing standard toolkit. Unattended first deployment uses
+`CLOUD_ARGS="--setup-if-needed --yes"` after review; `--yes` alone approves application
+deployment changes, not first bootstrap. The CLI never grants permissions to the caller.
 
 The host exposes all 106 Compose exercise definitions as Challenges, including
 workbenches and the 15 explicitly declared participant terminals. Catalog coverage

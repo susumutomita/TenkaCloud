@@ -1,9 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   TenkaCloud cloud hosting launcher: Lambda, DynamoDB, Cognito and both existing web
-  applications. First review and install the project toolkit with make deploy
-  CLOUD_ARGS="--show-setup" / "--setup". Then this CodeBuild project uses only its
-  ordinary operator policy. Default current sources are pinned to an offline-verified
+  applications. Review the broad CodeBuild caller role and selected sources before
+  creating this launcher or starting a build. Current deploy reuses standard CDKToolkit,
+  or runs official cdk bootstrap only if missing, with explicit unattended approval.
+  Standard bootstrap defaults to AdministratorAccess for CloudFormation execution.
+  Default current sources are pinned to an offline-verified
   candidate; live AWS deployment remains unverified. Current destroy coordinates event cleanup and
   retains history, identity and asset storage, which may continue to incur charges.
   Advanced historical-source compatibility preserves the original fixed implementation,
@@ -18,7 +20,7 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: "Organizer (requires reviewed one-time project setup)"
+          default: "Organizer (review privileged deployment role before use)"
         Parameters:
           - TenantAdminEmail
       - Label:
@@ -58,8 +60,9 @@ Parameters:
       - current-cloud-v1
       - historical-949a40a9
     Description: >-
-      Current Lambda/DynamoDB hosting uses the reviewed project toolkit and operator
-      policy installed by make deploy CLOUD_ARGS="--setup". The advanced historical
+      Current Lambda/DynamoDB hosting uses standard CDKToolkit and the reviewed broad
+      CodeBuild role. Starting deploy approves first bootstrap if missing and application
+      IAM changes; the default CDK execution role uses AdministratorAccess. The advanced historical
       contract preserves the original complete launcher, broad IAM and destroy-all
       behavior for its pinned old source pair. No automatic data migration is performed.
 
@@ -73,7 +76,7 @@ Parameters:
     Description: >-
       Target environment. Selects infrastructure/environments/{env}/config.json
       in the historical contract. Current hosting uses the same selected environment
-      for its project toolkit, application and backend stacks.
+      for its application and backend stacks; CDKToolkit is shared per account/region.
 
   Action:
     Type: String
@@ -231,7 +234,7 @@ Parameters:
 Mappings:
   SourceDefaults:
     current-cloud-v1:
-      # Offline-verified current CLI/setup source; live AWS deployment is not validated.
+      # Offline-verified current CLI source; live AWS deployment is not validated.
       CurrentPlatformCommit: 6cec1a9284e5103fe7d27067479b42f1cb64e3c5
       CatalogCommit: 915fe862fe09bf6b63bb96edcf0cb3deddd54d37
       Classification: candidate/unreleased
@@ -481,7 +484,8 @@ Resources:
                 - |
                   if [ "${SOURCE_CONTRACT}" = "current-cloud-v1" ]; then
                     if [ "${ACTION}" = "deploy" ]; then
-                      make deploy ENV="${ENVIRONMENT}" || exit $?
+                      # Starting this reviewed build approves missing standard bootstrap and app IAM changes.
+                      make deploy ENV="${ENVIRONMENT}" CLOUD_ARGS="--setup-if-needed --yes" || exit $?
                     elif [ "${ACTION}" = "destroy" ]; then
                       make destroy ENV="${ENVIRONMENT}" CLOUD_ARGS="--yes" || exit $?
                     else
@@ -538,8 +542,11 @@ Resources:
   # =====================================
   # IAM role for the deploy build
   # =====================================
-  # Current builds use only the installed operator policy and this launcher's logs.
-  # The original broad inline role is retained solely under historical-source compatibility.
+  # Preserve the former launcher caller policy for both source contracts.
+  # This is privileged bootstrap/deployment authority, including IAM, and persists
+  # after setup. Review all actions and who may create/update/start this build.
+  # Current CDK deployment uses standard bootstrap roles; no custom managed policy
+  # is installed or attached. Historical deployment/cleanup permissions are unchanged.
   CodeBuildRole:
     Type: AWS::IAM::Role
     Properties:
@@ -551,73 +558,64 @@ Resources:
             Principal:
               Service: codebuild.amazonaws.com
             Action: sts:AssumeRole
-      ManagedPolicyArns: !If
-        - UsesCurrentSources
-        - - !Sub arn:aws:iam::${AWS::AccountId}:policy/tenkacloud/cloud-hosting/${Environment}-${AWS::Region}-operator
-        - !Ref AWS::NoValue
       Policies:
         - PolicyName: CodeBuildPolicy
           PolicyDocument:
             Version: "2012-10-17"
-            Statement: !If
-              - UsesCurrentSources
-              - - Sid: LauncherLogs
-                  Effect: Allow
-                  Action: [logs:CreateLogStream, logs:PutLogEvents]
-                  Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/tenkacloud/codebuild/lite-launcher-${Environment}:*
-              -
-                # Services that `cdk deploy` (Lite) and `cdk bootstrap` create/manage.
-                - Sid: DeployServices
-                  Effect: Allow
-                  Action:
-                    - cloudformation:*
-                    - iam:*
-                    - lambda:*
-                    - apigateway:*
-                    - cognito-idp:*
-                    - cognito-identity:*
-                    - dynamodb:*
-                    - s3:*
-                    - cloudfront:*
-                    - states:*
-                    - events:*
-                    - sns:*
-                    - sqs:*
-                    - ecr:*
-                    - codebuild:*
-                    - logs:*
-                  Resource: "*"
-                # Cost-zero principle: secrets live in SSM Parameter Store, not Secrets Manager.
-                - Sid: SsmParameters
-                  Effect: Allow
-                  Action:
-                    - ssm:GetParameter
-                    - ssm:GetParameters
-                    - ssm:GetParametersByPath
-                    - ssm:PutParameter
-                    - ssm:DeleteParameter
-                    - ssm:AddTagsToResource
-                  Resource:
-                    - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/TenkaCloud/*
-                    - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cdk-bootstrap/*
-                - Sid: KmsForBootstrapAndAssets
-                  Effect: Allow
-                  Action:
-                    - kms:Decrypt
-                    - kms:GenerateDataKey
-                  Resource: "*"
-                # cdk deploy assumes the bootstrap roles to publish assets / run the change set.
-                - Sid: AssumeCdkRoles
-                  Effect: Allow
-                  Action:
-                    - sts:AssumeRole
-                  Resource:
-                    - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-*
-                - Sid: Identity
-                  Effect: Allow
-                  Action:
-                    - sts:GetCallerIdentity
-                  Resource: "*"
+            Statement:
+              # Preserved caller authority for cdk bootstrap, deploy and direct CLI operations.
+              # This is intentionally broad and is not a least-privilege policy.
+              - Sid: DeployServices
+                Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - iam:*
+                  - lambda:*
+                  - apigateway:*
+                  - cognito-idp:*
+                  - cognito-identity:*
+                  - dynamodb:*
+                  - s3:*
+                  - cloudfront:*
+                  - states:*
+                  - events:*
+                  - sns:*
+                  - sqs:*
+                  - ecr:*
+                  - codebuild:*
+                  - logs:*
+                Resource: "*"
+              # Cost-zero principle: secrets live in SSM Parameter Store, not Secrets Manager.
+              - Sid: SsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:AddTagsToResource
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/TenkaCloud/*
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cdk-bootstrap/*
+              - Sid: KmsForBootstrapAndAssets
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: "*"
+              # cdk deploy assumes the bootstrap roles to publish assets / run the change set.
+              - Sid: AssumeCdkRoles
+                Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource:
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-*
+              - Sid: Identity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
 
 Outputs:
   ReleaseManifestVersion:
@@ -634,12 +632,13 @@ Outputs:
       - !If [HasAnyOverride, custom/unverified, !FindInMap [SourceDefaults, !Ref SourceContract, Classification]]
 
   CodeBuildProjectName:
-    Description: CodeBuild project name. Press "Start build" to deploy.
+    Description: CodeBuild project name. Review privileged role and source refs before "Start build".
     Value: !Ref CodeBuildProject
 
   StartBuildConsoleUrl:
     Description: >-
-      Open the CodeBuild project: "Start build" deploys; "Start build with overrides" with
+      After reviewing the broad role and source refs, "Start build" approves deploy and
+      missing standard bootstrap (default AdministratorAccess execution). "Start build with overrides" with
       ACTION=destroy coordinates current event cleanup and retains data. destroy-all
       is available only for the explicitly selected historical source contract.
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-${Environment}?region=${AWS::Region}

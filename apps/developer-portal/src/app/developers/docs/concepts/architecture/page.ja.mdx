@@ -16,7 +16,7 @@ export const metadata = { title: "アーキテクチャ" };
 
 <h2 id="cloud-components">AWS 問題とクラウド基盤</h2>
 
-AWS サービスの問題はクラウド開催専用です。明示設定した cloud flag runner は、競技者 role と SSM に保存した必須の ExternalId を使い、所有情報付きの CloudFormation stack を配置します。参加者には hello-world だけに限定した viewer の資格情報を発行します。Console / CloudShell は未対応です。[初回 IAM 設定](https://github.com/susumutomita/TenkaCloud/blob/integration/host-only-20261001/infrastructure/BOOTSTRAP-IAM.md)はポリシー確認と明示的な実行が必要で、実 AWS では未検証です。配置 role の認証情報を参加者へ渡してはいけません。
+AWS サービスの問題はクラウド開催専用です。明示設定した cloud flag runner は、競技者 role と SSM に保存した必須の ExternalId を使い、所有情報付きの CloudFormation stack を配置します。参加者には hello-world だけに限定した viewer の資格情報を発行します。Console / CloudShell は未対応です。[初回 IAM 設定](https://github.com/susumutomita/TenkaCloud/blob/integration/host-only-20261001/infrastructure/BOOTSTRAP-IAM.md)は標準 `CDKToolkit` と呼び出し元の権限の確認、初回 bootstrap の承認が必要で、実 AWS では未検証です。配置 role の認証情報を参加者へ渡してはいけません。
 
 クラウド基盤は Lambda、Cognito、DynamoDB を使い、配置受付と Step Functions の処理を永続化します。`make deploy` と `make destroy` は、権限設定と所有対象を確認する既存 CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world と、DynamoDB に状態を保存する組み込みの Cryptography Battle です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。
 

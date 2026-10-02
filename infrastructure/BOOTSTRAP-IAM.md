@@ -1,149 +1,100 @@
 # Cloud deployment permission boundaries
 
-Current cloud hosting has an inspectable first-account path. It transforms the pinned
-CDK bootstrap template, preserves its resource/output/qualifier/version contract and
-replaces broad deployment/lookup grants. Shared `CDKToolkit` is never adopted and
-`AdministratorAccess` is never a current-control-plane fallback.
+Current cloud hosting uses the standard AWS CDK `CDKToolkit` in the selected
+account/region. It reuses a compatible existing toolkit unchanged and runs the
+pinned official `cdk bootstrap` only when that stack is missing. It does not create
+TenkaCloud-specific bootstrap roles, managed policies or application boundaries.
+
+Standard bootstrap's CloudFormation execution role defaults to
+`AdministratorAccess`. Its deployment roles therefore represent privileged
+account access; this is not a least-privilege deployment design. Review existing
+trust, execution policies and who can assume these roles. Application/runtime IAM,
+competitor-account trust and participant sessions have their own narrower policies.
+See [AWS bootstrap resources and caller permissions](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping-env.html)
+and [AWS execution-policy customization](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping-customizing.html).
 
 ## First-account setup
 
-Start with `infrastructure/environments/development/.env.example` (or the
-`staging` / `production` sample). Copy it to `.env` in the same directory only if
-that file does not exist, then fill in the organizer email, account and region.
-`make deploy ENV=development` reads that file automatically. Use the same selected
-environment for review, setup, deployment and destruction. See the
-[configuration rules](README.md#current-checkouts-setup-and-teardown-boundary).
+Copy the selected `infrastructure/environments/{development,staging,production}/.env.example`
+to `.env` in the same directory only if absent. Set the organizer email, account
+and region, then run `make deploy ENV=development` with the intended AWS profile.
+Use the matching environment for configuration, deployment and destruction. Never
+put credentials in `.env`; see [configuration rules](README.md#current-checkouts-setup-and-teardown-boundary).
 
-Run `make deploy ENV=development` with the intended AWS profile. When the project
-toolkit is missing, the command displays its account, region, environment, exact
-IAM role/policy names, retained asset bucket and residual permission scope. It asks
-for separate initial-setup confirmation, installs and verifies the toolkit, then
-continues building and deploying the application with the same credentials.
-An existing toolkit is validated and reused; ordinary deploy never updates it.
+The normal command checks `CDKToolkit` first. If it exists and is compatible, it
+continues without bootstrap changes. Otherwise it displays the target and standard
+bootstrap authority, asks for separate first-bootstrap confirmation, runs the
+repository's pinned CDK CLI, verifies the resulting toolkit, and continues with
+the same credentials. Interactive application deployment retains CDK's normal
+security-change review. No policy is attached to the caller and no profile is changed.
 
-The current profile must already have both initial-setup and ordinary operator
-permissions for that combined operation. No policy is attached to the caller and
-credentials are not changed. If the profile has only setup permissions, ordinary
-deployment reports the denied operation and required operator policy; an IAM
-administrator must authorize the intended deployment operator separately.
+First bootstrap needs CloudFormation, IAM, S3, ECR and SSM permissions for the
+standard toolkit resources; AWS's documented starting policy uses those service
+wildcards on `*`. Account controls such as SCPs, permission boundaries and explicit
+denies still apply. Review this with the account owner rather than treating a
+bootstrap preview as proof that an identity is authorized. If bootstrap succeeds
+and application deployment fails, the toolkit remains and is reused on retry.
 
-For an optional full review before running deploy, export values as below or use
-the selected `.env`. Exported values override the file. The account/region below
-are placeholders. No live AWS, IAM or billing operation was performed during
-implementation or tests. Never save credentials in `.env`.
+The ordinary deployment caller needs access to inspect stacks/bootstrap metadata,
+assume the standard publishing/lookup/deployment roles, and use the direct
+Cognito invitation and coordinated teardown operations listed below. Existing
+bootstrap execution policies determine what CloudFormation can deploy. A reduced
+policy or older toolkit can require an administrator's separately reviewed update;
+the CLI does not silently replace it or grant more permissions after a failure.
 
-```bash
-export ACCOUNT_ID=123456789012
-export AWS_REGION=ap-northeast-1
-export ENV=development
-make -s deploy CLOUD_ARGS="--show-setup" > /tmp/tenkacloud-setup.json
-```
-
-`--show-setup` is offline. Review the template's IAM documents, names and
-`Metadata.TenkaCloudSetupPermissions`: the latter is the exact initial-caller policy.
-An IAM administrator prepares the initial-setup permissions. Setup creates or,
-with the explicit setup-only command, updates only the owned
-`TenkaCloudToolkit-<environment>`, qualifier-scoped asset
-resources, roles and managed policies. It does not attach policies to the caller,
-change credentials, activate trusted access or grant cross-account bootstrap trust.
-
-For organizations using separate initial-setup and deployment principals, the
-optional advanced path remains available:
+Optional commands, after configuring the selected environment:
 
 ```bash
-# Initial-setup principal; installs the toolkit only after confirmation.
-make deploy CLOUD_ARGS="--setup"
-# Switch to the intended ordinary deployment operator's AWS profile/role.
-export TENKACLOUD_ADMIN_EMAIL=organizer@example.com
-make deploy
+# Inspect standard bootstrap offline; does not contact AWS.
+make -s deploy ENV=development CLOUD_ARGS="--show-setup"
+# Bootstrap only when missing, for organizations using a separate initial caller.
+make deploy ENV=development CLOUD_ARGS="--setup"
+# Ordinary deployment, using the intended deployment profile.
+make deploy ENV=development
 ```
 
-`--setup` installs and verifies the toolkit only; it does not deploy the application.
-Its output names the generated operator policy. An IAM administrator attaches that
-policy only to the intended deployment operator. The CodeBuild launcher references
-that same policy after setup. `make destroy` uses the
-operator policy to coordinate cleanup while retaining data. Cognito organizers need
-no AWS policy. Neither policy is automatically attached to a user or existing role.
+`--setup` does not update an existing toolkit or deploy the application. Unattended
+first deployment uses `CLOUD_ARGS="--setup-if-needed --yes"` after review.
+`--yes` alone approves application deployment changes, not creation of a missing
+bootstrap. Setup-only automation can use `--setup --yes`. All paths require the
+caller's existing permissions. Declining first bootstrap stops before IAM changes
+and builds; failures are reported, not hidden by changing credentials or permissions.
 
-CI and noninteractive first deployment must explicitly approve initial setup with
-`make deploy CLOUD_ARGS="--setup-if-needed --yes"` after review. The opt-in is limited
-to creating the missing project toolkit for the selected account, region and
-environment; it never updates an existing toolkit. `--yes` alone does not authorize
-initial IAM setup, and an unapproved noninteractive invocation stops without
-prompting. Setup-only automation can use `--setup --yes`. Both paths require the
-caller's existing permissions and keep the same ownership checks. Declining setup
-stops before IAM changes and builds; failures stop deployment rather than granting
-additional permissions. Already-created toolkit resources remain after a later
-failure and are validated on retry.
+## Existing toolkits and retained resources
 
-## Fail-safe behavior
+Both stacks use the standard CDK synthesizer and default `hnb659fds` qualifier.
+The toolkit is shared across environments/applications in the same account/region;
+TenkaCloud ownership or environment tags are not required on `CDKToolkit`.
+Standard bootstrap compatibility is checked without rewriting trust or execution
+policies. Only a confirmed CloudFormation not-found response permits creation;
+access denial, failed stack state or incompatible metadata stops deployment.
+Manage any required official bootstrap upgrade separately.
 
-Both synthesizers and the CLI use the same project qualifier. Existing toolkits must
-match ownership/environment tags, qualifier, execution-policy list, versioned
-bootstrap variant and empty trusted-account parameters. Earlier unbounded project
-toolkits and unrelated configurations are not automatically migrated or adopted.
-Previously deployed resources missing ownership or `TenkaCloudRegion` tags need an
-explicitly privileged, separately reviewed migration before the new execution policy
-can update them. The documented setup route is for a fresh installation.
+Earlier `TenkaCloudToolkit-*` stacks, their custom policies and assets remain
+untouched. They are not migrated, deleted or used as substitutes for `CDKToolkit`.
+`TENKACLOUD_CFN_EXECUTION_POLICY_ARN` from earlier revisions is unsupported; remove
+it from configuration. To retain an organization-specific execution policy, review
+and manage the standard toolkit through the normal AWS CDK process.
 
-Default execution policies are generated from the reviewed source for this account,
-region and environment. Leave `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` unset for fresh
-setup. Its optional comma-separated value is only an assertion of the already installed
-execution-policy list, not an installer for arbitrary custom policies. ARNs must belong
-to the deployment account, use `policy/tenkacloud/cloud-hosting/`, and exactly match
-the toolkit list. ARN/ownership validation does not replace policy-content review.
-Bootstrap roles use rewritten scoped policies; application/provider roles additionally
-carry the generated permissions boundary.
+`make destroy` retains the standard toolkit, CDK assets, event data and organizer
+identity. Retention does not promise automatic reattachment on a fresh deployment.
+No live AWS bootstrap, IAM change or deployment was performed by source tests.
 
-The stock-template transform fails closed if an upstream change introduces an
-unexpected IAM resource. Every application/provider role receives the installation's
-application boundary. The execution policy can apply only that boundary and cannot
-remove or edit it. Managed policies are split at statement boundaries to meet IAM
-size limits; oversized legacy binding sets fail explicitly rather than broadening
-permissions. The generated template and setup policy are reviewable artifacts.
+## Deployment authority versus ordinary use
 
-## Derivation from the synthesized resources
+The standard CloudFormation execution role deploys the application's DynamoDB,
+Cognito, Lambda, API Gateway, S3, CloudFront, Step Functions, EventBridge, IAM, Logs
+and SSM resources. The current path builds the two SPAs and publishes CDK assets;
+it creates no separate source-bundle bucket or archive. Deployers can change
+application code, identities, permissions and data, so treat them as installation
+administrators. Standard bootstrap defaults also allow authority beyond TenkaCloud;
+use an account boundary where this trust separation is required.
 
-The current two synthesized stacks contain the following resource families:
-
-- DynamoDB: three project tables and event/deployment GSI1 indexes
-- Cognito: one organizer pool, client and domain
-- Lambda: the API function and CDK static-asset deployment/cleanup providers
-- API Gateway: one regional REST API, Cognito authorizer, explicit methods/stage
-- S3/CloudFront: two private SPA buckets, origin access controls, distributions,
-  asset deployment and cache invalidation
-- IAM/Logs: execution roles/policies and function log groups for those resources
-- One Standard Step Functions workflow, scoped Lambda workers/dispatcher/recovery,
-  scheduled and terminal-status EventBridge rules, and a private retained
-  execution-artifact bucket
-- One public, secret-free competitor bootstrap template object and an installation
-  SSM SecureString initialized through the existing account-registration flow
-
-`lib/cloud-hosting/deployment-policy.ts` inventories these synthesized resource types
-and defines explicit actions and account/region/project scopes. Tests compare both
-actual synths with that inventory, cover all generated application roles and the
-stock-template transform, and reject broad action wildcards/default administrator
-grants. No AWS policy simulator or live create/update/delete was run.
-
-Residual scopes are listed in the generated policy module: CloudFront origin access
-controls, APIs lacking resource-level/tag authorization, regional log-delivery and
-CloudFormation validation/export discovery. Generated/truncated S3 and PassRole
-names use the bounded TenkaCloud project namespace. Deployment operators are
-TenkaCloud project administrators across environments in this account/region where
-these actions cannot be isolated. Environment names are not an IAM security boundary.
-CloudFormation stack targets remain exact; supported ownership tags and participant/team
-restrictions remain enforced. Deployers can change project code, data and identity. Use a dedicated hosting account when that trust boundary is
-needed. API Gateway account-wide logging configuration is not changed; Lambda
-operation logs remain. Previously generated retained API logging roles/settings
-are not deleted when that unused construct is removed.
-
-## One-time setup versus ordinary use
-
-The initial caller needs the generated setup policy; the ordinary deployment
-operator uses the distinct operator policy with asset-publishing and owned-stack
-CloudFormation operations. There is no additional
-source-bundle bucket or source archive upload in the current path. These setup
-credentials are never placed in SPA configuration or participant responses.
+These setup/deployment credentials are never placed in SPA configuration or
+participant responses. Application/provider runtime roles retain their explicit
+service permissions; standard bootstrap does not add `AdministratorAccess` to them.
+API Gateway account-wide logging configuration is not changed. Previously retained
+logging roles/settings are not deleted by this correction.
 
 Ordinary organizers use Cognito and the application API. They receive no AWS IAM
 credentials or bootstrap policy. The foundation API has table-scoped storage
@@ -212,11 +163,13 @@ The operator running this CLI needs the actions used by its direct storage path:
 - Deployments: `GetItem`, `Query`, `PutItem`, `UpdateItem`, `DeleteItem`
 
 Each action above has the `dynamodb:` prefix and is scoped to that exact owned table.
-These direct operator permissions are in the generated operator policy, distinct
-from CloudFormation execution and Cognito roles. The CLI verifies table ownership
-before use; native settlement also reads owned catalog/plugin artifacts. Setup
-creates the policy but does not attach it to the caller. CloudFormation deletion and waiting use exact
-physical stack ARNs. Permission errors preserve the platform and durable stop state.
+Grant these direct operations to the intended deployment/teardown caller separately
+from CloudFormation execution and Cognito application roles. The CLI verifies table
+ownership before use; native settlement also needs `s3:GetObject` for owned
+catalog/plugin artifacts. Ordinary deployment needs `cognito-idp:AdminGetUser` and
+`cognito-idp:AdminCreateUser` for the installation's organizer pool. CloudFormation
+deletion and waiting use exact physical stack ARNs. Standard bootstrap does not
+grant these direct operations to the caller. Permission errors preserve the platform and durable stop state.
 Independently deployed exercises and retained data/artifact buckets are not purged.
 
 ## One launcher, explicit source compatibility
@@ -224,7 +177,16 @@ Independently deployed exercises and retained data/artifact buckets are not purg
 `templates/cloud-pipeline.yaml` keeps one CodeBuild project, platform/catalog source
 selection, invitations, deployment/teardown paths, original physical names, output
 links and checkpoint values. The default `current-cloud-v1` contract uses the current
-CLI and installed operator policy. Published
+CLI and standard CDK bootstrap. The launcher reuses its preserved former broad
+CodeBuild caller policy, including IAM, CloudFormation and other service wildcards,
+standard `cdk-*` role assumption, Cognito invitations and DynamoDB cleanup access.
+This privileged role persists after bootstrap. Review the complete template,
+selected source refs and who can create/update/start the build before using it.
+The launcher never attaches a generated TenkaCloud policy or expands bootstrap
+trust. Creating it provisions its role and logs but does not start a build.
+Starting current deploy runs `make deploy CLOUD_ARGS="--setup-if-needed --yes"`,
+explicitly approving first bootstrap if missing and application IAM changes.
+Published
 `SourceDefaults.current-cloud-v1.CurrentPlatformCommit` points to a tested source
 commit containing `scripts/cloud-hosting/launcher-check.ts`; incompatible refs fail
 before AWS use. Custom repositories remain selectable. Current catalogs must contain
@@ -233,7 +195,8 @@ selecting a catalog does not enable arbitrary runtimes.
 
 Advanced `historical-949a40a9` compatibility preserves the original fixed source pair
 and full old behavior: Turso, provisioned capacity, old `.env`, shared bootstrap and
-`destroy-all`. Its broad role is conditional on that explicit historical choice.
+`destroy-all`. The original broad caller role is retained for both source contracts; historical
+behavior and data-deletion semantics still require their own review.
 No current-stack adoption or automatic data migration is promised. Empty ref inputs
 select the chosen contract's defaults.
 

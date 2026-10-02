@@ -59,7 +59,7 @@ function action(actionName: string, exitCode = 0, sourceContract = "historical-9
 }
 
 describe("one complete current launcher with explicit historical-source compatibility; no AWS execution", () => {
-  it("defaults to the current source contract and keeps initial IAM setup out of its build role", () => {
+  it("defaults to the current source contract with the preserved privileged launcher caller role", () => {
     const parsed = template.toJSON();
     template.hasParameter("SourceContract", {
       Default: "current-cloud-v1",
@@ -80,27 +80,48 @@ describe("one complete current launcher with explicit historical-source compatib
       Classification: "historical/unverified",
     });
     const role = parsed.Resources.CodeBuildRole.Properties;
-    expect(role.ManagedPolicyArns["Fn::If"][0]).toBe("UsesCurrentSources");
-    expect(JSON.stringify(role.ManagedPolicyArns["Fn::If"][1])).toContain("-operator");
-    const branches = role.Policies[0].PolicyDocument.Statement["Fn::If"];
-    expect(branches[0]).toBe("UsesCurrentSources");
-    expect(branches[1]).toEqual([
-      {
-        Sid: "LauncherLogs",
-        Effect: "Allow",
-        Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
-        Resource: {
-          "Fn::Sub": `arn:aws:logs:\${AWS::Region}:\${AWS::AccountId}:log-group:/tenkacloud/codebuild/lite-launcher-\${Environment}:*`,
-        },
-      },
-    ]);
-    expect(branches[2].map((entry: { Sid: string }) => entry.Sid)).toEqual([
+    expect(role.ManagedPolicyArns).toBeUndefined();
+    const statements = role.Policies[0].PolicyDocument.Statement;
+    expect(statements.map((entry: { Sid: string }) => entry.Sid)).toEqual([
       "DeployServices",
       "SsmParameters",
       "KmsForBootstrapAndAssets",
       "AssumeCdkRoles",
       "Identity",
     ]);
+    // Retain the original caller policy for both source contracts. Current bootstrap
+    // authority is explicit rather than depending on a generated custom operator policy.
+    expect(statements[0]).toEqual({
+      Sid: "DeployServices",
+      Effect: "Allow",
+      Action: [
+        "cloudformation:*",
+        "iam:*",
+        "lambda:*",
+        "apigateway:*",
+        "cognito-idp:*",
+        "cognito-identity:*",
+        "dynamodb:*",
+        "s3:*",
+        "cloudfront:*",
+        "states:*",
+        "events:*",
+        "sns:*",
+        "sqs:*",
+        "ecr:*",
+        "codebuild:*",
+        "logs:*",
+      ],
+      Resource: "*",
+    });
+    expect(statements[3]).toEqual({
+      Sid: "AssumeCdkRoles",
+      Effect: "Allow",
+      Action: ["sts:AssumeRole"],
+      Resource: [{ "Fn::Sub": `arn:aws:iam::\${AWS::AccountId}:role/cdk-*` }],
+    });
+    expect(JSON.stringify(role)).not.toContain("policy/tenkacloud/cloud-hosting/");
+    expect(parsed.Description).toContain("Standard bootstrap defaults to AdministratorAccess");
     template.resourceCountIs("AWS::CodeBuild::Project", 1);
     template.resourceCountIs("AWS::IAM::Role", 1);
     template.resourceCountIs("AWS::Logs::LogGroup", 1);
@@ -201,12 +222,12 @@ describe("one complete current launcher with explicit historical-source compatib
 
 describe("current launcher/source contract", () => {
   it.each(["deploy", "destroy"])(
-    "uses the current %s entrypoint without legacy bootstrap or cleanup",
+    "uses the current %s entrypoint with explicit unattended deployment approval",
     (command) => {
       const result = action(command, 0, "current-cloud-v1");
       expect(result.status, result.stderr).toBe(0);
       expect(result.calls).toBe(
-        `${command} ENV=staging${command === "destroy" ? " CLOUD_ARGS=--yes" : ""}|confirm=unset\n`,
+        `${command} ENV=staging${command === "destroy" ? " CLOUD_ARGS=--yes" : " CLOUD_ARGS=--setup-if-needed --yes"}|confirm=unset\n`,
       );
       expect(result.stdout).not.toContain("TC{LITE-CLEANUP-COMPLETE}");
     },
