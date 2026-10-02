@@ -4,6 +4,39 @@ import { createOrganizerSession } from "./organizer-fixture";
 
 const one = { scope: "team", targetTeamIds: [] as string[] };
 
+test("key-only organizers retain disruption attribution and reset revokes new requests", async () => {
+  const f = await disruptionFixture({ keyOnly: true });
+  try {
+    expect((await f.api("/feature-flags", "PUT", { key: "audit", enabled: true })).status).toBe(
+      200,
+    );
+    expect((await f.fire()).status).toBe(202);
+    const accepted = f.service.disruptions.store.request(f.event.eventId, "fixture-request-1");
+    expect(accepted?.firedBy).toBe("host-key");
+    expect(accepted?.acceptedAudit?.actor).toEqual({
+      kind: "host-key",
+      role: "Admin",
+      authMethod: "host-key",
+    });
+    expect((await f.fire()).status).toBe(202);
+    await f.tick();
+    expect(f.aws.commands).toHaveLength(2);
+    const replacement = f.store.rotateLocalOrganizerKey();
+    expect((await f.fire({ requestId: "revoked-session-request" })).status).toBe(401);
+    expect(
+      f.service.disruptions.store.request(f.event.eventId, "revoked-session-request"),
+    ).toBeUndefined();
+    const login = await f.api("/host/login", "POST", { key: replacement }, "");
+    expect(login.status).toBe(200);
+    const history = await f.api(`${f.path}/audit`, "GET", undefined, login.body.idToken);
+    expect(history.status).toBe(200);
+    expect(history.body.items[0]?.firedBy).toBe("host-key");
+    expect(f.aws.commands).toHaveLength(2);
+  } finally {
+    await f.close();
+  }
+});
+
 test("disruption reads use read permission while requests retain the accepting organizer and operation", async () => {
   const f = await disruptionFixture();
   try {

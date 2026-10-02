@@ -123,13 +123,14 @@ export class DisruptionAws {
   }
 }
 
-export async function disruptionFixture(options: { staticRoot?: string } = {}) {
+export async function disruptionFixture(options: { staticRoot?: string; keyOnly?: boolean } = {}) {
   const directory = createTemporaryDirectory(root, "tenka-disruption-");
   const db = join(directory, "host.sqlite");
   const aws = new DisruptionAws();
   let store = new HostStore(new Database(db));
   // Browser rehearsals use current key-only auth; unit role cases retain legacy accounts.
-  const organizerKey = options.staticRoot ? store.ensureLocalOrganizerKey().key : undefined;
+  const organizerKey =
+    options.staticRoot || options.keyOnly ? store.ensureLocalOrganizerKey().key : undefined;
   const engine = new CompetitionEngine(root, directory, false);
   engine.disruptionAdapter = () => aws.adapter();
   let service = new HostingService(store, engine, "fixture-host-key", () => aws.now);
@@ -230,7 +231,7 @@ export async function disruptionFixture(options: { staticRoot?: string } = {}) {
     path,
     directory,
     get organizerKey() {
-      if (!organizerKey) throw new Error("This fixture is not in key-only browser mode.");
+      if (!organizerKey) throw new Error("This fixture is not in key-only mode.");
       return organizerKey;
     },
     get origin() {

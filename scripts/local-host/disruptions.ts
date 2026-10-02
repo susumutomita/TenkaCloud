@@ -90,7 +90,7 @@ export class LocalDisruptions {
         },
       };
     if (command === "POST fire") {
-      const organizerId = principal.userId;
+      const organizerId = principal.authMethod === "host-key" ? "host-key" : principal.userId;
       if (!organizerId) throw new HostError(403, "An organizer identity is required.");
       const parsed = DisruptionFireRequestSchema.safeParse(request.body);
       if (!parsed.success)
