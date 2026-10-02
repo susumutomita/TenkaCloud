@@ -66,7 +66,10 @@ describe("one complete current launcher with explicit historical-source compatib
       AllowedValues: ["current-cloud-v1", "historical-949a40a9"],
     });
     expect(parsed.Mappings.SourceDefaults["current-cloud-v1"].CurrentPlatformCommit).toMatch(
-      /^(main|[a-f0-9]{40})$/u,
+      /^[a-f0-9]{40}$/u,
+    );
+    expect(parsed.Mappings.SourceDefaults["current-cloud-v1"].Classification).toBe(
+      "candidate/unreleased",
     );
     expect(parsed.Mappings.SourceDefaults["current-cloud-v1"].CatalogCommit).toBe(
       "915fe862fe09bf6b63bb96edcf0cb3deddd54d37",

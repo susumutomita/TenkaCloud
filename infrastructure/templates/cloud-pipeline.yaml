@@ -3,8 +3,8 @@ Description: >-
   TenkaCloud cloud hosting launcher: Lambda, DynamoDB, Cognito and both existing web
   applications. First review and install the project toolkit with make deploy
   CLOUD_ARGS="--show-setup" / "--setup". Then this CodeBuild project uses only its
-  ordinary operator policy. Default current sources are explicitly development/unreleased
-  until CurrentPlatformCommit is pinned. Current destroy coordinates event cleanup and
+  ordinary operator policy. Default current sources are pinned to an offline-verified
+  candidate; live AWS deployment remains unverified. Current destroy coordinates event cleanup and
   retains history, identity and asset storage, which may continue to incur charges.
   Advanced historical-source compatibility preserves the original fixed implementation,
   including its broad deployment role and destructive destroy-all contract. It does not
@@ -231,10 +231,10 @@ Parameters:
 Mappings:
   SourceDefaults:
     current-cloud-v1:
-      # Publication replaces this field with the tested helper-source commit.
-      CurrentPlatformCommit: main
+      # Offline-verified current CLI/setup source; live AWS deployment is not validated.
+      CurrentPlatformCommit: 6cec1a9284e5103fe7d27067479b42f1cb64e3c5
       CatalogCommit: 915fe862fe09bf6b63bb96edcf0cb3deddd54d37
-      Classification: development/unreleased
+      Classification: candidate/unreleased
     historical-949a40a9:
       CurrentPlatformCommit: 949a40a9ed9199331d928ad5cf9397dbb4ba3f81
       CatalogCommit: 363a7c9b83969e20d63b74fd0410a354da5e202b
@@ -622,8 +622,8 @@ Resources:
 Outputs:
   ReleaseManifestVersion:
     Description: >-
-      Baseline manifest version for the exact default ref pair. main or custom overrides are
-      classified separately and are not represented by this manifest version.
+      Compatibility manifest version for the historical source pair only. The current
+      source contract is an unreleased candidate; consult ReleaseClassification.
     Value: 1.11.0
 
   ReleaseClassification:
