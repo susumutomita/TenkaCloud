@@ -12,7 +12,6 @@ import type { AppConfig } from "../src/config";
 import { I18nProvider } from "../src/i18n";
 import { LocalHostLoginPage } from "../src/pages/LocalHostLogin";
 import { LocalHostSettingsPage } from "../src/pages/LocalHostSettings";
-import { LocalHostUsersPage } from "../src/pages/LocalHostUsers";
 
 const origin = window.location.origin;
 const config: AppConfig = {
@@ -34,7 +33,7 @@ const config: AppConfig = {
   mode: "local-host",
 };
 
-type Handler = (url: string, init?: RequestInit) => Response;
+type Handler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 type OrganizerRole = "Admin" | "Operator" | "Viewer";
 function organizerToken(role: OrganizerRole) {
   const claims = {
@@ -70,9 +69,7 @@ function stubHost(
   };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), origin);
-    const handler =
-      routes[url.pathname] ??
-      (url.pathname.startsWith("/api/host/users/") ? routes["/api/host/users/:id"] : undefined);
+    const handler = routes[url.pathname];
     if (!handler) return json({ message: `unexpected ${url.pathname}` }, 404);
     return handler(url.pathname, init);
   });
@@ -81,7 +78,7 @@ function stubHost(
 }
 
 async function signIn() {
-  fireEvent.change(await screen.findByLabelText("Organizer key"), {
+  fireEvent.change(await screen.findByLabelText(/Organizer key|主催者キー/u), {
     target: { value: "synthetic-organizer-key" },
   });
   fireEvent.submit(document.querySelector("form") as HTMLFormElement);
@@ -221,49 +218,109 @@ describe("organizer journey in local-host mode", () => {
     },
   );
 
-  it("lets an Admin change a persisted local feature flag", async () => {
-    const flags = { saml: false, audit: false };
-    const fetchMock = stubHost({
-      "/api/feature-flags": (_url, init) => {
-        if (init?.method === "PUT") {
-          const body = JSON.parse(String(init.body)) as {
-            key: keyof typeof flags;
-            enabled: boolean;
-          };
-          flags[body.key] = body.enabled;
-        }
-        return new Response(JSON.stringify({ flags }), {
-          headers: { "content-type": "application/json" },
-        });
-      },
-    });
-    render(
-      <I18nProvider>
-        <MemoryRouter initialEntries={["/login"]}>
-          <App config={config} />
-        </MemoryRouter>
-      </I18nProvider>,
-    );
-    await signIn();
-    fireEvent.click(await screen.findByRole("link", { name: "Settings" }));
-    expect(await screen.findByRole("heading", { name: "Local host settings" })).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "saml" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "SAML" })).toBeNull();
-    expect(
-      fetchMock.mock.calls.some(([input]) => /\/host\/(?:users|saml)/u.test(String(input))),
-    ).toBe(false);
-    const audit = screen.getByRole("checkbox", { name: "audit" });
-    expect(audit).not.toBeChecked();
-    fireEvent.click(audit);
-    await waitFor(() => expect(audit).toBeChecked());
-    const updateRequest = fetchMock.mock.calls.find(
-      ([input, init]) => String(input) === `${origin}/api/feature-flags` && init?.method === "PUT",
-    )?.[1];
-    expect(JSON.parse(String(updateRequest?.body))).toEqual({ key: "audit", enabled: true });
-    expect(updateRequest?.headers).toMatchObject({
-      authorization: `Bearer ${organizerToken("Admin")}`,
-    });
-  });
+  it.each(["en", "ja"] as const)(
+    "lets an Admin change the persisted audit flag in %s",
+    async (locale) => {
+      window.localStorage.setItem("tenkacloud.application-admin.locale", locale);
+      const flags = { saml: false, audit: false };
+      const fetchMock = stubHost({
+        "/api/feature-flags": (_url, init) => {
+          if (init?.method === "PUT") {
+            const body = JSON.parse(String(init.body)) as {
+              key: keyof typeof flags;
+              enabled: boolean;
+            };
+            flags[body.key] = body.enabled;
+          }
+          return new Response(JSON.stringify({ flags }), {
+            headers: { "content-type": "application/json" },
+          });
+        },
+      });
+      render(
+        <I18nProvider>
+          <MemoryRouter initialEntries={["/login"]}>
+            <App config={config} />
+          </MemoryRouter>
+        </I18nProvider>,
+      );
+      await signIn();
+      fireEvent.click(
+        await screen.findByRole("link", { name: locale === "ja" ? "設定" : "Settings" }),
+      );
+      expect(
+        await screen.findByRole("heading", {
+          name: locale === "ja" ? "ローカルホスト設定" : "Local host settings",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          locale === "ja" ? /監査ログは既定で停止中です/u : /Audit logging is off by default/u,
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("checkbox", { name: "saml" })).toBeNull();
+      expect(screen.queryByRole("heading", { name: "SAML" })).toBeNull();
+      expect(
+        fetchMock.mock.calls.some(([input]) => /\/host\/(?:users|saml)/u.test(String(input))),
+      ).toBe(false);
+      const audit = screen.getByRole("checkbox", { name: "audit" });
+      expect(audit).not.toBeChecked();
+      fireEvent.click(audit);
+      await waitFor(() => expect(audit).toBeChecked());
+      const updateRequest = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input) === `${origin}/api/feature-flags` && init?.method === "PUT",
+      )?.[1];
+      expect(JSON.parse(String(updateRequest?.body))).toEqual({ key: "audit", enabled: true });
+      expect(updateRequest?.headers).toMatchObject({
+        authorization: `Bearer ${organizerToken("Admin")}`,
+      });
+    },
+  );
+
+  it.each(["success", "failure"] as const)(
+    "retains the saved audit state while a change is pending and handles %s",
+    async (outcome) => {
+      let finish!: (response: Response) => void;
+      const pending = new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+      const fetchMock = stubHost({
+        "/api/feature-flags": (_url, init) =>
+          init?.method === "PUT" ? pending : Response.json({ flags: { audit: false } }),
+      });
+      render(
+        <I18nProvider>
+          <MemoryRouter initialEntries={["/settings"]}>
+            <App config={config} />
+          </MemoryRouter>
+        </I18nProvider>,
+      );
+      await signIn();
+      const audit = await screen.findByRole("checkbox", { name: "audit" });
+      fireEvent.click(audit);
+      expect(audit).not.toBeChecked();
+      expect(audit).toBeDisabled();
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.objectContaining({ pathname: "/api/feature-flags" }),
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ key: "audit", enabled: true }),
+        }),
+      );
+      finish(
+        outcome === "success"
+          ? Response.json({ flags: { audit: true } })
+          : Response.json({ message: "Settings could not be saved." }, { status: 503 }),
+      );
+      await waitFor(() => expect(audit).toBeEnabled());
+      if (outcome === "success") expect(audit).toBeChecked();
+      else {
+        expect(audit).not.toBeChecked();
+        expect(screen.getByText(/Settings could not be saved/u)).toBeInTheDocument();
+      }
+    },
+  );
 
   it("shows a flag loading failure instead of an empty settings page", async () => {
     const fetchMock = stubHost({
@@ -398,9 +455,9 @@ describe("organizer journey in local-host mode", () => {
     ).toBe(false);
   });
 
-  it("keeps organizer management private while no sign-in token is available", () => {
+  it("keeps host settings private while no sign-in token is available", () => {
     const fetchMock = stubHost();
-    const settings = render(
+    render(
       <I18nProvider>
         <MemoryRouter>
           <AuthProvider config={config}>
@@ -410,18 +467,6 @@ describe("organizer journey in local-host mode", () => {
       </I18nProvider>,
     );
     expect(screen.getByText("Only Admin can change settings.")).toBeInTheDocument();
-    settings.unmount();
-
-    render(
-      <I18nProvider>
-        <MemoryRouter>
-          <AuthProvider config={config}>
-            <LocalHostUsersPage config={config} />
-          </AuthProvider>
-        </MemoryRouter>
-      </I18nProvider>,
-    );
-    expect(screen.getByText("Only Admin can manage organizers.")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -437,19 +482,6 @@ describe("organizer journey in local-host mode", () => {
       });
       const fetchMock = vi.fn((input: RequestInfo | URL) => {
         const pathname = new URL(String(input), origin).pathname;
-        if (pathname.endsWith("/host/saml/provider"))
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                provider: null,
-                entityId: `${origin}/api/host/saml/metadata`,
-                callbackUrl: `${origin}/api/host/saml/acs`,
-                identities: [],
-              }),
-            ),
-          );
-        if (pathname.endsWith("/host/users"))
-          return Promise.resolve(new Response(JSON.stringify({ items: [] })));
         if (pathname === "/api/feature-flags") return oldResponse;
         if (pathname === "/api-next/feature-flags")
           return Promise.resolve(

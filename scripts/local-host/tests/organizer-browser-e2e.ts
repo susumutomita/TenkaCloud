@@ -38,12 +38,13 @@ async function signIn(page: Page, origin: string, key: string) {
   assert.equal(await page.locator("#organizer-username, #organizer-password").count(), 0);
   assert.equal(await page.getByRole("button", { name: /Create Admin account|SAML/u }).count(), 0);
   await fillOrganizerKey(page, key);
-  const pending = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/host/login") && response.request().method() === "POST",
-  );
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  const response = await pending;
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/host/login") && response.request().method() === "POST",
+    ),
+    page.getByRole("button", { name: "Sign in", exact: true }).click(),
+  ]);
   assert.equal(response.status(), 200);
   const submitted = response.request().postDataJSON() as Record<string, unknown>;
   assert.deepEqual(Object.keys(submitted), ["key"]);
@@ -92,12 +93,17 @@ async function main() {
     await page.getByRole("heading", { name: "Local host settings", exact: true }).waitFor();
     await page.getByRole("checkbox", { name: "audit", exact: true }).waitFor();
     assert.equal(await page.getByRole("checkbox").count(), 1);
-    const changed = page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/feature-flags") && response.request().method() === "PUT",
-    );
-    await page.getByRole("checkbox", { name: "audit", exact: true }).check();
-    assert.equal((await changed).status(), 200);
+    // The controlled toggle updates after the PUT, not synchronously with the click.
+    // Observe both promises immediately so action failures keep their original diagnostic.
+    const [changed] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().endsWith("/api/feature-flags") && response.request().method() === "PUT",
+      ),
+      page.getByRole("checkbox", { name: "audit", exact: true }).click(),
+    ]);
+    assert.equal(changed.status(), 200);
+    await page.getByRole("checkbox", { name: "audit", exact: true, checked: true }).waitFor();
 
     for (const body of [
       { key: host.masterKey },
