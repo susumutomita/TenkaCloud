@@ -4,11 +4,8 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium } from "playwright-core";
-import {
-  REGISTRATION_ORGANIZER,
-  type RegistrationSummary,
-  registrationFixture,
-} from "./registration-fixture";
+import { fillOrganizerKey } from "./organizer-login";
+import { type RegistrationSummary, registrationFixture } from "./registration-fixture";
 
 async function main(): Promise<void> {
   const fixture = await registrationFixture({ browser: true });
@@ -31,8 +28,7 @@ async function main(): Promise<void> {
       });
     }
     await organizer.goto(`${fixture.admin}/events/${event.eventId}`);
-    await organizer.locator("#organizer-username").fill(REGISTRATION_ORGANIZER.username);
-    await organizer.locator("#organizer-password").fill(REGISTRATION_ORGANIZER.password);
+    await fillOrganizerKey(organizer, fixture.hostKey);
     await organizer.getByRole("button", { name: "Sign in", exact: true }).click();
     await organizer.getByRole("tab", { name: "Teams", exact: true }).click();
     await organizer

@@ -43,6 +43,13 @@ export const auditActionSchema = z.enum([
 const actorSchema = z.discriminatedUnion("kind", [
   z
     .object({
+      kind: z.literal("host-key"),
+      role: z.literal("Admin"),
+      authMethod: z.literal("host-key"),
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("organizer"),
       userId: auditIdentifierSchema,
       role: z.enum(["Admin", "Operator", "Viewer"]),
@@ -96,7 +103,9 @@ export type AuditActor = AuditRecord["actor"];
 export type AuditAction = AuditRecord["action"];
 
 export function auditActor(principal: OrganizerPrincipal): AuditActor {
-  if (!principal.userId || principal.authMethod === "host-key") return { kind: "anonymous" };
+  if (principal.authMethod === "host-key")
+    return { kind: "host-key", role: "Admin", authMethod: "host-key" };
+  if (!principal.userId) return { kind: "anonymous" };
   return {
     kind: "organizer",
     userId: principal.userId,

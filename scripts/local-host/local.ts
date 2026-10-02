@@ -1,15 +1,18 @@
 import { Database } from "bun:sqlite";
-import { lstatSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { lstatSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import { createServer, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { randomToken, sameSecret } from "./auth";
-import { prepareDatabase, privateDirectory } from "./files";
+import { hasDatabaseState, prepareDatabase, privateDirectory } from "./files";
 import { runLocalHost } from "./main";
 import { parseOptions } from "./options";
+import { openOrganizerKeyDisplay } from "./organizer-key-output";
+import { HostStore } from "./store";
 
 const sessionSchema = z.object({
+  protocol: z.literal(2).optional(),
   pid: z.number().int().positive(),
   port: z.number().int().min(1024).max(65535),
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
@@ -69,7 +72,7 @@ function acquireLocalLock(directory: string): Database {
 function claimSession(path: string, session: LocalSession): void {
   const prior = readSession(path);
   if (prior) {
-    if (alive(prior.pid))
+    if (prior.pid !== process.pid && alive(prior.pid))
       throw new Error("This local host already has a live owner. Use make down first.");
     // Only dead-owner launcher metadata is removed. Event and runtime files are untouched.
     unlinkSync(path);
@@ -82,7 +85,8 @@ function releaseSession(path: string, sessionId: string): void {
 }
 
 export async function stopManagedLocal(directory: string): Promise<void> {
-  const path = join(privateDirectory(directory), SESSION_FILE);
+  const data = realpathSync(privateDirectory(directory));
+  const path = join(data, SESSION_FILE);
   const session = readSession(path);
   if (!session) {
     console.log("No managed local host is running; event data is unchanged.");
@@ -100,15 +104,28 @@ export async function stopManagedLocal(directory: string): Promise<void> {
     );
     return;
   }
+  if (session.protocol !== 2)
+    throw new Error(
+      "This controller predates directory-bound commands. Stop its original terminal with Ctrl+C, then run make local again; no PID was signalled.",
+    );
   // Never signal a PID read from a file: it may now belong to an unrelated process.
   const response = await fetch(`http://127.0.0.1:${String(session.port)}/down`, {
     method: "POST",
-    headers: { authorization: `Bearer ${session.token}` },
+    headers: {
+      authorization: `Bearer ${session.token}`,
+      "x-tenkacloud-data-directory": encodeURIComponent(data),
+    },
     signal: AbortSignal.timeout(60_000),
   });
   const result: unknown = await response.json();
-  const parsed = z.object({ sessionId: z.string(), code: z.number() }).safeParse(result);
-  if (!parsed.success || !sameSecret(parsed.data.sessionId, session.sessionId))
+  const parsed = z
+    .object({ sessionId: z.string(), code: z.number(), directory: z.string() })
+    .safeParse(result);
+  if (
+    !parsed.success ||
+    !sameSecret(parsed.data.sessionId, session.sessionId) ||
+    parsed.data.directory !== data
+  )
     throw new Error(
       "The shutdown endpoint does not belong to this local host; no PID was signalled.",
     );
@@ -119,6 +136,95 @@ export async function stopManagedLocal(directory: string): Promise<void> {
   console.log("Local host stopped. Event data and stopped Docker runtime data are retained.");
 }
 
+function assertExistingHostDatabase(path: string): void {
+  const database = new Database(path, { readonly: true, strict: true });
+  try {
+    const present = database.query("SELECT name FROM sqlite_master WHERE name='host_schema'").get();
+    if (!present) throw new Error("This is not an existing TenkaCloud local-host database.");
+    const versions = database.query("SELECT version FROM host_schema").all() as {
+      version: number;
+    }[];
+    if (versions.length !== 1 || ![1, 2, 3, 4, 5].includes(versions[0]?.version ?? 0))
+      throw new Error("Unsupported local-host database schema; no key was rotated.");
+  } finally {
+    database.close();
+  }
+}
+
+/** Local filesystem ownership authorizes recovery; neither a team key nor the old key does. */
+export async function resetLocalOrganizerKey(directory: string): Promise<string> {
+  try {
+    lstatSync(directory);
+  } catch (error) {
+    if (missing(error)) throw new Error("No existing local host state. Run make local first.");
+    throw error;
+  }
+  const data = realpathSync(privateDirectory(directory));
+  const databasePath = join(data, "hosting.sqlite");
+  if (!hasDatabaseState(databasePath))
+    throw new Error("No existing local host database. Run make local first.");
+  const session = readSession(join(data, SESSION_FILE));
+  if (session && alive(session.pid)) {
+    if (session.protocol !== 2)
+      throw new Error(
+        "Stop the previous local host in its original terminal with Ctrl+C before organizer-key recovery. No key was rotated.",
+      );
+    const response = await fetch(`http://127.0.0.1:${String(session.port)}/reset-organizer-key`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${session.token}`,
+        "x-tenkacloud-data-directory": encodeURIComponent(data),
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const parsed = z
+      .object({
+        sessionId: z.string(),
+        directory: z.string(),
+        key: z.string().regex(/^[A-Za-z0-9_-]{43}$/u),
+      })
+      .safeParse(await response.json());
+    if (
+      !response.ok ||
+      !parsed.success ||
+      !sameSecret(parsed.data.sessionId, session.sessionId) ||
+      parsed.data.directory !== data
+    )
+      throw new Error("Could not confirm organizer-key rotation with this local host.");
+    return parsed.data.key;
+  }
+  // Recovery must not initialize a different application's SQLite file.
+  assertExistingHostDatabase(databasePath);
+  const lock = acquireLocalLock(data);
+  let store: HostStore | undefined;
+  try {
+    prepareDatabase(databasePath);
+    store = new HostStore(new Database(databasePath, { strict: true }));
+    return store.rotateLocalOrganizerKey();
+  } finally {
+    store?.close();
+    lock.close();
+  }
+}
+
+function replyWithRotatedKey(
+  response: ServerResponse,
+  target: { sessionId: string; directory: string },
+  rotate: (() => string) | undefined,
+): void {
+  response.setHeader("cache-control", "no-store");
+  response.setHeader("content-type", "application/json");
+  if (!rotate) {
+    response.writeHead(503).end(JSON.stringify(target));
+    return;
+  }
+  try {
+    response.end(JSON.stringify({ ...target, key: rotate() }));
+  } catch {
+    response.writeHead(500).end(JSON.stringify(target));
+  }
+}
+
 export async function runManagedLocal(root: string, args: string[]): Promise<number> {
   const options = parseOptions(args, root);
   if (options.help) {
@@ -126,26 +232,40 @@ export async function runManagedLocal(root: string, args: string[]): Promise<num
     return 0;
   }
   process.umask(0o077);
-  const directory = privateDirectory(options.dataDirectory);
+  const directory = realpathSync(privateDirectory(options.dataDirectory));
   const path = join(directory, SESSION_FILE);
   const token = randomToken();
   const sessionId = randomToken();
   const shutdown = new AbortController();
   let lock: Database | undefined;
   let exited: Promise<number> = Promise.resolve(1);
+  let rotateOrganizerKey: (() => string) | undefined;
   const control = createServer((request, response) => {
     if (
       request.method !== "POST" ||
-      request.url !== "/down" ||
+      (request.url !== "/down" && request.url !== "/reset-organizer-key") ||
       !sameSecret(request.headers.authorization ?? "", `Bearer ${token}`)
     ) {
       response.writeHead(403).end();
       return;
     }
+    if (request.headers["x-tenkacloud-data-directory"] !== encodeURIComponent(directory)) {
+      response.writeHead(409, { "content-type": "application/json" });
+      response.end(JSON.stringify({ sessionId, directory }));
+      return;
+    }
+    if (request.url === "/reset-organizer-key") {
+      replyWithRotatedKey(
+        response,
+        { sessionId, directory },
+        shutdown.signal.aborted ? undefined : rotateOrganizerKey,
+      );
+      return;
+    }
     shutdown.abort();
     void exited.then((code) => {
       response.writeHead(code === 0 ? 200 : 500, { "content-type": "application/json" });
-      response.end(JSON.stringify({ sessionId, code }));
+      response.end(JSON.stringify({ sessionId, directory, code }));
     });
   });
   await new Promise<void>((resolve, reject) => {
@@ -156,10 +276,13 @@ export async function runManagedLocal(root: string, args: string[]): Promise<num
     const address = control.address();
     if (!address || typeof address === "string") throw new Error("No local control address.");
     lock = acquireLocalLock(directory);
-    claimSession(path, { pid: process.pid, port: address.port, token, sessionId });
+    claimSession(path, { protocol: 2, pid: process.pid, port: address.port, token, sessionId });
     exited = runLocalHost(args, {
       signal: shutdown.signal,
       stopLocalEnvironments: true,
+      onReady: (host) => {
+        rotateOrganizerKey = host.rotateOrganizerKey;
+      },
     }).then(
       () => 0,
       (error: unknown) => {
@@ -185,8 +308,37 @@ if (import.meta.main) {
   const [command, ...args] = process.argv.slice(2);
   try {
     if (command === "start") process.exitCode = await runManagedLocal(root, args);
-    else if (command === "down") await stopManagedLocal(parseOptions(args, root).dataDirectory);
-    else throw new Error("Use make local or make down; pass runtime options with LOCAL_ARGS.");
+    else if (command === "down")
+      await stopManagedLocal(
+        // State-only operations never open hosting listeners, including inside the image.
+        parseOptions(args, root, { ...process.env, TENKACLOUD_HOST_REQUIRE_PUBLIC: undefined })
+          .dataDirectory,
+      );
+    else if (command === "reset") {
+      const options = parseOptions(args, root, {
+        ...process.env,
+        TENKACLOUD_HOST_REQUIRE_PUBLIC: undefined,
+      });
+      if (options.help) {
+        console.log(
+          'make local-reset LOCAL_ARGS="--data <directory>" rotates only the organizer key and revokes organizer sessions. Events, scores, participant keys and runtime data are retained. An interactive terminal is required to show the new key once.',
+        );
+      } else {
+        // Obtain a private display before mutation: redirecting must not lose the new key.
+        const display = openOrganizerKeyDisplay();
+        try {
+          display.show(await resetLocalOrganizerKey(options.dataDirectory));
+          console.log(
+            "Organizer key rotated; organizer sessions revoked. Event and participant data are retained.",
+          );
+        } finally {
+          display.close();
+        }
+      }
+    } else
+      throw new Error(
+        "Use make local, make down or make local-reset; pass options with LOCAL_ARGS.",
+      );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

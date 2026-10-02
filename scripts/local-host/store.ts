@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   type CompetitorAccount,
   HostError,
@@ -16,6 +16,11 @@ export const digest = (value: string): string => createHash("sha256").update(val
 
 interface BodyRow {
   body: string;
+}
+
+interface LocalOrganizerKey {
+  hash: string;
+  version: number;
 }
 
 export type { OrganizerRole } from "./organizer-access";
@@ -435,7 +440,7 @@ export class HostStore {
     );
   }
   bootstrapCompleted(): boolean {
-    return this.setting("bootstrap_completed") === "true";
+    return this.localOrganizerKeyEnabled() || this.setting("bootstrap_completed") === "true";
   }
   private setting(key: string): string | undefined {
     const row = this.statement("SELECT value FROM host_settings WHERE key=?").get(key) as
@@ -443,9 +448,63 @@ export class HostStore {
       | undefined;
     return row?.value;
   }
+  private localOrganizerKey(): LocalOrganizerKey | undefined {
+    const value = this.setting("local_organizer_key");
+    if (value === undefined) return undefined;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      throw new Error("Invalid local organizer key state.");
+    }
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("hash" in parsed) ||
+      typeof parsed.hash !== "string" ||
+      !/^[a-f0-9]{64}$/u.test(parsed.hash) ||
+      !("version" in parsed) ||
+      typeof parsed.version !== "number" ||
+      !Number.isSafeInteger(parsed.version) ||
+      parsed.version < 1
+    )
+      throw new Error("Invalid local organizer key state.");
+    return { hash: parsed.hash, version: parsed.version };
+  }
+  localOrganizerKeyEnabled(): boolean {
+    return this.localOrganizerKey() !== undefined;
+  }
+  /** Enable key-only local authentication once, preserving historical users and event state. */
+  ensureLocalOrganizerKey(): { key?: string } {
+    return this.transaction(() =>
+      this.localOrganizerKeyEnabled() ? {} : { key: this.rotateLocalOrganizerKey() },
+    );
+  }
+  /** The returned secret exists only in memory. Rotation never touches participant credentials. */
+  rotateLocalOrganizerKey(): string {
+    return this.transaction(() => {
+      const version = (this.localOrganizerKey()?.version ?? 0) + 1;
+      if (!Number.isSafeInteger(version)) throw new Error("Organizer key version exhausted.");
+      const key = randomBytes(32).toString("base64url");
+      this.statement(
+        "INSERT INTO host_settings(key,value) VALUES ('local_organizer_key',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      ).run(JSON.stringify({ hash: digest(key), version }));
+      this.statement("DELETE FROM host_sessions").run();
+      return key;
+    });
+  }
+  verifyLocalOrganizerKey(key: string): number {
+    const current = this.localOrganizerKey();
+    if (
+      !current ||
+      !timingSafeEqual(Buffer.from(digest(key), "hex"), Buffer.from(current.hash, "hex"))
+    )
+      throw new HostError(401, "Invalid organizer key.");
+    return current.version;
+  }
   featureFlags(): Record<string, boolean> {
     return {
-      saml: this.setting("flag:saml") === "true",
+      saml: !this.localOrganizerKeyEnabled() && this.setting("flag:saml") === "true",
       audit: this.setting("flag:audit") === "true",
       challengePrerequisiteGate: this.setting("flag:challengePrerequisiteGate") === "true",
       registration: this.setting("flag:registration") === "true",
@@ -559,6 +618,7 @@ export class HostStore {
     ).get(id) as OrganizerIdentity | undefined;
   }
   private validIdentity(user: OrganizerUser, identity: OrganizerIdentity): boolean {
+    if (this.localOrganizerKeyEnabled()) return false;
     if (identity.userId !== user.id || this.identityById(identity.id)?.userId !== user.id)
       return false;
     if (identity.provider === "saml") return this.featureFlags().saml === true;
@@ -575,7 +635,14 @@ export class HostStore {
     now: number,
     user?: OrganizerUser,
     identity?: OrganizerIdentity,
+    hostKeyVersion?: number,
   ): void {
+    const key = this.localOrganizerKey();
+    if (
+      (key && (user || identity || hostKeyVersion !== key.version)) ||
+      (!key && hostKeyVersion !== undefined)
+    )
+      throw new HostError(401, "Host authentication changed. Sign in again.");
     if (
       (user === undefined) !== (identity === undefined) ||
       (user && identity && !this.validIdentity(user, identity))
@@ -593,7 +660,7 @@ export class HostStore {
       user?.id ?? null,
       identity?.id ?? null,
       method,
-      user?.authVersion ?? 0,
+      user?.authVersion ?? hostKeyVersion ?? 0,
       now,
       now,
       expires,
@@ -615,7 +682,17 @@ export class HostStore {
     if (!row || row.expires <= now || row.lastSeen + 15 * 60 * 1000 <= now)
       throw new HostError(401, "Host session expired or invalid.");
     if (row.authMethod === "host-key") {
-      throw new HostError(401, "Host session expired or invalid.");
+      if (
+        row.userId !== null ||
+        row.identityId !== null ||
+        this.localOrganizerKey()?.version !== row.authVersion
+      )
+        throw new HostError(401, "Host session expired or invalid.");
+      this.statement("UPDATE host_sessions SET last_seen=? WHERE token_hash=?").run(
+        now,
+        digest(token),
+      );
+      return { userId: null, identityId: null, role: "Admin", authMethod: "host-key" };
     }
     const user = row.userId ? this.organizer(row.userId) : undefined;
     const identity = row.identityId ? this.identityById(row.identityId) : undefined;
@@ -642,7 +719,8 @@ export class HostStore {
     return this.transaction(() => {
       const hash = digest(refresh);
       const principal = this.statement(`SELECT s.user_id AS userId,s.identity_id AS identityId,
-        s.auth_method AS authMethod,u.role FROM host_sessions s JOIN host_organizer_users u ON u.id=s.user_id
+        s.auth_method AS authMethod,CASE WHEN s.auth_method='host-key' THEN 'Admin' ELSE u.role END AS role
+        FROM host_sessions s LEFT JOIN host_organizer_users u ON u.id=s.user_id
         WHERE s.refresh_hash=?`).get(hash) as OrganizerPrincipal | null;
       this.statement("DELETE FROM host_sessions WHERE refresh_hash=?").run(hash);
       return principal ?? undefined;

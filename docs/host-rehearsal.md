@@ -7,7 +7,9 @@ tickets, SAML responses and AWS credentials out of screenshots and reports.
 ## Local hosting
 
 1. Start the reviewed checkout with `make local`. Follow its printed organizer URL,
-   complete initial setup, and verify Admin, Operator and Viewer permissions.
+   sign in with the organizer key, and confirm username/password/SAML paths are unavailable.
+   Rotate with `make local-reset`: the old key and organizer sessions must fail,
+   while scores, participant keys and runtime work remain intact.
 2. Create separate teams and select the actual problems planned for the event.
    Preparing an on-demand event must leave Docker jobs stopped until a participant
    starts them. Native Battle games use the shared competition runtime.
@@ -24,9 +26,9 @@ tickets, SAML responses and AWS credentials out of screenshots and reports.
 6. Verify only this event's resources are affected by stop or explicit teardown.
    Check the difference between retained work and deletion before approving a
    destructive action. Do not prune unrelated Docker networks or containers.
-7. If using registration, progression gates, SAML or audit collection, rehearse
-   their failure, retry, revocation and restart paths as well. Audit is off by
-   default. Keep a working local password Admin when testing an external IdP.
+7. If using registration, progression gates or audit collection, rehearse their
+   failure, retry, revocation and restart paths as well. Audit is off by default.
+   Key-authenticated organizer actions use an explicit host-key audit actor.
 
 The old local AWS-region switch is rejected. A local rehearsal must not create AWS
 resources. Existing AWS resources from an earlier integration revision need that

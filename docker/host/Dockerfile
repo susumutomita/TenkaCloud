@@ -12,7 +12,9 @@
 #
 # Publish on loopback for a proxy on the same VM; only the proxy may reach these ports. The
 # proxy must pass the original Host header (Caddy does by default; nginx needs
-# `proxy_set_header Host $host`). State and the host login key live in /data.
+# `proxy_set_header Host $host`). State and the organizer key hash live in /data.
+# Generate/recover the key in a private exec terminal; it never enters container logs:
+# docker exec -it <container> bun run scripts/local-host/local.ts reset --data /data
 
 FROM oven/bun:1.3.11-alpine AS build
 WORKDIR /app
@@ -72,4 +74,4 @@ EXPOSE 5174 5175
 # Public mode answers /healthz regardless of Host, so the check can use loopback.
 HEALTHCHECK --interval=30s --timeout=5s \
   CMD wget -qO- http://127.0.0.1:5175/healthz >/dev/null || exit 1
-ENTRYPOINT ["bun", "run", "scripts/local-host/main.ts", "--no-build", "--data", "/data"]
+ENTRYPOINT ["bun", "run", "scripts/local-host/local.ts", "start", "--no-build", "--data", "/data"]

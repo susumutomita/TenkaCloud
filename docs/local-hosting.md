@@ -3,12 +3,10 @@
 Local hosting runs a competition on the organizer's computer through `make local`.
 The former `make local` individual-practice entry point and its login flow are
 retired as a separate backend in this integration candidate. Existing installations should follow
-their [pinned legacy release](legacy-operations.md). The host console uses local
-organizer accounts. The host key creates the first Admin once. Participants sign
-in with the team keys issued for their event.
-
-SAML sign-in for existing organizers is optional. See [host SAML setup](host-saml.md)
-for identity-provider configuration, NameID links and revocation.
+their [pinned legacy release](legacy-operations.md). The current host console uses
+one organizer key, with no username, password or local SAML sign-in. Participants
+sign in with the separate team keys issued for their event. Cloud organizer
+authentication remains Cognito.
 
 ## Supported problems
 
@@ -83,23 +81,34 @@ mode and refuses to change the permissions of an existing one, so pointing
 `--data` at a shared project or home directory fails instead of locking other
 users and services out of unrelated files.
 
-The terminal prints the two URLs, the exercise-gateway port range and the host
-key used for the first organizer account. The defaults are the host console at `http://127.0.0.1:5174`, the
+The terminal prints the two URLs and the exercise-gateway port range. A newly
+generated organizer key is shown once on the interactive terminal, never in
+redirected output or container logs. The defaults are the host console at `http://127.0.0.1:5174`, the
 participant portal at `http://127.0.0.1:5175` and exercise gateways on ports
 `5200-5239`. Use the printed URLs exactly; arbitrary Host aliases are not
-accepted. The host key is not included in public browser configuration.
+accepted. The organizer key is not included in browser configuration and the
+browser keeps it only until submission. SQLite stores only its SHA-256 hash and
+rotation version. The private `host-key` file is an internal token-signing key,
+not the organizer login key; keep it with the database when backing up state.
 
 The host console is the normal Application Admin Console running in local-host
 mode: the same event list, event creation page, event detail tabs, schedule,
 scoreboard, notifications and report, served against this computer's API. On the
-first visit, enter the terminal's host key and create a local Admin username and
-password. Later visits use that username and password. There is no Cognito.
+first and later visits, enter the organizer key. The key grants organizer Admin
+access. Local **Users**, password and SAML management are not offered; **Settings**
+retains the optional audit control. Older organizer records remain historical
+state and cannot authenticate after key mode is enabled. There is no local Cognito.
 
-Admin can manage organizer users and settings. Operator can run events and
-distribute team keys. Viewer can read event data but cannot see team keys or
-change events. Admin can add, disable, change, and delete organizer users from
-**Users**. The host refuses any change that would remove the last active Admin
-with a local password.
+If the key is lost, run `make local-reset` in an interactive terminal. For a custom
+state directory use the same `LOCAL_ARGS="--data <directory>"`. Rotation works with
+the managed host running or stopped. It invalidates the old organizer key and all
+organizer sessions, preserving events, scores, progress, participant keys and
+running/stopped problem environments. It does not stop containers or delete data.
+A redirected or noninteractive reset refuses before mutation. An unrecognized or
+unreachable running controller is not replaced and no process is killed. Before upgrading an
+already running older host, stop it with Ctrl+C in its original terminal. New
+commands refuse controllers without directory-bound request support; copied
+launcher metadata cannot rotate or stop a different live host.
 
 After signing in:
 
@@ -223,11 +232,10 @@ events are ready while Docker jobs remain stopped: participants start them when 
 Older eager events still require every prepared environment to be running.
 
 An organizer login expires after eight hours or 15 minutes without a request.
-Sign in again with the organizer password after expiration. Changing a user's
-role, password, or status revokes that user's sessions. Bootstrap completion
-persists in SQLite across restarts, including when no users remain. The host key
-cannot reopen bootstrap or recover an Admin password. Expiry does not
-stop the event or discard its results.
+Sign in again with the organizer key after expiration. `make local-reset`
+revokes all organizer sessions, including sessions issued before an upgrade from
+password/SAML authentication. Participant access is independent. Expiry and key
+rotation do not stop the event or discard its results.
 
 Subsequent runs may reuse the compiled interfaces:
 
@@ -358,7 +366,7 @@ docker run --read-only --tmpfs /tmp --cap-drop ALL \
   Host and `X-Forwarded-For` headers, and would speak plain HTTP. On a container
   platform, keep the ports private to its load balancer.
 - **The image refuses to start without the public origins.** Inside a container
-  loopback is unreachable, and the log would carry the host key.
+  loopback is unreachable from the proxy.
 - **The proxy must pass the original Host header.** Caddy does this by default.
   nginx needs `proxy_set_header Host $host`. A request with another Host is refused
   with `Untrusted Host header. Expected <host>.`
@@ -368,10 +376,11 @@ docker run --read-only --tmpfs /tmp --cap-drop ALL \
   would lock out everyone. Use the flag only when the proxy sets that header.
 - **HTTPS only.** Public origins must be `https:`. `--unsafe-http` exists for local
   smoke tests only.
-- **The host login key.** It is not printed, because platforms retain container
-  logs. Read it with `docker exec <container> cat /data/host-key`. The database and
-  the key live in the `/data` volume, so use a platform that provides a persistent
-  volume.
+- **The organizer key.** It never enters container logs. Generate/recover it with
+  `docker exec -it <container> bun run scripts/local-host/local.ts reset --data /data`
+  in a private terminal. This rotates organizer access while preserving the event
+  and participant keys. The `/data` volume contains the hash, database and internal
+  signing key; `cat /data/host-key` is not a login or recovery procedure.
 - **Health checks.** `GET /healthz` answers on either port whatever the Host header,
   and returns only a status.
 - **Supported problems.** Docker Compose problems are not offered. Their sibling
@@ -574,8 +583,7 @@ environment while checking that the other team's containers, gateway and score
 are unchanged.
 
 The browser rehearsal builds the interfaces and drives them in Chromium: the
-organizer creates the first Admin with the host key, signs in again with the
-Admin password, then creates a two-team
+organizer signs in with the key, verifies key rotation and sign-in revocation, then creates a two-team
 event, deploys and starts it; two independent participant browsers sign in with
 their team keys, open their own exercise, submit its flag and see the ranking;
 the organizer then ends the event and tears the environments down:

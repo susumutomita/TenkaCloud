@@ -257,8 +257,10 @@ it("shows host audit history and collection limits while recording is stopped", 
       {
         id: "1",
         tenantId: "local-host",
-        actor: "admin-id",
+        actor: "host-key",
+        actorKind: "host-key",
         actorRole: "Admin",
+        authMethod: "host-key",
         action: "event.deploy",
         outcome: "succeeded",
         target: "job-id",
@@ -298,7 +300,7 @@ it("shows host audit history and collection limits while recording is stopped", 
   });
   render(<AuditLogPage config={{ ...config, mode: "local-host" }} />);
   expect(await screen.findByText("Recording stopped")).toBeInTheDocument();
-  expect(screen.getByText("admin-id (Admin)")).toBeInTheDocument();
+  expect(screen.getByText("host-key (Admin)")).toBeInTheDocument();
   expect(screen.getByText("job: job-id")).toBeInTheDocument();
   expect(screen.getByText("host: -")).toBeInTheDocument();
   expect(screen.getByText("operation-id / result")).toBeInTheDocument();
@@ -306,7 +308,9 @@ it("shows host audit history and collection limits while recording is stopped", 
   expect(screen.getByText("Some audit records are missing")).toBeInTheDocument();
   expect(screen.getByText(/count is currently held by this process/)).toBeInTheDocument();
   expect(screen.getByText(/2 old records were removed/)).toBeInTheDocument();
-  expect(screen.getByPlaceholderText("実行者ID / anonymous / system")).toBeInTheDocument();
+  expect(
+    screen.getByPlaceholderText("実行者ID / host-key / anonymous / system"),
+  ).toBeInTheDocument();
   for (const outcome of ["success", "forbidden", "error"])
     expect(screen.getByText(outcome)).toBeInTheDocument();
   mockExport.mockRejectedValue(new TenantAuditApiError(413, "audit_export_too_large"));

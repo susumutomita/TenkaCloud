@@ -33,8 +33,10 @@ bun run build:host
 make local LOCAL_ARGS="--no-build"
 ```
 
-Use the organizer URL printed by the process. Use the private host key once to
-create the first local Admin, then sign in with that account's password. Create an
+Use the organizer URL printed by the process and sign in with the organizer key.
+A fresh key is shown once in the interactive terminal; no username or password is needed.
+Use `make local-reset` if you lose the key. It rotates only organizer access and signs
+out existing organizer sessions while retaining events, scores and participant keys. Create an
 event, prepare its team environments, distribute the team keys, then start it.
 Participants start or resume local exercises when needed; preparation does not start every container.
 Run `make down` from another terminal to stop this local controller and its owned

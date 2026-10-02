@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { auditRecordSchema } from "../audit-record";
+import { auditActor, auditRecordSchema } from "../audit-record";
 import { HostStore } from "../store";
 
 test("session constraints retain all supported authentication methods and reject unknown methods", () => {
@@ -35,4 +35,26 @@ test("organizer audit accepts the same sign-in methods without accepting anonymo
     expect(auditRecordSchema.safeParse(record(method)).success).toBe(true);
   for (const method of ["host-key", "unknown-method"])
     expect(auditRecordSchema.safeParse(record(method)).success).toBe(false);
+});
+
+test("key-only organizers have an explicit audit actor without an invented user identity", () => {
+  const actor = auditActor({
+    userId: null,
+    identityId: null,
+    role: "Admin",
+    authMethod: "host-key",
+  });
+  expect(actor).toEqual({ kind: "host-key", role: "Admin", authMethod: "host-key" });
+  const record = {
+    operationId: randomUUID(),
+    phase: "request",
+    actor,
+    action: "organizer.login",
+    resource: { kind: "host" },
+    outcome: "succeeded",
+  };
+  expect(auditRecordSchema.safeParse(record).success).toBe(true);
+  expect(
+    auditRecordSchema.safeParse({ ...record, actor: { ...actor, userId: randomUUID() } }).success,
+  ).toBe(false);
 });

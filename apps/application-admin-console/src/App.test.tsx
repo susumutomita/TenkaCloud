@@ -24,12 +24,9 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const path = new URL(String(input), window.location.origin).pathname;
-      if (path === "/api/host/bootstrap-status")
-        return Response.json({ bootstrapCompleted: false });
-      if (path === "/api/host/saml") return Response.json({ enabled: false });
       if (path === "/api/feature-flags") return Response.json({ flags: {} });
       if (path === "/api/events") return Response.json({ items: [] });
-      if (path === "/api/host/bootstrap")
+      if (path === "/api/host/login")
         return Response.json({
           idToken: `a.${btoa(JSON.stringify({ "custom:organizerRole": "Admin" }))}.c`,
           accessToken: "synthetic-access",
@@ -59,24 +56,18 @@ function openConsole() {
 }
 
 describe("local-host console root entry", () => {
-  it("opens first-admin bootstrap from the advertised root URL", async () => {
+  it("opens organizer-key sign-in from the advertised root URL", async () => {
     openConsole();
-    expect(
-      await screen.findByRole("button", { name: /Create Admin account|Admin.*作成/u }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Sign in|サインイン/u })).toBeInTheDocument();
     expect(window.location.pathname).toBe("/login");
   });
 
-  it("opens the events list after bootstrap and when an authenticated organizer visits root", async () => {
+  it("opens the events list after key sign-in and when an authenticated organizer visits root", async () => {
     openConsole();
-    const submit = await screen.findByRole("button", { name: /Create Admin account|Admin.*作成/u });
-    for (const [id, value] of [
-      ["local-host-key", "synthetic-host-key"],
-      ["organizer-username", "synthetic-admin"],
-      ["organizer-password", "synthetic-rehearsal-password"],
-    ]) {
+    const submit = await screen.findByRole("button", { name: /Sign in|サインイン/u });
+    for (const [id, value] of [["local-host-key", "synthetic-host-key"]]) {
       const input = document.getElementById(id);
-      if (!input) throw new Error(`Missing bootstrap input ${id}`);
+      if (!input) throw new Error(`Missing login input ${id}`);
       fireEvent.change(input, { target: { value } });
     }
     fireEvent.click(submit);

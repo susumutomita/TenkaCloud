@@ -83,9 +83,10 @@ describe("ShellLayout demo banner (#1954)", () => {
     ).toHaveAttribute("href", "/competitor-accounts");
   });
 
-  it("shows Users and Settings only to a local Admin", () => {
+  it("shows local Admin settings without offering organizer accounts", () => {
     const admin = renderShell(false, undefined, true, false, "Admin");
-    expect(screen.getByRole("link", { name: /Users|ユーザー/u })).toHaveAttribute("href", "/users");
+    expect(screen.queryByRole("link", { name: /Users|ユーザー/u })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Identity providers|ID プロバイダー/u })).toBeNull();
     expect(screen.getByRole("link", { name: /Settings|設定/u })).toHaveAttribute(
       "href",
       "/settings",

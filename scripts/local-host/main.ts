@@ -3,7 +3,8 @@ import { buildHosting } from "./build";
 import { CompetitionEngine } from "./competition-engine";
 import { DEFAULT_GATEWAY_PORTS, formatGatewayPorts } from "./gateway-ports";
 import { parseOptions } from "./options";
-import { startLocalHost } from "./server";
+import { openOrganizerKeyDisplay } from "./organizer-key-output";
+import { type RunningLocalHost, startLocalHost } from "./server";
 
 function waitForStop(signal?: AbortSignal): Promise<void> {
   return new Promise<void>((accept) => {
@@ -26,14 +27,13 @@ function announceHost(
   stopLocalEnvironments: boolean,
 ): void {
   if (options.public) {
-    // Container logs are shipped and retained elsewhere; the key stays in the data volume.
     console.log(
-      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nHost login key: stored in ${host.masterKeyPath}\nState: ${host.databasePath}\nDocker Compose problems are not offered in public mode.\n`,
+      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nOrganizer key: use make local-reset to rotate a lost key.\nState: ${host.databasePath}\nDocker Compose problems are not offered in public mode.\n`,
     );
   } else {
     const gateways = `http://${options.hostname}:${formatGatewayPorts(options.gatewayPorts)}`;
     console.log(
-      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (active local environments only)\nHost login key: ${host.masterKey}\nState: ${host.databasePath}\n`,
+      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (active local environments only)\nOrganizer key: use make local-reset to rotate a lost key.\nState: ${host.databasePath}\n`,
     );
   }
   if (!options.public && options.hostname !== "127.0.0.1")
@@ -49,7 +49,11 @@ function announceHost(
 
 export async function runLocalHost(
   args: string[],
-  lifecycle: { signal?: AbortSignal; stopLocalEnvironments?: boolean } = {},
+  lifecycle: {
+    signal?: AbortSignal;
+    stopLocalEnvironments?: boolean;
+    onReady?: (host: RunningLocalHost) => void;
+  } = {},
 ): Promise<void> {
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const options = parseOptions(args, root);
@@ -72,6 +76,23 @@ export async function runLocalHost(
       new CompetitionEngine(root, directory, !options.public, undefined, options.dockerNetworkPool),
   );
   try {
+    lifecycle.onReady?.(host);
+    // A container's controlling TTY can be captured by its log driver. Public hosts
+    // recover keys only through a separate private exec terminal, never startup output.
+    if (host.organizerKey && !options.public) {
+      try {
+        const display = openOrganizerKeyDisplay();
+        try {
+          display.show(host.organizerKey);
+        } finally {
+          display.close();
+        }
+      } catch {
+        console.log(
+          "Organizer key initialized. Run make local-reset in an interactive terminal to obtain a new key; secrets are not shown in logs.",
+        );
+      }
+    }
     announceHost(options, host, lifecycle.stopLocalEnvironments === true);
     await waitForStop(lifecycle.signal);
     console.log("Closing listeners; waiting for in-flight environment operations to finish.");

@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { hostBuildDirectory } from "../build";
 import { disruptionFixture } from "./disruption-fixture";
-import { TEST_ORGANIZER_PASSWORD } from "./organizer-fixture";
 import { signInOrganizer } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -28,11 +27,7 @@ async function main(): Promise<void> {
     page.on("pageerror", (error) => pageErrors.push(error.message));
     async function signIn(): Promise<void> {
       await page.clock.setFixedTime(new Date(fixture.aws.now));
-      await signInOrganizer(
-        page,
-        { admin: fixture.origin, key: "fixture-host-key" },
-        { username: "fixture-admin", password: TEST_ORGANIZER_PASSWORD },
-      );
+      await signInOrganizer(page, { admin: fixture.origin, key: fixture.organizerKey });
       await page.locator(`a[href="/events/${fixture.event.eventId}"]`).click();
       await page.getByRole("tab", { name: "Disruptions", exact: true }).click();
       await page.getByRole("heading", { name: "Disruptions (red team)", exact: true }).waitFor();

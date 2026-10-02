@@ -1,4 +1,6 @@
-# SAML sign-in for a competition host
+# Historical SAML sign-in for a competition host
+
+This guide applies only to the [pinned former host](https://github.com/susumutomita/TenkaCloud/tree/2b2530c091d339d5f023042495e7f5d941b930c3). Current local hosting uses organizer-key sign-in and `make local-reset`; local SAML and password accounts are unavailable. Cloud organizers continue using Cognito. Existing historical identity records are retained but cannot authorize local key-mode sessions.
 
 SAML signs an existing organizer into the host console with that user's current
 Admin, Operator or Viewer role. It is disabled by default. Configure it after

@@ -21,7 +21,6 @@ import { IdentityProvidersPage } from "./pages/IdentityProviders";
 import { LocalHostLoginPage } from "./pages/LocalHostLogin";
 import { LocalHostSettingsPage } from "./pages/LocalHostSettings";
 import { LocalHostUnavailablePage } from "./pages/LocalHostUnavailable";
-import { LocalHostUsersPage } from "./pages/LocalHostUsers";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { ProblemsPage } from "./pages/Problems";
@@ -60,7 +59,7 @@ function guarded(element: React.ReactNode, config: AppConfig) {
 function LoginRoute({ config }: { config: AppConfig }) {
   const location = useLocation();
   const returnPath = readLoginReturnPathState(location.state);
-  // Local hosting bootstraps its first Admin with the host key, then uses organizer sign-in.
+  // Local hosting exchanges the organizer key for a memory-only session.
   return isLocalHost(config) ? (
     <LocalHostLoginPage config={config} returnPath={returnPath} />
   ) : (
@@ -165,7 +164,6 @@ function LocalHostRoutes({ config }: { config: AppConfig }) {
       <Route path="/events" element={guarded(<EventListPage config={config} />, config)} />
       <Route path="/events/new" element={guarded(<EventCreatePage config={config} />, config)} />
       <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />, config)} />
-      <Route path="/users" element={guarded(<LocalHostUsersPage config={config} />, config)} />
       <Route
         path="/settings"
         element={guarded(<LocalHostSettingsPage config={config} />, config)}

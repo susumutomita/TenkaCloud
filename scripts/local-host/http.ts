@@ -336,6 +336,12 @@ export async function startHttpHost(options: {
       throw new HostError(404, "Unknown participant endpoint.");
     if (options.kind === "admin" && participantRoute)
       throw new HostError(404, "Unknown host endpoint.");
+    if (
+      options.kind === "admin" &&
+      path.startsWith("/host/saml/") &&
+      options.service.store.localOrganizerKeyEnabled()
+    )
+      throw new HostError(404, "SAML is unavailable in local key mode.");
   }
   async function dispatch(apiRequest: ApiRequest): Promise<ApiResponse> {
     return options.kind === "admin"

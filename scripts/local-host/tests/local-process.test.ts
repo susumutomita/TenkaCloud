@@ -1,13 +1,12 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { randomToken } from "../auth";
-import { stopManagedLocal } from "../local";
-import { REHEARSAL_ORGANIZER } from "./organizer-login";
+import { resetLocalOrganizerKey, stopManagedLocal } from "../local";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const sessionFile = "local-session.json";
@@ -104,21 +103,51 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
   }
   try {
     await start();
-    const key = readFileSync(join(data, "host-key"), "utf8").trim();
-    const bootstrap = await api(admin, "/host/bootstrap", "", "POST", {
-      key,
-      ...REHEARSAL_ORGANIZER,
-    });
-    expect(bootstrap.status).toBe(201);
+    const signingKey = readFileSync(join(data, "host-key"), "utf8").trim();
+    let key = await resetLocalOrganizerKey(data);
+    const bootstrap = await api(admin, "/host/login", "", "POST", { key });
+    expect(bootstrap.status).toBe(200);
     const token = z.object({ idToken: z.string() }).parse(bootstrap.body).idToken;
+    const copied = temporary();
+    try {
+      cpSync(data, copied, { recursive: true });
+      const copyBefore = readFileSync(join(copied, "hosting.sqlite"));
+      const refusedReset = await resetLocalOrganizerKey(copied).then(
+        () => false,
+        () => true,
+      );
+      expect(refusedReset).toBe(true);
+      const refusedDown = await stopManagedLocal(copied).then(
+        () => false,
+        () => true,
+      );
+      expect(refusedDown).toBe(true);
+      expect(readFileSync(join(copied, "hosting.sqlite")).equals(copyBefore)).toBe(true);
+      expect((await api(admin, "/host/me", token)).status).toBe(200);
+      expect((await api(admin, "/host/login", "", "POST", { key })).status).toBe(200);
+    } finally {
+      rmSync(copied, { recursive: true, force: true });
+    }
+    const redirectedReset = await command("local-reset", args);
+    expect(redirectedReset.code).not.toBe(0);
+    expect(redirectedReset.output).toContain("interactive terminal");
+    expect(redirectedReset.output.includes(key)).toBe(false);
+    expect((await api(admin, "/host/login", "", "POST", { key })).status).toBe(200);
     const initialSession = readFileSync(join(data, sessionFile), "utf8");
     const duplicate = await command("local", args);
     expect(duplicate.code).not.toBe(0);
     expect(duplicate.output).toContain("local controller lock");
-    expect(readFileSync(join(data, sessionFile), "utf8")).toBe(initialSession);
+    expect(readFileSync(join(data, sessionFile), "utf8") === initialSession).toBe(true);
     const session = z.object({ port: z.number() }).parse(JSON.parse(initialSession));
     expect(
       (await fetch(`http://127.0.0.1:${String(session.port)}/down`, { method: "POST" })).status,
+    ).toBe(403);
+    expect(
+      (
+        await fetch(`http://127.0.0.1:${String(session.port)}/reset-organizer-key`, {
+          method: "POST",
+        })
+      ).status,
     ).toBe(403);
     expect((await api(admin, "/host/bootstrap-status")).status).toBe(200);
 
@@ -175,8 +204,18 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
     const saved = projectionSchema.parse(
       (await api(participant, "/portal/me/coordination/projection", team.teamLoginKey)).body,
     ).projection;
+    const oldKey = key;
+    key = await resetLocalOrganizerKey(data);
+    expect(key === oldKey).toBe(false);
+    expect((await api(admin, "/host/login", "", "POST", { key: oldKey })).status).toBe(401);
+    expect((await api(admin, `/events/${event.eventId}`, token)).status).toBe(401);
+    expect((await api(admin, "/host/login", "", "POST", { key })).status).toBe(200);
+    expect(
+      boardSchema.parse((await api(participant, "/portal/leaderboard", team.teamLoginKey)).body),
+    ).toEqual(leaderboard);
+    expect(existsSync(join(data, sessionFile))).toBe(true);
     await down();
-    expect(readFileSync(join(data, "host-key"), "utf8").trim()).toBe(key);
+    expect(readFileSync(join(data, "host-key"), "utf8").trim() === signingKey).toBe(true);
     const database = new Database(join(data, "hosting.sqlite"), { readonly: true });
     try {
       expect(database.query("SELECT id FROM host_events").all()).toHaveLength(1);
@@ -185,8 +224,11 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
       database.close();
     }
     await start();
-    expect((await api(admin, "/host/bootstrap-status")).body).toEqual({ bootstrapCompleted: true });
-    const login = await api(admin, "/host/login", "", "POST", REHEARSAL_ORGANIZER);
+    expect((await api(admin, "/host/bootstrap-status")).body).toEqual({
+      bootstrapCompleted: true,
+      authMode: "host-key",
+    });
+    const login = await api(admin, "/host/login", "", "POST", { key });
     expect(login.status).toBe(200);
     const restored = projectionSchema.parse(
       (await api(participant, "/portal/me/coordination/projection", team.teamLoginKey)).body,
@@ -196,7 +238,16 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
     expect(
       boardSchema.parse((await api(participant, "/portal/leaderboard", team.teamLoginKey)).body),
     ).toEqual(leaderboard);
-    expect(readFileSync(join(data, "host-key"), "utf8").trim()).toBe(key);
+    expect(readFileSync(join(data, "host-key"), "utf8").trim() === signingKey).toBe(true);
+    await down();
+    const recoveredKey = await resetLocalOrganizerKey(data);
+    expect(recoveredKey === key).toBe(false);
+    await start();
+    expect((await api(admin, "/host/login", "", "POST", { key })).status).toBe(401);
+    expect((await api(admin, "/host/login", "", "POST", { key: recoveredKey })).status).toBe(200);
+    expect(
+      boardSchema.parse((await api(participant, "/portal/leaderboard", team.teamLoginKey)).body),
+    ).toEqual(leaderboard);
     await down();
     expect((await command("down", args)).output).toContain("No managed local host is running");
   } finally {
@@ -215,6 +266,7 @@ test("down never signals an unrelated live PID or accepts a different controller
     fetch: () => Response.json({ sessionId: randomToken(), code: 0 }),
   });
   const session = {
+    protocol: 2,
     pid: process.pid,
     port: server.port,
     token: randomToken(),
@@ -224,7 +276,7 @@ test("down never signals an unrelated live PID or accepts a different controller
   try {
     await expect(stopManagedLocal(data)).rejects.toThrow("no PID was signalled");
     expect(process.kill(process.pid, 0)).toBe(true);
-    expect(JSON.parse(readFileSync(join(data, sessionFile), "utf8"))).toEqual(session);
+    expect(readFileSync(join(data, sessionFile), "utf8") === JSON.stringify(session)).toBe(true);
     expect(readFileSync(sentinel, "utf8")).toBe("keep");
   } finally {
     await server.stop(true);
@@ -251,6 +303,59 @@ test("down removes dead-owner metadata without touching retained data", async ()
     expect(existsSync(join(data, sessionFile))).toBe(false);
     expect(readFileSync(sentinel, "utf8")).toBe("keep");
   } finally {
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
+test("key recovery rejects absent or unrelated state without creating host records", async () => {
+  const data = temporary();
+  const path = join(data, "hosting.sqlite");
+  try {
+    await expect(resetLocalOrganizerKey(data)).rejects.toThrow("No existing local host database");
+    expect(existsSync(join(data, "local-launcher.sqlite"))).toBe(false);
+    const unrelated = new Database(path);
+    unrelated.run("CREATE TABLE unrelated(value TEXT); INSERT INTO unrelated VALUES ('retain');");
+    unrelated.close();
+    const before = readFileSync(path);
+    await expect(resetLocalOrganizerKey(data)).rejects.toThrow("not an existing TenkaCloud");
+    expect(readFileSync(path).equals(before)).toBe(true);
+    expect(existsSync(join(data, "local-launcher.sqlite"))).toBe(false);
+    expect(existsSync(join(data, "host-key"))).toBe(false);
+  } finally {
+    rmSync(data, { recursive: true, force: true });
+  }
+});
+
+test("legacy controllers are refused before sending a reset or shutdown request", async () => {
+  const data = temporary();
+  const database = new Database(join(data, "hosting.sqlite"));
+  database.run("CREATE TABLE host_schema(version INTEGER); INSERT INTO host_schema VALUES (5);");
+  database.close();
+  let requests = 0;
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => {
+      requests += 1;
+      return Response.json({});
+    },
+  });
+  writeFileSync(
+    join(data, sessionFile),
+    JSON.stringify({
+      pid: process.pid,
+      port: server.port,
+      token: randomToken(),
+      sessionId: randomToken(),
+    }),
+    { mode: 0o600 },
+  );
+  try {
+    await expect(resetLocalOrganizerKey(data)).rejects.toThrow("original terminal");
+    await expect(stopManagedLocal(data)).rejects.toThrow("original terminal");
+    expect(requests).toBe(0);
+  } finally {
+    await server.stop(true);
     rmSync(data, { recursive: true, force: true });
   }
 });

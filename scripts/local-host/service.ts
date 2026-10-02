@@ -3,7 +3,14 @@ import type { ProbeFn } from "../lib/http-probe-client";
 import { HostAuditLog } from "./audit-log";
 import { type AuditOperation, auditActor } from "./audit-record";
 import { auditFailure, auditRequest } from "./audit-request";
-import { id, issueOrganizerSession, randomToken, SerialQueue, sameSecret } from "./auth";
+import {
+  id,
+  issueLocalOrganizerSession,
+  issueOrganizerSession,
+  randomToken,
+  SerialQueue,
+  sameSecret,
+} from "./auth";
 import { type ContainerLimits, DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { LocalCoordination } from "./coordination";
 import { LocalDisruptions } from "./disruptions";
@@ -138,7 +145,8 @@ function requireRole(principal: OrganizerPrincipal, permission: OrganizerPermiss
 }
 function requireAdmin(principal: OrganizerPrincipal): void {
   requireRole(principal, "manage-connections");
-  if (!principal.userId) throw new HostError(403, "Complete organizer bootstrap first.");
+  if (!principal.userId && principal.authMethod !== "host-key")
+    throw new HostError(403, "Complete organizer bootstrap first.");
 }
 
 function failureMessage(error: unknown, fallback: string): string {
@@ -395,6 +403,7 @@ export class HostingService {
     request: ApiRequest,
     operation: AuditOperation | undefined,
   ): Promise<ApiResponse> {
+    this.assertLocalAuthRoute(request.path);
     const unauthenticated = await this.adminLogin(request, operation);
     if (unauthenticated) return unauthenticated;
     const publicSaml = await this.publicSamlRoute(request, operation);
@@ -447,6 +456,19 @@ export class HostingService {
         current,
       );
     });
+  }
+  private assertLocalAuthRoute(path: string): void {
+    if (
+      this.store.localOrganizerKeyEnabled() &&
+      (path === "/host/bootstrap" ||
+        path === "/host/users" ||
+        path.startsWith("/host/users/") ||
+        path.startsWith("/host/saml/"))
+    )
+      throw new HostError(
+        404,
+        "Account and SAML authentication are unavailable in local key mode.",
+      );
   }
   private async publicSamlRoute(
     request: ApiRequest,
@@ -515,7 +537,10 @@ export class HostingService {
     operation: AuditOperation | undefined,
   ): Promise<ApiResponse | undefined> {
     if (request.path === "/host/bootstrap-status" && request.method === "GET")
-      return ok({ bootstrapCompleted: this.store.bootstrapCompleted() });
+      return ok({
+        bootstrapCompleted: this.store.bootstrapCompleted(),
+        ...(this.store.localOrganizerKeyEnabled() ? { authMode: "host-key" } : {}),
+      });
     if (request.path === "/host/bootstrap" && request.method === "POST")
       return this.bootstrapOrganizer(request.body, operation);
     if (request.path === "/host/login" && request.method === "POST")
@@ -564,6 +589,7 @@ export class HostingService {
     input: unknown,
     operation: AuditOperation | undefined,
   ): Promise<ApiResponse> {
+    if (this.store.localOrganizerKeyEnabled()) return this.loginLocalOrganizer(input, operation);
     if (!this.store.bootstrapCompleted())
       throw new HostError(
         409,
@@ -608,6 +634,23 @@ export class HostingService {
       return this.audit.commit(operation, () =>
         ok(issueOrganizerSession(this.store, this.masterKey, current, this.now(), currentIdentity)),
       );
+    });
+  }
+  private loginLocalOrganizer(input: unknown, operation: AuditOperation | undefined): ApiResponse {
+    const body = object(input);
+    if (
+      Object.keys(body).length !== 1 ||
+      typeof body.key !== "string" ||
+      !/^[A-Za-z0-9_-]{43}$/u.test(body.key)
+    )
+      throw new HostError(401, "Invalid organizer key.");
+    const key = body.key;
+    return this.store.transaction(() => {
+      const version = this.store.verifyLocalOrganizerKey(key);
+      const session = issueLocalOrganizerSession(this.store, this.masterKey, this.now(), version);
+      if (operation)
+        operation.actor = auditActor(this.store.authenticateAdmin(session.idToken, this.now()));
+      return this.audit.commit(operation, () => ok(session));
     });
   }
   private async adminFixedRoute(
@@ -757,6 +800,8 @@ export class HostingService {
       throw new HostError(400, "Unknown feature flag.");
     if (typeof body.enabled !== "boolean")
       throw new HostError(400, "Flag enabled must be boolean.");
+    if (key === "saml" && this.store.localOrganizerKeyEnabled())
+      throw new HostError(404, "SAML is unavailable in local key mode.");
     const enabled = body.enabled;
     if (key === "audit") this.audit.setEnabled(enabled, auditActor(principal));
     else {

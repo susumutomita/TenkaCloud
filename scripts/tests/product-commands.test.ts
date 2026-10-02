@@ -11,13 +11,14 @@ function make(...args: string[]) {
     encoding: "utf8",
   });
 }
-test("default bilingual help separates four hosting commands and four essential development commands", () => {
+test("default bilingual help includes key recovery and four essential development commands", () => {
   for (const language of ["en", "ja"]) {
     const result = make("help", `HELP_LANG=${language}`);
     expect(result.status).toBe(0);
     expect([...result.stdout.matchAll(/^ {2}([a-z-]+)\s/gmu)].map((match) => match[1])).toEqual([
       "local",
       "down",
+      "local-reset",
       "deploy",
       "destroy",
       "install",
@@ -30,6 +31,13 @@ test("default bilingual help separates four hosting commands and four essential 
     expect(result.stdout).not.toContain("Phase 1");
     expect(result.stdout).not.toContain("test-root");
   }
+});
+test("local-reset reaches only key rotation, not shutdown or cloud teardown", () => {
+  const result = make("-n", "local-reset", "LOCAL_ARGS=--data /tmp/synthetic-host");
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("scripts/local-host/local.ts reset --data /tmp/synthetic-host");
+  expect(result.stdout).not.toContain("cloud-hosting");
+  expect(result.stdout).not.toContain("local.ts down");
 });
 test("retired demo and test-root targets are removed without dropping root or security tests", () => {
   for (const target of [

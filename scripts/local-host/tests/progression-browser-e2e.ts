@@ -32,7 +32,7 @@ async function main(): Promise<void> {
     const errors: string[] = [];
     organizer.on("pageerror", (error) => errors.push(error.message));
     async function signIn() {
-      await signInOrganizer(organizer, { admin: fixture.adminOrigin, key: "gate-test-host-key" });
+      await signInOrganizer(organizer, { admin: fixture.adminOrigin, key: fixture.organizerKey });
       await organizer.locator(`a[href="/events/${event.eventId}"]`).click();
       await organizer
         .getByRole("tab", { name: "Progression / Gate (Advanced)", exact: true })

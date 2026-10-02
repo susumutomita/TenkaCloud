@@ -10,13 +10,11 @@ import { parseGatewayPorts } from "../gateway-ports";
 import { startHttpHost } from "../http";
 import { parseOptions } from "../options";
 import { type RunningLocalHost, startLocalHost } from "../server";
-import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const ADMIN = "https://admin.example.test";
 const PLAY = "https://play.example.test";
-// eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Negative credential for a temporary local host.
-const INVALID_PASSWORD = "wrong";
+const INVALID_KEY = "wrong";
 const running: RunningLocalHost[] = [];
 const directories: string[] = [];
 afterEach(async () => {
@@ -105,12 +103,12 @@ async function host(options: { public: boolean; behindProxy?: boolean }) {
   );
   running.push(started);
   const bootstrap = await call(adminPort, {
-    path: "/api/host/bootstrap",
+    path: "/api/host/login",
     method: "POST",
     host: options.public ? "admin.example.test" : `127.0.0.1:${adminPort}`,
-    body: { key: started.masterKey, ...REHEARSAL_ORGANIZER },
+    body: { key: started.organizerKey },
   });
-  if (bootstrap.status !== 201) throw new Error("Public-mode organizer bootstrap failed.");
+  if (bootstrap.status !== 200) throw new Error("Public-mode organizer-key sign-in failed.");
   return { started, adminPort, participantPort, adminToken: String(bootstrap.body.idToken) };
 }
 
@@ -200,7 +198,7 @@ async function failLogins(port: number, forwardedFor: (attempt: number) => strin
       method: "POST",
       host: "admin.example.test",
       headers: { "x-forwarded-for": forwardedFor(attempt) },
-      body: { username: REHEARSAL_ORGANIZER.username, password: INVALID_PASSWORD },
+      body: { key: INVALID_KEY },
     });
 }
 
@@ -210,7 +208,7 @@ const login = (port: number, forwardedFor: string) =>
     method: "POST",
     host: "admin.example.test",
     headers: { "x-forwarded-for": forwardedFor },
-    body: { username: REHEARSAL_ORGANIZER.username, password: INVALID_PASSWORD },
+    body: { key: INVALID_KEY },
   });
 
 test("behind a proxy, one client's failed logins do not lock out the others", async () => {

@@ -75,10 +75,14 @@ function parseQuery(query: URLSearchParams, exporting: boolean) {
   const principal = query.get("principal");
   if (
     principal !== null &&
-    !["anonymous", "system"].includes(principal) &&
+    !["anonymous", "system", "host-key"].includes(principal) &&
     !auditIdentifierSchema.safeParse(principal).success
   )
-    throw new HostError(400, "Use an organizer ID, anonymous or system.", "invalid_principal");
+    throw new HostError(
+      400,
+      "Use an organizer ID, host-key, anonymous or system.",
+      "invalid_principal",
+    );
   const action = query.get("action");
   if (action !== null && !auditActionSchema.safeParse(action).success)
     throw new HostError(400, "Use an exact audit action.", "invalid_action");
@@ -102,7 +106,7 @@ function wire(row: StoredAudit) {
     target: record.resource.kind === "host" ? "host" : record.resource.id,
     occurredAt: new Date(row.occurredAt).toISOString(),
     actorKind: record.actor.kind,
-    ...(record.actor.kind === "organizer"
+    ...(record.actor.kind === "organizer" || record.actor.kind === "host-key"
       ? { actorRole: record.actor.role, authMethod: record.actor.authMethod }
       : {}),
     resourceKind: record.resource.kind,

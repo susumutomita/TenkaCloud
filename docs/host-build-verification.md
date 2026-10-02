@@ -28,7 +28,7 @@ bun run release:candidate --image tenkacloud-host:review --out .tenkacloud/host-
 
 The container rehearsal creates its own volume, serves both real applications,
 starts a two-team Cryptography Battle, restarts the container with the same
-volume, and checks the retained host key, participant access, ready players and team vault. It removes only
+volume, and checks organizer-key login, participant access, ready players and team vault. It removes only
 its disposable container and volume in `finally`. The direct Docker exercise
 rehearsal uses `bun run test:host:docker`; the browser rehearsal uses
 `bun run test:host:e2e`. Run them sequentially on constrained machines.

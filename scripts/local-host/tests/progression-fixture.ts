@@ -8,7 +8,7 @@ import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { FakeAws } from "./fake-aws";
-import { organizerToken } from "./organizer-login";
+import { organizerToken, REHEARSAL_ORGANIZER } from "./organizer-login";
 
 export const GATE = "challengePrerequisiteGate";
 export const START = Date.parse("2026-09-30T00:00:00Z");
@@ -25,6 +25,8 @@ export async function progressionFixture(
   const data = createTemporaryDirectory(root, "tenka-progression-");
   const filename = join(data, "host.sqlite");
   let store = new HostStore(new Database(filename));
+  // Keep legacy role tests explicit; a served admin UI always uses the organizer key.
+  const organizerKey = options.adminBuild ? store.ensureLocalOrganizerKey().key : undefined;
   const aws = new FakeAws();
   const cloud = new CloudFormationEngine(root, {
     region: "ap-northeast-1",
@@ -72,7 +74,7 @@ export async function progressionFixture(
       service,
       participantOrigin: portal.origin,
     });
-    token = await organizerToken({ admin: admin.origin, key: "gate-test-host-key" });
+    token = await loginAdmin();
     for (const awsAccountId of ["111111111111", "222222222222"]) {
       if (store.accounts().some((account) => account.awsAccountId === awsAccountId)) continue;
       const registered = await request("/admin/competitor-accounts", "POST", { awsAccountId });
@@ -80,6 +82,17 @@ export async function progressionFixture(
       const verified = await request(`/admin/competitor-accounts/${awsAccountId}/verify`, "POST");
       if (verified.status !== 200) throw new Error("Account verification failed.");
     }
+  }
+  async function loginAdmin(): Promise<string> {
+    if (organizerKey) return organizerToken({ admin: admin.origin, key: organizerKey });
+    const firstVisit = !store.bootstrapCompleted();
+    const login = await request(firstVisit ? "/host/bootstrap" : "/host/login", "POST", {
+      ...REHEARSAL_ORGANIZER,
+      ...(firstVisit ? { key: "gate-test-host-key" } : {}),
+    });
+    if (login.status !== (firstVisit ? 201 : 200) || typeof login.body.idToken !== "string")
+      throw new Error("Legacy organizer fixture login failed.");
+    return login.body.idToken;
   }
   async function request(
     path: string,
@@ -114,6 +127,10 @@ export async function progressionFixture(
     data,
     aws,
     engine,
+    get organizerKey() {
+      if (!organizerKey) throw new Error("This fixture is not in key-only browser mode.");
+      return organizerKey;
+    },
     get store() {
       return store;
     },

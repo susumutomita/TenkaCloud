@@ -24,6 +24,25 @@ function docker(args: string[], check = true): string {
   return `${result.stdout}${check ? "" : result.stderr}`.trim();
 }
 
+/** Capture this private exec terminal only in memory; never include its output in diagnostics. */
+function rotateOrganizerKey(): string {
+  const result = runDocker([
+    "exec",
+    "-t",
+    NAME,
+    "bun",
+    "run",
+    "scripts/local-host/local.ts",
+    "reset",
+    "--data",
+    "/data",
+  ]);
+  assert.ok(result.status === 0, "private organizer-key rotation failed");
+  const key = /Organizer key \(shown once\): ([A-Za-z0-9_-]{43})/u.exec(result.stdout)?.[1];
+  assert.ok(key, "private key display was absent");
+  return key;
+}
+
 async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((accept) => server.listen(0, "127.0.0.1", accept));
@@ -71,6 +90,7 @@ async function main(): Promise<void> {
   docker([
     "run",
     "--detach",
+    "--tty",
     "--name",
     NAME,
     "--read-only",
@@ -97,10 +117,14 @@ async function main(): Promise<void> {
     await waitFor("the participant health check", async () =>
       (await fetch(`${participant}/healthz`)).ok ? true : undefined,
     );
-    const key = docker(["exec", NAME, "cat", "/data/host-key"]);
+    const key = rotateOrganizerKey();
     const printed = docker(["logs", NAME], false);
-    assert.ok(printed.includes("Host login key: stored in /data/host-key"), printed);
-    assert.ok(!printed.includes(key), "the host key must not appear in container logs");
+    assert.ok(printed.includes("Organizer key: use make local-reset"), "missing recovery guidance");
+    assert.ok(
+      !printed.includes("Organizer key (shown once):"),
+      "a public container startup TTY must never display a key",
+    );
+    assert.ok(!printed.includes(key), "the organizer key must not appear in container logs");
 
     for (const origin of [admin, participant]) {
       const page = await fetch(`${origin}/`);
@@ -121,7 +145,7 @@ async function main(): Promise<void> {
 
     const firstToken = await organizerToken({ admin, key });
     const token = await organizerToken({ admin, key });
-    assert.notEqual(firstToken, token, "a return visit must use an organizer password");
+    assert.ok(firstToken !== token, "each organizer-key login must receive an independent session");
 
     const catalog = await api(admin, "GET", "/host/catalog", token);
     assert.deepEqual(
@@ -174,7 +198,7 @@ async function main(): Promise<void> {
     await waitFor("participant recovery after container restart", async () =>
       (await fetch(`${participant}/healthz`)).ok ? true : undefined,
     );
-    assert.equal(docker(["exec", NAME, "cat", "/data/host-key"]), key);
+    await organizerToken({ admin, key });
     for (const team of teams) {
       const recovered = await api(participant, "GET", "/portal/me", team.teamLoginKey);
       assert.equal(recovered.status, 200, JSON.stringify(recovered.body));

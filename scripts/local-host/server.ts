@@ -28,6 +28,10 @@ export interface RunningLocalHost {
   readonly masterKey: string;
   readonly masterKeyPath: string;
   readonly databasePath: string;
+  /** Returned only on first enablement; never saved or sent to the announcement logger. */
+  readonly organizerKey?: string;
+  /** Revoke organizer sessions without stopping participant environments or changing their keys. */
+  rotateOrganizerKey(): string;
   /** Close listeners, wait for in-flight environment work, write held Battle state, close SQLite. */
   stop(options?: { stopLocalEnvironments?: boolean }): Promise<void>;
 }
@@ -91,6 +95,7 @@ export async function startLocalHost(
       );
   }
   try {
+    const { key: organizerKey } = store.ensureLocalOrganizerKey();
     const engine = createEngine(directory, store);
     service = new HostingService(store, engine, masterKey);
     service.accountConnection = settings.accountConnection;
@@ -154,7 +159,16 @@ export async function startLocalHost(
     };
     uptimeTimer = setInterval(pollUptime, 10_000);
     pollUptime();
-    return { admin, participant, masterKey, masterKeyPath, databasePath, stop };
+    return {
+      admin,
+      participant,
+      masterKey,
+      masterKeyPath,
+      databasePath,
+      organizerKey,
+      rotateOrganizerKey: () => store.rotateLocalOrganizerKey(),
+      stop,
+    };
   } catch (error) {
     await stop();
     throw error;

@@ -12,6 +12,7 @@ instructions include legacy local-practice and Lite paths.
 | make local for individual practice | make local starts one event/team competition system; prepare dormant Docker jobs, start the event, then use participant Start / resume |
 | make local-down clears progress | make down preserves DB, scores, keys, writable layers and volumes; new Docker jobs remain stopped until participant resume, with no RAM retention |
 | make host | Removed public target; use make local |
+| Local organizer username/password or SAML | Current local hosting uses one organizer key; make local-reset rotates organizer access and revokes organizer sessions while preserving event/participant/runtime state |
 | Lite launcher / CodeBuild platform setup | cloud-pipeline.yaml defaults to the reviewed current source after explicit IAM setup; its advanced historical-source contract retains the original fixed-ref flow; exercise coverage remains partial |
 | ACTION=destroy-all | Retained only by the fixed-old-ref pipeline; current make destroy confirms owned targets, drains recorded exercises, removes the platform stacks and retains data |
 | pack activate for a tenant | Retained local record only; does not add problems to current events |

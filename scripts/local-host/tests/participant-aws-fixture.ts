@@ -29,6 +29,8 @@ export async function createParticipantAwsFixture(
   const directory = createTemporaryDirectory(root, "tenka-console-");
   const database = join(directory, "host.sqlite");
   const store = new HostStore(new Database(database));
+  // Static UI rehearsals use key auth; historical role tests remain account based.
+  const organizerKey = options.staticRoot ? store.ensureLocalOrganizerKey().key : undefined;
   const expiry = new Date(Date.now() + 3_500_000);
   const calls: { stage: Stage; input: AssumeRoleCommandInput }[] = [];
   const federation: { url: string; init: RequestInit }[] = [];
@@ -137,11 +139,15 @@ export async function createParticipantAwsFixture(
       body: z.record(z.unknown()).parse(await response.json()),
     };
   }
-  const login = await request(admin.origin, "/api/host/bootstrap", "", "POST", {
-    key: "host-test-key",
-    username: "fixture-admin",
-    password: TEST_ORGANIZER_PASSWORD,
-  });
+  const login = await request(
+    admin.origin,
+    organizerKey ? "/api/host/login" : "/api/host/bootstrap",
+    "",
+    "POST",
+    organizerKey
+      ? { key: organizerKey }
+      : { key: "host-test-key", username: "fixture-admin", password: TEST_ORGANIZER_PASSWORD },
+  );
   const token = z.string().parse(login.body.idToken);
   const eventId = id();
   const definition = cloud.catalog()[0];
@@ -200,6 +206,10 @@ export async function createParticipantAwsFixture(
   if (!alpha || !beta) throw new Error("Missing test teams");
   return {
     origin: participant.origin,
+    get organizerKey() {
+      if (!organizerKey) throw new Error("This fixture is not in key-only browser mode.");
+      return organizerKey;
+    },
     close,
     store,
     service,

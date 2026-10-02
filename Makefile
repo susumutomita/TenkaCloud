@@ -170,11 +170,13 @@ pack-list: ## List installed problem packs | install済み問題packを一覧表
 	$(PACK) list $(ARGS)
 
 # ===== Host candidate | host candidate =====
-.PHONY: local down deploy destroy release-check release-candidate
+.PHONY: local down local-reset deploy destroy release-check release-candidate
 local: ## Start the unified local competition console | ローカル競技コンソールを起動
 	bun run scripts/local-host/local.ts start $(LOCAL_ARGS)
 down: ## Stop owned local runtimes and preserve event data | 所有するローカル環境を停止し大会データを保持
 	bun run scripts/local-host/local.ts down $(LOCAL_ARGS)
+local-reset: ## Rotate the organizer key; preserve event and participant data | 主催者キーを再発行し大会・参加者データを保持
+	bun run scripts/local-host/local.ts reset $(LOCAL_ARGS)
 # Current checkout's Lambda/DynamoDB path. See infrastructure/README.md for supported
 # problems, reviewed IAM setup, retained resources and the separate historical pipeline.
 deploy: ## Deploy cloud hosting with reviewed AWS setup | 権限設定を確認してクラウド開催を配置

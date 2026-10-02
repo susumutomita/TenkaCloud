@@ -3,7 +3,8 @@
 ## Local hosting
 
 Local hosting uses one Bun process with one SQLite database on a local or attached
-persistent disk. Its dedicated data directory contains the host key. `make local`
+persistent disk. SQLite stores the organizer-key hash and rotation version; the
+private `host-key` file is a separate internal signing key. `make local`
 does not configure AWS clients and refuses the former `--aws-region` option.
 
 An earlier AWS-enabled host revision may also have saved a competitor ExternalId
@@ -16,9 +17,10 @@ mode `0700` for an existing directory and uses mode `0600` for private files. It
 rejects symlinked directories and linked key files. These filesystem checks do
 not encrypt the database or protect it from the machine administrator.
 
-SQLite holds organizer accounts and sessions, competitor registrations, event
-state and operational records. SAML correlation and replay protection are
-mandatory authentication state. Optional audit collection is a separate feature
+SQLite holds organizer token hashes, competitor registrations, participant keys,
+event state and operational records. Historical organizer/SAML records are retained
+but cannot authenticate in current local key mode. New organizer sign-in collects
+no username, email or password. Optional audit collection is a separate feature
 flag, defaults OFF, and writes only to the host database. Turning audit OFF does
 not turn off operational or authentication records.
 
@@ -77,7 +79,9 @@ while it is being written is not the documented backup procedure.
 Restore the database and key files together with their ownership and permissions.
 Losing or replacing the ExternalId breaks competitor trust until the account
 owner deliberately updates that trust policy. An existing nonempty host database
-requires its original host key. A retained competitor account or CloudFormation
+requires its original internal signing key. This file is not the organizer login
+key. A lost organizer login key can be rotated with `make local-reset`, preserving
+event state and participant access. A retained competitor account or CloudFormation
 job also requires the original ExternalId; startup refuses a missing key before
 contacting AWS or changing the database.
 

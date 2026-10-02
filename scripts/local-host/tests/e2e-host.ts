@@ -2,10 +2,10 @@
  * Browser-rehearsal host: the production `startLocalHost` wiring (listeners, SQLite, gateways,
  * built interfaces) over a temporary data directory. `HOST_E2E_ENGINE=docker` uses the real
  * Docker engine; the default is the explicitly test-only exercise adapter, and the harness
- * reports which one ran. Prints one JSON line with the URLs and host key, then waits for SIGTERM.
+ * reports which one ran. Prints public URLs only; the organizer key uses a private parent pipe.
  */
 import { Database } from "bun:sqlite";
-import { existsSync } from "node:fs";
+import { existsSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DockerHostingEngine } from "../docker-engine";
@@ -72,11 +72,14 @@ async function main(): Promise<void> {
       (directory) => (engineKind === "docker" ? new DockerHostingEngine(root, directory) : fixture),
       (message) => console.error(message),
     );
+    if (!host.organizerKey) throw new Error("The fresh browser fixture has no organizer key.");
+    if (process.env.HOST_E2E_KEY_FD !== "3")
+      throw new Error("Browser fixture requires its private organizer-key pipe.");
+    writeSync(3, `${host.organizerKey}\n`);
     console.log(
       JSON.stringify({
         admin: host.admin.origin,
         participant: host.participant.origin,
-        key: host.masterKey,
         engine: engineKind,
       }),
     );

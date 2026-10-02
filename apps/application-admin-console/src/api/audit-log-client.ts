@@ -15,6 +15,7 @@ export interface TenantAuditItem {
   readonly id: string;
   readonly tenantId: string;
   readonly actor: string;
+  readonly actorKind?: string;
   readonly actorUsername?: string;
   readonly action: string;
   readonly outcome: string;

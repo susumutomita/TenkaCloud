@@ -128,6 +128,8 @@ export async function disruptionFixture(options: { staticRoot?: string } = {}) {
   const db = join(directory, "host.sqlite");
   const aws = new DisruptionAws();
   let store = new HostStore(new Database(db));
+  // Browser rehearsals use current key-only auth; unit role cases retain legacy accounts.
+  const organizerKey = options.staticRoot ? store.ensureLocalOrganizerKey().key : undefined;
   const engine = new CompetitionEngine(root, directory, false);
   engine.disruptionAdapter = () => aws.adapter();
   let service = new HostingService(store, engine, "fixture-host-key", () => aws.now);
@@ -150,18 +152,16 @@ export async function disruptionFixture(options: { staticRoot?: string } = {}) {
       participantOrigin: "http://127.0.0.1:1",
       service,
     });
-    const session = !store.bootstrapCompleted()
-      ? await api("/host/bootstrap", "POST", {
-          key: "fixture-host-key",
+    const firstVisit = !store.bootstrapCompleted();
+    const body = organizerKey
+      ? { key: organizerKey }
+      : {
           username: "fixture-admin",
           password: TEST_ORGANIZER_PASSWORD,
-        })
-      : await api("/host/login", "POST", {
-          username: "fixture-admin",
-          password: TEST_ORGANIZER_PASSWORD,
-        });
-    if (!token && session.status !== 201) throw new Error("Organizer bootstrap failed.");
-    if (token && session.status !== 200) throw new Error("Organizer login failed.");
+          ...(firstVisit ? { key: "fixture-host-key" } : {}),
+        };
+    const session = await api(firstVisit ? "/host/bootstrap" : "/host/login", "POST", body);
+    if (session.status !== (firstVisit ? 201 : 200)) throw new Error("Organizer login failed.");
     token = session.body.idToken;
   }
   await attach();
@@ -229,6 +229,10 @@ export async function disruptionFixture(options: { staticRoot?: string } = {}) {
     api,
     path,
     directory,
+    get organizerKey() {
+      if (!organizerKey) throw new Error("This fixture is not in key-only browser mode.");
+      return organizerKey;
+    },
     get origin() {
       return http.origin;
     },

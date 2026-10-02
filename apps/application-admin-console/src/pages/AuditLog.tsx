@@ -236,7 +236,9 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
             // #2954: 末尾 `*` は prefix 一致。machine principal は `m2m:<clientId>` で client id が
             // 発行ごとに変わるため、`m2m:*` で「machine が起こした操作」を 1 query で引ける。
             placeholder={
-              localHost ? "実行者ID / anonymous / system" : "principal (sub / username / m2m:*)"
+              localHost
+                ? "実行者ID / host-key / anonymous / system"
+                : "principal (sub / username / m2m:*)"
             }
           />
           <Input

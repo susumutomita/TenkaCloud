@@ -133,123 +133,138 @@ function renderLogin(config: AppConfig) {
 }
 
 function stubLogin(
-  bootstrapCompleted: boolean,
-  exchange: () => Response = () =>
-    new Response(
-      JSON.stringify({
-        idToken: "a.b.c",
-        accessToken: "a.b.c",
-        refreshToken: "refresh",
-        expiresAt: Date.now() + 60_000,
-      }),
-    ),
+  exchange: () => Response | Promise<Response> = () =>
+    Response.json({
+      idToken: "a.b.c",
+      accessToken: "a.b.c",
+      refreshToken: "refresh",
+      expiresAt: Date.now() + 60_000,
+    }),
 ) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
-    if (path === "/api/host/bootstrap-status")
-      return new Response(JSON.stringify({ bootstrapCompleted }));
-    if (path === "/api/host/saml") return new Response(JSON.stringify({ enabled: false }));
-    if (path === "/api/host/bootstrap" || path === "/api/host/login") return exchange();
+    if (path === "/api/host/login") return exchange();
     return new Response("{}", { status: 404 });
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
-describe("LocalHostLoginPage", () => {
-  it("uses the host key once to create the first local Admin account", async () => {
-    const config = await localConfig();
-    const fetchMock = stubLogin(false);
-    const secret = "bootstrap-password";
-    renderLogin(config);
-    fireEvent.change(await screen.findByLabelText("Host key"), {
-      target: { value: "host-key" },
-    });
-    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "owner" } });
-    fireEvent.change(screen.getByLabelText("Password"), {
-      target: { value: secret },
-    });
-    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
-    await waitFor(() => expect(screen.getByText("events page")).toBeInTheDocument());
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${origin}/api/host/bootstrap`,
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ key: "host-key", username: "owner", password: secret }),
-      }),
-    );
-  });
+function submitKey(key = "synthetic-organizer-key") {
+  fireEvent.change(screen.getByLabelText("Organizer key"), { target: { value: key } });
+  fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+}
 
-  it("uses a username and password without asking for the key after bootstrap", async () => {
+describe("LocalHostLoginPage", () => {
+  it("exchanges only the organizer key for a memory-only session", async () => {
     const config = await localConfig();
-    const fetchMock = stubLogin(true);
-    const secret = "new-password";
+    const fetchMock = stubLogin();
+    const save = vi.spyOn(window.localStorage, "setItem");
+    const sessionSave = vi.spyOn(window.sessionStorage, "setItem");
     renderLogin(config);
-    fireEvent.change(await screen.findByLabelText("Username"), { target: { value: "owner" } });
-    expect(screen.queryByLabelText("Host key")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Password"), {
-      target: { value: secret },
-    });
-    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+    expect(screen.getByLabelText("Organizer key")).toHaveAttribute("type", "password");
+    expect(screen.getByLabelText("Organizer key")).toHaveAttribute("autocomplete", "off");
+    expect(screen.queryByLabelText("Username")).toBeNull();
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    expect(screen.queryByText(/SAML/u)).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    submitKey();
     await waitFor(() => expect(screen.getByText("events page")).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       `${origin}/api/host/login`,
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ username: "owner", password: secret }),
+        body: JSON.stringify({ key: "synthetic-organizer-key" }),
       }),
     );
+    for (const spy of [save, sessionSave]) {
+      expect(spy.mock.calls.flat().join(" ")).not.toMatch(/synthetic-organizer-key|a.b.c|refresh/u);
+    }
   });
 
-  it("shows the host's invalid-password response without signing in", async () => {
+  it("clears the key during a pending attempt and blocks duplicate submissions", async () => {
     const config = await localConfig();
-    stubLogin(
-      true,
-      () => new Response(JSON.stringify({ message: "Invalid credentials." }), { status: 401 }),
+    let finish!: (response: Response) => void;
+    const fetchMock = stubLogin(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
     );
     renderLogin(config);
-    fireEvent.change(await screen.findByLabelText("Username"), { target: { value: "owner" } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "wrong" } });
+    submitKey();
+    expect(screen.getByLabelText("Organizer key")).toHaveValue("");
+    expect(screen.getByLabelText("Organizer key")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
     fireEvent.submit(document.querySelector("form") as HTMLFormElement);
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Invalid credentials.");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    finish(Response.json({ message: "Invalid organizer key." }, { status: 401 }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid organizer key.");
+    expect(screen.getByLabelText("Organizer key")).toHaveValue("");
+    expect(screen.getByLabelText("Organizer key")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled();
     expect(screen.queryByText("events page")).toBeNull();
   });
-});
 
-describe("LocalHostLoginPage error bodies", () => {
-  it("shows the sign-in failure message for a non-JSON error response", async () => {
+  it("allows a new key after a rejected attempt", async () => {
     const config = await localConfig();
-    stubLogin(true, () => new Response("<html>Bad gateway</html>", { status: 502 }));
+    let attempts = 0;
+    stubLogin(() =>
+      ++attempts === 1
+        ? Response.json({ message: "Invalid organizer key." }, { status: 401 })
+        : Response.json({
+            idToken: "a.b.c",
+            accessToken: "a.b.c",
+            refreshToken: "refresh",
+            expiresAt: Date.now() + 60_000,
+          }),
+    );
     renderLogin(config);
-    fireEvent.change(await screen.findByLabelText("Username"), { target: { value: "owner" } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password" } });
-    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Host sign-in failed|サインインできませんでした/u);
-    expect(alert.textContent).not.toMatch(/JSON|Unexpected token/u);
+    submitKey("wrong-key");
+    await screen.findByRole("alert");
+    submitKey("replacement-key");
+    expect(await screen.findByText("events page")).toBeInTheDocument();
   });
-});
 
-describe("LocalHostLoginPage null bodies", () => {
-  it("shows the sign-in failure message for a JSON null error body", async () => {
+  it.each([
+    ["non-JSON", "<html>Bad gateway</html>", 502],
+    ["null", "null", 500],
+    ["array", "[]", 500],
+    ["incomplete session", '{"idToken":"a.b.c"}', 200],
+  ])("rejects a %s response without retaining the key", async (_label, body, status) => {
     const config = await localConfig();
-    stubLogin(true, () => new Response("null", { status: 500 }));
+    stubLogin(() => new Response(body, { status }));
     renderLogin(config);
-    fireEvent.change(await screen.findByLabelText("Username"), { target: { value: "owner" } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password" } });
-    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/Host sign-in failed|サインインできませんでした/u);
-    expect(alert.textContent).not.toMatch(/null|TypeError/u);
+    submitKey();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Host sign-in failed.");
+    expect(screen.getByLabelText("Organizer key")).toHaveValue("");
+    expect(screen.queryByText("events page")).toBeNull();
+  });
+
+  it("reports a network failure without retaining the key", async () => {
+    const config = await localConfig();
+    stubLogin(() => Promise.reject(new Error("Host is offline.")));
+    renderLogin(config);
+    submitKey();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Host is offline.");
+    expect(screen.getByLabelText("Organizer key")).toHaveValue("");
+  });
+
+  it("explains key rotation without implying that competition data is deleted", async () => {
+    const config = await localConfig();
+    stubLogin();
+    renderLogin(config);
+    expect(screen.getByText(/make local-reset/u)).toHaveTextContent(
+      "rotate the key and sign out all organizers. Events, participant access, scores, and problem environments are preserved.",
+    );
   });
 });
 
 describe("local-host routes", () => {
-  it("sends an unauthenticated organizer to local password sign-in, not Cognito", async () => {
+  it("sends an unauthenticated organizer to the local key sign-in", async () => {
     const config = await localConfig();
-    stubLogin(true);
-    window.history.pushState({}, "", "/competitor-accounts");
+    stubLogin();
     render(
       <I18nProvider>
         <MemoryRouter initialEntries={["/competitor-accounts"]}>
@@ -257,9 +272,9 @@ describe("local-host routes", () => {
         </MemoryRouter>
       </I18nProvider>,
     );
-    expect(await screen.findByLabelText(/ユーザー名|Username/u)).toBeInTheDocument();
-    expect(screen.getByLabelText(/パスワード|Password/u)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/主催者キー|Host key/u)).toBeNull();
+    expect(await screen.findByLabelText("Organizer key")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Username")).toBeNull();
+    expect(screen.queryByLabelText("Password")).toBeNull();
   });
 });
 

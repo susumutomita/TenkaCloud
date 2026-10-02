@@ -16,7 +16,7 @@ bun install --frozen-lockfile --ignore-scripts
 make local
 ```
 
-The default organizer URL is `http://127.0.0.1:5174`; the participant URL is `http://127.0.0.1:5175`. Use the URLs printed by the process. The first organizer creates a local Admin account using the private bootstrap key printed in the terminal. Later sign-ins use that username and password.
+The default organizer URL is `http://127.0.0.1:5174`; the participant URL is `http://127.0.0.1:5175`. Use the URLs printed by the process. Sign in with the organizer key only; no username or password is needed. The first key is shown once on the interactive terminal. If lost, run `make local-reset` with the same data directory to rotate organizer access while preserving events, scores, participant keys and problem environments.
 
 <h2 id="first-event">Create and play an event</h2>
 

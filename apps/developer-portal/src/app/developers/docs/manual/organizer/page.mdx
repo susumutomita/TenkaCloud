@@ -8,7 +8,7 @@ This documents the unpublished integration candidate. Local event/team operation
 
 <h2 id="prepare-local-host">Prepare the local host</h2>
 
-Follow [getting started](/developers/docs/getting-started/) with `make local`. Keep one process per private data directory. Bootstrap a local Admin; Operator can run events and Viewer can inspect them. Keep a local password Admin available when using optional SAML.
+Follow [getting started](/developers/docs/getting-started/) with `make local`. Keep one process per private data directory. Sign in with the organizer key only; no username, password or local SAML account is needed. If lost, run `make local-reset` in an interactive terminal with the same data directory. It rotates organizer access and signs out organizers while preserving events, scores, progress, participant keys and problem environments.
 
 <h2 id="run-the-event">Run the event</h2>
 

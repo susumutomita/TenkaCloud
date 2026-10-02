@@ -17,7 +17,6 @@ import { DEFAULT_GATEWAY_PORTS, parseGatewayPorts } from "../gateway-ports";
 import { startLocalHost } from "../server";
 import { type ApiResponse, HostingService } from "../service";
 import { HostStore } from "../store";
-import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const directories: string[] = [];
@@ -228,9 +227,8 @@ test("stopping the host writes the reads it held in memory", async () => {
     const admin = (path: string, method: string, token: string, body?: unknown) =>
       api(host.admin.origin, path, method, token, body);
     const token = (
-      await admin("/host/bootstrap", "POST", "", {
-        key: host.masterKey,
-        ...REHEARSAL_ORGANIZER,
+      await admin("/host/login", "POST", "", {
+        key: host.organizerKey,
       })
     ).idToken as string;
     const created = await admin("/events", "POST", token, {

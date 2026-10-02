@@ -3,7 +3,7 @@
  * organizer and participants see: the built host console and participant portal, served by
  * `e2e-host.ts` (production wiring over a temporary data directory).
  *
- * Organizer: one-time Admin bootstrap, password sign-in, event creation, deploy, and start.
+ * Organizer: key-only sign-in, event creation, deploy, and start.
  * Participants: two independent browser contexts sign in with their team keys, open their own
  * exercise through the portal link, obtain the flag through that exercise's login form, submit
  * it in the portal, and see the ranking. Organizer: end the event and tear the environments down.
@@ -16,6 +16,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
 import { signInOrganizer } from "./organizer-login";
@@ -42,14 +43,40 @@ function chromiumPath(): string | undefined {
 async function startHost(): Promise<{ info: HostInfo; child: ChildProcess }> {
   const child = spawn(process.execPath, ["run", "scripts/local-host/tests/e2e-host.ts"], {
     cwd: root,
-    stdio: ["ignore", "pipe", "inherit"],
+    stdio: ["ignore", "pipe", "inherit", "pipe"],
+    env: { ...process.env, HOST_E2E_KEY_FD: "3" },
   });
-  const lines = createInterface({ input: child.stdout ?? process.stdin });
-  const info = await new Promise<HostInfo>((accept, reject) => {
-    child.once("exit", (code) => reject(new Error(`Host exited early (${String(code)}).`)));
-    lines.once("line", (line) => accept(JSON.parse(line) as HostInfo));
-  });
-  return { info, child };
+  const publicLines = createInterface({ input: child.stdout ?? process.stdin });
+  const privateLines = createInterface({ input: child.stdio[3] as Readable });
+  const ready = <T>(lines: ReturnType<typeof createInterface>, parse: (line: string) => T) =>
+    new Promise<T>((accept, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code) => reject(new Error(`Host exited early (${String(code)}).`)));
+      lines.once("line", (line) => {
+        try {
+          accept(parse(line));
+        } catch {
+          reject(new Error("Host fixture readiness response is invalid."));
+        }
+      });
+    });
+  try {
+    const [address, key] = await Promise.all([
+      ready(publicLines, (line) => JSON.parse(line) as Omit<HostInfo, "key">),
+      ready(privateLines, (line) => {
+        if (!/^[A-Za-z0-9_-]{43}$/u.test(line))
+          throw new Error("Host fixture organizer key is invalid.");
+        return line;
+      }),
+    ]);
+    return { info: { ...address, key }, child };
+  } catch (error) {
+    await stopHost(child);
+    throw error;
+  } finally {
+    publicLines.close();
+    privateLines.close();
+  }
 }
 
 async function stopHost(child: ChildProcess): Promise<void> {
@@ -228,7 +255,7 @@ async function main(): Promise<void> {
     admin.setDefaultTimeout(STEP_TIMEOUT);
     organizer = await admin.newPage();
     await signInOrganizer(organizer, info);
-    // A page navigation drops the memory-only token; the second sign-in uses the password.
+    // A page navigation drops the memory-only token; the same organizer key signs in again.
     await signInOrganizer(organizer, info);
     const keys = await createEvent(organizer, "Browser rehearsal");
     await waitForEnvironmentState(organizer, info.engine === "docker" ? "Stopped" : "Running");

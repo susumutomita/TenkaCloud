@@ -32,13 +32,16 @@ export interface RegistrationSummary {
 export async function registrationFixture(options: { browser?: boolean } = {}) {
   const directory = createTemporaryDirectory(root, "tenka-registration-");
   const database = join(directory, "host.sqlite");
-  const hostKey = "test-only-registration-host-key";
+  const masterKey = "test-only-registration-signing-key";
   let clock = Date.now();
   let store = new HostStore(new Database(database));
+  // Browser journeys use key auth; legacy unit role cases keep account auth.
+  const organizerKey = options.browser ? store.ensureLocalOrganizerKey().key : undefined;
+  const hostKey = organizerKey ?? masterKey;
   let service = new HostingService(
     store,
     new CompetitionEngine(root, directory),
-    hostKey,
+    masterKey,
     () => clock,
   );
   let admin: HttpHost;
@@ -93,7 +96,9 @@ export async function registrationFixture(options: { browser?: boolean } = {}) {
       "admin",
       firstVisit ? "/host/bootstrap" : "/host/login",
       "POST",
-      { ...REGISTRATION_ORGANIZER, ...(firstVisit ? { key: hostKey } : {}) },
+      organizerKey
+        ? { key: organizerKey }
+        : { ...REGISTRATION_ORGANIZER, ...(firstVisit ? { key: masterKey } : {}) },
     );
     assert.equal(login.status, firstVisit ? 201 : 200);
     adminToken = login.body.idToken;
@@ -171,7 +176,7 @@ export async function registrationFixture(options: { browser?: boolean } = {}) {
       service = new HostingService(
         store,
         new CompetitionEngine(root, directory),
-        hostKey,
+        masterKey,
         () => clock,
       );
       await service.recover();

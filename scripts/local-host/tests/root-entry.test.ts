@@ -10,12 +10,17 @@ import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { organizerToken } from "./organizer-login";
 
-test("host root, login and history routes serve the same SPA before and after bootstrap", async () => {
+test("host root, login and history routes serve the same SPA before and after organizer-key sign-in", async () => {
   const directory = mkdtempSync(join(tmpdir(), "tenka-root-entry-"));
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const store = new HostStore(new Database(":memory:"));
-  const key = "synthetic-root-route-key";
-  const service = new HostingService(store, new CompetitionEngine(root, directory), key);
+  const key = store.ensureLocalOrganizerKey().key;
+  if (!key) throw new Error("Fresh root route fixture must create an organizer key.");
+  const service = new HostingService(
+    store,
+    new CompetitionEngine(root, directory),
+    "synthetic-root-signing-key",
+  );
   const html =
     '<!doctype html><div id="root"></div><script type="module" src="/assets/entry.js"></script>';
   mkdirSync(join(directory, "assets"));
