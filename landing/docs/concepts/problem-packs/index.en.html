@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Legacy Lite settings</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Legacy Lite messages</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -70,7 +68,7 @@
 <h1>Problem packs <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>A pack is a versioned, inspectable unit of competition content. Its manifest declares identity, runtime requirements and problem files. The artifact depends on the runtime; a CloudFormation template is only one possibility.</p>
 <h2>What is a problem pack</h2>
-<p>The current pack CLI can scaffold, validate, inspect and store immutable revisions. Installing or activating a pack does not add it to the current event catalog. Retained tenant-scoped activation is a legacy local record, not a current hosting workflow.</p>
+<p>The current pack CLI can scaffold, validate, inspect and store immutable revisions. Installing or activating a pack does not add it to the current event catalog. Activation records are offline catalog metadata, not a current hosting workflow.</p>
 <h2>Battle versus Challenge</h2>
 <p>Challenge and Battle describe a problem&#39;s interaction and scoring model. Runtime placement is a separate concern. All former local Compose problems are intended to run as Challenge competitions; generic catalog/workbench restoration and terminal/browser verification are still in progress.</p>
 <h2>Scoring kinds</h2>

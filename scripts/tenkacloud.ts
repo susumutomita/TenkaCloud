@@ -6,7 +6,7 @@ if (command === "pack") {
   process.exitCode = runPackCli(args, (line) => console.log(line));
 } else {
   console.log(
-    "Usage: tenkacloud pack <command>\nHost a competition with: make local [LOCAL_ARGS=...]\nStop it with: make down [LOCAL_ARGS=...]\nLegacy Lite commands are retired; see docs/legacy-operations.md.",
+    "Usage: tenkacloud pack <command>\nHost a competition with: make local [LOCAL_ARGS=...]\nStop it with: make down [LOCAL_ARGS=...]\nCloud hosting: make deploy / make destroy [CLOUD_ARGS=...]",
   );
   process.exitCode = command === undefined || command === "--help" || command === "help" ? 0 : 1;
 }

@@ -1,11 +1,8 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { handle, type LambdaContext, type LambdaEvent } from "hono/aws-lambda";
-import { DynamoCloudRepository } from "../../control-data/dynamodb-cloud-repository.js";
-import { DynamoDbCompetitorAccountsRepository } from "../../control-data/dynamodb-competitor-accounts-repository.js";
-import { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
+import { acquireCloudData } from "../../control-data/cloud-data.js";
+import type { CloudData } from "../../control-data/cloud-data-ports.js";
 import { createAwsCloudRunnerDependencies } from "../cloud-runner/sdk.js";
 import { createInstallationExternalIdStore } from "../shared/external-id-store.js";
 import { createCloudApp } from "./app.js";
@@ -26,43 +23,31 @@ function required(name: string): string {
   if (!value) throw new Error(`Missing cloud setting: ${name}`);
   return value;
 }
-const document = DynamoDBDocumentClient.from(
-  new DynamoDBClient({ ignoreConfiguredEndpointUrls: true }),
-  {
-    marshallOptions: { removeUndefinedValues: true },
-  },
-);
-const tables = {
-  events: required("EVENTS_TABLE_NAME"),
-  teams: required("TEAMS_TABLE_NAME"),
-  deployments: required("DEPLOYMENTS_TABLE_NAME"),
-};
-const repository = new DynamoCloudRepository(document, tables);
 async function compose() {
-  const execution = await composeExecution();
+  const data = await acquireCloudData();
+  const execution = await composeExecution(data);
   return createCloudApp({
-    repository,
+    repository: data.repository,
     ...execution,
     organizerAuth: { issuer: required("COGNITO_ISSUER"), audience: required("COGNITO_CLIENT_ID") },
     allowedOrigins: required("ALLOWED_ORIGINS").split(","),
   });
 }
-async function composeExecution() {
+async function composeExecution(data: CloudData) {
+  const { repository, work, accounts } = data;
   if (!process.env.CLOUD_CATALOG_KEY) return {};
   const coordination = createProductionNativeCoordination({
-    documentClient: document,
-    tables,
+    repository,
+    store: data.coordination,
     artifactBucket: required("CLOUD_ARTIFACT_BUCKET"),
     expectedBucketOwner: required("CONTROL_PLANE_ACCOUNT"),
     region: required("AWS_REGION"),
     catalogKey: required("CLOUD_CATALOG_KEY"),
   });
   const bindings = await loadExecutionBindings();
-  const work = new DynamoDeploymentWork(document, tables);
   const catalog = createExecutionCatalogProvider();
   const controlPlaneAccount = required("CONTROL_PLANE_ACCOUNT");
   const verify = createConnectionVerifier(controlPlaneAccount);
-  const accounts = new DynamoDbCompetitorAccountsRepository(document, tables);
   const config = process.env.COMPETITOR_ROLE_NAME ? installationAccountConfig() : undefined;
   const resolvePinned = createExecutionArtifactResolver();
   const participantAccess = {

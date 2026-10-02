@@ -18,15 +18,13 @@ export const metadata = { title: "競技開催者マニュアル" };
 
 <h2 id="aws-problems">AWS 問題はクラウド開催へ</h2>
 
-AWS サービスを使う問題はクラウド開催専用です。ローカル開催では旧 AWS リージョン指定を拒否します。Lambda / DynamoDB によるクラウド開催は、限定 CLI を使う hello-world の配置・採点と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。初回アカウント設定では、[IAM 設定手順](https://github.com/susumutomita/TenkaCloud/blob/integration/host-only-20261001/infrastructure/BOOTSTRAP-IAM.md)に従って生成ポリシーをオフラインで確認し、明示的にセットアップします。配置担当者の権限は同じアカウントの TenkaCloud 環境を横断するため、環境名は IAM の分離境界になりません。実 AWS への配置は未検証です。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。ローカルのコマンドで代用しないでください。既存の AWS リソースは作成時の確認済み手順で片付ける必要があるため、所有情報を保持します。
+AWS サービスを使う問題はクラウド開催専用です。ローカル開催では旧 AWS リージョン指定を拒否します。Lambda と選択した Turso / DynamoDB によるクラウド開催は、限定 CLI を使う hello-world の配置・採点と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。初回アカウント設定では、[IAM 設定手順](https://github.com/susumutomita/TenkaCloud/blob/integration/host-only-20261001/infrastructure/BOOTSTRAP-IAM.md)で標準 CDK の権限を確認します。既存 CDKToolkit は再利用し、未作成の場合だけ make deploy 内で承認後に bootstrap します。配置担当者の権限は同じアカウントの TenkaCloud 環境を横断するため、環境名は IAM の分離境界になりません。実 AWS への配置は未検証です。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。ローカルのコマンドで代用しないでください。既存の AWS リソースは作成時の確認済み手順で片付ける必要があるため、所有情報を保持します。
 
 <h2 id="storage-and-shutdown">データベースと停止</h2>
 
 ローカルのデータベースは SQLite です。キーを含む非公開ディレクトリ全体を整合した状態でバックアップします。`make down` は大会データと停止した Docker の状態を保持します。再開には同じディレクトリを使います。新しいオンデマンドの Docker 環境は `make local` 後も停止したままで、参加者が再開します。AWS リソースの削除や大会時刻のリセットは行いません。環境を所有している保存領域を先に消さないでください。
 
-Lambda / DynamoDB のクラウド開催を復旧中です。`make deploy` は権限設定の事前確認が必要です。`make destroy` は対象を確認して記録済み問題を撤収し、データを保持します。現在は限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。固定費ゼロのクラウド基盤は確立していません。AWS 問題の費用は別に確認します。
-
-SaaS と旧個人練習の手順は[固定した旧版](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9)を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。
+Lambda と選択した Turso / DynamoDB のクラウド開催を復旧中です。`make deploy` は権限設定の事前確認が必要です。`make destroy` は対象を確認して基盤とデフォルトの所有データを削除します。外部 Turso の行は残し、`make destroy-all` で明示的にリセットします。問題環境は大会の Teardown または `--drain-events` で撤収します。現在は限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。固定費ゼロのクラウド基盤は確立していません。AWS 問題の費用は別に確認します。
 
 新しい Docker 大会は、停止状態のチーム・問題 jobs を大会ごとに最大 512 件準備します。参加者が **Start / resume** と **Stop (keep data)** を使います。停止は既存の書き込みレイヤーと volume を保持しますが、RAM は保持しません。自動退避や初期化は行いません。既存大会は従来の lifecycle を維持します。
 

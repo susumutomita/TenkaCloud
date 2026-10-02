@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Legacy Lite settings</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Legacy Lite messages</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -82,7 +80,7 @@ make local LOCAL_ARGS=&quot;--no-build&quot;
 <p>Bun 1.3.11 is pinned. The host serves the organizer and participant applications
 and persists competition state in SQLite. Use a private dedicated data directory.
 Docker problem execution requires Docker; the built-in Battle runs in Bun.
-AWS-service problems are cloud-only. Lambda/DynamoDB hosting and the full cloud lifecycle remain under verification.</p>
+AWS-service problems are cloud-only. Lambda + Turso/DynamoDB hosting and the full cloud lifecycle remain under verification.</p>
 <h2>Code ownership</h2>
 <table>
 <thead>
@@ -139,7 +137,7 @@ HTTP/SQLite path for state and authorization changes. Follow the
 <code>docs/host-build-verification.md</code>
 for distribution changes. Record browser and optional live AWS/IdP evidence
 separately; local tests do not prove external account access.</p>
-<p><code>make down</code> preserves local event and Docker data. Cloud <code>make deploy</code> / <code>make destroy</code> call the existing CLI with reviewed AWS setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval. Use <code>CLOUD_ARGS=&quot;--help&quot;</code> to inspect either command without AWS access.</p>
+<p><code>make down</code> preserves local event and Docker data. Cloud <code>make deploy</code> / <code>make destroy</code> call the existing CLI with reviewed AWS setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement. Use <code>CLOUD_ARGS=&quot;--help&quot;</code> to inspect either command without AWS access.</p>
 
 </article>
 </main>

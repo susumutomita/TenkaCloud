@@ -135,6 +135,21 @@ function originLabel(detail: ProblemDetail): string {
  * order (matching the previous `PROBLEM_CATALOG` ordering).
  */
 export function buildEffectiveCatalog(input: EffectiveCatalogInput): readonly ProblemDetail[] {
+  const listed = (metadata: ProblemMetadata) =>
+    input.includeLocalOnly === true || isCloudCatalogEntry(metadata);
+  return composeCatalogDetails({
+    core: input.core.filter((entry) => listed(entry.metadata)).map(coreDetail),
+    packs: input.packs.filter((entry) => listed(entry.metadata)).map(packDetail),
+    includeLocalOnly: input.includeLocalOnly,
+  });
+}
+
+/** Merge the build-time projections with the same ownership and runtime rules. */
+export function composeCatalogDetails(input: {
+  readonly core: readonly ProblemDetail[];
+  readonly packs: readonly ProblemDetail[];
+  readonly includeLocalOnly?: boolean;
+}): readonly ProblemDetail[] {
   const owners = new Map<string, ProblemDetail>();
 
   const claim = (detail: ProblemDetail): void => {
@@ -151,13 +166,13 @@ export function buildEffectiveCatalog(input: EffectiveCatalogInput): readonly Pr
 
   // Core first, preserving the given (discovery) order — packs cannot override it.
   // Local-only (#2168) problems are excluded from this cloud console catalog.
-  const listed = (metadata: ProblemMetadata) =>
-    input.includeLocalOnly === true || isCloudCatalogEntry(metadata);
+  const listed = (detail: ProblemDetail) =>
+    input.includeLocalOnly === true || !isLocalOnlyProblemRuntime(detail.runtime);
   for (const entry of input.core) {
-    if (listed(entry.metadata)) claim(coreDetail(entry));
+    if (listed(entry)) claim(entry);
   }
   for (const entry of input.packs) {
-    if (listed(entry.metadata)) claim(packDetail(entry));
+    if (listed(entry)) claim(entry);
   }
 
   return [...owners.values()].sort((a, b) => a.id.localeCompare(b.id));

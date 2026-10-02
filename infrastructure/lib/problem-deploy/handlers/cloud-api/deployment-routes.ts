@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { ulid } from "ulid";
 import { z } from "zod";
+import type { CloudDeploymentWork } from "../../control-data/cloud-data-ports.js";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
 import {
   contentDigest,
@@ -11,7 +12,6 @@ import {
 } from "../../control-data/domain/deployment-work.js";
 import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
-import type { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
 import { ApiError, type OrganizerAuthConfig, participantKey, requireOrganizer } from "./auth.js";
 import {
   type CloudCoordinationApi,
@@ -31,7 +31,7 @@ export interface CloudProblem {
   readonly parameters: Readonly<Record<string, string>>;
 }
 export interface CloudDeploymentApi {
-  readonly work: DynamoDeploymentWork;
+  readonly work: CloudDeploymentWork;
   readonly catalog: () => Promise<Readonly<Record<string, CloudProblem>>>;
   readonly controlPlaneAccount: string;
   readonly prepareConnection?: (event: EventRecord, team: TeamRecord, now: number) => Promise<void>;
@@ -294,7 +294,7 @@ async function planTargets(
   };
 }
 function assertConnection(
-  connection: Awaited<ReturnType<DynamoDeploymentWork["getConnection"]>>,
+  connection: Awaited<ReturnType<CloudDeploymentWork["getConnection"]>>,
   team: TeamRecord,
   ids: readonly string[],
   event: EventRecord,
@@ -323,7 +323,7 @@ function assertConnection(
     throw new ApiError(409, "problem_connection_not_reviewed");
 }
 async function planTarget(
-  work: DynamoDeploymentWork,
+  work: CloudDeploymentWork,
   eventId: string,
   teamId: string,
   problemId: string,
@@ -344,7 +344,7 @@ function buildJob(
   event: EventRecord,
   team: TeamRecord,
   problem: CloudProblem,
-  connection: NonNullable<Awaited<ReturnType<DynamoDeploymentWork["getConnection"]>>>,
+  connection: NonNullable<Awaited<ReturnType<CloudDeploymentWork["getConnection"]>>>,
   account: string,
   createdAt: string,
 ): DeploymentJob {
@@ -437,7 +437,7 @@ async function teardown(context: Context, options: RouteOptions) {
 /** Shared by the authenticated organizer route and the ownership-checked operator CLI. */
 export async function requestEventTeardown(options: {
   readonly repository: CloudRepository;
-  readonly work: DynamoDeploymentWork;
+  readonly work: CloudDeploymentWork;
   readonly eventId: string;
   readonly now: number;
   readonly beforeClose?: (event: EventRecord) => Promise<EventRecord>;

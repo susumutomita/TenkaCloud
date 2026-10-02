@@ -2,6 +2,7 @@ import { AssumeRoleCommand, type AssumeRoleCommandOutput } from "@aws-sdk/client
 import type { CliCredentialsView } from "@tenkacloud/portal-contracts";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
+import type { CloudDeploymentWork } from "../../control-data/cloud-data-ports.js";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
 import {
   contentDigest,
@@ -10,7 +11,6 @@ import {
 } from "../../control-data/domain/deployment-work.js";
 import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
-import type { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
 import {
   type CloudRunnerDependencies,
   deploymentIdentity,
@@ -25,7 +25,7 @@ import { ApiError, participantKey } from "./auth.js";
 
 export interface CloudParticipantAccess {
   readonly work: Pick<
-    DynamoDeploymentWork,
+    CloudDeploymentWork,
     | "getJob"
     | "getTarget"
     | "getConnection"

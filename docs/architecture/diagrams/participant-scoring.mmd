@@ -4,6 +4,7 @@ sequenceDiagram
   participant Host as Event/team authorization
   participant Problem as Owned verifier or scoring adapter
   participant DB as Persistent store
+  Note over Host,DB: Local: persistent SQLite; cloud: selected Turso or DynamoDB
   Player->>Portal: Submit declared answer or checkpoint
   Portal->>Host: Team-authenticated request
   Host->>Host: Check event, problem, time and access

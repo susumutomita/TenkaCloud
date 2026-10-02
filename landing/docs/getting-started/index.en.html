@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Legacy Lite settings</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Legacy Lite messages</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -88,9 +86,8 @@ make local
 </code></pre>
 <p><code>make down</code> stops the managed local process and owned Docker runtimes while preserving the database, scores, keys and Docker data. It does not end the event or remove AWS exercise stacks. The next start restores retained event data; new on-demand Docker jobs remain stopped until participants resume them. Writable layers and volumes survive Stop, but RAM does not. The event clock is not reset. End Event stops scoring; explicit environment teardown removes owned environments. Keep the data directory until cleanup succeeds.</p>
 <p>Options use <code>LOCAL_ARGS</code>, for example <code>make local LOCAL_ARGS=&quot;--no-build&quot;</code>. When using a custom <code>--data</code> directory, pass the same directory to <code>make down</code>.</p>
-<h2 id="cloud-status">Cloud deployment status</h2><p><code>make deploy</code> and <code>make destroy</code> use the current Lambda/DynamoDB CLI after reviewed IAM setup. The supported cloud problems are hello-world with scoped CLI access and native Cryptography Battle; destroy confirms targets and retains event data. Lambda/DynamoDB hosting is in progress; this is not a verified zero-cost deployment. AWS-service problems are cloud-only. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval. The preserved cloud pipeline uses fixed historical source refs rather than the current CLI.</p>
+<h2 id="cloud-status">Cloud deployment status</h2><p><code>make deploy</code> and <code>make destroy</code> use the current Lambda + Turso/DynamoDB CLI after reviewed IAM setup. The supported cloud problems are hello-world with scoped CLI access and native Cryptography Battle; destroy confirms targets and deletes platform-owned data by default. Ordinary destroy leaves external Turso rows; destroy-all explicitly resets them. Exercise teardown is separate. Lambda + Turso/DynamoDB hosting is in progress; this is not a verified zero-cost deployment. AWS-service problems are cloud-only. Docker/Compose exercises are local-only and are not listed in the cloud catalog. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement. The cloud pipeline defaults to the current CLI; review its source settings and deployment role before starting a build.</p>
 <p>Codespaces forwarded-origin and exercise routing have not been verified for this candidate. Use the local checkout procedure above until that path has its own evidence.</p>
-<p>Historical SaaS/Lite and individual-practice instructions are available in the <a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">pinned legacy source</a>. Do not use them against this candidate or assume data migrates automatically.</p>
 <p>Next: <a href="/docs/manual/organizer/index.en.html">organizer manual</a>, <a href="/docs/manual/participant/index.en.html">participant manual</a> and <a href="/docs/operate/deploy-paths/index.en.html">deployment boundaries</a>.</p>
 <h2>Books and compatibility</h2>
 <p><a href="https://zenn.dev/bull/books/cloud-competition">自分で作るクラウド競技</a> and

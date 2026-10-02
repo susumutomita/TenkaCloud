@@ -26,8 +26,3 @@ feature flag と大会の Teams 設定を管理します。
 [host の自己登録契約](../host-participant-registration.md)に、準備状態、原子的な
 割り当て、受付票を説明しています。準備状態は保存記録に基づき、その場でのクラウド
 健康確認ではありません。実環境や全 Docker・terminal の動作は別に検証します。
-
-## 旧版の経路
-
-[固定した旧版の資料](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/operations/participant-self-registration.md)は
-異なるクラウド配置の仕組みです。現在の契約ではなく、既存の登録は自動移行されません。

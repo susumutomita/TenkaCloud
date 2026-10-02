@@ -36,7 +36,7 @@ revision's reviewed cleanup procedure and retained ownership records.
 
 ## Cloud hosting: supported scope and capacity checks
 
-The current Lambda/DynamoDB CLI supports `make deploy`, coordinated `make destroy`,
+The current Lambda CLI with Turso or DynamoDB supports `make deploy`, platform `make destroy`, explicit `make destroy-all`,
 hello-world with scoped CLI access, and native Cryptography Battle with durable
 shared state and scoring. Docker/Compose exercises are local-only and are not
 listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second
@@ -73,3 +73,33 @@ Use the exact commit, scenario, expected result, observed result and sanitized
 evidence. Mark unrun scenarios explicitly. A catalog entry is not proof that a
 problem is playable, and testing representative problems is not an all-catalog
 runtime claim.
+
+## Restored deployment and removal contract
+
+The reference is repository commit `825415fc` and its actual CLI/CDK source.
+This comparison is an offline regression record, not evidence of a live AWS run.
+
+| Behavior | Original implementation | Current regression coverage |
+| --- | --- | --- |
+| Provider selection | `CDK_PARAM_CONTROL_DATA_BACKEND`, Turso URL and SSM parameter | `backend-config.test.ts`, `stacks.test.ts`, `launcher.test.ts`: selected provider, no DynamoDB resources in Turso mode |
+| Default table removal | `resolve.ts`, `data-table-removal-policy.ts`: explicit true alone retains data | `stacks.test.ts`: default Delete/no protection, explicit Retain |
+| Managed logs and buckets | `define-nodejs-function.ts` / `deployment-log-group.ts`: Delete; owned asset buckets use auto-deletion | `stacks.test.ts`: explicit log and bucket removal policies, objects and versions |
+| Cognito | Lite `IdentityProvider` omitted removalPolicy and did not apply the full/SaaS DestroyPolicySetter, despite the old destroy prompt promising UserPool deletion | Current explicit Delete aligns the implementation with the documented cleanup command; this is a behavior correction, not byte-identical restoration |
+| Ordinary destroy | `cmdDown`: platform stacks, application then backend | `cli.test.ts`: no Outputs/DB requirement, failed or partial creation and retry |
+| Explicit purge | `lite-complete-teardown.ts`: captured physical table/log identities | `complete-teardown.test.ts`: exact ownership, old parser oracle, protected-table refusal; the same log identities are also removed after stack deletion to handle provider logs recreated during cleanup |
+| Turso cleanup | `lite-turso-teardown.ts`: normal destroy preserves external rows; explicit purge resets before AWS teardown | `turso-teardown.test.ts`: deployed target, failure abort, schema preserved |
+| Competition resources | Separate from ordinary platform destroy | `cli.test.ts`: event Teardown or explicit `--drain-events`; no automatic extra scope |
+
+Already-deployed deletion protection is live configuration: pulling this source
+cannot remove it. Save `make destroy CLOUD_ARGS="--plan"` output and review the
+exact owned table before any separately authorized protection change. Rerun the
+plan to confirm the setting before purge. Shared CDKToolkit and competitor
+bootstrap stacks remain outside the platform's deletion scope.
+
+The Cognito distinction is based on `bin/tenkacloud-lite.ts`,
+`app-wiring/wire/aspects.ts`, `tenant-template/identity-provider.ts` and the old
+`confirmTeardown` text. The old Lite/identity tests checked pool creation and
+sign-in properties, but did not pin pool removal policy. Do not infer Lite's
+removal policy from the separate full/SaaS wiring. Current synth tests explicitly
+check Delete; deleting a deployed pool also permanently removes its organizer
+accounts and still requires the operator's destructive-action confirmation.

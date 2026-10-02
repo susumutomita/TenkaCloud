@@ -22,7 +22,7 @@ AWS 問題にはアカウント、region、リソース、削除の合意が必�
 
 <h2 id="finish">安全に終了する</h2>
 
-End Event で採点を止め、コンソールの teardown で所有する環境を削除し、完了を確認します。結果を保持し、ディレクトリ全体をバックアップします。通常のローカル停止は `make down`、再開は同じディレクトリで `make local` です。停止は AWS の削除ではありません。クラウドの `make deploy` は権限設定の確認が必要です。`make destroy` は対象を確認し、記録済み問題の撤収後もデータを保持します。現在は限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。
+End Event で採点を止め、コンソールの teardown で所有する環境を削除し、完了を確認します。結果を保持し、ディレクトリ全体をバックアップします。通常のローカル停止は `make down`、再開は同じディレクトリで `make local` です。停止は AWS の削除ではありません。クラウドの `make deploy` は権限設定の確認が必要です。`make destroy` は対象を確認して基盤とデフォルトの所有データを削除します。外部 Turso の行は残し、`make destroy-all` で明示的にリセットします。問題環境は大会の Teardown または `--drain-events` で撤収します。現在は限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。
 
 運用チェックリストはリポジトリの `docs/operations/event-runbook.md` を参照してください。
 

@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/" aria-current="page">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
-<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -72,7 +70,7 @@
 Git install は指定した HTTPS repository へ接続します。以下のコマンド表は
 CLI 自身の usage 文字列から解析された<strong>規範的リファレンス</strong>であり、ドキュメントに
 記載されたコマンド名とオプションは常にコードと一致します。</p>
-<p>現在の起動は <code>make local</code>、データを保持する停止は <code>make down</code> です。<code>make deploy</code> は権限設定の事前確認が必要です。<code>make destroy</code> は対象を確認して問題環境を撤収し、データを保持します。クラウドは限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。pack activate/deactivate は旧版向けのローカル記録であり、現在の大会カタログへ問題を追加しません。</p>
+<p>現在の起動は <code>make local</code>、データを保持する停止は <code>make down</code> です。<code>make deploy</code> は権限設定の事前確認が必要です。<code>make destroy</code> は対象を確認して基盤とデフォルトの所有データを削除します。外部 Turso の行は残し、<code>make destroy-all</code> で明示的にリセットします。問題環境は大会の Teardown または <code>--drain-events</code> で撤収します。クラウドは限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。pack activate/deactivate はオフラインのカタログ記録であり、現在の大会カタログへ問題を追加しません。</p>
 <h2>コマンド</h2>
 <table class="reference-table"><thead><tr><th>Command</th><th>Usage</th></tr></thead><tbody>
 <tr><td><code>activate</code></td><td><code>tenkacloud pack activate &lt;id@version&gt; --tenant &lt;t&gt; [--store &lt;dir&gt;]</code></td></tr>

@@ -255,6 +255,8 @@
     "coordination_duel-deadline": "DUEL の不戦勝とお題の期限切れ"
   },
   "problem_detail": {
+    "instructions_error": "問題の手順を読み込めませんでした",
+    "instructions_retry": "再試行",
     "reference_header": "問題情報と環境の状態",
     "back_button": "問題一覧へ戻る",
     "video_header": "動画でわかる操作の流れ",

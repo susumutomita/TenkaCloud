@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
-<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -70,10 +68,9 @@
 <h1>起動と配置の境界 <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>未公開の統合 candidate の手順です。ローカルの大会・チーム運用は実装されていますが、クラウド基盤の配置や全カタログのプレイ確認が完了した公開版ではありません。</p>
 <h2 id="local-platform">ローカル基盤</h2><p><code>make local</code> は Bun のサーバーと二つの画面を起動し、SQLite へ状態を保存します。<code>make down</code> は所有するローカル環境を止め、大会データを保持します。旧 host target は別モードとして残しません。<a href="/docs/getting-started/">はじめに</a>で初期管理者、大会作成、参加者ログインを確認してください。</p>
-<h2 id="cloud-platform">クラウド基盤の対応範囲と検証状況</h2><p><code>make deploy</code> と <code>make destroy</code> は、この版の Lambda/DynamoDB 配置と協調撤収 CLI を実行します。標準の <code>CDKToolkit</code> を再利用し、存在しない場合だけ <code>make deploy</code> 内で承認後に公式 <code>cdk bootstrap</code> を実行します。標準の CloudFormation 実行 role はデフォルトで <code>AdministratorAccess</code> を持つため、bootstrap の信頼設定、呼び出し元の権限、アプリケーションの IAM 変更を確認してください。既存 Toolkit は変更せず、以前の独自 TenkaCloud Toolkit も削除・移行しません。現在のクラウド問題は限定 CLI を使う hello-world と組み込みの Cryptography Battle です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。撤収ではアカウント、リージョン、所有対象を表示し、記録済み問題の撤収後に基盤を削除します。データは保持し、保持リソースには料金が発生する場合があります。<code>infrastructure/templates/cloud-pipeline.yaml</code> のデフォルトは現行 CLI と明示的に承認する無人 bootstrap・配置です。launcher の作成・build 開始前に広い権限を持つ CodeBuild role とソース ref を確認してください。詳細設定の旧版ソースでは元の完全な処理を維持します。コンテナの build 成功は、配置済みや費用ゼロの証明ではありません。</p>
+<h2 id="cloud-platform">クラウド基盤の対応範囲と検証状況</h2><p><code>make deploy</code> と <code>make destroy</code> は、この版の Lambda と選択した Turso/DynamoDB の配置・基盤撤収 CLI を実行します。標準の <code>CDKToolkit</code> を再利用し、存在しない場合だけ <code>make deploy</code> 内で承認後に公式 <code>cdk bootstrap</code> を実行します。標準の CloudFormation 実行 role はデフォルトで <code>AdministratorAccess</code> を持つため、bootstrap の信頼設定、呼び出し元の権限、アプリケーションの IAM 変更を確認してください。既存 Toolkit は変更せず、以前の独自 TenkaCloud Toolkit も削除・移行しません。現在のクラウド問題は限定 CLI を使う hello-world と組み込みの Cryptography Battle です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。撤収ではアカウント、リージョン、所有対象を表示し、基盤とデフォルトの所有データを削除します。外部 Turso の行は通常残し、<code>make destroy-all</code> で明示的にリセットします。問題環境は大会の Teardown または <code>--drain-events</code> で撤収します。保持リソースには料金が発生する場合があります。<code>infrastructure/templates/cloud-pipeline.yaml</code> のデフォルトは現行 CLI と明示的に承認する無人 bootstrap・配置です。launcher の作成・build 開始前に広い権限を持つ CodeBuild role とソース ref を確認してください。コンテナの build 成功は、配置済みや費用ゼロの証明ではありません。</p>
 <h2 id="exercise-deployment">問題環境の配置は別の操作</h2><p>ローカル大会では所有情報付きの Docker Compose project と組み込み Battle を使います。AWS サービスの問題はクラウド開催専用で、確認した競技者アカウント、region、role、必須の ExternalId を使います。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。組み込みの Cryptography Battle は両方の開催方法に対応します。問題リソースには費用が発生する場合があります。ローカル停止では、以前の AWS 対応版が作成した stack を削除しません。</p>
-<h2 id="legacy-installations">既存の旧版環境</h2><p>SaaS/Lite と旧個人練習の手順は<a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">固定した旧版</a>を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。</p>
-<p>SaaS tenant の rollout は旧版の契約です。改名した cloud pipeline は固定したソースに対する元の CodePipeline/CodeBuild 配置・撤収を維持します。既存環境の操作には、その環境を作成した正確な旧版を使ってください。</p>
+<p>cloud pipeline は固定した現行ソースで CodePipeline/CodeBuild の配置・撤収を実行します。DB の選択やソース変更でデータは自動移行しません。</p>
 
 </article>
 </main>

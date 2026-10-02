@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
-<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -70,7 +68,7 @@
 <h1>問題パック <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>pack は競技の内容を version ごとに確認・保存する単位です。manifest に識別情報、必要な runtime、問題ファイルを記述します。artifact は runtime によって異なり、CloudFormation template はその一例です。</p>
 <h2>問題パックとは</h2>
-<p>現在の CLI は雛形作成、検証、内容確認、不変 revision の保存を行えます。install や activate では現在の大会カタログへ追加されません。残っている tenant 単位の activation は旧版向けのローカル記録であり、現行の競技実行手順ではありません。</p>
+<p>現在の CLI は雛形作成、検証、内容確認、不変 revision の保存を行えます。install や activate では現在の大会カタログへ追加されません。activation はオフラインのカタログ記録であり、現行の競技実行手順ではありません。</p>
 <h2>Battle と Challenge</h2>
 <p>Challenge と Battle は操作と採点の形式であり、実行場所とは別です。旧ローカル Compose 問題はすべて Challenge 競技へ対応させる方針です。汎用カタログ・workbench の復旧と terminal・ブラウザ検証は進行中です。</p>
 <h2>採点方式</h2>

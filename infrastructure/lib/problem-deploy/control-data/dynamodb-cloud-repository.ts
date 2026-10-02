@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   type DynamoDBDocumentClient,
   GetCommand,
@@ -9,7 +8,9 @@ import {
   type TransactWriteCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
+import { digest, eventSchema, ID, KEY, scoreSchema, teamSchema } from "./cloud-records.js";
 import type { CloudRepository, EventCreationReceipt } from "./cloud-repository.js";
+import { deploymentSchema } from "./deployment-records.js";
 import { NATIVE_COORDINATION_PROBLEM } from "./domain/coordination.js";
 import { DeploymentConflict } from "./domain/deployment-work.js";
 import type { DeploymentRecord } from "./domain/deployments.js";
@@ -24,78 +25,6 @@ import {
   installationScopeDigest,
 } from "./installation-control.js";
 
-const scoreSchema = z.object({
-  eventId: z.string(),
-  teamId: z.string(),
-  score: z.number().finite(),
-  completedProblems: z.number().int().nonnegative(),
-});
-const ID = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
-const KEY = /^[A-Za-z0-9_-]{43}$/u;
-const digest = (key: string): string => createHash("sha256").update(key).digest("hex");
-const teamSchema = z.object({
-  eventId: z.string().regex(ID),
-  teamId: z.string().regex(ID),
-  internalSlug: z.string(),
-  displayName: z.string().optional(),
-  awsAccountId: z.string().optional(),
-  region: z.string().optional(),
-  teamLoginKey: z.string().regex(KEY),
-  authVersion: z.number().int().positive(),
-  accessRevoked: z.boolean(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  expiresAt: z.number().finite(),
-});
-const eventSchema = z.object({
-  eventId: z.string().regex(ID),
-  name: z.string(),
-  status: z.enum(["DRAFT", "DEPLOYING", "READY", "ENDED", "TEARDOWN", "ARCHIVED"]),
-  problems: z.array(
-    z.object({
-      problemId: z.string(),
-      defaultRegion: z.string(),
-      defaultAwsAccountId: z.string().optional(),
-    }),
-  ),
-  teamCount: z.number().int().nonnegative(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  expiresAt: z.number().finite(),
-  startsAt: z.string().optional(),
-  endsAt: z.string().optional(),
-  scoringLocked: z.boolean().optional(),
-  scoreboardFreezeMinutes: z.number().optional(),
-  teardownExpected: z.number().int().nonnegative().optional(),
-  teardownCompleted: z.number().int().nonnegative().optional(),
-});
-export const deploymentSchema = z.object({
-  jobId: z.string().regex(ID),
-  eventId: z.string().regex(ID),
-  teamId: z.string().regex(ID),
-  problemId: z.string(),
-  region: z.string(),
-  awsAccountId: z.string(),
-  status: z.enum([
-    "PENDING",
-    "IN_PROGRESS",
-    "COMPLETE",
-    "FAILED",
-    "DELETING",
-    "DELETED",
-    "EXPIRED",
-    "AUTO_DELETED",
-  ]),
-  expiresAt: z.number().finite(),
-  score: z.number().finite(),
-  publicOutputs: z.record(z.string()).optional(),
-  scoring: z.object({ kind: z.literal("flag"), points: z.number() }).optional(),
-  flagSubmitted: z.boolean().optional(),
-  failureReason: z.string().optional(),
-  teardownStatus: z.enum(["PENDING", "IN_PROGRESS", "FAILED", "DELETED"]).optional(),
-  teardownFailureReason: z.string().optional(),
-  createdAt: z.string().optional(),
-});
 export function eventKey(eventId: string) {
   if (!ID.test(eventId)) throw new Error("Invalid event ID.");
   return { PK: `EVENT#${eventId}`, SK: "META" };

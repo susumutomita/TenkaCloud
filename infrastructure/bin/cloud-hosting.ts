@@ -1,6 +1,10 @@
 import { resolve } from "node:path";
 import { App } from "aws-cdk-lib";
 import { CloudApplicationStack } from "../lib/cloud-hosting/application-stack.js";
+import {
+  cloudControlDataConfiguration,
+  retainCloudDataTables,
+} from "../lib/cloud-hosting/config.js";
 import { CloudDataStack } from "../lib/cloud-hosting/data-stack.js";
 import { cloudDeploymentTarget } from "../lib/cloud-hosting/regions.js";
 import { cloudStackNames, cloudStackTags } from "../lib/cloud-hosting/stack-names.js";
@@ -17,6 +21,8 @@ const app = new App({
 });
 const backend = new CloudDataStack(app, names.backend, {
   environment,
+  controlData: cloudControlDataConfiguration(process.env),
+  retainDataTables: retainCloudDataTables(process.env),
   env: { account, region },
   tags: cloudStackTags(environment),
   synthesizer: standardSynthesizer(),

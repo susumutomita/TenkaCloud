@@ -22,7 +22,7 @@ For AWS exercises, agree on accounts, region, resources and cleanup. Use `infras
 
 <h2 id="finish">Finish safely</h2>
 
-End Event to stop scoring. Remove owned environments using the organizer teardown actions and verify completion. Retain results and back up the full data directory. For an ordinary local pause use `make down`; restart with `make local` and the same directory. Stop is not AWS cleanup. Cloud `make deploy` requires reviewed IAM setup; `make destroy` confirms the installation, drains recorded exercises, and retains data. The current cloud catalog supports hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval.
+End Event to stop scoring. Remove owned environments using the organizer teardown actions and verify completion. Retain results and back up the full data directory. For an ordinary local pause use `make down`; restart with `make local` and the same directory. Stop is not AWS cleanup. Cloud `make deploy` requires reviewed IAM setup; `make destroy` confirms the installation and deletes platform-owned data by default. It leaves external Turso rows; `make destroy-all` explicitly resets them. Use event Teardown or `--drain-events` for exercise resources. The current cloud catalog supports hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement.
 
 See the repository's `docs/operations/event-runbook.md` for the operating checklist.
 

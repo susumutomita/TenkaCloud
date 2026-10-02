@@ -20,8 +20,8 @@ export function MachineApiPage({ locale }: { locale: Locale }) {
         {locale === "ja"
           ? "旧版の machine API 資料です。現在の host candidate にこの API はありません。単体 deploy の互換性は Draft の未決事項です。"
           : "Historical machine API reference. These routes are absent from the host candidate. Standalone deploy compatibility remains an unresolved Draft decision."}{" "}
-        <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/legacy-operations.md">
-          Legacy operations
+        <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/host-retirement.md">
+          {locale === "ja" ? "現在の対応範囲" : "Current hosting support"}
         </a>
       </p>
       <p>{copy.lead}</p>

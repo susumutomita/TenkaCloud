@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
-<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -75,7 +73,7 @@
 <li><a href="/docs/manual/developer/">開発者</a>: 実装とテストを変更する</li>
 </ul>
 <h2 id="how-the-roles-fit-together">役割の関係</h2><p>一つのローカルプロセスが開催者・参加者の画面を配信し、大会・チームの状態を保存して、所有する問題環境を操作します。開催者の権限と参加チームの認証は別です。問題の内容はカタログが管理します。schema の検証成功だけでは実行対応を証明できません。</p>
-<h2 id="if-you-are-unsure">迷った場合</h2><p><a href="/docs/getting-started/">はじめに</a>から進めてください。現行 candidate に SaaS/Lite の構築手順はありません。クラウドの deploy/destroy は権限設定を確認して実行します。クラウドは限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。</p>
+<h2 id="if-you-are-unsure">迷った場合</h2><p><a href="/docs/getting-started/">はじめに</a>から進めてください。現行 candidate に SaaS/Lite の構築手順はありません。クラウドの deploy/destroy は権限設定を確認して実行します。クラウドは限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。</p>
 
 </article>
 </main>

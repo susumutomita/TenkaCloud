@@ -1,8 +1,8 @@
 # Cloud hosting
 
-This unreleased integration candidate uses Lambda, DynamoDB, Cognito, CloudFront
-and CDK for the supported cloud exercises described below. Local hosting remains
-SQLite. No SBT, tenant provisioning, tier plans or remote SQL backend is included.
+This unreleased integration candidate uses Lambda, Cognito, CloudFront and CDK
+with a choice of Turso or DynamoDB for the supported cloud exercises below.
+Local hosting remains SQLite. No SBT, tenant provisioning or tier plans are included.
 Source, synth and local rehearsals do not establish live AWS authorization, costs
 or the capacity of a particular event.
 
@@ -15,7 +15,7 @@ or the capacity of a particular event.
 - REST API Gateway Cognito signature verification and client-audience pinning
 - Lambda issuer, audience, ID-token, expiry, and explicit role validation
 - Invitation-only organizer sign-in with mandatory TOTP and no self-assigned role
-- Retained, deletion-protected event/team/deployment tables and private SPA hosting
+- Conditional atomic persistence in the selected database and private SPA hosting
 - Existing SPA builds and standard CDK bootstrap/asset publishing, deploy, and guarded foundation teardown
 - Existing competitor-account registration, verification and event-selection flow
 - AWS flag deployment intake, durable dispatch, fenced lifecycle, and atomic scoring
@@ -62,11 +62,61 @@ existing creation/explicit-reveal contract; neither listing nor participant view
 include them. Rotation/revocation uses one conditional transaction and invalidates
 the prior lookup immediately.
 
+## Database selection
+
+Set `CDK_PARAM_CONTROL_DATA_BACKEND=dynamodb` (the default) or `turso` in the
+selected environment's `.env`. The values are normalized as in the former cloud
+implementation. Turso additionally requires:
+
+```dotenv
+CDK_PARAM_CONTROL_DATA_BACKEND=turso
+CDK_PARAM_TURSO_DATABASE_URL=libsql://your-database.turso.io
+CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/tenkacloud/turso/auth-token
+```
+
+The URL is configuration, not the token. The token must already exist in the
+chosen AWS region's SSM Parameter Store. Its creation and credentials are an
+operator setup step; no token is accepted in browser configuration or source.
+Turso handlers receive permission to read that exact parameter. Turso mode creates
+zero DynamoDB tables and grants no DynamoDB runtime access. DynamoDB mode preserves
+the three on-demand tables and does not require a Turso URL or token parameter.
+
+Both providers implement event/team authentication, deployment work, competitor
+registrations, durable dispatch, scoring receipts and native Battle state. Turso
+uses the existing official HTTP client and SQL transactions with conditional
+rollback. Authorization reads are routed to the primary in one write batch;
+this avoids replica-local stale authorization after a completed key revocation,
+but adds primary transaction contention. A request already in flight can finish.
+
+The current SQL schema uses installation-owned `cloud_*` tables. It does not
+migrate old tenant-based SQL or DynamoDB data. `make deploy` rejects a backend or
+Turso URL change for an existing installation before mutation. Ordinary destroy
+uses the deployed identity even if the local environment file has changed.
+Do not share this installation's database with a second TenkaCloud installation.
+
+The repeatable local protocol rehearsal starts an explicitly supplied, installed
+[official sqld](https://github.com/tursodatabase/libsql/releases/tag/libsql-server-v0.24.32)
+primary and replica on loopback, then removes its synthetic database:
+
+```bash
+node --import tsx infrastructure/verification/libsql-protocol-check.ts /absolute/path/to/sqld
+```
+
+It downloads nothing and uses no hosted endpoint, AWS account or credentials.
+The [2026-10-02 evidence](test/cloud-hosting/evidence/libsql-protocol-20261002.json)
+uses sqld 0.24.32 and `@libsql/client/http` 0.17.4: 25 teams and 100 concurrent
+authentication reads completed in 504 ms (p95 502 ms), plus canonical Crypto Battle
+operations/projections, real proxy-constraint rollback, exactly-once scoring and
+receipts, primary-routed authorization, restart durability and scoped reset.
+During primary outage, replica-local SELECT remained available while repository
+authentication failed closed. These measurements do not establish hosted Turso
+availability, WAN replication fault behavior or production capacity.
+
 ## Cloud deployment pipeline
 
 [`templates/cloud-pipeline.yaml`](templates/cloud-pipeline.yaml) remains the one
-complete launcher. Its default `current-cloud-v1` source contract runs the current
-`make deploy` / coordinated `make destroy` with standard CDK bootstrap roles.
+complete launcher. Its `current-cloud-v1` source contract runs the current
+`make deploy`, `make destroy` and `make destroy-all` with standard CDK bootstrap roles.
 The launcher retains the former broad CodeBuild caller policy; review its IAM,
 service access and selected source refs before creating it or starting a build.
 The final template pins its tested helper-source
@@ -82,23 +132,21 @@ Current deploy builds pass `--setup-if-needed --yes`: they reuse a compatible
 `CDKToolkit`, or create the missing standard toolkit and deploy with the reviewed
 build role. First bootstrap defaults to an `AdministratorAccess` CloudFormation
 execution role. The CodeBuild caller retains its broad permissions after bootstrap;
-this is not a least-privilege launcher. Current builds reject Turso/provisioned-Dynamo
-settings, shared ExternalId overrides and historical `destroy-all` semantics.
+this is not a least-privilege launcher. The selected Turso/DynamoDB provider and
+explicit data-retention setting are passed to the same CLI used locally.
+DynamoDB uses on-demand capacity; provisioned-capacity options and a shared
+ExternalId override are rejected rather than silently ignored.
 
-The advanced `historical-949a40a9` contract preserves the full original launcher at
-platform `949a40a9ed9199331d928ad5cf9397dbb4ba3f81` and catalog
-`363a7c9b83969e20d63b74fd0410a354da5e202b`, including historical backend/capacity
-parameters, bootstrap, destroy/destroy-all, physical resource names and cleanup
-checkpoints. Its original broad CodeBuild permissions and data-deletion behavior
-require separate review. Selecting historical sources is not a migration to the
-current cloud architecture. See [permission boundaries](BOOTSTRAP-IAM.md).
+The launcher has one current execution path. Source overrides must implement its
+checked contract; changing source or database settings is not a data migration.
+See [permission boundaries](BOOTSTRAP-IAM.md).
 
 ## Current checkout's setup and teardown boundary
 
 `make deploy` and `make destroy` call the existing `scripts/cloud-hosting/main.ts`
 implementation in this checkout. They use this checkout, rather than an implicitly selected historical source. The current cloud exercise catalog supports hello-world with scoped CLI
 access and native Cryptography Battle. Docker/Compose exercises are local-only and
-are not listed in the cloud catalog. First-account IAM preparation is explicit and inspectable, as described below. Synchronized Battle bursts still exceed the five-second refresh interval;
+are not listed in the cloud catalog. First-account IAM preparation is explicit and inspectable, as described below. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement;
 the presence of its routes is not a 100-participant capacity claim. These commands can create chargeable AWS resources; they do not
 promise a zero-cost platform.
 
@@ -176,76 +224,84 @@ least-privilege caller permissions. Application runtime policies, participant
 access restrictions, ExternalId requirements and owned-stack teardown checks remain
 separate from standard CDK deployment authority.
 
-Use `make destroy` with the same account, region and environment for coordinated
-teardown. It prints targets and retained-data consequences before confirmation.
-`CLOUD_ARGS="--yes"` is an explicit noninteractive teardown confirmation, not a purge.
+Use `make destroy` with the same account, region and environment. It verifies both
+platform stack ARNs and ownership tags, shows the deletion consequences, then asks
+for confirmation. `CLOUD_ARGS="--yes"` is explicit noninteractive confirmation.
+The pinned official CDK CLI removes the application before its backend using its
+standard deployment-role assumption and same-account fallback. A small temporary
+assembly pins the verified physical stack ARN without re-synthesizing application
+code, publishing assets or changing the deployed CloudFormation service role.
+The temporary files are removed on success or failure. Ordinary destruction does not
+need application `Outputs`, database access, an empty Events table or a durable
+drain marker. It also works after initial `CREATE_FAILED`, `ROLLBACK_COMPLETE`,
+`ROLLBACK_FAILED` or `DELETE_FAILED`, and can resume when one stack is already gone.
+Wait for any create/update/rollback operation to finish before retrying.
 
-An existing app stack must explicitly publish `CloudRunnerEnabled=true|false`.
-Registry deployments also publish `CloudRunnerMode` and the digest of retained
-legacy bindings. `up` does not require manual bindings for a registry-only
-installation, but refuses to omit or change a deployed legacy compatibility set.
-It also refuses to reopen an installation with a durable teardown marker.
+The default deployed policy deletes stack-owned DynamoDB tables and all their rows,
+Cognito accounts, S3 objects, CloudFront distributions and managed logs. Only an
+explicit `CDK_PARAM_RETAIN_DATA_TABLES=true` deployment retains its data tables.
+CloudFormation uses the policy already deployed: changing source or `.env` alone
+does not update an existing stack. Retained resources can continue to incur charges.
+CDKToolkit, its shared assets, competitor bootstrap roles/stacks and separately
+deployed exercise resources are outside platform destruction.
 
-The source CLI's `down` first validates account, region, installation tags, physical
-stack ARNs and stack-scoped table outputs. It requires
-`CloudInstallationControlVersion=1` for the prior AWS-only application, or version
-`2` plus the pinned artifact-bucket/catalog outputs for native coordination. The
-version-2 CLI closes and settles native runs before requesting resource teardown;
-older CLIs refuse an unknown control version. An older deployment cannot honor a
-new intake fence merely because its table received a marker.
-A stack update still in progress blocks teardown. After showing the exact targets
-and retained-data consequences, the command asks for confirmation (`--yes` is an
-explicit noninteractive alternative).
+For retained data cleanup, use `make destroy-all ENV=development`, equivalent to
+`make destroy ENV=development CLOUD_ARGS="--purge-retained-data"`. It first captures
+exact CloudFormation-owned table and log identities, verifies table ARNs and tags,
+and shows the permanent deletion scope. It deletes those tables and CloudWatch
+logs, then resets the selected deployed Turso control-data rows if applicable,
+then removes the AWS stacks. A failure in that pre-deletion purge or Turso reset
+stops stack removal. After the stacks are gone, it deletes the same captured log
+groups again to remove logs recreated by S3 cleanup providers during deletion.
+No additional log names are discovered. If this final log pass fails, the error
+explicitly says that the stacks are already removed; use the saved inventory for
+operator-reviewed recovery instead of assuming the command can rediscover them.
+Turso reset happens while the stack's SSM authentication is still available and
+preserves the database schema and migration state. Ordinary `make destroy` leaves
+external Turso rows and warns about them. The deployed provider and Turso target
+come from stack outputs, never from a subsequently changed local `.env`.
 
-The existing Events table stores a durable installation stop marker. Event
-creation, deployment acceptance/claim/create reservation and scoring include its
-condition in their transactions. Only after stopping intake does the CLI strongly
-scan the base table for every stored event and reuse the event teardown path.
-The dispatcher continues deletion work while skipping creation, including across
-empty filtered query pages. Partial acceptance, unresolved resources or uncertain
-creation keep the platform available for cleanup and leave intake closed.
-A 30-minute CLI wait timeout does not erase the marker or imply success; correct
-the event diagnostics and repeat the command to resume.
+To inspect an existing deployment without changing it, run:
 
-A retried problem may have older attempts in another account or region. Teardown
-uses each immutable attempt snapshot and its original physical ARN, connection and
-catalog. It records a separate completion proof for each historical attempt before
-starting the current target's final cleanup. Unknown creation is never resolved by
-a timeout alone. Partial failure and interrupted dispatch remain retryable; event
-counts advance once per team/problem target, not once per historical attempt.
-Synthetic DynamoDB tests covered 25 teams and 75 attempts, parallel retry, response
-loss and older-worker recovery while retaining scores, snapshots and receipts.
+```bash
+make -s destroy ENV=development CLOUD_ARGS="--plan" > teardown-plan.txt
+```
 
-Only archived events with matching expected/completed counts permit a durable
-`DRAINED` marker. The CLI then calls CloudFormation deletion and its waiter with
-the verified physical application ARN, followed by the backend ARN. It does not
-delete by a reusable stack name or rebuild/upload assets during teardown. A retry
-after application deletion requires the matching backend and completed drain
-marker before it can finish. Both stacks already absent is a no-op, not a data-purge
-claim. An unexplained missing stack or ambiguous state blocks destructive work.
+Save the printed physical-resource inventory before destroying stacks. The plan
+records exact table/stack ARNs, deployed retention policies, deletion protection,
+owned log groups and every retained resource's physical ID/type/stack identity,
+including retained S3 buckets and Cognito pools. It does not scan table contents, discover tables by prefix,
+modify protection, or delete resources. If both stacks are gone, the CLI cannot
+prove ownership of orphaned retained resources and refuses a purge; use the saved
+inventory for an operator-reviewed recovery instead of adopting resources by name.
 
-Initial creation can fail before CloudFormation publishes `Outputs`. Once the stack
-finishes `CREATE_FAILED`, `ROLLBACK_COMPLETE` or `ROLLBACK_FAILED`, repeat
-`make destroy` for the same environment. The CLI verifies the exact stack's
-creation history, deployed template and complete resource inventory before
-recovering table identities; it also checks table ARNs, ownership tags and
-retention policies. It never searches all AWS resources or adopts tables by name.
+A deployment made with the previous unconditional retention/deletion-protection
+policy still has those live settings. A source fix does not repair it. If the plan
+shows `protected: true`, `destroy-all` stops before purging. Review the specific
+table ARN and its CloudFormation ownership, explicitly authorize any required
+protection change, and use a targeted stack update when the stack is updateable.
+For a failed initial stack that cannot be updated, an operator must separately
+review and perform the exact table's protection change. Rerun `--plan` to verify
+protection is off, then run `destroy-all` with its explicit purge confirmation.
+These commands never automatically disable live protection or change CDKToolkit.
+Previously retained S3/Cognito resources also keep their deployed policies. Save
+the plan before removing their stacks; explicit table/log purge does not silently
+expand to bucket or UserPool deletion. Any survivor cleanup uses those exact
+recorded identities in a separately reviewed operator action.
 
-When the application exists, recovery uses its verified intake-fence contract and
-the normal durable event drain. If native artifacts were never created, removal
-requires a durable intake stop and strongly consistent, paginated proof that all
-three tables contain no data except the matching Events-table stop marker. When
-only the backend failed its first creation and no application exists, every
-surviving table must be empty; not-yet-created tables need no cleanup. Nonempty
-partial data, uncertain ownership, incomplete history or resources still changing
-block deletion with the evidence retained for review. A stack still creating or
-rolling back must finish before retrying. A failed deletion can be retried with
-the same command; this never purges retained resources or modifies `CDKToolkit`.
+Competition resource cleanup is a separate operation: use the event's Teardown
+action before removing the platform when needed. The optional
+`CLOUD_ARGS="--drain-events"` explicitly includes stopping intake and cleaning up
+recorded competition resources before platform removal. This flag uses the durable
+installation marker and requires the deployed control version, database and native
+artifact metadata. Failures keep the platform available and intake stopped;
+repeat the same explicit command after resolving the event diagnostics. Ordinary
+`make destroy` does not acquire those new requirements or silently expand its scope.
 
-Event data, scores and receipts, organizer accounts, shared ExternalId, competitor
-bootstrap roles/stacks, CDK asset and execution-artifact storage, and the shared
-standard `CDKToolkit` are retained. Unrelated or separately deployed exercise resources are not
-adopted or removed. Retained resources can continue to incur charges.
+An existing app stack must publish `CloudRunnerEnabled=true|false` for deployment
+updates. Registry deployments also publish `CloudRunnerMode` and a digest of legacy
+bindings. `up` refuses to omit or change deployed legacy credentials, or to reopen
+an installation whose explicit event drain has started.
 
 Current deployment builds the two existing SPAs and lets CDK publish their assets
 and the execution artifacts. It creates no additional source ZIP, staging tree or
@@ -254,8 +310,8 @@ It does not replace the selected problem catalog with a submodule checkout.
 Historical pinned launchers still run their own source preparation. Any buckets
 created by those older paths are not silently adopted or deleted by this CLI.
 
-There is no purge flag. Retention does not imply automatic reattachment on a later
-fresh deployment; an explicit import/recovery procedure is still required.
+Retention does not imply automatic reattachment on a later fresh deployment; an
+explicit import/recovery procedure is still required.
 
 ## Verification
 

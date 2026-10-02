@@ -1,99 +1,55 @@
-# External Git pack: manual runbook (real repository)
+# External Git problem packs
 
-> Pack authoring remains available. Lite/SaaS runtime wiring below is historical; local activation does not add a problem to the host catalog. See [the retirement matrix](../../docs/host-retirement.md).
+Pack tools create, validate and store reusable problem content independently of
+the competition runtime. Installing a pack does not add it to the event catalog.
+The [pack tutorial](../../apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx)
+explains the authoring contract; [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)
+is the competition catalog.
 
-The automated end-to-end acceptance test
-(`infrastructure/test/problem-pack/external-git-pack-e2e.test.ts`, Issue #2098)
-proves the full external-Git-pack lifecycle DETERMINISTICALLY and OFFLINE: it
-injects a fake Git transport that serves a local fixture pack pinned to a full
-40-hex SHA, so it runs in CI with no real cloud and no real Git network.
+## Create and validate
 
-This runbook documents the one part the offline test cannot exercise: fetching a
-pinned revision from a SEPARATE REAL repository over HTTPS. Run it manually when
-you want to verify the real `git`-backed transport end to end.
+Run from the TenkaCloud checkout with its dependencies installed:
 
-## Prerequisites
+```bash
+bun run pack init /path/to/my-pack
+bun run pack validate /path/to/my-pack
+```
 
-- A separate public Git repository that contains a valid problem pack — a
-  `tenkacloud-pack.json` manifest at the pack root, or under a subdir. It MUST
-  NOT live under this repo's core `problems/` tree.
-- `git` available on PATH (the real fetcher shells out to `git` plumbing with
-  hooks disabled and lifecycle scripts never run).
+Complete the scaffold's problem and provider artifact, add tests, then validate
+again. A manifest and placeholder are not a playable exercise. Use an absolute
+path outside this checkout; the scaffolder rejects `..` path segments.
 
-## Steps
+## Install a reviewed revision
 
-1. Author + validate the pack in the external repo (outside this core repo).
-   The pack CLI runs from this repo's root via the `make pack-*` wrappers
-   (without make: `cd <repo-root> && ./node_modules/.bin/tsx
-   infrastructure/bin/tenkacloud-pack.ts <subcommand> …`):
+Publish the authored pack to your own repository after reviewing it. Record its
+full 40-character commit SHA; branches, tags and abbreviated hashes are not
+accepted as immutable revisions.
 
-   ```bash
-   make pack-init ARGS="/path/to/external-pack"
-   # Edit the scaffolded tenkacloud-pack.json (id, title, ...) and the problem.
-   make pack-validate ARGS="/path/to/external-pack"
-   ```
+```bash
+bun run pack install git https://github.com/<you>/my-pack.git --commit <full-40-character-sha>
+bun run pack list
+bun run pack inspect <pack-id>@<version>
+```
 
-   (The scaffolder rejects `..` path segments by design, so point `pack-init`
-   at an absolute path when the pack lives outside this repo.)
+Use `--subdir <path>` when the manifest is below the repository root. Check that
+`packs-lock.json` records the source URL, resolved commit, subdirectory and content
+digest. Fetching uses Git over HTTPS with hooks disabled. Installation does not
+run lifecycle scripts or deploy provider resources.
 
-   Commit and push it to the separate repository, then note the FULL 40-hex
-   commit SHA of the revision you want to pin (`git rev-parse HEAD`). A branch
-   name, tag, `HEAD`, or abbreviated hash is rejected by design.
+## Remove a stored revision
 
-2. Install the exact pinned revision over HTTPS (real transport):
+```bash
+bun run pack remove <pack-id>@<version>
+```
 
-   ```bash
-   make pack-install ARGS="git https://github.com/<you>/external-pack.git --commit <full-40-hex-sha> [--subdir <path>]"
-   ```
+Removal refuses revisions still referenced by local activation or event-pin
+records. Inspect and resolve those references first. Removing a snapshot does not
+tear down an AWS stack or a running exercise.
 
-   Confirm the lock (`packs-lock.json`) records `sourceKind: "git"`, the resolved
-   commit, the optional subdir, and a content digest.
+## What the repository verifies
 
-3. Activate the revision for ONE tenant, confirm a SECOND tenant does not see it,
-   create an event that pins its problem, and confirm a deployment resolves the
-   pack provenance from the event's pinned snapshot.
-
-4. Deactivate the pack (or install a newer revision); confirm the existing
-   event's pinned catalog is UNCHANGED.
-
-5. Confirm `pack remove` is refused while the revision is pinned by an event or
-   activation, and succeeds once every reference is removed.
-
-The contracts checked manually here are the same ones the offline e2e asserts
-against injected fakes; only the transport (real `git` over HTTPS) differs.
-
-## Live Lite-mode verification (issue #2459)
-
-The offline suites (`external-git-pack-e2e.test.ts` and, for the fuller
-CLI → synth → event → deployment chain, `pack-lite-full-chain-e2e.test.ts`) prove
-every contract deterministically with no real AWS account. Issue #2459's
-acceptance criterion is different: run the same flow once against real AWS in
-Lite mode and record the evidence. Steps:
-
-1. Install the pinned pack from the separate repository (real `git` transport):
-
-   ```bash
-   make pack-install ARGS="git https://github.com/<you>/external-pack.git --commit <full-40-hex-sha>"
-   ```
-
-2. Activate it for tenant `local` — Lite's fixed tenant id, the only tenant a
-   Lite synth ever reads:
-
-   ```bash
-   make pack-activate ARGS="<packId>@<version> --tenant local"
-   ```
-
-3. Deploy Lite mode against real AWS:
-
-   ```bash
-   make deploy
-   ```
-
-4. In the Application Admin Console, create an event. Confirm the activated
-   pack's problem appears in the catalog picker beside the core problems.
-
-5. Deploy the pack problem to a competitor account from the console, submit the
-   expected flag, and confirm the scoring engine records the solve.
-
-6. Capture logs and/or a screen recording of steps 3-5 and attach them as
-   evidence on #2459.
+The [external Git acceptance test](test/external-git-pack-e2e.test.ts) exercises
+immutable fetch, validation, provenance, scoped activation records, event pins and
+removal with an injected transport. Golden and reference packs test the same
+contracts offline. The manual Git install above checks the real network transport;
+it does not establish an integrated pack-to-event deployment path.

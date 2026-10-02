@@ -10,7 +10,7 @@ Git install は指定した HTTPS repository へ接続します。以下のコ�
 CLI 自身の usage 文字列から解析された**規範的リファレンス**であり、ドキュメントに
 記載されたコマンド名とオプションは常にコードと一致します。
 
-現在の起動は `make local`、データを保持する停止は `make down` です。`make deploy` は権限設定の事前確認が必要です。`make destroy` は対象を確認して問題環境を撤収し、データを保持します。クラウドは限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。pack activate/deactivate は旧版向けのローカル記録であり、現在の大会カタログへ問題を追加しません。
+現在の起動は `make local`、データを保持する停止は `make down` です。`make deploy` は権限設定の事前確認が必要です。`make destroy` は対象を確認して基盤とデフォルトの所有データを削除します。外部 Turso の行は残し、`make destroy-all` で明示的にリセットします。問題環境は大会の Teardown または `--drain-events` で撤収します。クラウドは限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。pack activate/deactivate はオフラインのカタログ記録であり、現在の大会カタログへ問題を追加しません。
 
 ## コマンド
 

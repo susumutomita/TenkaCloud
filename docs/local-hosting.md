@@ -1,9 +1,7 @@
 # Local competition hosting
 
 Local hosting runs a competition on the organizer's computer through `make local`.
-The former `make local` individual-practice entry point and its login flow are
-retired as a separate backend in this integration candidate. Existing installations should follow
-their [pinned legacy release](legacy-operations.md). The current host console uses
+The host console uses
 one organizer key, with no username, password or local SAML sign-in. Participants
 sign in with the separate team keys issued for their event. Cloud organizer
 authentication remains Cognito.
@@ -327,10 +325,10 @@ AWS-service problems belong to cloud hosting. `make local` refuses the old
 `--aws-region` option before initializing AWS clients. Local hosting offers the
 non-AWS Compose catalog and native Battle games; it does not create AWS resources.
 
-`make deploy` and `make destroy` use the current Lambda/DynamoDB CLI after
+`make deploy` and `make destroy` use the current Lambda + Turso/DynamoDB CLI after
 [reviewed AWS setup](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 The supported cloud problems are hello-world with scoped CLI access and native
-Cryptography Battle backed by DynamoDB.
+Cryptography Battle backed by the selected database.
 Destroy confirms the exact installation and drains its recorded exercise attempts
 before removing hosting; retained data and storage are not purged. Docker/Compose
 exercises are local-only and are not listed in the cloud catalog. Synchronized

@@ -2,7 +2,7 @@
 
 リリース前の統合 candidate 用です。`make local` で同じ大会・チームのシステムを起動し、
 `make down` でデータを保持して停止します。SaaS/Lite の基盤構築手順ではありません。
-`make deploy` は権限設定を確認して現行 CLI を実行します。`make destroy` は所有対象を確認して記録済み問題を撤収し、大会データを保持します。現行クラウドは hello-world の限定 CLI アクセスと組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドの候補には表示しません。DynamoDB Local での Battle 一斉更新は 100 人で 5.910 秒となり、5 秒の更新間隔を超えています。AWS の測定値ではありません。
+`make deploy` は権限設定を確認して現行 CLI を実行します。`make destroy` は所有対象を確認して基盤とデフォルトの所有データを削除します。外部 Turso の行は残し、`make destroy-all` で明示的にリセットします。問題環境は大会の Teardown または `--drain-events` で撤収します。現行クラウドは hello-world の限定 CLI アクセスと組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドの候補には表示しません。DynamoDB Local での Battle 一斉更新は 100 人で 5.910 秒となり、5 秒の更新間隔を超えています。AWS の測定値ではありません。
 Lambda / DynamoDB によるクラウド開催を復旧中です。AWS サービスの問題はクラウド開催専用です。
 
 ## 開催前
@@ -58,9 +58,3 @@ End Event は採点を止めます。発行済み AWS セッションの即時�
 再開は同じディレクトリで `make local` を使います。新しい Docker jobs は参加者が再開するまで停止したままです。
 書き込みレイヤーと volume は保持しますが、RAM は保持しません。大会の時計はリセットしません。
 AWS の問題 stack はローカル停止では削除されません。環境を所有している DB やキーを先に消さないでください。
-
-## 旧版環境
-
-[固定した旧版の Runbook](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/operations/event-runbook.md)は、
-その版で作成した既存環境の参考です。旧 CodeBuild の destroy-all、DynamoDB capacity、
-Cognito の操作を現行 candidate の手順として実行しないでください。

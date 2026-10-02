@@ -23,6 +23,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { CloudApplicationStack } from "../../lib/cloud-hosting/application-stack.js";
 import { CloudDataStack } from "../../lib/cloud-hosting/data-stack.js";
 import { CloudDeploymentPipeline } from "../../lib/cloud-hosting/deployment-pipeline.js";
+import { createCloudDataCache } from "../../lib/problem-deploy/control-data/cloud-data.js";
 import {
   type CreationReservation,
   contentDigest,
@@ -547,13 +548,19 @@ describe("production Lambda factory with every SDK send intercepted", () => {
     const cfn = vi
       .spyOn(CloudFormationClient.prototype, "send")
       .mockImplementation(async () => ({ Stacks: [f.stack] }));
-    const handlers = await createProductionWorkflowHandlers(f.resolveArtifacts);
+    const handlers = await createProductionWorkflowHandlers(
+      f.resolveArtifacts,
+      createCloudDataCache({ env: process.env, region: process.env.AWS_REGION }),
+    );
     expect((await handlers.create(INITIAL)).phase).toBe("pending");
     const calls = sts.mock.calls.length;
     const cfnCalls = cfn.mock.calls.length;
     raw = JSON.stringify([{ ...binding, id: "withdrawn" }]);
     vi.stubEnv("CLOUD_RUNNER_BINDINGS_KEY", `bindings/${contentDigest(raw)}.json`);
-    const withdrawn = await createProductionWorkflowHandlers(f.resolveArtifacts);
+    const withdrawn = await createProductionWorkflowHandlers(
+      f.resolveArtifacts,
+      createCloudDataCache({ env: process.env, region: process.env.AWS_REGION }),
+    );
     await expect(withdrawn.create(INITIAL)).rejects.toThrow("could not complete");
     expect(sts).toHaveBeenCalledTimes(calls);
     expect(cfn).toHaveBeenCalledTimes(cfnCalls);
@@ -640,7 +647,10 @@ describe("registry-backed production worker with intercepted SDKs", () => {
           name: "ValidationError",
         });
       });
-    const handlers = await createProductionWorkflowHandlers(f.resolveArtifacts);
+    const handlers = await createProductionWorkflowHandlers(
+      f.resolveArtifacts,
+      createCloudDataCache({ env: process.env, region: process.env.AWS_REGION }),
+    );
     expect((await handlers.create(INITIAL)).phase).toBe("pending");
     const before = [sts.mock.calls.length, ssm.mock.calls.length, cfn.mock.calls.length];
     for (const changed of [
@@ -1009,13 +1019,13 @@ describe("terminal Standard execution reconciliation", () => {
     const send = vi
       .spyOn(SFNClient.prototype, "send")
       .mockImplementation(async () => ({ $metadata: {}, executionArn: OWNER }));
-    const dispatch = createAwsDispatcherDependencies();
+    const dispatch = await createAwsDispatcherDependencies();
     await dispatch.startExecution({
       stateMachineArn: MACHINE,
       name: dispatchExecutionName(IDENTITY),
       input: serializeDispatchIdentity(IDENTITY),
     });
-    const recoveryDeps = createAwsRecoveryDependencies();
+    const recoveryDeps = await createAwsRecoveryDependencies();
     await recoveryDeps.describeExecution({ executionArn: OWNER });
     expect(send.mock.calls[0]?.[0]).toBeInstanceOf(StartExecutionCommand);
     expect(send.mock.calls[1]?.[0]).toBeInstanceOf(DescribeExecutionCommand);
@@ -1050,9 +1060,12 @@ describe("optional deployment pipeline offline synthesis", () => {
     };
     const props = {
       repositoryRoot: resolve(import.meta.dirname, "../../.."),
-      events: table("Events"),
-      teams: table("Teams"),
-      deployments: table("Deployments"),
+      controlData: {
+        kind: "dynamodb" as const,
+        events: table("Events"),
+        teams: table("Teams"),
+        deployments: table("Deployments"),
+      },
       allowedRoleArns: [binding.roleArn],
       runnerBindings: [binding],
       externalIdParameterArns: [binding.externalIdParameterArn],
@@ -1117,7 +1130,7 @@ describe("optional deployment pipeline offline synthesis", () => {
       historyQueries.every(
         (statement) =>
           JSON.stringify(statement.Resource) ===
-          JSON.stringify(stack.resolve(props.deployments.tableArn)),
+          JSON.stringify(stack.resolve(props.controlData.deployments.tableArn)),
       ),
     ).toBe(true);
     const finishRole = JSON.stringify(stack.resolve(pipeline.workers.finish.role?.roleName));
@@ -1129,7 +1142,7 @@ describe("optional deployment pipeline offline synthesis", () => {
     expect(finishPolicies).toContainEqual(
       expect.objectContaining({
         Action: "dynamodb:DeleteItem",
-        Resource: stack.resolve(props.deployments.tableArn),
+        Resource: stack.resolve(props.controlData.deployments.tableArn),
         Condition: {
           "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["DISPATCH#PENDING"] },
         },
@@ -1162,7 +1175,7 @@ describe("optional deployment pipeline offline synthesis", () => {
           "dynamodb:UpdateItem",
           "dynamodb:DeleteItem",
         ],
-        Resource: stack.resolve(props.deployments.tableArn),
+        Resource: stack.resolve(props.controlData.deployments.tableArn),
         Condition: {
           "ForAllValues:StringLike": {
             "dynamodb:LeadingKeys": ["DEPLOYMENT#*", "DISPATCH#PENDING"],

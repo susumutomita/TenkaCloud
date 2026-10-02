@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/" aria-current="page">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
-<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -85,14 +83,14 @@
 </tr>
 <tr>
 <td>組み込みの Cryptography Battle</td>
-<td>ローカルは SQLite、クラウドは DynamoDB で実行。チームごとの非公開表示と採点の原子性を維持。Docker・競技者 AWS アカウントは不要。クラウドの一斉アクセス時は 5 秒の更新間隔を超える</td>
+<td>ローカルは SQLite、クラウドは選択した Turso または DynamoDB で実行。チームごとの非公開表示と採点の原子性を維持。Docker・競技者 AWS アカウントは不要。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超える。実 AWS は未計測</td>
 </tr>
 <tr>
 <td>AWS CloudFormation</td>
 <td>クラウド開催専用。明示設定した hello-world の flag 経路と参加者用の限定 CLI アクセスを接続。Console / CloudShell は未完成。実 AWS は別途リハーサル</td>
 </tr>
 <tr>
-<td>Lambda/DynamoDB のクラウド基盤</td>
+<td>Lambda + Turso/DynamoDB のクラウド基盤</td>
 <td>基盤、永続化した処理、組み込み Battle、この版の make deploy/destroy CLI を実装。権限設定の事前確認が必要。Docker / Compose 問題はローカル開催専用</td>
 </tr>
 <tr>

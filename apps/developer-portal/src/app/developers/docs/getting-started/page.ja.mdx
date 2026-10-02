@@ -42,11 +42,9 @@ make local
 
 <h2 id="cloud-status">クラウド配置の状態</h2>
 
-`make deploy` と `make destroy` は権限設定を確認したうえで、この版の Lambda/DynamoDB CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world と組み込みの Cryptography Battle です。撤収時に対象を確認し、大会データは保持します。Lambda/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。復元した cloud pipeline は固定した旧版のソースを実行し、この版の CLI は実行しません。
+`make deploy` と `make destroy` は権限設定を確認したうえで、この版の Lambda + Turso/DynamoDB CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world と組み込みの Cryptography Battle です。撤収時に対象を確認し、基盤の所有データはデフォルトで削除します。通常の destroy は外部 Turso の行を残し、destroy-all で明示的にリセットします。問題環境の撤収は別操作です。Lambda + Turso/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。cloud pipeline は現行 CLI を既定で使います。build を始める前にソース設定と配置 role を確認してください。
 
 Codespaces の転送 URL と問題接続は、この candidate では未確認です。確認記録ができるまでは上のローカル手順を使ってください。
-
-SaaS/Lite と旧個人練習の手順は[固定した旧版](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9)を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。
 
 次は[開催者マニュアル](/developers/docs/manual/organizer/)、[参加者マニュアル](/developers/docs/manual/participant/)、[配置の境界](/developers/docs/operate/deploy-paths/)です。
 

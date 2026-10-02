@@ -18,7 +18,7 @@ New Docker events prepare up to 512 dormant jobs, then participants Start / resu
 
 AWS-service problems are restricted to cloud hosting. The opt-in cloud flag runner deploys owned CloudFormation stacks through configured competitor roles and mandatory ExternalId parameters in SSM. Participant access uses a scoped hello-world viewer session; Console/CloudShell are unsupported. [First-account IAM setup](https://github.com/susumutomita/TenkaCloud/blob/integration/host-only-20261001/infrastructure/BOOTSTRAP-IAM.md) uses standard `CDKToolkit`, requires review of bootstrap/caller authority and confirmation for first bootstrap, and has not been verified against live AWS. Deployment-role credentials never become participant credentials.
 
-The cloud foundation uses Lambda, Cognito and DynamoDB, with durable dispatch and Step Functions work. `make deploy` and `make destroy` use the scoped CLI with reviewed IAM setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle backed by DynamoDB. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval.
+The cloud foundation uses Lambda, Cognito and selectable Turso or DynamoDB, with durable dispatch and Step Functions work. `make deploy` and `make destroy` use the scoped CLI with reviewed IAM setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle backed by the selected database. Docker/Compose exercises are local-only and are not listed in the cloud catalog. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement.
 
 <h2 id="problem-deployment">Problem deployment and scoring</h2>
 
@@ -26,10 +26,8 @@ An authenticated organizer requests an event operation. Ownership is saved befor
 
 <h2 id="diagram-sources">Editable diagram sources</h2>
 
-The repository's `docs/architecture/README.md` identifies the restored AWS-icon `system-architecture.drawio` and its generator. The restored drawing preserves its original visual quality and historical architecture; it is not evidence of the current cloud implementation.
+The repository's `docs/architecture/README.md` identifies the restored AWS-icon `system-architecture.drawio` and its generator. The drawing preserves the AWS icons and layout conventions while documenting the current local and cloud boundaries. A diagram is not evidence of an AWS event rehearsal.
 
-<h2 id="legacy-reference">Historical reference</h2>
+<h2 id="cloud-design">Cloud design</h2>
 
-Old SaaS/control-plane and Lite deployment details remain in the pinned legacy source below. The current cloud foundation selectively reuses single-installation Lambda/DynamoDB and Step Functions mechanisms. Logical event/team responsibilities are retained without speculative SaaS abstractions.
-
-[Legacy architecture / 固定した旧版](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/architecture/README.md).
+The current cloud foundation selectively reuses single-installation Lambda + Turso/DynamoDB and Step Functions mechanisms. Logical event/team responsibilities are retained without speculative SaaS abstractions.

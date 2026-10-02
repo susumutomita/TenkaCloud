@@ -37,7 +37,7 @@ and application deployment fails, the toolkit remains and is reused on retry.
 
 The ordinary deployment caller needs access to inspect stacks/bootstrap metadata,
 assume the standard publishing/lookup/deployment roles, and use the direct
-Cognito invitation and coordinated teardown operations listed below. Existing
+Cognito invitation and optional coordinated teardown operations listed below. Existing
 bootstrap execution policies determine what CloudFormation can deploy. A reduced
 policy or older toolkit can require an administrator's separately reviewed update;
 the CLI does not silently replace it or grant more permissions after a failure.
@@ -76,13 +76,15 @@ untouched. They are not migrated, deleted or used as substitutes for `CDKToolkit
 it from configuration. To retain an organization-specific execution policy, review
 and manage the standard toolkit through the normal AWS CDK process.
 
-`make destroy` retains the standard toolkit, CDK assets, event data and organizer
-identity. Retention does not promise automatic reattachment on a fresh deployment.
+`make destroy` retains the standard toolkit and its shared CDK assets. Platform-owned
+data and organizer identity use the deployed removal policies, which default to
+Delete. Explicitly retained tables survive unless `make destroy-all` purges them.
+Retention does not promise automatic reattachment on a fresh deployment.
 No live AWS bootstrap, IAM change or deployment was performed by source tests.
 
 ## Deployment authority versus ordinary use
 
-The standard CloudFormation execution role deploys the application's DynamoDB,
+The standard CloudFormation execution role deploys the selected database resources,
 Cognito, Lambda, API Gateway, S3, CloudFront, Step Functions, EventBridge, IAM, Logs
 and SSM resources. The current path builds the two SPAs and publishes CDK assets;
 it creates no separate source-bundle bucket or archive. Deployers can change
@@ -155,8 +157,10 @@ of this state machine and uses ownership-qualified deployment writes.
 This does not create competitor-account trust automatically or broaden the existing
 competitor-bootstrap exception. Each account follows its explicit registration flow.
 Problem-template permissions, including any dedicated-account assumptions, require
-separate review. Platform teardown coordinates active/pending event work before removing the runner.
-The operator running this CLI needs the actions used by its direct storage path:
+separate review. Explicit `--drain-events` coordinates active/pending event work
+before removing the runner; ordinary platform destroy does not use the database.
+For installation update checks and explicit event drain, the DynamoDB operator
+needs the actions used by that direct storage path:
 
 - Events: `GetItem`, `Scan`, `PutItem`, `UpdateItem`, `ConditionCheckItem`
 - Teams: `Query`
@@ -168,9 +172,14 @@ from CloudFormation execution and Cognito application roles. The CLI verifies ta
 ownership before use; native settlement also needs `s3:GetObject` for owned
 catalog/plugin artifacts. Ordinary deployment needs `cognito-idp:AdminGetUser` and
 `cognito-idp:AdminCreateUser` for the installation's organizer pool. CloudFormation
-deletion and waiting use exact physical stack ARNs. Standard bootstrap does not
-grant these direct operations to the caller. Permission errors preserve the platform and durable stop state.
-Independently deployed exercises and retained data/artifact buckets are not purged.
+destruction uses the standard CDK deployment-role assumption with exact physical
+stack ARNs; its existing same-account fallback remains available. An already
+deleting stack only needs the read-only waiter. Standard bootstrap does not
+grant these direct operations to the caller. Turso operators instead need
+`ssm:GetParameter` for the exact selected token parameter and database access.
+Permission errors in explicit drain preserve the platform and durable stop state.
+Independent exercise resources are only removed by an explicit exercise operation;
+ordinary platform destroy follows the deployed resource removal policies.
 
 ## One launcher, explicit source compatibility
 
@@ -193,16 +202,15 @@ before AWS use. Custom repositories remain selectable. Current catalogs must con
 the reviewed `hello-world` and `ac26-crypto-battle` artifacts and supported contracts;
 selecting a catalog does not enable arbitrary runtimes.
 
-Advanced `historical-949a40a9` compatibility preserves the original fixed source pair
-and full old behavior: Turso, provisioned capacity, old `.env`, shared bootstrap and
-`destroy-all`. The original broad caller role is retained for both source contracts; historical
-behavior and data-deletion semantics still require their own review.
-No current-stack adoption or automatic data migration is promised. Empty ref inputs
-select the chosen contract's defaults.
+The launcher uses one current source contract. Empty ref inputs select its tested
+defaults. Turso and DynamoDB are selectable through the same environment contract;
+Turso mode grants runtime access only to its exact SSM token parameter and creates
+no DynamoDB tables. Source or provider changes do not migrate existing data.
 
-Current builds reject Turso, a custom shared ExternalId, nondefault provisioned
-capacities, `RetainDataTables=false` and `destroy-all` before AWS operations.
-`RetainDataTables=auto` preserves current retention and the historical false default.
-Current `destroy` drains recorded event work before platform removal, retaining
-history, accounts, ExternalId, toolkit and assets. It never emits a complete-purge
-checkpoint. Historical cleanup checkpoints require successful historical `destroy-all`.
+Current builds accept `destroy-all` and default `RetainDataTables` to false; only
+explicit true retains data tables. `auto` also selects the original false default.
+Current `destroy` removes platform-owned resources under their deployed policies.
+Competition cleanup is explicit through the event Teardown action or
+`--drain-events`; toolkit and competitor bootstrap resources remain outside scope.
+See the [teardown contract](README.md#current-checkouts-setup-and-teardown-boundary)
+for exact retained-data purge and existing deletion-protection recovery.

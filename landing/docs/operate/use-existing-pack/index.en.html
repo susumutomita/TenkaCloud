@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Legacy Lite settings</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Legacy Lite messages</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -68,7 +66,7 @@
 <main class="doc">
 <article>
 <h1>Use an existing pack <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate&#39;s event catalog. The retained tenant-scoped activation command is a legacy local record, not a current hosting workflow.</p>
+<p>Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate&#39;s event catalog. Activation is an offline catalog record, not a current hosting workflow.</p>
 <h2 id="prerequisites">Prerequisites</h2><p>Obtain a trusted local pack directory or HTTPS Git URL plus an immutable full 40-hex commit SHA. Review the declared runtime, files and provenance before installation.</p>
 <h2 id="install-the-pinned-git-revision">Install the pinned Git revision</h2><pre><code class="language-sh">make pack-install ARGS=&quot;git &lt;https-url&gt; --commit &lt;40-hex-commit-sha&gt;&quot;
 make pack-list
@@ -77,7 +75,6 @@ bun run pack inspect &lt;id@version&gt;
 <p>Run from the repository root. The default store is <code>.tenkacloud/pack-store</code>. Git install uses the network; local-directory validation and installation do not deploy anything.</p>
 <h2 id="verify-the-installed-revision">Verify the stored revision</h2><p>Check the source, resolved commit and digest. Installation is not authorization to run arbitrary code, expose endpoints or create cloud resources.</p>
 <h2 id="create-the-event">Event integration is unavailable</h2><p>Installed packs do not appear in the current event picker through activation. This is an implementation gap, not merely pending live batch verification. Use a supported core-catalog problem for an event and record the pack route as Not run. See <a href="/docs/tutorials/first-pack/index.en.html">first pack tutorial</a>.</p>
-<p>Historical SaaS/Lite and individual-practice instructions are available in the <a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">pinned legacy source</a>. Do not use them against this candidate or assume data migrates automatically.</p>
 
 </article>
 </main>

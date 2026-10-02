@@ -41,9 +41,11 @@ field proves publication. No workflow in this change pushes a host image or
 creates a release tag. Publication requires a later reviewed command, attached
 verification evidence and a digest verified against the target registry.
 
-Historical `release/tenkacloud-release.*` and `release/launcher-defaults.json`
-remain unchanged. They describe the old launcher and must never be used to
-advertise this candidate as the public v1.11.0 release.
+Historical `release/tenkacloud-release.*` remains unchanged and describes the old
+release. `release/launcher-defaults.json` records the current cloud launcher's
+pinned source contract and `candidate/unreleased` classification, matching
+`infrastructure/templates/cloud-pipeline.yaml`. Neither record advertises this
+candidate as the public v1.11.0 release.
 
 Use [host operations](local-hosting.md) for public origins, proxy settings and
 persistent volume ownership. For an AWS/IdP rehearsal use the separate

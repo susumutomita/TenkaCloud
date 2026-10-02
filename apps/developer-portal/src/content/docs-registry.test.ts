@@ -48,22 +48,6 @@ const PROBLEM_AUTHOR_MANUAL_JA_SOURCE = readFileSync(
   "src/app/developers/docs/manual/problem-author/page.ja.mdx",
   "utf8",
 );
-const LITE_SETTINGS_SOURCE = readFileSync(
-  "src/app/developers/docs/reference/lite-settings/page.mdx",
-  "utf8",
-);
-const LITE_SETTINGS_JA_SOURCE = readFileSync(
-  "src/app/developers/docs/reference/lite-settings/page.ja.mdx",
-  "utf8",
-);
-const LITE_MESSAGES_SOURCE = readFileSync(
-  "src/app/developers/docs/reference/lite-messages/page.mdx",
-  "utf8",
-);
-const LITE_MESSAGES_JA_SOURCE = readFileSync(
-  "src/app/developers/docs/reference/lite-messages/page.ja.mdx",
-  "utf8",
-);
 
 describe("docs registry — role manuals (#2818)", () => {
   it("should expose exactly the role chooser and four manuals in their own section", () => {
@@ -88,19 +72,13 @@ describe("docs registry — role manuals (#2818)", () => {
     }
   });
 
-  it("should separate pinned legacy storage from incomplete current cloud support", () => {
-    for (const source of [LITE_SETTINGS_SOURCE, LITE_SETTINGS_JA_SOURCE]) {
-      expect(source).toContain("825415fcda5075ad723daf9e4514eac47d7b8bb9");
-      expect(source).toMatch(/do not synchronize|同期されません/);
-      expect(source).not.toContain("CDK_PARAM_CONTROL_DATA_BACKEND");
-    }
+  it("should describe current cloud support without retired setup commands", () => {
     expect(ORGANIZER_MANUAL_SOURCE).toContain("has not been established");
     expect(ORGANIZER_MANUAL_SOURCE).toContain("environment names are not an IAM security boundary");
     expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("環境名は IAM の分離境界になりません");
     expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("実 AWS への配置は未検証");
     for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
-      expect(source).toMatch(/Lambda\s*\/\s*DynamoDB/);
-      expect(source).not.toContain("Cloud Turso");
+      for (const service of ["Lambda", "Turso", "DynamoDB"]) expect(source).toContain(service);
     }
   });
 
@@ -155,9 +133,16 @@ describe("docs registry — role manuals (#2818)", () => {
       expect(source).not.toContain("100 jobs のため拒否");
     }
     expect(ORGANIZER_MANUAL_SOURCE).toContain("reviewed IAM setup");
-    expect(ORGANIZER_MANUAL_SOURCE).toContain("retains data");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("deletes platform-owned data by default");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("leaves external Turso rows");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("make destroy-all");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("--drain-events");
     expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("権限設定");
     expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("データを保持");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("基盤とデフォルトの所有データを削除");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("外部 Turso の行は残し");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("make destroy-all");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("--drain-events");
   });
 
   it("should distinguish participant resume, disk retention and representative real terminal evidence", () => {
@@ -186,42 +171,19 @@ describe("docs registry — role manuals (#2818)", () => {
   });
 });
 
-describe("docs registry — Lite technical references", () => {
-  const referenceHrefs = [
-    "/developers/docs/reference/lite-settings/",
-    "/developers/docs/reference/lite-messages/",
-  ];
-
-  it("should register the setting contract and message catalog", () => {
-    for (const href of referenceHrefs) expect(allRoutes()).toContain(href);
-    expect(findDocBySlug("reference/lite-settings")).toBeDefined();
-    expect(findDocBySlug("reference/lite-messages")).toBeDefined();
+describe("docs registry — current references", () => {
+  it("should remove retired Lite routes from navigation and search", () => {
+    for (const slug of ["reference/lite-settings", "reference/lite-messages"]) {
+      expect(findDocBySlug(slug)).toBeUndefined();
+      expect(allRoutes()).not.toContain(`/developers/docs/${slug}/`);
+    }
+    expect(DOC_SECTIONS.some((section) => section.title === "Legacy reference")).toBe(false);
   });
 
-  it("should retain current required trust guidance while marking old messages historical", () => {
-    for (const source of [LITE_SETTINGS_SOURCE, LITE_SETTINGS_JA_SOURCE]) {
-      expect(source).toContain("16");
-      expect(source).toContain("128");
-      expect(source).toContain("_ = , . @ : / -");
-    }
-    for (const source of [LITE_MESSAGES_SOURCE, LITE_MESSAGES_JA_SOURCE]) {
-      expect(source).toContain("825415fcda5075ad723daf9e4514eac47d7b8bb9");
-      expect(source).toContain("/developers/docs/getting-started/");
-      expect(source).toContain("/developers/docs/operate/deploy-paths/");
-    }
-    expect(findDocBySlug("reference/lite-settings")?.section).toBe("Legacy reference");
-    expect(findDocBySlug("reference/lite-messages")?.section).toBe("Legacy reference");
-  });
-
-  it("should make settings and errors findable in Japanese and English", () => {
+  it("should keep current setup and recovery guidance searchable", () => {
     expect(
-      searchIndex("ExternalId 16 128").some(
-        (result) => result.href === "/developers/docs/reference/lite-settings/",
-      ),
-    ).toBe(true);
-    expect(
-      searchIndex("設定 メッセージ 要因 処置").some(
-        (result) => result.href === "/developers/docs/reference/lite-messages/",
+      searchIndex("local-reset organizer key").some(
+        (result) => result.href === "/developers/docs/getting-started/",
       ),
     ).toBe(true);
   });

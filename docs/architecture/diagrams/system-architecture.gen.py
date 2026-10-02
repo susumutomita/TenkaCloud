@@ -226,6 +226,7 @@ def cloud():
         ("region-tenkacloud", "aws-tenkacloud", "開催基盤リージョン", REGION, 40, 2200, 340),
         ("stack-admin-hosting", "region-tenkacloud", "CloudApplicationStack", CONSOLE_STACK, 60, 1390, 400),
         ("stack-problem-deploy", "region-tenkacloud", "CloudDataStack", BACKEND_STACK, 1420, 2180, 400),
+        ("turso-boundary", "1", "外部 Turso（DynamoDB と択一）", EXTERNAL, 2330, 2730, 680),
     ]
     icons = [
         ("user-organizer", "1", "user", "開催者", 640, YU),
@@ -237,8 +238,10 @@ def cloud():
         ("cognito-tenant", "stack-admin-hosting", "cognito", "Amazon Cognito\n開催者認証・MFA", 300, R1),
         ("apigw-tenant", "stack-admin-hosting", "api_gateway", "Amazon API Gateway\n開催者・参加者 REST API", 640, R1),
         ("lambda-api", "stack-admin-hosting", "lambda", "AWS Lambda\n大会・認証・採点\nnative Cryptography Battle", 640, R2),
-        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB（3 テーブル）\nEvents・Teams・Deployments\n大会・ジョブ・得点・native state", 1690, R2),
-        ("s3-source", "stack-admin-hosting", "s3", "Amazon S3\n固定カタログ・CFn・native plugin", 1090, R2),
+        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB（選択時のみ）\nEvents・Teams・Deployments\n大会・ジョブ・得点・native state", 1690, R2),
+        ("turso-control", "turso-boundary", "generic_database", "Turso（HTTPS / libSQL）\n大会・ジョブ・得点・native state\nDynamoDB テーブルは作成しない", 2530, R2),
+        ("ssm-turso-token", "region-tenkacloud", "systems_manager", "AWS Systems Manager\n既存の指定 SecureString 1 個\nTurso token（Turso 選択時のみ）", 1690, R6),
+        ("s3-source", "stack-admin-hosting", "s3", "Amazon S3\n固定カタログ・CFn・native plugin\nmake destroy で削除", 1090, R2),
         ("ssm-external-id", "stack-admin-hosting", "systems_manager", "AWS Systems Manager\nParameter Store（ExternalId）", 300, R3),
         ("lambda-dispatcher", "stack-admin-hosting", "lambda", "AWS Lambda\n永続キューの Dispatcher", 640, R4),
         ("eventbridge-problem-deploy", "stack-admin-hosting", "eventbridge", "Amazon EventBridge\n1 分ごとの起動", 300, R4),
@@ -259,6 +262,8 @@ def cloud():
     e("apigw-tenant", ("left",), "cognito-tenant", ("right",), "開催者 JWT を検証", aux=True)
     e("apigw-tenant", ("bottom",), "lambda-api", ("top",), "Lambda 統合")
     e("lambda-api", ("right",), "dynamodb-control", ("left",), "状態・得点を永続化", via=[(710, R2), (710, 930), (1580, 930), (1580, R2)], lab=(2, 0.5))
+    e("stack-admin-hosting", ("right", 1080), "turso-control", ("bottom",), "API・Dispatcher・Worker: HTTP（Turso 選択時）", via=[(2530, 1080)], lab=(0, 0.58))
+    e("stack-admin-hosting", ("bottom", 1230), "ssm-turso-token", ("left",), "同じ Lambda 群: 指定 token だけ取得", via=[(1230, R6)], lab=(1, 0.5))
     e("lambda-api", ("right", 0.25), "s3-source", ("left", 0.25), "固定 artifact を読む")
     e("lambda-api", ("left",), "ssm-external-id", ("top",), "初回作成・取得", via=[(300, R2)], lab=(0, 0.5))
     e("eventbridge-problem-deploy", ("right",), "lambda-dispatcher", ("left",), "起動", aux=True)
@@ -278,12 +283,14 @@ def aws_exercises():
         ("stack-problem-deploy", "region-lite", "CloudApplicationStack / CloudDataStack", BACKEND_STACK, 60, 1720, 360),
         ("external", "1", "AWS Cloud（競技用アカウント・開催基盤とは分離）", EXTERNAL, 1860, 2730, 130),
         ("competitor-account", "external", "競技用リージョン（チームごとの割り当て）", REGION, 1880, 2710, 940),
+        ("turso-boundary", "1", "外部 Turso（DynamoDB と択一）", EXTERNAL, 850, 1330, 1370),
     ]
     icons = [
         ("user-organizer", "1", "user", "開催者", 640, YU),
         ("user-participants", "1", "users", "参加者", 2490, YU),
         ("lambda-api", "stack-problem-deploy", "lambda", "AWS Lambda\n大会・ジョブを受理", 640, R0),
-        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB\n所有権・試行・永続キュー", 1090, R0),
+        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB（選択時のみ）\n所有権・試行・永続キュー", 1090, R0),
+        ("turso-control", "turso-boundary", "generic_database", "Turso（HTTPS / libSQL）\n所有権・試行・永続キュー\n指定 SSM token で接続", 1090, 1470),
         ("eventbridge-problem-deploy", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\n1 分ごとの起動", 220, R1),
         ("lambda-dispatcher", "stack-problem-deploy", "lambda", "AWS Lambda\nDispatcher", 640, R1),
         ("sfn-deploy", "stack-problem-deploy", "step_functions", "AWS Step Functions\nClaim → Create → Describe → Finish\n失敗・タイムアウトを保存", 640, R2),
@@ -304,6 +311,7 @@ def aws_exercises():
     e=d.edge
     e("user-organizer", ("bottom",), "lambda-api", ("top",), "認証済みの配置要求", lab=(0, 0.99))
     e("lambda-api", ("right",), "dynamodb-control", ("left",), "ジョブ・outbox を保存")
+    e("stack-problem-deploy", ("bottom", 640), "turso-control", ("left",), "API・Dispatcher・Worker・Recovery\nTurso 選択時: HTTPS", via=[(640, 1470)], lab=(0, 0.28))
     e("eventbridge-problem-deploy", ("right",), "lambda-dispatcher", ("left",), "起動", aux=True)
     e("lambda-dispatcher", ("right",), "dynamodb-control", ("bottom",), "永続キューを確認", via=[(1090, R1)])
     e("lambda-dispatcher", ("bottom",), "sfn-deploy", ("top",), "実行を開始")
@@ -393,7 +401,7 @@ def use_cases():
         (0,"uc-commit","問題の定義・検証コードを変更して CI で確認する\nproblems/（TenkaCloudChallenge）"),
         (2,"uc-practice","ローカルの大会を起動・停止する\nmake local / make down（データを保持）"),
         (4,"uc-bootstrap","競技用アカウントの IAM 初期設定を承認する\n共通ロール・必須 ExternalId"),
-        (6,"uc-platform","開催基盤を配置・撤去する\nmake deploy / make destroy（対象 installation を確認）"),
+        (6,"uc-platform","make deploy / make destroy（対象 installation を確認）\n通常は AWS 基盤・既定データを削除\n競技環境の撤去は --drain-events を明示"),
         (8,"uc-cleanup","組織の複数アカウントに初期設定を配る\n任意の手動 Organizations / StackSets 手順"),
     ]
     frames=[("tenkacloud","1","TenkaCloud（現行の local / cloud）",lane("#FFFFFF","#232F3E",16),330,2110,130)]
@@ -423,10 +431,11 @@ def context():
         ("aws-account","tenkacloud","AWS 開催基盤アカウント",lane("#FFFFFF","#147EBA",15,1),740,1720,260,760),
         ("pc","tenkacloud","開催者のコンピューター",lane("#FAFBFC","#405A78",15,1),740,1720,800,1240),
         ("competitor-boundary","1","AWS 競技用アカウント（開催基盤から分離）",EXTERNAL,1930,2610,260,720),
+        ("turso-boundary","1","外部 Turso（DynamoDB と択一）",EXTERNAL,1930,2610,780),
     ]
     boxes=[
-        ("mode-lite","aws-account","cloud\nLambda / API Gateway / Cognito / DynamoDB\nhello-world・native Cryptography Battle",1230,460,880,100,MODE),
-        ("cloud-cli","aws-account","make deploy / make destroy\n現在の cloud CLI・project-scoped CDK bootstrap",1230,650,880,80,MODE),
+        ("mode-lite","aws-account","cloud: Lambda / API Gateway / Cognito\n保存先は DynamoDB または外部 Turso\nhello-world・native Cryptography Battle",1230,460,880,100,MODE),
+        ("cloud-cli","aws-account","make deploy / make destroy（AWS 基盤・既定データを削除）\n競技環境は --drain-events を明示／外部 Turso は通常保持",1230,650,880,80,MODE),
         ("mode-local-host","pc","local\n単一 Bun プロセス + SQLite\n開催管理・参加者画面・native Cryptography Battle",1230,960,880,100,MODE),
         ("mode-local","pc","on-demand Docker / Compose（local のみ）\nチームごとの起動・停止とディスク状態の保持",1230,1150,880,80,MODE),
     ]
@@ -438,6 +447,7 @@ def context():
         ("author","1","user","問題作成者",200,1300),
         ("iam-competitor","competitor-boundary","identity_and_access_management","AWS IAM\n共通ロール・ExternalId",2240,370),
         ("competitor","competitor-boundary","cloudformation","AWS CloudFormation\n別アカウント、または\n同一競技用アカウントの別リージョン",2240,580),
+        ("turso-control","turso-boundary","generic_database","Turso\ncloud の永続ストア（選択時のみ）\nDynamoDB テーブルは作成しない",2240,890),
         ("challenge","1","documents","problems/（TenkaCloudChallenge）\n固定カタログ・テンプレート・plugin",2240,1150),
     ]
     d=Diagram(frames,icons,boxes)
@@ -448,6 +458,7 @@ def context():
     e("local-operator",("right",),"pc",("left",1000),"make local / make down")
     e("aws-account",("right",370),"iam-competitor",("left",),"AssumeRole（ExternalId 必須）")
     e("iam-competitor",("bottom",),"competitor",("top",),"チームの割り当て先へ配置")
+    e("aws-account",("right",710),"turso-control",("left",),"Turso 選択時: HTTPS",via=[(1800,710),(1800,890)],lab=(2,0.62))
     e("challenge",("left",),"mode-local",("right",),"local catalog")
     e("challenge",("top",),"mode-lite",("right",),"cloud の対応 2 問だけを固定",via=[(1840,1060),(1840,460)],lab=(1,0.35))
     e("author",("right",),"challenge",("bottom",),"変更・CI で検証",via=[(2240,1300)],lab=(0,0.5))

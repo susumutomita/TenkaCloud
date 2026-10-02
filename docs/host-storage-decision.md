@@ -28,7 +28,7 @@ not turn off operational or authentication records.
 
 Local hosting must start and retain competition state without an external
 control plane or database. This local requirement does not remove the separate
-Lambda/DynamoDB cloud-hosting path.
+Lambda cloud-hosting path with Turso or DynamoDB.
 
 This changes the trust boundary from cloud-managed storage access to possession
 of the host disk and process account. The operator must provide disk and backup
@@ -38,11 +38,13 @@ KMS-protected secret store.
 
 ## Cloud storage and authorization
 
-The cloud candidate uses Lambda and DynamoDB, reusing the former single-installation
-cloud path without SaaS/SBT provisioning. Its existing three tables retain events,
-teams, deployment work, scoring and retry receipts. No SQLite or Turso driver is
-used by this cloud path. Initial setup, complete exercise execution and coordinated
-platform teardown remain under verification; see [cloud status](../infrastructure/README.md).
+The cloud candidate uses Lambda with Turso or DynamoDB, reusing the former
+single-installation cloud path without SaaS/SBT provisioning. Both adapters store
+events, teams, deployment work, scoring and retry receipts with conditional atomic
+writes. Turso uses the HTTP client and an exact SSM token parameter; no DynamoDB
+tables are created in that mode. Local hosting continues to use SQLite.
+Provider changes do not migrate data and are rejected for an existing installation.
+See [cloud status and database setup](../infrastructure/README.md#database-selection).
 
 The opt-in flag runner assumes only explicitly configured competitor role ARNs
 and reads ExternalId values from their configured SSM parameter ARNs. These values
@@ -91,8 +93,7 @@ from enabling AWS for the first time on a local-only host. Complete-directory
 backups remain required; the startup checks cannot detect every partial restore.
 
 Changing deployment models does not migrate existing Lite/SaaS, DynamoDB, Turso
-or practice-mode data, and does not remove their resources. Existing installations
-need their exact legacy release and a separately reviewed migration or retirement
+or practice-mode data, and does not remove their resources. Data conversion and resource retirement require an explicit, reviewed
 plan. The new host schema migrations apply only to supported
 host SQLite versions. Running two host processes against one data directory or
 using a network filesystem is outside this storage contract.

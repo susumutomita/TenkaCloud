@@ -30,7 +30,6 @@ Use `bun run test:host` for real HTTP/SQLite tests and `bun run test:authoring`
 for the retained pack tools. See [clean checkout verification](docs/host-build-verification.md).
 The old mode-specific launchers are retired. Cloud hosting selectively reuses the
 serverless backend without SaaS/SBT and is still under integration verification.
-Use [a pinned legacy release](docs/legacy-operations.md) for an existing legacy installation.
 
 The default `make help` separates hosting commands from these development commands:
 

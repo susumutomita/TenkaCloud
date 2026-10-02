@@ -36,12 +36,13 @@ is no automatic eviction or reset. Event time is not reset. An ordinary stop is 
 Docker volume removal or AWS stack deletion. Explicit event teardown is separate;
 keep ownership records until it succeeds.
 
-`make deploy` and `make destroy` call the current Lambda/DynamoDB CLI after
+`make deploy` and `make destroy` call the current Lambda + Turso/DynamoDB CLI after
 reviewed AWS setup. The current cloud catalog includes hello-world with scoped CLI
 access and native Cryptography Battle. Docker/Compose exercises are local-only and
-are not listed in the cloud catalog. Synchronized Battle bursts still exceed the
-five-second refresh interval. Destroy confirms
-owned targets and drains recorded exercises while retaining data. See the
+are not listed in the cloud catalog. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement. Destroy confirms
+owned targets and removes platform-owned data by default. Exercise cleanup is
+separate; ordinary destroy leaves external Turso rows and explicit destroy-all
+resets them. See the
 [cloud setup boundary](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 
 ## Admission limits
@@ -96,10 +97,3 @@ hints, score, restart and cleanup. Include two teams to check isolation.
 The book examples are sqli-demo, hello-world, hello-world-battle and the
 wp-exposed-backup multi-checkpoint starter. See [book compatibility](book-compatibility.md).
 Pack install/activate is not currently connected to the event catalog.
-
-## Historical behavior
-
-The [pinned legacy local guide](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/local-play.md)
-records the old practice API, simulator, snapshot and terminal paths. It is not
-a current command reference. Old progress and cloud storage are not automatically
-migrated. Do not apply the old destructive local-down behavior to make down.

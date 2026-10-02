@@ -1,8 +1,8 @@
 import type { Hono } from "hono";
 import { z } from "zod";
+import type { CloudDeploymentWork } from "../../control-data/cloud-data-ports.js";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
 import type { EventRecord } from "../../control-data/domain/events.js";
-import type { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
 import { ApiError, type OrganizerAuthConfig, requireOrganizer } from "./auth.js";
 import {
   type CloudCoordinationApi,
@@ -40,7 +40,7 @@ export function registerCloudScheduleRoutes(
   app: Hono,
   options: {
     readonly repository: CloudRepository;
-    readonly work: DynamoDeploymentWork;
+    readonly work: CloudDeploymentWork;
     readonly coordination?: CloudCoordinationApi;
     readonly organizerAuth: OrganizerAuthConfig;
     readonly now: () => number;

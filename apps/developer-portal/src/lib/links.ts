@@ -4,7 +4,6 @@
 export const GITHUB_REPO = "https://github.com/susumutomita/TenkaCloud";
 export const GITHUB_DISCUSSIONS = "https://github.com/susumutomita/TenkaCloud/discussions";
 export const CATALOG_REPO = "https://github.com/susumutomita/TenkaCloudChallenge";
-export const CONTACT_FORM = "https://forms.gle/djVprYmq3hFgJA7P9";
 
 import type { Locale } from "@/lib/i18n";
 

@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { z } from "zod";
+import type { CloudDeploymentsCoordination } from "../../control-data/cloud-data-ports.js";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
 import type {
   NativeCoordinationArtifact,
@@ -8,13 +9,12 @@ import type {
 import { contentDigest } from "../../control-data/domain/deployment-work.js";
 import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
-import type { DynamoDeploymentsCoordination } from "../../control-data/dynamodb-deployments-coordination.js";
 import { ApiError, participantKey } from "./auth.js";
 import type { createNativeArtifactResolver, NativeProblem } from "./execution-config.js";
 import { body } from "./schema.js";
 
 export interface CloudCoordinationApi {
-  readonly store: DynamoDeploymentsCoordination;
+  readonly store: CloudDeploymentsCoordination;
   readonly catalog: () => Promise<Readonly<Record<string, NativeProblem>>>;
   readonly resolve: ReturnType<typeof createNativeArtifactResolver>;
 }
@@ -97,7 +97,7 @@ export async function settleNativeEvent(
   api: CloudCoordinationApi,
   event: EventRecord,
   now: () => number,
-  patch: Parameters<DynamoDeploymentsCoordination["changeSchedule"]>[0]["patch"],
+  patch: Parameters<CloudDeploymentsCoordination["changeSchedule"]>[0]["patch"],
   close = false,
 ) {
   const run = await nativeRun(api, event);

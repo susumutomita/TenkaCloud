@@ -143,3 +143,11 @@ export function scoringBlock(
   }
   return event.scoringLocked ? "scoring_locked" : undefined;
 }
+
+export interface DeploymentCompletion {
+  readonly status: "COMPLETE" | "FAILED";
+  readonly stackId?: string;
+  readonly flagDigest?: string;
+  readonly publicOutputs?: Readonly<Record<string, string>>;
+  readonly failureReason?: string;
+}

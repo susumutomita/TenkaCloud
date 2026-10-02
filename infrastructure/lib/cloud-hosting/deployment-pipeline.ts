@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { ArnFormat, Duration, Stack } from "aws-cdk-lib";
-import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { PolicyStatement, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
@@ -27,16 +26,20 @@ import {
 import { LambdaInvoke } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
 import type { InstallationCompetitorConfig } from "../problem-deploy/control-data/domain/competitor-accounts.js";
+import {
+  type CloudControlDataResources,
+  controlDataRuntimeEnv,
+  grantTursoAuthTokenRead,
+} from "../problem-deploy/control-data-backend-env.js";
 import type { RunnerBinding } from "../problem-deploy/handlers/cloud-api/execution-config.js";
 import { competitorAssumeRolePolicy, denyControlPlaneAssumeRole } from "./competitor-accounts.js";
+import { cloudLambdaBundling } from "./lambda-bundling.js";
 
 export interface CloudDeploymentPipelineProps {
   readonly repositoryRoot: string;
   readonly workflowEntry?: string;
   readonly dispatcherEntry?: string;
-  readonly events: ITable;
-  readonly teams: ITable;
-  readonly deployments: ITable;
+  readonly controlData: CloudControlDataResources;
   readonly allowedRoleArns: readonly string[];
   readonly runnerBindings: readonly RunnerBinding[];
   readonly externalIdParameterArns: readonly string[];
@@ -57,11 +60,10 @@ export class CloudDeploymentPipeline extends Construct {
   constructor(scope: Construct, id: string, props: CloudDeploymentPipelineProps) {
     super(scope, id);
     validateAllowlist(props);
+    const data = props.controlData;
     const environment = {
       CONTROL_PLANE_ACCOUNT: Stack.of(this).account,
-      EVENTS_TABLE_NAME: props.events.tableName,
-      TEAMS_TABLE_NAME: props.teams.tableName,
-      DEPLOYMENTS_TABLE_NAME: props.deployments.tableName,
+      ...controlDataRuntimeEnv(data),
       CLOUD_ARTIFACT_BUCKET: props.catalogBucket.bucketName,
       CLOUD_CATALOG_KEY: props.catalogKey,
       CLOUD_RUNNER_BINDINGS_KEY: props.bindingsKey,
@@ -78,7 +80,7 @@ export class CloudDeploymentPipeline extends Construct {
         assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       });
       logs.grantWrite(role);
-      return new NodejsFunction(this, name, {
+      const worker = new NodejsFunction(this, name, {
         entry,
         handler,
         role,
@@ -88,15 +90,11 @@ export class CloudDeploymentPipeline extends Construct {
         memorySize: 512,
         depsLockFilePath: join(props.repositoryRoot, "bun.lock"),
         projectRoot: props.repositoryRoot,
-        bundling: {
-          bundleAwsSDK: true,
-          minify: true,
-          target: "node24",
-          // Tree-shake the SDK's ESM inputs while retaining CommonJS Lambda output.
-          mainFields: ["module", "main"],
-        },
+        bundling: cloudLambdaBundling(),
         environment,
       });
+      grantTursoAuthTokenRead(worker, data);
+      return worker;
     };
     const entry =
       props.workflowEntry ??
@@ -113,48 +111,9 @@ export class CloudDeploymentPipeline extends Construct {
     };
     this.workers = workers;
     for (const worker of Object.values(workers)) {
-      grant(worker, ["dynamodb:GetItem"], [props.deployments.tableArn]);
       grant(worker, ["s3:GetObject"], [props.catalogBucket.arnForObjects(props.bindingsKey)]);
     }
-    for (const worker of [workers.claim, workers.create, workers.describe, workers.finish]) {
-      grant(worker, ["dynamodb:GetItem"], [props.events.tableArn]);
-    }
-    grant(
-      workers.claim,
-      ["dynamodb:UpdateItem", "dynamodb:DeleteItem"],
-      [props.deployments.tableArn],
-    );
-    grant(workers.claim, ["dynamodb:ConditionCheckItem"], [props.events.tableArn]);
-    for (const worker of [workers.create, workers.finish, workers.fail])
-      grant(worker, ["dynamodb:PutItem", "dynamodb:UpdateItem"], [props.deployments.tableArn]);
-    grant(workers.describe, ["dynamodb:UpdateItem"], [props.deployments.tableArn]);
-    grant(workers.fail, ["dynamodb:DeleteItem"], [props.deployments.tableArn]);
-    for (const worker of [workers.create, workers.describe, workers.finish])
-      grant(
-        worker,
-        ["dynamodb:ConditionCheckItem"],
-        [props.events.tableArn, props.deployments.tableArn],
-      );
-    grant(workers.finish, ["dynamodb:UpdateItem"], [props.events.tableArn]);
-    workers.finish.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:DeleteItem"],
-        resources: [props.deployments.tableArn],
-        conditions: {
-          "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["DISPATCH#PENDING"] },
-        },
-      }),
-    );
-    for (const worker of [workers.create, workers.describe, workers.finish])
-      worker.addToRolePolicy(
-        new PolicyStatement({
-          actions: ["dynamodb:Query"],
-          resources: [props.deployments.tableArn],
-          conditions: {
-            "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["DEPLOYMENT#*"] },
-          },
-        }),
-      );
+    grantWorkflowDataAccess(workers, data);
     for (const worker of [workers.create, workers.describe, workers.finish]) {
       grantCompetitorAccess(worker, props);
       // Old pending jobs retain their immutable catalog key across application updates. The
@@ -232,7 +191,7 @@ export class CloudDeploymentPipeline extends Construct {
       timeout: Duration.minutes(90),
       logs: { destination: logs, level: LogLevel.ERROR, includeExecutionData: false },
     });
-    // Standard execution names/input and conditional DynamoDB claims make overlapping dispatch
+    // Standard execution names/input and conditional durable claims make overlapping dispatch
     // safe. Do not reserve account concurrency: small accounts may have none available to reserve.
     this.dispatcher = makeWorker(
       "Dispatcher",
@@ -244,45 +203,49 @@ export class CloudDeploymentPipeline extends Construct {
       "handler",
       120,
     );
-    this.dispatcher.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:GetItem"],
-        resources: [props.events.tableArn],
-        conditions: {
-          "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["INSTALLATION"] },
-        },
-      }),
-    );
+    if (data.kind === "dynamodb") {
+      this.dispatcher.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["dynamodb:GetItem"],
+          resources: [data.events.tableArn],
+          conditions: {
+            "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["INSTALLATION"] },
+          },
+        }),
+      );
+    }
     this.dispatcher.addEnvironment(
       "DEPLOYMENT_STATE_MACHINE_ARN",
       this.stateMachine.stateMachineArn,
     );
-    this.dispatcher.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:Query"],
-        resources: [props.deployments.tableArn],
-        conditions: {
-          "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["DISPATCH#PENDING"] },
-        },
-      }),
-    );
     grant(this.dispatcher, ["states:StartExecution"], [this.stateMachine.stateMachineArn]);
-    this.dispatcher.addToRolePolicy(
-      new PolicyStatement({
-        actions: [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:DeleteItem",
-        ],
-        resources: [props.deployments.tableArn],
-        conditions: {
-          "ForAllValues:StringLike": {
-            "dynamodb:LeadingKeys": ["DEPLOYMENT#*", "DISPATCH#PENDING"],
+    if (data.kind === "dynamodb") {
+      this.dispatcher.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["dynamodb:Query"],
+          resources: [data.deployments.tableArn],
+          conditions: {
+            "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["DISPATCH#PENDING"] },
           },
-        },
-      }),
-    );
+        }),
+      );
+      this.dispatcher.addToRolePolicy(
+        new PolicyStatement({
+          actions: [
+            "dynamodb:GetItem",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+            "dynamodb:DeleteItem",
+          ],
+          resources: [data.deployments.tableArn],
+          conditions: {
+            "ForAllValues:StringLike": {
+              "dynamodb:LeadingKeys": ["DEPLOYMENT#*", "DISPATCH#PENDING"],
+            },
+          },
+        }),
+      );
+    }
     grant(
       this.dispatcher,
       ["states:DescribeExecution"],
@@ -311,11 +274,13 @@ export class CloudDeploymentPipeline extends Construct {
       "recoveryHandler",
     );
     recovery.addEnvironment("DEPLOYMENT_STATE_MACHINE_ARN", this.stateMachine.stateMachineArn);
-    grant(
-      recovery,
-      ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"],
-      [props.deployments.tableArn],
-    );
+    if (data.kind === "dynamodb") {
+      grant(
+        recovery,
+        ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"],
+        [data.deployments.tableArn],
+      );
+    }
     grant(
       recovery,
       ["states:DescribeExecution"],
@@ -382,4 +347,48 @@ function validateAllowlist(props: CloudDeploymentPipelineProps): void {
   ) {
     throw new Error("Deployment runner requires exact role, ExternalId and artifact allowlists");
   }
+}
+
+function grantWorkflowDataAccess(
+  workers: CloudDeploymentPipeline["workers"],
+  data: CloudControlDataResources,
+): void {
+  if (data.kind !== "dynamodb") return;
+  for (const worker of Object.values(workers))
+    grant(worker, ["dynamodb:GetItem"], [data.deployments.tableArn]);
+  for (const worker of [workers.claim, workers.create, workers.describe, workers.finish]) {
+    grant(worker, ["dynamodb:GetItem"], [data.events.tableArn]);
+  }
+  grant(workers.claim, ["dynamodb:UpdateItem", "dynamodb:DeleteItem"], [data.deployments.tableArn]);
+  grant(workers.claim, ["dynamodb:ConditionCheckItem"], [data.events.tableArn]);
+  for (const worker of [workers.create, workers.finish, workers.fail])
+    grant(worker, ["dynamodb:PutItem", "dynamodb:UpdateItem"], [data.deployments.tableArn]);
+  grant(workers.describe, ["dynamodb:UpdateItem"], [data.deployments.tableArn]);
+  grant(workers.fail, ["dynamodb:DeleteItem"], [data.deployments.tableArn]);
+  for (const worker of [workers.create, workers.describe, workers.finish])
+    grant(
+      worker,
+      ["dynamodb:ConditionCheckItem"],
+      [data.events.tableArn, data.deployments.tableArn],
+    );
+  grant(workers.finish, ["dynamodb:UpdateItem"], [data.events.tableArn]);
+  workers.finish.addToRolePolicy(
+    new PolicyStatement({
+      actions: ["dynamodb:DeleteItem"],
+      resources: [data.deployments.tableArn],
+      conditions: {
+        "ForAllValues:StringEquals": { "dynamodb:LeadingKeys": ["DISPATCH#PENDING"] },
+      },
+    }),
+  );
+  for (const worker of [workers.create, workers.describe, workers.finish])
+    worker.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["dynamodb:Query"],
+        resources: [data.deployments.tableArn],
+        conditions: {
+          "ForAllValues:StringLike": { "dynamodb:LeadingKeys": ["DEPLOYMENT#*"] },
+        },
+      }),
+    );
 }

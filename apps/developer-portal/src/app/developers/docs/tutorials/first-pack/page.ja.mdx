@@ -4,7 +4,7 @@ export const metadata = { title: "はじめての問題パック" };
 
 # はじめての問題パック <MaturityBadge level="preview" />
 
-pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。残っている tenant 単位の activate は旧版向けのローカル記録であり、現行の競技実行手順ではありません。
+pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。activate はオフラインのカタログ記録であり、現行の競技実行手順ではありません。
 
 既存 pack を扱う場合は[既存パックを使う](/developers/docs/operate/use-existing-pack/)へ進みます。
 
@@ -40,7 +40,7 @@ Git install は HTTPS URL と完全な 40 桁 commit SHA を使います。sourc
 
 <h2 id="runtime-boundary">実行経路との境界</h2>
 
-現行 candidate では pack activate から大会作成、配置まで一連の経路は完成していません。大会の確認には固定された core catalog の対応問題を使います。汎用ローカルカタログと workbench の復旧は別の作業です。この不足を埋めるために削除済みの Lite launcher や tenant を使わないでください。
+現行 candidate では pack activate から大会作成、配置まで一連の経路は完成していません。大会の確認には固定された core catalog の対応問題を使います。組み込みのローカルカタログは、検証済みの runtime adapter を使います。
 
 <h2 id="common-failures">よくある検証失敗</h2>
 
@@ -52,4 +52,4 @@ Git install は HTTPS URL と完全な 40 桁 commit SHA を使います。sourc
 bun run pack remove com.example.starter@0.1.0
 ```
 
-activation や参照が残っている場合は拒否されます。先に内容を確認してください。pack の削除は、問題環境やクラウド基盤の撤収ではありません。SaaS/Lite と旧個人練習の手順は[固定した旧版](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9)を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。
+activation や参照が残っている場合は拒否されます。先に内容を確認してください。pack の削除は、問題環境やクラウド基盤の撤収ではありません。

@@ -10,9 +10,9 @@ export const metadata = { title: "runtime の実行状況" };
 | --- | --- |
 | ローカル Docker Compose | ローカル開催専用で、クラウドのカタログには表示しない。新しい大会は最大 512 件の停止中 jobs を準備。参加者が起動・再開・停止する。デフォルトはチーム 3、host 全体 12 環境、メモリー上限の合計 4096 MiB。106 問の表示は全問のプレイ確認ではない |
 | Docker 問題内の terminal | 15 問が宣言。実 PostgreSQL terminal の exec、3 checkpoints、チーム分離、再起動を確認。他の terminal 問題には追加の代表経路確認が必要 |
-| 組み込みの Cryptography Battle | ローカルは SQLite、クラウドは DynamoDB で実行。チームごとの非公開表示と採点の原子性を維持。Docker・競技者 AWS アカウントは不要。クラウドの一斉アクセス時は 5 秒の更新間隔を超える |
+| 組み込みの Cryptography Battle | ローカルは SQLite、クラウドは選択した Turso または DynamoDB で実行。チームごとの非公開表示と採点の原子性を維持。Docker・競技者 AWS アカウントは不要。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超える。実 AWS は未計測 |
 | AWS CloudFormation | クラウド開催専用。明示設定した hello-world の flag 経路と参加者用の限定 CLI アクセスを接続。Console / CloudShell は未完成。実 AWS は別途リハーサル |
-| Lambda/DynamoDB のクラウド基盤 | 基盤、永続化した処理、組み込み Battle、この版の make deploy/destroy CLI を実装。権限設定の事前確認が必要。Docker / Compose 問題はローカル開催専用 |
+| Lambda + Turso/DynamoDB のクラウド基盤 | 基盤、永続化した処理、組み込み Battle、この版の make deploy/destroy CLI を実装。権限設定の事前確認が必要。Docker / Compose 問題はローカル開催専用 |
 | 外部 pack、Azure、GCP、Sakura、その他の採点方式 | schema・作問用の宣言だけでは大会での実行対応になりません |
 
 <h2 id="support-classes">確認結果を区別する</h2>

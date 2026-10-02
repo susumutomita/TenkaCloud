@@ -145,18 +145,17 @@ describe("documentation home by role", () => {
     expect(english).not.toContain("<h1>Developer docs</h1>");
   });
 
-  it("should publish the author diagram and pinned legacy Lite guidance", () => {
+  it("should publish the author diagram and current setup guidance", () => {
     const author = read("landing/docs/manual/problem-author/index.html");
     expect(author).toContain("/docs/assets/problem-author-flow.ja.svg");
     expect(read("landing/docs/assets/problem-author-flow.ja.svg")).toContain("<title");
-    const settings = read("landing/docs/reference/lite-settings/index.html");
-    expect(settings).toContain("SSM");
-    expect(settings).toContain("16–128");
-    expect(settings).toContain("ExternalId");
-    for (const page of [settings, read("landing/docs/reference/lite-messages/index.html")]) {
-      expect(page).toContain("825415fcda5075ad723daf9e4514eac47d7b8bb9");
-      expect(page).toContain("/docs/getting-started/");
-      expect(page).toContain("旧");
+    for (const suffix of ["index.html", "index.en.html"]) {
+      const gettingStarted = read(`landing/docs/getting-started/${suffix}`);
+      expect(gettingStarted).toContain("make local-reset");
+      expect(gettingStarted).toContain("make destroy");
+      expect(gettingStarted).not.toContain("825415fcda5075ad723daf9e4514eac47d7b8bb9");
+      expect(read(`landing/docs/${suffix}`)).not.toContain("reference/lite-settings");
+      expect(read(`landing/docs/${suffix}`)).not.toContain("reference/lite-messages");
     }
   });
   it("keeps current local/cloud guidance consistent without relabeling the historical setup", () => {

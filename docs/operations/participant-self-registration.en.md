@@ -28,9 +28,3 @@ The [host registration contract](../host-participant-registration.md) describes
 readiness checks, atomic allocation and receipt behavior. These use retained
 records; they are not fresh cloud health checks. Real deployment and complete
 Docker/terminal playability need separate evidence.
-
-## Historical flow
-
-The [pinned legacy registration guide](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/operations/participant-self-registration.en.md)
-used a different cloud provisioning workflow. It is not the current contract;
-no legacy allocations are imported automatically.

@@ -1,4 +1,4 @@
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import {
   type DynamoDBDocumentClient,
   GetCommand,
@@ -10,13 +10,33 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { z } from "zod";
-import { pluginStateSchemaVersion } from "../../../../scripts/lib/coordination-state-schema.js";
 import {
   createMatch,
-  type LocalMatch,
   type MatchTransition,
   transitionMatch,
 } from "../../../../scripts/local-host/coordination-core.js";
+import {
+  assertArtifact,
+  assertOpen,
+  assertParticipantGate,
+  assertPin,
+  assertRoster,
+  assertSchedule,
+  assertSelected,
+  checkedRoster,
+  closedStatuses,
+  defined,
+  digestSchema,
+  elapsed,
+  hash,
+  id,
+  jsonBytes,
+  matchDigest,
+  nextTime,
+  projection,
+  scheduledClock,
+  validateOperation,
+} from "./coordination-state.js";
 import { scoreKey, teamGuard, type Write } from "./deployment-storage.js";
 import {
   COORDINATION_CHUNK_BYTES,
@@ -37,49 +57,19 @@ import {
   eventKey,
   teamKey,
 } from "./dynamodb-cloud-repository.js";
+import {
+  assertSnapshotScope,
+  decodedChunks,
+  dynamoCloseFence,
+  dynamoHeadAbsent,
+  dynamoHeadCheck,
+  headSchema,
+  readDynamoSnapshot,
+  type StoredRun,
+  snapshotKey,
+} from "./dynamodb-coordination-snapshot.js";
 import { installationControlKey, installationIntakeGuard } from "./installation-control.js";
 
-const id = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/u);
-const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
-const headSchema = z.object({
-  eventId: id,
-  problemId: z.literal("ac26-crypto-battle"),
-  runId: id,
-  revision: z.number().int().nonnegative(),
-  artifactDigest: digestSchema,
-  pluginKey: z.string(),
-  catalogKey: z.string(),
-  roster: z
-    .array(z.object({ teamId: id, teamName: z.string() }))
-    .min(1)
-    .max(48),
-  clock: z.object({
-    pausedMs: z.number().nonnegative(),
-    elapsedMs: z.number().nonnegative(),
-    lockedAt: z.number().optional(),
-  }),
-  closed: z.boolean(),
-  admissionOwner: z.string().uuid().optional(),
-  admissionExpiresAt: z.number().int().nonnegative().optional(),
-  updatedAt: z.string().datetime(),
-  snapshotDigest: digestSchema,
-  byteLength: z.number().int().positive().max(COORDINATION_MAX_BYTES),
-  chunkCount: z.number().int().positive().max(8),
-});
-const matchSchema = z.object({
-  state: z.unknown().refine((value) => value !== undefined),
-  matchSecret: z.string().regex(/^[a-f0-9]{64}$/u),
-  version: z.number().int().nonnegative(),
-  stateSchemaVersion: z.number().int().positive(),
-  scores: z.record(z.number().finite()),
-});
-interface StoredRun extends NativeCoordinationRun {
-  readonly admissionOwner?: string;
-  readonly admissionExpiresAt?: number;
-  readonly snapshotDigest: string;
-  readonly chunkCount: number;
-  readonly byteLength: number;
-}
 interface Admission {
   readonly owner: string;
   attempted: boolean;
@@ -123,8 +113,6 @@ export interface CoordinationWriteMeasurement {
   readonly maxItemBytes: number;
   readonly bytesUpperBound: number;
 }
-const hash = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex");
-const closedStatuses = new Set(["ENDED", "TEARDOWN", "ARCHIVED"]);
 
 /** Exact native lifecycle; no CloudFormation job, account, TARGET row or process-local authority. */
 export class DynamoDeploymentsCoordination {
@@ -188,49 +176,11 @@ export class DynamoDeploymentsCoordination {
     return this.readSnapshot(eventId, problemId);
   }
   /** Cleanup needs a complete, closed native snapshot, never merely an event status. */
-  async closeFence(eventId: string, problemId: string): Promise<Write> {
-    const run = await this.readSnapshot(eventId, problemId);
-    if (!run) return this.headAbsent(eventId, problemId);
-    if (!run.closed) throw new NativeCoordinationError(409, "coordination_not_settled");
-    return this.headCheck(run);
+  closeFence(eventId: string, problemId: string): Promise<Write> {
+    return dynamoCloseFence(this.ddb, this.tables.deployments, eventId, problemId, this.timing);
   }
-  private async readSnapshot(eventId: string, problemId: string): Promise<StoredRun | undefined> {
-    const key = coordinationHeadKey(eventId, problemId);
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const raw = await this.get(key);
-      if (!raw) return undefined;
-      const head = headSchema.parse(raw);
-      assertSnapshotScope(head, eventId, problemId);
-      const values = await this.ddb.send(
-        new TransactGetCommand({
-          TransactItems: [
-            ...Array.from({ length: head.chunkCount }, (_, index) => ({
-              Get: { TableName: this.tables.deployments, Key: snapshotKey(key.PK, index) },
-            })),
-            { Get: { TableName: this.tables.deployments, Key: key } },
-          ],
-        }),
-      );
-      const after = headSchema.safeParse(values.Responses?.at(-1)?.Item);
-      if (!after.success || after.data.chunkCount !== head.chunkCount) continue;
-      // HEAD and every selected chunk share this transaction's snapshot. The first
-      // read only sizes the transaction; an intervening admission or publication
-      // does not invalidate an otherwise complete, internally consistent result.
-      const current = after.data;
-      assertSnapshotScope(current, eventId, problemId);
-      const chunks = values.Responses?.slice(0, current.chunkCount).map((item) => item.Item) ?? [];
-      const bytes = decodedChunks(chunks, current.runId, current.revision);
-      if (
-        !bytes ||
-        bytes.byteLength !== current.byteLength ||
-        hash(bytes) !== current.snapshotDigest
-      ) {
-        if (attempt < 7) continue;
-        throw new NativeCoordinationError(503, "coordination_snapshot_invalid");
-      }
-      return this.timed("decode", () => parsedRun(current, bytes));
-    }
-    throw new NativeCoordinationError(409, "coordination_snapshot_changed");
+  private readSnapshot(eventId: string, problemId: string): Promise<StoredRun | undefined> {
+    return readDynamoSnapshot(this.ddb, this.tables.deployments, eventId, problemId, this.timing);
   }
   async initialize(input: {
     readonly event: EventRecord;
@@ -256,7 +206,7 @@ export class DynamoDeploymentsCoordination {
           await this.commit([
             installationIntakeGuard(this.tables.events),
             this.eventCheck(event, now),
-            this.headCheck(prior),
+            dynamoHeadCheck(this.tables.deployments, prior),
           ])
         )
           return prior;
@@ -518,7 +468,7 @@ export class DynamoDeploymentsCoordination {
       let writes: Write[];
       if (!previous) {
         writes = [
-          this.headAbsent(input.event.eventId, input.artifact.problemId),
+          dynamoHeadAbsent(this.tables.deployments, input.event.eventId, input.artifact.problemId),
           this.eventUpdate(input.event, nextEvent),
         ];
       } else {
@@ -738,24 +688,8 @@ export class DynamoDeploymentsCoordination {
       teamGuard(this.tables.teams, input.team, now),
     ];
     if (!run.closed || input.operation) writes.push(installationIntakeGuard(this.tables.events));
-    if (head) writes.push(this.headCheck(run));
+    if (head) writes.push(dynamoHeadCheck(this.tables.deployments, run));
     return writes;
-  }
-  private headCheck(run: StoredRun): Write {
-    return {
-      ConditionCheck: {
-        TableName: this.tables.deployments,
-        Key: coordinationHeadKey(run.eventId, run.problemId),
-        ConditionExpression:
-          "runId = :run AND revision = :revision AND snapshotDigest = :digest AND closed = :closed",
-        ExpressionAttributeValues: {
-          ":run": run.runId,
-          ":revision": run.revision,
-          ":digest": run.snapshotDigest,
-          ":closed": run.closed,
-        },
-      },
-    };
   }
   private eventCheck(event: EventRecord, now: number, closedAllowed = false): Write {
     if (!closedAllowed) assertOpen(event, now);
@@ -821,15 +755,6 @@ export class DynamoDeploymentsCoordination {
           ":previous": previous.updatedAt,
           ":previousStatus": previous.status,
         },
-      },
-    };
-  }
-  private headAbsent(eventId: string, problemId: string): Write {
-    return {
-      ConditionCheck: {
-        TableName: this.tables.deployments,
-        Key: coordinationHeadKey(eventId, problemId),
-        ConditionExpression: "attribute_not_exists(PK)",
       },
     };
   }
@@ -1002,35 +927,6 @@ function readHeadCurrent(raw: Record<string, unknown> | undefined, run: StoredRu
   );
 }
 
-function assertSnapshotScope(
-  head: z.infer<typeof headSchema>,
-  eventId: string,
-  problemId: string,
-): void {
-  if (head.eventId !== eventId || head.problemId !== problemId)
-    throw new NativeCoordinationError(503, "coordination_scope_invalid");
-}
-
-function parsedRun(head: z.infer<typeof headSchema>, bytes: Buffer): StoredRun {
-  const parsed = matchSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown);
-  const match = { ...parsed, state: parsed.state };
-  if (match.version !== head.revision)
-    throw new NativeCoordinationError(503, "coordination_snapshot_invalid");
-  return { ...head, match };
-}
-
-function jsonBytes(value: unknown): Buffer {
-  const text = JSON.stringify(value, (_key, item: unknown) => {
-    if (
-      (typeof item === "number" && !Number.isFinite(item)) ||
-      ["bigint", "function", "symbol"].includes(typeof item)
-    )
-      throw new NativeCoordinationError(503, "coordination_state_invalid");
-    return item;
-  });
-  if (text === undefined) throw new NativeCoordinationError(503, "coordination_state_invalid");
-  return Buffer.from(text, "utf8");
-}
 function split(bytes: Uint8Array): Uint8Array[] {
   return Array.from(
     { length: Math.ceil(bytes.byteLength / COORDINATION_CHUNK_BYTES) },
@@ -1038,178 +934,13 @@ function split(bytes: Uint8Array): Uint8Array[] {
       bytes.slice(index * COORDINATION_CHUNK_BYTES, (index + 1) * COORDINATION_CHUNK_BYTES),
   );
 }
-function snapshotKey(PK: string, index: number) {
-  return { PK, SK: `SNAPSHOT#${index}` };
-}
-function decodedChunks(
-  rows: readonly (Record<string, unknown> | undefined)[],
-  runId: string,
-  revision: number,
-): Buffer | undefined {
-  const values: Uint8Array[] = [];
-  for (const row of rows) {
-    if (
-      row?.runId !== runId ||
-      row.revision !== revision ||
-      !(row.data instanceof Uint8Array) ||
-      row.data.byteLength > COORDINATION_CHUNK_BYTES
-    )
-      return undefined;
-    values.push(row.data);
-  }
-  return Buffer.concat(values);
-}
-function assertArtifact(artifact: NativeCoordinationArtifact): void {
-  coordinationHeadKey("00000000000000000000000000", artifact.problemId);
-  digestSchema.parse(artifact.artifactDigest);
-  if (
-    artifact.pluginKey !== `plugins/${artifact.artifactDigest}.mjs` ||
-    !/^catalogs\/[a-f0-9]{64}\.json$/u.test(artifact.catalogKey)
-  )
-    throw new NativeCoordinationError(503, "coordination_artifact_invalid");
-  if (
-    !Number.isSafeInteger(artifact.stateBudget.bytesPerTeam) ||
-    artifact.stateBudget.bytesPerTeam < 1 ||
-    !Number.isSafeInteger(artifact.stateBudget.baseBytes) ||
-    artifact.stateBudget.baseBytes < 0
-  )
-    throw new NativeCoordinationError(503, "coordination_state_budget_invalid");
-}
-function assertPin(run: NativeCoordinationRun, artifact: NativeCoordinationArtifact): void {
-  if (
-    run.artifactDigest !== artifact.artifactDigest ||
-    run.pluginKey !== artifact.pluginKey ||
-    run.catalogKey !== artifact.catalogKey ||
-    run.match.stateSchemaVersion !== pluginStateSchemaVersion(artifact.plugin)
-  )
-    throw new NativeCoordinationError(409, "coordination_artifact_changed");
-}
-function assertSelected(event: EventRecord, problemId: string): void {
-  if (!event.problems.some((problem) => problem.problemId === problemId))
-    throw new NativeCoordinationError(404, "coordination_not_configured");
-}
-function assertOpen(event: EventRecord, now: number): void {
-  if (
-    !["DRAFT", "DEPLOYING", "READY"].includes(event.status) ||
-    event.expiresAt <= Math.floor(now / 1000)
-  )
-    throw new NativeCoordinationError(409, "event_closed");
-}
-function checkedRoster(event: EventRecord, teams: readonly TeamRecord[]) {
-  if (
-    teams.length !== event.teamCount ||
-    teams.length < 1 ||
-    teams.length > 48 ||
-    new Set(teams.map((team) => team.teamId)).size !== teams.length ||
-    teams.some((team) => team.eventId !== event.eventId)
-  )
-    throw new NativeCoordinationError(409, "coordination_roster_invalid");
-  return teams
-    .map((team) => ({ teamId: team.teamId, teamName: team.displayName ?? team.internalSlug }))
-    .sort((a, b) => a.teamId.localeCompare(b.teamId));
-}
-function assertRoster(run: NativeCoordinationRun, roster: NativeCoordinationRun["roster"]): void {
-  if (
-    JSON.stringify(run.roster.map((team) => team.teamId)) !==
-    JSON.stringify(roster.map((team) => team.teamId))
-  )
-    throw new NativeCoordinationError(409, "coordination_roster_changed");
-}
-function assertParticipantGate(event: EventRecord, now: number, move: boolean): void {
-  if (!event.startsAt || now < Date.parse(event.startsAt))
-    throw new NativeCoordinationError(
-      move ? 422 : 409,
-      move ? "event_ended" : "scoring_not_started",
-    );
-  if (
-    move &&
-    (closedStatuses.has(event.status) ||
-      (event.endsAt !== undefined && now >= Date.parse(event.endsAt)))
-  )
-    throw new NativeCoordinationError(422, "event_ended");
-  if (move && event.scoringLocked) throw new NativeCoordinationError(422, "scoring_locked");
-}
-function validateOperation(operation: Operation): void {
-  if (!/^[A-Za-z0-9_-]{8,128}$/u.test(operation.key) || !/^[a-f0-9]{64}$/u.test(operation.hash))
-    throw new NativeCoordinationError(400, "invalid_operation_key");
-}
 function receiptKey(run: RunIdentity, team: TeamRecord, key: string) {
   return {
     PK: coordinationHeadKey(run.eventId, run.problemId).PK,
     SK: `RECEIPT#${run.runId}#${team.teamId}#${hash(key)}`,
   };
 }
-function projection(
-  artifact: NativeCoordinationArtifact,
-  run: NativeCoordinationRun,
-  teamId: string,
-): NativeCoordinationResponse {
-  return {
-    status: 200,
-    body: { projection: artifact.plugin.projectForTeam(structuredClone(run.match.state), teamId) },
-    revision: run.revision,
-  };
-}
-function matchDigest(match: LocalMatch): string {
-  return hash(
-    jsonBytes({
-      state: match.state,
-      stateSchemaVersion: match.stateSchemaVersion,
-      matchSecret: match.matchSecret,
-      scores: match.scores,
-    }),
-  );
-}
-function elapsed(event: EventRecord, run: NativeCoordinationRun, now: number): number {
-  const start = Date.parse(event.startsAt ?? new Date(now).toISOString());
-  const end = Math.min(
-    now,
-    event.endsAt ? Date.parse(event.endsAt) : Infinity,
-    event.scoringLocked ? (run.clock.lockedAt ?? now) : Infinity,
-  );
-  return Math.max(run.clock.elapsedMs, Math.max(0, end - start - run.clock.pausedMs));
-}
-function scheduledClock(
-  event: EventRecord,
-  run: NativeCoordinationRun,
-  patch: NativeSchedulePatch,
-  now: number,
-): NativeCoordinationRun["clock"] {
-  let pausedMs = run.clock.pausedMs;
-  let lockedAt = run.clock.lockedAt;
-  if (patch.scoringLocked === true && !event.scoringLocked) lockedAt = now;
-  if (patch.scoringLocked === false && event.scoringLocked && lockedAt !== undefined) {
-    pausedMs += Math.max(
-      0,
-      Math.min(now, event.endsAt ? Date.parse(event.endsAt) : Infinity) -
-        Math.max(lockedAt, Date.parse(event.startsAt ?? new Date(now).toISOString())),
-    );
-    lockedAt = undefined;
-  }
-  return {
-    pausedMs,
-    ...(lockedAt === undefined ? {} : { lockedAt }),
-    elapsedMs: elapsed(event, run, now),
-  };
-}
-function assertSchedule(event: EventRecord, patch: NativeSchedulePatch, now: number): void {
-  if (
-    event.startsAt &&
-    Date.parse(event.startsAt) <= now &&
-    patch.startsAt !== undefined &&
-    patch.startsAt !== event.startsAt
-  )
-    throw new NativeCoordinationError(409, "coordination_start_already_fixed");
-  if (event.status === "ARCHIVED") throw new NativeCoordinationError(409, "event_closed");
-}
-function nextTime(event: EventRecord, now: number): string {
-  return new Date(Math.max(now, Date.parse(event.updatedAt) + 1)).toISOString();
-}
-function defined<T extends object>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as Partial<T>;
-}
+
 function itemBytes(value: unknown): number {
   if (value instanceof Uint8Array) return value.byteLength;
   if (typeof value === "string") return Buffer.byteLength(value, "utf8");

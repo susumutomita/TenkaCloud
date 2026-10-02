@@ -20,7 +20,7 @@ make local LOCAL_ARGS="--no-build"
 Bun 1.3.11 is pinned. The host serves the organizer and participant applications
 and persists competition state in SQLite. Use a private dedicated data directory.
 Docker problem execution requires Docker; the built-in Battle runs in Bun.
-AWS-service problems are cloud-only. Lambda/DynamoDB hosting and the full cloud lifecycle remain under verification.
+AWS-service problems are cloud-only. Lambda + Turso/DynamoDB hosting and the full cloud lifecycle remain under verification.
 
 ## Code ownership
 
@@ -46,4 +46,4 @@ HTTP/SQLite path for state and authorization changes. Follow the
 for distribution changes. Record browser and optional live AWS/IdP evidence
 separately; local tests do not prove external account access.
 
-`make down` preserves local event and Docker data. Cloud `make deploy` / `make destroy` call the existing CLI with reviewed AWS setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval. Use `CLOUD_ARGS="--help"` to inspect either command without AWS access.
+`make down` preserves local event and Docker data. Cloud `make deploy` / `make destroy` call the existing CLI with reviewed AWS setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement. Use `CLOUD_ARGS="--help"` to inspect either command without AWS access.

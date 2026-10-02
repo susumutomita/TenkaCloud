@@ -4,7 +4,7 @@ export const metadata = { title: "First pack tutorial" };
 
 # First pack tutorial <MaturityBadge level="preview" />
 
-Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate's event catalog. The retained tenant-scoped activation command is a legacy local record, not a current hosting workflow.
+Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate's event catalog. Activation is an offline catalog record, not a current hosting workflow.
 
 Just want to run an existing pack? → [Use an existing pack](/developers/docs/operate/use-existing-pack/).
 
@@ -40,7 +40,7 @@ For a Git install use an HTTPS URL and full immutable 40-hex commit SHA. Keep so
 
 <h2 id="runtime-boundary">Runtime boundary</h2>
 
-There is no complete pack activate → event → deployment path in this candidate. Use its supported pinned core catalog to rehearse an event. Generic local catalog/workbench restoration is separate work. Do not run a deleted Lite launcher or invent a tenant to bridge this gap.
+There is no complete pack activate → event → deployment path in this candidate. Use its supported pinned core catalog to rehearse an event. The built-in local catalog uses its own validated runtime adapters.
 
 <h2 id="common-failures">Common failures and diagnostic codes</h2>
 
@@ -52,4 +52,4 @@ There is no complete pack activate → event → deployment path in this candida
 bun run pack remove com.example.starter@0.1.0
 ```
 
-Removal may refuse a retained activation/reference; inspect it first. Removing a pack is not exercise or cloud teardown. Historical SaaS/Lite and individual-practice instructions are available in the [pinned legacy source](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9). Do not use them against this candidate or assume data migrates automatically.
+Removal may refuse a retained activation/reference; inspect it first. Removing a pack is not exercise or cloud teardown.

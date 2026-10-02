@@ -1,18 +1,17 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DescribeExecutionCommand, SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import { assertCommercialRegion } from "../../../cloud-hosting/regions.js";
+import type { CloudDeploymentWork } from "../../control-data/cloud-data-ports.js";
+import { acquireCloudWork } from "../../control-data/cloud-work-data.js";
 import {
   DeploymentConflict,
   type DeploymentIdentity,
 } from "../../control-data/domain/deployment-work.js";
-import { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
 import { identitySchema, serializeDispatchIdentity } from "./workflow.js";
 
 export interface DispatchDependencies {
   readonly repository: Pick<
-    DynamoDeploymentWork,
+    CloudDeploymentWork,
     "listDispatch" | "acceptingNewDeployments" | "getDeletionJob" | "getTeardown" | "finishTeardown"
   >;
   readonly describeExecution: RecoveryDependencies["describeExecution"];
@@ -27,7 +26,7 @@ export interface DispatchDependencies {
 
 export interface RecoveryDependencies {
   readonly repository: Pick<
-    DynamoDeploymentWork,
+    CloudDeploymentWork,
     "getJob" | "finish" | "failPending" | "getTeardown" | "finishTeardown"
   >;
   readonly stateMachineArn: string;
@@ -86,7 +85,7 @@ async function verifiedTerminalExecution(
 async function recoverTeardownExecution(
   execution: NonNullable<Awaited<ReturnType<typeof verifiedTerminalExecution>>>,
   deps: {
-    readonly repository: Pick<DynamoDeploymentWork, "getTeardown" | "finishTeardown">;
+    readonly repository: Pick<CloudDeploymentWork, "getTeardown" | "finishTeardown">;
     readonly now?: () => number;
   },
 ) {
@@ -264,20 +263,13 @@ function required(name: string): string {
   return value;
 }
 
-export function createAwsDispatcherDependencies(): DispatchDependencies {
+export async function createAwsDispatcherDependencies(): Promise<DispatchDependencies> {
   const region = required("AWS_REGION");
   assertCommercialRegion(region);
   const client = new SFNClient({ region, ignoreConfiguredEndpointUrls: true });
-  const ddb = DynamoDBDocumentClient.from(
-    new DynamoDBClient({ region, ignoreConfiguredEndpointUrls: true }),
-    { marshallOptions: { removeUndefinedValues: true } },
-  );
+  const { work } = await acquireCloudWork();
   return {
-    repository: new DynamoDeploymentWork(ddb, {
-      events: required("EVENTS_TABLE_NAME"),
-      teams: required("TEAMS_TABLE_NAME"),
-      deployments: required("DEPLOYMENTS_TABLE_NAME"),
-    }),
+    repository: work,
     stateMachineArn: required("DEPLOYMENT_STATE_MACHINE_ARN"),
     startExecution: (input) => client.send(new StartExecutionCommand(input)),
     describeExecution: (input) => client.send(new DescribeExecutionCommand(input)),
@@ -286,7 +278,7 @@ export function createAwsDispatcherDependencies(): DispatchDependencies {
 
 export async function handler(): Promise<Awaited<ReturnType<typeof dispatchPending>>> {
   try {
-    const result = await dispatchPending(createAwsDispatcherDependencies(), {
+    const result = await dispatchPending(await createAwsDispatcherDependencies(), {
       limit: 500,
       concurrency: 5,
     });
@@ -297,27 +289,20 @@ export async function handler(): Promise<Awaited<ReturnType<typeof dispatchPendi
   }
 }
 
-export function createAwsRecoveryDependencies(): RecoveryDependencies {
+export async function createAwsRecoveryDependencies(): Promise<RecoveryDependencies> {
   const region = required("AWS_REGION");
   assertCommercialRegion(region);
   const client = new SFNClient({ region, ignoreConfiguredEndpointUrls: true });
-  const ddb = DynamoDBDocumentClient.from(
-    new DynamoDBClient({ region, ignoreConfiguredEndpointUrls: true }),
-    { marshallOptions: { removeUndefinedValues: true } },
-  );
+  const { work } = await acquireCloudWork();
   return {
-    repository: new DynamoDeploymentWork(ddb, {
-      events: required("EVENTS_TABLE_NAME"),
-      teams: required("TEAMS_TABLE_NAME"),
-      deployments: required("DEPLOYMENTS_TABLE_NAME"),
-    }),
+    repository: work,
     stateMachineArn: required("DEPLOYMENT_STATE_MACHINE_ARN"),
     describeExecution: (input) => client.send(new DescribeExecutionCommand(input)),
   };
 }
 export async function recoveryHandler(value: unknown) {
   try {
-    return await recoverTerminalExecution(value, createAwsRecoveryDependencies());
+    return await recoverTerminalExecution(value, await createAwsRecoveryDependencies());
   } catch {
     throw new Error("Cloud terminal-execution reconciliation failed");
   }

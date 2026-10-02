@@ -6,6 +6,7 @@ import { App, BootstraplessSynthesizer, Stack } from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { CfnInclude } from "aws-cdk-lib/cloudformation-include";
 import { afterAll, describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import { z } from "zod";
 import { assertCurrentLauncherConfiguration } from "../../../scripts/cloud-hosting/launcher-contract.js";
 
@@ -21,50 +22,101 @@ const source = z
 const buildSpec = source.Properties.Source.BuildSpec;
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
-function buildActionScript(): string {
-  const phase = buildSpec.split("\n  build:\n")[1]?.split("\n  post_build:\n")[0];
-  const block = phase?.split("\n      - |\n")[1];
-  if (!block) throw new Error("Missing preserved build action script");
-  return block
-    .split("\n")
-    .map((line) => line.replace(/^ {8}/u, ""))
-    .join("\n");
-}
-/** Only the preserved action selector runs, with make replaced by a synthetic executable. */
-function action(actionName: string, exitCode = 0, sourceContract = "historical-949a40a9") {
+const phases = z
+  .object({ phases: z.record(z.object({ commands: z.array(z.string()) })) })
+  .parse(parse(buildSpec)).phases;
+
+/** Execute the real buildspec shell with deployment commands replaced by local fixtures. */
+function runPhases(names: string[], env: NodeJS.ProcessEnv = {}) {
   const root = mkdtempSync(join(directory, "action-"));
   const bin = join(root, "bin");
   mkdirSync(bin);
+  mkdirSync(join(root, "repo"));
   const calls = join(root, "calls");
+  const configuration = join(root, "configuration");
   writeFileSync(calls, "");
+  writeFileSync(configuration, "");
   const make = join(bin, "make");
   writeFileSync(
     make,
-    `#!/bin/sh\nprintf "%s|confirm=%s\\n" "$*" "\${TENKACLOUD_LITE_DOWN_YES-unset}" >> "$CALL_LOG"\nexit "$MAKE_EXIT"\n`,
+    `#!/bin/sh
+printf '%s\\n' "$*" >> "$CALL_LOG"
+printf '%s\\n' "$TENKACLOUD_ADMIN_EMAIL" "$CDK_PARAM_ENVIRONMENT" "$AWS_REGION" "$CDK_PARAM_RETAIN_DATA_TABLES" "$CDK_PARAM_CONTROL_DATA_BACKEND" "$CDK_PARAM_TURSO_DATABASE_URL" "$CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME" > "$CONFIG_LOG"
+exit "$MAKE_EXIT"
+`,
   );
   chmodSync(make, 0o700);
-  const result = spawnSync("/bin/bash", ["-c", buildActionScript()], {
+  const bun = join(bin, "bun");
+  writeFileSync(
+    bun,
+    `#!/bin/sh
+[ "$*" = "scripts/cloud-hosting/launcher-check.ts" ] || exit 99
+exit "$CHECK_EXIT"
+`,
+  );
+  chmodSync(bun, 0o700);
+  const script = names
+    .map((name) => {
+      const phase = phases[name];
+      if (!phase) throw new Error(`Missing buildspec phase: ${name}`);
+      return phase.commands.join("\n");
+    })
+    .join("\n");
+  const result = spawnSync("/bin/bash", ["-c", script], {
     cwd: root,
     encoding: "utf8",
     env: {
       PATH: bin,
-      ACTION: actionName,
-      SOURCE_CONTRACT: sourceContract,
+      ACTION: "deploy",
       ENVIRONMENT: "staging",
+      CODEBUILD_SRC_DIR: root,
+      CODEBUILD_BUILD_SUCCEEDING: "1",
+      AWS_DEFAULT_REGION: "ap-northeast-1",
+      TENANT_ADMIN_EMAIL: "organizer@example.com",
+      RETAIN_DATA_TABLES: "false",
+      CONTROL_DATA_BACKEND: "dynamodb",
       CALL_LOG: calls,
-      MAKE_EXIT: String(exitCode),
+      CONFIG_LOG: configuration,
+      MAKE_EXIT: "0",
+      CHECK_EXIT: "0",
+      ...env,
     },
   });
-  return { ...result, calls: readFileSync(calls, "utf8") };
+  return {
+    ...result,
+    calls: readFileSync(calls, "utf8"),
+    configuration: readFileSync(configuration, "utf8"),
+  };
 }
 
-describe("one complete current launcher with explicit historical-source compatibility; no AWS execution", () => {
-  it("defaults to the current source contract with the preserved privileged launcher caller role", () => {
-    const parsed = template.toJSON();
-    template.hasParameter("SourceContract", {
-      Default: "current-cloud-v1",
-      AllowedValues: ["current-cloud-v1", "historical-949a40a9"],
+describe("current cloud launcher; no AWS execution", () => {
+  it("keeps the current launcher manifest and template source pins aligned", () => {
+    const manifest = z
+      .object({
+        $comment: z.string(),
+        sourceContract: z.literal("current-cloud-v1"),
+        classification: z.literal("candidate/unreleased"),
+        platformCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+        catalogCommit: z.string().regex(/^[a-f0-9]{40}$/u),
+      })
+      .strict()
+      .parse(
+        JSON.parse(
+          readFileSync(
+            resolve(import.meta.dirname, "../../../release/launcher-defaults.json"),
+            "utf8",
+          ),
+        ),
+      );
+    expect(template.toJSON().Mappings.SourceDefaults[manifest.sourceContract]).toEqual({
+      CurrentPlatformCommit: manifest.platformCommit,
+      CatalogCommit: manifest.catalogCommit,
+      Classification: manifest.classification,
     });
+  });
+  it("pins current sources and discloses the preserved privileged launcher caller role", () => {
+    const parsed = template.toJSON();
+    expect(Object.keys(parsed.Mappings.SourceDefaults)).toEqual(["current-cloud-v1"]);
     expect(parsed.Mappings.SourceDefaults["current-cloud-v1"].CurrentPlatformCommit).toMatch(
       /^[a-f0-9]{40}$/u,
     );
@@ -74,22 +126,17 @@ describe("one complete current launcher with explicit historical-source compatib
     expect(parsed.Mappings.SourceDefaults["current-cloud-v1"].CatalogCommit).toBe(
       "915fe862fe09bf6b63bb96edcf0cb3deddd54d37",
     );
-    expect(parsed.Mappings.SourceDefaults["historical-949a40a9"]).toEqual({
-      CurrentPlatformCommit: "949a40a9ed9199331d928ad5cf9397dbb4ba3f81",
-      CatalogCommit: "363a7c9b83969e20d63b74fd0410a354da5e202b",
-      Classification: "historical/unverified",
-    });
     const role = parsed.Resources.CodeBuildRole.Properties;
     expect(role.ManagedPolicyArns).toBeUndefined();
     const statements = role.Policies[0].PolicyDocument.Statement;
-    expect(statements.map((entry: { Sid: string }) => entry.Sid)).toEqual([
+    expect(statements.slice(0, 5).map((entry: { Sid: string }) => entry.Sid)).toEqual([
       "DeployServices",
       "SsmParameters",
       "KmsForBootstrapAndAssets",
       "AssumeCdkRoles",
       "Identity",
     ]);
-    // Retain the original caller policy for both source contracts. Current bootstrap
+    // Retain the reviewed caller policy. Current bootstrap
     // authority is explicit rather than depending on a generated custom operator policy.
     expect(statements[0]).toEqual({
       Sid: "DeployServices",
@@ -126,13 +173,12 @@ describe("one complete current launcher with explicit historical-source compatib
     template.resourceCountIs("AWS::IAM::Role", 1);
     template.resourceCountIs("AWS::Logs::LogGroup", 1);
   });
-  it("preserves historical parameter IDs and exposes compatibility without silently using ignored options", () => {
+  it("offers only supported current configuration with DynamoDB default and optional Turso", () => {
     const parsed = z
       .object({ Parameters: z.record(z.record(z.unknown())) })
       .parse(template.toJSON());
     expect(Object.keys(parsed.Parameters).sort()).toEqual(
       [
-        "SourceContract",
         "Environment",
         "Action",
         "TenantAdminEmail",
@@ -140,12 +186,9 @@ describe("one complete current launcher with explicit historical-source compatib
         "RepoRef",
         "ProblemsRepoUrl",
         "ProblemsRepoRef",
-        "DeployExternalId",
         "ControlDataBackend",
         "TursoDatabaseUrl",
         "TursoAuthTokenParameterName",
-        "DynamoReadCapacity",
-        "DynamoWriteCapacity",
         "RetainDataTables",
         "BunVersion",
         "CodeBuildTimeoutMinutes",
@@ -153,14 +196,58 @@ describe("one complete current launcher with explicit historical-source compatib
     );
     template.hasParameter("Action", { AllowedValues: ["deploy", "destroy", "destroy-all"] });
     template.hasParameter("RetainDataTables", {
-      Default: "auto",
-      AllowedValues: ["auto", "false", "true"],
+      Default: "false",
+      AllowedValues: ["false", "true"],
     });
     template.hasParameter("ControlDataBackend", {
       Default: "dynamodb",
       AllowedValues: ["dynamodb", "turso"],
     });
-    template.hasParameter("DeployExternalId", { NoEcho: true });
+    for (const obsolete of [
+      "SourceContract",
+      "DeployExternalId",
+      "DynamoReadCapacity",
+      "DynamoWriteCapacity",
+      "ReleaseManifestVersion",
+    ])
+      expect(JSON.stringify(template.toJSON())).not.toContain(obsolete);
+  });
+  it("allows cleanup to read only the configured Turso token when Turso is selected", () => {
+    const parsed = template.toJSON();
+    expect(parsed.Conditions.UsesTurso).toEqual({
+      "Fn::Equals": [{ Ref: "ControlDataBackend" }, "turso"],
+    });
+    expect(parsed.Conditions.UsesTursoAuthToken).toEqual({
+      "Fn::And": [
+        { Condition: "UsesTurso" },
+        { "Fn::Not": [{ "Fn::Equals": [{ Ref: "TursoAuthTokenParameterName" }, ""] }] },
+      ],
+    });
+    const statements =
+      parsed.Resources.CodeBuildRole.Properties.Policies[0].PolicyDocument.Statement;
+    expect(statements).toHaveLength(6);
+    expect(statements[5]).toEqual({
+      "Fn::If": [
+        "UsesTursoAuthToken",
+        {
+          Sid: "TursoTokenForCleanup",
+          Effect: "Allow",
+          Action: ["ssm:GetParameter"],
+          Resource: {
+            "Fn::Sub": `arn:\${AWS::Partition}:ssm:\${AWS::Region}:\${AWS::AccountId}:parameter\${TursoAuthTokenParameterName}`,
+          },
+        },
+        { Ref: "AWS::NoValue" },
+      ],
+    });
+    const parameter = z
+      .object({ AllowedPattern: z.string() })
+      .parse(parsed.Parameters.TursoAuthTokenParameterName);
+    const pattern = new RegExp(parameter.AllowedPattern, "u");
+    for (const name of ["", "/TenkaCloud/staging/turso/token", "/other-project/token.v2"])
+      expect(pattern.test(name)).toBe(true);
+    for (const name of ["/*", "/TenkaCloud/*", "/token?", "relative/name", "/", "/a//b"])
+      expect(pattern.test(name)).toBe(false);
   });
   it("keeps physical identities, output links and existing onboarding checkpoint values", () => {
     template.hasResourceProperties("AWS::CodeBuild::Project", {
@@ -178,92 +265,176 @@ describe("one complete current launcher with explicit historical-source compatib
         "Fn::Sub": `https://\${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-\${Environment}?region=\${AWS::Region}`,
       },
     });
-    expect(buildSpec).toContain("TC{LITE-CLEANUP-COMPLETE}");
+    expect(buildSpec).not.toContain("TC{LITE-CLEANUP-COMPLETE}");
   });
-  it("preserves source verification and historical bootstrap while requiring current source compatibility", () => {
+  it("verifies immutable source checkouts and requires current launcher compatibility", () => {
     expect(buildSpec).toContain("rev-parse --verify 'FETCH_HEAD^{commit}'");
     expect(buildSpec).toContain("refusing to fall back to another ref");
     expect(buildSpec).toContain(
       `checkout_repo_ref "\${PROBLEMS_REPO_URL}" "\${PROBLEMS_REPO_REF}" repo/problems catalog`,
     );
     expect(buildSpec).toContain("bun install --frozen-lockfile --ignore-scripts");
-    expect(buildSpec).toContain(`cdk bootstrap "aws://\${AWS_ACCOUNT_ID}/\${AWS_REGION}"`);
+    expect(buildSpec).toContain("if [ ! -f repo/scripts/cloud-hosting/launcher-check.ts ]; then");
+    expect(buildSpec).toContain("does not implement current-cloud-v1");
+    expect(buildSpec).not.toContain("SOURCE_CONTRACT");
     for (const status of ["development/unreleased", "custom/unverified"])
       expect(buildSpec).toContain(status);
     expect(buildSpec).toContain(`release_classification="\${DEFAULT_CLASSIFICATION}"`);
   });
   it.each(["deploy", "destroy", "destroy-all"])(
-    "keeps the %s action and its confirmation/checkpoint contract",
+    "uses current make %s with the necessary unattended approvals",
     (command) => {
-      const result = action(command);
+      const result = runPhases(["build"], { ACTION: command });
       expect(result.status, result.stderr).toBe(0);
       expect(result.calls).toBe(
-        `${command} ENV=staging|confirm=${command === "deploy" ? "unset" : "1"}\n`,
-      );
-      if (command === "destroy-all")
-        expect(result.stdout).toContain("Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}");
-      else expect(result.stdout).not.toContain("Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}");
-    },
-  );
-  it.each(["deploy", "destroy", "destroy-all"])(
-    "does not report cleanup success after %s fails",
-    (command) => {
-      const result = action(command, 17);
-      expect(result.status).not.toBe(0);
-      expect(result.stdout).not.toContain("Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}");
-    },
-  );
-  it("refuses an unknown action before invoking make", () => {
-    const result = action("unexpected");
-    expect(result.status).toBe(2);
-    expect(result.calls).toBe("");
-  });
-});
-
-describe("current launcher/source contract", () => {
-  it.each(["deploy", "destroy"])(
-    "uses the current %s entrypoint with explicit unattended deployment approval",
-    (command) => {
-      const result = action(command, 0, "current-cloud-v1");
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.calls).toBe(
-        `${command} ENV=staging${command === "destroy" ? " CLOUD_ARGS=--yes" : " CLOUD_ARGS=--setup-if-needed --yes"}|confirm=unset\n`,
+        `${command} ENV=staging CLOUD_ARGS=${command === "deploy" ? "--setup-if-needed --yes" : "--yes"}\n`,
       );
       expect(result.stdout).not.toContain("TC{LITE-CLEANUP-COMPLETE}");
     },
   );
-  it.each(["deploy", "destroy"])("preserves current %s failures", (command) => {
-    expect(action(command, 17, "current-cloud-v1").status).toBe(17);
+  it.each(["deploy", "destroy", "destroy-all"])("preserves %s failures", (command) => {
+    const result = runPhases(["build", "post_build"], { ACTION: command, MAKE_EXIT: "17" });
+    expect(result.status).toBe(17);
+    expect(result.stdout).not.toContain("finished");
   });
-  it("rejects destructive legacy cleanup and unknown source contracts before make", () => {
-    expect(action("destroy-all", 0, "current-cloud-v1").calls).toBe("");
-    expect(action("destroy-all", 0, "current-cloud-v1").status).toBe(2);
-    expect(action("deploy", 0, "unknown").calls).toBe("");
+  it("refuses an unknown action before invoking make", () => {
+    const result = runPhases(["build"], { ACTION: "unexpected" });
+    expect(result.status).toBe(2);
+    expect(result.calls).toBe("");
   });
-  it("maps the saved organizer/environment to the current CLI and verifies the source protocol", () => {
-    expect(buildSpec).toContain(`export TENKACLOUD_ADMIN_EMAIL="\${TENANT_ADMIN_EMAIL}"`);
-    expect(buildSpec).toContain(`export CDK_PARAM_ENVIRONMENT="\${ENVIRONMENT}"`);
-    expect(buildSpec).toContain("does not implement current-cloud-v1");
-    expect(buildSpec).toContain("bun scripts/cloud-hosting/launcher-check.ts || exit 1");
-    expect(buildSpec).toContain(
-      `if [ "\${RETAIN_DATA_TABLES}" = "auto" ]; then export RETAIN_DATA_TABLES=false; fi`,
+  it("never reports success from a failing CodeBuild run", () => {
+    const result = runPhases(["post_build"], { CODEBUILD_BUILD_SUCCEEDING: "0" });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("Build failed");
+    expect(result.stdout).not.toContain("finished");
+  });
+  it.each(["dynamodb", "turso"])("forwards %s configuration to the current CLI", (backend) => {
+    const result = runPhases(["pre_build", "build"], {
+      CONTROL_DATA_BACKEND: backend,
+      TURSO_DATABASE_URL: backend === "turso" ? "libsql://cloud.example.com" : "",
+      TURSO_AUTH_TOKEN_PARAMETER_NAME: backend === "turso" ? "/TenkaCloud/staging/turso/token" : "",
+      RETAIN_DATA_TABLES: "true",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.configuration.split("\n")).toEqual([
+      "organizer@example.com",
+      "staging",
+      "ap-northeast-1",
+      "true",
+      backend,
+      backend === "turso" ? "libsql://cloud.example.com" : "",
+      backend === "turso" ? "/TenkaCloud/staging/turso/token" : "",
+      "",
+    ]);
+    expect(result.calls).toContain("deploy ENV=staging CLOUD_ARGS=--setup-if-needed --yes");
+  });
+  it("rejects launcher-check failure before deployment", () => {
+    const result = runPhases(["pre_build", "build"], { CHECK_EXIT: "1" });
+    expect(result.status).toBe(1);
+    expect(result.calls).toBe("");
+    expect(result.configuration).toBe("");
+  });
+  it("maps the launcher backend parameters into the CodeBuild environment", () => {
+    const project = z
+      .object({
+        Properties: z.object({
+          Environment: z.object({ EnvironmentVariables: z.array(z.unknown()) }),
+        }),
+      })
+      .parse(template.findResources("AWS::CodeBuild::Project").CodeBuildProject);
+    expect(project.Properties.Environment.EnvironmentVariables).toEqual(
+      expect.arrayContaining([
+        { Name: "CONTROL_DATA_BACKEND", Value: { Ref: "ControlDataBackend" }, Type: "PLAINTEXT" },
+        { Name: "TURSO_DATABASE_URL", Value: { Ref: "TursoDatabaseUrl" }, Type: "PLAINTEXT" },
+        {
+          Name: "TURSO_AUTH_TOKEN_PARAMETER_NAME",
+          Value: { Ref: "TursoAuthTokenParameterName" },
+          Type: "PLAINTEXT",
+        },
+      ]),
     );
-    expect(buildSpec).toContain(`if [ "\${CODEBUILD_BUILD_SUCCEEDING}" != "1" ]`);
   });
-  it("accepts supported current defaults and refuses every legacy-only option", () => {
-    const env = { SOURCE_CONTRACT: "current-cloud-v1" };
-    expect(() => assertCurrentLauncherConfiguration(env)).not.toThrow();
-    for (const override of [
-      { SOURCE_CONTRACT: "historical-949a40a9" },
-      { ACTION: "destroy-all" },
-      { CONTROL_DATA_BACKEND: "turso" },
-      { TURSO_DATABASE_URL: "libsql://test" },
-      { TURSO_AUTH_TOKEN_PARAMETER_NAME: "/test" },
-      { DEPLOY_EXTERNAL_ID: "legacy-external-id" },
-      { DYNAMO_READ_CAPACITY: "2" },
-      { DYNAMO_WRITE_CAPACITY: "2" },
-      { RETAIN_DATA_TABLES: "false" },
-    ])
-      expect(() => assertCurrentLauncherConfiguration({ ...env, ...override })).toThrow();
+});
+
+const tursoConfiguration = {
+  CONTROL_DATA_BACKEND: "turso",
+  TURSO_DATABASE_URL: "libsql://cloud.example.com",
+  TURSO_AUTH_TOKEN_PARAMETER_NAME: "/TenkaCloud/staging/turso/token",
+};
+
+describe("current launcher configuration", () => {
+  it.each([undefined, "", "  ", "dynamodb", " DynamoDB "])(
+    "defaults to DynamoDB or normalizes the backend %s",
+    (backend) => {
+      expect(() =>
+        assertCurrentLauncherConfiguration({ CONTROL_DATA_BACKEND: backend }),
+      ).not.toThrow();
+    },
+  );
+  it.each(["libsql://cloud.example.com", "https://cloud.example.com"])(
+    "accepts current Turso hosting with %s",
+    (url) => {
+      expect(() =>
+        assertCurrentLauncherConfiguration({
+          ...tursoConfiguration,
+          CONTROL_DATA_BACKEND: " Turso ",
+          TURSO_DATABASE_URL: ` ${url} `,
+        }),
+      ).not.toThrow();
+    },
+  );
+  it.each([
+    { CONTROL_DATA_BACKEND: "unknown" },
+    { TURSO_DATABASE_URL: "" },
+    { TURSO_AUTH_TOKEN_PARAMETER_NAME: "" },
+    { TURSO_DATABASE_URL: "file:/tmp/local.db" },
+    { TURSO_DATABASE_URL: "https://user:secret@cloud.example.com" },
+    { TURSO_AUTH_TOKEN_PARAMETER_NAME: "/TenkaCloud/*" },
+    { TURSO_AUTH_TOKEN_PARAMETER_NAME: "unrooted-parameter" },
+  ])("refuses invalid backend configuration %j", (override) => {
+    expect(() =>
+      assertCurrentLauncherConfiguration({ ...tursoConfiguration, ...override }),
+    ).toThrow();
+  });
+  it.each(["deploy", "destroy", "destroy-all"])("accepts action %s", (command) => {
+    expect(() => assertCurrentLauncherConfiguration({ ACTION: command })).not.toThrow();
+  });
+  it.each(["destroy", "destroy-all"])(
+    "allows %s to use deployed ownership despite missing or corrupt desired database configuration",
+    (command) => {
+      for (const configuration of [
+        { CONTROL_DATA_BACKEND: "turso" },
+        { CONTROL_DATA_BACKEND: "unknown" },
+        {
+          CONTROL_DATA_BACKEND: "turso",
+          TURSO_DATABASE_URL: "invalid-local-url",
+          TURSO_AUTH_TOKEN_PARAMETER_NAME: "/*",
+        },
+      ])
+        expect(() =>
+          assertCurrentLauncherConfiguration({
+            ...configuration,
+            ACTION: command,
+          }),
+        ).not.toThrow();
+      expect(() =>
+        assertCurrentLauncherConfiguration({
+          ACTION: command,
+          RETAIN_DATA_TABLES: "invalid",
+        }),
+      ).toThrow("RetainDataTables");
+    },
+  );
+  it.each([undefined, "false", "true"])("accepts retention %s", (retention) => {
+    expect(() =>
+      assertCurrentLauncherConfiguration({ RETAIN_DATA_TABLES: retention }),
+    ).not.toThrow();
+  });
+  it.each([
+    { ACTION: "unexpected" },
+    { RETAIN_DATA_TABLES: "auto" },
+    { RETAIN_DATA_TABLES: "invalid" },
+  ])("refuses invalid action or retention %j", (override) => {
+    expect(() => assertCurrentLauncherConfiguration(override)).toThrow();
   });
 });

@@ -9,7 +9,7 @@ The `tenkacloud pack` CLI is the offline pack tool. Local-directory commands do 
 from the CLI's own usage strings, so the documented command names and options
 always match the code.
 
-Current launch commands are `make local` and state-preserving `make down`. `make deploy` requires reviewed AWS setup. `make destroy` confirms targets, drains owned exercises, and retains data. The current cloud slice supports hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second refresh interval. Pack activate/deactivate retain legacy local records and do not add problems to the current event catalog.
+Current launch commands are `make local` and state-preserving `make down`. `make deploy` requires reviewed AWS setup. `make destroy` confirms targets and deletes platform-owned data by default. It leaves external Turso rows; `make destroy-all` explicitly resets them. Exercise cleanup uses event Teardown or `--drain-events`. The current cloud slice supports hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement. Pack activate/deactivate manage offline catalog records and do not add problems to the current event catalog.
 
 ## Commands
 

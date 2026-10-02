@@ -1,14 +1,12 @@
 import { z } from "zod";
+import type { CloudDeploymentWork } from "../../control-data/cloud-data-ports.js";
+import type { DeploymentCompletion } from "../../control-data/domain/deployment-work.js";
 import {
   type DeploymentConnection,
   type DeploymentIdentity,
   type DeploymentJob,
   flagDigest,
 } from "../../control-data/domain/deployment-work.js";
-import type {
-  DeploymentCompletion,
-  DynamoDeploymentWork,
-} from "../../control-data/dynamodb-deployment-work.js";
 import {
   type CloudRunnerDependencies,
   createDeployment,
@@ -62,7 +60,7 @@ export interface DeploymentArtifacts {
 }
 export type ArtifactResolver = (job: DeploymentJob) => Promise<DeploymentArtifacts>;
 export type WorkflowRepository = Pick<
-  DynamoDeploymentWork,
+  CloudDeploymentWork,
   | "getJob"
   | "getDeletionJob"
   | "getConnection"

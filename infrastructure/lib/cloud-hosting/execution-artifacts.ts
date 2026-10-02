@@ -11,6 +11,7 @@ import {
   executionCatalogSchema,
   type RunnerBinding,
 } from "../problem-deploy/handlers/cloud-api/execution-config.js";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
 
 export function repositoryArtifactFile(repositoryRoot: string, artifact: string): string {
   const selectedRoot = resolve(repositoryRoot);
@@ -190,9 +191,11 @@ export function cloudExecutionArtifacts(
     encryption: BucketEncryption.S3_MANAGED,
     enforceSSL: true,
     versioned: true,
-    removalPolicy: RemovalPolicy.RETAIN,
+    removalPolicy: RemovalPolicy.DESTROY,
+    autoDeleteObjects: true,
   });
   const deployment = new BucketDeployment(scope, "ExecutionArtifactUpload", {
+    logGroup: deploymentLogGroup(scope),
     destinationBucket: bucket,
     sources: [
       Source.data(catalogKey, rawCatalog),
@@ -200,6 +203,7 @@ export function cloudExecutionArtifacts(
       Source.data(native.descriptor.pluginKey, native.source),
     ],
     prune: false,
+    retainOnDelete: false,
   });
   return {
     bucket,

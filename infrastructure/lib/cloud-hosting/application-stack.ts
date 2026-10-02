@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
+import { Aspects, CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from "aws-cdk-lib";
 import {
   AuthorizationType,
   type CfnAuthorizer,
@@ -24,9 +24,15 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
+import { DestroyPolicySetter } from "../cdk-aspect/destroy-policy-setter.js";
 import { contentDigest } from "../problem-deploy/control-data/domain/deployment-work.js";
 import { CLOUD_EVENT_LIMITS } from "../problem-deploy/control-data/domain/events.js";
+import {
+  controlDataRuntimeEnv,
+  grantTursoAuthTokenRead,
+} from "../problem-deploy/control-data-backend-env.js";
 import type { RunnerBinding } from "../problem-deploy/handlers/cloud-api/execution-config.js";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
 import {
   CompetitorBootstrapHosting,
   competitorAssumeRolePolicy,
@@ -38,6 +44,7 @@ import { CloudDeploymentPipeline } from "./deployment-pipeline.js";
 import { cloudExecutionArtifacts } from "./execution-artifacts.js";
 import { CloudHosting } from "./hosting.js";
 import { scopeInvalidationPermissions } from "./invalidation-permissions.js";
+import { cloudLambdaBundling } from "./lambda-bundling.js";
 import { applyOwnershipTags } from "./ownership-tags.js";
 
 export interface CloudApplicationStackProps extends StackProps {
@@ -53,9 +60,12 @@ export class CloudApplicationStack extends Stack {
   constructor(scope: Construct, id: string, props: CloudApplicationStackProps) {
     super(scope, id, props);
     applyOwnershipTags(this, props.environment);
+    // Cover every CFN-owned resource, including the explicit deployment-provider logs.
+    // Implicit S3 auto-delete provider logs are handled by stack-owned CLI cleanup.
+    Aspects.of(this).add(new DestroyPolicySetter());
     const consoleSite = new CloudHosting(this, "OrganizerConsole", props.consoleAssets);
     const pool = new UserPool(this, "OrganizerUserPool", {
-      removalPolicy: RemovalPolicy.RETAIN,
+      removalPolicy: RemovalPolicy.DESTROY,
       selfSignUpEnabled: false,
       signInAliases: { email: true },
       autoVerify: { email: true },
@@ -112,6 +122,7 @@ export class CloudApplicationStack extends Stack {
       props.repositoryRoot,
     );
     const execution = cloudExecutionArtifacts(this, props.repositoryRoot, legacyBindings);
+    const data = props.backend.controlData;
     const apiHandler = new NodejsFunction(this, "CloudApi", {
       runtime: Runtime.NODEJS_24_X,
       entry: join(
@@ -125,17 +136,9 @@ export class CloudApplicationStack extends Stack {
       memorySize: 512,
       role: apiRole,
       logGroup: apiLogs,
-      bundling: {
-        bundleAwsSDK: true,
-        minify: true,
-        target: "node24",
-        // Tree-shake the SDK's ESM inputs while retaining CommonJS Lambda output.
-        mainFields: ["module", "main"],
-      },
+      bundling: cloudLambdaBundling(),
       environment: {
-        EVENTS_TABLE_NAME: props.backend.events.tableName,
-        TEAMS_TABLE_NAME: props.backend.teams.tableName,
-        DEPLOYMENTS_TABLE_NAME: props.backend.deployments.tableName,
+        ...controlDataRuntimeEnv(data),
         COGNITO_ISSUER: issuer,
         COGNITO_CLIENT_ID: client.userPoolClientId,
         ALLOWED_ORIGINS: origins.join(","),
@@ -147,40 +150,45 @@ export class CloudApplicationStack extends Stack {
         CONTROL_PLANE_ACCOUNT: this.account,
       },
     });
-    apiHandler.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem"],
-        resources: [props.backend.events.tableArn, `${props.backend.events.tableArn}/index/GSI1`],
-      }),
-    );
-    apiHandler.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem", "dynamodb:DeleteItem"],
-        resources: [props.backend.teams.tableArn],
-      }),
-    );
-    apiHandler.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:Query"],
-        resources: [
-          props.backend.deployments.tableArn,
-          `${props.backend.deployments.tableArn}/index/GSI1`,
-        ],
-      }),
-    );
-    apiHandler.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:ConditionCheckItem"],
-        resources: [props.backend.events.tableArn],
-      }),
-    );
-    // Only a missing first-use ExternalId needs authoritative checks of retained registry/job references.
-    apiHandler.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:Scan"],
-        resources: [props.backend.events.tableArn, props.backend.deployments.tableArn],
-      }),
-    );
+    grantTursoAuthTokenRead(apiHandler, data);
+    if (data.kind === "dynamodb") {
+      apiHandler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem"],
+          resources: [data.events.tableArn, `${data.events.tableArn}/index/GSI1`],
+        }),
+      );
+      apiHandler.addToRolePolicy(
+        new PolicyStatement({
+          actions: [
+            "dynamodb:GetItem",
+            "dynamodb:Query",
+            "dynamodb:PutItem",
+            "dynamodb:DeleteItem",
+          ],
+          resources: [data.teams.tableArn],
+        }),
+      );
+      apiHandler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["dynamodb:Query"],
+          resources: [data.deployments.tableArn, `${data.deployments.tableArn}/index/GSI1`],
+        }),
+      );
+      apiHandler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["dynamodb:ConditionCheckItem"],
+          resources: [data.events.tableArn],
+        }),
+      );
+      // Only a missing first-use ExternalId needs authoritative checks of retained registry/job references.
+      apiHandler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["dynamodb:Scan"],
+          resources: [data.events.tableArn, data.deployments.tableArn],
+        }),
+      );
+    }
     apiHandler.addToRolePolicy(competitorAssumeRolePolicy(competitor));
     apiHandler.addToRolePolicy(
       new PolicyStatement({
@@ -217,35 +225,33 @@ export class CloudApplicationStack extends Stack {
         conditions: { StringEquals: { "ssm:Overwrite": "false" } },
       }),
     );
-    apiHandler.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:DeleteItem"],
-        resources: [props.backend.events.tableArn],
-      }),
-    );
     apiHandler.node.addDependency(execution.deployment);
-    apiHandler.addToRolePolicy(
-      new PolicyStatement({
-        actions: [
-          "dynamodb:GetItem",
-          "dynamodb:Query",
-          "dynamodb:PutItem",
-          "dynamodb:UpdateItem",
-          "dynamodb:ConditionCheckItem",
-        ],
-        resources: [
-          props.backend.events.tableArn,
-          props.backend.teams.tableArn,
-          props.backend.deployments.tableArn,
-        ],
-      }),
-    );
-    apiHandler.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:DeleteItem"],
-        resources: [props.backend.deployments.tableArn],
-      }),
-    );
+    if (data.kind === "dynamodb") {
+      apiHandler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["dynamodb:DeleteItem"],
+          resources: [data.events.tableArn],
+        }),
+      );
+      apiHandler.addToRolePolicy(
+        new PolicyStatement({
+          actions: [
+            "dynamodb:GetItem",
+            "dynamodb:Query",
+            "dynamodb:PutItem",
+            "dynamodb:UpdateItem",
+            "dynamodb:ConditionCheckItem",
+          ],
+          resources: [data.events.tableArn, data.teams.tableArn, data.deployments.tableArn],
+        }),
+      );
+      apiHandler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["dynamodb:DeleteItem"],
+          resources: [data.deployments.tableArn],
+        }),
+      );
+    }
     apiHandler.addToRolePolicy(
       new PolicyStatement({
         actions: ["s3:GetObject"],
@@ -272,9 +278,7 @@ export class CloudApplicationStack extends Stack {
     }
     const pipeline = new CloudDeploymentPipeline(this, "DeploymentPipeline", {
       repositoryRoot: props.repositoryRoot,
-      events: props.backend.events,
-      teams: props.backend.teams,
-      deployments: props.backend.deployments,
+      controlData: data,
       allowedRoleArns: [...new Set(legacyBindings.map((binding) => binding.roleArn))],
       externalIdParameterArns: [
         ...new Set(legacyBindings.map((binding) => binding.externalIdParameterArn)),
@@ -360,6 +364,7 @@ export class CloudApplicationStack extends Stack {
       access.addMethod("GET", integration, { authorizationType: AuthorizationType.NONE });
     }
     new BucketDeployment(this, "ConsoleRuntime", {
+      logGroup: deploymentLogGroup(this),
       destinationBucket: consoleSite.bucket,
       distribution: consoleSite.distribution,
       sources: [
@@ -388,6 +393,7 @@ export class CloudApplicationStack extends Stack {
       prune: false,
     });
     new BucketDeployment(this, "PortalRuntime", {
+      logGroup: deploymentLogGroup(this),
       destinationBucket: props.backend.portal.bucket,
       distribution: props.backend.portal.distribution,
       sources: [

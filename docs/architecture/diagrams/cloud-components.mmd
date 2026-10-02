@@ -7,14 +7,18 @@ flowchart TB
       Static["Private S3 apps + runtime-config.json; OAC"]
       Auth["Cognito: organizer roles + MFA"]
       API["API Gateway / Lambda: event and team authorization"]
-      DB["DynamoDB: Events / Teams / Deployments; scores + native state"]
-      Artifacts["Retained S3: pinned hello-world template + native CryptoBattle plugin"]
+      DB["DynamoDB when selected: Events / Teams / Deployments; scores + native state"]
+      Artifacts["S3: pinned hello-world template + native CryptoBattle plugin; deleted on destroy"]
       Outbox["Lambda dispatcher: durable deployment queue"]
       Timer["EventBridge: every minute"]
       Workflow["Step Functions + Lambda: owned CloudFormation lifecycle"]
       Recovery["EventBridge terminal failures + recovery Lambda"]
       ExternalId["SSM Parameter Store: installation ExternalId"]
+      TursoToken["SSM Parameter Store: exact existing Turso token SecureString; Turso only"]
     end
+  end
+  subgraph ExternalTurso["External Turso service; alternative to DynamoDB"]
+    Turso["Turso via HTTPS / libSQL: event / team / deployment state, queue, scores + native state; no DynamoDB tables"]
   end
   subgraph Competitor["Separate competitor AWS account; teams may share an account in different regions"]
     DeployRole["Global IAM deployment role; common required ExternalId"]
@@ -22,7 +26,8 @@ flowchart TB
     Stack["CloudFormation: hello-world per team / problem / attempt"]
     Parameter["Only the assigned hello-world Parameter"]
   end
-  Commands["make deploy / make destroy: current cloud CLI; reviewed IAM + project CDK toolkit"]
+  Commands["make deploy / make destroy: selected installation; ordinary destroy removes AWS platform + default data + S3; external Turso retained"]
+  Drain["Explicit --drain-events: stop intake and remove recorded competitor exercise resources before platform teardown"]
   Organizer --> CDN
   Participant --> CDN
   CDN --> Static
@@ -31,16 +36,24 @@ flowchart TB
   Auth -.->|"JWT validation"| API
   Participant -->|"Event-owned team key"| API
   API -->|"State, score and operation transactions"| DB
+  API -->|"Turso selected: same state and transactions over HTTPS"| Turso
+  API -->|"Turso selected: GetParameter for exact token"| TursoToken
   API --> Artifacts
   API -->|"First-use create / read"| ExternalId
   Timer --> Outbox
   Outbox -->|"Read durable queue"| DB
+  Outbox -->|"Turso selected: durable queue over HTTPS"| Turso
+  Outbox -->|"Turso selected: exact token"| TursoToken
   Outbox --> Workflow
   Workflow -->|"Persist owned progress"| DB
+  Workflow -->|"Turso selected: owned progress over HTTPS"| Turso
+  Workflow -->|"Turso selected: exact token"| TursoToken
   Workflow --> Artifacts
   Workflow --> ExternalId
   Workflow -.-> Recovery
   Recovery --> DB
+  Recovery -->|"Turso selected: recover durable state over HTTPS"| Turso
+  Recovery -->|"Turso selected: exact token"| TursoToken
   Workflow -->|"AssumeRole"| DeployRole
   DeployRole --> Stack
   Stack --> Parameter
@@ -48,3 +61,4 @@ flowchart TB
   Viewer -.->|"15-minute CLI credentials: read only the assigned Parameter"| Participant
   Participant -->|"Scoped AWS CLI"| Parameter
   Commands -.-> Platform
+  Drain -.-> Workflow

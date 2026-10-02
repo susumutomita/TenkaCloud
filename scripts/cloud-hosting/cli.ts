@@ -1,5 +1,9 @@
 import { join } from "node:path";
 import { z } from "zod";
+import {
+  type CloudControlDataConfiguration,
+  cloudControlDataConfiguration,
+} from "../../infrastructure/lib/cloud-hosting/config";
 import { assertCommercialRegion } from "../../infrastructure/lib/cloud-hosting/regions";
 import { cloudStackNames } from "../../infrastructure/lib/cloud-hosting/stack-names";
 import { contentDigest } from "../../infrastructure/lib/problem-deploy/control-data/domain/deployment-work";
@@ -7,13 +11,16 @@ import type { CloudTableNames } from "../../infrastructure/lib/problem-deploy/co
 import type { InstallationScope } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
 import { parseRunnerBindings } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/execution-config";
 import { STANDARD_TOOLKIT_STACK } from "./bootstrap-check";
-import { cloudEnvironmentInstructions, loadCloudEnvironment } from "./environment";
 import {
-  canRecoverCreation,
-  type FailedCreationRecovery,
-  type PlatformStack,
-  recoverFailedCreation,
-} from "./failed-creation";
+  assertPurgeAllowed,
+  discoverTeardownPlan,
+  purgeStackOwnedLogGroups,
+  purgeStackOwnedResources,
+  showTeardownPlan,
+  type TeardownPlan,
+} from "./complete-teardown";
+import { cloudEnvironmentInstructions, loadCloudEnvironment } from "./environment";
+import { canRecoverCreation, type PlatformStack } from "./failed-creation";
 import {
   type CloudInstallation,
   drainInstallation,
@@ -22,6 +29,7 @@ import {
 import type { CloudCliIo, ProcessResult } from "./process";
 import { setupCloudToolkit, showCloudToolkit } from "./setup";
 import { assertOwnedStack, assertRunnerChange, isMissingStack } from "./stack-check";
+import { planDeployedTursoTeardown, type TursoTeardownPlan } from "./turso-teardown";
 
 export interface CloudCliOptions {
   readonly root: string;
@@ -39,9 +47,12 @@ function run(
 ): Promise<ProcessResult> {
   return context.io.run({ command, args, cwd: context.root, env: context.env, inherit });
 }
-function cdk(context: Context, args: readonly string[]): Promise<ProcessResult> {
+function cdk(
+  context: Context,
+  args: readonly string[],
+  app = "node --import tsx ./infrastructure/bin/cloud-hosting.ts",
+): Promise<ProcessResult> {
   // CDK strips enclosing quotes from --app. Resolve the loader and app from our root cwd.
-  const app = "node --import tsx ./infrastructure/bin/cloud-hosting.ts";
   return run(
     context,
     join(context.root, "node_modules/aws-cdk/bin/cdk"),
@@ -126,7 +137,7 @@ function stackOutputs(text: string, allowMissing: boolean): Readonly<Record<stri
     throw new Error(
       "Required outputs are absent from a completed platform stack; no resources were removed. Review its deployment state.",
     );
-  // Absence only selects the verified failed-creation recovery path; it never authorizes deletion.
+  // Platform removal is owned by CloudFormation and does not require application outputs.
   if (!raw.Outputs) return {};
   if (new Set(raw.Outputs.map((entry) => entry.OutputKey)).size !== raw.Outputs.length)
     throw new Error("Ambiguous stack outputs");
@@ -185,7 +196,7 @@ async function platformPreflight(
       name,
       arn,
       status,
-      outputs: stackOutputs(result.stdout, mode === "down" && canRecoverCreation(status)),
+      outputs: stackOutputs(result.stdout, mode === "down"),
     });
     if (mode === "up") validateRunnerTransition(context, name, result.stdout);
   }
@@ -206,7 +217,7 @@ function validatePlatformStatus(
     );
   if (mode === "up" && canRecoverCreation(status))
     throw new Error(
-      `Stack ${name} is ${status}. Review the stack state, then run make destroy ENV=${environment} before deploying again; retained data is not purged.`,
+      `Stack ${name} is ${status}. Review the stack state, then run make destroy ENV=${environment} before deploying again. Review the deployed retention/protection with CLOUD_ARGS="--plan" if cleanup fails.`,
     );
   return status;
 }
@@ -266,6 +277,7 @@ async function up(
   setupApproved: boolean,
   deploymentApproved: boolean,
 ): Promise<number> {
+  const desiredData = cloudControlDataConfiguration(context.env);
   const email = context.env.TENKACLOUD_ADMIN_EMAIL?.trim() ?? "";
   const parts = email.split("@");
   if (
@@ -281,7 +293,7 @@ async function up(
   if (context.env.TENKACLOUD_RUNNER_BINDINGS !== undefined)
     parseRunnerBindings(context.env.TENKACLOUD_RUNNER_BINDINGS);
   context.io.stdout(
-    "[cloud] Supported cloud exercises: hello-world with scoped participant AWS CLI access, and native Cryptography Battle backed by DynamoDB. AWS usage and retained storage can incur charges; see infrastructure/README.md for feature and capacity limits.\n",
+    `[cloud] Supported cloud exercises: hello-world with scoped participant AWS CLI access, and native Cryptography Battle backed by ${desiredData.kind === "turso" ? "Turso" : "DynamoDB"}. AWS usage and retained storage can incur charges; see infrastructure/README.md for feature and capacity limits.\n`,
   );
 
   const resolved = await resolveCloudContext(context);
@@ -299,10 +311,9 @@ async function up(
   }
   const backend = deployed.find((stack) => stack.name === context.stacks.backend);
   if (backend) {
-    const installation = resolved.io.openInstallation({
-      region: resolved.env.REGION ?? "",
-      tables: installationTables(backend),
-    });
+    const location = deployedInstallationLocation(backend, resolved.env.REGION ?? "");
+    assertDataTransition(desiredData, location);
+    const installation = await resolved.io.openInstallation(location);
     try {
       await installation.repository.assertAcceptingInstallation();
     } finally {
@@ -336,6 +347,45 @@ async function up(
     `Cloud hosting deployed for hello-world (scoped participant AWS CLI) and native Cryptography Battle.\nOrganizer console: ${consoleUrl}\nParticipant portal: ${portalUrl}\n`,
   );
   return 0;
+}
+/** Deployed Outputs are authoritative; local edits never select an existing installation's data. */
+function deployedInstallationLocation(
+  backend: OwnedPlatformStack,
+  region: string,
+): InstallationLocation {
+  const kind = backend.outputs.CloudControlDataBackend;
+  if (kind === "turso") {
+    const selected = cloudControlDataConfiguration({
+      CDK_PARAM_CONTROL_DATA_BACKEND: "turso",
+      CDK_PARAM_TURSO_DATABASE_URL: backend.outputs.TursoDatabaseUrl,
+      CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: backend.outputs.TursoAuthTokenParameterName,
+    });
+    if (selected.kind !== "turso") throw new Error("Invalid deployed Turso provider identity.");
+    return {
+      region,
+      backend: "turso",
+      turso: {
+        databaseUrl: selected.databaseUrl,
+        authTokenParameterName: selected.authTokenParameterName,
+      },
+    };
+  }
+  if (kind && kind !== "dynamodb")
+    throw new Error("Unknown deployed cloud data backend; no resources were changed.");
+  // Older current-cloud stacks emitted only these three owned physical names.
+  return { region, backend: "dynamodb", tables: installationTables(backend) };
+}
+function assertDataTransition(
+  desired: CloudControlDataConfiguration,
+  deployed: InstallationLocation,
+): void {
+  if (
+    desired.kind !== deployed.backend ||
+    (desired.kind === "turso" && desired.databaseUrl !== deployed.turso?.databaseUrl)
+  )
+    throw new Error(
+      "Changing the deployed cloud data backend or Turso database URL requires an explicit data migration or separate installation. No automatic data migration is performed; deployment stopped before mutation.",
+    );
 }
 function installationTables(backend: OwnedPlatformStack): CloudTableNames {
   const result = {
@@ -416,127 +466,166 @@ async function teardownScope(
     );
   return control.scope;
 }
-function needsCreationRecovery(stack: OwnedPlatformStack, appName: string): boolean {
-  if (["CREATE_FAILED", "ROLLBACK_FAILED", "ROLLBACK_COMPLETE"].includes(stack.status)) return true;
-  const required =
-    stack.name === appName
-      ? [
-          "CloudRunnerEnabled",
-          "CloudInstallationControlVersion",
-          ...(stack.outputs.CloudInstallationControlVersion === "2"
-            ? ["CloudExecutionArtifactBucket", "CloudExecutionCatalogKey"]
-            : []),
-        ]
-      : ["EventsTableName", "TeamsTableName", "DeploymentsTableName"];
-  return (
-    canRecoverCreation(stack.status) && required.some((key) => stack.outputs[key] === undefined)
-  );
+interface DownOptions {
+  readonly yes: boolean;
+  readonly purge: boolean;
+  readonly plan: boolean;
+  readonly drain: boolean;
 }
-async function down(context: Context, yes: boolean): Promise<void> {
+async function down(context: Context, options: DownOptions): Promise<void> {
   const resolved = await resolveCloudContext(context);
-  let stacks: readonly OwnedPlatformStack[] = await platformPreflight(resolved, "down");
+  const stacks = await platformPreflight(resolved, "down");
   if (stacks.length === 0) {
+    if (options.purge || options.plan)
+      throw new Error(
+        "Both platform stacks are absent; retained resource ownership cannot be proven. Use a previously saved physical-resource inventory for operator-reviewed recovery.",
+      );
     context.io.stdout(
-      "[cloud] Both platform stacks are already absent. Retained data, assets and competitor bootstrap resources were not changed.\n",
+      "[cloud] Both platform stacks are already absent. No resources were changed.\n",
     );
     return;
   }
-  const recoveryNeeded = stacks.some((stack) => needsCreationRecovery(stack, resolved.stacks.app));
-  const recovery = recoveryNeeded
-    ? await recoverFailedCreation(
-        {
-          account: resolved.env.ACCOUNT_ID ?? "",
-          region: resolved.env.REGION ?? "",
-          environment: resolved.env.CDK_PARAM_ENVIRONMENT ?? "development",
-          appName: resolved.stacks.app,
-          backendName: resolved.stacks.backend,
-          run: (args) => run(resolved, "aws", args),
-        },
-        stacks,
-      )
-    : undefined;
-  stacks = recovery?.stacks ?? stacks;
-  if (recovery?.backendOnly) {
-    await removeFailedBackend(resolved, recovery, yes);
+  const cleanup = await readCleanupPlan(resolved, stacks, options);
+  if (options.plan) return;
+  const backend = stacks.find((stack) => stack.name === resolved.stacks.backend);
+  const turso = planDeployedTursoTeardown(
+    (backend && cleanup?.storageOutputs[backend.arn]) ?? backend?.outputs ?? {},
+    options.purge,
+  );
+  validateTursoPlan(turso, options.purge, context.io);
+  const confirmation = teardownConfirmation(resolved, stacks, options, turso);
+  context.io.stdout(`${confirmation}\n`);
+  if (!options.yes && !(await context.io.confirm(`${confirmation} [y/N] `))) {
+    context.io.stdout("Cloud teardown cancelled\n");
     return;
   }
+  if (options.drain) await drainPlatformInstallation(resolved, stacks);
+  if (cleanup) await purgeStackOwnedResources(cleanup, (args) => run(resolved, "aws", args));
+  if (turso.kind === "purge") await resetTursoBeforeStackRemoval(resolved, turso.target);
+  await deletePlatformStacks(resolved, stacks);
+  await finishTeardownLogs(resolved, cleanup);
+  context.io.stdout(
+    "Cloud platform stacks destroyed. Existing deployed Retain policies may leave chargeable resources; review the saved plan. External Turso rows are removed only by explicit destroy-all when the deployed provider identity is verified.\n",
+  );
+}
+async function finishTeardownLogs(context: Context, plan: TeardownPlan | undefined): Promise<void> {
+  if (!plan) return;
+  try {
+    await purgeStackOwnedLogGroups(plan, (args) => run(context, "aws", args));
+  } catch (error) {
+    throw new Error(
+      `Platform stacks were already removed, but final cleanup of their captured log groups failed. Use the saved physical-resource inventory for operator-reviewed recovery; removed stacks cannot provide a new ownership plan. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+async function readCleanupPlan(
+  context: Context,
+  stacks: readonly OwnedPlatformStack[],
+  options: DownOptions,
+): Promise<TeardownPlan | undefined> {
+  if (!options.purge && !options.plan) return undefined;
+  const plan = await discoverTeardownPlan({
+    account: context.env.ACCOUNT_ID ?? "",
+    region: context.env.REGION ?? "",
+    environment: context.env.CDK_PARAM_ENVIRONMENT ?? "development",
+    stacks,
+    run: (args) => run(context, "aws", args),
+  });
+  showTeardownPlan(plan, context.io.stdout);
+  if (!options.plan) assertPurgeAllowed(plan);
+  return plan;
+}
+function validateTursoPlan(plan: TursoTeardownPlan, purge: boolean, io: CloudCliIo): void {
+  if (plan.kind === "unverified" && purge) throw new Error(plan.message);
+  if (plan.kind === "warn" || plan.kind === "unverified") io.stdout(`${plan.message}\n`);
+  if (plan.kind === "purge" && !io.purgeTursoControlData)
+    throw new Error(
+      "Turso reset is unavailable; purge stopped before mutation or losing SSM access.",
+    );
+}
+async function resetTursoBeforeStackRemoval(
+  context: Context,
+  target: { readonly databaseUrl: string; readonly parameterName: string },
+): Promise<void> {
+  if (!context.io.purgeTursoControlData)
+    throw new Error("Turso reset is unavailable; platform removal stopped.");
+  try {
+    await context.io.purgeTursoControlData({ ...target, region: context.env.REGION ?? "" });
+  } catch (error) {
+    throw new Error(
+      `Turso control-data reset failed; AWS stack removal stopped to preserve SSM access. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+function teardownConfirmation(
+  resolved: Context,
+  stacks: readonly OwnedPlatformStack[],
+  options: DownOptions,
+  turso: TursoTeardownPlan,
+): string {
+  const consequences = `Destroy platform stacks in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stacks.map((stack) => stack.arn).join("\n")}\nStack-owned DynamoDB tables and all rows, Cognito accounts, S3 objects, CloudFront distributions and managed logs are deleted under the default policy. Existing deployed Retain policies are honored; retained storage may continue to incur charges. ${options.purge ? "Additionally permanently purge the exact stack-owned tables and CloudWatch logs listed above, including retained data. This cannot be undone. No deletion protection is changed. " : ""}${options.drain ? "First stop new competition work and remove recorded event exercise resources using their stored ownership records. " : "Competition exercise resources are not cleaned up by this command; use each event's Teardown action before removing its platform if needed. "}CDKToolkit, its shared assets, competitor bootstrap stacks/IAM roles and unrelated or separately deployed exercise resources are untouched.`;
+  return (
+    consequences +
+    (turso.kind === "purge"
+      ? ` Turso control-data rows in ${turso.target.databaseUrl} will also be permanently deleted before removing the AWS stacks; schema and migration state remain. Authentication uses the deployed SSM parameter ${turso.target.parameterName}.`
+      : "")
+  );
+}
+async function drainPlatformInstallation(
+  context: Context,
+  stacks: readonly OwnedPlatformStack[],
+): Promise<void> {
   const backend = stacks.find((stack) => stack.name === context.stacks.backend);
   if (!backend)
     throw new Error(
-      "Backend is missing; event cleanup cannot be verified. No resources were removed.",
+      "Backend is missing; explicit event drain cannot verify its stored work. Ordinary make destroy does not require event drain.",
     );
-  const installation = resolved.io.openInstallation({
-    region: resolved.env.REGION ?? "",
-    tables: installationTables(backend),
-    native: recovery?.emptyOnly ? undefined : nativeInstallationArtifacts(resolved, stacks),
+  const installation = await context.io.openInstallation({
+    ...deployedInstallationLocation(backend, context.env.REGION ?? ""),
+    native: nativeInstallationArtifacts(context, stacks),
   });
   try {
-    const scope = await teardownScope(resolved, stacks, installation);
-    const consequences = `Stop new competition work, remove recorded event exercise resources, then destroy platform hosting in account ${scope.account}, region ${scope.region}, environment ${scope.environment}?\n${stacks.map((stack) => stack.arn).join("\n")}\nEvent data, scores and receipts, organizer sign-in accounts, shared ExternalId, competitor-owned bootstrap stacks/IAM roles, CDK asset and execution-artifact S3 storage, and CDKToolkit are retained and may continue to incur charges. Unrelated or separately deployed exercise resources are untouched.`;
-    context.io.stdout(`${consequences}\n`);
-    if (!yes && !(await context.io.confirm(`${consequences} [y/N] `))) {
-      context.io.stdout("Cloud teardown cancelled\n");
-      return;
-    }
-    if (recovery?.emptyOnly) {
-      await installation.repository.stopAcceptingInstallation(
-        scope,
-        new Date(context.io.now()).toISOString(),
-      );
-      await recovery.assertEmpty();
-      await installation.repository.confirmInstallationDrained(
-        scope,
-        new Date(context.io.now()).toISOString(),
-      );
-    } else await drainInstallation(installation, scope, context.io);
-    await deletePlatformStacks(resolved, stacks);
-    context.io.stdout(
-      "Cloud hosting and recorded event exercise resources destroyed. Retained data, accounts, shared ExternalId, bootstrap resources and asset storage are not purged.\n",
+    await drainInstallation(
+      installation,
+      await teardownScope(context, stacks, installation),
+      context.io,
     );
   } finally {
     installation.close();
   }
 }
-async function removeFailedBackend(
-  context: Context,
-  recovery: FailedCreationRecovery,
-  yes: boolean,
-): Promise<void> {
-  // This exact backend never completed creation and no application stack exists.
-  // There is no application intake to fence. Its newly created tables must be empty.
-  await recovery.assertEmpty();
-  const consequences = `Remove failed initial hosting creation in account ${context.env.ACCOUNT_ID}, region ${context.env.REGION}, environment ${context.env.CDK_PARAM_ENVIRONMENT}?\n${recovery.stacks.map((stack) => stack.arn).join("\n")}\nVerified retained tables and asset storage are kept and may incur charges. CDKToolkit and competitor resources are untouched.`;
-  context.io.stdout(`${consequences}\n`);
-  if (!yes && !(await context.io.confirm(`${consequences} [y/N] `))) {
-    context.io.stdout("Cloud teardown cancelled\n");
-    return;
-  }
-  // Repeat the strongly consistent proof after potentially long operator confirmation.
-  await recovery.assertEmpty();
-  await deletePlatformStacks(context, recovery.stacks);
-  context.io.stdout(
-    "Failed initial hosting creation removed. Retained tables and assets were not purged.\n",
-  );
-}
 async function deletePlatformStacks(
   context: Context,
   stacks: readonly OwnedPlatformStack[],
 ): Promise<void> {
-  // Delete the verified physical ARN, never a reusable name. CloudFormation honors
-  // retained resources and the existing service role; CDKToolkit is never selected.
+  // CDK assumes the standard deployment role, as the original Lite destroy did.
+  // Its assembly pins the verified physical ARN and needs no application synth/assets.
   for (const name of [context.stacks.app, context.stacks.backend]) {
     const stack = stacks.find((candidate) => candidate.name === name);
     if (!stack) continue;
     const args = ["--stack-name", stack.arn, "--region", context.env.REGION ?? ""];
-    if (stack.status !== "DELETE_IN_PROGRESS")
+    if (stack.status === "DELETE_IN_PROGRESS") {
+      // DescribeStacks was already authorized by preflight; do not issue another delete.
       assertSuccess(
-        await run(context, "aws", ["cloudformation", "delete-stack", ...args]),
-        `Delete ${name}`,
+        await run(context, "aws", ["cloudformation", "wait", "stack-delete-complete", ...args]),
+        `Wait for ${name} deletion. Inspect CloudFormation failure events; no protection was modified`,
       );
-    assertSuccess(
-      await run(context, "aws", ["cloudformation", "wait", "stack-delete-complete", ...args]),
-      `Wait for ${name} deletion`,
-    );
+      continue;
+    }
+    const assembly = context.io.createDestroyAssembly({
+      name,
+      arn: stack.arn,
+      account: context.env.ACCOUNT_ID ?? "",
+      region: context.env.REGION ?? "",
+    });
+    try {
+      assertSuccess(
+        await cdk(context, ["destroy", name, "--force"], assembly.directory),
+        `Destroy ${name}. Inspect CloudFormation failure events. For retained or deletion-protected resources run make destroy ENV=${context.env.CDK_PARAM_ENVIRONMENT} CLOUD_ARGS="--plan"; changing source defaults does not change a deployed table. No protection was modified`,
+      );
+    } finally {
+      assembly.dispose();
+    }
   }
 }
 async function status(context: Context): Promise<number> {
@@ -557,11 +646,12 @@ async function status(context: Context): Promise<number> {
   return 0;
 }
 const HELP =
-  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. Exported variables override file values; AWS credentials come from your intended profile/role. make deploy reuses standard CDKToolkit unchanged; if missing, it explains the standard bootstrap IAM/resources, asks for separate consent, runs the pinned official cdk bootstrap aws://account/region and continues deployment. Standard bootstrap uses an AdministratorAccess CloudFormation execution role by default. Optional --show-setup prints the bootstrap plan and official template offline; --setup creates only a missing toolkit and never updates an existing one. Interactive deployment keeps CDK security-change approval (broadening). --yes explicitly approves security changes for the selected application deployment; it never alone approves initial bootstrap. Unattended first deployment requires CLOUD_ARGS="--setup-if-needed --yes" after reviewing --show-setup. down accepts --yes.\n';
+  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. CDK_PARAM_CONTROL_DATA_BACKEND selects dynamodb (default) or turso; Turso also requires CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME, naming an existing SSM SecureString. Existing deployments cannot switch data backends or database URLs without an explicit migration or separate installation. Exported variables override file values; AWS credentials come from your intended profile/role. make deploy reuses standard CDKToolkit unchanged; if missing, it explains the standard bootstrap IAM/resources, asks for separate consent, runs the pinned official cdk bootstrap aws://account/region and continues deployment. Standard bootstrap uses an AdministratorAccess CloudFormation execution role by default. Optional --show-setup prints the bootstrap plan and official template offline; --setup creates only a missing toolkit and never updates an existing one. Interactive deployment keeps CDK security-change approval (broadening). --yes explicitly approves security changes for the selected application deployment; it never alone approves initial bootstrap. Unattended first deployment requires CLOUD_ARGS="--setup-if-needed --yes" after reviewing --show-setup. down accepts --yes, --purge-retained-data (make destroy-all), --plan (read-only exact-resource/retention/protection inventory), and --drain-events (explicitly stop intake and remove recorded competition exercise resources before platform removal). Ordinary destroy does not require database access or application Outputs. Purge never disables deletion protection.\n';
 function assertCommandArguments(command: string, args: readonly string[]): void {
   let permitted: readonly string[] = [];
   if (command === "up") permitted = ["--setup", "--show-setup", "--setup-if-needed", "--yes", "-y"];
-  if (command === "down") permitted = ["--yes", "-y"];
+  if (command === "down")
+    permitted = ["--yes", "-y", "--purge-retained-data", "--plan", "--drain-events"];
   if (
     args.some((arg) => !permitted.includes(arg)) ||
     (command === "up" &&
@@ -620,7 +710,12 @@ export async function runCloudCli(
           args.some((arg) => ["--yes", "-y"].includes(arg)),
         );
       case "down":
-        await down(context, args.length > 0);
+        await down(context, {
+          yes: args.some((arg) => ["--yes", "-y"].includes(arg)),
+          purge: args.includes("--purge-retained-data"),
+          plan: args.includes("--plan"),
+          drain: args.includes("--drain-events"),
+        });
         return 0;
       case "status":
         return await status(await resolveCloudContext(context));
@@ -638,7 +733,13 @@ export async function runCloudCli(
         throw new Error(`Unknown cloud command: ${command}`);
     }
   } catch (error) {
-    io.stderr(`[cloud] ${error instanceof Error ? error.message : String(error)}\n`);
+    io.stderr(`[cloud] ${cloudErrorMessage(error)}\n`);
     return 1;
   }
+}
+
+function cloudErrorMessage(error: unknown): string {
+  if (error instanceof z.ZodError)
+    return "AWS returned incomplete or malformed platform metadata. Inspect the selected stack state and retry; no success was assumed.";
+  return error instanceof Error ? error.message : String(error);
 }

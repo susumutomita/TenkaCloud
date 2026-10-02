@@ -6,6 +6,7 @@ import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3"
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
 import type { InstallationCompetitorConfig } from "../problem-deploy/control-data/domain/competitor-accounts.js";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
 import { repositoryArtifactFile } from "./execution-artifacts.js";
 import { assertCommercialRegion } from "./regions.js";
 import { cloudStackNames } from "./stack-names.js";
@@ -82,6 +83,7 @@ export class CompetitorBootstrapHosting extends Construct {
       }),
     );
     new BucketDeployment(this, "Template", {
+      logGroup: deploymentLogGroup(this),
       destinationBucket: bucket,
       sources: [Source.data("competitor-bootstrap.yaml", contents)],
       prune: false,

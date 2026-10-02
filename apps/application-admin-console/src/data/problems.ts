@@ -8,7 +8,7 @@
 
 import { LOCAL_HOST_BUILD } from "../local-host-build";
 import type { CoreCatalogInput, PackCatalogProblemInput } from "./effective-catalog";
-import { buildEffectiveCatalog } from "./effective-catalog";
+import { composeCatalogDetails } from "./effective-catalog";
 import type { ProblemDetail, ProblemMetadata, ProblemSummary } from "./problem-types";
 
 // `metadataToDetail` / `isExecutableProblemRuntime` live in `problem-mapping.ts`
@@ -35,17 +35,12 @@ export type {
 } from "./problem-types";
 
 // `import.meta.glob` で repo root の `problems/*/*/metadata.json` を build 時 / HMR 時に
-// 全件取り込む。`eager: true` で同期 import (lazy chunk なし)。`{ default: ... }` 構造で
-// 返るのでアダプタで剥がす。
-const metadataModules = import.meta.glob<{ default: ProblemMetadata }>(
+// 全件取り込む。Vite の catalog plugin が表示用の detail と cost summary に投影し、
+// 未使用 metadata や YAML 本文を browser に含めない。同期 lookup は維持する。
+const metadataModules = import.meta.glob<{ default: ProblemDetail }>(
   "../../../../problems/*/*/metadata.json",
-  { eager: true },
+  { eager: true, query: "?catalog-detail" },
 );
-const templateModules = import.meta.glob<string>("../../../../problems/*/*/*.yaml", {
-  eager: true,
-  import: "default",
-  query: "?raw",
-});
 
 function findTemplateYaml(
   modules: Record<string, string>,
@@ -71,13 +66,9 @@ function findTemplateYaml(
  * carries a `tenkacloud-pack.json` manifest from which the pack identity / license
  * provenance is read.
  */
-const packMetadataModules = import.meta.glob<{ default: ProblemMetadata }>(
+const packMetadataModules = import.meta.glob<{ default: ProblemDetail }>(
   "../../../../.tenkacloud/pack-store/snapshots/**/metadata.json",
-  { eager: true },
-);
-const packTemplateModules = import.meta.glob<string>(
-  "../../../../.tenkacloud/pack-store/snapshots/**/*.yaml",
-  { eager: true, import: "default", query: "?raw" },
+  { eager: true, query: "?catalog-detail" },
 );
 const packManifestModules = import.meta.glob<{ default: PackManifestShape }>(
   "../../../../.tenkacloud/pack-store/snapshots/**/tenkacloud-pack.json",
@@ -144,14 +135,32 @@ export function buildPackInputs(
   });
 }
 
-const coreInputs = buildCoreInputs(metadataModules, templateModules);
-const packInputs = buildPackInputs(packMetadataModules, packTemplateModules, packManifestModules);
+/** Attach provenance after projection; an orphan snapshot still cannot become core. */
+export function buildPackDetails(
+  metadata: Record<string, { default: ProblemDetail }>,
+  manifests: Record<string, { default: PackManifestShape }>,
+): readonly ProblemDetail[] {
+  return Object.entries(metadata).flatMap(([metadataPath, mod]) => {
+    const manifest = findPackManifest(manifests, metadataPath);
+    return manifest
+      ? [
+          {
+            ...mod.default,
+            source: "pack" as const,
+            packId: manifest.id,
+            packVersion: manifest.version,
+            license: manifest.license,
+          },
+        ]
+      : [];
+  });
+}
 
-// 表示順の安定化のため id で sort (buildEffectiveCatalog が担保)。EFFECTIVE catalog は
+// 表示順の安定化のため id で sort (composeCatalogDetails が担保)。EFFECTIVE catalog は
 // core (上記 glob) と installed pack snapshots を #2091 の composer 経由で merge する。
-export const PROBLEM_CATALOG: readonly ProblemDetail[] = buildEffectiveCatalog({
-  core: coreInputs,
-  packs: packInputs,
+export const PROBLEM_CATALOG: readonly ProblemDetail[] = composeCatalogDetails({
+  core: Object.values(metadataModules).map((mod) => mod.default),
+  packs: buildPackDetails(packMetadataModules, packManifestModules),
   // Issue #3226: set only by vite.host.config.ts (the local competition host build).
   includeLocalOnly: LOCAL_HOST_BUILD,
 });

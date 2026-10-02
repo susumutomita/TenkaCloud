@@ -1,11 +1,16 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
-
+import {
+  createDestroyAssembly,
+  type DestroyAssembly,
+  type DestroyAssemblyTarget,
+} from "./destroy-assembly";
 import {
   type CloudInstallation,
   type InstallationLocation,
   openCloudInstallation,
 } from "./installation";
+import { purgeTursoControlData } from "./turso-reset";
 
 export interface ProcessRequest {
   readonly command: string;
@@ -21,10 +26,16 @@ export interface ProcessResult {
 }
 export interface CloudCliIo {
   run(request: ProcessRequest): Promise<ProcessResult>;
+  createDestroyAssembly(target: DestroyAssemblyTarget): DestroyAssembly;
   stdout(text: string): void;
   stderr(text: string): void;
   confirm(question: string): Promise<boolean>;
-  openInstallation(location: InstallationLocation): CloudInstallation;
+  openInstallation(location: InstallationLocation): CloudInstallation | Promise<CloudInstallation>;
+  purgeTursoControlData?(target: {
+    readonly databaseUrl: string;
+    readonly parameterName: string;
+    readonly region: string;
+  }): Promise<void>;
   now(): number;
   wait(ms: number): Promise<void>;
 }
@@ -32,7 +43,9 @@ export interface CloudCliIo {
 /** Subprocesses use argument arrays; only CDK's documented --app value is a command string. */
 export function systemCloudIo(): CloudCliIo {
   return {
+    createDestroyAssembly,
     openInstallation: openCloudInstallation,
+    purgeTursoControlData,
     now: Date.now,
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     run: (request) =>

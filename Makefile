@@ -170,7 +170,7 @@ pack-list: ## List installed problem packs | install済み問題packを一覧表
 	$(PACK) list $(ARGS)
 
 # ===== Host candidate | host candidate =====
-.PHONY: local down local-reset deploy destroy release-check release-candidate
+.PHONY: local down local-reset deploy destroy destroy-all release-check release-candidate
 local: ## Start the unified local competition console | ローカル競技コンソールを起動
 	bun run scripts/local-host/local.ts start $(LOCAL_ARGS)
 down: ## Stop owned local runtimes and preserve event data | 所有するローカル環境を停止し大会データを保持
@@ -181,14 +181,15 @@ local-reset: ## Rotate the organizer key; preserve event and participant data | 
 # problems, reviewed IAM setup, retained resources and the separate historical pipeline.
 deploy: ## Deploy cloud hosting with reviewed AWS setup | 権限設定を確認してクラウド開催を配置
 	bun run --no-env-file scripts/cloud-hosting/main.ts up $(CLOUD_ARGS)
-destroy: ## Confirm and remove owned cloud resources; retain event data | 対象を確認してクラウドを撤収し大会データを保持
+destroy: ## Confirm and delete cloud platform stacks and default-owned data | 確認して開催基盤と既定の所有データを削除
 	bun run --no-env-file scripts/cloud-hosting/main.ts down $(CLOUD_ARGS)
+
+destroy-all: ## Purge exact stack-owned retained data, then delete platform stacks | stack所有の保持データを完全削除して基盤を撤収
+	bun run --no-env-file scripts/cloud-hosting/main.ts down --purge-retained-data $(CLOUD_ARGS)
 release-check: ## Validate the unpublished host candidate contract | 未公開 host candidate の契約を検証
 	bun run release:check
 release-candidate: ## Record an already built image digest and source pins | build 済み image digest と source pin を記録
 	bun run release:candidate $(ARGS)
-form-setup: ## Configure the contact form backend | お問い合わせフォームを設定
-	bun run form:setup $(FORM_SETUP_ARGS)
 
 # ===== Problem deploy smoke test | 問題デプロイのスモークテスト =====
 .PHONY: deploy-battles destroy-battles

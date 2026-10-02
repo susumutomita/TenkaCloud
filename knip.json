@@ -33,7 +33,6 @@
     ".": {
       "entry": [
         "scripts/*.ts",
-        "scripts/form/setup.ts",
         "scripts/landing/generate-landing-docs.ts",
         "scripts/landing/generate-landing-locales.ts",
         "scripts/landing/stamp-asset-versions.ts",

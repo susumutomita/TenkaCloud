@@ -1,11 +1,13 @@
 import type { Hono } from "hono";
 import { z } from "zod";
+import type {
+  CloudCompetitorAccountsRepository,
+  CloudDeploymentWork,
+} from "../../control-data/cloud-data-ports.js";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
 import type { InstallationCompetitorConfig } from "../../control-data/domain/competitor-accounts.js";
 import type { EventRecord } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
-import type { DynamoDbCompetitorAccountsRepository } from "../../control-data/dynamodb-competitor-accounts-repository.js";
-import type { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
 import { ApiError, type OrganizerAuthConfig, requireOrganizer } from "./auth.js";
 import type { CloudProblem } from "./deployment-routes.js";
 import { type RunnerBinding, registeredRunnerBinding } from "./execution-config.js";
@@ -19,7 +21,7 @@ export function registerCloudConnectionRoutes(
   app: Hono,
   options: CloudConnectionApi & {
     readonly repository: CloudRepository;
-    readonly work: DynamoDeploymentWork;
+    readonly work: CloudDeploymentWork;
     readonly organizerAuth: OrganizerAuthConfig;
     readonly now: () => number;
   },
@@ -75,14 +77,14 @@ export function registerCloudConnectionRoutes(
 }
 
 interface RegisteredConnectionOptions {
-  readonly accounts: DynamoDbCompetitorAccountsRepository;
-  readonly work: DynamoDeploymentWork;
+  readonly accounts: CloudCompetitorAccountsRepository;
+  readonly work: CloudDeploymentWork;
   readonly config: InstallationCompetitorConfig;
   readonly catalog: () => Promise<Readonly<Record<string, CloudProblem>>>;
   readonly legacyBindings: readonly RunnerBinding[];
 }
 function bindingMatches(
-  connection: Awaited<ReturnType<DynamoDeploymentWork["getConnection"]>>,
+  connection: Awaited<ReturnType<CloudDeploymentWork["getConnection"]>>,
   binding: RunnerBinding,
   registrationId?: string,
 ): boolean {
@@ -106,7 +108,7 @@ function selectedTarget(event: EventRecord, team: TeamRecord) {
   return { accountId, region };
 }
 function retainedLegacyConnection(
-  previous: Awaited<ReturnType<DynamoDeploymentWork["getConnection"]>>,
+  previous: Awaited<ReturnType<CloudDeploymentWork["getConnection"]>>,
   bindings: readonly RunnerBinding[],
 ) {
   if (!previous || previous.registrationId !== undefined) return false;

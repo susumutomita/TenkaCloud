@@ -24,6 +24,11 @@ import {
   competitorAssumeRolePolicy,
   installationCompetitorConfig,
 } from "../../lib/cloud-hosting/competitor-accounts.js";
+import {
+  type CloudControlDataConfiguration,
+  cloudControlDataConfiguration,
+  retainCloudDataTables,
+} from "../../lib/cloud-hosting/config.js";
 import { CloudDataStack } from "../../lib/cloud-hosting/data-stack.js";
 import {
   cloudExecutionArtifacts,
@@ -43,6 +48,10 @@ vi.mock("node:fs", async (importOriginal) => {
 const directory = mkdtempSync(join(tmpdir(), "tenkacloud-cloud-synth-"));
 let data: Template;
 let application: Template;
+let tursoData: Template;
+let tursoApplication: Template;
+let retainedData: Template;
+let retainedApplication: Template;
 let stackTags: Record<string, string>[];
 beforeAll(() => {
   const assets = join(directory, "assets");
@@ -51,35 +60,142 @@ beforeAll(() => {
     join(assets, "index.html"),
     "<!doctype html><title>Synthetic static asset for CDK contract test</title>",
   );
-  const app = new App({
-    outdir: join(directory, "cdk.out"),
-    context: { "@aws-cdk/core:bootstrapQualifier": "custom123" },
-  });
-  const env = { account: "123456789012", region: "us-east-1" };
-  const backend = new CloudDataStack(app, "CloudBackend", {
-    environment: "test",
-    env,
-    tags: cloudStackTags("test"),
-    synthesizer: standardSynthesizer(),
-    participantAssets: assets,
-  });
-  const stack = new CloudApplicationStack(app, "CloudApplication", {
-    env,
-    tags: cloudStackTags("test"),
-    synthesizer: standardSynthesizer(),
-    environment: "test",
-    backend,
-    consoleAssets: assets,
-    repositoryRoot: resolve(import.meta.dirname, "../../.."),
-  });
-  // This also detects cross-stack dependency cycles. It performs no context lookup or AWS calls.
-  stackTags = app.synth().stacks.map((artifact) => artifact.tags);
-  data = Template.fromStack(backend);
-  application = Template.fromStack(stack);
+  function synthesize(
+    retainDataTables?: boolean,
+    controlData: CloudControlDataConfiguration = { kind: "dynamodb" },
+  ) {
+    let outputDirectory = retainDataTables ? "retained.cdk.out" : "cdk.out";
+    if (controlData.kind === "turso") outputDirectory = "turso.cdk.out";
+    const app = new App({
+      outdir: join(directory, outputDirectory),
+      context: { "@aws-cdk/core:bootstrapQualifier": "custom123" },
+    });
+    const env = { account: "123456789012", region: "us-east-1" };
+    const backend = new CloudDataStack(app, "CloudBackend", {
+      environment: "test",
+      controlData,
+      ...(retainDataTables === undefined ? {} : { retainDataTables }),
+      env,
+      tags: cloudStackTags("test"),
+      synthesizer: standardSynthesizer(),
+      participantAssets: assets,
+    });
+    const stack = new CloudApplicationStack(app, "CloudApplication", {
+      env,
+      tags: cloudStackTags("test"),
+      synthesizer: standardSynthesizer(),
+      environment: "test",
+      backend,
+      consoleAssets: assets,
+      repositoryRoot: resolve(import.meta.dirname, "../../.."),
+    });
+    // This also detects cross-stack dependency cycles. It performs no context lookup or AWS calls.
+    stackTags = app.synth().stacks.map((artifact) => artifact.tags);
+    return [Template.fromStack(backend), Template.fromStack(stack)] as const;
+  }
+  [data, application] = synthesize();
+  [tursoData, tursoApplication] = synthesize(
+    false,
+    cloudControlDataConfiguration({
+      CDK_PARAM_CONTROL_DATA_BACKEND: " TURSO ",
+      CDK_PARAM_TURSO_DATABASE_URL: "libsql://synthetic.turso.io",
+      CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: "/TenkaCloud/test/turso/auth-token",
+    }),
+  );
+  [retainedData, retainedApplication] = synthesize(
+    retainCloudDataTables({ CDK_PARAM_RETAIN_DATA_TABLES: "true" }),
+  );
 }, 60_000);
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
+function assertRemovalPolicies(template: Template, retainTables: boolean): void {
+  for (const [id, resource] of Object.entries(template.toJSON().Resources)) {
+    const owned = resource as {
+      Type: string;
+      DeletionPolicy?: string;
+      UpdateReplacePolicy?: string;
+    };
+    const policy = retainTables && owned.Type === "AWS::DynamoDB::Table" ? "Retain" : "Delete";
+    expect(owned.DeletionPolicy, id).toBe(policy);
+    expect(owned.UpdateReplacePolicy, id).toBe(policy);
+  }
+  for (const table of Object.values(template.findResources("AWS::DynamoDB::Table")))
+    expect(table.Properties.DeletionProtectionEnabled).toBe(false);
+}
+
+function assertBucketCleanup(template: Template): void {
+  const buckets = Object.keys(template.findResources("AWS::S3::Bucket"));
+  const emptying = Object.values(template.findResources("Custom::S3AutoDeleteObjects"));
+  expect(emptying).toHaveLength(buckets.length);
+  for (const bucketId of buckets)
+    expect(emptying).toContainEqual(
+      expect.objectContaining({
+        Properties: expect.objectContaining({ BucketName: { Ref: bucketId } }),
+      }),
+    );
+}
+
+function assertProviderLogs(template: Template): void {
+  const logs = template.findResources("AWS::Logs::LogGroup");
+  const deploymentLogs = Object.keys(logs).filter((id) => id.startsWith("BucketDeploymentLogs"));
+  expect(deploymentLogs).toHaveLength(1);
+  for (const log of Object.values(logs)) expect(log.Properties.RetentionInDays).toBeGreaterThan(0);
+  const functions = Object.entries(template.findResources("AWS::Lambda::Function"));
+  const deploymentProviders = functions.filter(([id]) =>
+    id.startsWith("CustomCDKBucketDeployment"),
+  );
+  expect(deploymentProviders).toHaveLength(1);
+  expect(deploymentProviders[0]?.[1].Properties.LoggingConfig.LogGroup).toEqual({
+    Ref: deploymentLogs[0],
+  });
+  // CDK's auto-delete provider exposes no logGroup prop; its runtime-created group is
+  // intentionally absent from synth and must be collected by exact stack-owned CLI cleanup.
+  const implicit = functions.filter(([, resource]) => !resource.Properties.LoggingConfig?.LogGroup);
+  expect(implicit).toHaveLength(1);
+  expect(implicit[0]?.[0]).toMatch(/^CustomS3AutoDeleteObjectsCustomResourceProviderHandler/u);
+}
+
 describe("cloud CDK synth-only security and frontend wiring", () => {
+  it("synthesizes and bundles every Turso handler without DynamoDB resources, names or permissions", () => {
+    for (const template of [tursoData, tursoApplication]) {
+      template.resourceCountIs("AWS::DynamoDB::Table", 0);
+      expect(JSON.stringify(template.toJSON())).not.toMatch(
+        /dynamodb:|EVENTS_TABLE_NAME|TEAMS_TABLE_NAME|DEPLOYMENTS_TABLE_NAME|GSI1/iu,
+      );
+      assertRemovalPolicies(template, false);
+    }
+    tursoData.hasOutput("CloudControlDataBackend", { Value: "turso" });
+    tursoData.hasOutput("TursoDatabaseUrl", { Value: "https://synthetic.turso.io" });
+    tursoData.hasOutput("TursoAuthTokenParameterName", {
+      Value: "/TenkaCloud/test/turso/auth-token",
+    });
+    for (const name of ["EventsTableName", "TeamsTableName", "DeploymentsTableName"])
+      expect(tursoData.toJSON().Outputs[name]).toBeUndefined();
+    const functions = Object.values(tursoApplication.findResources("AWS::Lambda::Function")).filter(
+      (fn) => fn.Properties.Environment?.Variables?.CONTROL_DATA_BACKEND === "turso",
+    );
+    expect(functions).toHaveLength(8);
+    for (const fn of functions) {
+      expect(fn.Properties.Environment.Variables).toMatchObject({
+        TURSO_DATABASE_URL: "https://synthetic.turso.io",
+        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/TenkaCloud/test/turso/auth-token",
+      });
+    }
+    const policies = Object.values(tursoApplication.findResources("AWS::IAM::Policy"));
+    const tokenReads = policies
+      .flatMap((policy) => policy.Properties.PolicyDocument.Statement)
+      .filter((statement) =>
+        JSON.stringify(statement.Resource).includes("parameter/TenkaCloud/test/turso/auth-token"),
+      );
+    expect(tokenReads).toHaveLength(8);
+    for (const statement of tokenReads) {
+      expect([statement.Action].flat()).toEqual(["ssm:GetParameter"]);
+      expect(JSON.stringify(statement.Resource)).not.toContain("parameter/*");
+    }
+    expect(JSON.stringify(policies)).toContain("sts:ExternalId");
+    expect(JSON.stringify(policies)).toContain("ssm:PutParameter");
+  });
+
   it("keeps the verified deployment account and region ahead of ambient CDK defaults", () => {
     const defaults = { CDK_DEFAULT_ACCOUNT: "222222222222", CDK_DEFAULT_REGION: "eu-west-1" };
     expect(
@@ -123,48 +239,65 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
       { ...cloudStackTags("test"), TenkaCloudRegion: "us-east-1" },
     ]);
   });
-  it("loads every declared Node handler from a bundle smaller than 1 MiB", () => {
-    const functions = Object.entries(application.findResources("AWS::Lambda::Function")).filter(
-      ([id]) => /^(CloudApi|DeploymentPipeline)/u.test(id),
-    );
-    const bundles = functions.map(([, resource]) => {
-      expect(resource.Properties.Runtime).toBe("nodejs24.x");
-      const handler = String(resource.Properties.Handler);
-      expect(handler).toMatch(/^index\.[a-zA-Z]+$/u);
-      const key = String(resource.Properties.Code.S3Key);
-      expect(key).toMatch(/^[a-f0-9]{64}\.zip$/u);
-      const file = join(directory, "cdk.out", `asset.${key.slice(0, -4)}`, "index.js");
-      expect(readFileSync(file).byteLength).toBeLessThan(1024 * 1024);
-      return { file, handler: handler.slice("index.".length) };
-    });
-    expect(bundles.map(({ handler }) => handler).sort()).toEqual([
-      "claimHandler",
-      "createHandler",
-      "describeHandler",
-      "failHandler",
-      "finishHandler",
-      "handler",
-      "handler",
-      "recoveryHandler",
-    ]);
-    execFileSync(
-      process.execPath,
-      [
-        "-e",
-        'for (const { file, handler } of JSON.parse(process.argv[1])) require("node:assert/strict").equal(typeof require(file)[handler], "function", handler);',
-        JSON.stringify(bundles),
-      ],
-      {
-        env: {
-          AWS_EC2_METADATA_DISABLED: "true",
-          AWS_REGION: "us-east-1",
-          EVENTS_TABLE_NAME: "events",
-          TEAMS_TABLE_NAME: "teams",
-          DEPLOYMENTS_TABLE_NAME: "deployments",
+  it.each(["dynamodb", "turso"])(
+    "loads every declared %s Node handler from a bundle smaller than 1 MiB",
+    (backend) => {
+      const template = backend === "turso" ? tursoApplication : application;
+      const functions = Object.entries(template.findResources("AWS::Lambda::Function")).filter(
+        ([id]) => /^(CloudApi|DeploymentPipeline)/u.test(id),
+      );
+      const bundles = functions.map(([, resource]) => {
+        expect(resource.Properties.Runtime).toBe("nodejs24.x");
+        const handler = String(resource.Properties.Handler);
+        expect(handler).toMatch(/^index\.[a-zA-Z]+$/u);
+        const key = String(resource.Properties.Code.S3Key);
+        expect(key).toMatch(/^[a-f0-9]{64}\.zip$/u);
+        const file = join(
+          directory,
+          backend === "turso" ? "turso.cdk.out" : "cdk.out",
+          `asset.${key.slice(0, -4)}`,
+          "index.js",
+        );
+        expect(readFileSync(file).byteLength).toBeLessThan(1024 * 1024);
+        return { file, handler: handler.slice("index.".length) };
+      });
+      expect(bundles.map(({ handler }) => handler).sort()).toEqual([
+        "claimHandler",
+        "createHandler",
+        "describeHandler",
+        "failHandler",
+        "finishHandler",
+        "handler",
+        "handler",
+        "recoveryHandler",
+      ]);
+      execFileSync(
+        process.execPath,
+        [
+          "-e",
+          'for (const { file, handler } of JSON.parse(process.argv[1])) require("node:assert/strict").equal(typeof require(file)[handler], "function", handler);',
+          JSON.stringify(bundles),
+        ],
+        {
+          env: {
+            AWS_EC2_METADATA_DISABLED: "true",
+            AWS_REGION: "us-east-1",
+            ...(backend === "turso"
+              ? {
+                  CONTROL_DATA_BACKEND: "turso",
+                  TURSO_DATABASE_URL: "https://synthetic.turso.io",
+                  TURSO_AUTH_TOKEN_PARAMETER_NAME: "/TenkaCloud/test/turso/auth-token",
+                }
+              : {
+                  EVENTS_TABLE_NAME: "events",
+                  TEAMS_TABLE_NAME: "teams",
+                  DEPLOYMENTS_TABLE_NAME: "deployments",
+                }),
+          },
         },
-      },
-    );
-  });
+      );
+    },
+  );
   it("retains ownership tags without requiring custom bootstrap IAM policies", () => {
     for (const source of [data, application]) {
       for (const role of Object.values(source.findResources("AWS::IAM::Role"))) {
@@ -218,13 +351,14 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
       }),
     );
   });
-  it("retains all event/team/deployment data by default and does not TTL-delete history", () => {
+  it("deletes owned data by default, keeps on-demand billing and does not TTL-delete history", () => {
     data.resourceCountIs("AWS::DynamoDB::Table", 3);
     const tables = data.findResources("AWS::DynamoDB::Table");
     for (const table of Object.values(tables)) {
-      expect(table.DeletionPolicy).toBe("Retain");
-      expect(table.UpdateReplacePolicy).toBe("Retain");
-      expect(table.Properties.DeletionProtectionEnabled).toBe(true);
+      expect(table.DeletionPolicy).toBe("Delete");
+      expect(table.UpdateReplacePolicy).toBe("Delete");
+      expect(table.Properties.DeletionProtectionEnabled).toBe(false);
+      expect(table.Properties.BillingMode).toBe("PAY_PER_REQUEST");
       expect(table.Properties.TimeToLiveSpecification).toBeUndefined();
       expect(table.Properties.KeySchema).toEqual([
         { AttributeName: "PK", KeyType: "HASH" },
@@ -232,6 +366,29 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
       ]);
     }
   });
+  it.each([undefined, "", "false", "1", "TRUE", "True", " true", "true "])(
+    "keeps the original exact true retention opt-in (%s)",
+    (value) => {
+      expect(retainCloudDataTables({ CDK_PARAM_RETAIN_DATA_TABLES: value })).toBe(false);
+    },
+  );
+  it.each([false, true])(
+    "restores original removal policies across all owned resources (retain tables: %s)",
+    (retainTables) => {
+      const templates = retainTables ? [retainedData, retainedApplication] : [data, application];
+      for (const template of templates) {
+        assertRemovalPolicies(template, retainTables);
+        assertBucketCleanup(template);
+        assertProviderLogs(template);
+      }
+      templates[1]?.resourceCountIs("AWS::Cognito::UserPool", 1);
+      templates[1]?.hasResource("AWS::S3::Bucket", {
+        Properties: { VersioningConfiguration: { Status: "Enabled" } },
+        DeletionPolicy: "Delete",
+        UpdateReplacePolicy: "Delete",
+      });
+    },
+  );
   it("does not change the regional API Gateway logging account setting", () => {
     application.resourceCountIs("AWS::ApiGateway::Account", 0);
     expect(JSON.stringify(application.toJSON())).not.toContain(

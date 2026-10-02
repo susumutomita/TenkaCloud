@@ -1,15 +1,13 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { createCloudDataCache } from "../../infrastructure/lib/problem-deploy/control-data/cloud-data";
+import type { CloudDataRepository } from "../../infrastructure/lib/problem-deploy/control-data/cloud-data-ports";
 import type { CloudTableNames } from "../../infrastructure/lib/problem-deploy/control-data/dynamodb-cloud-repository";
-import { DynamoCloudRepository } from "../../infrastructure/lib/problem-deploy/control-data/dynamodb-cloud-repository";
-import { DynamoDeploymentWork } from "../../infrastructure/lib/problem-deploy/control-data/dynamodb-deployment-work";
 import type { InstallationScope } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
 import { requestEventTeardown } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/deployment-routes";
 import { createProductionNativeCoordination } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/native-production";
 
 export interface CloudInstallation {
   readonly repository: Pick<
-    DynamoCloudRepository,
+    CloudDataRepository,
     | "installationControl"
     | "assertAcceptingInstallation"
     | "stopAcceptingInstallation"
@@ -21,7 +19,12 @@ export interface CloudInstallation {
 }
 export interface InstallationLocation {
   readonly region: string;
-  readonly tables: CloudTableNames;
+  readonly tables?: CloudTableNames;
+  readonly backend?: "dynamodb" | "turso";
+  readonly turso?: {
+    readonly databaseUrl: string;
+    readonly authTokenParameterName: string;
+  };
   readonly native?: {
     readonly artifactBucket: string;
     readonly catalogKey: string;
@@ -29,20 +32,23 @@ export interface InstallationLocation {
   };
 }
 /** Uses the same operator credential chain as the CLI; never accepts alternate service endpoints. */
-export function openCloudInstallation(location: InstallationLocation): CloudInstallation {
-  const client = new DynamoDBClient({
+export async function openCloudInstallation(
+  location: InstallationLocation,
+): Promise<CloudInstallation> {
+  const data = await createCloudDataCache({
     region: location.region,
-    ignoreConfiguredEndpointUrls: true,
-  });
-  const document = DynamoDBDocumentClient.from(client, {
-    marshallOptions: { removeUndefinedValues: true },
-  });
-  const repository = new DynamoCloudRepository(document, location.tables);
-  const work = new DynamoDeploymentWork(document, location.tables);
+    tables: location.tables,
+    env: {
+      CONTROL_DATA_BACKEND: location.backend,
+      TURSO_DATABASE_URL: location.turso?.databaseUrl,
+      TURSO_AUTH_TOKEN_PARAMETER_NAME: location.turso?.authTokenParameterName,
+    },
+  })();
+  const { repository, work } = data;
   const native = location.native
     ? createProductionNativeCoordination({
-        documentClient: document,
-        tables: location.tables,
+        repository,
+        store: data.coordination,
         region: location.region,
         ...location.native,
       })
@@ -59,7 +65,7 @@ export function openCloudInstallation(location: InstallationLocation): CloudInst
           ...(native ? { beforeClose: () => native.closeEvent(eventId, now) } : {}),
         })
       ).body,
-    close: () => client.destroy(),
+    close: () => data.close(),
   };
 }
 

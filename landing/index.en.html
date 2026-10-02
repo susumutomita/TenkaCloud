@@ -124,7 +124,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-<link rel="stylesheet" href="./styles/main.css?v=3de33d57c7" />
+<link rel="stylesheet" href="./styles/main.css?v=23445e0cc2" />
 </head>
 <body>
 
@@ -579,7 +579,7 @@
           <li data-i18n="pricing.starter.f3">Selected from the public problem set</li>
         </ul>
         <p class="pricing-fineprint" data-i18n="pricing.starter.fineprint">* You bring your own AWS account.</p>
-        <a class="pricing-cta secondary" href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.starter.cta">Request a quote</span> →</a>
+        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.starter.cta">Discuss publicly on GitHub</span> →</a>
       </div>
 
       <div class="pricing-card featured">
@@ -596,7 +596,7 @@
           <li data-i18n="pricing.hosted.f4">Problem selection</li>
         </ul>
         <p class="pricing-fineprint" data-i18n="pricing.hosted.fineprint">* You bring your own AWS account. If we need to provide one, we'll quote separately.</p>
-        <a class="pricing-cta primary" href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.hosted.cta">Request a quote</span> →</a>
+        <a class="pricing-cta primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.hosted.cta">Discuss publicly on GitHub</span> →</a>
       </div>
 
       <div class="pricing-card">
@@ -612,7 +612,7 @@
           <li data-i18n="pricing.enterprise.f3">Post-event PDF report (= scoring history, team progress, and attack timeline pulled from the portal — one PDF per event)</li>
         </ul>
         <p class="pricing-fineprint" data-i18n="pricing.enterprise.fineprint">* Quoted by scope and scale. You bring your own AWS account.</p>
-        <a class="pricing-cta secondary" href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.enterprise.cta">Talk about a program</span> →</a>
+        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.enterprise.cta">Discuss publicly on GitHub</span> →</a>
       </div>
     </div>
     <p class="pricing-tail" data-i18n="pricing.tail"><strong>Custom problem authoring</strong> follows the same scope as regular software development (requirements → implementation), so we quote it separately. <a href="#contact">Get in touch</a> for that and for anything beyond these tiers.</p>
@@ -626,50 +626,9 @@
       <h2 data-i18n="ent.h2">Let's talk.</h2>
       <p data-i18n="ent.p">Cloud enablement programs, internal onboarding, recurring AWS drills — share your scale, cadence, and audience, and we'll figure out the right setup together.</p>
       <p data-i18n="ent.enterprise">If you are considering TenkaCloud for enterprise or internal training use, please feel free to contact us. TenkaCloud is open source, but we would love to learn more about real-world training needs, custom exercise requirements, and how organizations want to run hands-on operations/security drills.</p>
-      <form class="contact-form" data-contact-form hidden novalidate>
-        <div class="contact-form-grid">
-          <div class="contact-field">
-            <label class="contact-field-label" for="contact-name"><span data-i18n="form.name">Name</span><em class="contact-required" aria-hidden="true">*</em></label>
-            <input type="text" id="contact-name" data-form-field="name" autocomplete="name" required aria-required="true" aria-describedby="contact-name-error" />
-            <span class="contact-field-error" id="contact-name-error" data-contact-field-error></span>
-          </div>
-          <div class="contact-field">
-            <label class="contact-field-label" for="contact-organization"><span data-i18n="form.organization">Company or team</span></label>
-            <input type="text" id="contact-organization" data-form-field="organization" autocomplete="organization" aria-describedby="contact-organization-error" />
-            <span class="contact-field-error" id="contact-organization-error" data-contact-field-error></span>
-          </div>
-          <div class="contact-field contact-field-wide">
-            <label class="contact-field-label" for="contact-email"><span data-i18n="form.email">Email</span><em class="contact-required" aria-hidden="true">*</em></label>
-            <input type="email" id="contact-email" data-form-field="email" autocomplete="email" required aria-required="true" aria-describedby="contact-email-error" />
-            <span class="contact-field-error" id="contact-email-error" data-contact-field-error></span>
-          </div>
-          <div class="contact-field contact-field-wide">
-            <label class="contact-field-label" for="contact-topic"><span data-i18n="form.topic">What is this about</span><em class="contact-required" aria-hidden="true">*</em></label>
-            <select id="contact-topic" data-form-field="topic" required aria-required="true" aria-describedby="contact-topic-error">
-              <option value="" data-i18n="form.topic.placeholder">Please choose</option>
-              <option value="プラン・見積もりの相談" data-i18n="form.topic.plan">Plans and quotes</option>
-              <option value="企業内の研修・演習での利用" data-i18n="form.topic.training">Internal training and drills</option>
-              <option value="カスタム問題の追加開発" data-i18n="form.topic.custom">Custom problem development</option>
-              <option value="その他" data-i18n="form.topic.other">Something else</option>
-            </select>
-            <span class="contact-field-error" id="contact-topic-error" data-contact-field-error></span>
-          </div>
-          <div class="contact-field contact-field-wide">
-            <label class="contact-field-label" for="contact-message"><span data-i18n="form.message">Your message</span><em class="contact-required" aria-hidden="true">*</em></label>
-            <textarea rows="5" id="contact-message" data-form-field="message" required aria-required="true" aria-describedby="contact-message-error"></textarea>
-            <span class="contact-field-error" id="contact-message-error" data-contact-field-error></span>
-          </div>
-        </div>
-        <div class="contact-form-actions">
-          <button type="submit" class="btn-primary" data-contact-form-submit data-i18n="form.submit">Send</button>
-        </div>
-        <p class="contact-form-status" data-contact-form-status role="status" aria-live="polite"></p>
-      </form>
       <div class="btns" style="margin-top:1.6rem">
-        <a class="btn-primary" href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer"><span data-i18n="contact.cta">Open the contact form</span> →</a>
-        <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer">GitHub Discussions →</a>
+        <a class="btn-primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="contact.discussions">GitHub Discussions (public)</span> →</a>
       </div>
-      <p class="contact-fineprint" data-i18n="contact.fineprint">Responses are stored in a Google Form (managed by Google) and used only for replying and quoting (see <a href="./privacy.en.html">Privacy Policy</a>).</p>
     </div>
   </div>
 </section>
@@ -730,8 +689,7 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./contact-form.js?v=7301ba7ae8" defer></script>
-<script src="./app.js?v=f94e5e5605" defer></script>
+<script src="./app.js?v=c9d40b8b97" defer></script>
 
 </body>
 </html>

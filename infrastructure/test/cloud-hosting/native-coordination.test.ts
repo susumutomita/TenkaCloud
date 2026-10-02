@@ -1120,8 +1120,8 @@ describe("native DynamoDB SDK transaction contracts", () => {
       };
     });
     const factory = createProductionNativeCoordination({
-      documentClient: f.document,
-      tables: f.tables,
+      repository: new DynamoCloudRepository(f.document, f.tables),
+      store: f.store,
       artifactBucket: "synthetic-artifacts",
       region: "us-east-1",
       catalogKey,
@@ -1159,8 +1159,8 @@ describe("native DynamoDB SDK transaction contracts", () => {
       .spyOn(S3Client.prototype, "send")
       .mockRejectedValue(new Error("Unexpected artifact request"));
     const factory = createProductionNativeCoordination({
-      documentClient: f.document,
-      tables: f.tables,
+      repository: new DynamoCloudRepository(f.document, f.tables),
+      store: f.store,
       artifactBucket: "synthetic-artifacts",
       region: "us-east-1",
       catalogKey: f.artifact.catalogKey,

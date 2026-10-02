@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Legacy Lite settings</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Legacy Lite messages</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -68,7 +66,7 @@
 <main class="doc">
 <article>
 <h1>First pack tutorial <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate&#39;s event catalog. The retained tenant-scoped activation command is a legacy local record, not a current hosting workflow.</p>
+<p>Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate&#39;s event catalog. Activation is an offline catalog record, not a current hosting workflow.</p>
 <p>Just want to run an existing pack? → <a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a>.</p>
 <h2>Prerequisites</h2>
 <p>Run from the TenkaCloud repository root with Bun 1.3.11 and installed dependencies. Local-directory operations need no cloud credentials. Installing from Git contacts the given HTTPS repository.</p>
@@ -83,11 +81,11 @@ make pack-list
 bun run pack inspect com.example.starter@0.1.0
 </code></pre>
 <p>For a Git install use an HTTPS URL and full immutable 40-hex commit SHA. Keep source provenance and content digest. Do not use a moving branch as the revision.</p>
-<h2 id="runtime-boundary">Runtime boundary</h2><p>There is no complete pack activate → event → deployment path in this candidate. Use its supported pinned core catalog to rehearse an event. Generic local catalog/workbench restoration is separate work. Do not run a deleted Lite launcher or invent a tenant to bridge this gap.</p>
+<h2 id="runtime-boundary">Runtime boundary</h2><p>There is no complete pack activate → event → deployment path in this candidate. Use its supported pinned core catalog to rehearse an event. The built-in local catalog uses its own validated runtime adapters.</p>
 <h2 id="common-failures">Common failures and diagnostic codes</h2><p><code>PACK_DIR_MISSING</code>, <code>MANIFEST_INVALID</code>, duplicate IDs and missing artifacts need corrections in the pack, not a cloud deployment. See <a href="/docs/reference/validation-errors/index.en.html">validation errors</a>.</p>
 <h2 id="teardown">Remove a stored revision</h2><pre><code class="language-sh">bun run pack remove com.example.starter@0.1.0
 </code></pre>
-<p>Removal may refuse a retained activation/reference; inspect it first. Removing a pack is not exercise or cloud teardown. Historical SaaS/Lite and individual-practice instructions are available in the <a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">pinned legacy source</a>. Do not use them against this candidate or assume data migrates automatically.</p>
+<p>Removal may refuse a retained activation/reference; inspect it first. Removing a pack is not exercise or cloud teardown.</p>
 
 </article>
 </main>

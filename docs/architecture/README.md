@@ -6,7 +6,7 @@ released cloud service or claim that every restored catalog entry is playable.
 ## Current responsibilities
 
 - One Bun process serves the organizer and participant applications
-- Organizer accounts and roles are separate from event-owned participant team keys
+- The local organizer key is separate from event-owned participant team keys
 - Event/team state, operation ownership, scores, receipts and authentication live
   in local SQLite with private original key files
 - New Docker events prepare up to 512 dormant jobs; participants Start / resume
@@ -32,15 +32,18 @@ stacks. Explicit event teardown and ordinary shutdown are separate operations.
 ## Storage and cloud boundary
 
 Local hosting uses SQLite. Cloud hosting uses API Gateway, Lambda, Cognito and
-three DynamoDB tables (Events, Teams and Deployments), reusing reviewed serverless
-components without SaaS / SBT. Both SPAs and their runtime configuration are served
+either Turso or three DynamoDB tables (Events, Teams and Deployments), reusing
+reviewed serverless components without SaaS / SBT. Turso mode uses an exact SSM
+token parameter and creates no DynamoDB tables. Both SPAs and their runtime configuration are served
 from private S3 origins through CloudFront origin access control.
 AWS service problems require cloud hosting. Docker/Compose exercises are local-only
 and are not listed in the cloud catalog. Native Cryptography Battle runs on both
-hosting options; synchronized cloud bursts still exceed the five-second refresh interval.
-`make deploy` and `make destroy` call the current Lambda/DynamoDB CLI after
+hosting options; the DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; AWS performance remains unmeasured.
+`make deploy` and `make destroy` call the current cloud CLI after
 reviewed IAM setup. The supported cloud catalog includes hello-world with scoped CLI
-access and native Cryptography Battle. Teardown confirms the exact installation and preserves retained data.
+access and native Cryptography Battle. Destroy confirms the exact platform and deletes default-owned data. `destroy-all`
+purges stack-owned retained data; recorded competition cleanup requires the explicit
+`--drain-events` option or an event Teardown action.
 A container build, remote-driver experiment or schema declaration is not an
 end-to-end cloud rehearsal or zero-fixed-cost guarantee.
 
@@ -53,7 +56,7 @@ verified competitor deployment role with the required installation ExternalId.
 Participant access uses the verified deployment-bound viewer role with the job ID
 as ExternalId. The currently supported hello-world access is a 15-minute CLI credential set
 restricted to its Parameter. Native Cryptography Battle executes in the platform
-and persists its state and scoring in the same DynamoDB transaction boundary.
+and persists its state and scoring in the same selected-database transaction boundary.
 The competitor-template AdministratorAccess grant stays confined to competitor
 initialization. Standard CDK platform execution authority is reviewed separately;
 application and participant runtime roles do not receive it. Existing STS sessions can outlive
@@ -109,10 +112,3 @@ Mermaid CLI is available. Previously generated Mermaid/JAWS slide exports are
 historical; current guides do not embed those stale images as current evidence.
 The JAWS exporter reads its preserved landing-page Draw.io copy, so regenerating
 that historical talk cannot overwrite the current diagram or mix architectures.
-
-## Historical architecture
-
-SaaS tenant onboarding and the former named deployment modes belong to the [pinned legacy architecture](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/architecture/README.md).
-Cloud hosting selectively reuses Lambda / DynamoDB code; it does not restore
-SaaS / SBT or imply an automatic data migration. The old tenant-onboarding filename
-is a legacy pointer only.

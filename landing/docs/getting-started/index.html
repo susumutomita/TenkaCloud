@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
-<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -88,9 +86,8 @@ make local
 </code></pre>
 <p><code>make down</code> は管理対象のローカルプロセスと所有する Docker 環境を止め、DB、得点、キー、Docker のデータを保持します。大会の終了や AWS 問題 stack の削除は行いません。<code>make local</code> 後も、新しいオンデマンドの Docker jobs は参加者が再開するまで停止したままです。書き込みレイヤーと volume は保持しますが、RAM は保持しません。再起動しても大会の時刻はリセットされません。End Event は採点を止め、環境の teardown は所有する環境を削除します。削除が完了するまでデータディレクトリを消さないでください。</p>
 <p>起動オプションは <code>LOCAL_ARGS</code> へ渡します。例は <code>make local LOCAL_ARGS=&quot;--no-build&quot;</code> です。<code>--data</code> を指定した場合、<code>make down</code> にも同じディレクトリを指定します。</p>
-<h2 id="cloud-status">クラウド配置の状態</h2><p><code>make deploy</code> と <code>make destroy</code> は権限設定を確認したうえで、この版の Lambda/DynamoDB CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world と組み込みの Cryptography Battle です。撤収時に対象を確認し、大会データは保持します。Lambda/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。復元した cloud pipeline は固定した旧版のソースを実行し、この版の CLI は実行しません。</p>
+<h2 id="cloud-status">クラウド配置の状態</h2><p><code>make deploy</code> と <code>make destroy</code> は権限設定を確認したうえで、この版の Lambda + Turso/DynamoDB CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world と組み込みの Cryptography Battle です。撤収時に対象を確認し、基盤の所有データはデフォルトで削除します。通常の destroy は外部 Turso の行を残し、destroy-all で明示的にリセットします。問題環境の撤収は別操作です。Lambda + Turso/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。cloud pipeline は現行 CLI を既定で使います。build を始める前にソース設定と配置 role を確認してください。</p>
 <p>Codespaces の転送 URL と問題接続は、この candidate では未確認です。確認記録ができるまでは上のローカル手順を使ってください。</p>
-<p>SaaS/Lite と旧個人練習の手順は<a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">固定した旧版</a>を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。</p>
 <p>次は<a href="/docs/manual/organizer/">開催者マニュアル</a>、<a href="/docs/manual/participant/">参加者マニュアル</a>、<a href="/docs/operate/deploy-paths/">配置の境界</a>です。</p>
 <h2>書籍と互換性</h2>
 <p><a href="https://zenn.dev/bull/books/cloud-competition">自分で作るクラウド競技</a>と

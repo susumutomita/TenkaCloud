@@ -1,8 +1,5 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { assertCommercialRegion } from "../../../cloud-hosting/regions.js";
-import { DynamoDbCompetitorAccountsRepository } from "../../control-data/dynamodb-competitor-accounts-repository.js";
-import { DynamoDeploymentWork } from "../../control-data/dynamodb-deployment-work.js";
+import { acquireCloudWork } from "../../control-data/cloud-work-data.js";
 import {
   createJobBindingAuthorizer,
   installationAccountConfig,
@@ -22,25 +19,19 @@ function required(name: string): string {
   return value;
 }
 
-export async function createProductionWorkflowHandlers(resolveArtifacts: ArtifactResolver) {
+export async function createProductionWorkflowHandlers(
+  resolveArtifacts: ArtifactResolver,
+  acquireData = acquireCloudWork,
+) {
   const region = required("AWS_REGION");
   const controlPlaneAccount = required("CONTROL_PLANE_ACCOUNT");
   if (!/^\d{12}$/u.test(controlPlaneAccount)) throw new CloudWorkflowError();
   assertCommercialRegion(region);
   const bindings = await loadExecutionBindings();
-  const client = DynamoDBDocumentClient.from(
-    new DynamoDBClient({ region, ignoreConfiguredEndpointUrls: true }),
-    { marshallOptions: { removeUndefinedValues: true } },
-  );
-  const tables = {
-    events: required("EVENTS_TABLE_NAME"),
-    teams: required("TEAMS_TABLE_NAME"),
-    deployments: required("DEPLOYMENTS_TABLE_NAME"),
-  };
-  const accounts = new DynamoDbCompetitorAccountsRepository(client, tables);
+  const { work, accounts } = await acquireData();
   const config = process.env.COMPETITOR_ROLE_NAME ? installationAccountConfig() : undefined;
   return createWorkflowHandlers({
-    repository: new DynamoDeploymentWork(client, tables),
+    repository: work,
     runner: createAwsCloudRunnerDependencies({ controlPlaneRegion: region }),
     resolveArtifacts,
     authorizeJob: createJobBindingAuthorizer({ bindings, accounts, config, controlPlaneAccount }),

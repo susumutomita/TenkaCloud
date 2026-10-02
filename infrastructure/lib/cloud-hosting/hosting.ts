@@ -4,6 +4,7 @@ import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
 
 /** Two existing SPAs, S3 origin access control, and runtime configuration; no separate SaaS UI. */
 export class CloudHosting extends Construct {
@@ -12,7 +13,7 @@ export class CloudHosting extends Construct {
   readonly url: string;
   constructor(scope: Construct, id: string, assetPath: string) {
     super(scope, id);
-    // eslint-disable-next-line sonarjs/aws-s3-bucket-versioning -- This bucket contains rebuildable published SPA assets only; persistent event/identity records are retained separately.
+    // eslint-disable-next-line sonarjs/aws-s3-bucket-versioning -- This bucket contains rebuildable published SPA assets only.
     this.bucket = new Bucket(this, "Bucket", {
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
@@ -33,6 +34,7 @@ export class CloudHosting extends Construct {
       })),
     });
     new BucketDeployment(this, "Assets", {
+      logGroup: deploymentLogGroup(this),
       sources: [
         Source.asset(assetPath, { exclude: [".env*", ".git"], ignoreMode: IgnoreMode.GIT }),
       ],

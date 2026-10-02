@@ -4,10 +4,11 @@ sequenceDiagram
   participant Host as Authorized event service
   participant DB as Persistent store
   participant Runtime as Owned runtime adapter
+  Note over Host,DB: Local: persistent SQLite; cloud: selected Turso or DynamoDB
   Organizer->>Host: Prepare selected event problems
   Host->>Host: Validate event, team and runtime
   Host->>DB: Retain jobs and ownership
-  alt New Docker event
+  alt New local Docker event
     Host-->>Organizer: Up to 512 dormant jobs prepared
     Participant->>Host: Start / resume own assigned problem
     Host->>Host: Check event/team access and active/memory limits
@@ -28,9 +29,10 @@ sequenceDiagram
   else Native Cryptography Battle
     Host->>DB: Retain plugin identity and native state
     Host-->>Organizer: Ready without Docker or a competitor stack
-  else Legacy Docker event
+  else Legacy local Docker event
     Host->>Runtime: Existing deployment lifecycle
     Runtime-->>Host: Outputs or failure
     Host->>DB: Persist status and private runtime data
   end
   Note over Host,Runtime: No automatic eviction or reset; synthetic allocation is not a Docker benchmark
+  Note over Organizer,Runtime: Ordinary make destroy removes the AWS platform, default data and S3; external Turso is retained. Explicit --drain-events removes recorded competitor resources first.

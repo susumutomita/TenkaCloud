@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
-<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -71,7 +69,7 @@
 <p>現在のブランチはローカル・クラウド開催を統合検証中の Draft です。
 <code>CONTRIBUTING.md</code>と
 <code>docs/host-retirement.md</code>を確認してください。
-既存 SaaS/Lite 環境は固定した旧版で運用します。このブランチは移行や撤収を行いません。</p>
+データの自動移行は行いません。</p>
 <h2>準備と起動</h2>
 <pre><code class="language-sh">git submodule update --init --recursive
 bun install --frozen-lockfile --ignore-scripts
@@ -81,7 +79,7 @@ make local LOCAL_ARGS=&quot;--no-build&quot;
 <p>Bun 1.3.11 を使います。host は開催者・参加者アプリを配信し、競技状態を SQLite に保存します。
 専用の非公開データディレクトリを用意してください。
 ローカルの Docker 問題には Docker が必要です。AWS サービスの問題はクラウド開催専用です。
-Lambda/DynamoDB によるクラウド開催と配置・撤収は検証中です。
+Lambda + Turso/DynamoDB によるクラウド開催と配置・撤収は検証中です。
 組み込みの Battle は Bun で動作します。</p>
 <h2>担当コード</h2>
 <table>
@@ -139,7 +137,7 @@ Lambda/DynamoDB によるクラウド開催と配置・撤収は検証中です�
 配布に関わる変更では
 <code>docs/host-build-verification.md</code>
 も確認します。ブラウザ検証と任意の実 AWS・IdP 検証は、ローカルテストと分けて報告します。</p>
-<p><code>make down</code> は大会と Docker のデータを保持します。クラウドの <code>make deploy</code> / <code>make destroy</code> は、権限設定と所有対象を確認する既存 CLI を実行します。現在は限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。<code>CLOUD_ARGS=&quot;--help&quot;</code> で AWS に接続せず説明を確認できます。</p>
+<p><code>make down</code> は大会と Docker のデータを保持します。クラウドの <code>make deploy</code> / <code>make destroy</code> は、権限設定と所有対象を確認する既存 CLI を実行します。現在は限定 CLI を使う hello-world と組み込みの Cryptography Battle に対応します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。<code>CLOUD_ARGS=&quot;--help&quot;</code> で AWS に接続せず説明を確認できます。</p>
 
 </article>
 </main>

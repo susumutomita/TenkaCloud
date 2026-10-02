@@ -59,8 +59,6 @@
 <li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">旧 Lite 設定</a></li>
-<li><a href="/docs/reference/lite-messages/">旧 Lite メッセージ</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -68,7 +66,7 @@
 <main class="doc">
 <article>
 <h1>既存パックを使う <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。残っている tenant 単位の activate は旧版向けのローカル記録であり、現行の競技実行手順ではありません。</p>
+<p>pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。activate はオフラインのカタログ記録であり、現行の競技実行手順ではありません。</p>
 <h2 id="prerequisites">前提条件</h2><p>信頼する pack のローカルディレクトリ、または HTTPS Git URL と完全な 40 桁 commit SHA を用意します。runtime、ファイル、provenance を確認してください。</p>
 <h2 id="install-the-pinned-git-revision">固定した revision を保存する</h2><pre><code class="language-sh">make pack-install ARGS=&quot;git &lt;https-url&gt; --commit &lt;40-hex-commit-sha&gt;&quot;
 make pack-list
@@ -77,7 +75,6 @@ bun run pack inspect &lt;id@version&gt;
 <p>リポジトリのルートで実行します。既定の保存先は <code>.tenkacloud/pack-store</code> です。Git install はネットワークを使います。ローカルディレクトリの検証や保存はリソースを配置しません。</p>
 <h2 id="verify-the-installed-revision">保存結果を確認する</h2><p>取得元、解決済み commit、digest を確認します。install 成功は、任意コードの実行、endpoint の公開、クラウド作成の承認ではありません。</p>
 <h2 id="create-the-event">大会への接続は未対応</h2><p>activate しても現在の大会選択欄へ pack の問題は追加されません。実装上の不足であり、実環境テストだけが未実施という状態ではありません。大会には対応する core catalog の問題を使い、pack の経路は Not run と記録します。<a href="/docs/tutorials/first-pack/">最初の pack</a>も参照してください。</p>
-<p>SaaS/Lite と旧個人練習の手順は<a href="https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9">固定した旧版</a>を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。</p>
 
 </article>
 </main>

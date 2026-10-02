@@ -255,6 +255,8 @@
     "coordination_duel-deadline": "DUEL forfeit win and expired Orders"
   },
   "problem_detail": {
+    "instructions_error": "Could not load problem instructions",
+    "instructions_retry": "Retry",
     "reference_header": "Problem information and environment status",
     "back_button": "Back to problems",
     "video_header": "Watch the flow",

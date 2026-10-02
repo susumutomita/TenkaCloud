@@ -4,7 +4,7 @@ export const metadata = { title: "既存パックを使う" };
 
 # 既存パックを使う <MaturityBadge level="preview" />
 
-pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。残っている tenant 単位の activate は旧版向けのローカル記録であり、現行の競技実行手順ではありません。
+pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。activate はオフラインのカタログ記録であり、現行の競技実行手順ではありません。
 
 <h2 id="prerequisites">前提条件</h2>
 
@@ -27,5 +27,3 @@ bun run pack inspect <id@version>
 <h2 id="create-the-event">大会への接続は未対応</h2>
 
 activate しても現在の大会選択欄へ pack の問題は追加されません。実装上の不足であり、実環境テストだけが未実施という状態ではありません。大会には対応する core catalog の問題を使い、pack の経路は Not run と記録します。[最初の pack](/developers/docs/tutorials/first-pack/)も参照してください。
-
-SaaS/Lite と旧個人練習の手順は[固定した旧版](https://github.com/susumutomita/TenkaCloud/tree/825415fcda5075ad723daf9e4514eac47d7b8bb9)を参照してください。この candidate へ適用したり、データが自動移行されると考えたりしないでください。

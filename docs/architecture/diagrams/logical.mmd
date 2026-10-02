@@ -10,7 +10,7 @@ flowchart TB
   end
   Catalog["Hosting-specific pinned catalog / safe participant projection"]
   Local["Local: on-demand Docker / Compose + native CryptoBattle; SQLite"]
-  Cloud["Cloud: hello-world CloudFormation + native CryptoBattle; DynamoDB"]
+  Cloud["Cloud: hello-world CloudFormation + native CryptoBattle; selected Turso or DynamoDB; no Docker"]
   Organizer --> Auth
   Team --> Auth
   Auth --> Event
