@@ -118,6 +118,7 @@ function phaseMatches(request: ProcessRequest, phase: string): boolean {
 function fixture(
   options: {
     confirmed?: boolean;
+    toolkitMissing?: boolean;
     fail?: (request: ProcessRequest) => ProcessResult | undefined;
     installation?: CloudInstallation;
   } = {},
@@ -128,6 +129,7 @@ function fixture(
   const confirmations: string[] = [];
   const storageCalls: string[] = [];
   const locations: InstallationLocation[] = [];
+  let toolkitInstalled = !options.toolkitMissing;
   let control: InstallationControl | undefined;
   const installation: CloudInstallation = options.installation ?? {
     repository: {
@@ -165,6 +167,16 @@ function fixture(
       calls.push(structuredClone(request));
       const failure = options.fail?.(request);
       if (failure) return failure;
+      if (request.args.includes("TenkaCloudToolkit-staging")) {
+        if (request.args.includes("create-stack")) toolkitInstalled = true;
+        if (request.args.includes("describe-stacks") && !toolkitInstalled)
+          return {
+            code: 1,
+            stdout: "",
+            stderr:
+              "An error occurred (ValidationError) when calling the DescribeStacks operation: Stack with id TenkaCloudToolkit-staging does not exist",
+          };
+      }
       return mockResponse(request);
     },
     stdout: (value) => messages.push(value),
@@ -258,6 +270,10 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(create?.args.join(" ")).not.toContain("tenant");
     expect(f.messages.join("")).toContain("https://console.example.test");
     expect(f.messages.join("")).toContain("https://portal.example.test");
+    expect(f.messages.join("")).toContain("hello-world with scoped participant AWS CLI access");
+    expect(f.messages.join("")).toContain("native Cryptography Battle backed by DynamoDB");
+    expect(f.messages.join("")).toContain("AWS usage and retained storage can incur charges");
+    expect(f.messages.join("")).not.toContain("full competition lifecycle remains incomplete");
     expect(f.env).toEqual({
       TENKACLOUD_ADMIN_EMAIL: "organizer@example.test",
       TENKACLOUD_CFN_EXECUTION_POLICY_ARN: POLICY,
@@ -571,6 +587,9 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
   it.each([
     { args: ["unknown"] },
     { args: ["up", "--force"] },
+    { args: ["up", "--setup", "--setup-if-needed"] },
+    { args: ["up", "--show-setup", "--yes"] },
+    { args: ["down", "--setup-if-needed"] },
     { args: ["down", "--purge-retained-data"] },
     { args: ["status", "--yes"] },
   ])("rejects unsupported commands without effects: %s", async ({ args }) => {
@@ -602,21 +621,236 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(f.messages.join("")).toContain("TenkaCloud cloud-hosting v1");
     expect(f.messages.join("")).not.toContain("AdministratorAccess");
   });
-  it("fails before building when first-account setup is missing", async () => {
+  it.each([{ args: [] }, { args: ["--yes"] }])(
+    "stops before IAM writes or builds when initial setup is declined: %s",
+    async ({ args }) => {
+      const f = fixture({ toolkitMissing: true });
+      expect(await f.run(["up", ...args])).toBe(1);
+      expect(f.confirmations).toHaveLength(1);
+      expect(f.errors.join("")).toContain("--show-setup");
+      expect(f.calls.some((call) => call.inherit || call.args.includes("create-stack"))).toBe(
+        false,
+      );
+    },
+  );
+  it.each([
+    { args: [], ci: undefined, prompts: 1 },
+    { args: ["--yes"], ci: undefined, prompts: 1 },
+    { args: ["--setup-if-needed", "--yes"], ci: "true", prompts: 0 },
+  ])(
+    "sets up a missing toolkit and completes the same deploy: %s",
+    async ({ args, ci, prompts }) => {
+      const f = fixture({ toolkitMissing: true, confirmed: true });
+      expect(
+        await runCloudCli(["up", ...args], f.io, { root: ROOT, env: { ...f.env, CI: ci } }),
+      ).toBe(0);
+      expect(f.confirmations).toHaveLength(prompts);
+      const notice = f.messages.join("");
+      for (const text of [
+        "account 123456789012",
+        "region ap-northeast-1",
+        "environment staging",
+        "IAM roles:",
+        "Managed IAM policies:",
+        "retained asset storage can incur charges",
+        "environment names are not an IAM security boundary",
+        "continues the application deployment with the same credentials",
+      ])
+        expect(notice).toContain(text);
+      const identities = deploymentPolicies({
+        account: "123456789012",
+        region: "ap-northeast-1",
+        environment: "staging",
+      }).identities;
+      expect(notice).toContain(identities.executionRoleArn);
+      expect(notice).toContain(identities.operatorPolicyArn);
+      expect(notice).toContain(identities.assetBucketName);
+      const create = f.calls.findIndex((call) => call.args.includes("create-stack"));
+      const wait = f.calls.findIndex((call) => call.args.includes("stack-create-complete"));
+      const verify = f.calls.findIndex(
+        (call, index) =>
+          index > wait &&
+          call.args.includes("TenkaCloudToolkit-staging") &&
+          call.args.includes("describe-stacks"),
+      );
+      const build = f.calls.findIndex((call) => call.command === "bun");
+      expect(create).toBeGreaterThan(0);
+      expect(wait).toBeGreaterThan(create);
+      expect(verify).toBeGreaterThan(wait);
+      expect(build).toBeGreaterThan(verify);
+      expect(f.calls[create]?.args).toContain("CAPABILITY_NAMED_IAM");
+      expect(f.calls[create]?.args).toContain("--enable-termination-protection");
+      expect(f.calls.some((call) => call.args.includes("deploy"))).toBe(true);
+      expect(f.calls.some((call) => call.args.includes("admin-create-user"))).toBe(true);
+      expect(
+        f.calls.some((call) => call.args.includes("iam") || call.args.includes("update-stack")),
+      ).toBe(false);
+      expect(notice).toContain("https://console.example.test");
+    },
+  );
+  it.each([{ args: [] }, { args: ["--yes"] }, { args: ["--setup-if-needed"] }])(
+    "never prompts or treats ordinary CI deploy consent as initial IAM approval: %s",
+    async ({ args }) => {
+      const f = fixture({ toolkitMissing: true, confirmed: true });
+      expect(
+        await runCloudCli(["up", ...args], f.io, { root: ROOT, env: { ...f.env, CI: "true" } }),
+      ).toBe(1);
+      expect(f.confirmations).toEqual([]);
+      expect(f.errors.join("")).toContain("--setup-if-needed --yes");
+      expect(f.calls.some((call) => call.inherit || call.args.includes("create-stack"))).toBe(
+        false,
+      );
+    },
+  );
+  it("validates an installed toolkit without changing IAM even with initial-setup opt-in", async () => {
+    const f = fixture();
+    expect(await f.run(["up", "--setup-if-needed", "--yes"])).toBe(0);
+    expect(f.confirmations).toEqual([]);
+    expect(
+      f.calls.some(
+        (call) => call.args.includes("create-stack") || call.args.includes("update-stack"),
+      ),
+    ).toBe(false);
+  });
+  it("deploys a fresh account with both platform stacks absent after confirmed toolkit setup", async () => {
     const f = fixture({
+      toolkitMissing: true,
+      confirmed: true,
+      fail: (request) => {
+        if (!platformInspection(request)) return undefined;
+        const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+        return {
+          code: 1,
+          stdout: "",
+          stderr: `An error occurred (ValidationError) when calling the DescribeStacks operation: Stack with id ${name} does not exist`,
+        };
+      },
+    });
+    expect(await f.run(["up"])).toBe(0);
+    expect(f.confirmations).toHaveLength(1);
+    expect(f.storageCalls).toEqual([]);
+    expect(f.calls.filter((call) => call.args.includes("create-stack"))).toHaveLength(1);
+    expect(f.calls.some((call) => call.args.includes("deploy"))).toBe(true);
+  });
+  it("retains verified setup after a deploy failure and reuses it on retry", async () => {
+    let failDeploy = true;
+    const f = fixture({
+      toolkitMissing: true,
+      confirmed: true,
       fail: (request) =>
-        request.args.includes("TenkaCloudToolkit-staging")
-          ? {
-              code: 1,
-              stdout: "",
-              stderr:
-                "An error occurred (ValidationError) when calling the DescribeStacks operation: Stack with id TenkaCloudToolkit-staging does not exist",
-            }
+        failDeploy && request.args.includes("deploy")
+          ? { code: 1, stdout: "", stderr: "AccessDenied: synthetic operator failure" }
           : undefined,
     });
     expect(await f.run(["up"])).toBe(1);
-    expect(f.errors.join("")).toContain("--show-setup");
+    expect(f.errors.join("")).toContain("staging-ap-northeast-1-operator");
+    expect(f.errors.join("")).toContain("synthetic operator failure");
+    expect(f.calls.some((call) => call.args.includes("delete-stack"))).toBe(false);
+    failDeploy = false;
+    expect(await f.run(["up"])).toBe(0);
+    expect(f.confirmations).toHaveLength(1);
+    expect(f.calls.filter((call) => call.args.includes("create-stack"))).toHaveLength(1);
+    expect(
+      f.calls.some((call) => call.args.includes("update-stack") || call.args.includes("iam")),
+    ).toBe(false);
+  });
+  it("does not update a matching toolkit installed between the missing check and setup", async () => {
+    let inspected = false;
+    const f = fixture({
+      fail: (request) => {
+        if (!inspected && request.args.includes("TenkaCloudToolkit-staging")) {
+          inspected = true;
+          return {
+            code: 1,
+            stdout: "",
+            stderr:
+              "An error occurred (ValidationError) when calling the DescribeStacks operation: Stack with id TenkaCloudToolkit-staging does not exist",
+          };
+        }
+        return undefined;
+      },
+    });
+    expect(await f.run(["up"])).toBe(0);
+    expect(f.confirmations).toEqual([]);
+    expect(
+      f.calls.some(
+        (call) => call.args.includes("create-stack") || call.args.includes("update-stack"),
+      ),
+    ).toBe(false);
+  });
+  it.each(["create-stack", "stack-create-complete"])(
+    "halts the combined deploy when initial %s fails",
+    async (phase) => {
+      const f = fixture({
+        toolkitMissing: true,
+        confirmed: true,
+        fail: (request) =>
+          request.args.includes(phase)
+            ? { code: 1, stdout: "", stderr: "AccessDenied: synthetic initial setup denial" }
+            : undefined,
+      });
+      expect(await f.run(["up"])).toBe(1);
+      expect(f.errors.join("")).toContain("synthetic initial setup denial");
+      if (phase === "create-stack")
+        expect(f.errors.join("")).toContain("Metadata.TenkaCloudSetupPermissions");
+      expect(f.calls.some((call) => call.inherit || call.args.includes("iam"))).toBe(false);
+    },
+  );
+  it("does not build or claim success when the newly installed toolkit fails verification", async () => {
+    let created = false;
+    const f = fixture({
+      toolkitMissing: true,
+      confirmed: true,
+      fail: (request) => {
+        if (request.args.includes("create-stack")) created = true;
+        if (
+          created &&
+          request.args.includes("describe-stacks") &&
+          request.args.includes("TenkaCloudToolkit-staging")
+        )
+          return { code: 0, stdout: JSON.stringify({ Tags: [], Parameters: [] }), stderr: "" };
+        return undefined;
+      },
+    });
+    expect(await f.run(["up"])).toBe(1);
+    expect(f.errors.join("")).toContain("refusing to modify");
     expect(f.calls.some((call) => call.inherit)).toBe(false);
+  });
+  it("explains the operator permission needed by a setup-only caller without granting it", async () => {
+    const f = fixture({
+      toolkitMissing: true,
+      confirmed: true,
+      fail: (request) =>
+        platformInspection(request)
+          ? { code: 1, stdout: "", stderr: "AccessDenied: cloudformation:DescribeStacks" }
+          : undefined,
+    });
+    expect(await f.run(["up"])).toBe(1);
+    expect(f.errors.join("")).toContain("cloudformation:DescribeStacks");
+    expect(f.errors.join("")).toContain("staging-ap-northeast-1-operator");
+    expect(f.errors.join("")).toContain("switch to that profile and rerun make deploy ENV=staging");
+    expect(f.confirmations).toEqual([]);
+    expect(
+      f.calls.some(
+        (call) => call.inherit || call.args.includes("create-stack") || call.args.includes("iam"),
+      ),
+    ).toBe(false);
+  });
+  it("rejects a fresh-installation policy override before asking to create the toolkit", async () => {
+    const f = fixture({ toolkitMissing: true, confirmed: true });
+    expect(
+      await runCloudCli(["up"], f.io, {
+        root: ROOT,
+        env: {
+          ...f.env,
+          TENKACLOUD_CFN_EXECUTION_POLICY_ARN:
+            "arn:aws:iam::123456789012:policy/tenkacloud/cloud-hosting/other",
+        },
+      }),
+    ).toBe(1);
+    expect(f.errors.join("")).toContain("Leave TENKACLOUD_CFN_EXECUTION_POLICY_ARN unset");
+    expect(f.confirmations).toEqual([]);
+    expect(f.calls.some((call) => call.inherit || call.args.includes("create-stack"))).toBe(false);
   });
   it("requires explicit setup confirmation and never treats non-interactive refusal as approval", async () => {
     const f = fixture();

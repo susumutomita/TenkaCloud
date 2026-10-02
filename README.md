@@ -48,7 +48,11 @@ teardown removes known generated runtime files; old or unknown temporary files a
 not swept automatically. See [generated-file ownership](docs/local-hosting.md#generated-files-and-retained-data).
 
 Cloud commands are `make deploy` and `make destroy`. They use the current
-Lambda/DynamoDB CLI after [reviewed AWS setup](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
+Lambda/DynamoDB CLI. If the project toolkit is missing, `make deploy` displays
+the account, region, IAM resources and permission scope, asks for initial-setup
+approval, then installs the toolkit and continues deployment with the same AWS
+credentials. Existing toolkits are validated and reused. See
+[setup and permission requirements](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 The current cloud catalog includes hello-world with scoped CLI access and native
 Cryptography Battle backed by DynamoDB. Docker/Compose exercises are local-only and
 are not listed in the cloud catalog. Synchronized Battle bursts still exceed the
@@ -61,7 +65,11 @@ without contacting AWS. For cloud configuration, copy the matching
 and region. `make deploy ENV=development` loads that environment's file; see
 [configuration and setup](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
 The preserved [cloud pipeline](infrastructure/README.md#cloud-deployment-pipeline)
-uses the current source contract after explicit [first-account IAM setup](infrastructure/BOOTSTRAP-IAM.md#first-account-setup). Its advanced historical-source option retains the old complete flow. Inspect permissions offline with `make -s deploy CLOUD_ARGS="--show-setup"`; actual `--setup` changes IAM and requires your review.
+uses the current source contract after explicit [first-account IAM setup](infrastructure/BOOTSTRAP-IAM.md#first-account-setup). Its advanced historical-source option retains the old complete flow.
+Optional `make -s deploy CLOUD_ARGS="--show-setup"` prints permissions offline;
+`--setup` installs the toolkit only. Unattended first deployment requires
+`CLOUD_ARGS="--setup-if-needed --yes"` after review; `--yes` alone does not approve
+initial IAM setup. The CLI never grants permissions to the caller.
 
 The host exposes all 106 Compose exercise definitions as Challenges, including
 workbenches and the 15 explicitly declared participant terminals. Catalog coverage

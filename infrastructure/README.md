@@ -110,21 +110,30 @@ Edit that `.env` and set `TENKACLOUD_ADMIN_EMAIL` to the organizer invitation
 address, `ACCOUNT_ID` to the intended 12-digit AWS account, and `AWS_REGION` to
 the deployment region. The samples deliberately leave email/account empty.
 Use an existing AWS CLI profile or role for credentials; do not put access keys
-or tokens in this file. Then follow [first-account setup](BOOTSTRAP-IAM.md#first-account-setup):
+or tokens in this file. Run `make deploy ENV=development` (or the matching
+`staging` / `production` environment). If the project toolkit is missing, the same
+command displays the account, region, environment, IAM roles/policies, retained
+asset bucket and permission scope, then asks for initial-setup approval. Confirming
+installs and verifies the toolkit, then continues the application deployment using
+the same credentials. Declining stops before IAM writes or application builds.
+An installed toolkit is validated and reused without changing its policies.
 
-1. Select the matching environment with `make deploy ENV=development`; use
-   `staging` or `production` when appropriate. First run
-   `make -s deploy ENV=development CLOUD_ARGS="--show-setup"` to inspect the account-specific JSON
-   without credentials or AWS calls. Review all IAM documents and the initial
-   caller permissions in `Metadata.TenkaCloudSetupPermissions`.
-2. An authorized initial-setup principal runs `make deploy ENV=development CLOUD_ARGS="--setup"`.
-   Confirmation identifies the account, region, project toolkit and residual
-   authority. This creates/updates the owned toolkit and policies only. It does
-   not attach a policy to the caller or deploy the application.
-3. An IAM administrator grants the returned operator policy only to the intended
-   deployment profile/role. Switch to that profile, then run ordinary
-   `make deploy ENV=development`. Fresh setup leaves the advanced
-   `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` compatibility input unset.
+The current profile must already have both the reviewed initial-setup permissions
+and ordinary operator permissions for first setup plus deployment. The CLI never
+attaches permissions to the caller or switches credentials. If your organization
+uses separate setup and deployment principals, use the optional
+`make deploy ENV=development CLOUD_ARGS="--setup"` for toolkit setup only, then
+switch to the authorized operator profile and run `make deploy ENV=development`.
+An IAM administrator grants the generated operator policy only to that intended
+operator. Fresh setup leaves `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` unset.
+
+For a full offline review, `make -s deploy ENV=development CLOUD_ARGS="--show-setup"`
+prints the account-specific template without credentials or AWS calls. It includes
+the IAM documents and exact initial-caller permissions in
+`Metadata.TenkaCloudSetupPermissions`. CI or another noninteractive first deployment
+requires the separate, explicit opt-in `CLOUD_ARGS="--setup-if-needed --yes"` after
+review. `--yes` alone does not approve initial IAM setup. Existing installations
+need neither flag for ordinary deploy. See [permission boundaries](BOOTSTRAP-IAM.md#first-account-setup).
 
 `ENV` or `CDK_PARAM_ENVIRONMENT` selects the file before it is read; when both
 are present they must agree. The default is `development`. Custom names continue
@@ -150,9 +159,10 @@ CloudFront OAC lifecycle, retain account-level scope. Environment names are not
 an IAM security boundary. The review/confirmation exposes these limits; it is not
 approval to apply them. Actual AWS setup/deployment was not executed in verification.
 
-Ordinary deployment performs no toolkit-policy setup; CloudFormation still creates
-and updates the application's roles within the supplied permissions. Missing or
-mismatched setup stops before builds. Existing toolkits require the exact project,
+Ordinary deployment never updates an installed toolkit's policies; CloudFormation
+still creates and updates the application's roles within the supplied permissions.
+Missing setup requires separate approval within the command; mismatched setup
+stops before builds. Existing toolkits require the exact project,
 environment, qualifier, policy list and source-contract variant. Shared `CDKToolkit`,
 earlier unbounded toolkits and untagged installations are not silently adopted;
 review their migration separately. Only explicit CloudFormation not-found responses

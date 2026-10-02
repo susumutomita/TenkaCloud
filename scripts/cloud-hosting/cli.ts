@@ -221,7 +221,11 @@ async function ensureOrganizer(context: Context, email: string): Promise<void> {
   ]);
   assertSuccess(created, "Create organizer account");
 }
-async function bootstrapPreflight(context: Context, policyArn: string): Promise<void> {
+async function bootstrapPreflight(
+  context: Context,
+  policyArn: string,
+  setupApproved: boolean,
+): Promise<void> {
   const environment = context.env.CDK_PARAM_ENVIRONMENT ?? "development";
   const toolkit = projectBootstrap(environment);
   const result = await run(context, "aws", [
@@ -234,14 +238,26 @@ async function bootstrapPreflight(context: Context, policyArn: string): Promise<
     "--output",
     "json",
   ]);
-  if (result.code !== 0 && isMissingStack(result.stderr, toolkit.stackName))
-    throw new Error(
-      'Project setup is missing. Review make deploy CLOUD_ARGS="--show-setup", then use make deploy CLOUD_ARGS="--setup" with initial setup permissions.',
+  if (result.code !== 0 && isMissingStack(result.stderr, toolkit.stackName)) {
+    if (setupArtifacts(context.env).policies.identities.executionPolicyArns.join(",") !== policyArn)
+      throw new Error(
+        "Initial setup requires the source-reviewed execution-policy list. Leave TENKACLOUD_CFN_EXECUTION_POLICY_ARN unset for a fresh installation; no toolkit was created.",
+      );
+    context.io.stdout(
+      `[cloud] Project toolkit ${toolkit.stackName} is missing; review initial setup below.\n`,
     );
+    await setupCloudToolkit(
+      { cwd: context.root, env: context.env },
+      context.io,
+      setupApproved,
+      "deploy",
+    );
+    return;
+  }
   assertSuccess(result, "Inspect project toolkit");
   assertOwnedBootstrap(result.stdout, environment, policyArn);
 }
-async function up(context: Context): Promise<number> {
+async function up(context: Context, setupApproved: boolean): Promise<number> {
   const email = context.env.TENKACLOUD_ADMIN_EMAIL?.trim() ?? "";
   const parts = email.split("@");
   if (
@@ -260,7 +276,7 @@ async function up(context: Context): Promise<number> {
     ? requireExecutionPolicy(context.env.TENKACLOUD_CFN_EXECUTION_POLICY_ARN)
     : undefined;
   context.io.stdout(
-    "[cloud] AWS resources and retained storage can incur charges. Only the explicitly configured, reviewed AWS flag slice can execute; the full competition lifecycle remains incomplete.\n",
+    "[cloud] Supported cloud exercises: hello-world with scoped participant AWS CLI access, and native Cryptography Battle backed by DynamoDB. AWS usage and retained storage can incur charges; see infrastructure/README.md for feature and capacity limits.\n",
   );
 
   const resolved = await resolveCloudContext(context);
@@ -271,7 +287,21 @@ async function up(context: Context): Promise<number> {
     );
   if (resolved.env.ACCOUNT_ID !== executionPolicy.account)
     throw new Error("Execution policy must belong to the deployment account.");
-  const deployed = await platformPreflight(resolved, "up");
+  // The operator policy name is independent of optional legacy runner bindings.
+  const operatorPolicy = setupArtifacts({ ...resolved.env, TENKACLOUD_RUNNER_BINDINGS: undefined })
+    .policies.identities.operatorPolicyArn;
+  const operatorInstructions = `Ordinary deployment requires ${operatorPolicy} or equivalent reviewed permissions. If this profile has initial-setup permissions only, ask your IAM administrator to authorize the intended deployment operator, switch to that profile and rerun make deploy ENV=${resolved.env.CDK_PARAM_ENVIRONMENT}. No policy is automatically attached to your current user or role.`;
+  let deployed: OwnedPlatformStack[];
+  try {
+    deployed = await platformPreflight(resolved, "up");
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /access.?denied|not authorized|unauthorized/iu.test(error.message)
+    )
+      throw new Error(`${error.message}\n${operatorInstructions}`);
+    throw error;
+  }
   const backend = deployed.find((stack) => stack.name === context.stacks.backend);
   if (backend) {
     const installation = resolved.io.openInstallation({
@@ -284,7 +314,7 @@ async function up(context: Context): Promise<number> {
       installation.close();
     }
   }
-  await bootstrapPreflight(resolved, executionPolicy.arn);
+  await bootstrapPreflight(resolved, executionPolicy.arn, setupApproved);
   context.io.stdout("[cloud] [1/3] Building both web applications for CDK asset publishing\n");
   await buildApplications(resolved);
   context.io.stdout("[cloud] [2/3] Deploying cloud application and backend stacks\n");
@@ -296,14 +326,14 @@ async function up(context: Context): Promise<number> {
       "--require-approval",
       "never",
     ]),
-    "CDK deploy",
+    `CDK deploy. ${operatorInstructions}`,
   );
   context.io.stdout("[cloud] [3/3] Preparing organizer sign-in and access URLs\n");
   await ensureOrganizer(resolved, email);
   const consoleUrl = await output(resolved, context.stacks.app, "ApplicationAdminConsoleUrl");
   const portalUrl = await output(resolved, context.stacks.backend, "ParticipantPortalApiUrl");
   context.io.stdout(
-    `Cloud control API and hosting deployed; the full competition lifecycle remains incomplete\nOrganizer console: ${consoleUrl}\nParticipant portal: ${portalUrl}\n`,
+    `Cloud hosting deployed for hello-world (scoped participant AWS CLI) and native Cryptography Battle.\nOrganizer console: ${consoleUrl}\nParticipant portal: ${portalUrl}\n`,
   );
   return 0;
 }
@@ -469,16 +499,16 @@ async function status(context: Context): Promise<number> {
   return 0;
 }
 const HELP =
-  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. Exported variables override file values; AWS credentials come from your intended profile/role. First inspect make deploy ENV=<environment> CLOUD_ARGS="--show-setup", then make deploy ENV=<environment> CLOUD_ARGS="--setup" with initial setup permissions (setup only, no application deploy). Ordinary up only uses the installed project toolkit. down accepts --yes.\n';
+  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. Exported variables override file values; AWS credentials come from your intended profile/role. make deploy checks the project toolkit; if missing, it displays initial IAM setup for separate confirmation, installs it and continues deployment with the same credentials. Existing toolkits are validated and never updated by ordinary deploy. Optional --show-setup prints the complete setup template offline; --setup installs or updates the toolkit only. Unattended first deployment requires CLOUD_ARGS="--setup-if-needed --yes" after reviewing --show-setup. --yes alone never approves initial IAM setup. down accepts --yes.\n';
 function assertCommandArguments(command: string, args: readonly string[]): void {
   let permitted: readonly string[] = [];
-  if (command === "up") permitted = ["--setup", "--show-setup", "--yes", "-y"];
+  if (command === "up") permitted = ["--setup", "--show-setup", "--setup-if-needed", "--yes", "-y"];
   if (command === "down") permitted = ["--yes", "-y"];
   if (
     args.some((arg) => !permitted.includes(arg)) ||
     (command === "up" &&
       ((args.includes("--show-setup") && args.length !== 1) ||
-        (args.some((arg) => ["--yes", "-y"].includes(arg)) && !args.includes("--setup"))))
+        (args.includes("--setup") && args.includes("--setup-if-needed"))))
   )
     throw new Error("Unknown or conflicting cloud command argument.");
 }
@@ -522,7 +552,10 @@ export async function runCloudCli(
           );
           return 0;
         }
-        return await up(context);
+        return await up(
+          context,
+          args.includes("--setup-if-needed") && args.some((arg) => ["--yes", "-y"].includes(arg)),
+        );
       case "down":
         await down(context, args.length > 0);
         return 0;

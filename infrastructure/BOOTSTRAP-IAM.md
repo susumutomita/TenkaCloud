@@ -14,10 +14,23 @@ that file does not exist, then fill in the organizer email, account and region.
 environment for review, setup, deployment and destruction. See the
 [configuration rules](README.md#current-checkouts-setup-and-teardown-boundary).
 
-Alternatively, export the values as below. Exported values override the selected
-file. The account/region below are placeholders. No live AWS, IAM or billing
-operation was performed during implementation or tests. Use the intended AWS
-profile throughout; never save credentials in `.env`.
+Run `make deploy ENV=development` with the intended AWS profile. When the project
+toolkit is missing, the command displays its account, region, environment, exact
+IAM role/policy names, retained asset bucket and residual permission scope. It asks
+for separate initial-setup confirmation, installs and verifies the toolkit, then
+continues building and deploying the application with the same credentials.
+An existing toolkit is validated and reused; ordinary deploy never updates it.
+
+The current profile must already have both initial-setup and ordinary operator
+permissions for that combined operation. No policy is attached to the caller and
+credentials are not changed. If the profile has only setup permissions, ordinary
+deployment reports the denied operation and required operator policy; an IAM
+administrator must authorize the intended deployment operator separately.
+
+For an optional full review before running deploy, export values as below or use
+the selected `.env`. Exported values override the file. The account/region below
+are placeholders. No live AWS, IAM or billing operation was performed during
+implementation or tests. Never save credentials in `.env`.
 
 ```bash
 export ACCOUNT_ID=123456789012
@@ -28,13 +41,17 @@ make -s deploy CLOUD_ARGS="--show-setup" > /tmp/tenkacloud-setup.json
 
 `--show-setup` is offline. Review the template's IAM documents, names and
 `Metadata.TenkaCloudSetupPermissions`: the latter is the exact initial-caller policy.
-An IAM administrator prepares that temporary setup principal. Setup creates or
-updates only the owned `TenkaCloudToolkit-<environment>`, qualifier-scoped asset
+An IAM administrator prepares the initial-setup permissions. Setup creates or,
+with the explicit setup-only command, updates only the owned
+`TenkaCloudToolkit-<environment>`, qualifier-scoped asset
 resources, roles and managed policies. It does not attach policies to the caller,
 change credentials, activate trusted access or grant cross-account bootstrap trust.
 
+For organizations using separate initial-setup and deployment principals, the
+optional advanced path remains available:
+
 ```bash
-# Initial-setup principal; the command asks for confirmation after review.
+# Initial-setup principal; installs the toolkit only after confirmation.
 make deploy CLOUD_ARGS="--setup"
 # Switch to the intended ordinary deployment operator's AWS profile/role.
 export TENKACLOUD_ADMIN_EMAIL=organizer@example.com
@@ -44,10 +61,20 @@ make deploy
 `--setup` installs and verifies the toolkit only; it does not deploy the application.
 Its output names the generated operator policy. An IAM administrator attaches that
 policy only to the intended deployment operator. The CodeBuild launcher references
-that same policy after setup. Ordinary `make deploy` performs no toolkit/IAM setup;
-missing or mismatched setup stops before application builds. `make destroy` uses the
+that same policy after setup. `make destroy` uses the
 operator policy to coordinate cleanup while retaining data. Cognito organizers need
 no AWS policy. Neither policy is automatically attached to a user or existing role.
+
+CI and noninteractive first deployment must explicitly approve initial setup with
+`make deploy CLOUD_ARGS="--setup-if-needed --yes"` after review. The opt-in is limited
+to creating the missing project toolkit for the selected account, region and
+environment; it never updates an existing toolkit. `--yes` alone does not authorize
+initial IAM setup, and an unapproved noninteractive invocation stops without
+prompting. Setup-only automation can use `--setup --yes`. Both paths require the
+caller's existing permissions and keep the same ownership checks. Declining setup
+stops before IAM changes and builds; failures stop deployment rather than granting
+additional permissions. Already-created toolkit resources remain after a later
+failure and are validated on retry.
 
 ## Fail-safe behavior
 

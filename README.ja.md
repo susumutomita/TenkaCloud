@@ -50,8 +50,11 @@ Docker 問題は一斉起動せず、参加者が必要な問題をポータル�
 詳しくは[生成ファイルと保持データ](docs/local-hosting.md#generated-files-and-retained-data)を参照してください。
 
 クラウドのコマンドは `make deploy` と `make destroy` です。
-[必要な AWS 権限の準備](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を確認して、
-この版の Lambda/DynamoDB CLI を実行します。現在のクラウド問題は、限定した CLI アクセスを使う hello-world と、
+初回は同じコマンド内でアカウント、リージョン、作成する IAM と権限範囲を表示します。
+内容を確認して承認すると、現在の AWS 認証で Toolkit を作成し、そのまま配置を続けます。
+既存の Toolkit は検証して再利用します。必要な権限は自動付与しません。
+詳しくは[必要な AWS 権限の準備](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を参照してください。
+現在のクラウド問題は、限定した CLI アクセスを使う hello-world と、
 DynamoDB に状態を保存する Cryptography Battle です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。
 Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超えています。撤収時はアカウント、リージョン、所有する対象を表示して確認し、
 記録済みの問題環境を撤収します。大会データは保持します。保持ストレージや AWS の利用には料金が発生する場合があります。
@@ -60,7 +63,10 @@ Battle の一斉アクセス時の処理時間は、5 秒の更新間隔を超�
 同じディレクトリの `.env` にコピーして、開催者のメールアドレス、AWS アカウント ID、リージョンを編集します。
 既存の `.env` は上書きしません。`make deploy ENV=development` で選んだ環境のファイルを読み込みます。
 詳しくは[環境設定と初回セットアップ](infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を参照してください。
-[クラウド pipeline](infrastructure/README.md#cloud-deployment-pipeline)は、明示的な[初回 IAM 設定](infrastructure/BOOTSTRAP-IAM.md#first-account-setup)後に現行の配置経路を使います。旧版を使う詳細設定では元の完全な処理を維持します。`make -s deploy CLOUD_ARGS="--show-setup"` は権限をオフラインで表示するだけですが、`--setup` は IAM を変更するため内容の確認が必要です。
+[クラウド pipeline](infrastructure/README.md#cloud-deployment-pipeline)は、明示的な[初回 IAM 設定](infrastructure/BOOTSTRAP-IAM.md#first-account-setup)後に現行の配置経路を使います。旧版を使う詳細設定では元の完全な処理を維持します。
+任意の `make -s deploy CLOUD_ARGS="--show-setup"` で権限をオフライン表示できます。
+`--setup` は Toolkit だけを設定します。無人での初回配置は内容の確認後に
+`CLOUD_ARGS="--setup-if-needed --yes"` を明示してください。`--yes` だけでは初回 IAM 設定を承認しません。
 
 106 件の Compose 問題を Challenge として表示し、エディターと明示的に許可された
 15 件の参加者ターミナルに接続します。カタログと模擬ライフサイクルの検証は、
