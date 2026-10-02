@@ -407,6 +407,7 @@ describe("scoped transformation of the pinned CDK bootstrap", () => {
     expect(() => projectBootstrapTemplate(scope, changed)).toThrow("resource contract changed");
   });
 
+  // Match the CDK synthesis budget below; this is template validation, not a runtime latency test.
   it("loads the generated template as CloudFormation with matching concrete policy names", () => {
     const template = projectBootstrapTemplate(scope);
     const path = join(output, "bootstrap.json");
@@ -422,7 +423,7 @@ describe("scoped transformation of the pinned CDK bootstrap", () => {
     expect(actual.Parameters.CloudFormationExecutionPolicies.Default).toBe(
       deploymentPolicies(scope).identities.executionPolicyArns.join(","),
     );
-  });
+  }, 60_000);
 
   it("covers the actual application and data synth resource inventory, including CDK providers", () => {
     const assets = join(output, "assets");
