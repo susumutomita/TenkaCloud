@@ -84,7 +84,9 @@ test("cloud product commands reach the existing scoped CLI without replacing loc
   ]) {
     const result = make("-n", target ?? "", "CLOUD_ARGS=--help");
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain(`bun run scripts/cloud-hosting/main.ts ${command} --help`);
+    expect(result.stdout).toContain(
+      `bun run --no-env-file scripts/cloud-hosting/main.ts ${command} --help`,
+    );
     expect(result.stdout).not.toContain("not implemented");
   }
   const local = make("-n", "down");

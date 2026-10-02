@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { projectBootstrap } from "../../infrastructure/lib/cloud-hosting/bootstrap";
 import { deploymentPolicies } from "../../infrastructure/lib/cloud-hosting/deployment-policy";
 import {
@@ -268,6 +271,32 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(await runCloudCli(["up"], f.io, { root: ROOT, env: {} })).toBe(1);
     expect(f.calls).toEqual([]);
     expect(f.errors.join("")).toContain("TENKACLOUD_ADMIN_EMAIL");
+    expect(f.errors.join("")).toContain("infrastructure/environments/development/.env.example");
+    expect(f.errors.join("")).toContain("--show-setup");
+  });
+  it("uses the selected file for offline setup and ordinary deployment without modifying it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tenkacloud-cli-env-"));
+    const directory = join(root, "infrastructure/environments/staging");
+    const source =
+      "ENV=staging\nTENKACLOUD_ADMIN_EMAIL=file@example.test\nACCOUNT_ID=123456789012\nAWS_REGION=ap-northeast-1\n";
+    try {
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, ".env"), source);
+      const preview = fixture();
+      expect(
+        await runCloudCli(["up", "--show-setup"], preview.io, { root, env: { ENV: "staging" } }),
+      ).toBe(0);
+      expect(preview.calls).toEqual([]);
+      expect(preview.messages.join("")).toContain("TenkaCloudToolkit-staging");
+      const deploy = fixture();
+      expect(await runCloudCli(["up"], deploy.io, { root, env: { ENV: "staging" } })).toBe(0);
+      expect(deploy.calls.every((call) => call.env.ENV === "staging")).toBe(true);
+      const invitation = deploy.calls.find((call) => call.args.includes("admin-create-user"));
+      expect(invitation?.args).toContain("file@example.test");
+      expect(readFileSync(join(directory, ".env"), "utf8")).toBe(source);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
   it.each(["resolve", "prepare", "toolkit", "deploy"])("halts after %s fails", async (phase) => {
     const f = fixture({

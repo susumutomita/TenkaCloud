@@ -97,20 +97,52 @@ the presence of its routes is not a 100-participant capacity claim. These comman
 promise a zero-cost platform.
 
 Start with `make deploy CLOUD_ARGS="--help"`; help makes no AWS request. For a
-fresh installation, follow [first-account setup](BOOTSTRAP-IAM.md#first-account-setup):
+fresh installation, restore the familiar per-environment configuration first:
 
-1. Set `ACCOUNT_ID`, `AWS_REGION` and `ENV` (default `development`). Run
-   `make -s deploy CLOUD_ARGS="--show-setup"` to inspect the account-specific JSON
+```bash
+# Use staging or production in both paths when selecting those environments.
+# Preserve an existing .env; edit it instead of copying over it.
+test -e infrastructure/environments/development/.env || \
+  cp infrastructure/environments/development/.env.example infrastructure/environments/development/.env
+```
+
+Edit that `.env` and set `TENKACLOUD_ADMIN_EMAIL` to the organizer invitation
+address, `ACCOUNT_ID` to the intended 12-digit AWS account, and `AWS_REGION` to
+the deployment region. The samples deliberately leave email/account empty.
+Use an existing AWS CLI profile or role for credentials; do not put access keys
+or tokens in this file. Then follow [first-account setup](BOOTSTRAP-IAM.md#first-account-setup):
+
+1. Select the matching environment with `make deploy ENV=development`; use
+   `staging` or `production` when appropriate. First run
+   `make -s deploy ENV=development CLOUD_ARGS="--show-setup"` to inspect the account-specific JSON
    without credentials or AWS calls. Review all IAM documents and the initial
    caller permissions in `Metadata.TenkaCloudSetupPermissions`.
-2. An authorized initial-setup principal runs `make deploy CLOUD_ARGS="--setup"`.
+2. An authorized initial-setup principal runs `make deploy ENV=development CLOUD_ARGS="--setup"`.
    Confirmation identifies the account, region, project toolkit and residual
    authority. This creates/updates the owned toolkit and policies only. It does
    not attach a policy to the caller or deploy the application.
 3. An IAM administrator grants the returned operator policy only to the intended
-   deployment profile/role. Switch to that profile, set `TENKACLOUD_ADMIN_EMAIL`,
-   then run ordinary `make deploy`. Fresh setup leaves the advanced
+   deployment profile/role. Switch to that profile, then run ordinary
+   `make deploy ENV=development`. Fresh setup leaves the advanced
    `TENKACLOUD_CFN_EXECUTION_POLICY_ARN` compatibility input unset.
+
+`ENV` or `CDK_PARAM_ENVIRONMENT` selects the file before it is read; when both
+are present they must agree. The default is `development`. Custom names continue
+to work (a lowercase letter followed by up to 31 lowercase letters, digits or
+hyphens), with their own `.env` or exported configuration. Only
+`infrastructure/environments/<selected-environment>/.env` is loaded. A selector
+inside that file must match its directory; copying a staging file into production
+does not silently retarget a deployment. Exported process variables override file
+values, including an explicit empty value. CI can provide all values without a
+file. `REGION` takes precedence over `AWS_REGION`, then `AWS_DEFAULT_REGION`; the
+AWS profile region is the fallback for actual AWS commands.
+
+The file accepts single-line `KEY=value` assignments, optional `export`, single
+or double quotes, and comments. It rejects duplicate keys and malformed lines;
+shell commands and variable references are literal, never executed or expanded.
+Use single quotes around JSON values. The CLI never creates or rewrites `.env`.
+The Make targets disable Bun's automatic root `.env` loading; use
+`bun run --no-env-file scripts/cloud-hosting/main.ts` for direct CLI commands too.
 
 The operator administers TenkaCloud resources across environments where S3 and
 PassRole cannot be isolated. Some generated-ID or untaggable APIs, including

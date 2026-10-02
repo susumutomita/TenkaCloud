@@ -7,8 +7,17 @@ replaces broad deployment/lookup grants. Shared `CDKToolkit` is never adopted an
 
 ## First-account setup
 
-The account/region below are placeholders. No live AWS, IAM or billing operation was
-performed during implementation or tests. Use the intended AWS profile throughout.
+Start with `infrastructure/environments/development/.env.example` (or the
+`staging` / `production` sample). Copy it to `.env` in the same directory only if
+that file does not exist, then fill in the organizer email, account and region.
+`make deploy ENV=development` reads that file automatically. Use the same selected
+environment for review, setup, deployment and destruction. See the
+[configuration rules](README.md#current-checkouts-setup-and-teardown-boundary).
+
+Alternatively, export the values as below. Exported values override the selected
+file. The account/region below are placeholders. No live AWS, IAM or billing
+operation was performed during implementation or tests. Use the intended AWS
+profile throughout; never save credentials in `.env`.
 
 ```bash
 export ACCOUNT_ID=123456789012

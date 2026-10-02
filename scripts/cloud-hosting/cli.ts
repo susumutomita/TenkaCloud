@@ -11,6 +11,7 @@ import type { CloudTableNames } from "../../infrastructure/lib/problem-deploy/co
 import type { InstallationScope } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
 import { parseRunnerBindings } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/execution-config";
 import { assertOwnedBootstrap } from "./bootstrap-check";
+import { cloudEnvironmentInstructions, loadCloudEnvironment } from "./environment";
 import {
   type CloudInstallation,
   drainInstallation,
@@ -250,7 +251,9 @@ async function up(context: Context): Promise<number> {
     !parts[1]?.includes(".") ||
     /[\s,]/u.test(email)
   )
-    throw new Error("Set TENKACLOUD_ADMIN_EMAIL before cloud deployment.");
+    throw new Error(
+      `Set TENKACLOUD_ADMIN_EMAIL before cloud deployment. ${cloudEnvironmentInstructions(context.env.ENV ?? "development")}`,
+    );
   if (context.env.TENKACLOUD_RUNNER_BINDINGS !== undefined)
     parseRunnerBindings(context.env.TENKACLOUD_RUNNER_BINDINGS);
   const explicitPolicy = context.env.TENKACLOUD_CFN_EXECUTION_POLICY_ARN
@@ -466,7 +469,7 @@ async function status(context: Context): Promise<number> {
   return 0;
 }
 const HELP =
-  'TenkaCloud cloud hosting\nUsage: make deploy | make destroy [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSet TENKACLOUD_ADMIN_EMAIL, AWS_REGION, and AWS credentials for up. First inspect ACCOUNT_ID=... make deploy CLOUD_ARGS="--show-setup", then make deploy CLOUD_ARGS="--setup" with initial setup permissions (setup only, no application deploy). Ordinary up only uses the installed project toolkit. down accepts --yes.\n';
+  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. Exported variables override file values; AWS credentials come from your intended profile/role. First inspect make deploy ENV=<environment> CLOUD_ARGS="--show-setup", then make deploy ENV=<environment> CLOUD_ARGS="--setup" with initial setup permissions (setup only, no application deploy). Ordinary up only uses the installed project toolkit. down accepts --yes.\n';
 function assertCommandArguments(command: string, args: readonly string[]): void {
   let permitted: readonly string[] = [];
   if (command === "up") permitted = ["--setup", "--show-setup", "--yes", "-y"];
@@ -497,18 +500,12 @@ export async function runCloudCli(
       return 0;
     }
     assertCommandArguments(command, args);
-    if (
-      options.env.ENV &&
-      options.env.CDK_PARAM_ENVIRONMENT &&
-      options.env.ENV !== options.env.CDK_PARAM_ENVIRONMENT
-    )
-      throw new Error("ENV and CDK_PARAM_ENVIRONMENT must select the same cloud environment.");
-    const environment = options.env.CDK_PARAM_ENVIRONMENT ?? options.env.ENV ?? "development";
+    const env = loadCloudEnvironment(options.root, options.env);
     const context: Context = {
       ...options,
-      env: { ...options.env, CDK_PARAM_ENVIRONMENT: environment, ENV: environment },
+      env,
       io,
-      stacks: cloudStackNames(environment),
+      stacks: cloudStackNames(env.ENV),
     };
     switch (command) {
       case "up":
