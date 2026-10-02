@@ -139,7 +139,17 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
     expect(beforeStart.body.error).toBe("event_ended");
     expect((await api("participant", "/portal/me/coordination/projection")).status).toBe(401);
     await api("admin", `/events/${event.eventId}/schedule`, "PATCH", { startNow: true });
-    const one = await op(required(a).teamLoginKey, { kind: "ready" });
+    const one = await api(
+      "participant",
+      "/portal/me/coordination/op",
+      "POST",
+      {
+        op: { kind: "ready" },
+        runId: required(store.jobs(event.eventId, required(a).teamId)[0]).jobId,
+      },
+      required(a).teamLoginKey,
+    );
+    expect(one.status).toBe(200);
     expect((one.body.projection as Projection).ready.count).toBe(1);
     expect((one.body.projection as Projection).myContracts).toHaveLength(0);
     await op(required(b).teamLoginKey, { kind: "ready" });

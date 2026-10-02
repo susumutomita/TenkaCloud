@@ -26,7 +26,10 @@ import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
 import { DestroyPolicySetter } from "../cdk-aspect/destroy-policy-setter.js";
 import { contentDigest } from "../problem-deploy/control-data/domain/deployment-work.js";
-import { CLOUD_EVENT_LIMITS } from "../problem-deploy/control-data/domain/events.js";
+import {
+  CLOUD_EVENT_LIMITS,
+  SQL_EVENT_LIMITS,
+} from "../problem-deploy/control-data/domain/events.js";
 import {
   controlDataRuntimeEnv,
   grantTursoAuthTokenRead,
@@ -317,6 +320,12 @@ export class CloudApplicationStack extends Stack {
     events.addMethod("POST", integration, protectedMethod);
     const event = events.addResource("{eventId}");
     event.addMethod("GET", integration, protectedMethod);
+    event
+      .addResource("problems")
+      .addResource("{problemId}")
+      .addResource("coordination")
+      .addResource("reset")
+      .addMethod("POST", integration, protectedMethod);
     const team = event.addResource("teams").addResource("{teamId}");
     team.addResource("rotate-login-key").addMethod("POST", integration, protectedMethod);
     team.addResource("access").addMethod("DELETE", integration, protectedMethod);
@@ -384,7 +393,7 @@ export class CloudApplicationStack extends Stack {
           // Fixed compatibility fields required by the existing SPA parser, never an authorization axis.
           tenantId: "local",
           tenantName: "TenkaCloud",
-          eventLimits: CLOUD_EVENT_LIMITS,
+          eventLimits: data.kind === "turso" ? SQL_EVENT_LIMITS : CLOUD_EVENT_LIMITS,
           competitorRoleName: competitor.roleName,
           competitorBootstrapTemplateUrl: bootstrapTemplate.templateUrl,
           participantPortalUrl: props.backend.portal.url,

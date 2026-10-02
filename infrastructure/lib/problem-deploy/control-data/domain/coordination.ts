@@ -7,6 +7,8 @@ import type { EventRecord } from "./events.js";
 export const NATIVE_COORDINATION_PROBLEM = "ac26-crypto-battle";
 export const COORDINATION_CHUNK_BYTES = 256 * 1024;
 export const COORDINATION_MAX_BYTES = 2 * 1024 * 1024;
+/** Historical SQL state policy; SQL snapshots do not share DynamoDB's 4 MiB transaction budget. */
+export const SQL_COORDINATION_MAX_BYTES = 4 * 1024 * 1024;
 
 export interface NativeCoordinationArtifact {
   readonly problemId: string;
@@ -21,6 +23,12 @@ export interface NativeCoordinationRun {
   readonly problemId: string;
   readonly runId: string;
   readonly revision: number;
+  /** Retained previous runs, newest first; the current run plus history totals three. */
+  readonly history?: readonly string[];
+  /** Retired run whose private snapshot/receipts still need resumable deletion. */
+  readonly retiredRuns?: readonly string[];
+  /** Missing on legacy snapshots; new runs own their chunks independently. */
+  readonly snapshotLayout?: "run";
   readonly artifactDigest: string;
   readonly pluginKey: string;
   readonly catalogKey: string;
@@ -40,6 +48,11 @@ export interface NativeCoordinationResponse {
   readonly body: { readonly projection?: unknown; readonly error?: string };
   readonly revision: number;
 }
+/** Closed event reports retain identity after private gameplay payloads are removed. */
+export type NativeCoordinationSummary = Pick<
+  NativeCoordinationRun,
+  "eventId" | "problemId" | "runId" | "revision" | "closed"
+> & { readonly purgeState?: "pending" | "complete" };
 export interface NativeSchedulePatch {
   readonly startsAt?: string;
   readonly endsAt?: string;
@@ -60,4 +73,17 @@ export function coordinationHeadKey(eventId: string, problemId: string) {
   if (!/^[0-9A-HJKMNP-TV-Z]{26}$/u.test(eventId) || problemId !== NATIVE_COORDINATION_PROBLEM)
     throw new Error("Invalid native coordination scope.");
   return { PK: `COORD#${eventId}#${problemId}`, SK: "HEAD" };
+}
+
+export interface NativeCoordinationResetInput {
+  readonly event: EventRecord;
+  readonly artifact: NativeCoordinationArtifact;
+  readonly expectedRunId: string;
+  readonly now: () => number;
+}
+export interface NativeCoordinationResetResult {
+  readonly eventId: string;
+  readonly problemId: string;
+  readonly runId: string;
+  readonly previousRunId: string;
 }

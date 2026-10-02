@@ -30,6 +30,7 @@ vi.mock("../../src/api/events-client", async (importOriginal) => {
   };
 });
 
+import { ApiError } from "../../src/api/client";
 import type { EventDetail } from "../../src/api/events-client";
 import type { AppConfig } from "../../src/config";
 
@@ -66,12 +67,12 @@ const baseDetail: EventDetail = {
 const { EventDetailPage } = await import("../../src/pages/EventDetail");
 const { I18nProvider } = await import("../../src/i18n");
 
-function renderPage() {
+function renderPage(pageConfig = config) {
   return render(
     <I18nProvider>
       <MemoryRouter initialEntries={[`/events/${EVENT_ID}`]}>
         <Routes>
-          <Route path="/events/:eventId" element={<EventDetailPage config={config} />} />
+          <Route path="/events/:eventId" element={<EventDetailPage config={pageConfig} />} />
         </Routes>
       </MemoryRouter>
     </I18nProvider>,
@@ -148,4 +149,93 @@ describe("EventDetail bulk teardown confirm dialog #1350", () => {
     const confirm = screen.getByTestId("modal-teardown-confirm");
     await waitFor(() => expect(confirm).not.toBeDisabled());
   });
+
+  it.each(["pending", undefined] as const)(
+    "retries archived cleanup with purge state %s through typed confirmation and disables it after completion",
+    async (purgeState) => {
+      const pending: EventDetail = {
+        ...baseDetail,
+        status: "ARCHIVED",
+        nativeRuns: [
+          {
+            runId: "run-1",
+            problemId: "ac26-crypto-battle",
+            status: "CLOSED",
+            revision: 3,
+            purgeState,
+          },
+        ],
+      };
+      const complete: EventDetail = {
+        ...pending,
+        nativeRuns: pending.nativeRuns?.map((run) => ({ ...run, purgeState: "complete" })),
+      };
+      const delJson = vi
+        .fn()
+        .mockRejectedValueOnce(new ApiError(409, '{"error":"coordination_purge_conflict"}'))
+        .mockResolvedValueOnce({ eventId: EVENT_ID, enqueued: 0, skipped: 0, failed: 0 });
+      mocks.useApiClient.mockReturnValue({ delJson });
+      const actual = await vi.importActual<typeof import("../../src/api/events-client")>(
+        "../../src/api/events-client",
+      );
+      mocks.bulkTeardownEvent.mockImplementation(actual.bulkTeardownEvent);
+      mocks.getEvent.mockResolvedValueOnce(pending).mockResolvedValue(complete);
+      renderPage({ ...config, mode: "cloud-host" });
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
+      const cleanup = await screen.findByRole("button", { name: "即座に撤去" });
+      expect(cleanup).toBeEnabled();
+      await user.click(cleanup);
+      expect(screen.getByTestId("modal-teardown-confirm")).toBeDisabled();
+      fireEvent.change(await screen.findByPlaceholderText("DELETE"), {
+        target: { value: "DELETE" },
+      });
+      await user.click(screen.getByTestId("modal-teardown-confirm"));
+      expect(delJson).toHaveBeenCalledExactlyOnceWith(`events/${EVENT_ID}`);
+      expect(
+        await screen.findByText('API 409: {"error":"coordination_purge_conflict"}'),
+      ).toBeInTheDocument();
+      expect(mocks.getEvent).toHaveBeenCalledOnce();
+      expect(cleanup).toBeEnabled();
+      await user.click(cleanup);
+      fireEvent.change(await screen.findByPlaceholderText("DELETE"), {
+        target: { value: "DELETE" },
+      });
+      await user.click(screen.getByTestId("modal-teardown-confirm"));
+      await waitFor(() => expect(mocks.getEvent).toHaveBeenCalledTimes(2));
+      expect(delJson).toHaveBeenNthCalledWith(2, `events/${EVENT_ID}`);
+      await waitFor(() => expect(cleanup).toBeDisabled());
+      expect(
+        screen.queryByText('API 409: {"error":"coordination_purge_conflict"}'),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["pending", undefined] as const)(
+    "keeps archived cleanup with purge state %s disabled for read-only organizers",
+    async (purgeState) => {
+      mocks.getEvent.mockResolvedValue({
+        ...baseDetail,
+        status: "ARCHIVED",
+        nativeRuns: [
+          {
+            runId: "run-1",
+            problemId: "ac26-crypto-battle",
+            status: "CLOSED",
+            revision: 3,
+            purgeState,
+          },
+        ],
+      });
+      mocks.useApiClient.mockReturnValue({
+        tenantAccess: { canMutateTenant: false },
+        cloudOrganizerRole: "Viewer",
+      });
+      renderPage({ ...config, mode: "cloud-host" });
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
+      expect(await screen.findByRole("button", { name: "即座に撤去" })).toBeDisabled();
+      expect(mocks.bulkTeardownEvent).not.toHaveBeenCalled();
+    },
+  );
 });

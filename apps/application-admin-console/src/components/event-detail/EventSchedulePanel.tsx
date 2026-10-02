@@ -282,6 +282,10 @@ function CloudDeployTeardownFields({
   | "t"
 >) {
   const blocked = !apiClient || !canMutateTenant || bulkInFlight !== null;
+  const nativeCleanupAvailable = detail.nativeRuns?.some(
+    (run) =>
+      run.purgeState === "pending" || (run.status === "CLOSED" && run.purgeState === undefined),
+  );
   return (
     <Box margin={{ top: "m" }}>
       <SpaceBetween size="s">
@@ -303,7 +307,7 @@ function CloudDeployTeardownFields({
           </Button>
           <Button
             loading={bulkInFlight === "teardown"}
-            disabled={blocked || detail.status === "ARCHIVED"}
+            disabled={blocked || (detail.status === "ARCHIVED" && !nativeCleanupAvailable)}
             onClick={onConfirmTeardown}
           >
             {t("event_detail.teardown_at_now")}

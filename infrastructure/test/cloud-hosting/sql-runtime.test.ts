@@ -10,6 +10,7 @@ import {
 import {
   createDefaultSqlExecutorCache,
   createSqlExecutorCache,
+  probeTursoConnection,
   type RuntimeDependencies,
 } from "../../lib/problem-deploy/control-data/sql-executor-cache.js";
 import { resetControlData } from "../../lib/problem-deploy/control-data/sql-reset.js";
@@ -35,6 +36,34 @@ const environment = {
   TURSO_DATABASE_URL: "libsql://fixture.invalid",
   TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/turso/auth-token",
 };
+
+describe("read-only deploy connectivity probe", () => {
+  it("uses the production HTTP client for SELECT 1 without creating control-data tables", async () => {
+    const f = httpFixture();
+    vi.stubGlobal("fetch", f.fetch);
+    try {
+      await probeTursoConnection({ url: "https://fixture.invalid", authToken: "synthetic-token" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(f.executedStatements).toEqual(["SELECT 1 AS reachable"]);
+    expect(f.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all()).toEqual([]);
+  });
+  it.each(["query-failed", "bad-result"])("closes its client after %s", async (outcome) => {
+    const close = vi.fn();
+    const execute = vi.fn().mockImplementation(async () => {
+      if (outcome === "query-failed") throw new Error("rejected");
+      return { rows: [] };
+    });
+    await expect(
+      probeTursoConnection(
+        { url: "https://fixture.invalid", authToken: "synthetic-token" },
+        () => ({ close, execute }) as unknown as Pick<Client, "execute" | "close">,
+      ),
+    ).rejects.toThrow();
+    expect(close).toHaveBeenCalledOnce();
+  });
+});
 function cacheFixture() {
   const f = httpFixture();
   const send = vi
@@ -320,10 +349,14 @@ describe("explicit current SQL data reset", () => {
     await sql.run("INSERT INTO cloud_events VALUES ('one', '{}')");
     await sql.run("INSERT INTO cloud_installation_control VALUES (1, '{}')");
     await sql.run("INSERT INTO cloud_coordination_runs VALUES ('event', 'problem', '{}', '{}')");
+    await sql.run(
+      "INSERT INTO cloud_coordination_history VALUES ('event', 'problem', 'run', '{}', '{}')",
+    );
     await resetControlData(sql);
     expect(await sql.all("SELECT * FROM cloud_events")).toEqual([]);
     expect(await sql.all("SELECT * FROM cloud_installation_control")).toEqual([]);
     expect(await sql.all("SELECT * FROM cloud_coordination_runs")).toEqual([]);
+    expect(await sql.all("SELECT * FROM cloud_coordination_history")).toEqual([]);
     expect(await sql.get("SELECT version FROM cloud_schema")).toEqual({ version: 1 });
     expect(await sql.get("SELECT * FROM events")).toEqual({ id: "legacy-lite" });
     expect(await sql.get("SELECT * FROM another_application")).toEqual({ id: "unrelated" });

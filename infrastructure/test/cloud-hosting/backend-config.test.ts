@@ -10,19 +10,22 @@ describe("cloud deployment database configuration", () => {
       });
     },
   );
-  it("normalizes the original Turso choice and libsql URL for secure HTTP execution", () => {
-    expect(
-      cloudControlDataConfiguration({
-        CDK_PARAM_CONTROL_DATA_BACKEND: " TURSO ",
-        CDK_PARAM_TURSO_DATABASE_URL: " libsql://example.turso.io ",
-        CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: " /TenkaCloud/test/turso/auth-token ",
-      }),
-    ).toEqual({
-      kind: "turso",
-      databaseUrl: "https://example.turso.io",
-      authTokenParameterName: "/TenkaCloud/test/turso/auth-token",
-    });
-  });
+  it.each(["libsql", "LibSQL", "https", "HTTPS"])(
+    "normalizes the original Turso choice and %s URL for secure HTTP execution",
+    (scheme) => {
+      expect(
+        cloudControlDataConfiguration({
+          CDK_PARAM_CONTROL_DATA_BACKEND: " TURSO ",
+          CDK_PARAM_TURSO_DATABASE_URL: ` ${scheme}://example.turso.io `,
+          CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: " /TenkaCloud/test/turso/auth-token ",
+        }),
+      ).toEqual({
+        kind: "turso",
+        databaseUrl: "https://example.turso.io",
+        authTokenParameterName: "/TenkaCloud/test/turso/auth-token",
+      });
+    },
+  );
   it.each(["sqlite", "sql", "turso-mirror"])("rejects unsupported backend %s", (kind) => {
     expect(() => cloudControlDataConfiguration({ CDK_PARAM_CONTROL_DATA_BACKEND: kind })).toThrow(
       "dynamodb|turso",

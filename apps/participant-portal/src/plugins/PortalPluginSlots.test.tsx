@@ -203,6 +203,7 @@ describe("PortalPluginSlots", () => {
       { kind: "register-route", url: "https://svc" },
       undefined,
       expect.any(String),
+      baseProps.jobId,
     );
     expect(mockRefresh).toHaveBeenCalled();
     expect(mockGetProjection).toHaveBeenCalledWith("https://coord.example", "key-1");

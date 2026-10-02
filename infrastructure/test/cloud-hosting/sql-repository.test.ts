@@ -117,10 +117,10 @@ describe("SQL cloud repository with real SQLite transactions", () => {
         f.repository.createEventWithTeams({ ...f.event, teamCount: teams.length }, teams),
       ).rejects.toThrow();
     }
-    const teams = Array.from({ length: 49 }, () => ({ ...f.team, teamId: ulid() }));
+    const teams = Array.from({ length: 100 }, () => ({ ...f.team, teamId: ulid() }));
     await expect(
-      f.repository.createEventWithTeams({ ...f.event, teamCount: 49 }, teams),
-    ).rejects.toThrow("1-48");
+      f.repository.createEventWithTeams({ ...f.event, teamCount: 100 }, teams),
+    ).rejects.toThrow("1-99");
     expect(await f.repository.listEvents()).toEqual([]);
   });
   it("rotates and revokes with CAS; a stale writer cannot delete the winning access key", async () => {

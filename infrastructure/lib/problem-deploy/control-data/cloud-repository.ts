@@ -1,6 +1,6 @@
 import type { TeamScoreProjection } from "./domain/deployment-work.js";
 import type { DeploymentRecord } from "./domain/deployments.js";
-import type { EventRecord } from "./domain/events.js";
+import type { CloudEventLimits, EventRecord } from "./domain/events.js";
 import type { TeamRecord } from "./domain/teams.js";
 export interface EventCreationReceipt {
   readonly scope: string;
@@ -9,6 +9,7 @@ export interface EventCreationReceipt {
   readonly response: unknown;
 }
 export interface CloudRepository {
+  readonly eventLimits: CloudEventLimits;
   replayEventCreation(
     scope: string,
     key: string,

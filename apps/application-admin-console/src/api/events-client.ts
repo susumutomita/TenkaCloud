@@ -158,6 +158,7 @@ export interface EventDetail extends EventSummary {
     readonly problemId: string;
     readonly status: "COMPLETE" | "CLOSED";
     readonly revision: number;
+    readonly purgeState?: "pending" | "complete";
   }[];
   /** Issue #1038 P1 #7: opt-in で全 team の累計 score event timeline を含む。 */
   scoreEventsByTeam?: readonly TeamScoreEvents[];

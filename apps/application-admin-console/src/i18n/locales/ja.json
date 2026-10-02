@@ -434,6 +434,7 @@
     "modal_force_archive_confirm": "Force ARCHIVED",
     "modal_teardown_header": "Event 全 deployment を削除しますか?",
     "modal_teardown_body": "このイベント配下の全 deployment を削除状態に移し、 競技者アカウント上で CloudFormation のスタック削除を実行します。 取り消しできません。",
+    "modal_teardown_native_body": "ネイティブ対戦の非公開データと保存された対戦履歴は完全に削除されます。イベント情報、スコア、スコア履歴は保持されます。",
     "modal_teardown_confirm": "全削除",
     "modal_schedule_header": "競技開始日時を指定",
     "modal_schedule_confirm": "予約",

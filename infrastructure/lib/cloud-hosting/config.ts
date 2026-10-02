@@ -23,7 +23,7 @@ export function cloudControlDataConfiguration(
   let url: URL;
   try {
     // The original libsql:// input selects the same secure HTTP endpoint.
-    url = new URL(rawUrl.replace(/^libsql:\/\//u, "https://"));
+    url = new URL(rawUrl.replace(/^libsql:\/\//iu, "https://"));
   } catch {
     throw new Error("CDK_PARAM_TURSO_DATABASE_URL must be a libsql:// or https:// database URL.");
   }

@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
 import {
   NativeCoordinationError,
-  type NativeCoordinationRun,
+  type NativeCoordinationSummary,
 } from "../../control-data/domain/coordination.js";
 import {
   contentDigest,
@@ -23,7 +23,7 @@ import { type CloudConnectionApi, registerCloudConnectionRoutes } from "./connec
 import {
   type CloudCoordinationApi,
   nativeParticipantProblems,
-  nativeRun,
+  nativeSummary,
   registerCloudCoordinationRoutes,
 } from "./coordination-routes.js";
 import { type CloudDeploymentApi, registerCloudDeploymentRoutes } from "./deployment-routes.js";
@@ -77,7 +77,7 @@ async function create(
   catalog?: () => Promise<Readonly<Record<string, unknown>>>,
 ) {
   const actor = requireOrganizer(context, writeRoles, auth, now);
-  const input = createEventSchema.parse(await body(context));
+  const input = createEventSchema(repo.eventLimits).parse(await body(context));
   const requestKey = z
     .string()
     .min(1)
@@ -142,7 +142,7 @@ async function create(
   }
   return context.json(response, 201);
 }
-function nativeRunSummary(run: NativeCoordinationRun | undefined) {
+function nativeRunSummary(run: NativeCoordinationSummary | undefined) {
   if (!run) return {};
   return {
     nativeRuns: [
@@ -151,6 +151,7 @@ function nativeRunSummary(run: NativeCoordinationRun | undefined) {
         problemId: run.problemId,
         status: run.closed ? "CLOSED" : "COMPLETE",
         revision: run.revision,
+        ...(run.purgeState ? { purgeState: run.purgeState } : {}),
       },
     ],
   };
@@ -197,7 +198,7 @@ async function detail(
     });
   }
   const [run, totals] = await Promise.all([
-    coordination ? nativeRun(coordination, event) : undefined,
+    coordination ? nativeSummary(coordination, event) : undefined,
     requestedScoreTotals(repo, event, teams, withScores),
   ]);
   return context.json({
@@ -366,7 +367,12 @@ export function createCloudApp(options: CloudApiOptions): Hono {
       now,
     });
   if (options.coordination)
-    registerCloudCoordinationRoutes(app, { ...options.coordination, repository: repo, now });
+    registerCloudCoordinationRoutes(app, {
+      ...options.coordination,
+      repository: repo,
+      organizerAuth: options.organizerAuth,
+      now,
+    });
   if (options.connections && options.deployment)
     registerCloudConnectionRoutes(app, {
       ...options.connections,

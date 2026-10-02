@@ -8,6 +8,11 @@ export const SQL_COORDINATION_SCHEMA = [
     event_id TEXT NOT NULL, problem_id TEXT NOT NULL, payload TEXT NOT NULL, snapshot TEXT NOT NULL,
     PRIMARY KEY (event_id, problem_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS cloud_coordination_history (
+    event_id TEXT NOT NULL, problem_id TEXT NOT NULL, run_id TEXT NOT NULL,
+    payload TEXT NOT NULL, snapshot TEXT NOT NULL,
+    PRIMARY KEY (event_id, problem_id, run_id)
+  )`,
   `CREATE TABLE IF NOT EXISTS cloud_coordination_receipts (
     event_id TEXT NOT NULL, problem_id TEXT NOT NULL, run_id TEXT NOT NULL,
     team_id TEXT NOT NULL, operation_hash TEXT NOT NULL, payload TEXT NOT NULL, response TEXT NOT NULL,

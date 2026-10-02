@@ -434,6 +434,7 @@
     "modal_force_archive_confirm": "Force ARCHIVED",
     "modal_teardown_header": "Delete all deployments for this Event?",
     "modal_teardown_body": "All deployments under this Event will be moved to DELETING and a CloudFormation stack delete will be issued on competitor accounts. Cannot be undone.",
+    "modal_teardown_native_body": "Private native match data and saved match history will be permanently deleted. Event details, scores, and score history are kept.",
     "modal_teardown_confirm": "Delete all",
     "modal_schedule_header": "Set start datetime",
     "modal_schedule_confirm": "Schedule",

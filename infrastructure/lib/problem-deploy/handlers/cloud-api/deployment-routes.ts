@@ -10,7 +10,7 @@ import {
   deploymentStackName,
   type FlagDefinition,
 } from "../../control-data/domain/deployment-work.js";
-import type { EventRecord } from "../../control-data/domain/events.js";
+import { type EventRecord, SQL_EVENT_LIMITS } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
 import { ApiError, type OrganizerAuthConfig, participantKey, requireOrganizer } from "./auth.js";
 import {
@@ -44,7 +44,7 @@ interface RouteOptions extends CloudDeploymentApi {
 }
 const selection = z
   .object({
-    teamIds: z.array(identifier).min(1).max(49).optional(),
+    teamIds: z.array(identifier).min(1).max(SQL_EVENT_LIMITS.maxTeams).optional(),
     problemIds: z.array(z.string().min(1).max(128)).min(1).max(50).optional(),
     retryFailedOnly: z.boolean().optional(),
   })
@@ -429,6 +429,10 @@ async function teardown(context: Context, options: RouteOptions) {
               { status: "TEARDOWN", endsAt: new Date(now).toISOString(), scoringLocked: true },
               true,
             )) ?? event,
+          afterDispatch: async (event: EventRecord) => {
+            const problemId = nativeProblem(event);
+            if (problemId) await coordination.store.purge(event.eventId, problemId);
+          },
         }
       : {}),
   });
@@ -441,13 +445,16 @@ export async function requestEventTeardown(options: {
   readonly eventId: string;
   readonly now: number;
   readonly beforeClose?: (event: EventRecord) => Promise<EventRecord>;
+  /** Private payload deletion is requested only by the explicit organizer DELETE route. */
+  readonly afterDispatch?: (event: EventRecord) => Promise<void>;
 }) {
   const now = options.now;
   let event = await options.repository.getEvent(identifier.parse(options.eventId));
   if (!event) throw new ApiError(404, "not_found");
   if (options.beforeClose) event = await options.beforeClose(event);
   const at = new Date(Math.max(now, Date.parse(event.updatedAt) + 1)).toISOString();
-  if ((await options.work.closeEvent(event, at)) === "archived")
+  if ((await options.work.closeEvent(event, at)) === "archived") {
+    await options.afterDispatch?.(event);
     return {
       status: 200 as const,
       body: {
@@ -457,6 +464,7 @@ export async function requestEventTeardown(options: {
         failed: 0,
       },
     };
+  }
   const teams = await options.repository.listTeamsByEvent(event.eventId);
   const jobs: DeploymentJob[] = [];
   await boundedMap(teams, async (team) => {
@@ -472,6 +480,7 @@ export async function requestEventTeardown(options: {
     }
   });
   await options.work.archiveTeardown(event.eventId);
+  if (result.failed === 0) await options.afterDispatch?.(event);
   return { body: result, status: 202 as const };
 }
 /** Existing event-deploy/participant-flag wire paths; no tenant claims or process-local locks. */

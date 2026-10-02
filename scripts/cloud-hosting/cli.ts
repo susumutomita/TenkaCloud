@@ -29,6 +29,7 @@ import {
 import type { CloudCliIo, ProcessResult } from "./process";
 import { setupCloudToolkit, showCloudToolkit } from "./setup";
 import { assertOwnedStack, assertRunnerChange, isMissingStack } from "./stack-check";
+import { verifyTursoBeforeDeployment } from "./turso-preflight";
 import { planDeployedTursoTeardown, type TursoTeardownPlan } from "./turso-teardown";
 
 export interface CloudCliOptions {
@@ -272,6 +273,36 @@ async function ensureOrganizer(context: Context, email: string): Promise<void> {
   ]);
   assertSuccess(created, "Create organizer account");
 }
+async function validateDeploymentData(
+  context: Context,
+  desiredData: CloudControlDataConfiguration,
+  backend: OwnedPlatformStack | undefined,
+): Promise<void> {
+  const location = backend
+    ? deployedInstallationLocation(backend, context.env.REGION ?? "")
+    : undefined;
+  if (location) assertDataTransition(desiredData, location);
+  if (desiredData.kind === "turso") {
+    if (!context.io.probeTurso)
+      throw new Error("Turso preflight is unavailable; deployment stopped.");
+    await verifyTursoBeforeDeployment({
+      configuration: desiredData,
+      region: context.env.REGION ?? "",
+      run: (args) => run(context, "aws", args),
+      probe: context.io.probeTurso,
+      now: context.io.now(),
+      output: context.io.stdout,
+    });
+  }
+  if (location) {
+    const installation = await context.io.openInstallation(location);
+    try {
+      await installation.repository.assertAcceptingInstallation();
+    } finally {
+      installation.close();
+    }
+  }
+}
 async function up(
   context: Context,
   setupApproved: boolean,
@@ -309,17 +340,11 @@ async function up(
       throw new Error(`${error.message}\n${operatorInstructions}`);
     throw error;
   }
-  const backend = deployed.find((stack) => stack.name === context.stacks.backend);
-  if (backend) {
-    const location = deployedInstallationLocation(backend, resolved.env.REGION ?? "");
-    assertDataTransition(desiredData, location);
-    const installation = await resolved.io.openInstallation(location);
-    try {
-      await installation.repository.assertAcceptingInstallation();
-    } finally {
-      installation.close();
-    }
-  }
+  await validateDeploymentData(
+    resolved,
+    desiredData,
+    deployed.find((stack) => stack.name === context.stacks.backend),
+  );
   await setupCloudToolkit(
     { cwd: resolved.root, env: resolved.env },
     context.io,
@@ -679,6 +704,7 @@ export async function runCloudCli(
     }
     assertCommandArguments(command, args);
     const env = loadCloudEnvironment(options.root, options.env);
+    io.configureEnvironment?.(env);
     const context: Context = {
       ...options,
       env,

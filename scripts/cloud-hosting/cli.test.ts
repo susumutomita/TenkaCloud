@@ -55,6 +55,12 @@ function platformInspection(request: ProcessRequest): boolean {
   );
 }
 function mockResponse(request: ProcessRequest): ProcessResult {
+  if (request.args.includes("get-parameter"))
+    return {
+      code: 0,
+      stdout: JSON.stringify({ Type: "SecureString", Value: "synthetic-token" }),
+      stderr: "",
+    };
   if (request.args.includes("get-caller-identity"))
     return { code: 0, stdout: "123456789012\n", stderr: "" };
   if (platformInspection(request)) {
@@ -120,6 +126,7 @@ function fixture(
   const confirmations: string[] = [];
   const storageCalls: string[] = [];
   const locations: InstallationLocation[] = [];
+  const probes: { url: string; token: string }[] = [];
   let toolkitInstalled = !options.toolkitMissing;
   let control: InstallationControl | undefined;
   const installation: CloudInstallation = options.installation ?? {
@@ -192,6 +199,9 @@ function fixture(
       locations.push(location);
       return installation;
     },
+    probeTurso: async (url, token) => {
+      probes.push({ url, token });
+    },
     now: () => Date.parse("2026-10-01T14:00:00.000Z"),
     wait: async () => {
       throw new Error("Unexpected wait in CLI fixture");
@@ -212,6 +222,7 @@ function fixture(
     confirmations,
     storageCalls,
     locations,
+    probes,
     installation,
     env,
     run: (args: readonly string[]) => runCloudCli(args, io, { root: ROOT, env }),
@@ -764,12 +775,12 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(f.messages.join("")).toContain("AdministratorAccess");
     expect(f.messages.join("")).toContain("not a TenkaCloud-scoped permission");
   });
-  it("clears implicit CDK profile settings while preserving the selected AWS profile for all subprocesses", async () => {
+  it("clears implicit CDK settings while preserving matching AWS profile aliases for all subprocesses", async () => {
     const f = fixture({ toolkitMissing: true, confirmed: true });
     const env = {
       ...f.env,
       AWS_PROFILE: "reviewed-profile",
-      AWS_DEFAULT_PROFILE: "fallback-profile",
+      AWS_DEFAULT_PROFILE: "reviewed-profile",
     };
     expect(await runCloudCli(["up", "--show-setup"], f.io, { root: ROOT, env })).toBe(0);
     expect(await runCloudCli(["up"], f.io, { root: ROOT, env })).toBe(0);
@@ -783,7 +794,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       expect(call.args[profileIndex + 1]).toBe("");
     }
     expect(f.calls.every((call) => call.env.AWS_PROFILE === "reviewed-profile")).toBe(true);
-    expect(f.calls.every((call) => call.env.AWS_DEFAULT_PROFILE === "fallback-profile")).toBe(true);
+    expect(f.calls.every((call) => call.env.AWS_DEFAULT_PROFILE === "reviewed-profile")).toBe(true);
     expect(f.messages.join("")).toContain("--profile ''");
     expect(f.messages.join("")).toContain("--bootstrap-kms-key-id AWS_MANAGED_KEY");
     expect(f.messages.join("")).toContain(
@@ -1688,6 +1699,24 @@ function tursoStackResponse(request: ProcessRequest): ProcessResult | undefined 
   return { code: 0, stdout: JSON.stringify(stack), stderr: "" };
 }
 describe("selected cloud data deployment and drain", () => {
+  it("configures SDK environment before resolving or mutating the deployment", async () => {
+    let configured: string | undefined;
+    const f = fixture({
+      fail: () => {
+        expect(configured).toBe("selected-profile");
+        return undefined;
+      },
+    });
+    f.io.configureEnvironment = (env) => {
+      configured = env.AWS_PROFILE;
+    };
+    expect(
+      await runCloudCli(["up"], f.io, {
+        root: ROOT,
+        env: { ...f.env, AWS_PROFILE: "selected-profile" },
+      }),
+    ).toBe(0);
+  });
   it("validates Turso configuration before AWS or storage access", async () => {
     const f = fixture();
     expect(
@@ -1720,6 +1749,47 @@ describe("selected cloud data deployment and drain", () => {
       tursoEnvironment,
     );
     expect(f.messages.join("")).toContain("backed by Turso");
+    expect(f.messages.join("")).toContain("read-only preflight passed");
+    expect(f.probes).toEqual([{ url: "https://owned.turso.io", token: "synthetic-token" }]);
+    const preflight = f.calls.findIndex((request) => request.args.includes("get-parameter"));
+    expect(preflight).toBeGreaterThan(-1);
+    expect(preflight).toBeLessThan(f.calls.findIndex((request) => request.command === "bun"));
+  });
+  it("stops fresh Turso deployment before bootstrap/build when the saved token is rejected", async () => {
+    const f = fixture({
+      toolkitMissing: true,
+      fail: (request) =>
+        platformInspection(request)
+          ? {
+              code: 1,
+              stdout: "",
+              stderr: `(ValidationError) Stack with id ${request.args[request.args.indexOf("--stack-name") + 1]} does not exist`,
+            }
+          : undefined,
+    });
+    f.io.probeTurso = async () => {
+      throw new Error("UNAUTHORIZED synthetic-token");
+    };
+    expect(
+      await runCloudCli(["up"], f.io, {
+        root: ROOT,
+        env: { ...f.env, ...tursoEnvironment, AWS_PROFILE: "selected-profile" },
+      }),
+    ).toBe(1);
+    expect(f.errors.join("")).toContain("authenticated SELECT 1 failed");
+    expect(f.errors.join("")).not.toContain("synthetic-token");
+    expect(f.calls.find((request) => request.args.includes("get-parameter"))?.env.AWS_PROFILE).toBe(
+      "selected-profile",
+    );
+    expect(
+      f.calls.some(
+        (request) =>
+          request.command === "bun" ||
+          request.args.includes("bootstrap") ||
+          request.args.includes("deploy"),
+      ),
+    ).toBe(false);
+    expect(f.locations).toEqual([]);
   });
   it("awaits the existing Turso repository and uses deployed identity", async () => {
     const f = fixture({ fail: tursoStackResponse });

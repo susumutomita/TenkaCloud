@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   DynamoDBDocumentClient,
   GetCommand,
+  QueryCommand,
   ScanCommand,
   TransactGetCommand,
   type TransactGetCommandInput,
@@ -13,9 +15,10 @@ import {
 import { ulid } from "ulid";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HostPlugin } from "../../../scripts/local-host/coordination-core.js";
-import type { Write } from "../../lib/problem-deploy/control-data/deployment-storage.js";
+import { scoreKey, type Write } from "../../lib/problem-deploy/control-data/deployment-storage.js";
 import {
   COORDINATION_CHUNK_BYTES,
+  COORDINATION_MAX_BYTES,
   coordinationHeadKey,
   type NativeCoordinationArtifact,
 } from "../../lib/problem-deploy/control-data/domain/coordination.js";
@@ -115,9 +118,89 @@ function checkAdmissionConditions(rows: Map<string, Row>, items: Write[]): void 
 function checkClaimHead(head: Row, values: Row): void {
   if (
     head.closed ||
+    head.purge ||
     (head.admissionOwner && Number(head.admissionExpiresAt) > Number(values[":now"]))
   )
     throw cancelled();
+}
+function checkHeadPublication(
+  rows: Map<string, Row>,
+  put: NonNullable<Write["Put"] | Write["ConditionCheck"]>,
+): void {
+  const current = rows.get(rowKey(put.TableName, "Item" in put ? put.Item : put.Key));
+  if (put.ConditionExpression === "attribute_not_exists(PK)") {
+    if (current) throw cancelled();
+    return;
+  }
+  const values = put.ExpressionAttributeValues ?? {};
+  if (
+    !current ||
+    current.runId !== values[":run"] ||
+    current.revision !== values[":revision"] ||
+    current.snapshotDigest !== values[":digest"] ||
+    current.closed !== values[":closed"]
+  )
+    throw cancelled();
+  checkPurgeCondition(current, put.ConditionExpression ?? "", values);
+  if (
+    (put.ConditionExpression?.includes("attribute_not_exists(retiredRuns)") &&
+      current.retiredRuns !== undefined) ||
+    (put.ConditionExpression?.includes("retiredRuns = :retiredRuns") &&
+      JSON.stringify(current.retiredRuns) !== JSON.stringify(values[":retiredRuns"]))
+  )
+    throw cancelled();
+}
+function checkPurgeCondition(current: Row, expression: string, values: Row): void {
+  if (
+    ((expression.includes("attribute_not_exists(purge)") ||
+      expression.includes("attribute_not_exists(#purge)")) &&
+      current.purge !== undefined) ||
+    (expression.includes("#purge = :purge") && !isDeepStrictEqual(current.purge, values[":purge"]))
+  )
+    throw cancelled();
+}
+function checkRetirementGuard(
+  rows: Map<string, Row>,
+  guard: NonNullable<Write["ConditionCheck"] | Write["Update"]>,
+): void {
+  const head = rows.get(rowKey(guard.TableName, guard.Key));
+  const retired = guard.ExpressionAttributeValues?.[":retired"];
+  if (
+    !(head?.retiredRuns as unknown[] | undefined)?.includes(retired) ||
+    head?.runId === retired ||
+    (head?.history as unknown[] | undefined)?.includes(retired) ||
+    (guard.ConditionExpression?.includes("attribute_not_exists(purge)") &&
+      head?.purge !== undefined)
+  )
+    throw cancelled();
+}
+function checkLifecycleHeadGuard(rows: Map<string, Row>, guard: Write["ConditionCheck"]): void {
+  if (guard?.Key?.SK !== "HEAD") return;
+  if (
+    guard.ConditionExpression?.startsWith("runId = :run") ||
+    guard.ConditionExpression === "attribute_not_exists(PK)"
+  )
+    checkHeadPublication(rows, guard);
+}
+/** Narrow SDK fake: native HEAD/purge CAS, immutable archive and retirement guards only. */
+function checkLifecycleConditions(rows: Map<string, Row>, items: Write[]): void {
+  for (const item of items) {
+    if (item.Put?.Item?.SK === "HEAD") checkHeadPublication(rows, item.Put);
+    checkLifecycleHeadGuard(rows, item.ConditionCheck);
+    if (
+      String(item.Put?.Item?.SK).match(/^RUN#.+#HEAD$/u) &&
+      rows.has(rowKey(item.Put?.TableName, item.Put?.Item))
+    )
+      throw cancelled();
+    const guard = item.ConditionCheck ?? item.Update;
+    if (guard?.ConditionExpression?.includes("contains(retiredRuns"))
+      checkRetirementGuard(rows, guard);
+  }
+  checkLifecycleExternalGuards(rows, items);
+}
+function checkLifecycleExternalGuards(rows: Map<string, Row>, items: Write[]): void {
+  if (!resetPublication(items) && !purgePublication(items, "pending")) return;
+  for (const item of items) if (item.ConditionCheck) checkAdmissionGuard(rows, item.ConditionCheck);
 }
 function applyOwnedRelease(rows: Map<string, Row>, command: UpdateCommand): void {
   const current = rows.get(rowKey(command.input.TableName, command.input.Key));
@@ -147,7 +230,7 @@ function applyRecordedUpdate(rows: Map<string, Row>, update: UpdateCommand["inpu
       eventId: values[":event"],
       teamId: values[":team"],
       score: Number(previous.score ?? 0) + Number(values[":delta"]),
-      completedProblems: 0,
+      completedProblems: previous.completedProblems ?? 0,
     });
     return;
   }
@@ -173,8 +256,36 @@ function applyRecordedUpdate(rows: Map<string, Row>, update: UpdateCommand["inpu
 function eventMetaRow(row: Row): boolean {
   return typeof row.PK === "string" && row.PK.startsWith("EVENT#") && row.SK === "META";
 }
+interface RecordedQueryPage {
+  Items?: Row[];
+  LastEvaluatedKey?: Row;
+}
+function queryRecordedRows(
+  rows: Map<string, Row>,
+  input: QueryCommand["input"],
+): RecordedQueryPage {
+  const values = input.ExpressionAttributeValues ?? {};
+  const items = [...rows.entries()]
+    .filter(
+      ([key, row]) =>
+        key === rowKey(input.TableName, row) &&
+        row.PK === values[":pk"] &&
+        String(row.SK).startsWith(String(values[":prefix"])),
+    )
+    .map(([, row]) => row)
+    .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
+  if (input.ScanIndexForward === false) items.reverse();
+  const page = items.slice(0, input.Limit);
+  const last = page.at(-1);
+  return {
+    Items: structuredClone(page),
+    ...(items.length > page.length && last
+      ? { LastEvaluatedKey: { PK: last.PK, SK: last.SK } }
+      : {}),
+  };
+}
 /** Records intercepted SDK writes, not a substitute for DynamoDB's transaction/concurrency conformance tests. */
-function fixture(count = 2, padding = 0) {
+function fixture(count = 2, padding = 0, initialScore = 0) {
   const client = new DynamoDBClient({
     region: "us-east-1",
     credentials: { accessKeyId: "DUMMYIDEXAMPLE", secretAccessKey: "DUMMYEXAMPLEKEY" },
@@ -218,7 +329,7 @@ function fixture(count = 2, padding = 0) {
   const plugin: HostPlugin = {
     initialState: (context) => ({
       padding: "x".repeat(padding),
-      scores: Object.fromEntries(context.teamIds.map((teamId) => [teamId, 0])),
+      scores: Object.fromEntries(context.teamIds.map((teamId) => [teamId, initialScore])),
     }),
     validateOp: (_state, _team, op) =>
       (op as { kind: string }).kind === "reject"
@@ -250,22 +361,30 @@ function fixture(count = 2, padding = 0) {
   const measurements: CoordinationWriteMeasurement[] = [];
   const timings: CoordinationTiming[] = [];
   const releases: UpdateCommand[] = [];
-  let afterGet: ((key: Row | undefined) => void) | undefined;
-  let beforeWrite: ((items: Write[]) => void) | undefined;
-  let afterWrite: ((items: Write[]) => void) | undefined;
-  let afterRead: ((rows: { Item?: Row }[], items: ReadItems) => void) | undefined;
+  let afterGet: ((key: Row | undefined) => void | Promise<void>) | undefined;
+  let beforeWrite: ((items: Write[]) => void | Promise<void>) | undefined;
+  let afterWrite: ((items: Write[]) => void | Promise<void>) | undefined;
+  let afterRead: ((rows: { Item?: Row }[], items: ReadItems) => void | Promise<void>) | undefined;
+  let afterQuery:
+    | ((page: RecordedQueryPage, input: QueryCommand["input"]) => void | Promise<void>)
+    | undefined;
   const send = vi.spyOn(document, "send").mockImplementation(async (command) => {
     if (command instanceof GetCommand) {
       const Item = structuredClone(rows.get(rowKey(command.input.TableName, command.input.Key)));
-      afterGet?.(command.input.Key);
+      await afterGet?.(command.input.Key);
       return { Item };
     }
     if (command instanceof TransactGetCommand) {
       const responses = (command.input.TransactItems ?? []).map((item) => ({
         Item: structuredClone(rows.get(rowKey(item.Get?.TableName, item.Get?.Key))),
       }));
-      afterRead?.(responses, command.input.TransactItems ?? []);
+      await afterRead?.(responses, command.input.TransactItems ?? []);
       return { Responses: responses };
+    }
+    if (command instanceof QueryCommand) {
+      const page = queryRecordedRows(rows, command.input);
+      await afterQuery?.(page, command.input);
+      return page;
     }
     if (command instanceof ScanCommand)
       return {
@@ -273,11 +392,12 @@ function fixture(count = 2, padding = 0) {
       };
     if (command instanceof TransactWriteCommand) {
       const items = command.input.TransactItems ?? [];
-      beforeWrite?.(items);
+      await beforeWrite?.(items);
       checkAdmissionConditions(rows, items);
+      checkLifecycleConditions(rows, items);
       writes.push(structuredClone(items));
       applyRecordedTransaction(rows, items);
-      afterWrite?.(items);
+      await afterWrite?.(items);
       return {};
     }
     if (command instanceof UpdateCommand) {
@@ -294,8 +414,9 @@ function fixture(count = 2, padding = 0) {
     (value) => timings.push(value),
   );
   const initialize = () => store.initialize({ event, teams, artifact, now: NOW });
-  const operation = (key = "operation-1", kind = "score") => ({
+  const operation = (key = "operation-1", kind = "score", runId?: string) => ({
     key,
+    ...(runId === undefined ? {} : { runId }),
     hash: contentDigest(JSON.stringify({ kind })),
     op: { kind },
   });
@@ -320,6 +441,11 @@ function fixture(count = 2, padding = 0) {
     initialize,
     operation,
     request,
+    reset: (expectedRunId: string) =>
+      store.reset({ event, artifact, expectedRunId, now: () => NOW }),
+    setInitialScore: (value: number) => {
+      initialScore = value;
+    },
     setAfterGet: (value: typeof afterGet) => {
       afterGet = value;
     },
@@ -331,6 +457,9 @@ function fixture(count = 2, padding = 0) {
     },
     setAfterRead: (value: typeof afterRead) => {
       afterRead = value;
+    },
+    setAfterQuery: (value: typeof afterQuery) => {
+      afterQuery = value;
     },
   };
 }
@@ -358,12 +487,15 @@ const scope: InstallationScope = {
   backendStackId:
     "arn:aws:cloudformation:us-east-1:123456789012:stack/tenkacloud-cloud-problem-deploy-test/synthetic-data",
 };
-function drainingInstallation(f: ReturnType<typeof fixture>): void {
+function drainingInstallation(
+  f: ReturnType<typeof fixture>,
+  status: "DRAINING" | "DRAINED" = "DRAINING",
+): void {
   f.rows.set(rowKey(f.tables.events, installationControlKey), {
     ...installationControlKey,
     scope,
     scopeDigest: installationScopeDigest(scope),
-    status: "DRAINING",
+    status,
     startedAt: AT,
     updatedAt: AT,
   });
@@ -397,6 +529,1274 @@ function corruptStateChunk(f: ReturnType<typeof fixture>): void {
   const [key, row] = entry;
   f.rows.set(key, { ...row, data: Buffer.alloc((row.data as Uint8Array).byteLength) });
 }
+
+function resetPublication(items: Write[]) {
+  return items.find((item) => /^RUN#.+#HEAD$/u.test(String(item.Put?.Item?.SK)))?.Put;
+}
+function nativeRows(f: ReturnType<typeof fixture>): Row[] {
+  const { PK } = coordinationHeadKey(f.event.eventId, f.artifact.problemId);
+  return [...f.rows.values()].filter((row) => row.PK === PK);
+}
+function scoreRow(f: ReturnType<typeof fixture>): Row | undefined {
+  return f.rows.get(rowKey(f.tables.teams, scoreKey(f.event.eventId, f.team.teamId)));
+}
+async function leaveRetirementPending(f: ReturnType<typeof fixture>): Promise<string> {
+  const first = await f.initialize();
+  await f.request();
+  const second = await f.reset(first.runId);
+  const third = await f.reset(second.runId);
+  const failure = new Error("Synthetic interruption before retired-run cleanup");
+  f.setAfterWrite((items) => {
+    if (resetPublication(items)) throw failure;
+  });
+  await expect(f.reset(third.runId)).rejects.toBe(failure);
+  f.setAfterWrite(undefined);
+  expect(currentHead(f).retiredRuns).toEqual([first.runId]);
+  return first.runId;
+}
+
+function nativePayloadRows(f: ReturnType<typeof fixture>): Row[] {
+  return nativeRows(f).filter((row) => /^(?:SNAPSHOT|RUN|RECEIPT)#/u.test(String(row.SK)));
+}
+function recordedRowsFingerprint(f: ReturnType<typeof fixture>) {
+  return [...f.rows].map(([key, row]) => [
+    key,
+    {
+      ...row,
+      ...(row.data instanceof Uint8Array
+        ? { data: createHash("sha256").update(row.data).digest("hex") }
+        : {}),
+    },
+  ]);
+}
+function purgePublication(items: Write[], state: "pending" | "complete") {
+  return items.find((item) => item.Put?.Item?.SK === "HEAD" && item.Put.Item.purge?.state === state)
+    ?.Put;
+}
+function purgePageGuard(items: Write[]) {
+  return items.find((item) => item.ConditionCheck?.ExpressionAttributeValues?.[":purge"])
+    ?.ConditionCheck;
+}
+function purgeReference(head: Row): Row {
+  return Object.fromEntries(
+    ["runId", "revision", "snapshotDigest", "byteLength", "chunkCount", "snapshotLayout"]
+      .filter((field) => head[field] !== undefined)
+      .map((field) => [field, head[field]]),
+  );
+}
+function isPurgePhase(items: Write[], phase: "intent" | "page" | "completion"): boolean {
+  if (phase === "page") return purgePageGuard(items) !== undefined;
+  return purgePublication(items, phase === "intent" ? "pending" : "complete") !== undefined;
+}
+async function leavePurgePending(f: ReturnType<typeof fixture>): Promise<void> {
+  const failure = new Error("Synthetic interruption before purge page");
+  f.setBeforeWrite((items) => {
+    if (purgePageGuard(items)) throw failure;
+  });
+  await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toBe(failure);
+  f.setBeforeWrite(undefined);
+  expect(currentHead(f).purge).toMatchObject({ state: "pending" });
+}
+
+describe("native DynamoDB explicit event purge SDK-only contracts", () => {
+  it.each(["current", "history and pending retirement"] as const)(
+    "verifies and purges %s while preserving permanent scores, unrelated scopes and shared artifacts",
+    async (retention) => {
+      const f = fixture(2, 400000, 30);
+      if (retention === "current") await f.initialize();
+      else await leaveRetirementPending(f);
+      await closeAndArchive(f);
+      const head = structuredClone(currentHead(f));
+      const ids = [
+        String(head.runId),
+        ...((head.history as string[] | undefined) ?? []),
+        ...((head.retiredRuns as string[] | undefined) ?? []),
+      ];
+      const { PK } = coordinationHeadKey(f.event.eventId, f.artifact.problemId);
+      const references = ids.map((runId, index) => {
+        const run =
+          index === 0
+            ? head
+            : f.rows.get(rowKey(f.tables.deployments, { PK, SK: `RUN#${runId}#HEAD` }));
+        if (!run) throw new Error("Missing fixture archive");
+        return purgeReference(run);
+      });
+      for (let index = 0; index < 165; index++) {
+        const runId = ids[index % ids.length];
+        const digest = contentDigest(`purge-receipt-${index}`);
+        const row = {
+          PK,
+          SK: `RECEIPT#${runId}#${f.team.teamId}#${digest}`,
+          runId,
+          response: { private: "saved projection" },
+        };
+        f.rows.set(rowKey(f.tables.deployments, row), row);
+      }
+      const unrelated = [
+        { PK: `COORD#${ulid()}#${f.artifact.problemId}`, SK: "SNAPSHOT#0", data: "other event" },
+        { PK: `COORD#${f.event.eventId}#other-problem`, SK: "SNAPSHOT#0", data: "other problem" },
+        { PK: `ARTIFACT#${f.artifact.artifactDigest}`, SK: "PLUGIN", data: "shared plugin" },
+        { PK: `ARTIFACT#${f.artifact.artifactDigest}`, SK: "CATALOG", data: "shared catalog" },
+      ];
+      for (const row of unrelated) f.rows.set(rowKey(f.tables.deployments, row), row);
+      const preserved = new Map(
+        [...f.rows].filter(
+          ([, row]) =>
+            row.PK !== PK ||
+            (row.SK !== "HEAD" && !/^(?:SNAPSHOT|RUN|RECEIPT)#/u.test(String(row.SK))),
+        ),
+      );
+      const scoreEvents = await f.store.listScoreEvents(
+        f.event.eventId,
+        f.artifact.problemId,
+        f.team.teamId,
+      );
+      const s3 = vi
+        .spyOn(S3Client.prototype, "send")
+        .mockRejectedValue(new Error("Purge must not fetch shared artifacts"));
+      const readsBefore = f.send.mock.calls.length;
+      const writesBefore = f.writes.length;
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+      expect(nativePayloadRows(f)).toEqual([]);
+      expect(currentHead(f)).toEqual({ ...head, purge: { state: "complete", runs: references } });
+      expect(currentHead(f)).not.toHaveProperty("expiresAt");
+      expect(currentHead(f)).not.toHaveProperty("match");
+      for (const [key, value] of preserved) expect(f.rows.get(key)).toEqual(value);
+      expect(
+        await f.store.listScoreEvents(f.event.eventId, f.artifact.problemId, f.team.teamId),
+      ).toEqual(scoreEvents);
+      expect(s3).not.toHaveBeenCalled();
+      const purgeWrites = f.writes.slice(writesBefore);
+      const intent = purgePublication(purgeWrites[0] ?? [], "pending");
+      expect(intent?.Item?.purge).toEqual({ state: "pending", runs: references });
+      expect(intent?.ConditionExpression).toContain(
+        "snapshotDigest = :digest AND closed = :closed",
+      );
+      expect(intent?.ConditionExpression).toContain("attribute_not_exists(#purge)");
+      expect(intent?.ExpressionAttributeValues).toMatchObject({
+        ":run": head.runId,
+        ":revision": head.revision,
+        ":digest": head.snapshotDigest,
+        ":closed": true,
+      });
+      const reads = f.send.mock.calls
+        .slice(readsBefore)
+        .flatMap(([command]) =>
+          command instanceof TransactGetCommand ? [command.input.TransactItems ?? []] : [],
+        );
+      for (const [index, runId] of ids.entries()) {
+        const manifestKey = index === 0 ? "HEAD" : `RUN#${runId}#HEAD`;
+        const read = reads.find((items) => items.at(-1)?.Get?.Key?.SK === manifestKey);
+        expect(read).toHaveLength(Number(references[index]?.chunkCount) + 1);
+      }
+      const pages = purgeWrites.filter((items) => items.some((item) => item.Delete));
+      expect(pages.length).toBeGreaterThanOrEqual(4);
+      for (const items of pages) {
+        expect(items.length).toBeLessThanOrEqual(81);
+        const guard = purgePageGuard(items);
+        expect(guard).toMatchObject({
+          TableName: f.tables.deployments,
+          Key: { PK, SK: "HEAD" },
+          ConditionExpression: expect.stringContaining("#purge = :purge"),
+          ExpressionAttributeNames: { "#purge": "purge" },
+          ExpressionAttributeValues: {
+            ":run": head.runId,
+            ":revision": head.revision,
+            ":digest": head.snapshotDigest,
+            ":closed": true,
+            ":purge": { state: "pending", runs: references },
+          },
+        });
+        expect(
+          items
+            .filter((item) => item.Delete)
+            .every(
+              (item) =>
+                item.Delete?.TableName === f.tables.deployments &&
+                item.Delete.Key?.PK === PK &&
+                /^(?:SNAPSHOT|RUN|RECEIPT)#/u.test(String(item.Delete.Key.SK)),
+            ),
+        ).toBe(true);
+      }
+      const queries = f.send.mock.calls
+        .slice(readsBefore)
+        .flatMap(([command]) =>
+          command instanceof QueryCommand &&
+          command.input.ExpressionAttributeValues?.[":prefix"] !== "SCORE#"
+            ? [command.input]
+            : [],
+        );
+      expect(
+        queries.slice(-3).map((query) => query.ExpressionAttributeValues?.[":prefix"]),
+      ).toEqual(["SNAPSHOT#", "RUN#", "RECEIPT#"]);
+      for (const query of queries) {
+        expect(query).toMatchObject({
+          TableName: f.tables.deployments,
+          ConsistentRead: true,
+          Limit: 80,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+          ExpressionAttributeValues: { ":pk": PK },
+        });
+        expect(query).not.toHaveProperty("ExclusiveStartKey");
+        expect(query).not.toHaveProperty("FilterExpression");
+        expect(query).not.toHaveProperty("ProjectionExpression");
+      }
+      const completed = purgePublication(purgeWrites.at(-1) ?? [], "complete");
+      expect(completed?.ConditionExpression).toContain("#purge = :purge");
+      expect(completed?.ExpressionAttributeValues?.[":purge"]).toEqual({
+        state: "pending",
+        runs: references,
+      });
+      const beforeRetry = structuredClone(f.rows);
+      const committed = f.writes.length;
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+      expect(f.rows).toEqual(beforeRetry);
+      expect(f.writes).toHaveLength(committed);
+    },
+  );
+  it("fences an empty scope and refuses an open run before writing purge intent", async () => {
+    const f = fixture();
+    await f.store.purge(f.event.eventId, f.artifact.problemId);
+    expect(f.writes).toEqual([
+      [
+        {
+          ConditionCheck: {
+            TableName: f.tables.deployments,
+            Key: coordinationHeadKey(f.event.eventId, f.artifact.problemId),
+            ConditionExpression: "attribute_not_exists(PK)",
+          },
+        },
+      ],
+    ]);
+    const queries = f.send.mock.calls.flatMap(([command]) =>
+      command instanceof QueryCommand ? [command.input] : [],
+    );
+    expect(queries.map((query) => query.ExpressionAttributeValues?.[":prefix"])).toEqual([
+      "SNAPSHOT#",
+      "RUN#",
+      "RECEIPT#",
+    ]);
+    for (const query of queries)
+      expect(query).toMatchObject({
+        ConsistentRead: true,
+        Limit: 1,
+        ExpressionAttributeValues: {
+          ":pk": coordinationHeadKey(f.event.eventId, f.artifact.problemId).PK,
+        },
+      });
+    await f.initialize();
+    const before = structuredClone(f.rows);
+    await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 409,
+      code: "coordination_not_settled",
+    });
+    expect(f.rows).toEqual(before);
+    expect(currentHead(f)).not.toHaveProperty("purge");
+  });
+  it.each(["SNAPSHOT#", "RUN#", "RECEIPT#"])(
+    "rejects orphan %s data when the verified HEAD is missing",
+    async (prefix) => {
+      const f = fixture();
+      const { PK } = coordinationHeadKey(f.event.eventId, f.artifact.problemId);
+      const orphan = { PK, SK: `${prefix}orphan`, data: "private orphan payload" };
+      f.rows.set(rowKey(f.tables.deployments, orphan), orphan);
+      const before = structuredClone(f.rows);
+      await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+        status: 503,
+        code: "coordination_purge_invalid",
+      });
+      expect(f.rows).toEqual(before);
+      expect(f.writes).toEqual([]);
+    },
+  );
+  it("rejects an empty continuation page when checking an absent HEAD", async () => {
+    const f = fixture();
+    f.setAfterQuery((page) => {
+      page.Items = undefined;
+      page.LastEvaluatedKey = {
+        PK: coordinationHeadKey(f.event.eventId, f.artifact.problemId).PK,
+        SK: "SNAPSHOT#cursor",
+      };
+    });
+    await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 503,
+      code: "coordination_purge_invalid",
+    });
+    expect(f.writes).toEqual([]);
+  });
+  it("rechecks an absent HEAD when initialization races the empty-partition fence", async () => {
+    const f = fixture();
+    f.setBeforeWrite(async (items) => {
+      if (!items.some((item) => item.ConditionCheck?.Key?.SK === "HEAD")) return;
+      f.setBeforeWrite(undefined);
+      await f.initialize();
+    });
+    await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 409,
+      code: "coordination_not_settled",
+    });
+    expect(currentHead(f)).toMatchObject({ closed: false });
+    expect(currentHead(f)).not.toHaveProperty("purge");
+    expect(nativePayloadRows(f)).not.toHaveLength(0);
+  });
+  it.each(["other partition", "score key", "unverified snapshot"] as const)(
+    "rejects a query row from %s before deleting any payload",
+    async (damage) => {
+      const f = fixture();
+      await f.initialize();
+      await closeAndArchive(f);
+      await leavePurgePending(f);
+      const before = recordedRowsFingerprint(f);
+      const writesBefore = f.writes.length;
+      f.setAfterQuery((page) => {
+        const row = page.Items?.[0];
+        if (!row) return;
+        if (damage === "other partition") row.PK = `COORD#${ulid()}#${f.artifact.problemId}`;
+        else if (damage === "score key") row.SK = "SCORE#unrelated";
+        else row.runId = ulid();
+      });
+      await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+        status: 503,
+        code:
+          damage === "unverified snapshot"
+            ? "coordination_purge_invalid"
+            : "coordination_scope_invalid",
+      });
+      expect(recordedRowsFingerprint(f)).toEqual(before);
+      expect(f.writes).toHaveLength(writesBefore);
+      expect(currentHead(f).purge).toMatchObject({ state: "pending" });
+    },
+  );
+  it.each([
+    ["current", "missing chunk"],
+    ["current", "corrupt chunk"],
+    ["history", "missing chunk"],
+    ["history", "corrupt chunk"],
+    ["history", "missing manifest"],
+    ["retired", "missing chunk"],
+    ["retired", "corrupt chunk"],
+    ["retired", "missing manifest"],
+  ] as const)("fails closed before intent for a %s run with a %s", async (target, damage) => {
+    const f = fixture(2, 400000);
+    await leaveRetirementPending(f);
+    await closeAndArchive(f);
+    const head = currentHead(f);
+    const retainedField = target === "history" ? "history" : "retiredRuns";
+    const runId =
+      target === "current" ? String(head.runId) : String((head[retainedField] as string[])[0]);
+    const row = nativeRows(f)
+      .filter(
+        (item) =>
+          item.runId === runId &&
+          (damage === "missing manifest"
+            ? String(item.SK).endsWith("#HEAD")
+            : item.data instanceof Uint8Array && String(item.SK).includes("SNAPSHOT#")),
+      )
+      .at(-1);
+    if (!row) throw new Error("Missing corruption fixture row");
+    if (damage === "corrupt chunk")
+      f.rows.set(rowKey(f.tables.deployments, row), {
+        ...row,
+        data: new Uint8Array((row.data as Uint8Array).byteLength),
+      });
+    else f.rows.delete(rowKey(f.tables.deployments, row));
+    const before = recordedRowsFingerprint(f);
+    const writesBefore = f.writes.length;
+    await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 503,
+      code:
+        damage === "missing manifest"
+          ? "coordination_history_invalid"
+          : "coordination_snapshot_invalid",
+    });
+    expect(recordedRowsFingerprint(f)).toEqual(before);
+    expect(f.writes).toHaveLength(writesBefore);
+    expect(currentHead(f)).not.toHaveProperty("purge");
+  });
+  it("exposes only safe identity after intent and allows close only after every payload page is gone", async () => {
+    const f = fixture();
+    const first = await f.initialize();
+    await f.reset(first.runId);
+    await closeAndArchive(f);
+    const head = structuredClone(currentHead(f));
+    const payloads = nativePayloadRows(f);
+    const staleFence = await f.store.closeFence(f.event.eventId, f.artifact.problemId);
+    await leavePurgePending(f);
+    expect(nativePayloadRows(f)).toEqual(payloads);
+    const safe = {
+      eventId: f.event.eventId,
+      problemId: f.artifact.problemId,
+      runId: head.runId,
+      revision: head.revision,
+      closed: true,
+    };
+    expect(await f.store.summary(f.event.eventId, f.artifact.problemId)).toEqual({
+      ...safe,
+      purgeState: "pending",
+    });
+    await expect(f.store.read(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 409,
+      code: "coordination_run_closed",
+    });
+    await expect(
+      f.store.readRun(f.event.eventId, f.artifact.problemId, first.runId),
+    ).rejects.toMatchObject({ status: 409, code: "coordination_run_closed" });
+    await expect(f.store.closeFence(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 503,
+      code: "coordination_purge_pending",
+    });
+    await expect(
+      f.document.send(new TransactWriteCommand({ TransactItems: [staleFence] })),
+    ).rejects.toMatchObject({ name: "TransactionCanceledException" });
+    await f.store.purge(f.event.eventId, f.artifact.problemId);
+    expect(await f.store.summary(f.event.eventId, f.artifact.problemId)).toEqual({
+      ...safe,
+      purgeState: "complete",
+    });
+    const readsBefore = f.send.mock.calls.length;
+    const fence = await f.store.closeFence(f.event.eventId, f.artifact.problemId);
+    expect(fence.ConditionCheck?.ExpressionAttributeValues?.[":purge"]).toEqual(
+      currentHead(f).purge,
+    );
+    expect(
+      f.send.mock.calls
+        .slice(readsBefore)
+        .some(([command]) => command instanceof TransactGetCommand),
+    ).toBe(false);
+    await expect(
+      f.document.send(new TransactWriteCommand({ TransactItems: [fence] })),
+    ).resolves.toEqual({});
+    await expect(f.store.read(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 409,
+      code: "coordination_run_closed",
+    });
+    await expect(
+      f.store.readRun(f.event.eventId, f.artifact.problemId, first.runId),
+    ).rejects.toMatchObject({ status: 409, code: "coordination_run_closed" });
+  });
+  it.each(["intent", "page", "completion"] as const)(
+    "recovers a lost %s transaction reply using the permanent marker",
+    async (phase) => {
+      const f = fixture();
+      await f.initialize();
+      await f.request();
+      await closeAndArchive(f);
+      const failure = new Error(`Synthetic lost ${phase} reply`);
+      f.setAfterWrite((items) => {
+        if (isPurgePhase(items, phase)) throw failure;
+      });
+      await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toBe(failure);
+      expect(currentHead(f).purge).toMatchObject({
+        state: phase === "completion" ? "complete" : "pending",
+      });
+      const marker = structuredClone(currentHead(f).purge) as Row;
+      f.setAfterWrite(undefined);
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+      expect(currentHead(f).purge).toEqual({ ...marker, state: "complete" });
+      expect(nativePayloadRows(f)).toEqual([]);
+    },
+  );
+  it.each(["SNAPSHOT#", "RUN#", "RECEIPT#"])(
+    "keeps pending intent when an empty %s page has a continuation cursor",
+    async (prefix) => {
+      const f = fixture();
+      await f.initialize();
+      await closeAndArchive(f);
+      await leavePurgePending(f);
+      const { PK } = coordinationHeadKey(f.event.eventId, f.artifact.problemId);
+      f.setAfterQuery((page, input) => {
+        if (input.ExpressionAttributeValues?.[":prefix"] === prefix) {
+          page.Items = [];
+          page.LastEvaluatedKey = { PK, SK: `${prefix}cursor` };
+        }
+      });
+      await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+        status: 503,
+        code: "coordination_purge_page_invalid",
+      });
+      expect(currentHead(f).purge).toMatchObject({ state: "pending" });
+      expect(f.writes.some((items) => purgePublication(items, "complete"))).toBe(false);
+      f.setAfterQuery(undefined);
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+      expect(currentHead(f).purge).toMatchObject({ state: "complete" });
+    },
+  );
+  it("bounds repeated conflicts at twelve attempts and leaves resumable pending intent", async () => {
+    const f = fixture();
+    await f.initialize();
+    await closeAndArchive(f);
+    await leavePurgePending(f);
+    let conflicts = 0;
+    f.setBeforeWrite((items) => {
+      if (purgePageGuard(items)) {
+        conflicts++;
+        throw cancelled();
+      }
+    });
+    await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 409,
+      code: "coordination_purge_conflict",
+    });
+    expect(conflicts).toBe(12);
+    expect(currentHead(f).purge).toMatchObject({ state: "pending" });
+    f.setBeforeWrite(undefined);
+    await f.store.purge(f.event.eventId, f.artifact.problemId);
+    expect(nativePayloadRows(f)).toEqual([]);
+  });
+  it("stops at the fifteen-second deadline without claiming an unfinished purge completed", async () => {
+    const f = fixture();
+    await f.initialize();
+    await closeAndArchive(f);
+    await leavePurgePending(f);
+    let elapsed = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => elapsed);
+    f.setAfterWrite((items) => {
+      if (purgePageGuard(items)) elapsed = 15000;
+    });
+    await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 503,
+      code: "coordination_purge_pending",
+    });
+    expect(currentHead(f).purge).toMatchObject({ state: "pending" });
+    clock.mockRestore();
+    f.setAfterWrite(undefined);
+    await f.store.purge(f.event.eventId, f.artifact.problemId);
+    expect(currentHead(f).purge).toMatchObject({ state: "complete" });
+  });
+  it.each(["intent", "page", "completion"] as const)(
+    "accepts a concurrent purge winner at %s without rewriting its permanent manifest",
+    async (phase) => {
+      const f = fixture();
+      await f.initialize();
+      await f.request();
+      await closeAndArchive(f);
+      let winner: Row | undefined;
+      f.setBeforeWrite(async (items) => {
+        if (!isPurgePhase(items, phase)) return;
+        f.setBeforeWrite(undefined);
+        await f.store.purge(f.event.eventId, f.artifact.problemId);
+        winner = structuredClone(currentHead(f));
+      });
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+      expect(winner).toBeDefined();
+      expect(currentHead(f)).toEqual(winner);
+      expect(nativePayloadRows(f)).toEqual([]);
+      expect(f.writes.filter((items) => purgePublication(items, "complete"))).toHaveLength(1);
+    },
+  );
+  it.each(["pending", "complete"] as const)(
+    "accepts a concurrent %s purge while verifying a retained snapshot",
+    async (state) => {
+      const f = fixture();
+      const first = await f.initialize();
+      await f.reset(first.runId);
+      await closeAndArchive(f);
+      let winner: Row | undefined;
+      f.setAfterGet(async (key) => {
+        if (key?.SK !== `RUN#${first.runId}#HEAD`) return;
+        f.setAfterGet(undefined);
+        if (state === "pending") {
+          const failure = new Error("Synthetic lost first-page reply during concurrent purge");
+          f.setAfterWrite((items) => {
+            if (purgePageGuard(items)) throw failure;
+          });
+          await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toBe(failure);
+          f.setAfterWrite(undefined);
+        } else await f.store.purge(f.event.eventId, f.artifact.problemId);
+        winner = structuredClone(currentHead(f));
+      });
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+      expect(winner).toBeDefined();
+      expect(currentHead(f)).toEqual({
+        ...winner,
+        purge: { ...(winner?.purge as Row), state: "complete" },
+      });
+      expect(nativePayloadRows(f)).toEqual([]);
+    },
+  );
+  it("restarts verification when legitimate retirement removes its pending archive", async () => {
+    const f = fixture();
+    const retired = await leaveRetirementPending(f);
+    await closeAndArchive(f);
+    f.setAfterGet(async (key) => {
+      if (key?.SK !== `RUN#${retired}#HEAD`) return;
+      f.setAfterGet(undefined);
+      await f.store.pruneHistory(f.event.eventId, f.artifact.problemId);
+    });
+    await f.store.purge(f.event.eventId, f.artifact.problemId);
+    const head = currentHead(f);
+    expect(head).not.toHaveProperty("retiredRuns");
+    expect(head.purge).toEqual({
+      state: "complete",
+      runs: [
+        expect.objectContaining({ runId: head.runId }),
+        ...(head.history as string[]).map((runId) => expect.objectContaining({ runId })),
+      ],
+    });
+    expect(nativePayloadRows(f)).toEqual([]);
+  });
+  it("resumes a concurrent intent after global drain starts between HEAD and intake reads", async () => {
+    const f = fixture();
+    await f.initialize();
+    await closeAndArchive(f);
+    let marker: Row | undefined;
+    f.setAfterGet(async (key) => {
+      if (key?.SK !== "HEAD") return;
+      f.setAfterGet(undefined);
+      await leavePurgePending(f);
+      marker = structuredClone(currentHead(f).purge) as Row;
+      drainingInstallation(f);
+    });
+    await f.store.purge(f.event.eventId, f.artifact.problemId);
+    expect(marker).toBeDefined();
+    expect(currentHead(f).purge).toEqual({ ...marker, state: "complete" });
+    expect(nativePayloadRows(f)).toEqual([]);
+  });
+  it("fences a closed snapshot publisher that races purge without any other HEAD identity change", async () => {
+    const f = fixture();
+    await f.initialize();
+    const event = await f.store.changeSchedule({
+      event: f.event,
+      artifact: f.artifact,
+      patch: { scoringLocked: true },
+      close: true,
+      now: () => NOW + 1000,
+    });
+    const head = structuredClone(currentHead(f));
+    f.setBeforeWrite(async (items) => {
+      const publication = items.find((item) => item.Put?.Item?.SK === "HEAD")?.Put;
+      if (!publication) return;
+      f.setBeforeWrite(undefined);
+      expect(publication.ConditionExpression).toContain("attribute_not_exists(purge)");
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+    });
+    await expect(
+      f.store.changeSchedule({
+        event,
+        artifact: f.artifact,
+        patch: { scoringLocked: true },
+        close: true,
+        now: () => NOW + 2000,
+      }),
+    ).rejects.toMatchObject({ status: 409, code: "coordination_run_closed" });
+    expect(currentHead(f)).toMatchObject({
+      runId: head.runId,
+      revision: head.revision,
+      snapshotDigest: head.snapshotDigest,
+      purge: { state: "complete" },
+    });
+    expect(nativePayloadRows(f)).toEqual([]);
+  });
+  it("fences initialization replay after it reads a closed snapshot and purge wins its guard", async () => {
+    const f = fixture();
+    await f.initialize();
+    const event = await f.store.changeSchedule({
+      event: f.event,
+      artifact: f.artifact,
+      patch: { scoringLocked: true },
+      close: true,
+      now: () => NOW + 1000,
+    });
+    f.setBeforeWrite(async (items) => {
+      if (!items.some((item) => item.ConditionCheck?.Key?.SK === "HEAD")) return;
+      f.setBeforeWrite(undefined);
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+    });
+    await expect(
+      f.store.initialize({ event, teams: f.teams, artifact: f.artifact, now: NOW + 2000 }),
+    ).rejects.toMatchObject({ status: 409, code: "coordination_run_closed" });
+    expect(currentHead(f).purge).toMatchObject({ state: "complete" });
+    expect(nativePayloadRows(f)).toEqual([]);
+  });
+  it.each(["operation", "reset"] as const)(
+    "does not resurrect a run when a stale %s races close and purge",
+    async (operation) => {
+      const f = fixture();
+      const first = await f.initialize();
+      f.setBeforeWrite(async (items) => {
+        const publication =
+          operation === "operation" ? admissionPublication(items) : resetPublication(items);
+        if (!publication) return;
+        f.setBeforeWrite(undefined);
+        await closeAndArchive(f);
+        await f.store.purge(f.event.eventId, f.artifact.problemId);
+      });
+      await expect(
+        operation === "operation" ? f.request() : f.reset(first.runId),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(currentHead(f).purge).toMatchObject({ state: "complete" });
+      expect(nativePayloadRows(f)).toEqual([]);
+    },
+  );
+  it("fences retirement deletion that races purge so its permanent inventory cannot be removed", async () => {
+    const f = fixture();
+    await leaveRetirementPending(f);
+    await closeAndArchive(f);
+    const retired = structuredClone(currentHead(f).retiredRuns);
+    f.setBeforeWrite(async (items) => {
+      if (!items.some((item) => item.Update?.UpdateExpression === "REMOVE retiredRuns")) return;
+      f.setBeforeWrite(undefined);
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+    });
+    await expect(f.store.pruneHistory(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject(
+      { status: 409, code: "coordination_run_closed" },
+    );
+    expect(currentHead(f)).toMatchObject({ retiredRuns: retired, purge: { state: "complete" } });
+    expect(nativePayloadRows(f)).toEqual([]);
+  });
+  it.each(["DRAINING", "DRAINED"] as const)(
+    "refuses new purge intent after installation intake is %s",
+    async (status) => {
+      const f = fixture();
+      await f.initialize();
+      await closeAndArchive(f);
+      drainingInstallation(f, status);
+      const before = recordedRowsFingerprint(f);
+      const writesBefore = f.writes.length;
+      await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+        status: 409,
+        code: "coordination_purge_intake_closed",
+      });
+      expect(recordedRowsFingerprint(f)).toEqual(before);
+      expect(f.writes).toHaveLength(writesBefore);
+      expect(currentHead(f)).not.toHaveProperty("purge");
+    },
+  );
+  it("atomically rejects new purge intent when global drain wins after snapshot verification", async () => {
+    const f = fixture();
+    await f.initialize();
+    await closeAndArchive(f);
+    const head = structuredClone(currentHead(f));
+    const payloads = nativePayloadRows(f);
+    const writesBefore = f.writes.length;
+    f.setBeforeWrite((items) => {
+      if (!purgePublication(items, "pending")) return;
+      expect(items).toContainEqual({
+        ConditionCheck: {
+          TableName: f.tables.events,
+          Key: installationControlKey,
+          ConditionExpression: "attribute_not_exists(PK)",
+        },
+      });
+      f.setBeforeWrite(undefined);
+      drainingInstallation(f);
+    });
+    await expect(f.store.purge(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject({
+      status: 409,
+      code: "coordination_purge_intake_closed",
+    });
+    expect(currentHead(f)).toEqual(head);
+    expect(nativePayloadRows(f)).toEqual(payloads);
+    expect(f.writes).toHaveLength(writesBefore);
+  });
+  it.each(["DRAINING", "DRAINED"] as const)(
+    "resumes an already-recorded purge after installation intake is %s",
+    async (status) => {
+      const f = fixture();
+      await f.initialize();
+      await f.request();
+      await closeAndArchive(f);
+      await leavePurgePending(f);
+      const marker = structuredClone(currentHead(f).purge) as Row;
+      drainingInstallation(f, status);
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+      expect(currentHead(f).purge).toEqual({ ...marker, state: "complete" });
+      expect(nativePayloadRows(f)).toEqual([]);
+      const before = recordedRowsFingerprint(f);
+      const writesBefore = f.writes.length;
+      await f.store.purge(f.event.eventId, f.artifact.problemId);
+      expect(recordedRowsFingerprint(f)).toEqual(before);
+      expect(f.writes).toHaveLength(writesBefore);
+    },
+  );
+  it("retains private snapshots when ordinary event teardown has no explicit purge callback", async () => {
+    const f = fixture();
+    await f.initialize();
+    const payloads = nativePayloadRows(f);
+    const result = await requestEventTeardown({
+      repository: new DynamoCloudRepository(f.document, f.tables),
+      work: new DynamoDeploymentWork(f.document, f.tables),
+      eventId: f.event.eventId,
+      now: NOW + 2000,
+      beforeClose: (event) =>
+        f.store.changeSchedule({
+          event,
+          artifact: f.artifact,
+          patch: { scoringLocked: true },
+          close: true,
+          now: () => NOW + 1000,
+        }),
+    });
+    expect(result.status).toBe(202);
+    expect(nativePayloadRows(f)).toHaveLength(payloads.length);
+    expect(currentHead(f)).not.toHaveProperty("purge");
+    expect((await f.store.read(f.event.eventId, f.artifact.problemId))?.closed).toBe(true);
+  });
+});
+
+describe("native DynamoDB reset/history SDK-only contracts", () => {
+  it("atomically publishes initial nonzero scores and resets only the native subtotal", async () => {
+    const f = fixture(2, 0, 30);
+    f.rows.set(rowKey(f.tables.teams, scoreKey(f.event.eventId, f.team.teamId)), {
+      ...scoreKey(f.event.eventId, f.team.teamId),
+      eventId: f.event.eventId,
+      teamId: f.team.teamId,
+      score: 200,
+      completedProblems: 4,
+    });
+    const tick = vi.spyOn(f.artifact.plugin, "tick");
+    const teamScores = vi.spyOn(f.artifact.plugin, "teamScores");
+    const first = await f.initialize();
+    expect(scoreRow(f)).toMatchObject({ score: 230, completedProblems: 4 });
+    expect(first.match.scores[f.team.teamId]).toBe(30);
+    expect(teamScores).toHaveBeenCalledTimes(1);
+    expect(tick).not.toHaveBeenCalled();
+    expect(f.apply).not.toHaveBeenCalled();
+    expect(f.writes).toHaveLength(1);
+    expect(f.writes[0]?.filter((item) => item.Update?.TableName === "teams")).toHaveLength(2);
+    const oldChunks = nativeRows(f).filter((row) => String(row.SK).startsWith("SNAPSHOT#"));
+    expect(oldChunks).not.toHaveLength(0);
+    f.setInitialScore(17);
+    const reset = await f.reset(first.runId);
+    expect(reset).toEqual({
+      eventId: f.event.eventId,
+      problemId: f.artifact.problemId,
+      previousRunId: first.runId,
+      runId: expect.stringMatching(/^[0-9A-HJKMNP-TV-Z]{26}$/u),
+    });
+    const current = await f.store.read(f.event.eventId, f.artifact.problemId);
+    expect(current).toMatchObject({
+      revision: 1,
+      history: [first.runId],
+      snapshotLayout: "run",
+      artifactDigest: first.artifactDigest,
+      pluginKey: first.pluginKey,
+      catalogKey: first.catalogKey,
+      roster: first.roster,
+      clock: first.clock,
+      match: { version: 1, scores: { [f.team.teamId]: 17 } },
+    });
+    expect(current?.runId).not.toBe(first.runId);
+    expect(current?.match.matchSecret).not.toBe(first.match.matchSecret);
+    expect(scoreRow(f)).toMatchObject({ score: 217, completedProblems: 4 });
+    expect(teamScores).toHaveBeenCalledTimes(2);
+    expect(tick).not.toHaveBeenCalled();
+    expect(f.apply).not.toHaveBeenCalled();
+    expect(await f.store.readRun(f.event.eventId, f.artifact.problemId, first.runId)).toMatchObject(
+      {
+        runId: first.runId,
+        closed: true,
+        match: first.match,
+      },
+    );
+    for (const chunk of oldChunks)
+      expect(f.rows.get(rowKey(f.tables.deployments, chunk))).toEqual(chunk);
+    const writes = f.writes.at(-1) ?? [];
+    expect(writes.filter((item) => item.Update?.TableName === "teams")).toHaveLength(2);
+    expect(
+      writes.find((item) => item.Put?.Item?.SK === "HEAD")?.Put?.ExpressionAttributeValues,
+    ).toMatchObject({ ":run": first.runId, ":revision": 0 });
+    expect(
+      writes.find((item) => item.Put?.Item?.SK === "HEAD")?.Put?.ConditionExpression,
+    ).toContain(
+      "runId = :run AND revision = :revision AND snapshotDigest = :digest AND closed = :closed",
+    );
+    expect(resetPublication(writes)?.ConditionExpression).toBe("attribute_not_exists(PK)");
+    expect(nativeRows(f).filter((row) => String(row.SK).startsWith("SCORE#"))).toHaveLength(2);
+    expect(
+      writes
+        .filter((item) => item.Put?.Item?.data instanceof Uint8Array)
+        .every((item) => String(item.Put?.Item?.SK).startsWith(`RUN#${reset.runId}#SNAPSHOT#`)),
+    ).toBe(true);
+  });
+  it("leaves initial scores and snapshots untouched when atomic initialization fails", async () => {
+    const f = fixture(2, 0, 17);
+    const before = structuredClone(f.rows);
+    const failure = new Error("Synthetic initialization outage");
+    f.setBeforeWrite(() => {
+      throw failure;
+    });
+    await expect(f.initialize()).rejects.toBe(failure);
+    expect(f.rows).toEqual(before);
+    expect(f.writes).toHaveLength(0);
+  });
+  it("lets exactly one reset win its HEAD CAS without resetting again on the loser retry", async () => {
+    const f = fixture(2, 0, 17);
+    const first = await f.initialize();
+    let winner: Awaited<ReturnType<typeof f.reset>> | undefined;
+    f.setBeforeWrite(async (items) => {
+      if (!resetPublication(items)) return;
+      f.setBeforeWrite(undefined);
+      winner = await f.reset(first.runId);
+    });
+    await expect(f.reset(first.runId)).rejects.toMatchObject({
+      status: 409,
+      code: "run_rotation_conflict",
+    });
+    expect(winner).toBeDefined();
+    expect(currentHead(f)).toMatchObject({
+      runId: winner?.runId,
+      revision: 1,
+      history: [first.runId],
+    });
+    expect(f.writes.filter((items) => resetPublication(items))).toHaveLength(1);
+    const rows = structuredClone(f.rows);
+    await expect(f.reset(first.runId)).rejects.toMatchObject({
+      status: 409,
+      code: "run_rotation_conflict",
+    });
+    expect(f.rows).toEqual(rows);
+  });
+  it.each(["before claim", "after claim", "before publication"] as const)(
+    "fences an operation racing a reset %s before applying it to the new run",
+    async (phase) => {
+      const f = fixture();
+      const first = await f.initialize();
+      let nextRunId: string | undefined;
+      const rotate = async () => {
+        f.setBeforeWrite(undefined);
+        f.setAfterWrite(undefined);
+        nextRunId = (await f.reset(first.runId)).runId;
+      };
+      if (phase === "after claim")
+        f.setAfterWrite(async (items) => {
+          if (admissionClaim(items)) await rotate();
+        });
+      else
+        f.setBeforeWrite(async (items) => {
+          if (phase === "before claim" ? admissionClaim(items) : admissionPublication(items))
+            await rotate();
+        });
+      await expect(
+        f.request(f.operation("racing-move", "score", first.runId)),
+      ).rejects.toMatchObject({ status: 409, code: "coordination_run_changed" });
+      expect(currentHead(f)).toMatchObject({ runId: nextRunId, revision: 1 });
+      expect(f.apply).toHaveBeenCalledTimes(phase === "before publication" ? 1 : 0);
+      expect(
+        (await f.store.read(f.event.eventId, f.artifact.problemId))?.match.scores[f.team.teamId],
+      ).toBe(0);
+      expect(nativeRows(f).some((row) => String(row.SK).startsWith("RECEIPT#"))).toBe(false);
+      expect(f.writes.filter((items) => admissionPublication(items))).toHaveLength(0);
+    },
+  );
+  it("rejects a reset encountered during old receipt replay before returning that receipt", async () => {
+    const f = fixture();
+    const first = await f.initialize();
+    const operation = f.operation("replay-race", "score", first.runId);
+    await f.request(operation);
+    f.setAfterGet(async (key) => {
+      if (!String(key?.SK).startsWith(`RECEIPT#${first.runId}#`)) return;
+      f.setAfterGet(undefined);
+      await f.reset(first.runId);
+    });
+    await expect(f.request(operation)).rejects.toMatchObject({
+      status: 409,
+      code: "coordination_run_changed",
+    });
+    expect(f.apply).toHaveBeenCalledTimes(1);
+    expect(currentHead(f).revision).toBe(2);
+  });
+  it("keeps replay within a run and requires refreshed identities after the first reset", async () => {
+    const f = fixture();
+    const first = await f.initialize();
+    const oldResponse = await f.request();
+    const oldReceipt = nativeRows(f).filter((row) =>
+      String(row.SK).startsWith(`RECEIPT#${first.runId}#`),
+    );
+    expect(await f.request(f.operation("operation-1", "score", first.runId))).toEqual(oldResponse);
+    await expect(f.request(f.operation("wrong-run", "score", ulid()))).rejects.toMatchObject({
+      status: 409,
+      code: "coordination_run_changed",
+    });
+    const next = await f.reset(first.runId);
+    const writesBefore = f.writes.length;
+    await expect(f.request()).rejects.toMatchObject({
+      status: 409,
+      code: "coordination_run_changed",
+    });
+    await expect(f.request(f.operation("operation-1", "score", first.runId))).rejects.toMatchObject(
+      {
+        status: 409,
+        code: "coordination_run_changed",
+      },
+    );
+    expect(f.writes).toHaveLength(writesBefore);
+    const newOperation = f.operation("operation-1", "score", next.runId);
+    const newResponse = await f.request(newOperation);
+    expect(newResponse.revision).toBeGreaterThan(oldResponse.revision);
+    expect(await f.request(newOperation)).toEqual(newResponse);
+    expect(f.apply).toHaveBeenCalledTimes(2);
+    for (const row of oldReceipt)
+      expect(f.rows.get(rowKey(f.tables.deployments, row))).toEqual(row);
+    expect(
+      nativeRows(f).filter((row) => String(row.SK).startsWith(`RECEIPT#${next.runId}#`)),
+    ).toHaveLength(oldReceipt.length);
+  });
+  it("retains current plus two prior runs while physically deleting retired snapshots and receipts", async () => {
+    const f = fixture(2, 400000, 17);
+    const first = await f.initialize();
+    let runId = first.runId;
+    const runs = [runId];
+    const secrets = new Set([first.match.matchSecret]);
+    let revision = 0;
+    for (let index = 0; index < 4; index++) {
+      await f.request(f.operation(`retained-${index}`, "score", runId));
+      revision++;
+      runId = (await f.reset(runId)).runId;
+      runs.push(runId);
+      revision++;
+      const current = await f.store.read(f.event.eventId, f.artifact.problemId);
+      expect(current?.revision).toBe(revision);
+      secrets.add(current?.match.matchSecret ?? "");
+      expect(current?.history).toEqual(runs.slice(-3, -1).reverse());
+    }
+    expect(secrets.size).toBe(5);
+    for (const run of runs.slice(0, -3)) {
+      expect(await f.store.readRun(f.event.eventId, f.artifact.problemId, run)).toBeUndefined();
+      expect(
+        nativeRows(f).filter((row) => row.runId === run && !String(row.SK).startsWith("SCORE#")),
+      ).toHaveLength(0);
+    }
+    for (const run of runs.slice(-3))
+      expect(await f.store.readRun(f.event.eventId, f.artifact.problemId, run)).toMatchObject({
+        runId: run,
+      });
+    expect(nativeRows(f).filter((row) => String(row.SK).startsWith("SNAPSHOT#"))).toHaveLength(0);
+    expect(nativeRows(f).filter((row) => String(row.SK).startsWith("SCORE#"))).toHaveLength(9);
+    expect(currentHead(f)).not.toHaveProperty("retiredRuns");
+    expect(await f.store.readRun(f.event.eventId, f.artifact.problemId, ulid())).toBeUndefined();
+  });
+  it("resumes interrupted paged cleanup from its durable marker and preserves foreign rows and audit scores", async () => {
+    const f = fixture(2, 400000, 17);
+    const first = await f.initialize();
+    await f.request();
+    const second = await f.reset(first.runId);
+    const third = await f.reset(second.runId);
+    const { PK } = coordinationHeadKey(f.event.eventId, f.artifact.problemId);
+    for (let index = 0; index < 83; index++) {
+      const row = {
+        PK,
+        SK: `RECEIPT#${first.runId}#synthetic-${String(index).padStart(3, "0")}`,
+        runId: first.runId,
+      };
+      f.rows.set(rowKey(f.tables.deployments, row), row);
+    }
+    const foreign = [
+      {
+        PK: coordinationHeadKey(ulid(), f.artifact.problemId).PK,
+        SK: `RECEIPT#${first.runId}#foreign-event`,
+        runId: first.runId,
+      },
+      { PK, SK: `RECEIPT#${third.runId}#foreign-run`, runId: third.runId },
+    ];
+    for (const row of foreign) f.rows.set(rowKey(f.tables.deployments, row), row);
+    const audit = nativeRows(f).filter((row) => String(row.SK).startsWith("SCORE#"));
+    const failure = new Error("Synthetic lost receipt-deletion response");
+    f.setAfterWrite((items) => {
+      if (items.some((item) => String(item.Delete?.Key?.SK).startsWith(`RECEIPT#${first.runId}#`)))
+        throw failure;
+    });
+    await expect(f.reset(third.runId)).rejects.toBe(failure);
+    expect(currentHead(f)).toMatchObject({
+      history: [third.runId, second.runId],
+      retiredRuns: [first.runId],
+    });
+    expect(
+      nativeRows(f).filter((row) => String(row.SK).startsWith(`RECEIPT#${first.runId}#`)),
+    ).toHaveLength(5);
+    expect(nativeRows(f).some((row) => String(row.SK).startsWith("SNAPSHOT#"))).toBe(true);
+    expect(
+      await f.store.readRun(f.event.eventId, f.artifact.problemId, first.runId),
+    ).toBeUndefined();
+    f.setAfterWrite(undefined);
+    await f.store.pruneHistory(f.event.eventId, f.artifact.problemId);
+    expect(currentHead(f)).not.toHaveProperty("retiredRuns");
+    expect(
+      nativeRows(f).filter(
+        (row) => row.runId === first.runId && !String(row.SK).startsWith("SCORE#"),
+      ),
+    ).toHaveLength(0);
+    for (const row of [...foreign, ...audit])
+      expect(f.rows.get(rowKey(f.tables.deployments, row))).toEqual(row);
+    const queries = f.send.mock.calls.flatMap(([command]) =>
+      command instanceof QueryCommand ? [command.input] : [],
+    );
+    expect(queries.length).toBeGreaterThanOrEqual(3);
+    for (const query of queries) {
+      expect(query).toMatchObject({
+        TableName: f.tables.deployments,
+        ConsistentRead: true,
+        Limit: 80,
+        ExpressionAttributeValues: { ":pk": PK, ":prefix": `RECEIPT#${first.runId}#` },
+      });
+      expect(query).not.toHaveProperty("ExclusiveStartKey");
+    }
+    const writesBefore = f.writes.length;
+    await f.store.pruneHistory(f.event.eventId, f.artifact.problemId);
+    expect(f.writes).toHaveLength(writesBefore);
+    const cleanup = f.writes.filter((items) => items.some((item) => item.Delete));
+    expect(cleanup).toHaveLength(3);
+    for (const items of cleanup) {
+      const guard = items.map((item) => item.ConditionCheck ?? item.Update).find(Boolean);
+      expect(guard).toMatchObject({
+        Key: coordinationHeadKey(f.event.eventId, f.artifact.problemId),
+        ConditionExpression:
+          "contains(retiredRuns, :retired) AND runId <> :retired AND NOT contains(#history, :retired) AND attribute_not_exists(purge)",
+        ExpressionAttributeNames: { "#history": "history" },
+        ExpressionAttributeValues: { ":retired": first.runId },
+      });
+      expect(items.length).toBeLessThan(100);
+    }
+  });
+  it.each([[], undefined])(
+    "keeps all retired data when an empty receipt page has a continuation cursor (%s)",
+    async (Items) => {
+      const f = fixture();
+      const retired = await leaveRetirementPending(f);
+      const { PK } = coordinationHeadKey(f.event.eventId, f.artifact.problemId);
+      const manifest = f.rows.get(rowKey(f.tables.deployments, { PK, SK: `RUN#${retired}#HEAD` }));
+      if (!manifest) throw new Error("Missing retired manifest");
+      const before = structuredClone(f.rows);
+      const writesBefore = f.writes.length;
+      f.send
+        .mockImplementationOnce(async () => ({ Item: structuredClone(currentHead(f)) }))
+        .mockImplementationOnce(async () => ({ Item: structuredClone(manifest) }))
+        .mockImplementationOnce(async () => ({
+          Items,
+          LastEvaluatedKey: { PK, SK: `RECEIPT#${retired}#cursor` },
+        }));
+      await expect(
+        f.store.pruneHistory(f.event.eventId, f.artifact.problemId),
+      ).rejects.toMatchObject({
+        status: 503,
+        code: "coordination_history_page_invalid",
+      });
+      expect(f.rows).toEqual(before);
+      expect(f.writes).toHaveLength(writesBefore);
+      expect(currentHead(f).retiredRuns).toEqual([retired]);
+      await f.store.pruneHistory(f.event.eventId, f.artifact.problemId);
+      expect(currentHead(f)).not.toHaveProperty("retiredRuns");
+      expect(
+        nativeRows(f).filter(
+          (row) => row.runId === retired && !String(row.SK).startsWith("SCORE#"),
+        ),
+      ).toHaveLength(0);
+    },
+  );
+  it("fails closed when a retained run is listed but its archive is missing", async () => {
+    const f = fixture();
+    const first = await f.initialize();
+    await f.reset(first.runId);
+    const { PK } = coordinationHeadKey(f.event.eventId, f.artifact.problemId);
+    f.rows.delete(rowKey(f.tables.deployments, { PK, SK: `RUN#${first.runId}#HEAD` }));
+    const before = structuredClone(f.rows);
+    await expect(
+      f.store.readRun(f.event.eventId, f.artifact.problemId, first.runId),
+    ).rejects.toMatchObject({ status: 503, code: "coordination_history_invalid" });
+    expect(f.rows).toEqual(before);
+  });
+  it("returns no historical run when a reset retires it during the archive read", async () => {
+    const f = fixture();
+    const first = await f.initialize();
+    const second = await f.reset(first.runId);
+    const third = await f.reset(second.runId);
+    f.setAfterGet(async (key) => {
+      if (key?.SK !== `RUN#${first.runId}#HEAD`) return;
+      f.setAfterGet(undefined);
+      await f.reset(third.runId);
+    });
+    expect(
+      await f.store.readRun(f.event.eventId, f.artifact.problemId, first.runId),
+    ).toBeUndefined();
+    expect(
+      nativeRows(f).filter(
+        (row) => row.runId === first.runId && !String(row.SK).startsWith("SCORE#"),
+      ),
+    ).toHaveLength(0);
+  });
+  it("keeps the retirement marker and private chunks when the retired manifest is missing", async () => {
+    const f = fixture();
+    const retired = await leaveRetirementPending(f);
+    const { PK } = coordinationHeadKey(f.event.eventId, f.artifact.problemId);
+    f.rows.delete(rowKey(f.tables.deployments, { PK, SK: `RUN#${retired}#HEAD` }));
+    const before = structuredClone(f.rows);
+    const writesBefore = f.writes.length;
+    await expect(f.store.pruneHistory(f.event.eventId, f.artifact.problemId)).rejects.toMatchObject(
+      {
+        status: 503,
+        code: "coordination_history_invalid",
+      },
+    );
+    expect(f.rows).toEqual(before);
+    expect(f.writes).toHaveLength(writesBefore);
+    expect(currentHead(f).retiredRuns).toEqual([retired]);
+    expect(
+      nativeRows(f).some((row) => row.runId === retired && row.data instanceof Uint8Array),
+    ).toBe(true);
+  });
+  it("accepts a concurrently completed cleanup when the previously read retired manifest has gone", async () => {
+    const f = fixture();
+    const retired = await leaveRetirementPending(f);
+    f.setAfterGet(async (key) => {
+      if (key?.SK !== "HEAD") return;
+      f.setAfterGet(undefined);
+      await f.store.pruneHistory(f.event.eventId, f.artifact.problemId);
+    });
+    await f.store.pruneHistory(f.event.eventId, f.artifact.problemId);
+    expect(currentHead(f)).not.toHaveProperty("retiredRuns");
+    expect(
+      nativeRows(f).filter((row) => row.runId === retired && !String(row.SK).startsWith("SCORE#")),
+    ).toHaveLength(0);
+  });
+  it("retries an active publication after cleanup without resurrecting the completed retirement marker", async () => {
+    const f = fixture();
+    const retired = await leaveRetirementPending(f);
+    const runId = String(currentHead(f).runId);
+    f.apply.mockClear();
+    f.setBeforeWrite(async (items) => {
+      if (!admissionPublication(items)) return;
+      f.setBeforeWrite(undefined);
+      expect(admissionPublication(items)?.ConditionExpression).toContain(
+        "retiredRuns = :retiredRuns",
+      );
+      expect(admissionPublication(items)?.ExpressionAttributeValues?.[":retiredRuns"]).toEqual([
+        retired,
+      ]);
+      await f.store.pruneHistory(f.event.eventId, f.artifact.problemId);
+    });
+    expect((await f.request(f.operation("cleanup-race", "score", runId))).body).toEqual({
+      projection: { score: 1 },
+    });
+    expect(f.apply).toHaveBeenCalledTimes(2);
+    expect(currentHead(f)).not.toHaveProperty("retiredRuns");
+    expect(
+      nativeRows(f).filter((row) => row.runId === retired && !String(row.SK).startsWith("SCORE#")),
+    ).toHaveLength(0);
+  });
+  it("fits a near-2MiB reset with 48 score changes without copying the archived snapshot", async () => {
+    const f = fixture(48, COORDINATION_MAX_BYTES - 16000, 30);
+    const first = await f.initialize();
+    f.setInitialScore(17);
+    const next = await f.reset(first.runId);
+    const writes = f.writes.at(-1) ?? [];
+    const chunks = writes.flatMap((item) =>
+      item.Put?.Item?.data instanceof Uint8Array ? [item.Put.Item] : [],
+    );
+    expect(chunks).toHaveLength(8);
+    expect(chunks.every((row) => String(row.SK).startsWith(`RUN#${next.runId}#SNAPSHOT#`))).toBe(
+      true,
+    );
+    expect(
+      chunks.reduce((sum, row) => sum + (row.data as Uint8Array).byteLength, 0),
+    ).toBeGreaterThan(1.9 * 1024 * 1024);
+    expect(writes.filter((item) => item.Update?.TableName === "teams")).toHaveLength(48);
+    expect(resetPublication(writes)?.Item).not.toHaveProperty("data");
+    const measurement = f.measurements.at(-1);
+    expect(measurement?.items).toBeLessThan(100);
+    expect(measurement?.maxItemBytes).toBeLessThan(400 * 1024);
+    expect(measurement?.bytesUpperBound).toBeLessThan(4 * 1024 * 1024);
+  });
+});
 
 describe("native DynamoDB SDK transaction contracts", () => {
   it("enforces the monotonic 20-second budget after admission while game time is frozen", async () => {

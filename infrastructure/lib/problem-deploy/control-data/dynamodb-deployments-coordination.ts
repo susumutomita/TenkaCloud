@@ -11,10 +11,20 @@ import {
 import { ulid } from "ulid";
 import { z } from "zod";
 import {
-  createMatch,
   type MatchTransition,
   transitionMatch,
 } from "../../../../scripts/local-host/coordination-core.js";
+import {
+  assertPurgeManifest,
+  type PurgeManifest,
+  purgeRunReference,
+} from "./coordination-purge.js";
+import {
+  assertOperationRun,
+  assertResetOpen,
+  initializedMatch,
+  resetRun,
+} from "./coordination-runs.js";
 import {
   assertArtifact,
   assertOpen,
@@ -44,8 +54,11 @@ import {
   coordinationHeadKey,
   type NativeCoordinationArtifact,
   NativeCoordinationError,
+  type NativeCoordinationResetInput,
+  type NativeCoordinationResetResult,
   type NativeCoordinationResponse,
   type NativeCoordinationRun,
+  type NativeCoordinationSummary,
   type NativeSchedulePatch,
 } from "./domain/coordination.js";
 import type { EventRecord } from "./domain/events.js";
@@ -58,17 +71,21 @@ import {
   teamKey,
 } from "./dynamodb-cloud-repository.js";
 import {
+  assertDynamoPayloadAvailable,
   assertSnapshotScope,
   decodedChunks,
   dynamoCloseFence,
   dynamoHeadAbsent,
   dynamoHeadCheck,
   headSchema,
+  historyKey,
   readDynamoSnapshot,
   type StoredRun,
   snapshotKey,
 } from "./dynamodb-coordination-snapshot.js";
 import { installationControlKey, installationIntakeGuard } from "./installation-control.js";
+
+type CleanupOutcome = "done" | "page" | "conflict";
 
 interface Admission {
   readonly owner: string;
@@ -77,6 +94,7 @@ interface Admission {
 }
 type RunIdentity = Pick<NativeCoordinationRun, "eventId" | "problemId" | "runId">;
 interface Operation {
+  readonly runId?: string;
   readonly key: string;
   readonly hash: string;
   readonly op: unknown;
@@ -175,6 +193,350 @@ export class DynamoDeploymentsCoordination {
   async read(eventId: string, problemId: string): Promise<NativeCoordinationRun | undefined> {
     return this.readSnapshot(eventId, problemId);
   }
+  async summary(
+    eventId: string,
+    problemId: string,
+  ): Promise<NativeCoordinationSummary | undefined> {
+    const raw = await this.get(coordinationHeadKey(eventId, problemId));
+    if (!raw) return undefined;
+    const head = headSchema.parse(raw);
+    assertSnapshotScope(head, eventId, problemId);
+    assertPurgeManifest(head);
+    const run = head.purge ? head : await this.readSnapshot(eventId, problemId);
+    if (!run) return undefined;
+    return {
+      eventId,
+      problemId,
+      runId: run.runId,
+      revision: run.revision,
+      closed: run.closed,
+      ...(head.purge ? { purgeState: head.purge.state } : {}),
+    };
+  }
+  /** Explicit event teardown removes private payloads; the verified closed HEAD never expires. */
+  async purge(eventId: string, problemId: string): Promise<void> {
+    coordinationHeadKey(eventId, problemId);
+    const deadline = performance.now() + 15000;
+    let conflicts = 0;
+    while (conflicts < 12) {
+      if (performance.now() >= deadline)
+        throw new NativeCoordinationError(503, "coordination_purge_pending");
+      const result = await this.purgeStep(eventId, problemId);
+      if (result === "done") return;
+      if (result === "conflict") await this.backoff(conflicts++);
+    }
+    throw new NativeCoordinationError(409, "coordination_purge_conflict");
+  }
+  private async purgeStep(eventId: string, problemId: string): Promise<CleanupOutcome> {
+    const key = coordinationHeadKey(eventId, problemId);
+    const raw = await this.get(key);
+    if (!raw) return this.purgeAbsent(eventId, problemId);
+    const head = headSchema.parse(raw);
+    assertSnapshotScope(head, eventId, problemId);
+    assertPurgeManifest(head);
+    if (head.purge?.state === "complete") return "done";
+    if (head.purge) return this.purgePage(head);
+    return (await this.beginPurge(head.eventId, head.problemId)) ? "page" : "conflict";
+  }
+  private async purgeAbsent(eventId: string, problemId: string): Promise<CleanupOutcome> {
+    const key = coordinationHeadKey(eventId, problemId);
+    for (const prefix of ["SNAPSHOT#", "RUN#", "RECEIPT#"]) {
+      const page = await this.ddb.send(
+        new QueryCommand({
+          TableName: this.tables.deployments,
+          ConsistentRead: true,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+          ExpressionAttributeValues: { ":pk": key.PK, ":prefix": prefix },
+          Limit: 1,
+        }),
+      );
+      if (
+        page.Items?.length ||
+        (page.LastEvaluatedKey && Object.keys(page.LastEvaluatedKey).length)
+      )
+        throw new NativeCoordinationError(503, "coordination_purge_invalid");
+    }
+    return (await this.commit([dynamoHeadAbsent(this.tables.deployments, eventId, problemId)]))
+      ? "done"
+      : "conflict";
+  }
+  private async beginPurge(eventId: string, problemId: string): Promise<boolean> {
+    if (await this.repository.installationControl()) {
+      if (await this.purgeAdvanced(eventId, problemId)) return false;
+      throw new NativeCoordinationError(409, "coordination_purge_intake_closed");
+    }
+    let run: StoredRun | undefined;
+    try {
+      run = await this.readSnapshot(eventId, problemId);
+    } catch (error) {
+      if (error instanceof NativeCoordinationError && error.code === "coordination_run_closed")
+        return false;
+      throw error;
+    }
+    if (!run) return false;
+    if (!run.closed) throw new NativeCoordinationError(409, "coordination_not_settled");
+    let references: PurgeManifest["runs"];
+    try {
+      references = await this.purgeReferences(run);
+    } catch (error) {
+      // Concurrent cleanup can remove history while it is being verified.
+      // A durable marker or retirement change must explain that disappearance.
+      if (await this.purgeAdvanced(eventId, problemId, run)) return false;
+      throw error;
+    }
+    const head = headSchema.omit({ admissionOwner: true, admissionExpiresAt: true }).parse(run);
+    const purge: PurgeManifest = { state: "pending", runs: references };
+    assertPurgeManifest({ ...head, purge });
+    const guard = dynamoHeadCheck(this.tables.deployments, head).ConditionCheck;
+    if (!guard) throw new Error("Missing native close guard");
+    return this.commit([
+      {
+        Put: {
+          TableName: this.tables.deployments,
+          Item: { ...head, ...coordinationHeadKey(eventId, problemId), purge },
+          ConditionExpression:
+            guard.ConditionExpression +
+            (head.retiredRuns === undefined
+              ? " AND attribute_not_exists(retiredRuns)"
+              : " AND retiredRuns = :retiredRuns"),
+          ExpressionAttributeNames: guard.ExpressionAttributeNames,
+          ExpressionAttributeValues: {
+            ...guard.ExpressionAttributeValues,
+            ...(head.retiredRuns === undefined ? {} : { ":retiredRuns": head.retiredRuns }),
+          },
+        },
+      },
+      // Once global drain stops intake, its proof relies on closed retained
+      // heads staying immutable. Already-recorded purge obligations still resume.
+      installationIntakeGuard(this.tables.events),
+    ]);
+  }
+  private async purgeReferences(run: StoredRun): Promise<PurgeManifest["runs"]> {
+    const references = [purgeRunReference(run)];
+    for (const runId of [...(run.history ?? []), ...(run.retiredRuns ?? [])]) {
+      const retained = await readDynamoSnapshot(
+        this.ddb,
+        this.tables.deployments,
+        run.eventId,
+        run.problemId,
+        this.timing,
+        runId,
+      );
+      if (!retained?.closed) throw new NativeCoordinationError(503, "coordination_history_invalid");
+      references.push(purgeRunReference(retained));
+    }
+    return references;
+  }
+  private async purgeAdvanced(
+    eventId: string,
+    problemId: string,
+    previous?: StoredRun,
+  ): Promise<boolean> {
+    const raw = await this.get(coordinationHeadKey(eventId, problemId));
+    if (!raw) return false;
+    const head = headSchema.parse(raw);
+    assertSnapshotScope(head, eventId, problemId);
+    assertPurgeManifest(head);
+    if (head.purge) return true;
+    return (
+      previous !== undefined &&
+      head.runId === previous.runId &&
+      head.revision === previous.revision &&
+      head.snapshotDigest === previous.snapshotDigest &&
+      JSON.stringify(head.retiredRuns) !== JSON.stringify(previous.retiredRuns)
+    );
+  }
+  private async purgePage(head: z.infer<typeof headSchema>): Promise<CleanupOutcome> {
+    const key = coordinationHeadKey(head.eventId, head.problemId);
+    for (const prefix of ["SNAPSHOT#", "RUN#", "RECEIPT#"]) {
+      // Re-read the first remaining page after each committed batch. The permanent
+      // manifest keeps retries scoped even if the previous response was lost.
+      const page = await this.ddb.send(
+        new QueryCommand({
+          TableName: this.tables.deployments,
+          ConsistentRead: true,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+          ExpressionAttributeValues: { ":pk": key.PK, ":prefix": prefix },
+          Limit: 80,
+        }),
+      );
+      const rows = page.Items ?? [];
+      if (!rows.length && page.LastEvaluatedKey && Object.keys(page.LastEvaluatedKey).length)
+        throw new NativeCoordinationError(503, "coordination_purge_page_invalid");
+      if (rows.length) {
+        const deletes = rows.map((row) =>
+          purgePayloadDelete(this.tables.deployments, key.PK, prefix, head.purge, row),
+        );
+        return (await this.commit([...deletes, dynamoHeadCheck(this.tables.deployments, head)]))
+          ? "page"
+          : "conflict";
+      }
+    }
+    const guard = dynamoHeadCheck(this.tables.deployments, head).ConditionCheck;
+    if (!guard || !head.purge) throw new Error("Missing native purge manifest");
+    return (await this.commit([
+      {
+        Put: {
+          TableName: this.tables.deployments,
+          Item: { ...head, ...key, purge: { ...head.purge, state: "complete" } },
+          ConditionExpression: guard.ConditionExpression,
+          ExpressionAttributeNames: guard.ExpressionAttributeNames,
+          ExpressionAttributeValues: guard.ExpressionAttributeValues,
+        },
+      },
+    ]))
+      ? "done"
+      : "conflict";
+  }
+  async readRun(
+    eventId: string,
+    problemId: string,
+    runId: string,
+  ): Promise<NativeCoordinationRun | undefined> {
+    id.parse(runId);
+    const current = await this.readSnapshot(eventId, problemId);
+    if (!current || current.runId === runId) return current;
+    if (!current.history?.includes(runId)) return undefined;
+    const retained = await readDynamoSnapshot(
+      this.ddb,
+      this.tables.deployments,
+      eventId,
+      problemId,
+      this.timing,
+      runId,
+    );
+    if (!retained) {
+      const latest = await this.get(coordinationHeadKey(eventId, problemId));
+      if (!latest) return undefined;
+      const head = headSchema.parse(latest);
+      assertSnapshotScope(head, eventId, problemId);
+      if (!head.history?.includes(runId)) return undefined;
+      throw new NativeCoordinationError(503, "coordination_history_invalid");
+    }
+    return retained;
+  }
+  async reset(input: NativeCoordinationResetInput): Promise<NativeCoordinationResetResult> {
+    const { event, artifact, expectedRunId } = input;
+    assertArtifact(artifact);
+    assertSelected(event, artifact.problemId);
+    assertResetOpen(event, input.now());
+    id.parse(expectedRunId);
+    await this.pruneHistory(event.eventId, artifact.problemId);
+    const previous = await this.readSnapshot(event.eventId, artifact.problemId);
+    if (!previous) throw new NativeCoordinationError(404, "coordination_not_initialized");
+    if (previous.runId !== expectedRunId)
+      throw new NativeCoordinationError(409, "run_rotation_conflict");
+    const { run, deltas } = resetRun(previous, event, artifact, input.now());
+    const fields = Object.fromEntries(
+      Object.entries(previous).filter(([key]) => key !== "match" && !key.startsWith("admission")),
+    );
+    const writes = this.transitionWrites(run, previous, deltas, input.now());
+    writes.push({
+      Put: {
+        TableName: this.tables.deployments,
+        Item: {
+          ...fields,
+          ...historyKey(coordinationHeadKey(event.eventId, artifact.problemId).PK, previous.runId),
+          closed: true,
+        },
+        ConditionExpression: "attribute_not_exists(PK)",
+      },
+    });
+    const commitAt = input.now();
+    assertResetOpen(event, commitAt);
+    writes.push(this.eventCheck(event, commitAt), installationIntakeGuard(this.tables.events));
+    if (!(await this.commit(writes)))
+      throw new NativeCoordinationError(409, "run_rotation_conflict");
+    await this.pruneHistory(event.eventId, artifact.problemId);
+    return {
+      eventId: event.eventId,
+      problemId: artifact.problemId,
+      runId: run.runId,
+      previousRunId: previous.runId,
+    };
+  }
+  /** The head keeps the deletion obligation until its private rows have actually gone. */
+  async pruneHistory(eventId: string, problemId: string): Promise<void> {
+    const key = coordinationHeadKey(eventId, problemId);
+    const deadline = performance.now() + 15000;
+    let conflicts = 0;
+    while (conflicts < 12) {
+      if (performance.now() >= deadline)
+        throw new NativeCoordinationError(503, "coordination_history_cleanup_pending");
+      const raw = await this.get(key);
+      if (!raw) return;
+      const head = headSchema.parse(raw);
+      assertSnapshotScope(head, eventId, problemId);
+      assertDynamoPayloadAvailable(head);
+      const runId = pendingRetiredRun(head);
+      if (!runId) return;
+      const outcome = await this.pruneRun(head, runId);
+      if (outcome === "done") return;
+      if (outcome === "conflict") await this.backoff(conflicts++);
+    }
+    throw new NativeCoordinationError(409, "coordination_history_cleanup_conflict");
+  }
+  private async pruneRun(head: z.infer<typeof headSchema>, runId: string): Promise<CleanupOutcome> {
+    const key = coordinationHeadKey(head.eventId, head.problemId);
+    const manifestKey = historyKey(key.PK, runId);
+    const saved = await this.get(manifestKey);
+    if (!saved) {
+      const latest = await this.get(key);
+      if (latest) {
+        const current = headSchema.parse(latest);
+        assertSnapshotScope(current, head.eventId, head.problemId);
+        if (!current.retiredRuns?.includes(runId)) return "page";
+      }
+      // Chunks, manifest and obligation clear in one transaction. A missing
+      // manifest with a still-pending obligation is corruption, not cleanup.
+      throw new NativeCoordinationError(503, "coordination_history_invalid");
+    }
+    const manifest = headSchema.parse(saved);
+    assertSnapshotScope(manifest, head.eventId, head.problemId, runId);
+    // Start each bounded page at the beginning. Interrupted deletions leave the
+    // remaining rows available for the next call without a lossy cursor.
+    // Full Query rows also bound each page to DynamoDB's 1 MiB read ceiling,
+    // so even receipt chunks fit within the delete transaction's 4 MiB limit.
+    const page = await this.ddb.send(
+      new QueryCommand({
+        TableName: this.tables.deployments,
+        ConsistentRead: true,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+        ExpressionAttributeValues: { ":pk": key.PK, ":prefix": `RECEIPT#${runId}#` },
+        Limit: 80,
+      }),
+    );
+    const receipts = page.Items ?? [];
+    if (!receipts.length && page.LastEvaluatedKey && Object.keys(page.LastEvaluatedKey).length)
+      throw new NativeCoordinationError(503, "coordination_history_page_invalid");
+    const guard = {
+      TableName: this.tables.deployments,
+      Key: key,
+      ConditionExpression:
+        "contains(retiredRuns, :retired) AND runId <> :retired AND NOT contains(#history, :retired) AND attribute_not_exists(purge)",
+      ExpressionAttributeNames: { "#history": "history" },
+      ExpressionAttributeValues: { ":retired": runId },
+    };
+    if (receipts.length) {
+      const deletes = receipts.map((row) =>
+        retiredReceiptDelete(this.tables.deployments, key.PK, runId, row),
+      );
+      return (await this.commit([...deletes, { ConditionCheck: guard }])) ? "page" : "conflict";
+    }
+    const deletes: Write[] = Array.from({ length: manifest.chunkCount }, (_, index) => ({
+      Delete: {
+        TableName: this.tables.deployments,
+        Key: snapshotKey(key.PK, index, manifest.snapshotLayout === "run" ? runId : undefined),
+      },
+    }));
+    deletes.push({ Delete: { TableName: this.tables.deployments, Key: manifestKey } });
+    return (await this.commit([
+      ...deletes,
+      { Update: { ...guard, UpdateExpression: "REMOVE retiredRuns" } },
+    ]))
+      ? "done"
+      : "conflict";
+  }
   /** Cleanup needs a complete, closed native snapshot, never merely an event status. */
   closeFence(eventId: string, problemId: string): Promise<Write> {
     return dynamoCloseFence(this.ddb, this.tables.deployments, eventId, problemId, this.timing);
@@ -192,7 +554,7 @@ export class DynamoDeploymentsCoordination {
     assertArtifact(artifact);
     assertSelected(event, artifact.problemId);
     assertOpen(event, now);
-    const roster = checkedRoster(event, teams);
+    const roster = checkedRoster(event, teams, this.repository.eventLimits.maxTeams);
     const estimate =
       artifact.stateBudget.baseBytes + artifact.stateBudget.bytesPerTeam * roster.length;
     if (!Number.isSafeInteger(estimate) || estimate > COORDINATION_MAX_BYTES)
@@ -214,11 +576,7 @@ export class DynamoDeploymentsCoordination {
         await this.backoff(attempt);
         continue;
       }
-      const match = createMatch(artifact.plugin, {
-        eventId: event.eventId,
-        teamIds: roster.map((team) => team.teamId),
-        teamNames: Object.fromEntries(roster.map((team) => [team.teamId, team.teamName])),
-      });
+      const match = initializedMatch(artifact, roster, event.eventId);
       const run: NativeCoordinationRun = {
         eventId: event.eventId,
         problemId: artifact.problemId,
@@ -233,7 +591,7 @@ export class DynamoDeploymentsCoordination {
         closed: false,
         updatedAt: new Date(now).toISOString(),
       };
-      const writes = this.snapshotWrites(run);
+      const writes = [...this.snapshotWrites(run), ...this.scoreWrites(run, run.match.scores, now)];
       writes.push(installationIntakeGuard(this.tables.events), this.eventCheck(event, now));
       if (
         event.status === "DRAFT" &&
@@ -272,6 +630,7 @@ export class DynamoDeploymentsCoordination {
     const run = await this.readSnapshot(input.event.eventId, input.artifact.problemId);
     if (!run) throw new NativeCoordinationError(409, "not_running");
     assertPin(run, input.artifact);
+    assertOperationRun(run, input.operation);
     if (!run.roster.some((team) => team.teamId === input.team.teamId))
       throw new NativeCoordinationError(401, "unauthorized");
     if (input.operation && run.closed) throw new NativeCoordinationError(422, "event_ended");
@@ -285,6 +644,8 @@ export class DynamoDeploymentsCoordination {
       if (!raw) throw new NativeCoordinationError(409, "not_running");
       const head = headSchema.parse(raw);
       assertSnapshotScope(head, input.event.eventId, input.artifact.problemId);
+      assertDynamoPayloadAvailable(head);
+      assertOperationRun(head, input.operation);
       const replay = await this.readReceipt(head, input.team, input.operation);
       if (!replay) return this.withAdmission(input);
       const run = await this.currentRun(input);
@@ -320,6 +681,8 @@ export class DynamoDeploymentsCoordination {
       const head = headSchema.parse(raw);
       const now = input.now();
       assertSnapshotScope(head, input.event.eventId, input.artifact.problemId);
+      assertDynamoPayloadAvailable(head);
+      assertOperationRun(head, input.operation);
       assertParticipantGate(input.event, now, input.operation !== undefined);
       if (head.closed) return false;
       if (head.admissionOwner && (head.admissionExpiresAt ?? Infinity) > now) {
@@ -563,14 +926,30 @@ export class DynamoDeploymentsCoordination {
     const writes: Write[] = chunks.map((data, index) => ({
       Put: {
         TableName: this.tables.deployments,
-        Item: { ...snapshotKey(key.PK, index), runId: run.runId, revision: run.revision, data },
+        Item: {
+          ...snapshotKey(key.PK, index, run.snapshotLayout === "run" ? run.runId : undefined),
+          runId: run.runId,
+          revision: run.revision,
+          data,
+        },
       },
     }));
-    for (let index = chunks.length; index < (previous?.chunkCount ?? 0); index++)
+    for (
+      let index = chunks.length;
+      index < (previous?.runId === run.runId ? previous.chunkCount : 0);
+      index++
+    )
       writes.push({
-        Delete: { TableName: this.tables.deployments, Key: snapshotKey(key.PK, index) },
+        Delete: {
+          TableName: this.tables.deployments,
+          Key: snapshotKey(key.PK, index, run.snapshotLayout === "run" ? run.runId : undefined),
+        },
       });
     const owned = owner ? " AND admissionOwner = :owner AND admissionExpiresAt > :atMs" : "";
+    const pruning =
+      previous?.retiredRuns === undefined
+        ? " AND attribute_not_exists(retiredRuns)"
+        : " AND retiredRuns = :retiredRuns";
     writes.push({
       Put: {
         TableName: this.tables.deployments,
@@ -582,8 +961,9 @@ export class DynamoDeploymentsCoordination {
           chunkCount: chunks.length,
         },
         ConditionExpression: previous
-          ? "runId = :run AND revision = :revision AND snapshotDigest = :digest AND closed = :closed" +
-            owned
+          ? "runId = :run AND revision = :revision AND snapshotDigest = :digest AND closed = :closed AND attribute_not_exists(purge)" +
+            owned +
+            pruning
           : "attribute_not_exists(PK)",
         ...(previous
           ? {
@@ -592,6 +972,9 @@ export class DynamoDeploymentsCoordination {
                 ":revision": previous.revision,
                 ":digest": previous.snapshotDigest,
                 ":closed": previous.closed,
+                ...(previous.retiredRuns === undefined
+                  ? {}
+                  : { ":retiredRuns": previous.retiredRuns }),
                 ...(owner ? { ":owner": owner, ":atMs": atMs } : {}),
               },
             }
@@ -608,7 +991,17 @@ export class DynamoDeploymentsCoordination {
     owner?: string,
     atMs?: number,
   ): Write[] {
-    const writes = this.snapshotWrites(run, previous, owner, atMs);
+    return [
+      ...this.snapshotWrites(run, previous, owner, atMs),
+      ...this.scoreWrites(run, deltas, now),
+    ];
+  }
+  private scoreWrites(
+    run: NativeCoordinationRun,
+    deltas: Record<string, number>,
+    now: number,
+  ): Write[] {
+    const writes: Write[] = [];
     const changed = Object.entries(deltas).filter(([, value]) => value !== 0);
     for (const [teamId, delta] of changed)
       writes.push({
@@ -923,7 +1316,8 @@ function readHeadCurrent(raw: Record<string, unknown> | undefined, run: StoredRu
     raw?.runId === run.runId &&
     raw.revision === run.revision &&
     raw.snapshotDigest === run.snapshotDigest &&
-    raw.closed === run.closed
+    raw.closed === run.closed &&
+    raw.purge === undefined
   );
 }
 
@@ -973,4 +1367,55 @@ function measureWrites(writes: readonly Write[]): CoordinationWriteMeasurement {
 }
 async function pause(attempt: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, Math.min(40, 2 ** attempt) + randomInt(8)));
+}
+
+function pendingRetiredRun(head: z.infer<typeof headSchema>): string | undefined {
+  const runId = head.retiredRuns?.[0];
+  if (runId && (head.runId === runId || head.history?.includes(runId)))
+    throw new NativeCoordinationError(503, "coordination_history_invalid");
+  return runId;
+}
+function retiredReceiptDelete(
+  table: string,
+  PK: string,
+  runId: string,
+  row: Record<string, unknown>,
+): Write {
+  if (
+    row.PK !== PK ||
+    typeof row.SK !== "string" ||
+    !row.SK.startsWith(`RECEIPT#${runId}#`) ||
+    row.runId !== runId
+  )
+    throw new NativeCoordinationError(503, "coordination_scope_invalid");
+  return { Delete: { TableName: table, Key: { PK, SK: row.SK } } };
+}
+
+function purgePayloadDelete(
+  table: string,
+  PK: string,
+  prefix: string,
+  purge: PurgeManifest | undefined,
+  row: Record<string, unknown>,
+): Write {
+  if (!purge || row.PK !== PK || typeof row.SK !== "string" || !row.SK.startsWith(prefix))
+    throw new NativeCoordinationError(503, "coordination_scope_invalid");
+  const reference = purge.runs.find((run) => run.runId === row.runId);
+  const snapshot = /^(?:RUN#([0-9A-HJKMNP-TV-Z]{26})#)?SNAPSHOT#([0-7])$/u.exec(row.SK);
+  const history = /^RUN#([0-9A-HJKMNP-TV-Z]{26})#HEAD$/u.exec(row.SK);
+  const receipt =
+    /^RECEIPT#([0-9A-HJKMNP-TV-Z]{26})#[0-9A-HJKMNP-TV-Z]{26}#[a-f0-9]{64}(?:#[0-7])?$/u.exec(
+      row.SK,
+    );
+  let valid = false;
+  if (receipt) valid = receipt[1] === row.runId;
+  else if (reference && snapshot) {
+    const expectedRun = reference.snapshotLayout === "run" ? reference.runId : undefined;
+    valid =
+      Number(snapshot[2]) < reference.chunkCount &&
+      snapshot[1] === expectedRun &&
+      row.revision === reference.revision;
+  } else if (reference && history) valid = history[1] === reference.runId;
+  if (!valid) throw new NativeCoordinationError(503, "coordination_purge_invalid");
+  return { Delete: { TableName: table, Key: { PK, SK: row.SK } } };
 }

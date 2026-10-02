@@ -5,7 +5,7 @@ import { deploymentSchema } from "./deployment-records.js";
 import { NATIVE_COORDINATION_PROBLEM } from "./domain/coordination.js";
 import { DeploymentConflict } from "./domain/deployment-work.js";
 import type { DeploymentRecord } from "./domain/deployments.js";
-import { CLOUD_EVENT_LIMITS, type EventRecord } from "./domain/events.js";
+import { type CloudEventLimits, type EventRecord, SQL_EVENT_LIMITS } from "./domain/events.js";
 import type { TeamRecord } from "./domain/teams.js";
 import {
   type InstallationControl,
@@ -41,6 +41,7 @@ function parseDeployment(row: SqlRow): DeploymentRecord {
 }
 /** Current cloud contracts backed by atomic libSQL write batches and durable records. */
 export class SqlCloudRepository implements CloudRepository {
+  readonly eventLimits: CloudEventLimits = SQL_EVENT_LIMITS;
   constructor(private readonly sql: SqlExecutor) {}
 
   async installationControl(): Promise<InstallationControl | undefined> {
@@ -144,10 +145,10 @@ export class SqlCloudRepository implements CloudRepository {
     eventSchema.parse(event);
     if (
       teams.length === 0 ||
-      teams.length > CLOUD_EVENT_LIMITS.maxTeams ||
+      teams.length > this.eventLimits.maxTeams ||
       event.teamCount !== teams.length
     )
-      throw new Error(`Event creation supports 1-${CLOUD_EVENT_LIMITS.maxTeams} teams.`);
+      throw new Error(`Event creation supports 1-${this.eventLimits.maxTeams} teams.`);
     const ids = new Set<string>();
     const keys = new Set<string>();
     const slugs = new Set<string>();

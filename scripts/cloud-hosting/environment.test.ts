@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -20,6 +21,112 @@ afterEach(() => {
 });
 
 describe("selected cloud environment files", () => {
+  it("rejects mixed credential sources without printing values, after applying exported precedence", () => {
+    const root = fixture({
+      development:
+        "AWS_PROFILE=file-profile\nAWS_ACCESS_KEY_ID=synthetic-file-id\nAWS_SECRET_ACCESS_KEY=synthetic-file-secret\n",
+    });
+    expect(() => loadCloudEnvironment(root, {})).toThrow("Choose one source");
+    for (const inherited of [
+      {
+        AWS_PROFILE: "selected",
+        AWS_ACCESS_KEY_ID: "synthetic-access",
+        AWS_SECRET_ACCESS_KEY: "synthetic-secret",
+        AWS_SESSION_TOKEN: "synthetic-session",
+      },
+      { AWS_PROFILE: "selected", AWS_ACCESS_KEY_ID: "synthetic-access", AWS_SECRET_ACCESS_KEY: "" },
+      { AWS_PROFILE: "selected", AWS_ACCESS_KEY_ID: "", AWS_SECRET_ACCESS_KEY: "synthetic-secret" },
+    ]) {
+      const error: unknown = (() => {
+        try {
+          loadCloudEnvironment(fixture(), inherited);
+          return undefined;
+        } catch (value) {
+          return value;
+        }
+      })();
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).not.toContain("synthetic");
+    }
+    expect(
+      loadCloudEnvironment(root, {
+        AWS_PROFILE: "",
+        AWS_ACCESS_KEY_ID: "synthetic-exported-id",
+        AWS_SECRET_ACCESS_KEY: "synthetic-exported-secret",
+        AWS_SESSION_TOKEN: "synthetic-session",
+      }).AWS_PROFILE,
+    ).toBe("");
+    expect(
+      loadCloudEnvironment(root, {
+        AWS_ACCESS_KEY_ID: "",
+        AWS_SECRET_ACCESS_KEY: "",
+        AWS_SESSION_TOKEN: "",
+      }).AWS_PROFILE,
+    ).toBe("file-profile");
+  });
+  it("accepts one credential source and normalizes the legacy profile alias without choosing between conflicts", () => {
+    const root = fixture();
+    expect(loadCloudEnvironment(root, { AWS_PROFILE: "chosen" }).AWS_PROFILE).toBe("chosen");
+    expect(loadCloudEnvironment(root, { AWS_DEFAULT_PROFILE: "chosen" }).AWS_PROFILE).toBe(
+      "chosen",
+    );
+    expect(() =>
+      loadCloudEnvironment(root, { AWS_PROFILE: "one", AWS_DEFAULT_PROFILE: "two" }),
+    ).toThrow("same profile");
+    const keys = {
+      AWS_PROFILE: "",
+      AWS_DEFAULT_PROFILE: "",
+      AWS_ACCESS_KEY_ID: "synthetic-id",
+      AWS_SECRET_ACCESS_KEY: "synthetic-secret",
+      AWS_SESSION_TOKEN: "synthetic-session",
+    };
+    expect(loadCloudEnvironment(root, keys)).toMatchObject(keys);
+  });
+  it("applies the selected profile to in-process AWS SDKs as well as subprocesses", () => {
+    const root = fixture({ staging: "AWS_PROFILE=selected\nAWS_REGION=us-east-1\n" });
+    const credentials = join(root, "synthetic-credentials");
+    const config = join(root, "synthetic-config");
+    writeFileSync(
+      credentials,
+      "[default]\naws_access_key_id=synthetic-default\naws_secret_access_key=synthetic-default-value\n[selected]\naws_access_key_id=synthetic-selected\naws_secret_access_key=synthetic-selected-value\n",
+    );
+    writeFileSync(config, "");
+    const repository = resolve(import.meta.dirname, "../..");
+    const child = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        `
+      import assert from "node:assert/strict";
+      import { SSMClient } from ${JSON.stringify(join(repository, "node_modules/@aws-sdk/client-ssm"))};
+      import { loadCloudEnvironment } from ${JSON.stringify(join(repository, "scripts/cloud-hosting/environment.ts"))};
+      import { systemCloudIo } from ${JSON.stringify(join(repository, "scripts/cloud-hosting/process.ts"))};
+      const before = new SSMClient({ region: "us-east-1" });
+      assert.equal((await before.config.credentials()).accessKeyId, "synthetic-default");
+      before.destroy();
+      const environment = loadCloudEnvironment(${JSON.stringify(root)}, process.env);
+      systemCloudIo().configureEnvironment(environment);
+      const after = new SSMClient({ region: "us-east-1" });
+      assert.equal((await after.config.credentials()).accessKeyId, "synthetic-selected");
+      after.destroy();
+      process.stdout.write("selected-profile-resolved-without-network");
+    `,
+      ],
+      {
+        cwd: root,
+        env: {
+          PATH: process.env.PATH,
+          ENV: "staging",
+          AWS_SHARED_CREDENTIALS_FILE: credentials,
+          AWS_CONFIG_FILE: config,
+          AWS_EC2_METADATA_DISABLED: "true",
+        },
+        encoding: "utf8",
+      },
+    );
+    expect({ code: child.status, stderr: child.stderr }).toEqual({ code: 0, stderr: "" });
+    expect(child.stdout).toBe("selected-profile-resolved-without-network");
+  });
   it("defaults to development and preserves exported overrides without rewriting the file", () => {
     const source =
       "ENV=development\nTENKACLOUD_ADMIN_EMAIL=file@example.test\nAWS_REGION=us-east-1\n";

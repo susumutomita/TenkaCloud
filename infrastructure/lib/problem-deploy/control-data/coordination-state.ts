@@ -85,11 +85,11 @@ export function assertOpen(event: EventRecord, now: number): void {
     throw new NativeCoordinationError(409, "event_closed");
 }
 
-export function checkedRoster(event: EventRecord, teams: readonly TeamRecord[]) {
+export function checkedRoster(event: EventRecord, teams: readonly TeamRecord[], maxTeams: number) {
   if (
     teams.length !== event.teamCount ||
     teams.length < 1 ||
-    teams.length > 48 ||
+    teams.length > maxTeams ||
     new Set(teams.map((team) => team.teamId)).size !== teams.length ||
     teams.some((team) => team.eventId !== event.eventId)
   )

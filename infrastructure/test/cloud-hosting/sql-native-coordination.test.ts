@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HostPlugin } from "../../../scripts/local-host/coordination-core.js";
 import { hash, jsonBytes } from "../../lib/problem-deploy/control-data/coordination-state.js";
 import {
-  COORDINATION_MAX_BYTES,
+  SQL_COORDINATION_MAX_BYTES as COORDINATION_MAX_BYTES,
   type NativeCoordinationArtifact,
 } from "../../lib/problem-deploy/control-data/domain/coordination.js";
 import type { EventRecord } from "../../lib/problem-deploy/control-data/domain/events.js";

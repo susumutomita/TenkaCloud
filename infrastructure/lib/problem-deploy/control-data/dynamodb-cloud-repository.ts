@@ -14,7 +14,7 @@ import { deploymentSchema } from "./deployment-records.js";
 import { NATIVE_COORDINATION_PROBLEM } from "./domain/coordination.js";
 import { DeploymentConflict } from "./domain/deployment-work.js";
 import type { DeploymentRecord } from "./domain/deployments.js";
-import { CLOUD_EVENT_LIMITS, type EventRecord } from "./domain/events.js";
+import { CLOUD_EVENT_LIMITS, type CloudEventLimits, type EventRecord } from "./domain/events.js";
 import type { TeamRecord } from "./domain/teams.js";
 import {
   type InstallationControl,
@@ -60,6 +60,7 @@ export interface CloudTableNames {
 }
 /** Surgical reuse of historical event/team transactions, with durable hash lookup and rotation CAS. */
 export class DynamoCloudRepository implements CloudRepository {
+  readonly eventLimits: CloudEventLimits = CLOUD_EVENT_LIMITS;
   constructor(
     private readonly ddb: DynamoDBDocumentClient,
     private readonly tables: CloudTableNames,

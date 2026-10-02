@@ -65,6 +65,7 @@ interface PortalPluginSlotsProps {
 
 interface CoordinationOperationScope {
   readonly id: string;
+  readonly runId: string;
   readonly pending: Map<string, PendingOperation>;
   projection?: ReturnType<typeof getCoordinationProjection>;
 }
@@ -85,7 +86,14 @@ async function submitPluginOperation(
     scope.pending.set(body, intent);
   }
   const key = intent.keyFor(scope.id, op);
-  const result = await submitCoordinationOp(coordinationApiUrl, sessionToken, op, undefined, key);
+  const result = await submitCoordinationOp(
+    coordinationApiUrl,
+    sessionToken,
+    op,
+    undefined,
+    key,
+    scope.runId,
+  );
   if (result.kind === "ok" || result.kind === "rejected") {
     intent.acknowledge(key);
     if (scope.pending.get(body) === intent) scope.pending.delete(body);
@@ -137,6 +145,7 @@ export function PortalPluginSlots({
   const operationScope = useMemo<CoordinationOperationScope>(
     () => ({
       id: JSON.stringify([coordinationApiUrl, sessionToken, jobId]),
+      runId: jobId,
       pending: new Map(),
     }),
     [coordinationApiUrl, sessionToken, jobId],

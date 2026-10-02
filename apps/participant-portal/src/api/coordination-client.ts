@@ -32,8 +32,12 @@ async function mapResponse(res: Response): Promise<CoordinationOutcome> {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       return { kind: "rejected", error: body.error ?? "rejected" };
     }
-    case StatusCodes.CONFLICT:
+    case StatusCodes.CONFLICT: {
+      const body = (await res.json().catch(() => ({}))) as { error?: string } | null;
+      if (body?.error === "coordination_run_changed")
+        return { kind: "rejected", error: body.error };
       return { kind: "conflict" };
+    }
     case StatusCodes.TOO_MANY_REQUESTS:
     case StatusCodes.INTERNAL_SERVER_ERROR:
     case StatusCodes.BAD_GATEWAY:
@@ -48,13 +52,14 @@ async function mapResponse(res: Response): Promise<CoordinationOutcome> {
   }
 }
 
-/** team の op を提出し、 適用後の projection を返す (= write 経路)。 */
+/** Submit a team operation; runId pins retries to the problem jobId shown by the portal. */
 export async function submitCoordinationOp(
   coordinationApiUrl: string,
   teamLoginKey: string,
   op: unknown,
   signal?: AbortSignal,
   operationKey: string = newOperationKey(),
+  runId?: string,
 ): Promise<CoordinationOutcome> {
   const res = await fetch(coordinationUrl(coordinationApiUrl, "portal/me/coordination/op"), {
     method: "POST",
@@ -63,7 +68,7 @@ export async function submitCoordinationOp(
       "content-type": "application/json",
       "Idempotency-Key": operationKey,
     },
-    body: JSON.stringify({ op }),
+    body: JSON.stringify({ op, ...(runId ? { runId } : {}) }),
     signal,
   });
   return mapResponse(res);

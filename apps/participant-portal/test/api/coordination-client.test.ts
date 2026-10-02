@@ -10,7 +10,7 @@ const URL_BASE = "https://coord.example.com";
 function mockFetch(status: number, body?: unknown) {
   return vi.fn().mockResolvedValue({
     status,
-    json: async () => body ?? {},
+    json: async () => (body === undefined ? {} : body),
   });
 }
 
@@ -53,6 +53,27 @@ describe("submitCoordinationOp", () => {
       expect(init.headers["Idempotency-Key"]).toBe("same-operation-key");
   });
 
+  it("pins retries to the caller's run without changing the operation or key", async () => {
+    const f = mockFetch(409, { error: "coordination_conflict" });
+    vi.stubGlobal("fetch", f);
+    const runId = "01K00000000000000000000004";
+    for (let attempt = 0; attempt < 2; attempt++)
+      expect(
+        await submitCoordinationOp(
+          URL_BASE,
+          "key-1",
+          { kind: "move" },
+          undefined,
+          "same-operation-key",
+          runId,
+        ),
+      ).toEqual({ kind: "conflict" });
+    for (const [, init] of f.mock.calls) {
+      expect(init.body).toBe(JSON.stringify({ op: { kind: "move" }, runId }));
+      expect(init.headers["Idempotency-Key"]).toBe("same-operation-key");
+    }
+  });
+
   it("should map 422 to rejected with the backend error", async () => {
     vi.stubGlobal("fetch", mockFetch(422, { error: "bad_op" }));
     expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({
@@ -83,6 +104,35 @@ describe("submitCoordinationOp", () => {
 
   it("should map 409 to conflict", async () => {
     vi.stubGlobal("fetch", mockFetch(409));
+    expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({ kind: "conflict" });
+  });
+
+  it("treats a changed run as a terminal rejection instead of a retryable conflict", async () => {
+    vi.stubGlobal("fetch", mockFetch(409, { error: "coordination_run_changed" }));
+    expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({
+      kind: "rejected",
+      error: "coordination_run_changed",
+    });
+  });
+
+  it.each([null, { error: "coordination_conflict" }])(
+    "preserves retryable conflicts for other response bodies (%s)",
+    async (body) => {
+      vi.stubGlobal("fetch", mockFetch(409, body));
+      expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({ kind: "conflict" });
+    },
+  );
+
+  it("preserves a retryable conflict when its body cannot be decoded", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 409,
+        json: async () => {
+          throw new Error("bad json");
+        },
+      }),
+    );
     expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({ kind: "conflict" });
   });
 

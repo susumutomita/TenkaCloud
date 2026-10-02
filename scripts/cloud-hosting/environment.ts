@@ -71,5 +71,21 @@ export function loadCloudEnvironment(
   const overrides = Object.fromEntries(
     Object.entries(inherited).filter(([, value]) => value !== undefined),
   );
-  return { ...file, ...overrides, ENV: environment, CDK_PARAM_ENVIRONMENT: environment };
+  const resolved: NodeJS.ProcessEnv & { ENV: string; CDK_PARAM_ENVIRONMENT: string } = {
+    ...file,
+    ...overrides,
+    ENV: environment,
+    CDK_PARAM_ENVIRONMENT: environment,
+  };
+  const profile = resolved.AWS_PROFILE;
+  const defaultProfile = resolved.AWS_DEFAULT_PROFILE;
+  if (profile && defaultProfile && profile !== defaultProfile)
+    throw new Error("AWS_PROFILE and AWS_DEFAULT_PROFILE must select the same profile.");
+  // The CLI accepts the legacy alias; the JavaScript SDK reads AWS_PROFILE.
+  if (!profile && defaultProfile) resolved.AWS_PROFILE = defaultProfile;
+  if (resolved.AWS_PROFILE && (resolved.AWS_ACCESS_KEY_ID || resolved.AWS_SECRET_ACCESS_KEY))
+    throw new Error(
+      "AWS profile and environment access keys are both configured. AWS CLI and JavaScript SDK give them different precedence. Choose one source: unset AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN to use the profile, or unset AWS_PROFILE/AWS_DEFAULT_PROFILE to use environment credentials. No AWS action was taken.",
+    );
+  return resolved;
 }

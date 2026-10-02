@@ -38,7 +38,10 @@ import { CloudHosting } from "../../lib/cloud-hosting/hosting.js";
 import { cloudDeploymentTarget } from "../../lib/cloud-hosting/regions.js";
 import { cloudStackTags } from "../../lib/cloud-hosting/stack-names.js";
 import { standardSynthesizer } from "../../lib/cloud-hosting/synthesizer.js";
-import { CLOUD_EVENT_LIMITS } from "../../lib/problem-deploy/control-data/domain/events.js";
+import {
+  CLOUD_EVENT_LIMITS,
+  SQL_EVENT_LIMITS,
+} from "../../lib/problem-deploy/control-data/domain/events.js";
 
 vi.mock("node:fs", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:fs")>();
@@ -316,41 +319,44 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
     expect(templates).not.toContain("custom123");
     expect(templates).not.toContain("policy/tenkacloud/cloud-hosting/");
   });
-  it("publishes authoritative creation limits in the actual organizer runtime-config asset", () => {
-    const outdir = join(directory, "cdk.out");
-    const configs = readdirSync(outdir)
-      .map((name) => join(outdir, name, "runtime-config.json"))
-      .filter(existsSync)
-      .map(
-        (path) =>
-          JSON.parse(
-            readFileSync(path, "utf8").replace(/<<marker:[^>]+>>/gu, '"SYNTHESIZED_TOKEN"'),
-          ) as unknown,
+  it.each(["dynamodb", "turso"])(
+    "publishes %s creation limits in the actual organizer runtime-config asset",
+    (provider) => {
+      const outdir = join(directory, provider === "turso" ? "turso.cdk.out" : "cdk.out");
+      const configs = readdirSync(outdir)
+        .map((name) => join(outdir, name, "runtime-config.json"))
+        .filter(existsSync)
+        .map(
+          (path) =>
+            JSON.parse(
+              readFileSync(path, "utf8").replace(/<<marker:[^>]+>>/gu, '"SYNTHESIZED_TOKEN"'),
+            ) as unknown,
+        );
+      expect(configs).toContainEqual(
+        expect.objectContaining({
+          eventLimits: provider === "turso" ? SQL_EVENT_LIMITS : CLOUD_EVENT_LIMITS,
+          mode: "cloud-host",
+          supportedProblemIds: ["hello-world", "ac26-crypto-battle"],
+          nativeProblemIds: ["ac26-crypto-battle"],
+          features: {
+            samlSso: false,
+            nonAwsRuntime: false,
+            redTeam: false,
+            challengePrerequisiteGate: false,
+          },
+        }),
       );
-    expect(configs).toContainEqual(
-      expect.objectContaining({
-        eventLimits: CLOUD_EVENT_LIMITS,
-        mode: "cloud-host",
-        supportedProblemIds: ["hello-world", "ac26-crypto-battle"],
-        nativeProblemIds: ["ac26-crypto-battle"],
-        features: {
-          samlSso: false,
-          nonAwsRuntime: false,
-          redTeam: false,
-          challengePrerequisiteGate: false,
-        },
-      }),
-    );
-    expect(configs).toContainEqual(
-      expect.objectContaining({
-        mode: "backend",
-        cloudMode: "real",
-        hasAws: true,
-        notificationsEnabled: false,
-        scoreTimelineEnabled: false,
-      }),
-    );
-  });
+      expect(configs).toContainEqual(
+        expect.objectContaining({
+          mode: "backend",
+          cloudMode: "real",
+          hasAws: true,
+          notificationsEnabled: false,
+          scoreTimelineEnabled: false,
+        }),
+      );
+    },
+  );
   it("deletes owned data by default, keeps on-demand billing and does not TTL-delete history", () => {
     data.resourceCountIs("AWS::DynamoDB::Table", 3);
     const tables = data.findResources("AWS::DynamoDB::Table");
@@ -405,7 +411,37 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
     const writes = methods.filter((method) =>
       ["POST", "DELETE", "PATCH"].includes(method.Properties.HttpMethod),
     );
-    expect(writes).toHaveLength(16);
+    expect(writes).toHaveLength(17);
+    const resources = application.findResources("AWS::ApiGateway::Resource");
+    const reset = Object.entries(resources).find(
+      ([, resource]) => resource.Properties.PathPart === "reset",
+    );
+    expect(reset).toBeDefined();
+    if (!reset) throw new Error("Native reset resource is missing");
+    let resourceId = reset[0];
+    for (const pathPart of [
+      "reset",
+      "coordination",
+      "{problemId}",
+      "problems",
+      "{eventId}",
+      "events",
+    ]) {
+      const resetResource = resources[resourceId];
+      if (!resetResource) throw new Error(`Missing native reset resource: ${pathPart}`);
+      expect(resetResource.Properties.PathPart).toBe(pathPart);
+      resourceId = resetResource.Properties.ParentId?.Ref;
+    }
+    expect(writes).toContainEqual(
+      expect.objectContaining({
+        Properties: expect.objectContaining({
+          HttpMethod: "POST",
+          ResourceId: { Ref: reset[0] },
+          AuthorizationType: "COGNITO_USER_POOLS",
+          AuthorizerId: expect.any(Object),
+        }),
+      }),
+    );
     const flagId = Object.entries(application.findResources("AWS::ApiGateway::Resource")).find(
       ([, resource]) => resource.Properties.PathPart === "submit-flag",
     )?.[0];

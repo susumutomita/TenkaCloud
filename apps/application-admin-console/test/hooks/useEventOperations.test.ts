@@ -185,6 +185,48 @@ describe("useEventOperations — bulk deploy / teardown", () => {
     expect(result.current.bulkResult).toEqual({ ok: 2 });
     expect(refresh).toHaveBeenCalled();
   });
+
+  it("surfaces a pending-purge conflict and allows the same explicit teardown to be retried", async () => {
+    ops.bulkTeardownEvent
+      .mockRejectedValueOnce(new ApiError(409, '{"error":"coordination_purge_conflict"}'))
+      .mockResolvedValueOnce({ eventId: "evt-1", enqueued: 0, skipped: 0, failed: 0 });
+    const { result, refresh, setError } = setup({ cloudHost: true });
+    await act(async () => {
+      await result.current.handleBulkTeardown();
+    });
+    expect(setError).toHaveBeenLastCalledWith('API 409: {"error":"coordination_purge_conflict"}');
+    expect(result.current.bulkResult).toBeNull();
+    expect(result.current.bulkInFlight).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.handleBulkTeardown();
+    });
+    expect(ops.bulkTeardownEvent).toHaveBeenNthCalledWith(2, CLIENT, "evt-1");
+    expect(result.current.bulkResult).toEqual({
+      eventId: "evt-1",
+      enqueued: 0,
+      skipped: 0,
+      failed: 0,
+    });
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces the authoritative installation-intake fence without reporting cleanup success", async () => {
+    ops.bulkTeardownEvent.mockRejectedValue(
+      new ApiError(409, '{"error":"coordination_purge_intake_closed"}'),
+    );
+    const { result, refresh, setError } = setup({ cloudHost: true });
+    await act(async () => {
+      await result.current.handleBulkTeardown();
+    });
+    expect(setError).toHaveBeenLastCalledWith(
+      'API 409: {"error":"coordination_purge_intake_closed"}',
+    );
+    expect(ops.bulkTeardownEvent).toHaveBeenCalledExactlyOnceWith(CLIENT, "evt-1");
+    expect(result.current.bulkResult).toBeNull();
+    expect(result.current.bulkInFlight).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+  });
 });
 
 describe("useEventOperations — scheduling", () => {

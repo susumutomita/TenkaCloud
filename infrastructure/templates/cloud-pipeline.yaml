@@ -472,7 +472,7 @@ Resources:
                 Action:
                   - sts:GetCallerIdentity
                 Resource: "*"
-              # Explicit Turso destroy-all authenticates with this exact deployed token.
+              # Read-only deploy preflight and explicit Turso destroy-all use this exact token.
               # The parameter pattern forbids wildcards before this IAM policy is created.
               - !If
                 - UsesTursoAuthToken

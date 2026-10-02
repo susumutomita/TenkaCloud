@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
+import { probeTursoConnection } from "../../infrastructure/lib/problem-deploy/control-data/sql-executor-cache";
 import {
   createDestroyAssembly,
   type DestroyAssembly,
@@ -10,6 +11,7 @@ import {
   type InstallationLocation,
   openCloudInstallation,
 } from "./installation";
+import type { TursoTokenProbe } from "./turso-preflight";
 import { purgeTursoControlData } from "./turso-reset";
 
 export interface ProcessRequest {
@@ -25,12 +27,14 @@ export interface ProcessResult {
   readonly stderr: string;
 }
 export interface CloudCliIo {
+  configureEnvironment?(env: NodeJS.ProcessEnv): void;
   run(request: ProcessRequest): Promise<ProcessResult>;
   createDestroyAssembly(target: DestroyAssemblyTarget): DestroyAssembly;
   stdout(text: string): void;
   stderr(text: string): void;
   confirm(question: string): Promise<boolean>;
   openInstallation(location: InstallationLocation): CloudInstallation | Promise<CloudInstallation>;
+  probeTurso?: TursoTokenProbe;
   purgeTursoControlData?(target: {
     readonly databaseUrl: string;
     readonly parameterName: string;
@@ -43,9 +47,14 @@ export interface CloudCliIo {
 /** Subprocesses use argument arrays; only CDK's documented --app value is a command string. */
 export function systemCloudIo(): CloudCliIo {
   return {
+    // Match the historical Makefile export: in-process SDK credential providers
+    // must see the same selected profile/configuration as AWS/CDK subprocesses.
+    // This CLI runs one command per process; it never writes an operator's files.
+    configureEnvironment: (env) => Object.assign(process.env, env),
     createDestroyAssembly,
     openInstallation: openCloudInstallation,
     purgeTursoControlData,
+    probeTurso: (url, authToken) => probeTursoConnection({ url, authToken }),
     now: Date.now,
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     run: (request) =>

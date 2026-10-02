@@ -2,11 +2,17 @@ import { randomInt, randomUUID } from "node:crypto";
 import { ulid } from "ulid";
 import { z } from "zod";
 import {
-  createMatch,
   type MatchTransition,
   transitionMatch,
 } from "../../../../scripts/local-host/coordination-core.js";
 import { eventSchema, teamSchema } from "./cloud-records.js";
+import { purgeRunReference } from "./coordination-purge.js";
+import {
+  assertOperationRun,
+  assertResetOpen,
+  initializedMatch,
+  resetRun,
+} from "./coordination-runs.js";
 import {
   assertArtifact,
   assertOpen,
@@ -34,18 +40,26 @@ import {
   coordinationHeadKey,
   type NativeCoordinationArtifact,
   NativeCoordinationError,
+  type NativeCoordinationResetInput,
+  type NativeCoordinationResetResult,
   type NativeCoordinationResponse,
   type NativeCoordinationRun,
+  type NativeCoordinationSummary,
   type NativeSchedulePatch,
+  SQL_COORDINATION_MAX_BYTES,
 } from "./domain/coordination.js";
-import type { EventRecord } from "./domain/events.js";
+import { type EventRecord, SQL_EVENT_LIMITS } from "./domain/events.js";
 import type { TeamRecord } from "./domain/teams.js";
 import type { CoordinationTiming } from "./dynamodb-deployments-coordination.js";
 import { sqlPayload } from "./sql-cloud-records.js";
 import {
   assertSnapshotScope,
+  assertSqlPayloadAvailable,
+  decodeSqlSnapshot,
   headSchema,
+  readSqlRunSnapshot,
   readSqlSnapshot,
+  readSqlSummary,
   type StoredRun,
   sqlCloseFence,
   sqlHeadAbsent,
@@ -64,6 +78,7 @@ interface Operation {
   readonly key: string;
   readonly hash: string;
   readonly op: unknown;
+  readonly runId?: string;
 }
 interface RequestInput {
   readonly event: EventRecord;
@@ -121,6 +136,7 @@ export class SqlDeploymentsCoordination {
     if (!raw) return undefined;
     const head = headSchema.parse(sqlPayload(raw));
     assertSnapshotScope(head, eventId, problemId);
+    assertSqlPayloadAvailable(head);
     return head;
   }
 
@@ -135,6 +151,254 @@ export class SqlDeploymentsCoordination {
 
   async read(eventId: string, problemId: string): Promise<NativeCoordinationRun | undefined> {
     return this.readSnapshot(eventId, problemId);
+  }
+  summary(eventId: string, problemId: string): Promise<NativeCoordinationSummary | undefined> {
+    return readSqlSummary(this.sql, eventId, problemId, this.timing);
+  }
+
+  /** Erase only verified private payloads, retaining a permanent closed identity and score audit. */
+  async purge(eventId: string, problemId: string): Promise<void> {
+    coordinationHeadKey(eventId, problemId);
+    for (let attempt = 0; attempt < 24; attempt++) {
+      if (await this.purgeOnce(eventId, problemId)) return;
+      await this.backoff(attempt);
+    }
+    throw new NativeCoordinationError(409, "coordination_conflict");
+  }
+
+  private async purgeOnce(eventId: string, problemId: string): Promise<boolean> {
+    const raw = await this.sql.get(
+      "SELECT payload, snapshot FROM cloud_coordination_runs WHERE event_id = ? AND problem_id = ?",
+      [eventId, problemId],
+    );
+    if (!raw) return this.purgeAbsent(eventId, problemId);
+    const head = headSchema.parse(sqlPayload(raw));
+    assertSnapshotScope(head, eventId, problemId);
+    if (head.purge?.state === "pending")
+      throw new NativeCoordinationError(503, "coordination_purge_pending");
+    if (head.purge?.state === "complete") {
+      if (raw.snapshot !== "") throw new NativeCoordinationError(503, "coordination_purge_invalid");
+      return true;
+    }
+    if (await this.sql.get("SELECT 1 FROM cloud_installation_control WHERE id = 1"))
+      throw new NativeCoordinationError(409, "coordination_purge_intake_closed");
+    const current = decodeSqlSnapshot(raw, eventId, problemId, this.timing);
+    if (!current.closed) throw new NativeCoordinationError(409, "coordination_not_settled");
+    const history = await this.purgeHistoryOrRetry(head);
+    if (!history) return false;
+    const { runs, guards } = history;
+    const retained = headSchema
+      .omit({ admissionOwner: true, admissionExpiresAt: true })
+      .parse(head);
+    const manifest = { ...retained, purge: { state: "complete" as const, runs } };
+    assertSnapshotScope(manifest, eventId, problemId);
+    return this.commit([
+      sqlIntakeGuard(),
+      sqlGuard(
+        `EXISTS (SELECT 1 FROM cloud_coordination_runs WHERE event_id = ? AND problem_id = ?
+          AND payload = ? AND snapshot = ? AND json_extract(payload, '$.purge') IS NULL)`,
+        [eventId, problemId, String(raw.payload), String(raw.snapshot)],
+      ),
+      ...guards,
+      {
+        sql: "DELETE FROM cloud_coordination_history WHERE event_id = ? AND problem_id = ?",
+        params: [eventId, problemId],
+      },
+      {
+        sql: "DELETE FROM cloud_coordination_receipts WHERE event_id = ? AND problem_id = ?",
+        params: [eventId, problemId],
+      },
+      {
+        sql: `UPDATE cloud_coordination_runs SET payload = ?, snapshot = ''
+          WHERE event_id = ? AND problem_id = ? AND payload = ?
+            AND json_extract(payload, '$.purge') IS NULL`,
+        params: [JSON.stringify(manifest), eventId, problemId, String(raw.payload)],
+      },
+      sqlChangesGuard(),
+    ]);
+  }
+
+  private async purgeAbsent(eventId: string, problemId: string): Promise<boolean> {
+    const absent = `NOT EXISTS (SELECT 1 FROM cloud_coordination_history WHERE event_id = ? AND problem_id = ?)
+      AND NOT EXISTS (SELECT 1 FROM cloud_coordination_receipts WHERE event_id = ? AND problem_id = ?)`;
+    const params = [eventId, problemId, eventId, problemId];
+    const row = await this.sql.get(`SELECT (${absent}) AS absent`, params);
+    if (row?.absent !== 1) throw new NativeCoordinationError(503, "coordination_history_invalid");
+    return this.commit([sqlHeadAbsent(eventId, problemId), sqlGuard(absent, params)]);
+  }
+
+  private async purgeHistory(head: z.infer<typeof headSchema>) {
+    const { eventId, problemId } = head;
+    const runIds = [...(head.history ?? []), ...(head.retiredRuns ?? [])];
+    if (new Set([head.runId, ...runIds]).size !== runIds.length + 1)
+      throw new NativeCoordinationError(503, "coordination_history_invalid");
+    // Four rows suffice to reject extra history beyond the bounded three-run inventory.
+    const history = await this.sql.all(
+      `SELECT run_id FROM cloud_coordination_history
+        WHERE event_id = ? AND problem_id = ? LIMIT 4`,
+      [eventId, problemId],
+    );
+    if (history.length !== runIds.length)
+      throw new NativeCoordinationError(503, "coordination_history_invalid");
+    const guards = [
+      sqlGuard(
+        `(SELECT COUNT(*) FROM cloud_coordination_history WHERE event_id = ? AND problem_id = ?) = ?`,
+        [eventId, problemId, runIds.length],
+      ),
+    ];
+    const runs = [purgeRunReference(head)];
+    for (const runId of runIds) {
+      if (!history.some((row) => row.run_id === runId))
+        throw new NativeCoordinationError(503, "coordination_history_invalid");
+      // Keep each HTTP response within the existing single-snapshot size policy.
+      const saved = await this.sql.get(
+        `SELECT payload, snapshot FROM cloud_coordination_history
+          WHERE event_id = ? AND problem_id = ? AND run_id = ?`,
+        [eventId, problemId, runId],
+      );
+      if (!saved) throw new NativeCoordinationError(503, "coordination_history_invalid");
+      const run = decodeSqlSnapshot(saved, eventId, problemId, this.timing);
+      if (run.runId !== runId || !run.closed)
+        throw new NativeCoordinationError(503, "coordination_history_invalid");
+      runs.push(purgeRunReference(run));
+      guards.push(
+        sqlGuard(
+          `EXISTS (SELECT 1 FROM cloud_coordination_history
+            WHERE event_id = ? AND problem_id = ? AND run_id = ? AND payload = ? AND snapshot = ?)`,
+          [eventId, problemId, runId, String(saved.payload), String(saved.snapshot)],
+        ),
+      );
+    }
+    return { runs, guards };
+  }
+
+  private async purgeHistoryOrRetry(head: z.infer<typeof headSchema>) {
+    try {
+      return await this.purgeHistory(head);
+    } catch (error) {
+      if (
+        error instanceof NativeCoordinationError &&
+        ["coordination_history_invalid", "coordination_snapshot_invalid"].includes(error.code) &&
+        (await this.historyCleanupAdvanced(head))
+      )
+        return undefined;
+      throw error;
+    }
+  }
+
+  /** Separate history reads may straddle another verified purge or a retired-run cleanup. */
+  private async historyCleanupAdvanced(previous: z.infer<typeof headSchema>): Promise<boolean> {
+    const { eventId, problemId } = previous;
+    const raw = await this.sql.get(
+      "SELECT payload, snapshot FROM cloud_coordination_runs WHERE event_id = ? AND problem_id = ?",
+      [eventId, problemId],
+    );
+    if (!raw) return false;
+    const head = headSchema.parse(sqlPayload(raw));
+    assertSnapshotScope(head, eventId, problemId);
+    if (
+      JSON.stringify(purgeRunReference(head)) !== JSON.stringify(purgeRunReference(previous)) ||
+      head.closed !== previous.closed
+    )
+      return false;
+    if (head.purge?.state === "complete") {
+      if (raw.snapshot !== "") throw new NativeCoordinationError(503, "coordination_purge_invalid");
+      return true;
+    }
+    if (
+      head.purge ||
+      previous.retiredRuns?.length !== 1 ||
+      (head.retiredRuns?.length ?? 0) !== 0 ||
+      JSON.stringify(head.history ?? []) !== JSON.stringify(previous.history ?? [])
+    )
+      return false;
+    decodeSqlSnapshot(raw, eventId, problemId, this.timing);
+    return true;
+  }
+  readRun(
+    eventId: string,
+    problemId: string,
+    runId: string,
+  ): Promise<NativeCoordinationRun | undefined> {
+    return readSqlRunSnapshot(this.sql, eventId, problemId, runId, this.timing);
+  }
+
+  async reset(input: NativeCoordinationResetInput): Promise<NativeCoordinationResetResult> {
+    id.parse(input.expectedRunId);
+    assertArtifact(input.artifact);
+    assertSelected(input.event, input.artifact.problemId);
+    assertResetOpen(input.event, input.now());
+    // A retry completes any committed cleanup obligation before checking its stale run ID.
+    await this.pruneHistory(input.event.eventId, input.artifact.problemId);
+    const previous = await this.readSnapshot(input.event.eventId, input.artifact.problemId);
+    if (!previous) throw new NativeCoordinationError(404, "coordination_not_initialized");
+    if (previous.runId !== input.expectedRunId)
+      throw new NativeCoordinationError(409, "run_rotation_conflict");
+    const { run, deltas } = resetRun(previous, input.event, input.artifact, input.now());
+    const writes: SqlStatement[] = [
+      {
+        sql: `INSERT INTO cloud_coordination_history
+          (event_id, problem_id, run_id, payload, snapshot)
+          SELECT event_id, problem_id, ?, json_set(json_remove(payload, '$.admissionOwner', '$.admissionExpiresAt'), '$.closed', json('true')), snapshot
+          FROM cloud_coordination_runs WHERE event_id = ? AND problem_id = ?
+            AND json_extract(payload, '$.purge') IS NULL`,
+        params: [previous.runId, previous.eventId, previous.problemId],
+      },
+      ...this.transitionWrites(run, previous, deltas, input.now()),
+    ];
+    const commitAt = input.now();
+    assertResetOpen(input.event, commitAt);
+    writes.push(sqlIntakeGuard(), this.eventCheck(input.event, commitAt));
+    // A losing CAS must not loop and rotate the winning request's new run.
+    if (!(await this.commit(writes)))
+      throw new NativeCoordinationError(409, "run_rotation_conflict");
+    await this.pruneHistory(run.eventId, run.problemId);
+    return {
+      eventId: run.eventId,
+      problemId: run.problemId,
+      runId: run.runId,
+      previousRunId: previous.runId,
+    };
+  }
+
+  async pruneHistory(eventId: string, problemId: string): Promise<void> {
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const head = await this.readHead(eventId, problemId);
+      if (!head?.retiredRuns?.length) return;
+      const writes: SqlStatement[] = [];
+      for (const runId of head.retiredRuns) {
+        if (runId === head.runId || head.history?.includes(runId))
+          throw new NativeCoordinationError(503, "coordination_snapshot_invalid");
+        writes.push(
+          {
+            sql: "DELETE FROM cloud_coordination_history WHERE event_id = ? AND problem_id = ? AND run_id = ?",
+            params: [eventId, problemId, runId],
+          },
+          {
+            sql: "DELETE FROM cloud_coordination_receipts WHERE event_id = ? AND problem_id = ? AND run_id = ?",
+            params: [eventId, problemId, runId],
+          },
+        );
+      }
+      writes.push(
+        {
+          sql: `UPDATE cloud_coordination_runs SET payload = json_remove(payload, '$.retiredRuns')
+            WHERE event_id = ? AND problem_id = ? AND json_extract(payload, '$.runId') = ?
+              AND json_extract(payload, '$.revision') = ?
+              AND json_extract(payload, '$.purge') IS NULL
+              AND json_extract(payload, '$.retiredRuns') = json(?)`,
+          params: [eventId, problemId, head.runId, head.revision, JSON.stringify(head.retiredRuns)],
+        },
+        sqlChangesGuard(),
+      );
+      try {
+        if (await this.commit(writes)) return;
+      } catch {
+        throw new NativeCoordinationError(503, "coordination_history_prune_failed");
+      }
+      await this.backoff(attempt);
+    }
+    throw new NativeCoordinationError(503, "coordination_history_prune_failed");
   }
   /** Cleanup needs a complete, closed native snapshot, never merely an event status. */
   closeFence(eventId: string, problemId: string): Promise<SqlStatement[]> {
@@ -154,10 +418,10 @@ export class SqlDeploymentsCoordination {
     assertArtifact(artifact);
     assertSelected(event, artifact.problemId);
     assertOpen(event, now);
-    const roster = checkedRoster(event, teams);
+    const roster = checkedRoster(event, teams, SQL_EVENT_LIMITS.maxTeams);
     const estimate =
       artifact.stateBudget.baseBytes + artifact.stateBudget.bytesPerTeam * roster.length;
-    if (!Number.isSafeInteger(estimate) || estimate > COORDINATION_MAX_BYTES)
+    if (!Number.isSafeInteger(estimate) || estimate > SQL_COORDINATION_MAX_BYTES)
       throw new NativeCoordinationError(503, "coordination_state_budget_exceeded");
     for (let attempt = 0; attempt < 12; attempt++) {
       const prior = await this.readSnapshot(event.eventId, artifact.problemId);
@@ -170,11 +434,7 @@ export class SqlDeploymentsCoordination {
         await this.backoff(attempt);
         continue;
       }
-      const match = createMatch(artifact.plugin, {
-        eventId: event.eventId,
-        teamIds: roster.map((team) => team.teamId),
-        teamNames: Object.fromEntries(roster.map((team) => [team.teamId, team.teamName])),
-      });
+      const match = initializedMatch(artifact, roster, event.eventId);
       const run: NativeCoordinationRun = {
         eventId: event.eventId,
         problemId: artifact.problemId,
@@ -189,7 +449,7 @@ export class SqlDeploymentsCoordination {
         closed: false,
         updatedAt: new Date(now).toISOString(),
       };
-      const writes = this.snapshotWrites(run);
+      const writes = [...this.snapshotWrites(run), ...this.scoreWrites(run, match.scores, now)];
       writes.push(sqlIntakeGuard(), this.eventCheck(event, now));
       if (
         event.status === "DRAFT" &&
@@ -232,6 +492,7 @@ export class SqlDeploymentsCoordination {
     const run = await this.readSnapshot(input.event.eventId, input.artifact.problemId);
     if (!run) throw new NativeCoordinationError(409, "not_running");
     assertPin(run, input.artifact);
+    if (input.operation) assertOperationRun(run, input.operation);
     if (!run.roster.some((team) => team.teamId === input.team.teamId))
       throw new NativeCoordinationError(401, "unauthorized");
     if (input.operation && run.closed) throw new NativeCoordinationError(422, "event_ended");
@@ -241,6 +502,7 @@ export class SqlDeploymentsCoordination {
     if (input.operation) {
       const head = await this.readHead(input.event.eventId, input.artifact.problemId);
       if (!head) throw new NativeCoordinationError(409, "not_running");
+      assertOperationRun(head, input.operation);
       const replay = await this.readReceipt(head, input.team, input.operation);
       if (!replay) return this.withAdmission(input);
       const run = await this.currentRun(input);
@@ -272,6 +534,7 @@ export class SqlDeploymentsCoordination {
       assertRequestBudget(input);
       const head = await this.readHead(input.event.eventId, input.artifact.problemId);
       if (!head) throw new NativeCoordinationError(409, "not_running");
+      if (input.operation) assertOperationRun(head, input.operation);
       const now = input.now();
       assertParticipantGate(input.event, now, input.operation !== undefined);
       if (head.closed) return false;
@@ -288,6 +551,7 @@ export class SqlDeploymentsCoordination {
             WHERE event_id = ? AND problem_id = ?
               AND json_extract(payload, '$.runId') = ? AND json_extract(payload, '$.revision') = ?
               AND json_extract(payload, '$.closed') = 0
+              AND json_extract(payload, '$.purge') IS NULL
               AND (json_extract(payload, '$.admissionOwner') IS NULL OR json_extract(payload, '$.admissionExpiresAt') <= ?)`,
             params: [
               admission.owner,
@@ -316,7 +580,8 @@ export class SqlDeploymentsCoordination {
     await this.sql.run(
       `UPDATE cloud_coordination_runs
       SET payload = json_remove(payload, '$.admissionOwner', '$.admissionExpiresAt')
-      WHERE event_id = ? AND problem_id = ? AND json_extract(payload, '$.admissionOwner') = ?`,
+      WHERE event_id = ? AND problem_id = ? AND json_extract(payload, '$.admissionOwner') = ?
+        AND json_extract(payload, '$.purge') IS NULL`,
       [input.event.eventId, input.artifact.problemId, owner],
     );
   }
@@ -491,7 +756,7 @@ export class SqlDeploymentsCoordination {
     atMs?: number,
   ): SqlStatement[] {
     const bytes = this.timed("encode", () => jsonBytes(run.match));
-    if (bytes.byteLength > COORDINATION_MAX_BYTES)
+    if (bytes.byteLength > SQL_COORDINATION_MAX_BYTES)
       throw new NativeCoordinationError(503, "coordination_state_too_large");
     const fields = Object.fromEntries(
       Object.entries(run).filter(([key]) => key !== "match" && !key.startsWith("admission")),
@@ -515,7 +780,9 @@ export class SqlDeploymentsCoordination {
           `UPDATE cloud_coordination_runs SET payload = ?, snapshot = ?
         WHERE event_id = ? AND problem_id = ? AND json_extract(payload, '$.runId') = ?
           AND json_extract(payload, '$.revision') = ? AND json_extract(payload, '$.snapshotDigest') = ?
-          AND json_extract(payload, '$.closed') = ?` +
+          AND json_extract(payload, '$.closed') = ?
+          AND json_extract(payload, '$.purge') IS NULL
+          AND COALESCE(json_extract(payload, '$.retiredRuns'), '[]') = ?` +
           (owner
             ? " AND json_extract(payload, '$.admissionOwner') = ? AND json_extract(payload, '$.admissionExpiresAt') > ?"
             : ""),
@@ -528,6 +795,7 @@ export class SqlDeploymentsCoordination {
           previous.revision,
           previous.snapshotDigest,
           Number(previous.closed),
+          JSON.stringify(previous.retiredRuns ?? []),
           ...(owner ? [owner, atMs ?? 0] : []),
         ],
       },
@@ -543,7 +811,18 @@ export class SqlDeploymentsCoordination {
     owner?: string,
     atMs?: number,
   ): SqlStatement[] {
-    const writes = this.snapshotWrites(run, previous, owner, atMs);
+    return [
+      ...this.snapshotWrites(run, previous, owner, atMs),
+      ...this.scoreWrites(run, deltas, now),
+    ];
+  }
+
+  private scoreWrites(
+    run: NativeCoordinationRun,
+    deltas: Record<string, number>,
+    now: number,
+  ): SqlStatement[] {
+    const writes: SqlStatement[] = [];
     const changed = Object.entries(deltas).filter(([, value]) => value !== 0);
     for (const [teamId, delta] of changed)
       writes.push({
@@ -616,6 +895,7 @@ export class SqlDeploymentsCoordination {
       head.revision === run.revision &&
       head.snapshotDigest === run.snapshotDigest &&
       head.closed === run.closed &&
+      head.purge === undefined &&
       ((!input.operation && run.closed) || row.installation == null)
     );
   }

@@ -4,11 +4,15 @@ import type {
 } from "../../lib/problem-deploy/control-data/cloud-repository.js";
 import { DeploymentConflict } from "../../lib/problem-deploy/control-data/domain/deployment-work.js";
 import type { DeploymentRecord } from "../../lib/problem-deploy/control-data/domain/deployments.js";
-import type { EventRecord } from "../../lib/problem-deploy/control-data/domain/events.js";
+import {
+  CLOUD_EVENT_LIMITS,
+  type EventRecord,
+} from "../../lib/problem-deploy/control-data/domain/events.js";
 import type { TeamRecord } from "../../lib/problem-deploy/control-data/domain/teams.js";
 
 /** HTTP unit-test fixture only; DynamoDB transaction behavior is checked separately. */
 export class FakeRepository implements CloudRepository {
+  readonly eventLimits = CLOUD_EVENT_LIMITS;
   readonly events = new Map<string, EventRecord>();
   readonly teams = new Map<string, TeamRecord>();
   deployments: DeploymentRecord[] = [];

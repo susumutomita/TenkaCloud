@@ -26,11 +26,16 @@ The actual frontend selects the ID token. `Admin` and `Operator` can create even
 and rotate keys; only `Admin` revokes access. `Viewer` can read ordinary event
 information but cannot reveal keys. No token or missing role is promoted to Admin.
 
-The console runtime config advertises `eventLimits: { maxTeams: 48, maxProblems: 50 }`.
-These values share the API/repository source of truth. Event creation writes one
-event, two rows per team, one creation receipt and an installation-intake condition.
-Thus 48 teams use 99 transaction items; the target 25-team HTTP creation uses 53.
-Existing 49-team events remain readable and removable.
+The console runtime config advertises the selected database's event limits:
+Turso supports 99 teams and DynamoDB supports 48, with up to 50 problems on either
+provider. The API and repository enforce those same limits. DynamoDB event creation
+writes one event, two rows per team, one creation receipt and an installation-intake
+condition: 48 teams use 99 transaction items; 25 teams use 53. SQL keeps all event,
+team, access-key and receipt writes in one atomic batch without that item ceiling.
+Native Battle preserves the SQL 4 MiB snapshot policy and 99-team roster; DynamoDB
+keeps its 2 MiB chunked snapshots and 48-team roster so state, all scores and the
+receipt can commit atomically. Existing 49-team DynamoDB events remain readable and
+removable. These are admission limits, not live-event performance measurements.
 
 ## Historical schema and reuse
 
@@ -77,6 +82,17 @@ CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/tenkacloud/turso/auth-token
 The URL is configuration, not the token. The token must already exist in the
 chosen AWS region's SSM Parameter Store. Its creation and credentials are an
 operator setup step; no token is accepted in browser configuration or source.
+Before bootstrap, builds or AWS deployment, `make deploy` reads that exact SecureString
+with the selected AWS identity and runs an authenticated `SELECT 1`. Missing, invalid
+or expired credentials stop deployment without creating database tables or changing
+AWS resources. The token is never printed. DynamoDB skips this Turso-only check.
+The selected environment is also applied to in-process AWS SDKs. Use either an
+AWS profile or environment access keys (with `AWS_SESSION_TOKEN` when required).
+Unlike the old CLI-only precedence, mixing a profile with access keys is now
+rejected before AWS access because the CLI and JavaScript SDK choose different
+sources. Unset the unused source; credential values are never included in the error.
+`AWS_DEFAULT_PROFILE` is accepted as an alias; if both profile variables are set,
+they must name the same profile. No credentials or profile files are changed.
 Turso handlers receive permission to read that exact parameter. Turso mode creates
 zero DynamoDB tables and grants no DynamoDB runtime access. DynamoDB mode preserves
 the three on-demand tables and does not require a Turso URL or token parameter.
@@ -531,11 +547,48 @@ manual claim reset. Read-only no-op/replay paths recheck authorization atomicall
 No game-clock rounding or tick coalescing is used, because tick spacing can change
 this problem's scoring outcomes.
 
+An `Admin` or `Operator` can start a fresh match with
+`POST /events/:eventId/problems/:problemId/coordination/reset`. The optional
+`runId` body field fences an operator's previously read run; the response contains
+the new `runId` and `previousRunId`. Reset is refused after event end. A concurrent
+reset or changed publication returns a conflict instead of resetting the winner.
+The new match keeps the reviewed plugin/schema pin and the original event clock,
+with a fresh secret. Its initial native score replaces the previous native subtotal
+in the same transaction, preserving scores from other problems and solved counts.
+
+The current run and two previous snapshots remain readable through the storage
+adapter. Retiring a run deletes its private snapshot and operation receipts;
+score-event audit records remain. An interrupted cleanup keeps a durable obligation
+that the next reset or explicit cleanup retry must finish before another rotation.
+Existing DynamoDB snapshot keys remain readable across the first reset; later runs
+own separate chunk keys. SQL archives the previous snapshot in the same atomic
+batch that publishes the new run.
+
+Participant operations carry their displayed job ID as `runId`, including retries.
+A stale run returns `coordination_run_changed` without applying the operation to
+the replacement match. Legacy callers can omit `runId` only before the first reset.
+
 Organizer Prepare initializes the native run. Start, scheduled end, scoring lock,
 End Event and coordinated teardown use the same durable state. End settles and
-closes the match; it does not delete AWS resources in a mixed event. Full platform
-teardown verifies native closure as well as AWS cleanup before recording DRAINED.
-An old CLI cannot tear down a version-2 application without this step.
+closes the match; it does not delete AWS resources in a mixed event. Optional
+platform teardown with `--drain-events` verifies native closure as well as AWS
+cleanup before recording DRAINED. Ordinary platform destroy does not require
+native closure or access to the control-data database.
+
+The organizer's explicit event DELETE removes the closed native match snapshots,
+match secrets and operation receipts after every resource teardown request is accepted.
+It retains a permanent verified run manifest, team totals, score history and shared
+plugin/catalog artifacts. End Event keeps the closed projection and retained runs.
+SQL performs the private-data removal atomically. DynamoDB records a pending purge
+before deleting bounded pages; an interruption retains that obligation and the
+same event teardown action resumes it. Pending cleanup never reports completion.
+
+Optional platform drain retains native payloads in external Turso. Starting a new
+event purge must precede global drain: once installation intake closes, a new purge
+returns `coordination_purge_intake_closed`. This preserves the drain's settled-data
+check. A previously recorded purge continues during DRAINING or DRAINED, and a
+completed purge remains idempotent. Explicit `destroy-all` still removes all owned
+control-data rows, including the retained manifests and run history.
 
 The organizer scoreboard returns authoritative current team totals. Complete score
 history, solved counts and per-problem averages are currently unavailable in that

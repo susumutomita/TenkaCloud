@@ -100,6 +100,75 @@ describe("EventSchedulePanel", () => {
     expect(btn("event_detail.teardown_at_now")).toBeDisabled();
   });
 
+  it.each([
+    ["TEARDOWN", "pending"],
+    ["ARCHIVED", "pending"],
+    ["ARCHIVED", undefined],
+  ] as const)(
+    "keeps cleanup confirmation available for a closed native run in %s with purge state %s",
+    (status, purgeState) => {
+      const p = props({
+        cloudHost: true,
+        detail: {
+          ...props().detail,
+          status,
+          nativeRuns: [
+            {
+              runId: "run-1",
+              problemId: "ac26-crypto-battle",
+              status: "CLOSED",
+              revision: 3,
+              purgeState,
+            },
+          ],
+        },
+      });
+      const view = render(<EventSchedulePanel {...p} />);
+      expect(btn("event_detail.teardown_at_now")).toBeEnabled();
+      fireEvent.click(btn("event_detail.teardown_at_now"));
+      expect(p.onConfirmTeardown).toHaveBeenCalledOnce();
+      expect(btn("event_detail.cloud_prepare")).toBeDisabled();
+      view.rerender(<EventSchedulePanel {...p} canMutateTenant={false} />);
+      expect(btn("event_detail.teardown_at_now")).toBeDisabled();
+      view.rerender(<EventSchedulePanel {...p} bulkInFlight="teardown" />);
+      expect(btn("event_detail.teardown_at_now")).toBeDisabled();
+    },
+  );
+
+  it("disables archived cleanup after native payload deletion completes", () => {
+    renderPanel({
+      cloudHost: true,
+      detail: {
+        ...props().detail,
+        status: "ARCHIVED",
+        nativeRuns: [
+          {
+            runId: "run-1",
+            problemId: "ac26-crypto-battle",
+            status: "CLOSED",
+            revision: 3,
+            purgeState: "complete",
+          },
+        ],
+      },
+    });
+    expect(btn("event_detail.teardown_at_now")).toBeDisabled();
+  });
+
+  it("does not enable archived cleanup for an unclosed native run", () => {
+    renderPanel({
+      cloudHost: true,
+      detail: {
+        ...props().detail,
+        status: "ARCHIVED",
+        nativeRuns: [
+          { runId: "run-1", problemId: "ac26-crypto-battle", status: "COMPLETE", revision: 3 },
+        ],
+      },
+    });
+    expect(btn("event_detail.teardown_at_now")).toBeDisabled();
+  });
+
   it("should render set values and fire every action callback when enabled", () => {
     const p = props();
     render(<EventSchedulePanel {...p} />);
