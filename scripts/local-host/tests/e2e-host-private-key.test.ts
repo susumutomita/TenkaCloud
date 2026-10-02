@@ -1,16 +1,20 @@
 import { expect, test } from "bun:test";
-import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { spawnPrivateKeyProcess } from "../private-key-process";
 import { inspectTemporaryDirectories } from "../temporary-directory";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 
 test("browser fixture delivers its login key only over the private pipe", async () => {
-  const child = spawn(process.execPath, ["run", "scripts/local-host/tests/e2e-host.ts"], {
+  const {
+    child,
+    stdout: publicOutput,
+    stderr: errorOutput,
+    privateOutput,
+    exited,
+  } = spawnPrivateKeyProcess([process.execPath, "run", "scripts/local-host/tests/e2e-host.ts"], {
     cwd: repository,
-    stdio: ["ignore", "pipe", "pipe", "pipe"],
     env: {
       ...process.env,
       HOST_E2E_ENGINE: "fixture",
@@ -21,20 +25,21 @@ test("browser fixture delivers its login key only over the private pipe", async 
   });
   let stdout = "";
   let stderr = "";
-  child.stdout?.on("data", (chunk: Buffer) => {
+  publicOutput.on("data", (chunk: Buffer) => {
     stdout += chunk.toString();
   });
-  child.stderr?.on("data", (chunk: Buffer) => {
+  errorOutput.on("data", (chunk: Buffer) => {
     stderr += chunk.toString();
   });
-  const publicLines = createInterface({ input: child.stdout as Readable });
-  const privateLines = createInterface({ input: child.stdio[3] as Readable });
-  const exited = new Promise<number | null>((accept) => child.once("exit", accept));
+  const publicLines = createInterface({ input: publicOutput });
+  const privateLines = createInterface({ input: privateOutput });
   const line = (lines: ReturnType<typeof createInterface>) =>
     new Promise<string>((accept, reject) => {
       lines.once("line", accept);
-      child.once("error", reject);
-      child.once("exit", () => reject(new Error("Browser fixture exited before readiness.")));
+      void child.exited.then(
+        () => reject(new Error("Browser fixture exited before readiness.")),
+        reject,
+      );
     });
   let key = "";
   try {
@@ -55,6 +60,8 @@ test("browser fixture delivers its login key only over the private pipe", async 
   } finally {
     publicLines.close();
     privateLines.close();
+    publicOutput.resume();
+    privateOutput.resume();
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
     expect(await exited).toBe(0);
     if (key) {

@@ -12,13 +12,12 @@
  * or HOST_E2E_CHROMIUM); it never downloads browsers.
  */
 import assert from "node:assert/strict";
-import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
+import { type PrivateKeyProcess, spawnPrivateKeyProcess } from "../private-key-process";
 import { signInOrganizer } from "./organizer-login";
 
 interface HostInfo {
@@ -40,18 +39,24 @@ function chromiumPath(): string | undefined {
   return existsSync(preinstalled) ? preinstalled : undefined;
 }
 
-async function startHost(): Promise<{ info: HostInfo; child: ChildProcess }> {
-  const child = spawn(process.execPath, ["run", "scripts/local-host/tests/e2e-host.ts"], {
-    cwd: root,
-    stdio: ["ignore", "pipe", "inherit", "pipe"],
-    env: { ...process.env, HOST_E2E_KEY_FD: "3" },
-  });
-  const publicLines = createInterface({ input: child.stdout ?? process.stdin });
-  const privateLines = createInterface({ input: child.stdio[3] as Readable });
+async function startHost(): Promise<{ info: HostInfo; child: PrivateKeyProcess }> {
+  const processHandle = spawnPrivateKeyProcess(
+    [process.execPath, "run", "scripts/local-host/tests/e2e-host.ts"],
+    {
+      cwd: root,
+      env: { ...process.env, HOST_E2E_KEY_FD: "3" },
+    },
+  );
+  const { child, stdout, stderr, privateOutput } = processHandle;
+  stderr.pipe(process.stderr);
+  const publicLines = createInterface({ input: stdout });
+  const privateLines = createInterface({ input: privateOutput });
   const ready = <T>(lines: ReturnType<typeof createInterface>, parse: (line: string) => T) =>
     new Promise<T>((accept, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code) => reject(new Error(`Host exited early (${String(code)}).`)));
+      void child.exited.then(
+        (code) => reject(new Error(`Host exited early (${String(code)}).`)),
+        reject,
+      );
       lines.once("line", (line) => {
         try {
           accept(parse(line));
@@ -69,32 +74,24 @@ async function startHost(): Promise<{ info: HostInfo; child: ChildProcess }> {
         return line;
       }),
     ]);
-    return { info: { ...address, key }, child };
+    return { info: { ...address, key }, child: processHandle };
   } catch (error) {
-    await stopHost(child);
+    await stopHost(processHandle);
     throw error;
   } finally {
     publicLines.close();
     privateLines.close();
+    stdout.resume();
+    privateOutput.resume();
   }
 }
 
-async function stopHost(child: ChildProcess): Promise<void> {
-  let code = child.exitCode;
-  let signal = child.signalCode;
-  if (code === null && signal === null) {
-    const completed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-      (accept) =>
-        child.once("exit", (exitCode, exitSignal) =>
-          accept({ code: exitCode, signal: exitSignal }),
-        ),
-    );
-    if (!child.kill("SIGTERM") && child.exitCode === null && child.signalCode === null)
-      throw new Error("Could not signal the browser fixture host to clean up its jobs.");
-    ({ code, signal } = await completed);
-  }
+async function stopHost(processHandle: PrivateKeyProcess): Promise<void> {
+  const { child } = processHandle;
+  if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+  const code = await processHandle.exited;
   if (code !== 0) {
-    const status = code === null ? `signal ${String(signal)}` : `code ${String(code)}`;
+    const status = child.signalCode ? `signal ${String(child.signalCode)}` : `code ${String(code)}`;
     throw new Error(
       `Browser fixture host exited with ${status}. Check stderr for retained SQLite ownership.`,
     );

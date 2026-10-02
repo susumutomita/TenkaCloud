@@ -443,6 +443,153 @@ for (const engine of ["sqlite", "libsql"] as const)
       await expect(f.request()).rejects.toThrow("unauthorized");
       expect(f.apply).toHaveBeenCalledTimes(1);
     });
+    it("retries a schedule change when initialization wins the absent-run fence", async () => {
+      const f = await fixture(engine);
+      let initialized: Awaited<ReturnType<typeof f.initialize>> | undefined;
+      f.before(async (writes) => {
+        if (
+          !writes.some((write) =>
+            write.sql.includes("NOT EXISTS (SELECT 1 FROM cloud_coordination_runs"),
+          )
+        )
+          return;
+        f.before(undefined);
+        initialized = await new SqlDeploymentsCoordination(f.peer).initialize({
+          event: f.event,
+          teams: f.teams,
+          artifact: f.artifact,
+          now: NOW,
+        });
+      });
+      const changed = await f.store.changeSchedule({
+        event: f.event,
+        artifact: f.artifact,
+        patch: { scoringLocked: true },
+        now: () => NOW + 1000,
+      });
+      expect(initialized).toBeDefined();
+      expect(changed.scoringLocked).toBe(true);
+      expect(await f.read()).toMatchObject({
+        runId: initialized?.runId,
+        revision: 1,
+        match: { matchSecret: initialized?.match.matchSecret },
+        clock: { elapsedMs: 1000, pausedMs: 0, lockedAt: NOW + 1000 },
+      });
+      const eventRow = await f.peer.get("SELECT payload FROM cloud_events WHERE event_id = ?", [
+        f.event.eventId,
+      ]);
+      expect(JSON.parse(String(eventRow?.payload))).toEqual(changed);
+      expect(await f.count("cloud_coordination_runs")).toBe(1);
+      expect(await f.count("cloud_coordination_scores")).toBe(0);
+    });
+    it.each(["different event", "outside the pinned roster"])(
+      "rejects a stored team from %s before exposing a projection",
+      async (scope) => {
+        const f = await fixture(engine);
+        await f.initialize();
+        const team = {
+          ...f.team,
+          teamId: ulid(),
+          eventId: scope === "different event" ? ulid() : f.event.eventId,
+        };
+        await f.peer.run("INSERT INTO cloud_teams (event_id, team_id, payload) VALUES (?, ?, ?)", [
+          team.eventId,
+          team.teamId,
+          JSON.stringify(team),
+        ]);
+        const projectForTeam = vi.fn(f.artifact.plugin.projectForTeam);
+        await expect(
+          f.store.request({
+            event: f.event,
+            team,
+            artifact: { ...f.artifact, plugin: { ...f.artifact.plugin, projectForTeam } },
+            now: () => NOW,
+          }),
+        ).rejects.toThrow("unauthorized");
+        expect(projectForTeam).not.toHaveBeenCalled();
+        expect(f.apply).not.toHaveBeenCalled();
+        expect((await f.read())?.revision).toBe(0);
+      },
+    );
+    it.each([
+      [
+        "binary snapshot",
+        "UPDATE cloud_coordination_runs SET snapshot = CAST(snapshot AS BLOB)",
+        "coordination_snapshot_invalid",
+      ],
+      [
+        "mismatched revision",
+        "UPDATE cloud_coordination_runs SET payload = json_set(payload, '$.revision', 1)",
+        "coordination_snapshot_invalid",
+      ],
+      [
+        "head belonging to another event",
+        "UPDATE cloud_coordination_runs SET payload = json_set(payload, '$.eventId', '00000000000000000000000000')",
+        "coordination_scope_invalid",
+      ],
+    ])("rejects a %s before reducing or returning stored state", async (_case, mutation, error) => {
+      const f = await fixture(engine);
+      await f.initialize();
+      await f.peer.run(mutation);
+      await expect(f.read()).rejects.toThrow(error);
+      await expect(f.request()).rejects.toThrow(error);
+      expect(f.apply).not.toHaveBeenCalled();
+      expect(await f.count("cloud_team_scores")).toBe(0);
+      expect(await f.count("cloud_coordination_receipts")).toBe(0);
+    });
+    it("rejects a receipt whose metadata revision differs from its intact response", async () => {
+      const f = await fixture(engine);
+      await f.initialize();
+      const original = await f.request();
+      await f.peer.run(
+        "UPDATE cloud_coordination_receipts SET payload = json_set(payload, '$.revision', ?)",
+        [original.revision + 1],
+      );
+      await expect(f.request()).rejects.toThrow("coordination_receipt_invalid");
+      expect((await f.read())?.revision).toBe(original.revision);
+      expect(f.apply).toHaveBeenCalledTimes(1);
+      expect(await f.count("cloud_coordination_receipts")).toBe(1);
+    });
+    it("does not replay a saved response after the authoritative team is deleted", async () => {
+      const f = await fixture(engine);
+      await f.initialize();
+      await f.request();
+      await f.peer.run("DELETE FROM cloud_teams WHERE event_id = ? AND team_id = ?", [
+        f.event.eventId,
+        f.team.teamId,
+      ]);
+      await expect(f.request()).rejects.toThrow("unauthorized");
+      expect(f.apply).toHaveBeenCalledTimes(1);
+      expect((await f.read())?.revision).toBe(1);
+      expect(await f.count("cloud_coordination_receipts")).toBe(1);
+    });
+    it("releases admission without publishing when serialization exhausts the request budget", async () => {
+      const f = await fixture(engine);
+      await f.initialize();
+      let monotonicNow = 0;
+      vi.spyOn(performance, "now").mockImplementation(() => monotonicNow);
+      const store = new SqlDeploymentsCoordination(f.sql, (sample) => {
+        if (sample.phase === "encode") monotonicNow += 20001;
+      });
+      await expect(
+        store.request({
+          event: f.event,
+          team: f.team,
+          artifact: f.artifact,
+          now: () => NOW,
+          operation: operation(),
+        }),
+      ).rejects.toThrow("coordination_conflict");
+      expect(await f.read()).toMatchObject({
+        revision: 0,
+        match: { scores: { [f.team.teamId]: 0 } },
+      });
+      expect(await f.count("cloud_team_scores")).toBe(0);
+      expect(await f.count("cloud_coordination_receipts")).toBe(0);
+      const row = await f.peer.get("SELECT payload FROM cloud_coordination_runs");
+      expect(JSON.parse(String(row?.payload))).not.toHaveProperty("admissionOwner");
+      expect(JSON.parse(String(row?.payload))).not.toHaveProperty("admissionExpiresAt");
+    });
     it("protects snapshot and receipt integrity, scope and schema before reduction", async () => {
       const f = await fixture(engine);
       await f.initialize();

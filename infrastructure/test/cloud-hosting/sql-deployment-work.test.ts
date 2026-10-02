@@ -153,6 +153,21 @@ async function close(f: ReturnType<typeof fixture>) {
 function deletion(job: DeploymentIdentity, generation = 1): DeploymentIdentity {
   return { ...job, operation: "delete", generation };
 }
+async function retryFailedCreation(f: ReturnType<typeof fixture>) {
+  await f.work.accept(f.accept);
+  await f.work.begin(f.job, "worker", AT);
+  await f.work.reserveCreation(f.job, "worker", NOW);
+  await f.work.recordCreation(f.job, "worker", f.reference);
+  await f.work.finish(
+    f.job,
+    "worker",
+    { status: "FAILED", failureReason: "stack failed", stackId: f.reference.stackId },
+    AT,
+  );
+  const second = { ...f.job, attempt: 2 };
+  await f.work.accept({ ...f.accept, job: second, retryOf: 1, requestKey: "retry" });
+  return second;
+}
 
 describe("native SQL deployment transactions", () => {
   it("persists acceptance receipts and immutable dispatch across repository/process restarts", async () => {
@@ -673,5 +688,483 @@ describe("SQL workflow late races and libSQL production executor", () => {
     await expect(
       f.work.setSchedule({ ...f.event, updatedAt: AT }, { scoringLocked: false }, AT),
     ).rejects.toThrow("event_schedule_changed");
+  });
+});
+
+describe("SQL connection and participant isolation", () => {
+  it("persists connection registration, rejects stale replacement and fences draining installations", async () => {
+    const f = fixture();
+    await f.sql.run("DELETE FROM cloud_connections");
+    expect(await f.work.getConnection(f.event.eventId, f.team.teamId)).toBeUndefined();
+    await f.work.saveVerifiedConnection(f.job.connection);
+    expect(await f.work.getConnection(f.event.eventId, f.team.teamId)).toEqual(f.job.connection);
+    const replacement = { ...f.job.connection, version: 2, region: "us-west-2" };
+    await f.work.saveVerifiedConnection(replacement, 1);
+    await expect(f.work.saveVerifiedConnection(f.job.connection)).rejects.toThrow(
+      "connection_changed",
+    );
+    await expect(
+      f.work.saveVerifiedConnection({ ...replacement, region: "eu-west-1" }, 1),
+    ).rejects.toThrow("connection_changed");
+    await expect(f.work.saveVerifiedConnection(replacement, 2)).rejects.toThrow(
+      "Invalid connection version",
+    );
+    expect(await f.work.getConnection(f.event.eventId, f.team.teamId)).toEqual(replacement);
+    expect(await f.work.acceptingNewDeployments()).toBe(true);
+    await f.sql.run("INSERT INTO cloud_installation_control VALUES (1, '{}')");
+    expect(await f.work.acceptingNewDeployments()).toBe(false);
+    await expect(f.work.saveVerifiedConnection({ ...replacement, version: 3 }, 2)).rejects.toThrow(
+      "connection_changed",
+    );
+    expect(await f.work.getConnection(f.event.eventId, f.team.teamId)).toEqual(replacement);
+  });
+
+  it("rejects corrupted deployment, connection, target and creation ownership", async () => {
+    const f = fixture();
+    expect(await f.work.getTarget(f.event.eventId, f.team.teamId, f.job.problemId)).toBeUndefined();
+    await f.work.accept(f.accept);
+    await f.sql.run("UPDATE cloud_deployments SET payload = json_set(payload, '$.jobId', ?)", [
+      ulid(),
+    ]);
+    await expect(f.work.getJob(f.job.jobId)).rejects.toThrow("Deployment scope mismatch");
+    await f.sql.run("UPDATE cloud_deployments SET payload = ?", [JSON.stringify(f.job)]);
+    await f.sql.run("UPDATE cloud_deployment_targets SET attempt = 2");
+    await expect(f.work.getTarget(f.event.eventId, f.team.teamId, f.job.problemId)).rejects.toThrow(
+      "Corrupt deployment target ownership",
+    );
+    await f.sql.run("UPDATE cloud_connections SET payload = json_set(payload, '$.teamId', ?)", [
+      ulid(),
+    ]);
+    await expect(f.work.getConnection(f.event.eventId, f.team.teamId)).rejects.toThrow(
+      "Connection scope mismatch",
+    );
+    await f.sql.run("UPDATE cloud_creations SET payload = json_set(payload, '$.eventId', ?)", [
+      ulid(),
+    ]);
+    await expect(f.work.getCreation(f.job)).rejects.toThrow("creation_scope_changed");
+    await expect(f.work.begin({ ...f.job, teamId: ulid() }, "worker", AT)).rejects.toThrow(
+      "deployment_scope_or_attempt_changed",
+    );
+  });
+
+  it("keeps invalid initial state and retries from writing receipts or historical attempts", async () => {
+    const f = fixture();
+    await expect(
+      f.work.accept({ ...f.accept, job: { ...f.job, region: "us-west-2" } }),
+    ).rejects.toThrow("Invalid deployment acceptance ownership");
+    await expect(f.work.accept({ ...f.accept, requestKey: "" })).rejects.toThrow("Request key");
+    await expect(
+      f.work.accept({ ...f.accept, job: { ...f.job, attempt: 2 }, retryOf: 1 }),
+    ).rejects.toThrow("retry_attempt_changed");
+    await f.work.accept(f.accept);
+    await expect(
+      f.work.accept({
+        ...f.accept,
+        job: { ...f.job, attempt: 2 },
+        retryOf: 1,
+        requestKey: "retry",
+      }),
+    ).rejects.toThrow("deployment_acceptance_conflict");
+    expect(await f.sql.all("SELECT * FROM cloud_deployment_attempts")).toEqual([]);
+    expect(await f.sql.all("SELECT * FROM cloud_deployment_receipts")).toHaveLength(1);
+    expect(await f.work.getJob(f.job.jobId)).toEqual(f.job);
+  });
+
+  it("denies participant release for mismatched ownership, failed jobs and locked scoring", async () => {
+    const f = fixture();
+    const job = await complete(f);
+    const input = {
+      event: f.event,
+      team: f.team,
+      job,
+      fingerprint: f.reference.fingerprint,
+      now: NOW,
+    };
+    for (const change of [
+      { team: { ...f.team, teamId: ulid() } },
+      { job: { ...job, status: "FAILED" as const } },
+      { fingerprint: "invalid" },
+      { event: { ...f.event, scoringLocked: true } },
+    ])
+      await expect(f.work.assertParticipantAccessCurrent({ ...input, ...change })).rejects.toThrow(
+        "participant_access_changed",
+      );
+    expect(await f.work.getJob(f.job.jobId)).toEqual(job);
+  });
+});
+
+describe("SQL delivery retries and scoring boundaries", () => {
+  it("replays a concurrent completion but rejects changed ownership and a late transition", async () => {
+    const f = fixture();
+    await f.work.accept(f.accept);
+    await f.work.begin(f.job, "worker", AT);
+    const result = { status: "FAILED" as const, failureReason: "artifact unavailable" };
+    await expect(f.work.finish(f.job, "other", result, AT)).rejects.toThrow(
+      "deployment_owner_changed",
+    );
+    const outcomes = await Promise.all([
+      f.work.finish(f.job, "worker", result, AT),
+      new SqlDeploymentWork(f.sql).finish(f.job, "worker", result, AT),
+    ]);
+    expect(outcomes.sort()).toEqual(["replay", "updated"]);
+    await expect(
+      f.work.finish(
+        f.job,
+        "worker",
+        { status: "COMPLETE", stackId: f.reference.stackId, flagDigest: flagDigest("correct") },
+        AT,
+      ),
+    ).rejects.toThrow("deployment_transition_conflict");
+    expect(await f.work.getJob(f.job.jobId)).toMatchObject(result);
+  });
+
+  it("does not let pending-dispatch failure overwrite a claimed deployment", async () => {
+    const f = fixture();
+    await f.work.accept(f.accept);
+    await expect(f.work.begin(f.job, "", AT)).rejects.toThrow("immutable workflow owner");
+    await expect(f.work.failPending(f.job, "", AT)).rejects.toThrow("bounded failure reason");
+    await f.work.begin(f.job, "worker", AT);
+    await expect(f.work.failPending(f.job, "late dispatcher failure", AT)).rejects.toThrow(
+      "pending_failure_conflict",
+    );
+    expect(await f.work.getJob(f.job.jobId)).toMatchObject({
+      status: "IN_PROGRESS",
+      owner: "worker",
+    });
+  });
+
+  it("records wrong answers once, floors penalties at zero and rejects altered replay payloads", async () => {
+    const f = fixture();
+    await complete(f);
+    const wrong = { ...f.flag, flag: "incorrect" };
+    expect(await f.work.submitFlag(wrong)).toEqual({ kind: "wrong", scoreDelta: 0, totalScore: 0 });
+    expect(await f.work.submitFlag(wrong)).toEqual({ kind: "wrong", scoreDelta: 0, totalScore: 0 });
+    await expect(f.work.submitFlag(f.flag)).rejects.toThrow("idempotency_key_reused");
+    expect(await f.work.submitFlag({ ...f.flag, requestKey: "correct", now: NOW + 1000 })).toEqual({
+      kind: "ok",
+      scoreDelta: 100,
+      totalScore: 100,
+    });
+    expect(await f.work.listScoreEvents(f.event.eventId, f.team.teamId, 1)).toMatchObject([
+      { source: "flag", points: 100 },
+    ]);
+    expect(await f.work.listScoreEvents(f.event.eventId, f.team.teamId)).toMatchObject([
+      { source: "flag" },
+      { source: "flag-wrong", points: 0 },
+    ]);
+    expect(await f.work.listScoreEvents(f.event.eventId, ulid())).toEqual([]);
+    await f.sql.run("UPDATE cloud_score_events SET payload = json_set(payload, '$.teamId', ?)", [
+      ulid(),
+    ]);
+    await expect(f.work.listScoreEvents(f.event.eventId, f.team.teamId)).rejects.toThrow(
+      "Score history ownership mismatch",
+    );
+  });
+
+  it("rejects invalid, premature and closed scoring without producing receipts", async () => {
+    const f = fixture();
+    await f.work.accept(f.accept);
+    await expect(f.work.submitFlag(f.flag)).rejects.toThrow("deployment_not_ready");
+    await expect(f.work.submitFlag({ ...f.flag, attempt: 0 })).rejects.toThrow(
+      "invalid_scoring_scope_or_request",
+    );
+    await expect(
+      f.work.submitFlag({ ...f.flag, event: { ...f.event, scoringLocked: true } }),
+    ).rejects.toThrow("scoring_locked");
+    expect(await f.sql.all("SELECT * FROM cloud_score_events")).toEqual([]);
+    expect(await f.sql.all("SELECT * FROM cloud_deployment_receipts")).toHaveLength(1);
+    await expect(f.work.listScoreEvents(f.event.eventId, f.team.teamId, 101)).rejects.toThrow(
+      "Invalid history limit",
+    );
+    await expect(f.work.listDispatch(0)).rejects.toThrow("Invalid dispatch limit");
+  });
+
+  it("pins a concurrent batch winner and bounds its persisted plan size", async () => {
+    const f = fixture();
+    const plans = [{ jobs: ["one"] }, { jobs: ["two"] }];
+    const results = await Promise.all(
+      plans.map((plan) =>
+        new SqlDeploymentWork(f.sql).pinRequest(f.event.eventId, "batch", "hash", plan),
+      ),
+    );
+    expect(results[0]).toEqual(results[1]);
+    expect(plans).toContainEqual(results[0]);
+    await expect(
+      f.work.pinRequest(f.event.eventId, "oversized", "hash", "界".repeat(45_000)),
+    ).rejects.toThrow("Deployment plan exceeds bounds");
+    expect(await f.sql.all("SELECT * FROM cloud_deployment_receipts")).toHaveLength(1);
+  });
+
+  it("handles a stale event-close delivery without reopening or changing its target count", async () => {
+    const f = fixture();
+    await f.work.setSchedule(f.event, { scoringLocked: true }, new Date(NOW + 1).toISOString());
+    await expect(f.work.closeEvent(f.event, AT)).rejects.toThrow("event_teardown_conflict");
+    const current = { ...f.event, updatedAt: new Date(NOW + 1).toISOString() };
+    expect(await f.work.closeEvent(current, AT)).toBe("closing");
+    expect(await f.work.closeEvent(current, AT)).toBe("closing");
+    expect(await f.work.closeEvent({ ...current, status: "TEARDOWN" }, AT)).toBe("closing");
+    await f.work.setTeardownExpected(f.event.eventId, 0);
+    expect(await f.work.archiveTeardown(f.event.eventId)).toBe(true);
+    expect(await f.work.closeEvent(current, AT)).toBe("archived");
+    expect(await f.work.closeEvent({ ...current, status: "ARCHIVED" }, AT)).toBe("archived");
+    await f.work.setTeardownExpected(f.event.eventId, 0);
+    await expect(f.work.setTeardownExpected(f.event.eventId, 1)).rejects.toThrow(
+      "teardown_target_set_changed",
+    );
+    await expect(f.work.setTeardownExpected(f.event.eventId, -1)).rejects.toThrow(
+      "Invalid teardown target count",
+    );
+  });
+});
+
+describe("SQL historical cleanup recovery and integrity", () => {
+  it("recovers a lost historical dispatch, retries failure and releases current cleanup only after owned history is deleted", async () => {
+    const f = fixture();
+    const second = await retryFailedCreation(f);
+    expect(await f.work.listTargetJobs(f.event.eventId, f.team.teamId)).toMatchObject([
+      { attempt: 2 },
+    ]);
+    expect(await f.work.listTargetJobs(f.event.eventId, ulid())).toEqual([]);
+    await close(f);
+    await f.work.requestTeardown(second, AT);
+    const first = deletion(f.job);
+    await f.sql.run("DELETE FROM cloud_dispatch WHERE operation = 'delete'");
+    expect(await f.work.requestTeardown(second, AT)).toBe("skipped");
+    expect(await f.work.listDispatch(25, { deletesOnly: true })).toMatchObject([
+      { attempt: 1, generation: 1 },
+    ]);
+    expect(
+      await f.work.finishTeardown(
+        first,
+        undefined,
+        { status: "FAILED", failureReason: "dispatcher unavailable" },
+        AT,
+      ),
+    ).toBe("updated");
+    expect(await f.work.getJob(f.job.jobId)).toMatchObject({
+      attempt: 2,
+      teardownStatus: "FAILED",
+      teardownFailureReason: "historical_attempt_1: dispatcher unavailable",
+    });
+    expect(await f.work.listDispatch(25, { deletesOnly: true })).toEqual([]);
+    expect(await f.work.requestTeardown(second, AT)).toBe("enqueued");
+    const retry = deletion(f.job, 2);
+    await expect(f.work.beginTeardown(first, "stale", AT)).rejects.toThrow(
+      "teardown_scope_or_generation_changed",
+    );
+    expect(await f.work.beginTeardown(retry, "cleanup", AT)).toBe("started");
+    expect(await f.work.beginTeardown(retry, "cleanup", AT)).toBe("replay");
+    await expect(f.work.beginTeardown(retry, "other", AT)).rejects.toThrow(
+      "teardown_claim_conflict",
+    );
+    expect(await f.work.prepareDeletion(retry, "cleanup", NOW + 120001)).toBe(true);
+    await expect(
+      f.work.recordTeardownReference(retry, "cleanup", {
+        ...f.reference,
+        fingerprint: contentDigest("another-resource"),
+      }),
+    ).rejects.toThrow("teardown_reference_changed");
+    await f.work.recordTeardownReference(retry, "cleanup", f.reference);
+    await f.work.finishTeardown(
+      retry,
+      "cleanup",
+      { status: "DELETED", stackId: f.reference.stackId },
+      AT,
+    );
+    expect(
+      (await f.work.listDispatch()).filter((intent) => intent.operation === undefined),
+    ).toMatchObject([{ jobId: f.job.jobId, attempt: 2, createdAt: AT }]);
+    expect(await f.work.requestTeardown(second, AT)).toBe("skipped");
+    const root = deletion(second);
+    await f.work.beginTeardown(root, "root", AT);
+    expect(await f.work.prepareDeletion(root, "root", NOW + 120001)).toBe(true);
+    const outcomes = await Promise.all([
+      f.work.finishTeardown(root, "root", { status: "DELETED" }, AT),
+      new SqlDeploymentWork(f.sql).finishTeardown(root, "root", { status: "DELETED" }, AT),
+    ]);
+    expect(outcomes.sort()).toEqual(["replay", "updated"]);
+    expect(await f.work.finishTeardown(root, "root", { status: "DELETED" }, AT)).toBe("replay");
+    expect(await f.work.listDispatch()).toEqual([]);
+    expect(
+      JSON.parse(String((await f.sql.get("SELECT payload FROM cloud_events"))?.payload)),
+    ).toMatchObject({ status: "ARCHIVED", teardownCompleted: 1 });
+  });
+
+  it.each(["creation-fingerprint", "cleanup-owner"])(
+    "revalidates %s historical proof before deleting the current target",
+    async (proof) => {
+      const f = fixture();
+      const second = await retryFailedCreation(f);
+      await close(f);
+      await f.work.requestTeardown(second, AT);
+      const historical = deletion(f.job);
+      await f.work.beginTeardown(historical, "cleanup", AT);
+      await f.work.prepareDeletion(historical, "cleanup", NOW + 120001);
+      await f.work.recordTeardownReference(historical, "cleanup", f.reference);
+      await f.work.finishTeardown(historical, "cleanup", { status: "DELETED" }, AT);
+      if (proof === "creation-fingerprint")
+        await f.sql.run(
+          "UPDATE cloud_creations SET payload = json_set(payload, '$.fingerprint', ?) WHERE attempt = 1",
+          [contentDigest("changed-physical-resource")],
+        );
+      else
+        await f.sql.run(
+          "UPDATE cloud_teardowns SET payload = json_remove(payload, '$.owner') WHERE source_attempt = 1",
+        );
+      const root = deletion(second);
+      await f.work.beginTeardown(root, "root", AT);
+      await expect(f.work.prepareDeletion(root, "root", NOW + 120001)).rejects.toThrow(
+        "historical_attempt_resources_unresolved",
+      );
+      expect(await f.work.getJob(f.job.jobId)).toMatchObject({ attempt: 2, status: "PENDING" });
+      expect(
+        JSON.parse(String((await f.sql.get("SELECT payload FROM cloud_events"))?.payload)),
+      ).toMatchObject({ status: "TEARDOWN", teardownCompleted: 0 });
+    },
+  );
+
+  it.each(["missing", "malformed", "wrong-team", "wrong-attempt"])(
+    "blocks cleanup with %s historical evidence before creating any teardown work",
+    async (corruption) => {
+      const f = fixture();
+      const second = await retryFailedCreation(f);
+      if (corruption === "missing") await f.sql.run("DELETE FROM cloud_deployment_attempts");
+      if (corruption === "malformed")
+        await f.sql.run("UPDATE cloud_deployment_attempts SET payload = '{}'");
+      if (corruption === "wrong-team")
+        await f.sql.run(
+          "UPDATE cloud_deployment_attempts SET payload = json_set(payload, '$.teamId', ?)",
+          [ulid()],
+        );
+      if (corruption === "wrong-attempt")
+        await f.sql.run(
+          "UPDATE cloud_deployment_attempts SET payload = json_set(payload, '$.attempt', 2)",
+        );
+      await close(f);
+      await expect(f.work.listTargetJobs(f.event.eventId, f.team.teamId)).rejects.toThrow(
+        corruption === "missing"
+          ? "historical_attempt_history_incomplete"
+          : "historical_attempt_record_invalid",
+      );
+      await expect(f.work.requestTeardown(second, AT)).rejects.toThrow();
+      expect(await f.sql.all("SELECT * FROM cloud_teardowns")).toEqual([]);
+      expect(await f.work.listDispatch(25, { deletesOnly: true })).toEqual([]);
+    },
+  );
+
+  it("rejects missing or mismatched historical jobs and teardown parents", async () => {
+    const f = fixture();
+    const second = await retryFailedCreation(f);
+    await expect(f.work.getDeletionJob({ ...f.job, attempt: 3 })).rejects.toThrow(
+      "deployment_scope_or_attempt_changed",
+    );
+    await f.sql.run(
+      "UPDATE cloud_deployment_attempts SET payload = json_set(payload, '$.teamId', ?)",
+      [ulid()],
+    );
+    await expect(f.work.getDeletionJob(f.job)).rejects.toThrow("historical_attempt_record_invalid");
+    await f.sql.run("UPDATE cloud_deployment_attempts SET payload = ?", [
+      JSON.stringify({ ...f.job, status: "FAILED", owner: "worker", stackId: f.reference.stackId }),
+    ]);
+    await close(f);
+    await f.work.requestTeardown(second, AT);
+    await f.sql.run(
+      "UPDATE cloud_teardowns SET payload = json_set(payload, '$.parentAttempt', 3) WHERE source_attempt = 1",
+    );
+    await expect(f.work.getTeardown(f.job)).rejects.toThrow("teardown_history_scope_changed");
+    await f.sql.run("DELETE FROM cloud_teardowns WHERE source_attempt = 1");
+    await expect(f.work.getTeardown(f.job)).rejects.toThrow("teardown_scope_or_generation_changed");
+  });
+
+  it("requires teardown identity, owner and immutable resource reference before finishing", async () => {
+    const f = fixture();
+    await complete(f);
+    const identity = deletion(f.job);
+    await expect(f.work.beginTeardown(f.job, "cleanup", AT)).rejects.toThrow(
+      "invalid_teardown_identity",
+    );
+    await expect(f.work.beginTeardown(identity, "cleanup", AT)).rejects.toThrow("teardown_missing");
+    await close(f);
+    await f.work.requestTeardown(f.job, AT);
+    await expect(f.work.beginTeardown(identity, "", AT)).rejects.toThrow(
+      "immutable teardown owner",
+    );
+    await f.work.beginTeardown(identity, "cleanup", AT);
+    await expect(
+      f.work.finishTeardown(identity, undefined, { status: "DELETED" }, AT),
+    ).rejects.toThrow("teardown_owner_required");
+    await expect(
+      f.work.finishTeardown(identity, "cleanup", { status: "FAILED", failureReason: "" }, AT),
+    ).rejects.toThrow("bounded teardown failure reason");
+    await expect(
+      f.work.finishTeardown(identity, "other", { status: "DELETED" }, AT),
+    ).rejects.toThrow("teardown_owner_changed");
+    await expect(
+      f.work.finishTeardown(identity, "cleanup", { status: "DELETED" }, AT),
+    ).rejects.toThrow("teardown_not_deleting");
+    await expect(f.work.prepareDeletion(identity, "other", NOW + 120001)).rejects.toThrow(
+      "teardown_prepare_conflict",
+    );
+    await f.work.prepareDeletion(identity, "cleanup", NOW + 120001);
+    await expect(f.work.recordTeardownReference(identity, "other", f.reference)).rejects.toThrow(
+      "teardown_reference_changed",
+    );
+    await f.work.recordTeardownReference(identity, "cleanup", f.reference);
+    await expect(
+      f.work.finishTeardown(
+        identity,
+        "cleanup",
+        { status: "DELETED", stackId: `${f.reference.stackId}-other` },
+        AT,
+      ),
+    ).rejects.toThrow("teardown_reference_changed");
+    expect(await f.work.getTeardown(identity)).toMatchObject({
+      status: "IN_PROGRESS",
+      stackId: f.reference.stackId,
+    });
+  });
+
+  it("rechecks creation and teardown references inside their writes", async () => {
+    const f = fixture();
+    await f.work.accept(f.accept);
+    await f.work.begin(f.job, "worker", AT);
+    await f.work.reserveCreation(f.job, "worker", NOW);
+    const work = new SqlDeploymentWork(
+      interleave(f.sql, () =>
+        f.db.exec("UPDATE cloud_creations SET payload = json_set(payload, '$.owner', 'other')"),
+      ),
+    );
+    await expect(work.recordCreation(f.job, "worker", f.reference)).rejects.toThrow(
+      "creation_receipt_changed",
+    );
+    expect(await f.work.getCreation(f.job)).toMatchObject({ state: "REQUESTED", owner: "other" });
+    await f.sql.run("UPDATE cloud_creations SET payload = json_set(payload, '$.owner', 'worker')");
+    await f.work.recordCreation(f.job, "worker", f.reference);
+    await f.work.reserveCreation(f.job, "worker", NOW + 1);
+    expect(await f.work.getCreation(f.job)).toMatchObject({
+      state: "ACKNOWLEDGED",
+      stackId: f.reference.stackId,
+      leaseUntil: NOW + 120001,
+    });
+    await f.work.finish(
+      f.job,
+      "worker",
+      { status: "FAILED", failureReason: "stack failed", stackId: f.reference.stackId },
+      AT,
+    );
+    await close(f);
+    await f.work.requestTeardown(f.job, AT);
+    const identity = deletion(f.job);
+    await f.work.beginTeardown(identity, "cleanup", AT);
+    const teardown = new SqlDeploymentWork(
+      interleave(f.sql, () =>
+        f.db.exec("UPDATE cloud_teardowns SET payload = json_set(payload, '$.owner', 'other')"),
+      ),
+    );
+    await expect(
+      teardown.recordTeardownReference(identity, "cleanup", f.reference),
+    ).rejects.toThrow("teardown_reference_changed");
+    expect(await f.work.getTeardown(identity)).toMatchObject({ owner: "other" });
+    expect((await f.work.getTeardown(identity))?.stackId).toBeUndefined();
   });
 });

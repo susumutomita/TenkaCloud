@@ -1,9 +1,8 @@
-import { type ChildProcess, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { Readable } from "node:stream";
 import type { GatewayPortRange } from "../gateway-ports";
 import { formatGatewayPorts } from "../gateway-ports";
 import { portsFree } from "../ports";
+import { type PrivateKeyProcess, spawnPrivateKeyProcess } from "../private-key-process";
 
 export interface HostProcessInfo {
   readonly adminOrigin: string;
@@ -70,9 +69,9 @@ export interface SpawnHostOptions {
 
 /** Runs the production local host through the benchmark's private organizer-key wrapper. */
 export async function spawnHostProcess(options: SpawnHostOptions): Promise<HostProcessHandle> {
-  const child = spawn(
-    process.execPath,
+  const processHandle = spawnPrivateKeyProcess(
     [
+      process.execPath,
       "run",
       "scripts/local-host/bench/host-entry.ts",
       "--no-build",
@@ -85,24 +84,25 @@ export async function spawnHostProcess(options: SpawnHostOptions): Promise<HostP
       "--gateway-ports",
       formatGatewayPorts(options.gatewayPorts),
     ],
-    { cwd: options.repositoryRoot, stdio: ["ignore", "pipe", "pipe", "pipe"] },
+    { cwd: options.repositoryRoot },
   );
   try {
-    return await waitForHostProcess(child, options.readyTimeoutMs);
+    return await waitForHostProcess(processHandle, options.readyTimeoutMs);
   } catch (error) {
-    await stopHostProcess(child);
+    await stopHostProcess(processHandle);
     throw error;
   }
 }
 
 function waitForHostProcess(
-  child: ChildProcess,
+  processHandle: PrivateKeyProcess,
   readyTimeoutMs: number,
 ): Promise<HostProcessHandle> {
+  const { child, stdout, stderr, privateOutput } = processHandle;
   const stderrChunks: string[] = [];
-  child.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk.toString("utf8")));
-  const lines = createInterface({ input: child.stdout as Readable });
-  const privateLines = createInterface({ input: child.stdio[3] as Readable });
+  stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk.toString("utf8")));
+  const lines = createInterface({ input: stdout });
+  const privateLines = createInterface({ input: privateOutput });
   return new Promise<HostProcessHandle>((accept, reject) => {
     const partial: PartialHostProcessInfo = {};
     const timeout = setTimeout(() => {
@@ -123,13 +123,12 @@ function waitForHostProcess(
     };
     function cleanup(): void {
       clearTimeout(timeout);
-      child.off("exit", onExit);
-      child.off("error", onError);
       lines.off("line", onLine);
       privateLines.off("line", onKey);
       lines.close();
-      child.stdout?.resume();
+      stdout.resume();
       privateLines.close();
+      privateOutput.resume();
     }
     function onLine(line: string): void {
       parseStartupLine(line, partial);
@@ -153,44 +152,44 @@ function waitForHostProcess(
         databasePath: partial.databasePath,
       };
       const pid = child.pid;
-      if (pid === undefined) {
-        reject(new Error("Local host process has no pid."));
-        return;
-      }
       accept({
         info,
         pid,
         databasePath: info.databasePath,
-        stop: () => stopHostProcess(child),
+        stop: () => stopHostProcess(processHandle),
       });
     }
-    child.once("exit", onExit);
-    child.once("error", onError);
+    void child.exited.then(onExit, onError);
     lines.on("line", onLine);
     privateLines.on("line", onKey);
   });
 }
 
-async function stopHostProcess(child: ChildProcess): Promise<void> {
-  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+async function stopHostProcess(processHandle: PrivateKeyProcess): Promise<void> {
+  const { child } = processHandle;
+  if (child.exitCode !== null || child.signalCode !== null) {
+    await processHandle.exited;
+    return;
+  }
   child.kill("SIGINT");
-  if (await waitForExit(child, 10_000)) return;
+  if (await waitForExit(child, 10_000)) {
+    await processHandle.exited;
+    return;
+  }
   child.kill("SIGKILL");
   if (!(await waitForExit(child, 10_000)))
     throw new Error("Benchmark child did not exit; retaining its temporary data.");
+  await processHandle.exited;
 }
 
-function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
+function waitForExit(child: PrivateKeyProcess["child"], timeoutMs: number): Promise<boolean> {
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
   return new Promise((accept) => {
     const onExit = () => {
       clearTimeout(timeout);
       accept(true);
     };
-    const timeout = setTimeout(() => {
-      child.off("exit", onExit);
-      accept(false);
-    }, timeoutMs);
-    child.once("exit", onExit);
+    const timeout = setTimeout(() => accept(false), timeoutMs);
+    void child.exited.then(onExit);
   });
 }

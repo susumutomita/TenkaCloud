@@ -1513,7 +1513,11 @@ export class SqlDeploymentWork {
       }),
     ];
     if (deleted)
-      writes.push(...(await this.historyProofs(job)), ...completedTeardownUpdate(job.eventId));
+      writes.push(
+        ...(await this.historyProofs(job)),
+        ...completedTeardownUpdate(job.eventId),
+        deleteDispatch(job),
+      );
     return writes;
   }
 }

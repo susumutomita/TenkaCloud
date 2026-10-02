@@ -1,13 +1,12 @@
 import { expect, test } from "bun:test";
-import { spawn } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { spawnHostProcess } from "../bench/host-process";
 import { adminLogin, apiCall } from "../bench/http-client";
+import { spawnPrivateKeyProcess } from "../private-key-process";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -53,9 +52,9 @@ test("HTTP benchmark starts the production host and signs in repeatedly with its
 test("benchmark production entry delivers its organizer key only through the private pipe", async () => {
   const data = mkdtempSync(join(tmpdir(), "tenka-bench-private-key-"));
   const ports = await availablePorts();
-  const child = spawn(
-    process.execPath,
+  const { child, stdout, stderr, privateOutput, exited } = spawnPrivateKeyProcess(
     [
+      process.execPath,
       "run",
       "scripts/local-host/bench/host-entry.ts",
       "--no-build",
@@ -68,23 +67,24 @@ test("benchmark production entry delivers its organizer key only through the pri
       "--gateway-ports",
       "1024-1063",
     ],
-    { cwd: repository, stdio: ["ignore", "pipe", "pipe", "pipe"] },
+    { cwd: repository },
   );
   let output = "";
-  for (const stream of [child.stdout, child.stderr])
-    stream?.on("data", (chunk: Buffer) => {
+  for (const stream of [stdout, stderr])
+    stream.on("data", (chunk: Buffer) => {
       output += chunk.toString();
     });
-  const exited = new Promise<number | null>((accept) => child.once("exit", accept));
-  const lines = createInterface({ input: child.stdio[3] as Readable });
+  const lines = createInterface({ input: privateOutput });
   let key = "";
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     key = await new Promise<string>((accept, reject) => {
       timeout = setTimeout(() => reject(new Error("Benchmark key pipe timed out.")), 5000);
       lines.once("line", accept);
-      child.once("error", reject);
-      child.once("exit", () => reject(new Error("Benchmark exited before its private key.")));
+      void child.exited.then(
+        () => reject(new Error("Benchmark exited before its private key.")),
+        reject,
+      );
     });
     expect(/^[A-Za-z0-9_-]{43}$/u.test(key)).toBe(true);
     const origin = `http://127.0.0.1:${String(ports.adminPort)}`;
@@ -93,6 +93,7 @@ test("benchmark production entry delivers its organizer key only through the pri
   } finally {
     clearTimeout(timeout);
     lines.close();
+    privateOutput.resume();
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGINT");
     expect(await exited).toBe(0);
     if (key) expect(output.includes(key)).toBe(false);

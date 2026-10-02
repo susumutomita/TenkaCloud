@@ -1460,7 +1460,7 @@ describe("teardown requests and source convergence with intercepted SDK", () => 
 });
 
 describe("atomic teardown completion, retry and archival with intercepted SDK", () => {
-  it("commits terminal marker, job state and one event increment together without replacing score history", async () => {
+  it("commits terminal state, one event increment and removal of only the current creation intent", async () => {
     const f = teardownFixture();
     const marker = { ...f.marker, ...f.reference, status: "IN_PROGRESS", owner: "owner" };
     f.send
@@ -1477,7 +1477,7 @@ describe("atomic teardown completion, retry and archival with intercepted SDK", 
       ),
     ).toBe("updated");
     const writes = transaction(f.send.mock.calls[2]?.[0]);
-    expect(writes).toHaveLength(3);
+    expect(writes).toHaveLength(4);
     expect(writes[0]?.Put?.Item).toMatchObject({
       ...f.reference,
       status: "DELETED",
@@ -1494,7 +1494,14 @@ describe("atomic teardown completion, retry and archival with intercepted SDK", 
     );
     expect(writes[2]?.Update?.UpdateExpression).toBe("ADD teardownCompleted :one");
     expect(writes[2]?.Update?.ExpressionAttributeValues?.[":one"]).toBe(1);
-    expect(writes.some((write) => write.Delete)).toBe(false);
+    expect(writes.filter((write) => write.Delete)).toEqual([
+      {
+        Delete: {
+          TableName: "deployments",
+          Key: { PK: "DISPATCH#PENDING", SK: `${f.job.jobId}#1` },
+        },
+      },
+    ]);
     expect(transaction(f.send.mock.calls[3]?.[0])[0]?.Update?.ConditionExpression).toContain(
       "teardownCompleted = teardownExpected",
     );
@@ -1704,7 +1711,7 @@ describe("atomic teardown completion, retry and archival with intercepted SDK", 
         .slice(0, 3)
         .every(
           (writes) =>
-            writes.length === 3 &&
+            writes.length === 4 &&
             writes[2]?.Update?.UpdateExpression === "ADD teardownCompleted :one",
         ),
     ).toBe(true);
@@ -1968,6 +1975,23 @@ function historicalCleanupFixture() {
 }
 
 describe("delayed current-root dispatch and atomic historical completion", () => {
+  it("preserves the newer creation intent when finishing an older historical attempt", async () => {
+    const f = historicalCleanupFixture();
+    const currentIntent = `${f.job.jobId}#3`;
+    f.intents.set(currentIntent, { ...f.current });
+    await f.work.requestTeardown(f.current, AT);
+    f.claim(1);
+    await f.work.finishTeardown(
+      f.childIdentity(1),
+      "cleanup-1",
+      { status: "DELETED", stackId: f.histories[0]?.stackId },
+      AT,
+    );
+    expect(f.intents.get(currentIntent)).toEqual(f.current);
+    expect(f.intents.has(`${f.job.jobId}#1#DELETE#1`)).toBe(false);
+    expect(f.intents.has(`${f.job.jobId}#2#DELETE#1`)).toBe(true);
+  });
+
   it("publishes only child intents until the final child atomically increments the root and releases its original identity", async () => {
     const f = historicalCleanupFixture();
     expect(await f.work.requestTeardown(f.current, AT)).toBe("enqueued");

@@ -1016,7 +1016,10 @@ export class DynamoDeploymentWork {
     if (deleted) await this.assertHistoryResolved(job);
     const completion = await this.checkedTeardownCompletion(identity, job, marker, result);
     const writes = this.teardownFinishWrites(identity, owner, marker, job, completion, at);
-    if (deleted) writes.push(this.completedTeardownUpdate(identity.eventId));
+    if (deleted)
+      writes.push(this.completedTeardownUpdate(identity.eventId), {
+        Delete: { TableName: this.tables.deployments, Key: dispatchKey(job.jobId, job.attempt) },
+      });
     if (!owner)
       writes.push({
         Delete: {
