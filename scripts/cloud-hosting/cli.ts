@@ -34,7 +34,8 @@ function run(
   return context.io.run({ command, args, cwd: context.root, env: context.env, inherit });
 }
 function cdk(context: Context, args: readonly string[]): Promise<ProcessResult> {
-  const app = `${JSON.stringify(join(context.root, "node_modules/.bin/tsx"))} ${JSON.stringify(join(context.root, "infrastructure/bin/cloud-hosting.ts"))}`;
+  // CDK strips enclosing quotes from --app. Resolve the loader and app from our root cwd.
+  const app = "node --import tsx ./infrastructure/bin/cloud-hosting.ts";
   return run(
     context,
     join(context.root, "node_modules/aws-cdk/bin/cdk"),

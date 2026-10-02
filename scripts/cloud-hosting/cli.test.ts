@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -203,6 +204,68 @@ function fixture(
     run: (args: readonly string[]) => runCloudCli(args, io, { root: ROOT, env }),
   };
 }
+
+describe("cloud CLI real CDK app execution", () => {
+  it("synthesizes a dummy TypeScript app from a repository path containing spaces", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tenkacloud cdk app "));
+    try {
+      symlinkSync(join(import.meta.dir, "../../node_modules"), join(root, "node_modules"), "dir");
+      mkdirSync(join(root, "infrastructure/bin"), { recursive: true });
+      writeFileSync(join(root, "infrastructure/package.json"), '{"type":"module"}');
+      writeFileSync(
+        join(root, "infrastructure/bin/cloud-hosting.ts"),
+        [
+          'import { App, Stack } from "aws-cdk-lib";',
+          'const stackName: string = "DummyStack";',
+          "const app = new App();",
+          "new Stack(app, stackName);",
+          "app.synth();",
+          'console.log("DUMMY_TYPESCRIPT_APP_EXECUTED");',
+        ].join("\n"),
+      );
+      const emptyConfig = join(root, "empty-aws-config");
+      writeFileSync(emptyConfig, "");
+      const f = fixture();
+      expect(await runCloudCli(["up"], f.io, { root, env: f.env })).toBe(0);
+      const request = f.calls.find((call) => call.args.includes("deploy"));
+      if (!request) throw new Error("Missing CDK deployment request");
+      // Exercise CDK's real --app parser and subprocess with no deployment or AWS access.
+      const result = spawnSync(
+        request.command,
+        [
+          ...request.args.slice(0, request.args.indexOf("deploy")),
+          "synth",
+          "--no-lookups",
+          "--no-notices",
+          "--no-version-reporting",
+        ],
+        {
+          cwd: request.cwd,
+          env: {
+            PATH: process.env.PATH,
+            HOME: root,
+            AWS_CONFIG_FILE: emptyConfig,
+            AWS_SHARED_CREDENTIALS_FILE: emptyConfig,
+            AWS_EC2_METADATA_DISABLED: "true",
+            AWS_REGION: f.env.AWS_REGION,
+            CDK_DISABLE_VERSION_CHECK: "1",
+            CDK_DISABLE_CLI_TELEMETRY: "1",
+          },
+          encoding: "utf8",
+          timeout: 20_000,
+        },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toContain("DUMMY_TYPESCRIPT_APP_EXECUTED");
+      expect(
+        JSON.parse(readFileSync(join(root, "cdk.out/manifest.json"), "utf8")) as unknown,
+      ).toMatchObject({ artifacts: { DummyStack: { type: "aws:cloudformation:stack" } } });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+});
 
 describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests", () => {
   it("prints cloud help without resolving credentials or importing the CDK app", async () => {
