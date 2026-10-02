@@ -1397,3 +1397,568 @@ describe("native-aware cloud teardown contract", () => {
     expect(f.locations[0]?.native).toBeUndefined();
   });
 });
+
+describe("failed initial cloud creation recovery", () => {
+  const names = cloudStackNames("staging");
+  const kinds = ["Events", "Teams", "Deployments"];
+  const result = (body: unknown): ProcessResult => ({
+    code: 0,
+    stdout: JSON.stringify(body),
+    stderr: "",
+  });
+  function recoveryFixture(
+    options: {
+      backendOnly?: boolean;
+      status?: string;
+      artifact?: boolean;
+      missingTables?: readonly string[];
+      confirmed?: boolean;
+      mutate?: (request: ProcessRequest, body: unknown) => unknown;
+      fail?: (request: ProcessRequest) => ProcessResult | undefined;
+    } = {},
+  ) {
+    const target = options.backendOnly ? names.backend : names.app;
+    const status = options.status ?? "CREATE_FAILED";
+    const tableName = (kind: string) => `${names.backend}-${kind}ABC123-synthetic`;
+    const resources = Object.fromEntries(
+      kinds.map((kind) => [
+        `${kind}ABC123`,
+        {
+          Type: "AWS::DynamoDB::Table",
+          DeletionPolicy: "Retain",
+          UpdateReplacePolicy: "Retain",
+        },
+      ]),
+    );
+    const backendTemplate = {
+      Resources: resources,
+      Outputs: Object.fromEntries(
+        kinds.map((kind) => [`${kind}TableName`, { Value: { Ref: `${kind}ABC123` } }]),
+      ),
+    };
+    const appTemplate = {
+      Resources: {
+        ExecutionArtifactsABC123: {
+          Type: "AWS::S3::Bucket",
+          DeletionPolicy: "Retain",
+          UpdateReplacePolicy: "Retain",
+        },
+        CloudApiABC123: { Type: "AWS::Lambda::Function" },
+      },
+      Outputs: {
+        CloudInstallationControlVersion: { Value: "2" },
+        CloudRunnerEnabled: { Value: "true" },
+        CloudExecutionArtifactBucket: { Value: { Ref: "ExecutionArtifactsABC123" } },
+        CloudExecutionCatalogKey: { Value: `catalogs/${"a".repeat(64)}.json` },
+      },
+    };
+    function inspectPlatform(request: ProcessRequest): ProcessResult {
+      const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+      if (options.backendOnly && name === names.app)
+        return {
+          code: 1,
+          stdout: "",
+          stderr: `(ValidationError) Stack with id ${name} does not exist`,
+        };
+      return response(request, {
+        ...ownedStack(name),
+        ...(name === target ? { StackStatus: status, Outputs: undefined } : {}),
+      });
+    }
+    function inventory(request: ProcessRequest): unknown {
+      if (request.args.includes(ownedStack(names.backend).StackId))
+        return {
+          StackResourceSummaries: kinds
+            .filter((kind) => !options.missingTables?.includes(kind))
+            .map((kind) => ({
+              LogicalResourceId: `${kind}ABC123`,
+              PhysicalResourceId: tableName(kind),
+              ResourceType: "AWS::DynamoDB::Table",
+              ResourceStatus: "CREATE_COMPLETE",
+            })),
+        };
+      return {
+        StackResourceSummaries: [
+          {
+            LogicalResourceId: "CloudApiABC123",
+            PhysicalResourceId: "created-runner",
+            ResourceType: "AWS::Lambda::Function",
+            ResourceStatus: "CREATE_COMPLETE",
+          },
+          ...(options.artifact === false
+            ? []
+            : [
+                {
+                  LogicalResourceId: "ExecutionArtifactsABC123",
+                  PhysicalResourceId: "owned-native-artifacts",
+                  ResourceType: "AWS::S3::Bucket",
+                  ResourceStatus: "CREATE_COMPLETE",
+                },
+              ]),
+        ],
+      };
+    }
+    const readers: Record<string, (request: ProcessRequest) => unknown> = {
+      "describe-stack-events": () => ({
+        StackEvents: ["CREATE_IN_PROGRESS", "CREATE_FAILED"].map((ResourceStatus) => ({
+          PhysicalResourceId: ownedStack(target).StackId,
+          ResourceType: "AWS::CloudFormation::Stack",
+          ResourceStatus,
+        })),
+      }),
+      "get-template": (request) => ({
+        TemplateBody: request.args.includes(ownedStack(names.backend).StackId)
+          ? backendTemplate
+          : appTemplate,
+      }),
+      "list-stack-resources": inventory,
+      "describe-table": (request) => {
+        const TableName = request.args[request.args.indexOf("--table-name") + 1] ?? "";
+        return {
+          Table: {
+            TableName,
+            TableArn: `arn:aws:dynamodb:ap-northeast-1:123456789012:table/${TableName}`,
+            TableStatus: "ACTIVE",
+          },
+        };
+      },
+      "list-tags-of-resource": () => ({
+        Tags: Object.entries(cloudStackTags("staging")).map(([Key, Value]) => ({ Key, Value })),
+      }),
+      scan: () => ({ Items: [] }),
+    };
+    function response(request: ProcessRequest, body: unknown): ProcessResult {
+      return result(options.mutate ? options.mutate(request, body) : body);
+    }
+    const f = fixture({
+      confirmed: options.confirmed ?? true,
+      fail: (request) => {
+        const failure = options.fail?.(request);
+        if (failure) return failure;
+        if (platformInspection(request)) return inspectPlatform(request);
+        const read = readers[request.args[1] ?? ""];
+        return read ? response(request, read(request)) : undefined;
+      },
+    });
+    return { ...f, target, tableName };
+  }
+  const rewrite = (body: unknown): Record<string, unknown> =>
+    JSON.parse(JSON.stringify(body)) as Record<string, unknown>;
+  const noDeletes = (f: ReturnType<typeof recoveryFixture>) =>
+    expect(f.calls.some((call) => call.args.includes("delete-stack"))).toBe(false);
+
+  it.each(["CREATE_FAILED", "ROLLBACK_COMPLETE", "ROLLBACK_FAILED", "DELETE_FAILED"])(
+    "recovers absent Outputs after runner creation in %s using physical ownership and durable drain",
+    async (status) => {
+      const f = recoveryFixture({ status });
+      expect(await f.run(["down", "--yes"])).toBe(0);
+      expect(f.storageCalls).toEqual(["stop", "list", "list", "drained", "close"]);
+      expect(f.locations[0]?.native?.artifactBucket).toBe("owned-native-artifacts");
+      expect(f.calls.filter((call) => call.args.includes("delete-stack"))).toHaveLength(2);
+      const proof = f.calls.filter((call) =>
+        ["get-template", "describe-stack-events", "list-stack-resources"].some((action) =>
+          call.args.includes(action),
+        ),
+      );
+      expect(
+        proof.every((call) => call.args.some((arg) => arg.startsWith("arn:aws:cloudformation:"))),
+      ).toBe(true);
+      expect(
+        f.calls.some(
+          (call) => call.args.includes("--role-arn") || call.args.includes("CDKToolkit"),
+        ),
+      ).toBe(false);
+    },
+  );
+  it.each([
+    { missingTables: [] },
+    { missingTables: ["Events"] },
+    { missingTables: ["Events", "Teams", "Deployments"] },
+  ])(
+    "removes only failed backend hosting with empty or not-yet-created tables: %j",
+    async ({ missingTables }) => {
+      const f = recoveryFixture({ backendOnly: true, missingTables });
+      expect(await f.run(["down", "--yes"])).toBe(0);
+      expect(f.locations).toEqual([]);
+      expect(f.calls.filter((call) => call.args.includes("delete-stack"))).toHaveLength(1);
+      const scans = f.calls.filter((call) => call.args.includes("scan"));
+      expect(scans).toHaveLength((3 - missingTables.length) * 2);
+      expect(scans.every((call) => call.args.includes("--consistent-read"))).toBe(true);
+      expect(f.messages.join("")).toContain("Retained tables and assets were not purged");
+    },
+  );
+  it("fences a created runner and proves all table pages empty when native assets were never created", async () => {
+    let pages = 0;
+    const f = recoveryFixture({
+      artifact: false,
+      mutate: (request, body) => {
+        if (!request.args.includes("scan")) return body;
+        expect(f.storageCalls).toContain("stop");
+        pages++;
+        return pages === 1
+          ? {
+              Items: [{ PK: { S: "INSTALLATION" }, SK: { S: "CONTROL" } }],
+              LastEvaluatedKey: { PK: { S: "INSTALLATION" }, SK: { S: "CONTROL" } },
+            }
+          : { Items: [], LastEvaluatedKey: {} };
+      },
+    });
+    expect(await f.run(["down", "--yes"])).toBe(0);
+    expect(pages).toBe(4);
+    expect(f.storageCalls).toEqual(["stop", "drained", "close"]);
+    expect(f.calls.some((call) => call.args.includes("--exclusive-start-key"))).toBe(true);
+    expect(f.locations[0]?.native).toBeUndefined();
+  });
+  it.each([true, false])(
+    "preserves retained data and live work with partial native resources, backendOnly=%s",
+    async (backendOnly) => {
+      const f = recoveryFixture({
+        backendOnly,
+        artifact: false,
+        mutate: (request, body) =>
+          request.args.includes("scan")
+            ? { Items: [{ PK: { S: "EVENT#live" }, SK: { S: "META" } }] }
+            : body,
+      });
+      expect(await f.run(["down", "--yes"])).toBe(1);
+      expect(f.errors.join("")).toContain("stored data or event work");
+      noDeletes(f);
+      expect(f.storageCalls).not.toContain("drained");
+    },
+  );
+  it("repeats a failed backend deletion and then accepts both stacks absent", async () => {
+    let attempt = 0;
+    const f = recoveryFixture({
+      backendOnly: true,
+      fail: (request) => {
+        if (attempt === 0 && request.args.includes("delete-stack"))
+          return { code: 1, stdout: "", stderr: "Synthetic retry" };
+        if (attempt === 2 && platformInspection(request)) {
+          const name = request.args[request.args.indexOf("--stack-name") + 1];
+          return {
+            code: 1,
+            stdout: "",
+            stderr: `(ValidationError) Stack with id ${name} does not exist`,
+          };
+        }
+        return undefined;
+      },
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    attempt++;
+    expect(await f.run(["down", "--yes"])).toBe(0);
+    attempt++;
+    const before = f.calls.length;
+    expect(await f.run(["down", "--yes"])).toBe(0);
+    expect(f.calls.slice(before).some((call) => call.args.includes("delete-stack"))).toBe(false);
+  });
+  it.each([true, false])("cancels recovery before writes, backendOnly=%s", async (backendOnly) => {
+    const f = recoveryFixture({ backendOnly, confirmed: false });
+    expect(await f.run(["down"])).toBe(0);
+    noDeletes(f);
+    expect(f.storageCalls).not.toContain("stop");
+    expect(f.confirmations).toHaveLength(1);
+  });
+  it.each(["CREATE_IN_PROGRESS", "ROLLBACK_IN_PROGRESS"])(
+    "reports %s without parsing missing outputs or mutating",
+    async (status) => {
+      const f = recoveryFixture({ status });
+      expect(await f.run(["down", "--yes"])).toBe(1);
+      noDeletes(f);
+      expect(f.errors.join("")).toContain("wait");
+      expect(f.errors.join("")).not.toContain("Expected array");
+    },
+  );
+  it("reports failed creation on up without rebuilding or implicitly replacing it", async () => {
+    const f = recoveryFixture();
+    expect(await f.run(["up"])).toBe(1);
+    expect(f.errors.join("")).toContain("make destroy");
+    expect(f.calls.some((call) => call.inherit)).toBe(false);
+  });
+  it.each([
+    "get-template",
+    "describe-stack-events",
+    "list-stack-resources",
+    "describe-table",
+    "list-tags-of-resource",
+  ])("fails closed when %s evidence is denied", async (action) => {
+    const f = recoveryFixture({
+      fail: (request) =>
+        request.args.includes(action)
+          ? { code: 1, stdout: "", stderr: "AccessDeniedException" }
+          : undefined,
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    noDeletes(f);
+  });
+  function mutateEvidence(action: string, change: string, value: Record<string, unknown>): void {
+    const mutations: Record<string, () => void> = {
+      "describe-stack-events": () => mutateHistory(change, value),
+      "list-stack-resources": () => mutateInventory(change, value),
+      "describe-table": () => mutateTable(change, value),
+      "list-tags-of-resource": () => {
+        if (change === "missing") value.Tags = [];
+        if (change === "conflict")
+          (value.Tags as unknown[]).push({
+            Key: "aws:cloudformation:stack-id",
+            Value: "other-stack",
+          });
+      },
+      "get-template": () => {
+        const template = value.TemplateBody as {
+          Resources: Record<string, Record<string, unknown>>;
+          Outputs: Record<string, { Value: unknown }>;
+        };
+        if (change === "retention" && template.Resources.EventsABC123)
+          template.Resources.EventsABC123.DeletionPolicy = "Delete";
+        if (change === "contract" && template.Outputs.CloudInstallationControlVersion)
+          template.Outputs.CloudInstallationControlVersion.Value = "unknown";
+      },
+    };
+    mutations[action]?.();
+  }
+  function mutateHistory(change: string, value: Record<string, unknown>): void {
+    if (change === "missing") value.StackEvents = [];
+    if (change === "successful" || change === "updated")
+      value.StackEvents = [
+        {
+          PhysicalResourceId: ownedStack(names.app).StackId,
+          ResourceType: "AWS::CloudFormation::Stack",
+          ResourceStatus: change === "successful" ? "CREATE_COMPLETE" : "UPDATE_COMPLETE",
+        },
+      ];
+  }
+  function mutateInventory(change: string, value: Record<string, unknown>): void {
+    const items = value.StackResourceSummaries as Record<string, unknown>[];
+    const first = items[0];
+    if (!first) throw new Error("Missing test inventory");
+    if (change === "duplicate") items.push({ ...first });
+    if (change === "type") first.ResourceType = "AWS::S3::Bucket";
+    if (change === "progress") first.ResourceStatus = "DELETE_IN_PROGRESS";
+    if (change === "unowned") first.PhysicalResourceId = "some-other-table";
+    if (change === "missing-physical") delete first.PhysicalResourceId;
+  }
+  function mutateTable(change: string, value: Record<string, unknown>): void {
+    const table = value.Table as Record<string, unknown>;
+    if (change === "account")
+      table.TableArn = "arn:aws:dynamodb:ap-northeast-1:210987654321:table/other";
+    if (change === "name") table.TableName = "other";
+    if (change === "status") table.TableStatus = "DELETING";
+  }
+  it.each([
+    ["describe-stack-events", "truncated"],
+    ["describe-stack-events", "successful"],
+    ["describe-stack-events", "updated"],
+    ["describe-stack-events", "missing"],
+    ["list-stack-resources", "truncated"],
+    ["list-stack-resources", "duplicate"],
+    ["list-stack-resources", "type"],
+    ["list-stack-resources", "progress"],
+    ["list-stack-resources", "unowned"],
+    ["list-stack-resources", "missing-physical"],
+    ["describe-table", "account"],
+    ["describe-table", "name"],
+    ["describe-table", "status"],
+    ["list-tags-of-resource", "missing"],
+    ["list-tags-of-resource", "conflict"],
+    ["get-template", "retention"],
+    ["get-template", "contract"],
+  ])("rejects %s %s without deleting or fencing", async (action, change) => {
+    const f = recoveryFixture({
+      mutate: (request, body) => {
+        if (!request.args.includes(action)) return body;
+        const value = rewrite(body);
+        if (change === "truncated") value.NextToken = "not-complete";
+        mutateEvidence(action, change, value);
+        return value;
+      },
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    noDeletes(f);
+    expect(f.storageCalls).not.toContain("stop");
+  });
+  it("rejects a missing backend even if the app claims failed initial creation", async () => {
+    const f = recoveryFixture({
+      fail: (request) =>
+        platformInspection(request) && request.args.includes(names.backend)
+          ? {
+              code: 1,
+              stdout: "",
+              stderr: `(ValidationError) Stack with id ${names.backend} does not exist`,
+            }
+          : undefined,
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    noDeletes(f);
+  });
+  it("rejects incomplete installation tables when a runner may have been created", async () => {
+    const f = recoveryFixture({ missingTables: ["Teams"] });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    noDeletes(f);
+  });
+  it("rejects repeating scan cursors rather than accepting incomplete empty proof", async () => {
+    const f = recoveryFixture({
+      backendOnly: true,
+      mutate: (request, body) =>
+        request.args.includes("scan")
+          ? { Items: [], LastEvaluatedKey: { PK: { S: "stuck" } } }
+          : body,
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    noDeletes(f);
+  });
+  it("accepts JSON-string templates and the previous version-1 durable drain contract", async () => {
+    const f = recoveryFixture({
+      mutate: (request, body) => {
+        if (!request.args.includes("get-template")) return body;
+        const value = rewrite(body);
+        const template = value.TemplateBody as { Outputs: Record<string, { Value: unknown }> };
+        if (template.Outputs.CloudInstallationControlVersion)
+          template.Outputs.CloudInstallationControlVersion.Value = "1";
+        value.TemplateBody = JSON.stringify(template);
+        return value;
+      },
+    });
+    expect(await f.run(["down", "--yes"])).toBe(0);
+    expect(f.locations[0]?.native).toBeUndefined();
+    expect(f.storageCalls).toContain("drained");
+  });
+  it("does not treat missing outputs on a successful stack as initial failure", async () => {
+    const f = recoveryFixture({ status: "CREATE_COMPLETE" });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    expect(f.errors.join("")).toContain("completed platform stack");
+    noDeletes(f);
+  });
+  it("rejects an app paired with a partial backend", async () => {
+    const f = recoveryFixture({
+      mutate: (request, body) =>
+        platformInspection(request) && request.args.includes(names.backend)
+          ? { ...rewrite(body), StackStatus: "CREATE_FAILED" }
+          : body,
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    noDeletes(f);
+  });
+  it("does not recover a healthy app from the failed backend's history", async () => {
+    const f = recoveryFixture({
+      mutate: (request, body) => {
+        if (!platformInspection(request)) return body;
+        return request.args.includes(names.app)
+          ? ownedStack(names.app)
+          : { ...rewrite(body), StackStatus: "CREATE_FAILED" };
+      },
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    expect(f.errors.join("")).toContain("not proof");
+    noDeletes(f);
+  });
+  it("allows a table that failed before creation even if CloudFormation assigned a physical name", async () => {
+    const f = recoveryFixture({
+      backendOnly: true,
+      fail: (request) =>
+        request.args.includes("describe-table")
+          ? {
+              code: 1,
+              stdout: "",
+              stderr: "(ResourceNotFoundException) Requested resource not found",
+            }
+          : undefined,
+      mutate: (request, body) => {
+        if (!request.args.includes("list-stack-resources")) return body;
+        const value = rewrite(body);
+        for (const item of value.StackResourceSummaries as Record<string, unknown>[])
+          item.ResourceStatus = "CREATE_FAILED";
+        return value;
+      },
+    });
+    expect(await f.run(["down", "--yes"])).toBe(0);
+    expect(f.calls.some((call) => call.args.includes("scan"))).toBe(false);
+  });
+  it("rejects an unexpected fourth data table before inspecting or deleting its data", async () => {
+    const f = recoveryFixture({
+      backendOnly: true,
+      mutate: (request, body) => {
+        if (!request.args.includes("get-template")) return body;
+        const value = rewrite(body);
+        const template = value.TemplateBody as { Resources: Record<string, unknown> };
+        template.Resources.UnknownData = { Type: "AWS::DynamoDB::Table" };
+        return value;
+      },
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    noDeletes(f);
+  });
+  it.each(["table", "application"])(
+    "rejects partial %s outputs conflicting with physical evidence",
+    async (kind) => {
+      const f = recoveryFixture({
+        mutate: (request, body) => {
+          if (!platformInspection(request)) return body;
+          if (kind === "table" && request.args.includes(names.backend)) {
+            const value = rewrite(body);
+            value.Outputs = [{ OutputKey: "EventsTableName", OutputValue: "other-table" }];
+            return value;
+          }
+          return kind === "application" && request.args.includes(names.app)
+            ? {
+                ...rewrite(body),
+                Outputs: [{ OutputKey: "CloudRunnerEnabled", OutputValue: "false" }],
+              }
+            : body;
+        },
+      });
+      expect(await f.run(["down", "--yes"])).toBe(1);
+      noDeletes(f);
+    },
+  );
+  it("never ignores a control-shaped unknown row in Teams or Deployments", async () => {
+    const f = recoveryFixture({
+      artifact: false,
+      mutate: (request, body) =>
+        request.args.includes("scan") && request.args.some((arg) => arg.includes("-Teams"))
+          ? { Items: [{ PK: { S: "INSTALLATION" }, SK: { S: "CONTROL" } }] }
+          : body,
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    noDeletes(f);
+    expect(f.storageCalls).toContain("stop");
+  });
+  it("recovers deletion retries with only some Outputs present", async () => {
+    const f = recoveryFixture({
+      status: "DELETE_FAILED",
+      mutate: (request, body) =>
+        platformInspection(request) && request.args.includes(names.app)
+          ? {
+              ...rewrite(body),
+              Outputs: [{ OutputKey: "CloudRunnerEnabled", OutputValue: "true" }],
+            }
+          : body,
+    });
+    expect(await f.run(["down", "--yes"])).toBe(0);
+    expect(f.storageCalls).toContain("drained");
+  });
+  it("resumes the durable backend drain proof after a failed app was already removed", async () => {
+    let resumed = false;
+    const f = recoveryFixture({
+      fail: (request) => {
+        if (resumed && platformInspection(request) && request.args.includes(names.app))
+          return {
+            code: 1,
+            stdout: "",
+            stderr: `(ValidationError) Stack with id ${names.app} does not exist`,
+          };
+        if (
+          !resumed &&
+          request.args.includes("delete-stack") &&
+          request.args.includes(ownedStack(names.backend).StackId)
+        )
+          return { code: 1, stdout: "", stderr: "Synthetic delete failure" };
+        return undefined;
+      },
+    });
+    expect(await f.run(["down", "--yes"])).toBe(1);
+    expect((await f.installation.repository.installationControl())?.status).toBe("DRAINED");
+    resumed = true;
+    expect(await f.run(["down", "--yes"])).toBe(0);
+  });
+});

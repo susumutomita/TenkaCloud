@@ -9,6 +9,12 @@ import { parseRunnerBindings } from "../../infrastructure/lib/problem-deploy/han
 import { STANDARD_TOOLKIT_STACK } from "./bootstrap-check";
 import { cloudEnvironmentInstructions, loadCloudEnvironment } from "./environment";
 import {
+  canRecoverCreation,
+  type FailedCreationRecovery,
+  type PlatformStack,
+  recoverFailedCreation,
+} from "./failed-creation";
+import {
   type CloudInstallation,
   drainInstallation,
   type InstallationLocation,
@@ -111,15 +117,17 @@ async function buildApplications(context: Context): Promise<void> {
       `Build ${application}`,
     );
 }
-interface OwnedPlatformStack {
-  readonly name: string;
-  readonly arn: string;
-  readonly outputs: Readonly<Record<string, string>>;
-  readonly status: string;
-}
+type OwnedPlatformStack = PlatformStack;
 const outputsSchema = z.array(z.object({ OutputKey: z.string(), OutputValue: z.string() }));
-function stackOutputs(text: string): Readonly<Record<string, string>> {
-  const raw = z.object({ Outputs: outputsSchema }).parse(JSON.parse(text) as unknown);
+function stackOutputs(text: string, allowMissing: boolean): Readonly<Record<string, string>> {
+  const parsed: unknown = JSON.parse(text);
+  const raw = z.object({ Outputs: outputsSchema.optional() }).parse(parsed);
+  if (!raw.Outputs && !allowMissing)
+    throw new Error(
+      "Required outputs are absent from a completed platform stack; no resources were removed. Review its deployment state.",
+    );
+  // Absence only selects the verified failed-creation recovery path; it never authorizes deletion.
+  if (!raw.Outputs) return {};
   if (new Set(raw.Outputs.map((entry) => entry.OutputKey)).size !== raw.Outputs.length)
     throw new Error("Ambiguous stack outputs");
   return Object.fromEntries(raw.Outputs.map((entry) => [entry.OutputKey, entry.OutputValue]));
@@ -161,21 +169,46 @@ async function platformPreflight(
       continue;
     }
     assertSuccess(result, `Inspect platform stack ${name}`);
+    const arn = assertOwnedStack(result.stdout, {
+      account,
+      region,
+      name,
+      environment: context.env.CDK_PARAM_ENVIRONMENT ?? "development",
+    });
+    const status = validatePlatformStatus(
+      result.stdout,
+      mode,
+      name,
+      context.env.CDK_PARAM_ENVIRONMENT ?? "development",
+    );
     stacks.push({
       name,
-      arn: assertOwnedStack(result.stdout, {
-        account,
-        region,
-        name,
-        environment: context.env.CDK_PARAM_ENVIRONMENT ?? "development",
-      }),
-      outputs: stackOutputs(result.stdout),
-      status: z.object({ StackStatus: z.string() }).parse(JSON.parse(result.stdout) as unknown)
-        .StackStatus,
+      arn,
+      status,
+      outputs: stackOutputs(result.stdout, mode === "down" && canRecoverCreation(status)),
     });
     if (mode === "up") validateRunnerTransition(context, name, result.stdout);
   }
   return stacks;
+}
+function validatePlatformStatus(
+  text: string,
+  mode: "up" | "down",
+  name: string,
+  environment: string,
+): string {
+  const { StackStatus: status } = z
+    .object({ StackStatus: z.string() })
+    .parse(JSON.parse(text) as unknown);
+  if (status.endsWith("_IN_PROGRESS") && status !== "DELETE_IN_PROGRESS")
+    throw new Error(
+      `Stack ${name} is ${status}; wait for CloudFormation to finish before retrying.`,
+    );
+  if (mode === "up" && canRecoverCreation(status))
+    throw new Error(
+      `Stack ${name} is ${status}. Review the stack state, then run make destroy ENV=${environment} before deploying again; retained data is not purged.`,
+    );
+  return status;
 }
 function validateRunnerTransition(context: Context, name: string, output: string): void {
   if (name !== context.stacks.app) return;
@@ -383,13 +416,48 @@ async function teardownScope(
     );
   return control.scope;
 }
+function needsCreationRecovery(stack: OwnedPlatformStack, appName: string): boolean {
+  if (["CREATE_FAILED", "ROLLBACK_FAILED", "ROLLBACK_COMPLETE"].includes(stack.status)) return true;
+  const required =
+    stack.name === appName
+      ? [
+          "CloudRunnerEnabled",
+          "CloudInstallationControlVersion",
+          ...(stack.outputs.CloudInstallationControlVersion === "2"
+            ? ["CloudExecutionArtifactBucket", "CloudExecutionCatalogKey"]
+            : []),
+        ]
+      : ["EventsTableName", "TeamsTableName", "DeploymentsTableName"];
+  return (
+    canRecoverCreation(stack.status) && required.some((key) => stack.outputs[key] === undefined)
+  );
+}
 async function down(context: Context, yes: boolean): Promise<void> {
   const resolved = await resolveCloudContext(context);
-  const stacks = await platformPreflight(resolved, "down");
+  let stacks: readonly OwnedPlatformStack[] = await platformPreflight(resolved, "down");
   if (stacks.length === 0) {
     context.io.stdout(
       "[cloud] Both platform stacks are already absent. Retained data, assets and competitor bootstrap resources were not changed.\n",
     );
+    return;
+  }
+  const recoveryNeeded = stacks.some((stack) => needsCreationRecovery(stack, resolved.stacks.app));
+  const recovery = recoveryNeeded
+    ? await recoverFailedCreation(
+        {
+          account: resolved.env.ACCOUNT_ID ?? "",
+          region: resolved.env.REGION ?? "",
+          environment: resolved.env.CDK_PARAM_ENVIRONMENT ?? "development",
+          appName: resolved.stacks.app,
+          backendName: resolved.stacks.backend,
+          run: (args) => run(resolved, "aws", args),
+        },
+        stacks,
+      )
+    : undefined;
+  stacks = recovery?.stacks ?? stacks;
+  if (recovery?.backendOnly) {
+    await removeFailedBackend(resolved, recovery, yes);
     return;
   }
   const backend = stacks.find((stack) => stack.name === context.stacks.backend);
@@ -397,18 +465,10 @@ async function down(context: Context, yes: boolean): Promise<void> {
     throw new Error(
       "Backend is missing; event cleanup cannot be verified. No resources were removed.",
     );
-  if (
-    stacks.some(
-      (stack) => stack.status.endsWith("_IN_PROGRESS") && stack.status !== "DELETE_IN_PROGRESS",
-    )
-  )
-    throw new Error(
-      "A platform stack update is still running; wait for it to finish before destroy.",
-    );
   const installation = resolved.io.openInstallation({
     region: resolved.env.REGION ?? "",
     tables: installationTables(backend),
-    native: nativeInstallationArtifacts(resolved, stacks),
+    native: recovery?.emptyOnly ? undefined : nativeInstallationArtifacts(resolved, stacks),
   });
   try {
     const scope = await teardownScope(resolved, stacks, installation);
@@ -418,29 +478,65 @@ async function down(context: Context, yes: boolean): Promise<void> {
       context.io.stdout("Cloud teardown cancelled\n");
       return;
     }
-    await drainInstallation(installation, scope, context.io);
-    // Delete the verified physical ARN, never a reusable stack name. CloudFormation still
-    // runs custom-resource cleanup and honors each template's retention policies.
-    // Omitting --role-arn preserves the service role recorded on each existing stack.
-    for (const name of [context.stacks.app, context.stacks.backend]) {
-      const stack = stacks.find((candidate) => candidate.name === name);
-      if (!stack) continue;
-      const args = ["--stack-name", stack.arn, "--region", scope.region];
-      if (stack.status !== "DELETE_IN_PROGRESS")
-        assertSuccess(
-          await run(resolved, "aws", ["cloudformation", "delete-stack", ...args]),
-          `Delete ${name}`,
-        );
-      assertSuccess(
-        await run(resolved, "aws", ["cloudformation", "wait", "stack-delete-complete", ...args]),
-        `Wait for ${name} deletion`,
+    if (recovery?.emptyOnly) {
+      await installation.repository.stopAcceptingInstallation(
+        scope,
+        new Date(context.io.now()).toISOString(),
       );
-    }
+      await recovery.assertEmpty();
+      await installation.repository.confirmInstallationDrained(
+        scope,
+        new Date(context.io.now()).toISOString(),
+      );
+    } else await drainInstallation(installation, scope, context.io);
+    await deletePlatformStacks(resolved, stacks);
     context.io.stdout(
       "Cloud hosting and recorded event exercise resources destroyed. Retained data, accounts, shared ExternalId, bootstrap resources and asset storage are not purged.\n",
     );
   } finally {
     installation.close();
+  }
+}
+async function removeFailedBackend(
+  context: Context,
+  recovery: FailedCreationRecovery,
+  yes: boolean,
+): Promise<void> {
+  // This exact backend never completed creation and no application stack exists.
+  // There is no application intake to fence. Its newly created tables must be empty.
+  await recovery.assertEmpty();
+  const consequences = `Remove failed initial hosting creation in account ${context.env.ACCOUNT_ID}, region ${context.env.REGION}, environment ${context.env.CDK_PARAM_ENVIRONMENT}?\n${recovery.stacks.map((stack) => stack.arn).join("\n")}\nVerified retained tables and asset storage are kept and may incur charges. CDKToolkit and competitor resources are untouched.`;
+  context.io.stdout(`${consequences}\n`);
+  if (!yes && !(await context.io.confirm(`${consequences} [y/N] `))) {
+    context.io.stdout("Cloud teardown cancelled\n");
+    return;
+  }
+  // Repeat the strongly consistent proof after potentially long operator confirmation.
+  await recovery.assertEmpty();
+  await deletePlatformStacks(context, recovery.stacks);
+  context.io.stdout(
+    "Failed initial hosting creation removed. Retained tables and assets were not purged.\n",
+  );
+}
+async function deletePlatformStacks(
+  context: Context,
+  stacks: readonly OwnedPlatformStack[],
+): Promise<void> {
+  // Delete the verified physical ARN, never a reusable name. CloudFormation honors
+  // retained resources and the existing service role; CDKToolkit is never selected.
+  for (const name of [context.stacks.app, context.stacks.backend]) {
+    const stack = stacks.find((candidate) => candidate.name === name);
+    if (!stack) continue;
+    const args = ["--stack-name", stack.arn, "--region", context.env.REGION ?? ""];
+    if (stack.status !== "DELETE_IN_PROGRESS")
+      assertSuccess(
+        await run(context, "aws", ["cloudformation", "delete-stack", ...args]),
+        `Delete ${name}`,
+      );
+    assertSuccess(
+      await run(context, "aws", ["cloudformation", "wait", "stack-delete-complete", ...args]),
+      `Wait for ${name} deletion`,
+    );
   }
 }
 async function status(context: Context): Promise<number> {

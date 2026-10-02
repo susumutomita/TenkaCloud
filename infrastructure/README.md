@@ -224,6 +224,24 @@ after application deletion requires the matching backend and completed drain
 marker before it can finish. Both stacks already absent is a no-op, not a data-purge
 claim. An unexplained missing stack or ambiguous state blocks destructive work.
 
+Initial creation can fail before CloudFormation publishes `Outputs`. Once the stack
+finishes `CREATE_FAILED`, `ROLLBACK_COMPLETE` or `ROLLBACK_FAILED`, repeat
+`make destroy` for the same environment. The CLI verifies the exact stack's
+creation history, deployed template and complete resource inventory before
+recovering table identities; it also checks table ARNs, ownership tags and
+retention policies. It never searches all AWS resources or adopts tables by name.
+
+When the application exists, recovery uses its verified intake-fence contract and
+the normal durable event drain. If native artifacts were never created, removal
+requires a durable intake stop and strongly consistent, paginated proof that all
+three tables contain no data except the matching Events-table stop marker. When
+only the backend failed its first creation and no application exists, every
+surviving table must be empty; not-yet-created tables need no cleanup. Nonempty
+partial data, uncertain ownership, incomplete history or resources still changing
+block deletion with the evidence retained for review. A stack still creating or
+rolling back must finish before retrying. A failed deletion can be retried with
+the same command; this never purges retained resources or modifies `CDKToolkit`.
+
 Event data, scores and receipts, organizer accounts, shared ExternalId, competitor
 bootstrap roles/stacks, CDK asset and execution-artifact storage, and the shared
 standard `CDKToolkit` are retained. Unrelated or separately deployed exercise resources are not

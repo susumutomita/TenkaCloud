@@ -11,7 +11,10 @@ const environment = process.env.CDK_PARAM_ENVIRONMENT ?? "development";
 const names = cloudStackNames(environment);
 const { account, region } = cloudDeploymentTarget(process.env);
 const root = resolve(import.meta.dirname, "../..");
-const app = new App();
+const app = new App({
+  // Retain CloudFormation export/import protection for the persistent backend.
+  postCliContext: { "@aws-cdk/core:defaultCrossStackReferences": "strong" },
+});
 const backend = new CloudDataStack(app, names.backend, {
   environment,
   env: { account, region },
@@ -32,4 +35,4 @@ const application = new CloudApplicationStack(app, names.app, {
   consoleAssets: resolve(root, "apps/application-admin-console/dist"),
 });
 
-application.addDependency(backend);
+application.addStackDependency(backend);

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   cpSync,
@@ -121,6 +122,48 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
       { ...cloudStackTags("test"), TenkaCloudRegion: "us-east-1" },
       { ...cloudStackTags("test"), TenkaCloudRegion: "us-east-1" },
     ]);
+  });
+  it("loads every declared Node handler from a bundle smaller than 1 MiB", () => {
+    const functions = Object.entries(application.findResources("AWS::Lambda::Function")).filter(
+      ([id]) => /^(CloudApi|DeploymentPipeline)/u.test(id),
+    );
+    const bundles = functions.map(([, resource]) => {
+      expect(resource.Properties.Runtime).toBe("nodejs24.x");
+      const handler = String(resource.Properties.Handler);
+      expect(handler).toMatch(/^index\.[a-zA-Z]+$/u);
+      const key = String(resource.Properties.Code.S3Key);
+      expect(key).toMatch(/^[a-f0-9]{64}\.zip$/u);
+      const file = join(directory, "cdk.out", `asset.${key.slice(0, -4)}`, "index.js");
+      expect(readFileSync(file).byteLength).toBeLessThan(1024 * 1024);
+      return { file, handler: handler.slice("index.".length) };
+    });
+    expect(bundles.map(({ handler }) => handler).sort()).toEqual([
+      "claimHandler",
+      "createHandler",
+      "describeHandler",
+      "failHandler",
+      "finishHandler",
+      "handler",
+      "handler",
+      "recoveryHandler",
+    ]);
+    execFileSync(
+      process.execPath,
+      [
+        "-e",
+        'for (const { file, handler } of JSON.parse(process.argv[1])) require("node:assert/strict").equal(typeof require(file)[handler], "function", handler);',
+        JSON.stringify(bundles),
+      ],
+      {
+        env: {
+          AWS_EC2_METADATA_DISABLED: "true",
+          AWS_REGION: "us-east-1",
+          EVENTS_TABLE_NAME: "events",
+          TEAMS_TABLE_NAME: "teams",
+          DEPLOYMENTS_TABLE_NAME: "deployments",
+        },
+      },
+    );
   });
   it("retains ownership tags without requiring custom bootstrap IAM policies", () => {
     for (const source of [data, application]) {

@@ -125,7 +125,13 @@ export class CloudApplicationStack extends Stack {
       memorySize: 512,
       role: apiRole,
       logGroup: apiLogs,
-      bundling: { bundleAwsSDK: true, minify: true, target: "node24" },
+      bundling: {
+        bundleAwsSDK: true,
+        minify: true,
+        target: "node24",
+        // Tree-shake the SDK's ESM inputs while retaining CommonJS Lambda output.
+        mainFields: ["module", "main"],
+      },
       environment: {
         EVENTS_TABLE_NAME: props.backend.events.tableName,
         TEAMS_TABLE_NAME: props.backend.teams.tableName,

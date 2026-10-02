@@ -72,13 +72,7 @@ export class CloudDeploymentPipeline extends Construct {
           }
         : {}),
     };
-    const makeWorker = (
-      name: string,
-      entry: string,
-      handler: string,
-      timeout = 60,
-      reservedConcurrentExecutions?: number,
-    ) => {
+    const makeWorker = (name: string, entry: string, handler: string, timeout = 60) => {
       const logs = new LogGroup(this, `${name}Logs`, { retention: RetentionDays.ONE_WEEK });
       const role = new Role(this, `${name}Role`, {
         assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
@@ -92,10 +86,15 @@ export class CloudDeploymentPipeline extends Construct {
         runtime: Runtime.NODEJS_24_X,
         timeout: Duration.seconds(timeout),
         memorySize: 512,
-        reservedConcurrentExecutions,
         depsLockFilePath: join(props.repositoryRoot, "bun.lock"),
         projectRoot: props.repositoryRoot,
-        bundling: { bundleAwsSDK: true, minify: true, target: "node24" },
+        bundling: {
+          bundleAwsSDK: true,
+          minify: true,
+          target: "node24",
+          // Tree-shake the SDK's ESM inputs while retaining CommonJS Lambda output.
+          mainFields: ["module", "main"],
+        },
         environment,
       });
     };
@@ -233,6 +232,8 @@ export class CloudDeploymentPipeline extends Construct {
       timeout: Duration.minutes(90),
       logs: { destination: logs, level: LogLevel.ERROR, includeExecutionData: false },
     });
+    // Standard execution names/input and conditional DynamoDB claims make overlapping dispatch
+    // safe. Do not reserve account concurrency: small accounts may have none available to reserve.
     this.dispatcher = makeWorker(
       "Dispatcher",
       props.dispatcherEntry ??
@@ -242,7 +243,6 @@ export class CloudDeploymentPipeline extends Construct {
         ),
       "handler",
       120,
-      1,
     );
     this.dispatcher.addToRolePolicy(
       new PolicyStatement({

@@ -16,7 +16,7 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
 import { DynamoDBDocumentClient, GetCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { App, ArnFormat, Stack } from "aws-cdk-lib";
-import { Template } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { AttributeType, Table } from "aws-cdk-lib/aws-dynamodb";
 import { BlockPublicAccess, Bucket } from "aws-cdk-lib/aws-s3";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
@@ -691,6 +691,82 @@ function unusedDispatchRecovery() {
 }
 
 describe("scheduled durable intent dispatcher", () => {
+  it.each([
+    ["create", "RUNNING"],
+    ["create", "SUCCEEDED"],
+    ["delete", "RUNNING"],
+    ["delete", "SUCCEEDED"],
+  ] as const)(
+    "overlapping %s dispatches share one Standard execution when it is %s",
+    async (operation, status) => {
+      const identity = {
+        ...IDENTITY,
+        ...(operation === "delete" ? { operation, generation: 1 } : {}),
+      };
+      const intents = [{ ...identity, createdAt: new Date(NOW).toISOString() }];
+      const executions = new Map<string, { input: string; executionArn: string }>();
+      let active = 0;
+      let peak = 0;
+      const startExecution = vi.fn<DispatchDependencies["startExecution"]>(async (input) => {
+        active += 1;
+        peak = Math.max(peak, active);
+        await Promise.resolve();
+        active -= 1;
+        const existing = executions.get(input.name);
+        if (existing) {
+          // AWS Standard returns the same ARN for a running name/input, but rejects a
+          // closed execution even when it finished before an overlapping request arrived.
+          if (existing.input !== input.input || status !== "RUNNING")
+            throw Object.assign(new Error("already exists"), { name: "ExecutionAlreadyExists" });
+          return { executionArn: existing.executionArn };
+        }
+        const executionArn = `${MACHINE.replace(":stateMachine:", ":execution:")}:${input.name}`;
+        executions.set(input.name, { input: input.input, executionArn });
+        return { executionArn };
+      });
+      const deps: DispatchDependencies = {
+        repository: {
+          ...unusedDispatchRecovery(),
+          getDeletionJob: fixture().getDeletionJob,
+          // Independent invocations read the same persisted intent before its worker claims it.
+          listDispatch: async () => structuredClone(intents),
+          acceptingNewDeployments: async () => operation === "create",
+        },
+        stateMachineArn: MACHINE,
+        startExecution,
+        describeExecution: vi.fn<DispatchDependencies["describeExecution"]>(),
+      };
+      const summaries = await Promise.all([dispatchPending(deps), dispatchPending(deps)]);
+      expect(peak).toBe(2);
+      expect(startExecution).toHaveBeenCalledTimes(2);
+      expect(startExecution.mock.calls[0]).toEqual(startExecution.mock.calls[1]);
+      expect(executions).toEqual(
+        new Map([
+          [
+            dispatchExecutionName(identity),
+            {
+              input: serializeDispatchIdentity(identity),
+              executionArn: `${MACHINE.replace(":stateMachine:", ":execution:")}:${dispatchExecutionName(identity)}`,
+            },
+          ],
+        ]),
+      );
+      expect(summaries).toEqual([
+        { pending: 1, started: 1, duplicate: 0, uncertain: 0 },
+        {
+          pending: 1,
+          started: status === "RUNNING" ? 1 : 0,
+          duplicate: status === "RUNNING" ? 0 : 1,
+          uncertain: 0,
+        },
+      ]);
+      expect(intents).toEqual([{ ...identity, createdAt: new Date(NOW).toISOString() }]);
+      expect(deps.repository.getTeardown).not.toHaveBeenCalled();
+      expect(deps.repository.finishTeardown).not.toHaveBeenCalled();
+      expect(deps.describeExecution).not.toHaveBeenCalled();
+    },
+  );
+
   it("uses byte-identical Standard execution input/name and leaves uncertain/duplicate intents intact", async () => {
     const intents = Array.from({ length: 3 }, (_, i) => ({
       ...IDENTITY,
@@ -1117,8 +1193,11 @@ describe("optional deployment pipeline offline synthesis", () => {
     });
     template.hasResourceProperties("AWS::Lambda::Function", {
       Handler: "index.handler",
-      ReservedConcurrentExecutions: 1,
+      Timeout: 120,
+      ReservedConcurrentExecutions: Match.absent(),
     });
+    for (const resource of Object.values(template.findResources("AWS::Lambda::Function")))
+      expect(resource.Properties).not.toHaveProperty("ReservedConcurrentExecutions");
     const all = JSON.stringify(template.toJSON());
     expect(all).not.toContain('"CLOUD_RUNNER_BINDINGS":');
     expect(all).toContain("CLOUD_RUNNER_BINDINGS_KEY");
