@@ -24,11 +24,10 @@ install_ci: ## Install locked CI dependencies without lifecycle scripts | lockfi
 # Bumps the problems/ pin to its tracked branch tip and leaves it STAGED for review. Run this to
 # open the bump as its own PR (there is no scheduled workflow that does this automatically);
 # pre-commit only checks that the checkout matches the staged pin; it never updates it.
-submodule-latest: ## Update and stage the problem catalog submodule | 問題カタログsubmoduleを最新版へ更新してstage
-	git submodule update --remote --recursive problems
-	@git diff --quiet -- problems \
-		&& echo "problems already at the latest pin." \
-		|| { git add problems; echo "problems bumped + staged — review the submodule diff, then commit."; }
+submodule-latest: ## Fast-forward and stage problem sources (apply to hosts separately) | 問題ソースを前進更新してstage (開催環境への反映は別途)
+	@echo "Update between events: retained local events still need their original problem files. See docs/local-hosting.md."
+	bun run scripts/ops/update-problems.ts
+	@echo "Source checkout only; running hosts are not refreshed. Local: rebuild/restart with make local. Cloud: update with make deploy."
 # How many workspaces `build` / `typecheck` run at once. 1 (serial, fail-fast, output in order)
 # is the default a developer wants in a terminal; CI passes WORKSPACE_JOBS=4 because one
 # `tsc --noEmit` uses a single core and the serial chain left three of the runner's four idle.

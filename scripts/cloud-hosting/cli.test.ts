@@ -55,6 +55,10 @@ function platformInspection(request: ProcessRequest): boolean {
   );
 }
 function mockResponse(request: ProcessRequest): ProcessResult {
+  if (request.args.includes("get-template"))
+    return { code: 0, stdout: JSON.stringify({ TemplateBody: { Resources: {} } }), stderr: "" };
+  if (request.args.includes("list-stack-resources"))
+    return { code: 0, stdout: JSON.stringify({ StackResourceSummaries: [] }), stderr: "" };
   if (request.args.includes("get-parameter"))
     return {
       code: 0,
@@ -331,7 +335,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       "tenkacloud-cloud-problem-deploy-staging",
       "tenkacloud-cloud-staging",
       "--require-approval",
-      "broadening",
+      "never",
     ]);
     expect(
       f.calls.some(
@@ -397,8 +401,6 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
         "",
         "--region",
         "ap-northeast-1",
-        "--bootstrap-bucket-name",
-        "cdk-hnb659fds-assets-123456789012-ap-northeast-1",
         "--bootstrap-kms-key-id",
         "AWS_MANAGED_KEY",
       ]);
@@ -456,8 +458,14 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     const f = fixture();
     expect(await f.run(["down"])).toBe(0);
     expect(f.confirmations).toHaveLength(1);
-    expect(f.calls).toHaveLength(4);
-    expect(f.calls.slice(2).every(platformInspection)).toBe(true);
+    expect(f.calls).toHaveLength(8);
+    expect(f.calls.slice(2, 4).every(platformInspection)).toBe(true);
+    expect(f.calls.slice(4).map((call) => call.args[1])).toEqual([
+      "get-template",
+      "list-stack-resources",
+      "get-template",
+      "list-stack-resources",
+    ]);
     expect(f.calls.some((call) => call.inherit)).toBe(false);
     expect(f.storageCalls).toEqual([]);
     expect(f.confirmations[0]).toContain("123456789012");
@@ -473,7 +481,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     async ({ args }) => {
       const f = fixture({ confirmed: true });
       expect(await f.run(["down", ...args])).toBe(0);
-      expect(f.calls).toHaveLength(6);
+      expect(f.calls).toHaveLength(10);
       expect(f.storageCalls).toEqual([]);
       const deletes = f.calls.filter((call) => call.args.includes("destroy"));
       expect(f.assemblies.map((assembly) => assembly.arn)).toEqual([
@@ -497,7 +505,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
           : undefined,
     });
     expect(await f.run(["down"])).toBe(1);
-    expect(f.calls).toHaveLength(5);
+    expect(f.calls).toHaveLength(9);
     expect(f.storageCalls).toEqual([]);
     expect(f.assemblies).toHaveLength(1);
     expect(f.assemblies[0]?.disposed).toBe(true);
@@ -739,9 +747,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
         ),
       ).toBe(false);
       const deploy = f.calls.find((call) => call.args.includes("deploy"));
-      expect(deploy?.args.at(-1)).toBe(
-        args.some((arg) => arg === "--yes") ? "never" : "broadening",
-      );
+      expect(deploy?.args.at(-1)).toBe("never");
     },
   );
   it("inspects the official bootstrap template offline without AWS, app synthesis or organizer email", async () => {
@@ -765,8 +771,6 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       "",
       "--region",
       "ap-northeast-1",
-      "--bootstrap-bucket-name",
-      "cdk-hnb659fds-assets-123456789012-ap-northeast-1",
       "--bootstrap-kms-key-id",
       "AWS_MANAGED_KEY",
     ]);
@@ -797,11 +801,38 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(f.calls.every((call) => call.env.AWS_DEFAULT_PROFILE === "reviewed-profile")).toBe(true);
     expect(f.messages.join("")).toContain("--profile ''");
     expect(f.messages.join("")).toContain("--bootstrap-kms-key-id AWS_MANAGED_KEY");
+    expect(f.messages.join("")).not.toContain("--bootstrap-bucket-name");
     expect(f.messages.join("")).toContain(
-      "--bootstrap-bucket-name cdk-hnb659fds-assets-123456789012-ap-northeast-1",
+      "S3 asset bucket cdk-hnb659fds-assets-123456789012-ap-northeast-1",
     );
     expect(env.AWS_PROFILE).toBe("reviewed-profile");
   });
+  it("passes bootstrap preview arguments through the installed CDK parser without unknown options", async () => {
+    const f = fixture();
+    expect(await f.run(["up", "--show-setup"])).toBe(0);
+    const preview = f.calls[0];
+    expect(preview?.args).toContain("--show-template");
+    const cdk = join(import.meta.dirname, "../../node_modules/aws-cdk/bin/cdk");
+    const result = spawnSync(cdk, [...(preview?.args ?? []), "--notices", "false"], {
+      cwd: join(import.meta.dirname, "../.."),
+      env: {
+        PATH: process.env.PATH,
+        AWS_EC2_METADATA_DISABLED: "true",
+        CDK_DISABLE_VERSION_CHECK: "1",
+        CDK_DISABLE_CLI_TELEMETRY: "1",
+      },
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain("Unknown option(s)");
+    expect(result.stdout).toContain(
+      `Fn::Sub: cdk-\${Qualifier}-assets-\${AWS::AccountId}-\${AWS::Region}`,
+    );
+    expect(f.calls).toHaveLength(1);
+    expect(f.calls.every((call) => call.command !== "aws")).toBe(true);
+  }, 15000);
   it("reports a failed offline template preview", async () => {
     const f = fixture({
       fail: (request) =>
@@ -813,20 +844,20 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(f.errors.join("")).toContain("Synthetic template failure");
     expect(f.calls.every((call) => call.command !== "aws")).toBe(true);
   });
-  it.each([{ args: [] }, { args: ["--yes"] }])(
-    "stops before IAM writes or builds when initial bootstrap is declined: %s",
+  it.each([{ args: [] }, { args: ["--yes"] }, { args: ["-y"] }])(
+    "restores automatic first deployment without invoking a declining confirmation stub: %s",
     async ({ args }) => {
-      const f = fixture({ toolkitMissing: true });
-      expect(await f.run(["up", ...args])).toBe(1);
-      expect(f.confirmations).toHaveLength(1);
-      expect(f.errors.join("")).toContain("--show-setup");
-      expect(f.calls.some((call) => call.inherit)).toBe(false);
-      expect(f.calls.some((call) => call.command === "bun")).toBe(false);
+      const f = fixture({ toolkitMissing: true, confirmed: false });
+      expect(await f.run(["up", ...args])).toBe(0);
+      expect(f.confirmations).toEqual([]);
+      expect(f.calls.filter((call) => call.args.includes("bootstrap"))).toHaveLength(1);
+      const deploy = f.calls.find((call) => call.args.includes("deploy"));
+      expect(deploy?.args.slice(-2)).toEqual(["--require-approval", "never"]);
     },
   );
   it.each([
-    { args: [], ci: undefined, prompts: 1 },
-    { args: ["--yes"], ci: undefined, prompts: 1 },
+    { args: [], ci: undefined, prompts: 0 },
+    { args: ["--yes"], ci: undefined, prompts: 0 },
     { args: ["--setup-if-needed", "--yes"], ci: "true", prompts: 0 },
   ])(
     "pins the standard bootstrap stack and qualifier before completing the same deploy: %s",
@@ -836,7 +867,8 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
         await runCloudCli(["up", ...args], f.io, { root: ROOT, env: { ...f.env, CI: ci } }),
       ).toBe(0);
       expect(f.confirmations).toHaveLength(prompts);
-      const notice = f.messages.join("");
+      const notice = [...f.messages, ...f.confirmations].join("");
+      expect(notice.match(/Creating standard CDKToolkit/gu)).toHaveLength(1);
       for (const text of [
         "account 123456789012",
         "region ap-northeast-1",
@@ -871,8 +903,6 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
         "",
         "--region",
         "ap-northeast-1",
-        "--bootstrap-bucket-name",
-        "cdk-hnb659fds-assets-123456789012-ap-northeast-1",
         "--bootstrap-kms-key-id",
         "AWS_MANAGED_KEY",
       ]);
@@ -893,18 +923,22 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     },
   );
   it.each([{ args: [] }, { args: ["--yes"] }, { args: ["--setup-if-needed"] }])(
-    "never treats ordinary CI deployment consent as initial bootstrap approval: %s",
+    "restores plain CI deployment without an interactive approval gate: %s",
     async ({ args }) => {
-      const f = fixture({ toolkitMissing: true, confirmed: true });
+      const f = fixture({ toolkitMissing: true, confirmed: false });
       expect(
         await runCloudCli(["up", ...args], f.io, { root: ROOT, env: { ...f.env, CI: "true" } }),
-      ).toBe(1);
+      ).toBe(0);
       expect(f.confirmations).toEqual([]);
-      expect(f.errors.join("")).toContain("--setup-if-needed --yes");
-      expect(f.calls.some((call) => call.inherit)).toBe(false);
+      expect(f.errors).toEqual([]);
+      expect(f.calls.some((call) => call.args.includes("bootstrap"))).toBe(true);
+      expect(f.calls.find((call) => call.args.includes("deploy"))?.args.slice(-2)).toEqual([
+        "--require-approval",
+        "never",
+      ]);
     },
   );
-  it("deploys a fresh account after confirmed toolkit bootstrap", async () => {
+  it("deploys a fresh account after automatic toolkit bootstrap", async () => {
     const f = fixture({
       toolkitMissing: true,
       confirmed: true,
@@ -919,7 +953,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       },
     });
     expect(await f.run(["up"])).toBe(0);
-    expect(f.confirmations).toHaveLength(1);
+    expect(f.confirmations).toHaveLength(0);
     expect(f.storageCalls).toEqual([]);
     expect(f.calls.filter((call) => call.args.includes("bootstrap"))).toHaveLength(1);
     expect(f.calls.some((call) => call.args.includes("deploy"))).toBe(true);
@@ -939,10 +973,10 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(f.calls.some((call) => call.args.includes("destroy"))).toBe(false);
     failDeploy = false;
     expect(await f.run(["up"])).toBe(0);
-    expect(f.confirmations).toHaveLength(1);
+    expect(f.confirmations).toHaveLength(0);
     expect(f.calls.filter((call) => call.args.includes("bootstrap"))).toHaveLength(1);
   });
-  it("rechecks after consent and reuses a toolkit installed while confirmation was pending", async () => {
+  it("rechecks before creation and reuses a toolkit installed by another caller", async () => {
     let inspected = false;
     const f = fixture({
       confirmed: true,
@@ -960,7 +994,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       },
     });
     expect(await f.run(["up"])).toBe(0);
-    expect(f.confirmations).toHaveLength(1);
+    expect(f.confirmations).toHaveLength(0);
     expect(
       f.calls.some((call) => call.args.includes("bootstrap") || call.args.includes("update-stack")),
     ).toBe(false);
@@ -1420,6 +1454,153 @@ describe("native-aware cloud teardown contract", () => {
   });
 });
 
+describe("owned failed-stack bucket cleanup through make destroy", () => {
+  function buckets(
+    options: { confirmed?: boolean; fault?: "tags" | "delete"; retain?: boolean } = {},
+  ) {
+    const name = "tenkacloud-cloud-staging-owned-console";
+    const stack = ownedStack("tenkacloud-cloud-staging");
+    let empty = false;
+    const json = (value: unknown): ProcessResult => ({
+      code: 0,
+      stderr: "",
+      stdout: JSON.stringify(value),
+    });
+    const metadata = (ours: boolean) =>
+      json({
+        TemplateBody: {
+          Resources: ours
+            ? {
+                OrganizerBucket: {
+                  Type: "AWS::S3::Bucket",
+                  DeletionPolicy: options.retain ? "Retain" : "Delete",
+                },
+              }
+            : {},
+          Outputs: { CloudControlDataBackend: { Value: "dynamodb" } },
+        },
+      });
+    const inventory = (ours: boolean) =>
+      json({
+        StackResourceSummaries: ours
+          ? [
+              {
+                LogicalResourceId: "OrganizerBucket",
+                PhysicalResourceId: name,
+                ResourceType: "AWS::S3::Bucket",
+                ResourceStatus: "DELETE_FAILED",
+              },
+            ]
+          : [],
+      });
+    const tags = () =>
+      json({
+        TagSet: Object.entries({
+          ...cloudStackTags("staging"),
+          "aws:cloudformation:stack-id": options.fault === "tags" ? "another-stack" : stack.StackId,
+          "aws:cloudformation:logical-id": "OrganizerBucket",
+        }).map(([Key, Value]) => ({ Key, Value })),
+      });
+    const versions = () =>
+      json(
+        empty
+          ? { IsTruncated: false }
+          : {
+              IsTruncated: false,
+              Versions: [{ Key: "index.html", VersionId: "old-version" }],
+              DeleteMarkers: [{ Key: "index.html", VersionId: "delete-marker" }],
+            },
+      );
+    const s3 = (request: ProcessRequest): ProcessResult => {
+      expect(request.args[request.args.indexOf("--expected-bucket-owner") + 1]).toBe(
+        "123456789012",
+      );
+      expect(request.args[request.args.indexOf("--bucket") + 1]).toBe(name);
+      switch (request.args[1]) {
+        case "get-bucket-tagging":
+          return tags();
+        case "list-object-versions":
+          return versions();
+        case "delete-objects":
+          if (options.fault === "delete") return { code: 1, stdout: "", stderr: "AccessDenied" };
+          empty = true;
+          return { code: 0, stdout: "", stderr: "" };
+        default:
+          throw new Error("Unexpected S3 operation");
+      }
+    };
+    const f = fixture({
+      confirmed: options.confirmed ?? true,
+      fail: (request) => {
+        if (platformInspection(request) && request.args.includes(stack.StackName))
+          return json({ ...stack, StackStatus: "ROLLBACK_FAILED", Outputs: undefined });
+        if (request.args.includes("get-template"))
+          return metadata(request.args.includes(stack.StackId));
+        if (request.args.includes("list-stack-resources"))
+          return inventory(request.args.includes(stack.StackId));
+        return request.args[0] === "s3api" ? s3(request) : undefined;
+      },
+    });
+    return { ...f, name };
+  }
+  it("confirms exact ownership, empties versions/markers and verifies empty before CDK destroys failed stacks", async () => {
+    const f = buckets();
+    expect(await f.run(["down"])).toBe(0);
+    expect(f.confirmations).toHaveLength(1);
+    const deletion = f.calls.findIndex((call) => call.args.includes("delete-objects"));
+    expect(deletion).toBeGreaterThan(0);
+    const payload = f.calls[deletion]?.args;
+    expect(JSON.parse(payload?.[payload.indexOf("--delete") + 1] ?? "null")).toEqual({
+      Objects: [
+        { Key: "index.html", VersionId: "old-version" },
+        { Key: "index.html", VersionId: "delete-marker" },
+      ],
+      Quiet: true,
+    });
+    const verified = f.calls.findIndex(
+      (call, index) => index > deletion && call.args.includes("list-object-versions"),
+    );
+    expect(verified).toBeGreaterThan(deletion);
+    expect(f.calls.findIndex((call) => call.args.includes("destroy"))).toBeGreaterThan(verified);
+    expect(f.storageCalls).toEqual([]);
+    expect(f.calls.some((call) => call.args[0] === "dynamodb")).toBe(false);
+    expect(f.messages.join("")).toContain(f.name);
+  });
+  it("does no object listing/deletion when the user declines, and a plan never mutates", async () => {
+    for (const args of [["down"], ["down", "--plan"]]) {
+      const f = buckets({ confirmed: false });
+      expect(await f.run(args)).toBe(0);
+      expect(
+        f.calls.some((call) =>
+          ["list-object-versions", "delete-objects", "destroy"].some((arg) =>
+            call.args.includes(arg),
+          ),
+        ),
+      ).toBe(false);
+    }
+  });
+  it.each(["tags", "delete"] as const)(
+    "stops before stack deletion for %s failure",
+    async (fault) => {
+      const f = buckets({ fault });
+      expect(await f.run(["down"])).toBe(1);
+      expect(f.calls.some((call) => call.args.includes("destroy"))).toBe(false);
+      expect(f.messages.join("")).not.toContain("Cloud platform stacks destroyed");
+    },
+  );
+  it("keeps retained objects for ordinary destroy and names them in explicit-purge consent", async () => {
+    const ordinary = buckets({ retain: true });
+    expect(await ordinary.run(["down"])).toBe(0);
+    expect(ordinary.calls.some((call) => call.args[0] === "s3api")).toBe(false);
+    const purge = buckets({ retain: true });
+    expect(await purge.run(["down", "--purge-retained-data"])).toBe(0);
+    expect(purge.confirmations[0]).toContain("S3 object versions/delete markers");
+    expect(purge.confirmations[0]).toContain("bucket containers remain");
+    expect(purge.calls.some((call) => call.args.includes("delete-objects"))).toBe(true);
+    expect(purge.calls.some((call) => call.args.includes("delete-bucket"))).toBe(false);
+  });
+});
+
 describe("original platform destroy contract", () => {
   const names = cloudStackNames("staging");
   it.each([
@@ -1447,8 +1628,8 @@ describe("original platform destroy contract", () => {
     ]);
     expect(
       f.calls.some((request) =>
-        ["scan", "get-template", "list-stack-resources", "update-table", "delete-table"].some(
-          (value) => request.args.includes(value),
+        ["scan", "describe-table", "update-table", "delete-table"].some((value) =>
+          request.args.includes(value),
         ),
       ),
     ).toBe(false);

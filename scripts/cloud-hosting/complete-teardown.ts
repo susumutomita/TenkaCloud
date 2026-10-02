@@ -9,6 +9,14 @@ interface TeardownContext {
   readonly environment: string;
   readonly stacks: readonly PlatformStack[];
   readonly run: (args: readonly string[]) => Promise<ProcessResult>;
+  readonly bucketsOnly?: boolean;
+  readonly purgeRetainedBuckets?: boolean;
+}
+interface OwnedBucket {
+  readonly name: string;
+  readonly logicalId: string;
+  readonly stackArn: string;
+  readonly retention: "Delete" | "Retain" | "RetainExceptOnCreate";
 }
 interface OwnedTable {
   readonly name: string;
@@ -25,12 +33,26 @@ interface RetainedResource {
   readonly deletionPolicy: "Retain" | "RetainExceptOnCreate";
 }
 export interface TeardownPlan {
+  readonly account: string;
+  readonly environment: string;
   readonly region: string;
+  readonly buckets: readonly OwnedBucket[];
   readonly tables: readonly OwnedTable[];
   readonly logGroups: readonly string[];
   readonly retainedResources: readonly RetainedResource[];
   readonly storageOutputs: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
+type BucketContext = Pick<TeardownContext, "account" | "environment" | "region" | "run">;
+const bucketPolicySchema = z.enum(["Delete", "Retain", "RetainExceptOnCreate"]);
+const bucketObjectSchema = z.object({ Key: z.string().min(1), VersionId: z.string().min(1) });
+const bucketPageSchema = z.object({
+  IsTruncated: z.boolean(),
+  Versions: z.array(bucketObjectSchema).default([]),
+  DeleteMarkers: z.array(bucketObjectSchema).default([]),
+});
+// Drain one bounded service page at a time, then prove the bucket is empty.
+const maxBucketPages = 10_000;
+const maxDeletePayloadBytes = 64 * 1024;
 const templateSchema = z.object({
   Resources: z.record(z.object({ Type: z.string(), DeletionPolicy: z.string().optional() })),
   Outputs: z.record(z.object({ Value: z.unknown() })).optional(),
@@ -60,6 +82,73 @@ async function read(context: TeardownContext, args: readonly string[]): Promise<
       `Ownership discovery ${args[1]} returned invalid JSON; no resources were removed.`,
     );
   }
+}
+async function bucketRequest(
+  context: BucketContext,
+  bucket: OwnedBucket,
+  operation: string,
+  args: readonly string[] = [],
+): Promise<unknown> {
+  const result = await context.run([
+    "s3api",
+    operation,
+    "--bucket",
+    bucket.name,
+    "--expected-bucket-owner",
+    context.account,
+    ...args,
+    "--region",
+    context.region,
+    "--output",
+    "json",
+  ]);
+  if (result.code !== 0) {
+    if (/\(NoSuchBucket\)/u.test(result.stderr)) return undefined;
+    throw new Error(`S3 ${operation} for ${bucket.name} failed: ${result.stderr.trim()}`);
+  }
+  // The CLI emits no JSON for a successful quiet deletion with no per-object errors.
+  if (operation === "delete-objects" && result.stdout.trim() === "") return {};
+  return JSON.parse(result.stdout) as unknown;
+}
+async function verifyBucketOwnership(
+  context: BucketContext,
+  bucket: OwnedBucket,
+): Promise<boolean> {
+  const result = await bucketRequest(context, bucket, "get-bucket-tagging");
+  if (result === undefined) return false;
+  const { TagSet: tags } = z
+    .object({ TagSet: z.array(z.object({ Key: z.string(), Value: z.string() })) })
+    .parse(result);
+  const expected = {
+    ...cloudStackTags(context.environment),
+    "aws:cloudformation:stack-id": bucket.stackArn,
+    "aws:cloudformation:logical-id": bucket.logicalId,
+  };
+  if (
+    !Object.entries(expected).every(([key, value]) => {
+      const matches = tags.filter((tag) => tag.Key === key);
+      return matches.length === 1 && matches[0]?.Value === value;
+    })
+  )
+    throw new Error(`Bucket ownership tags do not match ${bucket.name}; bucket cleanup stopped.`);
+  return true;
+}
+async function ownedBucket(
+  context: TeardownContext,
+  stack: PlatformStack,
+  resource: z.infer<typeof inventorySchema>["StackResourceSummaries"][number],
+  policy: string | undefined,
+): Promise<OwnedBucket | undefined> {
+  if (resource.ResourceType !== "AWS::S3::Bucket" || resource.ResourceStatus === "DELETE_COMPLETE")
+    return undefined;
+  const name = resource.PhysicalResourceId;
+  if (!name && resource.ResourceStatus === "CREATE_FAILED") return undefined;
+  if (!name || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(name))
+    throw new Error("Invalid stack-owned bucket physical identity.");
+  const retention = bucketPolicySchema.parse(policy ?? "Delete");
+  if (retention !== "Delete" && !context.purgeRetainedBuckets) return undefined;
+  const bucket = { name, logicalId: resource.LogicalResourceId, stackArn: stack.arn, retention };
+  return (await verifyBucketOwnership(context, bucket)) ? bucket : undefined;
 }
 /** Baseline cleanup scope: exact CFN tables/logs and logs derived from its Lambda/CodeBuild IDs. */
 export function parseStackOwnedCleanupResources(stdout: string):
@@ -109,8 +198,14 @@ async function ownedTable(
   context: TeardownContext,
   stack: PlatformStack,
   resource: z.infer<typeof inventorySchema>["StackResourceSummaries"][number],
-  retention: string,
+  retention: string | undefined,
 ): Promise<OwnedTable | undefined> {
+  if (
+    context.bucketsOnly ||
+    resource.ResourceType !== "AWS::DynamoDB::Table" ||
+    !resource.PhysicalResourceId
+  )
+    return undefined;
   const name = resource.PhysicalResourceId ?? "";
   if (!/^[A-Za-z0-9_.-]{3,255}$/u.test(name))
     throw new Error("Invalid stack-owned table physical identity.");
@@ -161,7 +256,13 @@ async function ownedTable(
   }))
     if (tags.some((tag) => tag.Key === key && tag.Value !== value))
       throw new Error(`Table CloudFormation ownership conflicts with ${arn}.`);
-  return { name, arn, stackArn: stack.arn, retention, protected: table.DeletionProtectionEnabled };
+  return {
+    name,
+    arn,
+    stackArn: stack.arn,
+    retention: retention ?? "Delete",
+    protected: table.DeletionProtectionEnabled,
+  };
 }
 function recoverStorageOutputs(
   stack: PlatformStack,
@@ -207,7 +308,38 @@ function retainedResource(
     deletionPolicy,
   };
 }
+function assertStackIdentity(context: TeardownContext, stack: PlatformStack): void {
+  const identity =
+    /^arn:(?:aws|aws-us-gov|aws-cn):cloudformation:([^:]+):(\d{12}):stack\/([^/]+)\/[^/]+$/u.exec(
+      stack.arn,
+    );
+  if (
+    !identity ||
+    identity[1] !== context.region ||
+    identity[2] !== context.account ||
+    identity[3] !== stack.name
+  )
+    throw new Error("Stack identity does not match the selected account and region.");
+}
+function assertStableInventory(
+  template: z.infer<typeof templateSchema>,
+  inventory: z.infer<typeof inventorySchema>,
+): void {
+  const seen = new Set<string>();
+  for (const resource of inventory.StackResourceSummaries) {
+    if (
+      seen.has(resource.LogicalResourceId) ||
+      template.Resources[resource.LogicalResourceId]?.Type !== resource.ResourceType ||
+      resource.ResourceStatus.endsWith("_IN_PROGRESS")
+    )
+      throw new Error(
+        "Ambiguous or changing CloudFormation inventory; wait and retry the read-only plan.",
+      );
+    seen.add(resource.LogicalResourceId);
+  }
+}
 async function discoverStack(context: TeardownContext, stack: PlatformStack) {
+  assertStackIdentity(context, stack);
   const raw = z
     .object({ TemplateBody: z.unknown() })
     .parse(await read(context, ["cloudformation", "get-template", "--stack-name", stack.arn]));
@@ -219,39 +351,39 @@ async function discoverStack(context: TeardownContext, stack: PlatformStack) {
   const inventory = inventorySchema.parse(
     await read(context, ["cloudformation", "list-stack-resources", "--stack-name", stack.arn]),
   );
-  const seen = new Set<string>();
+  assertStableInventory(template, inventory);
+  const buckets: OwnedBucket[] = [];
   const tables: OwnedTable[] = [];
   const retainedResources: RetainedResource[] = [];
   for (const resource of inventory.StackResourceSummaries) {
-    if (
-      seen.has(resource.LogicalResourceId) ||
-      template.Resources[resource.LogicalResourceId]?.Type !== resource.ResourceType ||
-      resource.ResourceStatus.endsWith("_IN_PROGRESS")
-    )
-      throw new Error(
-        "Ambiguous or changing CloudFormation inventory; wait and retry the read-only plan.",
-      );
-    seen.add(resource.LogicalResourceId);
     const retained = retainedResource(
       stack,
       resource,
       template.Resources[resource.LogicalResourceId]?.DeletionPolicy,
     );
     if (retained) retainedResources.push(retained);
-    if (resource.ResourceType === "AWS::DynamoDB::Table" && resource.PhysicalResourceId) {
-      const table = await ownedTable(
-        context,
-        stack,
-        resource,
-        template.Resources[resource.LogicalResourceId]?.DeletionPolicy ?? "Delete",
-      );
-      if (table) tables.push(table);
-    }
+    const bucket = await ownedBucket(
+      context,
+      stack,
+      resource,
+      template.Resources[resource.LogicalResourceId]?.DeletionPolicy,
+    );
+    if (bucket) buckets.push(bucket);
+    const table = await ownedTable(
+      context,
+      stack,
+      resource,
+      template.Resources[resource.LogicalResourceId]?.DeletionPolicy,
+    );
+    if (table) tables.push(table);
   }
-  const resources = collectCleanupResources(inventory.StackResourceSummaries);
+  const resources = context.bucketsOnly
+    ? { logGroupNames: [] }
+    : collectCleanupResources(inventory.StackResourceSummaries);
   if (!resources)
     throw new Error("Incomplete CloudFormation physical inventory; no resources were removed.");
   return {
+    buckets,
     tables,
     logGroups: resources.logGroupNames,
     retainedResources,
@@ -260,12 +392,16 @@ async function discoverStack(context: TeardownContext, stack: PlatformStack) {
 }
 /** Read-only physical ownership/protection proof. No data scans, prefix adoption or protection changes. */
 export async function discoverTeardownPlan(context: TeardownContext): Promise<TeardownPlan> {
+  const buckets: OwnedBucket[] = [];
   const tables: OwnedTable[] = [];
   const logGroups = new Set<string>();
   const retainedResources: RetainedResource[] = [];
   const storageOutputs: Record<string, Readonly<Record<string, string>>> = {};
   for (const stack of context.stacks) {
+    // An in-flight deletion is only waited by the caller; never race its resource cleanup.
+    if (stack.status === "DELETE_IN_PROGRESS") continue;
     const discovered = await discoverStack(context, stack);
+    buckets.push(...discovered.buckets);
     tables.push(...discovered.tables);
     retainedResources.push(...discovered.retainedResources);
     for (const name of discovered.logGroups) logGroups.add(name);
@@ -273,13 +409,100 @@ export async function discoverTeardownPlan(context: TeardownContext): Promise<Te
   }
   if (new Set(tables.map((table) => table.arn)).size !== tables.length)
     throw new Error("A table appears in multiple stack inventories; ownership is ambiguous.");
+  if (new Set(buckets.map((bucket) => bucket.name)).size !== buckets.length)
+    throw new Error("A bucket appears in multiple stack inventories; ownership is ambiguous.");
   return {
+    account: context.account,
+    environment: context.environment,
     region: context.region,
+    buckets,
     tables,
     logGroups: [...logGroups],
     retainedResources,
     storageOutputs,
   };
+}
+/** Empty exact, verified CFN buckets before CFN deletes them, including failed-create buckets. */
+export async function emptyStackOwnedBuckets(
+  plan: TeardownPlan,
+  run: TeardownContext["run"],
+  purgeRetainedBuckets = false,
+): Promise<void> {
+  if (!purgeRetainedBuckets && plan.buckets.some((bucket) => bucket.retention !== "Delete"))
+    throw new Error("Retained bucket cleanup requires explicit purge authorization.");
+  for (const bucket of plan.buckets) await emptyBucket({ ...plan, run }, bucket);
+}
+async function emptyBucket(context: BucketContext, bucket: OwnedBucket): Promise<void> {
+  let previousPage = "";
+  for (let pageNumber = 0; pageNumber < maxBucketPages; pageNumber += 1) {
+    const result = await bucketRequest(context, bucket, "list-object-versions", [
+      "--max-keys",
+      "1000",
+      "--no-paginate",
+    ]);
+    if (result === undefined) return;
+    const page = bucketPageSchema.parse(result);
+    const objects = [...page.Versions, ...page.DeleteMarkers];
+    if (objects.length === 0 && !page.IsTruncated) return;
+    if (objects.length === 0 || objects.length > 1000)
+      throw new Error(`Invalid S3 version page for ${bucket.name}; bucket cleanup stopped.`);
+    const signature = JSON.stringify(
+      objects.map((item) => JSON.stringify(item)).sort((left, right) => left.localeCompare(right)),
+    );
+    if (signature === previousPage)
+      throw new Error(`S3 cleanup made no progress for ${bucket.name}; stop writers and retry.`);
+    previousPage = signature;
+    if (!(await deleteBucketPage(context, bucket, objects))) return;
+    // Restart at the first service page after deleting it. Following a cursor whose object
+    // was just removed can skip versions; a fresh page also catches concurrent writes.
+  }
+  throw new Error(
+    `S3 cleanup exceeded ${maxBucketPages} pages for ${bucket.name}; stop writers and retry.`,
+  );
+}
+function bucketDeletePayloads(objects: readonly z.infer<typeof bucketObjectSchema>[]): string[] {
+  const payloads: string[] = [];
+  let batch: string[] = [];
+  const envelopeBytes = Buffer.byteLength('{"Objects":[],"Quiet":true}');
+  let bytes = envelopeBytes;
+  for (const object of objects) {
+    const encoded = JSON.stringify(object);
+    const objectBytes = Buffer.byteLength(encoded);
+    if (objectBytes + envelopeBytes > maxDeletePayloadBytes)
+      throw new Error("S3 object identity exceeds the safe deletion payload size.");
+    if (bytes + objectBytes + batch.length > maxDeletePayloadBytes) {
+      payloads.push(`{"Objects":[${batch.join(",")}],"Quiet":true}`);
+      batch = [];
+      bytes = envelopeBytes;
+    }
+    batch.push(encoded);
+    bytes += objectBytes;
+  }
+  if (batch.length > 0) payloads.push(`{"Objects":[${batch.join(",")}],"Quiet":true}`);
+  return payloads;
+}
+async function deleteBucketPage(
+  context: BucketContext,
+  bucket: OwnedBucket,
+  objects: readonly z.infer<typeof bucketObjectSchema>[],
+): Promise<boolean> {
+  // Keep each argv below the OS limit even when a page has 1,000 long or escaped keys.
+  for (const payload of bucketDeletePayloads(objects)) {
+    // Recheck tags immediately before each destructive request, as buckets can be recreated.
+    if (!(await verifyBucketOwnership(context, bucket))) return false;
+    const deleted = await bucketRequest(context, bucket, "delete-objects", ["--delete", payload]);
+    if (deleted === undefined) return false;
+    const { Errors: errors } = z
+      .object({
+        Errors: z
+          .array(z.object({ Key: z.string(), Code: z.string(), Message: z.string().optional() }))
+          .default([]),
+      })
+      .parse(deleted);
+    if (errors.length > 0)
+      throw new Error(`Delete objects from ${bucket.name} failed: ${JSON.stringify(errors)}`);
+  }
+  return true;
 }
 export function assertPurgeAllowed(plan: TeardownPlan): void {
   const protectedTables = plan.tables.filter((table) => table.protected);

@@ -128,14 +128,18 @@ function assertRemovalPolicies(template: Template, retainTables: boolean): void 
 
 function assertBucketCleanup(template: Template): void {
   const buckets = Object.keys(template.findResources("AWS::S3::Bucket"));
-  const emptying = Object.values(template.findResources("Custom::S3AutoDeleteObjects"));
+  const emptying = Object.entries(template.findResources("Custom::S3AutoDeleteObjects"));
   expect(emptying).toHaveLength(buckets.length);
-  for (const bucketId of buckets)
-    expect(emptying).toContainEqual(
-      expect.objectContaining({
-        Properties: expect.objectContaining({ BucketName: { Ref: bucketId } }),
-      }),
+  for (const bucketId of buckets) {
+    const cleanup = emptying.find(
+      ([, resource]) => resource.Properties.BucketName.Ref === bucketId,
     );
+    expect(cleanup).toBeDefined();
+    const uploads = Object.values(template.findResources("Custom::CDKBucketDeployment")).filter(
+      (resource) => resource.Properties.DestinationBucketName.Ref === bucketId,
+    );
+    for (const upload of uploads) expect(upload.DependsOn).toContain(cleanup?.[0]);
+  }
 }
 
 function assertProviderLogs(template: Template): void {
@@ -400,6 +404,69 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
     expect(JSON.stringify(application.toJSON())).not.toContain(
       "AmazonAPIGatewayPushToCloudWatchLogs",
     );
+  });
+  it("keeps API invoke policy below 20 KiB independently of route count, with account and stage bounds", () => {
+    for (const template of [application, tursoApplication]) {
+      const apiId = Object.keys(template.findResources("AWS::ApiGateway::RestApi"))[0];
+      const stages = template.findResources("AWS::ApiGateway::Stage");
+      expect(apiId).toBeDefined();
+      const permissions = Object.values(template.findResources("AWS::Lambda::Permission")).filter(
+        (resource) => resource.Properties.Principal === "apigateway.amazonaws.com",
+      );
+      // #2947's regression: adding routes must never add per-method Lambda policy statements.
+      expect(permissions).toHaveLength(2);
+      const methods = Object.values(template.findResources("AWS::ApiGateway::Method")).filter(
+        (resource) => resource.Properties.HttpMethod !== "OPTIONS",
+      );
+      expect(methods.length).toBeGreaterThan(20);
+      const sourceArns = permissions.map(({ Properties: permission }) => {
+        expect(permission.Action).toBe("lambda:InvokeFunction");
+        expect(permission.SourceAccount).toBe("123456789012");
+        expect(permission.FunctionName).toEqual({
+          "Fn::GetAtt": [expect.stringMatching(/^CloudApi/u), "Arn"],
+        });
+        const [separator, parts] = permission.SourceArn["Fn::Join"];
+        expect(separator).toBe("");
+        return parts
+          .map((part: string | { Ref: string }) => {
+            if (typeof part === "string") return part;
+            if (part.Ref === "AWS::Partition") return "aws";
+            if (stages[part.Ref]) {
+              expect(stages[part.Ref].Properties.RestApiId).toEqual({ Ref: apiId });
+              expect(stages[part.Ref].Properties.StageName).toBe("prod");
+              return stages[part.Ref].Properties.StageName;
+            }
+            expect(part.Ref).toBe(apiId);
+            return "abcdefghij";
+          })
+          .join("");
+      });
+      expect(sourceArns.toSorted()).toEqual([
+        "arn:aws:execute-api:us-east-1:123456789012:abcdefghij/prod/*/*",
+        "arn:aws:execute-api:us-east-1:123456789012:abcdefghij/test-invoke-stage/*/*",
+      ]);
+      for (const method of methods) {
+        expect(method.Properties.Integration.Type).toBe("AWS_PROXY");
+        expect(method.Properties.Integration.IntegrationHttpMethod).toBe("POST");
+      }
+      // Bound real policy JSON using the maximum Lambda name/Sid lengths and a long commercial region.
+      const policy = {
+        Version: "2012-10-17",
+        Id: "default",
+        Statement: sourceArns.map((sourceArn: string) => ({
+          Sid: "s".repeat(100),
+          Effect: "Allow",
+          Principal: { Service: "apigateway.amazonaws.com" },
+          Action: "lambda:InvokeFunction",
+          Resource: `arn:aws:lambda:ap-southeast-7:123456789012:function:${"f".repeat(64)}`,
+          Condition: {
+            ArnLike: { "AWS:SourceArn": sourceArn.replace(":us-east-1:", ":ap-southeast-7:") },
+            StringEquals: { "AWS:SourceAccount": "123456789012" },
+          },
+        })),
+      };
+      expect(Buffer.byteLength(JSON.stringify(policy))).toBeLessThan(20480);
+    }
   });
   it("uses signature-validating REST Cognito ID-token authorization with audience pinning", () => {
     application.hasResourceProperties("AWS::ApiGateway::Authorizer", {

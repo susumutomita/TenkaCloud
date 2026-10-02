@@ -7,6 +7,7 @@ Lambda / DynamoDB によるクラウド開催を復旧中です。AWS サービ�
 
 ## 開催前
 
+- 問題ソースの取得は `make submodule-latest`、検証は `make validate-problems` を使う。稼働環境への反映は別で、ローカルは[再ビルド・再起動](../local-hosting.md#update-the-problem-catalog)、クラウドは[既存環境の更新](../../infrastructure/README.md#update-the-problem-catalog)を行う。開催中の問題差し替えは避け、再開予定の大会には元の問題ソースと実行 revision を保持する
 - ソースと問題カタログの revision、担当者、開催時間、連絡経路、撤収担当を記録する
 - [起動手順](../local-hosting.md)で初期 Admin を作り、運営担当には Operator、参照担当には Viewer を用意する
 - private なデータディレクトリと整合したバックアップを用意し、1 つのプロセスだけが所有する

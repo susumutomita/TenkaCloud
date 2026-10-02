@@ -23,10 +23,10 @@ put credentials in `.env`; see [configuration rules](README.md#current-checkouts
 
 The normal command checks `CDKToolkit` first. If it exists and is compatible, it
 continues without bootstrap changes. Otherwise it displays the target and standard
-bootstrap authority, asks for separate first-bootstrap confirmation, runs the
-repository's pinned CDK CLI, verifies the resulting toolkit, and continues with
-the same credentials. Interactive application deployment retains CDK's normal
-security-change review. No policy is attached to the caller and no profile is changed.
+bootstrap authority and cost notice, runs the repository's pinned CDK CLI, verifies
+the resulting toolkit, and continues with the same credentials. Ordinary deployment
+uses `--require-approval never`, including in CI; no extra flag or confirmation is
+required. No policy is attached to the caller and no profile is changed.
 
 First bootstrap needs CloudFormation, IAM, S3, ECR and SSM permissions for the
 standard toolkit resources; AWS's documented starting policy uses those service
@@ -53,12 +53,13 @@ make deploy ENV=development CLOUD_ARGS="--setup"
 make deploy ENV=development
 ```
 
-`--setup` does not update an existing toolkit or deploy the application. Unattended
-first deployment uses `CLOUD_ARGS="--setup-if-needed --yes"` after review.
-`--yes` alone approves application deployment changes, not creation of a missing
-bootstrap. Setup-only automation can use `--setup --yes`. All paths require the
-caller's existing permissions. Declining first bootstrap stops before IAM changes
-and builds; failures are reported, not hidden by changing credentials or permissions.
+`--setup` asks for its own confirmation before creating a missing toolkit; it does
+not update an existing toolkit or deploy the application. Setup-only automation can
+use `--setup --yes`. Declining setup-only confirmation stops before IAM changes.
+Ordinary `make deploy` already handles first bootstrap and deployment unattended.
+Its `--yes` and `--setup-if-needed` flags remain accepted for compatibility and are
+optional. All paths require the caller's existing permissions; failures are reported,
+not hidden by changing credentials or permissions.
 
 ## Existing toolkits and retained resources
 
@@ -79,6 +80,10 @@ and manage the standard toolkit through the normal AWS CDK process.
 `make destroy` retains the standard toolkit and its shared CDK assets. Platform-owned
 data and organizer identity use the deployed removal policies, which default to
 Delete. Explicitly retained tables survive unless `make destroy-all` purges them.
+After its existing deletion confirmation, ordinary destroy empties only verified
+CloudFormation-owned S3 buckets with a deployed `Delete` policy. Retained bucket
+contents survive unless explicit `destroy-all` empties them; `Retain` bucket
+containers remain. The CLI leaves bucket-container deletion to CloudFormation.
 Retention does not promise automatic reattachment on a fresh deployment.
 No live AWS bootstrap, IAM change or deployment was performed by source tests.
 
@@ -181,6 +186,26 @@ Permission errors in explicit drain preserve the platform and durable stop state
 Independent exercise resources are only removed by an explicit exercise operation;
 ordinary platform destroy follows the deployed resource removal policies.
 
+Ordinary teardown and failed-deployment recovery also use direct S3 cleanup before
+CloudFormation removes the stacks. The actual CLI caller needs:
+
+- `cloudformation:DescribeStacks`, `cloudformation:GetTemplate` and `cloudformation:ListStackResources` for the exact owned stacks
+- `s3:GetBucketTagging` and `s3:ListBucketVersions` on the exact owned bucket ARNs
+- `s3:DeleteObject` and `s3:DeleteObjectVersion` on objects in those owned buckets
+
+CloudFormation execution-role permissions alone do not authorize these CLI calls.
+Cleanup reads bucket names and deployed retention policies from CloudFormation,
+requires the expected account owner and matching project/environment/stack/logical-ID
+tags, and rechecks tags before each deletion request. After confirmation, it removes
+object versions and delete markers and verifies that the bucket is empty. Ordinary
+destroy excludes retained bucket contents; explicit retained-data purge includes
+them while preserving `Retain` bucket containers. No `s3:ListAllMyBuckets`,
+`s3:PutBucketPolicy` or direct `s3:DeleteBucket` permission is needed by this cleanup,
+and it never adopts resources by a global name prefix. Ownership or permission
+failures, malformed inventories and incomplete object deletion stop stack removal.
+The CLI does not relax policies to recover from these failures. These paths were
+checked with injected process responses; no live AWS cleanup was executed.
+
 ## One launcher, explicit source compatibility
 
 `templates/cloud-pipeline.yaml` keeps one CodeBuild project, platform/catalog source
@@ -193,8 +218,10 @@ This privileged role persists after bootstrap. Review the complete template,
 selected source refs and who can create/update/start the build before using it.
 The launcher never attaches a generated TenkaCloud policy or expands bootstrap
 trust. Creating it provisions its role and logs but does not start a build.
-Starting current deploy runs `make deploy CLOUD_ARGS="--setup-if-needed --yes"`,
-explicitly approving first bootstrap if missing and application IAM changes.
+Starting current deploy runs ordinary `make deploy`, which creates missing standard
+bootstrap and deploys application IAM changes with `--require-approval never`.
+It needs no additional approval flag or prompt; deletion paths retain their
+explicit confirmation behavior.
 Published
 `SourceDefaults.current-cloud-v1.CurrentPlatformCommit` points to a tested source
 commit containing `scripts/cloud-hosting/launcher-check.ts`; incompatible refs fail

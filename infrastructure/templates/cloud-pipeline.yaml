@@ -172,7 +172,7 @@ Mappings:
     current-cloud-v1:
       # Offline-verified current CLI source; live AWS deployment is not validated.
       CurrentPlatformCommit: 6552ba768a61c180820888fbfc0ef5d04582268a
-      CatalogCommit: 915fe862fe09bf6b63bb96edcf0cb3deddd54d37
+      CatalogCommit: 4bb3a116c545fc46ed6a39ffcc5117fb914947f4
       Classification: candidate/unreleased
 
 Conditions:
@@ -366,7 +366,7 @@ Resources:
                 - |
                   if [ "${ACTION}" = "deploy" ]; then
                     # Starting this reviewed build approves missing standard bootstrap and app IAM changes.
-                    make deploy ENV="${ENVIRONMENT}" CLOUD_ARGS="--setup-if-needed --yes" || exit $?
+                    make deploy ENV="${ENVIRONMENT}" || exit $?
                   elif [ "${ACTION}" = "destroy" ]; then
                     make destroy ENV="${ENVIRONMENT}" CLOUD_ARGS="--yes" || exit $?
                   elif [ "${ACTION}" = "destroy-all" ]; then

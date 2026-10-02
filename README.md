@@ -99,13 +99,15 @@ aws sts get-caller-identity
 make deploy ENV=development
 ```
 
-`make deploy` validates and reuses the standard `CDKToolkit`. Only when it is missing does it ask for first-bootstrap approval and run the pinned official CDK bootstrap before deployment. Review [bootstrap and caller permissions](./infrastructure/BOOTSTRAP-IAM.md): the standard CloudFormation execution role defaults to `AdministratorAccess`. Application runtime roles do not receive that policy.
+`make deploy` validates and reuses the standard `CDKToolkit`, or creates it with the pinned official CDK bootstrap when missing. It then deploys with `--require-approval never`, including in CI; no extra flag or approval prompt is required. The command displays the target, permissions and cost notice. Review [bootstrap and caller permissions](./infrastructure/BOOTSTRAP-IAM.md): the standard CloudFormation execution role defaults to `AdministratorAccess`. Application runtime roles do not receive that policy.
 
 For an AWS-console deployment, review the [cloud pipeline](./infrastructure/README.md#cloud-deployment-pipeline), its source settings and its privileged CodeBuild role. Creating the launcher and starting a build are separate actions; only trusted deployment administrators should start builds.
 
 Before inviting participants, create a test event and team, open a problem, submit an answer and verify its score.
 
 **After the event:** `make destroy ENV=development` confirms the account, region and owned resources, then removes platform hosting and its default-owned data. Exercise cleanup is separate: use the event Teardown action or explicitly add `CLOUD_ARGS="--drain-events"`. DynamoDB tables are deleted by default; only an explicit retain setting keeps them. Ordinary destroy leaves external Turso rows; `make destroy-all` explicitly resets those rows and purges stack-owned retained data. Retained storage and AWS resources can incur charges. See [setup and teardown](./infrastructure/README.md#current-checkouts-setup-and-teardown-boundary) for the current lifecycle and recovery steps.
+
+After confirmation, destroy empties only verified CloudFormation-owned S3 buckets with a deployed `Delete` policy, including object versions and delete markers, before removing the stacks. Buckets with a `Retain` policy and their contents remain on ordinary destroy. Explicit `destroy-all` can empty retained contents; `Retain` bucket containers remain. The caller needs the [direct S3 cleanup permissions](./infrastructure/BOOTSTRAP-IAM.md#deployment-authority-versus-ordinary-use), separately from CloudFormation's execution permissions.
 
 To inspect commands without AWS access, use `make deploy CLOUD_ARGS="--help"` or `make destroy CLOUD_ARGS="--help"`.
 
@@ -121,6 +123,10 @@ No hosting option promises a zero bill. [Cost boundaries and retained resources]
 ## Add your own problems
 
 Problem content lives in [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge). Use its authoring and validation workflow to contribute to the competition catalog. You do not need to fork the platform to author a problem.
+
+`make submodule-latest` fetches and stages the latest problem sources; `make validate-problems` checks the selected pin. Neither updates a running host. After reviewing changes between events, [rebuild and restart locally](./docs/local-hosting.md#update-the-problem-catalog) with `make local`, or [update the cloud installation](./infrastructure/README.md#update-the-problem-catalog) with `make deploy`. `make build` only builds local artifacts. Keep the original checkout for local events you still need to resume; existing event definitions and cloud runs are not automatically upgraded.
+
+The update command fetches the tracked branch, then refuses older or divergent commits before checkout or staging. It also refuses unfinished source changes; unrelated platform work is preserved. Keep a reviewed trial pin until the tracked branch can advance it without dropping commits.
 
 For reusable or private content, the public SDK and offline Problem Pack tools create, validate and store immutable revisions:
 

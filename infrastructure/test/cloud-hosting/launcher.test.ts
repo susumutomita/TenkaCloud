@@ -124,7 +124,7 @@ describe("current cloud launcher; no AWS execution", () => {
       "candidate/unreleased",
     );
     expect(parsed.Mappings.SourceDefaults["current-cloud-v1"].CatalogCommit).toBe(
-      "915fe862fe09bf6b63bb96edcf0cb3deddd54d37",
+      "4bb3a116c545fc46ed6a39ffcc5117fb914947f4",
     );
     const role = parsed.Resources.CodeBuildRole.Properties;
     expect(role.ManagedPolicyArns).toBeUndefined();
@@ -282,12 +282,12 @@ describe("current cloud launcher; no AWS execution", () => {
     expect(buildSpec).toContain(`release_classification="\${DEFAULT_CLASSIFICATION}"`);
   });
   it.each(["deploy", "destroy", "destroy-all"])(
-    "uses current make %s with the necessary unattended approvals",
+    "uses plain deploy and retains explicit unattended deletion approval for %s",
     (command) => {
       const result = runPhases(["build"], { ACTION: command });
       expect(result.status, result.stderr).toBe(0);
       expect(result.calls).toBe(
-        `${command} ENV=staging CLOUD_ARGS=${command === "deploy" ? "--setup-if-needed --yes" : "--yes"}\n`,
+        command === "deploy" ? "deploy ENV=staging\n" : `${command} ENV=staging CLOUD_ARGS=--yes\n`,
       );
       expect(result.stdout).not.toContain("TC{LITE-CLEANUP-COMPLETE}");
     },
@@ -326,7 +326,7 @@ describe("current cloud launcher; no AWS execution", () => {
       backend === "turso" ? "/TenkaCloud/staging/turso/token" : "",
       "",
     ]);
-    expect(result.calls).toContain("deploy ENV=staging CLOUD_ARGS=--setup-if-needed --yes");
+    expect(result.calls).toBe("deploy ENV=staging\n");
   });
   it("rejects launcher-check failure before deployment", () => {
     const result = runPhases(["pre_build", "build"], { CHECK_EXIT: "1" });

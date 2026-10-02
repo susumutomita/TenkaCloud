@@ -14,6 +14,7 @@ import { STANDARD_TOOLKIT_STACK } from "./bootstrap-check";
 import {
   assertPurgeAllowed,
   discoverTeardownPlan,
+  emptyStackOwnedBuckets,
   purgeStackOwnedLogGroups,
   purgeStackOwnedResources,
   showTeardownPlan,
@@ -303,11 +304,7 @@ async function validateDeploymentData(
     }
   }
 }
-async function up(
-  context: Context,
-  setupApproved: boolean,
-  deploymentApproved: boolean,
-): Promise<number> {
+async function up(context: Context): Promise<number> {
   const desiredData = cloudControlDataConfiguration(context.env);
   const email = context.env.TENKACLOUD_ADMIN_EMAIL?.trim() ?? "";
   const parts = email.split("@");
@@ -328,6 +325,9 @@ async function up(
   );
 
   const resolved = await resolveCloudContext(context);
+  context.io.stdout(
+    `[cloud] Deployment target: account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}. make deploy uses automatic CDK approval and creates standard CDKToolkit only when missing.\n`,
+  );
   const operatorInstructions = `Use your intended AWS profile with permission to deploy through the existing standard CDKToolkit and administer the TenkaCloud application. Existing toolkit policies, trust and permissions boundaries are not changed. Review CDK's deployment output for required permissions, then rerun make deploy ENV=${resolved.env.CDK_PARAM_ENVIRONMENT}.`;
   let deployed: OwnedPlatformStack[];
   try {
@@ -345,12 +345,7 @@ async function up(
     desiredData,
     deployed.find((stack) => stack.name === context.stacks.backend),
   );
-  await setupCloudToolkit(
-    { cwd: resolved.root, env: resolved.env },
-    context.io,
-    setupApproved,
-    "deploy",
-  );
+  await setupCloudToolkit({ cwd: resolved.root, env: resolved.env }, context.io, true, "deploy");
   context.io.stdout("[cloud] [1/3] Building both web applications for CDK asset publishing\n");
   await buildApplications(resolved);
   context.io.stdout("[cloud] [2/3] Deploying cloud application and backend stacks\n");
@@ -360,7 +355,7 @@ async function up(
       context.stacks.backend,
       context.stacks.app,
       "--require-approval",
-      deploymentApproved ? "never" : "broadening",
+      "never",
     ]),
     `CDK deploy. ${operatorInstructions}`,
   );
@@ -525,10 +520,11 @@ async function down(context: Context, options: DownOptions): Promise<void> {
     return;
   }
   if (options.drain) await drainPlatformInstallation(resolved, stacks);
-  if (cleanup) await purgeStackOwnedResources(cleanup, (args) => run(resolved, "aws", args));
+  await emptyStackOwnedBuckets(cleanup, (args) => run(resolved, "aws", args), options.purge);
+  if (options.purge) await purgeStackOwnedResources(cleanup, (args) => run(resolved, "aws", args));
   if (turso.kind === "purge") await resetTursoBeforeStackRemoval(resolved, turso.target);
   await deletePlatformStacks(resolved, stacks);
-  await finishTeardownLogs(resolved, cleanup);
+  if (options.purge) await finishTeardownLogs(resolved, cleanup);
   context.io.stdout(
     "Cloud platform stacks destroyed. Existing deployed Retain policies may leave chargeable resources; review the saved plan. External Turso rows are removed only by explicit destroy-all when the deployed provider identity is verified.\n",
   );
@@ -547,17 +543,18 @@ async function readCleanupPlan(
   context: Context,
   stacks: readonly OwnedPlatformStack[],
   options: DownOptions,
-): Promise<TeardownPlan | undefined> {
-  if (!options.purge && !options.plan) return undefined;
+): Promise<TeardownPlan> {
   const plan = await discoverTeardownPlan({
     account: context.env.ACCOUNT_ID ?? "",
     region: context.env.REGION ?? "",
     environment: context.env.CDK_PARAM_ENVIRONMENT ?? "development",
     stacks,
     run: (args) => run(context, "aws", args),
+    bucketsOnly: !options.purge && !options.plan,
+    purgeRetainedBuckets: options.purge,
   });
   showTeardownPlan(plan, context.io.stdout);
-  if (!options.plan) assertPurgeAllowed(plan);
+  if (options.purge && !options.plan) assertPurgeAllowed(plan);
   return plan;
 }
 function validateTursoPlan(plan: TursoTeardownPlan, purge: boolean, io: CloudCliIo): void {
@@ -588,7 +585,7 @@ function teardownConfirmation(
   options: DownOptions,
   turso: TursoTeardownPlan,
 ): string {
-  const consequences = `Destroy platform stacks in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stacks.map((stack) => stack.arn).join("\n")}\nStack-owned DynamoDB tables and all rows, Cognito accounts, S3 objects, CloudFront distributions and managed logs are deleted under the default policy. Existing deployed Retain policies are honored; retained storage may continue to incur charges. ${options.purge ? "Additionally permanently purge the exact stack-owned tables and CloudWatch logs listed above, including retained data. This cannot be undone. No deletion protection is changed. " : ""}${options.drain ? "First stop new competition work and remove recorded event exercise resources using their stored ownership records. " : "Competition exercise resources are not cleaned up by this command; use each event's Teardown action before removing its platform if needed. "}CDKToolkit, its shared assets, competitor bootstrap stacks/IAM roles and unrelated or separately deployed exercise resources are untouched.`;
+  const consequences = `Destroy platform stacks in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stacks.map((stack) => stack.arn).join("\n")}\nStack-owned DynamoDB tables and all rows, Cognito accounts, S3 objects, CloudFront distributions and managed logs are deleted under the default policy. Existing deployed Retain policies are honored; retained storage may continue to incur charges. ${options.purge ? "Additionally permanently purge the exact stack-owned tables, CloudWatch logs and S3 object versions/delete markers listed above, including retained data. Retain-policy bucket containers remain; only their contents are emptied. This cannot be undone. No deletion protection is changed. " : ""}${options.drain ? "First stop new competition work and remove recorded event exercise resources using their stored ownership records. " : "Competition exercise resources are not cleaned up by this command; use each event's Teardown action before removing its platform if needed. "}CDKToolkit, its shared assets, competitor bootstrap stacks/IAM roles and unrelated or separately deployed exercise resources are untouched.`;
   return (
     consequences +
     (turso.kind === "purge"
@@ -671,7 +668,7 @@ async function status(context: Context): Promise<number> {
   return 0;
 }
 const HELP =
-  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. CDK_PARAM_CONTROL_DATA_BACKEND selects dynamodb (default) or turso; Turso also requires CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME, naming an existing SSM SecureString. Existing deployments cannot switch data backends or database URLs without an explicit migration or separate installation. Exported variables override file values; AWS credentials come from your intended profile/role. make deploy reuses standard CDKToolkit unchanged; if missing, it explains the standard bootstrap IAM/resources, asks for separate consent, runs the pinned official cdk bootstrap aws://account/region and continues deployment. Standard bootstrap uses an AdministratorAccess CloudFormation execution role by default. Optional --show-setup prints the bootstrap plan and official template offline; --setup creates only a missing toolkit and never updates an existing one. Interactive deployment keeps CDK security-change approval (broadening). --yes explicitly approves security changes for the selected application deployment; it never alone approves initial bootstrap. Unattended first deployment requires CLOUD_ARGS="--setup-if-needed --yes" after reviewing --show-setup. down accepts --yes, --purge-retained-data (make destroy-all), --plan (read-only exact-resource/retention/protection inventory), and --drain-events (explicitly stop intake and remove recorded competition exercise resources before platform removal). Ordinary destroy does not require database access or application Outputs. Purge never disables deletion protection.\n';
+  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. CDK_PARAM_CONTROL_DATA_BACKEND selects dynamodb (default) or turso; Turso also requires CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME, naming an existing SSM SecureString. Existing deployments cannot switch data backends or database URLs without an explicit migration or separate installation. Exported variables override file values; AWS credentials come from your intended profile/role. make deploy reuses standard CDKToolkit unchanged; if missing, it explains the standard bootstrap IAM/resources, runs the pinned official cdk bootstrap aws://account/region and continues deployment. Standard bootstrap uses an AdministratorAccess CloudFormation execution role by default. Optional --show-setup prints the bootstrap plan and official template offline; --setup creates only a missing toolkit and never updates an existing one. As in the original deployment command, ordinary up uses automatic bootstrap and --require-approval never, including CI/noninteractive runs; no extra approval flag is required. Review the target and permissions before running it. Existing --yes/--setup-if-needed options remain accepted for compatibility; setup-only automation can use --setup --yes. down accepts --yes, --purge-retained-data (make destroy-all), --plan (read-only exact-resource/retention/protection inventory), and --drain-events (explicitly stop intake and remove recorded competition exercise resources before platform removal). Ordinary destroy does not require database access or application Outputs. Purge never disables deletion protection.\n';
 function assertCommandArguments(command: string, args: readonly string[]): void {
   let permitted: readonly string[] = [];
   if (command === "up") permitted = ["--setup", "--show-setup", "--setup-if-needed", "--yes", "-y"];
@@ -730,11 +727,7 @@ export async function runCloudCli(
           );
           return 0;
         }
-        return await up(
-          context,
-          args.includes("--setup-if-needed") && args.some((arg) => ["--yes", "-y"].includes(arg)),
-          args.some((arg) => ["--yes", "-y"].includes(arg)),
-        );
+        return await up(context);
       case "down":
         await down(context, {
           yes: args.some((arg) => ["--yes", "-y"].includes(arg)),

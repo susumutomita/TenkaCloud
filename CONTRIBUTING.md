@@ -38,6 +38,12 @@ The default `make help` separates hosting commands from these development comman
 - `make lint`: check Markdown, prose, formatting and typed TypeScript lint
 - `make before-commit`: run lint, dead-code checks and the complete test suite
 
+The catalog section also lists `make submodule-latest` (fetch and stage source),
+`make validate-problems` (validate the staged catalog pin) and `make build` (build
+artifacts without publishing). Follow the [local catalog update procedure](docs/local-hosting.md#update-the-problem-catalog)
+or [cloud catalog update procedure](infrastructure/README.md#update-the-problem-catalog)
+to apply reviewed changes between events.
+
 ## Make one reviewable change
 
 1. Start from a request or [open issue](https://github.com/susumutomita/TenkaCloud/issues).

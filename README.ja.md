@@ -101,13 +101,15 @@ aws sts get-caller-identity
 make deploy ENV=development
 ```
 
-`make deploy` は標準の `CDKToolkit` を検証して再利用します。存在しない場合だけ初回 bootstrap の承認を求め、固定版の公式 CDK bootstrap を実行して配置を続けます。[bootstrap と呼び出し元の権限](./infrastructure/BOOTSTRAP-IAM.md)を確認してください。標準の CloudFormation 実行 role はデフォルトで `AdministratorAccess` を使います。アプリケーションの実行 role には付与しません。
+`make deploy` は標準の `CDKToolkit` を検証して再利用し、存在しない場合だけ固定版の公式 CDK bootstrap で作成します。続けて `--require-approval never` で配置します。CI でも追加のフラグや承認入力は不要です。コマンドは配置先・権限・費用の注意事項を表示します。[bootstrap と呼び出し元の権限](./infrastructure/BOOTSTRAP-IAM.md)を確認してください。標準の CloudFormation 実行 role はデフォルトで `AdministratorAccess` を使います。アプリケーションの実行 role には付与しません。
 
 AWS コンソールから配置する場合は、[クラウド pipeline](./infrastructure/README.md#cloud-deployment-pipeline)のソース設定と、CodeBuild role の配置権限を確認します。launcher の作成と build の開始は別の操作です。build の開始権限は、配置先を管理できる担当者に限定してください。
 
 参加者を招く前に、テスト用の大会とチームで問題を開き、解答を送信して得点まで確認します。
 
 **大会が終わったら:** `make destroy ENV=development` でアカウント・リージョン・所有する対象を確認し、基盤とデフォルトの所有データを削除します。問題環境は大会の Teardown 操作、または明示した `CLOUD_ARGS="--drain-events"` で撤収します。DynamoDB テーブルはデフォルトで削除し、明示的に retain を設定した場合だけ保持します。通常の destroy は外部 Turso の行を残します。`make destroy-all` はその行のリセットと、スタックが所有していた保持データの削除を明示的に実行します。残したストレージや AWS リソースには料金が発生する場合があります。現行の処理と復旧手順は[配置と撤収](./infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を参照してください。
+
+destroy は承認後、CloudFormation の所有情報を検証した S3 バケットのうち、配置済みの削除ポリシーが `Delete` のものだけを空にします。オブジェクトのバージョンと削除マーカーも削除してから、スタックを撤収します。通常の destroy は `Retain` ポリシーのバケットと内容を残します。明示した `destroy-all` は保持対象の内容も空にしますが、`Retain` ポリシーのバケット本体は残ります。呼び出し元には、CloudFormation の実行権限とは別に[直接 S3 を清掃する権限](./infrastructure/BOOTSTRAP-IAM.md#deployment-authority-versus-ordinary-use)が必要です。
 
 AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` または `make destroy CLOUD_ARGS="--help"` を使います。
 
@@ -123,6 +125,10 @@ AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` 
 ## 自分の問題を追加する
 
 問題の正本は [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) です。カタログへの追加には、そのリポジトリの作問・検証手順を使います。作問のためにプラットフォームを fork する必要はありません。
+
+`make submodule-latest` で問題ソースを最新版へ更新して stage し、`make validate-problems` で選択した pin を検証します。どちらも稼働中のカタログへは反映しません。大会の合間に差分を確認し、ローカルは `make local` で[再ビルド・再起動](./docs/local-hosting.md#update-the-problem-catalog)、クラウドは `make deploy` で[既存環境を更新](./infrastructure/README.md#update-the-problem-catalog)します。`make build` は手元の成果物を作るだけです。再開予定のローカル大会には元の checkout を残してください。既存大会の問題定義やクラウドの実行内容は自動移行しません。
+
+更新コマンドは追跡する branch を取得し、古い commit または分岐した commit であれば checkout や stage の前に停止します。問題ソースに未完了の編集がある場合も停止し、本体側の無関係な作業は保持します。検証用の pin は、その commit を失わずに追跡先へ前進できるまで維持してください。
 
 再利用する問題や非公開コンテンツには、公開 SDK とオフラインの Problem Pack ツールで作成・検証・不変な revision の保存ができます。
 

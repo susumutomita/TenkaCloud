@@ -29,12 +29,11 @@ function setupTarget(env: NodeJS.ProcessEnv) {
 }
 
 function bootstrapArguments(target: ReturnType<typeof setupTarget>): string[] {
+  // The standard template derives its bucket name from this qualifier, account and region.
   return [
     ...STANDARD_BOOTSTRAP_ARGUMENTS,
     "--region",
     target.region,
-    "--bootstrap-bucket-name",
-    `cdk-${STANDARD_TOOLKIT_QUALIFIER}-assets-${target.account}-${target.region}`,
     "--bootstrap-kms-key-id",
     "AWS_MANAGED_KEY",
   ];
@@ -116,14 +115,18 @@ export async function setupCloudToolkit(
       ? " This command then continues the application deployment with the same credentials."
       : " This command installs the toolkit only; it does not deploy the application.";
   const question = `Create standard CDKToolkit in account ${target.account}, region ${target.region}, including its default AdministratorAccess execution role?${continuation}`;
-  io.stdout(`${question}\n`);
+  if (yes)
+    io.stdout(
+      `[cloud] Creating standard CDKToolkit in account ${target.account}, region ${target.region}.${continuation}\n`,
+    );
+  else if (request.env.CI) io.stdout(`${question}\n`);
   if (!yes && (request.env.CI || !(await io.confirm(`${question} [y/N] `)))) {
     const args = mode === "deploy" ? "--setup-if-needed --yes" : "--setup --yes";
     throw new Error(
-      `Standard CDK bootstrap cancelled; no IAM or hosting resources were changed. Review --show-setup, then explicitly approve first bootstrap with make deploy ENV=${target.environment} CLOUD_ARGS="${args}" using an authorized profile. --yes alone on ordinary deploy does not approve bootstrap.`,
+      `Standard CDK bootstrap cancelled; no IAM or hosting resources were changed. Review --show-setup, then explicitly approve first bootstrap with make deploy ENV=${target.environment} CLOUD_ARGS="${args}" using an authorized profile.`,
     );
   }
-  // Approval may take time. Reuse a toolkit installed in the meantime rather than update it.
+  // Another caller may bootstrap after inspection. Reuse that toolkit rather than update it.
   if (exists(await inspect())) return;
   const result = await io.run({
     ...request,

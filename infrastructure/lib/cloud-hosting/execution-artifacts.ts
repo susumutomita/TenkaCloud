@@ -205,6 +205,7 @@ export function cloudExecutionArtifacts(
     prune: false,
     retainOnDelete: false,
   });
+  deployment.node.addDependency(bucket);
   return {
     bucket,
     catalogKey,

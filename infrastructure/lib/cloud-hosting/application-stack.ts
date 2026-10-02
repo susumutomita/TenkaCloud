@@ -6,7 +6,8 @@ import {
   type CfnAuthorizer,
   CognitoUserPoolsAuthorizer,
   EndpointType,
-  LambdaIntegration,
+  Integration,
+  IntegrationType,
   RestApi,
 } from "aws-cdk-lib/aws-apigateway";
 import {
@@ -19,7 +20,7 @@ import {
   UserPoolClientIdentityProvider,
 } from "aws-cdk-lib/aws-cognito";
 import { PolicyStatement, Role, ServicePrincipal } from "aws-cdk-lib/aws-iam";
-import { Runtime } from "aws-cdk-lib/aws-lambda";
+import { CfnPermission, Runtime } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
@@ -314,7 +315,24 @@ export class CloudApplicationStack extends Stack {
     (authorizer.node.defaultChild as CfnAuthorizer).identityValidationExpression =
       `^${client.userPoolClientId}$`;
     const protectedMethod = { authorizationType: AuthorizationType.COGNITO, authorizer };
-    const integration = new LambdaIntegration(apiHandler);
+    // Restore #2947's bounded API grants, preserving deployed and console-test invocation without per-route statements.
+    for (const [id, stage] of [
+      ["CloudApiInvoke", api.deploymentStage.stageName],
+      ["CloudApiTestInvoke", "test-invoke-stage"],
+    ] as const) {
+      new CfnPermission(this, id, {
+        action: "lambda:InvokeFunction",
+        functionName: apiHandler.functionArn,
+        principal: "apigateway.amazonaws.com",
+        sourceAccount: this.account,
+        sourceArn: api.arnForExecuteApi("*", "/*", stage),
+      });
+    }
+    const integration = new Integration({
+      type: IntegrationType.AWS_PROXY,
+      integrationHttpMethod: "POST",
+      uri: `arn:${this.partition}:apigateway:${this.region}:lambda:path/2015-03-31/functions/${apiHandler.functionArn}/invocations`,
+    });
     const events = api.root.addResource("events");
     events.addMethod("GET", integration, protectedMethod);
     events.addMethod("POST", integration, protectedMethod);
@@ -372,7 +390,7 @@ export class CloudApplicationStack extends Stack {
       // eslint-disable-next-line sonarjs/aws-apigateway-public-api -- Fresh team/event/attempt/connection checks guard CLI issuance; the unsupported console route never issues credentials.
       access.addMethod("GET", integration, { authorizationType: AuthorizationType.NONE });
     }
-    new BucketDeployment(this, "ConsoleRuntime", {
+    const consoleRuntime = new BucketDeployment(this, "ConsoleRuntime", {
       logGroup: deploymentLogGroup(this),
       destinationBucket: consoleSite.bucket,
       distribution: consoleSite.distribution,
@@ -401,7 +419,8 @@ export class CloudApplicationStack extends Stack {
       ],
       prune: false,
     });
-    new BucketDeployment(this, "PortalRuntime", {
+    consoleRuntime.node.addDependency(consoleSite.bucket);
+    const portalRuntime = new BucketDeployment(this, "PortalRuntime", {
       logGroup: deploymentLogGroup(this),
       destinationBucket: props.backend.portal.bucket,
       distribution: props.backend.portal.distribution,
@@ -419,6 +438,7 @@ export class CloudApplicationStack extends Stack {
       ],
       prune: false,
     });
+    portalRuntime.node.addDependency(props.backend.portal.bucket);
     scopeInvalidationPermissions(this, [
       consoleSite.distribution.distributionArn,
       props.backend.portal.distribution.distributionArn,

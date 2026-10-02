@@ -82,13 +82,14 @@ export class CompetitorBootstrapHosting extends Construct {
         resources: [bucket.arnForObjects("competitor-bootstrap.yaml")],
       }),
     );
-    new BucketDeployment(this, "Template", {
+    const deployment = new BucketDeployment(this, "Template", {
       logGroup: deploymentLogGroup(this),
       destinationBucket: bucket,
       sources: [Source.data("competitor-bootstrap.yaml", contents)],
       prune: false,
       retainOnDelete: false,
     });
+    deployment.node.addDependency(bucket);
     this.templateUrl = `https://${bucket.bucketName}.s3.${Stack.of(this).region}.amazonaws.com/competitor-bootstrap.yaml`;
   }
 }

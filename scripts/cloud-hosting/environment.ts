@@ -17,7 +17,7 @@ export function cloudEnvironmentInstructions(environment: string): string {
   const configuration = SAMPLE_ENVIRONMENTS.includes(environment)
     ? `Configure ${directory}/.env using ${directory}/.env.example (copy only if .env does not exist)`
     : `Configure exported variables or ${directory}/.env for this custom environment`;
-  return `${configuration}, then run make deploy ENV=${environment}. The command reuses standard CDKToolkit or confirms first bootstrap when missing. Optional offline preview: make deploy ENV=${environment} CLOUD_ARGS="--show-setup".`;
+  return `${configuration}, then run make deploy ENV=${environment}. The command reuses standard CDKToolkit or automatically bootstraps when missing. Optional offline preview: make deploy ENV=${environment} CLOUD_ARGS="--show-setup".`;
 }
 
 function parseValue(raw: string, location: string): string {

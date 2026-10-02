@@ -136,7 +136,7 @@ complete launcher. Its `current-cloud-v1` source contract runs the current
 The launcher retains the former broad CodeBuild caller policy; review its IAM,
 service access and selected source refs before creating it or starting a build.
 The final template pins its tested helper-source
-commit and catalog `915fe862fe09bf6b63bb96edcf0cb3deddd54d37`; the exact values and
+commit and catalog `4bb3a116c545fc46ed6a39ffcc5117fb914947f4`; the exact values and
 release classification are in `Mappings.SourceDefaults`. Creating the launcher
 also creates its CodeBuild role and log group; it does not start a build.
 
@@ -144,9 +144,10 @@ Custom platform/catalog repositories and refs remain selectable. Current catalog
 must contain the reviewed hello-world and ac26-crypto-battle artifacts. The build
 checks the selected source protocol and rejects incompatible current settings
 before application deployment. It does not make arbitrary pack runtimes executable.
-Current deploy builds pass `--setup-if-needed --yes`: they reuse a compatible
+Current deploy builds run the same ordinary `make deploy`: they reuse a compatible
 `CDKToolkit`, or create the missing standard toolkit and deploy with the reviewed
-build role. First bootstrap defaults to an `AdministratorAccess` CloudFormation
+build role, using `--require-approval never` without an extra prompt or flag.
+First bootstrap defaults to an `AdministratorAccess` CloudFormation
 execution role. The CodeBuild caller retains its broad permissions after bootstrap;
 this is not a least-privilege launcher. The selected Turso/DynamoDB provider and
 explicit data-retention setting are passed to the same CLI used locally.
@@ -183,10 +184,11 @@ Use an existing AWS CLI profile or role for credentials; do not put access keys
 or tokens in this file. Run `make deploy ENV=development` (or the matching
 `staging` / `production` environment). A compatible standard `CDKToolkit` in the
 selected account/region is reused without changing it. If it is missing, the same
-command displays the bootstrap account/region and permission scope, asks for
-first-bootstrap approval, runs the pinned official `cdk bootstrap`, then continues
-the application deployment with the same credentials. Declining stops before
-bootstrap changes or application builds.
+command displays the bootstrap account/region, permission scope and cost notice,
+runs the pinned official `cdk bootstrap`, verifies the toolkit, then continues
+the application deployment with the same credentials. Ordinary deployment uses
+`--require-approval never` and requires no additional flag or confirmation, including
+in CI. Existing toolkit configuration is unchanged.
 
 Standard CDK bootstrap creates asset storage and publishing, lookup, deployment
 and CloudFormation execution roles. Its default execution role uses
@@ -198,15 +200,16 @@ read the toolkit/stacks and perform the CLI's direct invitation/teardown operati
 The CLI never attaches policies to its caller or switches credentials.
 
 Optional `make -s deploy ENV=development CLOUD_ARGS="--show-setup"` previews the
-standard bootstrap offline. `CLOUD_ARGS="--setup"` only creates a missing toolkit;
-it does not change an existing one or deploy the application. If your organization
-uses separate bootstrap and deployment principals, use that optional command with
+standard bootstrap offline. `CLOUD_ARGS="--setup"` asks for its own confirmation and
+only creates a missing toolkit; it does not change an existing one or deploy the
+application. Setup-only automation can use `CLOUD_ARGS="--setup --yes"`.
+If your organization uses separate bootstrap and deployment principals, use that command with
 the authorized bootstrap profile, then switch profiles and run ordinary deploy.
 
-For unattended first deployment, use `CLOUD_ARGS="--setup-if-needed --yes"` after
-reviewing bootstrap and application IAM changes. `--yes` alone approves application
-deployment changes and does not approve a missing bootstrap. Interactive deployment
-uses CDK's normal security-change approval. See [permission boundaries](BOOTSTRAP-IAM.md#first-account-setup).
+Plain `make deploy ENV=development` also performs first deployment unattended.
+`--yes` and `--setup-if-needed` remain accepted for compatibility but are optional
+for ordinary deployment. Review the target and [permission boundaries](BOOTSTRAP-IAM.md#first-account-setup)
+before running it; the caller must already have the required permissions.
 
 `ENV` or `CDK_PARAM_ENVIRONMENT` selects the file before it is read; when both
 are present they must agree. The default is `development`. Custom names continue
@@ -253,6 +256,27 @@ drain marker. It also works after initial `CREATE_FAILED`, `ROLLBACK_COMPLETE`,
 `ROLLBACK_FAILED` or `DELETE_FAILED`, and can resume when one stack is already gone.
 Wait for any create/update/rollback operation to finish before retrying.
 
+After confirmation and before stack removal, the CLI empties exact S3 buckets
+from the verified CloudFormation inventory whose deployed deletion policy is
+`Delete`. This also handles failed initial deployments where the CDK cleanup
+provider is unavailable. Each request pins the expected AWS account owner; project,
+environment, CloudFormation stack ID and logical ID tags must match. Ownership is
+checked again before each object-deletion request. Cleanup removes all object
+versions and delete markers, then verifies that no versions remain. Ordinary destroy
+leaves `Retain` and `RetainExceptOnCreate` bucket contents untouched.
+
+The actual CLI caller needs `cloudformation:DescribeStacks`,
+`cloudformation:GetTemplate` and `cloudformation:ListStackResources` for the owned
+stacks, `s3:GetBucketTagging` and `s3:ListBucketVersions` on the exact owned buckets,
+and `s3:DeleteObject` and `s3:DeleteObjectVersion` on their objects. Permissions on
+the CloudFormation execution role alone do not authorize these direct CLI calls.
+The CLI does not require `s3:ListAllMyBuckets`, change bucket policies, directly
+delete bucket containers, or discover cleanup targets by a global name prefix.
+Denied access, missing or mismatched ownership tags, incomplete inventory, object
+deletion errors or failure to empty a bucket stop stack removal. Resolve the exact
+reported failure and stop any active writers before retrying; already deleted
+objects are not restored.
+
 The default deployed policy deletes stack-owned DynamoDB tables and all their rows,
 Cognito accounts, S3 objects, CloudFront distributions and managed logs. Only an
 explicit `CDK_PARAM_RETAIN_DATA_TABLES=true` deployment retains its data tables.
@@ -263,10 +287,13 @@ deployed exercise resources are outside platform destruction.
 
 For retained data cleanup, use `make destroy-all ENV=development`, equivalent to
 `make destroy ENV=development CLOUD_ARGS="--purge-retained-data"`. It first captures
-exact CloudFormation-owned table and log identities, verifies table ARNs and tags,
-and shows the permanent deletion scope. It deletes those tables and CloudWatch
-logs, then resets the selected deployed Turso control-data rows if applicable,
-then removes the AWS stacks. A failure in that pre-deletion purge or Turso reset
+exact CloudFormation-owned bucket, table and log identities, verifies ownership,
+and shows the permanent deletion scope. After confirmation, it empties the owned
+buckets, including retained object versions and delete markers, then deletes the
+owned tables and CloudWatch logs. Bucket containers with a deployed `Retain` policy
+remain; the CLI only empties their contents. It then resets the selected deployed
+Turso control-data rows if applicable and removes the AWS stacks.
+A failure in that pre-deletion purge or Turso reset
 stops stack removal. After the stacks are gone, it deletes the same captured log
 groups again to remove logs recreated by S3 cleanup providers during deletion.
 No additional log names are discovered. If this final log pass fails, the error
@@ -284,8 +311,8 @@ make -s destroy ENV=development CLOUD_ARGS="--plan" > teardown-plan.txt
 ```
 
 Save the printed physical-resource inventory before destroying stacks. The plan
-records exact table/stack ARNs, deployed retention policies, deletion protection,
-owned log groups and every retained resource's physical ID/type/stack identity,
+records exact table/stack ARNs, owned bucket identities, deployed retention policies,
+deletion protection, owned log groups and every retained resource's physical ID/type/stack identity,
 including retained S3 buckets and Cognito pools. It does not scan table contents, discover tables by prefix,
 modify protection, or delete resources. If both stacks are gone, the CLI cannot
 prove ownership of orphaned retained resources and refuses a purge; use the saved
@@ -300,10 +327,12 @@ For a failed initial stack that cannot be updated, an operator must separately
 review and perform the exact table's protection change. Rerun `--plan` to verify
 protection is off, then run `destroy-all` with its explicit purge confirmation.
 These commands never automatically disable live protection or change CDKToolkit.
-Previously retained S3/Cognito resources also keep their deployed policies. Save
-the plan before removing their stacks; explicit table/log purge does not silently
-expand to bucket or UserPool deletion. Any survivor cleanup uses those exact
-recorded identities in a separately reviewed operator action.
+Previously retained S3/Cognito resources also keep their deployed policies.
+Ordinary destroy preserves retained bucket contents; explicit `destroy-all` empties
+verified retained bucket contents while leaving `Retain` bucket containers and
+retained UserPools in place. Save the plan before removing their stacks. Removing
+those surviving containers or identities requires a separately reviewed operator
+action using the exact recorded physical identities.
 
 Competition resource cleanup is a separate operation: use the event's Teardown
 action before removing the platform when needed. The optional
@@ -328,6 +357,59 @@ created by those older paths are not silently adopted or deleted by this CLI.
 
 Retention does not imply automatic reattachment on a later fresh deployment; an
 explicit import/recovery procedure is still required.
+
+## Update the problem catalog
+
+`make submodule-latest` only fetches and stages the problem-source pin in this
+checkout. Review it before applying it to cloud hosting:
+
+`submodule-latest` follows the configured `main` branch unless overridden in the
+submodule settings, but rejects older or divergent targets before checkout or staging.
+Only equal or fast-forward history is accepted. Dirty problem sources or an
+unstaged pin selection are also refused without discarding work. Keep a reviewed
+trial pin until the tracked branch can advance it without dropping commits.
+
+```sh
+git -C problems rev-parse HEAD # record the old catalog commit
+make submodule-latest
+git diff --cached --submodule=log -- problems
+make validate-problems
+make deploy ENV=development   # use the existing installation's environment
+```
+
+Skip `make submodule-latest` when you have intentionally selected a different
+catalog commit, and stage that selection with `git add problems` before
+`make validate-problems`: validation aligns the submodule to the staged pin.
+Review uncommitted content edits separately with `git -C problems diff`.
+If the same checkout hosts local events, preserve their original sources as
+described in the [local update procedure](../docs/local-hosting.md#update-the-problem-catalog).
+
+`make deploy` rebuilds both browser applications from this checkout, then CDK
+publishes the content-addressed catalog/templates/plugins and updates the existing
+application/backend stacks. Use the same account, region, environment and database
+configuration as the existing installation. This is a normal CloudFormation
+update of changed assets and resources; it does not require destroying and
+recreating the installation. `make build` alone only creates local artifacts.
+There is no supported catalog-only hot-refresh command: both the browser's
+build-time catalog and the server's execution artifacts must agree.
+
+For the console pipeline, update `ProblemsRepoRef` to the reviewed full commit
+SHA and start a new deploy build. Updating launcher parameters alone does not
+publish the catalog. Each build fetches its configured refs, so a branch follows
+new commits while a full SHA remains fixed. Keep the chosen platform/catalog
+pair recorded and rehearse it before an event.
+
+Apply changes between events or rehearse them in a separate installation.
+Publishing a new catalog does not upgrade previously deployed team problem
+stacks or migrate saved runs. Pending AWS jobs retain their catalog key and old
+content-addressed artifacts, but this is not a guarantee that every existing
+event can continue: native Battle runs reject a changed catalog key, and
+participant AWS access rejects a template digest that no longer matches the
+currently reviewed catalog. Do not update an active event's catalog expecting
+its saved state to migrate. Create a new test event against the new revision and
+verify deployment, participant access and scoring. Supported runtimes remain
+hello-world and native Cryptography Battle; adding source files does not make
+other cloud runtimes executable, and Docker/Compose remains local-only.
 
 ## Verification
 

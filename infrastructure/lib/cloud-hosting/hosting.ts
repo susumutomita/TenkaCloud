@@ -33,7 +33,7 @@ export class CloudHosting extends Construct {
         responsePagePath: "/index.html",
       })),
     });
-    new BucketDeployment(this, "Assets", {
+    const assets = new BucketDeployment(this, "Assets", {
       logGroup: deploymentLogGroup(this),
       sources: [
         Source.asset(assetPath, { exclude: [".env*", ".git"], ignoreMode: IgnoreMode.GIT }),
@@ -43,6 +43,10 @@ export class CloudHosting extends Construct {
       retainOnDelete: false,
       prune: false,
     });
+    // Ref(bucketName) alone does not wait for the auto-delete custom resource.
+    // Arm cleanup before the first upload; rollback then removes uploads before
+    // emptying the bucket, with the bucket policy/provider still available.
+    assets.node.addDependency(this.bucket);
     this.url = `https://${this.distribution.distributionDomainName}`;
   }
 }
