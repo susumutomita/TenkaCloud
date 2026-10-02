@@ -537,8 +537,9 @@ plugin digest and schema. Native runs are separate from AWS deployment jobs and 
 not fabricate account IDs, regions, stack ARNs, or AWS access controls. Mixed events
 still need verified competitor accounts for their AWS problems.
 
-The existing Deployments table stores a small versioned HEAD and bounded snapshot
-chunks. A successful transition atomically writes the snapshot, team score deltas,
+DynamoDB uses the existing Deployments table for a small versioned HEAD and bounded
+snapshot chunks; Turso stores the same match in SQL head, snapshot and history rows.
+A successful transition atomically writes the snapshot, team score deltas,
 ledger and operation receipt, with current event/team/intake checks. One event has
 one authoritative shared match; it is not split into independent per-team games.
 Short expiring admission on that same HEAD reduces conflicting snapshot writes.
