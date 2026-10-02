@@ -2,6 +2,6 @@
   "$comment": "Current cloud launcher defaults from infrastructure/templates/cloud-pipeline.yaml. This pinned source pair is an unreleased candidate, not a published release or a live AWS deployment verification. Keep its SourceDefaults mapping, source contract and classification aligned when advancing the reviewed source pins.",
   "sourceContract": "current-cloud-v1",
   "classification": "candidate/unreleased",
-  "platformCommit": "6552ba768a61c180820888fbfc0ef5d04582268a",
+  "platformCommit": "a47b6f0311b7a185952a19f62cd59ee769dac455",
   "catalogCommit": "4bb3a116c545fc46ed6a39ffcc5117fb914947f4"
 }
