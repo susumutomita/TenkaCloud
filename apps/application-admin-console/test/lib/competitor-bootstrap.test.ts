@@ -91,7 +91,7 @@ describe("buildShareablePayload", () => {
 describe("COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK", () => {
   it("should point to a public repo raw URL (= accessible to competitors)", () => {
     expect(COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK).toMatch(
-      /^https:\/\/raw\.githubusercontent\.com\/.+\/competitor-bootstrap\.yaml$/,
+      /^https:\/\/raw\.githubusercontent\.com\/.+\/infrastructure\/templates\/competitor-bootstrap\.yaml$/,
     );
   });
 });

@@ -57,7 +57,7 @@ export class CompetitorBootstrapHosting extends Construct {
   constructor(scope: Construct, id: string, repositoryRoot: string) {
     super(scope, id);
     const contents = readFileSync(
-      repositoryArtifactFile(repositoryRoot, "templates/competitor-bootstrap.yaml"),
+      repositoryArtifactFile(repositoryRoot, "infrastructure/templates/competitor-bootstrap.yaml"),
       "utf8",
     );
     // eslint-disable-next-line sonarjs/aws-s3-bucket-versioning -- This bucket serves one public, reproducible bootstrap template; no event data or credentials are uploaded.

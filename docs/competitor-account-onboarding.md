@@ -1,7 +1,7 @@
 # Competitor AWS account setup
 
 Use the existing **Competitor Accounts** screen and
-[competitor-bootstrap.yaml](../templates/competitor-bootstrap.yaml) for both paths:
+[competitor-bootstrap.yaml](../infrastructure/templates/competitor-bootstrap.yaml) for both paths:
 
 - **AWS Organizations already configured:** an organization administrator distributes
   the role centrally with service-managed CloudFormation StackSets to selected accounts or OUs
@@ -100,7 +100,7 @@ aws cloudformation create-stack-set \
   --call-as "$TC_CALL_AS" --stack-set-name "$TC_STACKSET_NAME" \
   --permission-model SERVICE_MANAGED --auto-deployment Enabled=false \
   --capabilities CAPABILITY_NAMED_IAM \
-  --template-body file://templates/competitor-bootstrap.yaml \
+  --template-body file://infrastructure/templates/competitor-bootstrap.yaml \
   --parameters "file://$TC_PARAMETERS_FILE"
 ```
 

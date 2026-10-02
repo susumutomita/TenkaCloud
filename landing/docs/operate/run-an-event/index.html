@@ -69,7 +69,7 @@
 <article>
 <h1>大会を最後まで運営する <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <h2 id="prepare">準備とリハーサル</h2><p><a href="/docs/manual/organizer/">開催者マニュアル</a>と <code>make local</code> を使います。実際の問題とチーム数を選び、ソース・カタログの revision、必要な機器、確認結果、運営担当、時間、連絡経路、撤収担当を記録します。カタログ対応は進行中です。Docker や terminal の全問確認済みとは扱わないでください。</p>
-<h2 id="connect-a-competitor-account">任意の競技者アカウントを接続する</h2><p>AWS 問題にはアカウント、region、リソース、削除の合意が必要です。<code>templates/competitor-bootstrap.yaml</code> と、表示された運営アカウント、正確な role 名、保存された ExternalId を使います。各アカウントを検証してからチームへ割り当てます。参加者へ配置 role の認証情報を配布しないでください。</p>
+<h2 id="connect-a-competitor-account">任意の競技者アカウントを接続する</h2><p>AWS 問題にはアカウント、region、リソース、削除の合意が必要です。<code>infrastructure/templates/competitor-bootstrap.yaml</code> と、表示された運営アカウント、正確な role 名、保存された ExternalId を使います。各アカウントを検証してからチームへ割り当てます。参加者へ配置 role の認証情報を配布しないでください。</p>
 <h2 id="deploy-a-problem">配置・開始・採点</h2><ol>
 <li>大会、チーム、問題を作成します。</li>
 <li>停止状態の Docker jobs の準備結果をチームごとに確認し、失敗した操作だけを所有情報に基づいて再試行します。AWS 問題は別途配置します。</li>

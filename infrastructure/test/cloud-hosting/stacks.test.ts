@@ -619,7 +619,7 @@ describe("existing competitor bootstrap and registry IAM source boundaries", () 
       "SyntheticStackSetInstance",
     );
     new CfnInclude(stack, "Template", {
-      templateFile: resolve(import.meta.dirname, "../../../templates/competitor-bootstrap.yaml"),
+      templateFile: resolve(import.meta.dirname, "../../templates/competitor-bootstrap.yaml"),
     });
     const template = Template.fromStack(stack);
     template.resourceCountIs("AWS::IAM::Role", 1);
@@ -656,7 +656,7 @@ describe("existing competitor bootstrap and registry IAM source boundaries", () 
       env: { account: "222222222222", region: "us-east-1" },
     });
     new CfnInclude(stack, "Template", {
-      templateFile: resolve(import.meta.dirname, "../../../templates/competitor-bootstrap.yaml"),
+      templateFile: resolve(import.meta.dirname, "../../templates/competitor-bootstrap.yaml"),
       parameters: {
         TenkaCloudAccountId: "123456789012",
         ExternalId: "SYNTHETIC-EXTERNAL-ID-ONLY",

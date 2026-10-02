@@ -57,7 +57,7 @@ COPY --from=runtime-deps /app/infrastructure/package.json /app/infrastructure/pa
 COPY packages /app/packages
 COPY scripts/lib /app/scripts/lib
 COPY scripts/local-host /app/scripts/local-host
-COPY templates /app/templates
+COPY infrastructure/templates/competitor-bootstrap.yaml /app/infrastructure/templates/competitor-bootstrap.yaml
 COPY problems /app/problems
 COPY --from=build /app/.tenkacloud/host-build /app/.tenkacloud/host-build
 

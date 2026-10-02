@@ -283,7 +283,7 @@ The existing Competitor Accounts screen uses the restored
 `/admin/competitor-accounts` list/create, bulk, verify and delete contracts. Only
 Admin can change registrations; the three organizer roles can list them. New
 registrations use the installation's fixed `competitorRoleName` from runtime
-config. The existing [competitor bootstrap template](../templates/competitor-bootstrap.yaml)
+config. The existing [competitor bootstrap template](./templates/competitor-bootstrap.yaml)
 is served as one public, secret-free S3 object for the screen's CloudFormation
 Quick-create link. No second bootstrap template or account-management app exists.
 The [account setup guide](../docs/competitor-account-onboarding.md) covers the

@@ -1,15 +1,16 @@
 # TenkaCloud — Deployment guide
 
-The AWS console launcher is [cloud-pipeline.yaml](./infrastructure/templates/cloud-pipeline.yaml).
-It preserves the previous complete deployment and teardown flow, using its fixed
-platform/catalog refs. Renaming the file does not switch it to the unfinished
-Lambda/DynamoDB restoration in this checkout. The detailed steps below describe
-that pinned implementation and its compatibility identifiers.
+For the current checkout, follow [cloud setup and teardown](./infrastructure/README.md)
+for `make deploy` / `make destroy`, and [README Quickstart](./README.md#quickstart)
+for `make local` / `make down`. The current
+[cloud-pipeline.yaml](./infrastructure/templates/cloud-pipeline.yaml) defaults to
+the current deployment contract and standard CDK bootstrap.
 
-For the current checkout, use [README Quickstart](./README.md#quickstart) for
-`make local` / `make down`. Current `make deploy` / `make destroy` still stop as
-unimplemented; see [cloud restoration status](./infrastructure/README.md).
-AWS deployment through the pinned console launcher can incur charges.
+The remaining sections below describe the **historical implementation**, including
+its Lite/SaaS compatibility identifiers. Use the pinned checkout that created your
+environment, as explained in [legacy operations](./docs/legacy-operations.md), before
+following those historical steps. They do not migrate an existing installation to
+the current checkout. AWS deployment can incur charges.
 
 ## What the pinned cloud deployment creates
 
@@ -119,7 +120,7 @@ current objects does not empty a versioned bucket. Do not run the SaaS cleanup
 script for a Lite deployment. Shared CDK bootstrap resources are separate too;
 retain them while other CDK applications use them.
 
-See the [cleanup guide](./infrastructure/templates/README.md#撤去-teardown) for the
+See the [historical cleanup guide](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/infrastructure/templates/README.md#撤去-teardown) for the
 stack and backend steps.
 
 ## Deploy your own problem catalog

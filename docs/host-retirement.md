@@ -19,7 +19,7 @@ these verification results.
 | AWS-service problems | Cloud hosting only; the reviewed flag slice does not cover every AWS catalog problem or endpoint-based Battle | [Cloud status](../infrastructure/README.md) |
 | Docker/Compose exercises in cloud hosting | Local-only; not listed in the cloud catalog. Native Cryptography Battle is supported separately | [Cloud status](../infrastructure/README.md) |
 | Organizer accounts, explicit SAML, optional audit, progression and participant registration | Local implementations and their behavior tests retained; do not infer cloud parity from retained local code | `scripts/local-host` |
-| Competitor bootstrap and trust | Template retained; ExternalId and viewer-role boundaries remain required. Cloud onboarding and account-isolation conditions still need acceptance | `templates/competitor-bootstrap.yaml` |
+| Competitor bootstrap and trust | Template retained; ExternalId and viewer-role boundaries remain required. Cloud onboarding and account-isolation conditions still need acceptance | `infrastructure/templates/competitor-bootstrap.yaml` |
 | Pack creation, validation, immutable install/list/inspect/remove and activation records | Offline tooling retained. Activation does not yet add a pack to the competition runtime; structured drill/progression integration remains incomplete | `scripts/problem-pack`, public SDKs, `packs/` |
 | Generic multi-provider pack authoring | Authoring/validation retained; no promise of execution for every AWS/GCP/Azure/Sakura pack | public SDKs and golden-pack tests |
 | SaaS control plane, tenant provisioning and pooled/silo stacks | Retired from this candidate; use the exact old release for existing environments | [Legacy operations](legacy-operations.md) |

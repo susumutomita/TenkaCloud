@@ -13,7 +13,7 @@ Lambda / DynamoDB によるクラウド開催を復旧中です。AWS サービ�
 - 実際の問題・チーム数で環境を配置し、正答、誤答、ヒント、得点、再起動、撤収を確認する
 - Docker カタログの表示件数だけを全問のプレイ確認として扱わない。terminal と実 Docker・ブラウザの未確認経路を記録する
 - 実 AWS で任意のリハーサルを行う場合は、対象アカウント、region、資源、費用、権限変更と削除を事前に承認する。未実施だけを開発完了の阻害とは扱わない
-- 競技者アカウントに `templates/competitor-bootstrap.yaml` を使い、表示された運営アカウント、role 名、ExternalId を合わせて接続を検証する
+- 競技者アカウントに `infrastructure/templates/competitor-bootstrap.yaml` を使い、表示された運営アカウント、role 名、ExternalId を合わせて接続を検証する
 - Organizations の一括配布と個別設定は[導入手順](../competitor-account-onboarding.md)を使う。別アカウント、または同一アカウントの別 region をチームへ割り当てる。IAM role は global のため bootstrap を複数 region に重複配置しない
 - 参加者用 role と配置 role を分離し、初期設定の AdministratorAccess を参加者へ配らない
 - 大会・チームの参加キーを安全に配布する。任意の[自己登録](participant-self-registration.md)は準備済みチームの割り当てであり、環境の自動作成ではない
