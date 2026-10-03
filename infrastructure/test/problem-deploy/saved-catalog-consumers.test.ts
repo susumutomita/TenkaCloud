@@ -16,8 +16,10 @@ import {
 } from "../../lib/problem-deploy/handlers/shared/execution-catalog.js";
 import { makeSqliteExecutor } from "./control-data/control-data-write.test-helpers.js";
 
-const source = (version: string) =>
-  `export default {initialState:()=>({count:0}),validateOp:()=>({ok:true}),applyOp:s=>({count:s.count+1}),projectForTeam:s=>({version:${JSON.stringify(version)},count:s.count})};`;
+const pluginSources = {
+  A: 'export default {initialState:()=>({count:0}),validateOp:()=>({ok:true}),applyOp:s=>({count:s.count+1}),projectForTeam:s=>({version:"A",count:s.count})};',
+  B: 'export default {initialState:()=>({count:0}),validateOp:()=>({ok:true}),applyOp:s=>({count:s.count+1}),projectForTeam:s=>({version:"B",count:s.count})};',
+};
 const sources = new Map<string, string>();
 vi.mock("../../lib/problem-deploy/handlers/shared/execution-catalog.js", async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -28,10 +30,14 @@ vi.mock("../../lib/problem-deploy/handlers/shared/execution-catalog.js", async (
   },
 }));
 
-function catalog(version: string, points = 100, penalty = 7): ResolvedExecutionCatalog {
-  const digest = contentDigest(source(version));
+function catalog(
+  version: keyof typeof pluginSources,
+  points = 100,
+  penalty = 7,
+): ResolvedExecutionCatalog {
+  const digest = contentDigest(pluginSources[version]);
   const key = `catalogs/${contentDigest(version)}.json`;
-  sources.set(key, source(version));
+  sources.set(key, pluginSources[version]);
   return {
     version: 1,
     catalogKey: key,

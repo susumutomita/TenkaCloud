@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { resetKnownTursoData, type TursoResetSql } from "./turso-reset";
-import { assertTursoSchemaCompatible } from "./turso-schema";
+import { assertTursoSchemaCompatible, PUBLISHED_CLOUD_DATA_TABLES } from "./turso-schema";
 
 function fixture(statements: readonly string[]) {
   const db = new Database(":memory:");
@@ -97,6 +97,37 @@ describe("read-only Turso schema compatibility", () => {
   });
 });
 describe("explicit Turso purge preserves schema and unrelated data", () => {
+  it("accepts the previously published schema after its explicit purge, including the transaction guard", async () => {
+    const f = fixture([
+      "CREATE TABLE cloud_schema (id INTEGER PRIMARY KEY, version INTEGER NOT NULL)",
+      "INSERT INTO cloud_schema VALUES (1, 1)",
+      "CREATE TABLE cloud_transaction_guard (id INTEGER PRIMARY KEY, valid INTEGER CHECK(valid=1))",
+      "INSERT INTO cloud_transaction_guard VALUES (1, 1)",
+      ...PUBLISHED_CLOUD_DATA_TABLES.filter((name) => name !== "cloud_transaction_guard").flatMap(
+        (name) => [
+          `CREATE TABLE ${name} (id TEXT)`,
+          `INSERT INTO ${name} VALUES ('synthetic-existing-row')`,
+        ],
+      ),
+      "CREATE TABLE unrelated (id TEXT)",
+      "INSERT INTO unrelated VALUES ('preserved')",
+    ]);
+    try {
+      await expect(assertTursoSchemaCompatible(f.client)).rejects.toThrow("cloud-v1");
+      expect(f.calls.every((sql) => sql.startsWith("SELECT "))).toBe(true);
+      await resetKnownTursoData(f.client, "cloud-v1");
+      const readOnlyStart = f.calls.length;
+      await assertTursoSchemaCompatible(f.client);
+      expect(f.calls.slice(readOnlyStart).every((sql) => sql.startsWith("SELECT "))).toBe(true);
+      for (const name of PUBLISHED_CLOUD_DATA_TABLES)
+        expect(f.db.query(`SELECT COUNT(*) AS count FROM ${name}`).get()).toEqual({ count: 0 });
+      expect(f.db.query("SELECT version FROM cloud_schema").get()).toEqual({ version: 1 });
+      expect(f.db.query("SELECT id FROM unrelated").get()).toEqual({ id: "preserved" });
+    } finally {
+      f.db.close();
+    }
+  });
+
   it("uses restored schema tables, including score summaries, but preserves migrations and unrelated rows", async () => {
     const names = [
       "events",

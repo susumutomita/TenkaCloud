@@ -210,7 +210,7 @@ describe("restored cloud SPA with synthetic HTTP", () => {
     expect(JSON.parse(String(change?.init?.body))).toEqual({ role: "TenantOperator" });
   });
 
-  it("creates two teams in one AWS account with different regions and retains the full event routes", async () => {
+  it("creates two teams in one AWS account with different regions and opens the created event", async () => {
     const { container } = await openAuthenticated("/events/new");
     await screen.findByRole("heading", { name: "Create new Event" });
     await waitFor(() =>
@@ -250,6 +250,11 @@ describe("restored cloud SPA with synthetic HTTP", () => {
         .find(({ url }) => url.pathname === `/prod/events/${EVENT_ID}`)
         ?.url.searchParams.get("withScoreEvents"),
     ).toBe("true");
+  });
+
+  it("retains the full event routes for an authenticated organizer", async () => {
+    await openAuthenticated(`/events/${EVENT_ID}`);
+    await screen.findByRole("tab", { name: /Overview/ });
     for (const name of [
       /Schedule/,
       /Problems/,
