@@ -157,15 +157,11 @@ test("bootstrap revokes the host key, and organizer roles control API access", a
     await expect(
       call("PUT", "/feature-flags", operator, { key: "audit", enabled: true }),
     ).rejects.toMatchObject({ status: 403 });
-    expect(
-      (await call("PUT", "/feature-flags", admin, { key: "audit", enabled: true })).body,
-    ).toEqual({
-      flags: {
-        saml: false,
-        audit: true,
-        challengePrerequisiteGate: false,
-        registration: false,
-      },
+    await expect(
+      call("PUT", "/feature-flags", admin, { key: "audit", enabled: true }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect((await call("GET", "/feature-flags", admin)).body).toEqual({
+      flags: { saml: false, audit: false, challengePrerequisiteGate: false, registration: false },
     });
 
     const identity = store.localIdentity(reader.id);

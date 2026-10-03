@@ -525,3 +525,60 @@ describe("EventCreatePage flow", () => {
     expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
   });
 });
+
+describe("EventCreatePage hosting-account confirmation", () => {
+  const rejection = () =>
+    new ApiError(
+      422,
+      JSON.stringify({
+        error: "unsupported_hosting_account",
+        awsAccountId: ACCOUNT_ID,
+      }),
+    );
+
+  it("shows risk before keys, cancels without another request, and confirms the selected event", async () => {
+    mockCreate.mockRejectedValueOnce(rejection());
+    const { container } = renderPage();
+    fillValidForm(container);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    expect(await screen.findByText("event_create.self_test_risk")).toBeInTheDocument();
+    expect(mockCreate).toHaveBeenCalledOnce();
+    expect(mockCreate.mock.calls[0]?.[1].hostingAccountSelfTest).toBeUndefined();
+    expect(screen.queryByText("ONE-TIME-KEY")).not.toBeInTheDocument();
+    createWrapper(document.body)
+      .findModal('[data-testid="self-test-prompt"]')
+      ?.findDismissButton()
+      ?.click();
+    await waitFor(() =>
+      expect(screen.queryByText("event_create.self_test_risk")).not.toBeInTheDocument(),
+    );
+    expect(mockCreate).toHaveBeenCalledOnce();
+    mockCreate.mockRejectedValueOnce(rejection());
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "event_create.self_test_confirm" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(3));
+    expect(mockCreate.mock.calls[2]?.[1]).toEqual({
+      ...mockCreate.mock.calls[0]?.[1],
+      hostingAccountSelfTest: {
+        awsAccountId: ACCOUNT_ID,
+        riskVersion: "hosting-account-self-test-v1",
+      },
+    });
+    expect(await screen.findByText("ONE-TIME-KEY")).toBeInTheDocument();
+  });
+
+  it("retains acknowledgment and operation key after a lost response; repeated confirmation sends once", async () => {
+    mockCreate.mockRejectedValueOnce(rejection()).mockRejectedValueOnce(new Error("response lost"));
+    const { container } = renderPage();
+    fillValidForm(container);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    const confirm = await screen.findByRole("button", { name: "event_create.self_test_confirm" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(await screen.findByText("response lost")).toBeInTheDocument();
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(3));
+    expect(mockCreate.mock.calls[2]?.slice(1)).toEqual(mockCreate.mock.calls[1]?.slice(1));
+  });
+});

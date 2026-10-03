@@ -2,7 +2,10 @@ import { AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
-import { getConsoleSigninUrl } from "../../lib/problem-deploy/handlers/participant-handler/sso";
+import {
+  getCliCredentials,
+  getConsoleSigninUrl,
+} from "../../lib/problem-deploy/handlers/participant-handler/sso";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const JOB = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
@@ -394,4 +397,48 @@ describe("participant console SSO: direct operator viewer access", () => {
     f.fetchClient.mockResolvedValueOnce(new Response(body));
     expect(await f.issue()).toEqual({ kind: "federation_token_malformed" });
   });
+});
+
+describe("hosting-account participant access is bound to the live event", () => {
+  const consent = {
+    awsAccountId: ACCOUNT,
+    riskVersion: "hosting-account-self-test-v1",
+    acknowledgedBy: "operator-a",
+    acknowledgedAt: "2026-10-03T00:00:00.000Z",
+  };
+  it.each(["console", "cli"] as const)(
+    "permits %s through the same owned role proof with persisted event consent",
+    async (kind) => {
+      vi.stubEnv("PARTICIPANT_OPERATOR_ACCOUNT_ID", ACCOUNT);
+      const f = fixture(
+        row({ eventId: "event-one" }),
+        eventRow({ hostingAccountSelfTest: consent }),
+      );
+      const result =
+        kind === "console" ? await f.issue() : await getCliCredentials(f.shared, KEY, JOB, f.deps);
+      expect(result.kind).toBe("ok");
+      expect(f.verificationSend).toHaveBeenCalledOnce();
+      expect(f.stsSend.mock.calls[0]?.[0].input).toMatchObject({ RoleArn: ROLE, ExternalId: JOB });
+      expect(
+        f.ddbSend.mock.calls.some(
+          ([command]) => command.input.TableName === "Events" && command.input.ConsistentRead,
+        ),
+      ).toBe(true);
+    },
+  );
+  it.each([
+    undefined,
+    { ...consent, awsAccountId: "888888888888" },
+    { ...consent, riskVersion: "other" },
+  ])(
+    "refuses credentials for unacknowledged/mismatched events: %s",
+    async (hostingAccountSelfTest) => {
+      vi.stubEnv("PARTICIPANT_OPERATOR_ACCOUNT_ID", ACCOUNT);
+      const f = fixture(row({ eventId: "event-one" }), eventRow({ hostingAccountSelfTest }));
+      expect(await getCliCredentials(f.shared, KEY, JOB, f.deps)).toEqual({ kind: "not_ready" });
+      expect(f.ssmSend).not.toHaveBeenCalled();
+      expect(f.verificationSend).not.toHaveBeenCalled();
+      expect(f.stsSend).not.toHaveBeenCalled();
+    },
+  );
 });

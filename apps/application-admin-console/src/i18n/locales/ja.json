@@ -24,7 +24,6 @@
     "problems": "Problems",
     "deployments": "Deployments",
     "competitor_accounts": "Competitor Accounts",
-    "audit_log": "監査ログ",
     "tenant_users": "ユーザー",
     "identity_providers": "ID プロバイダ",
     "settings": "設定",
@@ -34,7 +33,7 @@
   },
   "settings": {
     "header": "フィーチャーフラグ",
-    "description": "この開催環境の機能を切り替えます。変更は即座に反映され、監査ログに記録されます。",
+    "description": "この開催環境の機能を切り替えます。変更は即座に反映されます。",
     "load_error": "フィーチャーフラグの取得に失敗しました。",
     "save_error": "フィーチャーフラグの更新に失敗しました。",
     "readonly_notice": "この設定を変更できるのは主催者の管理者のみです。",
@@ -192,8 +191,8 @@
     "title": "新規 Event 作成",
     "description": "チーム数と問題セットを指定して Event を作成します。各 teamLoginKey は Event 詳細から Admin と Operator がコピーできます。",
     "error_header": "作成に失敗しました",
-    "hosting_account_rejected_header": "別の競技者 AWS アカウントを使用してください",
-    "hosting_account_rejected_body": "AWS リソースを使う問題は、リージョンを変えても TenkaCloud の開催用アカウントには配置できません。Competitor Accounts ページで別のアカウントを登録して接続確認を行い、そのアカウントを選択してイベントを作成してください。このイベントは作成済みですが、デプロイは拒否されました。この画面を離れる前に、下のログインキーを保存してください。",
+    "hosting_account_rejected_header": "開催用アカウントのリスク確認が必要です",
+    "hosting_account_rejected_body": "このイベントには開催用アカウントでの自己検証への同意が記録されていません。新しいイベントの作成前にリスクを確認するか、接続確認済みの別の競技者 AWS アカウントを使用してください。この画面を離れる前に、下のログインキーを保存してください。",
     "basic_info_header": "基本情報",
     "name_label": "Event 名",
     "name_placeholder_example": "例: Tenka Battle Cup 2026",
@@ -258,7 +257,12 @@
     "col_team_region": "Region (未指定は問題の既定)",
     "team_region_inherit": "問題の既定に従う",
     "teams_description_native": "この大会は TenkaCloud 内で動く問題だけを使います。チームの内部識別子を設定してください。競技者用の AWS アカウントは不要です。",
-    "native_execution": "TenkaCloud 内で実行"
+    "native_execution": "TenkaCloud 内で実行",
+    "self_test_header": "開催用アカウントでの自己検証を確認",
+    "self_test_account": "AWS アカウント {account} は TenkaCloud の開催基盤にも使われています。イベントとログインキーはまだ作成されていません。",
+    "self_test_risk": "このアカウントの問題用ロールや参加者用ロールから、TenkaCloud の開催基盤の設定やデータへアクセス・変更できる可能性があります。リージョンを変えても権限は分離されません。リスクへの同意によって隔離や安全性が保証されるものではありません。",
+    "self_test_recommendation": "自分で行う自己検証に限って選択してください。第三者が参加する本格開催には、接続確認済みの別の競技者 AWS アカウントを推奨します。同意はこのイベントだけに適用されます。接続確認済みの競技者ロールと ExternalId は引き続き必要です。",
+    "self_test_confirm": "リスクを理解して自己検証を作成"
   },
   "lite_drill": {
     "checkpoint_header": "オンボーディングドリル: チェックポイント獲得!",

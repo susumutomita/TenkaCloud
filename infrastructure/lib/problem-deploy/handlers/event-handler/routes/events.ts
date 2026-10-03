@@ -3,12 +3,12 @@ import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
 import {
   requireRole,
+  resolveCognitoSub,
   resolveTenantId,
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
 import { ULID_RE } from "../../shared/constants.js";
-import { auditEventAction } from "../audit.js";
 import { bulkTeardownEvent } from "../bulk-delete.js";
 import {
   createEvent,
@@ -42,10 +42,9 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
         try {
           const response = await createEvent(
             shared,
-            { tenantId: resolveTenantId(c), nowMs: Date.now() },
+            { tenantId: resolveTenantId(c), nowMs: Date.now(), actor: resolveCognitoSub(c) },
             body,
           );
-          auditEventAction(c, "create_event", response.eventId);
           return c.json(response, StatusCodes.CREATED);
         } catch (err) {
           if (err instanceof UnknownEventProblemError)
@@ -138,7 +137,6 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
           if (outcome.kind === "conflict") {
             return c.json({ error: "rotation_conflict" }, StatusCodes.CONFLICT);
           }
-          auditEventAction(c, "rotate_team_login_key", `${eventId}/${teamId}`);
           return c.json(outcome, StatusCodes.OK);
         } catch (err) {
           return handleRouteError(
@@ -164,7 +162,6 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
           const outcome = await bulkTeardownEvent(shared, resolveTenantId(c), eventId, Date.now());
           if (outcome.kind === "not_found")
             return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-          auditEventAction(c, "delete_event", eventId);
           return c.json(outcome.result, StatusCodes.ACCEPTED);
         } catch (err) {
           return handleRouteError(c, "[events] bulkTeardownEvent failed", { eventId }, err);

@@ -7,7 +7,6 @@ import { TENANT_ADMIN_ROLE, TENANT_BLANKET_ROLES, TENANT_ROLES } from "../deploy
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { createMachineGuardMiddleware } from "../shared/machine-principal.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
-import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
 import { registerCapacityRoutes } from "./routes/capacity.js";
 import { registerCoordinationRoutes } from "./routes/coordination.js";
@@ -126,8 +125,6 @@ registerBulkDeployRoutes(app, shared);
 // the deploy route, which runs against live events.
 registerCoordinationRoutes(app, shared);
 registerDisruptionRoutes(app, shared);
-// Issue #1292: Tenant Admin 向け audit log read routes (= /admin/audit-log + /export)。
-registerAuditLogRoutes(app, shared);
 // Issue #2231: per-tenant runtime feature-flag toggle (/admin/feature-flags)。
 registerFeatureFlagsRoutes(app, shared);
 // Issue #2410 Slice 2: event-hot DynamoDB キャパ監視 (= /admin/capacity、read-only)。

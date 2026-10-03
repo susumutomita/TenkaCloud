@@ -84,11 +84,6 @@
       "count": 2
     }
   },
-  "apps/application-admin-console/src/pages/AuditLog.tsx": {
-    "@typescript-eslint/consistent-type-definitions": {
-      "count": 1
-    }
-  },
   "apps/application-admin-console/src/pages/EventCreate.tsx": {
     "sonarjs/no-nested-functions": {
       "count": 1
@@ -260,14 +255,6 @@
       "count": 1
     },
     "@typescript-eslint/no-empty-function": {
-      "count": 1
-    }
-  },
-  "apps/application-admin-console/test/pages/AuditLog.test.tsx": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 3
-    },
-    "sonarjs/no-hardcoded-ip": {
       "count": 1
     }
   },
@@ -995,16 +982,6 @@
       "count": 1
     }
   },
-  "infrastructure/lib/problem-deploy/handlers/shared/audit-log.ts": {
-    "sonarjs/no-nested-conditional": {
-      "count": 2
-    }
-  },
-  "infrastructure/lib/problem-deploy/handlers/shared/audit/audit-wrapper.ts": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 1
-    }
-  },
   "infrastructure/lib/problem-deploy/handlers/shared/jwt-claims.ts": {
     "@typescript-eslint/consistent-indexed-object-style": {
       "count": 1
@@ -1074,24 +1051,6 @@
   "infrastructure/test/problem-deploy-backend-stack.test-helpers.ts": {
     "sonarjs/constructor-for-side-effects": {
       "count": 3
-    }
-  },
-  "infrastructure/test/problem-deploy/audit-log-read.test.ts": {
-    "@typescript-eslint/array-type": {
-      "count": 1
-    },
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 5
-    }
-  },
-  "infrastructure/test/problem-deploy/audit-log-routes.test.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "infrastructure/test/problem-deploy/audit-wrapper.test.ts": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 1
     }
   },
   "infrastructure/test/problem-deploy/auth-wiring.test.ts": {
@@ -1627,17 +1586,7 @@
       "count": 3
     }
   },
-  "infrastructure/test/problem-deploy/event-audit.test.ts": {
-    "sonarjs/no-hardcoded-ip": {
-      "count": 2
-    }
-  },
   "infrastructure/test/problem-deploy/event-bulk-deploy-non-aws.test.ts": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 1
-    }
-  },
-  "infrastructure/test/problem-deploy/event-bulk-deploy-provenance-audit.test.ts": {
     "@typescript-eslint/consistent-type-assertions": {
       "count": 1
     }
@@ -1889,14 +1838,6 @@
       "count": 1
     },
     "@typescript-eslint/consistent-type-definitions": {
-      "count": 1
-    }
-  },
-  "infrastructure/test/problem-deploy/system-audit-writer-handler.test.ts": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },

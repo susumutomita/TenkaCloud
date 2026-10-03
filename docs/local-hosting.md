@@ -93,8 +93,9 @@ The host console is the normal Application Admin Console running in local-host
 mode: the same event list, event creation page, event detail tabs, schedule,
 scoreboard, notifications and report, served against this computer's API. On the
 first and later visits, enter the organizer key. The key grants organizer Admin
-access. Local **Users**, password and SAML management are not offered; **Settings**
-retains the optional audit control. Older organizer records remain historical
+access. Local **Users**, password and SAML management are not offered. Dedicated
+audit collection, settings and read/export endpoints are retired. This change does
+not migrate or purge existing audit tables or rows. Older organizer records remain historical
 state and cannot authenticate after key mode is enabled. There is no local Cognito.
 
 If the key is lost, run `make local-reset` in an interactive terminal. For a custom

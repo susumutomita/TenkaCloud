@@ -26,14 +26,15 @@ function fixture(present: readonly string[]) {
   return { recorded, run, options: { account, region, environment, run } };
 }
 const original = cloudStackNames(environment, "lite");
-const published = cloudStackNames(environment, "cloud");
+const cloud = cloudStackNames(environment, "cloud");
 describe("physical installation discovery before mutation", () => {
   it.each([
-    { present: [], expected: "lite" },
+    { present: [], expected: "cloud" },
     { present: [original.app, original.backend], expected: "lite" },
-    { present: [published.app, published.backend], expected: "cloud" },
+    { present: [cloud.app, cloud.backend], expected: "cloud" },
     { present: [original.backend], expected: "lite" },
-    { present: [published.app], expected: "cloud" },
+    { present: [cloud.app], expected: "cloud" },
+    { present: [cloud.backend], expected: "cloud" },
   ])("preserves the discovered installation: %j", async ({ present, expected }) => {
     const f = fixture(present);
     expect(await selectCloudInstallation(f.options)).toBe(expected);
@@ -41,7 +42,7 @@ describe("physical installation discovery before mutation", () => {
     expect(f.recorded.every((args) => args[1] === "describe-stacks")).toBe(true);
   });
   it("does not choose one installation when both physical layouts exist", async () => {
-    const f = fixture([original.app, published.backend]);
+    const f = fixture([original.app, cloud.backend]);
     await expect(selectCloudInstallation(f.options)).rejects.toThrow(
       "Both tenkacloud-lite and tenkacloud-cloud",
     );
@@ -50,7 +51,7 @@ describe("physical installation discovery before mutation", () => {
   it.each(["lite", "cloud"])(
     "allows an explicit bounded operator selection: %s",
     async (explicitLayout) => {
-      const f = fixture([original.app, published.app]);
+      const f = fixture([original.app, cloud.app]);
       expect(await selectCloudInstallation({ ...f.options, explicitLayout })).toBe(explicitLayout);
       expect(f.recorded).toEqual([]);
     },

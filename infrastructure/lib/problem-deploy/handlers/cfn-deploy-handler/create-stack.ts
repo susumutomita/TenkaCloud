@@ -54,7 +54,7 @@ import {
   assumeCompetitorRole,
 } from "../shared/assume-competitor-role.js";
 import {
-  assertSeparateCompetitorAccount,
+  assertEventCompetitorAccount,
   UnsupportedHostingAccountError,
 } from "../shared/competitor-account-policy.js";
 import {
@@ -490,11 +490,24 @@ function assertCloudCompetitorTarget(
   detail: DeployCreateRequestedDetail,
   tenkaCloudAccountId: string,
 ): void {
-  assertSeparateCompetitorAccount(detail.awsAccountId);
-  if (detail.awsAccountId === tenkaCloudAccountId) {
+  const acknowledgment = detail.hostingAccountSelfTest;
+  if (
+    acknowledgment &&
+    (acknowledgment.eventId !== detail.eventId ||
+      acknowledgment.tenantId !== detail.tenantId ||
+      acknowledgment.jobId !== detail.jobId ||
+      acknowledgment.awsAccountId !== detail.awsAccountId)
+  ) {
     throw new UnsupportedHostingAccountError(detail.awsAccountId);
   }
-  if (detail.catalogKey || currentCatalogKey()) {
+  assertEventCompetitorAccount(detail.awsAccountId, detail);
+  assertEventCompetitorAccount(detail.awsAccountId, detail, tenkaCloudAccountId);
+  if (
+    detail.catalogKey ||
+    currentCatalogKey() ||
+    detail.awsAccountId === tenkaCloudAccountId ||
+    detail.awsAccountId === process.env.CONTROL_PLANE_ACCOUNT
+  ) {
     const roleAccount = /^arn:[^:]+:iam::(\d{12}):role\/.+$/u.exec(
       detail.competitorRoleArn ?? "",
     )?.[1];

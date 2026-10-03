@@ -1,4 +1,9 @@
 import { expect, test } from "bun:test";
+import {
+  legacyAuditSnapshot,
+  rejectLegacyAuditWrites,
+  seedLegacyAudit,
+} from "./audit-retirement-fixture";
 import { disruptionFixture, START } from "./disruption-fixture";
 import { createOrganizerSession } from "./organizer-fixture";
 
@@ -7,17 +12,13 @@ const one = { scope: "team", targetTeamIds: [] as string[] };
 test("key-only organizers retain disruption attribution and reset revokes new requests", async () => {
   const f = await disruptionFixture({ keyOnly: true });
   try {
-    expect((await f.api("/feature-flags", "PUT", { key: "audit", enabled: true })).status).toBe(
-      200,
-    );
+    seedLegacyAudit(f.store);
+    rejectLegacyAuditWrites(f.store);
+    const legacy = legacyAuditSnapshot(f.store);
     expect((await f.fire()).status).toBe(202);
     const accepted = f.service.disruptions.store.request(f.event.eventId, "fixture-request-1");
     expect(accepted?.firedBy).toBe("host-key");
-    expect(accepted?.acceptedAudit?.actor).toEqual({
-      kind: "host-key",
-      role: "Admin",
-      authMethod: "host-key",
-    });
+    expect(accepted?.acceptedAudit).toBeUndefined();
     expect((await f.fire()).status).toBe(202);
     await f.tick();
     expect(f.aws.commands).toHaveLength(2);
@@ -31,18 +32,19 @@ test("key-only organizers retain disruption attribution and reset revokes new re
     const history = await f.api(`${f.path}/audit`, "GET", undefined, login.body.idToken);
     expect(history.status).toBe(200);
     expect(history.body.items[0]?.firedBy).toBe("host-key");
+    expect(legacyAuditSnapshot(f.store)).toEqual(legacy);
     expect(f.aws.commands).toHaveLength(2);
   } finally {
     await f.close();
   }
 });
 
-test("disruption reads use read permission while requests retain the accepting organizer and operation", async () => {
+test("disruption reads keep role boundaries and accepting organizer attribution", async () => {
   const f = await disruptionFixture();
   try {
-    expect((await f.api("/feature-flags", "PUT", { key: "audit", enabled: true })).status).toBe(
-      200,
-    );
+    seedLegacyAudit(f.store);
+    rejectLegacyAuditWrites(f.store);
+    const legacy = legacyAuditSnapshot(f.store);
     const operator = await createOrganizerSession(
       f.service,
       f.token,
@@ -82,11 +84,14 @@ test("disruption reads use read permission while requests retain the accepting o
       operator.token,
     );
     expect(accepted.status).toBe(202);
-    const acceptedOperation = f.service.disruptions.store.request(
+    const acceptingUser = f.store.organizerByUsername("disruption-operator");
+    if (!acceptingUser) throw new Error("Missing accepting organizer");
+    const acceptedRequest = f.service.disruptions.store.request(
       f.event.eventId,
       "operator-audited-request",
-    )?.acceptedAudit;
-    expect(acceptedOperation?.actor).toMatchObject({ kind: "organizer", role: "Operator" });
+    );
+    expect(acceptedRequest?.firedBy).toBe(acceptingUser.id);
+    expect(acceptedRequest?.acceptedAudit).toBeUndefined();
     await f.tick();
     expect(f.rows()[0]?.status).toBe("inject_unknown");
     expect(
@@ -99,115 +104,84 @@ test("disruption reads use read permission while requests retain the accepting o
         )
       ).status,
     ).toBe(200);
-    if (acceptedOperation?.actor.kind !== "organizer") throw new Error("Missing accepting actor");
     expect(
-      (await f.api(`/host/users/${acceptedOperation.actor.userId}`, "PATCH", { role: "Viewer" }))
-        .status,
+      (await f.api(`/host/users/${acceptingUser.id}`, "PATCH", { role: "Viewer" })).status,
     ).toBe(200);
     f.aws.invisible = false;
     await f.tick();
-    const records = (await f.api("/admin/audit-log")).body.items as {
-      action: string;
-      actor: string;
-      operationId: string;
-      outcome: string;
-      phase: string;
-    }[];
-    const disruption = records.filter(
-      (row) =>
-        (row.action === "disruption.requested" || row.action === "disruption.operation") &&
-        row.outcome !== "denied",
-    );
-    expect(
-      records.some((row) => row.action === "disruption.requested" && row.outcome === "denied"),
-    ).toBe(true);
-    expect(
-      disruption.some((row) => row.action === "disruption.requested" && row.outcome === "accepted"),
-    ).toBe(true);
-    expect(
-      disruption.some((row) => row.action === "disruption.operation" && row.outcome === "unknown"),
-    ).toBe(true);
-    expect(
-      disruption.some(
-        (row) => row.action === "disruption.operation" && row.outcome === "succeeded",
-      ),
-    ).toBe(true);
-    expect(disruption.every((row) => row.operationId === acceptedOperation?.operationId)).toBe(
-      true,
-    );
-    expect(
-      disruption.every(
-        (row) =>
-          row.actor ===
-          (acceptedOperation?.actor.kind === "organizer" ? acceptedOperation.actor.userId : ""),
-      ),
-    ).toBe(true);
-    const afterCancel = (await f.api("/admin/audit-log")).body.items as {
-      action: string;
-      actor: string;
-      outcome: string;
-    }[];
-    expect(
-      afterCancel.some(
-        (row) =>
-          row.action === "disruption.cancelled" &&
-          row.outcome === "succeeded" &&
-          row.actor ===
-            (acceptedOperation?.actor.kind === "organizer" ? acceptedOperation.actor.userId : ""),
-      ),
-    ).toBe(true);
+    expect(f.rows()[0]?.status).toBe("revert_due");
+    const history = (await f.api(`${f.path}/audit`)).body;
+    expect(history.items[0]?.firedBy).toBe(acceptingUser.id);
+    expect(history.items[0]?.cancelled).toBe(true);
+    expect((await f.api("/admin/audit-log")).status).toBe(404);
+    expect(legacyAuditSnapshot(f.store)).toEqual(legacy);
   } finally {
     await f.close();
   }
 });
 
-test("audit storage failure prevents disruption dispatch, while optional result records never block runtime state", async () => {
+test("disruption acceptance stays atomic and retired audit storage cannot block dispatch or cleanup", async () => {
   const f = await disruptionFixture();
   try {
-    expect((await f.api("/feature-flags", "PUT", { key: "audit", enabled: true })).status).toBe(
-      200,
-    );
+    seedLegacyAudit(f.store);
+    rejectLegacyAuditWrites(f.store);
+    const legacy = legacyAuditSnapshot(f.store);
     f.store.database.exec(
-      "CREATE TRIGGER reject_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(FAIL, 'audit rejected'); END;",
+      "CREATE TRIGGER reject_execution BEFORE INSERT ON host_disruption_executions BEGIN SELECT RAISE(ABORT, 'test execution persistence failure'); END;",
     );
-    expect((await f.fire()).status).toBe(503);
+    expect((await f.fire()).status).toBe(500);
     expect(f.rows()).toHaveLength(0);
+    expect(f.service.disruptions.store.requests(f.event.eventId)).toHaveLength(0);
     expect(f.aws.commands).toHaveLength(0);
-    f.store.database.exec("DROP TRIGGER reject_audit");
+    f.store.database.exec("DROP TRIGGER reject_execution");
     expect((await f.fire()).status).toBe(202);
-    f.store.database.exec(
-      "CREATE TRIGGER reject_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(FAIL, 'audit rejected'); END;",
-    );
-    expect((await f.api(`${f.path}/recurring/fixture-request-1/cancel`, "POST", {})).status).toBe(
-      503,
-    );
-    expect(
-      f.service.disruptions.store.request(f.event.eventId, "fixture-request-1")?.cancelled,
-    ).toBe(false);
     await f.tick();
     expect(f.rows().every((row) => row.status === "revert_due")).toBe(true);
     expect(f.aws.commands).toHaveLength(2);
-    f.store.database.exec("DROP TRIGGER reject_audit");
-    const collection = (await f.api("/admin/audit-log")).body.collection as { missed: number };
-    expect(collection.missed).toBeGreaterThan(0);
+    expect((await f.api(`${f.path}/recurring/fixture-request-1/cancel`, "POST", {})).status).toBe(
+      200,
+    );
+    expect(
+      f.service.disruptions.store.request(f.event.eventId, "fixture-request-1")?.cancelled,
+    ).toBe(true);
+    f.advance(600_000);
+    await f.tick();
+    expect(f.rows().every((row) => row.status === "revert_command_completed")).toBe(true);
+    expect(legacyAuditSnapshot(f.store)).toEqual(legacy);
   } finally {
     await f.close();
   }
 });
 
-test("requests accepted with audit off never gain result records when audit is enabled later", async () => {
+test("old accepted audit metadata is preserved but never owns disruption recovery", async () => {
   const f = await disruptionFixture();
   try {
+    seedLegacyAudit(f.store);
+    rejectLegacyAuditWrites(f.store);
+    const legacy = legacyAuditSnapshot(f.store);
     expect((await f.fire()).status).toBe(202);
-    expect(
-      f.service.disruptions.store.request(f.event.eventId, "fixture-request-1")?.acceptedAudit,
-    ).toBeUndefined();
-    expect((await f.api("/feature-flags", "PUT", { key: "audit", enabled: true })).status).toBe(
+    const request = f.service.disruptions.store.request(f.event.eventId, "fixture-request-1");
+    if (!request) throw new Error("Missing request");
+    expect(request.acceptedAudit).toBeUndefined();
+    const retained = {
+      operationId: "00000000-0000-4000-8000-000000000003",
+      actor: { kind: "host-key", role: "Admin", authMethod: "host-key" },
+      action: "disruption.requested",
+      resource: { kind: "event", id: f.event.eventId },
+    };
+    f.service.disruptions.store.putRequest({ ...request, acceptedAudit: retained });
+    await f.tick();
+    await f.restart();
+    expect((await f.api(`${f.path}/recurring/fixture-request-1/cancel`, "POST", {})).status).toBe(
       200,
     );
+    f.advance(600_000);
     await f.tick();
-    const records = (await f.api("/admin/audit-log")).body.items as { action: string }[];
-    expect(records.filter((row) => row.action.startsWith("disruption."))).toEqual([]);
+    expect(f.rows().every((row) => row.status === "revert_command_completed")).toBe(true);
+    expect(
+      f.service.disruptions.store.request(f.event.eventId, "fixture-request-1")?.acceptedAudit,
+    ).toEqual(retained);
+    expect(legacyAuditSnapshot(f.store)).toEqual(legacy);
   } finally {
     await f.close();
   }

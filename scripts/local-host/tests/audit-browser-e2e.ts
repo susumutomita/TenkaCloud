@@ -8,6 +8,11 @@ import { parseGatewayPorts } from "../gateway-ports";
 import { type RunningLocalHost, startLocalHost } from "../server";
 import type { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
+import {
+  legacyAuditSnapshot,
+  rejectLegacyAuditWrites,
+  seedLegacyAudit,
+} from "./audit-retirement-fixture";
 import { ExerciseFixture } from "./exercise-fixture";
 import { fillOrganizerKey, organizerToken, signInOrganizer } from "./organizer-login";
 
@@ -27,8 +32,9 @@ async function main() {
   let host: RunningLocalHost | undefined;
   let store: HostStore | undefined;
   const errors: string[] = [];
-  try {
-    host = await startLocalHost(
+  let seeded = false;
+  const start = () =>
+    startLocalHost(
       root,
       {
         dataDirectory: data,
@@ -39,14 +45,23 @@ async function main() {
       },
       (_directory, database) => {
         store = database;
+        if (!seeded) {
+          seedLegacyAudit(store);
+          rejectLegacyAuditWrites(store);
+          seeded = true;
+        }
         return new ExerciseFixture((path) => new Database(path));
       },
       () => undefined,
     );
+  try {
+    host = await start();
+    assert.ok(store);
+    const legacy = legacyAuditSnapshot(store);
     const key = host.organizerKey;
     assert.ok(key, "The fresh host provides its organizer key.");
     browser = await chromium.launch({ executablePath: chromiumPath() });
-    const context = await browser.newContext({ locale: "en-US", acceptDownloads: true });
+    const context = await browser.newContext({ locale: "en-US" });
     page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
     await signInOrganizer(page, { admin: host.admin.origin, key });
@@ -60,39 +75,20 @@ async function main() {
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-    assert.equal(
-      (await request("/feature-flags", "PUT", { key: "audit", enabled: true })).status,
-      200,
-    );
+    for (const enabled of [true, false])
+      assert.equal((await request("/feature-flags", "PUT", { key: "audit", enabled })).status, 400);
     await signInOrganizer(page, { admin: host.admin.origin, key });
-    assert.ok(store);
-    store.database.exec(
-      "CREATE TRIGGER fail_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(ABORT, 'unavailable'); END;",
-    );
-    assert.equal(
-      (await request("/feature-flags", "PUT", { key: "audit", enabled: false })).status,
-      503,
-    );
-    store.database.exec("DROP TRIGGER fail_audit");
-    assert.equal(store.featureFlags().audit, true);
-    const records = await request("/admin/audit-log");
-    assert.equal(records.status, 200);
-    const history = await records.text();
-    assert.ok(history.includes("organizer.login"));
-    assert.ok(!history.includes(key));
-    assert.ok(!history.includes(host.masterKey));
-    const exported = await request("/admin/audit-log/export");
-    assert.equal(exported.status, 200);
-    const csv = await exported.text();
-    assert.ok(csv.includes("organizer.login"));
-    assert.ok(csv.includes("host-key"));
-    assert.ok(!csv.includes(key));
-    assert.ok(!csv.includes(host.masterKey));
-    assert.equal(
-      (await request("/feature-flags", "PUT", { key: "audit", enabled: false })).status,
-      200,
-    );
-    assert.ok((await (await request("/admin/audit-log")).text()).includes("organizer.login"));
+    assert.equal(store.featureFlags().audit, false);
+    for (const path of ["/admin/audit-log", "/admin/audit-log/export"])
+      assert.equal((await request(path)).status, 404);
+    const created = await request("/events", "POST", {
+      name: "Audit retirement",
+      teams: [{ internalSlug: "one" }],
+      problems: [{ problemId: "sqli-demo" }],
+    });
+    assert.equal(created.status, 201);
+    const { eventId } = (await created.json()) as { eventId: string };
+    assert.deepEqual(legacyAuditSnapshot(store), legacy);
     for (const path of ["/audit-log", "/settings"]) {
       await page.goto(`${host.admin.origin}${path}`);
       await fillOrganizerKey(page, key);
@@ -114,8 +110,13 @@ async function main() {
       path: join(artifacts, "audit-ui-removed.png"),
       fullPage: true,
     });
+    await host.stop();
+    host = await start();
+    await signInOrganizer(page, { admin: host.admin.origin, key });
+    assert.equal(store.event(eventId).name, "Audit retirement");
+    assert.deepEqual(legacyAuditSnapshot(store), legacy);
     console.log(
-      "PASS hidden local audit routes with retained key-login history, secret exclusion, fail-closed settings and access boundaries (real HTTP/SQLite).",
+      "PASS retired local audit UI/API/collection with unchanged legacy history, ordinary event creation, key login and restart (real HTTP/SQLite).",
     );
   } catch (error) {
     mkdirSync(artifacts, { recursive: true });

@@ -5,7 +5,6 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
-import { auditLogEnabledEnv } from "./audit-log-env.js";
 import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
@@ -28,9 +27,7 @@ export interface CompetitorAccountsApiLambdaProps {
    * Issue #950: admin 操作 audit log 用 DDB Table。 deploy-api-lambda と同じ。
    */
   readonly adminAuditLogTable?: Table;
-  /**
-   * Issue #2311: 監査ログ feature flag。false で `AUDIT_LOG_ENABLED="false"` を注入し no-op 化。
-   */
+  /** @deprecated Accepted for stack compatibility; dedicated audit collection is removed. */
   readonly auditLogEnabled?: boolean;
   /**
    * Issue #2290: control-plane data backend (dynamodb|turso)。監査 Lambda 群と
@@ -100,8 +97,6 @@ export class CompetitorAccountsApiLambda extends Construct {
         TENKACLOUD_ACCOUNT_ID: stack.account,
         // Issue #950: audit log table 名 (未配線なら空文字)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
-        // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
-        ...auditLogEnabledEnv(props.auditLogEnabled),
         // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
         ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
         // [Issue #2442]: repository seam の Turso executor 接続情報 (default dynamodb では
@@ -118,7 +113,6 @@ export class CompetitorAccountsApiLambda extends Construct {
     // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.competitorAccountsTable?.grantReadWriteData(this.fn);
     // Issue #950: admin audit log は write-only。
-    props.adminAuditLogTable?.grantWriteData(this.fn);
 
     // 2. SSM Parameter Store SecureString — tenant の path prefix で絞り込み。
     //    `/{env}/tenants/*/external-id` (= tenantId は wildcard、env は固定)。

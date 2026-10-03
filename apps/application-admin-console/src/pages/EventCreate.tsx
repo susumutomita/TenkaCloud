@@ -12,6 +12,7 @@ import { canMutateTenant, useApiClient } from "../api/client";
 import {
   bulkDeployEvent,
   type CoordinationCapacityWarning,
+  type CreateEventRequest,
   type CreateEventResponse,
   createEvent,
 } from "../api/events-client";
@@ -25,6 +26,10 @@ import { EventCreateAccountsAlerts } from "./event-create/EventCreateAccountsAle
 import { EventCreateBasicInfoSection } from "./event-create/EventCreateBasicInfoSection";
 import { EventCreateDeployPromptModal } from "./event-create/EventCreateDeployPromptModal";
 import { EventCreateProblemsetSection } from "./event-create/EventCreateProblemsetSection";
+import {
+  EventCreateSelfTestModal,
+  hostingAccountRequiringConsent,
+} from "./event-create/EventCreateSelfTestModal";
 import { EventCreateTeamsSection } from "./event-create/EventCreateTeamsSection";
 import {
   buildVerifiedAccountOption,
@@ -94,6 +99,18 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const t = useT();
   const creation = useRef(new PendingOperation());
   const deployment = useRef(new PendingOperation());
+  const submissionInFlight = useRef(false);
+  const selfTestConsent = useRef<
+    | {
+        body: string;
+        acknowledgment: NonNullable<CreateEventRequest["hostingAccountSelfTest"]>;
+      }
+    | undefined
+  >(undefined);
+  const [selfTestPrompt, setSelfTestPrompt] = useState<{
+    body: CreateEventRequest;
+    awsAccountId: string;
+  } | null>(null);
 
   // 問題 option 化 (#1414 の disabled 出し分け) と検索 / filter (#1776) は
   // EventCreateProblemsetSection 側の責務。 ここは catalog 全件を渡すだけ。
@@ -256,36 +273,45 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     }
   }, [deployPromptTarget, config]);
 
-  const handleSubmit = async () => {
-    // submit button は disabled={!canSubmit} なので canSubmit 偽では発火し得ず、 canSubmit 真なら
-    // apiClient は非 null (canSubmit に含む)。 = この guard の return は UI 経路では不到達 (防御)。
-    /* v8 ignore next */
+  const handleSubmit = () => {
     if (!canSubmit || !apiClient) return;
+    const body: CreateEventRequest = {
+      name,
+      teams: teamRows.map((tr) => ({
+        internalSlug: tr.internalSlug,
+        ...(providerMode.kind === "aws" ||
+        (providerMode.kind === "composite" && providerMode.providers.includes("aws"))
+          ? { awsAccountId: tr.awsAccountId }
+          : {}),
+        ...(providerMode.kind === "nonAws" ||
+        (providerMode.kind === "composite" && providerMode.providers.some((p) => p !== "aws"))
+          ? { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug }
+          : {}),
+        // [Issue #3173] Omitted when blank, so a team that follows the
+        // problem's region stores nothing and every existing event is
+        // unaffected.
+        ...(tr.region ? { region: tr.region } : {}),
+      })),
+      problems: problemRows.map((r) => ({
+        problemId: r.problemId,
+        defaultRegion: r.defaultRegion,
+      })),
+    };
+    const consent = selfTestConsent.current;
+    void submitEvent(
+      consent?.body === JSON.stringify(body)
+        ? { ...body, hostingAccountSelfTest: consent.acknowledgment }
+        : body,
+    );
+  };
+
+  const submitEvent = async (body: CreateEventRequest) => {
+    if (!apiClient || submissionInFlight.current) return;
+    submissionInFlight.current = true;
     setSubmitting(true);
     setError(null);
+    if (body.hostingAccountSelfTest) setSelfTestPrompt(null);
     try {
-      const body = {
-        name,
-        teams: teamRows.map((tr) => ({
-          internalSlug: tr.internalSlug,
-          ...(providerMode.kind === "aws" ||
-          (providerMode.kind === "composite" && providerMode.providers.includes("aws"))
-            ? { awsAccountId: tr.awsAccountId }
-            : {}),
-          ...(providerMode.kind === "nonAws" ||
-          (providerMode.kind === "composite" && providerMode.providers.some((p) => p !== "aws"))
-            ? { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug }
-            : {}),
-          // [Issue #3173] Omitted when blank, so a team that follows the
-          // problem's region stores nothing and every existing event is
-          // unaffected.
-          ...(tr.region ? { region: tr.region } : {}),
-        })),
-        problems: problemRows.map((r) => ({
-          problemId: r.problemId,
-          defaultRegion: r.defaultRegion,
-        })),
-      };
       const operationKey = creation.current.keyFor(`${config.apiBaseUrl}/events`, body);
       const res = await createEvent(apiClient, body, operationKey);
       creation.current.acknowledge(operationKey);
@@ -296,10 +322,26 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         warnings: res.warnings ?? [],
       });
     } catch (err) {
-      setError(toErrorMessage(err));
+      const account = hostingAccountRequiringConsent(err);
+      if (account && !body.hostingAccountSelfTest) {
+        setSelfTestPrompt({ body, awsAccountId: account });
+      } else {
+        setError(toErrorMessage(err));
+      }
     } finally {
+      submissionInFlight.current = false;
       setSubmitting(false);
     }
+  };
+
+  const confirmSelfTest = () => {
+    if (!selfTestPrompt) return;
+    const acknowledgment = {
+      awsAccountId: selfTestPrompt.awsAccountId,
+      riskVersion: "hosting-account-self-test-v1" as const,
+    };
+    selfTestConsent.current = { body: JSON.stringify(selfTestPrompt.body), acknowledgment };
+    void submitEvent({ ...selfTestPrompt.body, hostingAccountSelfTest: acknowledgment });
   };
 
   const handleDeployNow = async () => {
@@ -421,6 +463,15 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           </Box>
         </SpaceBetween>
       </Form>
+
+      {selfTestPrompt && (
+        <EventCreateSelfTestModal
+          visible
+          awsAccountId={selfTestPrompt.awsAccountId}
+          onCancel={() => setSelfTestPrompt(null)}
+          onConfirm={confirmSelfTest}
+        />
+      )}
 
       <EventCreateDeployPromptModal
         visible={deployPromptTarget !== null}

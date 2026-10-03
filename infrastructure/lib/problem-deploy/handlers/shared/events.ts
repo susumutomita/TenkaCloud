@@ -1,6 +1,7 @@
 import type { EventBridgeClient, PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { z } from "zod";
+import { HostingAccountSelfTestDispatchSchema } from "./competitor-account-policy.js";
 import { logDeployTrace } from "./trace-log.js";
 
 /**
@@ -100,6 +101,9 @@ function isProblemDir(value: string): boolean {
  * `teamSlug` は同 script の `TEAM_SLUG` env として渡る (UI の teamName を slugify したもの)。
  */
 export const DeployCreateRequestedDetailSchema = z.object({
+  /** Server-stored event consent snapshot; never accepted by a public deploy request. */
+  hostingAccountSelfTest: HostingAccountSelfTestDispatchSchema.optional(),
+  eventId: z.string().min(1).optional(),
   catalogKey: z
     .string()
     .regex(/^catalogs\/[a-f0-9]{64}\.json$/u)

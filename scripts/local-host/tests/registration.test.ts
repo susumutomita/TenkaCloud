@@ -2,6 +2,11 @@ import { expect, test } from "bun:test";
 import type { RegistrationProgress } from "@tenkacloud/problem-sdk/internal/event-registration";
 import { randomToken } from "../auth";
 import { digest } from "../store";
+import {
+  legacyAuditSnapshot,
+  rejectLegacyAuditWrites,
+  seedLegacyAudit,
+} from "./audit-retirement-fixture";
 import { type RegistrationSummary, registrationFixture } from "./registration-fixture";
 
 function required<T>(value: T | null | undefined): T {
@@ -296,94 +301,67 @@ test("configuration validates event ownership and retained claims; malformed req
   }
 });
 
-test("audit hooks run once per successful claim in the same SQLite transaction", async () => {
+test("registration claims roll back failed persistence and retries allocate exactly once", async () => {
   const f = await registrationFixture();
   try {
     const event = await f.create(1);
     await f.flag(true);
-    const invitation = required((await f.open(event)).body.invitation),
-      receipt = randomToken();
-    f.store.database.exec("CREATE TABLE registration_test_audit(body TEXT NOT NULL) STRICT");
-    f.service.registration.onMutation = (mutation) => {
-      f.store
-        .statement("INSERT INTO registration_test_audit VALUES (?)")
-        .run(JSON.stringify(mutation));
-      throw new Error("test rollback");
-    };
+    const invitation = required((await f.open(event)).body.invitation);
+    const receipt = randomToken();
+    f.store.database.exec(
+      "CREATE TRIGGER reject_claim AFTER INSERT ON host_registration_claims BEGIN SELECT RAISE(ABORT, 'test claim persistence failure'); END;",
+    );
     expect((await f.public(event.eventId, "claim", invitation, receipt)).status).toBe(500);
-    expect(f.errors).toHaveLength(1);
-    expect(f.errors[0]).toEqual(new Error("test rollback"));
-    expect(f.store.statement("SELECT * FROM registration_test_audit").all()).toHaveLength(0);
     expect(
       (await f.api<RegistrationSummary>("admin", `/events/${event.eventId}/registration`)).body
         .claimed,
     ).toBe(0);
-    f.service.registration.onMutation = (mutation) => {
-      f.store
-        .statement("INSERT INTO registration_test_audit VALUES (?)")
-        .run(JSON.stringify(mutation));
-    };
+    f.store.database.exec("DROP TRIGGER reject_claim");
     expect((await f.public(event.eventId, "claim", invitation, receipt)).status).toBe(200);
     expect((await f.public(event.eventId, "claim", invitation, receipt)).status).toBe(200);
-    const audit = f.store.statement("SELECT * FROM registration_test_audit").all();
-    expect(audit).toHaveLength(1);
-    expect(JSON.stringify(audit)).not.toContain(receipt);
-    expect(JSON.stringify(audit)).not.toContain(invitation);
+    expect(
+      f.store.statement("SELECT COUNT(*) AS count FROM host_registration_claims").get(),
+    ).toEqual({ count: 1 });
+    const claims = JSON.stringify(
+      f.store.statement("SELECT * FROM host_registration_claims").all(),
+    );
+    expect(claims).not.toContain(receipt);
+    expect(claims).not.toContain(invitation);
   } finally {
     await f.close();
   }
 });
 
-test("registration settings and public claims produce one durable audit record and roll back together", async () => {
-  const fixture = await registrationFixture();
+test("registration settings and claims work with retired audit rows unchanged across restart", async () => {
+  const f = await registrationFixture();
   try {
-    const event = await fixture.create(2);
-    expect(
-      (
-        await fixture.api("admin", "/feature-flags", "PUT", {
-          key: "audit",
-          enabled: true,
-        })
-      ).status,
-    ).toBe(200);
-    expect((await fixture.flag(true)).status).toBe(200);
-    const opened = await fixture.open(event);
+    seedLegacyAudit(f.store);
+    rejectLegacyAuditWrites(f.store);
+    const legacy = legacyAuditSnapshot(f.store);
+    const event = await f.create(2);
+    expect((await f.flag(true)).status).toBe(200);
+    const opened = await f.open(event);
     expect(opened.status).toBe(200);
     const invitation = required(opened.body.invitation);
     const receipt = randomToken();
-    expect((await fixture.public(event.eventId, "claim", invitation, receipt)).status).toBe(200);
-    expect((await fixture.public(event.eventId, "claim", invitation, receipt)).status).toBe(200);
-
-    const audit = await fixture.api<{
-      items: { action: string; actor: string; actorRole?: string; outcome: string }[];
-    }>("admin", "/admin/audit-log");
-    expect(audit.status).toBe(200);
-    expect(audit.body.items.filter((item) => item.action === "registration.updated")).toEqual([
-      expect.objectContaining({ actorRole: "Admin", outcome: "succeeded" }),
-    ]);
-    expect(audit.body.items.filter((item) => item.action === "registration.claimed")).toEqual([
-      expect.objectContaining({ actor: "anonymous", outcome: "succeeded" }),
-    ]);
-    const stored = JSON.stringify(
-      fixture.store.statement("SELECT body FROM host_audit_records").all(),
-    );
-    for (const secret of [invitation, receipt, required(event.teams[0]).teamLoginKey])
-      expect(stored).not.toContain(secret);
-
-    fixture.store.database.exec(
-      "CREATE TRIGGER fail_registration_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(ABORT, 'unavailable'); END;",
-    );
-    const closed = await fixture.api("admin", `/events/${event.eventId}/registration`, "PUT", {
-      enabled: false,
-    });
-    expect(closed.status).toBe(503);
+    expect((await f.public(event.eventId, "claim", invitation, receipt)).status).toBe(200);
+    expect((await f.public(event.eventId, "claim", invitation, receipt)).status).toBe(200);
     expect(
-      (await fixture.api<RegistrationSummary>("admin", `/events/${event.eventId}/registration`))
-        .body.enabled,
-    ).toBe(true);
-    fixture.store.database.exec("DROP TRIGGER fail_registration_audit");
+      (await f.api("admin", `/events/${event.eventId}/registration`, "PUT", { enabled: false }))
+        .status,
+    ).toBe(200);
+    expect(
+      (await f.api<RegistrationSummary>("admin", `/events/${event.eventId}/registration`)).body
+        .enabled,
+    ).toBe(false);
+    await f.restart();
+    expect(
+      (await f.api<RegistrationSummary>("admin", `/events/${event.eventId}/registration`)).body
+        .claimed,
+    ).toBe(1);
+    expect(legacyAuditSnapshot(f.store)).toEqual(legacy);
   } finally {
-    await fixture.close();
+    await f.close();
   }
 });
 

@@ -83,3 +83,10 @@ IAM ロールはアカウント全体のリソースなので、競技者 bootst
 [`cloud-pipeline.yaml`](./cloud-pipeline.yaml) は、運営側のクラウド基盤を配置する入口です。
 競技者アカウントの初期設定とは別に、運営側では標準の `CDKToolkit` を使います。
 [基盤の導入手順](../README.md)と [標準 CDK bootstrap](../BOOTSTRAP-IAM.md)を参照してください。
+
+新規の本体 stack は対応する source 版から `tenkacloud-cloud` 系の名前で作成され、
+既存の `tenkacloud-lite` 系は自動検出して同じ名前で扱います。launcher の実行 source は
+テンプレートの固定 commit または明示指定した ref で決まるため、その版の動作を確認してください。
+launcher 自体の CodeBuild project・IAM role・log group の `lite` を含む物理名と、
+既存の launcher stack 名は、更新時の resource 置換を避けるため維持します。
+本体の互換性は名前だけで判定せず、公開 cloud-v1 の上書き更新を拒否します。

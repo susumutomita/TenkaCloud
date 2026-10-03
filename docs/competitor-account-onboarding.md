@@ -8,9 +8,11 @@ Use the existing **Competitor Accounts** screen and
 - **No Organizations, or accounts outside the organization:** each account owner creates
   an individual CloudFormation stack using the same template and parameters
 
-AWS resource exercises require an account separate from the TenkaCloud hosting
-account. A hosting-account target is rejected before resource mutation with setup
-guidance. Register and verify each competitor AWS account once. Teams can use
+AWS resource exercises require a verified competitor account. For your own
+self-test, the event creation flow accepts explicit hosting-account risk
+acknowledgment before creating an event or issuing keys. Problem and participant
+roles may reach hosting configuration and data; using another region does not
+provide isolation. Use a separate account when third parties participate. Register and verify each competitor AWS account once. Teams can use
 separate competitor accounts or share one with different problem deployment regions. The named IAM bootstrap role is global:
 **create it in only one bootstrap region per account**, regardless of the regions
 chosen for teams. Deploying the same named role into a second region causes a name
@@ -177,8 +179,16 @@ with different regions still shares global IAM and other account-wide services;
 it does not establish a security boundary for arbitrary problems. Check each
 problem's participant permissions. The restored participant API supports Console
 and CLI access through the problem's separate participant role. The platform
-hosting account is unsupported and unverified: both resource deployment and
-participant STS reject it. Different-region team allocation is supported but does
+hosting account can be selected for your own self-test only after explicit risk
+acknowledgment in the event creation dialog, before the event and login keys are
+created. Consent is persisted per event and participant Console/CLI issuance
+rechecks it. A verified competitor role and ExternalId remain mandatory; there
+is no fallback to hosting credentials. Problem and participant roles may access
+or change hosting configuration and data; consent does not provide isolation.
+Use a separate competitor account when third parties participate. An already
+blocked event needs a newly acknowledged self-test event; no existing event is
+automatically opted in. Standalone and composite deployments without event
+membership still reject hosting-account targets. Different-region team allocation is supported but does
 not prove full IAM isolation. The catalog IAM audit still has unresolved findings;
 review the selected problem rather than assuming every policy is least privilege.
 

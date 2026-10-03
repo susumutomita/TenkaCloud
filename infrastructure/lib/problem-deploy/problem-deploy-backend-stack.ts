@@ -121,12 +121,7 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * no `BucketDeployment` = CFn テンプレ byte 互換。
    */
   readonly packAssets?: readonly PackAsset[];
-  /**
-   * Issue #2311: 監査ログ出力を on/off する。default (未指定 / true) は
-   * 従来どおり監査 Lambda 群 (deploy-api / event-api / competitor-accounts-api /
-   * system-audit-writer) が `writeAuditEvent` する。false のとき各 Lambda env に
-   * `AUDIT_LOG_ENABLED="false"` を注入し no-op 化する (= 書き込みコスト節約)。
-   */
+  /** @deprecated Accepted for legacy stack inputs; audit collection cannot be re-enabled. */
   readonly auditLogEnabled?: boolean;
   /**
    * Issue #2290: control-plane data backend の選択 (`dynamodb` | `turso` | `sql`)。

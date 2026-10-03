@@ -41,13 +41,14 @@ team key; deployment credentials are never participant credentials.
 
 ## Existing installations and resource identity
 
-New installations preserve the original physical names: `tenkacloud-lite` and
-`tenkacloud-lite-problem-deploy` in development, with `-<environment>` appended in
-other environments. The CLI discovers the Lite and cloud name pairs in the selected
-account/region. An existing single pair is selected; a new installation defaults
-to Lite names. If both pairs exist, the CLI stops until the operator explicitly
-selects `TENKACLOUD_STACK_LAYOUT=lite` or `cloud`. That choice targets one installation;
-it does not merge, rename or migrate the other.
+New installations use `tenkacloud-cloud` and `tenkacloud-cloud-problem-deploy` in
+development, with `-<environment>` appended in other environments. The CLI discovers
+both Lite and cloud name pairs in the selected account/region before choosing a
+target. Existing `tenkacloud-lite` stacks keep their names, including installations
+created by earlier restored releases. A partial or failed stack also counts as an
+existing installation, even without Outputs. If both pairs exist, the CLI stops
+until the operator explicitly selects `TENKACLOUD_STACK_LAYOUT=lite` or `cloud`.
+That choice targets one installation; it does not merge, rename or migrate the other.
 
 Restored stacks publish `CloudComposition=lite-baseline-v1`. Before adopting an
 original Lite stack, the CLI verifies its ownership tags and template's persistent
@@ -56,9 +57,11 @@ incompatible templates stop the update before bootstrap or source upload.
 
 Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use `CLOUD_ARGS="--confirm-no-active-events"` for a noninteractive upgrade; generic `--yes` cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic `make deploy` behavior.
 
-The separately published **cloud-v1** stack layout is incompatible with this
-restoration. Stack updates are refused before mutation. Keep that
-installation on its matching release and back up/export its data; use a separate
+The separately published **cloud-v1** backend also used `tenkacloud-cloud` names,
+but its resource/database contract is incompatible with this restoration. Names
+alone do not establish compatibility: template resources and composition/provider
+Outputs must pass the existing checks. Its stack updates are refused before
+mutation. Keep that installation on its matching release and back up/export its data; use a separate
 ENV and, for Turso, a separate database for a fresh restored installation. Existing
 platform destroy/recovery remains available after its ownership checks. There is
 no automatic database migration, backend conversion or resource adoption by name.

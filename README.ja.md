@@ -94,7 +94,7 @@ Codespace を作成し、依存関係の準備が終わったらターミナル�
 
 クラウド開催は SBT を使わない旧 Lite の処理を再利用し、Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカルで実行します。この checkout は**統合検証中の候補版**です。実 AWS での大会全体のリハーサルと、Battle の一斉アクセス性能には検証が残っています。環境ファイルの `CDK_PARAM_CONTROL_DATA_BACKEND` で `turso` または `dynamodb` を選択します。Turso には DB URL と既存の SSM トークンパラメーターが必要です。[DB 設定](./infrastructure/README.md#database-selection)を参照してください。
 
-物理 stack 名は旧 `tenkacloud-lite` 系を維持し、CLI が Lite / cloud の既存環境を検出します。両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` を明示します。公開 cloud-v1 の DB・resource 構成は自動移行しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。現行の 9 template は `TemplateBody` 上限を超えるため、全 AWS 問題の配置を保証しません。[互換性と制限](./infrastructure/README.md#existing-installations-and-resource-identity)を確認してください。
+新規環境の stack 名は `tenkacloud-cloud` 系とし、既存の `tenkacloud-lite` 系 stack は名前を維持します。CLI が Lite / cloud の既存環境を検出します。両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` を明示します。公開 cloud-v1 の DB・resource 構成は自動移行しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。現行の 9 template は `TemplateBody` 上限を超えるため、全 AWS 問題の配置を保証しません。[互換性と制限](./infrastructure/README.md#existing-installations-and-resource-identity)を確認してください。
 
 AWS CLI のプロファイル、アカウント、リージョン、開催者のメールアドレスを用意します。`infrastructure/environments/{development,staging,production}/.env.example` を、同じディレクトリの `.env` がなければコピーして編集します。
 
@@ -113,7 +113,7 @@ AWS コンソールから配置する場合は、[クラウド pipeline](./infra
 
 destroy は承認後、CloudFormation の所有情報を検証した S3 バケットのうち、配置済みの削除ポリシーが `Delete` のものだけを空にします。オブジェクトのバージョンと削除マーカーも削除してから、スタックを撤収します。通常の destroy は `Retain` ポリシーのバケットと内容を残します。明示した `destroy-all` は保持対象の内容も空にしますが、`Retain` ポリシーのバケット本体は残ります。呼び出し元には、CloudFormation の実行権限とは別に[直接 S3 を清掃する権限](./infrastructure/BOOTSTRAP-IAM.md#direct-deployment-and-cleanup-permissions)が必要です。
 
-AWS 資源を使う問題には、開催基盤とは別の検証済み競技者アカウントが必要です。hosting account は資源変更前に拒否します。同じ競技者アカウントの別 region に複数チームを配置できますが、global IAM は共有され、問題ごとの権限確認が必要です。Cryptography Battle は得点を奪う機能を無効にした native 版なら競技者アカウント不要で、有効にすると AWS 版を維持します。
+AWS 資源を使う問題には検証済みの競技者アカウントが必要です。自分で行う自己検証では、イベント作成とキー発行の前にリスクを明示的に確認すると、開催用アカウントを選択できます。問題用・参加者用ロールが開催基盤の設定やデータへ到達する可能性があり、別リージョンでも隔離されません。第三者が参加する本格開催には別アカウントを推奨します。同じ競技者アカウントの別 region に複数チームを配置できますが、global IAM は共有され、問題ごとの権限確認が必要です。Cryptography Battle は得点を奪う機能を無効にした native 版なら競技者アカウント不要で、有効にすると AWS 版を維持します。
 
 catalog pin のない旧 Lite 環境は、resource / schema の検査後、bootstrap・source upload・配置の前に、進行中の大会がないことを初回だけ明示確認します。開催中の大会は完了まで配置済みの版で継続してください。大会が残っていないことを運用者が確認してから対話で承認し、非対話の更新には `CLOUD_ARGS="--confirm-no-active-events"` を使います。通常の `--yes` ではこの確認を省略できません。legacy catalog key だけでは安全な更新を証明できず、過去のデータも自動移行しません。新規環境と復旧済み環境は通常の `make deploy` で自動配置します。
 

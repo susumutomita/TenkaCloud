@@ -107,17 +107,18 @@ test("key-only login uses a separate hashed key and disables account and SAML ro
       ),
     ).toBe(404);
     expect(
-      (await f.call("PUT", "/feature-flags", { key: "audit", enabled: true }, session.idToken))
-        .status,
-    ).toBe(200);
+      await rejectedStatus(
+        f.call("PUT", "/feature-flags", { key: "audit", enabled: true }, session.idToken),
+      ),
+    ).toBe(400);
     const second = await f.login(key);
-    const audit = f.service.audit.list(new URLSearchParams({ principal: "host-key" }));
-    expect(audit.items.some((record) => record.action === "organizer.login")).toBe(true);
-    expect(audit.items.every((record) => record.authMethod === "host-key")).toBe(true);
+    expect(f.store.authenticateAdmin(second.idToken, f.service.now())).toMatchObject({
+      authMethod: "host-key",
+      userId: null,
+    });
     const rows = JSON.stringify(f.store.statement("SELECT * FROM host_settings").all());
     expect(rows.includes(key)).toBe(false);
     expect(rows.includes(digest(key))).toBe(true);
-    expect(JSON.stringify(audit).includes(key)).toBe(false);
     await f.call("POST", "/host/logout", { refreshToken: second.refreshToken });
     expect(await rejectedStatus(f.call("GET", "/events", {}, second.idToken))).toBe(401);
     expect((await f.call("GET", "/events", {}, session.idToken)).status).toBe(200);

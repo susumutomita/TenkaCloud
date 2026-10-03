@@ -40,9 +40,6 @@ export const BIND_RESOURCE_SERVER_PREFIX = "tc-tenant-";
 /** bind resource server が持つ唯一の scope 名。 */
 export const BIND_SCOPE_NAME = "bind";
 
-/** audit log の `actor` に付ける machine principal prefix (= `m2m:<clientId>`)。 */
-export const MACHINE_ACTOR_PREFIX = "m2m:";
-
 /**
  * capability。`disruptions.fire` / `audit.read` は名前を予約するが宣言しない (= Cognito が
  * そもそも発行できない)。

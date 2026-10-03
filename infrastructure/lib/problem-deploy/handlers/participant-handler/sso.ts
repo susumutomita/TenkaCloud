@@ -3,6 +3,7 @@ import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
+import { isHostingAccountSelfTestAcknowledged } from "../shared/competitor-account-policy.js";
 import { DELETED_LIKE_STATUSES, PROBLEM_ID_RE, ULID_RE } from "../shared/constants.js";
 import { buildExternalIdParameterName } from "../shared/external-id-store.js";
 import { logDeployTrace } from "../shared/trace-log.js";
@@ -187,7 +188,6 @@ function validateSsoIdentifiers(deployment: Partial<DeploymentItem>):
       tenantId,
     });
   }
-  if (awsAccountId === process.env.PARTICIPANT_OPERATOR_ACCOUNT_ID) return { kind: "not_ready" };
   const { stackId, competitorRoleArn } = deployment;
   if (!competitorRoleArn || !isOwnedStackId(stackId, region, awsAccountId, namePrefix)) {
     return { kind: "not_ready" };
@@ -215,7 +215,10 @@ async function accessDeadline(
 ): Promise<number | AccessFailure> {
   const expiresAt = (deployment.expiresAt ?? Number.NaN) * 1000;
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return { kind: "unauthorized" };
-  if (!deployment.eventId) return expiresAt;
+  const hostingAccount =
+    process.env.PARTICIPANT_OPERATOR_ACCOUNT_ID ?? process.env.CONTROL_PLANE_ACCOUNT;
+  const sameAccount = deployment.awsAccountId === hostingAccount;
+  if (!deployment.eventId) return sameAccount ? { kind: "not_ready" } : expiresAt;
   const events = await shared.runtime.resolveEventsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
@@ -223,6 +226,8 @@ async function accessDeadline(
   const event = await events.getEvent(tenantId, deployment.eventId, true);
   if (
     event?.status !== "READY" ||
+    event.eventId !== deployment.eventId ||
+    (sameAccount && !isHostingAccountSelfTestAcknowledged(event, deployment.awsAccountId ?? "")) ||
     !event.problems?.some((problem) => problem.problemId === deployment.problemId) ||
     evaluateGate(
       {

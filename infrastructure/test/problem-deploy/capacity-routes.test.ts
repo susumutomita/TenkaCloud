@@ -13,7 +13,6 @@ import { buildAuthErrorHandler } from "../../lib/problem-deploy/handlers/shared/
 const mocks = vi.hoisted(() => ({
   getCapacityOverview: vi.fn(),
   startCapacityScale: vi.fn(),
-  auditEventAction: vi.fn(),
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/event-handler/capacity", async (importOriginal) => {
@@ -39,9 +38,6 @@ vi.mock(
     };
   },
 );
-vi.mock("../../lib/problem-deploy/handlers/event-handler/audit", () => ({
-  auditEventAction: mocks.auditEventAction,
-}));
 
 const { CapacityUnconfiguredError } = await import(
   "../../lib/problem-deploy/handlers/event-handler/capacity"
@@ -153,7 +149,7 @@ describe("POST /admin/capacity", () => {
       body: typeof body === "string" ? body : JSON.stringify(body),
     });
 
-  it("should 202 with the execution id and write one capacity.scale audit line", async () => {
+  it("should 202 with the execution id", async () => {
     mocks.startCapacityScale.mockResolvedValueOnce({
       executionId: "exec-123",
       tableName: "Deployments-x",
@@ -172,12 +168,6 @@ describe("POST /admin/capacity", () => {
       status: "accepted",
     });
     expect(mocks.startCapacityScale).toHaveBeenCalledWith(shared, BODY);
-    expect(mocks.auditEventAction).toHaveBeenCalledTimes(1);
-    expect(mocks.auditEventAction).toHaveBeenCalledWith(
-      expect.anything(),
-      "capacity.scale",
-      "Deployments-x -> 25/10 RCU/WCU (execution exec-123)",
-    );
   });
 
   it("should 400 on a body that is not JSON without touching the service", async () => {
@@ -186,7 +176,6 @@ describe("POST /admin/capacity", () => {
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     expect((await res.json()).error).toBe("invalid_capacity_request");
     expect(mocks.startCapacityScale).not.toHaveBeenCalled();
-    expect(mocks.auditEventAction).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -211,7 +200,6 @@ describe("POST /admin/capacity", () => {
 
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     expect((await res.json()).error).toBe("invalid_table");
-    expect(mocks.auditEventAction).not.toHaveBeenCalled();
   });
 
   it("should 503 when the runbook env is not wired (old deploy chain)", async () => {
@@ -232,7 +220,6 @@ describe("POST /admin/capacity", () => {
 
     expect(res.status).toBe(StatusCodes.CONFLICT);
     expect((await res.json()).error).toBe("capacity_not_applicable");
-    expect(mocks.auditEventAction).not.toHaveBeenCalled();
   });
 
   it("should surface an SSM error via handleRouteError (5xx) without an audit line", async () => {
@@ -241,7 +228,6 @@ describe("POST /admin/capacity", () => {
     const res = await postCapacity();
 
     expect(res.status).toBeGreaterThanOrEqual(500);
-    expect(mocks.auditEventAction).not.toHaveBeenCalled();
   });
 
   it.each(["TenantOperator", "TenantViewer"])(
@@ -253,7 +239,6 @@ describe("POST /admin/capacity", () => {
 
       expect(res.status).toBe(StatusCodes.FORBIDDEN);
       expect(mocks.startCapacityScale).not.toHaveBeenCalled();
-      expect(mocks.auditEventAction).not.toHaveBeenCalled();
     },
   );
 });

@@ -24,7 +24,6 @@
     "problems": "Problems",
     "deployments": "Deployments",
     "competitor_accounts": "Competitor Accounts",
-    "audit_log": "Audit log",
     "tenant_users": "Users",
     "identity_providers": "Identity providers",
     "settings": "Settings",
@@ -34,7 +33,7 @@
   },
   "settings": {
     "header": "Feature flags",
-    "description": "Toggle runtime features for this hosting environment. Changes take effect immediately and are recorded in the audit log.",
+    "description": "Toggle runtime features for this hosting environment. Changes take effect immediately.",
     "load_error": "Failed to load feature flags.",
     "save_error": "Failed to update the feature flag.",
     "readonly_notice": "Only an organizer admin can change these settings.",
@@ -192,8 +191,8 @@
     "title": "Create new Event",
     "description": "Specify team count and problem set to create an Event. Admins and operators can copy each teamLoginKey from Event details.",
     "error_header": "Failed to create",
-    "hosting_account_rejected_header": "Use a separate competitor AWS account",
-    "hosting_account_rejected_body": "AWS resource exercises cannot use the TenkaCloud hosting account, even in a different region. Register and verify a separate account on the Competitor Accounts page, then create an event that selects that account. This event was created, but deployment was refused. Keep the login keys below before leaving this screen.",
+    "hosting_account_rejected_header": "Hosting-account acknowledgment is required",
+    "hosting_account_rejected_body": "This event has no approved hosting-account self-test acknowledgment. Create a new event and confirm the hosting-account risk before creation, or use a separate verified competitor AWS account. Keep the login keys below before leaving this screen.",
     "basic_info_header": "Basic info",
     "name_label": "Event name",
     "name_placeholder_example": "e.g. Tenka Battle Cup 2026",
@@ -258,7 +257,12 @@
     "col_team_region": "Region (blank = the problem's)",
     "team_region_inherit": "Use the problem's region",
     "teams_description_native": "This event uses only exercises that run inside TenkaCloud. Set each team’s internal ID; no competitor AWS account is required.",
-    "native_execution": "Runs inside TenkaCloud"
+    "native_execution": "Runs inside TenkaCloud",
+    "self_test_header": "Confirm hosting-account self-test",
+    "self_test_account": "AWS account {account} also hosts TenkaCloud. No event or login keys have been created yet.",
+    "self_test_risk": "Problem and participant roles in this account may access or change TenkaCloud hosting configuration and data. Using a different region does not isolate these permissions. Accepting this risk does not make the environment isolated or safe.",
+    "self_test_recommendation": "Use this option only for your own self-test. A separate verified competitor AWS account is recommended for events with third-party participants. This acknowledgment applies only to this event; a verified competitor role and ExternalId are still required.",
+    "self_test_confirm": "Accept risk and create self-test"
   },
   "lite_drill": {
     "checkpoint_header": "Onboarding drill: checkpoint earned!",

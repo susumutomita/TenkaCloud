@@ -5,7 +5,6 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
-import { auditEventAction } from "../audit.js";
 import { resetCoordinationRun } from "../coordination-reset.js";
 import { handleRouteError, withEventId } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
@@ -52,7 +51,6 @@ export function registerCoordinationRoutes(app: Hono, shared: EventSharedResourc
           // whether they still want one of their own.
           if (outcome.kind === "conflict")
             return c.json({ error: "run_rotation_conflict" }, StatusCodes.CONFLICT);
-          auditEventAction(c, "coordination_run_reset", eventId);
           return c.json(outcome.result, StatusCodes.OK);
         } catch (err) {
           return handleRouteError(

@@ -1106,8 +1106,8 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
   });
   it("rejects unsafe environment names", () => {
     expect(cloudStackNames("development")).toEqual({
-      app: "tenkacloud-lite",
-      backend: "tenkacloud-lite-problem-deploy",
+      app: "tenkacloud-cloud",
+      backend: "tenkacloud-cloud-problem-deploy",
     });
     expect(() => cloudStackNames("development;bad")).toThrow();
   });
@@ -2061,6 +2061,125 @@ describe("partial restored installation storage identity", () => {
   });
 });
 
+describe("cloud naming with automatic installation discovery", () => {
+  const lite = cloudStackNames("staging", "lite");
+  const cloud = cloudStackNames("staging", "cloud");
+  function discoveredResponse(
+    request: ProcessRequest,
+    names: readonly string[],
+    overrides: Record<string, unknown> = {},
+  ): ProcessResult | undefined {
+    if (!request.args.includes("describe-stacks") || !request.args.includes("Stacks[0]"))
+      return undefined;
+    const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+    if (name === "CDKToolkit") return undefined;
+    return names.includes(name)
+      ? { code: 0, stderr: "", stdout: JSON.stringify({ ...ownedStack(name), ...overrides }) }
+      : {
+          code: 1,
+          stdout: "",
+          stderr: `(ValidationError) Stack with id ${name} does not exist`,
+        };
+  }
+  it.each([
+    { present: [], expected: cloud, layout: "cloud" },
+    { present: Object.values(lite), expected: lite, layout: "lite" },
+    { present: Object.values(cloud), expected: cloud, layout: "cloud" },
+  ])(
+    "deploys only the selected restored installation: %j",
+    async ({ present, expected, layout }) => {
+      const f = fixture({ fail: (request) => discoveredResponse(request, present) });
+      expect(
+        await runCloudCli(["up"], f.io, {
+          root: ROOT,
+          env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
+        }),
+      ).toBe(0);
+      expect(f.errors).toEqual([]);
+      expect(f.confirmations).toEqual([]);
+      const deploy = f.calls.find((call) => call.args.includes("deploy"));
+      expect(deploy?.args.slice(-5)).toEqual([
+        "deploy",
+        expected.backend,
+        expected.app,
+        "--require-approval",
+        "never",
+      ]);
+      expect(deploy?.env.TENKACLOUD_STACK_LAYOUT).toBe(layout);
+      expect(f.calls.some((call) => call.args.includes("destroy"))).toBe(false);
+    },
+  );
+  it("refuses the existing narrowed cloud-v1 contract despite matching the new default names", async () => {
+    const f = fixture({
+      fail: (request) => {
+        if (request.args.includes("get-template"))
+          return {
+            code: 0,
+            stderr: "",
+            stdout: JSON.stringify({
+              TemplateBody: {
+                Resources: { CloudApiABC12345: { Type: "AWS::Lambda::Function" } },
+                Outputs: { CloudRunnerEnabled: { Value: "true" } },
+              },
+            }),
+          };
+        return discoveredResponse(request, Object.values(cloud), { Outputs: [] });
+      },
+    });
+    expect(
+      await runCloudCli(["up"], f.io, {
+        root: ROOT,
+        env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
+      }),
+    ).toBe(1);
+    expect(f.errors.join(" ")).toContain("published cloud-v1 resource layout");
+    expect(f.calls.some((call) => call.inherit || call.command === "bash")).toBe(false);
+    expect(f.calls.some((call) => call.args.includes("CDKToolkit"))).toBe(false);
+  });
+  it.each(["lite", "cloud"] as const)(
+    "keeps failed %s stacks with no Outputs selected for explicit recovery, never fresh deployment",
+    async (layout) => {
+      const names = cloudStackNames("staging", layout);
+      const fail = (request: ProcessRequest) =>
+        discoveredResponse(request, Object.values(names), {
+          StackStatus: "ROLLBACK_COMPLETE",
+          Outputs: undefined,
+        });
+      const deployment = fixture({ fail });
+      expect(
+        await runCloudCli(["up"], deployment.io, {
+          root: ROOT,
+          env: { ...deployment.env, TENKACLOUD_STACK_LAYOUT: undefined },
+        }),
+      ).toBe(1);
+      expect(deployment.calls.some((call) => call.inherit || call.command === "bash")).toBe(false);
+      const recovery = fixture({ fail });
+      expect(
+        await runCloudCli(["down", "--yes"], recovery.io, {
+          root: ROOT,
+          env: { ...recovery.env, TENKACLOUD_STACK_LAYOUT: undefined },
+        }),
+      ).toBe(0);
+      expect(recovery.errors).toEqual([]);
+      expect(recovery.assemblies.map((target) => target.name)).toEqual([names.app, names.backend]);
+      expect(recovery.storageCalls).toEqual([]);
+    },
+  );
+  it("does not adopt completed cloud-named stacks with missing Outputs", async () => {
+    const f = fixture({
+      fail: (request) => discoveredResponse(request, Object.values(cloud), { Outputs: undefined }),
+    });
+    expect(
+      await runCloudCli(["up"], f.io, {
+        root: ROOT,
+        env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
+      }),
+    ).toBe(1);
+    expect(f.errors.join(" ")).toContain("Required outputs are absent");
+    expect(f.calls.some((call) => call.inherit || call.command === "bash")).toBe(false);
+  });
+});
+
 describe("original physical installation continuity", () => {
   const baseline = z
     .object({ templates: z.record(z.record(z.unknown())) })
@@ -2209,32 +2328,35 @@ describe("original physical installation continuity", () => {
     ]);
     expect(f.assemblies.map((a) => a.name)).toEqual([names.app]);
   });
-  it("makes no mutation when both physical installations exist", async () => {
-    const f = fixture({
-      fail: (request) => {
-        const target = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
-        if (
-          request.args.includes("describe-stacks") &&
-          request.args.includes("Stacks[0]") &&
-          target.startsWith("tenkacloud-lite")
-        )
-          return { code: 0, stderr: "", stdout: JSON.stringify(ownedStack(target)) };
-        return undefined;
-      },
-    });
-    expect(
-      await runCloudCli(["up"], f.io, {
-        root: ROOT,
-        env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
-      }),
-    ).toBe(1);
-    expect(f.errors.join(" ")).toContain("Both tenkacloud-lite and tenkacloud-cloud");
-    expect(
-      f.calls.every(
-        (call) =>
-          call.command === "aws" &&
-          (call.args.includes("get-caller-identity") || call.args.includes("describe-stacks")),
-      ),
-    ).toBe(true);
-  });
+  it.each(["up", "down"])(
+    "makes no mutation on %s when both physical installations exist",
+    async (command) => {
+      const f = fixture({
+        fail: (request) => {
+          const target = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+          if (
+            request.args.includes("describe-stacks") &&
+            request.args.includes("Stacks[0]") &&
+            target.startsWith("tenkacloud-lite")
+          )
+            return { code: 0, stderr: "", stdout: JSON.stringify(ownedStack(target)) };
+          return undefined;
+        },
+      });
+      expect(
+        await runCloudCli([command], f.io, {
+          root: ROOT,
+          env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
+        }),
+      ).toBe(1);
+      expect(f.errors.join(" ")).toContain("Both tenkacloud-lite and tenkacloud-cloud");
+      expect(
+        f.calls.every(
+          (call) =>
+            call.command === "aws" &&
+            (call.args.includes("get-caller-identity") || call.args.includes("describe-stacks")),
+        ),
+      ).toBe(true);
+    },
+  );
 });

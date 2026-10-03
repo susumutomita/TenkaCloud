@@ -12,7 +12,6 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HostAuditLog } from "../audit-log";
 import { DisruptionStore } from "../disruption-store";
 import { clearManagedLocal } from "../local";
 import { clearLocalHistory, type LocalClearIo, parseLocalClearOptions } from "../local-clear";
@@ -20,6 +19,7 @@ import { localRuntimeFailure } from "../local-runtime-report";
 import type { Job } from "../model";
 import { prepareRuntimeDirectory } from "../runtime-directory";
 import { HostStore } from "../store";
+import { createLegacyAuditSchema } from "./audit-retirement-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -61,9 +61,9 @@ function setup() {
   store.putReceipt("team", "nonce", "fingerprint", 200, { solved: true });
   store.statement("INSERT INTO host_settings VALUES('test-setting', 'keep-setting')").run();
   store.ensureLocalOrganizerKey();
-  const audit = new HostAuditLog(store, () => 1);
+  createLegacyAuditSchema(store);
+  store.statement("INSERT INTO host_audit_status(id) VALUES (1)").run();
   const disruptions = new DisruptionStore(store);
-  expect(audit).toBeDefined();
   expect(disruptions).toBeDefined();
   store.statement("INSERT INTO host_accounts VALUES('fixture-account', '{}')").run();
   store.database.exec(`

@@ -1,4 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
+import {
+  legacyAuditSnapshot,
+  rejectLegacyAuditWrites,
+  seedLegacyAudit,
+} from "./audit-retirement-fixture";
 import { fakeFlag } from "./fake-aws";
 import { createOrganizerSession } from "./organizer-fixture";
 import { createParticipantAwsFixture } from "./participant-aws-fixture";
@@ -23,7 +28,7 @@ async function fixture() {
   return { f, event, team, path: `/events/${event.eventId}/progression-gate` };
 }
 
-test("gate policy uses current organizer roles and audit rollback, including canonical paths", async () => {
+test("gate policy uses current organizer roles and atomic writes, including canonical paths", async () => {
   const { f, event, path } = await fixture();
   const operator = await createOrganizerSession(
     f.service,
@@ -32,9 +37,9 @@ test("gate policy uses current organizer roles and audit rollback, including can
     "Operator",
   );
   const viewer = await createOrganizerSession(f.service, f.adminToken, "gate-viewer", "Viewer");
-  expect((await f.request("/feature-flags", "PUT", { key: "audit", enabled: true })).status).toBe(
-    200,
-  );
+  seedLegacyAudit(f.store);
+  rejectLegacyAuditWrites(f.store);
+  const legacy = legacyAuditSnapshot(f.store);
   expect((await f.flag(true)).status).toBe(200);
   expect((await f.request(path, "GET", undefined, viewer.token)).status).toBe(200);
   expect((await f.request(path, "PUT", config, viewer.token)).status).toBe(403);
@@ -49,18 +54,8 @@ test("gate policy uses current organizer roles and audit rollback, including can
     ).status,
   ).toBe(403);
   expect((await f.request(path, "PUT", config, operator.token)).status).toBe(200);
-  const entries = f.service.audit.list(
-    new URLSearchParams({ action: "progression.updated" }),
-  ).items;
-  expect(entries[0]).toMatchObject({
-    outcome: "succeeded",
-    actorKind: "organizer",
-    actorRole: "Operator",
-    resourceKind: "event",
-    target: event.eventId,
-  });
   f.store.database.exec(
-    "CREATE TRIGGER fail_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(ABORT, 'unavailable'); END;",
+    "CREATE TRIGGER fail_gate BEFORE UPDATE ON host_events BEGIN SELECT RAISE(ABORT, 'test gate persistence failure'); END;",
   );
   for (const route of [
     path,
@@ -69,16 +64,20 @@ test("gate policy uses current organizer roles and audit rollback, including can
   ])
     expect(
       (await f.request(route, "PUT", { ...config, completionBonus: 900 }, operator.token)).status,
-    ).toBe(503);
-  expect((await f.request(path, "DELETE", undefined, operator.token)).status).toBe(503);
+    ).toBe(500);
+  expect((await f.request(path, "DELETE", undefined, operator.token)).status).toBe(500);
   expect(f.store.event(event.eventId).progressionGate).toMatchObject({ completionBonus: 50 });
-  f.store.database.exec("DROP TRIGGER fail_audit");
+  f.store.database.exec("DROP TRIGGER fail_gate");
   expect((await f.request(path, "DELETE", undefined, operator.token)).status).toBe(200);
   expect(f.store.event(event.eventId).progressionGate).toBeUndefined();
+  expect(legacyAuditSnapshot(f.store)).toEqual(legacy);
 });
 
 test("gate bonus projects the signed ledger once instead of adding to a floored total", async () => {
   const { f, event, team, path } = await fixture();
+  seedLegacyAudit(f.store);
+  rejectLegacyAuditWrites(f.store);
+  const legacy = legacyAuditSnapshot(f.store);
   await f.flag(true);
   await f.request(path, "PUT", config);
   for (let attempt = 0; attempt < 21; attempt++) {
@@ -119,6 +118,7 @@ test("gate bonus projects the signed ledger once instead of adding to a floored 
     "signed-ledger-bonus",
   );
   expect(replay.body.totalScore).toBe(45);
+  expect(legacyAuditSnapshot(f.store)).toEqual(legacy);
 });
 
 for (const stage of [

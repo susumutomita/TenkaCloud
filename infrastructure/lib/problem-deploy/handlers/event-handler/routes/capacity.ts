@@ -1,7 +1,6 @@
 import type { Context, Hono } from "hono";
 import { StatusCodes } from "http-status-codes";
 import { requireRole, TENANT_ADMIN_ROLE } from "../../deploy-handler/auth.js";
-import { auditEventAction } from "../audit.js";
 import {
   CapacityQuerySchema,
   CapacityUnconfiguredError,
@@ -75,11 +74,6 @@ async function handleCapacityScale(c: Context, shared: EventSharedResources): Pr
   }
   try {
     const result = await startCapacityScale(shared, parsed.data);
-    auditEventAction(
-      c,
-      "capacity.scale",
-      `${result.tableName} -> ${parsed.data.readCapacityUnits}/${parsed.data.writeCapacityUnits} RCU/WCU (execution ${result.executionId})`,
-    );
     // UpdateTable は非同期 (runbook が受理された時点では未反映) なので 202 Accepted。
     return c.json(
       {

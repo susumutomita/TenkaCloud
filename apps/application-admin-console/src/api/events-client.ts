@@ -177,6 +177,10 @@ export interface CreateEventTeamInput {
 }
 
 export interface CreateEventRequest {
+  hostingAccountSelfTest?: {
+    readonly awsAccountId: string;
+    readonly riskVersion: "hosting-account-self-test-v1";
+  };
   name: string;
   teams: readonly CreateEventTeamInput[];
   problems: readonly EventProblemTarget[];

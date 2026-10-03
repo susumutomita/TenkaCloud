@@ -7,7 +7,6 @@ import { buildLoginReturnPath, readLoginReturnPathState } from "./auth/login-ret
 import { ShellLayout } from "./components/AppLayout";
 import { type AppConfig, isCloudHost, isLocalHost } from "./config";
 import { useEffectiveFeatures } from "./hooks/useEffectiveFeatures";
-import { AuditLogPage } from "./pages/AuditLog";
 import { CallbackPage } from "./pages/Callback";
 import { CompetitorAccountsPage } from "./pages/CompetitorAccounts";
 import { DeploymentDetailPage } from "./pages/DeploymentDetail";
@@ -137,8 +136,6 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
         path="/events/:eventId/report"
         element={guarded(<EventReportPage config={config} />, config)}
       />
-      {/* Issue #1292: Tenant Admin 向け audit log view (= 自テナント scope only) */}
-      <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />, config)} />
       <Route path="/users" element={guarded(<TenantUsersPage config={config} />, config)} />
       {/* Issue #2231: per-tenant runtime feature-flag toggle. */}
       <Route path="/settings" element={guarded(<SettingsPage config={config} />, config)} />

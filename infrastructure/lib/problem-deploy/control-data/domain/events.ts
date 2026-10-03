@@ -99,7 +99,16 @@ export type ProgressionGateConfig = {
  * adding the physical keys — a new event attribute is added HERE and flows to
  * the handler layer, never the reverse.
  */
+export interface HostingAccountSelfTestAcknowledgment {
+  readonly awsAccountId: string;
+  readonly riskVersion: "hosting-account-self-test-v1";
+  readonly acknowledgedAt: string;
+  readonly acknowledgedBy: string;
+}
+
 export type EventRecord = {
+  /** Explicit per-event self-test consent. This does not provide account isolation. */
+  hostingAccountSelfTest?: HostingAccountSelfTestAcknowledgment;
   /** Immutable execution artifact catalog; never inferred from the current installation. */
   catalogKey?: string;
   /** Never project invitation/receipt hashes into public event or leaderboard responses. */

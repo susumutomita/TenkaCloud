@@ -5,7 +5,6 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
-import { auditEventAction } from "../audit.js";
 import { bulkDeployEvent } from "../bulk-deploy.js";
 import { handleRouteError, parseOptionalJsonBody, withEventId } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
@@ -46,7 +45,6 @@ export function registerBulkDeployRoutes(app: Hono, shared: EventSharedResources
               { error: "coordination_capacity_exceeded", refusals: outcome.refusals },
               StatusCodes.UNPROCESSABLE_ENTITY,
             );
-          auditEventAction(c, "bulk_deploy", eventId);
           return c.json(outcome.result, StatusCodes.ACCEPTED);
         } catch (err) {
           return handleRouteError(c, "[events] bulkDeployEvent failed", { eventId }, err);

@@ -4,12 +4,16 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { auditRequest } from "../audit-request";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
 import { CloudFormationEngine } from "../cloudformation-engine";
 import { startHttpHost } from "../http";
 import { type ApiResponse, HostingService } from "../service";
 import { HostStore } from "../store";
+import {
+  legacyAuditSnapshot,
+  rejectLegacyAuditWrites,
+  seedLegacyAudit,
+} from "./audit-retirement-fixture";
 import { FakeAws, OPERATOR_ACCOUNT } from "./fake-aws";
 import { bootstrapOrganizer, createOrganizerSession } from "./organizer-fixture";
 
@@ -147,7 +151,9 @@ test("HTTP refuses cloud stop before accepting work, and recovery keeps an old r
   const eventId = await createEvent(admin, [TEAM_A]);
   expect((await admin("POST", `/events/${eventId}/deploy`)).status).toBe(202);
   await service.drain();
-  expect((await admin("PUT", "/feature-flags", { key: "audit", enabled: true })).status).toBe(200);
+  seedLegacyAudit(store);
+  rejectLegacyAuditWrites(store);
+  const legacy = legacyAuditSnapshot(store);
   const before = store.jobs(eventId)[0];
   if (!before) throw new Error("Expected a deployed cloud job.");
   expect(before.status).toBe("COMPLETE");
@@ -185,32 +191,13 @@ test("HTTP refuses cloud stop before accepting work, and recovery keeps an old r
     expect(store.event(eventId).status).toBe("READY");
     expect(aws.stacks[0]).toEqual(stack);
     expect(aws.deleted).toEqual([]);
-    expect(
-      service.audit.list(new URLSearchParams({ action: "environment.stop" })).items,
-    ).toMatchObject([
-      { action: "environment.stop", outcome: "failed", phase: "request", reason: "conflict" },
-    ]);
-
-    // A prior version could persist this invalid intent before the async pause failed.
-    const legacyIntent = auditRequest("POST", path.slice(4));
-    if (!legacyIntent) throw new Error("Expected an auditable environment operation.");
-    service.audit.accept(legacyIntent, [before.jobId], () =>
-      store.putJob({ ...before, operation: "stop" }),
-    );
+    // A prior version persisted an invalid cloud stop intent in the business job row.
+    store.transaction(() => store.putJob({ ...before, operation: "stop" }));
     await new HostingService(store, engine, HOST_KEY).recover();
     expect(store.job(before.jobId)).toEqual(before);
     expect(aws.stacks[0]).toEqual(stack);
     expect(aws.deleted).toEqual([]);
-    expect(
-      service.audit
-        .list(new URLSearchParams({ action: "environment.stop" }))
-        .items.filter((record) => record.operationId === legacyIntent.operationId)
-        .map((record) => ({ phase: record.phase, outcome: record.outcome, reason: record.reason })),
-    ).toEqual([
-      { phase: "result", outcome: "failed", reason: "operation_failed" },
-      { phase: "result", outcome: "unknown", reason: undefined },
-      { phase: "request", outcome: "accepted", reason: undefined },
-    ]);
+    expect(legacyAuditSnapshot(store)).toEqual(legacy);
   } finally {
     await listener.close();
   }

@@ -56,6 +56,7 @@ function stubLoginExchange(claims: Record<string, string>) {
           { status: 200, headers: { "content-type": "application/json" } },
         );
       }
+      if (url.endsWith("/feature-flags")) return Response.json({ flags: {} });
       return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
     }),
   );
@@ -147,6 +148,47 @@ describe("App", () => {
       expect(screen.queryByText("BASIC")).toBeNull();
       expect(screen.queryByText(/テナント名が JWT/)).toBeNull();
     });
+
+    it.each(["/", "/audit-log?from=2026-01-01"])(
+      "keeps cloud audit UI unavailable after returning to %s",
+      async (returnPath) => {
+        stubLoginExchange({ email: "admin@example.com", "custom:userRole": "TenantAdmin" });
+        sessionStorage.setItem("TenkaCloud.application_admin.login_return_path", returnPath);
+        renderApp(CALLBACK_PATH, {
+          ...config,
+          features: {
+            samlSso: true,
+            nonAwsRuntime: false,
+            redTeam: false,
+            challengePrerequisiteGate: false,
+          },
+        });
+        expect(
+          await screen.findByRole("heading", { level: 1, name: /admin@example.com/ }),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: /監査ログ|Audit log/u })).toBeNull();
+        expect(screen.queryByRole("heading", { name: "監査ログ" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "CSV エクスポート" })).toBeNull();
+        for (const label of [
+          "Events",
+          "Deployments",
+          "Competitor Accounts",
+          "Problems",
+          "ユーザー",
+          "設定",
+          "ID プロバイダ",
+        ])
+          expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+        expect(
+          vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/admin/audit-log")),
+        ).toBe(false);
+        expect(
+          vi
+            .mocked(fetch)
+            .mock.calls.some(([, init]) => init?.method === "PUT" || init?.method === "DELETE"),
+        ).toBe(false);
+      },
+    );
 
     it("does not display the shared placeholder or legacy tenant identity", async () => {
       stubLoginExchange({

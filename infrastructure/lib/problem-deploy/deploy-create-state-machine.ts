@@ -305,7 +305,10 @@ export class DeployCreateStateMachine extends Construct {
       .when(
         Condition.and(
           Condition.stringEqualsJsonPath("$.competitorRole.account", "$.detail.awsAccountId"),
-          Condition.not(Condition.stringEquals("$.competitorRole.account", Aws.ACCOUNT_ID)),
+          Condition.or(
+            Condition.not(Condition.stringEquals("$.competitorRole.account", Aws.ACCOUNT_ID)),
+            acknowledgedHostingAccountSelfTest(),
+          ),
         ),
         startPinnedCodeBuildCrossAccount,
       )
@@ -742,4 +745,29 @@ export class DeployCreateStateMachine extends Construct {
       ...(resultPath ? { resultPath } : {}),
     });
   }
+}
+
+/** The API writes this snapshot from the persisted event; this workflow is not a public API. */
+function acknowledgedHostingAccountSelfTest(): Condition {
+  const scope = "$.detail.hostingAccountSelfTest";
+  return Condition.and(
+    Condition.isPresent(scope),
+    Condition.isPresent("$.detail.eventId"),
+    Condition.isPresent(`${scope}.eventId`),
+    Condition.isPresent(`${scope}.tenantId`),
+    Condition.isPresent(`${scope}.jobId`),
+    Condition.isPresent(`${scope}.awsAccountId`),
+    Condition.isPresent(`${scope}.riskVersion`),
+    Condition.isPresent(`${scope}.acknowledgedAt`),
+    Condition.isPresent(`${scope}.acknowledgedBy`),
+    Condition.not(Condition.stringEquals("$.detail.eventId", "")),
+    Condition.stringEquals(`${scope}.riskVersion`, "hosting-account-self-test-v1"),
+    Condition.stringEqualsJsonPath(`${scope}.eventId`, "$.detail.eventId"),
+    Condition.stringEqualsJsonPath(`${scope}.tenantId`, "$.detail.tenantId"),
+    Condition.stringEqualsJsonPath(`${scope}.jobId`, "$.detail.jobId"),
+    Condition.stringEqualsJsonPath(`${scope}.awsAccountId`, "$.detail.awsAccountId"),
+    Condition.isTimestamp(`${scope}.acknowledgedAt`),
+    Condition.isString(`${scope}.acknowledgedBy`),
+    Condition.not(Condition.stringEquals(`${scope}.acknowledgedBy`, "")),
+  );
 }

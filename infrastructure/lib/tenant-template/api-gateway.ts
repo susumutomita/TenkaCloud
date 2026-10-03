@@ -333,30 +333,22 @@ export class ApiGateway extends Construct {
     usersById.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
     usersById.addMethod("PATCH", competitorAccountsIntegration, deployMethodOptions);
 
-    // Issue #1292: Tenant Admin 向け監査ログ read / CSV export。
-    // EventApi handler 側の `/admin/audit-log*` route と同じ EventApi integration に公開する。
-    // API Gateway resource が無いと request は Lambda に届かず、Gateway 自身の 403 に CORS
-    // header が付かないため browser では response body ではなく "Failed to fetch" になる。
-    const auditLog = admin.addResource("audit-log");
-    auditLog.addMethod("GET", eventIntegration, deployMethodOptions);
-    auditLog.addResource("export").addMethod("GET", eventIntegration, deployMethodOptions);
-
     // Issue #2410 Slice 2: イベント中の DynamoDB キャパ監視 (TenantAdmin のみ、GET=read)。
     // Issue #2680: 同じ resource に POST (= SSM runbook 起動でキャパ変更) を追加。
     // EventApi handler 側の `/admin/capacity` route と同じ EventApi integration に公開する
     // (resource が無いと Gateway 403 に CORS が付かず browser が "Failed to fetch" になる、
-    // Issue #1292 audit-log と同じ理由)。
+    // CORS header が欠落するため)。
     const capacity = admin.addResource("capacity");
     capacity.addMethod("GET", eventIntegration, deployMethodOptions);
     capacity.addMethod("POST", eventIntegration, deployMethodOptions);
 
     // Issue #2231: per-tenant runtime feature-flag overrides, served by the same
-    // EventApi handler as /admin/audit-log and /admin/capacity.
+    // EventApi handler as /admin/capacity.
     //   GET  /feature-flags        readable by any tenant role (gates UI tabs for all roles)
     //   PUT  /admin/feature-flags  TenantAdmin-only full-replace of the override set
     // Both Gateway resources must exist or the request 403s before reaching the Lambda with no
     // CORS header, which the console surfaces as "フィーチャーフラグの取得に失敗しました" — the
-    // same failure mode as the #1292 audit-log / #2410 capacity routes above.
+    // same failure mode as the capacity routes above.
     this.restApi.root
       .addResource("feature-flags")
       .addMethod("GET", eventIntegration, deployMethodOptions);

@@ -223,16 +223,7 @@ function idempotencyKey(request: IncomingMessage): string | undefined {
  * TLS-terminating proxy publishes it at an advertised origin.
  */
 function sendApiResponse(response: ServerResponse, result: ApiResponse): void {
-  if (result.contentType) {
-    response.writeHead(result.status, {
-      "content-type": result.contentType,
-      "cache-control": "no-store",
-      "content-disposition": 'attachment; filename="host-audit.csv"',
-      "x-content-type-options": "nosniff",
-      "referrer-policy": "no-referrer",
-    });
-    response.end(result.body);
-  } else json(response, result.status, result.body);
+  json(response, result.status, result.body);
 }
 
 export async function startHttpHost(options: {
@@ -389,20 +380,8 @@ export async function startHttpHost(options: {
     response.end();
     return true;
   }
-  function recordCredentialFailure(error: unknown, remote: string, path: string): void {
-    if (error instanceof HostError && error.status === 401) {
-      limiter.record(remote);
-      if (path === "/host/saml/acs")
-        options.service.audit.observe({
-          operationId: crypto.randomUUID(),
-          actor: { kind: "anonymous" },
-          action: "organizer.login",
-          resource: { kind: "host" },
-          phase: "request",
-          outcome: "denied",
-          reason: "invalid_credentials",
-        });
-    }
+  function recordCredentialFailure(error: unknown, remote: string): void {
+    if (error instanceof HostError && error.status === 401) limiter.record(remote);
   }
   async function handleApi(
     request: IncomingMessage,
@@ -427,7 +406,7 @@ export async function startHttpHost(options: {
       const result = await dispatch(apiRequest);
       sendApiResponse(response, result);
     } catch (error) {
-      recordCredentialFailure(error, remote, path);
+      recordCredentialFailure(error, remote);
       throw error;
     }
   }

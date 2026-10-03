@@ -6,7 +6,6 @@ import {
   CAPABILITY_RESOURCE_SERVER_ID,
   CAPABILITY_SCOPE_NAMES,
   findMachineRoute,
-  MACHINE_ACTOR_PREFIX,
   MACHINE_CAPABILITIES,
   type MachineCapability,
 } from "./machine-scopes.js";
@@ -164,11 +163,6 @@ export function getMachinePrincipal(c: Context): MachinePrincipal | undefined {
   const get = (c as Partial<Pick<Context, "get">>).get;
   if (typeof get !== "function") return undefined;
   return get.call(c, "machinePrincipal");
-}
-
-/** audit log / log 行に載せる actor 文字列。 */
-export function machineActor(principal: MachinePrincipal): string {
-  return `${MACHINE_ACTOR_PREFIX}${principal.clientId}`;
 }
 
 /**

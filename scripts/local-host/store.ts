@@ -505,13 +505,14 @@ export class HostStore {
   featureFlags(): Record<string, boolean> {
     return {
       saml: !this.localOrganizerKeyEnabled() && this.setting("flag:saml") === "true",
-      audit: this.setting("flag:audit") === "true",
+      // Compatibility response only; the retired setting stays stored and cannot enable collection.
+      audit: false,
       challengePrerequisiteGate: this.setting("flag:challengePrerequisiteGate") === "true",
       registration: this.setting("flag:registration") === "true",
     };
   }
   setFeatureFlag(
-    key: "saml" | "audit" | "challengePrerequisiteGate" | "registration",
+    key: "saml" | "challengePrerequisiteGate" | "registration",
     enabled: boolean,
   ): void {
     this.statement(

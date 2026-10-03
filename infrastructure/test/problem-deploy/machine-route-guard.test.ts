@@ -136,14 +136,6 @@ vi.mock("../../lib/problem-deploy/handlers/event-handler/disruption-fire", () =>
   listDisruptionAudit: eventMocks.listDisruptionAudit,
 }));
 
-const auditMocks = vi.hoisted(() => ({ writeAuditEvent: vi.fn() }));
-vi.mock("../../lib/problem-deploy/handlers/shared/audit-log", async () => {
-  const actual = await vi.importActual<
-    typeof import("../../lib/problem-deploy/handlers/shared/audit-log")
-  >("../../lib/problem-deploy/handlers/shared/audit-log");
-  return { ...actual, writeAuditEvent: auditMocks.writeAuditEvent };
-});
-
 const { app: deployApp } = await import("../../lib/problem-deploy/handlers/deploy-handler/index");
 const { app: eventApp } = await import("../../lib/problem-deploy/handlers/event-handler/index");
 const {
@@ -195,7 +187,6 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  auditMocks.writeAuditEvent.mockResolvedValue(true);
   deployMocks.startDeployment.mockResolvedValue({ jobId: ULID });
   deployMocks.listDeployments.mockResolvedValue({ items: [] });
   deployMocks.getDeployment.mockResolvedValue({ jobId: ULID, status: "IN_PROGRESS" });
@@ -465,8 +456,8 @@ describe("#2948 T-7 / T-8: env fallback never rescues a machine principal", () =
   });
 });
 
-describe("#2948 T-11: machine mutations and denials reach the admin audit log", () => {
-  it("should write a deploy_problem audit row for a machine deploy", async () => {
+describe("machine mutations and denials after audit retirement", () => {
+  it("keeps authorized machine deployment available", async () => {
     const res = await deployApp.request(
       `/problems/${PROBLEM}/deploy`,
       {
@@ -481,33 +472,15 @@ describe("#2948 T-11: machine mutations and denials reach the admin audit log", 
       machineEnv(),
     );
     expect(res.status).toBe(202);
-    expect(auditMocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: TENANT,
-        actor: "m2m:machine-client-1",
-        action: "deploy_problem",
-        outcome: "success",
-        target: PROBLEM,
-      }),
-    );
   });
 
-  it("should write a forbidden audit row when the guard denies a machine request", async () => {
+  it("keeps forbidden machine requests denied", async () => {
     const res = await deployApp.request(`/deployments/${ULID}`, { method: "DELETE" }, machineEnv());
     expect(res.status).toBe(403);
-    expect(auditMocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: TENANT,
-        actor: "m2m:machine-client-1",
-        outcome: "forbidden",
-        action: `DELETE /deployments/${ULID}`,
-        target: "route_not_allowlisted",
-      }),
-    );
   });
 
-  it("should write a deploy_problem audit row for a human deploy too (same granularity)", async () => {
-    await deployApp.request(
+  it("keeps authorized human deployment available", async () => {
+    const response = await deployApp.request(
       `/problems/${PROBLEM}/deploy`,
       {
         method: "POST",
@@ -520,14 +493,7 @@ describe("#2948 T-11: machine mutations and denials reach the admin audit log", 
       },
       humanEnv("TenantOperator"),
     );
-    expect(auditMocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actor: "cognito-sub-1",
-        actorUsername: "operator@example.com",
-        action: "deploy_problem",
-        outcome: "success",
-      }),
-    );
+    expect(response.status).toBe(202);
   });
 });
 
@@ -559,20 +525,13 @@ describe("#2955: POST /deployments/retry is the second machine mutating route", 
     expect(deployMocks.retryDeployments).not.toHaveBeenCalled();
   });
 
-  it("should write a retry_deployments audit row", async () => {
-    await deployApp.request(
+  it("keeps machine retry execution available", async () => {
+    const response = await deployApp.request(
       "/deployments/retry",
       { method: "POST", body: RETRY_BODY, headers: JSON_HEADERS },
       machineEnv(["read", "write"]),
     );
-    expect(auditMocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: TENANT,
-        actor: "m2m:machine-client-1",
-        action: "retry_deployments",
-        outcome: "success",
-      }),
-    );
+    expect(response.status).toBe(200);
   });
 
   it("should keep working for a human TenantOperator", async () => {

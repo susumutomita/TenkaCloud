@@ -37,12 +37,6 @@ interface Claim {
   login_hash: string;
   claimed_at: string;
 }
-export interface RegistrationMutation {
-  readonly action: "open_registration" | "close_registration" | "claim_registration";
-  readonly eventId: string;
-  readonly teamId?: string;
-  readonly occurredAt: string;
-}
 
 function matches(secret: string, expected: string): boolean {
   const actual = Buffer.from(digest(secret));
@@ -55,8 +49,6 @@ function fail(code: string, status = 409): never {
 
 /** Atomic allocation of existing host teams. The public receipt never follows a rotated key. */
 export class HostRegistration {
-  /** Audit adapter: invoked in the same transaction, with no invitation, receipt or login key. */
-  onMutation?: (mutation: RegistrationMutation) => void;
   constructor(
     private readonly store: HostStore,
     private readonly now: () => number,
@@ -130,23 +122,13 @@ export class HostRegistration {
     };
   }
 
-  configure(
-    eventId: string,
-    input: unknown,
-    onMutation: (mutation: RegistrationMutation) => void = this.onMutation ?? (() => undefined),
-  ) {
+  configure(eventId: string, input: unknown) {
     const parsed = RegistrationConfigSchema.safeParse(input);
     if (!parsed.success) fail("invalid_request", 400);
-    return this.store.transaction(() =>
-      this.configureInTransaction(eventId, parsed.data, onMutation),
-    );
+    return this.store.transaction(() => this.configureInTransaction(eventId, parsed.data));
   }
 
-  private configureInTransaction(
-    eventId: string,
-    input: RegistrationConfigInput,
-    onMutation: (mutation: RegistrationMutation) => void,
-  ) {
+  private configureInTransaction(eventId: string, input: RegistrationConfigInput) {
     if (!this.featureEnabled()) fail("feature_disabled");
     const event = this.store.event(eventId);
     if (!registrationEventActive(event, this.now())) fail("closed");
@@ -172,11 +154,6 @@ export class HostRegistration {
         selection.closesAt,
         JSON.stringify(selection.teamIds),
       );
-    onMutation({
-      action: input.enabled ? "open_registration" : "close_registration",
-      eventId,
-      occurredAt: new Date(this.now()).toISOString(),
-    });
     return { ...this.summary(eventId), ...(invitation ? { invitation } : {}) };
   }
 
@@ -320,7 +297,6 @@ export class HostRegistration {
         digest(team.loginKey),
         new Date(this.now()).toISOString(),
       );
-    this.record("claim_registration", event.eventId, team.teamId);
     return this.status(event, receipt);
   }
 
@@ -342,9 +318,5 @@ export class HostRegistration {
       ...progress,
       ...(progress.state === "ready" ? { teamLoginKey: team.loginKey } : {}),
     };
-  }
-
-  private record(action: RegistrationMutation["action"], eventId: string, teamId?: string): void {
-    this.onMutation?.({ action, eventId, teamId, occurredAt: new Date(this.now()).toISOString() });
   }
 }

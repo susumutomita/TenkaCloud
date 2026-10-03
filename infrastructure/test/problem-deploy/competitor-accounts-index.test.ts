@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   routeGet: vi.fn(),
   routePut: vi.fn(),
   routeDelete: vi.fn(),
-  writeAuditEvent: vi.fn(),
 }));
 vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/shared", () => ({
   buildCompetitorAccountsSharedResources: () => ({
@@ -44,15 +43,6 @@ vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/saml-rout
   routeGet: mocks.routeGet,
   routePut: mocks.routePut,
   routeDelete: mocks.routeDelete,
-}));
-vi.mock("../../lib/problem-deploy/handlers/shared/audit-log", () => ({
-  extractAuditContext: () => ({
-    actor: "sub-1",
-    actorUsername: "admin@example.com",
-    ipAddress: "127.0.0.1",
-    userAgent: "vitest",
-  }),
-  writeAuditEvent: mocks.writeAuditEvent,
 }));
 
 const { app } = await import("../../lib/problem-deploy/handlers/competitor-accounts-handler/index");
@@ -97,7 +87,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.DEFAULT_TENANT_ID = "tenant-test";
   process.env.DEFAULT_USER_ROLE = "TenantAdmin";
-  mocks.writeAuditEvent.mockResolvedValue(undefined);
   mocks.routeGet.mockResolvedValue({ status: 200, body: { enabled: false } });
   mocks.routePut.mockResolvedValue({ status: 200, body: { enabled: true } });
   mocks.routeDelete.mockResolvedValue({ status: 200, body: { deleted: true } });
@@ -115,33 +104,24 @@ describe("healthz + /admin/* role middleware", () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 
-  it("should 403 + audit a known-role mismatch (resolveTenantId succeeds)", async () => {
+  it("should 403 for a known-role mismatch", async () => {
     process.env.DEFAULT_USER_ROLE = "TenantUser"; // not in TENANT_ROLES
     const res = await json("POST", "/admin/competitor-accounts", validCreate);
     expect(res.status).toBe(StatusCodes.FORBIDDEN);
     expect((await res.json()).error).toBe("forbidden_role");
-    expect(mocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ outcome: "forbidden", tenantId: "tenant-test" }),
-    );
   });
 
-  it("should still audit as 'unknown' tenant when the claim is also missing", async () => {
+  it("should reject a wrong role when the tenant claim is also missing", async () => {
     process.env.DEFAULT_USER_ROLE = "TenantUser";
     delete process.env.DEFAULT_TENANT_ID;
     const res = await app.request("/admin/competitor-accounts");
     expect(res.status).toBe(StatusCodes.FORBIDDEN);
-    expect(mocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ outcome: "forbidden", tenantId: "unknown" }),
-    );
   });
 
   it("should 403 with actualRole '(none)' when no role claim is present", async () => {
     delete process.env.DEFAULT_USER_ROLE;
     const res = await app.request("/admin/competitor-accounts");
     expect(res.status).toBe(StatusCodes.FORBIDDEN);
-    expect(mocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ extra: expect.objectContaining({ actualRole: "(none)" }) }),
-    );
   });
 
   it("should 401 missing_tenant_claim when resolveTenantId throws outside a try (POST create)", async () => {
@@ -194,7 +174,6 @@ describe("healthz + /admin/* role middleware", () => {
     );
     expect(res.status).toBe(StatusCodes.FORBIDDEN);
     expect((await res.json()).error).toBe("forbidden_machine_route");
-    expect(mocks.writeAuditEvent).not.toHaveBeenCalled();
   });
 });
 
@@ -241,23 +220,17 @@ describe("POST /admin/competitor-accounts", () => {
     expect((await res.json()).error).toBe("validation_failed");
   });
 
-  it("should 201 + write a success audit on create", async () => {
+  it("should 201 on create", async () => {
     mocks.createCompetitorAccount.mockResolvedValueOnce({ awsAccountId: ACCT, externalId: "ext" });
     const res = await json("POST", "/admin/competitor-accounts", validCreate);
     expect(res.status).toBe(StatusCodes.CREATED);
-    expect(mocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "create_competitor_account", outcome: "success" }),
-    );
   });
 
-  it("should 409 + conflict audit on a duplicate", async () => {
+  it("should 409 on a duplicate", async () => {
     mocks.createCompetitorAccount.mockRejectedValueOnce(new DuplicateCompetitorAccountError(ACCT));
     const res = await json("POST", "/admin/competitor-accounts", validCreate);
     expect(res.status).toBe(StatusCodes.CONFLICT);
     expect((await res.json()).error).toBe("duplicate_account");
-    expect(mocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ outcome: "conflict" }),
-    );
   });
 
   it("should 500 on an unexpected create error", async () => {
@@ -350,14 +323,11 @@ describe("DELETE /admin/competitor-accounts/:awsAccountId", () => {
       StatusCodes.BAD_REQUEST,
     );
   });
-  it("should 200 + write a success audit on delete", async () => {
+  it("should 200 on delete", async () => {
     mocks.deleteCompetitorAccount.mockResolvedValueOnce(undefined);
     const res = await json("DELETE", `/admin/competitor-accounts/${ACCT}`);
     expect(res.status).toBe(StatusCodes.OK);
     expect(await res.json()).toEqual({ deleted: true });
-    expect(mocks.writeAuditEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "delete_competitor_account", outcome: "success" }),
-    );
   });
   it("should 404 when the account is not found", async () => {
     mocks.deleteCompetitorAccount.mockRejectedValueOnce(new CompetitorAccountNotFoundError(ACCT));

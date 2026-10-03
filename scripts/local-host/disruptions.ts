@@ -8,7 +8,6 @@ import {
   type ProblemPhaseEntry,
   triggerMatches,
 } from "@tenkacloud/problem-sdk/internal";
-import type { AuditOperation, AuditRecord } from "./audit-record";
 import {
   declaredDisruptions,
   disruptionParameters,
@@ -34,8 +33,6 @@ function canonical(value: unknown): unknown {
   return value;
 }
 const iso = (time: number) => new Date(time).toISOString();
-const executionAuditId = (id: string) =>
-  `${id.slice(0, 8)}-${id.slice(8, 12)}-4${id.slice(13, 16)}-8${id.slice(17, 20)}-${id.slice(20, 32)}`;
 
 /** One host process owns durable requests and polls only the retained command targets. */
 export class LocalDisruptions {
@@ -48,7 +45,6 @@ export class LocalDisruptions {
       () => host.engine.disruptionAdapter?.(),
       host.now,
       (target, requestId, injecting) => this.assertTarget(target, requestId, injecting),
-      (row) => this.observeResult(row),
     );
   }
   recover(): void {
@@ -69,7 +65,6 @@ export class LocalDisruptions {
     parts: string[],
     request: ApiRequest,
     principal: OrganizerPrincipal,
-    operation: AuditOperation | undefined,
   ): ApiResponse | undefined {
     if (parts[0] !== "disruptions") return undefined;
     const command = `${request.method} ${parts.slice(1).join("/")}`;
@@ -95,18 +90,7 @@ export class LocalDisruptions {
       const parsed = DisruptionFireRequestSchema.safeParse(request.body);
       if (!parsed.success)
         throw new HostError(400, "Invalid disruption request.", "invalid_disruption_request");
-      const existing = this.store.request(event.eventId, parsed.data.requestId);
-      const row = existing
-        ? this.host.store.transaction(() => this.enqueue(event, parsed.data, organizerId))
-        : this.host.audit.accept(operation, [], () =>
-            this.enqueue(
-              event,
-              parsed.data,
-              organizerId,
-              undefined,
-              this.host.store.featureFlags().audit ? operation : undefined,
-            ),
-          );
+      const row = this.host.store.transaction(() => this.enqueue(event, parsed.data, organizerId));
       return {
         status: 202,
         body: {
@@ -150,7 +134,7 @@ export class LocalDisruptions {
       parts[1] === "recurring" &&
       parts[3] === "cancel"
     ) {
-      this.host.audit.commit(operation, () => {
+      this.host.store.transaction(() => {
         const row = this.store.request(event.eventId, parts[2] ?? "");
         if (!row) throw new HostError(404, "Disruption request not found.");
         this.store.putRequest({ ...row, cancelled: true });
@@ -250,7 +234,6 @@ export class LocalDisruptions {
     input: DisruptionFireRequest,
     firedBy: string,
     triggerDueAt?: number,
-    acceptedAudit?: AuditOperation,
   ): DisruptionRequest {
     const fingerprint = digest(JSON.stringify(canonical(input)));
     const existing = this.store.request(event.eventId, input.requestId);
@@ -305,7 +288,6 @@ export class LocalDisruptions {
       dueAt,
       endsAt: dueAt + interval * (count - 1),
       cancelled: false,
-      ...(acceptedAudit ? { acceptedAudit } : {}),
     };
     this.store.putRequest(row);
     for (let tick = 1; tick <= count; tick += 1)
@@ -322,49 +304,6 @@ export class LocalDisruptions {
           status: "queued",
         });
     return row;
-  }
-  private observeResult(row: import("./disruption-model").DisruptionExecution): void {
-    const accepted = this.store.request(row.eventId, row.requestId)?.acceptedAudit;
-    if (!accepted) return;
-    let phase: AuditRecord["phase"];
-    let outcome: AuditRecord["outcome"];
-    let reason: AuditRecord["reason"] | undefined;
-    switch (row.status) {
-      case "failed":
-      case "skipped":
-        phase = "result";
-        outcome = "failed";
-        reason = "operation_failed";
-        break;
-      case "inject_unknown":
-        phase = "result";
-        outcome = "unknown";
-        break;
-      case "revert_due":
-        phase = "result";
-        outcome = row.injectOutcome === "completed" ? "succeeded" : "failed";
-        if (outcome === "failed") reason = "operation_failed";
-        break;
-      case "recovery_required":
-        phase = "cleanup";
-        outcome = "unknown";
-        break;
-      case "revert_command_completed":
-        phase = "cleanup";
-        outcome = "succeeded";
-        reason = "unverified";
-        break;
-      default:
-        return;
-    }
-    this.host.audit.observe({
-      ...accepted,
-      action: "disruption.operation",
-      resource: { kind: "disruption", id: executionAuditId(row.id) },
-      phase,
-      outcome,
-      ...(reason ? { reason } : {}),
-    });
   }
   private assertTarget(target: DisruptionTarget, requestId: string, injecting: boolean): void {
     const job = this.host.store.job(target.jobId);

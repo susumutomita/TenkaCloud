@@ -8,7 +8,6 @@ import { z } from "zod";
 import { getEnv } from "../../../helper-functions.js";
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
-import type { AdminAuditLogRepository } from "../../control-data/admin-audit-log-repository.js";
 import { selectBackend } from "../../control-data/backend-config.js";
 import type {
   DeploymentsQueryPort,
@@ -119,12 +118,7 @@ export interface EventSharedResources {
   readonly competitorAccountsTableName: string;
   /** Issue #888: disruption audit + idempotency 用 DDB table。 deploy 時に env で wire。 */
   readonly disruptionsTableName: string;
-  /**
-   * Issue #950 / #2442: admin audit log 用 DDB table 名。 pure SQL
-   * backend (turso) では table 自体が synth されず env も配線されないため、他の
-   * `*TableName` field と同じ空文字 default 緩和を適用する (`resolveAdminAuditLogRepository` が
-   * fail loud に受ける)。 tenant-scoped read route (`routes/audit-log.ts`) が使う。
-   */
+  /** Legacy configuration shape only; dedicated audit HTTP readers/writers are retired. */
   readonly adminAuditLogTableName: string;
   readonly eventBusName: string;
   readonly env: string;
@@ -483,22 +477,6 @@ export function resolveDisruptionsRepository(
   return shared.runtime.resolveDisruptionsRepository({
     ddb: shared.ddb,
     disruptionsTableName: shared.disruptionsTableName,
-  });
-}
-
-/**
- * [Issue #2442 / Phase C4] AdminAuditLog seam for `routes/audit-log.ts` (tenant-scoped audit read
- * — Issue #1292). Default backend stays DynamoDB and emits the same Query through the same
- * injected DocumentClient (byte-identical to the pre-seam inline access). Delegates to the
- * cold-start-cached injected `shared.runtime` (mirror of {@link resolveDisruptionsRepository}), so
- * `CONTROL_DATA_BACKEND=turso` works.
- */
-export function resolveAdminAuditLogRepository(
-  shared: Pick<EventSharedResources, "runtime" | "ddb" | "adminAuditLogTableName">,
-): Promise<AdminAuditLogRepository> {
-  return shared.runtime.resolveAdminAuditLogRepository({
-    ddb: shared.ddb,
-    adminAuditLogTableName: shared.adminAuditLogTableName,
   });
 }
 

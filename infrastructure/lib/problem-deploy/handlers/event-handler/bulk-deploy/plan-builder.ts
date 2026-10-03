@@ -3,7 +3,7 @@ import type { TeamDeploymentRecord } from "../../../control-data/teams-repositor
 import { buildStackPrefix, slugify } from "../../deploy-handler/naming.js";
 import { type DeploymentItem, runtimeItemFields } from "../../deploy-handler/types.js";
 import type { VerifiedCompetitorAccount } from "../../shared/competitor-account-lookup.js";
-import { assertSeparateCompetitorAccount } from "../../shared/competitor-account-policy.js";
+import { assertEventCompetitorAccount } from "../../shared/competitor-account-policy.js";
 import {
   provenanceItemFields,
   toDeploymentProvenance,
@@ -59,6 +59,12 @@ export interface BuildBulkDeployPlanArgs {
  * unsupportedRuntimeProblems に計上する (#2571: 下の buildBulkPlanEntry コメント参照)。
  */
 export function buildBulkDeployPlan(args: BuildBulkDeployPlanArgs): BulkDeployPlan {
+  if (
+    args.event.hostingAccountSelfTest &&
+    (args.event.eventId !== args.eventId || args.event.tenantId !== args.tenantId)
+  ) {
+    throw new Error("Self-test acknowledgment must belong to the event being deployed");
+  }
   const createdAt = new Date(args.nowMs).toISOString();
   const acc = createBulkPlanAccumulator();
   for (const team of args.selected.teams) {
@@ -185,7 +191,7 @@ function buildBulkPlanEntry(
   }
   const awsAccountId = team.awsAccountId ?? problem.defaultAwsAccountId;
   if (!awsAccountId) return { kind: "skip" };
-  assertSeparateCompetitorAccount(awsAccountId);
+  assertEventCompetitorAccount(awsAccountId, args.event);
   const verified = args.verified.get(awsAccountId);
   if (!verified) return { kind: "unverified", accountId: awsAccountId };
   return {
@@ -346,7 +352,20 @@ function createAwsPlanEntry(
       EventBusName: args.shared.eventBusName,
       Source: EVENT_SOURCE,
       DetailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
-      Detail: JSON.stringify(detail),
+      Detail: JSON.stringify({
+        ...detail,
+        ...(args.event.hostingAccountSelfTest && awsAccountId === process.env.CONTROL_PLANE_ACCOUNT
+          ? {
+              eventId: args.eventId,
+              hostingAccountSelfTest: {
+                ...args.event.hostingAccountSelfTest,
+                eventId: args.eventId,
+                tenantId: args.tenantId,
+                jobId,
+              },
+            }
+          : {}),
+      }),
       Resources: [`tenkacloud:deployment:${jobId}`],
     },
     replacesJobId: replacement?.jobId,

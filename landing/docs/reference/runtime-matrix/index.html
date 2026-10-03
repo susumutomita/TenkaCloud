@@ -87,7 +87,7 @@
 </tr>
 <tr>
 <td>AWS CloudFormation</td>
-<td>クラウド開催専用。別の検証済み競技者アカウントが必要で、hosting account は変更前に拒否。create / update / no-op / recreate、flag / multi-flag・定期採点、参加者 Console / CLI を復旧。現行 catalog の 9 template は TemplateBody の 51,200 bytes を超え、TemplateURL は未実装。実 AWS は別途リハーサル</td>
+<td>クラウド開催専用。検証済み競技者アカウントが必要。開催用アカウントでの自己検証はイベント作成・キー発行前のリスク確認が必要。問題用ロールが基盤のデータへ到達し得るため、第三者が参加する本格開催には別アカウントを推奨。create / update / no-op / recreate、flag / multi-flag・定期採点、参加者 Console / CLI を復旧。現行 catalog の 9 template は TemplateBody の 51,200 bytes を超え、TemplateURL は未実装。実 AWS は別途リハーサル</td>
 </tr>
 <tr>
 <td>Lambda + Turso/DynamoDB のクラウド基盤</td>

@@ -43,7 +43,6 @@ import {
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "./deploy.js";
-import { recordDeployAudit, recordRetryAudit } from "./deploy-audit.js";
 import { DeployQuotaExceededError, type QuotaTier, resolveQuotaTier } from "./deploy-quota.js";
 import { beginIdempotent, finishIdempotent, hashRequest } from "./idempotency.js";
 import { getDeployment, listDeployments } from "./list.js";
@@ -326,12 +325,6 @@ app.post("/problems/:problemId/deploy", async (c) => {
   const composite = asCompositeDescriptor(descriptor);
   if (composite) {
     const response = await handleCompositeDeploy(c, ctx, problemId, composite, quotaTier, body);
-    await recordDeployAudit(
-      c,
-      tenantId,
-      problemId,
-      response.status === StatusCodes.ACCEPTED ? "success" : "error",
-    );
     // composite も同じ route なので、 記録しないとここだけ再送で二重に走る。
     await recordIdempotentResult(response.status, await response.clone().json());
     return response;
@@ -359,11 +352,9 @@ app.post("/problems/:problemId/deploy", async (c) => {
       problemId,
       quotaTier,
     });
-    await recordDeployAudit(c, tenantId, problemId, "success");
     await recordIdempotentResult(StatusCodes.ACCEPTED, response);
     return c.json(response, StatusCodes.ACCEPTED);
   } catch (err) {
-    await recordDeployAudit(c, tenantId, problemId, "error");
     const failure = mapDeployError(c, problemId, err);
     // 失敗も記録する。 Stripe と同じで、 同じキーの再送には成功・失敗を問わず 1 回目の
     // 結果を返す。 失敗を記録しないと、 再送のたびに実処理が走ってしまう。
@@ -509,11 +500,8 @@ app.post("/deployments/retry", async (c) => {
   const retryTenantId = resolveTenantId(c);
   try {
     const result = await retryDeployments(shared, retryTenantId, request);
-    // #2955: 再投入は deploy と同じく mutating なので、同じ粒度で監査に残す。
-    await recordRetryAudit(c, retryTenantId, result.items.length, "success");
     return c.json(result, StatusCodes.OK);
   } catch (err) {
-    await recordRetryAudit(c, retryTenantId, request.failedJobIds.length, "error");
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] retryDeployments failed", { message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);

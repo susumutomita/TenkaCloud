@@ -12,7 +12,6 @@ export class DisruptionRunner {
       requestId: string,
       injecting: boolean,
     ) => void,
-    private readonly onSaved?: (row: DisruptionExecution) => void,
   ) {}
   recover(): void {
     for (const row of this.store.active()) {
@@ -51,12 +50,6 @@ export class DisruptionRunner {
   private save(row: DisruptionExecution): void {
     const updated = { ...row, updatedAt: this.now() };
     this.store.putExecution(updated);
-    // Audit is optional after the durable runtime result has been saved.
-    try {
-      this.onSaved?.(updated);
-    } catch {
-      // An audit observation cannot reverse a completed external command.
-    }
   }
   private async run(): Promise<void> {
     const rows = this.store

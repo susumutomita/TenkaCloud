@@ -6,6 +6,10 @@ import {
 import type { EventRecord } from "../../control-data/events-repository.js";
 import type { TeamRecord } from "../../control-data/teams-repository.js";
 import { generateTeamLoginKey } from "../deploy-handler/team-key.js";
+import {
+  HostingAccountSelfTestRequestSchema,
+  UnsupportedHostingAccountError,
+} from "../shared/competitor-account-policy.js";
 import { captureCurrentCatalog } from "../shared/execution-catalog.js";
 import {
   eventCatalogContext,
@@ -23,6 +27,7 @@ const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
 export interface CreateEventContext {
   readonly tenantId: string;
   readonly nowMs: number;
+  readonly actor?: string;
   readonly ttlMs?: number;
 }
 
@@ -74,6 +79,7 @@ export async function createEvent(
   }
 
   validateCurrentCatalogProblems(shared, req);
+  const hostingAccountSelfTest = validateSelfTestAcknowledgment(shared, ctx, req);
   const eventId = ulid();
   const nowMs = ctx.nowMs;
   const createdAt = new Date(nowMs).toISOString();
@@ -106,6 +112,7 @@ export async function createEvent(
     createdAt,
     updatedAt: createdAt,
     expiresAt,
+    ...(hostingAccountSelfTest ? { hostingAccountSelfTest } : {}),
     ...buildEventCatalogPin(shared, ctx.tenantId),
     ...(shared.executionCatalog ? { catalogKey: shared.executionCatalog.catalogKey } : {}),
   };
@@ -237,4 +244,49 @@ export class UnknownEventProblemError extends Error {
     super(`Problem ${problemId} is unavailable in the current catalog.`);
     this.name = "UnknownEventProblemError";
   }
+}
+
+/** Runs before generating any participant key or persisting the event/teams. */
+function validateSelfTestAcknowledgment(
+  shared: EventSharedResources,
+  ctx: CreateEventContext,
+  req: CreateEventRequest,
+): EventRecord["hostingAccountSelfTest"] {
+  const hostingAccount = process.env.CONTROL_PLANE_ACCOUNT;
+  const targetsHostingAccount =
+    Boolean(hostingAccount) &&
+    req.problems.some((problem) => {
+      if (isNativeExecutionProblem(shared.executionCatalog, problem.problemId)) return false;
+      const runtime = shared.resolveProblemRuntimeDescriptor?.(problem.problemId);
+      const usesAws =
+        !runtime ||
+        ("kind" in runtime
+          ? runtime.targets.some((target) => target.provider === "aws")
+          : runtime.provider === "aws");
+      return (
+        usesAws &&
+        req.teams.some(
+          (team) => (team.awsAccountId ?? problem.defaultAwsAccountId) === hostingAccount,
+        )
+      );
+    });
+  if (!targetsHostingAccount && !req.hostingAccountSelfTest) return undefined;
+  const parsed = HostingAccountSelfTestRequestSchema.safeParse(req.hostingAccountSelfTest);
+  if (
+    !targetsHostingAccount ||
+    !parsed.success ||
+    parsed.data.awsAccountId !== hostingAccount ||
+    !ctx.actor ||
+    ctx.actor === "unknown"
+  ) {
+    throw new UnsupportedHostingAccountError(
+      hostingAccount ?? req.hostingAccountSelfTest?.awsAccountId ?? "",
+    );
+  }
+  return {
+    awsAccountId: parsed.data.awsAccountId,
+    riskVersion: parsed.data.riskVersion,
+    acknowledgedAt: new Date(ctx.nowMs).toISOString(),
+    acknowledgedBy: ctx.actor,
+  };
 }

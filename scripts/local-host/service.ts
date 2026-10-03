@@ -1,8 +1,4 @@
-import { randomUUID } from "node:crypto";
 import type { ProbeFn } from "../lib/http-probe-client";
-import { HostAuditLog } from "./audit-log";
-import { type AuditOperation, auditActor } from "./audit-record";
-import { auditFailure, auditRequest } from "./audit-request";
 import {
   id,
   issueLocalOrganizerSession,
@@ -88,7 +84,6 @@ export interface ApiRequest {
 export interface ApiResponse {
   status: number;
   body: unknown;
-  contentType?: "text/csv; charset=utf-8";
 }
 const ok = (body: unknown, status = 200): ApiResponse => ({ status, body });
 const eventPattern = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
@@ -254,7 +249,6 @@ function showUptimeStatus(
 export class HostingService {
   readonly terminals: HostTerminals;
   readonly saml: SamlSignIn;
-  readonly audit: HostAuditLog;
   private readonly queue = new SerialQueue();
   readonly registration: HostRegistration;
   private readonly coordination = new LocalCoordination(this);
@@ -285,7 +279,6 @@ export class HostingService {
     this.terminals = new HostTerminals(this);
     this.progression = new HostProgression(store, now);
     this.saml = new SamlSignIn(store, masterKey, now);
-    this.audit = new HostAuditLog(store, now);
     this.disruptions = new LocalDisruptions(this);
     this.uptime = new LocalUptime(
       store,
@@ -296,17 +289,6 @@ export class HostingService {
       log,
     );
     this.registration = new HostRegistration(store, now);
-    this.registration.onMutation = (mutation) => {
-      if (mutation.action !== "claim_registration" || !mutation.teamId) return;
-      this.audit.append({
-        operationId: randomUUID(),
-        phase: "request",
-        actor: { kind: "anonymous" },
-        action: "registration.claimed",
-        resource: { kind: "team", id: mutation.teamId },
-        outcome: "succeeded",
-      });
-    };
   }
   private currentEvent(eventId: string): HostedEvent {
     const event = this.store.event(eventId);
@@ -390,31 +372,18 @@ export class HostingService {
       : {};
   }
   async admin(input: ApiRequest): Promise<ApiResponse> {
-    const request = { ...input, path: adminPath(input.path) };
-    const operation = auditRequest(request.method, request.path);
-    try {
-      return await this.adminRequest(request, operation);
-    } catch (error) {
-      if (operation) this.audit.observe({ ...operation, phase: "request", ...auditFailure(error) });
-      throw error;
-    }
+    return this.adminRequest({ ...input, path: adminPath(input.path) });
   }
-  private async adminRequest(
-    request: ApiRequest,
-    operation: AuditOperation | undefined,
-  ): Promise<ApiResponse> {
+  private async adminRequest(request: ApiRequest): Promise<ApiResponse> {
     this.assertLocalAuthRoute(request.path);
-    const unauthenticated = await this.adminLogin(request, operation);
+    const unauthenticated = await this.adminLogin(request);
     if (unauthenticated) return unauthenticated;
-    const publicSaml = await this.publicSamlRoute(request, operation);
+    const publicSaml = await this.publicSamlRoute(request);
     if (publicSaml) return publicSaml;
     const principal = this.store.authenticateAdmin(request.token, this.now());
-    if (operation) operation.actor = auditActor(principal);
-    const auditResponse = this.auditRoute(request, principal);
-    if (auditResponse) return auditResponse;
-    const samlResponse = this.samlAdminRoute(request, principal, operation);
+    const samlResponse = this.samlAdminRoute(request, principal);
     if (samlResponse) return samlResponse;
-    const fixed = await this.adminFixedRoute(request, principal, operation);
+    const fixed = await this.adminFixedRoute(request, principal);
     if (fixed) return fixed;
     const parts = request.path.split("/").filter(Boolean);
     const eventId = parts[0] === "events" ? parts[1] : undefined;
@@ -442,19 +411,12 @@ export class HostingService {
       });
     return this.queue.run(eventId, async () => {
       const current = this.store.authenticateAdmin(request.token, this.now());
-      if (operation) operation.actor = auditActor(current);
       if (parts[2] === "registration") requireAdmin(current);
       let permission: OrganizerPermission = "run-events";
       if (parts[2] === "teams") permission = "reveal-team-keys";
       else if (parts[2] === "disruptions" && request.method === "GET") permission = "read";
       requireRole(current, permission);
-      return this.mutateEvent(
-        this.currentEvent(eventId),
-        parts.slice(2),
-        request,
-        operation,
-        current,
-      );
+      return this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request, current);
     });
   }
   private assertLocalAuthRoute(path: string): void {
@@ -470,100 +432,65 @@ export class HostingService {
         "Account and SAML authentication are unavailable in local key mode.",
       );
   }
-  private async publicSamlRoute(
-    request: ApiRequest,
-    operation: AuditOperation | undefined,
-  ): Promise<ApiResponse | undefined> {
+  private async publicSamlRoute(request: ApiRequest): Promise<ApiResponse | undefined> {
     if (request.path === "/host/saml" && request.method === "GET")
       return ok({ enabled: this.saml.available() });
     if (request.path === "/host/saml/start" && request.method === "POST")
       return ok(await this.saml.start(request.body));
     if (request.path === "/host/saml/complete" && request.method === "POST")
-      return this.completeSaml(request.body, operation);
+      return this.completeSaml(request.body);
     return undefined;
   }
-  private completeSaml(input: unknown, operation: AuditOperation | undefined): ApiResponse {
+  private completeSaml(input: unknown): ApiResponse {
     return this.store.transaction(() => {
       const session = this.saml.complete(input);
-      if (operation)
-        operation.actor = auditActor(this.store.authenticateAdmin(session.idToken, this.now()));
-      return this.audit.commit(operation, () => ok(session));
+      return ok(session);
     });
-  }
-  private auditRoute(request: ApiRequest, principal: OrganizerPrincipal): ApiResponse | undefined {
-    if (
-      request.method !== "GET" ||
-      !["/admin/audit-log", "/admin/audit-log/export"].includes(request.path)
-    )
-      return undefined;
-    requireAdmin(principal);
-    if (request.path === "/admin/audit-log") return ok(this.audit.list(request.query));
-    return {
-      status: 200,
-      body: this.audit.exportCsv(request.query),
-      contentType: "text/csv; charset=utf-8",
-    };
   }
   private samlAdminRoute(
     request: ApiRequest,
     principal: OrganizerPrincipal,
-    operation: AuditOperation | undefined,
   ): ApiResponse | undefined {
     if (!request.path.startsWith("/host/saml/")) return undefined;
     requireAdmin(principal);
     if (request.path === "/host/saml/provider" && request.method === "GET")
       return ok(this.saml.settings());
     if (request.path === "/host/saml/provider" && request.method === "PUT") {
-      this.audit.commit(operation, () => this.saml.configure(request.body));
+      this.store.transaction(() => this.saml.configure(request.body));
       return ok(this.saml.settings());
     }
     if (request.path === "/host/saml/identities" && request.method === "POST") {
       this.store.transaction(() => {
-        const identityId = this.saml.link(request.body);
-        if (operation) operation.resource = { kind: "identity", id: identityId };
-        this.audit.commit(operation, () => undefined);
+        this.saml.link(request.body);
       });
       return ok({ identities: this.saml.identities() }, 201);
     }
     const identity = /^\/host\/saml\/identities\/([^/]+)$/u.exec(request.path);
     if (identity?.[1] && request.method === "DELETE") {
-      this.audit.commit(operation, () => this.saml.unlink(identity[1] ?? ""));
+      this.store.transaction(() => this.saml.unlink(identity[1] ?? ""));
       return ok({ identities: this.saml.identities() });
     }
     return undefined;
   }
-  private async adminLogin(
-    request: ApiRequest,
-    operation: AuditOperation | undefined,
-  ): Promise<ApiResponse | undefined> {
+  private async adminLogin(request: ApiRequest): Promise<ApiResponse | undefined> {
     if (request.path === "/host/bootstrap-status" && request.method === "GET")
       return ok({
         bootstrapCompleted: this.store.bootstrapCompleted(),
         ...(this.store.localOrganizerKeyEnabled() ? { authMode: "host-key" } : {}),
       });
     if (request.path === "/host/bootstrap" && request.method === "POST")
-      return this.bootstrapOrganizer(request.body, operation);
+      return this.bootstrapOrganizer(request.body);
     if (request.path === "/host/login" && request.method === "POST")
-      return this.loginOrganizer(request.body, operation);
+      return this.loginOrganizer(request.body);
     if (request.path === "/host/logout" && request.method === "POST") {
       // A revocation handle only revokes itself and works after its access token expires.
       const body = object(request.body);
-      const principal = this.store.revokeSession(text(body.refreshToken, "refreshToken", 128));
-      if (operation && principal)
-        this.audit.observe({
-          ...operation,
-          actor: auditActor(principal),
-          phase: "request",
-          outcome: "succeeded",
-        });
+      this.store.revokeSession(text(body.refreshToken, "refreshToken", 128));
       return ok({ revoked: true });
     }
     return undefined;
   }
-  private async bootstrapOrganizer(
-    input: unknown,
-    operation: AuditOperation | undefined,
-  ): Promise<ApiResponse> {
+  private async bootstrapOrganizer(input: unknown): Promise<ApiResponse> {
     if (this.store.bootstrapCompleted()) throw new HostError(409, "Host bootstrap is complete.");
     const body = object(input);
     if (typeof body.key !== "string" || !sameSecret(this.masterKey, body.key))
@@ -579,17 +506,13 @@ export class HostingService {
       passwordHash: hash,
       createdAt: this.now(),
     };
-    if (operation) operation.resource = { kind: "organizer", id: user.id };
-    return this.audit.commit(operation, () => {
+    return this.store.transaction(() => {
       const identity = this.store.bootstrap(user);
       return ok(issueOrganizerSession(this.store, this.masterKey, user, this.now(), identity), 201);
     });
   }
-  private async loginOrganizer(
-    input: unknown,
-    operation: AuditOperation | undefined,
-  ): Promise<ApiResponse> {
-    if (this.store.localOrganizerKeyEnabled()) return this.loginLocalOrganizer(input, operation);
+  private async loginOrganizer(input: unknown): Promise<ApiResponse> {
+    if (this.store.localOrganizerKeyEnabled()) return this.loginLocalOrganizer(input);
     if (!this.store.bootstrapCompleted())
       throw new HostError(
         409,
@@ -624,19 +547,12 @@ export class HostingService {
         currentIdentity.id !== identity.id
       )
         throw new HostError(401, "Invalid username or password.");
-      if (operation)
-        operation.actor = {
-          kind: "organizer",
-          userId: current.id,
-          role: current.role,
-          authMethod: "local-password",
-        };
-      return this.audit.commit(operation, () =>
-        ok(issueOrganizerSession(this.store, this.masterKey, current, this.now(), currentIdentity)),
+      return ok(
+        issueOrganizerSession(this.store, this.masterKey, current, this.now(), currentIdentity),
       );
     });
   }
-  private loginLocalOrganizer(input: unknown, operation: AuditOperation | undefined): ApiResponse {
+  private loginLocalOrganizer(input: unknown): ApiResponse {
     const body = object(input);
     if (
       Object.keys(body).length !== 1 ||
@@ -648,15 +564,12 @@ export class HostingService {
     return this.store.transaction(() => {
       const version = this.store.verifyLocalOrganizerKey(key);
       const session = issueLocalOrganizerSession(this.store, this.masterKey, this.now(), version);
-      if (operation)
-        operation.actor = auditActor(this.store.authenticateAdmin(session.idToken, this.now()));
-      return this.audit.commit(operation, () => ok(session));
+      return ok(session);
     });
   }
   private async adminFixedRoute(
     request: ApiRequest,
     principal: OrganizerPrincipal,
-    operation: AuditOperation | undefined,
   ): Promise<ApiResponse | undefined> {
     if (request.path === "/host/me" && request.method === "GET")
       return ok({
@@ -666,10 +579,10 @@ export class HostingService {
         role: principal.role,
         authMethod: principal.authMethod,
       });
-    const organizer = await this.organizerRoutes(request, principal, operation);
+    const organizer = await this.organizerRoutes(request, principal);
     if (organizer) return organizer;
     if (request.path.startsWith("/admin/competitor-accounts"))
-      return this.accountRoute(request, principal, operation);
+      return this.accountRoute(request, principal);
     if (request.path === "/host/catalog" && request.method === "GET") {
       return ok({
         limits: {
@@ -690,14 +603,13 @@ export class HostingService {
     }
     if (request.path === "/events" && request.method === "POST") {
       requireRole(principal, "run-events");
-      return this.createEvent(object(request.body), operation);
+      return this.createEvent(object(request.body));
     }
     return undefined;
   }
   private async organizerRoutes(
     request: ApiRequest,
     principal: OrganizerPrincipal,
-    operation: AuditOperation | undefined,
   ): Promise<ApiResponse | undefined> {
     if (request.path === "/host/users" && request.method === "GET") {
       requireAdmin(principal);
@@ -705,32 +617,29 @@ export class HostingService {
     }
     if (request.path === "/host/users" && request.method === "POST") {
       requireAdmin(principal);
-      return this.createOrganizer(request, operation);
+      return this.createOrganizer(request);
     }
     const userPath = /^\/host\/users\/([0-9A-HJKMNP-TV-Z]{26})$/u.exec(request.path);
     if (userPath) {
       requireAdmin(principal);
       const userId = userPath[1] ?? "";
       if (request.method === "DELETE") {
-        this.audit.commit(operation, () => this.store.deleteOrganizer(userId));
+        this.store.transaction(() => this.store.deleteOrganizer(userId));
         return ok({ deleted: true });
       }
       if (request.method === "PATCH") {
-        return this.updateOrganizer(request, userId, operation);
+        return this.updateOrganizer(request, userId);
       }
     }
     if (request.path === "/feature-flags" && request.method === "GET")
       return ok({ flags: this.store.featureFlags() });
     if (request.path === "/feature-flags" && request.method === "PUT") {
       requireAdmin(principal);
-      return this.updateFeatureFlag(request.body, operation, principal);
+      return this.updateFeatureFlag(request.body);
     }
     return undefined;
   }
-  private async createOrganizer(
-    request: ApiRequest,
-    operation: AuditOperation | undefined,
-  ): Promise<ApiResponse> {
+  private async createOrganizer(request: ApiRequest): Promise<ApiResponse> {
     const body = object(request.body);
     const name = username(body.username);
     const role = organizerRole(body.role);
@@ -748,21 +657,11 @@ export class HostingService {
         passwordHash: hash,
         createdAt: this.now(),
       };
-      if (operation) {
-        operation.actor = auditActor(this.store.authenticateAdmin(request.token, this.now()));
-        operation.resource = { kind: "organizer", id: user.id };
-      }
-      return this.audit.commit(operation, () => {
-        this.store.insertOrganizer(user);
-        return ok({ user: this.publicOrganizer(user) }, 201);
-      });
+      this.store.insertOrganizer(user);
+      return ok({ user: this.publicOrganizer(user) }, 201);
     });
   }
-  private async updateOrganizer(
-    request: ApiRequest,
-    userId: string,
-    operation: AuditOperation | undefined,
-  ): Promise<ApiResponse> {
+  private async updateOrganizer(request: ApiRequest, userId: string): Promise<ApiResponse> {
     const body = object(request.body);
     const current = this.store.organizer(userId);
     if (!current) throw new HostError(404, "Organizer not found.");
@@ -777,41 +676,26 @@ export class HostingService {
       passwordHash: hash,
     };
     requireAdmin(this.store.authenticateAdmin(request.token, this.now()));
-    if (operation)
-      operation.actor = auditActor(this.store.authenticateAdmin(request.token, this.now()));
-    return this.audit.commit(operation, () => {
+    return this.store.transaction(() => {
       this.store.updateOrganizer(updated);
       return ok({ user: this.publicOrganizer(this.store.organizer(userId)) });
     });
   }
-  private updateFeatureFlag(
-    input: unknown,
-    operation: AuditOperation | undefined,
-    principal: OrganizerPrincipal,
-  ): ApiResponse {
+  private updateFeatureFlag(input: unknown): ApiResponse {
     const body = object(input);
     const key = body.key;
-    if (
-      key !== "saml" &&
-      key !== "audit" &&
-      key !== "challengePrerequisiteGate" &&
-      key !== "registration"
-    )
+    if (key !== "saml" && key !== "challengePrerequisiteGate" && key !== "registration")
       throw new HostError(400, "Unknown feature flag.");
     if (typeof body.enabled !== "boolean")
       throw new HostError(400, "Flag enabled must be boolean.");
     if (key === "saml" && this.store.localOrganizerKeyEnabled())
       throw new HostError(404, "SAML is unavailable in local key mode.");
     const enabled = body.enabled;
-    if (key === "audit") this.audit.setEnabled(enabled, auditActor(principal));
-    else {
-      if (operation) operation.resource = { kind: "feature", id: key };
-      this.audit.commit(operation, () => {
-        this.store.setFeatureFlag(key, enabled);
-        if (key === "saml" && !enabled) this.saml.invalidate();
-        if (key === "challengePrerequisiteGate" && enabled) this.progression.captureAllEvents();
-      });
-    }
+    this.store.transaction(() => {
+      this.store.setFeatureFlag(key, enabled);
+      if (key === "saml" && !enabled) this.saml.invalidate();
+      if (key === "challengePrerequisiteGate" && enabled) this.progression.captureAllEvents();
+    });
     return ok({ flags: this.store.featureFlags() });
   }
   private publicOrganizer(user: OrganizerUser | undefined): OrganizerView {
@@ -830,15 +714,11 @@ export class HostingService {
       throw new HostError(422, "Start the host with --aws-region to manage competitor accounts.");
     return this.accountConnection;
   }
-  private registerAccount(
-    body: Record<string, unknown>,
-    operation: AuditOperation | undefined,
-  ): CompetitorAccount {
+  private registerAccount(body: Record<string, unknown>): CompetitorAccount {
     const connection = this.connection();
     const awsAccountId = text(body.awsAccountId, "awsAccountId", 12);
     if (!awsAccountPattern.test(awsAccountId))
       throw new HostError(422, "Use a 12-digit AWS account ID.");
-    if (operation) operation.resource = { kind: "account", id: awsAccountId };
     if (awsAccountId === connection.operatorAccountId)
       throw new HostError(422, "The operator account cannot be a competitor account.");
     const region = body.region === undefined ? connection.region : text(body.region, "region", 32);
@@ -863,7 +743,7 @@ export class HostingService {
       createdAt: now,
       updatedAt: now,
     };
-    return this.audit.commit(operation, () => {
+    return this.store.transaction(() => {
       this.store.putAccount(account);
       return account;
     });
@@ -871,13 +751,12 @@ export class HostingService {
   private accountRoute(
     request: ApiRequest,
     principal: OrganizerPrincipal,
-    operation: AuditOperation | undefined,
   ): ApiResponse | Promise<ApiResponse> {
     if (request.path === "/admin/competitor-accounts" && request.method === "GET")
       return ok({ items: this.store.accounts() });
     requireRole(principal, "manage-connections");
     if (request.path === "/admin/competitor-accounts" && request.method === "POST") {
-      const account = this.registerAccount(object(request.body), operation);
+      const account = this.registerAccount(object(request.body));
       const cloud = this.connection();
       return ok(
         { ...account, externalId: cloud.externalId, tenkaCloudAccountId: cloud.operatorAccountId },
@@ -885,22 +764,18 @@ export class HostingService {
       );
     }
     if (request.path === "/admin/competitor-accounts/bulk" && request.method === "POST")
-      return this.bulkRegisterAccounts(object(request.body), operation);
+      return this.bulkRegisterAccounts(object(request.body));
     const match = /^\/admin\/competitor-accounts\/(\d{12})(?:\/(verify))?$/u.exec(request.path);
     if (!match) throw new HostError(404, "Unknown host endpoint.");
     const accountId = match[1];
     if (!accountId) throw new HostError(404, "Unknown host endpoint.");
     if (request.method === "POST" && match[2] === "verify")
-      return this.verifyAccount(accountId, request.token, operation);
+      return this.verifyAccount(accountId, request.token);
     if (request.method === "DELETE" && !match[2])
-      return this.deleteAccount(accountId, request.token, operation);
+      return this.deleteAccount(accountId, request.token);
     throw new HostError(404, "Unknown host endpoint.");
   }
-  private bulkRegisterOne(
-    value: unknown,
-    defaults: Record<string, unknown>,
-    operation: AuditOperation | undefined,
-  ) {
+  private bulkRegisterOne(value: unknown, defaults: Record<string, unknown>) {
     const awsAccountId =
       value &&
       typeof value === "object" &&
@@ -910,10 +785,9 @@ export class HostingService {
         ? value.awsAccountId
         : "";
     try {
-      this.registerAccount({ ...defaults, ...object(value) }, operation);
+      this.registerAccount({ ...defaults, ...object(value) });
       return { awsAccountId, outcome: "created" as const };
     } catch (error) {
-      if (operation) this.audit.observe({ ...operation, phase: "request", ...auditFailure(error) });
       const status = error instanceof HostError ? error.status : 500;
       let outcome: "duplicate" | "invalid" | "failed" = "failed";
       if (status === 409) outcome = "duplicate";
@@ -925,16 +799,11 @@ export class HostingService {
       };
     }
   }
-  private bulkRegisterAccounts(
-    body: Record<string, unknown>,
-    operation: AuditOperation | undefined,
-  ): ApiResponse {
+  private bulkRegisterAccounts(body: Record<string, unknown>): ApiResponse {
     if (!Array.isArray(body.accounts) || body.accounts.length < 1 || body.accounts.length > 100)
       throw new HostError(400, "Choose 1–100 competitor accounts.");
     const defaults = body.defaults === undefined ? {} : object(body.defaults);
-    const results = body.accounts.map((value: unknown) =>
-      this.bulkRegisterOne(value, defaults, operation ? { ...operation } : undefined),
-    );
+    const results = body.accounts.map((value: unknown) => this.bulkRegisterOne(value, defaults));
     const created = results.filter((result) => result.outcome === "created").length;
     const cloud = this.connection();
     return ok({
@@ -947,11 +816,7 @@ export class HostingService {
       tenkaCloudAccountId: cloud.operatorAccountId,
     });
   }
-  private verifyAccount(
-    accountId: string,
-    token: string,
-    operation: AuditOperation | undefined,
-  ): Promise<ApiResponse> {
+  private verifyAccount(accountId: string, token: string): Promise<ApiResponse> {
     return this.queue.run(`account:${accountId}`, async () => {
       requireRole(this.store.authenticateAdmin(token, this.now()), "manage-connections");
       const account = this.store.account(accountId);
@@ -960,7 +825,6 @@ export class HostingService {
         await cloud.verify(account.awsAccountId, account.competitorRoleName);
       } catch {
         const current = this.store.authenticateAdmin(token, this.now());
-        if (operation) operation.actor = auditActor(current);
         requireRole(current, "manage-connections");
         const updatedAt = new Date(this.now()).toISOString();
         this.store.putAccount({ ...account, verified: false, verifiedAt: undefined, updatedAt });
@@ -970,24 +834,18 @@ export class HostingService {
         );
       }
       const current = this.store.authenticateAdmin(token, this.now());
-      if (operation) operation.actor = auditActor(current);
       requireRole(current, "manage-connections");
       const verifiedAt = new Date(this.now()).toISOString();
       const verified = { ...account, verified: true, verifiedAt, updatedAt: verifiedAt };
-      return this.audit.commit(operation, () => {
+      return this.store.transaction(() => {
         this.store.putAccount(verified);
         return ok(verified);
       });
     });
   }
-  private deleteAccount(
-    accountId: string,
-    token: string,
-    operation: AuditOperation | undefined,
-  ): Promise<ApiResponse> {
+  private deleteAccount(accountId: string, token: string): Promise<ApiResponse> {
     return this.queue.run(`account:${accountId}`, async () => {
       const current = this.store.authenticateAdmin(token, this.now());
-      if (operation) operation.actor = auditActor(current);
       requireRole(current, "manage-connections");
       this.store.account(accountId);
       if (this.store.accountReferenced(accountId))
@@ -995,16 +853,13 @@ export class HostingService {
           409,
           "Competitor account is assigned to an event or has resources awaiting cleanup.",
         );
-      return this.audit.commit(operation, () => {
+      return this.store.transaction(() => {
         this.store.deleteAccount(accountId);
         return ok({ deleted: true });
       });
     });
   }
-  private createEvent(
-    body: Record<string, unknown>,
-    operation: AuditOperation | undefined,
-  ): ApiResponse {
+  private createEvent(body: Record<string, unknown>): ApiResponse {
     const name = text(body.name, "name");
     if (!Array.isArray(body.teams) || body.teams.length < 1 || body.teams.length > MAX_JOBS)
       throw new HostError(400, "Choose 1–40 teams.");
@@ -1073,8 +928,7 @@ export class HostingService {
       problems,
       ...(demand ? { containerMode: "on-demand" as const } : {}),
     };
-    if (operation) operation.resource = { kind: "event", id: eventId };
-    this.audit.commit(operation, () => {
+    this.store.transaction(() => {
       this.store.putEvent(event);
       for (const team of teams) this.store.putTeam(team);
     });
@@ -1120,10 +974,9 @@ export class HostingService {
     event: HostedEvent,
     parts: string[],
     request: ApiRequest,
-    operation: AuditOperation | undefined,
     principal: OrganizerPrincipal,
   ): Promise<ApiResponse> {
-    const disruption = this.disruptions.route(event, parts, request, principal, operation);
+    const disruption = this.disruptions.route(event, parts, request, principal);
     if (disruption) return disruption;
     if (this.busyEvents.has(event.eventId))
       throw new HostError(409, "An environment operation is already in progress.");
@@ -1140,26 +993,20 @@ export class HostingService {
     };
     const commandKey = `${request.method} ${parts.join("/")}`;
     if (commandKey === "PUT registration")
-      return ok(
-        this.registration.configure(event.eventId, request.body, () => {
-          if (operation)
-            this.audit.append({ ...operation, phase: "request", outcome: "succeeded" });
-        }),
-      );
-    if (commandKey === "POST deploy") return this.deploy(event, body(), request.token, operation);
-    if (commandKey === "DELETE ") return this.teardown(event, operation);
+      return ok(this.registration.configure(event.eventId, request.body));
+    if (commandKey === "POST deploy") return this.deploy(event, body(), request.token);
+    if (commandKey === "DELETE ") return this.teardown(event);
     const command = commands[commandKey];
-    if (command) return this.audit.commit(operation, command);
+    if (command) return this.store.transaction(command);
     if (
       parts.length === 3 &&
       parts[0] === "teams" &&
       parts[2] === "rotate-login-key" &&
       request.method === "POST"
     )
-      return this.audit.commit(operation, () => this.rotateTeamKey(event, parts[1] ?? ""));
+      return this.store.transaction(() => this.rotateTeamKey(event, parts[1] ?? ""));
     const jobCommand = jobOperation(parts, request.method);
-    if (jobCommand)
-      return this.operateJob(event, parts[1] ?? "", jobCommand, operation, request.token);
+    if (jobCommand) return this.operateJob(event, parts[1] ?? "", jobCommand, request.token);
     throw new HostError(404, "This operation is not available in local hosting.");
   }
   private eventHasBusyJob(eventId: string): boolean {
@@ -1170,7 +1017,6 @@ export class HostingService {
     event: HostedEvent,
     jobId: string,
     operation: JobOperation,
-    auditOperation: AuditOperation | undefined,
     token: string,
   ): ApiResponse | Promise<ApiResponse> {
     if (!jobPattern.test(jobId)) throw new HostError(404, "Deployment not found in this event.");
@@ -1185,10 +1031,10 @@ export class HostingService {
       return this.queue.run(SLOT_QUEUE, async () => {
         if (operation === "restart") await this.prepareDemandStart(job);
         requireRole(this.store.authenticateAdmin(token, this.now()), "run-events");
-        return this.acceptDemand(job, operation === "stop" ? "stop" : "start", auditOperation);
+        return this.acceptDemand(job, operation === "stop" ? "stop" : "start");
       });
     job.operation = operation;
-    this.audit.accept(auditOperation, [jobId], () => this.store.putJob(job));
+    this.store.transaction(() => this.store.putJob(job));
     this.busyJobs.set(jobId, event.eventId);
     this.track(
       this.runJobOperation(jobId, operation).finally(() => this.busyJobs.delete(jobId)),
@@ -1220,7 +1066,6 @@ export class HostingService {
       job.operation = undefined;
       this.store.putJob(job);
     }
-    this.audit.settleJob(jobId, this.store.job(jobId).status);
     this.promoteIfDeployed(job.eventId);
   }
   /** Stop, resume or remove the runtime in place; `job` records the resulting state. */
@@ -1518,14 +1363,10 @@ export class HostingService {
     if (!job.unit) await this.allocateDemandPorts([job]);
     job.gatewaySlot = await this.demandGatewaySlot(job);
   }
-  private acceptDemand(
-    job: Job,
-    action: "start" | "stop",
-    auditOperation?: AuditOperation,
-  ): ApiResponse {
+  private acceptDemand(job: Job, action: "start" | "stop"): ApiResponse {
     job.operation = action === "start" ? "restart" : "stop";
     if (action === "start") job.status = "IN_PROGRESS";
-    this.audit.accept(auditOperation, [job.jobId], () => this.store.putJob(job));
+    this.store.transaction(() => this.store.putJob(job));
     this.busyJobs.set(job.jobId, job.eventId);
     this.track(
       this.runDemandOperation(job.jobId, action).finally(() => this.busyJobs.delete(job.jobId)),
@@ -1602,7 +1443,6 @@ export class HostingService {
     }
     job.operation = undefined;
     this.store.putJob(job);
-    this.audit.settleJob(job.jobId, job.status);
   }
   private async planDeploymentJobs(
     event: HostedEvent,
@@ -1647,7 +1487,6 @@ export class HostingService {
     event: HostedEvent,
     body: Record<string, unknown>,
     token: string,
-    operation: AuditOperation | undefined,
   ): Promise<ApiResponse> {
     // A torn-down event that never started (for example after a failed first deployment) can
     // be prepared again; an event that already ran is final and needs a new event instead.
@@ -1684,18 +1523,11 @@ export class HostingService {
       const planned = await this.planDeploymentJobs(event, teams, existing, failedOnly);
       this.store.transaction(() => {
         const current = this.store.authenticateAdmin(token, this.now());
-        if (operation) operation.actor = auditActor(current);
         requireRole(current, "run-events");
         if (redeployable) this.clearPastEnd(event);
         event.status = "DEPLOYING";
-        this.audit.accept(
-          operation,
-          planned.map((job) => job.jobId),
-          () => {
-            this.saveEvent(event);
-            for (const job of planned) this.store.putJob(job);
-          },
-        );
+        this.saveEvent(event);
+        for (const job of planned) this.store.putJob(job);
       });
       return planned;
     });
@@ -1766,9 +1598,8 @@ export class HostingService {
       job.error = failureMessage(error, "Runtime failed.");
     }
     this.store.putJob(job);
-    this.audit.settleJob(jobId, job.status);
   }
-  private teardown(event: HostedEvent, operation: AuditOperation | undefined): ApiResponse {
+  private teardown(event: HostedEvent): ApiResponse {
     if (event.status === "ARCHIVED")
       throw new HostError(409, "An archived event has no environments to remove.");
     // A torn-down event only accepts a retry while some cleanup is still owed.
@@ -1780,21 +1611,17 @@ export class HostingService {
     if (this.eventHasBusyJob(event.eventId))
       throw new HostError(409, "A team environment operation is still in progress.");
     const jobs = this.store.jobs(event.eventId);
-    this.audit.accept(
-      operation,
-      jobs.filter((job) => job.status !== "DELETED").map((job) => job.jobId),
-      () => {
-        this.coordination.settle(event);
-        event.status = "TEARDOWN";
-        if (event.startsAt) event.endsAt ??= new Date(this.now()).toISOString();
-        this.saveEvent(event);
-        for (const job of jobs) {
-          if (job.status === "DELETED") continue;
-          job.status = "DELETING";
-          this.store.putJob(job);
-        }
-      },
-    );
+    this.store.transaction(() => {
+      this.coordination.settle(event);
+      event.status = "TEARDOWN";
+      if (event.startsAt) event.endsAt ??= new Date(this.now()).toISOString();
+      this.saveEvent(event);
+      for (const job of jobs) {
+        if (job.status === "DELETED") continue;
+        job.status = "DELETING";
+        this.store.putJob(job);
+      }
+    });
     this.launch(event.eventId, async () => {
       for (const job of jobs) {
         if (job.status === "DELETED") continue;
@@ -1811,7 +1638,6 @@ export class HostingService {
           job.error = failureMessage(error, "Cleanup failed; ownership retained.");
         }
         this.store.putJob(job);
-        this.audit.settleJob(job.jobId, job.status);
       }
     });
     return ok(
@@ -1919,13 +1745,7 @@ export class HostingService {
     this.validateRuntimeReservations();
     this.store.transaction(() => this.progression.captureAllEvents());
     this.disruptions.recover();
-    await Promise.all(
-      this.store.jobs().map(async (job) => {
-        this.audit.settleJob(job.jobId, "unknown");
-        await this.recoverJob(job);
-        this.audit.settleJob(job.jobId, this.store.job(job.jobId).status);
-      }),
-    );
+    await Promise.all(this.store.jobs().map((job) => this.recoverJob(job)));
     for (const event of this.store.events()) {
       if (!["DEPLOYING", "READY"].includes(event.status)) continue;
       const jobs = this.store.jobs(event.eventId);
@@ -2038,7 +1858,6 @@ export class HostingService {
     }
     job.operation = undefined;
     this.store.putJob(job);
-    this.audit.settleJob(job.jobId, "FAILED");
   }
   private context(team: Team): Context {
     return {

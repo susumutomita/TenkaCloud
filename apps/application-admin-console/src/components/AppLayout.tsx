@@ -87,14 +87,12 @@ export function ShellLayout({
       text: t("nav.content_section"),
       items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
     },
-    // 管理系 (監査ログ / IdP) は日常運用メニューと混ざると見つけにくいので、 1 つの
+    // 管理系 (ユーザー / IdP) は日常運用メニューと混ざると見つけにくいので、 1 つの
     // category section にまとめて flat な羅列を解消する。
     {
       type: "section",
       text: t("nav.admin_section"),
       items: [
-        // Issue #1292: 自テナント監査ログ (= deploy / event 操作の audit)。
-        { type: "link", href: "/audit-log", text: t("nav.audit_log") },
         { type: "link", href: "/users", text: t("nav.tenant_users") },
         // Issue #2231: per-tenant runtime feature-flag toggle.
         { type: "link", href: "/settings", text: t("nav.settings") },

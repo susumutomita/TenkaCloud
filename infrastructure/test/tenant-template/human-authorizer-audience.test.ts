@@ -92,7 +92,6 @@ describe("#2953: identityValidationExpression is opt-in", () => {
 describe("#2953: the console keeps sending an ID token", () => {
   it.each([
     "apps/application-admin-console/src/api/client.ts",
-    "apps/application-admin-console/src/api/audit-log-client.ts",
     "apps/application-admin-console/src/api/idp-client.ts",
   ])("should authenticate %s with an ID token, not an access token", (relativePath) => {
     const source = readFileSync(

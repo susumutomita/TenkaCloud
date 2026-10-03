@@ -6,6 +6,7 @@ import {
   MAX_PROBLEMS_PER_EVENT,
 } from "../../control-data/domain/events.js";
 import { MAX_TEAMS_PER_EVENT, type TeamRecord } from "../../control-data/domain/teams.js";
+import { HostingAccountSelfTestRequestSchema } from "../shared/competitor-account-policy.js";
 import { ProgressionGateConfigSchema } from "../shared/progression-gate.js";
 import { PUBLIC_SCORE_EVENT_RESULTS, PUBLIC_SCORE_EVENT_SOURCES } from "../shared/score-event.js";
 
@@ -99,6 +100,7 @@ export interface TeamItem extends Omit<TeamRecord, "teamLoginKey"> {
  * `problems` には deploy する problemId と各々の default account / region。
  */
 export const CreateEventRequestSchema = z.object({
+  hostingAccountSelfTest: HostingAccountSelfTestRequestSchema.optional(),
   name: z.string().min(1).max(120),
   teams: z
     .array(

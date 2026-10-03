@@ -431,6 +431,27 @@ describe("DeployCreateStateMachine immutable source replay", () => {
       Variable: "$.competitorRole.account",
       StringEqualsPath: "$.detail.awsAccountId",
     });
+    const hostingPolicy = definition.States.VerifyPinnedCompetitorRole.Choices[0].And[1].Or;
+    expect(hostingPolicy[0]).toEqual({
+      Not: {
+        Variable: "$.competitorRole.account",
+        StringEquals: "ARN_PLACEHOLDER",
+      },
+    });
+    expect(hostingPolicy[1].And).toEqual(
+      expect.arrayContaining([
+        {
+          Variable: "$.detail.hostingAccountSelfTest.riskVersion",
+          StringEquals: "hosting-account-self-test-v1",
+        },
+        ...["eventId", "tenantId", "jobId", "awsAccountId"].map((field) => ({
+          Variable: `$.detail.hostingAccountSelfTest.${field}`,
+          StringEqualsPath: `$.detail.${field}`,
+        })),
+        { Variable: "$.detail.hostingAccountSelfTest.acknowledgedAt", IsTimestamp: true },
+        { Variable: "$.detail.hostingAccountSelfTest.acknowledgedBy", IsString: true },
+      ]),
+    );
     expect(definition.States.RouteCapturedSource.Choices[0].Next).toBe("RoutePinnedCreateInput");
     expect(definition.States.RouteCapturedSource.Default).toBe("InvalidCapturedSource");
     expect(definition.States.InvalidCapturedSource.Next).toBe("MarkFailedWithoutBuildId");

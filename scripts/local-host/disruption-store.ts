@@ -1,6 +1,5 @@
 import { DisruptionFireRequestSchema } from "@tenkacloud/problem-sdk/internal";
 import { z } from "zod";
-import { auditRecordSchema } from "./audit-record";
 import {
   type DisruptionExecution,
   type DisruptionRequest,
@@ -24,14 +23,8 @@ const requestSchema = z.object({
   dueAt: z.number(),
   endsAt: z.number(),
   cancelled: z.boolean(),
-  acceptedAudit: auditRecordSchema
-    .pick({
-      operationId: true,
-      actor: true,
-      action: true,
-      resource: true,
-    })
-    .optional(),
+  // Preserve retired metadata on existing request rows without using it for runtime work.
+  acceptedAudit: z.unknown().optional(),
 });
 
 export class DisruptionStore {

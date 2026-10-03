@@ -7,19 +7,27 @@ import { randomToken } from "../auth";
 import { startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import {
+  legacyAuditSnapshot,
+  rejectLegacyAuditWrites,
+  seedLegacyAudit,
+} from "./audit-retirement-fixture";
 import { ExerciseFixture } from "./exercise-fixture";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of cleanups.splice(0)) await close();
 });
-async function fixture() {
+async function fixture(guardLegacyWrites = true) {
   const directory = mkdtempSync(join(tmpdir(), "tenka-audit-http-"));
   const store = new HostStore(new Database(join(directory, "host.sqlite")));
   const engine = new ExerciseFixture((path) => new Database(path));
   const key = randomToken();
   const secret = randomToken();
   const logs: unknown[] = [];
+  seedLegacyAudit(store);
+  if (guardLegacyWrites) rejectLegacyAuditWrites(store);
+  const before = legacyAuditSnapshot(store);
   const service = new HostingService(store, engine, key, Date.now, (message) => logs.push(message));
   const host = await startHttpHost({
     kind: "admin",
@@ -60,21 +68,6 @@ async function fixture() {
   const { idToken: admin } = (await bootstrap.json()) as { idToken: string };
   const enable = (enabled: boolean) =>
     request("/feature-flags", "PUT", { key: "audit", enabled }, admin);
-  const list = async () => {
-    const result = await request("/admin/audit-log", "GET", undefined, admin);
-    expect(result.status).toBe(200);
-    return (await result.json()) as {
-      items: {
-        action: string;
-        actor: string;
-        actorRole?: string;
-        outcome: string;
-        phase: string;
-        operationId: string;
-      }[];
-      collection: { enabled: boolean; missed: number };
-    };
-  };
   const newEvent = () =>
     request(
       "/events",
@@ -84,6 +77,7 @@ async function fixture() {
     );
   return {
     directory,
+    before,
     store,
     service,
     engine,
@@ -94,123 +88,75 @@ async function fixture() {
     secret,
     key,
     enable,
-    list,
     logs,
     newEvent,
   };
 }
 
-test("real HTTP audit defaults off, restricts reads to Admin, excludes credentials and remains readable while off", async () => {
+test("retired audit endpoints and enablement are unavailable while host access boundaries remain", async () => {
   const f = await fixture();
-  expect((await f.list()).items).toEqual([]);
-  expect((await f.enable(true)).status).toBe(200);
+  for (const enabled of [true, false]) expect((await f.enable(enabled)).status).toBe(400);
+  for (const path of ["/admin/audit-log", "/admin/audit-log/export"]) {
+    expect((await f.request(path, "GET", undefined, f.admin)).status).toBe(404);
+    expect((await f.request(path)).status).toBe(401);
+    expect(
+      (
+        await fetch(`${f.portal.origin}/api${path}`, {
+          headers: { authorization: `Bearer ${f.admin}` },
+        })
+      ).status,
+    ).toBe(404);
+  }
   for (const role of ["Operator", "Viewer"] as const) {
     const username = role.toLowerCase();
     expect(
       (await f.request("/host/users", "POST", { username, password: f.secret, role }, f.admin))
         .status,
     ).toBe(201);
-    const session = await f.request("/host/login", "POST", { username, password: f.secret });
-    const { idToken } = (await session.json()) as { idToken: string };
-    expect((await f.request("/admin/audit-log", "GET", undefined, idToken)).status).toBe(403);
-    expect((await f.request("/admin/audit-log/export", "GET", undefined, idToken)).status).toBe(
-      403,
-    );
+    const signedIn = await f.request("/host/login", "POST", { username, password: f.secret });
+    const { idToken } = (await signedIn.json()) as { idToken: string };
+    expect((await f.request("/admin/audit-log", "GET", undefined, idToken)).status).toBe(404);
     expect(
-      (await f.request("/feature-flags", "PUT", { key: "audit", enabled: false }, idToken)).status,
+      (await f.request("/feature-flags", "PUT", { key: "registration", enabled: true }, idToken))
+        .status,
     ).toBe(403);
   }
   expect(
-    (await f.request("/host/login", "POST", { username: f.secret, password: f.secret })).status,
+    (await f.request("/host/login", "POST", { username: "admin", password: randomToken() })).status,
   ).toBe(401);
-  expect((await f.newEvent()).status).toBe(201);
-  const on = await f.list();
-  expect(
-    on.items.some(
-      (item) =>
-        item.action === "organizer.login" &&
-        item.actor === "anonymous" &&
-        item.outcome === "denied",
-    ),
-  ).toBe(true);
-  expect(
-    on.items
-      .filter((item) => item.action === "feature.updated" && item.outcome === "denied")
-      .map((item) => item.actorRole)
-      .sort((a, b) => String(a).localeCompare(String(b))),
-  ).toEqual(["Operator", "Viewer"]);
-  const csv = await f.request("/admin/audit-log/export", "GET", undefined, f.admin);
-  expect(csv.status).toBe(200);
-  expect(csv.headers.get("content-type")).toBe("text/csv; charset=utf-8");
-  expect(csv.headers.get("cache-control")).toBe("no-store");
-  const exported = await csv.text();
-  const database = JSON.stringify(f.store.statement("SELECT body FROM host_audit_records").all());
-  for (const secret of [f.secret, f.key, f.admin]) {
-    expect(exported).not.toContain(secret);
-    expect(database).not.toContain(secret);
-  }
+  expect(legacyAuditSnapshot(f.store)).toEqual(f.before);
   expect(f.logs).toEqual([]);
-  expect(
-    (
-      await fetch(`${f.portal.origin}/api/admin/audit-log`, {
-        headers: { authorization: `Bearer ${f.admin}` },
-      })
-    ).status,
-  ).toBe(404);
-  expect((await f.enable(false)).status).toBe(200);
-  const stopped = await f.list();
-  expect(stopped.collection.enabled).toBe(false);
-  expect(stopped.items[0]?.action).toBe("audit.disabled");
-  expect((await f.newEvent()).status).toBe(201);
-  expect((await f.list()).items).toEqual(stopped.items);
-  expect(
-    (await f.request("/admin/audit-log?tenantId=elsewhere", "GET", undefined, f.admin)).status,
-  ).toBe(400);
 });
 
-test("audit storage failure prevents synchronous changes and external dispatch without hiding its failure", async () => {
+test("event and deployment mutations keep atomic business transactions without audit storage", async () => {
   const f = await fixture();
-  const created = await f.newEvent();
-  const { eventId } = (await created.json()) as { eventId: string };
-  expect((await f.enable(true)).status).toBe(200);
   f.store.database.exec(
-    "CREATE TRIGGER fail_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(ABORT, 'unavailable'); END;",
+    "CREATE TRIGGER reject_team BEFORE INSERT ON host_teams BEGIN SELECT RAISE(ABORT, 'test team persistence failure'); END;",
   );
-  expect((await f.newEvent()).status).toBe(503);
-  expect(f.store.events()).toHaveLength(1);
-  expect(
-    (
-      await f.request(
-        "/host/users",
-        "POST",
-        { username: "blocked-user", password: randomToken(), role: "Viewer" },
-        f.admin,
-      )
-    ).status,
-  ).toBe(503);
-  expect(f.store.organizers().some((user) => user.username === "blocked-user")).toBe(false);
-  expect((await f.request(`/events/${eventId}/deploy`, "POST", {}, f.admin)).status).toBe(503);
+  expect((await f.newEvent()).status).toBe(500);
+  expect(f.store.events()).toEqual([]);
+  expect(f.store.statement("SELECT * FROM host_teams").all()).toEqual([]);
+  f.store.database.exec("DROP TRIGGER reject_team");
+  const { eventId } = (await (await f.newEvent()).json()) as { eventId: string };
+  f.store.database.exec(
+    "CREATE TRIGGER reject_job BEFORE INSERT ON host_jobs BEGIN SELECT RAISE(ABORT, 'test job persistence failure'); END;",
+  );
+  expect((await f.request(`/events/${eventId}/deploy`, "POST", {}, f.admin)).status).toBe(500);
   await f.service.drain();
+  expect(f.store.event(eventId).status).toBe("DRAFT");
   expect(f.store.jobs()).toEqual([]);
   expect(f.engine.starts).toEqual([]);
-  expect(f.store.event(eventId).status).toBe("DRAFT");
-  const encodedId = `%${eventId.charCodeAt(0).toString(16)}${eventId.slice(1)}`;
-  for (const path of [`/events/${encodedId}/archive`, `/events//${eventId}/%61rchive/`]) {
-    expect((await f.request(path, "POST", {}, f.admin)).status).toBe(503);
-    expect(f.store.event(eventId).status).toBe("DRAFT");
-  }
-  expect((await f.enable(false)).status).toBe(503);
-  expect(f.store.featureFlags().audit).toBe(true);
-  f.store.database.exec("DROP TRIGGER fail_audit");
-  expect((await f.list()).collection.missed).toBeGreaterThan(0);
-  expect(f.logs).toEqual([]);
+  f.store.database.exec("DROP TRIGGER reject_job");
+  expect((await f.request(`/events/${eventId}/deploy`, "POST", {}, f.admin)).status).toBe(202);
+  await f.service.drain();
+  expect(f.store.event(eventId).status).toBe("READY");
+  expect(f.store.jobs(eventId)[0]?.status).toBe("COMPLETE");
+  expect(legacyAuditSnapshot(f.store)).toEqual(f.before);
 });
 
-test("an accepted runtime result persists when audit storage later fails", async () => {
+test("accepted runtime completion and teardown ignore retired audit storage", async () => {
   const f = await fixture();
-  const created = await f.newEvent();
-  const { eventId } = (await created.json()) as { eventId: string };
-  expect((await f.enable(true)).status).toBe(200);
+  const { eventId } = (await (await f.newEvent()).json()) as { eventId: string };
   const { promise: ready, resolve: resume } = Promise.withResolvers<boolean>();
   const start = f.engine.start.bind(f.engine);
   f.engine.start = async (job, retain) => {
@@ -218,30 +164,19 @@ test("an accepted runtime result persists when audit storage later fails", async
     await start(job, retain);
   };
   expect((await f.request(`/events/${eventId}/deploy`, "POST", {}, f.admin)).status).toBe(202);
-  const accepted = (await f.list()).items.find((item) => item.action === "event.deploy");
-  expect(accepted?.outcome).toBe("accepted");
-  f.store.database.exec(
-    "CREATE TRIGGER fail_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(ABORT, 'unavailable'); END;",
-  );
+  expect(f.store.jobs(eventId)).toHaveLength(1);
   resume(true);
   await f.service.drain();
   expect(f.store.jobs(eventId)[0]?.status).toBe("COMPLETE");
   expect(f.store.event(eventId).status).toBe("READY");
-  f.store.database.exec("DROP TRIGGER fail_audit");
-  expect((await f.list()).collection.missed).toBe(1);
   expect((await f.request(`/events/${eventId}`, "DELETE", undefined, f.admin)).status).toBe(202);
   await f.service.drain();
-  const cleanup = (await f.list()).items.filter((item) => item.action === "event.teardown");
-  expect(cleanup.map((item) => item.phase).sort((a, b) => a.localeCompare(b))).toEqual([
-    "cleanup",
-    "request",
-  ]);
-  expect(new Set(cleanup.map((item) => item.operationId)).size).toBe(1);
   expect(f.store.jobs(eventId)[0]?.status).toBe("DELETED");
+  expect(legacyAuditSnapshot(f.store)).toEqual(f.before);
   expect(f.logs).toEqual([]);
 });
 
-test("competitor account audit uses account IDs, and failed verification still revokes eligibility during audit failure", async () => {
+test("account verification revokes eligibility and ordinary account mutations remain available", async () => {
   const f = await fixture();
   let failVerification = false;
   f.service.accountConnection = {
@@ -252,7 +187,6 @@ test("competitor account audit uses account IDs, and failed verification still r
       if (failVerification) throw new Error(f.secret);
     },
   };
-  expect((await f.enable(true)).status).toBe(200);
   const accountId = "111111111111";
   expect(
     (
@@ -268,9 +202,6 @@ test("competitor account audit uses account IDs, and failed verification still r
     (await f.request(`/admin/competitor-accounts/${accountId}/verify`, "POST", {}, f.admin)).status,
   ).toBe(200);
   expect(f.store.account(accountId).verified).toBe(true);
-  f.store.database.exec(
-    "CREATE TRIGGER fail_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(ABORT, 'unavailable'); END;",
-  );
   failVerification = true;
   expect(
     (await f.request(`/admin/competitor-accounts/${accountId}/verify`, "POST", {}, f.admin)).status,
@@ -279,14 +210,8 @@ test("competitor account audit uses account IDs, and failed verification still r
   expect(
     (await f.request(`/admin/competitor-accounts/${accountId}`, "DELETE", undefined, f.admin))
       .status,
-  ).toBe(503);
-  expect(f.store.accounts()).toHaveLength(1);
-  f.store.database.exec("DROP TRIGGER fail_audit");
-  expect(
-    (await f.request(`/admin/competitor-accounts/${accountId}`, "DELETE", undefined, f.admin))
-      .status,
   ).toBe(200);
-  const result = await f.request(
+  const bulk = await f.request(
     "/admin/competitor-accounts/bulk",
     "POST",
     {
@@ -298,35 +223,19 @@ test("competitor account audit uses account IDs, and failed verification still r
     },
     f.admin,
   );
-  expect(result.status).toBe(200);
-  expect(await result.json()).toMatchObject({ created: 2, invalid: 1, failed: 0 });
-  const rows = f.service.audit.list(new URLSearchParams()).items;
-  expect(
-    rows.some(
-      (item) => item.action === "competitor_account.registered" && item.target === accountId,
-    ),
-  ).toBe(true);
-  expect(
-    rows.some((item) => item.action === "competitor_account.verified" && item.target === accountId),
-  ).toBe(true);
-  expect(
-    rows.some((item) => item.action === "competitor_account.deleted" && item.target === accountId),
-  ).toBe(true);
-  expect(JSON.stringify(rows)).not.toContain(f.secret);
+  expect(bulk.status).toBe(200);
+  expect(await bulk.json()).toMatchObject({ created: 2, invalid: 1, failed: 0 });
+  expect(legacyAuditSnapshot(f.store)).toEqual(f.before);
   expect(f.logs).toEqual([]);
 });
 
-test("the browser revocation endpoint revokes its session even if optional audit storage fails", async () => {
+test("browser revocation still invalidates only the revoked session", async () => {
   const f = await fixture();
-  expect((await f.enable(true)).status).toBe(200);
   const signedIn = await f.request("/host/login", "POST", {
     username: "admin",
     password: f.secret,
   });
   const session = (await signedIn.json()) as { idToken: string; refreshToken: string };
-  f.store.database.exec(
-    "CREATE TRIGGER fail_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(ABORT, 'unavailable'); END;",
-  );
   const revoked = await fetch(`${f.host.origin}/api/host/oauth2/revoke`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -334,9 +243,8 @@ test("the browser revocation endpoint revokes its session even if optional audit
   });
   expect(revoked.status).toBe(200);
   expect((await f.request("/host/me", "GET", undefined, session.idToken)).status).toBe(401);
-  f.store.database.exec("DROP TRIGGER fail_audit");
-  expect((await f.list()).collection.missed).toBe(1);
-  expect(f.logs).toEqual([]);
+  expect((await f.request("/host/me", "GET", undefined, f.admin)).status).toBe(200);
+  expect(legacyAuditSnapshot(f.store)).toEqual(f.before);
 });
 
 test.each([
@@ -345,9 +253,9 @@ test.each([
   { operation: "restart", expected: "restart", status: "COMPLETE" },
   { operation: "teardown", expected: "teardown", status: "DELETED" },
 ] as const)(
-  "restart completes accepted $operation before recording success",
+  "restart completes accepted $operation from durable business state",
   async ({ operation, expected, status }) => {
-    const f = await fixture();
+    const f = await fixture(false);
     const { eventId } = (await (await f.newEvent()).json()) as { eventId: string };
     expect((await f.request(`/events/${eventId}/deploy`, "POST", {}, f.admin)).status).toBe(202);
     await f.service.drain();
@@ -360,21 +268,44 @@ test.each([
       ).toBe(202);
       await f.service.drain();
     }
-    expect((await f.enable(true)).status).toBe(200);
+    // Retired metadata for this exact job deliberately disagrees with its business intent.
+    f.store.statement("INSERT INTO host_audit_pending_jobs VALUES (?,1,?)").run(
+      job.jobId,
+      JSON.stringify({
+        operationId: "00000000-0000-4000-8000-000000000004",
+        actor: { kind: "system" },
+        action: expected === "teardown" ? "environment.restart" : "environment.teardown",
+        resource: { kind: "job", id: job.jobId },
+        phase: "result",
+        outcome: "unknown",
+      }),
+    );
+    const legacy = legacyAuditSnapshot(f.store);
+    rejectLegacyAuditWrites(f.store);
     const snapshot = join(f.directory, "accepted.sqlite");
-    const accept = f.service.audit.accept.bind(f.service.audit);
-    f.service.audit.accept = (intent, jobs, work) => {
-      const result = accept(intent, jobs, work);
+    const runtimeMethods = { teardown: "stop", stop: "pause", restart: "resume" } as const;
+    const runtimeMethod = runtimeMethods[expected];
+    const original = f.engine[runtimeMethod].bind(f.engine);
+    f.engine[runtimeMethod] = async (target) => {
+      // The accepted job/event transaction must already be durable before external work starts.
       f.store.statement("VACUUM INTO ?").run(snapshot);
-      return result;
+      await original(target);
     };
     const suffix = operation === "teardown" ? "" : `/${operation}`;
     const path =
       operation === "event-teardown"
         ? `/events/${eventId}`
         : `/events/${eventId}/deployments/${job.jobId}${suffix}`;
-    const method = operation.endsWith("teardown") ? "DELETE" : "POST";
-    expect((await f.request(path, method, undefined, f.admin)).status).toBe(202);
+    expect(
+      (
+        await f.request(
+          path,
+          operation.endsWith("teardown") ? "DELETE" : "POST",
+          undefined,
+          f.admin,
+        )
+      ).status,
+    ).toBe(202);
     await f.service.drain();
     const store = new HostStore(new Database(snapshot));
     try {
@@ -398,10 +329,7 @@ test.each([
       expect(store.job(job.jobId).status).toBe(status);
       expect(store.job(job.jobId).operation).toBeUndefined();
       if (expected === "teardown") expect(store.job(job.jobId).unit).toBeNull();
-      const action = operation === "event-teardown" ? "event.teardown" : `environment.${operation}`;
-      expect(
-        service.audit.list(new URLSearchParams({ action })).items.map((row) => row.outcome),
-      ).toEqual(["succeeded", "unknown", "accepted"]);
+      expect(legacyAuditSnapshot(store)).toEqual(legacy);
     } finally {
       store.close();
     }

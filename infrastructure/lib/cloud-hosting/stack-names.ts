@@ -3,17 +3,17 @@ export type CloudStackLayout = "lite" | "cloud";
 
 /** The CLI supplies the discovered layout; synthesis never discovers or adopts live stacks. */
 export function cloudStackLayout(env: NodeJS.ProcessEnv): CloudStackLayout {
-  const layout = env.TENKACLOUD_STACK_LAYOUT ?? "lite";
+  const layout = env.TENKACLOUD_STACK_LAYOUT ?? "cloud";
   if (layout !== "lite" && layout !== "cloud") {
     throw new Error("TENKACLOUD_STACK_LAYOUT must be lite or cloud.");
   }
   return layout;
 }
 
-/** Preserve original Lite physical names for new installs and existing original resources. */
+/** New installs use cloud names; the CLI preserves the discovered layout for existing stacks. */
 export function cloudStackNames(
   environment: string,
-  layout: CloudStackLayout = "lite",
+  layout: CloudStackLayout = "cloud",
 ): { app: string; backend: string } {
   if (!/^[a-z][a-z0-9-]{0,31}$/u.test(environment))
     throw new Error("Invalid cloud environment name.");

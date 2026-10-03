@@ -1,6 +1,5 @@
 import type { DisruptionDispatch, DisruptionFireRequest } from "@tenkacloud/problem-sdk/internal";
 import { z } from "zod";
-import type { AuditOperation } from "./audit-record";
 
 const dispatchSchema = z.object({
   kind: z.enum(["ssm-run-command", "lambda-invoke", "cfn-stack-update"]),
@@ -134,6 +133,6 @@ export interface DisruptionRequest {
   readonly dueAt: number;
   readonly endsAt: number;
   readonly cancelled: boolean;
-  /** Retained only when audit was enabled at acceptance; later enablement never backfills it. */
-  readonly acceptedAudit?: AuditOperation;
+  /** Legacy metadata is preserved unchanged; it has no role in runtime recovery. */
+  readonly acceptedAudit?: unknown;
 }

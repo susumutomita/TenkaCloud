@@ -13,6 +13,7 @@ const fixtures: {
   backend: Template;
   application: Template;
   tags: Record<string, string>[];
+  names: string[];
   outdir: string;
 }[] = [];
 beforeAll(() => {
@@ -23,7 +24,7 @@ beforeAll(() => {
       writeFileSync(join(dist, "index.html"), "<!doctype html><title>Synthesis fixture</title>");
     }
   }
-  for (const profile of ["dynamodb", "turso", "retained"]) {
+  for (const profile of ["dynamodb", "turso", "retained", "lite-dynamodb", "lite-turso"]) {
     const app = new App({
       outdir: join(directory, profile),
       context: { "aws:cdk:bundling-stacks": [], "@aws-cdk/core:bootstrapQualifier": "custom123" },
@@ -32,8 +33,9 @@ beforeAll(() => {
       app,
       {
         ...target,
+        ...(profile.startsWith("lite-") ? { TENKACLOUD_STACK_LAYOUT: "lite" } : {}),
         ...(profile === "retained" ? { CDK_PARAM_RETAIN_DATA_TABLES: "true" } : {}),
-        ...(profile === "turso"
+        ...(profile.endsWith("turso")
           ? {
               CDK_PARAM_CONTROL_DATA_BACKEND: "turso",
               CDK_PARAM_TURSO_DATABASE_URL: "libsql://synthetic.turso.io",
@@ -55,6 +57,7 @@ beforeAll(() => {
       backend: Template.fromStack(backend),
       application: Template.fromStack(application),
       tags: assembly.stacks.map((stack) => stack.tags),
+      names: assembly.stacks.map((stack) => stack.stackName),
       outdir: join(directory, profile),
     });
   }
@@ -68,6 +71,18 @@ function fixture(index = 0) {
 }
 
 describe("restored single-installation cloud composition", () => {
+  it("synthesizes cloud names by default and preserves the selected existing Lite names", () => {
+    for (const index of [0, 1, 2])
+      expect(fixture(index).names).toEqual([
+        "tenkacloud-cloud-problem-deploy-test",
+        "tenkacloud-cloud-test",
+      ]);
+    for (const index of [3, 4])
+      expect(fixture(index).names).toEqual([
+        "tenkacloud-lite-problem-deploy-test",
+        "tenkacloud-lite-test",
+      ]);
+  });
   it("uses the verified account and region ahead of ambient CDK defaults", () => {
     expect(
       cloudDeploymentTarget({
@@ -103,7 +118,12 @@ describe("restored single-installation cloud composition", () => {
         Record<string, Record<string, { Type: string; Properties?: Record<string, unknown> }>>
       >;
     };
-    for (const [index, provider] of ["dynamodb", "turso"].entries()) {
+    for (const [index, provider] of [
+      [0, "dynamodb"],
+      [1, "turso"],
+      [3, "dynamodb"],
+      [4, "turso"],
+    ] as const) {
       const current = fixture(index);
       for (const kind of ["application", "backend"] as const) {
         const resources = current[kind].toJSON().Resources;

@@ -72,9 +72,9 @@ See [recorded verification](../../infrastructure/README.md#verification).
 CDKToolkit or bootstraps it automatically when missing, and builds/uploads the
 source archive consumed by CodeBuild. Every upload uses a fresh private
 `<configured-key>.executions/<uuid>.zip` key and exact S3 `VersionId`; the pinned
-cloud path rejects explicitly disabled versioning. New installations retain Lite
-physical stack names; the CLI discovers existing Lite/cloud pairs and requires
-explicit selection when both exist. Original Lite updates verify ownership and
+cloud path rejects explicitly disabled versioning. New installations use cloud
+physical stack names. Existing Lite stacks keep their names. The CLI discovers
+existing Lite/cloud pairs and requires explicit selection when both exist. Original Lite updates verify ownership and
 persistent resource identities, then require explicit confirmation that no active
 competitions remain before bootstrap, source upload or deployment. Noninteractive
 original upgrades require `--confirm-no-active-events` after operator verification;
@@ -95,9 +95,11 @@ Teams may use separate competitor accounts or different problem regions within
 the same competitor account. IAM and other global services remain shared in the
 latter. Organizations/StackSets is an optional account-owner bootstrap procedure;
 platform deployment does not enable its trusted access. AWS resource exercises
-require a separate competitor account; hosting-account targets are rejected before
-resource mutation and participant STS denies them. Same-hosting-account exercises
-remain unsupported and unverified. Different regions in a shared competitor account
+require a verified competitor account. An explicit self-test acknowledgment before
+event creation permits the hosting account for that event. Participant STS rechecks
+the saved event consent. Problem and participant roles may reach hosting
+configuration and data; this opt-in does not provide isolation. Use a separate
+account when third parties participate. Live AWS self-tests remain unverified. Different regions in a shared competitor account
 do not establish complete IAM isolation. The catalog IAM audit has unresolved
 findings, so restoration is not a least-privilege certification. Previously issued
 credentials can outlive event end; current event/team state governs applicable new access.

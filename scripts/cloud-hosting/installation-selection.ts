@@ -67,5 +67,5 @@ export async function selectCloudInstallation(input: SelectionInput): Promise<Cl
     throw new Error(
       `Both tenkacloud-lite and tenkacloud-cloud installations exist for ${input.environment}. No update or deletion was selected. Review their stack ARNs, then explicitly set TENKACLOUD_STACK_LAYOUT=lite or cloud for the intended installation. The other installation is left untouched.`,
     );
-  return present.has("cloud") ? "cloud" : "lite";
+  return present.has("lite") ? "lite" : "cloud";
 }
