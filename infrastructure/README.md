@@ -411,6 +411,10 @@ triggers or references from unrelated tables stop the reset for operator review.
 A failed request is not reported as success; inspect the database before retrying
 if a lost response leaves the commit outcome unknown.
 
+`make turso-clear ENV=development` is an alias for `make turso-reset`, consistent
+with the `local-clear` name. Both Make targets share the same implementation,
+selected environment, `CLOUD_ARGS`, confirmation and data scope.
+
 The old `tenkacloud turso-live reset` alias reaches the same command. For direct Bun
 execution, use `bun run --no-env-file scripts/tenkacloud.ts turso-live reset`.
 `make local-reset` continues to rotate only the local organizer key.

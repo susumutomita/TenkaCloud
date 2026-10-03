@@ -42,7 +42,7 @@ if (command === "pack") {
   }
 } else {
   console.log(
-    "Usage: tenkacloud pack <command>\nHost a competition with: make local [LOCAL_ARGS=...]\nStop it with: make down [LOCAL_ARGS=...]\nCloud hosting: make deploy / make destroy [CLOUD_ARGS=...]\nCloud setup: make env-init / make turso-live\nTurso credentials: make turso-token-rotate [ROTATE_ARGS=...]\nTurso data reset: make turso-reset [CLOUD_ARGS=...] or tenkacloud turso-live reset [--plan|--yes]",
+    "Usage: tenkacloud pack <command>\nHost a competition with: make local [LOCAL_ARGS=...]\nStop it with: make down [LOCAL_ARGS=...]\nCloud hosting: make deploy / make destroy [CLOUD_ARGS=...]\nCloud setup: make env-init / make turso-live\nTurso credentials: make turso-token-rotate [ROTATE_ARGS=...]\nTurso data reset: make turso-clear / make turso-reset [CLOUD_ARGS=...] or tenkacloud turso-live reset [--plan|--yes]",
   );
   process.exitCode = command === undefined || command === "--help" || command === "help" ? 0 : 1;
 }

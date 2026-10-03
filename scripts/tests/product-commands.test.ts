@@ -25,6 +25,7 @@ test("default bilingual help includes hosting, catalog updates and development c
       "local-clear",
       "deploy",
       "destroy",
+      "turso-clear",
       "turso-reset",
       "env-init",
       "turso-live",
@@ -412,6 +413,7 @@ test("cloud product commands reach the existing scoped CLI without replacing loc
   for (const [target, command] of [
     ["deploy", "up"],
     ["destroy", "down"],
+    ["turso-clear", "turso-reset"],
     ["turso-reset", "turso-reset"],
   ]) {
     const result = make("-n", target ?? "", "CLOUD_ARGS=--help");
@@ -427,6 +429,58 @@ test("cloud product commands reach the existing scoped CLI without replacing loc
   expect(local.stdout).not.toContain("cloud-hosting");
 });
 
+test("Turso clear and reset forward the same selected environment and flags without implicit consent", () => {
+  const directory = mkdtempSync(join(tmpdir(), "tenkacloud-turso-alias-"));
+  const capture = join(directory, "capture");
+  try {
+    writeFileSync(
+      join(directory, "bun"),
+      '#!/bin/sh\nprintf \'%s\\n\' "$ENV" "$@" >> "$TURSO_ALIAS_CAPTURE"\nexit "$TURSO_ALIAS_EXIT"\n',
+      { mode: 0o755 },
+    );
+    // Existing files with these names must not suppress the phony cleanup targets.
+    for (const target of ["turso-clear", "turso-reset"]) {
+      writeFileSync(join(directory, target), "synthetic file\n");
+      for (const args of [[], ["--plan"], ["--yes"], ["-y"], ["--plan", "--yes"], ["--help"]]) {
+        for (const exit of [0, 7]) {
+          writeFileSync(capture, "");
+          const result = spawnSync(
+            "/usr/bin/make",
+            [
+              "--no-print-directory",
+              "-f",
+              join(root, "Makefile"),
+              target,
+              "ENV=staging",
+              `CLOUD_ARGS=${args.join(" ")}`,
+            ],
+            {
+              cwd: directory,
+              encoding: "utf8",
+              env: {
+                PATH: `${directory}:/usr/bin:/bin`,
+                TURSO_ALIAS_CAPTURE: capture,
+                TURSO_ALIAS_EXIT: String(exit),
+              },
+            },
+          );
+          expect(result.status).toBe(exit === 0 ? 0 : 2);
+          expect(readFileSync(capture, "utf8").trim().split("\n")).toEqual([
+            "staging",
+            "run",
+            "--no-env-file",
+            "scripts/cloud-hosting/main.ts",
+            "turso-reset",
+            ...args,
+          ]);
+        }
+      }
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("the Turso reset and credential aliases expose offline help", () => {
   const result = spawnSync(
     process.execPath,
@@ -435,6 +489,7 @@ test("the Turso reset and credential aliases expose offline help", () => {
   );
   expect(result.status).toBe(0);
   expect(result.stdout).toContain("Standalone make turso-reset");
+  expect(result.stdout).toContain("make turso-clear");
   const rotation = spawnSync(
     process.execPath,
     ["run", "--no-env-file", "scripts/tenkacloud.ts", "turso-live", "rotate-token", "--help"],

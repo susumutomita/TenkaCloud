@@ -170,7 +170,7 @@ pack-list: ## List installed problem packs | install済み問題packを一覧表
 	$(PACK) list $(ARGS)
 
 # ===== Host candidate | host candidate =====
-.PHONY: local down local-reset local-clear deploy destroy destroy-all turso-reset release-check release-candidate
+.PHONY: local down local-reset local-clear deploy destroy destroy-all turso-clear turso-reset release-check release-candidate
 local: ## Start the unified local competition console | ローカル競技コンソールを起動
 	bun run scripts/local-host/local.ts start $(LOCAL_ARGS)
 down: ## Stop owned local runtimes and preserve event data | 所有するローカル環境を停止し大会データを保持
@@ -188,6 +188,7 @@ destroy: ## Confirm and delete cloud platform stacks and default-owned data | �
 
 destroy-all: ## Purge exact stack-owned retained data, then delete platform stacks | stack所有の保持データを完全削除して基盤を撤収
 	bun run --no-env-file scripts/cloud-hosting/main.ts down --purge-retained-data $(CLOUD_ARGS)
+turso-clear: turso-reset ## Alias for turso-reset; clear selected Turso data after confirmation | turso-resetの別名: 確認して選択したTursoデータを消去
 turso-reset: ## Delete selected Turso control-data rows, preserving schema | 選択したTursoのcontrol-data行を削除(スキーマ維持)
 	bun run --no-env-file scripts/cloud-hosting/main.ts turso-reset $(CLOUD_ARGS)
 # Existing first-run and credential commands, backed by the current cloud configuration.

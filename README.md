@@ -118,7 +118,7 @@ Before inviting participants, create a test event and team, open a problem, subm
 
 After confirmation, destroy empties only verified CloudFormation-owned S3 buckets with a deployed `Delete` policy, including object versions and delete markers, before removing the stacks. Buckets with a `Retain` policy and their contents remain on ordinary destroy. Explicit `destroy-all` can empty retained contents; `Retain` bucket containers remain. The caller needs the [direct S3 cleanup permissions](./infrastructure/BOOTSTRAP-IAM.md#direct-deployment-and-cleanup-permissions), separately from CloudFormation's execution permissions.
 
-For Turso data cleanup alone, including after AWS stacks are gone, use `make turso-reset ENV=development`. It confirms the selected database and deletes known control-data rows while preserving schema, migrations and unrelated tables. Preview with `CLOUD_ARGS="--plan"`; unattended deletion requires `CLOUD_ARGS="--yes"`. Stop writers and complete exercise Teardown first. See [standalone Turso reset](./infrastructure/README.md#standalone-turso-data-reset).
+For Turso data cleanup alone, including after AWS stacks are gone, use `make turso-clear ENV=development` or its equivalent `make turso-reset ENV=development`. Both confirm the selected database and delete known control-data rows while preserving schema, migrations and unrelated tables. Preview with `CLOUD_ARGS="--plan"`; unattended deletion requires `CLOUD_ARGS="--yes"`. Stop writers and complete exercise Teardown first. See [standalone Turso reset](./infrastructure/README.md#standalone-turso-data-reset).
 
 To inspect commands without AWS access, use `make deploy CLOUD_ARGS="--help"` or `make destroy CLOUD_ARGS="--help"`.
 
