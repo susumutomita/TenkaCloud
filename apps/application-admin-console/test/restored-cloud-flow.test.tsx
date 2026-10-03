@@ -210,6 +210,9 @@ describe("restored cloud SPA with synthetic HTTP", () => {
     expect(JSON.parse(String(change?.init?.body))).toEqual({ role: "TenantOperator" });
   });
 
+  // Instrumented Cloudscape rendering across sign-in, creation and detail takes about
+  // five seconds on one CPU. Keep each Testing Library wait at its bounded default
+  // and give this complete journey a separate budget from individual unit tests.
   it("creates two teams in one AWS account with different regions and opens the created event", async () => {
     const { container } = await openAuthenticated("/events/new");
     await screen.findByRole("heading", { name: "Create new Event" });
@@ -250,7 +253,7 @@ describe("restored cloud SPA with synthetic HTTP", () => {
         .find(({ url }) => url.pathname === `/prod/events/${EVENT_ID}`)
         ?.url.searchParams.get("withScoreEvents"),
     ).toBe("true");
-  });
+  }, 15_000);
 
   it("retains the full event routes for an authenticated organizer", async () => {
     await openAuthenticated(`/events/${EVENT_ID}`);

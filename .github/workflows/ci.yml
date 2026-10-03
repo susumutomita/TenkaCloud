@@ -228,9 +228,31 @@ jobs:
           fi
           echo "coverage matrix succeeded"
 
+  # The deployment shell uses the system Bash/regex implementation. Linux-only tests
+  # do not catch macOS's RE_DUP_MAX=255. These offline fixtures replace every AWS call.
+  source-bundle-macos:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: true
+      - uses: ./.github/actions/bun-install
+      - name: Verify source preparation with the system Bash
+        working-directory: infrastructure
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          /bin/bash --version
+          bunx --no-install vitest run \
+            test/scripts/prepare-source-bundle.test.ts \
+            test/scripts/package-source-bundle.test.ts \
+            test/scripts/source-bucket-name.test.ts --maxWorkers=1
+
   # Stable required check: fail when any surviving gate fails or is skipped.
   ci:
-    needs: [gates, lint-ts, typecheck, build, coverage]
+    needs: [gates, lint-ts, typecheck, build, coverage, source-bundle-macos]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -242,7 +264,8 @@ jobs:
             "lint-ts:${{ needs.lint-ts.result }}" \
             "typecheck:${{ needs.typecheck.result }}" \
             "build:${{ needs.build.result }}" \
-            "coverage:${{ needs.coverage.result }}"; do
+            "coverage:${{ needs.coverage.result }}" \
+            "source-bundle-macos:${{ needs.source-bundle-macos.result }}"; do
             if [ "${entry#*:}" != "success" ]; then
               failed="$failed ${entry%%:*}(${entry#*:})"
             fi

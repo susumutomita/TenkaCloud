@@ -42,7 +42,8 @@ fi
 CDK_SOURCE_NAME="${CDK_SOURCE_NAME:-source.zip}"
 if ! [[ "${CDK_PARAM_S3_BUCKET_NAME}" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] \
   || [[ "${CDK_PARAM_S3_BUCKET_NAME}" = *..* ]] \
-  || ! [[ "${CDK_SOURCE_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,1023}$ ]] \
+  || ! [[ "${CDK_SOURCE_NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] \
+  || [ "${#CDK_SOURCE_NAME}" -gt 1024 ] \
   || [[ "${CDK_SOURCE_NAME}" =~ (^|/)\.\.?(/|$) ]]; then
   echo "[prepare-source-bundle] ERROR: invalid source bucket or object key" >&2
   exit 1

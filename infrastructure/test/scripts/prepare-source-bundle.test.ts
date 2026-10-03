@@ -12,6 +12,8 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { systemCloudIo } from "../../../scripts/cloud-hosting/process";
+import { prepareCloudSourceBundle } from "../../../scripts/cloud-hosting/source-bundle";
 
 const SCRIPT_DIR = resolve(__dirname, "..", "..", "..", "scripts");
 const PREPARE_SCRIPT = join(SCRIPT_DIR, "prepare-source-bundle.sh");
@@ -115,6 +117,14 @@ describe("scripts/prepare-source-bundle.sh bucket versioning", () => {
 // ${SCRIPT_DIR}-relative reference here was not updated — the exact break that
 // failed the CodeBuild Lite deploy.
 describe("scripts/prepare-source-bundle.sh helper references", () => {
+  it("keeps shell regex repetition within macOS's RE_DUP_MAX", () => {
+    // Apple's regcomp rejects larger bounds even when the input is only source.zip.
+    // https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/regexec.3.html
+    const script = readFileSync(PREPARE_SCRIPT, "utf8");
+    for (const match of script.matchAll(/\{\d+,(\d+)\}/gu))
+      expect(Number(match[1]), `nonportable shell regex: ${match[0]}`).toBeLessThanOrEqual(255);
+  });
+
   it("should reference helper scripts that exist on disk", () => {
     const script = readFileSync(PREPARE_SCRIPT, "utf8");
     const referenced = [...script.matchAll(/\$\{SCRIPT_DIR\}\/(\S+?\.(?:ts|sh))/g)].map(
@@ -249,6 +259,15 @@ describe("scripts/prepare-source-bundle.sh caller identity", { timeout: 30_000 }
     expect(result.stdout).toContain("CDK_SOURCE_NAME=releases/host.zip");
   });
 
+  it.each(["source.zip", "releases/source.zip", "a".repeat(1024)])(
+    "accepts valid source keys without a platform-specific regex bound (%s)",
+    (key) => {
+      const result = resolveBundleEnv({ AWS_REGION: "ap-northeast-1", CDK_SOURCE_NAME: key });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain(`CDK_SOURCE_NAME=${key}`);
+    },
+  );
+
   it("should resolve distinct buckets per environment", () => {
     const development = resolveBundleEnv({ AWS_REGION: "us-east-1", ENV: "development" });
     const production = resolveBundleEnv({ AWS_REGION: "us-east-1", ENV: "production" });
@@ -285,6 +304,7 @@ function preparationFixture(): { root: string; bin: string; log: string } {
       'echo "aws|$AWS_PROFILE|$*" >> "$COMMAND_LOG"',
       'if [ "$1 $2" = "sts get-caller-identity" ]; then echo 111122223333; exit 0; fi',
       'if [ "$1 $2" = "s3api head-bucket" ]; then exit 1; fi',
+      'if [ "$1 $2" = "s3api head-object" ]; then echo \'{"ETag":"abcdefabcdefabcdefabcdefabcdefab","VersionId":"version-A"}\'; exit 0; fi',
       `if [ "$1 $2" = "s3api put-object" ]; then test -f "$SOURCE_BUNDLE_ARCHIVE_PATH" || exit 98; printf '\\"abcdefabcdefabcdefabcdefabcdefab\\"\\tversion-A\\n'; fi`,
     ].join("\n"),
   );
@@ -321,6 +341,36 @@ function runPreparation(
 }
 
 describe("scripts/prepare-source-bundle.sh offline orchestration", { timeout: 30_000 }, () => {
+  it("runs the make-deploy adapter through real subprocesses and ZIP preparation with only AWS/build tools replaced", async () => {
+    const fixture = preparationFixture();
+    const env = await prepareCloudSourceBundle(
+      {
+        root: fixture.root,
+        env: {
+          PATH: `${fixture.bin}:${process.env.PATH ?? ""}`,
+          ACCOUNT_ID: "111122223333",
+          REGION: "ap-northeast-1",
+          ENV: "development",
+          AWS_PROFILE: "host-test",
+          COMMAND_LOG: fixture.log,
+          FAIL_BUILD: "0",
+        },
+      },
+      systemCloudIo(),
+    );
+    expect(env.CDK_PARAM_S3_BUCKET_NAME).toMatch(
+      /^tenkacloud-source-111122223333-ap-northeast-1-[a-f0-9]{8}$/u,
+    );
+    expect(env.CDK_SOURCE_NAME).toMatch(/^source\.zip\.executions\/[a-f0-9-]{36}\.zip$/u);
+    expect(env.CDK_SOURCE_VERSION_ID).toBe("version-A");
+    expect(env.CDK_PARAM_COMMIT_ID).toBe("abcdefabcdefabcdefabcdefabcdefab");
+    const calls = readFileSync(fixture.log, "utf8");
+    expect(calls).toContain("s3api head-object");
+    expect(calls).toContain("--version-id version-A");
+    expect(calls).toContain("--expected-bucket-owner 111122223333");
+    expect(existsSync(join(fixture.root, ".cache", "source-bundle"))).toBe(false);
+  });
+
   it("should build the two apps before AWS mutation and keep profile/region/owner consistent", () => {
     const fixture = preparationFixture();
     const result = runPreparation(fixture);
