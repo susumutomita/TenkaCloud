@@ -431,17 +431,18 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
           .map((part: string | { Ref: string }) => {
             if (typeof part === "string") return part;
             if (part.Ref === "AWS::Partition") return "aws";
-            if (stages[part.Ref]) {
-              expect(stages[part.Ref].Properties.RestApiId).toEqual({ Ref: apiId });
-              expect(stages[part.Ref].Properties.StageName).toBe("prod");
-              return stages[part.Ref].Properties.StageName;
+            const stage = stages[part.Ref];
+            if (stage) {
+              expect(stage.Properties.RestApiId).toEqual({ Ref: apiId });
+              expect(stage.Properties.StageName).toBe("prod");
+              return stage.Properties.StageName;
             }
             expect(part.Ref).toBe(apiId);
             return "abcdefghij";
           })
           .join("");
       });
-      expect(sourceArns.toSorted()).toEqual([
+      expect(sourceArns.sort()).toEqual([
         "arn:aws:execute-api:us-east-1:123456789012:abcdefghij/prod/*/*",
         "arn:aws:execute-api:us-east-1:123456789012:abcdefghij/test-invoke-stage/*/*",
       ]);
