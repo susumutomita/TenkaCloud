@@ -96,6 +96,8 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventDetail existing-event self-test consent", () => {
+  // The full-page cancel/reopen/confirm flow takes about 4 s under CI coverage.
+  // Keep bounded DOM waits while giving this scenario its own 10 s budget.
   it("confirms and deploys an existing event through the real HTTP client without recreating it", async () => {
     const { createCoreApiClient } = await import("@tenkacloud/web-kit");
     const detail: EventDetail = { ...baseDetail, status: "DRAFT", expiresAt: 4_102_444_800 };
@@ -154,7 +156,7 @@ describe("EventDetail existing-event self-test consent", () => {
     } finally {
       vi.unstubAllGlobals();
     }
-  });
+  }, 10_000);
 });
 
 describe("EventDetail bulk teardown confirm dialog #1350", () => {
