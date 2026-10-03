@@ -139,6 +139,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     apiClient,
     canMutateTenant: canMutate,
     cloudHost: isCloudHost(config),
+    localHost: isLocalHost(config),
     detail,
     eventId: eventIdForOperations,
     refresh,

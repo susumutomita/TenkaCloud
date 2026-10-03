@@ -1257,11 +1257,16 @@ export class HostingService {
     this.store.putEvent(event);
   }
   private end(event: HostedEvent): ApiResponse {
-    if (event.status !== "READY") throw new HostError(409, "Only a ready event can end.");
+    if (!["READY", "ENDED"].includes(event.status))
+      throw new HostError(409, "Only a ready or ended event can end.");
+    // Fix one server cutoff before settling. Retries, including after a scheduled end, retain
+    // that cutoff so pending scoring can settle without extending or reopening the match.
+    if (event.status === "READY") event.endsAt = new Date(this.now()).toISOString();
     this.coordination.settle(event);
-    event.status = "ENDED";
-    event.endsAt = new Date(this.now()).toISOString();
-    this.saveEvent(event);
+    if (event.status === "READY") {
+      event.status = "ENDED";
+      this.saveEvent(event);
+    }
     return ok({
       endsAt: event.endsAt,
       updatedDeployments: this.store.jobs(event.eventId).length,

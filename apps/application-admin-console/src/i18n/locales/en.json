@@ -326,7 +326,7 @@
     "field_created_at": "Created",
     "scoring_locked_badge": "SCORING LOCKED",
     "schedule_header": "Competition schedule",
-    "schedule_description": "Setting a start time triggers HealthCheck probing / scoring. Setting an end time closes the scoring gate without changing status.",
+    "schedule_description": "Set the scoring period. Ending preserves results and problem environments; teardown is separate.",
     "starts_at_label": "Start time (UTC)",
     "starts_at_unset": "Not set (scoring paused)",
     "starts_at_pick": "Pick start datetime",

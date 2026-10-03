@@ -336,6 +336,10 @@ function localTeardownOwed(detail: EventDetail): boolean {
   );
 }
 
+function hostScheduleClosed(detail: EventDetail, localHost: boolean, cloudHost: boolean): boolean {
+  return (localHost || cloudHost) && isTerminalEventStatus(detail.status);
+}
+
 export function EventSchedulePanel({
   apiClient,
   bulkInFlight,
@@ -393,7 +397,7 @@ export function EventSchedulePanel({
   readonly t: Translate;
   readonly wizard: WizardState | null;
 }) {
-  const closedCloud = cloudHost && isTerminalEventStatus(detail.status);
+  const closedEvent = hostScheduleClosed(detail, localHost, cloudHost);
   return (
     <Container
       header={
@@ -423,7 +427,7 @@ export function EventSchedulePanel({
               <Button
                 onClick={onOpenScheduleModal}
                 disabled={
-                  !apiClient || !canMutateTenant || closedCloud || scheduleInFlight !== null
+                  !apiClient || !canMutateTenant || closedEvent || scheduleInFlight !== null
                 }
               >
                 {t("event_detail.starts_at_pick")}
@@ -432,7 +436,7 @@ export function EventSchedulePanel({
                 variant={wizard?.primary === "start" ? "primary" : "normal"}
                 loading={scheduleInFlight === "now"}
                 disabled={
-                  !apiClient || !canMutateTenant || closedCloud || scheduleInFlight === "scheduled"
+                  !apiClient || !canMutateTenant || closedEvent || scheduleInFlight === "scheduled"
                 }
                 onClick={onStartNow}
               >
@@ -453,13 +457,13 @@ export function EventSchedulePanel({
             <SpaceBetween direction="horizontal" size="xs">
               <Button
                 onClick={onOpenEndsAtModal}
-                disabled={!apiClient || !canMutateTenant || closedCloud || endsAtInFlight}
+                disabled={!apiClient || !canMutateTenant || closedEvent || endsAtInFlight}
               >
                 {t("event_detail.ends_at_pick")}
               </Button>
               <Button
                 loading={endsAtInFlight}
-                disabled={!apiClient || !canMutateTenant || closedCloud}
+                disabled={!apiClient || !canMutateTenant || closedEvent}
                 onClick={onEndNowSchedule}
               >
                 {t("event_detail.ends_at_now")}
@@ -487,12 +491,12 @@ export function EventSchedulePanel({
               placeholder={t("event_detail.freeze_placeholder")}
               value={freezeMinutesInput}
               onChange={({ detail: d }) => onUpdateFreezeMinutes(d.value)}
-              disabled={!canMutateTenant || closedCloud || freezeMinutesInFlight}
+              disabled={!canMutateTenant || closedEvent || freezeMinutesInFlight}
             />
             <Button
               loading={freezeMinutesInFlight}
               disabled={
-                !apiClient || !canMutateTenant || closedCloud || freezeMinutesInput.trim() === ""
+                !apiClient || !canMutateTenant || closedEvent || freezeMinutesInput.trim() === ""
               }
               onClick={onSaveFreezeMinutes}
             >

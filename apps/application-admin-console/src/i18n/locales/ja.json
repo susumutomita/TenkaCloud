@@ -326,7 +326,7 @@
     "field_created_at": "作成",
     "scoring_locked_badge": "SCORING LOCKED",
     "schedule_header": "競技スケジュール",
-    "schedule_description": "開始時刻を指定すると HealthCheck が probe / 採点を開始、 終了時刻を指定すると status は変えずに採点 gate を閉じます。",
+    "schedule_description": "採点期間を設定します。終了後も結果と問題環境は保持されます。撤収は別操作です。",
     "starts_at_label": "開始時刻 (UTC)",
     "starts_at_unset": "未設定 (採点停止中)",
     "starts_at_pick": "日時を指定して開始",

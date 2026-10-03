@@ -305,23 +305,26 @@ describe("useEventOperations — scheduling", () => {
     expect(result.current.endsAtModalOpen).toBe(false);
   });
 
-  it("ends cloud events with the server clock and surfaces failures without a false refresh", async () => {
-    ops.endEvent
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("settlement failed"));
-    const { result, refresh, setError } = setup({ cloudHost: true });
-    await act(async () => {
-      await result.current.handleEndNowSchedule();
-    });
-    expect(ops.endEvent).toHaveBeenCalledWith(CLIENT, "evt-1");
-    expect(ops.setEventSchedule).not.toHaveBeenCalled();
-    expect(refresh).toHaveBeenCalledOnce();
-    await act(async () => {
-      await result.current.handleEndNowSchedule();
-    });
-    expect(setError).toHaveBeenCalledWith("settlement failed");
-    expect(refresh).toHaveBeenCalledOnce();
-  });
+  it.each([{ cloudHost: true }, { localHost: true }])(
+    "ends native host events with the server clock (%j) and surfaces failures without a false refresh",
+    async (host) => {
+      ops.endEvent
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error("settlement failed"));
+      const { result, refresh, setError } = setup(host);
+      await act(async () => {
+        await result.current.handleEndNowSchedule();
+      });
+      expect(ops.endEvent).toHaveBeenCalledWith(CLIENT, "evt-1");
+      expect(ops.setEventSchedule).not.toHaveBeenCalled();
+      expect(refresh).toHaveBeenCalledOnce();
+      await act(async () => {
+        await result.current.handleEndNowSchedule();
+      });
+      expect(setError).toHaveBeenCalledWith("settlement failed");
+      expect(refresh).toHaveBeenCalledOnce();
+    },
+  );
 
   it("should end-now schedule and surface its error", async () => {
     ops.setEventSchedule
