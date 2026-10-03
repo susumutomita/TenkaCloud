@@ -125,8 +125,11 @@ function createObjectLoader(
 ) {
   const bucket = config?.artifactBucket ?? setting("CLOUD_ARTIFACT_BUCKET");
   const region = config?.region ?? setting("AWS_REGION");
+  const expectedBucketOwner = config
+    ? config.expectedBucketOwner
+    : process.env.CONTROL_PLANE_ACCOUNT;
   assertCommercialRegion(region);
-  if (config?.expectedBucketOwner !== undefined && !/^\d{12}$/u.test(config.expectedBucketOwner))
+  if (expectedBucketOwner !== undefined && !/^\d{12}$/u.test(expectedBucketOwner))
     throw new Error("Invalid artifact bucket owner.");
   const client = new S3Client({ region, ignoreConfiguredEndpointUrls: true });
   const pending = new Map<string, Promise<string>>();
@@ -140,9 +143,7 @@ function createObjectLoader(
         new GetObjectCommand({
           Bucket: bucket,
           Key: key,
-          ...(config?.expectedBucketOwner
-            ? { ExpectedBucketOwner: config.expectedBucketOwner }
-            : {}),
+          ...(expectedBucketOwner ? { ExpectedBucketOwner: expectedBucketOwner } : {}),
         }),
       )
       .then(async (output) => {
@@ -171,7 +172,10 @@ export function createCatalogLoader(
   config?: Pick<NativeExecutionSettings, "artifactBucket" | "region" | "expectedBucketOwner">,
 ) {
   const load = createObjectLoader(config);
-  return async (key: string): Promise<ExecutionCatalog> => parseCatalog(await load(key));
+  return async (key: string): Promise<ExecutionCatalog> => {
+    if (!/^catalogs\/[a-f0-9]{64}\.json$/u.test(key)) throw new Error("Invalid catalog identity.");
+    return parseCatalog(await load(key));
+  };
 }
 export async function loadExecutionBindings(): Promise<readonly RunnerBinding[]> {
   const raw = await createObjectLoader()(setting("CLOUD_RUNNER_BINDINGS_KEY"));
@@ -229,7 +233,7 @@ function assertNativePlugin(
   )
     throw new Error("Invalid native coordination plugin schema.");
 }
-/** Only the currently configured, reviewed pin can execute; retained mismatches fail closed. */
+/** Saved runs resolve their immutable catalog and plugin pin; mismatched content fails closed. */
 export function createNativePluginResolver(config: NativeExecutionSettings = nativeSettings()) {
   const load = createCatalogLoader(config);
   const bucket = config.artifactBucket;
@@ -241,9 +245,9 @@ export function createNativePluginResolver(config: NativeExecutionSettings = nat
     readonly artifactDigest: string;
     readonly pluginKey: string;
   }) => {
-    if (pin.catalogKey !== config.catalogKey || pin.problemId !== "ac26-crypto-battle")
-      throw new Error("Native run is not the currently reviewed artifact.");
-    const descriptor = (await load(config.catalogKey)).nativeProblems?.find(
+    if (pin.problemId !== "ac26-crypto-battle")
+      throw new Error("Native run is not a supported reviewed artifact.");
+    const descriptor = (await load(pin.catalogKey)).nativeProblems?.find(
       (item) => item.problemId === "ac26-crypto-battle",
     );
     if (
@@ -299,9 +303,9 @@ export function createNativeArtifactResolver(config: NativeExecutionSettings = n
     readonly artifactDigest: string;
     readonly pluginKey: string;
   }) => {
-    if (pin.catalogKey !== config.catalogKey || pin.problemId !== "ac26-crypto-battle")
-      throw new Error("Native run is not the currently reviewed artifact.");
-    const descriptor = (await load(config.catalogKey)).nativeProblems?.find(
+    if (pin.problemId !== "ac26-crypto-battle")
+      throw new Error("Native run is not a supported reviewed artifact.");
+    const descriptor = (await load(pin.catalogKey)).nativeProblems?.find(
       (item) => item.problemId === "ac26-crypto-battle",
     );
     if (

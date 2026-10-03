@@ -260,8 +260,9 @@ export class CloudApplicationStack extends Stack {
       new PolicyStatement({
         actions: ["s3:GetObject"],
         resources: [
-          execution.bucket.arnForObjects(execution.catalogKey),
-          execution.bucket.arnForObjects(execution.pluginKey),
+          // Existing runs/jobs retain their content-addressed artifacts across catalog updates.
+          execution.bucket.arnForObjects("catalogs/*"),
+          execution.bucket.arnForObjects("plugins/*"),
           execution.bucket.arnForObjects(execution.bindingsKey),
         ],
       }),

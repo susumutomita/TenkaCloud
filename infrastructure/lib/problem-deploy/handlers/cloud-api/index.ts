@@ -49,21 +49,13 @@ async function composeExecution(data: CloudData) {
   const controlPlaneAccount = required("CONTROL_PLANE_ACCOUNT");
   const verify = createConnectionVerifier(controlPlaneAccount);
   const config = process.env.COMPETITOR_ROLE_NAME ? installationAccountConfig() : undefined;
-  const resolvePinned = createExecutionArtifactResolver();
   const participantAccess = {
     work,
     controlPlaneAccount,
     runner: createAwsCloudRunnerDependencies({ controlPlaneRegion: required("AWS_REGION") }),
     sts: new STSClient({ region: required("AWS_REGION"), ignoreConfiguredEndpointUrls: true }),
     authorizeJob: createJobBindingAuthorizer({ bindings, accounts, config, controlPlaneAccount }),
-    resolveArtifacts: async (
-      job: import("../../control-data/domain/deployment-work.js").DeploymentJob,
-    ) => {
-      const current = (await catalog())[job.problemId];
-      if (!current || current.artifactDigest !== job.artifactDigest)
-        throw new Error("Participant access requires the currently reviewed catalog artifact.");
-      return resolvePinned(job);
-    },
+    resolveArtifacts: createExecutionArtifactResolver(),
   };
   if (!config)
     return {

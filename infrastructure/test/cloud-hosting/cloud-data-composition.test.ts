@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SFNClient } from "@aws-sdk/client-sfn";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
@@ -7,7 +7,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openCloudInstallation } from "../../../scripts/cloud-hosting/installation.js";
 import { createCloudDataCache } from "../../lib/problem-deploy/control-data/cloud-data.js";
 import type { CloudData } from "../../lib/problem-deploy/control-data/cloud-data-ports.js";
-import { contentDigest } from "../../lib/problem-deploy/control-data/domain/deployment-work.js";
+import {
+  contentDigest,
+  type DeploymentJob,
+} from "../../lib/problem-deploy/control-data/domain/deployment-work.js";
 import type { EventRecord } from "../../lib/problem-deploy/control-data/domain/events.js";
 import type { TeamRecord } from "../../lib/problem-deploy/control-data/domain/teams.js";
 import { DynamoCloudRepository } from "../../lib/problem-deploy/control-data/dynamodb-cloud-repository.js";
@@ -61,6 +64,50 @@ const team: TeamRecord = {
   createdAt: at,
   updatedAt: at,
   expiresAt: event.expiresAt,
+};
+const apiRequest: Parameters<
+  typeof import("../../lib/problem-deploy/handlers/cloud-api/index.js").handler
+>[0] = {
+  version: "2.0",
+  routeKey: "$default",
+  rawPath: "/events",
+  rawQueryString: "",
+  headers: {},
+  body: null,
+  requestContext: {
+    accountId: "123456789012",
+    apiId: "fixture",
+    authentication: null,
+    authorizer: {},
+    domainName: "fixture.invalid",
+    domainPrefix: "fixture",
+    requestId: "fixture",
+    routeKey: "$default",
+    stage: "$default",
+    time: at,
+    timeEpoch: now,
+    http: {
+      method: "GET",
+      path: "/events",
+      protocol: "HTTP/1.1",
+      sourceIp: "127.0.0.1",
+      userAgent: "fixture",
+    },
+  },
+  isBase64Encoded: false,
+};
+const apiContext: Parameters<
+  typeof import("../../lib/problem-deploy/handlers/cloud-api/index.js").handler
+>[1] = {
+  callbackWaitsForEmptyEventLoop: false,
+  functionName: "fixture",
+  functionVersion: "$LATEST",
+  invokedFunctionArn: "arn:aws:lambda:us-east-1:123456789012:function:fixture",
+  memoryLimitInMB: "512",
+  awsRequestId: "fixture",
+  logGroupName: "fixture",
+  logStreamName: "fixture",
+  getRemainingTimeInMillis: () => 1000,
 };
 function sqlFixture() {
   const f = sqlHttpFixture();
@@ -226,6 +273,143 @@ describe("shared cloud provider composition", () => {
 });
 
 describe("production Lambda provider selection", () => {
+  it.each(
+    (["dynamodb", "turso"] as const).flatMap((backend) =>
+      (["changed", "removed"] as const).map((current) => ({ backend, current })),
+    ),
+  )(
+    "composes captured participant artifacts with $backend after current catalog is $current",
+    async ({ backend, current }) => {
+      vi.resetModules();
+      sqlFixture();
+      const bindings = "[]";
+      const captured = {
+        problemId: "hello-world",
+        problemDir: "problems/challenges/hello-world",
+        templateBody: "Resources: {} # captured A",
+        artifactDigest: contentDigest("Resources: {} # captured A"),
+        scoring: {
+          kind: "flag" as const,
+          points: 100,
+          flagOutputKey: "ExpectedFlag",
+          wrongPenalty: 0,
+        },
+        parameters: {},
+        capabilities: ["CAPABILITY_NAMED_IAM" as const],
+        publicOutputKeys: ["ParameterName", "ParticipantViewerRoleArn"],
+      };
+      const rawA = JSON.stringify({ version: 1, problems: [captured] });
+      const rawB = JSON.stringify({
+        version: 1,
+        problems: [
+          {
+            ...captured,
+            ...(current === "removed"
+              ? { problemId: "other", problemDir: "problems/challenges/other" }
+              : {}),
+            templateBody: "Resources: {} # current B",
+            artifactDigest: contentDigest("Resources: {} # current B"),
+          },
+        ],
+      });
+      const keyA = `catalogs/${contentDigest(rawA)}.json`;
+      const keyB = `catalogs/${contentDigest(rawB)}.json`;
+      const bindingsKey = `bindings/${contentDigest(bindings)}.json`;
+      const objects = new Map([
+        [keyA, rawA],
+        [keyB, rawB],
+        [bindingsKey, bindings],
+      ]);
+      const reads = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) => {
+        if (!(command instanceof GetObjectCommand)) throw new Error("Unexpected S3 command");
+        expect(command.input).toMatchObject({
+          Bucket: "fixture-artifacts",
+          ExpectedBucketOwner: "123456789012",
+        });
+        const raw = objects.get(command.input.Key ?? "");
+        if (raw === undefined) throw new Error("Unexpected artifact read");
+        return {
+          ContentLength: Buffer.byteLength(raw),
+          Body: { transformToString: async () => raw },
+        };
+      });
+      const selectedTables =
+        backend === "dynamodb" ? tables : { events: "", teams: "", deployments: "" };
+      for (const [key, value] of Object.entries({
+        ...env,
+        CONTROL_DATA_BACKEND: backend,
+        AWS_REGION: "us-east-1",
+        CONTROL_PLANE_ACCOUNT: "123456789012",
+        COGNITO_ISSUER: "https://fixture.invalid",
+        COGNITO_CLIENT_ID: "fixture-client",
+        ALLOWED_ORIGINS: "https://fixture.invalid",
+        CLOUD_CATALOG_KEY: keyB,
+        COMPETITOR_ROLE_NAME: "",
+        CLOUD_ARTIFACT_BUCKET: "fixture-artifacts",
+        CLOUD_RUNNER_BINDINGS_KEY: bindingsKey,
+        EVENTS_TABLE_NAME: selectedTables.events,
+        TEAMS_TABLE_NAME: selectedTables.teams,
+        DEPLOYMENTS_TABLE_NAME: selectedTables.deployments,
+      }))
+        vi.stubEnv(key, value);
+      const appModule = await import("../../lib/problem-deploy/handlers/cloud-api/app.js");
+      // Observe the real factory call; keep the production handler and app composition intact.
+      const composed = vi.spyOn(appModule, "createCloudApp");
+      const { handler: api } = await import("../../lib/problem-deploy/handlers/cloud-api/index.js");
+      expect((await api(apiRequest, apiContext)).statusCode).toBe(401);
+      const { acquireCloudData } = await import(
+        "../../lib/problem-deploy/control-data/cloud-data.js"
+      );
+      const data = tracked(await acquireCloudData());
+      expect(data.work.constructor.name).toBe(
+        backend === "dynamodb" ? "DynamoDeploymentWork" : "SqlDeploymentWork",
+      );
+      const access = composed.mock.calls[0]?.[0].participantAccess;
+      if (!access) throw new Error("Production participant access was not composed");
+      const job: DeploymentJob = {
+        eventId: event.eventId,
+        teamId: team.teamId,
+        jobId: "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+        problemId: captured.problemId,
+        problemDir: captured.problemDir,
+        artifactDigest: captured.artifactDigest,
+        catalogKey: keyA,
+        scoring: captured.scoring,
+        awsAccountId: "111111111111",
+        region: "us-east-1",
+        status: "COMPLETE",
+        attempt: 1,
+        revision: 1,
+        score: 0,
+        stackName: "captured-stack",
+        createdAt: at,
+        updatedAt: at,
+        expiresAt: event.expiresAt,
+        connection: {
+          eventId: event.eventId,
+          teamId: team.teamId,
+          accountId: "111111111111",
+          region: "us-east-1",
+          roleArn: "arn:aws:iam::111111111111:role/fixture",
+          externalIdParameter: "arn:aws:ssm:us-east-1:123456789012:parameter/fixture",
+          version: 1,
+          verifiedAt: at,
+        },
+      };
+      await expect(access.resolveArtifacts(job)).resolves.toEqual({
+        templateBody: captured.templateBody,
+        artifactDigest: captured.artifactDigest,
+        capabilities: captured.capabilities,
+        publicOutputKeys: captured.publicOutputKeys,
+      });
+      expect(
+        reads.mock.calls.map(([command]) =>
+          command instanceof GetObjectCommand ? command.input.Key : undefined,
+        ),
+      ).toEqual([bindingsKey, keyA]);
+    },
+  );
+
   it.each(["dynamodb", "turso"] as const)(
     "uses %s in API, dispatcher, recovery and worker entry points",
     async (backend) => {
@@ -242,6 +426,8 @@ describe("production Lambda provider selection", () => {
         ContentLength: bindings.length,
         Body: { transformToString: async () => bindings },
       }));
+      const selectedTables =
+        backend === "dynamodb" ? tables : { events: "", teams: "", deployments: "" };
       for (const [key, value] of Object.entries({
         ...env,
         CONTROL_DATA_BACKEND: backend,
@@ -255,56 +441,16 @@ describe("production Lambda provider selection", () => {
         CLOUD_ARTIFACT_BUCKET: "fixture-artifacts",
         CLOUD_RUNNER_BINDINGS_KEY: `bindings/${contentDigest(bindings)}.json`,
         DEPLOYMENT_STATE_MACHINE_ARN: "arn:aws:states:us-east-1:123456789012:stateMachine:fixture",
-        EVENTS_TABLE_NAME: backend === "dynamodb" ? tables.events : "",
-        TEAMS_TABLE_NAME: backend === "dynamodb" ? tables.teams : "",
-        DEPLOYMENTS_TABLE_NAME: backend === "dynamodb" ? tables.deployments : "",
+        EVENTS_TABLE_NAME: selectedTables.events,
+        TEAMS_TABLE_NAME: selectedTables.teams,
+        DEPLOYMENTS_TABLE_NAME: selectedTables.deployments,
       }))
         vi.stubEnv(key, value);
       const { acquireCloudData } = await import(
         "../../lib/problem-deploy/control-data/cloud-data.js"
       );
       const { handler: api } = await import("../../lib/problem-deploy/handlers/cloud-api/index.js");
-      const request: Parameters<typeof api>[0] = {
-        version: "2.0",
-        routeKey: "$default",
-        rawPath: "/events",
-        rawQueryString: "",
-        headers: {},
-        body: null,
-        requestContext: {
-          accountId: "123456789012",
-          apiId: "fixture",
-          authentication: null,
-          authorizer: {},
-          domainName: "fixture.invalid",
-          domainPrefix: "fixture",
-          requestId: "fixture",
-          routeKey: "$default",
-          stage: "$default",
-          time: at,
-          timeEpoch: now,
-          http: {
-            method: "GET",
-            path: "/events",
-            protocol: "HTTP/1.1",
-            sourceIp: "127.0.0.1",
-            userAgent: "fixture",
-          },
-        },
-        isBase64Encoded: false,
-      };
-      const context: Parameters<typeof api>[1] = {
-        callbackWaitsForEmptyEventLoop: false,
-        functionName: "fixture",
-        functionVersion: "$LATEST",
-        invokedFunctionArn: "arn:aws:lambda:us-east-1:123456789012:function:fixture",
-        memoryLimitInMB: "512",
-        awsRequestId: "fixture",
-        logGroupName: "fixture",
-        logStreamName: "fixture",
-        getRemainingTimeInMillis: () => 1000,
-      };
-      const result = await api(request, context);
+      const result = await api(apiRequest, apiContext);
       expect(result.statusCode).toBe(401);
       tracked(await acquireCloudData());
       const { acquireCloudWork } = await import(

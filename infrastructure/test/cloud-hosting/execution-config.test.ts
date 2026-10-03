@@ -14,6 +14,7 @@ import {
   createJobBindingAuthorizer,
   createNativeArtifactResolver,
   createNativeCatalogProvider,
+  createNativePluginResolver,
   installationAccountConfig,
   loadExecutionBindings,
   parseRunnerBindings,
@@ -46,6 +47,13 @@ function object(value: string) {
     Body: { transformToString: async () => value },
   };
 }
+function invalidObject(failure: string, value: string) {
+  if (failure === "missing") throw new Error("NoSuchKey");
+  if (failure === "missing-body") return {};
+  if (failure === "large-header") return { ...object(value), ContentLength: 1048577 };
+  if (failure === "large-body") return object("x".repeat(1048577));
+  return object(`${value} `);
+}
 beforeEach(() => {
   vi.stubEnv("AWS_REGION", "us-east-1");
   vi.stubEnv("CLOUD_ARTIFACT_BUCKET", "synthetic-artifacts");
@@ -72,9 +80,8 @@ describe("content-addressed execution configuration using intercepted SDK calls"
     const send = vi
       .spyOn(S3Client.prototype, "send")
       .mockRejectedValue(new Error("Unexpected request"));
-    await expect(createCatalogLoader()("catalogs/latest.json")).rejects.toThrow(
-      "Invalid catalog identity",
-    );
+    for (const invalidKey of ["catalogs/latest.json", `bindings/${contentDigest(raw)}.json`])
+      await expect(createCatalogLoader()(invalidKey)).rejects.toThrow("Invalid catalog identity");
     vi.stubEnv("CLOUD_ARTIFACT_BUCKET", "");
     expect(() => createCatalogLoader()).toThrow("Missing execution configuration");
     expect(send).not.toHaveBeenCalled();
@@ -113,8 +120,23 @@ describe("content-addressed execution configuration using intercepted SDK calls"
       ).rejects.toThrow("Unsafe catalog");
     },
   );
-  it("resolves only the persisted artifact and verifier, rejecting missing or changed identities", async () => {
-    vi.spyOn(S3Client.prototype, "send").mockImplementation(async () => object(raw));
+  it("resolves the persisted artifact and verifier while new requests use the current catalog", async () => {
+    const currentArtifact = {
+      ...artifact,
+      templateBody: "Current template",
+      artifactDigest: contentDigest("Current template"),
+      scoring: { ...artifact.scoring, points: 200 },
+    };
+    const currentRaw = JSON.stringify({ version: 1, problems: [currentArtifact] });
+    const currentKey = `catalogs/${contentDigest(currentRaw)}.json`;
+    vi.stubEnv("CLOUD_CATALOG_KEY", currentKey);
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "123456789012");
+    const send = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) => {
+      if (command instanceof GetObjectCommand && command.input.Key === key) return object(raw);
+      if (command instanceof GetObjectCommand && command.input.Key === currentKey)
+        return object(currentRaw);
+      throw new Error("Unexpected object request.");
+    });
     const resolve = createExecutionArtifactResolver();
     const job: DeploymentJob = {
       ...artifact,
@@ -148,12 +170,24 @@ describe("content-addressed execution configuration using intercepted SDK calls"
       capabilities: artifact.capabilities,
       publicOutputKeys: artifact.publicOutputKeys,
     });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]?.[0].input).toEqual({
+      Bucket: "synthetic-artifacts",
+      Key: key,
+      ExpectedBucketOwner: "123456789012",
+    });
+    expect((await createExecutionCatalogProvider()())["hello-world"]).toEqual({
+      ...currentArtifact,
+      catalogKey: currentKey,
+    });
     await expect(resolve({ ...job, catalogKey: undefined })).rejects.toThrow("no pinned catalog");
     for (const changes of [
       { problemId: "other" },
       { artifactDigest: "c".repeat(64) },
       { problemDir: "problems/challenges/other" },
       { scoring: { ...job.scoring, points: 101 } },
+      { scoring: { ...job.scoring, flagOutputKey: "OtherFlag" } },
+      { scoring: { ...job.scoring, wrongPenalty: 0 } },
     ])
       await expect(resolve({ ...job, ...changes })).rejects.toThrow("artifact or verifier changed");
   });
@@ -161,16 +195,28 @@ describe("content-addressed execution configuration using intercepted SDK calls"
     const encoded = JSON.stringify([binding]);
     const bindingsKey = `bindings/${contentDigest(encoded)}.json`;
     vi.stubEnv("CLOUD_RUNNER_BINDINGS_KEY", bindingsKey);
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "123456789012");
     const send = vi
       .spyOn(S3Client.prototype, "send")
       .mockImplementation(async () => object(encoded));
     expect(await loadExecutionBindings()).toEqual([binding]);
-    expect(send.mock.calls[0]?.[0].input).toMatchObject({ Key: bindingsKey });
+    expect(send.mock.calls[0]?.[0].input).toEqual({
+      Bucket: "synthetic-artifacts",
+      Key: bindingsKey,
+      ExpectedBucketOwner: "123456789012",
+    });
     expect(() => parseRunnerBindings(JSON.stringify([binding, binding]))).toThrow("Duplicate");
     expect(() =>
       parseRunnerBindings(JSON.stringify([{ ...binding, accountId: "999999999999" }])),
     ).toThrow("account mismatch");
     expect(() => parseRunnerBindings("[]")).toThrow();
+  });
+  it("rejects an invalid configured bucket owner before a catalog or binding request", async () => {
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "invalid");
+    const send = vi.spyOn(S3Client.prototype, "send");
+    expect(() => createCatalogLoader()).toThrow("Invalid artifact bucket owner");
+    await expect(loadExecutionBindings()).rejects.toThrow("Invalid artifact bucket owner");
+    expect(send).not.toHaveBeenCalled();
   });
 });
 
@@ -396,7 +442,7 @@ describe("installation-scoped registry configuration", () => {
   });
 });
 
-describe("native execution current-pin boundary", () => {
+describe("native execution saved-pin boundary", () => {
   const source =
     "export default { initialState:()=>({}), validateOp:()=>({ok:true}), applyOp:s=>s, projectForTeam:()=>({safe:true}), teamScores:()=>({}) };";
   const artifactDigest = contentDigest(source);
@@ -419,6 +465,185 @@ describe("native execution current-pin boundary", () => {
     catalogKey,
     expectedBucketOwner: "123456789012",
   };
+  const resolvers = [
+    ["plugin", createNativePluginResolver],
+    ["artifact", createNativeArtifactResolver],
+  ] as const;
+  describe.each(resolvers)("%s resolver", (_name, createResolver) => {
+    it.each(["description-only", "changed-plugin", "removed-problem"])(
+      "keeps catalog A's saved pin when current catalog B has %s changes",
+      async (change) => {
+        const currentSource = source.replace("safe:true", "current:true");
+        const currentDigest = contentDigest(currentSource);
+        const currentNative = {
+          ...native,
+          description: "Current description",
+          ...(change === "changed-plugin"
+            ? { artifactDigest: currentDigest, pluginKey: `plugins/${currentDigest}.mjs` }
+            : {}),
+        };
+        const currentRaw = JSON.stringify({
+          version: 1,
+          problems: [artifact],
+          nativeProblems: change === "removed-problem" ? [] : [currentNative],
+        });
+        const currentKey = `catalogs/${contentDigest(currentRaw)}.json`;
+        const objects: Record<string, string> = {
+          [catalogKey]: nativeRaw,
+          [currentKey]: currentRaw,
+          [native.pluginKey]: source,
+          [`plugins/${currentDigest}.mjs`]: currentSource,
+        };
+        const send = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) => {
+          const value = command instanceof GetObjectCommand && objects[command.input.Key ?? ""];
+          if (!value) throw new Error("Unexpected object request.");
+          return object(value);
+        });
+        const currentConfig = { ...config, catalogKey: currentKey };
+        const result = await createResolver(currentConfig)({ ...native, catalogKey });
+        const plugin = "plugin" in result ? result.plugin : result;
+        expect(plugin.projectForTeam({}, "a")).toEqual({ safe: true });
+        if ("descriptor" in result) expect(result.descriptor).toEqual({ ...native, catalogKey });
+        expect(
+          send.mock.calls.every(
+            ([command]) =>
+              command instanceof GetObjectCommand &&
+              command.input.Bucket === config.artifactBucket &&
+              command.input.ExpectedBucketOwner === config.expectedBucketOwner &&
+              [catalogKey, native.pluginKey].includes(command.input.Key ?? ""),
+          ),
+        ).toBe(true);
+
+        const currentCatalog = await createNativeCatalogProvider(currentConfig)();
+        expect(currentCatalog[native.problemId]).toEqual(
+          change === "removed-problem" ? undefined : { ...currentNative, catalogKey: currentKey },
+        );
+      },
+    );
+    it("does not fall back to the current catalog when the saved catalog is missing", async () => {
+      const currentKey = `catalogs/${"b".repeat(64)}.json`;
+      const send = vi.spyOn(S3Client.prototype, "send").mockRejectedValue(new Error("NoSuchKey"));
+      const resolve = createResolver({ ...config, catalogKey: currentKey });
+      await expect(resolve({ ...native, catalogKey })).rejects.toThrow("NoSuchKey");
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0]?.[0].input).toEqual({
+        Bucket: config.artifactBucket,
+        Key: catalogKey,
+        ExpectedBucketOwner: config.expectedBucketOwner,
+      });
+    });
+    it.each(["", "catalogs/latest.json", `bindings/${contentDigest(nativeRaw)}.json`])(
+      "rejects a malformed saved catalog key before a request: %s",
+      async (invalidKey) => {
+        const send = vi.spyOn(S3Client.prototype, "send");
+        await expect(createResolver(config)({ ...native, catalogKey: invalidKey })).rejects.toThrow(
+          "Invalid catalog identity",
+        );
+        expect(send).not.toHaveBeenCalled();
+      },
+    );
+    it("keeps the supported problem allowlist before loading any retained artifact", async () => {
+      const send = vi.spyOn(S3Client.prototype, "send");
+      await expect(
+        createResolver(config)({ ...native, catalogKey, problemId: "other-problem" }),
+      ).rejects.toThrow();
+      expect(send).not.toHaveBeenCalled();
+    });
+    it.each(["digest", "plugin-key"])(
+      "rejects a changed saved %s even after the genuine bundle has been cached",
+      async (change) => {
+        const send = vi
+          .spyOn(S3Client.prototype, "send")
+          .mockImplementation(async (command) =>
+            object(
+              command instanceof GetObjectCommand && command.input.Key === catalogKey
+                ? nativeRaw
+                : source,
+            ),
+          );
+        const resolve = createResolver(config);
+        await resolve({ ...native, catalogKey });
+        const count = send.mock.calls.length;
+        const pin = {
+          ...native,
+          catalogKey,
+          ...(change === "digest"
+            ? { artifactDigest: "0".repeat(64) }
+            : { pluginKey: `plugins/${"0".repeat(64)}.mjs` }),
+        };
+        await expect(resolve(pin)).rejects.toThrow("Pinned native artifact changed");
+        expect(send).toHaveBeenCalledTimes(count);
+      },
+    );
+  });
+  it.each(["missing", "missing-body", "large-header", "large-body", "hash-mismatch"])(
+    "rejects retained catalog %s and retries the saved key after failure eviction",
+    async (failure) => {
+      let rejectCatalog = true;
+      const send = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) => {
+        if (!(command instanceof GetObjectCommand)) throw new Error("Unexpected request.");
+        if (command.input.Key === native.pluginKey) return object(source);
+        if (command.input.Key !== catalogKey) throw new Error("Unpinned catalog requested.");
+        if (!rejectCatalog) return object(nativeRaw);
+        return invalidObject(failure, nativeRaw);
+      });
+      const resolve = createNativeArtifactResolver({
+        ...config,
+        catalogKey: `catalogs/${"b".repeat(64)}.json`,
+      });
+      await expect(resolve({ ...native, catalogKey })).rejects.toThrow();
+      rejectCatalog = false;
+      expect((await resolve({ ...native, catalogKey })).descriptor).toEqual({
+        ...native,
+        catalogKey,
+      });
+      expect(
+        send.mock.calls.filter(
+          ([command]) => command instanceof GetObjectCommand && command.input.Key === catalogKey,
+        ),
+      ).toHaveLength(3);
+      expect(
+        send.mock.calls.filter(
+          ([command]) =>
+            command instanceof GetObjectCommand && command.input.Key === native.pluginKey,
+        ),
+      ).toHaveLength(1);
+    },
+  );
+  it.each([
+    ["JSON", "{"],
+    ["schema", JSON.stringify({ version: 2, problems: [], nativeProblems: [native] })],
+    ["missing descriptor", JSON.stringify({ version: 1, problems: [artifact] })],
+    [
+      "unsupported problem",
+      JSON.stringify({
+        version: 1,
+        problems: [],
+        nativeProblems: [{ ...native, problemId: "other" }],
+      }),
+    ],
+    [
+      "plugin identity",
+      JSON.stringify({
+        version: 1,
+        problems: [],
+        nativeProblems: [{ ...native, pluginKey: `plugins/${"0".repeat(64)}.mjs` }],
+      }),
+    ],
+  ])(
+    "rejects a hash-valid retained catalog with invalid %s before loading code",
+    async (_failure, invalidRaw) => {
+      const invalidKey = `catalogs/${contentDigest(invalidRaw)}.json`;
+      const send = vi
+        .spyOn(S3Client.prototype, "send")
+        .mockImplementation(async () => object(invalidRaw));
+      await expect(
+        createNativeArtifactResolver(config)({ ...native, catalogKey: invalidKey }),
+      ).rejects.toThrow();
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0]?.[0].input).toMatchObject({ Key: invalidKey });
+    },
+  );
   it("loads the exact reviewed native bundle and exposes no fake CloudFormation problem", async () => {
     vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) =>
       object(
@@ -453,15 +678,14 @@ describe("native execution current-pin boundary", () => {
       ),
     ).toBe(true);
   });
-  it.each(["catalog", "digest", "key", "problem"])(
+  it.each(["digest", "key", "problem"])(
     "rejects changed %s without reading an unreviewed bundle",
     async (change) => {
       const send = vi
         .spyOn(S3Client.prototype, "send")
         .mockImplementation(async () => object(nativeRaw));
       const pin = { ...native, catalogKey };
-      if (change === "catalog") pin.catalogKey = `catalogs/${"0".repeat(64)}.json`;
-      else if (change === "digest") pin.artifactDigest = "0".repeat(64);
+      if (change === "digest") pin.artifactDigest = "0".repeat(64);
       else if (change === "key") pin.pluginKey = `plugins/${"0".repeat(64)}.mjs`;
       else pin.problemId = "other";
       await expect(createNativeArtifactResolver(config)(pin)).rejects.toThrow();
@@ -472,29 +696,87 @@ describe("native execution current-pin boundary", () => {
       ).toBe(true);
     },
   );
-  it("checks downloaded bytes before evaluating code and permits a correct retry", async () => {
-    const send = vi
-      .spyOn(S3Client.prototype, "send")
-      .mockImplementation(async (command) =>
+  it.each(["missing-body", "large-header", "large-body", "digest"])(
+    "checks plugin %s before evaluating code and permits a correct retry",
+    async (failure) => {
+      const send = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) => {
+        if (command instanceof GetObjectCommand && command.input.Key === catalogKey)
+          return object(nativeRaw);
+        return invalidObject(failure, source);
+      });
+      const resolve = createNativeArtifactResolver(config);
+      await expect(resolve({ ...native, catalogKey })).rejects.toThrow();
+      send.mockImplementation(async (command) =>
         object(
           command instanceof GetObjectCommand && command.input.Key === catalogKey
             ? nativeRaw
-            : `${source} /* changed */`,
+            : source,
         ),
       );
-    const resolve = createNativeArtifactResolver(config);
-    await expect(resolve({ ...native, catalogKey })).rejects.toThrow("integrity mismatch");
-    send.mockImplementation(async (command) =>
-      object(
-        command instanceof GetObjectCommand && command.input.Key === catalogKey
-          ? nativeRaw
-          : source,
-      ),
-    );
-    expect((await resolve({ ...native, catalogKey })).plugin.projectForTeam({}, "a")).toEqual({
-      safe: true,
-    });
-  });
+      expect((await resolve({ ...native, catalogKey })).plugin.projectForTeam({}, "a")).toEqual({
+        safe: true,
+      });
+      expect(
+        send.mock.calls.filter(
+          ([command]) =>
+            command instanceof GetObjectCommand && command.input.Key === native.pluginKey,
+        ),
+      ).toHaveLength(2);
+    },
+  );
+  it.each([
+    ["default export", "export default undefined;", "Invalid native coordination plugin"],
+    [
+      "required hooks",
+      source.replace("teamScores:()=>({})", "teamScores:undefined"),
+      "plugin hooks",
+    ],
+    [
+      "invalid schema version",
+      source.replace("initialState:", "stateSchemaVersion:0,initialState:"),
+      "plugin schema",
+    ],
+    [
+      "missing migration",
+      source.replace("initialState:", "stateSchemaVersion:2,initialState:"),
+      "plugin schema",
+    ],
+  ])(
+    "rejects an integrity-checked plugin with %s and evicts the failed plugin cache",
+    async (_failure, invalidSource, message) => {
+      const invalidDigest = contentDigest(invalidSource);
+      const invalidNative = {
+        ...native,
+        artifactDigest: invalidDigest,
+        pluginKey: `plugins/${invalidDigest}.mjs`,
+      };
+      const invalidRaw = JSON.stringify({
+        version: 1,
+        problems: [],
+        nativeProblems: [invalidNative],
+      });
+      const invalidKey = `catalogs/${contentDigest(invalidRaw)}.json`;
+      const send = vi
+        .spyOn(S3Client.prototype, "send")
+        .mockImplementation(async (command) =>
+          object(
+            command instanceof GetObjectCommand && command.input.Key === invalidKey
+              ? invalidRaw
+              : invalidSource,
+          ),
+        );
+      const resolve = createNativePluginResolver(config);
+      const pin = { ...invalidNative, catalogKey: invalidKey };
+      await expect(resolve(pin)).rejects.toThrow(message);
+      await expect(resolve(pin)).rejects.toThrow(message);
+      expect(
+        send.mock.calls.filter(
+          ([command]) =>
+            command instanceof GetObjectCommand && command.input.Key === invalidNative.pluginKey,
+        ),
+      ).toHaveLength(2);
+    },
+  );
   it("rejects an invalid expected bucket owner before requesting any object", () => {
     const send = vi.spyOn(S3Client.prototype, "send");
     expect(() =>

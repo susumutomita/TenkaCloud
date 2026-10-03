@@ -599,6 +599,48 @@ describe("cloud CDK synth-only security and frontend wiring", () => {
       }
     }
   });
+  it.each(["dynamodb", "turso"] as const)(
+    "limits %s API artifact reads to retained catalogs/plugins and the exact bindings object",
+    (backend) => {
+      const template = backend === "dynamodb" ? application : tursoApplication;
+      const api = Object.entries(template.findResources("AWS::Lambda::Function")).find(([id]) =>
+        id.startsWith("CloudApi"),
+      )?.[1];
+      const apiRole = Object.keys(template.findResources("AWS::IAM::Role")).find((id) =>
+        id.startsWith("ApiRole"),
+      );
+      expect(api).toBeDefined();
+      expect(apiRole).toBeDefined();
+      const variables = api?.Properties.Environment.Variables;
+      const bucketId = variables.CLOUD_ARTIFACT_BUCKET.Ref;
+      const statements = Object.values(template.findResources("AWS::IAM::Policy"))
+        .filter((policy) =>
+          policy.Properties.Roles?.some((role: { Ref?: string }) => role.Ref === apiRole),
+        )
+        .flatMap((policy) => policy.Properties.PolicyDocument.Statement)
+        .filter((statement) =>
+          [statement.Action]
+            .flat()
+            .some((action: string) => action === "*" || action.startsWith("s3:")),
+        );
+      const artifactArn = (key: string) => ({
+        "Fn::Join": ["", [{ "Fn::GetAtt": [bucketId, "Arn"] }, `/${key}`]],
+      });
+      // Exact equality excludes bucket-list, writes, whole-bucket and other-bucket grants.
+      expect(statements).toEqual([
+        {
+          Action: "s3:GetObject",
+          Effect: "Allow",
+          Resource: [
+            artifactArn("catalogs/*"),
+            artifactArn("plugins/*"),
+            artifactArn(variables.CLOUD_RUNNER_BINDINGS_KEY),
+          ],
+        },
+      ]);
+      expect(variables.CLOUD_RUNNER_BINDINGS_KEY).toMatch(/^bindings\/[a-f0-9]{64}\.json$/u);
+    },
+  );
   it("gives the API its own scoped logging role without broad managed execution policies", () => {
     const entry = Object.entries(application.findResources("AWS::IAM::Role")).find(([id]) =>
       id.startsWith("ApiRole"),

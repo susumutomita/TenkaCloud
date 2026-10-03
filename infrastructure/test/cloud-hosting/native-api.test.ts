@@ -16,7 +16,10 @@ import type { TeamRecord } from "../../lib/problem-deploy/control-data/domain/te
 import { DynamoDeploymentWork } from "../../lib/problem-deploy/control-data/dynamodb-deployment-work.js";
 import { DynamoDeploymentsCoordination } from "../../lib/problem-deploy/control-data/dynamodb-deployments-coordination.js";
 import { createCloudApp } from "../../lib/problem-deploy/handlers/cloud-api/app.js";
-import { settleNativeEvent } from "../../lib/problem-deploy/handlers/cloud-api/coordination-routes.js";
+import {
+  type CloudCoordinationApi,
+  settleNativeEvent,
+} from "../../lib/problem-deploy/handlers/cloud-api/coordination-routes.js";
 import { requestEventTeardown } from "../../lib/problem-deploy/handlers/cloud-api/deployment-routes.js";
 import type { NativeProblem } from "../../lib/problem-deploy/handlers/cloud-api/execution-config.js";
 import { FakeRepository } from "./fake-repository.js";
@@ -135,14 +138,22 @@ function fixture() {
   const connection = vi.spyOn(work, "getConnection");
   const accept = vi.spyOn(work, "accept");
   const awsSchedule = vi.spyOn(work, "setSchedule").mockResolvedValue();
-  const resolve = vi.fn(async () => ({ descriptor, plugin }));
+  const resolve = vi.fn(async (_pin: Parameters<CloudCoordinationApi["resolve"]>[0]) => ({
+    descriptor,
+    plugin,
+  }));
+  const catalog = vi.fn(
+    async (): Promise<Readonly<Record<string, NativeProblem>>> => ({
+      [descriptor.problemId]: descriptor,
+    }),
+  );
   const app = createCloudApp({
     repository,
     now: () => NOW,
     organizerAuth: AUTH,
     allowedOrigins: [],
     deployment: { work, catalog: async () => ({}), controlPlaneAccount: "123456789012" },
-    coordination: { store, catalog: async () => ({ [descriptor.problemId]: descriptor }), resolve },
+    coordination: { store, catalog, resolve },
   });
   const claims = {
     event: {
@@ -206,12 +217,106 @@ function fixture() {
     accept,
     awsSchedule,
     resolve,
+    catalog,
     organizer,
     claims,
     participant,
   };
 }
 describe("native Battle HTTP composition", () => {
+  it.each(["description", "plugin", "removed"])(
+    "replays deploy using the saved run after a current catalog %s change",
+    async (change) => {
+      const f = fixture();
+      const nextDigest = contentDigest("new-native-plugin");
+      const next: NativeProblem = {
+        ...f.descriptor,
+        catalogKey: `catalogs/${contentDigest("next-catalog")}.json`,
+        description: "New catalog description",
+        ...(change === "plugin"
+          ? { artifactDigest: nextDigest, pluginKey: `plugins/${nextDigest}.mjs` }
+          : {}),
+      };
+      f.catalog.mockResolvedValue(change === "removed" ? {} : { [next.problemId]: next });
+      f.resolve.mockImplementation(async (pin) => {
+        if (pin.catalogKey !== f.run.catalogKey) throw new Error("Existing run was repinned");
+        return { descriptor: f.descriptor, plugin };
+      });
+      const before = structuredClone(f.run);
+      for (let replay = 0; replay < 2; replay++) {
+        const response = await f.organizer(`/events/${f.event.eventId}/deploy`);
+        expect(response.status).toBe(202);
+      }
+      expect(f.resolve).toHaveBeenCalledWith(f.run);
+      expect(f.initialize).toHaveBeenCalledTimes(2);
+      expect(f.initialize).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          event: f.event,
+          teams: f.teams,
+          artifact: expect.objectContaining({ catalogKey: f.run.catalogKey, plugin }),
+        }),
+      );
+      expect(f.run).toEqual(before);
+      expect(f.reset).not.toHaveBeenCalled();
+      expect(f.accept).not.toHaveBeenCalled();
+    },
+  );
+
+  it("uses the current catalog only for a new run and rejects removed uninitialized problems", async () => {
+    const f = fixture();
+    f.read.mockResolvedValue(undefined);
+    const next = { ...f.descriptor, catalogKey: `catalogs/${contentDigest("next-catalog")}.json` };
+    f.catalog.mockResolvedValue({ [next.problemId]: next });
+    f.resolve.mockResolvedValue({ descriptor: next, plugin });
+    expect((await f.organizer(`/events/${f.event.eventId}/deploy`)).status).toBe(202);
+    expect(f.resolve).toHaveBeenCalledWith(next);
+    f.initialize.mockClear();
+    f.catalog.mockResolvedValue({});
+    expect((await f.organizer(`/events/${f.event.eventId}/deploy`)).status).toBe(409);
+    expect(f.initialize).not.toHaveBeenCalled();
+  });
+
+  it("still validates the full current roster on a saved-run deploy replay", async () => {
+    const f = fixture();
+    f.catalog.mockResolvedValue({});
+    expect(
+      (await f.organizer(`/events/${f.event.eventId}/deploy`, "POST", { teamIds: [f.team.teamId] }))
+        .status,
+    ).toBe(400);
+    expect(f.initialize).not.toHaveBeenCalled();
+    f.initialize.mockRejectedValueOnce(
+      new NativeCoordinationError(409, "coordination_roster_changed"),
+    );
+    const response = await f.organizer(`/events/${f.event.eventId}/deploy`);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "coordination_roster_changed" });
+    expect(f.reset).not.toHaveBeenCalled();
+  });
+
+  it.each([{ eventId: "01K00000000000000000000009" }, { problemId: "hello-world" }])(
+    "rejects a saved run outside the deployment scope (%s)",
+    async (changes) => {
+      const f = fixture();
+      f.read.mockResolvedValue({ ...f.run, ...changes });
+      const response = await f.organizer(`/events/${f.event.eventId}/deploy`);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error: "coordination_scope_mismatch" });
+      expect(f.resolve).not.toHaveBeenCalled();
+      expect(f.initialize).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not reinitialize when the saved run's schema no longer matches its plugin", async () => {
+    const f = fixture();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    f.read.mockResolvedValue({ ...f.run, match: { ...f.run.match, stateSchemaVersion: 2 } });
+    const response = await f.organizer(`/events/${f.event.eventId}/deploy`);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "coordination_unavailable" });
+    expect(f.initialize).not.toHaveBeenCalled();
+    expect(f.reset).not.toHaveBeenCalled();
+  });
+
   it("initializes the actual run for the full roster without competitor accounts or AWS jobs", async () => {
     const f = fixture();
     const response = await f.organizer(`/events/${f.event.eventId}/deploy`);

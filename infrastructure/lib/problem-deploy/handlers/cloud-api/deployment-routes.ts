@@ -4,6 +4,7 @@ import { ulid } from "ulid";
 import { z } from "zod";
 import type { CloudDeploymentWork } from "../../control-data/cloud-data-ports.js";
 import type { CloudRepository } from "../../control-data/cloud-repository.js";
+import type { NativeCoordinationRun } from "../../control-data/domain/coordination.js";
 import {
   contentDigest,
   type DeploymentJob,
@@ -123,7 +124,7 @@ async function initializeNativeRuns(
   event: EventRecord,
   teams: readonly TeamRecord[],
   ids: readonly string[],
-  catalog: Readonly<Record<string, NativeProblem>>,
+  catalog: Readonly<Record<string, NativeProblem | NativeCoordinationRun>>,
   retry: boolean,
   now: number,
 ) {
@@ -144,8 +145,22 @@ async function initializeNativeRuns(
 function nativeInitializationSummary(ids: readonly string[], initialized: number) {
   return ids.length ? { initialized } : {};
 }
-async function currentNativeCatalog(options: RouteOptions) {
-  return options.coordination ? options.coordination.catalog() : {};
+async function deploymentNativeCatalog(
+  options: RouteOptions,
+  event: EventRecord,
+  ids: readonly string[],
+) {
+  const coordination = options.coordination;
+  if (!coordination) return {};
+  const catalog = await coordination.catalog();
+  const id = nativeProblem(event);
+  if (!id || !ids.includes(id)) return catalog;
+  const run = await coordination.store.read(event.eventId, id);
+  if (!run) return catalog;
+  if (run.eventId !== event.eventId || run.problemId !== id)
+    throw new ApiError(409, "coordination_scope_mismatch");
+  // Re-entry must validate the existing run and roster against its saved artifact, never repin it.
+  return { ...catalog, [id]: run };
 }
 async function deploy(context: Context, options: RouteOptions) {
   const now = options.now();
@@ -163,7 +178,7 @@ async function deploy(context: Context, options: RouteOptions) {
   const ids = input.problemIds ?? event.problems.map((problem) => problem.problemId);
   validateSelection(input, selectedTeams, ids, event);
   const catalog = await options.catalog();
-  const nativeCatalog = await currentNativeCatalog(options);
+  const nativeCatalog = await deploymentNativeCatalog(options, event, ids);
   const nativeIds = ids.filter((id) => Object.hasOwn(nativeCatalog, id));
   const awsIds = ids.filter((id) => Object.hasOwn(catalog, id));
   if (nativeIds.length + awsIds.length !== ids.length)

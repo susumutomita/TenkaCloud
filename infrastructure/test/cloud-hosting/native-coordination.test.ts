@@ -43,6 +43,7 @@ import {
 } from "../../lib/problem-deploy/control-data/installation-control.js";
 import { requestEventTeardown } from "../../lib/problem-deploy/handlers/cloud-api/deployment-routes.js";
 import { createProductionNativeCoordination } from "../../lib/problem-deploy/handlers/cloud-api/native-production.js";
+import { verifySavedNativeCatalog } from "./native-catalog-continuity-fixture.js";
 
 const NOW = Date.parse("2026-10-01T12:00:00Z");
 const AT = new Date(NOW).toISOString();
@@ -1334,6 +1335,28 @@ describe("native DynamoDB explicit event purge SDK-only contracts", () => {
   });
 });
 
+describe("native DynamoDB saved catalog continuity", () => {
+  it.each(["description-only", "changed bundle"] as const)(
+    "preserves a saved native run through a %s catalog update",
+    async (update) => {
+      await verifySavedNativeCatalog(() => {
+        const f = fixture();
+        for (const team of f.teams) {
+          const key = scoreKey(f.event.eventId, team.teamId);
+          f.rows.set(rowKey(f.tables.teams, key), {
+            ...key,
+            eventId: f.event.eventId,
+            teamId: team.teamId,
+            score: 100,
+            completedProblems: 2,
+          });
+        }
+        return { ...f, repository: new DynamoCloudRepository(f.document, f.tables) };
+      }, update);
+    },
+  );
+});
+
 describe("native DynamoDB reset/history SDK-only contracts", () => {
   it("atomically publishes initial nonzero scores and resets only the native subtotal", async () => {
     const f = fixture(2, 0, 30);
@@ -2486,7 +2509,7 @@ describe("native DynamoDB SDK transaction contracts", () => {
       (await f.store.read(f.event.eventId, f.artifact.problemId))?.match.scores[f.team.teamId],
     ).toBe(0);
   });
-  it("uses the same current-pin production factory for operator closure and returns its committed event", async () => {
+  it("uses a saved catalog pin after a description-only update for operator closure", async () => {
     const f = fixture();
     const source =
       "export default {initialState:()=>({}),validateOp:()=>({ok:true}),applyOp:s=>s,projectForTeam:(s,id)=>({score:s.scores[id]}),teamScores:s=>s.scores};";
@@ -2504,6 +2527,12 @@ describe("native DynamoDB SDK transaction contracts", () => {
     };
     const raw = JSON.stringify({ version: 1, problems: [], nativeProblems: [descriptor] });
     const catalogKey = `catalogs/${contentDigest(raw)}.json`;
+    const currentRaw = JSON.stringify({
+      version: 1,
+      problems: [],
+      nativeProblems: [{ ...descriptor, description: "Updated display copy" }],
+    });
+    const currentCatalogKey = `catalogs/${contentDigest(currentRaw)}.json`;
     await f.store.initialize({
       event: f.event,
       teams: f.teams,
@@ -2513,7 +2542,13 @@ describe("native DynamoDB SDK transaction contracts", () => {
     const send = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) => {
       if (!(command instanceof GetObjectCommand)) throw new Error("Unexpected S3 command");
       expect(command.input.ExpectedBucketOwner).toBe("123456789012");
-      const text = command.input.Key === catalogKey ? raw : source;
+      const objects = {
+        [catalogKey]: raw,
+        [currentCatalogKey]: currentRaw,
+        [descriptor.pluginKey]: source,
+      };
+      const text = objects[command.input.Key ?? ""];
+      if (text === undefined) throw new Error("Unexpected artifact key");
       return {
         ContentLength: Buffer.byteLength(text),
         Body: { transformToString: async () => text },
@@ -2524,7 +2559,7 @@ describe("native DynamoDB SDK transaction contracts", () => {
       store: f.store,
       artifactBucket: "synthetic-artifacts",
       region: "us-east-1",
-      catalogKey,
+      catalogKey: currentCatalogKey,
       expectedBucketOwner: "123456789012",
     });
     const event = await factory.closeEvent(f.event.eventId, NOW + 1000);

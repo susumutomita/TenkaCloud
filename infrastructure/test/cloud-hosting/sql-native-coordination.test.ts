@@ -18,11 +18,13 @@ import {
   initializeControlDataSchema,
   LibsqlExecutor,
 } from "../../lib/problem-deploy/control-data/libsql-executor.js";
+import { SqlCloudRepository } from "../../lib/problem-deploy/control-data/sql-cloud-repository.js";
 import { sqlCoordinationClosedGuard } from "../../lib/problem-deploy/control-data/sql-coordination-schema.js";
 import { SqlDeploymentWork } from "../../lib/problem-deploy/control-data/sql-deployment-work.js";
 import { SqlDeploymentsCoordination } from "../../lib/problem-deploy/control-data/sql-deployments-coordination.js";
 import type { SqlExecutor, SqlStatement } from "../../lib/problem-deploy/control-data/sql-port.js";
 import { sqlCommit } from "../../lib/problem-deploy/control-data/sql-transaction.js";
+import { verifySavedNativeCatalog } from "./native-catalog-continuity-fixture.js";
 import { sqliteFixture } from "./sql-fixture.js";
 
 const NOW = Date.parse("2026-10-01T12:00:00Z");
@@ -165,6 +167,26 @@ async function fixture(engine: Engine, count = 2, padding = 0) {
 
 for (const engine of ["sqlite", "libsql"] as const)
   describe(`${engine}: native coordination atomic storage`, () => {
+    it.each(["description-only", "changed bundle"] as const)(
+      "preserves a saved native run through a %s catalog update",
+      async (update) => {
+        await verifySavedNativeCatalog(async () => {
+          const f = await fixture(engine);
+          for (const team of f.teams)
+            await f.peer.run("INSERT INTO cloud_team_scores VALUES (?, ?, ?)", [
+              f.event.eventId,
+              team.teamId,
+              JSON.stringify({
+                eventId: f.event.eventId,
+                teamId: team.teamId,
+                score: 100,
+                completedProblems: 2,
+              }),
+            ]);
+          return { ...f, repository: new SqlCloudRepository(f.peer) };
+        }, update);
+      },
+    );
     it("initializes once and persists run identity, secret, pin, schema and roster", async () => {
       const f = await fixture(engine);
       const [first, second] = await Promise.all([f.initialize(), f.initialize()]);

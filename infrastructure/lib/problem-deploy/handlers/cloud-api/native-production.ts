@@ -6,7 +6,7 @@ import type { EventRecord } from "../../control-data/domain/events.js";
 import { type CloudCoordinationApi, settleNativeEvent } from "./coordination-routes.js";
 import { createNativeArtifactResolver, createNativeCatalogProvider } from "./execution-config.js";
 
-/** The API and operator close path share exactly the configured reviewed artifact and native transaction implementation. */
+/** The API and operator close path resolve saved run artifacts through the same native transactions. */
 export function createProductionNativeCoordination(options: {
   readonly repository: Pick<CloudDataRepository, "getEvent">;
   readonly store: CloudDeploymentsCoordination;

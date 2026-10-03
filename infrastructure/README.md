@@ -401,12 +401,27 @@ pair recorded and rehearse it before an event.
 
 Apply changes between events or rehearse them in a separate installation.
 Publishing a new catalog does not upgrade previously deployed team problem
-stacks or migrate saved runs. Pending AWS jobs retain their catalog key and old
-content-addressed artifacts, but this is not a guarantee that every existing
-event can continue: native Battle runs reject a changed catalog key, and
-participant AWS access rejects a template digest that no longer matches the
-currently reviewed catalog. Do not update an active event's catalog expecting
-its saved state to migrate. Create a new test event against the new revision and
+stacks or migrate saved runs. Pending AWS jobs and participant AWS access resolve
+their saved catalog key and verify the original template and scoring definition.
+Native Battle projection, operations, deploy re-entry, reset and closure also use
+the saved run's catalog and plugin. A description edit, replacement plugin, or
+removal from the new catalog does not repin or reset an existing run. New runs
+must use a problem supported by the current catalog. Missing or altered saved
+artifacts fail closed; keep the installation's original content-addressed objects
+while its events still need them. Event/team authorization, current roster checks
+and state-schema checks still apply.
+
+The API role can read `catalogs/*` and `plugins/*` in this installation's private
+execution-artifact bucket so saved revisions remain available. Previously it could
+read only the current catalog and plugin objects. This change adds no bucket-list
+or write permission and keeps runner bindings restricted to their exact configured
+object. Catalog/plugin content hashes and the expected bucket owner are checked
+before use. It does not grant access to another installation's bucket.
+
+AWS deployment-request replay across a catalog revision still returns
+`catalog_revision_changed`; this restoration covers saved jobs and native runs,
+not replanning an earlier AWS deployment request. Do not expect saved state to
+migrate when updating a catalog. Create a new test event against the new revision and
 verify deployment, participant access and scoring. Supported runtimes remain
 hello-world and native Cryptography Battle; adding source files does not make
 other cloud runtimes executable, and Docker/Compose remains local-only.

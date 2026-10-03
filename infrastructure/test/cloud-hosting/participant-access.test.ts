@@ -1,8 +1,10 @@
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { AssumeRoleCommand, type AssumeRoleCommandOutput } from "@aws-sdk/client-sts";
 import type { CliCredentialsView } from "@tenkacloud/portal-contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type CreationReservation,
+  contentDigest,
   type DeploymentConnection,
   type DeploymentJob,
   deploymentStackName,
@@ -11,6 +13,7 @@ import {
 import type { EventRecord } from "../../lib/problem-deploy/control-data/domain/events.js";
 import type { TeamRecord } from "../../lib/problem-deploy/control-data/domain/teams.js";
 import { createCloudApp } from "../../lib/problem-deploy/handlers/cloud-api/app.js";
+import { createExecutionArtifactResolver } from "../../lib/problem-deploy/handlers/cloud-api/execution-config.js";
 import {
   type CloudParticipantAccess,
   helloWorldSessionPolicy,
@@ -360,6 +363,147 @@ function barrier() {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+function retainedArtifactFixture(current: "changed" | "removed" = "changed") {
+  const f = fixture();
+  const captured = {
+    problemId: f.job.problemId,
+    problemDir: f.job.problemDir,
+    ...f.artifacts,
+    artifactDigest: contentDigest(f.artifacts.templateBody),
+    scoring: { kind: "flag" as const, points: 100, flagOutputKey: "ExpectedFlag", wrongPenalty: 0 },
+    parameters: {},
+  };
+  const rawA = JSON.stringify({ version: 1, problems: [captured] });
+  const rawB = JSON.stringify({
+    version: 1,
+    problems: [
+      {
+        ...captured,
+        ...(current === "removed"
+          ? { problemId: "other", problemDir: "problems/challenges/other" }
+          : {}),
+        templateBody: "Resources: {} # new current template",
+        artifactDigest: contentDigest("Resources: {} # new current template"),
+      },
+    ],
+  });
+  const keyA = `catalogs/${contentDigest(rawA)}.json`;
+  const keyB = `catalogs/${contentDigest(rawB)}.json`;
+  const objects = new Map([
+    [keyA, rawA],
+    [keyB, rawB],
+  ]);
+  const job = {
+    ...f.job,
+    artifactDigest: captured.artifactDigest,
+    catalogKey: keyA,
+    scoring: captured.scoring,
+  };
+  f.state.job = job;
+  f.state.target = job;
+  f.repository.deployments = [job];
+  const { input } = buildDeploymentInput(job, captured);
+  if (!f.state.creation) throw new Error("Missing fixture creation");
+  f.state.creation = { ...f.state.creation, fingerprint: deploymentIdentity(input).fingerprint };
+  f.state.stack = { ...f.state.stack, Tags: deploymentOwnershipTags(input) };
+  for (const [name, value] of Object.entries({
+    AWS_REGION: "us-east-1",
+    CLOUD_ARTIFACT_BUCKET: "fixture-artifacts",
+    CONTROL_PLANE_ACCOUNT: CONTROL_ACCOUNT,
+    CLOUD_CATALOG_KEY: keyB,
+  }))
+    vi.stubEnv(name, value);
+  const reads = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) => {
+    if (!(command instanceof GetObjectCommand)) throw new Error("Unexpected S3 command");
+    await f.remote("artifacts");
+    const raw = objects.get(command.input.Key ?? "");
+    if (raw === undefined) throw new Error("Captured object missing");
+    return { ContentLength: Buffer.byteLength(raw), Body: { transformToString: async () => raw } };
+  });
+  f.resolveArtifacts.mockImplementation(createExecutionArtifactResolver());
+  return { ...f, job, captured, keyA, keyB, objects, reads };
+}
+
+describe("participant access with retained catalog artifacts", () => {
+  it.each(["changed", "removed"] as const)(
+    "issues credentials from captured catalog A when current B is %s",
+    async (current) => {
+      const f = retainedArtifactFixture(current);
+      const response = await f.request();
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ credentials: { accessKeyId: ACCESS_KEY } });
+      expect(f.reads).toHaveBeenCalledOnce();
+      const command = f.reads.mock.calls[0]?.[0];
+      if (!(command instanceof GetObjectCommand)) throw new Error("Missing artifact read");
+      expect(command.input).toEqual({
+        Bucket: "fixture-artifacts",
+        Key: f.keyA,
+        ExpectedBucketOwner: CONTROL_ACCOUNT,
+      });
+      expect(f.work.assertParticipantAccessCurrent).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ job: f.job, fingerprint: f.state.creation?.fingerprint }),
+      );
+      expect(f.viewerSend.mock.calls[0]?.[0].input.ExternalId).toBe(JOB);
+      expect(f.createStack).not.toHaveBeenCalled();
+      expect(f.deleteStack).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["missing", "corrupt", "digest", "directory", "scoring"] as const)(
+    "rejects %s captured artifacts without falling back to B or issuing credentials",
+    async (failure) => {
+      const f = retainedArtifactFixture();
+      if (failure === "missing") f.objects.delete(f.keyA);
+      if (failure === "corrupt") f.objects.set(f.keyA, "corrupt catalog");
+      if (failure === "digest") f.state.job = { ...f.job, artifactDigest: "f".repeat(64) };
+      if (failure === "directory" || failure === "scoring") {
+        const raw = JSON.stringify({
+          version: 1,
+          problems: [
+            {
+              ...f.captured,
+              ...(failure === "directory"
+                ? { problemDir: "problems/challenges/other" }
+                : { scoring: { ...f.captured.scoring, points: 200 } }),
+            },
+          ],
+        });
+        const key = `catalogs/${contentDigest(raw)}.json`;
+        f.objects.set(key, raw);
+        f.state.job = { ...f.job, catalogKey: key };
+      }
+      await expectError(await f.request(), 500, "assume_role_failed");
+      expect(f.reads).toHaveBeenCalledOnce();
+      expect(
+        f.reads.mock.calls.some(
+          ([command]) => command instanceof GetObjectCommand && command.input.Key === f.keyB,
+        ),
+      ).toBe(false);
+      expect(f.getParameter).not.toHaveBeenCalled();
+      noIssuance(f);
+    },
+  );
+  it("rechecks revocation after loading retained A and withholds credentials", async () => {
+    const f = retainedArtifactFixture();
+    const entered = barrier();
+    const resume = barrier();
+    f.remote.mockImplementation(async (stage) => {
+      if (stage === "artifacts") {
+        entered.release();
+        await resume.promise;
+      }
+    });
+    const pending = f.request();
+    await entered.promise;
+    updateTeam(f, { accessRevoked: true });
+    resume.release();
+    await expectError(await pending, 401, "unauthorized");
+    expect(f.reads).toHaveBeenCalledOnce();
+    expect(f.getParameter).not.toHaveBeenCalled();
+    noIssuance(f);
+  });
 });
 
 describe("cloud participant CLI HTTP and existing frontend contract", () => {
