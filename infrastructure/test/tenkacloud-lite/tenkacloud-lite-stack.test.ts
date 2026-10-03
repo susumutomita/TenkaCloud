@@ -9,8 +9,8 @@ import {
   type TenkaCloudLiteStackProps,
 } from "../../lib/tenkacloud-lite/index.js";
 
-// synth() は Lambda asset bundling を含む重い実処理。全 suite 並列時は default 5s を超えて
-// flake するため、個別の backend synth を要する test には明示 timeout を持つ
+// synth() は bundling を skip しても construct 生成と asset staging が必要。全 suite 並列時は
+// default 5s を超えるため、構成ごとの共有 fixture 作成には明示 timeout を持つ
 // (`SYNTH_TIMEOUT_MS` — problem-deploy-backend-stack.test-helpers.ts と同じ値)。
 const SYNTH_TIMEOUT_MS = 120_000;
 
@@ -82,32 +82,33 @@ function synth(
   return Template.fromStack(stack);
 }
 
-// synth() は Lambda asset bundling を含む重い実処理。全 suite 並列時は default 5s を
-// 超え flake するため、明示 timeout を持つ。
-describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
-  beforeAll(() => {
-    ensurePlaceholderDist();
-  });
+// 同じ構成の Template は読み取り専用で共有し、assertion ごとの再 synth を避ける。
+let defaultTemplate: Template;
+beforeAll(() => {
+  ensurePlaceholderDist();
+  defaultTemplate = synth();
+}, SYNTH_TIMEOUT_MS);
 
+describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   it("should create 1 set of Cognito UserPool / UserPoolClient / UserPoolDomain (from AppPlaneCore)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     template.resourceCountIs("AWS::Cognito::UserPool", 1);
     template.resourceCountIs("AWS::Cognito::UserPoolClient", 1);
     template.resourceCountIs("AWS::Cognito::UserPoolDomain", 1);
   });
 
   it("should create 1 Tenant REST API Gateway", () => {
-    const template = synth();
+    const template = defaultTemplate;
     template.resourceCountIs("AWS::ApiGateway::RestApi", 1);
   });
 
   it("should create 1 ApplicationAdminConsoleHosting (= CloudFront)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     template.resourceCountIs("AWS::CloudFront::Distribution", 1);
   });
 
   it("should include Application Admin Console URL / Cognito Domain / Tenant API / TenantId in CfnOutput", () => {
-    const template = synth();
+    const template = defaultTemplate;
     template.hasOutput("ApplicationAdminConsoleUrl", Match.objectLike({}));
     template.hasOutput("CognitoDomainUrl", Match.objectLike({}));
     template.hasOutput("TenantApiUrl", Match.objectLike({}));
@@ -115,7 +116,7 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   });
 
   it("Cognito UserPool domain prefix should embed tenantId=local (region-global uniqueness)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     template.hasResourceProperties(
       "AWS::Cognito::UserPoolDomain",
       Match.objectLike({
@@ -125,7 +126,7 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   });
 
   it("should not include SBT / pipeline resources (TenantMappingTable / SaaSPipeline)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // Lite mode は SBT TenantMappingTable を参照しない。 DynamoDB Table は #1312 で
     // SAML IdP CRUD 用に 1 個だけ (= SamlIdps、 UserPool と同 stack 同居の制約) 立つ。
     // SBT 経路 (TenantMappingTable / TenantsTable) は引き続き 0。
@@ -135,7 +136,7 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   });
 
   it("does not provision SaaS tier API keys or usage plans", () => {
-    const template = synth();
+    const template = defaultTemplate;
     expect(template.findResources("AWS::ApiGateway::UsagePlan")).toEqual({});
     expect(template.findResources("AWS::ApiGateway::ApiKey")).toEqual({});
   });
@@ -146,7 +147,7 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   // cyclic dependency になるため、 設計判断として TenkaCloudLiteStack 内に同居させる。
 
   it("should provision SamlIdpsTable (PK=pk / SK=sk lower-case, matches ddb-store.ts) at 1/1 PROVISIONED (#1312)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // lower-case `pk` / `sk` は `createDdbIdpStore` の PutCommand / GetCommand の Key 名と一致させるため
     // (= handler 経路と表構造の整合、 大文字 PK/SK にすると runtime で ValidationException で fail)。
     template.hasResourceProperties(
@@ -165,7 +166,7 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   });
 
   it("should provision a SamlIdp Lambda with IDP_TIER_GUARD=silo + SAML_IDPS_TABLE_NAME + TENANT_USER_POOL_ID env (#1312)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // Lite mode は 1 tenant 専用 (= silo 同型) なので `IDP_TIER_GUARD=silo` を pin する。
     // pooled 配線時に誤って動くと cross-tenant 副作用が出るため handler 側 fail-closed guard。
     const functions = template.findResources("AWS::Lambda::Function");
@@ -190,7 +191,7 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   });
 
   it("SamlIdp Lambda Role default policy should grant cognito-idp:*IdentityProvider on userpool/* + SamlIdps R+W (#1312)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // SAML federation 設定は Cognito UserPool の Identity Provider mutation で実装される。
     // wildcard userpool/* + runtime guard (`TENANT_USER_POOL_ID` 経由で自 pool 絞り込み) は
     // competitor-accounts-api-lambda.ts の既存 SAML grant と同じ pattern。
@@ -221,7 +222,7 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   // の双方に claim が乗り、 Application Plane handler の `requireRole` が成立する (#1358 fix の根幹)。
 
   it("should attach a Pre-Token Generation V2 Lambda trigger on the Lite UserPool (#1327 / #1358)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     template.hasResourceProperties(
       "AWS::Cognito::UserPool",
       Match.objectLike({
@@ -243,7 +244,7 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   });
 
   it("should bundle a LiteAdminClaims Lambda Function for the Pre-Token Generation trigger (#1327)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     const functions = template.findResources("AWS::Lambda::Function");
     const liteAdminClaims = Object.entries(functions).find(
       ([name]) => name.includes("LiteAdminClaims") && name.includes("Function"),
@@ -252,7 +253,7 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   });
 
   it("should expose /tenant/idp and /tenant/idp/{idpId} routes on the tenant REST API (#1312)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // ApiGateway は /tenant/idp (GET POST) と /tenant/idp/{idpId} (GET PATCH DELETE) を生やすので、
     // AWS::ApiGateway::Resource が `tenant` / `idp` / `{idpId}` の 3 段で見える。 path part 1 つずつ
     // pin することで、 ApiGateway 経由で SAML IdP Lambda に到達する経路を機械的に保証する。
@@ -275,9 +276,16 @@ describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
  * table presence (`attachSamlIdpLambda`): it exists in every backend, only its env/grant change.
  */
 describe("SamlIdps pure SQL conditional synth (#2442 Phase C5)", () => {
+  let pureTursoTemplate: Template;
+  let configuredTursoTemplate: Template;
   beforeAll(() => {
-    ensurePlaceholderDist();
-  });
+    pureTursoTemplate = synth({ controlDataBackend: "turso" });
+    configuredTursoTemplate = synth({
+      controlDataBackend: "turso",
+      tursoDatabaseUrl: "libsql://example.turso.io",
+      tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+    });
+  }, SYNTH_TIMEOUT_MS);
 
   function samlIdpFunctionEnv(template: Template): Record<string, unknown> {
     const functions = template.findResources("AWS::Lambda::Function");
@@ -294,7 +302,7 @@ describe("SamlIdps pure SQL conditional synth (#2442 Phase C5)", () => {
   it(
     "should NOT create a SamlIdps AWS::DynamoDB::Table when controlDataBackend='turso' (pure SQL)",
     () => {
-      const template = synth({ controlDataBackend: "turso" });
+      const template = pureTursoTemplate;
       template.resourceCountIs("AWS::DynamoDB::Table", 0);
     },
     SYNTH_TIMEOUT_MS,
@@ -303,7 +311,7 @@ describe("SamlIdps pure SQL conditional synth (#2442 Phase C5)", () => {
   it(
     "should still provision the SamlIdp Lambda (attachSamlIdpLambda decoupled from table presence) under controlDataBackend='turso'",
     () => {
-      const template = synth({ controlDataBackend: "turso" });
+      const template = pureTursoTemplate;
       const vars = samlIdpFunctionEnv(template);
       // IDP_TIER_GUARD / TENANT_USER_POOL_ID stay pinned — the Lambda + /tenant/idp* API keep
       // working via the repository seam even though the table is gone.
@@ -318,11 +326,7 @@ describe("SamlIdps pure SQL conditional synth (#2442 Phase C5)", () => {
   it(
     "should inject CONTROL_DATA_BACKEND + Turso env into the SamlIdp Lambda under controlDataBackend='turso' (the Lambda that opens the DB for this seam)",
     () => {
-      const template = synth({
-        controlDataBackend: "turso",
-        tursoDatabaseUrl: "libsql://example.turso.io",
-        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
-      });
+      const template = configuredTursoTemplate;
       const vars = samlIdpFunctionEnv(template);
       expect(vars.CONTROL_DATA_BACKEND).toBe("turso");
       expect(vars.TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
@@ -334,11 +338,7 @@ describe("SamlIdps pure SQL conditional synth (#2442 Phase C5)", () => {
   it(
     "should grant the SamlIdp Lambda ssm:GetParameter scoped to the Turso token parameter under controlDataBackend='turso'",
     () => {
-      const template = synth({
-        controlDataBackend: "turso",
-        tursoDatabaseUrl: "libsql://example.turso.io",
-        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
-      });
+      const template = configuredTursoTemplate;
       template.hasResourceProperties(
         "AWS::IAM::Policy",
         Match.objectLike({
@@ -366,7 +366,7 @@ describe("SamlIdps pure SQL conditional synth (#2442 Phase C5)", () => {
   it(
     "should default (dynamodb) to a byte-compatible synth — 1 DynamoDB Table, no CONTROL_DATA_BACKEND / TURSO_* env",
     () => {
-      const template = synth();
+      const template = defaultTemplate;
       template.resourceCountIs("AWS::DynamoDB::Table", 1);
       const vars = samlIdpFunctionEnv(template);
       expect(vars.CONTROL_DATA_BACKEND).toBeUndefined();

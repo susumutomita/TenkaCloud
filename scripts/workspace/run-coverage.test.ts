@@ -88,7 +88,12 @@ describe("SHARDS", () => {
     expect(SHARDS.portal).toEqual(["apps/participant-portal"]);
   });
 
-  it("should assign packages, developer-portal and cloud infrastructure to the packages shard", () => {
+  it("should keep cloud infrastructure in its own shard", () => {
+    expect(SHARDS.infrastructure).toEqual(["infrastructure"]);
+    expect(COVERAGE_PARTS.infrastructure).toBe(6);
+  });
+
+  it("should assign packages and developer-portal to the packages shard", () => {
     expect(SHARDS.packages).toEqual([
       "packages/trust-bridge",
       "packages/auth-client",
@@ -105,7 +110,6 @@ describe("SHARDS", () => {
       "apps/developer-portal",
       "packages/ai-eval",
       "packages/security-harness",
-      "infrastructure",
     ]);
   });
 });
@@ -185,8 +189,11 @@ describe("resolveLcovPaths", () => {
       "./apps/developer-portal/coverage/lcov.info",
       "./packages/ai-eval/coverage/lcov.info",
       "./packages/security-harness/coverage/lcov.info",
-      "./infrastructure/coverage/lcov.info",
     ]);
+  });
+
+  it("should upload the infrastructure report from each infrastructure part", () => {
+    expect(resolveLcovPaths("infrastructure")).toEqual(["./infrastructure/coverage/lcov.info"]);
   });
 });
 
@@ -248,6 +255,31 @@ describe("COVERAGE_PARTS / coverageMatrixLegs", () => {
         expect(SHARDS[shard].length).toBe(1);
       }
     }
+  });
+
+  it("should dispatch every workspace partition exactly once without selecting test files", () => {
+    const manifest = coverageMatrixLegs().flatMap((leg) => {
+      const args = parseArgs(["--shard", leg.shard, "--part", `${leg.part}/${leg.parts}`]);
+      return resolveWorkspaces(args.shard).map((ws) => ({
+        workspace: ws.dir,
+        testArgs: vitestPartArgs(args.part),
+      }));
+    });
+    const expectedParts: Record<string, number> = {
+      infrastructure: 6,
+      "apps/application-admin-console": 3,
+      "apps/participant-portal": 2,
+    };
+    const expected = EXPECTED_DIRS.flatMap((workspace) => {
+      const parts = expectedParts[workspace] ?? 1;
+      return Array.from({ length: parts }, (_unused, index) => ({
+        workspace,
+        testArgs: parts > 1 ? [`--shard=${index + 1}/${parts}`] : [],
+      }));
+    });
+    const keys = (entries: typeof manifest) => entries.map((entry) => JSON.stringify(entry)).sort();
+    expect(keys(manifest)).toEqual(keys(expected));
+    expect(new Set(keys(manifest)).size).toBe(manifest.length);
   });
 
   it("should reject a split shard that holds more than one workspace", () => {

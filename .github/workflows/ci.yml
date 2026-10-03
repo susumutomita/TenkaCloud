@@ -151,7 +151,7 @@ jobs:
       - name: Build
         run: make build WORKSPACE_JOBS=4
 
-  # Split the larger application suites with Vitest --shard while preserving workspace gates.
+  # Split infrastructure and the larger application suites with Vitest --shard.
   # The matrix below must match `coverageMatrixLegs()` in scripts/workspace/run-coverage.ts —
   # scripts/workspace/run-coverage.test.ts fails when the two drift, and codecov.yml's
   # `after_n_builds` counts these legs.
@@ -161,6 +161,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - { shard: infrastructure, part: 1, parts: 6 }
+          - { shard: infrastructure, part: 2, parts: 6 }
+          - { shard: infrastructure, part: 3, parts: 6 }
+          - { shard: infrastructure, part: 4, parts: 6 }
+          - { shard: infrastructure, part: 5, parts: 6 }
+          - { shard: infrastructure, part: 6, parts: 6 }
           - { shard: portal, part: 1, parts: 2 }
           - { shard: portal, part: 2, parts: 2 }
           - { shard: app-admin, part: 1, parts: 3 }

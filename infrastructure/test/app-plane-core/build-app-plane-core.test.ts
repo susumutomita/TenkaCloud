@@ -13,6 +13,7 @@ import { buildAppPlaneCore } from "../../lib/app-plane-core/index.js";
  * 同じ pattern で placeholder dist を mkdir する。
  */
 const distDir = path.join(__dirname, "..", "..", "..", "apps", "application-admin-console", "dist");
+let defaultTemplate: Template;
 beforeAll(() => {
   if (!fs.existsSync(distDir)) {
     fs.mkdirSync(distDir, { recursive: true });
@@ -21,7 +22,9 @@ beforeAll(() => {
       "<!doctype html><html><body>placeholder</body></html>",
     );
   }
-});
+  // 各 assertion は同じ構成を読むので、default の construct 生成と synth は 1 回だけ行う。
+  defaultTemplate = synth();
+}, 120_000);
 
 /**
  * Issue #778: AppPlaneCore builder の契約 pin。
@@ -59,7 +62,7 @@ function synth(features?: Readonly<Record<string, boolean>>): Template {
 
 describe("buildAppPlaneCore", () => {
   it("should generate ApplicationAdminConsoleHosting / IdentityProvider / ApiGateway directly under the Stack (= 0 CFn physical diff invariant)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // builder は scope = stack に対して 3 つの sub-construct を生成する。
     // 各 sub-construct は内部に複数の CFn resource を持つ。 stack 直下に下記が存在することで
     // logical ID パスが旧 TenantTemplateStack と一致していることを確認する。
@@ -73,14 +76,14 @@ describe("buildAppPlaneCore", () => {
   });
 
   it("should create 1 BucketDeployment custom resource for runtime-config.json (evidence that deployRuntimeConfig was invoked)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // BucketDeployment は AWS::CloudFormation::CustomResource として template に乗る。
     // hosting の runtime-config.json が apiGateway 確定後に配置されることを示す。
     template.hasResource("Custom::CDKBucketDeployment", Match.objectLike({}));
   });
 
   it("UserPoolClient callback URL should reference the ApplicationAdminConsoleHosting distribution URL", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // UserPoolClient の CallbackURLs / LogoutURLs に CloudFront distribution domain への
     // Fn::Join 参照が入る (= 順序依存)。 hosting が先に作られて identity に URL を渡す
     // フローが壊れていないか確認する。 string では引けない (= CDK token なので) ため、
@@ -98,7 +101,7 @@ describe("buildAppPlaneCore", () => {
   // CFn 物理差分が 0 件であることを機械的に保証する。
 
   it("should NOT attach a Pre-Token Generation Lambda when liteAdminClaimsInjection is not set (SaaS mode regression guard)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     const userPools = template.findResources("AWS::Cognito::UserPool");
     const userPool = Object.values(userPools)[0];
     const lambdaConfig = (userPool?.Properties as { LambdaConfig?: Record<string, unknown> })
@@ -168,7 +171,7 @@ describe("buildAppPlaneCore", () => {
   // Issue #1340 Phase 2: SAML attach の挙動 (= 未指定で no-op、 指定時のみ provider + allowlist 配線)。
 
   it("should NOT create a UserPoolIdentityProvider when samlIdps is omitted (= no CFn physical diff for existing tenants)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     template.resourceCountIs("AWS::Cognito::UserPoolIdentityProvider", 0);
   });
 
@@ -250,7 +253,7 @@ describe("buildAppPlaneCore", () => {
         .sort();
     };
 
-    expect(teamCloudCredentialMethods(synth())).toEqual([]);
+    expect(teamCloudCredentialMethods(defaultTemplate)).toEqual([]);
     expect(teamCloudCredentialMethods(synth({ nonAwsRuntime: false }))).toEqual([]);
     expect(teamCloudCredentialMethods(synth({ nonAwsRuntime: true }))).toEqual([
       "DELETE",

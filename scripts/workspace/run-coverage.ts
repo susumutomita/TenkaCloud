@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Run coverage for the 18 entries in COVERAGE_WORKSPACES.
- * --shard selects portal, app-admin or packages; without it, all entries run sequentially.
+ * --shard selects infrastructure, portal, app-admin or packages; without it, all entries run sequentially.
  * Each failure stops the run after writing its timing summary. Successful runs normalize
  * LCOV source paths using the same workspace registry before returning.
  */
@@ -12,9 +12,14 @@ import { resolve } from "node:path";
 
 const REPO_ROOT = resolve(import.meta.dir, "../..");
 
-export type ShardName = "portal" | "app-admin" | "packages";
+export type ShardName = "infrastructure" | "portal" | "app-admin" | "packages";
 
-export const SHARD_NAMES: readonly ShardName[] = ["portal", "app-admin", "packages"];
+export const SHARD_NAMES: readonly ShardName[] = [
+  "infrastructure",
+  "portal",
+  "app-admin",
+  "packages",
+];
 
 export interface CoverageWorkspace {
   readonly dir: string;
@@ -62,7 +67,7 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   // schema, finding/patch verdict engine). Pure and AWS-independent, so it sits on the packages
   // shard with the other dependency-light packages.
   { dir: "packages/security-harness", filter: "@tenkacloud/security-harness", shard: "packages" },
-  { dir: "infrastructure", filter: "@tenkacloud/infrastructure", shard: "packages" },
+  { dir: "infrastructure", filter: "@tenkacloud/infrastructure", shard: "infrastructure" },
 ];
 
 function shardDirs(shard: ShardName): readonly string[] {
@@ -74,17 +79,22 @@ function shardDirs(shard: ShardName): readonly string[] {
 // shape the empty object does not have: drop a shard from the reduce and the assertion still
 // says the key is there. Spelled out, `Record<ShardName, …>` makes a new shard a type error here.
 export const SHARDS: Readonly<Record<ShardName, readonly string[]>> = {
+  infrastructure: shardDirs("infrastructure"),
   portal: shardDirs("portal"),
   "app-admin": shardDirs("app-admin"),
   packages: shardDirs("packages"),
 };
 
 /**
- * CI runs six coverage legs: three app-admin, two portal and one packages leg.
+ * Keep infrastructure's six-way split from #3167: the restored cloud suite took 3m7.5s
+ * inside the serial packages leg (run 37107265986), making it the CI critical path.
+ * Twelve coverage legs + gates / lint-ts / typecheck / build + the macOS source check
+ * stay within the earlier 17-job concurrency budget.
  * run-coverage.test.ts checks the workflow matrix and Codecov build count against this map.
  * A shard split with --part must contain exactly one workspace.
  */
 export const COVERAGE_PARTS: Readonly<Record<ShardName, number>> = {
+  infrastructure: 6,
   "app-admin": 3,
   portal: 2,
   packages: 1,
