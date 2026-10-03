@@ -378,6 +378,7 @@ export type EventDetail = z.infer<typeof EventDetailSchema>;
  */
 export const BulkDeployRequestSchema = z
   .object({
+    hostingAccountSelfTest: HostingAccountSelfTestRequestSchema.strict().optional(),
     retryFailedOnly: z.literal(true).optional(),
     forceRedeploy: z.literal(true).optional(),
     teamIds: z.array(z.string().min(1)).min(1).max(100).optional(),

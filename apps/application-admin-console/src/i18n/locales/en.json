@@ -258,6 +258,8 @@
     "team_region_inherit": "Use the problem's region",
     "teams_description_native": "This event uses only exercises that run inside TenkaCloud. Set each team’s internal ID; no competitor AWS account is required.",
     "native_execution": "Runs inside TenkaCloud",
+    "self_test_existing_account": "AWS account {account} also hosts TenkaCloud. This existing event will be kept.",
+    "self_test_existing_confirm": "Accept risk and deploy",
     "self_test_header": "Confirm hosting-account self-test",
     "self_test_account": "AWS account {account} also hosts TenkaCloud. No event or login keys have been created yet.",
     "self_test_risk": "Problem and participant roles in this account may access or change TenkaCloud hosting configuration and data. Using a different region does not isolate these permissions. Accepting this risk does not make the environment isolated or safe.",

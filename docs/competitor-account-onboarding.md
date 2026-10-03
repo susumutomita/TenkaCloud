@@ -181,13 +181,13 @@ problem's participant permissions. The restored participant API supports Console
 and CLI access through the problem's separate participant role. The platform
 hosting account can be selected for your own self-test only after explicit risk
 acknowledgment in the event creation dialog, before the event and login keys are
-created. Consent is persisted per event and participant Console/CLI issuance
+created, or in the existing event’s deployment dialog. Consent is persisted per event and participant Console/CLI issuance
 rechecks it. A verified competitor role and ExternalId remain mandatory; there
 is no fallback to hosting credentials. Problem and participant roles may access
 or change hosting configuration and data; consent does not provide isolation.
-Use a separate competitor account when third parties participate. An already
-blocked event needs a newly acknowledged self-test event; no existing event is
-automatically opted in. Standalone and composite deployments without event
+Use a separate competitor account when third parties participate. For an already created event, use **Schedule → Deploy now** and confirm the
+risk when prompted. Consent is saved on that event before deployment continues;
+cancelling leaves it unchanged. Event IDs, keys, scores and schedules are kept. Standalone and composite deployments without event
 membership still reject hosting-account targets. Different-region team allocation is supported but does
 not prove full IAM isolation. The catalog IAM audit still has unresolved findings;
 review the selected problem rather than assuming every policy is least privilege.

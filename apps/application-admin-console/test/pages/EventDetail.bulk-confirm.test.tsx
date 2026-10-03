@@ -5,7 +5,7 @@
  * 同時に blast radius (= 何 team × 何 problem の削除か) を Alert で明示する。
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -94,6 +94,68 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("EventDetail existing-event self-test consent", () => {
+  it("confirms and deploys an existing event through the real HTTP client without recreating it", async () => {
+    const { createCoreApiClient } = await import("@tenkacloud/web-kit");
+    const detail: EventDetail = { ...baseDetail, status: "DRAFT", expiresAt: 4_102_444_800 };
+    mocks.getEvent.mockResolvedValue(detail);
+    window.localStorage.setItem("tenkacloud.application-admin.locale", "en");
+    const requests: { body: Record<string, unknown>; headers: Headers }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(new URL(String(input)).pathname).toBe(`/api/events/${EVENT_ID}/deploy`);
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        requests.push({ body, headers: new Headers(init?.headers) });
+        return body.hostingAccountSelfTest
+          ? Response.json({ eventId: EVENT_ID, enqueued: 2, skipped: 0, failed: 0 })
+          : Response.json(
+              { error: "unsupported_hosting_account", awsAccountId: "111111111111" },
+              { status: 422 },
+            );
+      }),
+    );
+    try {
+      mocks.useApiClient.mockReturnValue(
+        createCoreApiClient("https://synthetic.invalid/api", "synthetic-id-token"),
+      );
+      renderPage();
+      fireEvent.click(await screen.findByRole("tab", { name: "Schedule" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Deploy now" }));
+      expect(
+        await screen.findByRole("button", { name: "Accept risk and deploy" }),
+      ).toBeInTheDocument();
+      expect(requests).toHaveLength(1);
+      fireEvent.click(
+        within(screen.getByTestId("self-test-prompt")).getByRole("button", { name: "Cancel" }),
+      );
+      expect(
+        screen.queryByRole("button", { name: "Accept risk and deploy" }),
+      ).not.toBeInTheDocument();
+      expect(requests).toHaveLength(1);
+      expect(mocks.getEvent).toHaveBeenCalledOnce();
+      fireEvent.click(screen.getByRole("button", { name: "Deploy now" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Accept risk and deploy" }));
+      await waitFor(() => expect(mocks.getEvent).toHaveBeenCalledTimes(2));
+      expect(requests).toHaveLength(3);
+      expect(requests[2]?.body).toEqual({
+        hostingAccountSelfTest: {
+          awsAccountId: "111111111111",
+          riskVersion: "hosting-account-self-test-v1",
+        },
+      });
+      expect(requests[2]?.headers.get("authorization")).toBe("Bearer synthetic-id-token");
+      expect(requests[2]?.headers.get("Idempotency-Key")).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Accept risk and deploy" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 describe("EventDetail bulk teardown confirm dialog #1350", () => {
   it("should show the blast radius alert with team / problem counts", async () => {

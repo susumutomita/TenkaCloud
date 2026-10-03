@@ -6,6 +6,8 @@ import {
   DeployRequestSchema,
 } from "../../lib/problem-deploy/handlers/deploy-handler/types";
 import { bulkDeployEvent } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy";
+import { indexExistingDeployments } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy/existing-index";
+import { buildBulkDeployPlan } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy/plan-builder";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import { BulkDeployRequestSchema } from "../../lib/problem-deploy/handlers/event-handler/types";
 import { buildShared, NOW_MS, sampleEvent, sampleTeams } from "./event-bulk-deploy.test-helpers";
@@ -227,6 +229,41 @@ describe("bulk deploy hosting-account acknowledgment", () => {
     f.eventsSend.mockResolvedValue({});
     return f;
   };
+  it.each([{ eventId: "different-event" }, { tenantId: "different-tenant" }])(
+    "rejects saved consent from a different event or tenant before creating a plan: %s",
+    (mismatch) => {
+      const { shared, ddbSend, eventsSend } = buildShared();
+      const event = sampleEvent({ hostingAccountSelfTest: acknowledgment });
+
+      expect(() =>
+        buildBulkDeployPlan({
+          shared,
+          tenantId: "tenant-acme",
+          eventId: "EV1",
+          nowMs: NOW_MS,
+          event: { ...event, status: "DRAFT", ...mismatch },
+          selected: {
+            teams: sampleTeams(1).map(({ teamLoginKey, ...team }) => ({
+              ...team,
+              credential: { kind: "plaintext" as const, value: teamLoginKey },
+              createdAt: new Date(NOW_MS).toISOString(),
+              updatedAt: new Date(NOW_MS).toISOString(),
+              expiresAt: Math.floor(NOW_MS / 1000) + 86_400,
+            })),
+            problems: event.problems,
+          },
+          existing: indexExistingDeployments([]),
+          verified: new Map(),
+          nonAwsCredentials: new Set(),
+          retryFailedOnly: false,
+          forceRedeploy: false,
+        }),
+      ).toThrow("Self-test acknowledgment must belong to the event being deployed");
+      expect(ddbSend).not.toHaveBeenCalled();
+      expect(eventsSend).not.toHaveBeenCalled();
+    },
+  );
+
   it("composes the trusted dispatch from saved event consent and the persisted job", async () => {
     const f = arrange();
     await bulkDeployEvent(f.shared, "tenant-acme", "EV1", NOW_MS);

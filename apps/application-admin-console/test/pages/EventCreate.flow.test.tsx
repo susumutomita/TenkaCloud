@@ -567,6 +567,57 @@ describe("EventCreatePage hosting-account confirmation", () => {
     expect(await screen.findByText("ONE-TIME-KEY")).toBeInTheDocument();
   });
 
+  it("handles an actual HTTP 422 and posts consent through the real API client", async () => {
+    const { createCoreApiClient } = await import("@tenkacloud/web-kit");
+    const realEvents = await vi.importActual<typeof import("../../src/api/events-client")>(
+      "../../src/api/events-client",
+    );
+    const requests: { body: Record<string, unknown>; headers: Headers }[] = [];
+    const fetchHttp = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(new URL(String(input)).pathname).toBe("/api/events");
+      expect(init?.method).toBe("POST");
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requests.push({ body, headers: new Headers(init?.headers) });
+      if (!body.hostingAccountSelfTest)
+        return Response.json(
+          {
+            error: "unsupported_hosting_account",
+            awsAccountId: ACCOUNT_ID,
+            message:
+              "Using the hosting AWS account requires explicit self-test risk acknowledgment before event creation.",
+          },
+          { status: 422 },
+        );
+      return Response.json({
+        eventId: "e1",
+        teams: [{ teamId: "t1", internalSlug: "team-1", teamLoginKey: "ONE-TIME-KEY" }],
+      });
+    });
+    vi.stubGlobal("fetch", fetchHttp);
+    try {
+      config = { ...config, apiBaseUrl: "https://synthetic.invalid/api" };
+      mockApiClient.mockReturnValue(createCoreApiClient(config.apiBaseUrl, "synthetic-id-token"));
+      mockCreate.mockImplementation(realEvents.createEvent);
+      const { container } = renderPage();
+      fillValidForm(container);
+      fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+      expect(await screen.findByText("event_create.self_test_risk")).toBeInTheDocument();
+      expect(requests).toHaveLength(1);
+      expect(screen.queryByText("ONE-TIME-KEY")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "event_create.self_test_confirm" }));
+      expect(await screen.findByText("ONE-TIME-KEY")).toBeInTheDocument();
+      expect(requests).toHaveLength(2);
+      expect(requests[1]?.body.hostingAccountSelfTest).toEqual({
+        awsAccountId: ACCOUNT_ID,
+        riskVersion: "hosting-account-self-test-v1",
+      });
+      expect(requests[0]?.headers.get("authorization")).toBe("Bearer synthetic-id-token");
+      expect(requests[1]?.headers.get("Idempotency-Key")).toBeTruthy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("retains acknowledgment and operation key after a lost response; repeated confirmation sends once", async () => {
     mockCreate.mockRejectedValueOnce(rejection()).mockRejectedValueOnce(new Error("response lost"));
     const { container } = renderPage();

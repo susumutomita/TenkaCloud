@@ -337,6 +337,17 @@ export interface EventsRepository {
     eventId: string,
     consistentRead?: boolean,
   ): Promise<EventRecord | undefined>;
+  /**
+   * Save explicit self-test consent on an existing deployable event. This partial CAS
+   * preserves every other field and the first audit stamp on duplicate requests.
+   * The catalog pin and prior consent must still match the validated snapshot.
+   */
+  acknowledgeHostingAccountSelfTest(
+    tenantId: string,
+    eventId: string,
+    acknowledgment: HostingAccountSelfTestAcknowledgment,
+    expected: Pick<EventRecord, "catalogKey" | "hostingAccountSelfTest">,
+  ): Promise<EventMutationOutcome>;
   /** Upsert one event row. */
   putEvent(record: EventRecord): Promise<void>;
   /** Delete one event row by its domain identifier. */

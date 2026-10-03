@@ -3,6 +3,7 @@ import {
   savedExecutionCatalog,
 } from "../../shared/execution-catalog-context.js";
 import { logDeployTrace } from "../../shared/trace-log.js";
+import { acknowledgeExistingEventSelfTest } from "../self-test-consent.js";
 import { type EventSharedResources, queryDeploymentsByEvent } from "../shared.js";
 import type { BulkDeployRequest } from "../types.js";
 import { dispatchBulkAdapterEntries } from "./adapter-dispatch.js";
@@ -56,6 +57,7 @@ export async function bulkDeployEvent(
   eventId: string,
   nowMs: number,
   request?: BulkDeployRequest,
+  actor?: string,
 ): Promise<BulkDeployOutcome> {
   const loaded = await loadBulkDeployTargets(shared, tenantId, eventId);
   if (!loaded) return { kind: "not_found" };
@@ -111,6 +113,16 @@ export async function bulkDeployEvent(
   }
   const existingDeployments = await queryDeploymentsByEvent(shared, tenantId, eventId);
   assertDeploymentCatalogMatches(catalog?.catalogKey, existingDeployments);
+  const event = await acknowledgeExistingEventSelfTest({
+    shared,
+    tenantId,
+    eventId,
+    event: loaded.event,
+    selected,
+    request: request?.hostingAccountSelfTest,
+    nowMs,
+    actor,
+  });
   const existing = indexExistingDeployments(existingDeployments);
   const retryFailedOnly = request?.retryFailedOnly === true;
   const forceRedeploy = request?.forceRedeploy === true;
@@ -127,7 +139,7 @@ export async function bulkDeployEvent(
     tenantId,
     eventId,
     nowMs,
-    event: loaded.event,
+    event,
     selected,
     existing,
     verified,

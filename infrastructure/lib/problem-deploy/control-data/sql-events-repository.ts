@@ -3,6 +3,7 @@ import {
   parseProgressionGate,
 } from "../handlers/shared/progression-gate.js";
 import type { RegistrationUpdate } from "./domain/event-registration.js";
+import type { HostingAccountSelfTestAcknowledgment } from "./domain/events.js";
 import { TEAM_INSERT_SQL, teamRowParams } from "./sql-teams-repository.js";
 import type {
   ClearProgressionGateOutcome,
@@ -292,6 +293,35 @@ export class SqlEventsRepository implements EventsRepository {
     const event = await this.getEvent(args.tenantId, args.eventId);
     if (!event) return { outcome: "not_found" };
     return { outcome: "conflict", event };
+  }
+
+  async acknowledgeHostingAccountSelfTest(
+    tenantId: string,
+    eventId: string,
+    acknowledgment: HostingAccountSelfTestAcknowledgment,
+    expected: Pick<EventRecord, "catalogKey" | "hostingAccountSelfTest">,
+  ): Promise<EventMutationOutcome> {
+    const conditions = ["status IN ('DRAFT', 'READY', 'DEPLOYING')"];
+    const params: SqlParam[] = [];
+    for (const field of ["catalogKey", "hostingAccountSelfTest"] as const) {
+      if (expected[field] === undefined)
+        conditions.push(`json_type(payload, '$.${field}') IS NULL`);
+      else {
+        const isObject = field === "hostingAccountSelfTest";
+        conditions.push(`json_extract(payload, '$.${field}') = ${isObject ? "json(?)" : "?"}`);
+        params.push(isObject ? JSON.stringify(expected[field]) : String(expected[field]));
+      }
+    }
+    return this.conditionalUpdate({
+      tenantId,
+      eventId,
+      set: "payload = json_set(payload, '$.hostingAccountSelfTest', json(?))",
+      setParams: [JSON.stringify(acknowledgment)],
+      where: conditions.join(" AND "),
+      whereParams: params,
+      onMiss: "probe",
+      withPostImage: true,
+    });
   }
 
   async endEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome> {

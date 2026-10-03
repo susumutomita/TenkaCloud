@@ -24,7 +24,7 @@ export class UnsupportedHostingAccountError extends Error {
   readonly code = "unsupported_hosting_account";
   constructor(readonly awsAccountId: string) {
     super(
-      "Using the hosting AWS account requires explicit self-test risk acknowledgment before event creation. Problem and participant roles may access or change hosting configuration and data, even in another region. Use a separate competitor account for events with third-party participants.",
+      "Using the hosting AWS account requires explicit self-test risk acknowledgment before deployment. Problem and participant roles may access or change hosting configuration and data, even in another region. Use a separate competitor account for events with third-party participants.",
     );
     this.name = "UnsupportedHostingAccountError";
   }

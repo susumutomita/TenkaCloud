@@ -258,6 +258,8 @@
     "team_region_inherit": "問題の既定に従う",
     "teams_description_native": "この大会は TenkaCloud 内で動く問題だけを使います。チームの内部識別子を設定してください。競技者用の AWS アカウントは不要です。",
     "native_execution": "TenkaCloud 内で実行",
+    "self_test_existing_account": "AWS アカウント {account} は TenkaCloud の開催基盤にも使われています。作成済みのイベントをそのまま使います。",
+    "self_test_existing_confirm": "リスクを理解してデプロイ",
     "self_test_header": "開催用アカウントでの自己検証を確認",
     "self_test_account": "AWS アカウント {account} は TenkaCloud の開催基盤にも使われています。イベントとログインキーはまだ作成されていません。",
     "self_test_risk": "このアカウントの問題用ロールや参加者用ロールから、TenkaCloud の開催基盤の設定やデータへアクセス・変更できる可能性があります。リージョンを変えても権限は分離されません。リスクへの同意によって隔離や安全性が保証されるものではありません。",

@@ -6,7 +6,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { ApiError } from "@tenkacloud/web-kit";
 import { useT } from "../../i18n";
 
-/** The API has rejected creation before it generates keys or writes any event/team. */
+/** The API requires explicit organizer consent before creation or deployment proceeds. */
 export function hostingAccountRequiringConsent(error: unknown): string | undefined {
   if (!(error instanceof ApiError) || error.status !== 422) return undefined;
   try {
@@ -24,11 +24,13 @@ export function hostingAccountRequiringConsent(error: unknown): string | undefin
 export function EventCreateSelfTestModal({
   visible,
   awsAccountId,
+  existingEvent = false,
   onCancel,
   onConfirm,
 }: {
   readonly visible: boolean;
   readonly awsAccountId: string;
+  readonly existingEvent?: boolean;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) {
@@ -44,14 +46,27 @@ export function EventCreateSelfTestModal({
           <SpaceBetween direction="horizontal" size="xs">
             <Button onClick={onCancel}>{t("event_create.cancel")}</Button>
             <Button variant="primary" onClick={onConfirm}>
-              {t("event_create.self_test_confirm")}
+              {t(
+                existingEvent
+                  ? "event_create.self_test_existing_confirm"
+                  : "event_create.self_test_confirm",
+              )}
             </Button>
           </SpaceBetween>
         </Box>
       }
     >
       <SpaceBetween size="m">
-        <Box>{t("event_create.self_test_account", { account: awsAccountId })}</Box>
+        <Box>
+          {t(
+            existingEvent
+              ? "event_create.self_test_existing_account"
+              : "event_create.self_test_account",
+            {
+              account: awsAccountId,
+            },
+          )}
+        </Box>
         <Alert type="warning">{t("event_create.self_test_risk")}</Alert>
         <Box>{t("event_create.self_test_recommendation")}</Box>
       </SpaceBetween>

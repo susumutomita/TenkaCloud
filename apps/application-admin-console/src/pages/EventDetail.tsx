@@ -15,6 +15,7 @@ import { useEventDetail } from "../hooks/useEventDetail";
 import { useEventOperations, validateEndsAtInput } from "../hooks/useEventOperations";
 import { useT } from "../i18n";
 import { computeEventWizardState, type WizardState } from "../lib/event-wizard";
+import { EventCreateSelfTestModal } from "./event-create/EventCreateSelfTestModal";
 import {
   DisruptionsTab,
   EVENT_TAB_IDS,
@@ -31,6 +32,19 @@ import {
 } from "./event-detail/tabs";
 
 type EventOperations = ReturnType<typeof useEventOperations>;
+
+function ExistingEventSelfTestPrompt({ operations }: { readonly operations: EventOperations }) {
+  const prompt = operations.hostingAccountSelfTestPrompt;
+  return prompt ? (
+    <EventCreateSelfTestModal
+      visible
+      existingEvent
+      awsAccountId={prompt.awsAccountId}
+      onCancel={operations.cancelHostingAccountSelfTest}
+      onConfirm={operations.handleConfirmHostingAccountSelfTest}
+    />
+  ) : null;
+}
 
 /** Local Docker environments settle within seconds; 3s keeps the tables live without load. */
 const LOCAL_HOST_IN_FLIGHT_POLL_MS = 3_000;
@@ -211,6 +225,7 @@ function EventDetailErrorOnly({
 }) {
   return (
     <SpaceBetween size="l">
+      <ExistingEventSelfTestPrompt operations={operations} />
       <Header
         variant="h1"
         description={`Event ID: ${eventId}`}
@@ -354,6 +369,7 @@ function EventDetailLoaded({
 
   return (
     <SpaceBetween size="l">
+      <ExistingEventSelfTestPrompt operations={operations} />
       <Header
         variant="h1"
         description={`Event ID: ${eventId}`}

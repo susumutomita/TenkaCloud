@@ -229,6 +229,92 @@ describe("useEventOperations — bulk deploy / teardown", () => {
   });
 });
 
+describe("useEventOperations — existing-event self-test consent", () => {
+  const acknowledgment = {
+    awsAccountId: "111111111111",
+    riskVersion: "hosting-account-self-test-v1",
+  };
+  const rejection = () =>
+    new ApiError(
+      422,
+      JSON.stringify({
+        error: "unsupported_hosting_account",
+        awsAccountId: acknowledgment.awsAccountId,
+      }),
+    );
+
+  it("keeps the existing event unchanged when the organizer cancels consent", async () => {
+    ops.bulkDeployEvent.mockRejectedValue(rejection());
+    const { result, refresh, setError } = setup();
+    const body = { retryFailedOnly: true as const, teamIds: ["team-1"], problemIds: ["problem-1"] };
+    await act(async () => {
+      await result.current.handleBulkDeploy(body);
+    });
+    expect(result.current.hostingAccountSelfTestPrompt).toMatchObject({ eventId: "evt-1", body });
+    expect(setError).toHaveBeenCalledExactlyOnceWith(null);
+    act(() => result.current.cancelHostingAccountSelfTest());
+    expect(result.current.hostingAccountSelfTestPrompt).toBeNull();
+    expect(ops.bulkDeployEvent).toHaveBeenCalledOnce();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("retains filters and consent on uncertain retries and ignores repeated confirmation", async () => {
+    ops.bulkDeployEvent
+      .mockRejectedValueOnce(rejection())
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValue({ enqueued: 1 });
+    const { result, refresh } = setup();
+    const body = { forceRedeploy: true as const, teamIds: ["team-1"], problemIds: ["problem-1"] };
+    await act(async () => {
+      await result.current.handleBulkDeploy(body);
+    });
+    await act(async () => {
+      result.current.handleConfirmHostingAccountSelfTest();
+      result.current.handleConfirmHostingAccountSelfTest();
+    });
+    expect(ops.bulkDeployEvent).toHaveBeenCalledTimes(2);
+    expect(ops.bulkDeployEvent.mock.calls[1]?.slice(0, 3)).toEqual([
+      CLIENT,
+      "evt-1",
+      { ...body, hostingAccountSelfTest: acknowledgment },
+    ]);
+    expect(result.current.hostingAccountSelfTestPrompt).toBeNull();
+    await act(async () => {
+      await result.current.handleBulkDeploy(body);
+    });
+    expect(ops.bulkDeployEvent.mock.calls[2]).toEqual(ops.bulkDeployEvent.mock.calls[1]);
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("does not carry a previous event's confirmation into another event", async () => {
+    ops.bulkDeployEvent.mockRejectedValueOnce(rejection()).mockResolvedValue({ enqueued: 1 });
+    const { result, rerender } = renderHook(
+      ({ eventId }) =>
+        useEventOperations({
+          apiClient: CLIENT,
+          canMutateTenant: true,
+          detail: null,
+          eventId,
+          refresh: vi.fn().mockResolvedValue(undefined),
+          setError: vi.fn(),
+          t,
+        }),
+      { initialProps: { eventId: "evt-1" } },
+    );
+    await act(async () => {
+      await result.current.handleBulkDeploy();
+    });
+    rerender({ eventId: "evt-2" });
+    expect(result.current.hostingAccountSelfTestPrompt).toBeNull();
+    act(() => result.current.handleConfirmHostingAccountSelfTest());
+    expect(ops.bulkDeployEvent).toHaveBeenCalledOnce();
+    await act(async () => {
+      await result.current.handleBulkDeploy();
+    });
+    expect(ops.bulkDeployEvent.mock.calls[1]?.slice(0, 3)).toEqual([CLIENT, "evt-2", {}]);
+  });
+});
+
 describe("useEventOperations — scheduling", () => {
   it("should start now and surface errors", async () => {
     ops.setEventSchedule.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("x"));

@@ -296,6 +296,7 @@ export function rotateTeamLoginKey(
  * 何も指定しないと従来通り teams × problems を全展開 (= idempotent skip で衝突は飛ばす)。
  */
 export interface BulkDeployBody {
+  hostingAccountSelfTest?: NonNullable<CreateEventRequest["hostingAccountSelfTest"]>;
   retryFailedOnly?: true;
   forceRedeploy?: true;
   teamIds?: readonly string[];

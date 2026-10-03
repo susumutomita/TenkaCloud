@@ -14,6 +14,7 @@ import {
   setEventSchedule,
   unlockEventScoring,
 } from "../api/events-client";
+import { hostingAccountRequiringConsent } from "../pages/event-create/EventCreateSelfTestModal";
 import {
   type EndsAtValidation,
   formatEndEventError,
@@ -24,6 +25,21 @@ import {
 } from "./event-operations-validation";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
+
+interface ConfirmedSelfTest {
+  eventId: string;
+  acknowledgment: NonNullable<BulkDeployBody["hostingAccountSelfTest"]>;
+}
+
+function deploymentRequestBody(
+  eventId: string,
+  body: BulkDeployBody,
+  consent: ConfirmedSelfTest | null,
+): BulkDeployBody {
+  return consent?.eventId === eventId && !body.hostingAccountSelfTest
+    ? { ...body, hostingAccountSelfTest: consent.acknowledgment }
+    : body;
+}
 
 // Issue #2221: the 4 pure validators/formatters below now live in
 // event-operations-validation.ts; re-exported here so existing imports of
@@ -44,6 +60,13 @@ export function useEventOperations(args: {
 }) {
   const { apiClient, canMutateTenant, detail, eventId, refresh, setError, t } = args;
   const deployment = useRef(new PendingOperation());
+  const deploymentInFlight = useRef(false);
+  const confirmedSelfTest = useRef<ConfirmedSelfTest | null>(null);
+  const [selfTestPrompt, setSelfTestPrompt] = useState<{
+    eventId: string;
+    awsAccountId: string;
+    body: BulkDeployBody;
+  } | null>(null);
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   // #555/#756: deploy 系操作は同じ POST /deploy 経路。in-flight 状態だけ分けて表示する。
   const [bulkInFlight, setBulkInFlight] = useState<
@@ -82,23 +105,44 @@ export function useEventOperations(args: {
   // #558: scoring lock/unlock の in-flight 状態。"lock" / "unlock" / null を持つ。
   const [scoringLockInFlight, setScoringLockInFlight] = useState<"lock" | "unlock" | null>(null);
 
+  const handleDeployFailure = (error: unknown, body: BulkDeployBody) => {
+    const account = hostingAccountRequiringConsent(error);
+    if (account && !body.hostingAccountSelfTest)
+      setSelfTestPrompt({ eventId, awsAccountId: account, body });
+    else setError(toErrorMessage(error));
+  };
+
   const handleBulkDeploy = async (body: BulkDeployBody = {}) => {
-    if (!apiClient || !canMutateTenant || bulkInFlight) return;
+    if (!apiClient || !canMutateTenant || bulkInFlight || deploymentInFlight.current) return;
+    const request = deploymentRequestBody(eventId, body, confirmedSelfTest.current);
+    deploymentInFlight.current = true;
     setBulkInFlight(
       body.retryFailedOnly ? "retry-failed" : body.forceRedeploy ? "redeploy" : "deploy",
     );
     setError(null);
+    if (request.hostingAccountSelfTest) setSelfTestPrompt(null);
     try {
-      const operationKey = deployment.current.keyFor(eventId, body);
-      const res = await bulkDeployEvent(apiClient, eventId, body, operationKey);
+      const operationKey = deployment.current.keyFor(eventId, request);
+      const res = await bulkDeployEvent(apiClient, eventId, request, operationKey);
       deployment.current.acknowledge(operationKey);
       setBulkResult(res);
       await refresh();
     } catch (err) {
-      setError(toErrorMessage(err));
+      handleDeployFailure(err, request);
     } finally {
+      deploymentInFlight.current = false;
       setBulkInFlight(null);
     }
+  };
+
+  const handleConfirmHostingAccountSelfTest = () => {
+    if (!selfTestPrompt || selfTestPrompt.eventId !== eventId) return;
+    const acknowledgment = {
+      awsAccountId: selfTestPrompt.awsAccountId,
+      riskVersion: "hosting-account-self-test-v1" as const,
+    };
+    confirmedSelfTest.current = { eventId, acknowledgment };
+    void handleBulkDeploy({ ...selfTestPrompt.body, hostingAccountSelfTest: acknowledgment });
   };
 
   const handleBulkTeardown = async () => {
@@ -341,6 +385,9 @@ export function useEventOperations(args: {
   // Issue #2020: this flat return is each operation's display + input state + action; the danger
   // zone groups it into per-operation models via `buildEventDangerZoneController` at the seam.
   return {
+    hostingAccountSelfTestPrompt: selfTestPrompt?.eventId === eventId ? selfTestPrompt : null,
+    handleConfirmHostingAccountSelfTest,
+    cancelHostingAccountSelfTest: () => setSelfTestPrompt(null),
     bulkInFlight,
     bulkResult,
     confirmEnd,
