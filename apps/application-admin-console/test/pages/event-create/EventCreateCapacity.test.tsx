@@ -13,6 +13,7 @@ const catalog: HostCatalog = {
   supported: new Set(),
   cloud: new Set(),
   error: null,
+  loading: false,
   limits: { maxTeams: 40, maxEventJobs: 512 },
 };
 const limits = { maxTeams: 49, maxProblems: 50 };

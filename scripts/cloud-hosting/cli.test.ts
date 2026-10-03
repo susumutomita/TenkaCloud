@@ -1668,6 +1668,100 @@ function tursoStackResponse(request: ProcessRequest): ProcessResult | undefined 
   ];
   return { code: 0, stdout: JSON.stringify(stack), stderr: "" };
 }
+describe("standalone selected Turso reset routing", () => {
+  it.each([[], ["--plan"], ["--yes"], ["-y"]].map((args) => ({ args })))(
+    "resolves the selected database without requiring CloudFormation stacks: %j",
+    async ({ args }) => {
+      const f = fixture();
+      let resets = 0;
+      f.io.resetSelectedTursoData = async (target, options) => {
+        resets++;
+        expect(target).toEqual({
+          environment: "staging",
+          account: "123456789012",
+          region: "ap-northeast-1",
+          databaseUrl: "https://owned.turso.io",
+          parameterName: "/TenkaCloud/staging/turso/auth-token",
+        });
+        expect(options.plan).toBe(args.includes("--plan"));
+        expect(options.yes).toBe(args.includes("--yes") || args.includes("-y"));
+        expect(options.confirm).toBe(f.io.confirm);
+      };
+      expect(
+        await runCloudCli(["turso-reset", ...args], f.io, {
+          root: ROOT,
+          env: { ...f.env, ...tursoEnvironment },
+        }),
+      ).toBe(0);
+      expect(resets).toBe(1);
+      expect(f.calls).toHaveLength(1);
+      expect(f.calls[0]?.args).toContain("get-caller-identity");
+      expect(f.confirmations).toEqual([]);
+    },
+  );
+  it("loads only the selected environment file and applies credential-source guards", async () => {
+    const root = mkdtempSync(join(tmpdir(), "standalone-turso-env-"));
+    try {
+      mkdirSync(join(root, "infrastructure/environments/staging"), { recursive: true });
+      writeFileSync(
+        join(root, "infrastructure/environments/staging/.env"),
+        Object.entries({ ...tursoEnvironment, AWS_PROFILE: "synthetic-profile" })
+          .map(([key, value]) => `${key}=${value}`)
+          .join("\n"),
+      );
+      const f = fixture();
+      let selected: string | undefined;
+      f.io.configureEnvironment = (env) => {
+        selected = env.AWS_PROFILE;
+      };
+      f.io.resetSelectedTursoData = async (target) => {
+        expect(selected).toBe("synthetic-profile");
+        expect(target.databaseUrl).toBe("https://owned.turso.io");
+      };
+      expect(await runCloudCli(["turso-reset", "--plan"], f.io, { root, env: f.env })).toBe(0);
+      f.calls.length = 0;
+      expect(
+        await runCloudCli(["turso-reset", "--yes"], f.io, {
+          root,
+          env: { ...f.env, AWS_ACCESS_KEY_ID: "synthetic-access-id" },
+        }),
+      ).toBe(1);
+      expect(f.calls).toEqual([]);
+      expect(f.errors.join("")).not.toContain("synthetic-access-id");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it.each([
+    {},
+    {
+      ...tursoEnvironment,
+      CDK_PARAM_TURSO_DATABASE_URL: "https://user:synthetic-secret@owned.turso.io",
+    },
+    { ...tursoEnvironment, CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: "/turso/*" },
+  ])(
+    "rejects incomplete or unsafe targets before account/credential/database reads: %j",
+    async (configuration) => {
+      const f = fixture();
+      expect(
+        await runCloudCli(["turso-reset", "--yes"], f.io, {
+          root: ROOT,
+          env: { ...f.env, ...configuration },
+        }),
+      ).toBe(1);
+      expect(f.calls).toEqual([]);
+      expect(f.errors.join("")).not.toContain("synthetic-secret");
+    },
+  );
+  it("keeps reset help offline and rejects retired/unknown arguments", async () => {
+    for (const args of [["--help"], ["--purge-retained-data"], ["--rotate-token"]]) {
+      const f = fixture();
+      expect(await f.run(["turso-reset", ...args])).toBe(args[0] === "--help" ? 0 : 1);
+      expect(f.calls).toEqual([]);
+    }
+  });
+});
+
 describe("selected cloud data deployment and teardown", () => {
   it("configures SDK environment before resolving or mutating the deployment", async () => {
     let configured: string | undefined;

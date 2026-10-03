@@ -363,7 +363,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             onNameChange={setName}
             nameInvalid={nameInvalid}
             teamCount={teamRows.length}
-            onTeamCountChange={handleTeamCountChange}
+            onTeamCountChange={(next) =>
+              handleTeamCountChange(localHost ? Math.min(maxTeams, Math.max(1, next)) : next)
+            }
             teamCountInvalid={teamCountInvalid}
             maxTeams={maxTeams}
           />
@@ -399,6 +401,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             problemRows={problemRows}
             nonAwsRuntimeEnabled={config.features?.nonAwsRuntime ?? false}
             hostSupportedProblemIds={localHost ? hostCatalog.supported : undefined}
+            maxProblems={localHost ? capacity.maxProblems : undefined}
             onProblemsChange={onProblemsChange}
             onUpdateProblemRow={updateProblemRow}
           />

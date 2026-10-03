@@ -47,8 +47,9 @@ test: ## Run tests in every workspace | 全workspaceのテストを実行
 	bun run test
 test-coverage: ## Run all coverage shards sequentially | 全coverage shardを直列実行
 	bun run test:coverage
-test-scripts: ## Run retained script and authoring tests | 継続する script と問題作成機能を検証
-	bun run test:root
+# Fast script checks only; before-commit still runs authoring, host and workspace tests.
+test-scripts: ## Run fast script and generated-file checks | scriptと生成物を高速検証
+	bun run test:scripts
 
 # ===== Quality gates | 品質ゲート =====
 .PHONY: audit-deps dup-check dup-baseline dead-code \
@@ -169,13 +170,15 @@ pack-list: ## List installed problem packs | install済み問題packを一覧表
 	$(PACK) list $(ARGS)
 
 # ===== Host candidate | host candidate =====
-.PHONY: local down local-reset deploy destroy destroy-all release-check release-candidate
+.PHONY: local down local-reset local-clear deploy destroy destroy-all turso-reset release-check release-candidate
 local: ## Start the unified local competition console | ローカル競技コンソールを起動
 	bun run scripts/local-host/local.ts start $(LOCAL_ARGS)
 down: ## Stop owned local runtimes and preserve event data | 所有するローカル環境を停止し大会データを保持
 	bun run scripts/local-host/local.ts down $(LOCAL_ARGS)
 local-reset: ## Rotate the organizer key; preserve event and participant data | 主催者キーを再発行し大会・参加者データを保持
 	bun run scripts/local-host/local.ts reset $(LOCAL_ARGS)
+local-clear: ## Confirm and clear local event history and owned Docker data | 確認してローカル大会履歴と所有Dockerデータを消去
+	bun run scripts/local-host/local.ts clear $(LOCAL_ARGS)
 # Current checkout's Lambda/DynamoDB path. See infrastructure/README.md for supported
 # problems, reviewed IAM setup, retained resources and the separate historical pipeline.
 deploy: ## Deploy cloud hosting with reviewed AWS setup | 権限設定を確認してクラウド開催を配置
@@ -185,6 +188,8 @@ destroy: ## Confirm and delete cloud platform stacks and default-owned data | �
 
 destroy-all: ## Purge exact stack-owned retained data, then delete platform stacks | stack所有の保持データを完全削除して基盤を撤収
 	bun run --no-env-file scripts/cloud-hosting/main.ts down --purge-retained-data $(CLOUD_ARGS)
+turso-reset: ## Delete selected Turso control-data rows, preserving schema | 選択したTursoのcontrol-data行を削除(スキーマ維持)
+	bun run --no-env-file scripts/cloud-hosting/main.ts turso-reset $(CLOUD_ARGS)
 release-check: ## Validate the unpublished host candidate contract | 未公開 host candidate の契約を検証
 	bun run release:check
 release-candidate: ## Record an already built image digest and source pins | build 済み image digest と source pin を記録

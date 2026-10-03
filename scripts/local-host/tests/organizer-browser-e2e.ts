@@ -89,21 +89,20 @@ async function main() {
     assert.equal((await api(host.admin.origin, original.idToken, "GET", "/host/me")).status, 200);
     // Reloading loses the memory-only session, and the same key signs in again.
     await signIn(page, host.admin.origin, key);
-    await page.getByRole("link", { name: "Settings", exact: true }).click();
-    await page.getByRole("heading", { name: "Local host settings", exact: true }).waitFor();
-    await page.getByRole("checkbox", { name: "audit", exact: true }).waitFor();
-    assert.equal(await page.getByRole("checkbox").count(), 1);
-    // The controlled toggle updates after the PUT, not synchronously with the click.
-    // Observe both promises immediately so action failures keep their original diagnostic.
-    const [changed] = await Promise.all([
-      page.waitForResponse(
-        (response) =>
-          response.url().endsWith("/api/feature-flags") && response.request().method() === "PUT",
-      ),
-      page.getByRole("checkbox", { name: "audit", exact: true }).click(),
-    ]);
-    assert.equal(changed.status(), 200);
-    await page.getByRole("checkbox", { name: "audit", exact: true, checked: true }).waitFor();
+    assert.equal(await page.getByRole("link", { name: "Settings", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("link", { name: "Audit log", exact: true }).count(), 0);
+    await page.getByRole("link", { name: "Problems", exact: true }).click();
+    await page.getByRole("heading", { name: /Problem catalog/u }).waitFor();
+    // Retained audit records/settings stay in the host API; hiding the UI never deletes them.
+    assert.equal(
+      (
+        await api(host.admin.origin, original.idToken, "PUT", "/feature-flags", {
+          key: "audit",
+          enabled: true,
+        })
+      ).status,
+      200,
+    );
 
     for (const body of [
       { key: host.masterKey },
@@ -139,7 +138,7 @@ async function main() {
     await signIn(page, host.admin.origin, replacement);
     assert.deepEqual(errors, []);
     console.log(
-      "PASS organizer browser: key-only login, hidden legacy controls, audit settings, restart and reset session invalidation",
+      "PASS organizer browser: key-only login, catalog navigation, hidden audit controls, retained settings, restart and reset session invalidation",
     );
   } finally {
     await browser?.close();

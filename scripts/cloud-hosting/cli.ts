@@ -440,7 +440,7 @@ async function down(context: Context, options: DownOptions): Promise<void> {
   if (stacks.length === 0) {
     if (options.purge || options.plan)
       throw new Error(
-        "Both platform stacks are absent; retained resource ownership cannot be proven. Use a previously saved physical-resource inventory for operator-reviewed recovery.",
+        `Both platform stacks are absent; retained resource ownership cannot be proven. Use a previously saved physical-resource inventory for operator-reviewed recovery. For standalone Turso row cleanup, verify the selected database and existing SSM parameter, then use make turso-reset ENV=${context.env.ENV}.`,
       );
     context.io.stdout(
       "[cloud] Both platform stacks are already absent. No resources were changed.\n",
@@ -469,7 +469,7 @@ async function down(context: Context, options: DownOptions): Promise<void> {
   await deletePlatformStacks(resolved, stacks);
   if (options.purge) await finishTeardownLogs(resolved, cleanup);
   context.io.stdout(
-    "Cloud platform stacks destroyed. Existing deployed Retain policies may leave chargeable resources; review the saved plan. External Turso rows are removed only by explicit destroy-all when the deployed provider identity is verified.\n",
+    "Cloud platform stacks destroyed. Existing deployed Retain policies may leave chargeable resources; review the saved plan. This teardown removes external Turso rows only for explicit destroy-all when the deployed provider identity is verified.\n",
   );
 }
 async function finishTeardownLogs(context: Context, plan: TeardownPlan | undefined): Promise<void> {
@@ -587,8 +587,33 @@ async function status(context: Context): Promise<number> {
   }
   return 0;
 }
+async function resetSelectedDatabase(context: Context, args: readonly string[]): Promise<void> {
+  const configuration = cloudControlDataConfiguration(context.env);
+  if (configuration.kind !== "turso")
+    throw new Error(
+      "make turso-reset requires CDK_PARAM_CONTROL_DATA_BACKEND=turso in the selected environment.",
+    );
+  if (!context.io.resetSelectedTursoData)
+    throw new Error("Standalone Turso reset is unavailable; no rows were deleted.");
+  const resolved = await resolveCloudContext(context);
+  await context.io.resetSelectedTursoData(
+    {
+      databaseUrl: configuration.databaseUrl,
+      parameterName: configuration.authTokenParameterName,
+      region: resolved.env.REGION ?? "",
+      account: resolved.env.ACCOUNT_ID ?? "",
+      environment: resolved.env.ENV ?? "development",
+    },
+    {
+      plan: args.includes("--plan"),
+      yes: args.some((arg) => ["--yes", "-y"].includes(arg)),
+      confirm: context.io.confirm,
+      output: context.io.stdout,
+    },
+  );
+}
 const HELP =
-  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. CDK_PARAM_CONTROL_DATA_BACKEND selects dynamodb (default) or turso; Turso also requires CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME, naming an existing SSM SecureString. Existing deployments cannot switch data backends or database URLs without an explicit migration or separate installation. Published cloud-v1 resource/database layouts cannot be upgraded in place: use their matching release and a separate ENV/database for the restored competition backend. Source preparation builds both applications and uploads an environment-scoped source archive; the source bucket is outside CloudFormation ownership and remains after destroy. Exported variables override file values; AWS credentials come from your intended profile/role. make deploy reuses standard CDKToolkit unchanged; if missing, it explains the standard bootstrap IAM/resources, runs the pinned official cdk bootstrap aws://account/region and continues deployment. Standard bootstrap uses an AdministratorAccess CloudFormation execution role by default. Optional --show-setup prints the bootstrap plan and official template offline; --setup creates only a missing toolkit and never updates an existing one. As in the original deployment command, ordinary up uses automatic bootstrap and --require-approval never, including CI/noninteractive runs; no extra approval flag is required for new or already-restored installations. An original installation without catalog pins requires a one-time confirmation that all competitions are complete before any bootstrap or deployment; noninteractive upgrades require --confirm-no-active-events after verifying that condition. Generic --yes does not acknowledge it. Review the target and permissions before running it. Existing --yes/--setup-if-needed options remain accepted for compatibility; setup-only automation can use --setup --yes. down accepts --yes, --purge-retained-data (make destroy-all), --plan (read-only exact-resource/retention/protection inventory). --drain-events is unavailable because it belongs to the incompatible cloud-v1 intake model; use the matching old release for a cloud-v1 event drain before platform removal. Ordinary destroy does not require database access or application Outputs. Purge never disables deletion protection.\n';
+  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|turso-reset|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. CDK_PARAM_CONTROL_DATA_BACKEND selects dynamodb (default) or turso; Turso also requires CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME, naming an existing SSM SecureString. Existing deployments cannot switch data backends or database URLs without an explicit migration or separate installation. Published cloud-v1 resource/database layouts cannot be upgraded in place: use their matching release and a separate ENV/database for the restored competition backend. Source preparation builds both applications and uploads an environment-scoped source archive; the source bucket is outside CloudFormation ownership and remains after destroy. Exported variables override file values; AWS credentials come from your intended profile/role. make deploy reuses standard CDKToolkit unchanged; if missing, it explains the standard bootstrap IAM/resources, runs the pinned official cdk bootstrap aws://account/region and continues deployment. Standard bootstrap uses an AdministratorAccess CloudFormation execution role by default. Optional --show-setup prints the bootstrap plan and official template offline; --setup creates only a missing toolkit and never updates an existing one. As in the original deployment command, ordinary up uses automatic bootstrap and --require-approval never, including CI/noninteractive runs; no extra approval flag is required for new or already-restored installations. An original installation without catalog pins requires a one-time confirmation that all competitions are complete before any bootstrap or deployment; noninteractive upgrades require --confirm-no-active-events after verifying that condition. Generic --yes does not acknowledge it. Review the target and permissions before running it. Existing --yes/--setup-if-needed options remain accepted for compatibility; setup-only automation can use --setup --yes. down accepts --yes, --purge-retained-data (make destroy-all), --plan (read-only exact-resource/retention/protection inventory). --drain-events is unavailable because it belongs to the incompatible cloud-v1 intake model; use the matching old release for a cloud-v1 event drain before platform removal. Ordinary destroy does not require database access or application Outputs. Purge never disables deletion protection. Standalone make turso-reset ENV=development [CLOUD_ARGS="--plan|--yes"] uses the selected database URL and exact SSM SecureString even after AWS stacks are gone. It shows known tables and remaining deployment records, then confirms permanent row deletion; schema, migrations and unrelated tables remain. --plan only reads; unattended reset requires --yes. Stop application writers and complete exercise Teardown first. Compatibility alias: tenkacloud turso-live reset.\n';
 function assertCommandArguments(command: string, args: readonly string[]): void {
   let permitted: readonly string[] = [];
   if (command === "up")
@@ -602,6 +627,7 @@ function assertCommandArguments(command: string, args: readonly string[]): void 
     ];
   if (command === "down")
     permitted = ["--yes", "-y", "--purge-retained-data", "--plan", "--drain-events"];
+  if (command === "turso-reset") permitted = ["--yes", "-y", "--plan"];
   if (
     args.some((arg) => !permitted.includes(arg)) ||
     (command === "up" &&
@@ -621,7 +647,7 @@ export async function runCloudCli(
     if (
       command === undefined ||
       ["--help", "-h", "help"].includes(command) ||
-      (["up", "down"].includes(command) &&
+      (["up", "down", "turso-reset"].includes(command) &&
         args.length === 1 &&
         ["--help", "-h"].includes(args[0] ?? ""))
     ) {
@@ -667,6 +693,9 @@ export async function runCloudCli(
           purge: args.includes("--purge-retained-data"),
           plan: args.includes("--plan"),
         });
+        return 0;
+      case "turso-reset":
+        await resetSelectedDatabase(context, args);
         return 0;
       case "status":
         return await status(await resolvedInstallation(context));

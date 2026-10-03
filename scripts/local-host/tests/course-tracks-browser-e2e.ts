@@ -1,4 +1,4 @@
-/** Built participant UI over real local HTTP/SQLite, catalog and Docker projections.
+/** Competition UI boundaries over real local HTTP/SQLite, catalog and Docker projections.
  * Checkpoints are seeded saved state; no Docker container or verifier is executed. */
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
@@ -142,8 +142,16 @@ export async function verifyCourseTracks(runBrowser = false): Promise<void> {
       await page.goto(`${portal.origin}/login#invite=${encodeURIComponent(key)}`);
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await page.waitForURL((url) => !url.pathname.startsWith("/login"));
-      await page.locator('a[href="/course-tracks"]').click();
-      await page.getByTestId(`course-problem-${FIRST}`).waitFor();
+      await page.locator('a[href="/problems"]').waitFor();
+      assert.equal(await page.locator('a[href="/course-tracks"]').count(), 0);
+      // A shared/bookmarked learning URL cannot enter the course UI in a competition.
+      await page.goto(`${portal.origin}/course-tracks`);
+      await page.waitForURL((url) => url.pathname === "/");
+      await page.locator('a[href="/problems"]').click();
+      await page.getByRole("heading", { name: "Problems (Quests)", exact: true }).waitFor();
+      await page.locator('a[href^="/problems/"]').first().waitFor();
+      assert.equal(await page.locator('a[href="/course-tracks"]').count(), 0);
+      assert.equal(await page.locator('[data-testid^="course-problem-"]').count(), 0);
       return page;
     }
     const player = browser ? await login(alpha.teamLoginKey) : undefined;
@@ -152,19 +160,30 @@ export async function verifyCourseTracks(runBrowser = false): Promise<void> {
     const firstJobId = firstJob.jobId;
     const href = `/problems/${firstJob.jobId}`;
     if (player) {
-      const firstRow = player.getByTestId(`course-problem-${FIRST}`);
-      assert.equal(await player.locator('[data-testid^="course-problem-"]').count(), 2);
-      assert.equal(await player.getByTestId(`course-problem-${UNASSIGNED}`).count(), 0);
-      assert.match(await player.getByTestId(`course-problem-${NEXT}`).innerText(), /Locked/u);
-      assert.equal(await firstRow.getByRole("link").getAttribute("href"), href);
-      await player.getByRole("button", { name: "Go to next problem" }).click();
+      const assignedLinks = await player
+        .locator('a[href^="/problems/"]')
+        .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));
+      assert.deepEqual(
+        assignedLinks.toSorted((a, b) => a.localeCompare(b)),
+        initial.view.problems
+          .map((problem) => `/problems/${problem.jobId}`)
+          .toSorted((a, b) => a.localeCompare(b)),
+      );
+      await player.getByText("Locked", { exact: true }).waitFor();
+      await player.locator(`a[href="${href}"]`).click();
       await player.waitForURL((url) => url.pathname === href);
       await player.goBack();
-      await firstRow.waitFor();
+      await player.locator(`a[href="${href}"]`).waitFor();
+      await player.goForward();
+      await player.waitForURL((url) => url.pathname === href);
+      await player.goBack();
+      await player.locator(`a[href="${href}"]`).waitFor();
+      assert.equal(await player.locator('a[href="/course-tracks"]').count(), 0);
     }
 
     // Seed the existing serialized score/checkpoint contract, then use the normal
-    // engine -> HTTP -> team view -> browser course projection to read it back.
+    // engine -> HTTP -> team view -> course projection to read it back. Learning data
+    // stays available without making a competition's navigation a learning portal.
     function saveCheckpoints(solved: readonly string[]) {
       const team = store.team(alphaTeamId);
       const complete = solved.length === CHECKPOINTS.length;
@@ -201,10 +220,9 @@ export async function verifyCourseTracks(runBrowser = false): Promise<void> {
     assert.equal((await projected(alpha.teamLoginKey)).track.solvedCheckpoints, 1);
     if (player) {
       await player.reload();
-      await player
-        .getByTestId(`course-problem-${FIRST}`)
-        .getByText("1 of 3 closed", { exact: true })
-        .waitFor();
+      await player.locator(`a[href="${href}"]`).waitFor();
+      await player.getByText("In progress (1/3)", { exact: true }).waitFor();
+      await player.getByText("Locked", { exact: true }).waitFor();
     }
     saveCheckpoints(CHECKPOINTS);
     const solved = await projected(alpha.teamLoginKey);
@@ -218,31 +236,11 @@ export async function verifyCourseTracks(runBrowser = false): Promise<void> {
     assert.deepEqual(independent.view.progression?.lockedProblemIds, [NEXT]);
     if (player) {
       await player.reload();
-      await player
-        .getByTestId(`course-problem-${FIRST}`)
-        .getByText("Complete", { exact: true })
-        .waitFor();
-      await player
-        .getByTestId(`course-problem-${NEXT}`)
-        .getByText("Suggested next", { exact: true })
-        .waitFor();
-      assert.equal(
-        await player
-          .getByTestId(`course-problem-${NEXT}`)
-          .getByText("Locked", { exact: true })
-          .count(),
-        0,
-      );
+      await player.getByText("Cleared (1)", { exact: true }).waitFor();
+      assert.equal(await player.getByText("Locked", { exact: true }).count(), 0);
       const other = await login(beta.teamLoginKey);
-      await other
-        .getByTestId(`course-problem-${FIRST}`)
-        .getByText("Suggested next", { exact: true })
-        .waitFor();
-      assert.equal(await other.getByText("Complete", { exact: true }).count(), 0);
-      await other
-        .getByTestId(`course-problem-${NEXT}`)
-        .getByText("Locked", { exact: true })
-        .waitFor();
+      await other.getByText("Cleared (0)", { exact: true }).waitFor();
+      await other.getByText("Locked", { exact: true }).waitFor();
     }
     await stop();
     store = new HostStore(new Database(filename));
@@ -260,22 +258,19 @@ export async function verifyCourseTracks(runBrowser = false): Promise<void> {
     assert.deepEqual(persisted.view.progression?.lockedProblemIds, []);
     if (browser) {
       const restored = await login(alpha.teamLoginKey);
-      await restored
-        .getByTestId(`course-problem-${FIRST}`)
-        .getByText("Complete", { exact: true })
-        .waitFor();
-      await restored
-        .getByTestId(`course-problem-${NEXT}`)
-        .getByText("Suggested next", { exact: true })
-        .waitFor();
+      await restored.getByText("Cleared (1)", { exact: true }).waitFor();
+      assert.equal(await restored.getByText("Locked", { exact: true }).count(), 0);
       const artifacts = join(root, ".tenkacloud/host-e2e");
       mkdirSync(artifacts, { recursive: true });
-      await restored.screenshot({ path: join(artifacts, "course-tracks.png"), fullPage: true });
+      await restored.screenshot({
+        path: join(artifacts, "competition-course-boundary.png"),
+        fullPage: true,
+      });
     }
     assert.deepEqual(errors, []);
     if (runBrowser)
       console.log(
-        "PASS local course browser: assigned drafts, safe built metadata, checkpoint/gate projection, job links/back, team isolation and SQLite restart. Saved checkpoints were seeded; Docker verifiers were not run.",
+        "PASS local competition/course boundary: no course navigation or route, assigned problem links/back/forward, safe built metadata, checkpoint/gate projection, team isolation and SQLite restart. Saved checkpoints were seeded; Docker verifiers were not run.",
       );
   } finally {
     await browser?.close();

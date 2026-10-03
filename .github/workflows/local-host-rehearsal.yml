@@ -3,6 +3,8 @@ name: Local hosting rehearsal
 # Exercise the real Docker adapter when the hosting implementation or any runtime contract it
 # imports changes: the shared container scorer, Compose policy, Docker adapter, manifest, port
 # remapper, state store and verifier, plus the pinned problems catalog it reads sqli-demo from.
+# PRs cover the organizer/two-participant competition flow. workflow_dispatch retains the full
+# Docker/image/browser rehearsal; required ci already runs all host HTTP/SQLite tests and types.
 on:
   workflow_dispatch:
   pull_request:
@@ -39,11 +41,13 @@ jobs:
           submodules: true
       - uses: ./.github/actions/bun-install
       - name: Type-check hosting and both existing applications
+        if: github.event_name == 'workflow_dispatch'
         run: |
           bun run typecheck:host
           bun run --filter @TenkaCloud/application-admin-console typecheck
           bun run --filter @TenkaCloud/participant-portal typecheck
       - name: Real SQLite and HTTP boundary tests
+        if: github.event_name == 'workflow_dispatch'
         run: bun run test:host
       - name: Build the host and normal participant interfaces
         run: bun run build:host
@@ -52,11 +56,13 @@ jobs:
           docker info
           docker compose version
       - name: Production SQL and PostgreSQL terminal with two isolated teams
+        if: github.event_name == 'workflow_dispatch'
         env:
           # Isolated runner fixture; only this test's owned Compose projects use compact IPAM.
           HOST_DOCKER_NETWORK_POOL: 10.240.0.0/16
         run: bun run test:host:docker
       - name: Hosted image plays a Cryptography Battle at its advertised origins
+        if: github.event_name == 'workflow_dispatch'
         run: |
           docker build -f docker/host/Dockerfile \
             --build-arg TENKACLOUD_SOURCE_COMMIT="$(git rev-parse HEAD)" \
@@ -67,14 +73,27 @@ jobs:
       # Playwright's pinned Chromium for the browser rehearsal (the runner has none preinstalled).
       - name: Install Chromium for the browser rehearsal
         run: bunx playwright-core install --with-deps chromium
-      - name: Browser rehearsal (organizer console + two participant browsers, real Docker)
+      - name: Critical browser flow (organizer + two participants, real Docker)
+        if: github.event_name == 'pull_request'
+        env:
+          HOST_E2E_ENGINE: docker
+        run: bun run test:host:browser:smoke
+      - name: Full browser rehearsal (all hosting features, real Docker)
+        if: github.event_name == 'workflow_dispatch'
         env:
           HOST_E2E_ENGINE: docker
         run: bun run test:host:browser
-      - name: Keep browser failure screenshots
-        if: failure()
+      - name: Keep verified local UI screenshots
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: local-host-e2e
-          path: .tenkacloud/host-e2e/
+          name: local-host-ui-review
+          path: |
+            .tenkacloud/host-ui-review/local-catalog.png
+            .tenkacloud/host-ui-review/local-event-create.png
+            .tenkacloud/host-ui-review/participant-competition.png
+            .tenkacloud/host-ui-review/participant-scoreboard.png
+          retention-days: 3
+          # The parent directory is hidden; only the four reviewed PNGs above are eligible.
+          include-hidden-files: true
           if-no-files-found: ignore

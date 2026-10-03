@@ -283,7 +283,7 @@ export function buildSideNavItems(
       type: "section",
       text: t("nav.quests_section"),
       items: [
-        // The local host can offer the course view alongside the competition's flat list.
+        // Self-paced and explicitly enabled learning entries put their course view first.
         // 一覧を先に置く順は採らない — 2 項目しかない並びでは順番が案内そのもので、
         // 先に出るほうに着いた学習者は 71 件のフラットな一覧の前で止まる。
         ...(showsCourseTracks(cloudMode, courseTracksEnabled)

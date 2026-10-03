@@ -6,6 +6,7 @@ import { hasDatabaseState, persistentKey, prepareDatabase, privateDirectory } fr
 import type { GatewayPortRange } from "./gateway-ports";
 import { SurfaceGateways } from "./gateways";
 import { type HttpHost, startHttpHost } from "./http";
+import { localJobDescription, localRuntimeFailure } from "./local-runtime-report";
 import type { AccountConnection, RuntimeEngine } from "./model";
 import type { PublicExposure } from "./options";
 import { HostingService } from "./service";
@@ -62,7 +63,7 @@ export async function startLocalHost(
   let disruptionTimer: ReturnType<typeof setInterval> | undefined;
   let disruptionTick: Promise<void> | undefined;
   async function stop(options: { stopLocalEnvironments?: boolean } = {}): Promise<void> {
-    let unstoppedLocal = 0;
+    const unstoppedLocal: string[] = [];
     if (uptimeTimer) clearInterval(uptimeTimer);
     uptimeTimer = undefined;
     if (disruptionTimer) clearInterval(disruptionTimer);
@@ -76,8 +77,11 @@ export async function startLocalHost(
     await uptimeTick;
     await service?.drain();
     if (options.stopLocalEnvironments && service) {
-      const result = await service.stopLocalEnvironments();
-      unstoppedLocal = result.failed;
+      const result = await service.stopLocalEnvironments((job) => {
+        unstoppedLocal.push(
+          `${localJobDescription(job)} status=${job.status}: ${localRuntimeFailure(job.error)}`,
+        );
+      });
       announce(
         `Stopped ${String(result.stopped)} owned Docker environments; their data is retained.`,
       );
@@ -89,9 +93,9 @@ export async function startLocalHost(
     await gateways?.close();
     service?.flush();
     store.close();
-    if (unstoppedLocal > 0)
+    if (unstoppedLocal.length > 0)
       throw new Error(
-        `${String(unstoppedLocal)} local environments could not be stopped; ownership and data are retained.`,
+        `${String(unstoppedLocal.length)} owned Docker jobs are not confirmed stopped (including earlier failed deployments, not a container count); ownership and data are retained.\n${unstoppedLocal.join("\n")}`,
       );
   }
   try {

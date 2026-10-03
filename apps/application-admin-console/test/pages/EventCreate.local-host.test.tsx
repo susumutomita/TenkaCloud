@@ -90,8 +90,8 @@ const multiselect = (container: HTMLElement) =>
 describe("EventCreatePage on the local competition host", () => {
   it("creates a slug-only event from a host-supported problem and deploys it", async () => {
     const { container } = render(<EventCreatePage config={config} />);
-    expect(screen.getByText("local_host.create_header")).toBeInTheDocument();
-    expect(screen.getByText("local_host.create_body")).toBeInTheDocument();
+    expect(screen.queryByText("local_host.create_header")).toBeNull();
+    expect(screen.queryByText("local_host.create_body")).toBeNull();
     await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
     // No AWS competitor accounts are requested on the local host.
     expect(get).not.toHaveBeenCalledWith("admin/competitor-accounts");
@@ -173,11 +173,11 @@ describe("EventCreatePage on the local competition host", () => {
   });
 
   it.each([
-    { maxTeams: 40, maxEventJobs: 512, enabled: true },
-    { maxTeams: 40, maxEventJobs: 99, enabled: false },
-    { maxTeams: 4, maxEventJobs: 512, enabled: false },
+    { maxTeams: 40, maxEventJobs: 512, teams: 5, problems: 20 },
+    { maxTeams: 40, maxEventJobs: 99, teams: 5, problems: 19 },
+    { maxTeams: 4, maxEventJobs: 512, teams: 4, problems: 20 },
   ])(
-    "validates a 5-team × 20-problem event against host limits %j",
+    "bounds a requested 5-team × 20-problem event before submission: %j",
     async (limits) => {
       const problems = Array.from({ length: 20 }, (_, i) =>
         problem(`exercise-${i}`, "docker", "compose"),
@@ -197,25 +197,59 @@ describe("EventCreatePage on the local competition host", () => {
       await waitFor(() => expect(picker?.findDropdown().findOptions()).toHaveLength(20));
       for (const item of problems) picker?.selectOptionByValue(item.id);
       const submit = screen.getByRole("button", { name: "event_create.submit" });
-      if (limits.enabled) {
-        expect(submit).toBeEnabled();
-        fireEvent.click(submit);
-        await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
-        const body = mocks.createEvent.mock.calls[0]?.[1];
-        expect(body.teams).toHaveLength(5);
-        expect(body.problems).toHaveLength(20);
-      } else {
-        expect(submit).toBeDisabled();
-        expect(mocks.createEvent).not.toHaveBeenCalled();
-      }
-      if (limits.maxEventJobs < 100)
-        expect(screen.getByText("local_host.job_count_invalid")).toBeInTheDocument();
+      expect(submit).toBeEnabled();
+      expect(wrapper.findAllInputs()[1]?.findNativeInput().getElement()).toHaveValue(limits.teams);
+      expect(screen.queryByText("local_host.job_count_invalid")).toBeNull();
+      fireEvent.click(submit);
+      await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
+      const body = mocks.createEvent.mock.calls[0]?.[1];
+      expect(body.teams).toHaveLength(limits.teams);
+      expect(body.problems).toHaveLength(limits.problems);
       // Twenty real Cloudscape selection/rerender cycles exceed the default five seconds
       // under CI coverage instrumentation. Keep every capacity assertion and bound this
       // full-size interaction separately; this is not a production latency threshold.
     },
     20_000,
   );
+
+  it("reopens capacity after deselection and limits team increases without dropping selected problems", async () => {
+    const problems = [
+      problem("first", "docker", "compose"),
+      problem("second", "docker", "compose"),
+      problem("third", "docker", "compose"),
+    ];
+    mocks.listProblemSummaries.mockReturnValue(problems);
+    get.mockResolvedValue({
+      limits: { maxTeams: 40, maxEventJobs: 6 },
+      items: problems.map((item) => ({ problemId: item.id, runtime: "docker" })),
+    });
+    const { container } = render(<EventCreatePage config={config} />);
+    await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
+    const wrapper = createWrapper(container);
+    const picker = multiselect(container);
+    picker?.openDropdown();
+    picker?.selectOptionByValue("first");
+    picker?.selectOptionByValue("second");
+    const third = () =>
+      picker
+        ?.findDropdown()
+        .findOptions()
+        .find((option) => option.getElement().textContent?.includes("third"));
+    expect(third()?.isDisabled()).toBe(true);
+    wrapper.findAllInputs()[1]?.setInputValue("40");
+    expect(wrapper.findAllInputs()[1]?.findNativeInput().getElement()).toHaveValue(3);
+    picker?.selectOptionByValue("second");
+    expect(third()?.isDisabled()).toBe(false);
+    picker?.selectOptionByValue("third");
+    wrapper.findAllInputs()[0]?.setInputValue("Bounded selection");
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createEvent.mock.calls[0]?.[1].problems.map(
+        (item: { problemId: string }) => item.problemId,
+      ),
+    ).toEqual(["first", "third"]);
+  });
 
   it("says so when the host catalog cannot be loaded", async () => {
     get.mockRejectedValue(new Error("host unreachable"));

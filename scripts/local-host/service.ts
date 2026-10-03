@@ -1848,7 +1848,9 @@ export class HostingService {
     await this.disruptions.drain();
   }
   /** Only the private local launcher calls this, after listeners and accepted work drain. */
-  async stopLocalEnvironments(): Promise<{ stopped: number; failed: number; cloud: number }> {
+  async stopLocalEnvironments(
+    onFailure?: (job: Job) => void,
+  ): Promise<{ stopped: number; failed: number; cloud: number }> {
     const jobs = this.store.jobs();
     const local = jobs.filter(
       (job) =>
@@ -1867,17 +1869,19 @@ export class HostingService {
       }
     });
     for (const job of local) await this.runJobOperation(job.jobId, "stop");
+    const failed = this.store
+      .jobs()
+      .filter(
+        (job) =>
+          definitionKind(job.definition) === "compose" &&
+          job.unit !== null &&
+          job.status !== "STOPPED" &&
+          job.status !== "DELETED",
+      );
+    for (const job of failed) onFailure?.(job);
     return {
       stopped: local.filter((job) => this.store.job(job.jobId).status === "STOPPED").length,
-      failed: this.store
-        .jobs()
-        .filter(
-          (job) =>
-            definitionKind(job.definition) === "compose" &&
-            job.unit !== null &&
-            job.status !== "STOPPED" &&
-            job.status !== "DELETED",
-        ).length,
+      failed: failed.length,
       cloud: jobs.filter(
         (job) => definitionKind(job.definition) === "cloudformation" && job.unit !== null,
       ).length,

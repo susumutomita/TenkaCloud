@@ -174,3 +174,23 @@ test("finished events are stopped but not automatically started again", async ()
     f.store.close();
   }
 });
+
+test("shutdown reports each retained unstopped job, including an earlier failed deployment", async () => {
+  const f = fixture();
+  try {
+    const active = f.add("compose");
+    const earlierFailure = f.add("compose", "FAILED");
+    f.failures.pause = true;
+    const failures: Job[] = [];
+    expect(await f.service().stopLocalEnvironments((job) => failures.push(job))).toEqual({
+      stopped: 0,
+      failed: 2,
+      cloud: 0,
+    });
+    expect(failures.map((job) => job.jobId)).toEqual([active.jobId, earlierFailure.jobId]);
+    expect(failures[0]?.error).toBe("Synthetic stop failure.");
+    expect(f.calls.pauses).toEqual([active.jobId]);
+  } finally {
+    f.store.close();
+  }
+});

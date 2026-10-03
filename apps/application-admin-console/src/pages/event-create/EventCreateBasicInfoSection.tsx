@@ -70,6 +70,7 @@ export function EventCreateBasicInfoSection({
             disabled={maxTeams < 1}
             type="number"
             inputMode="numeric"
+            nativeInputAttributes={{ min: TEAMS_MIN, max: maxTeams }}
             value={String(teamCount)}
             onChange={({ detail }) => {
               const next = parseTeamCountInput(detail.value);

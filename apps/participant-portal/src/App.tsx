@@ -56,7 +56,7 @@ export function App({ config }: { config: AppConfig }) {
           )}
         />
         <Route path="/problems" element={guarded(config, <QuestsPage />)} />
-        {/* The local host opts into the guarded learning view separately from its provider mode. */}
+        {/* Self-paced and explicitly enabled learning entries share the guarded course view. */}
         {showsCourseTracks(config.cloudMode, config.courseTracksEnabled) && (
           <Route path="/course-tracks" element={guarded(config, <CourseTracksPage />)} />
         )}

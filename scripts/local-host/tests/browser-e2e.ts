@@ -29,6 +29,7 @@ interface HostInfo {
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const artifacts = join(root, ".tenkacloud/host-e2e");
+const reviewArtifacts = join(root, ".tenkacloud/host-ui-review");
 const STEP_TIMEOUT = 90_000;
 
 function chromiumPath(): string | undefined {
@@ -98,15 +99,24 @@ async function stopHost(processHandle: PrivateKeyProcess): Promise<void> {
   }
 }
 
-async function createEvent(page: Page, name: string): Promise<Map<string, string>> {
+async function createEvent(
+  page: Page,
+  name: string,
+  organizerKey: string,
+): Promise<Map<string, string>> {
   // In-app navigation: the session lives in memory only, so a reload means signing in again.
   await page.getByRole("button", { name: "Create event" }).first().click();
   await page.getByLabel("Event name").fill(name);
   const count = page.getByLabel("Team count");
+  await count.fill("999");
+  assert.equal(await count.inputValue(), "40", "The team input is bounded before submission.");
   await count.fill("2");
   await page.getByTestId("problem-select").click();
   await page.getByRole("option", { name: /sqli-demo/u }).click();
   await page.keyboard.press("Escape");
+  assert.equal(await page.getByText("Local competition mode", { exact: true }).count(), 0);
+  assert.equal(await page.getByText("Local competition event", { exact: true }).count(), 0);
+  await captureVerifiedUi(page, "local-event-create.png", [organizerKey]);
   await page.getByRole("button", { name: "Create Event" }).click();
   const modal = page.getByRole("dialog");
   await modal.getByText("Save these login keys now").waitFor();
@@ -144,6 +154,41 @@ async function startEvent(page: Page): Promise<void> {
   await page.getByText("Scoring", { exact: true }).first().waitFor({ timeout: STEP_TIMEOUT });
 }
 
+/** Only reviewed, key-free checkpoints enter the CI review artifact. */
+async function captureVerifiedUi(
+  page: Page,
+  filename: string,
+  secrets: readonly string[],
+): Promise<void> {
+  assert.equal(await page.getByRole("dialog").count(), 0, "Do not capture credential dialogs.");
+  assert.equal(
+    await page.locator('input[type="password"], a[href*="/__join?ticket="]').count(),
+    0,
+    "Do not capture credentials or join links.",
+  );
+  const route = new URL(page.url());
+  const parameters = [route.searchParams, new URLSearchParams(route.hash.slice(1))];
+  assert.ok(
+    !parameters.some((values) => values.has("invite") || values.has("ticket")),
+    "Do not capture a secret-bearing route.",
+  );
+  const visible = [
+    await page.locator("body").innerText(),
+    ...(await page
+      .locator("input, textarea")
+      .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value))),
+  ].join("\n");
+  assert.ok(
+    !secrets.some((secret) => secret.length > 0 && visible.includes(secret)),
+    "A review screenshot must not contain fixture secrets.",
+  );
+  assert.ok(
+    !/TC\{|[A-Za-z0-9_-]{43}|(?:invite|ticket)=/u.test(visible),
+    "A review screenshot must not contain keys, flags, or join tickets.",
+  );
+  await page.screenshot({ path: join(reviewArtifacts, filename), fullPage: true });
+}
+
 async function captureFailure(page: Page, filename: string): Promise<void> {
   try {
     await page.screenshot({ path: join(artifacts, filename), fullPage: true });
@@ -156,12 +201,13 @@ async function participantSolves(
   context: BrowserContext,
   info: HostInfo,
   teamKey: string,
+  teamSlug: "team-1" | "team-2",
 ): Promise<string> {
   const page = await context.newPage();
   try {
-    return await solveAs(page, context, info, teamKey);
+    return await solveAs(page, context, info, teamKey, teamSlug);
   } catch (error) {
-    await captureFailure(page, `participant-${teamKey.slice(0, 6)}.png`);
+    await captureFailure(page, `participant-${teamSlug}.png`);
     throw error;
   }
 }
@@ -171,11 +217,19 @@ async function solveAs(
   context: BrowserContext,
   info: HostInfo,
   teamKey: string,
+  teamSlug: "team-1" | "team-2",
 ): Promise<string> {
   await page.goto(`${info.participant}/login#invite=${encodeURIComponent(teamKey)}`);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: STEP_TIMEOUT });
   await page.goto(`${info.participant}/problems`);
+  assert.equal(await page.getByRole("link", { name: "Course tracks", exact: true }).count(), 0);
+  await page
+    .getByText(/Staff-Only Login|スタッフ専用ログイン|SQL injection exercise/u)
+    .first()
+    .waitFor();
+  if (teamSlug === "team-1")
+    await captureVerifiedUi(page, "participant-competition.png", [info.key, teamKey]);
   await page
     .getByText(/Staff-Only Login|スタッフ専用ログイン|SQL injection exercise/u)
     .first()
@@ -220,6 +274,8 @@ async function solveAs(
   await ranking.filter({ hasText: "team-1" }).first().waitFor({ timeout: STEP_TIMEOUT });
   await ranking.filter({ hasText: "team-2" }).first().waitFor({ timeout: STEP_TIMEOUT });
   await ranking.filter({ hasText: "(you)" }).getByText("100 pt").waitFor({ timeout: STEP_TIMEOUT });
+  if (teamSlug === "team-1")
+    await captureVerifiedUi(page, "participant-scoreboard.png", [info.key, teamKey, flag]);
   return flag;
 }
 
@@ -242,6 +298,7 @@ async function endAndTearDown(page: Page): Promise<void> {
 
 async function main(): Promise<void> {
   mkdirSync(artifacts, { recursive: true });
+  mkdirSync(reviewArtifacts, { recursive: true });
   const { info, child } = await startHost();
   let browser: Browser | undefined;
   let organizer: Page | undefined;
@@ -254,7 +311,21 @@ async function main(): Promise<void> {
     await signInOrganizer(organizer, info);
     // A page navigation drops the memory-only token; the same organizer key signs in again.
     await signInOrganizer(organizer, info);
-    const keys = await createEvent(organizer, "Browser rehearsal");
+    assert.equal(await organizer.getByRole("link", { name: "Audit log", exact: true }).count(), 0);
+    assert.equal(await organizer.getByRole("link", { name: "Settings", exact: true }).count(), 0);
+    await organizer.getByRole("link", { name: "Problems", exact: true }).click();
+    await organizer.getByRole("heading", { name: /Problem catalog/u }).waitFor();
+    await organizer
+      .getByPlaceholder("Search by name / description / tag (substring, case-insensitive)")
+      .fill("sqli");
+    await organizer.locator('a[href="/problems/sqli-demo"]').waitFor();
+    await captureVerifiedUi(organizer, "local-catalog.png", [info.key]);
+    await organizer.locator('a[href="/problems/sqli-demo"]').click();
+    await organizer.getByRole("heading", { name: "Overview", exact: true }).waitFor();
+    await organizer.getByRole("button", { name: "Back to list", exact: true }).click();
+    await organizer.getByRole("heading", { name: /Problem catalog/u }).waitFor();
+    await organizer.getByRole("link", { name: "Events", exact: true }).click();
+    const keys = await createEvent(organizer, "Browser rehearsal", info.key);
     await waitForEnvironmentState(organizer, info.engine === "docker" ? "Stopped" : "Running");
     await startEvent(organizer);
     // Two independent participant browsers (separate cookies and storage).
@@ -265,8 +336,8 @@ async function main(): Promise<void> {
     teamOne.setDefaultTimeout(STEP_TIMEOUT);
     teamTwo.setDefaultTimeout(STEP_TIMEOUT);
     const [flagOne, flagTwo] = await Promise.all([
-      participantSolves(teamOne, info, keys.get("team-1") ?? ""),
-      participantSolves(teamTwo, info, keys.get("team-2") ?? ""),
+      participantSolves(teamOne, info, keys.get("team-1") ?? "", "team-1"),
+      participantSolves(teamTwo, info, keys.get("team-2") ?? "", "team-2"),
     ]);
     assert.notEqual(flagOne, flagTwo, "Each team has its own environment and flag.");
     await waitForEnvironmentState(organizer, "Running");

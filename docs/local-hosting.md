@@ -483,6 +483,71 @@ contains the safe cleanup plan and per-deployment secrets.
 An archive request is refused while environments remain owned. Ending an event
 prevents further scoring but does not itself remove its Docker resources.
 
+### Clear local event history
+
+Use `make local-clear` when you want to discard the local competition history and
+start fresh. This is separate from `make down` (stop and retain) and
+`make local-reset` (rotate the organizer key). Stop the host first:
+
+```sh
+make down
+make local-clear
+```
+
+The clear command lists the exact `hosting.sqlite` path, event IDs and names,
+team/job counts and owned Docker projects, then asks for confirmation in the same
+terminal. Answer `y` or `yes` to proceed. For a custom data directory, pass the same
+`LOCAL_ARGS="--data /absolute/private/directory"` to both commands.
+
+```sh
+# Optional preview; no event or Docker data is changed.
+make local-clear LOCAL_ARGS="--data /absolute/private/directory --plan"
+# Explicit noninteractive confirmation, after reviewing the target and impact.
+make local-clear LOCAL_ARGS="--data /absolute/private/directory --yes"
+```
+
+Clearing removes every event, team, participant login key, result, score,
+submission receipt, progress snapshot, registration and event/audit/uptime/disruption
+history in that database. The existing per-project Compose teardown uses
+`down --volumes --remove-orphans`: it removes owned containers, writable layers,
+volumes and networks, including files and databases edited inside the exercises.
+Owned generated Compose plans and problem seeds are also removed. This cannot be
+undone without a backup. The SQLite file, organizer keys and sessions, host settings,
+account connections, installed problems and cached plugin code are retained.
+
+The command refuses a running host, retained AWS ownership, unknown database tables,
+untracked runtime directories, unknown files and unsafe links. It never searches for unrelated Docker resources or
+prunes shared images and caches. Preserve and review ambiguous legacy files rather
+than deleting the state directory to get past a refusal.
+
+Old generated directories from before ownership markers are supported when their
+job retains a valid Compose ownership record. The existing engine validates the
+saved paths, project and Compose plan before teardown. A job already recorded as
+`DELETED` with no owned environment can also have the seed-only directory left by
+old successful teardown, or an empty directory left by interrupted file cleanup.
+Only the expected regular files in that job's private directory are accepted;
+the command lists their exact paths before confirmation. It does not adopt the
+directory, create an ownership marker or read seed values to infer ownership.
+A legacy directory with no matching job, an unresolved job with no ownership record,
+or additional files remains blocked.
+
+Successful Docker teardown is recorded before legacy seed and empty-directory
+removal. If either file operation fails, all event/history rows remain, and retry
+finishes the known remainder without repeating the completed Docker teardown.
+
+If any owned teardown fails, event/history rows and failed ownership plans remain.
+Successful removals are recorded immediately, so the next `make local-clear` retries
+only the remaining owned environments. A database or file cleanup failure is reported
+without claiming the history was cleared. Start Docker Desktop or Docker Engine if
+it is unavailable, resolve the reported job's error, and retry with the same data
+directory. Backups and browser downloads are outside this cleanup.
+
+When `make down` reports, for example, `2 owned Docker jobs are not confirmed stopped`,
+that means two retained team/problem environments, not necessarily two containers.
+It can include earlier failed deployments that were already unresolved before
+shutdown. The report identifies each event, team, problem, job, expected Compose
+project, status and safe error category. No keys or raw Docker output are printed.
+
 ## Generated files and retained data
 
 - `.tenkacloud/host/`, or the selected `--data` directory, holds resumable event

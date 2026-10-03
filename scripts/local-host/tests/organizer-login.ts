@@ -25,7 +25,7 @@ export async function signInOrganizer(page: Page, host: HostAddress): Promise<vo
   await page.goto(`${host.admin}/events`);
   await fillOrganizerKey(page, host.key);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByText("Local competition mode").first().waitFor();
+  await page.getByRole("heading", { name: "Events", exact: true }).waitFor();
 }
 
 export async function organizerToken(host: HostAddress): Promise<string> {

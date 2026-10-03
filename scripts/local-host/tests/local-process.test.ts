@@ -250,6 +250,23 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
     ).toEqual(leaderboard);
     await down();
     expect((await command("down", args)).output).toContain("No managed local host is running");
+    const clear = await command("local-clear", `--data ${data} --yes`);
+    expect(clear.code).toBe(0);
+    expect(clear.output).toContain("Local event history and owned Docker work data cleared");
+    expect(clear.output.includes(recoveredKey)).toBe(false);
+    expect(clear.output.includes(team.teamLoginKey)).toBe(false);
+    await start();
+    expect((await api(admin, "/host/login", "", "POST", { key: recoveredKey })).status).toBe(200);
+    expect((await api(participant, "/portal/leaderboard", team.teamLoginKey)).status).toBe(401);
+    expect(readFileSync(join(data, "host-key"), "utf8").trim() === signingKey).toBe(true);
+    await down();
+    const cleared = new Database(join(data, "hosting.sqlite"), { readonly: true });
+    try {
+      expect(cleared.query("SELECT id FROM host_events").all()).toEqual([]);
+      expect(cleared.query("SELECT id FROM host_teams").all()).toEqual([]);
+    } finally {
+      cleared.close();
+    }
   } finally {
     if (running) await command("down", args);
     rmSync(data, { recursive: true, force: true });

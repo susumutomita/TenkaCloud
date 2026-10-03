@@ -4,6 +4,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 function make(...args: string[]) {
@@ -21,8 +22,10 @@ test("default bilingual help includes hosting, catalog updates and development c
       "local",
       "down",
       "local-reset",
+      "local-clear",
       "deploy",
       "destroy",
+      "turso-reset",
       "submodule-latest",
       "validate-problems",
       "build",
@@ -63,7 +66,10 @@ test("retired demo and test-root targets are removed without dropping root or se
     scripts: Record<string, string>;
   };
   expect(pkg.scripts.test).toContain("bun run test:root");
-  expect(pkg.scripts["test:root"]).toContain("./scripts/security/*.test.ts");
+  expect(pkg.scripts["test:root"]).toBe(
+    "bun run test:scripts && bun run test:authoring && bun run test:host",
+  );
+  expect(pkg.scripts["test:scripts"]).toContain("./scripts/security/*.test.ts");
   expect(
     readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8"),
   ).toContain("run: bun run test:root");
@@ -71,6 +77,96 @@ test("retired demo and test-root targets are removed without dropping root or se
   expect(developer.status).toBe(0);
   expect(developer.stdout).toContain("before-commit");
   expect(developer.stdout).not.toContain("security-harness-demo");
+});
+
+test("fast script checks preserve every root group while required CI retains all host regressions", () => {
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+  const fast = pkg.scripts["test:scripts"] ?? "";
+  const command = fast.split(" && ").find((entry) => entry.startsWith("bun test "));
+  expect(command?.split(" ").slice(2)).toEqual([
+    "./scripts/landing/*.test.ts",
+    "./scripts/workspace/*.test.ts",
+    "./scripts/release/*.test.ts",
+    "./scripts/quality/*.test.ts",
+    "./scripts/ops/*.test.ts",
+    "./scripts/tests/*.test.ts",
+    "./scripts/cloud-hosting/*.test.ts",
+    "./scripts/security/*.test.ts",
+  ]);
+  expect(fast).toContain("bun run release:check");
+  expect(fast).toContain("generate-landing-locales.ts --check");
+  expect(fast).toContain("generate-landing-docs.ts --check");
+  expect(fast).not.toContain("test:host");
+  expect(fast).not.toContain("test:authoring");
+  expect(pkg.scripts["test:host"]).toBe(
+    "bun test ./scripts/local-host/tests/*.test.ts ./scripts/local-host/container/*.test.ts ./scripts/lib/*.test.ts && bun run scripts/local-host/tests/run.ts",
+  );
+  const result = make("-n", "test-scripts");
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim()).toBe("bun run test:scripts");
+});
+
+interface RehearsalStep {
+  name?: string;
+  if?: string;
+  run?: string;
+  env?: Record<string, string>;
+}
+
+test("PRs retain the critical competition flow and manual rehearsal retains all browser suites", () => {
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+    scripts: Record<string, string>;
+  };
+  const critical = ["organizer-browser-e2e.ts", "browser-e2e.ts"];
+  const full = [
+    ...critical,
+    "cloud-browser-e2e.ts",
+    "accounts-browser-e2e.ts",
+    "participant-aws-browser-e2e.ts",
+    "saml-browser-e2e.ts",
+    "audit-browser-e2e.ts",
+    "disruption-browser-e2e.ts",
+    "uptime-browser-e2e.ts",
+    "progression-browser-e2e.ts",
+    "registration-browser-e2e.ts",
+    "course-tracks-browser-e2e.ts",
+  ];
+  const commands = (files: string[]) =>
+    files.map((file) => `bun run scripts/local-host/tests/${file}`).join(" && ");
+  expect(pkg.scripts["test:host:browser:smoke"]).toBe(commands(critical));
+  expect(pkg.scripts["test:host:browser"]).toBe(commands(full));
+  expect(pkg.scripts["test:host:e2e"]).toBe("bun run build:host && bun run test:host:browser");
+  const workflow = parse(
+    readFileSync(join(root, ".github/workflows/local-host-rehearsal.yml"), "utf8"),
+  ) as {
+    on: { pull_request: { paths: string[] }; workflow_dispatch: unknown };
+    jobs: { "local-host": { steps: RehearsalStep[] } };
+  };
+  expect(workflow.on).toHaveProperty("workflow_dispatch");
+  expect(workflow.on.pull_request.paths).toContain("scripts/local-host/**");
+  expect(workflow.on.pull_request.paths).toContain("package.json");
+  const steps = workflow.jobs["local-host"].steps;
+  const smoke = steps.find((step) => step.run === "bun run test:host:browser:smoke");
+  const rehearsal = steps.find((step) => step.run === "bun run test:host:browser");
+  expect(smoke?.if).toBe("github.event_name == 'pull_request'");
+  expect(rehearsal?.if).toBe("github.event_name == 'workflow_dispatch'");
+  expect(smoke?.env?.HOST_E2E_ENGINE).toBe("docker");
+  expect(rehearsal?.env?.HOST_E2E_ENGINE).toBe("docker");
+  for (const command of [
+    "bun run typecheck:host",
+    "bun run test:host",
+    "bun run test:host:docker",
+    "bun run test:host:container",
+  ]) {
+    const step = steps.find((entry) =>
+      entry.run?.split(/\s+/u).includes(command.split(" ")[2] ?? ""),
+    );
+    expect(step?.if).toBe("github.event_name == 'workflow_dispatch'");
+  }
+  expect(steps.find((step) => step.run === "bun run build:host")?.if).toBeUndefined();
+  expect(steps.find((step) => step.run?.includes("playwright-core install"))?.if).toBeUndefined();
 });
 
 test("the four development targets retain safe installation and the complete verification path", () => {
@@ -309,6 +405,7 @@ test("cloud product commands reach the existing scoped CLI without replacing loc
   for (const [target, command] of [
     ["deploy", "up"],
     ["destroy", "down"],
+    ["turso-reset", "turso-reset"],
   ]) {
     const result = make("-n", target ?? "", "CLOUD_ARGS=--help");
     expect(result.status).toBe(0);
@@ -321,4 +418,20 @@ test("cloud product commands reach the existing scoped CLI without replacing loc
   expect(local.status).toBe(0);
   expect(local.stdout).toContain("scripts/local-host/local.ts down");
   expect(local.stdout).not.toContain("cloud-hosting");
+});
+
+test("the old Turso reset alias exposes offline help without restoring the retired wizard", () => {
+  const result = spawnSync(
+    process.execPath,
+    ["run", "--no-env-file", "scripts/tenkacloud.ts", "turso-live", "reset", "--help"],
+    { cwd: root, env: process.env, encoding: "utf8" },
+  );
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("Standalone make turso-reset");
+  const retired = spawnSync(
+    process.execPath,
+    ["run", "--no-env-file", "scripts/tenkacloud.ts", "turso-live", "rotate-token"],
+    { cwd: root, env: process.env, encoding: "utf8" },
+  );
+  expect(retired.status).toBe(1);
 });

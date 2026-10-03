@@ -83,14 +83,16 @@ describe("ShellLayout demo banner (#1954)", () => {
     ).toHaveAttribute("href", "/competitor-accounts");
   });
 
-  it("shows local Admin settings without offering organizer accounts", () => {
+  it("offers the local catalog without audit, settings, or organizer accounts", () => {
     const admin = renderShell(false, undefined, true, false, "Admin");
     expect(screen.queryByRole("link", { name: /Users|ユーザー/u })).toBeNull();
     expect(screen.queryByRole("link", { name: /Identity providers|ID プロバイダー/u })).toBeNull();
-    expect(screen.getByRole("link", { name: /Settings|設定/u })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Problems|問題/u })).toHaveAttribute(
       "href",
-      "/settings",
+      "/problems",
     );
+    expect(screen.queryByRole("link", { name: /Settings|設定/u })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Audit|監査/u })).toBeNull();
     admin.unmount();
 
     for (const role of ["Operator", "Viewer"] as const) {

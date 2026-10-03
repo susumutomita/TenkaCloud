@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { AppConfig, CloudMode } from "./config";
+import { localCompetitionConfig } from "./local-host/config";
 
 /**
  * `/course-tracks` が URL として生きているかどうか。
@@ -58,10 +59,32 @@ describe("App routing for the course tracks", () => {
     expect(screen.getByText("course-tracks-page")).toBeTruthy();
   });
 
-  it("serves the local-host course route without switching provider or authentication mode", () => {
+  it("preserves an explicitly enabled learning route", () => {
     renderAt("/course-tracks", "real", false, true);
     expect(screen.getByText("course-tracks-page")).toBeTruthy();
   });
+
+  it.each([false, true])(
+    "redirects a bookmarked course route in local competition (AWS: %s)",
+    (hasAws) => {
+      const config = localCompetitionConfig(
+        {
+          mode: "local-host",
+          role: "participant",
+          apiBaseUrl: "http://localhost:8080/api",
+          hasAws,
+        },
+        "http://localhost:8080",
+      );
+      render(
+        <MemoryRouter initialEntries={["/course-tracks"]}>
+          <App config={config} />
+        </MemoryRouter>,
+      );
+      expect(screen.queryByText("course-tracks-page")).toBeNull();
+      expect(screen.getByText("root-entry-page")).toBeTruthy();
+    },
+  );
 
   it.each(["real", "mock"] as const)("should not serve /course-tracks in %s mode", (mode) => {
     renderAt("/course-tracks", mode);

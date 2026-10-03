@@ -36,6 +36,14 @@ is no automatic eviction or reset. Event time is not reset. An ordinary stop is 
 Docker volume removal or AWS stack deletion. Explicit event teardown is separate;
 keep ownership records until it succeeds.
 
+To discard local event history and owned Docker exercise data, stop the host and
+run `make local-clear`. It lists the database and affected environments, then asks
+for confirmation. `--plan` previews and `--yes` explicitly confirms a noninteractive
+run. Organizer keys and settings are retained; participant keys, scores, progress,
+Docker writable layers and volumes are removed. Failed cleanup keeps history and
+ownership for retry. See [clear local event history](local-hosting.md#clear-local-event-history).
+`make local-reset` only rotates the organizer key.
+
 Cloud hosting reuses the SBT-free Lite backend with Lambda and Turso or DynamoDB:
 generic CloudFormation deployment, flag/multi-flag and scheduled scoring,
 participant Console/CLI access and native coordination. Docker/Compose remains

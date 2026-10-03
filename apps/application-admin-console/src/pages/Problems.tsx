@@ -142,10 +142,18 @@ function ProblemPackGuidanceModal({
  * shortDescription / tag literal) は author が書いた JP 文字列なので i18n 対象外
  * (= 別 issue で metadata に \`description_en\` 等を加える必要がある)。
  */
-export function ProblemsPage() {
+export function ProblemsPage({
+  localHost = false,
+  supportedProblemIds,
+}: {
+  localHost?: boolean;
+  supportedProblemIds?: ReadonlySet<string>;
+}) {
   const navigate = useNavigate();
   const t = useT();
-  const problems = listProblemSummaries();
+  const problems = listProblemSummaries().filter(
+    (problem) => supportedProblemIds === undefined || supportedProblemIds.has(problem.id),
+  );
   const [criteria, setCriteria] = useState<ProblemFilterCriteria>(EMPTY_FILTER_CRITERIA);
   const [packGuidanceOpen, setPackGuidanceOpen] = useState(false);
 
@@ -191,7 +199,7 @@ export function ProblemsPage() {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description={t("problems.description")}
+        description={localHost ? undefined : t("problems.description")}
         counter={
           isFilterActive(criteria)
             ? `(${filtered.length} / ${problems.length})`
@@ -204,13 +212,15 @@ export function ProblemsPage() {
                 {t("problems.clear_filter")}
               </Button>
             ) : null}
-            <Button
-              iconName="add-plus"
-              onClick={openPackGuidance}
-              data-testid="problem-pack-guidance-open-header"
-            >
-              {t("problems.pack_guidance_open")}
-            </Button>
+            {!localHost && (
+              <Button
+                iconName="add-plus"
+                onClick={openPackGuidance}
+                data-testid="problem-pack-guidance-open-header"
+              >
+                {t("problems.pack_guidance_open")}
+              </Button>
+            )}
           </SpaceBetween>
         }
       >
@@ -345,11 +355,17 @@ export function ProblemsPage() {
               id: "description",
               content: (item) => <Box variant="p">{item.shortDescription}</Box>,
             },
-            {
-              id: "cost",
-              header: t("problem_cost.header"),
-              content: (item) => <ProblemCostSummary estimate={item.costEstimate} t={t} />,
-            },
+            ...(!localHost
+              ? [
+                  {
+                    id: "cost",
+                    header: t("problem_cost.header"),
+                    content: (item: ProblemSummary) => (
+                      <ProblemCostSummary estimate={item.costEstimate} t={t} />
+                    ),
+                  },
+                ]
+              : []),
             {
               id: "tags",
               header: t("problems.tags_header"),
@@ -391,8 +407,12 @@ export function ProblemsPage() {
             ) : (
               <SpaceBetween size="s">
                 <Box variant="p">{t("problems.empty")}</Box>
-                <Box color="text-body-secondary">{t("problems.pack_guidance_empty_hint")}</Box>
-                <Button onClick={openPackGuidance}>{t("problems.pack_guidance_open")}</Button>
+                {!localHost && (
+                  <>
+                    <Box color="text-body-secondary">{t("problems.pack_guidance_empty_hint")}</Box>
+                    <Button onClick={openPackGuidance}>{t("problems.pack_guidance_open")}</Button>
+                  </>
+                )}
               </SpaceBetween>
             )}
           </Box>

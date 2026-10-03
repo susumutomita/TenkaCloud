@@ -28,6 +28,7 @@ export interface HostCatalog {
   readonly supported: ReadonlySet<string>;
   readonly cloud: ReadonlySet<string>;
   readonly error: string | null;
+  readonly loading: boolean;
   readonly limits: HostLimits;
 }
 
@@ -38,9 +39,11 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
   const [cloud, setCloud] = useState<ReadonlySet<string>>(EMPTY);
   const [limits, setLimits] = useState<HostLimits>(LEGACY_LIMITS);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!apiClient) return;
     let active = true;
+    setLoading(true);
     apiClient
       .get<HostCatalogResponse>("host/catalog")
       .then((response) => {
@@ -55,15 +58,19 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
           ),
         );
         setError(null);
+        setLoading(false);
       })
       .catch((cause: unknown) => {
-        if (active) setError(toErrorMessage(cause));
+        if (active) {
+          setError(toErrorMessage(cause));
+          setLoading(false);
+        }
       });
     return () => {
       active = false;
     };
   }, [apiClient]);
-  return { supported, cloud, error, limits };
+  return { supported, cloud, error, limits, loading };
 }
 
 function LocalHostEventCreateNotice({
@@ -76,9 +83,6 @@ function LocalHostEventCreateNotice({
   const t = useT();
   return (
     <>
-      <Alert type="info" header={t("local_host.create_header")}>
-        {t("local_host.create_body", { ...catalog.limits })}
-      </Alert>
       {jobCountInvalid && (
         <Alert type="error">
           {t("local_host.job_count_invalid", { max: catalog.limits.maxEventJobs })}
@@ -101,9 +105,14 @@ export function eventCapacity(
   problems: number,
   cloudLimits: EventLimits | undefined,
 ) {
-  const maxTeams = local ? catalog.limits.maxTeams : (cloudLimits?.maxTeams ?? 0);
+  const maxTeams = local
+    ? Math.min(
+        catalog.limits.maxTeams,
+        Math.floor(catalog.limits.maxEventJobs / Math.max(1, problems)),
+      )
+    : (cloudLimits?.maxTeams ?? 0);
   const maxProblems = local
-    ? Math.max(40, catalog.supported.size)
+    ? Math.min(catalog.supported.size, Math.floor(catalog.limits.maxEventJobs / Math.max(1, teams)))
     : (cloudLimits?.maxProblems ?? 0);
   return {
     maxTeams,

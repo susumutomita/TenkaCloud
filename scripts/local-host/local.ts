@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { randomToken, sameSecret } from "./auth";
 import { hasDatabaseState, prepareDatabase, privateDirectory } from "./files";
+import { clearLocalHistory, parseLocalClearOptions } from "./local-clear";
 import { runLocalHost } from "./main";
 import { parseOptions } from "./options";
 import { openOrganizerKeyDisplay } from "./organizer-key-output";
@@ -119,7 +120,12 @@ export async function stopManagedLocal(directory: string): Promise<void> {
   });
   const result: unknown = await response.json();
   const parsed = z
-    .object({ sessionId: z.string(), code: z.number(), directory: z.string() })
+    .object({
+      sessionId: z.string(),
+      code: z.number(),
+      directory: z.string(),
+      error: z.string().optional(),
+    })
     .safeParse(result);
   if (
     !parsed.success ||
@@ -129,10 +135,10 @@ export async function stopManagedLocal(directory: string): Promise<void> {
     throw new Error(
       "The shutdown endpoint does not belong to this local host; no PID was signalled.",
     );
-  if (!response.ok || parsed.data.code !== 0)
-    throw new Error(
-      "Local shutdown reported a failure. Read the local terminal; retained data was not reset.",
-    );
+  if (!response.ok || parsed.data.code !== 0) {
+    const detail = parsed.data.error ?? "Read the local terminal for details.";
+    throw new Error(`Local shutdown reported a failure. Retained data was not reset.\n${detail}`);
+  }
   console.log("Local host stopped. Event data and stopped Docker runtime data are retained.");
 }
 
@@ -240,6 +246,7 @@ export async function runManagedLocal(root: string, args: string[]): Promise<num
   let lock: Database | undefined;
   let exited: Promise<number> = Promise.resolve(1);
   let rotateOrganizerKey: (() => string) | undefined;
+  let shutdownError: string | undefined;
   const control = createServer((request, response) => {
     if (
       request.method !== "POST" ||
@@ -265,7 +272,7 @@ export async function runManagedLocal(root: string, args: string[]): Promise<num
     shutdown.abort();
     void exited.then((code) => {
       response.writeHead(code === 0 ? 200 : 500, { "content-type": "application/json" });
-      response.end(JSON.stringify({ sessionId, directory, code }));
+      response.end(JSON.stringify({ sessionId, directory, code, error: shutdownError }));
     });
   });
   await new Promise<void>((resolve, reject) => {
@@ -286,7 +293,8 @@ export async function runManagedLocal(root: string, args: string[]): Promise<num
     }).then(
       () => 0,
       (error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
+        shutdownError = error instanceof Error ? error.message : "Local host shutdown failed.";
+        console.error(shutdownError);
         return 1;
       },
     );
@@ -303,6 +311,31 @@ export async function runManagedLocal(root: string, args: string[]): Promise<num
   }
 }
 
+export async function clearManagedLocal(root: string, args: string[]): Promise<void> {
+  const options = parseLocalClearOptions(args, root);
+  if (options.help) {
+    console.log(
+      'make local-clear LOCAL_ARGS="--data <directory> [--plan | --yes]" clears event history and owned Docker work data after confirmation. Stop the host first with make down. Organizer keys and settings are retained.',
+    );
+    return;
+  }
+  if (!lstatSync(options.directory, { throwIfNoEntry: false }))
+    throw new Error("No existing local host state to clear.");
+  const data = realpathSync(privateDirectory(options.directory));
+  const session = readSession(join(data, SESSION_FILE));
+  if (session && alive(session.pid))
+    throw new Error(
+      "The local host is running. Run make down with the same --data directory before clearing history.",
+    );
+  const lock = acquireLocalLock(data);
+  try {
+    assertExistingHostDatabase(join(data, "hosting.sqlite"));
+    await clearLocalHistory(root, data, options);
+  } finally {
+    lock.close();
+  }
+}
+
 if (import.meta.main) {
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const [command, ...args] = process.argv.slice(2);
@@ -314,6 +347,7 @@ if (import.meta.main) {
         parseOptions(args, root, { ...process.env, TENKACLOUD_HOST_REQUIRE_PUBLIC: undefined })
           .dataDirectory,
       );
+    else if (command === "clear") await clearManagedLocal(root, args);
     else if (command === "reset") {
       const options = parseOptions(args, root, {
         ...process.env,
@@ -337,7 +371,7 @@ if (import.meta.main) {
       }
     } else
       throw new Error(
-        "Use make local, make down or make local-reset; pass options with LOCAL_ARGS.",
+        "Use make local, make down, make local-reset or make local-clear; pass options with LOCAL_ARGS.",
       );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

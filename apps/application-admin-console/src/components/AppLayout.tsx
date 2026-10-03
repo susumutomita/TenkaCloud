@@ -122,7 +122,6 @@ export function ShellLayout({
       ],
     },
   ];
-  const organizerRole = claims?.["custom:organizerRole"];
   const localHostNavItems: SideNavigationProps.Item[] = [
     {
       type: "section",
@@ -140,32 +139,16 @@ export function ShellLayout({
           : []),
       ],
     },
-    ...(organizerRole === "Admin"
-      ? [
-          {
-            type: "section" as const,
-            text: t("nav.admin_section"),
-            items: [
-              { type: "link" as const, href: "/settings", text: t("nav.settings") },
-              { type: "link" as const, href: "/audit-log", text: t("nav.audit_log") },
-            ],
-          },
-        ]
-      : []),
+    {
+      type: "section",
+      text: t("nav.content_section"),
+      items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
+    },
   ];
 
-  // Issue #3226 / #1954: a mode banner above the page for local hosting and the public demo.
+  // Public demo guidance is separate from the local competition's normal page content.
   let content: ReactNode = children;
-  if (localHost)
-    content = (
-      <SpaceBetween size="m">
-        <Alert type="info" header={t("local_host.banner_header")}>
-          {t("local_host.banner_body")}
-        </Alert>
-        {children}
-      </SpaceBetween>
-    );
-  else if (demoMode)
+  if (demoMode)
     content = (
       <SpaceBetween size="m">
         <Alert type="info" header={t("demo.banner_header")}>

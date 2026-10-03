@@ -312,6 +312,31 @@ CDKToolkit or competitor bootstrap roles/stacks.
 Retention does not imply automatic reattachment on a fresh deployment. Save the
 exact inventory and plan any import/recovery separately.
 
+### Standalone Turso data reset
+
+`make turso-reset ENV=development` restores the standalone data cleanup command,
+even after both AWS platform stacks are gone. It uses the selected environment's
+`CDK_PARAM_CONTROL_DATA_BACKEND=turso`, database URL and exact SSM SecureString
+parameter, plus the selected AWS account and region. The parameter must still exist
+and be readable. The command prints that target, recognized tables and remaining
+deployment count, then asks once before deleting rows. Stop application writers and
+complete exercise Teardown first: deleting deployment records can orphan exercise
+resources and does not remove them or any AWS platform stacks.
+
+`CLOUD_ARGS="--plan"` performs only credential/schema/count reads;
+`CLOUD_ARGS="--yes"` explicitly approves unattended deletion. Original/restored Lite
+and published cloud-v1 schemas are supported; unknown or ambiguous schemas stop
+before writes. Known-empty retired tables may coexist with restored Lite tables.
+Only the selected layout's known data tables are reset in one write transaction;
+table definitions, migration/schema markers and unrelated rows remain. Custom
+triggers or references from unrelated tables stop the reset for operator review.
+A failed request is not reported as success; inspect the database before retrying
+if a lost response leaves the commit outcome unknown.
+
+The old `tenkacloud turso-live reset` alias reaches the same command. For direct Bun
+execution, use `bun run --no-env-file scripts/tenkacloud.ts turso-live reset`.
+`make local-reset` continues to rotate only the local organizer key.
+
 ## Update the problem catalog
 
 `make submodule-latest` fetches and stages the problem-source pin in this checkout;

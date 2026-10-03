@@ -21,7 +21,7 @@ export interface TursoResetTarget {
   readonly region: string;
   readonly schema: TursoSchema;
 }
-const liteTables = [
+const liteSchema = [
   ...SCORE_SUMMARY_SCHEMA_STATEMENTS,
   ...ADMIN_AUDIT_LOG_SCHEMA_STATEMENTS,
   ...COMPETITOR_ACCOUNTS_SCHEMA_STATEMENTS,
@@ -36,8 +36,18 @@ const liteTables = [
   ...TEAMS_SCHEMA_STATEMENTS,
 ].flatMap((sql) => {
   const name = /^CREATE TABLE IF NOT EXISTS ([a-z_]+) \(/u.exec(sql.trim())?.[1];
-  return name && name !== "control_data_migrations" ? [name] : [];
+  const columns = sql.split("\n").flatMap((line) => {
+    const column = /^([a-z_]+)\s+(?:TEXT|INTEGER|REAL|BLOB|NUMERIC)\b/u.exec(line.trim())?.[1];
+    return column ? [column] : [];
+  });
+  return name ? [{ name, columns }] : [];
 });
+export const LITE_TURSO_TABLE_COLUMNS = new Map(
+  liteSchema.map(({ name, columns }) => [name, columns]),
+);
+export const LITE_TURSO_DATA_TABLES = liteSchema
+  .map(({ name }) => name)
+  .filter((name) => name !== "control_data_migrations");
 // The published cloud-v1 schema remains supported solely for explicit teardown.
 // Do not initialize it, import its retired repository, or delete other database tables.
 
@@ -60,9 +70,9 @@ export async function resetKnownTursoData(
     if (version.rows.length !== 1 || Number(version.rows[0]?.version) !== 1)
       throw new Error("Unknown published cloud-v1 schema version; purge stopped before mutation.");
   }
-  const owned = (schema === "cloud-v1" ? PUBLISHED_CLOUD_DATA_TABLES : liteTables).filter((name) =>
-    tables.has(name),
-  );
+  const owned = (
+    schema === "cloud-v1" ? PUBLISHED_CLOUD_DATA_TABLES : LITE_TURSO_DATA_TABLES
+  ).filter((name) => tables.has(name));
   if (owned.length === 0) return;
   await client.batch(
     [
@@ -79,8 +89,11 @@ export async function resetKnownTursoData(
   );
 }
 
-/** Explicit destroy-all uses only the provider identity captured from the deployed stack. */
-export async function purgeTursoControlData(target: TursoResetTarget): Promise<void> {
+/** Keep SSM credentials inside one client lifetime, including standalone read-only plans. */
+export async function withTursoControlData<T>(
+  target: Omit<TursoResetTarget, "schema">,
+  action: (client: TursoResetSql) => Promise<T>,
+): Promise<T> {
   const ssm = new SSMClient({ region: target.region, ignoreConfiguredEndpointUrls: true });
   let client: Client | undefined;
   let authToken: string | undefined;
@@ -90,9 +103,9 @@ export async function purgeTursoControlData(target: TursoResetTarget): Promise<v
     );
     authToken = response.Parameter?.Value?.trim();
     if (response.Parameter?.Type !== "SecureString" || !authToken)
-      throw new Error("Deployed Turso token is not a nonempty SSM SecureString.");
+      throw new Error("Turso token is not a nonempty SSM SecureString.");
     client = createClient({ url: target.databaseUrl, authToken });
-    await resetKnownTursoData(client, target.schema);
+    return await action(client);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     const redacted = authToken
@@ -106,4 +119,9 @@ export async function purgeTursoControlData(target: TursoResetTarget): Promise<v
     client?.close();
     ssm.destroy();
   }
+}
+
+/** Explicit destroy-all uses only the provider identity captured from the deployed stack. */
+export function purgeTursoControlData(target: TursoResetTarget): Promise<void> {
+  return withTursoControlData(target, (client) => resetKnownTursoData(client, target.schema));
 }

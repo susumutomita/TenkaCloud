@@ -49,7 +49,7 @@ function show_commands(names, title, targets, count, i) {
 
 END {
   if (scope == "user" && (lang == "en" || lang == "ja")) {
-    show_commands("local down local-reset deploy destroy", lang == "ja" ? "開催・停止" : "Hosting")
+    show_commands("local down local-reset local-clear deploy destroy turso-reset", lang == "ja" ? "開催・停止" : "Hosting")
     show_commands("submodule-latest validate-problems build", lang == "ja" ? "問題ソース・カタログ更新" : "Problem sources and catalog updates")
     show_commands("install test lint before-commit", lang == "ja" ? "開発用" : "Development")
     print (lang == "ja" ? "\n開発用の全コマンド: make help HELP_SCOPE=developer" : "\nAll development commands: make help HELP_SCOPE=developer")

@@ -18,8 +18,8 @@ import { EventListPage } from "./pages/EventList";
 import { EventReportPage } from "./pages/EventReport";
 import { HomePage } from "./pages/Home";
 import { IdentityProvidersPage } from "./pages/IdentityProviders";
+import { LocalHostCatalogPage } from "./pages/LocalHostCatalog";
 import { LocalHostLoginPage } from "./pages/LocalHostLogin";
-import { LocalHostSettingsPage } from "./pages/LocalHostSettings";
 import { LocalHostUnavailablePage } from "./pages/LocalHostUnavailable";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
@@ -163,10 +163,10 @@ function LocalHostRoutes({ config }: { config: AppConfig }) {
       <Route path="/" element={<Navigate to="/events" replace />} />
       <Route path="/events" element={guarded(<EventListPage config={config} />, config)} />
       <Route path="/events/new" element={guarded(<EventCreatePage config={config} />, config)} />
-      <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />, config)} />
+      <Route path="/problems" element={guarded(<LocalHostCatalogPage config={config} />, config)} />
       <Route
-        path="/settings"
-        element={guarded(<LocalHostSettingsPage config={config} />, config)}
+        path="/problems/:problemId"
+        element={guarded(<LocalHostCatalogPage config={config} detail />, config)}
       />
       {config.hostAwsRegion && (
         <Route

@@ -52,10 +52,9 @@ async function main() {
     );
     assert.equal(await page.locator("#organizer-username, #organizer-password").count(), 0);
     await signInOrganizer(page, { admin: host.admin.origin, key });
-    await page.getByRole("link", { name: "Settings", exact: true }).click();
-    await page.getByRole("heading", { name: "Local host settings", exact: true }).waitFor();
-    await page.getByRole("checkbox", { name: "audit", exact: true }).waitFor();
-    assert.equal(await page.getByRole("checkbox").count(), 1);
+    assert.equal(await page.getByRole("link", { name: "Settings", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("link", { name: "Audit log", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("checkbox", { name: "audit", exact: true }).count(), 0);
     assert.equal(await page.getByRole("checkbox", { name: "saml", exact: true }).count(), 0);
     assert.equal(await page.getByLabel("IdP Entity ID", { exact: true }).count(), 0);
     assert.equal(await page.getByRole("link", { name: "Users", exact: true }).count(), 0);
@@ -90,7 +89,7 @@ async function main() {
     assert.equal(enabled.status, 404);
     assert.deepEqual(errors, []);
     mkdirSync(artifacts, { recursive: true });
-    await page.screenshot({ path: join(artifacts, "local-key-settings.png"), fullPage: true });
+    await page.screenshot({ path: join(artifacts, "local-key-navigation.png"), fullPage: true });
     console.log(
       "PASS local key mode: no SAML/account controls or legacy API access (real HTTP/SQLite).",
     );

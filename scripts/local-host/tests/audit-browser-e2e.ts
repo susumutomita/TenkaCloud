@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Browser, chromium, type Page } from "playwright-core";
@@ -9,7 +9,7 @@ import { type RunningLocalHost, startLocalHost } from "../server";
 import type { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { ExerciseFixture } from "./exercise-fixture";
-import { signInOrganizer } from "./organizer-login";
+import { fillOrganizerKey, organizerToken, signInOrganizer } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const artifacts = join(root, ".tenkacloud/host-audit-e2e");
@@ -19,17 +19,6 @@ function chromiumPath(): string | undefined {
     "/opt/pw-browsers/chromium",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   ].find(existsSync);
-}
-async function toggleAudit(page: Page, enabled: boolean, status = 200) {
-  await page.getByRole("link", { name: "Settings", exact: true }).click();
-  const response = page.waitForResponse(
-    (result) =>
-      new URL(result.url()).pathname === "/api/feature-flags" &&
-      result.request().method() === "PUT",
-  );
-  await page.getByRole("checkbox", { name: "audit", exact: true }).click();
-  assert.equal((await response).status(), status);
-  await page.getByRole("checkbox", { name: "audit", exact: true, checked: enabled }).waitFor();
 }
 async function main() {
   const data = createTemporaryDirectory(root, "tenka-audit-browser-");
@@ -61,38 +50,60 @@ async function main() {
     page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
     await signInOrganizer(page, { admin: host.admin.origin, key });
-    await page.getByRole("link", { name: "Audit log", exact: true }).click();
-    await page.getByText("Recording stopped", { exact: true }).waitFor();
-    await page.getByText("該当する監査ログはありません", { exact: false }).waitFor();
-    await toggleAudit(page, true);
-    // Reauthentication is an audited operation whose request contains the organizer secret.
+    assert.equal(await page.getByRole("link", { name: "Audit log", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("link", { name: "Settings", exact: true }).count(), 0);
+    const token = await organizerToken({ admin: host.admin.origin, key });
+    const adminOrigin = host.admin.origin;
+    const request = (path: string, method = "GET", body?: unknown) =>
+      fetch(`${adminOrigin}/api${path}`, {
+        method,
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    assert.equal(
+      (await request("/feature-flags", "PUT", { key: "audit", enabled: true })).status,
+      200,
+    );
     await signInOrganizer(page, { admin: host.admin.origin, key });
     assert.ok(store);
     store.database.exec(
       "CREATE TRIGGER fail_audit BEFORE INSERT ON host_audit_records BEGIN SELECT RAISE(ABORT, 'unavailable'); END;",
     );
-    // A failed audit write must also roll back a request to disable recording.
-    await toggleAudit(page, true, 503);
+    assert.equal(
+      (await request("/feature-flags", "PUT", { key: "audit", enabled: false })).status,
+      503,
+    );
     store.database.exec("DROP TRIGGER fail_audit");
     assert.equal(store.featureFlags().audit, true);
-    await page.getByRole("link", { name: "Audit log", exact: true }).click();
-    await page.getByText("Recording enabled", { exact: true }).waitFor();
-    await page.getByText("Some audit records are missing", { exact: true }).waitFor();
-    await page.getByRole("cell", { name: "organizer.login", exact: true }).waitFor();
-    const downloadEvent = page.waitForEvent("download");
-    await page.getByRole("button", { name: "CSV エクスポート", exact: true }).click();
-    const download = await downloadEvent;
-    const downloaded = await download.path();
-    assert.ok(downloaded);
-    const csv = readFileSync(downloaded, "utf8");
+    const records = await request("/admin/audit-log");
+    assert.equal(records.status, 200);
+    const history = await records.text();
+    assert.ok(history.includes("organizer.login"));
+    assert.ok(!history.includes(key));
+    assert.ok(!history.includes(host.masterKey));
+    const exported = await request("/admin/audit-log/export");
+    assert.equal(exported.status, 200);
+    const csv = await exported.text();
     assert.ok(csv.includes("organizer.login"));
     assert.ok(csv.includes("host-key"));
-    assert.ok(!csv.includes(key), "Audit CSV excludes the organizer key.");
-    assert.ok(!csv.includes(host.masterKey), "Audit CSV excludes the internal signing key.");
-    await toggleAudit(page, false);
-    await page.getByRole("link", { name: "Audit log", exact: true }).click();
-    await page.getByText("Recording stopped", { exact: true }).waitFor();
-    await page.getByRole("cell", { name: "organizer.login", exact: true }).waitFor();
+    assert.ok(!csv.includes(key));
+    assert.ok(!csv.includes(host.masterKey));
+    assert.equal(
+      (await request("/feature-flags", "PUT", { key: "audit", enabled: false })).status,
+      200,
+    );
+    assert.ok((await (await request("/admin/audit-log")).text()).includes("organizer.login"));
+    for (const path of ["/audit-log", "/settings"]) {
+      await page.goto(`${host.admin.origin}${path}`);
+      await fillOrganizerKey(page, key);
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      await page.getByText("Not available in a local competition", { exact: true }).waitFor();
+      assert.equal(await page.getByRole("checkbox", { name: "audit", exact: true }).count(), 0);
+      assert.equal(
+        await page.getByRole("button", { name: "CSV エクスポート", exact: true }).count(),
+        0,
+      );
+    }
     const anonymous = await fetch(`${host.admin.origin}/api/admin/audit-log`);
     assert.equal(anonymous.status, 401);
     const otherSurface = await fetch(`${host.participant.origin}/api/admin/audit-log`);
@@ -100,11 +111,11 @@ async function main() {
     assert.deepEqual(errors, []);
     mkdirSync(artifacts, { recursive: true });
     await page.screenshot({
-      path: join(artifacts, "audit-stopped-with-history.png"),
+      path: join(artifacts, "audit-ui-removed.png"),
       fullPage: true,
     });
     console.log(
-      "PASS audit UI enable, key-login history, CSV secret exclusion, fail-closed settings, gap warning, OFF history and access boundaries (real HTTP/SQLite).",
+      "PASS hidden local audit routes with retained key-login history, secret exclusion, fail-closed settings and access boundaries (real HTTP/SQLite).",
     );
   } catch (error) {
     mkdirSync(artifacts, { recursive: true });

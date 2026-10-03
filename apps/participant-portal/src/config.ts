@@ -25,9 +25,9 @@ export type CloudMode = "real" | "mock" | "local";
  * `cloudMode === "mock"` で動くため、AC26 を受講していない人が最初に触る画面に講座前提の
  * 学習経路が並んでいた。
  *
- * 旧 individual-practice の `local` に加え、統合 local host は明示的に講座画面を有効にする。
- * local host は通常の認証と大会の問題一覧を保ち、講座画面もそのチームに割り当てた問題だけ。
- * この capability は provider / 認証 mode とは独立し、cloud と公開 demo では既定で無効。
+ * 自習用の `local` と明示的な学習設定で有効にする。ローカル開催の競技画面は
+ * `cloudMode: "real"` を使い、この capability を有効にしない。
+ * この capability は provider / 認証 mode とは独立し、cloud と公開 demo でも既定で無効。
  *
  * nav と route の両方がこれを見る。link を隠すだけでは URL が生きたままになり、共有された
  * `/course-tracks` を踏めば同じ画面に着く。
@@ -51,7 +51,7 @@ export interface AppConfig {
   readonly eventRegion: string;
   readonly mode: AppMode;
   readonly cloudMode: CloudMode;
-  /** Local hosting's event-scoped learning view; does not select the retired practice backend. */
+  /** Explicit learning entry point; competition hosting does not enable it by default. */
   readonly courseTracksEnabled?: boolean;
   /** Random local-session login key, present only in generated local runtime config. */
   readonly localTeamLoginKey?: string;
