@@ -5,6 +5,7 @@ import {
   type DestroyAssembly,
   type DestroyAssemblyTarget,
 } from "./destroy-assembly";
+import { clearSelectedTursoData } from "./turso-clear";
 import type { TursoTokenProbe } from "./turso-preflight";
 import { purgeTursoControlData, type TursoResetTarget } from "./turso-reset";
 import { resetSelectedTursoData } from "./turso-reset-command";
@@ -34,6 +35,7 @@ export interface CloudCliIo {
   probeTurso?: TursoTokenProbe;
   purgeTursoControlData?(target: TursoResetTarget): Promise<void>;
   resetSelectedTursoData?: typeof resetSelectedTursoData;
+  clearSelectedTursoData?: typeof clearSelectedTursoData;
   now(): number;
   wait(ms: number): Promise<void>;
 }
@@ -48,6 +50,7 @@ export function systemCloudIo(): CloudCliIo {
     createDestroyAssembly,
     purgeTursoControlData,
     resetSelectedTursoData,
+    clearSelectedTursoData,
     probeTurso: (url, authToken) => probeTursoConnection({ url, authToken }),
     now: Date.now,
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

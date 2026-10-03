@@ -413,7 +413,7 @@ test("cloud product commands reach the existing scoped CLI without replacing loc
   for (const [target, command] of [
     ["deploy", "up"],
     ["destroy", "down"],
-    ["turso-clear", "turso-reset"],
+    ["turso-clear", "turso-clear"],
     ["turso-reset", "turso-reset"],
   ]) {
     const result = make("-n", target ?? "", "CLOUD_ARGS=--help");
@@ -429,19 +429,23 @@ test("cloud product commands reach the existing scoped CLI without replacing loc
   expect(local.stdout).not.toContain("cloud-hosting");
 });
 
-test("Turso clear and reset forward the same selected environment and flags without implicit consent", () => {
-  const directory = mkdtempSync(join(tmpdir(), "tenkacloud-turso-alias-"));
+test("Turso clear and legacy reset use distinct entrypoints and forward environment and consent", () => {
+  const directory = mkdtempSync(join(tmpdir(), "tenkacloud-turso-entrypoints-"));
   const capture = join(directory, "capture");
+  const inheritedToken = "synthetic-process-only-turso-token";
   try {
     writeFileSync(
       join(directory, "bun"),
-      '#!/bin/sh\nprintf \'%s\\n\' "$ENV" "$@" >> "$TURSO_ALIAS_CAPTURE"\nexit "$TURSO_ALIAS_EXIT"\n',
+      '#!/bin/sh\n[ "$TURSO_AUTH_TOKEN" = "synthetic-process-only-turso-token" ] || exit 93\nprintf \'%s\\n\' "$ENV" "$@" >> "$TURSO_COMMAND_CAPTURE"\nexit "$TURSO_COMMAND_EXIT"\n',
       { mode: 0o755 },
     );
     // Existing files with these names must not suppress the phony cleanup targets.
     for (const target of ["turso-clear", "turso-reset"]) {
       writeFileSync(join(directory, target), "synthetic file\n");
-      for (const args of [[], ["--plan"], ["--yes"], ["-y"], ["--plan", "--yes"], ["--help"]]) {
+      const variants = [[], ["--plan"], ["--yes"], ["-y"], ["--plan", "--yes"], ["--help"]];
+      if (target === "turso-clear")
+        variants.push(["--credentials", "ssm", "--plan"], ["--credentials", "ssm", "--yes"]);
+      for (const args of variants) {
         for (const exit of [0, 7]) {
           writeFileSync(capture, "");
           const result = spawnSync(
@@ -459,18 +463,20 @@ test("Turso clear and reset forward the same selected environment and flags with
               encoding: "utf8",
               env: {
                 PATH: `${directory}:/usr/bin:/bin`,
-                TURSO_ALIAS_CAPTURE: capture,
-                TURSO_ALIAS_EXIT: String(exit),
+                TURSO_AUTH_TOKEN: inheritedToken,
+                TURSO_COMMAND_CAPTURE: capture,
+                TURSO_COMMAND_EXIT: String(exit),
               },
             },
           );
           expect(result.status).toBe(exit === 0 ? 0 : 2);
+          expect(result.stdout + result.stderr).not.toContain(inheritedToken);
           expect(readFileSync(capture, "utf8").trim().split("\n")).toEqual([
             "staging",
             "run",
             "--no-env-file",
             "scripts/cloud-hosting/main.ts",
-            "turso-reset",
+            target,
             ...args,
           ]);
         }
@@ -479,6 +485,30 @@ test("Turso clear and reset forward the same selected environment and flags with
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("Turso clear help and the offline guide explain direct credentials and preserved settings", () => {
+  const clear = spawnSync(
+    process.execPath,
+    ["run", "--no-env-file", "scripts/cloud-hosting/main.ts", "turso-clear", "--help"],
+    { cwd: root, env: {}, encoding: "utf8" },
+  );
+  expect(clear.status).toBe(0);
+  expect(clear.stdout).toContain("TURSO_AUTH_TOKEN");
+  expect(clear.stdout).toContain("--credentials ssm");
+  expect(clear.stdout).not.toContain("TenkaCloud cloud hosting");
+  expect(clear.stdout).not.toContain("cdk bootstrap");
+  const guide = spawnSync(
+    process.execPath,
+    ["run", "--no-env-file", "scripts/tenkacloud.ts", "turso-live", "guide"],
+    { cwd: root, env: { ENV: "staging" }, encoding: "utf8" },
+  );
+  expect(guide.status).toBe(0);
+  expect(guide.stdout).toContain('make turso-clear ENV=staging CLOUD_ARGS="--plan"');
+  expect(guide.stdout).toContain("process-only TURSO_AUTH_TOKEN");
+  expect(guide.stdout).toContain("No AWS account, region, profile or calls are needed");
+  expect(guide.stdout).toContain("admin audit logs");
+  expect(guide.stdout).toContain("broader legacy SSM data-reset behavior");
 });
 
 test("the Turso reset and credential aliases expose offline help", () => {

@@ -54,6 +54,7 @@ function parseEnvironmentFile(contents: string, path: string): NodeJS.ProcessEnv
 export function loadCloudEnvironment(
   root: string,
   inherited: NodeJS.ProcessEnv,
+  options: { readonly validateAwsCredentials?: boolean } = {},
 ): NodeJS.ProcessEnv & { ENV: string; CDK_PARAM_ENVIRONMENT: string } {
   const environment = selectedEnvironment(inherited);
   const path = join(root, "infrastructure", "environments", environment, ".env");
@@ -77,6 +78,11 @@ export function loadCloudEnvironment(
     ENV: environment,
     CDK_PARAM_ENVIRONMENT: environment,
   };
+  if (options.validateAwsCredentials !== false) normalizeAwsCredentialSource(resolved);
+  return resolved;
+}
+
+function normalizeAwsCredentialSource(resolved: NodeJS.ProcessEnv): void {
   const profile = resolved.AWS_PROFILE;
   const defaultProfile = resolved.AWS_DEFAULT_PROFILE;
   if (profile && defaultProfile && profile !== defaultProfile)
@@ -87,5 +93,4 @@ export function loadCloudEnvironment(
     throw new Error(
       "AWS profile and environment access keys are both configured. AWS CLI and JavaScript SDK give them different precedence. Choose one source: unset AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN to use the profile, or unset AWS_PROFILE/AWS_DEFAULT_PROFILE to use environment credentials. No AWS action was taken.",
     );
-  return resolved;
 }

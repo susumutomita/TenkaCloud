@@ -146,7 +146,11 @@ export function renderTursoLiveGuide(environment: string): string {
     "   It resolves the database by URL, confirms replacement, issues a token, stores it in the selected SSM SecureString and verifies SELECT 1.",
     "   Default expiration: never. --database <name> must match the selected URL. --invalidate revokes all prior database tokens and can briefly interrupt warm Lambda instances.",
     "   Automation requires --yes; use an existing authenticated Turso CLI or TURSO_API_TOKEN from your secret provider. Never paste tokens into commands or logs.",
-    `5. Data only: make turso-reset ENV=${environment} CLOUD_ARGS="--plan"; stop writers and finish exercise Teardown before a confirmed reset.`,
+    `5. Competition data only: make turso-clear ENV=${environment} CLOUD_ARGS="--plan"; stop writers and finish exercise Teardown before confirmed deletion or --yes.`,
+    "   Direct libSQL uses the selected CDK_PARAM_TURSO_DATABASE_URL and process-only TURSO_AUTH_TOKEN. No AWS account, region, profile or calls are needed. Never put the token in .env, command arguments or logs; clear does not generate or save tokens.",
+    '   Opt into SSM with CLOUD_ARGS="--credentials ssm --plan" (or --yes): reads the exact parameter qualified by ACCOUNT_ID and REGION/AWS_REGION/AWS_DEFAULT_REGION, without STS, CloudFormation or bootstrap.',
+    "   Clear preserves competitor accounts, SAML settings, feature flags, admin audit logs, schema, migrations and unrelated tables. It does not reset connection settings or remove AWS/Docker resources.",
+    "   make turso-reset and tenkacloud turso-live reset retain the broader legacy SSM data-reset behavior; they do not delete connection configuration.",
     "   Complete competitions before changing their installation. Existing providers/URLs are not migrated automatically.",
     "   See infrastructure/README.md for AWS permissions, setup, invitation sign-in and cleanup.",
   ].join("\n");

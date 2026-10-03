@@ -120,7 +120,7 @@ AWS 資源を使う問題には検証済みの競技者アカウントが必要�
 
 catalog pin のない旧 Lite 環境は、resource / schema の検査後、bootstrap・source upload・配置の前に、進行中の大会がないことを初回だけ明示確認します。開催中の大会は完了まで配置済みの版で継続してください。大会が残っていないことを運用者が確認してから対話で承認し、非対話の更新には `CLOUD_ARGS="--confirm-no-active-events"` を使います。通常の `--yes` ではこの確認を省略できません。legacy catalog key だけでは安全な更新を証明できず、過去のデータも自動移行しません。新規環境と復旧済み環境は通常の `make deploy` で自動配置します。
 
-Turso のデータだけを初期化する場合は、`make turso-reset ENV=development` を使います。AWS スタックの削除後も、選択した DB と既存の SSM トークンを確認して実行できます。既知の control-data 行だけを削除し、スキーマ・migration・無関係なテーブルを保持します。`CLOUD_ARGS="--plan"` は読み取りのみで、非対話実行には `CLOUD_ARGS="--yes"` が必要です。先に書き込みを停止し、問題環境の Teardown を完了してください。[単独リセットの詳細](./infrastructure/README.md#standalone-turso-data-reset)を参照してください。
+Turso の大会データだけを初期化する場合は、`make turso-clear ENV=development` を使います。選択した環境の `CDK_PARAM_TURSO_DATABASE_URL` とプロセスから継承した `TURSO_AUTH_TOKEN` で直接接続するため、AWS アカウント・リージョン・プロファイルは不要で、AWS スタックの削除後も実行できます。トークンはプロセス環境から渡し、`.env`・コマンド引数・ログには含めないでください。`CLOUD_ARGS="--plan"` で対象と大会データのテーブルを読み取り確認し、削除には対話での承認か `CLOUD_ARGS="--yes"` が必要です。アカウント・SAML 設定、feature flag、管理者監査ログ、スキーマ・migration・無関係なテーブルを保持します。先に書き込みを停止し、問題環境の Teardown を完了してください。AWS や Docker のリソースは削除しません。`--credentials ssm` を明示すると設定済みの SSM トークンを使います。`make turso-reset` は従来の SSM 認証による、より広い範囲のデータ初期化を維持します。[単独初期化の詳細](./infrastructure/README.md#standalone-turso-data-reset)を参照してください。
 
 AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` または `make destroy CLOUD_ARGS="--help"` を使います。
 

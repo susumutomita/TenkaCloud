@@ -12,9 +12,14 @@ import { PROBLEM_ENDPOINTS_SCHEMA_STATEMENTS } from "../../infrastructure/lib/pr
 import { SAML_CONFIG_SCHEMA_STATEMENTS } from "../../infrastructure/lib/problem-deploy/control-data/sql-saml-config-repository";
 import { SAML_IDPS_SCHEMA_STATEMENTS } from "../../infrastructure/lib/problem-deploy/control-data/sql-saml-idps-repository";
 import { TEAMS_SCHEMA_STATEMENTS } from "../../infrastructure/lib/problem-deploy/control-data/sql-teams-repository";
+import {
+  CLOUD_TURSO_COMPETITION_TABLES,
+  LITE_TURSO_COMPETITION_TABLES,
+} from "./turso-clear-tables";
 import { assertTursoSchemaCompatible, PUBLISHED_CLOUD_DATA_TABLES } from "./turso-schema";
 
 export type TursoSchema = "lite-baseline-v1" | "cloud-v1";
+export type TursoDataScope = "all" | "competition";
 export interface TursoResetTarget {
   readonly databaseUrl: string;
   readonly parameterName: string;
@@ -51,6 +56,15 @@ export const LITE_TURSO_DATA_TABLES = liteSchema
 // The published cloud-v1 schema remains supported solely for explicit teardown.
 // Do not initialize it, import its retired repository, or delete other database tables.
 
+export function knownTursoDataTables(
+  schema: TursoSchema,
+  scope: TursoDataScope,
+): readonly string[] {
+  if (scope === "competition")
+    return schema === "cloud-v1" ? CLOUD_TURSO_COMPETITION_TABLES : LITE_TURSO_COMPETITION_TABLES;
+  return schema === "cloud-v1" ? PUBLISHED_CLOUD_DATA_TABLES : LITE_TURSO_DATA_TABLES;
+}
+
 /** Delete rows only in the deployed contract's known tables; never bootstrap or migrate. */
 export interface TursoResetSql {
   execute(sql: string): Promise<{ readonly rows: readonly Record<string, unknown>[] }>;
@@ -59,6 +73,7 @@ export interface TursoResetSql {
 export async function resetKnownTursoData(
   client: TursoResetSql,
   schema: TursoSchema,
+  scope: TursoDataScope = "all",
 ): Promise<void> {
   const result = await client.execute(
     "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
@@ -70,9 +85,7 @@ export async function resetKnownTursoData(
     if (version.rows.length !== 1 || Number(version.rows[0]?.version) !== 1)
       throw new Error("Unknown published cloud-v1 schema version; purge stopped before mutation.");
   }
-  const owned = (
-    schema === "cloud-v1" ? PUBLISHED_CLOUD_DATA_TABLES : LITE_TURSO_DATA_TABLES
-  ).filter((name) => tables.has(name));
+  const owned = knownTursoDataTables(schema, scope).filter((name) => tables.has(name));
   if (owned.length === 0) return;
   await client.batch(
     [
@@ -95,16 +108,33 @@ export async function withTursoControlData<T>(
   action: (client: TursoResetSql) => Promise<T>,
 ): Promise<T> {
   const ssm = new SSMClient({ region: target.region, ignoreConfiguredEndpointUrls: true });
-  let client: Client | undefined;
-  let authToken: string | undefined;
   try {
     const response = await ssm.send(
       new GetParameterCommand({ Name: target.parameterName, WithDecryption: true }),
     );
-    authToken = response.Parameter?.Value?.trim();
+    if (target.parameterName.startsWith("arn:") && response.Parameter?.ARN !== target.parameterName)
+      throw new Error(
+        "SSM returned a different parameter than the selected account/region target.",
+      );
+    const authToken = response.Parameter?.Value?.trim();
     if (response.Parameter?.Type !== "SecureString" || !authToken)
       throw new Error("Turso token is not a nonempty SSM SecureString.");
-    client = createClient({ url: target.databaseUrl, authToken });
+    return await withDirectTursoControlData({ databaseUrl: target.databaseUrl, authToken }, action);
+  } finally {
+    ssm.destroy();
+  }
+}
+
+/** Use an existing database token only for this connection; never create or save credentials. */
+export async function withDirectTursoControlData<T>(
+  target: { readonly databaseUrl: string; readonly authToken: string },
+  action: (client: TursoResetSql) => Promise<T>,
+  create = createClient,
+): Promise<T> {
+  let client: Client | undefined;
+  const authToken = target.authToken;
+  try {
+    client = create({ url: target.databaseUrl, authToken });
     return await action(client);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -117,7 +147,6 @@ export async function withTursoControlData<T>(
     throw new Error(redacted);
   } finally {
     client?.close();
-    ssm.destroy();
   }
 }
 

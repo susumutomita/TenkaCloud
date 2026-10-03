@@ -392,30 +392,72 @@ exact inventory and plan any import/recovery separately.
 
 ### Standalone Turso data reset
 
-`make turso-reset ENV=development` restores the standalone data cleanup command,
-even after both AWS platform stacks are gone. It uses the selected environment's
-`CDK_PARAM_CONTROL_DATA_BACKEND=turso`, database URL and exact SSM SecureString
-parameter, plus the selected AWS account and region. The parameter must still exist
-and be readable. The command prints that target, recognized tables and remaining
-deployment count, then asks once before deleting rows. Stop application writers and
-complete exercise Teardown first: deleting deployment records can orphan exercise
-resources and does not remove them or any AWS platform stacks.
+`make turso-clear ENV=development` connects directly to the selected environment's
+`CDK_PARAM_TURSO_DATABASE_URL` using `TURSO_AUTH_TOKEN` inherited from the process.
+Provide an existing token through your secret provider or process environment;
+never put it in `.env`, command arguments or logs. The command does not read tokens
+from `.env`, generate or save them, or print them. Direct mode makes no AWS calls
+and needs no AWS account, region or profile, even after both platform stacks are gone.
+
+Preview the target, competition-data tables and remaining deployment count first:
+
+```sh
+make turso-clear ENV=development CLOUD_ARGS="--plan"
+make turso-clear ENV=development
+```
+
+The second command asks for confirmation before deleting rows; unattended deletion
+requires `CLOUD_ARGS="--yes"`. Stop application writers and complete exercise Teardown
+first: deleting deployment records can orphan exercise resources. Clear does not
+remove AWS stacks, exercise resources or Docker resources, or reset connection settings.
 
 `CLOUD_ARGS="--plan"` performs only credential/schema/count reads;
 `CLOUD_ARGS="--yes"` explicitly approves unattended deletion. Original/restored Lite
 and published cloud-v1 schemas are supported; unknown or ambiguous schemas stop
 before writes. Known-empty retired tables may coexist with restored Lite tables.
-Only the selected layout's known data tables are reset in one write transaction;
-table definitions, migration/schema markers and unrelated rows remain. Custom
-triggers or references from unrelated tables stop the reset for operator review.
+Clear deletes only the selected layout's competition-data tables in one write
+transaction:
+
+- Original/restored Lite: `score_summary`, `leaderboard_snapshots`, `deployments`,
+  `deployment_score_events`, `coordination_state`, `coordination_state_scoped`,
+  `coordination_run`, `coordination_initialization_lease`, `coordination_match_secret`,
+  `disruption_audit`, `disruption_fire_claims`, `disruption_recurring`,
+  `disruption_exec_claims`, `events`, `notifications`, `problem_endpoints` and `teams`.
+  It preserves `competitor_accounts`, `saml_configs`, `saml_idps`,
+  `tenant_feature_flags` and `admin_audit_log`.
+- Published cloud-v1: `cloud_events`, `cloud_teams`, `cloud_access_keys`,
+  `cloud_create_receipts`, `cloud_deployments`, `cloud_team_scores`,
+  `cloud_deployment_targets`, `cloud_deployment_receipts`, `cloud_dispatch`,
+  `cloud_creations`, `cloud_deployment_attempts`, `cloud_teardowns`,
+  `cloud_score_events`, `cloud_competitor_references`, `cloud_coordination_runs`,
+  `cloud_coordination_history`, `cloud_coordination_receipts` and `cloud_coordination_scores`.
+  It preserves `cloud_connections`, `cloud_competitor_accounts`, `cloud_external_id`,
+  `cloud_installation_control`, `cloud_schema` and the transaction guard invariant.
+  This is not a full cloud-v1 purge or preparation for migration.
+
+Both layouts retain table definitions, migration/schema markers and unrelated rows.
+Custom triggers or references from preserved tables stop the clear for operator review.
 A failed request is not reported as success; inspect the database before retrying
 if a lost response leaves the commit outcome unknown.
 
-`make turso-clear ENV=development` is an alias for `make turso-reset`, consistent
-with the `local-clear` name. Both Make targets share the same implementation,
-selected environment, `CLOUD_ARGS`, confirmation and data scope.
+To use an existing SSM SecureString instead of a process token, opt in explicitly:
 
-The old `tenkacloud turso-live reset` alias reaches the same command. For direct Bun
+```sh
+make turso-clear ENV=development CLOUD_ARGS="--credentials ssm --plan"
+make turso-clear ENV=development CLOUD_ARGS="--credentials ssm --yes"
+```
+
+SSM mode requires the configured `ACCOUNT_ID`, region (`REGION`, `AWS_REGION` or
+`AWS_DEFAULT_REGION`) and `CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME`. It reads only
+that exact parameter, qualified by the configured account and region, using your
+selected AWS credentials. The parameter must still exist and be readable. It does
+not call STS, discover CloudFormation stacks or bootstrap AWS resources.
+
+`make turso-reset ENV=development` keeps its legacy SSM-authenticated data-reset
+behavior, including its broader known control-data table scope,
+`CDK_PARAM_CONTROL_DATA_BACKEND=turso` and the existing AWS configuration checks.
+It is not an alias for clear or a command to delete connection configuration. The old
+`tenkacloud turso-live reset` command retains that compatibility path. For direct Bun
 execution, use `bun run --no-env-file scripts/tenkacloud.ts turso-live reset`.
 `make local-reset` continues to rotate only the local organizer key.
 
