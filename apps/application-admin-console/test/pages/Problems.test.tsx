@@ -71,8 +71,7 @@ const CATALOG: ProblemSummary[] = [
 ];
 
 const renderPage = () => render(<ProblemsPage />);
-const searchBox = () =>
-  screen.getByRole("searchbox", { name: "problems.search_label", exact: true });
+const searchBox = () => screen.getByRole("searchbox", { name: "problems.search_label" });
 
 beforeEach(() => {
   mockNav.mockClear();
