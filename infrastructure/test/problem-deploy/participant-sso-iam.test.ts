@@ -19,7 +19,7 @@ vi.mock("../../lib/utils/define-nodejs-function.js", () => ({
 }));
 
 describe("participant viewer IAM boundary", () => {
-  it("grants only canonical viewer roles, requires job ExternalId, and excludes the host account", () => {
+  it("grants only canonical roles with ExternalId and supports acknowledged host-account events", () => {
     const app = new App();
     const stack = new Stack(app, "SsoTest", {
       env: { account: "111111111111", region: "ap-northeast-1" },
@@ -45,11 +45,11 @@ describe("participant viewer IAM boundary", () => {
         StringLike: { "sts:ExternalId": "??????????????????????????" },
       },
     });
-    expect(statements).toContainEqual({
-      Effect: "Deny",
-      Action: "sts:AssumeRole",
-      Resource: "arn:aws:iam::111111111111:role/*",
-    });
+    // The runtime binds same-account access to a saved event acknowledgment and
+    // verified stack ownership; its canonical role grant must remain executable.
+    expect(statements).not.toContainEqual(
+      expect.objectContaining({ Effect: "Deny", Action: "sts:AssumeRole" }),
+    );
     expect(statements).toContainEqual({
       Effect: "Allow",
       Action: "sts:AssumeRole",

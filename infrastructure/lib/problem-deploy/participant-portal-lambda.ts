@@ -3,7 +3,6 @@ import { ArnFormat, Duration, Stack } from "aws-cdk-lib";
 import type { IProject } from "aws-cdk-lib/aws-codebuild";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import {
-  Effect,
   ManagedPolicy,
   PolicyDocument,
   PolicyStatement,
@@ -269,15 +268,12 @@ export class ParticipantPortalLambda extends Construct {
               actions: ["sts:AssumeRole"],
               // Canonical stacks live in tc-*. Exact logical-resource ownership is
               // checked with DescribeStackResource; physical names may be truncated.
+              // Same-account access additionally requires persisted self-test consent
+              // in the event. A blanket host-account deny would reject that approved path.
               resources: ["arn:aws:iam::*:role/tc-*"],
               conditions: {
                 StringLike: { "sts:ExternalId": "??????????????????????????" },
               },
-            }),
-            new PolicyStatement({
-              effect: Effect.DENY,
-              actions: ["sts:AssumeRole"],
-              resources: [`arn:aws:iam::${stack.account}:role/*`],
             }),
           ],
         }),

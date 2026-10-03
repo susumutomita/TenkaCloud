@@ -214,33 +214,10 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("should bind GET /admin/audit-log and GET /admin/audit-log/export to the EventApi integration (#1292)", () => {
-    const adminResourceId = Object.entries(
-      tpl.findResources("AWS::ApiGateway::Resource", {
-        Properties: { PathPart: "admin" },
-      }),
-    )[0]?.[0];
-    expect(adminResourceId).toBeDefined();
-    const auditLogResourceId = Object.entries(
-      tpl.findResources("AWS::ApiGateway::Resource", {
-        Properties: { ParentId: { Ref: adminResourceId }, PathPart: "audit-log" },
-      }),
-    )[0]?.[0];
-    expect(auditLogResourceId).toBeDefined();
-    const exportResourceId = Object.entries(
-      tpl.findResources("AWS::ApiGateway::Resource", {
-        Properties: { ParentId: { Ref: auditLogResourceId }, PathPart: "export" },
-      }),
-    )[0]?.[0];
-    expect(exportResourceId).toBeDefined();
-    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
-      HttpMethod: "GET",
-      ResourceId: { Ref: auditLogResourceId },
-    });
-    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
-      HttpMethod: "GET",
-      ResourceId: { Ref: exportResourceId },
-    });
+  it("does not expose retired audit list or export resources", () => {
+    expect(findResource("admin")).toBeDefined();
+    expect(findResource("audit-log")).toBeUndefined();
+    expect(findResource("export")).toBeUndefined();
   });
 
   it("should bind GET and POST /admin/capacity to the EventApi integration (#2410 / #2680)", () => {
