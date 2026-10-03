@@ -100,16 +100,17 @@ Parameters:
     Type: String
     Default: https://github.com/susumutomita/TenkaCloudChallenge.git
     Description: >-
-      Public git URL cloned into problems/. Custom catalogs remain selectable; current
-      hosting executes only compatible hello-world and ac26-crypto-battle artifacts.
+      Public git URL cloned into problems/. The selected platform validates catalogs for
+      its supported AWS and native coordination contracts. Docker/Compose exercises
+      run only in local hosting.
 
   ProblemsRepoRef:
     Type: String
     Default: ""
     Description: >-
       Optional full commit SHA, branch or tag. Empty uses the pinned current catalog.
-      Current catalogs must contain the reviewed hello-world and ac26-crypto-battle
-      artifacts and their supported contracts; arbitrary additional runtimes are not enabled.
+      Revisions must satisfy the selected platform's cloud catalog and execution
+      contracts; unsupported runtimes are not enabled.
 
   ControlDataBackend:
     Type: String
@@ -119,7 +120,7 @@ Parameters:
       - turso
     Description: >-
       CDK_PARAM_CONTROL_DATA_BACKEND: dynamodb (default) keeps cloud control data in
-      on-demand DynamoDB tables. turso uses an existing remote SQL database with no
+      provisioned DynamoDB tables. turso uses an existing remote SQL database with no
       DynamoDB tables and requires TursoDatabaseUrl + TursoAuthTokenParameterName.
       This selection does not migrate existing data between backends.
 
@@ -171,7 +172,7 @@ Mappings:
   SourceDefaults:
     current-cloud-v1:
       # Offline-verified current CLI source; live AWS deployment is not validated.
-      CurrentPlatformCommit: 4499407851a2446ae75addb556ddc993dbd4350c
+      CurrentPlatformCommit: 9044932eb08da3442d49c3f4157eab3fe8acc177
       CatalogCommit: 4bb3a116c545fc46ed6a39ffcc5117fb914947f4
       Classification: candidate/unreleased
 
