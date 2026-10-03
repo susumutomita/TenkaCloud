@@ -32,7 +32,13 @@ export function canMutateTenant(apiClient: ApiClient | null): boolean {
 export function canManageConnections(config: AppConfig, apiClient: ApiClient | null): boolean {
   if (!canMutateTenant(apiClient)) return false;
   if (isLocalHost(config)) return apiClient?.organizerRole === "Admin";
-  return config.mode === "demo" || apiClient?.cloudOrganizerRole === "Admin";
+  if (config.mode === "demo") return true;
+  // The restored cloud API checks TenantAdmin; the earlier cloud-host API used Admin.
+  // Neither operator role may manage the competitor-account trust relationship.
+  return (
+    apiClient?.cloudOrganizerRole === "Admin" ||
+    (config.mode === undefined && apiClient?.cloudOrganizerRole === "TenantAdmin")
+  );
 }
 
 export function useApiClient(config: AppConfig): ApiClient | null {

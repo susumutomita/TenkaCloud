@@ -1,0 +1,14 @@
+/**
+ * `Authorization: Bearer <teamLoginKey>` から teamLoginKey を抽出する。
+ * 形式不正は `undefined` を返し、route 側で 401。
+ *
+ * teamLoginKey は `crypto.randomBytes(32).toString("base64url")` で生成される
+ * 43 文字 base64url。ここで形式チェックを行うのは、不正値で DDB Query する前に
+ * 早期に弾くため (DDB の存在確認時間が攻撃者に漏れる timing oracle を防ぐ)。
+ */
+export function extractBearerToken(authorizationHeader: string | undefined): string | undefined {
+  if (!authorizationHeader) return undefined;
+  const trimmed = authorizationHeader.trim();
+  // Match the bounded credential directly, avoiding an unbounded whitespace/tail split.
+  return /^Bearer[ \t]+([A-Z\d_-]{43})$/i.exec(trimmed)?.[1];
+}

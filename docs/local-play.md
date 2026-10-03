@@ -36,14 +36,17 @@ is no automatic eviction or reset. Event time is not reset. An ordinary stop is 
 Docker volume removal or AWS stack deletion. Explicit event teardown is separate;
 keep ownership records until it succeeds.
 
-`make deploy` and `make destroy` call the current Lambda + Turso/DynamoDB CLI after
-reviewed AWS setup. The current cloud catalog includes hello-world with scoped CLI
-access and native Cryptography Battle. Docker/Compose exercises are local-only and
-are not listed in the cloud catalog. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement. Destroy confirms
-owned targets and removes platform-owned data by default. Exercise cleanup is
-separate; ordinary destroy leaves external Turso rows and explicit destroy-all
-resets them. See the
-[cloud setup boundary](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
+Cloud hosting reuses the SBT-free Lite backend with Lambda and Turso or DynamoDB:
+generic CloudFormation deployment, flag/multi-flag and scheduled scoring,
+participant Console/CLI access and native coordination. Docker/Compose remains
+local-only. `make deploy` handles standard CDK bootstrap and source-bundle upload;
+see the [cloud setup guide](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
+Finish event Teardown before platform `make destroy`; `--drain-events` is unavailable.
+Destroy honors deployed removal policies. DynamoDB defaults to Delete; external
+Turso rows remain unless explicitly reset with `make destroy-all`. Source buckets,
+CDKToolkit and competitor bootstrap roles remain outside platform destruction.
+Live AWS/hosted Turso performance and all-catalog playability are unverified; nine
+current AWS templates exceed the restored deployer's TemplateBody size limit.
 
 ## Admission limits
 

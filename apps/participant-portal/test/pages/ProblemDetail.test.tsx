@@ -887,6 +887,25 @@ describe("ProblemDetailPage", () => {
     );
   });
 
+  it("passes the cloud coordination pointer independently of the deployment jobId", () => {
+    mockFindMeta.mockReturnValue(meta());
+    mockTeamView.mockReturnValue(
+      teamView({ view: viewWith({ problems: [problem({ coordinationRunId: "default" })] }) }),
+    );
+    const page = renderPage();
+    expect(mockPortalPluginSlots).toHaveBeenLastCalledWith(
+      expect.objectContaining({ jobId: "job-1", coordinationRunId: "default" }),
+    );
+    const nextRunId = "01K00000000000000000000005";
+    mockTeamView.mockReturnValue(
+      teamView({ view: viewWith({ problems: [problem({ coordinationRunId: nextRunId })] }) }),
+    );
+    page.rerender(<ProblemDetailPage config={config} />);
+    expect(mockPortalPluginSlots).toHaveBeenLastCalledWith(
+      expect.objectContaining({ jobId: "job-1", coordinationRunId: nextRunId }),
+    );
+  });
+
   it("should reset endpoint form state when the active problem or team changes", async () => {
     const user = userEvent.setup();
     let activeView = viewWith({

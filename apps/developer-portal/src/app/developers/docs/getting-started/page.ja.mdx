@@ -42,7 +42,7 @@ make local
 
 <h2 id="cloud-status">クラウド配置の状態</h2>
 
-`make deploy` と `make destroy` は権限設定を確認したうえで、この版の Lambda + Turso/DynamoDB CLI を実行します。現在のクラウド問題は限定 CLI を使う hello-world と組み込みの Cryptography Battle です。撤収時に対象を確認し、基盤の所有データはデフォルトで削除します。通常の destroy は外部 Turso の行を残し、destroy-all で明示的にリセットします。問題環境の撤収は別操作です。Lambda + Turso/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超えています。実 AWS の測定値ではありません。cloud pipeline は現行 CLI を既定で使います。build を始める前にソース設定と配置 role を確認してください。
+`make deploy` と `make destroy` は権限設定を確認したうえで、この版の Lambda + Turso/DynamoDB CLI を実行します。クラウド開催は SBT を使わない旧 Lite の処理を再利用し、Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。撤収時に対象を確認し、基盤の所有データはデフォルトで削除します。通常の destroy は外部 Turso の行を残し、destroy-all で明示的にリセットします。問題環境の撤収は別操作です。Lambda + Turso/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。実 AWS・hosted Turso での大会性能は未検証です。cloud pipeline は現行 CLI を既定で使います。build を始める前にソース設定と配置 role を確認してください。
 
 Codespaces の転送 URL と問題接続は、この candidate では未確認です。確認記録ができるまでは上のローカル手順を使ってください。
 
@@ -55,3 +55,7 @@ Codespaces の転送 URL と問題接続は、この candidate では未確認�
 教材と設計の背景を説明します。現行の挙動の正本はこのドキュメントと対応する checkout です。
 公開済み書籍には旧版の構築手順が残っています。`docs/book-compatibility.md` に
 コマンド、採点、runtime の修正点を記録しています。外部の書籍は変更していません。
+
+クラウドの物理 stack 名は旧 `tenkacloud-lite` 系を維持します。CLI は Lite / cloud の既存 stack を検出し、両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` の明示指定が必要です。旧 Lite の更新は所有情報と永続 resource ID を検証します。 catalog pin のない旧 Lite 環境は、resource / schema の検査後、bootstrap・source upload・配置の前に、進行中の大会がないことを初回だけ明示確認します。開催中の大会は完了まで配置済みの版で継続してください。大会が残っていないことを運用者が確認してから対話で承認し、非対話の更新には `CLOUD_ARGS="--confirm-no-active-events"` を使います。通常の `--yes` ではこの確認を省略できません。legacy catalog key だけでは安全な更新を証明できず、過去のデータも自動移行しません。新規環境と復旧済み環境は通常の `make deploy` で自動配置します。公開 cloud-v1 の resource / DB schema への上書き更新は拒否し、データは自動移行しません。`--drain-events` は使えません。問題環境を大会の Teardown で撤収してから基盤を削除してください。
+
+両 DB とも 99 チーム、SQL coordination は旧 4 MiB 上限です。現行 catalog の 9 template は `TemplateBody` の 51,200 bytes 上限を超え、`TemplateURL` は未実装です。全 AWS 問題の配置確認済みを意味しません。

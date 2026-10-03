@@ -16,6 +16,7 @@ describe("original Turso purge-or-warn contract", () => {
       target: {
         databaseUrl: outputs.TursoDatabaseUrl,
         parameterName: outputs.TursoAuthTokenParameterName,
+        schema: "cloud-v1",
       },
     });
   });

@@ -1,0 +1,498 @@
+import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { describe, expect, it, vi } from "vitest";
+import { resetCoordinationRun } from "../../lib/problem-deploy/handlers/event-handler/coordination-reset";
+import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { resolveDeploymentsRepository } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import * as executionArtifacts from "../../lib/problem-deploy/handlers/shared/execution-catalog.js";
+import * as catalogContexts from "../../lib/problem-deploy/handlers/shared/execution-catalog-context.js";
+import { makeFakeDdb } from "./control-data/control-data-write.test-helpers";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
+
+/**
+ * [Issue #3126] The coordination namespace is `tenant x event x problem x run`,
+ * so re-deploying a problem into the same event lands on the same key. Event
+ * teardown was the only lifecycle that removed the row, so the "new" match
+ * silently resumed the previous one's state, version, ledger and scores. The
+ * reset is a separate operator gesture rather than a hook on deploy, because
+ * `bulkDeployEvent` runs against live events (late-joining teams, failed-stack
+ * retries) and the state is shared by every team on the problem.
+ *
+ * [Issue #3153] What the reset DOES changed: it starts a new run instead of
+ * deleting the namespace. The match in progress still ends — the next operation
+ * rebuilds from `plugin.initialState` — but the run that just ended stays
+ * readable under its own id. An operator resets because something went wrong,
+ * and the old reset destroyed the evidence of what went wrong as its first act.
+ */
+
+/**
+ * A DynamoDB whose items persist across commands.
+ *
+ * The pointer is the whole subject here, so a fake that forgot it between calls
+ * could not tell a rotation from a no-op: every reset would read "no pointer",
+ * rotate from the initial run, and look like it worked.
+ */
+function buildShared(
+  deployments: readonly Record<string, unknown>[],
+  event: Record<string, unknown> | null = { tenantId: "tenant-acme", status: "READY" },
+  currentDeployments = deployments,
+): {
+  shared: EventSharedResources;
+  ddbSend: ReturnType<typeof vi.fn>;
+  getItem: (key: { PK: string; SK: string }) => Promise<Record<string, unknown> | undefined>;
+  putItem: (item: Record<string, unknown>) => Promise<void>;
+} {
+  const ddb = makeFakeDdb();
+  const ddbSend = vi.fn(async (cmd: unknown) => {
+    if (cmd instanceof GetCommand && cmd.input.TableName === "TestEvents")
+      return { Item: event ?? undefined };
+    if (cmd instanceof QueryCommand) return { Items: [...deployments] };
+    if (cmd instanceof GetCommand && String(cmd.input.Key?.PK).startsWith("DEPLOYMENT#"))
+      return {
+        Item: currentDeployments.find((row) => `DEPLOYMENT#${row.jobId}` === cmd.input.Key?.PK),
+      };
+    return ddb.send(cmd as never);
+  });
+  const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
+    eventsTableName: "TestEvents",
+    teamsTableName: "TestTeams",
+    deploymentsTableName: "TestDeployments",
+    competitorAccountsTableName: "TestCompetitorAccounts",
+    eventBusName: "test-bus",
+    env: "development",
+    ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],
+    events: { send: vi.fn() } as unknown as EventSharedResources["events"],
+    problemsCatalog: {},
+    problemsCoordination: { "battle-a": { plugin: "battle-a" } },
+  };
+  return {
+    shared,
+    ddbSend,
+    getItem: async (key) =>
+      (await ddb.send(new GetCommand({ TableName: "TestDeployments", Key: key }))).Item,
+    putItem: async (item) => {
+      await ddb.send(new PutCommand({ TableName: "TestDeployments", Item: item }));
+    },
+  };
+}
+
+const deployment = (problemId: string, teamId: string) => ({
+  jobId: `job-${problemId}-${teamId}`,
+  tenantId: "tenant-acme",
+  eventId: "EV1",
+  teamId,
+  problemId,
+  status: "COMPLETE",
+});
+
+const deleteKeys = (ddbSend: ReturnType<typeof vi.fn>) =>
+  ddbSend.mock.calls
+    .map((call) => call[0])
+    .filter((cmd): cmd is DeleteCommand => cmd instanceof DeleteCommand)
+    .map((cmd) => `${cmd.input.Key?.PK}/${cmd.input.Key?.SK}`);
+
+describe("resetCoordinationRun (#3153)", () => {
+  it("refuses ordinary deployed problems before creating an unrecoverable reset pointer", async () => {
+    const { shared, ddbSend, getItem } = buildShared([deployment("ordinary", "team-1")]);
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "ordinary")).toEqual({
+      kind: "not_found",
+    });
+    expect(ddbSend.mock.calls.every(([cmd]) => cmd instanceof GetCommand)).toBe(true);
+    expect(
+      await getItem({ PK: "COORDRUN#tenant-acme#EV1#ordinary", SK: "CURRENT" }),
+    ).toBeUndefined();
+  });
+
+  it.each(
+    [
+      [],
+      [{ ...deployment("battle-a", "team-1"), status: "DELETING" }],
+      [{ ...deployment("battle-a", "team-1"), teardownRequestedAt: "2026-09-06T01:00:00.000Z" }],
+      [{ ...deployment("battle-a", "team-1"), tenantId: "other-tenant" }],
+      [{ ...deployment("battle-a", "team-1"), eventId: "other-event" }],
+      [{ ...deployment("battle-a", "team-1"), problemId: "other-problem" }],
+    ].map((current) => ({ current })),
+  )("refuses stale GSI admission using the consistent META read: %j", async ({ current }) => {
+    const { shared, ddbSend, getItem } = buildShared(
+      [deployment("battle-a", "team-1")],
+      undefined,
+      current,
+    );
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+      kind: "not_found",
+    });
+    const pointRead = ddbSend.mock.calls
+      .map(([cmd]) => cmd)
+      .find((cmd) => cmd instanceof GetCommand && cmd.input.TableName === "TestDeployments");
+    expect(pointRead.input).toMatchObject({
+      ConsistentRead: true,
+      Key: { PK: "DEPLOYMENT#job-battle-a-team-1", SK: "META" },
+    });
+    expect(
+      await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    [-1, "ok"],
+    [0, "event_ended"],
+    [1, "event_ended"],
+  ] as const)("should apply the event end boundary at %+d ms", async (offset, kind) => {
+    const end = "2026-09-06T01:00:00.000Z";
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse(end) + offset);
+    try {
+      const { shared } = buildShared([deployment("battle-a", "team-1")], {
+        tenantId: "tenant-acme",
+        status: "READY",
+        endsAt: end,
+      });
+      expect((await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).kind).toBe(
+        kind,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    { status: "ENDED" },
+    { status: "TEARDOWN" },
+    { status: "ARCHIVED" },
+    { status: "READY", endsAt: "2020-01-01T00:00:00.000Z" },
+    { status: "READY", startsAt: "2020-01-01T00:00:00.000Z" },
+  ])("should reject a finished event before rotating or clearing scores: %j", async (event) => {
+    // Deployment denormalization may lag behind the authoritative event row.
+    const { shared, ddbSend, getItem, putItem } = buildShared([deployment("battle-a", "team-1")], {
+      tenantId: "tenant-acme",
+      ...event,
+    });
+    const pointerKey = { PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" };
+    const pointer = { ...pointerKey, runId: "finished-run" };
+    await putItem(pointer);
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+      kind: "event_ended",
+    });
+    expect(await getItem(pointerKey)).toEqual(pointer);
+    expect(ddbSend.mock.calls.every(([cmd]) => cmd instanceof GetCommand)).toBe(true);
+  });
+
+  it.each([null, { tenantId: "another-tenant", status: "READY" }])(
+    "should not reset a missing or foreign event despite stale deployment rows: %j",
+    async (event) => {
+      const { shared, ddbSend } = buildShared([deployment("battle-a", "team-1")], event);
+      expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+        kind: "not_found",
+      });
+      expect(ddbSend.mock.calls.every(([cmd]) => cmd instanceof GetCommand)).toBe(true);
+    },
+  );
+
+  it.each([
+    { status: "DELETING" },
+    { status: "DELETED" },
+    { status: "EXPIRED" },
+    { status: "AUTO_DELETED" },
+    { status: "FAILED", teardownRequestedAt: "2026-09-06T01:00:00.000Z" },
+  ])("should not create a run when all matching deployments are retired: %j", async (retired) => {
+    const { shared, getItem } = buildShared([
+      { ...deployment("battle-a", "team-1"), ...retired },
+      { ...deployment("battle-a", "team-2"), status: "DELETED" },
+      deployment("another-problem", "team-1"),
+    ]);
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+      kind: "not_found",
+    });
+    expect(
+      await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+    ).toBeUndefined();
+  });
+
+  it.each(["PENDING", "DEPLOYING", "COMPLETE", "FAILED"])(
+    "should allow a new run while a matching %s deployment remains playable",
+    async (status) => {
+      const { shared, getItem } = buildShared([
+        { ...deployment("battle-a", "team-1"), status: "DELETED" },
+        { ...deployment("battle-a", "team-2"), status },
+      ]);
+      expect((await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).kind).toBe(
+        "ok",
+      );
+      expect(
+        await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+      ).toMatchObject({
+        pendingInitialization: true,
+      });
+    },
+  );
+
+  it("should keep the current run and return conflict while score delivery is pending", async () => {
+    const { shared, ddbSend, getItem, putItem } = buildShared([deployment("battle-a", "team-1")]);
+    const stateKey = { PK: "COORD#tenant-acme#EV1#battle-a#default", SK: "STATE" };
+    const saved = {
+      ...stateKey,
+      version: 1,
+      coordinationScoresPending: true,
+      state: {
+        __tenkacloudCoordinationEnvelope: 1,
+        stateSchemaVersion: 1,
+        state: { scores: { "team-1": 30 } },
+        pendingScores: {
+          occurredAt: "2026-09-06T01:00:00.000Z",
+          teams: { "team-1": { before: 0, score: 30, reason: "cipher" } },
+        },
+      },
+    };
+    await putItem(saved);
+
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+      kind: "conflict",
+    });
+
+    expect(await getItem(stateKey)).toEqual(saved);
+    expect(
+      await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+    ).toBeUndefined();
+    expect(deleteKeys(ddbSend)).toEqual([]);
+  });
+
+  it("should start a new run and report which run it replaced", async () => {
+    const { shared } = buildShared([
+      deployment("battle-a", "team-1"),
+      deployment("battle-a", "team-2"),
+    ]);
+
+    const outcome = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+
+    expect(outcome.kind).toBe("ok");
+    expect(outcome.kind === "ok" && outcome.result).toMatchObject({
+      eventId: "EV1",
+      problemId: "battle-a",
+      // The first run of every (event, problem) keeps the old constant, which
+      // is what lets a match that predates this change keep playing.
+      previousRunId: "default",
+    });
+    expect(outcome.kind === "ok" && outcome.result.runId).not.toBe("default");
+  });
+
+  it("should leave the previous run's state readable instead of deleting it", async () => {
+    const { shared, ddbSend } = buildShared([deployment("battle-a", "team-1")]);
+
+    await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+
+    // This is the behaviour change. The match is over — the next operation
+    // rebuilds from `initialState` under the new run — but the one that just
+    // ended is still there to look at.
+    expect(deleteKeys(ddbSend)).not.toContain("COORD#tenant-acme#EV1#battle-a#default/STATE");
+  });
+
+  it("should point participants at the new run afterwards", async () => {
+    const { shared, getItem } = buildShared([deployment("battle-a", "team-1")]);
+
+    const outcome = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+
+    const pointer = await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" });
+    expect(pointer?.runId).toBe(outcome.kind === "ok" ? outcome.result.runId : undefined);
+    expect(pointer?.history).toEqual(["default"]);
+  });
+
+  it("should mint a distinct run every time, never reusing one", async () => {
+    const { shared } = buildShared([deployment("battle-a", "team-1")]);
+
+    const first = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+    if (first.kind === "ok")
+      await (await resolveDeploymentsRepository(shared)).writeCoordinationState(
+        {
+          tenantId: "tenant-acme",
+          eventId: "EV1",
+          problemId: "battle-a",
+          runId: first.result.runId,
+        },
+        {},
+        0,
+        new Date().toISOString(),
+        0,
+      );
+    const second = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+
+    // A reused id would walk a new match into the previous run's tombstoned
+    // artifact prefix, and would make "history" meaningless.
+    expect(first.kind).toBe("ok");
+    expect(second.kind).toBe("ok");
+    expect(first.kind === "ok" && second.kind === "ok" && first.result.runId).not.toBe(
+      second.kind === "ok" ? second.result.runId : "",
+    );
+    expect(second.kind === "ok" && second.result.previousRunId).toBe(
+      first.kind === "ok" ? first.result.runId : "",
+    );
+  });
+
+  it("should retire runs that fall out of the retention window, with their state", async () => {
+    const { shared, ddbSend } = buildShared([deployment("battle-a", "team-1")]);
+
+    const runIds: string[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      const outcome = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+      if (outcome.kind === "ok") {
+        runIds.push(outcome.result.previousRunId);
+        await (await resolveDeploymentsRepository(shared)).writeCoordinationState(
+          {
+            tenantId: "tenant-acme",
+            eventId: "EV1",
+            problemId: "battle-a",
+            runId: outcome.result.runId,
+          },
+          {},
+          0,
+          new Date().toISOString(),
+          0,
+        );
+      }
+    }
+
+    // History is a debrief, not an archive: every retained run is a full state
+    // row plus its artifacts, and #3151 measured what one of those costs.
+    const deleted = deleteKeys(ddbSend);
+    expect(deleted).toContain("COORD#tenant-acme#EV1#battle-a#default/STATE");
+    expect(deleted).not.toContain(`COORD#tenant-acme#EV1#battle-a#${runIds.at(-1)}/STATE`);
+  });
+
+  it("should reset only the named problem, leaving other matches in the event alone", async () => {
+    const { shared, getItem } = buildShared([
+      deployment("battle-a", "team-1"),
+      deployment("battle-b", "team-1"),
+    ]);
+
+    await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+
+    expect(
+      await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-b", SK: "CURRENT" }),
+    ).toBeUndefined();
+  });
+
+  it("should report not_found when the event never deployed that problem", async () => {
+    const { shared, ddbSend } = buildShared([deployment("battle-a", "team-1")]);
+
+    // Without this guard a mistyped problemId returns a cheerful success and
+    // the operator believes they reset a match they did not touch.
+    const outcome = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battel-a");
+
+    expect(outcome).toEqual({ kind: "not_found" });
+    expect(ddbSend.mock.calls.some((call) => call[0] instanceof PutCommand)).toBe(false);
+  });
+
+  it("should report a conflict rather than silently discarding a concurrent reset", async () => {
+    const { shared, getItem, putItem } = buildShared([deployment("battle-a", "team-1")]);
+    await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+
+    // Another operator's rotation lands between this one's read and its write.
+    const pointerKey = { PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" };
+    const stored = await getItem(pointerKey);
+    const raced = { ...stored, runId: "rSOMEONEELSE" };
+    const original = shared.ddb.send.bind(shared.ddb);
+    let reads = 0;
+    (shared.ddb as { send: (cmd: unknown) => Promise<unknown> }).send = async (cmd: unknown) => {
+      if (
+        cmd instanceof GetCommand &&
+        cmd.input.Key?.PK === pointerKey.PK &&
+        cmd.input.Key?.SK === pointerKey.SK
+      ) {
+        reads += 1;
+        // The first read sees the old pointer; the winner writes before this
+        // caller gets to its own write.
+        if (reads === 1) {
+          const result = await original(cmd as never);
+          await putItem(raced);
+          return result;
+        }
+      }
+      return original(cmd as never);
+    };
+
+    const outcome = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+
+    // Two operators resetting at once must not end up with two runs started and
+    // one silently discarded.
+    expect(outcome).toEqual({ kind: "conflict" });
+    expect((await getItem(pointerKey))?.runId).toBe("rSOMEONEELSE");
+  });
+});
+
+describe("saved catalog coordination reset", () => {
+  it("resets removed A support using A and verifies plugin bytes before mutation", async () => {
+    const { shared, getItem } = buildShared([deployment("battle-a", "team-1")], {
+      tenantId: "tenant-acme",
+      status: "READY",
+      catalogKey: "catalogs/A.json",
+    });
+    const saved = {
+      catalogKey: "catalogs/A.json",
+      catalog: { "battle-a": "battle-a" },
+      coordination: { "battle-a": { plugin: "coordination.ts" } },
+      runtimes: {},
+      visibility: {},
+      provenance: {},
+      disruptions: {},
+    };
+    const loader = vi
+      .spyOn(catalogContexts, "savedExecutionCatalog")
+      .mockResolvedValue(saved as never);
+    const plugin = vi
+      .spyOn(executionArtifacts, "loadExecutionPluginSource")
+      .mockResolvedValue("verified A plugin bytes");
+    try {
+      expect(
+        (
+          await resetCoordinationRun(
+            { ...shared, problemsCoordination: {} },
+            "tenant-acme",
+            "EV1",
+            "battle-a",
+          )
+        ).kind,
+      ).toBe("ok");
+      expect(loader).toHaveBeenCalledWith("catalogs/A.json");
+      expect(plugin).toHaveBeenCalledWith(saved, "battle-a");
+      expect(
+        await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+      ).toMatchObject({ pendingInitialization: true });
+    } finally {
+      loader.mockRestore();
+      plugin.mockRestore();
+    }
+  });
+
+  it("does not rotate the run when saved plugin bytes are missing", async () => {
+    const { shared, getItem } = buildShared([deployment("battle-a", "team-1")], {
+      tenantId: "tenant-acme",
+      status: "READY",
+      catalogKey: "catalogs/A.json",
+    });
+    const saved = {
+      catalogKey: "catalogs/A.json",
+      catalog: {},
+      coordination: { "battle-a": { plugin: "coordination.ts" } },
+      runtimes: {},
+      visibility: {},
+      provenance: {},
+      disruptions: {},
+    };
+    const loader = vi
+      .spyOn(catalogContexts, "savedExecutionCatalog")
+      .mockResolvedValue(saved as never);
+    const plugin = vi
+      .spyOn(executionArtifacts, "loadExecutionPluginSource")
+      .mockRejectedValue(new Error("Saved plugin missing"));
+    try {
+      await expect(resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).rejects.toThrow(
+        "Saved plugin missing",
+      );
+      expect(
+        await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+      ).toBeUndefined();
+    } finally {
+      loader.mockRestore();
+      plugin.mockRestore();
+    }
+  });
+});

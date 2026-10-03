@@ -11,6 +11,6 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["bin/**/*.ts", "lib/**/*.ts", "test/**/*.ts"],
+  "include": ["bin/**/*.ts", "lib/**/*.ts", "test/cloud-hosting/**/*.ts"],
   "exclude": ["node_modules", "cdk.out"]
 }

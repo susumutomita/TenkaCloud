@@ -227,6 +227,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       {/* Issue #1038 P0 #2: ProblemPanel (= flag 提出 / hint reveal の UI 本体) も lock。 */}
       {canRenderBody && problem && (
         <ProblemPanel
+          key={problem.jobId}
           problem={problem}
           apiBaseUrl={config.apiBaseUrl}
           sessionToken={sessionToken ?? ""}
@@ -259,6 +260,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           key={problem.jobId}
           problemId={problem.problemId}
           jobId={problem.jobId}
+          coordinationRunId={problem.coordinationRunId}
           score={problem.score}
           locale={locale}
           posture={problem.posture}

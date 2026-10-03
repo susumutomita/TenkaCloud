@@ -1,6 +1,17 @@
 import type { Client, InArgs, InStatement, ResultSet } from "@libsql/client/http";
-import { CONTROL_DATA_SCHEMA_STATEMENTS, SQL_SCHEMA_VERSION } from "./sql-control-schema.js";
-import type { SqlExecutor, SqlParam, SqlRow, SqlRunResult, SqlStatement } from "./sql-port.js";
+import { SCORE_SUMMARY_SCHEMA_STATEMENTS } from "./score-summary-schema.js";
+import { ADMIN_AUDIT_LOG_SCHEMA_STATEMENTS } from "./sql-admin-audit-log-repository.js";
+import { COMPETITOR_ACCOUNTS_SCHEMA_STATEMENTS } from "./sql-competitor-accounts-repository.js";
+import { DEPLOYMENTS_SCHEMA_STATEMENTS } from "./sql-deployments-repository.js";
+import { DISRUPTIONS_SCHEMA_STATEMENTS } from "./sql-disruptions-repository.js";
+import { EVENTS_SCHEMA_STATEMENTS } from "./sql-events-repository.js";
+import { FEATURE_FLAGS_SCHEMA_STATEMENTS } from "./sql-feature-flags-repository.js";
+import { NOTIFICATIONS_SCHEMA_STATEMENTS } from "./sql-notifications-repository.js";
+import { PROBLEM_ENDPOINTS_SCHEMA_STATEMENTS } from "./sql-problem-endpoints-repository.js";
+import { SAML_CONFIG_SCHEMA_STATEMENTS } from "./sql-saml-config-repository.js";
+import { SAML_IDPS_SCHEMA_STATEMENTS } from "./sql-saml-idps-repository.js";
+import { TEAMS_SCHEMA_STATEMENTS } from "./sql-teams-repository.js";
+import type { SqlExecutor, SqlParam, SqlRow, SqlRunResult, SqlStatement } from "./types.js";
 
 type LibsqlClient = Pick<Client, "execute" | "batch">;
 
@@ -27,22 +38,12 @@ export class LibsqlExecutor implements SqlExecutor {
   }
 
   async get(sql: string, params?: readonly SqlParam[]): Promise<SqlRow | undefined> {
-    return (await this.all(sql, params))[0];
+    const result = await this.client.execute(statement(sql, params));
+    return rows(result)[0];
   }
 
   async all(sql: string, params?: readonly SqlParam[]): Promise<readonly SqlRow[]> {
-    // libSQL replicas classify BEGIN/SELECT/COMMIT as a read-only program.
-    // A zero-row UPDATE makes the whole batch route to the primary without
-    // changing data. Auth revocation and other authority checks cannot use
-    // replica-local reads. One HTTP request, with a short primary write lock.
-    // https://github.com/tursodatabase/libsql/blob/main/libsql-server/src/query_analysis.rs
-    const results = await this.client.batch(
-      [statement("UPDATE cloud_schema SET version = version WHERE 0"), statement(sql, params)],
-      "write",
-    );
-    const result = results[1];
-    if (!result) throw new Error("Missing authoritative SQL query result.");
-    return rows(result);
+    return rows(await this.client.execute(statement(sql, params)));
   }
 
   async batch(statements: readonly SqlStatement[]): Promise<readonly SqlRunResult[]> {
@@ -63,15 +64,36 @@ export class LibsqlExecutor implements SqlExecutor {
  * transaction window.
  */
 export async function initializeControlDataSchema(client: LibsqlClient): Promise<void> {
-  const results = await client.batch(
-    [
-      ...CONTROL_DATA_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
-      statement("SELECT version FROM cloud_schema WHERE id = 1"),
-    ],
-    "write",
-  );
-  // Read schema identity in the same primary transaction, without a later
-  // replica-local SELECT racing replication of the newly created schema.
-  if (results.at(-1)?.rows[0]?.version !== SQL_SCHEMA_VERSION)
-    throw new Error("Unsupported cloud control-data schema version.");
+  const statements: InStatement[] = [
+    ...EVENTS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...TEAMS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...NOTIFICATIONS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...FEATURE_FLAGS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...DEPLOYMENTS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...PROBLEM_ENDPOINTS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...COMPETITOR_ACCOUNTS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...SAML_CONFIG_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...SAML_IDPS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...DISRUPTIONS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...ADMIN_AUDIT_LOG_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...SCORE_SUMMARY_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+  ];
+  await client.batch(statements, "write");
+  // Existing installations predate this additive column. Inspect on every
+  // bootstrap, and tolerate another cold start winning ALTER only after a
+  // fresh schema read confirms the required column actually exists.
+  for (const column of ["pending_initialization", "closed"]) {
+    const hasColumn = async () =>
+      (await client.execute(statement("PRAGMA table_info(coordination_run)"))).rows.some(
+        (row) => row.name === column,
+      );
+    if (await hasColumn()) continue;
+    try {
+      await client.execute(
+        statement(`ALTER TABLE coordination_run ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`),
+      );
+    } catch (error) {
+      if (!(await hasColumn())) throw error;
+    }
+  }
 }

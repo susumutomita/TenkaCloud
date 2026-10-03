@@ -1,64 +1,35 @@
-flowchart TB
-  Organizer["Organizer browser"]
-  Participant["Participant browser"]
-  subgraph Platform["AWS platform account"]
-    CDN["CloudFront: organizer and participant apps"]
-    subgraph Region["Selected platform region"]
-      Static["Private S3 apps + runtime-config.json; OAC"]
-      Auth["Cognito: organizer roles + MFA"]
-      API["API Gateway / Lambda: event and team authorization"]
-      DB["DynamoDB when selected: Events / Teams / Deployments; scores + native state"]
-      Artifacts["S3: pinned hello-world template + native CryptoBattle plugin; deleted on destroy"]
-      Outbox["Lambda dispatcher: durable deployment queue"]
-      Timer["EventBridge: every minute"]
-      Workflow["Step Functions + Lambda: owned CloudFormation lifecycle"]
-      Recovery["EventBridge terminal failures + recovery Lambda"]
-      ExternalId["SSM Parameter Store: installation ExternalId"]
-      TursoToken["SSM Parameter Store: exact existing Turso token SecureString; Turso only"]
-    end
-  end
-  subgraph ExternalTurso["External Turso service; alternative to DynamoDB"]
-    Turso["Turso via HTTPS / libSQL: event / team / deployment state, queue, scores + native state; no DynamoDB tables"]
-  end
-  subgraph Competitor["Separate competitor AWS account; teams may share an account in different regions"]
-    DeployRole["Global IAM deployment role; common required ExternalId"]
-    Viewer["Deployment-bound IAM viewer; ExternalId = job ID"]
-    Stack["CloudFormation: hello-world per team / problem / attempt"]
-    Parameter["Only the assigned hello-world Parameter"]
-  end
-  Commands["make deploy / make destroy: selected installation; ordinary destroy removes AWS platform + default data + S3; external Turso retained"]
-  Drain["Explicit --drain-events: stop intake and remove recorded competitor exercise resources before platform teardown"]
-  Organizer --> CDN
-  Participant --> CDN
-  CDN --> Static
-  Organizer --> Auth
-  Organizer -->|"Organizer JWT"| API
-  Auth -.->|"JWT validation"| API
-  Participant -->|"Event-owned team key"| API
-  API -->|"State, score and operation transactions"| DB
-  API -->|"Turso selected: same state and transactions over HTTPS"| Turso
-  API -->|"Turso selected: GetParameter for exact token"| TursoToken
-  API --> Artifacts
-  API -->|"First-use create / read"| ExternalId
-  Timer --> Outbox
-  Outbox -->|"Read durable queue"| DB
-  Outbox -->|"Turso selected: durable queue over HTTPS"| Turso
-  Outbox -->|"Turso selected: exact token"| TursoToken
-  Outbox --> Workflow
-  Workflow -->|"Persist owned progress"| DB
-  Workflow -->|"Turso selected: owned progress over HTTPS"| Turso
-  Workflow -->|"Turso selected: exact token"| TursoToken
-  Workflow --> Artifacts
-  Workflow --> ExternalId
-  Workflow -.-> Recovery
-  Recovery --> DB
-  Recovery -->|"Turso selected: recover durable state over HTTPS"| Turso
-  Recovery -->|"Turso selected: exact token"| TursoToken
-  Workflow -->|"AssumeRole"| DeployRole
-  DeployRole --> Stack
-  Stack --> Parameter
-  API -->|"Verified event / team / attempt; AssumeRole"| Viewer
-  Viewer -.->|"15-minute CLI credentials: read only the assigned Parameter"| Participant
-  Participant -->|"Scoped AWS CLI"| Parameter
-  Commands -.-> Platform
-  Drain -.-> Workflow
+flowchart LR
+  AdminUI["Application Admin Console"]
+  PortalUI["Participant Portal"]
+
+  EventAPI["開催API<br/>event-handler"]
+  Bus["Amazon EventBridge<br/>Deploy*Requested"]
+  DeployFlow["配置・削除ワークフロー<br/>Step Functions"]
+  Worker["配置担当<br/>CfnDeploy / DescribeStack または CodeBuild"]
+  Artifacts["非公開の実行 snapshot<br/>catalogKey・source ZIP の key / VersionId"]
+  PortalAPI["参加者API<br/>participant-handler"]
+  Dispatcher["独自競技の実行担当<br/>coordination-dispatcher-handler"]
+  Plugin["問題同梱のプラグイン<br/>validateOp / applyOp / projectForTeam"]
+  Scorer["定期採点・状態調整<br/>GenericScoring"]
+  Timer["EventBridgeの定期実行"]
+  Store["保存用Repository<br/>DynamoDB / 対応するTurso構成"]
+  Runtime["開催基盤と別アカウントの競技用AWS環境"]
+
+  AdminUI -->|"管理者JWT・開催API"| EventAPI
+  EventAPI -->|"保存した catalogKey・配置要求"| Bus
+  Bus --> DeployFlow
+  Worker -->|"固定した source を読む"| Artifacts
+  Dispatcher -->|"固定した plugin を読む"| Artifacts
+  DeployFlow --> Worker
+  Worker -->|"対象権限でCloudFormation操作"| Runtime
+  PortalUI -->|"チームキー"| PortalAPI
+  PortalUI -->|"チームキー・独自競技の操作"| Dispatcher
+  Dispatcher --> Plugin
+  Timer --> Scorer
+  Scorer -->|"稼働確認など"| Runtime
+  Scorer -->|"coordinationのtickを委譲"| Dispatcher
+  EventAPI --> Store
+  DeployFlow -->|"直接またはStatusWriter経由"| Store
+  PortalAPI --> Store
+  Dispatcher --> Store
+  Scorer --> Store

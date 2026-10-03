@@ -52,7 +52,7 @@ async function mapResponse(res: Response): Promise<CoordinationOutcome> {
   }
 }
 
-/** Submit a team operation; runId pins retries to the problem jobId shown by the portal. */
+/** Submit a team operation; runId pins retries to the cloud coordination pointer or local jobId. */
 export async function submitCoordinationOp(
   coordinationApiUrl: string,
   teamLoginKey: string,

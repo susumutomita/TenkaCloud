@@ -5,7 +5,7 @@ import Button from "@cloudscape-design/components/button";
 import Form from "@cloudscape-design/components/form";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { PendingOperation, toErrorMessage } from "@tenkacloud/web-kit";
+import { ApiError, PendingOperation, toErrorMessage } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { canMutateTenant, useApiClient } from "../api/client";
@@ -100,7 +100,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const cloudHost = isCloudHost(config);
   const allProblems = useMemo(() => {
     const catalog = listProblemSummaries();
-    return cloudHost
+    return cloudHost || config.supportedProblemIds !== undefined
       ? catalog.filter((problem) => config.supportedProblemIds?.includes(problem.id))
       : catalog;
   }, [cloudHost, config.supportedProblemIds]);
@@ -166,13 +166,13 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             /* v8 ignore next */
             if (!meta) throw new Error(`selected problem is missing from catalog: ${opt.value}`);
             const row = newProblemRow(meta, opt.value);
-            return cloudHost && config.nativeProblemIds?.includes(opt.value)
+            return !isLocalHost(config) && config.nativeProblemIds?.includes(opt.value)
               ? { ...row, runtimeProvider: "native", composite: false }
               : row;
           });
       });
     },
-    [allProblems, cloudHost, config.nativeProblemIds],
+    [allProblems, config],
   );
 
   const updateProblemRow = useCallback((problemId: string, patch: Partial<ProblemRow>) => {
@@ -235,6 +235,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     warnings: readonly CoordinationCapacityWarning[];
   } | null>(null);
   const [deployStarting, setDeployStarting] = useState(false);
+  const [hostingAccountRejected, setHostingAccountRejected] = useState(false);
 
   // Issue #2696: Lite mode でだけ 「初回イベント作成」 ドリルのチェックポイントを出す。
   // 一度表示したら二度と出さない (2026-07-21) — 毎回の event 作成で再表示されていたため。
@@ -313,14 +314,25 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
       await bulkDeployEvent(apiClient, deployPromptTarget.eventId, {}, operationKey);
       deployment.current.acknowledge(operationKey);
       navigate(`/events/${deployPromptTarget.eventId}`);
+      setDeployPromptTarget(null);
     } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.status === 422 &&
+        /"error"\s*:\s*"unsupported_hosting_account"/u.test(err.message)
+      ) {
+        // Preserve the one-time keys and the actionable refusal instead of navigating
+        // to a DRAFT event whose polling cannot recover this rejected deploy request.
+        setHostingAccountRejected(true);
+        return;
+      }
       // bulk deploy 失敗時も Event 自体は作成済なので EventDetail に navigate して
       // operator が手動 deploy できる経路を残す。 error 表示は EventDetail 側 polling で拾われる。
       setError(toErrorMessage(err));
       navigate(`/events/${deployPromptTarget.eventId}`);
+      setDeployPromptTarget(null);
     } finally {
       setDeployStarting(false);
-      setDeployPromptTarget(null);
     }
   };
 
@@ -360,13 +372,15 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
           {/* #528 / Phase 2.2 (Issue #459): Teams 入力の上に置く 3 種 Alert。
            *   load error / loading / 0-verified hint をまとめた小 component。 */}
-          <EventCreateAccountsAlerts
-            accountsLoadError={accountsLoadError}
-            accountsLoading={accountsLoading}
-            showLoadingHint={competitorAccounts === null && accountsLoading && !accountsLoadError}
-            showNoVerifiedAccountsHint={showNoVerifiedAccountsHint && providerMode.kind === "aws"}
-            onReload={() => void fetchAccounts()}
-          />
+          {providerMode.kind !== "native" && (
+            <EventCreateAccountsAlerts
+              accountsLoadError={accountsLoadError}
+              accountsLoading={accountsLoading}
+              showLoadingHint={competitorAccounts === null && accountsLoading && !accountsLoadError}
+              showNoVerifiedAccountsHint={showNoVerifiedAccountsHint && providerMode.kind === "aws"}
+              onReload={() => void fetchAccounts()}
+            />
+          )}
 
           <EventCreateTeamsSection
             teamTableItems={teamTableItems}
@@ -409,6 +423,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         visible={deployPromptTarget !== null}
         canMutateTenant={canMutate}
         deployStarting={deployStarting}
+        hostingAccountRejected={hostingAccountRejected}
         bulkDeploySupported={["aws", "local", "native"].includes(providerMode.kind)}
         participantPortalUrl={config.participantPortalUrl}
         teams={deployPromptTarget?.teams ?? []}

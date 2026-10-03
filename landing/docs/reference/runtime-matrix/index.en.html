@@ -83,15 +83,15 @@
 </tr>
 <tr>
 <td>Native Cryptography Battle</td>
-<td>Local SQLite and cloud Turso/DynamoDB execution with private team views and atomic scoring; no Docker or competitor AWS account required. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement</td>
+<td>Reviewed ac26-crypto-battle with score stealing disabled needs no competitor account; enabling score stealing retains the AWS variant. Local SQLite or cloud Turso/DynamoDB; original coordination backend and private team views/scoring. Both cloud providers admit 99 teams; SQL state policy is 4 MiB. Hosted event capacity remains unverified</td>
 </tr>
 <tr>
 <td>AWS CloudFormation</td>
-<td>Cloud-only; opt-in hello-world flag execution and scoped participant CLI access are wired. Console/CloudShell access remains incomplete; live AWS is a separate rehearsal</td>
+<td>Cloud-only with a separate verified competitor account; hosting-account targets fail before mutation; create/update/no-op/recreate, flag/multi-flag and scheduled scoring, participant Console/CLI restored. Nine current templates exceed the 51,200-byte TemplateBody limit; TemplateURL is not implemented. Live AWS remains a separate rehearsal</td>
 </tr>
 <tr>
 <td>Cloud platform with Lambda + Turso/DynamoDB</td>
-<td>Foundation, durable work, native Battle and current make deploy/destroy CLI implemented; reviewed IAM setup required. Docker/Compose exercises stay local-only</td>
+<td>Original SBT-free Lite backend, Lambda/CodeBuild paths and make deploy/destroy; standard CDK bootstrap, saved catalogKey and exact private source archive key/VersionId across updates. Docker/Compose stays local-only; no automatic migration</td>
 </tr>
 <tr>
 <td>External packs, Azure, GCP, Sakura and other scoring kinds</td>

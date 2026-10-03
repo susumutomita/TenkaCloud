@@ -1,77 +1,72 @@
 # Cloud hosting
 
-This unreleased integration candidate uses Lambda, Cognito, CloudFront and CDK
-with a choice of Turso or DynamoDB for the supported cloud exercises below.
-Local hosting remains SQLite. No SBT, tenant provisioning or tier plans are included.
-Source, synth and local rehearsals do not establish live AWS authorization, costs
-or the capacity of a particular event.
+Cloud hosting restores the existing SBT-free, single-installation Lite backend:
+Lambda, Cognito, API Gateway, CloudFront, Step Functions and CodeBuild, with either
+Turso or DynamoDB. The public hosting name is **cloud**. Local hosting remains the
+unified Bun process and persistent SQLite; `make local`, `make down`,
+`make local-reset` and local state are unchanged. There is no SaaS provisioning,
+tenant administration product or tier plan.
 
-## Implemented vertical slice
+## Restored competition backend
 
-- Event creation with atomic event, team, access-key, and response-receipt persistence
-- Organizer event list/detail, explicit credential expansion, rotation and revocation
-- Participant authentication, team-keyed state queries, and transactional scoreboard projections
-- Existing organizer and participant HTTP response contracts
-- REST API Gateway Cognito signature verification and client-audience pinning
-- Lambda issuer, audience, ID-token, expiry, and explicit role validation
-- Invitation-only organizer sign-in with mandatory TOTP and no self-assigned role
-- Conditional atomic persistence in the selected database and private SPA hosting
-- Existing SPA builds and standard CDK bootstrap/asset publishing, deploy, and guarded foundation teardown
-- Existing competitor-account registration, verification and event-selection flow
-- AWS flag deployment intake, durable dispatch, fenced lifecycle, and atomic scoring
-- Standard Step Functions polling plus owner-fenced terminal-execution reconciliation
-- Native Cryptography Battle using the pinned shared reducer, durable snapshots and atomic score/receipt updates
+The existing event/team, deployment and participant APIs provide:
 
-The actual frontend selects the ID token. `Admin` and `Operator` can create events
-and rotate keys; only `Admin` revokes access. `Viewer` can read ordinary event
-information but cannot reveal keys. No token or missing role is promoted to Admin.
+- Event creation, scheduling, team keys, scoring controls and scoreboards
+- Generic AWS CloudFormation create, update, no-op, recreate and teardown paths
+- Flag and multi-flag submissions and scheduled endpoint scoring
+- Participant CLI credentials and Console access through the problem's participant role
+- Competitor-account registration, verification and mandatory ExternalId
+- Native coordination, including Cryptography Battle, with private team views,
+  persisted runs and scoring on the selected database
+- The original Lambda and CodeBuild problem-deployment paths
 
-The console runtime config advertises the selected database's event limits:
-Turso supports 99 teams and DynamoDB supports 48, with up to 50 problems on either
-provider. The API and repository enforce those same limits. DynamoDB event creation
-writes one event, two rows per team, one creation receipt and an installation-intake
-condition: 48 teams use 99 transaction items; 25 teams use 53. SQL keeps all event,
-team, access-key and receipt writes in one atomic batch without that item ceiling.
-Native Battle preserves the SQL 4 MiB snapshot policy and 99-team roster; DynamoDB
-keeps its 2 MiB chunked snapshots and 48-team roster so state, all scores and the
-receipt can commit atomically. Existing 49-team DynamoDB events remain readable and
-removable. These are admission limits, not live-event performance measurements.
+Docker/Compose exercises remain local-only and are excluded from the cloud catalog.
+Catalog availability does not establish that every AWS problem has passed a live
+rehearsal. In particular, nine templates in the current canonical catalog exceed
+CloudFormation's 51,200-byte `TemplateBody` limit. The restored deployer still uses
+`TemplateBody`; it does not implement `TemplateURL` for those larger templates.
+This is a historical limitation, and those templates are not verified deployable
+through this path.
 
-## Historical schema and reuse
+Both cloud databases retain the original **99-team** event limit. SQL coordination
+retains the original **4 MiB** state policy; DynamoDB has its own item-size budget.
+These admission and state limits are not a promise of a particular event's latency
+or capacity. Rehearse the selected problems and expected concurrency.
 
-The source reference is commit `825415fc`, particularly the former
-`scripts/tenkacloud-lite.ts`, `prepare-source-bundle.sh`, `package-source-bundle.sh`,
-event create/key-rotation handlers, event/team repositories, and participant
-bearer/leaderboard contracts. Public names now say cloud hosting.
+Cognito organizer claims keep the original `TenantAdmin`, `TenantOperator` and
+`TenantViewer` role values. The console maps them to organizer roles. The internal
+`tenantId=local` is fixed compatibility data for one installation, not a user-facing
+tenant or an invitation to restore SaaS/SBT. Participants authenticate with their
+team key; deployment credentials are never participant credentials.
 
-- Events retain `PK = EVENT#<eventId>`, `SK = META`
-- Teams retain `PK = EVENT#<eventId>`, `SK = TEAM#<teamId>`
-- Deployments retain `PK = DEPLOYMENT#<jobId>`, `SK = META`, and deployment scores
-- Strongly consistent `ACCESS#<SHA-256>` lookup rows live in the teams table
-- Events use installation-wide GSI1 listing; deployment GSI1 is event-scoped
+## Existing installations and resource identity
 
-The physical primary-key families are preserved, but this is not an automatic
-migration of a retired deployment. Tenant indexes are removed, auth versions and
-hash lookup rows are added, and access is checked against the current team row.
-Old deployment-GSI bearer authentication must not be reintroduced beside this path.
-Deployment score and ledger remain authoritative. Separate `SCORE#<teamId>` rows
-are derived scoreboard projections updated in the same scoring transaction. Key
-rotation only replaces `TEAM#` metadata and cannot erase a score projection.
-`completedProblems` means solved problems, matching the portal contract: deployment
-readiness leaves it at zero; the first correct flag increments it in the same
-score/ledger/receipt transaction; retries and already-solved submissions do not.
+New installations preserve the original physical names: `tenkacloud-lite` and
+`tenkacloud-lite-problem-deploy` in development, with `-<environment>` appended in
+other environments. The CLI discovers the Lite and cloud name pairs in the selected
+account/region. An existing single pair is selected; a new installation defaults
+to Lite names. If both pairs exist, the CLI stops until the operator explicitly
+selects `TENKACLOUD_STACK_LAYOUT=lite` or `cloud`. That choice targets one installation;
+it does not merge, rename or migrate the other.
 
-History has no DynamoDB TTL. Expiry limits participant access without deleting
-results. Team plaintext keys remain private organizer credential material for the
-existing creation/explicit-reveal contract; neither listing nor participant views
-include them. Rotation/revocation uses one conditional transaction and invalidates
-the prior lookup immediately.
+Restored stacks publish `CloudComposition=lite-baseline-v1`. Before adopting an
+original Lite stack, the CLI verifies its ownership tags and template's persistent
+resource identities. Database and Cognito logical IDs are preserved. Unknown or
+incompatible templates stop the update before bootstrap or source upload.
+
+Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use `CLOUD_ARGS="--confirm-no-active-events"` for a noninteractive upgrade; generic `--yes` cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic `make deploy` behavior.
+
+The separately published **cloud-v1** stack layout is incompatible with this
+restoration. Stack updates are refused before mutation. Keep that
+installation on its matching release and back up/export its data; use a separate
+ENV and, for Turso, a separate database for a fresh restored installation. Existing
+platform destroy/recovery remains available after its ownership checks. There is
+no automatic database migration, backend conversion or resource adoption by name.
 
 ## Database selection
 
-Set `CDK_PARAM_CONTROL_DATA_BACKEND=dynamodb` (the default) or `turso` in the
-selected environment's `.env`. The values are normalized as in the former cloud
-implementation. Turso additionally requires:
+Set `CDK_PARAM_CONTROL_DATA_BACKEND=dynamodb` (default) or `turso` in the selected
+environment's `.env`. Turso additionally requires:
 
 ```dotenv
 CDK_PARAM_CONTROL_DATA_BACKEND=turso
@@ -79,93 +74,62 @@ CDK_PARAM_TURSO_DATABASE_URL=libsql://your-database.turso.io
 CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/tenkacloud/turso/auth-token
 ```
 
-The URL is configuration, not the token. The token must already exist in the
-chosen AWS region's SSM Parameter Store. Its creation and credentials are an
-operator setup step; no token is accepted in browser configuration or source.
-Before bootstrap, builds or AWS deployment, `make deploy` reads that exact SecureString
-with the selected AWS identity and runs an authenticated `SELECT 1`. Missing, invalid
-or expired credentials stop deployment without creating database tables or changing
-AWS resources. The token is never printed. DynamoDB skips this Turso-only check.
-The selected environment is also applied to in-process AWS SDKs. Use either an
-AWS profile or environment access keys (with `AWS_SESSION_TOKEN` when required).
-Unlike the old CLI-only precedence, mixing a profile with access keys is now
-rejected before AWS access because the CLI and JavaScript SDK choose different
-sources. Unset the unused source; credential values are never included in the error.
-`AWS_DEFAULT_PROFILE` is accepted as an alias; if both profile variables are set,
-they must name the same profile. No credentials or profile files are changed.
-Turso handlers receive permission to read that exact parameter. Turso mode creates
-zero DynamoDB tables and grants no DynamoDB runtime access. DynamoDB mode preserves
-the three on-demand tables and does not require a Turso URL or token parameter.
+The token must already exist as an SSM SecureString in the selected AWS region.
+Before bootstrap, source upload or deployment, the CLI reads that exact parameter
+and performs a read-only authenticated connection/schema check. It does not print
+the token, create schema or modify data during preflight. Nonempty or unrecognized
+`cloud_*` schemas fail this check. Known version-1 tables left empty after an explicit
+cloud-v1 purge may coexist with the restored schema; preflight neither drops those
+tables nor migrates data. Explicit restored-schema reset preserves unrelated and
+known-empty retired tables. DynamoDB skips the Turso-only check. Turso runtime roles
+can read the exact token parameter and Turso mode creates no DynamoDB tables.
 
-Both providers implement event/team authentication, deployment work, competitor
-registrations, durable dispatch, scoring receipts and native Battle state. Turso
-uses the existing official HTTP client and SQL transactions with conditional
-rollback. Authorization reads are routed to the primary in one write batch;
-this avoids replica-local stale authorization after a completed key revocation,
-but adds primary transaction contention. A request already in flight can finish.
+The restored repositories use the original events, teams, deployments, competitor
+accounts, endpoint, coordination and supporting schemas. They do not use the
+replaced cloud-v1 installation intake, durable dispatch outbox or scoreboard
+projection schema. Do not share an installation database with another installation.
+Changing the provider or Turso URL of an existing installation is refused; ordinary
+destroy resolves the deployed identity even if the local `.env` was edited.
 
-The current SQL schema uses installation-owned `cloud_*` tables. It does not
-migrate old tenant-based SQL or DynamoDB data. `make deploy` rejects a backend or
-Turso URL change for an existing installation before mutation. Ordinary destroy
-uses the deployed identity even if the local environment file has changed.
-Do not share this installation's database with a second TenkaCloud installation.
-
-The repeatable local protocol rehearsal starts an explicitly supplied, installed
-[official sqld](https://github.com/tursodatabase/libsql/releases/tag/libsql-server-v0.24.32)
-primary and replica on loopback, then removes its synthetic database:
-
-```bash
-node --import tsx infrastructure/verification/libsql-protocol-check.ts /absolute/path/to/sqld
-```
-
-It downloads nothing and uses no hosted endpoint, AWS account or credentials.
-The [2026-10-02 evidence](test/cloud-hosting/evidence/libsql-protocol-20261002.json)
-uses sqld 0.24.32 and `@libsql/client/http` 0.17.4: 25 teams and 100 concurrent
-authentication reads completed in 504 ms (p95 502 ms), plus canonical Crypto Battle
-operations/projections, real proxy-constraint rollback, exactly-once scoring and
-receipts, primary-routed authorization, restart durability and scoped reset.
-During primary outage, replica-local SELECT remained available while repository
-authentication failed closed. These measurements do not establish hosted Turso
-availability, WAN replication fault behavior or production capacity.
+Use either an AWS profile or environment access keys, including `AWS_SESSION_TOKEN`
+when needed. Mixing profile selection with access keys is rejected because CLI
+and JavaScript SDK credential precedence differs. `AWS_DEFAULT_PROFILE` is accepted;
+if both profile variables are set, they must agree. The selected identity and region
+also apply to the in-process SDK. No credentials or profile files are rewritten.
 
 ## Cloud deployment pipeline
 
-[`templates/cloud-pipeline.yaml`](templates/cloud-pipeline.yaml) remains the one
-complete launcher. Its `current-cloud-v1` source contract runs the current
-`make deploy`, `make destroy` and `make destroy-all` with standard CDK bootstrap roles.
-The launcher retains the former broad CodeBuild caller policy; review its IAM,
-service access and selected source refs before creating it or starting a build.
-The final template pins its tested helper-source
-commit and catalog `4bb3a116c545fc46ed6a39ffcc5117fb914947f4`; the exact values and
-release classification are in `Mappings.SourceDefaults`. Creating the launcher
-also creates its CodeBuild role and log group; it does not start a build.
+[`templates/cloud-pipeline.yaml`](templates/cloud-pipeline.yaml) preserves the
+existing console launcher and CodeBuild source-selection workflow. Review its
+platform/catalog refs, source contract and privileged CodeBuild role before creating
+or starting it. Creation provisions the launcher; starting its build is a separate
+action. Use platform and catalog revisions that implement the same source contract.
+A historical pinned source continues to run that source's behavior.
 
-Custom platform/catalog repositories and refs remain selectable. Current catalogs
-must contain the reviewed hello-world and ac26-crypto-battle artifacts. The build
-checks the selected source protocol and rejects incompatible current settings
-before application deployment. It does not make arbitrary pack runtimes executable.
-Current deploy builds run the same ordinary `make deploy`: they reuse a compatible
-`CDKToolkit`, or create the missing standard toolkit and deploy with the reviewed
-build role, using `--require-approval never` without an extra prompt or flag.
-First bootstrap defaults to an `AdministratorAccess` CloudFormation
-execution role. The CodeBuild caller retains its broad permissions after bootstrap;
-this is not a least-privilege launcher. The selected Turso/DynamoDB provider and
-explicit data-retention setting are passed to the same CLI used locally.
-DynamoDB uses on-demand capacity; provisioned-capacity options and a shared
-ExternalId override are rejected rather than silently ignored.
+Ordinary `make deploy` builds the organizer and participant applications and
+uploads the source archive to a fresh `<configured-key>.executions/<uuid>.zip`
+object in the resolved private source bucket. The CLI verifies the upload and
+retains both its exact key and S3 `VersionId` for CodeBuild. The pinned cloud path
+requires versioning and rejects an explicit `CDK_PARAM_SOURCE_BUCKET_VERSIONING`
+value of `false`, `suspended` or `0` before builds or bucket changes. The standalone
+legacy source-preparation helper retains its existing non-pinned behavior.
 
-The launcher has one current execution path. Source overrides must implement its
-checked contract; changing source or database settings is not a data migration.
-See [permission boundaries](BOOTSTRAP-IAM.md).
+Each fresh key stays current when later deployments upload another key, so the
+existing noncurrent-version expiration does not age out a running event's archive.
+These archives consume storage and remain until separately reviewed cleanup of the
+owned source bucket; there is no automatic event-aware garbage collection. This
+bucket is outside platform CloudFormation ownership and survives `make destroy`
+and `make destroy-all`, as do shared CDKToolkit assets. Finish every event that
+uses an archive before removing it.
+
+The existing Lambda and CodeBuild problem-deployment paths remain available.
+After the original-installation upgrade guard, if applicable, standard CDK bootstrap
+is automatic when missing; application deployment uses `--require-approval never`,
+including in CI. The launcher role and standard bootstrap
+execution role are privileged deployment identities, not ordinary organizer or
+participant identities. Review [permission boundaries](BOOTSTRAP-IAM.md).
 
 ## Current checkout's setup and teardown boundary
-
-`make deploy` and `make destroy` call the existing `scripts/cloud-hosting/main.ts`
-implementation in this checkout. They use this checkout, rather than an implicitly selected historical source. The current cloud exercise catalog supports hello-world with scoped CLI
-access and native Cryptography Battle. Docker/Compose exercises are local-only and
-are not listed in the cloud catalog. First-account IAM preparation is explicit and inspectable, as described below. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement;
-the presence of its routes is not a 100-participant capacity claim. These commands can create chargeable AWS resources; they do not
-promise a zero-cost platform.
 
 Start with `make deploy CLOUD_ARGS="--help"`; help makes no AWS request. For a
 fresh installation, restore the familiar per-environment configuration first:
@@ -187,8 +151,9 @@ selected account/region is reused without changing it. If it is missing, the sam
 command displays the bootstrap account/region, permission scope and cost notice,
 runs the pinned official `cdk bootstrap`, verifies the toolkit, then continues
 the application deployment with the same credentials. Ordinary deployment uses
-`--require-approval never` and requires no additional flag or confirmation, including
-in CI. Existing toolkit configuration is unchanged.
+`--require-approval never`; new and already-restored installations require no extra
+confirmation, including in CI. Original unpinned installations must first pass the
+no-active-events confirmation described above. Existing toolkit configuration is unchanged.
 
 Standard CDK bootstrap creates asset storage and publishing, lookup, deployment
 and CloudFormation execution roles. Its default execution role uses
@@ -208,7 +173,9 @@ the authorized bootstrap profile, then switch profiles and run ordinary deploy.
 
 Plain `make deploy ENV=development` also performs first deployment unattended.
 `--yes` and `--setup-if-needed` remain accepted for compatibility but are optional
-for ordinary deployment. Review the target and [permission boundaries](BOOTSTRAP-IAM.md#first-account-setup)
+for new and already-restored installations. Neither bypasses the original-installation
+upgrade guard; noninteractive original upgrades require `--confirm-no-active-events`
+only after the operator verifies that all competitions have completed. Review the target and [permission boundaries](BOOTSTRAP-IAM.md#first-account-setup)
 before running it; the caller must already have the required permissions.
 
 `ENV` or `CDK_PARAM_ENVIRONMENT` selects the file before it is read; when both
@@ -243,7 +210,7 @@ least-privilege caller permissions. Application runtime policies, participant
 access restrictions, ExternalId requirements and owned-stack teardown checks remain
 separate from standard CDK deployment authority.
 
-Use `make destroy` with the same account, region and environment. It verifies both
+Use `make destroy` with the same account, region and environment. It verifies selected
 platform stack ARNs and ownership tags, shows the deletion consequences, then asks
 for confirmation. `CLOUD_ARGS="--yes"` is explicit noninteractive confirmation.
 The pinned official CDK CLI removes the application before its backend using its
@@ -334,394 +301,125 @@ retained UserPools in place. Save the plan before removing their stacks. Removin
 those surviving containers or identities requires a separately reviewed operator
 action using the exact recorded physical identities.
 
-Competition resource cleanup is a separate operation: use the event's Teardown
-action before removing the platform when needed. The optional
-`CLOUD_ARGS="--drain-events"` explicitly includes stopping intake and cleaning up
-recorded competition resources before platform removal. This flag uses the durable
-installation marker and requires the deployed control version, database and native
-artifact metadata. Failures keep the platform available and intake stopped;
-repeat the same explicit command after resolving the event diagnostics. Ordinary
-`make destroy` does not acquire those new requirements or silently expand its scope.
+Competition cleanup is separate: finish the event's **Teardown** and verify its
+problem resources are removed before removing the platform. `--drain-events` is
+rejected: it belongs to the incompatible cloud-v1 intake model. To drain an existing
+cloud-v1 installation, use its matching release before platform teardown. Ordinary
+destroy does not require database access, application Outputs or a drain marker.
+It does not delete separately deployed problem stacks, the source bucket,
+CDKToolkit or competitor bootstrap roles/stacks.
 
-An existing app stack must publish `CloudRunnerEnabled=true|false` for deployment
-updates. Registry deployments also publish `CloudRunnerMode` and a digest of legacy
-bindings. `up` refuses to omit or change deployed legacy credentials, or to reopen
-an installation whose explicit event drain has started.
-
-Current deployment builds the two existing SPAs and lets CDK publish their assets
-and the execution artifacts. It creates no additional source ZIP, staging tree or
-source-bundle bucket: the current stacks have no consumer for that former path.
-It does not replace the selected problem catalog with a submodule checkout.
-Historical pinned launchers still run their own source preparation. Any buckets
-created by those older paths are not silently adopted or deleted by this CLI.
-
-Retention does not imply automatic reattachment on a later fresh deployment; an
-explicit import/recovery procedure is still required.
+Retention does not imply automatic reattachment on a fresh deployment. Save the
+exact inventory and plan any import/recovery separately.
 
 ## Update the problem catalog
 
-`make submodule-latest` only fetches and stages the problem-source pin in this
-checkout. Review it before applying it to cloud hosting:
-
-`submodule-latest` follows the configured `main` branch unless overridden in the
-submodule settings, but rejects older or divergent targets before checkout or staging.
-Only equal or fast-forward history is accepted. Dirty problem sources or an
-unstaged pin selection are also refused without discarding work. Keep a reviewed
-trial pin until the tracked branch can advance it without dropping commits.
+`make submodule-latest` fetches and stages the problem-source pin in this checkout;
+it does not update a running installation. Review it between events:
 
 ```sh
-git -C problems rev-parse HEAD # record the old catalog commit
+git -C problems rev-parse HEAD
 make submodule-latest
 git diff --cached --submodule=log -- problems
 make validate-problems
-make deploy ENV=development   # use the existing installation's environment
+make deploy ENV=development
 ```
 
-Skip `make submodule-latest` when you have intentionally selected a different
-catalog commit, and stage that selection with `git add problems` before
-`make validate-problems`: validation aligns the submodule to the staged pin.
-Review uncommitted content edits separately with `git -C problems diff`.
-If the same checkout hosts local events, preserve their original sources as
-described in the [local update procedure](../docs/local-hosting.md#update-the-problem-catalog).
+The submodule command accepts equal or fast-forward history and refuses dirty,
+older or divergent selections. Skip it when deliberately using another reviewed
+pin; stage that pin before validation. Preserve the original checkout for local
+events that must resume; see [local updates](../docs/local-hosting.md#update-the-problem-catalog).
 
-`make deploy` rebuilds both browser applications from this checkout, then CDK
-publishes the content-addressed catalog/templates/plugins and updates the existing
-application/backend stacks. Use the same account, region, environment and database
-configuration as the existing installation. This is a normal CloudFormation
-update of changed assets and resources; it does not require destroying and
-recreating the installation. `make build` alone only creates local artifacts.
-There is no supported catalog-only hot-refresh command: both the browser's
-build-time catalog and the server's execution artifacts must agree.
+`make deploy` rebuilds both applications, prepares/uploads the source bundle and
+updates the selected compatible stacks. Use the existing account, region,
+environment and database configuration. `make build` only builds local artifacts.
+There is no catalog-only hot-refresh command. For a console pipeline, update its
+reviewed source refs and start a deploy build; editing launcher parameters alone
+does not publish those changes.
 
-For the console pipeline, update `ProblemsRepoRef` to the reviewed full commit
-SHA and start a new deploy build. Updating launcher parameters alone does not
-publish the catalog. Each build fetches its configured refs, so a branch follows
-new commits while a full SHA remains fixed. Keep the chosen platform/catalog
-pair recorded and rehearse it before an event.
+Cloud deployment snapshots the effective catalog maps, hints, plugin bundles and
+raw problem sources in a private, content-addressed execution-artifact bucket.
+Saved events and deployments retain `catalogKey`: an event created with catalog A
+continues using A after B is deployed or the problem is removed from B. Lambda
+readers verify the saved source hashes; CodeBuild reads the saved archive key and
+`VersionId`. Request-specific catalog selection does not mutate the runtime's global
+catalog. The execution-artifact bucket is platform-owned and follows platform
+teardown; the separate source archive bucket has the longer lifecycle described above.
 
-Apply changes between events or rehearse them in a separate installation.
-Publishing a new catalog does not upgrade previously deployed team problem
-stacks or migrate saved runs. Pending AWS jobs and participant AWS access resolve
-their saved catalog key and verify the original template and scoring definition.
-Native Battle projection, operations, deploy re-entry, reset and closure also use
-the saved run's catalog and plugin. A description edit, replacement plugin, or
-removal from the new catalog does not repin or reset an existing run. New runs
-must use a problem supported by the current catalog. Missing or altered saved
-artifacts fail closed; keep the installation's original content-addressed objects
-while its events still need them. Event/team authorization, current roster checks
-and state-schema checks still apply.
+Older saved data without a catalog pin fails closed. Set `CDK_LEGACY_CATALOG_KEY`
+only after recovering and verifying the exact original immutable snapshot in the
+execution-artifact bucket. Do not guess by assigning the current catalog, and do
+not treat this recovery setting as a state/schema migration. This recovery setting does not authorize upgrading an active original installation; finish its competitions on the installed version and satisfy the no-active-events preflight first.
 
-The API role can read `catalogs/*` and `plugins/*` in this installation's private
-execution-artifact bucket so saved revisions remain available. Previously it could
-read only the current catalog and plugin objects. This change adds no bucket-list
-or write permission and keeps runner bindings restricted to their exact configured
-object. Catalog/plugin content hashes and the expected bucket owner are checked
-before use. It does not grant access to another installation's bucket.
+An update does not migrate saved state or automatically update all team problem
+stacks. Keep the original revisions and both kinds of artifacts needed by unfinished
+events. Rehearse the new revision in a test event, including participant access,
+scoring and cleanup. Adding a template does not bypass the `TemplateBody` size
+limit or turn a Docker problem into a cloud runtime.
 
-AWS deployment-request replay across a catalog revision still returns
-`catalog_revision_changed`; this restoration covers saved jobs and native runs,
-not replanning an earlier AWS deployment request. Do not expect saved state to
-migrate when updating a catalog. Create a new test event against the new revision and
-verify deployment, participant access and scoring. Supported runtimes remain
-hello-world and native Cryptography Battle; adding source files does not make
-other cloud runtimes executable, and Docker/Compose remains local-only.
+## Competitor accounts and participant access
 
-## Verification
+Use the existing Competitor Accounts screen and
+[account onboarding guide](../docs/competitor-account-onboarding.md). Registration
+and verification use the displayed control-plane account, role name and required
+ExternalId; they do not create competitor trust automatically. Install the named
+bootstrap IAM role once per competitor account, in one bootstrap region.
 
-- CLI subprocess tests use injected calls; no AWS or CDK deployment executes
-- CLI tests assert that no extra source bucket, archive, or catalog checkout is invoked
-- Injected drain tests cover partial failure, interruption, physical-ARN deletion,
-  backend-only recovery, closed-intake updates and retained-data boundaries
-- API tests exercise role/key/event boundaries and the real REST Lambda adapter
-- Frontend contract tests use its real bearer client and role decoder
-- CDK tests synthesize and bundle the real API, inspect IAM/auth/retention, and read
-  the generated runtime-config asset; no context lookup or AWS call is used
-- `make audit-deps` passes without a baseline or guard change
+Teams may use separate competitor accounts or the same competitor account with
+different problem regions. Regional allocation still shares global IAM and other
+account-wide services; regional assignment is functional support, not proof of
+complete IAM isolation. AWS resource exercises require a competitor account separate
+from the platform hosting account. Hosting-account targets are rejected before
+resource mutation, with guidance to register and verify a separate account;
+participant STS also denies the hosting account. Same-hosting-account exercises
+remain unsupported and unverified. The catalog IAM review has unresolved findings;
+restoration does not certify every problem's least-privilege policy.
 
-The opt-in real-storage check is:
-
-```sh
-bun run --cwd infrastructure test:dynamodb-local http://127.0.0.1:18654
-```
-
-It accepts only an explicit IPv4 loopback endpoint and uses fixed public dummy
-credentials. Start the official vendor distribution with
-`test/cloud-hosting/LoopbackDynamo.java`; that launcher binds Jetty to loopback
-before starting, disables telemetry, and uses memory-only storage. Obtain and
-verify the vendor archive using the
-[official download instructions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html).
-The 2026-10-01 evidence is in
-[test/cloud-hosting/evidence/dynamodb-local-20261001.json](test/cloud-hosting/evidence/dynamodb-local-20261001.json).
-
-On official DynamoDB Local 3.3.1, atomic creation/rotation/revocation tests and 100
-concurrent authentications across 25 teams passed. These are storage/auth checks,
-not AWS latency measurements or scoring-capacity validation.
-
-## AWS flag execution
-
-The narrow source-wired path reuses the old deploy/flag HTTP contracts and the
-CloudFormation Lambda plus Step Functions sequence. It does not restore the old
-backend wholesale. The real `hello-world` flag challenge and native `ac26-crypto-battle` are in the
-execution catalog. Container execution, AWS endpoint Battles, multi-flag AWS
-challenges, hints and force-redeploy are not
-silently mapped to this implementation.
-
-The existing Competitor Accounts screen uses the restored
-`/admin/competitor-accounts` list/create, bulk, verify and delete contracts. Only
-Admin can change registrations; the three organizer roles can list them. New
-registrations use the installation's fixed `competitorRoleName` from runtime
-config. The existing [competitor bootstrap template](./templates/competitor-bootstrap.yaml)
-is served as one public, secret-free S3 object for the screen's CloudFormation
-Quick-create link. No second bootstrap template or account-management app exists.
-The [account setup guide](../docs/competitor-account-onboarding.md) covers the
-existing individual-account path and centralized Organizations StackSets rollout
-to an explicitly selected set of accounts, with automatic deployment disabled.
-Both paths use this same template; the named global IAM role is created in one
-bootstrap region per account.
-
-Each remote operation requires the exact installation role name, Purpose and
-Installation tags, mandatory ExternalId and current verification. The platform
-account is refused by the API/worker and by explicit role-assumption IAM denies.
-Registration verification establishes the connection's identity and trust; it
-is not a certification that sharing an AWS account safely isolates participants.
-Teams may use separate accounts or the same account in different deployment
-regions. Registration verifies the global IAM role once; each event/team pins its
-own supported commercial region for the connection and job. The host keeps its
-ExternalId parameter and pinned artifacts in the hosting region, then submits
-the verified template body to CloudFormation in the team's region.
-
-Region assignment alone does not isolate global IAM or every AWS service.
-Hello-world's legacy metadata-listing permission has a documented dedicated-account
-assumption; the cloud participant CLI slice below explicitly denies that permission
-and restricts reads to the owned parameter ARN. Console/CloudShell access and
-arbitrary problems require their own permission review.
-
-The focused local check, `bun run --cwd infrastructure test:dynamodb-work
-http://127.0.0.1:18657 --accounts-only`, exercises the existing SPA clients and
-actual DynamoDB Local transactions. It verifies one account registered in
-`us-east-1` with separate teams in `us-west-2` and `ap-northeast-1`, two durable
-connections/jobs, exact deployment replay and pending-job teardown. It also keeps
-the 25-account registration, revocation and concurrent deletion checks. STS/SSM
-are injected for this test; it does not deploy AWS exercise resources.
-
-### Participant hello-world CLI access
-
-The existing `GET /portal/me/cli-credentials?jobId=...` contract issues only the
-owned hello-world viewer's temporary credentials. It rechecks the current team
-key/authVersion, event schedule, installation stop marker, target attempt,
-connection and verified registration before and after remote I/O. A completed
-creation receipt must bind the original physical stack ARN and immutable request
-fingerprint. CloudFormation ownership tags and `DescribeStackResource` bind the
-exact `ParticipantViewerRole` resource, without guessing its generated name.
-A final condition-only DynamoDB transaction checks all current authorization
-rows together immediately before credential release. Changes during the earlier
-sequential reads cannot authorize a stale response. Revocation after this atomic
-decision point has the already-issued credential lifetime described below.
-
-The operator principal assumes that viewer directly with the job ID as ExternalId.
-The deployment-role probe uses the retained installation ExternalId; its
-credentials and secret never reach participants. The fixed inline STS policy permits
-only `ssm:GetParameter` and `ssm:GetParameters` on the one exact
-`/<stack-name>/hello` parameter. Explicit denies exclude other resources and all
-other actions, including metadata listing, role chaining and CloudShell.
-The API returns `no-store` responses and fixed public errors, with no secret logs.
-
-STS sessions last at most 15 minutes; the inline policy also denies use past the
-known event/team/job expiry. Revoking a team key, registration or bootstrap role
-blocks new issuance but does not instantly revoke already-issued viewer sessions.
-Responses and UI must not claim otherwise. The participant projection advertises
-only `cli-credentials`; Console requests return `409 aws_console_unavailable`.
-
-This path requires five explicit viewer ownership tags in the pinned canonical
-hello-world template. Older deployments without these tags deny issuance; the
-platform does not silently change existing roles. The role's existing operator
-trust and problem permissions are unchanged; the additional inline STS policy
-narrows each set of issued credentials.
-
-The existing EventCreate account selection now creates the durable team connection
-when deployment is requested. Its explicit `registrationId` distinguishes registry
-connections from old exact bindings, including old binding IDs starting `account-`.
-Connection/reference writes and account-deletion fences commit atomically. An
-account cannot be removed while any referenced event has unresolved resources;
-archived events must have matching expected/completed teardown counts. A delete
-never removes the shared ExternalId or the competitor-owned bootstrap role.
-
-`TENKACLOUD_RUNNER_BINDINGS` is retained only for existing exact-bound jobs. Its
-reviewed role/SSM grants and content-addressed private bindings object remain
-explicit, rather than silently falling back to another account or secret.
-`CloudRunnerMode` and `CloudLegacyBindingsDigest` identify the generated mode and
-compatibility set. Templates/catalogs are content-addressed and retained for
-pinned jobs. New installations use the registry and do not need a second manual
-binding-management step.
+Participant Console and CLI access use the problem's participant role and current
+event/team/deployment checks. Never distribute the privileged deployment role.
+Ending an event or revoking a key blocks applicable new access but cannot instantly
+revoke already-issued AWS credentials. Rehearse the specific problem's access policy
+and credential expiry.
 
 ### ExternalId recovery
 
-The shared SecureString remains in SSM; no value is stored in the registry,
-logs or verification artifacts. The Events table retains an `EXTERNAL_ID` marker
-under `INSTALLATION#ACCOUNTS`, even after every account is removed. First-time
-initialization reserves that marker before creating a parameter. Existing
-accounts, connection references or job snapshots prevent missing-key generation.
-The API's additional Scan permission is limited to the Events and Deployments
-tables and is used only for this missing-key recovery check, not participant polling.
-
-- If the exact SecureString still exists, retry the original registration. The
-  service records its use and reuses it, including after a marker-write interruption.
-- If only an `INITIALIZING` marker remains and the parameter is absent, stop new
-  registration attempts and establish that earlier initialization calls have ended.
-  An authorized operator must check the registry and retained connection/job
-  references. Only a confirmed never-used, empty store may be explicitly initialized
-  by that operator at the exact `CompetitorExternalIdParameterArn` output. Then retry
-  registration; there is no need to delete the marker.
-- If the marker is `INITIALIZED` or any registration/reference remains, restore the
-  original key through the approved secret-recovery process. If that is impossible,
-  all affected trust relationships need a separately reviewed recovery. Never erase
-  the marker or create a replacement value merely to make verification pass.
-
-No lease expiry, older parameter version, automatic secret rotation, or last-account
-cleanup can reset this boundary. These are recovery instructions, not AWS actions
-performed by this implementation task.
-
-`POST /events/:eventId/deploy` persists job/target/receipt/dispatch intent before
-execution. A scheduled dispatcher starts a Standard workflow with deterministic
-name and input; uncertain sends retain the intent. Claiming atomically removes
-that intent and fences the current attempt/owner. Create/describe verifies stack
-ownership tags and the immutable request fingerprint. Different attempts cannot
-silently adopt, update, delete, or duplicate a prior stack. Failed resources remain
-for explicit owned cleanup, with prior attempt records retained on retry.
-
-Completion/failure is conditionally persisted. Global timeout, abort and failed
-execution events are checked against authoritative `DescribeExecution` and the
-current job owner/attempt before reconciliation. Event delivery and retry remain
-operational dependencies; this is not a substitute for an operator recovery view.
-
-`PATCH /events/:eventId/schedule` restores startNow/start/end/freeze controls, and
-lock-scoring retains the existing POST/DELETE paths. An absent/invalid start time,
-ended event, scoring lock, stale attempt or revoked key blocks flag scoring.
-`POST /portal/me/submit-flag` commits job score, ledger, receipt and derived team
-projection together with current event/team/auth-version checks. Private flag
-outputs are hashed server-side and never returned to the portal or workflow state.
-`GET /portal/me/score-events` queries the team-scoped ledger index with a bound.
-
-Creation, bulk deploy and flag submission accept `Idempotency-Key`. The same key
-and body replay the saved response; changed content returns 422. Header-less
-legacy requests receive fresh operation keys. A deliberate new wrong-answer
-submission uses a new key and applies its penalty again; a network retry keeps the
-original key. The AWS flag score has the challenge's explicit zero floor. This
-does not change the signed penalty model of local Docker problems.
-
-The executable acceptance suite is `bun run --cwd infrastructure test:dynamodb-work
-http://127.0.0.1:PORT` (use one line). Its browser-client imports use a separate
-strict Bundler-resolution verification project; backend NodeNext settings remain
-unchanged. Both projects run in the workspace build/typecheck commands. The
-verification alias for `@tenkacloud/web-kit` points to the actual API-client source,
-not replacement declarations or a mock client.
-
-The saved evidence is
-[test/cloud-hosting/evidence/dynamodb-work-20261001.json](test/cloud-hosting/evidence/dynamodb-work-20261001.json).
-At 100 participants, 25 teams and 20 problems per team, two actual HTTP polling
-rounds use the frontend's 30-second interval. Each round makes 200 HTTP requests
-and 1,000 SDK commands, reading 7,000 query rows plus 700 point reads. Participant
-state reads 20 team jobs; leaderboard reads 25 teams and 25 score projections.
-No participant refresh queries all 500 event deployments. These are actual local
-DynamoDB/HTTP observations, not AWS latency, RCU or billing guarantees. Notification
-and Battle polling are outside this flag slice.
+The restored backend keeps ExternalId in its existing environment/installation SSM
+path. Preserve that parameter and the competitor trust relationships during event
+operations. If verification reports a missing or mismatched ExternalId, use the
+original value and reviewed recovery procedure; do not replace it merely to make
+verification pass. Do not copy secrets into source, logs, tickets or screenshots.
+Finish problem teardown before unregistering accounts or removing their bootstrap
+roles. Serialize account registration/unregistration operations and verify the
+connection afterwards; the historical SSM registration lifecycle is retained.
 
 ## Native Cryptography Battle
 
-The selected `ac26-crypto-battle` problem uses the existing shared coordination
-reducer, without a VM or a competitor AWS account. The execution catalog pins its
-plugin digest and schema. Native runs are separate from AWS deployment jobs and do
-not fabricate account IDs, regions, stack ARNs, or AWS access controls. Mixed events
-still need verified competitor accounts for their AWS problems.
+Native coordination reuses the original backend and shared problem reducer. Cloud
+state and scores live in the selected Turso or DynamoDB repositories; local state
+continues to live in SQLite. The reviewed `ac26-crypto-battle` profile with
+`defaultScoreStealEnabled=false` runs without Docker or a competitor AWS account.
+Setting the problem's score-steal parameter to true keeps its AWS-backed variant;
+that variant and mixed events with AWS problems require a separate competitor
+account. Catalog metadata alone does not qualify other plugins as account-free.
 
-DynamoDB uses the existing Deployments table for a small versioned HEAD and bounded
-snapshot chunks; Turso stores the same match in SQL head, snapshot and history rows.
-A successful transition atomically writes the snapshot, team score deltas,
-ledger and operation receipt, with current event/team/intake checks. One event has
-one authoritative shared match; it is not split into independent per-team games.
-Short expiring admission on that same HEAD reduces conflicting snapshot writes.
-Expired/replaced owners cannot commit; interruption does not require a permanent
-manual claim reset. Read-only no-op/replay paths recheck authorization atomically.
-No game-clock rounding or tick coalescing is used, because tick spacing can change
-this problem's scoring outcomes.
+The original SQL 4 MiB state policy and 99-team event admission are retained. State,
+private team views, scoring, reset and event teardown must be tested against the
+selected problem and provider. A limit or successful database read benchmark does
+not establish synchronized Battle capacity on hosted Turso or AWS.
 
-An `Admin` or `Operator` can start a fresh match with
-`POST /events/:eventId/problems/:problemId/coordination/reset`. The optional
-`runId` body field fences an operator's previously read run; the response contains
-the new `runId` and `previousRunId`. Reset is refused after event end. A concurrent
-reset or changed publication returns a conflict instead of resetting the winner.
-The new match keeps the reviewed plugin/schema pin and the original event clock,
-with a fresh secret. Its initial native score replaces the previous native subtotal
-in the same transaction, preserving scores from other problems and solved counts.
+## Verification
 
-The current run and two previous snapshots remain readable through the storage
-adapter. Retiring a run deletes its private snapshot and operation receipts;
-score-event audit records remain. An interrupted cleanup keeps a durable obligation
-that the next reset or explicit cleanup retry must finish before another rotation.
-Existing DynamoDB snapshot keys remain readable across the first reset; later runs
-own separate chunk keys. SQL archives the previous snapshot in the same atomic
-batch that publishes the new run.
+Offline regression checks cover both providers, the original persistent resource
+logical IDs, the restored API/frontend contracts, source-bundle preparation,
+installation discovery/compatibility, saved-catalog continuity after update/removal,
+private source identity and owned-resource teardown. These are source/test restoration
+results; they do not show an AWS deployment or hosted Turso event. SQL protocol
+[verification against an official local libSQL server](test/cloud-hosting/evidence/libsql-restored-20261003.json)
+passed with 25 teams and 100 concurrent authentication reads (p95 186 ms). This is a local storage result,
+not hosted Turso or AWS performance evidence.
 
-Participant operations carry their displayed job ID as `runId`, including retries.
-A stale run returns `coordination_run_changed` without applying the operation to
-the replacement match. Legacy callers can omit `runId` only before the first reset.
-
-Organizer Prepare initializes the native run. Start, scheduled end, scoring lock,
-End Event and coordinated teardown use the same durable state. End settles and
-closes the match; it does not delete AWS resources in a mixed event. Optional
-platform teardown with `--drain-events` verifies native closure as well as AWS
-cleanup before recording DRAINED. Ordinary platform destroy does not require
-native closure or access to the control-data database.
-
-The organizer's explicit event DELETE removes the closed native match snapshots,
-match secrets and operation receipts after every resource teardown request is accepted.
-It retains a permanent verified run manifest, team totals, score history and shared
-plugin/catalog artifacts. End Event keeps the closed projection and retained runs.
-SQL performs the private-data removal atomically. DynamoDB records a pending purge
-before deleting bounded pages; an interruption retains that obligation and the
-same event teardown action resumes it. Pending cleanup never reports completion.
-
-Optional platform drain retains native payloads in external Turso. Starting a new
-event purge must precede global drain: once installation intake closes, a new purge
-returns `coordination_purge_intake_closed`. This preserves the drain's settled-data
-check. A previously recorded purge continues during DRAINING or DRAINED, and a
-completed purge remains idempotent. Explicit `destroy-all` still removes all owned
-control-data rows, including the retained manifests and run history.
-
-The organizer scoreboard returns authoritative current team totals. Complete score
-history, solved counts and per-problem averages are currently unavailable in that
-cloud view and its report; they are identified as unavailable instead of inferred
-as zero. Notifications, self-registration, progression-gate administration, capacity
-controls, force archive and scheduled deployment/teardown are not offered by this
-cloud console. Local-host capabilities retain their existing behavior.
-
-The actual DynamoDB Local harness measures both staggered 100-participant/25-team
-polling and simultaneous refresh/operation bursts. Staggered polling and durable
-exactly-once scoring have passed; a synchronized 100-client burst still exceeds the
-5-second plugin refresh interval. This is a documented capacity limitation, not an
-AWS latency or cost guarantee. See the checked-in measurement evidence for the
-final run, state sizes, p50/p95/p99, conflicts and request amplification.
-
-The follow-up local measurement reduced SDK commands for the synchronized refresh
-from 6,434 to 4,530, with all 300 HTTP responses successful. Completion took 5.910
-seconds (participant refresh p95 5.698 seconds), so the five-second target remains
-unmet. The harness now reports this as `consistency-passed-capacity-unmet` and exits
-with code 2 instead of treating successful responses alone as sufficient capacity.
-The complete run retained exactly-once scores through 100 operations, receipt
-replays, revocation, interrupted ownership and final installation drain. Atomic
-snapshot reads avoid retries for unrelated admission changes, and an exact
-HEAD-only collision hint skips diagnostic reads; every retry still passes the
-original event, team and intake transaction guards before running the reducer.
-
-## Remaining acceptance work
-
-- Reviewed exercise permissions for each supported account/region arrangement
-- Participant AWS Console access without cross-team metadata disclosure
-- Cloud-native catalog expansion, AWS endpoint Battles, hints and disruptions
-- Public registration/claiming, audit, notifications and full organizer UI flows
-- Native Battle burst latency under the target participant load
-- External problem-pack execution and final tutorial alignment; built-in local
-  course tracks already reuse the event's team progress and existing gates
-
-Cloud hosting is still not competition-ready. No live AWS connection, bootstrap,
-permission change, deployment, or billing action was executed for these checks.
+Live AWS deployment, participant federation/STS, hosted Turso and a full cloud event
+remain operator-owned rehearsals. No live account change, deployment or cleanup
+is implied by source tests or synthesis. The nine oversized canonical templates
+remain a known historical limitation. See the
+[event rehearsal checklist](../docs/host-rehearsal.md) for recording actual results.

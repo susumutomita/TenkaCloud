@@ -30,11 +30,25 @@ make install
 make deploy ENV=development
 ```
 
-Deployment reuses a compatible standard `CDKToolkit`. If missing, it asks for
-approval before running the pinned official CDK bootstrap. Review the
+Deployment reuses a compatible standard `CDKToolkit`. If missing, it displays the
+target and permission scope, runs the pinned official CDK bootstrap automatically,
+and continues deployment with `--require-approval never`. Review the
 [bootstrap and caller permissions](./infrastructure/BOOTSTRAP-IAM.md) first:
 the standard CloudFormation execution role defaults to `AdministratorAccess`.
 The CLI does not grant permissions to its caller or rewrite an existing toolkit.
+It uploads a fresh private source archive key and retains its exact S3 `VersionId`
+for the restored CodeBuild paths. Pinned cloud deployment requires versioning.
+Saved events/deployments keep their catalog snapshot across later updates; see
+[catalog continuity and legacy recovery](./infrastructure/README.md#update-the-problem-catalog).
+The source bucket, CDKToolkit and competitor bootstrap roles survive platform destroy.
+
+The CLI discovers Lite/cloud physical stack pairs and requires explicit
+`TENKACLOUD_STACK_LAYOUT=lite` or `cloud` if both exist. New installations preserve
+Lite physical names. Original Lite adoption checks tags and persistent resource IDs;
+published cloud-v1 resource/database layouts cannot be updated in place. No automatic
+migration is performed. Use a separate environment/database or the matching release.
+
+Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use `CLOUD_ARGS="--confirm-no-active-events"` for a noninteractive upgrade; generic `--yes` cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic `make deploy` behavior.
 
 Follow [current cloud setup and teardown](./infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)
 for exact configuration, supported problems, confirmations and recovery. For a
@@ -44,13 +58,19 @@ or starting a build. Creating the launcher alone does not deploy the application
 
 The competition's AWS accounts use a separate [competitor bootstrap](./docs/competitor-account-onboarding.md).
 Keep their deployment role, participant viewer role and mandatory ExternalId boundaries.
+AWS resource exercises reject the platform hosting account before resource mutation;
+register and verify a separate competitor account. Different regions in one competitor
+account do not establish complete IAM isolation. Native Cryptography Battle needs no
+competitor account when score stealing is disabled; enabling it keeps the AWS variant.
 
 ## Verify a first event
 
 Create a test event and team, prepare a supported problem, sign in to the
 participant portal, submit an answer and verify its score. The current cloud
-catalog supports hello-world and native Cryptography Battle; Docker/Compose
-exercises require local hosting. [Runtime coverage](./docs/host-retirement.md)
+backend restores generic CloudFormation deployment, flag/multi-flag and scheduled
+scoring, Console/CLI access and native coordination. Docker/Compose exercises require
+local hosting. Nine current templates exceed the 51,200-byte TemplateBody limit;
+TemplateURL is not implemented, so those problems are not verified deployable. [Runtime coverage](./docs/host-retirement.md)
 distinguishes implemented contracts from complete exercise rehearsals.
 
 ## Stop and remove resources
@@ -62,7 +82,8 @@ make destroy ENV=development
 Check the account, region and owned targets before confirmation. Cloud teardown
 removes platform-owned data by default. Explicitly retained DynamoDB tables and
 external Turso rows remain unless you run `make destroy-all`. Recorded exercise
-cleanup is separate through event Teardown or `CLOUD_ARGS="--drain-events"`. Keep installation records until
+cleanup is separate: finish event Teardown before platform removal. `--drain-events`
+is unavailable in this backend. Keep installation records until
 cleanup succeeds so a failed operation can be retried safely. An ordinary local
 `make down` does not remove cloud resources.
 

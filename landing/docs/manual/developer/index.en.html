@@ -69,8 +69,10 @@
 <p>The current branch is a draft local/cloud integration candidate. Start with the
 <code>CONTRIBUTING.md</code>
 and <code>docs/host-retirement.md</code>.
-Existing SaaS/Lite installations use a pinned old checkout; this branch does not
-migrate or remove their resources.</p>
+Original Lite updates require verified resource identity and explicit confirmation
+that all competitions have completed on the installed version. Published cloud-v1
+installations require their matching release or a separate environment/database;
+this branch does not migrate their data automatically.</p>
 <h2>Prepare and run</h2>
 <pre><code class="language-sh">git submodule update --init --recursive
 bun install --frozen-lockfile --ignore-scripts
@@ -102,7 +104,7 @@ AWS-service problems are cloud-only. Lambda + Turso/DynamoDB hosting and the ful
 <td><code>scripts/lib/</code></td>
 </tr>
 <tr>
-<td>Cloud API, durable work and CDK resources</td>
+<td>Cloud APIs, original workflows and CDK resources</td>
 <td><code>infrastructure/lib/cloud-hosting/</code>, <code>infrastructure/lib/problem-deploy/</code></td>
 </tr>
 <tr>
@@ -137,7 +139,11 @@ HTTP/SQLite path for state and authorization changes. Follow the
 <code>docs/host-build-verification.md</code>
 for distribution changes. Record browser and optional live AWS/IdP evidence
 separately; local tests do not prove external account access.</p>
-<p><code>make down</code> preserves local event and Docker data. Cloud <code>make deploy</code> / <code>make destroy</code> call the existing CLI with reviewed AWS setup and ownership-checked teardown. The current cloud catalog includes hello-world with scoped CLI access and native Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement. Use <code>CLOUD_ARGS=&quot;--help&quot;</code> to inspect either command without AWS access.</p>
+<p><code>make down</code> preserves local event and Docker data. Cloud <code>make deploy</code> / <code>make destroy</code> call the existing CLI with reviewed AWS setup and ownership-checked teardown. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified. Use <code>CLOUD_ARGS=&quot;--help&quot;</code> to inspect either command without AWS access.</p>
+<p>Physical stack names preserve the original <code>tenkacloud-lite</code> layout. The CLI discovers Lite/cloud installations; if both exist, explicitly choose <code>TENKACLOUD_STACK_LAYOUT=lite</code> or <code>cloud</code>. Original Lite updates verify ownership and persistent resource IDs. Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use <code>CLOUD_ARGS=&quot;--confirm-no-active-events&quot;</code> for a noninteractive upgrade; generic <code>--yes</code> cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic <code>make deploy</code> behavior. Published cloud-v1 resource/database layouts cannot be updated in place, and no data is migrated automatically. <code>--drain-events</code> is unavailable; finish event Teardown before removing the platform.</p>
+<p>Both databases admit 99 teams; SQL coordination retains the original 4 MiB state policy. Nine current catalog templates exceed the 51,200-byte <code>TemplateBody</code> limit, and <code>TemplateURL</code> is not implemented. This is not an all-AWS-problems deployment claim.</p>
+<p>Cloud events and deployments save <code>catalogKey</code> for a private snapshot of catalog maps, hints, plugins and raw sources. An event created with catalog A continues using A after B is deployed or removes its problem. Lambda verifies pinned source hashes; CodeBuild uses the saved source ZIP key and exact S3 <code>VersionId</code>. Older unpinned records require recovery of their verified original snapshot through <code>CDK_LEGACY_CATALOG_KEY</code>; never assign the current catalog by guesswork. This recovery setting does not authorize upgrading an active original installation; finish its competitions on the installed version and satisfy the no-active-events preflight first.</p>
+<p>Each cloud deployment uploads a fresh <code>&lt;configured-key&gt;.executions/&lt;uuid&gt;.zip</code> and requires source-bucket versioning. Current unique keys are not removed by the noncurrent-version lifecycle. Archives consume storage until separately reviewed source-bucket cleanup after referencing events finish. Platform destroy removes its owned execution snapshots, while the separate source archive bucket survives. Source tests and synthesis do not establish a live AWS or hosted Turso rehearsal.</p>
 
 </article>
 </main>

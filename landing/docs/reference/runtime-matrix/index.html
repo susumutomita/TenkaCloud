@@ -83,15 +83,15 @@
 </tr>
 <tr>
 <td>組み込みの Cryptography Battle</td>
-<td>ローカルは SQLite、クラウドは選択した Turso または DynamoDB で実行。チームごとの非公開表示と採点の原子性を維持。Docker・競技者 AWS アカウントは不要。DynamoDB Local の 100 人一斉更新は 5.910 秒で、5 秒の更新間隔を超える。実 AWS は未計測</td>
+<td>確認した ac26-crypto-battle は得点を奪う機能が無効なら競技者アカウント不要。有効時は AWS 版を維持。ローカル SQLite またはクラウド Turso / DynamoDB。旧 coordination の非公開チーム表示と採点。両クラウド DB とも 99 チーム、SQL state は 4 MiB。実環境の大会性能は未検証</td>
 </tr>
 <tr>
 <td>AWS CloudFormation</td>
-<td>クラウド開催専用。明示設定した hello-world の flag 経路と参加者用の限定 CLI アクセスを接続。Console / CloudShell は未完成。実 AWS は別途リハーサル</td>
+<td>クラウド開催専用。別の検証済み競技者アカウントが必要で、hosting account は変更前に拒否。create / update / no-op / recreate、flag / multi-flag・定期採点、参加者 Console / CLI を復旧。現行 catalog の 9 template は TemplateBody の 51,200 bytes を超え、TemplateURL は未実装。実 AWS は別途リハーサル</td>
 </tr>
 <tr>
 <td>Lambda + Turso/DynamoDB のクラウド基盤</td>
-<td>基盤、永続化した処理、組み込み Battle、この版の make deploy/destroy CLI を実装。権限設定の事前確認が必要。Docker / Compose 問題はローカル開催専用</td>
+<td>旧 Lite の基盤、Lambda / CodeBuild の配置経路、組み込み Battle と make deploy/destroy CLI を復旧。標準 CDK bootstrap を使い、保存した catalogKey と非公開 source archive の key / VersionId を更新後も維持。Docker / Compose 問題はローカル開催専用</td>
 </tr>
 <tr>
 <td>外部 pack、Azure、GCP、Sakura、その他の採点方式</td>

@@ -153,7 +153,9 @@ function cloudRuntimeCapabilities(data: Partial<RuntimeConfig>) {
   if (data.mode !== undefined && data.mode !== "cloud-host")
     throw new CloudRuntimeConfigError("Unsupported cloud hosting runtime mode.");
   const supportedProblemIds =
-    data.mode === "cloud-host" ? supportedCloudProblems(data.supportedProblemIds) : undefined;
+    data.mode === "cloud-host" || data.supportedProblemIds !== undefined
+      ? supportedCloudProblems(data.supportedProblemIds)
+      : undefined;
   const nativeProblemIds =
     data.nativeProblemIds === undefined ? [] : supportedCloudProblems(data.nativeProblemIds);
   if (nativeProblemIds.some((id) => !supportedProblemIds?.includes(id)))

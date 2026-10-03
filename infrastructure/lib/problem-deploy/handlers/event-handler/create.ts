@@ -1,0 +1,240 @@
+import { ulid } from "ulid";
+import {
+  computeCatalogSnapshotId,
+  type PinnedProblemProvenance,
+} from "../../../problem-pack/event-pin.js";
+import type { EventRecord } from "../../control-data/events-repository.js";
+import type { TeamRecord } from "../../control-data/teams-repository.js";
+import { generateTeamLoginKey } from "../deploy-handler/team-key.js";
+import { captureCurrentCatalog } from "../shared/execution-catalog.js";
+import {
+  eventCatalogContext,
+  executionCatalogConfigured,
+  isNativeExecutionProblem,
+} from "../shared/execution-catalog-context.js";
+import { warnOnCoordinationCapacity } from "./coordination-capacity-warning.js";
+import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
+import type { CreateEventRequest, CreateEventResponse } from "./types.js";
+
+const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 日
+
+const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
+
+export interface CreateEventContext {
+  readonly tenantId: string;
+  readonly nowMs: number;
+  readonly ttlMs?: number;
+}
+
+export class DuplicateInternalSlugError extends Error {
+  constructor(public readonly slug: string) {
+    super(`duplicate internalSlug in request: ${slug}`);
+    this.name = "DuplicateInternalSlugError";
+  }
+}
+
+export class DuplicateProblemIdError extends Error {
+  constructor(public readonly problemId: string) {
+    super(`duplicate problemId in request: ${problemId}`);
+    this.name = "DuplicateProblemIdError";
+  }
+}
+
+/**
+ * Event 1 行 + Teams N 行を **原子的に書く** (repository seam の `createEventWithTeams`)。
+ *
+ * 失敗セマンティクス: 書き込みは all-or-nothing なので、teamLoginKey の重複等で
+ * 1 件でも失敗したら全行が書かれない。caller は呼び直しで OK (eventId は ULID なので
+ * idempotent ではない、新規生成する)。
+ *
+ * `teams` の internalSlug 重複と `problems` の problemId 重複は **caller 側で validate**
+ * すべきだが、defense-in-depth で本関数でもチェックする (ConditionalCheckFailed より分かりやすい)。
+ *
+ * [#2437 Phase A2] DDB TransactWrite (event 1 + teams ≤99、 全行 attribute_not_exists) は
+ * repository seam に移設。 一意性違反は seam が `conflict` union に変換して返すので、
+ * 本 handler は throw に戻して従来どおり 500 経路に載せる (ULID 衝突は実質起こらない)。
+ */
+export async function createEvent(
+  shared: EventSharedResources,
+  ctx: CreateEventContext,
+  req: CreateEventRequest,
+): Promise<CreateEventResponse> {
+  validateNoDuplicateSlugs(req);
+  validateNoDuplicateProblems(req);
+  if (executionCatalogConfigured())
+    shared = eventCatalogContext(shared, await captureCurrentCatalog());
+
+  if (
+    req.problems.some(
+      (problem) => !isNativeExecutionProblem(shared.executionCatalog, problem.problemId),
+    ) &&
+    req.teams.some((team) => !team.awsAccountId && !team.nonAwsCredentialTeamSlug)
+  ) {
+    throw new EventTeamCredentialRequiredError();
+  }
+
+  validateCurrentCatalogProblems(shared, req);
+  const eventId = ulid();
+  const nowMs = ctx.nowMs;
+  const createdAt = new Date(nowMs).toISOString();
+  const expiresAt = toEpochSeconds(nowMs + (ctx.ttlMs ?? DEFAULT_TTL_MS));
+
+  // teamLoginKey を required に保った型で持つ (TeamRecord 上は optional): 生成漏れを
+  // 型エラーにし、 response へ空 key が silent に流れないようにする。
+  const teams: Array<TeamRecord & { readonly teamLoginKey: string }> = req.teams.map((t) => ({
+    eventId,
+    teamId: ulid(),
+    tenantId: ctx.tenantId,
+    internalSlug: t.internalSlug,
+    teamLoginKey: generateTeamLoginKey(),
+    awsAccountId: t.awsAccountId,
+    nonAwsCredentialTeamSlug: t.nonAwsCredentialTeamSlug,
+    // [Issue #3173] Where this team deploys, when it is not the problem default.
+    region: t.region,
+    createdAt,
+    updatedAt: createdAt,
+    expiresAt,
+  }));
+
+  const eventRecord: EventRecord = {
+    eventId,
+    tenantId: ctx.tenantId,
+    name: req.name,
+    status: "DRAFT",
+    problems: req.problems,
+    teamCount: teams.length,
+    createdAt,
+    updatedAt: createdAt,
+    expiresAt,
+    ...buildEventCatalogPin(shared, ctx.tenantId),
+    ...(shared.executionCatalog ? { catalogKey: shared.executionCatalog.catalogKey } : {}),
+  };
+
+  // [Issue #3169] Computed BEFORE the write, not after.
+  //
+  // `coordinationStateBudget()` throws on a malformed `COORDINATION_STATE_MAX_BYTES`
+  // — deliberately, since a typo there would otherwise silently restore the "no
+  // ceiling at all" state #3151 exists to remove. Running it after the commit
+  // therefore meant an environment with that typo could persist the event and
+  // its teams and THEN return 500, and the one-time plaintext `teamLoginKey`
+  // values in this response would be lost with no way to re-read them.
+  //
+  // Advisory output must not be able to fail a write that already succeeded.
+  const capacityWarnings = warnOnCoordinationCapacity({
+    problems: req.problems,
+    teamCount: teams.length,
+    problemsCoordination: shared.problemsCoordination,
+    teamIds: teams.map((team) => team.teamId),
+    budget: shared.runtime.coordinationStateBudget(),
+    tenantId: ctx.tenantId,
+    eventId,
+  });
+
+  const repositories = await resolveEventRepositories(shared);
+  const result = await repositories.events.createEventWithTeams(eventRecord, teams);
+  if (result.outcome === "conflict") {
+    // attribute_not_exists / 一意性制約の不成立。 ULID 生成なので実質起こらない —
+    // 旧実装が TransactionCanceledException をそのまま throw していたのと同じく
+    // 500 経路 (handleRouteError) に載せる。
+    throw new Error(`createEventWithTeams conflict: event/team row already exists (${eventId})`);
+  }
+
+  return {
+    eventId,
+    status: eventRecord.status,
+    createdAt,
+    expiresAt,
+    ...(capacityWarnings.length > 0 ? { warnings: capacityWarnings } : {}),
+    teams: teams.map((t) => ({
+      teamId: t.teamId,
+      internalSlug: t.internalSlug,
+      teamLoginKey: t.teamLoginKey,
+    })),
+    problems: req.problems,
+  };
+}
+
+function buildEventCatalogPin(
+  shared: EventSharedResources,
+  tenantId: string,
+): Pick<EventRecord, "catalogSnapshotId" | "packProvenance"> {
+  const problems = buildPinnedProblems(shared);
+  const packProvenance = buildPackProvenance(problems);
+  if (Object.keys(packProvenance).length === 0) return {};
+  return {
+    catalogSnapshotId: computeCatalogSnapshotId(tenantId, problems),
+    packProvenance,
+  };
+}
+
+function buildPinnedProblems(shared: EventSharedResources): readonly PinnedProblemProvenance[] {
+  return Object.keys(shared.problemsCatalog)
+    .sort((a, b) => a.localeCompare(b))
+    .map((problemId) => ({
+      problemId,
+      provenance: shared.problemsProvenance[problemId] ?? { source: "core" },
+    }));
+}
+
+function buildPackProvenance(
+  problems: readonly PinnedProblemProvenance[],
+): NonNullable<EventRecord["packProvenance"]> {
+  const packProvenance: NonNullable<EventRecord["packProvenance"]> = {};
+  for (const problem of problems) {
+    const provenance = problem.provenance;
+    if (provenance.source !== "pack") continue;
+    packProvenance[problem.problemId] = {
+      packId: provenance.packId,
+      packVersion: provenance.packVersion,
+      contentDigest: provenance.contentDigest,
+    };
+  }
+  return packProvenance;
+}
+
+function validateNoDuplicateSlugs(req: CreateEventRequest): void {
+  const seen = new Set<string>();
+  for (const team of req.teams) {
+    if (seen.has(team.internalSlug)) {
+      throw new DuplicateInternalSlugError(team.internalSlug);
+    }
+    seen.add(team.internalSlug);
+  }
+}
+
+function validateNoDuplicateProblems(req: CreateEventRequest): void {
+  const seen = new Set<string>();
+  for (const p of req.problems) {
+    if (seen.has(p.problemId)) {
+      throw new DuplicateProblemIdError(p.problemId);
+    }
+    seen.add(p.problemId);
+  }
+}
+
+export class EventTeamCredentialRequiredError extends Error {
+  constructor() {
+    super(
+      "A cloud exercise requires an AWS competitor account or a registered non-AWS team credential.",
+    );
+    this.name = "EventTeamCredentialRequiredError";
+  }
+}
+
+function validateCurrentCatalogProblems(
+  shared: EventSharedResources,
+  req: CreateEventRequest,
+): void {
+  if (!shared.executionCatalog) return;
+  const unknown = req.problems.find(
+    (problem) => !shared.executionCatalog?.catalog[problem.problemId],
+  );
+  if (unknown) throw new UnknownEventProblemError(unknown.problemId);
+}
+
+export class UnknownEventProblemError extends Error {
+  constructor(readonly problemId: string) {
+    super(`Problem ${problemId} is unavailable in the current catalog.`);
+    this.name = "UnknownEventProblemError";
+  }
+}

@@ -333,9 +333,11 @@ describe("integration candidate documentation contract", () => {
       );
       expect(source).toMatch(/not listed in the cloud catalog|クラウドのカタログには表示しません/);
       expect(source).toContain("Cryptography Battle");
-      expect(source).toMatch(/exceed.*five-second|5 秒の更新間隔を超え/);
+      expect(source).toMatch(
+        /Live AWS and hosted Turso event capacity remain unverified|実 AWS・hosted Turso での大会性能は未検証/,
+      );
       expect(source).toMatch(/reviewed IAM|権限設定/);
-      expect(source).toContain("hello-world");
+      expect(source).toMatch(/generic CloudFormation|汎用 CloudFormation/);
       expect(source).toContain("106");
       expect(source).toMatch(/in progress|進行中/);
     }

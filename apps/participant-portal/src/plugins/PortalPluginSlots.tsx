@@ -43,6 +43,8 @@ import {
 interface PortalPluginSlotsProps {
   readonly problemId: string;
   readonly jobId: string;
+  /** Cloud resets rotate a shared pointer without replacing this deployment's jobId. */
+  readonly coordinationRunId?: string;
   readonly score: number;
   readonly locale: PortalLocale;
   readonly posture?: Record<string, boolean>;
@@ -66,6 +68,7 @@ interface PortalPluginSlotsProps {
 interface CoordinationOperationScope {
   readonly id: string;
   readonly runId: string;
+  readonly nowIso: string;
   readonly pending: Map<string, PendingOperation>;
   projection?: ReturnType<typeof getCoordinationProjection>;
 }
@@ -115,6 +118,7 @@ function readPluginProjection(scope: CoordinationOperationScope, url: string, to
 export function PortalPluginSlots({
   problemId,
   jobId,
+  coordinationRunId,
   score,
   locale,
   posture,
@@ -140,15 +144,17 @@ export function PortalPluginSlots({
     [problemId, stackOutputs, registeredEndpoints],
   );
   const teamProp = useMemo(() => buildPortalTeam(team), [team]);
+  const runId = coordinationRunId ?? jobId;
   // Keep each unacknowledged payload's key across retries and polling rerenders.
   // A different run or session gets a separate bounded intent set.
   const operationScope = useMemo<CoordinationOperationScope>(
     () => ({
-      id: JSON.stringify([coordinationApiUrl, sessionToken, jobId]),
-      runId: jobId,
+      id: JSON.stringify([coordinationApiUrl, sessionToken, jobId, runId]),
+      runId,
+      nowIso: new Date().toISOString(),
       pending: new Map(),
     }),
-    [coordinationApiUrl, sessionToken, jobId],
+    [coordinationApiUrl, sessionToken, jobId, runId],
   );
   // [#1420] dispatcher URL + session が揃ったときだけ live coordination client を束縛する
   // (= plugin は URL/token を知らず op 投入 + projection 取得できる)。 どちらか無ければ undefined。
@@ -169,11 +175,8 @@ export function PortalPluginSlots({
       getProjection: () => readPluginProjection(operationScope, coordinationApiUrl, sessionToken),
     };
   }, [coordinationApiUrl, sessionToken, operationScope, refreshAfterMutation]);
-  // mount 時刻を pin (= 5s polling 由来の re-render で plugin が clock change を見ない方が
-  // surprise が少ない、 「nowIso が動く」 ことに依存した plugin は plugin 内で自前
-  // setInterval を持つべき)。 [] で intentional mount-pin。 problemId / jobId が変われば
-  // 親で別 instance として再 mount され nowIso は自然に更新される。
-  const nowIso = useMemo(() => new Date().toISOString(), []);
+  // Pin the clock across ordinary polling, but start a fresh slot lifetime after a reset.
+  const nowIso = operationScope.nowIso;
 
   const slotProps: PortalSlotProps = useMemo(
     () => ({
@@ -226,7 +229,7 @@ export function PortalPluginSlots({
       <PluginUpdateNotice locale={locale} problemId={problemId} />
       {slotsToRender.map(({ slotName, Comp }) => (
         <PluginErrorBoundary
-          key={`${problemId}:${jobId}:${slotName}`}
+          key={`${problemId}:${jobId}:${runId}:${slotName}`}
           slotName={slotName}
           locale={locale}
         >

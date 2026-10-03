@@ -10,9 +10,9 @@ export const metadata = { title: "Runtime execution status" };
 | --- | --- |
 | Local Docker Compose | Local-only; not listed in the cloud catalog. New events prepare up to 512 dormant jobs; participant Start / resume and Stop (keep data). Defaults: team 3, host 12 active environments, 4096 MiB summed memory caps. 106 catalog entries are not 106 verified playable exercises |
 | Terminal inside a Docker problem | 15 declared problems; real PostgreSQL terminal exec, three checkpoints, team separation and restart were verified. Other terminal problem variants still need representative checks |
-| Native Cryptography Battle | Local SQLite and cloud Turso/DynamoDB execution with private team views and atomic scoring; no Docker or competitor AWS account required. The DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; this is not an AWS measurement |
-| AWS CloudFormation | Cloud-only; opt-in hello-world flag execution and scoped participant CLI access are wired. Console/CloudShell access remains incomplete; live AWS is a separate rehearsal |
-| Cloud platform with Lambda + Turso/DynamoDB | Foundation, durable work, native Battle and current make deploy/destroy CLI implemented; reviewed IAM setup required. Docker/Compose exercises stay local-only |
+| Native Cryptography Battle | Reviewed ac26-crypto-battle with score stealing disabled needs no competitor account; enabling score stealing retains the AWS variant. Local SQLite or cloud Turso/DynamoDB; original coordination backend and private team views/scoring. Both cloud providers admit 99 teams; SQL state policy is 4 MiB. Hosted event capacity remains unverified |
+| AWS CloudFormation | Cloud-only with a separate verified competitor account; hosting-account targets fail before mutation; create/update/no-op/recreate, flag/multi-flag and scheduled scoring, participant Console/CLI restored. Nine current templates exceed the 51,200-byte TemplateBody limit; TemplateURL is not implemented. Live AWS remains a separate rehearsal |
+| Cloud platform with Lambda + Turso/DynamoDB | Original SBT-free Lite backend, Lambda/CodeBuild paths and make deploy/destroy; standard CDK bootstrap, saved catalogKey and exact private source archive key/VersionId across updates. Docker/Compose stays local-only; no automatic migration |
 | External packs, Azure, GCP, Sakura and other scoring kinds | Schema/authoring declarations do not establish current event execution |
 
 <h2 id="support-classes">Read the evidence precisely</h2>

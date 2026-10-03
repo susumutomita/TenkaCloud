@@ -59,13 +59,21 @@ describe("createApiClient", () => {
       const api = createApiClient(config.apiBaseUrl, token);
       expect(api.tenantAccess).toEqual({ role: "viewer", canMutateTenant: false });
     });
-    it.each(["Admin", "Operator", "Viewer", "TenantAdmin", "unknown", undefined])(
-      "allows cloud connection management only for the exact Admin claim: %s",
-      (role) => {
-        const api = createApiClient(config.apiBaseUrl, makeJwt({ "custom:userRole": role }));
-        expect(canManageConnections(config, api)).toBe(role === "Admin");
-      },
-    );
+    it.each([
+      "Admin",
+      "Operator",
+      "Viewer",
+      "TenantAdmin",
+      "TenantOperator",
+      "TenantViewer",
+      "unknown",
+      undefined,
+    ])("allows only the appropriate cloud administrator to manage connections: %s", (role) => {
+      const api = createApiClient(config.apiBaseUrl, makeJwt({ "custom:userRole": role }));
+      expect(canManageConnections(config, api)).toBe(role === "Admin" || role === "TenantAdmin");
+      expect(canManageConnections({ ...config, mode: "cloud-host" }, api)).toBe(role === "Admin");
+      expect(canManageConnections({ ...config, mode: "local-host" }, api)).toBe(false);
+    });
     it("uses each hosting model's own role claim and keeps a missing session denied", () => {
       const localAdmin = createApiClient(
         config.apiBaseUrl,

@@ -36,17 +36,20 @@ revision's reviewed cleanup procedure and retained ownership records.
 
 ## Cloud hosting: supported scope and capacity checks
 
-The current Lambda CLI with Turso or DynamoDB supports `make deploy`, platform `make destroy`, explicit `make destroy-all`,
-hello-world with scoped CLI access, and native Cryptography Battle with durable
-shared state and scoring. Docker/Compose exercises are local-only and are not
-listed in the cloud catalog. Synchronized Battle bursts still exceed the five-second
-refresh interval; implementation and local measurements do not establish event capacity.
+The restored SBT-free Lite backend uses Lambda with Turso or DynamoDB and the
+original Lambda/CodeBuild deployment paths. It restores generic CloudFormation
+create/update/no-op/recreate, flag/multi-flag and scheduled endpoint scoring,
+participant Console/CLI access and native coordination. Docker/Compose stays local.
+Both providers admit 99 teams; SQL state policy is 4 MiB. Nine current templates
+exceed the 51,200-byte TemplateBody limit and TemplateURL is not implemented.
+These implementation boundaries are not hosted event-capacity measurements.
 
 Before a live rehearsal, obtain approval for the target account, region, initial
 IAM setup, temporary exercise resources, expected charges and cleanup. Reuse the
 existing standard `CDKToolkit` unchanged. Review its trust and execution policies,
 the caller's permissions, and CDK's application IAM changes. A missing standard
-toolkit is bootstrapped only after confirmation; its default CloudFormation
+toolkit is bootstrapped automatically by ordinary `make deploy` after the target
+and permission scope are displayed; its default CloudFormation
 execution role uses `AdministratorAccess`. Existing custom TenkaCloud toolkits
 remain untouched. See [deployment permission boundaries](../infrastructure/BOOTSTRAP-IAM.md).
 
@@ -58,8 +61,18 @@ The cloud rehearsal must cover:
 - AWS problems in the reviewed competitor-account isolation model, mandatory
   ExternalId and least-privilege participant access; already-issued AWS sessions
   may remain valid after event end
-- Native Cryptography Battle shared state, private team views, exactly-once scoring
-  and measured refresh/operation capacity; Docker/Compose exercises stay local-only
+- Native Cryptography Battle with score stealing disabled and no competitor account:
+  shared state, private team views, scoring and measured refresh/operation capacity;
+  enabling score stealing keeps the AWS variant and requires a competitor account
+- Save an event under catalog A, deploy B or remove its problem, then confirm A's
+  instructions, hints, plugin, scoring, deployment and cleanup still use its saved
+  catalog and archive version. Verify unpinned legacy records fail until their
+  actual original snapshot is recovered; do not assign the current catalog. For the
+  first original-Lite upgrade, complete competitions on the installed version and
+  verify the no-active-events guard; a legacy key alone is not a safe upgrade proof
+- Verify hosting-account AWS targets fail before resource mutation; multiple teams
+  in one separate competitor account may use different regions, but still require
+  review of global IAM and the catalog audit's unresolved findings
 - Interrupted deployment, durable recovery, scoring locks, event end and actual
   resource teardown, with retained data and remaining charges clearly identified
 
@@ -79,20 +92,18 @@ runtime claim.
 The reference is repository commit `825415fc` and its actual CLI/CDK source.
 This comparison is an offline regression record, not evidence of a live AWS run.
 
-| Behavior | Original implementation | Current regression coverage |
-| --- | --- | --- |
-| Provider selection | `CDK_PARAM_CONTROL_DATA_BACKEND`, Turso URL and SSM parameter | `backend-config.test.ts`, `stacks.test.ts`, `launcher.test.ts`: selected provider, no DynamoDB resources in Turso mode |
-| Default table removal | `resolve.ts`, `data-table-removal-policy.ts`: explicit true alone retains data | `stacks.test.ts`: default Delete/no protection, explicit Retain |
-| Managed logs and buckets | `define-nodejs-function.ts` / `deployment-log-group.ts`: Delete; owned asset buckets use auto-deletion | `stacks.test.ts`: explicit log and bucket removal policies, objects and versions |
-| Cognito | Lite `IdentityProvider` omitted removalPolicy and did not apply the full/SaaS DestroyPolicySetter, despite the old destroy prompt promising UserPool deletion | Current explicit Delete aligns the implementation with the documented cleanup command; this is a behavior correction, not byte-identical restoration |
-| Ordinary destroy | `cmdDown`: platform stacks, application then backend | `cli.test.ts`: no Outputs/DB requirement, failed or partial creation and retry |
-| Explicit purge | `lite-complete-teardown.ts`: captured physical table/log identities | `complete-teardown.test.ts`: exact ownership, old parser oracle, protected-table refusal; the same log identities are also removed after stack deletion to handle provider logs recreated during cleanup |
-| Turso deploy preflight | `turso-deploy-preflight.ts`: stored SecureString and authenticated SQL check before deployment | `turso-preflight.test.ts`, `cli.test.ts`, `sql-runtime.test.ts`: selected identity/region, no schema writes, failure stops bootstrap/build, secret redaction |
-| Turso cleanup | `lite-turso-teardown.ts`: normal destroy preserves external rows; explicit purge resets before AWS teardown | `turso-teardown.test.ts`: deployed target, failure abort, schema preserved |
-| Competition resources | Separate from ordinary platform destroy | `cli.test.ts`: event Teardown or explicit `--drain-events`; no automatic extra scope |
-| SQL event and Battle capacity | `event-handler/create.ts` admits up to 99 teams; `coordination-budget.ts` defines a 4 MiB SQL state policy | `native-capacity.test.ts`: 99-team creation/selection, near-limit state, score/receipt atomicity and rollback; DynamoDB's current 48-team admission remains a separate unresolved difference |
-| Battle reset and retained runs | `coordination-reset.ts`, `coordination-run.ts`: explicit fresh run, current plus two previous runs, closed permanent pointer after removal | `native-api.test.ts`, `native-coordination.test.ts`, `sql-native-run-history.test.ts`: fresh secret, stale-run rejection, score preservation and interrupted retirement recovery |
-| Explicit event removal | `bulk-delete.ts`, shared `coordination-run.ts`: remove private run payloads after accepted teardown; retain closed pointer and score audit | `native-api.test.ts`, `native-coordination.test.ts`, `sql-native-purge.test.ts`: bounded retry, corrupted-ownership refusal, stale writers, retained totals and interrupted UI retry; End Event and ordinary platform drain do not start this purge |
+| Behavior | Restored contract and verification boundary |
+| --- | --- |
+| Providers and data | Original Turso or DynamoDB repositories; no DynamoDB resources in Turso mode. Both admit 99 teams; SQL coordination policy is 4 MiB |
+| Persistent resource identity | Both-provider synth checks compare original Lite data/Cognito identities; initial adoption verifies live tags/template/schema and requires confirmation that all competitions are complete before mutation. Generic --yes is insufficient; noninteractive upgrades require --confirm-no-active-events after operator verification |
+| Installation selection | New installs retain Lite physical names; existing Lite/cloud pairs are discovered. Both present requires explicit TENKACLOUD_STACK_LAYOUT=lite or cloud. Published cloud-v1 update is refused |
+| Deployment | Standard CDK bootstrap when missing; EventBridge → Step Functions → Lambda/CodeBuild paths retained. Private snapshots preserve saved catalogKey and exact source ZIP key/VersionId across updates. No live AWS build/deployment is implied |
+| Ordinary destroy | Owned application then backend; deployed Delete/Retain policy, no Outputs/DB requirement, failed/partial-stack recovery and versioned S3 cleanup |
+| Explicit purge | Exact CloudFormation-owned data identities and supported deployed Turso rows; protected tables stop purge, source bucket/CDKToolkit/competitor bootstrap excluded |
+| Turso preflight | Existing SSM SecureString, read-only authenticated connection/schema check before mutation; no secret printing or automatic migration |
+| Competition cleanup | Event Teardown before platform removal. --drain-events is rejected; cloud-v1 drain requires its matching release |
+| Participant access | Restored team/event/deployment checks and Console/CLI paths. Hosting-account AWS targets fail before resource mutation and participant STS denies that account; live federation remains unverified |
+| Native coordination | Original selected-provider state/scoring and shared reducer. [Local official libSQL protocol check](../infrastructure/test/cloud-hosting/evidence/libsql-restored-20261003.json) passed with 25 teams/100 reads (p95 186 ms); it does not establish hosted Battle capacity |
 
 Already-deployed deletion protection is live configuration: pulling this source
 cannot remove it. Save `make destroy CLOUD_ARGS="--plan"` output and review the
@@ -100,10 +111,6 @@ exact owned table before any separately authorized protection change. Rerun the
 plan to confirm the setting before purge. Shared CDKToolkit and competitor
 bootstrap stacks remain outside the platform's deletion scope.
 
-The Cognito distinction is based on `bin/tenkacloud-lite.ts`,
-`app-wiring/wire/aspects.ts`, `tenant-template/identity-provider.ts` and the old
-`confirmTeardown` text. The old Lite/identity tests checked pool creation and
-sign-in properties, but did not pin pool removal policy. Do not infer Lite's
-removal policy from the separate full/SaaS wiring. Current synth tests explicitly
-check Delete; deleting a deployed pool also permanently removes its organizer
-accounts and still requires the operator's destructive-action confirmation.
+Deleting a pool with a deployed Delete policy removes its organizer accounts.
+Inspect the deployed removal policy before confirming destruction; neither pulling
+source nor changing a local environment file changes live retention settings.

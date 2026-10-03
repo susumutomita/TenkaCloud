@@ -1,0 +1,681 @@
+{
+  "sourceCommit": "825415fcda5075ad723daf9e4514eac47d7b8bb9",
+  "description": "Synthesized original Lite constructors in isolation; keys and immutable schema only. This is not deployed-resource migration evidence.",
+  "profiles": {
+    "dynamodb": {
+      "application": {
+        "SamlIdpsTable774D9129": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "pk",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "sk",
+                "AttributeType": "S"
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "pk",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "sk",
+                "KeyType": "RANGE"
+              }
+            ]
+          }
+        },
+        "ApplicationAdminConsoleHostingSiteBucketB91BAC99": {
+          "Type": "AWS::S3::Bucket"
+        },
+        "ApplicationAdminConsoleHostingDistribution6FB216F4": {
+          "Type": "AWS::CloudFront::Distribution"
+        },
+        "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "IdentityProvidertenantUserPoolC77ED8F6": {
+          "Type": "AWS::Cognito::UserPool",
+          "Properties": {
+            "Schema": [
+              {
+                "Mutable": true,
+                "Name": "email",
+                "Required": true
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "tenantId"
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "userRole"
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "apiKey"
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "tenantTier"
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "tenantName"
+              }
+            ]
+          }
+        },
+        "IdentityProvidertenantUserPooltenantUserPoolDomainCDB109D1": {
+          "Type": "AWS::Cognito::UserPoolDomain"
+        },
+        "IdentityProvidertenantUserPoolClient01DA8A68": {
+          "Type": "AWS::Cognito::UserPoolClient"
+        },
+        "SamlIdpFunction2BF6E8DD": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "LiteAdminClaimsFunctionA51E5905": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "ApiGatewayTenantAPIlocal720C8393": {
+          "Type": "AWS::ApiGateway::RestApi"
+        }
+      },
+      "backend": {
+        "DeploymentsTableDD4203FA": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "SK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1SK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI2PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI2SK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI3PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI3SK",
+                "AttributeType": "S"
+              }
+            ],
+            "GlobalSecondaryIndexes": [
+              {
+                "IndexName": "GSI1",
+                "KeySchema": [
+                  {
+                    "AttributeName": "GSI1PK",
+                    "KeyType": "HASH"
+                  },
+                  {
+                    "AttributeName": "GSI1SK",
+                    "KeyType": "RANGE"
+                  }
+                ],
+                "Projection": {
+                  "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                  "ReadCapacityUnits": 1,
+                  "WriteCapacityUnits": 1
+                }
+              },
+              {
+                "IndexName": "GSI2",
+                "KeySchema": [
+                  {
+                    "AttributeName": "GSI2PK",
+                    "KeyType": "HASH"
+                  },
+                  {
+                    "AttributeName": "GSI2SK",
+                    "KeyType": "RANGE"
+                  }
+                ],
+                "Projection": {
+                  "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                  "ReadCapacityUnits": 1,
+                  "WriteCapacityUnits": 1
+                }
+              },
+              {
+                "IndexName": "GSI3",
+                "KeySchema": [
+                  {
+                    "AttributeName": "GSI3PK",
+                    "KeyType": "HASH"
+                  },
+                  {
+                    "AttributeName": "GSI3SK",
+                    "KeyType": "RANGE"
+                  }
+                ],
+                "Projection": {
+                  "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                  "ReadCapacityUnits": 1,
+                  "WriteCapacityUnits": 1
+                }
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "PK",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "SK",
+                "KeyType": "RANGE"
+              }
+            ]
+          }
+        },
+        "EventsTable4B7491D3": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "SK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1SK",
+                "AttributeType": "S"
+              }
+            ],
+            "GlobalSecondaryIndexes": [
+              {
+                "IndexName": "GSI1",
+                "KeySchema": [
+                  {
+                    "AttributeName": "GSI1PK",
+                    "KeyType": "HASH"
+                  },
+                  {
+                    "AttributeName": "GSI1SK",
+                    "KeyType": "RANGE"
+                  }
+                ],
+                "Projection": {
+                  "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                  "ReadCapacityUnits": 1,
+                  "WriteCapacityUnits": 1
+                }
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "PK",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "SK",
+                "KeyType": "RANGE"
+              }
+            ]
+          }
+        },
+        "TeamsTable29FBC014": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "SK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1SK",
+                "AttributeType": "S"
+              }
+            ],
+            "GlobalSecondaryIndexes": [
+              {
+                "IndexName": "GSI1",
+                "KeySchema": [
+                  {
+                    "AttributeName": "GSI1PK",
+                    "KeyType": "HASH"
+                  },
+                  {
+                    "AttributeName": "GSI1SK",
+                    "KeyType": "RANGE"
+                  }
+                ],
+                "Projection": {
+                  "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                  "ReadCapacityUnits": 1,
+                  "WriteCapacityUnits": 1
+                }
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "PK",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "SK",
+                "KeyType": "RANGE"
+              }
+            ]
+          }
+        },
+        "ProblemEndpointsTableEB12A2E1": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "SK",
+                "AttributeType": "S"
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "PK",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "SK",
+                "KeyType": "RANGE"
+              }
+            ]
+          }
+        },
+        "CompetitorAccountsTable2661C473": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "SK",
+                "AttributeType": "S"
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "PK",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "SK",
+                "KeyType": "RANGE"
+              }
+            ]
+          }
+        },
+        "DisruptionsTable17A39504": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "SK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1SK",
+                "AttributeType": "S"
+              }
+            ],
+            "GlobalSecondaryIndexes": [
+              {
+                "IndexName": "GSI1",
+                "KeySchema": [
+                  {
+                    "AttributeName": "GSI1PK",
+                    "KeyType": "HASH"
+                  },
+                  {
+                    "AttributeName": "GSI1SK",
+                    "KeyType": "RANGE"
+                  }
+                ],
+                "Projection": {
+                  "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                  "ReadCapacityUnits": 1,
+                  "WriteCapacityUnits": 1
+                }
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "PK",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "SK",
+                "KeyType": "RANGE"
+              }
+            ]
+          }
+        },
+        "AdminAuditLogTable670D7986": {
+          "Type": "AWS::DynamoDB::Table",
+          "Properties": {
+            "AttributeDefinitions": [
+              {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "SK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1PK",
+                "AttributeType": "S"
+              },
+              {
+                "AttributeName": "GSI1SK",
+                "AttributeType": "S"
+              }
+            ],
+            "GlobalSecondaryIndexes": [
+              {
+                "IndexName": "GSI1",
+                "KeySchema": [
+                  {
+                    "AttributeName": "GSI1PK",
+                    "KeyType": "HASH"
+                  },
+                  {
+                    "AttributeName": "GSI1SK",
+                    "KeyType": "RANGE"
+                  }
+                ],
+                "Projection": {
+                  "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                  "ReadCapacityUnits": 1,
+                  "WriteCapacityUnits": 1
+                }
+              }
+            ],
+            "KeySchema": [
+              {
+                "AttributeName": "PK",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "SK",
+                "KeyType": "RANGE"
+              }
+            ]
+          }
+        },
+        "CompetitorBootstrapHostingBucket9F1B78E9": {
+          "Type": "AWS::S3::Bucket"
+        },
+        "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "SystemAuditWriterFunction3220F0FE": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "DeployApiFunctionC6EAEF11": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "BulkDeployPayloadBucketA76F3B42": {
+          "Type": "AWS::S3::Bucket"
+        },
+        "EventApiFunction801117B3": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "DisruptionExecutorFunctionED3AB9CD": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CompetitorAccountsApiFunction24E5F35B": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "ExternalIdAuditFunction32BBC33C": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "DescribeStackFunction225490F1": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CfnDeployFunction6B401815": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C256MiB5F7BD223": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "DeployCreateStateMachine9B2B6CCA": {
+          "Type": "AWS::StepFunctions::StateMachine"
+        },
+        "DeployDeleteStateMachine1D16E7A9": {
+          "Type": "AWS::StepFunctions::StateMachine"
+        },
+        "BulkDeployCreateStateMachineA1ABB59E": {
+          "Type": "AWS::StepFunctions::StateMachine"
+        },
+        "GenericScoringFunction75FE2425": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "ParticipantPortalLambdaFunctionC0659CBE": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CoordinationDispatcherFunction9FDE829E": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "ParticipantPortalSiteBucketF685E182": {
+          "Type": "AWS::S3::Bucket"
+        },
+        "ParticipantPortalDistribution0809E5D9": {
+          "Type": "AWS::CloudFront::Distribution"
+        }
+      }
+    },
+    "turso": {
+      "application": {
+        "ApplicationAdminConsoleHostingSiteBucketB91BAC99": {
+          "Type": "AWS::S3::Bucket"
+        },
+        "ApplicationAdminConsoleHostingDistribution6FB216F4": {
+          "Type": "AWS::CloudFront::Distribution"
+        },
+        "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "IdentityProvidertenantUserPoolC77ED8F6": {
+          "Type": "AWS::Cognito::UserPool",
+          "Properties": {
+            "Schema": [
+              {
+                "Mutable": true,
+                "Name": "email",
+                "Required": true
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "tenantId"
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "userRole"
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "apiKey"
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "tenantTier"
+              },
+              {
+                "AttributeDataType": "String",
+                "Mutable": true,
+                "Name": "tenantName"
+              }
+            ]
+          }
+        },
+        "IdentityProvidertenantUserPooltenantUserPoolDomainCDB109D1": {
+          "Type": "AWS::Cognito::UserPoolDomain"
+        },
+        "IdentityProvidertenantUserPoolClient01DA8A68": {
+          "Type": "AWS::Cognito::UserPoolClient"
+        },
+        "SamlIdpFunction2BF6E8DD": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "LiteAdminClaimsFunctionA51E5905": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "ApiGatewayTenantAPIlocal720C8393": {
+          "Type": "AWS::ApiGateway::RestApi"
+        }
+      },
+      "backend": {
+        "CompetitorBootstrapHostingBucket9F1B78E9": {
+          "Type": "AWS::S3::Bucket"
+        },
+        "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "SystemAuditWriterFunction3220F0FE": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "DeployApiFunctionC6EAEF11": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "BulkDeployPayloadBucketA76F3B42": {
+          "Type": "AWS::S3::Bucket"
+        },
+        "EventApiFunction801117B3": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "DisruptionExecutorFunctionED3AB9CD": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CompetitorAccountsApiFunction24E5F35B": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "ExternalIdAuditFunction32BBC33C": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "DescribeStackFunction225490F1": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CfnDeployFunction6B401815": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C256MiB5F7BD223": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "DeployStatusWriterFunctionC158D7E4": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "DeployCreateStateMachine9B2B6CCA": {
+          "Type": "AWS::StepFunctions::StateMachine"
+        },
+        "DeployDeleteStateMachine1D16E7A9": {
+          "Type": "AWS::StepFunctions::StateMachine"
+        },
+        "BulkDeployCreateStateMachineA1ABB59E": {
+          "Type": "AWS::StepFunctions::StateMachine"
+        },
+        "GenericScoringFunction75FE2425": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "ParticipantPortalLambdaFunctionC0659CBE": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "CoordinationDispatcherFunction9FDE829E": {
+          "Type": "AWS::Lambda::Function"
+        },
+        "ParticipantPortalSiteBucketF685E182": {
+          "Type": "AWS::S3::Bucket"
+        },
+        "ParticipantPortalDistribution0809E5D9": {
+          "Type": "AWS::CloudFront::Distribution"
+        }
+      }
+    }
+  }
+}

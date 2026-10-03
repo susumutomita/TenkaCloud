@@ -383,15 +383,17 @@ AWS-service problems belong to cloud hosting. `make local` refuses the old
 `--aws-region` option before initializing AWS clients. Local hosting offers the
 non-AWS Compose catalog and native Battle games; it does not create AWS resources.
 
-`make deploy` and `make destroy` use the current Lambda + Turso/DynamoDB CLI after
-[reviewed AWS setup](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
-The supported cloud problems are hello-world with scoped CLI access and native
-Cryptography Battle backed by the selected database.
-Destroy confirms the exact installation and drains its recorded exercise attempts
-before removing hosting; retained data and storage are not purged. Docker/Compose
-exercises are local-only and are not listed in the cloud catalog. Synchronized
-Battle bursts still exceed the five-second refresh interval. AWS usage and retained storage can incur
-charges. Repository metadata alone is not a cloud playability claim.
+Cloud hosting reuses the SBT-free Lite backend with Lambda and Turso or DynamoDB:
+generic CloudFormation deployment, flag/multi-flag and scheduled scoring,
+participant Console/CLI access and native coordination. Docker/Compose remains
+local-only. `make deploy` handles standard CDK bootstrap and source-bundle upload;
+see the [cloud setup guide](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
+Finish event Teardown before platform `make destroy`; `--drain-events` is unavailable.
+Destroy honors deployed removal policies. DynamoDB defaults to Delete; external
+Turso rows remain unless explicitly reset with `make destroy-all`. Source buckets,
+CDKToolkit and competitor bootstrap roles remain outside platform destruction.
+Live AWS/hosted Turso performance and all-catalog playability are unverified; nine
+current AWS templates exceed the restored deployer's TemplateBody size limit.
 
 If an earlier integration revision created AWS resources, keep its private state
 and account records. Use that exact reviewed revision for an explicitly authorized

@@ -3,20 +3,14 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import {
   cloudStackNames,
   cloudStackTags,
 } from "../../infrastructure/lib/cloud-hosting/stack-names";
-import { contentDigest } from "../../infrastructure/lib/problem-deploy/control-data/domain/deployment-work";
-import type {
-  InstallationControl,
-  InstallationScope,
-} from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
-import { installationScopeDigest } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
 import { assertStandardBootstrap } from "./bootstrap-check";
 import { runCloudCli } from "./cli";
 import type { DestroyAssemblyTarget } from "./destroy-assembly";
-import type { CloudInstallation, InstallationLocation } from "./installation";
 import type { CloudCliIo, ProcessRequest, ProcessResult } from "./process";
 import "./main";
 
@@ -37,8 +31,8 @@ function ownedStack(name: string) {
     StackName: name,
     StackStatus: "CREATE_COMPLETE",
     Outputs: [
-      { OutputKey: "CloudRunnerEnabled", OutputValue: "false" },
-      { OutputKey: "CloudInstallationControlVersion", OutputValue: "1" },
+      { OutputKey: "CloudComposition", OutputValue: "lite-baseline-v1" },
+      { OutputKey: "CloudControlDataBackend", OutputValue: "dynamodb" },
       ...["Events", "Teams", "Deployments"].map((kind) => ({
         OutputKey: `${kind}TableName`,
         OutputValue: `${name}-${kind}ABC123-synthetic`,
@@ -54,9 +48,52 @@ function platformInspection(request: ProcessRequest): boolean {
     request.args.some((arg) => arg.startsWith("tenkacloud-cloud"))
   );
 }
+function missingOriginalStack(request: ProcessRequest): ProcessResult | undefined {
+  if (request.args.includes("describe-stacks") && request.args.includes("Stacks[0]")) {
+    const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+    if (name.startsWith("tenkacloud-lite"))
+      return {
+        code: 1,
+        stdout: "",
+        stderr: `(ValidationError) Stack with id ${name} does not exist`,
+      };
+  }
+  return undefined;
+}
 function mockResponse(request: ProcessRequest): ProcessResult {
+  const missingOriginal = missingOriginalStack(request);
+  if (missingOriginal) return missingOriginal;
+
+  if (request.command === "bash" && request.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY === "1")
+    return {
+      code: 0,
+      stdout:
+        "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-123456789012-ap-northeast-1-1234abcd\nCDK_SOURCE_NAME=source.zip\n",
+      stderr: "",
+    };
+  if (request.command === "bash")
+    return {
+      code: 0,
+      stderr: "",
+      stdout: `SOURCE_UPLOAD_KEY=source.zip.executions/00000000-0000-4000-8000-000000000000.zip\nSOURCE_UPLOAD_ETAG=${"a".repeat(32)}\nSOURCE_UPLOAD_VERSION_ID=version-A\n`,
+    };
+  if (request.args.includes("head-object"))
+    return {
+      code: 0,
+      stdout: JSON.stringify({ ETag: `"${"a".repeat(32)}"`, VersionId: "version-A" }),
+      stderr: "",
+    };
   if (request.args.includes("get-template"))
-    return { code: 0, stdout: JSON.stringify({ TemplateBody: { Resources: {} } }), stderr: "" };
+    return {
+      code: 0,
+      stdout: JSON.stringify({
+        TemplateBody: {
+          Resources: {},
+          Metadata: { TenkaCloudCloudComposition: "lite-baseline-v1" },
+        },
+      }),
+      stderr: "",
+    };
   if (request.args.includes("list-stack-resources"))
     return { code: 0, stdout: JSON.stringify({ StackResourceSummaries: [] }), stderr: "" };
   if (request.args.includes("get-parameter"))
@@ -90,7 +127,7 @@ function outputResponse(request: ProcessRequest): ProcessResult {
     if (query.includes("OrganizerUserPoolId")) stdout = "ap-northeast-1_pool\n";
     else if (query.includes("ApplicationAdminConsoleUrl"))
       stdout = "https://console.example.test\n";
-    else if (query.includes("ParticipantPortalApiUrl")) stdout = "https://portal.example.test\n";
+    else if (query.includes("ParticipantPortalUrl")) stdout = "https://portal.example.test\n";
     else stdout = "CREATE_COMPLETE\n";
   }
   return { code: 0, stdout, stderr: "" };
@@ -111,7 +148,7 @@ function invalidStackResponse(name: string, change: string): ProcessResult {
 }
 function phaseMatches(request: ProcessRequest, phase: string): boolean {
   if (phase === "resolve") return request.args.includes("get-caller-identity");
-  if (phase === "prepare") return request.command === "bun";
+  if (phase === "prepare") return request.command === "bash";
   if (phase === "toolkit") return request.args.includes("CDKToolkit");
   return request.args.includes(phase);
 }
@@ -120,7 +157,6 @@ function fixture(
     confirmed?: boolean;
     toolkitMissing?: boolean;
     fail?: (request: ProcessRequest) => ProcessResult | undefined;
-    installation?: CloudInstallation;
   } = {},
 ) {
   const calls: ProcessRequest[] = [];
@@ -129,41 +165,9 @@ function fixture(
   const errors: string[] = [];
   const confirmations: string[] = [];
   const storageCalls: string[] = [];
-  const locations: InstallationLocation[] = [];
+  const locations: unknown[] = [];
   const probes: { url: string; token: string }[] = [];
   let toolkitInstalled = !options.toolkitMissing;
-  let control: InstallationControl | undefined;
-  const installation: CloudInstallation = options.installation ?? {
-    repository: {
-      installationControl: async () => control,
-      assertAcceptingInstallation: async () => {
-        storageCalls.push("assert-accepting");
-        if (control) throw new Error("installation_draining");
-      },
-      stopAcceptingInstallation: async (scope: InstallationScope, at: string) => {
-        storageCalls.push("stop");
-        control ??= {
-          scope,
-          scopeDigest: installationScopeDigest(scope),
-          status: "DRAINING",
-          startedAt: at,
-          updatedAt: at,
-        };
-        return control;
-      },
-      listStoppedInstallationEvents: async () => {
-        storageCalls.push("list");
-        return [];
-      },
-      confirmInstallationDrained: async () => {
-        storageCalls.push("drained");
-        if (!control) throw new Error("Missing fence");
-        control = { ...control, status: "DRAINED" };
-      },
-    },
-    requestEventTeardown: async () => ({ failed: 0 }),
-    close: () => storageCalls.push("close"),
-  };
   const io: CloudCliIo = {
     createDestroyAssembly: (target) => {
       const assembly = { ...target, disposed: false };
@@ -199,10 +203,6 @@ function fixture(
       confirmations.push(question);
       return options.confirmed ?? false;
     },
-    openInstallation: (location) => {
-      locations.push(location);
-      return installation;
-    },
     probeTurso: async (url, token) => {
       probes.push({ url, token });
     },
@@ -212,6 +212,7 @@ function fixture(
     },
   };
   const env = {
+    TENKACLOUD_STACK_LAYOUT: "cloud",
     TENKACLOUD_ADMIN_EMAIL: "organizer@example.test",
     CDK_PARAM_ENVIRONMENT: "staging",
     AWS_REGION: "ap-northeast-1",
@@ -227,7 +228,6 @@ function fixture(
     storageCalls,
     locations,
     probes,
-    installation,
     env,
     run: (args: readonly string[]) => runCloudCli(args, io, { root: ROOT, env }),
   };
@@ -317,12 +317,8 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     expect(f.calls[0]?.args).toContain("get-caller-identity");
     expect(f.calls[1]?.args).toContain("get-caller-identity");
     expect(f.calls.slice(2, 4).every(platformInspection)).toBe(true);
-    expect(f.calls[4]?.command).toBe("aws");
-    expect(f.calls.slice(5, 7).map((call) => [call.command, ...call.args])).toEqual([
-      ["bun", "run", "--cwd", `${ROOT}/apps/application-admin-console`, "build"],
-      ["bun", "run", "--cwd", `${ROOT}/apps/participant-portal`, "build"],
-    ]);
-    expect(f.calls[7]?.args.slice(2, 8)).toEqual([
+    const deploy = f.calls.find((call) => call.args.includes("deploy"));
+    expect(deploy?.args.slice(2, 8)).toEqual([
       "--toolkit-stack-name",
       "CDKToolkit",
       "--profile",
@@ -330,13 +326,25 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       "--region",
       "ap-northeast-1",
     ]);
-    expect(f.calls[7]?.args.slice(8)).toEqual([
+    expect(deploy?.args.slice(8)).toEqual([
       "deploy",
       "tenkacloud-cloud-problem-deploy-staging",
       "tenkacloud-cloud-staging",
       "--require-approval",
       "never",
     ]);
+    expect(deploy?.env.CDK_PARAM_S3_BUCKET_NAME).toBe(
+      "tenkacloud-source-123456789012-ap-northeast-1-1234abcd",
+    );
+    expect(deploy?.env.CDK_SOURCE_NAME).toBe(
+      "source.zip.executions/00000000-0000-4000-8000-000000000000.zip",
+    );
+    expect(deploy?.env.CDK_SOURCE_VERSION_ID).toBe("version-A");
+    expect(deploy?.env.CDK_PARAM_COMMIT_ID).toBe("a".repeat(32));
+    expect(f.calls.filter((call) => call.command === "bash")).toHaveLength(2);
+    expect(f.calls.findIndex((call) => call.args.includes("head-object"))).toBeLessThan(
+      f.calls.findIndex((call) => call.args.includes("deploy")),
+    );
     expect(
       f.calls.some(
         (call) =>
@@ -345,24 +353,21 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
           call.args.includes("update-stack"),
       ),
     ).toBe(false);
-    expect(f.calls.every((call) => !["bash", "git", "zip", "rsync"].includes(call.command))).toBe(
-      true,
-    );
-    expect(f.calls.some((call) => call.args.includes("s3api"))).toBe(false);
-    expect(f.calls.some((call) => call.env.CDK_PARAM_S3_BUCKET_NAME !== undefined)).toBe(false);
     expect(f.calls.slice(1).every((call) => call.env.AWS_DEFAULT_REGION === "ap-northeast-1")).toBe(
       true,
     );
     const create = f.calls.find((call) => call.args.includes("admin-create-user"));
-    expect(create?.args).toContain("Name=custom:userRole,Value=Admin");
-    expect(create?.args.join(" ")).not.toContain("tenant");
+    expect(create?.args).toContain("Name=custom:userRole,Value=TenantAdmin");
     expect(f.messages.join("")).toContain("https://console.example.test");
     expect(f.messages.join("")).toContain("https://portal.example.test");
-    expect(f.messages.join("")).toContain("hello-world with scoped participant AWS CLI access");
-    expect(f.messages.join("")).toContain("native Cryptography Battle backed by DynamoDB");
+    expect(f.messages.join("")).toContain(
+      "competition backend with event, account, deployment and scoring services",
+    );
+    expect(f.messages.join("")).toContain("backed by DynamoDB");
     expect(f.messages.join("")).toContain("AWS usage and retained storage can incur charges");
     expect(f.messages.join("")).not.toContain("full competition lifecycle remains incomplete");
     expect(f.env).toEqual({
+      TENKACLOUD_STACK_LAYOUT: "cloud",
       TENKACLOUD_ADMIN_EMAIL: "organizer@example.test",
       CDK_PARAM_ENVIRONMENT: "staging",
       AWS_REGION: "ap-northeast-1",
@@ -492,7 +497,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       expect(deletes.every((call) => !call.args.includes("--role-arn"))).toBe(true);
       expect(f.calls.filter((call) => call.args.includes("stack-delete-complete"))).toHaveLength(0);
       expect(deletes.every((call) => call.inherit)).toBe(true);
-      expect(f.calls.some((call) => call.command === "bun")).toBe(false);
+      expect(f.calls.some((call) => call.command === "bash")).toBe(false);
       expect(f.messages.join("")).toContain("Cloud platform stacks destroyed");
     },
   );
@@ -529,7 +534,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
   it.each(["up", "down"])(
     "%s checks both stacks and rejects unknown ownership before any mutation",
     async (command) => {
-      for (const name of Object.values(cloudStackNames("staging"))) {
+      for (const name of Object.values(cloudStackNames("staging", "cloud"))) {
         for (const change of [
           "tags",
           "environment",
@@ -578,82 +583,22 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       }
     },
   );
-  it.each(["up"])(
-    "%s fails closed for missing, malformed or ambiguous runner metadata",
-    async (command) => {
-      for (const values of [[], ["unknown"], ["false", "true"]]) {
-        const f = fixture({
-          confirmed: true,
-          fail: (request) => {
-            if (!platformInspection(request) || !request.args.includes("tenkacloud-cloud-staging"))
-              return undefined;
-            return {
-              code: 0,
-              stderr: "",
-              stdout: JSON.stringify({
-                ...ownedStack("tenkacloud-cloud-staging"),
-                Outputs: values.map((OutputValue) => ({
-                  OutputKey: "CloudRunnerEnabled",
-                  OutputValue,
-                })),
-              }),
-            };
-          },
-        });
-        expect(await f.run([command])).toBe(1);
-        expect(f.calls.some((call) => call.inherit)).toBe(false);
-        expect(f.confirmations).toEqual([]);
-      }
-    },
-  );
-  it("refuses an unversioned legacy runner update or teardown, even with --yes", async () => {
-    const f = fixture({
-      confirmed: true,
-      fail: (request) =>
-        platformInspection(request) && request.args.includes("tenkacloud-cloud-staging")
-          ? {
-              code: 0,
-              stderr: "",
-              stdout: JSON.stringify({
-                ...ownedStack("tenkacloud-cloud-staging"),
-                Outputs: [{ OutputKey: "CloudRunnerEnabled", OutputValue: "true" }],
-              }),
-            }
-          : undefined,
-    });
-    expect(await f.run(["up"])).toBe(1);
-    expect(f.errors.join("")).toContain("CloudRunnerMode");
-    expect(await f.run(["down", "--drain-events", "--yes"])).toBe(1);
-    expect(f.errors.join("")).toContain("durable intake-fence version");
-    expect(f.calls.some((call) => call.inherit)).toBe(false);
-  });
-  it("permits explicit activation from a runner-disabled foundation and rejects invalid configuration before reads", async () => {
+  it("rejects published cloud-v1 runner configuration before reads", async () => {
     const f = fixture();
-    const binding = [
-      {
-        id: "reviewed-fixture",
-        accountId: "123456789012",
-        region: "ap-northeast-1",
-        roleArn: "arn:aws:iam::123456789012:role/Fixture",
-        externalIdParameterArn:
-          "arn:aws:ssm:ap-northeast-1:123456789012:parameter/tenkacloud/fixture",
-        reviewedProblemIds: ["hello-world"],
-      },
-    ];
     expect(
       await runCloudCli(["up"], f.io, {
         root: ROOT,
-        env: { ...f.env, TENKACLOUD_RUNNER_BINDINGS: JSON.stringify(binding) },
-      }),
-    ).toBe(0);
-    const invalid = fixture();
-    expect(
-      await runCloudCli(["up"], invalid.io, {
-        root: ROOT,
-        env: { ...invalid.env, TENKACLOUD_RUNNER_BINDINGS: "[]" },
+        env: { ...f.env, TENKACLOUD_RUNNER_BINDINGS: "[]" },
       }),
     ).toBe(1);
-    expect(invalid.calls).toEqual([]);
+    expect(f.errors.join("")).toContain("incompatible cloud-v1 runner");
+    expect(f.calls).toEqual([]);
+  });
+  it("rejects unsupported cloud-v1 event drain before reads or mutations", async () => {
+    const f = fixture({ confirmed: true });
+    expect(await f.run(["down", "--drain-events", "--yes"])).toBe(1);
+    expect(f.errors.join("")).toContain("matching published release");
+    expect(f.calls).toEqual([]);
   });
   it.each(["status", "console-url", "portal-url"])(
     "supports read-only %s with matching environment stack names",
@@ -889,7 +834,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       const verify = f.calls.findIndex(
         (call, index) => index > create && call.args.includes("CDKToolkit"),
       );
-      const build = f.calls.findIndex((call) => call.command === "bun");
+      const build = f.calls.findIndex((call) => call.command === "bash");
       expect(create).toBeGreaterThan(0);
       expect(f.calls[create]?.command).toBe(`${ROOT}/node_modules/aws-cdk/bin/cdk`);
       expect(f.calls[create]?.args).toEqual([
@@ -1010,7 +955,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     });
     expect(await f.run(["up"])).toBe(1);
     expect(f.errors.join("")).toContain("synthetic initial bootstrap denial");
-    expect(f.calls.some((call) => call.command === "bun" || call.args.includes("deploy"))).toBe(
+    expect(f.calls.some((call) => call.command === "bash" || call.args.includes("deploy"))).toBe(
       false,
     );
   });
@@ -1031,7 +976,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
         },
       });
       expect(await f.run(["up"])).toBe(1);
-      expect(f.calls.some((call) => call.command === "bun")).toBe(false);
+      expect(f.calls.some((call) => call.command === "bash")).toBe(false);
       expect(f.messages.join("")).not.toContain("Standard CDKToolkit verified");
     },
   );
@@ -1082,7 +1027,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
     const f = fixture({ toolkitMissing: true, confirmed: true });
     expect(await f.run(["up", "--setup"])).toBe(0);
     expect(f.calls.filter((call) => call.args.includes("bootstrap"))).toHaveLength(1);
-    expect(f.calls.some((call) => call.command === "bun" || call.args.includes("deploy"))).toBe(
+    expect(f.calls.some((call) => call.command === "bash" || call.args.includes("deploy"))).toBe(
       false,
     );
     expect(await f.run(["up", "--setup"])).toBe(0);
@@ -1101,7 +1046,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
         request.args.includes("CDKToolkit") ? { code: 1, stdout: "", stderr } : undefined,
     });
     expect(await f.run(["up"])).toBe(1);
-    expect(f.calls.some((call) => call.inherit || call.command === "bun")).toBe(false);
+    expect(f.calls.some((call) => call.inherit || call.command === "bash")).toBe(false);
     expect(f.confirmations).toEqual([]);
   });
   it.each([
@@ -1118,7 +1063,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
           : undefined,
     });
     expect(await f.run(["up"])).toBe(1);
-    expect(f.calls.some((call) => call.inherit || call.command === "bun")).toBe(false);
+    expect(f.calls.some((call) => call.inherit || call.command === "bash")).toBe(false);
     expect(f.confirmations).toEqual([]);
   });
   it.each([
@@ -1149,7 +1094,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       });
       expect(await f.run(["up", "--setup-if-needed", "--yes"])).toBe(1);
       expect(f.errors.join("")).toContain("official CDK CLI separately");
-      expect(f.calls.some((call) => call.inherit || call.command === "bun")).toBe(false);
+      expect(f.calls.some((call) => call.inherit || call.command === "bash")).toBe(false);
       expect(f.confirmations).toEqual([]);
     },
   );
@@ -1161,8 +1106,8 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
   });
   it("rejects unsafe environment names", () => {
     expect(cloudStackNames("development")).toEqual({
-      app: "tenkacloud-cloud",
-      backend: "tenkacloud-cloud-problem-deploy",
+      app: "tenkacloud-lite",
+      backend: "tenkacloud-lite-problem-deploy",
     });
     expect(() => cloudStackNames("development;bad")).toThrow();
   });
@@ -1223,7 +1168,7 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
   });
 });
 
-describe("cloud CLI durable teardown recovery and registry updates", () => {
+describe("cloud CLI platform teardown recovery", () => {
   const app = "tenkacloud-cloud-staging";
   const backend = "tenkacloud-cloud-problem-deploy-staging";
   function missing(name: string): ProcessResult {
@@ -1245,11 +1190,10 @@ describe("cloud CLI durable teardown recovery and registry updates", () => {
         return undefined;
       },
     });
-    expect(await f.run(["down", "--drain-events", "--yes"])).toBe(1);
-    expect((await f.installation.repository.installationControl())?.status).toBe("DRAINED");
+    expect(await f.run(["down", "--yes"])).toBe(1);
     resumed = true;
     const before = f.calls.length;
-    expect(await f.run(["down", "--drain-events", "--yes"])).toBe(0);
+    expect(await f.run(["down", "--yes"])).toBe(0);
     expect(
       f.calls
         .slice(before)
@@ -1257,19 +1201,6 @@ describe("cloud CLI durable teardown recovery and registry updates", () => {
         .map((call) => call.args[call.args.indexOf("destroy") + 1]),
     ).toEqual([backend]);
   });
-  it.each([app, backend])(
-    "does not infer cleanup from missing %s without the durable completion proof",
-    async (name) => {
-      const f = fixture({
-        confirmed: true,
-        fail: (request) =>
-          platformInspection(request) && request.args.includes(name) ? missing(name) : undefined,
-      });
-      expect(await f.run(["down", "--drain-events", "--yes"])).toBe(1);
-      expect(f.calls.some((call) => call.args.includes("destroy"))).toBe(false);
-      expect(f.confirmations).toEqual([]);
-    },
-  );
   it("waits for a deletion already in progress instead of submitting another delete", async () => {
     const f = fixture({
       confirmed: true,
@@ -1282,13 +1213,13 @@ describe("cloud CLI durable teardown recovery and registry updates", () => {
             }
           : undefined,
     });
-    expect(await f.run(["down", "--drain-events", "--yes"])).toBe(0);
+    expect(await f.run(["down", "--yes"])).toBe(0);
     expect(f.calls.filter((call) => call.args.includes("destroy"))).toHaveLength(1);
     expect(f.calls.find((call) => call.args.includes("destroy"))?.args).toContain(backend);
     expect(f.calls.filter((call) => call.args.includes("stack-delete-complete"))).toHaveLength(1);
     expect(f.assemblies.map((assembly) => assembly.arn)).toEqual([ownedStack(backend).StackId]);
   });
-  it("waits for an update to complete before stopping event intake", async () => {
+  it("waits for an update to complete before removing platform stacks", async () => {
     const f = fixture({
       confirmed: true,
       fail: (request) =>
@@ -1300,157 +1231,9 @@ describe("cloud CLI durable teardown recovery and registry updates", () => {
             }
           : undefined,
     });
-    expect(await f.run(["down", "--drain-events", "--yes"])).toBe(1);
+    expect(await f.run(["down", "--yes"])).toBe(1);
     expect(f.storageCalls).toEqual([]);
     expect(f.calls.some((call) => call.args.includes("destroy"))).toBe(false);
-  });
-  it("does not let up reopen an installation after a teardown failure", async () => {
-    const f = fixture({
-      confirmed: true,
-      fail: (request) =>
-        request.args.includes("destroy")
-          ? { code: 3, stdout: "", stderr: "Synthetic delete failure" }
-          : undefined,
-    });
-    expect(await f.run(["down", "--drain-events", "--yes"])).toBe(1);
-    const before = f.calls.length;
-    expect(await f.run(["up"])).toBe(1);
-    expect(f.errors.join("")).toContain("installation_draining");
-    expect(f.calls.slice(before).some((call) => call.command === "bun" || call.inherit)).toBe(
-      false,
-    );
-  });
-  it.each(["Events", "Teams", "Deployments"])(
-    "rejects an unrelated %s table output",
-    async (kind) => {
-      const f = fixture({
-        confirmed: true,
-        fail: (request) =>
-          platformInspection(request) && request.args.includes(backend)
-            ? {
-                code: 0,
-                stderr: "",
-                stdout: JSON.stringify({
-                  ...ownedStack(backend),
-                  Outputs: ownedStack(backend).Outputs.map((entry) =>
-                    entry.OutputKey === `${kind}TableName`
-                      ? { ...entry, OutputValue: "unrelated-table" }
-                      : entry,
-                  ),
-                }),
-              }
-            : undefined,
-      });
-      expect(await f.run(["down", "--drain-events", "--yes"])).toBe(1);
-      expect(f.storageCalls).toEqual([]);
-      expect(f.confirmations).toEqual([]);
-    },
-  );
-  it("updates registry hosting without manual bindings while retaining the deployed empty-binding digest", async () => {
-    const f = fixture({
-      fail: (request) =>
-        platformInspection(request) && request.args.includes(app)
-          ? {
-              code: 0,
-              stderr: "",
-              stdout: JSON.stringify({
-                ...ownedStack(app),
-                Outputs: [
-                  { OutputKey: "CloudRunnerEnabled", OutputValue: "true" },
-                  { OutputKey: "CloudRunnerMode", OutputValue: "registry" },
-                  { OutputKey: "CloudLegacyBindingsDigest", OutputValue: contentDigest("[]") },
-                ],
-              }),
-            }
-          : undefined,
-    });
-    expect(await f.run(["up"])).toBe(0);
-    expect(f.storageCalls).toContain("assert-accepting");
-  });
-  it("refuses to omit legacy bindings still required by the deployed runner", async () => {
-    const f = fixture({
-      fail: (request) =>
-        platformInspection(request) && request.args.includes(app)
-          ? {
-              code: 0,
-              stderr: "",
-              stdout: JSON.stringify({
-                ...ownedStack(app),
-                Outputs: [
-                  { OutputKey: "CloudRunnerEnabled", OutputValue: "true" },
-                  { OutputKey: "CloudRunnerMode", OutputValue: "registry-with-legacy-bindings" },
-                  { OutputKey: "CloudLegacyBindingsDigest", OutputValue: "a".repeat(64) },
-                ],
-              }),
-            }
-          : undefined,
-    });
-    expect(await f.run(["up"])).toBe(1);
-    expect(f.errors.join("")).toContain("differs from the deployed legacy bindings");
-    expect(f.calls.some((call) => call.inherit || call.command === "bun")).toBe(false);
-  });
-});
-
-describe("native-aware cloud teardown contract", () => {
-  function nativeStackResponse(
-    request: ProcessRequest,
-    alter?: (outputs: { OutputKey: string; OutputValue: string }[]) => void,
-  ): ProcessResult | undefined {
-    if (!platformInspection(request)) return undefined;
-    const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
-    const stack = ownedStack(name);
-    if (name === cloudStackNames("staging").app) {
-      stack.Outputs = stack.Outputs.filter(
-        (item) => item.OutputKey !== "CloudInstallationControlVersion",
-      );
-      stack.Outputs.push(
-        { OutputKey: "CloudInstallationControlVersion", OutputValue: "2" },
-        { OutputKey: "CloudExecutionArtifactBucket", OutputValue: "owned-native-artifacts" },
-        { OutputKey: "CloudExecutionCatalogKey", OutputValue: `catalogs/${"a".repeat(64)}.json` },
-      );
-      alter?.(stack.Outputs);
-    }
-    return { code: 0, stdout: JSON.stringify(stack), stderr: "" };
-  }
-  it("passes the exact reviewed artifact identity and resolved account to native settlement", async () => {
-    const f = fixture({ confirmed: true, fail: (request) => nativeStackResponse(request) });
-    expect(await f.run(["down", "--drain-events"])).toBe(0);
-    expect(f.locations[0]?.native).toEqual({
-      artifactBucket: "owned-native-artifacts",
-      catalogKey: `catalogs/${"a".repeat(64)}.json`,
-      expectedBucketOwner: "123456789012",
-    });
-    expect(f.storageCalls).toContain("drained");
-    expect(f.calls.filter((call) => call.args.includes("destroy"))).toHaveLength(2);
-  });
-  it.each([
-    ["CloudExecutionArtifactBucket", ""],
-    ["CloudExecutionArtifactBucket", "https://outside.example"],
-    ["CloudExecutionArtifactBucket", "bucket..name"],
-    ["CloudExecutionCatalogKey", ""],
-    ["CloudExecutionCatalogKey", "catalogs/not-pinned.json"],
-    ["CloudExecutionCatalogKey", `other/${"a".repeat(64)}.json`],
-  ])(
-    "rejects invalid native %s before stopping intake or deleting resources",
-    async (key, value) => {
-      const f = fixture({
-        confirmed: true,
-        fail: (request) =>
-          nativeStackResponse(request, (outputs) => {
-            const item = outputs.find((entry) => entry.OutputKey === key);
-            if (item) item.OutputValue = value;
-          }),
-      });
-      expect(await f.run(["down", "--drain-events"])).toBe(1);
-      expect(f.locations).toEqual([]);
-      expect(f.storageCalls).not.toContain("stop");
-      expect(f.calls.some((call) => call.args.includes("destroy"))).toBe(false);
-    },
-  );
-  it("does not invent a native artifact requirement for the prior AWS-only control version", async () => {
-    const f = fixture({ confirmed: true });
-    expect(await f.run(["down", "--drain-events"])).toBe(0);
-    expect(f.locations[0]?.native).toBeUndefined();
   });
 });
 
@@ -1602,7 +1385,7 @@ describe("owned failed-stack bucket cleanup through make destroy", () => {
 });
 
 describe("original platform destroy contract", () => {
-  const names = cloudStackNames("staging");
+  const names = cloudStackNames("staging", "cloud");
   it.each([
     "CREATE_COMPLETE",
     "CREATE_FAILED",
@@ -1659,7 +1442,12 @@ describe("original platform destroy contract", () => {
         if (request.args.includes("get-template"))
           return {
             code: 0,
-            stdout: JSON.stringify({ TemplateBody: { Resources: {} } }),
+            stdout: JSON.stringify({
+              TemplateBody: {
+                Resources: {},
+                Metadata: { TenkaCloudCloudComposition: "lite-baseline-v1" },
+              },
+            }),
             stderr: "",
           };
         if (request.args.includes("list-stack-resources"))
@@ -1697,7 +1485,7 @@ describe("explicit Turso destruction sequence", () => {
   function deployedTursoStack(request: ProcessRequest): ProcessResult {
     const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
     const stack = ownedStack(name);
-    if (name === cloudStackNames("staging").backend)
+    if (name === cloudStackNames("staging", "cloud").backend)
       stack.Outputs = [
         { OutputKey: "CloudControlDataBackend", OutputValue: "turso" },
         { OutputKey: "TursoDatabaseUrl", OutputValue: "https://deployed.turso.io" },
@@ -1789,6 +1577,7 @@ describe("explicit Turso destruction sequence", () => {
         databaseUrl: "https://deployed.turso.io",
         parameterName: "/deployed/turso/token",
         region: "ap-northeast-1",
+        schema: "cloud-v1",
       },
     ]);
     expect(f.confirmations[0]).toContain("permanently deleted");
@@ -1867,9 +1656,9 @@ const tursoEnvironment = {
 function tursoStackResponse(request: ProcessRequest): ProcessResult | undefined {
   if (!platformInspection(request)) return undefined;
   const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
-  if (name !== cloudStackNames("staging").backend) return undefined;
   const stack = ownedStack(name);
   stack.Outputs = [
+    { OutputKey: "CloudComposition", OutputValue: "lite-baseline-v1" },
     { OutputKey: "CloudControlDataBackend", OutputValue: "turso" },
     { OutputKey: "TursoDatabaseUrl", OutputValue: "https://owned.turso.io" },
     {
@@ -1879,7 +1668,7 @@ function tursoStackResponse(request: ProcessRequest): ProcessResult | undefined 
   ];
   return { code: 0, stdout: JSON.stringify(stack), stderr: "" };
 }
-describe("selected cloud data deployment and drain", () => {
+describe("selected cloud data deployment and teardown", () => {
   it("configures SDK environment before resolving or mutating the deployment", async () => {
     let configured: string | undefined;
     const f = fixture({
@@ -1934,7 +1723,7 @@ describe("selected cloud data deployment and drain", () => {
     expect(f.probes).toEqual([{ url: "https://owned.turso.io", token: "synthetic-token" }]);
     const preflight = f.calls.findIndex((request) => request.args.includes("get-parameter"));
     expect(preflight).toBeGreaterThan(-1);
-    expect(preflight).toBeLessThan(f.calls.findIndex((request) => request.command === "bun"));
+    expect(preflight).toBeLessThan(f.calls.findIndex((request) => request.command === "bash"));
   });
   it("stops fresh Turso deployment before bootstrap/build when the saved token is rejected", async () => {
     const f = fixture({
@@ -1965,34 +1754,19 @@ describe("selected cloud data deployment and drain", () => {
     expect(
       f.calls.some(
         (request) =>
-          request.command === "bun" ||
+          request.command === "bash" ||
           request.args.includes("bootstrap") ||
           request.args.includes("deploy"),
       ),
     ).toBe(false);
     expect(f.locations).toEqual([]);
   });
-  it("awaits the existing Turso repository and uses deployed identity", async () => {
+  it("checks an existing restored Turso database without opening or changing repositories", async () => {
     const f = fixture({ fail: tursoStackResponse });
-    f.io.openInstallation = async (location) => {
-      await Promise.resolve();
-      f.locations.push(location);
-      return f.installation;
-    };
     expect(
       await runCloudCli(["up"], f.io, { root: ROOT, env: { ...f.env, ...tursoEnvironment } }),
     ).toBe(0);
-    expect(f.locations).toEqual([
-      {
-        region: "ap-northeast-1",
-        backend: "turso",
-        turso: {
-          databaseUrl: "https://owned.turso.io",
-          authTokenParameterName: "/TenkaCloud/staging/turso/auth-token",
-        },
-      },
-    ]);
-    expect(f.storageCalls).toEqual(["assert-accepting", "close"]);
+    expect(f.probes).toEqual([{ url: "https://owned.turso.io", token: "synthetic-token" }]);
   });
   it("blocks Dynamo to Turso changes before opening a repository, bootstrap, build or mutation", async () => {
     const f = fixture();
@@ -2003,7 +1777,10 @@ describe("selected cloud data deployment and drain", () => {
     expect(f.locations).toEqual([]);
     expect(
       f.calls.every(
-        (request) => request.args.includes("get-caller-identity") || platformInspection(request),
+        (request) =>
+          request.args.includes("get-caller-identity") ||
+          platformInspection(request) ||
+          request.args.includes("get-template"),
       ),
     ).toBe(true);
   });
@@ -2018,28 +1795,16 @@ describe("selected cloud data deployment and drain", () => {
       expect(f.locations).toEqual([]);
       expect(
         f.calls.every(
-          (request) => request.args.includes("get-caller-identity") || platformInspection(request),
+          (request) =>
+            request.args.includes("get-caller-identity") ||
+            platformInspection(request) ||
+            request.args.includes("get-template"),
         ),
       ).toBe(true);
     },
   );
-  it("drains deployed Turso asynchronously even when local selection is DynamoDB", async () => {
-    const f = fixture({ fail: tursoStackResponse });
-    f.io.openInstallation = async (location) => {
-      await Promise.resolve();
-      f.locations.push(location);
-      return f.installation;
-    };
-    expect(await f.run(["down", "--yes", "--drain-events"])).toBe(0);
-    expect(f.locations[0]?.backend).toBe("turso");
-    expect(f.locations[0]?.tables).toBeUndefined();
-    expect(f.storageCalls).toContain("drained");
-  });
   it("ordinary Turso destroy works despite invalid local database configuration and unavailable storage", async () => {
     const f = fixture({ fail: tursoStackResponse });
-    f.io.openInstallation = async () => {
-      throw new Error("Database is unavailable");
-    };
     expect(
       await runCloudCli(["down", "--yes"], f.io, {
         root: ROOT,
@@ -2048,5 +1813,334 @@ describe("selected cloud data deployment and drain", () => {
     ).toBe(0);
     expect(f.storageCalls).toEqual([]);
     expect(f.calls.filter((request) => request.args.includes("destroy"))).toHaveLength(2);
+  });
+});
+
+describe("restored backend compatibility boundary", () => {
+  it.each([
+    "CloudRunnerEnabled",
+    "CloudInstallationControlVersion",
+    "CloudRunnerMode",
+    "CloudLegacyBindingsDigest",
+  ])("rejects published %s before bootstrap or source preparation", async (marker) => {
+    const f = fixture({
+      toolkitMissing: true,
+      fail: (request) => {
+        if (!platformInspection(request)) return undefined;
+        const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+        const stack = ownedStack(name);
+        stack.Outputs.push({ OutputKey: marker, OutputValue: "published" });
+        return { code: 0, stdout: JSON.stringify(stack), stderr: "" };
+      },
+    });
+    expect(await f.run(["up"])).toBe(1);
+    expect(f.errors.join("")).toContain("published cloud-v1 resource layout");
+    expect(f.errors.join("")).toContain("different ENV");
+    expect(f.calls.every((call) => call.command === "aws" && !call.inherit)).toBe(true);
+    expect(f.calls.some((call) => call.args.includes("CDKToolkit"))).toBe(false);
+  });
+  it.each([
+    ["OrganizerUserPool1234ABCD", "AWS::Cognito::UserPool"],
+    ["EventsABC12345", "AWS::DynamoDB::Table"],
+    ["TeamsABC12345", "AWS::DynamoDB::Table"],
+    ["DeploymentsABC12345", "AWS::DynamoDB::Table"],
+    ["CloudApiABC12345", "AWS::Lambda::Function"],
+  ])(
+    "rejects the published logical ID %s even if output metadata claims compatibility",
+    async (id, type) => {
+      const f = fixture({
+        fail: (request) =>
+          request.args.includes("get-template")
+            ? {
+                code: 0,
+                stderr: "",
+                stdout: JSON.stringify({
+                  TemplateBody: {
+                    Metadata: { TenkaCloudCloudComposition: "lite-baseline-v1" },
+                    Resources: { [id]: { Type: type } },
+                  },
+                }),
+              }
+            : undefined,
+      });
+      expect(await f.run(["up"])).toBe(1);
+      expect(f.errors.join("")).toContain("incompatible");
+      expect(f.calls.every((call) => call.command === "aws" && !call.inherit)).toBe(true);
+    },
+  );
+  it("rejects unknown resource contracts and ambiguous composition outputs", async () => {
+    for (const entries of [[], ["other"], ["lite-baseline-v1", "lite-baseline-v1"]]) {
+      const f = fixture({
+        fail: (request) => {
+          if (!platformInspection(request)) return undefined;
+          const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+          return {
+            code: 0,
+            stderr: "",
+            stdout: JSON.stringify({
+              ...ownedStack(name),
+              Outputs: entries.map((OutputValue) => ({
+                OutputKey: "CloudComposition",
+                OutputValue,
+              })),
+            }),
+          };
+        },
+      });
+      expect(await f.run(["up"])).toBe(1);
+      expect(f.calls.some((call) => call.inherit || call.command === "bash")).toBe(false);
+    }
+  });
+  it("retains ordinary destroy recovery for a published cloud-v1 stack", async () => {
+    const f = fixture({
+      confirmed: true,
+      fail: (request) => {
+        if (!platformInspection(request)) return undefined;
+        const name = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+        return {
+          code: 0,
+          stderr: "",
+          stdout: JSON.stringify({
+            ...ownedStack(name),
+            Outputs: [{ OutputKey: "CloudRunnerEnabled", OutputValue: "true" }],
+          }),
+        };
+      },
+    });
+    expect(await f.run(["down"])).toBe(0);
+    expect(f.calls.filter((call) => call.args.includes("destroy"))).toHaveLength(2);
+  });
+});
+
+describe("partial restored installation storage identity", () => {
+  it("rejects an app-only provider change before bootstrap or source upload", async () => {
+    const f = fixture({
+      fail: (request) => {
+        if (
+          !platformInspection(request) ||
+          !request.args.includes(cloudStackNames("staging", "cloud").backend)
+        )
+          return undefined;
+        return {
+          code: 1,
+          stdout: "",
+          stderr: `(ValidationError) Stack with id ${cloudStackNames("staging", "cloud").backend} does not exist`,
+        };
+      },
+    });
+    expect(
+      await runCloudCli(["up"], f.io, { root: ROOT, env: { ...f.env, ...tursoEnvironment } }),
+    ).toBe(1);
+    expect(f.errors.join("")).toContain("No automatic data migration");
+    expect(f.calls.some((call) => call.command === "bash" || call.inherit)).toBe(false);
+  });
+  it("can explicitly purge a remaining restored app's verified Turso database", async () => {
+    const targets: unknown[] = [];
+    const f = fixture({
+      confirmed: true,
+      fail: (request) => {
+        if (
+          platformInspection(request) &&
+          request.args.includes(cloudStackNames("staging", "cloud").backend)
+        )
+          return {
+            code: 1,
+            stdout: "",
+            stderr: `(ValidationError) Stack with id ${cloudStackNames("staging", "cloud").backend} does not exist`,
+          };
+        return tursoStackResponse(request);
+      },
+    });
+    f.io.purgeTursoControlData = async (target) => {
+      targets.push(target);
+    };
+    expect(await f.run(["down", "--purge-retained-data"])).toBe(0);
+    expect(targets).toEqual([
+      {
+        databaseUrl: "https://owned.turso.io",
+        parameterName: "/TenkaCloud/staging/turso/auth-token",
+        schema: "lite-baseline-v1",
+        region: "ap-northeast-1",
+      },
+    ]);
+    expect(f.calls.filter((call) => call.args.includes("destroy"))).toHaveLength(1);
+  });
+});
+
+describe("original physical installation continuity", () => {
+  const baseline = z
+    .object({ templates: z.record(z.record(z.unknown())) })
+    .parse(
+      JSON.parse(
+        readFileSync(
+          new URL(
+            "../../infrastructure/test/cloud-hosting/fixtures/historical-lite-signatures.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      ),
+    );
+  const names = cloudStackNames("staging", "lite");
+  function historicalResponse(
+    request: ProcessRequest,
+    provider: "dynamodb" | "turso",
+  ): ProcessResult | undefined {
+    const target = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+    if (target === "CDKToolkit") return undefined;
+    if (request.args.includes("get-template"))
+      return {
+        code: 0,
+        stderr: "",
+        stdout: JSON.stringify({
+          TemplateBody:
+            baseline.templates[provider]?.[target.includes("problem-deploy") ? "backend" : "app"],
+        }),
+      };
+    if (!request.args.includes("describe-stacks") || !request.args.includes("Stacks[0]"))
+      return undefined;
+    if (!Object.values(names).includes(target))
+      return {
+        code: 1,
+        stdout: "",
+        stderr: `(ValidationError) Stack with id ${target} does not exist`,
+      };
+    return {
+      code: 0,
+      stderr: "",
+      stdout: JSON.stringify({
+        ...ownedStack(target),
+        Outputs: [{ OutputKey: "ExistingOutput", OutputValue: "preserved" }],
+        Tags: [
+          { Key: "Project", Value: "TenkaCloud" },
+          { Key: "Environment", Value: "staging" },
+        ],
+      }),
+    };
+  }
+  it("updates the characterized original names and existing Cognito/data contract, without creating cloud-named replacements", async () => {
+    const f = fixture({
+      confirmed: true,
+      fail: (request) => historicalResponse(request, "dynamodb"),
+    });
+    const result = await runCloudCli(["up"], f.io, {
+      root: ROOT,
+      env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
+    });
+    expect(f.errors).toEqual([]);
+    expect(result).toBe(0);
+    const deploy = f.calls.find((call) => call.args.includes("deploy"));
+    expect(deploy?.args).toContain(names.app);
+    expect(deploy?.args).toContain(names.backend);
+    expect(deploy?.args).not.toContain("tenkacloud-cloud-staging");
+    expect(deploy?.env.TENKACLOUD_STACK_LAYOUT).toBe("lite");
+  });
+  it.each([{ args: ["up"] }, { args: ["up", "--yes"] }])(
+    "holds an original installation before AWS changes without specific no-active-event confirmation: %j",
+    async ({ args }) => {
+      const f = fixture({ fail: (request) => historicalResponse(request, "dynamodb") });
+      expect(
+        await runCloudCli(args, f.io, {
+          root: ROOT,
+          env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
+        }),
+      ).toBe(1);
+      expect(f.confirmations).toHaveLength(1);
+      expect(f.messages.join(" ")).toContain(
+        "Updating during an active competition can stop scoring",
+      );
+      expect(f.errors.join(" ")).toContain("--confirm-no-active-events");
+      expect(f.calls.some((call) => call.inherit || call.command === "bash")).toBe(false);
+      expect(f.calls.some((call) => call.args.includes("CDKToolkit"))).toBe(false);
+    },
+  );
+  it("accepts only the explicit completed-event acknowledgment for an original unattended upgrade", async () => {
+    const f = fixture({ fail: (request) => historicalResponse(request, "dynamodb") });
+    expect(
+      await runCloudCli(["up", "--confirm-no-active-events"], f.io, {
+        root: ROOT,
+        env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined, CI: "true" },
+      }),
+    ).toBe(0);
+    expect(f.confirmations).toHaveLength(0);
+    expect(f.messages.join(" ")).toContain("no active competitions remain");
+    expect(f.calls.some((call) => call.args.includes("deploy"))).toBe(true);
+  });
+  it("rejects changing an original Turso database even without modern provider outputs", async () => {
+    const f = fixture({ fail: (request) => historicalResponse(request, "turso") });
+    expect(
+      await runCloudCli(["up"], f.io, {
+        root: ROOT,
+        env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
+      }),
+    ).toBe(1);
+    expect(f.errors.join(" ")).toContain("explicit data migration");
+    expect(f.calls.some((call) => call.inherit)).toBe(false);
+  });
+  it("recovers original Turso identity from its exact template for explicit app-only purge", async () => {
+    const f = fixture({
+      confirmed: true,
+      fail: (request) => {
+        const target = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+        if (
+          request.args.includes("describe-stacks") &&
+          request.args.includes("Stacks[0]") &&
+          target === names.backend
+        )
+          return {
+            code: 1,
+            stdout: "",
+            stderr: `(ValidationError) Stack with id ${target} does not exist`,
+          };
+        return historicalResponse(request, "turso");
+      },
+    });
+    const targets: unknown[] = [];
+    f.io.purgeTursoControlData = async (target) => {
+      targets.push(target);
+    };
+    expect(
+      await runCloudCli(["down", "--purge-retained-data"], f.io, {
+        root: ROOT,
+        env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
+      }),
+    ).toBe(0);
+    expect(targets).toEqual([
+      {
+        databaseUrl: "https://synthetic.turso.io",
+        parameterName: "/test/turso/token",
+        schema: "lite-baseline-v1",
+        region: "ap-northeast-1",
+      },
+    ]);
+    expect(f.assemblies.map((a) => a.name)).toEqual([names.app]);
+  });
+  it("makes no mutation when both physical installations exist", async () => {
+    const f = fixture({
+      fail: (request) => {
+        const target = request.args[request.args.indexOf("--stack-name") + 1] ?? "";
+        if (
+          request.args.includes("describe-stacks") &&
+          request.args.includes("Stacks[0]") &&
+          target.startsWith("tenkacloud-lite")
+        )
+          return { code: 0, stderr: "", stdout: JSON.stringify(ownedStack(target)) };
+        return undefined;
+      },
+    });
+    expect(
+      await runCloudCli(["up"], f.io, {
+        root: ROOT,
+        env: { ...f.env, TENKACLOUD_STACK_LAYOUT: undefined },
+      }),
+    ).toBe(1);
+    expect(f.errors.join(" ")).toContain("Both tenkacloud-lite and tenkacloud-cloud");
+    expect(
+      f.calls.every(
+        (call) =>
+          call.command === "aws" &&
+          (call.args.includes("get-caller-identity") || call.args.includes("describe-stacks")),
+      ),
+    ).toBe(true);
   });
 });

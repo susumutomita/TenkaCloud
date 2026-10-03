@@ -220,59 +220,102 @@ def label_orient(points, pos):
 
 
 def cloud():
-    # 実際の CloudApplicationStack / CloudDataStack。CloudFront と IAM はリージョン外。
+    # Original single-installation layout and resource relationships from 825415fc.
     frames = [
-        ("aws-tenkacloud", "1", "AWS Cloud（開催基盤アカウント）", CLOUD, 20, 2220, 130),
-        ("region-tenkacloud", "aws-tenkacloud", "開催基盤リージョン", REGION, 40, 2200, 340),
-        ("stack-admin-hosting", "region-tenkacloud", "CloudApplicationStack", CONSOLE_STACK, 60, 1390, 400),
-        ("stack-problem-deploy", "region-tenkacloud", "CloudDataStack", BACKEND_STACK, 1420, 2180, 400),
-        ("turso-boundary", "1", "外部 Turso（DynamoDB と択一）", EXTERNAL, 2330, 2730, 680),
+        ("aws-lite", "1", "AWS Cloud", CLOUD, 20, 2220, 130),
+        ("region-lite", "aws-lite", "開催基盤リージョン", REGION, 40, 2200, 300, 1820),
+        ("stack-lite", "region-lite", "TenkaCloud（開催管理スタック）", TENANT_STACK, 60, 950, 360),
+        ("stack-problem-deploy", "region-lite", "ProblemDeployBackendStack", BACKEND_STACK, 980, 2180, 360),
+        ("external", "1", "外部サービス・競技用 AWS アカウント", EXTERNAL, 2320, 2920, 130),
+        ("competitor-account", "external", "競技用 AWS アカウント", BACKEND_STACK, 2360, 2880, 1080),
     ]
     icons = [
         ("user-organizer", "1", "user", "開催者", 640, YU),
         ("user-participants", "1", "users", "参加者", 1690, YU),
-        ("cloudfront-organizer", "aws-tenkacloud", "cloudfront", "Amazon CloudFront\n開催管理コンソール", 860, 220),
-        ("cloudfront-portal", "aws-tenkacloud", "cloudfront", "Amazon CloudFront\n参加者ポータル", 1490, 220),
-        ("s3-organizer", "stack-admin-hosting", "s3", "Amazon S3\n画面・runtime-config.json", 860, 490),
-        ("s3-portal", "stack-problem-deploy", "s3", "Amazon S3\n画面・runtime-config.json", 1490, 490),
-        ("cognito-tenant", "stack-admin-hosting", "cognito", "Amazon Cognito\n開催者認証・MFA", 300, R1),
-        ("apigw-tenant", "stack-admin-hosting", "api_gateway", "Amazon API Gateway\n開催者・参加者 REST API", 640, R1),
-        ("lambda-api", "stack-admin-hosting", "lambda", "AWS Lambda\n大会・認証・採点\nnative Cryptography Battle", 640, R2),
-        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB（選択時のみ）\nEvents・Teams・Deployments\n大会・ジョブ・得点・native state", 1690, R2),
-        ("turso-control", "turso-boundary", "generic_database", "Turso（HTTPS / libSQL）\n大会・ジョブ・得点・native state\nDynamoDB テーブルは作成しない", 2530, R2),
-        ("ssm-turso-token", "region-tenkacloud", "systems_manager", "AWS Systems Manager\n既存の指定 SecureString 1 個\nTurso token（Turso 選択時のみ）", 1690, R6),
-        ("s3-source", "stack-admin-hosting", "s3", "Amazon S3\n固定カタログ・CFn・native plugin\nmake destroy で削除", 1090, R2),
-        ("ssm-external-id", "stack-admin-hosting", "systems_manager", "AWS Systems Manager\nParameter Store（ExternalId）", 300, R3),
-        ("lambda-dispatcher", "stack-admin-hosting", "lambda", "AWS Lambda\n永続キューの Dispatcher", 640, R4),
-        ("eventbridge-problem-deploy", "stack-admin-hosting", "eventbridge", "Amazon EventBridge\n1 分ごとの起動", 300, R4),
-        ("sfn-deploy", "stack-admin-hosting", "step_functions", "AWS Step Functions\nAWS 問題の配置・撤去", 640, R5),
-        ("lambda-cfn-deploy", "stack-admin-hosting", "lambda", "AWS Lambda\nClaim・Create・Describe\nFinish・Fail", 1090, R5),
-        ("cloudwatch-deploy-logs", "stack-admin-hosting", "cloudwatch_2", "Amazon CloudWatch\nAPI handler・Worker の診断\nWorkflow: ERROR（実行データなし）", 1090, R3),
+        ("lambda-pre-token", "stack-lite", "lambda", "AWS Lambda\n管理者 claims の追加", 200, R1),
+        ("cognito-tenant", "stack-lite", "cognito", "Amazon Cognito\n開催者（tenant=local）", 420, R1),
+        ("apigw-tenant", "stack-lite", "api_gateway", "Amazon API Gateway\nテナント REST API", 640, R1),
+        ("cloudfront-organizer", "aws-lite", "cloudfront", "Amazon CloudFront\n開催管理コンソール", 860, 220),
+        ("s3-organizer", "stack-lite", "s3", "Amazon S3\n開催管理コンソール", 860, R1),
+        ("dynamodb-saml", "stack-lite", "dynamodb", "Amazon DynamoDB（選択時）\nSamlIdps", 200, R2),
+        ("lambda-saml", "stack-lite", "lambda", "AWS Lambda\nSAML IdP の管理", 420, R2),
+        ("cloudfront-portal", "aws-lite", "cloudfront", "Amazon CloudFront\n参加者ポータル", 1490, 220),
+        ("s3-portal", "stack-problem-deploy", "s3", "Amazon S3\n参加者ポータル", 1490, R1),
+        ("lambda-portal", "stack-problem-deploy", "lambda", "AWS Lambda\n参加者 API（関数 URL）", 1690, R1),
+        ("lambda-coordination", "stack-problem-deploy", "lambda", "AWS Lambda\n独自競技の中継（関数 URL）", 1890, R1),
+        ("s3-coordination", "stack-problem-deploy", "s3", "Amazon S3\n独自競技のプラグイン", 2090, R1),
+        ("lambda-api", "stack-problem-deploy", "lambda", "AWS Lambda\n配置・大会・アカウント API", 1290, R2),
+        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB（選択時）\n制御データ（7 テーブル）", 1690, R2),
+        ("lambda-audit", "stack-problem-deploy", "lambda", "AWS Lambda\n監査の記録・ExternalId の点検", 2090, R2),
+        ("eventbridge-problem-deploy", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\nこの stack のイベントバス・スケジュール", 1290, R3),
+        ("lambda-scoring", "stack-problem-deploy", "lambda", "AWS Lambda\n定期採点（GenericScoring）", 1690, R3),
+        ("lambda-describe-stack", "stack-problem-deploy", "lambda", "AWS Lambda\nスタックの状態確認", 1090, R4),
+        ("sfn-deploy", "stack-problem-deploy", "step_functions", "AWS Step Functions\n配置・削除・一括配置", 1290, R4),
+        ("codebuild-rollback", "stack-problem-deploy", "codebuild", "AWS CodeBuild\n旧来の配置経路", 1490, R4),
+        ("cloudwatch-ops-alarms", "stack-problem-deploy", "cloudwatch_2", "Amazon CloudWatch\nログ・運用アラーム（任意）", 1890, R4),
+        ("s3-competitor-bootstrap", "stack-problem-deploy", "s3", "Amazon S3\n競技用アカウントの初期設定", 2090, R4),
+        ("ssm-external-id", "stack-problem-deploy", "systems_manager", "AWS Systems Manager\nParameter Store（ExternalId）", 1090, R5),
+        ("lambda-cfn-deploy", "stack-problem-deploy", "lambda", "AWS Lambda\nスタック操作（CfnDeploy）", 1290, R5),
+        ("s3-bulk-plan", "stack-problem-deploy", "s3", "Amazon S3\n一括配置の計画", 1090, R6),
+        ("cloudwatch-deploy-logs", "stack-problem-deploy", "cloudwatch_2", "Amazon CloudWatch\n配置ジョブのログ（参加者 API が読む）", 1490, R6),
+        ("s3-source", "region-lite", "s3", "Amazon S3\n非公開の実行 snapshot・source ZIP（別バケット）", 1290, 1690),
+        ("idp", "external", "corporate_data_center", "テナントの IdP\n（SAML 2.0、任意）", 2470, 460),
+        ("turso", "external", "generic_database", "Turso（HTTPS / libSQL）\nDynamoDB と択一・指定 SSM token", 2470, 630),
+        ("non-aws-providers", "external", "traditional_server", "AWS 以外のクラウド\nAzure・GCP・さくら（画面は既定で非表示）", 2470, 800),
+        ("iam-competitor", "competitor-account", "identity_and_access_management", "AWS IAM\n競技用デプロイロール・ExternalId 必須", 2490, R5),
+        ("cfn-problem", "competitor-account", "cloudformation", "AWS CloudFormation\n問題のスタック（チーム×問題）", 2730, R5),
+        ("problem-resources", "competitor-account", "general", "問題のリソース\n（テンプレートで定義）", 2730, R6),
     ]
-    # Bootstrap 配信用 S3 は実際には ApplicationStack。02 の詳細図に描く。
-    d = Diagram(frames, icons, align_bottoms=("stack-admin-hosting", "stack-problem-deploy"))
+    d = Diagram(frames, icons, align_bottoms=("aws-lite", "external"))
     e = d.edge
+
+    # 利用者
     e("user-organizer", ("right",), "cloudfront-organizer", ("top",), "画面（HTTPS）", via=[(860, YU)])
-    e("user-organizer", ("left",), "cognito-tenant", ("top",), "ログイン", via=[(300, YU)], lab=(1, 0.76))
-    e("user-organizer", ("bottom",), "apigw-tenant", ("top",), "開催者 JWT", lab=(0, 0.84))
+    e("user-organizer", ("bottom",), "apigw-tenant", ("top",), "API（JWT）", lab=(0, 0.727))
     e("user-participants", ("left",), "cloudfront-portal", ("top",), "画面（HTTPS）", via=[(1490, YU)])
-    e("user-participants", ("bottom",), "apigw-tenant", ("right",), "大会に属するチームキー", via=[(1690, R1)], lab=(1, 0.54))
-    e("cloudfront-organizer", ("bottom",), "s3-organizer", ("top",), "静的ファイル（OAC）", lab=(0, 0.98))
-    e("cloudfront-portal", ("bottom",), "s3-portal", ("top",), "静的ファイル（OAC）", lab=(0, 0.98))
-    e("apigw-tenant", ("left",), "cognito-tenant", ("right",), "開催者 JWT を検証", aux=True)
-    e("apigw-tenant", ("bottom",), "lambda-api", ("top",), "Lambda 統合")
-    e("lambda-api", ("right",), "dynamodb-control", ("left",), "状態・得点を永続化", via=[(710, R2), (710, 930), (1580, 930), (1580, R2)], lab=(2, 0.5))
-    e("stack-admin-hosting", ("right", 1080), "turso-control", ("bottom",), "API・Dispatcher・Worker: HTTP（Turso 選択時）", via=[(2530, 1080)], lab=(0, 0.58))
-    e("stack-admin-hosting", ("bottom", 1230), "ssm-turso-token", ("left",), "同じ Lambda 群: 指定 token だけ取得", via=[(1230, R6)], lab=(1, 0.5))
-    e("lambda-api", ("right", 0.25), "s3-source", ("left", 0.25), "固定 artifact を読む")
-    e("lambda-api", ("left",), "ssm-external-id", ("top",), "初回作成・取得", via=[(300, R2)], lab=(0, 0.5))
-    e("eventbridge-problem-deploy", ("right",), "lambda-dispatcher", ("left",), "起動", aux=True)
-    e("lambda-dispatcher", ("right",), "dynamodb-control", ("bottom", 0.25), "未処理ジョブを取得・照合", via=[(1675, R4)], lab=(0, 0.63))
-    e("lambda-dispatcher", ("bottom",), "sfn-deploy", ("top",), "StartExecution")
-    e("sfn-deploy", ("right",), "lambda-cfn-deploy", ("left",), "所有権付きの処理")
-    e("lambda-api", ("bottom",), "cloudwatch-deploy-logs", ("left",), "API handler のログ", aux=True, via=[(640, R3)])
-    e("lambda-cfn-deploy", ("top",), "cloudwatch-deploy-logs", ("bottom",), "Worker ログ", aux=True)
+    e("user-participants", ("bottom",), "lambda-portal", ("top",), "API（チームのキー）", lab=(0, 0.727))
+    e("user-participants", ("right", 0.75), "lambda-coordination", ("top",), "独自競技の操作", via=[(1890, 75)], lab=(1, 0.748))
+    e("user-participants", ("right", 0.25), "problem-resources", ("right",), "問題への解答操作", via=[(2980, 45), (2980, R6)], pos=-0.7)
+
+    # 開催管理（TenkaCloudLiteStack）
+    e("cloudfront-organizer", ("bottom",), "s3-organizer", ("top",), "静的ファイル（OAI）")
+    e("apigw-tenant", ("left",), "cognito-tenant", ("right",), "JWT を検証", aux=True)
+    e("cognito-tenant", ("left",), "lambda-pre-token", ("right",), "claims を追加")
+    e("apigw-tenant", ("bottom", 0.25), "lambda-saml", ("right",), "/tenant/idp", via=[(625, R2)])
+    e("lambda-saml", ("top",), "cognito-tenant", ("bottom",), "IdP を登録")
+    e("lambda-saml", ("left",), "dynamodb-saml", ("right",), "読み書き")
+    e("apigw-tenant", ("bottom", 0.75), "lambda-api", ("left",), "Lambda 統合（スタックをまたぐ）", via=[(655, R2)], lab=(1, 0.2))
+
+    # 外部の信頼境界（リージョンの上の帯を通す）
+    e("idp", ("left",), "cognito-tenant", ("top",), "SAML アサーション", via=[(2305, 460), (2305, BAND_A), (420, BAND_A)], lab=(3, 0.7))
+    e("lambda-api", ("top", 0.25), "turso", ("left",), "API・参加者・採点・競技・SAML: HTTPS（Turso）", via=[(1275, BAND_B), (2285, BAND_B), (2285, 630)], lab=(1, 0.6))
+    e("lambda-api", ("top", 0.75), "non-aws-providers", ("left",), "AWS 以外への配置", via=[(1305, BAND_D), (2265, BAND_D), (2265, 800)], lab=(1, 0.75))
+
+    # 問題の配置と参加者
+    e("cloudfront-portal", ("bottom",), "s3-portal", ("top",), "静的ファイル（OAI）")
+    e("lambda-portal", ("bottom",), "dynamodb-control", ("top",), "読み書き")
+    e("lambda-coordination", ("right",), "s3-coordination", ("left",), "プラグインを読む")
+    e("lambda-api", ("right",), "dynamodb-control", ("left",), "読み書き")
+    e("lambda-audit", ("left",), "dynamodb-control", ("right",), "監査ログ")
+    e("lambda-api", ("bottom",), "eventbridge-problem-deploy", ("top",), "Deploy*Requested")
+    e("eventbridge-problem-deploy", ("bottom",), "sfn-deploy", ("top",), "ルールの宛先")
+    e("eventbridge-problem-deploy", ("right",), "lambda-scoring", ("left",), "1 分ごとに起動")
+    e("lambda-scoring", ("top",), "dynamodb-control", ("bottom",), "得点を記録")
+    e("lambda-scoring", ("right",), "lambda-coordination", ("bottom",), "tick を委譲", via=[(1890, R3)], pos=-0.3)
+    e("lambda-scoring", ("bottom", 0.25), "problem-resources", ("left",), "HTTP(S) で確認", via=[(1675, R6)], pos=0.2)
+    e("lambda-scoring", ("bottom", 0.75), "cloudwatch-ops-alarms", ("left",), "エラー・停止", aux=True, via=[(1705, R4)])
+    e("sfn-deploy", ("bottom",), "lambda-cfn-deploy", ("top",), "スタック操作")
+    e("sfn-deploy", ("left",), "lambda-describe-stack", ("right",), "状態を確認")
+    e("sfn-deploy", ("right",), "codebuild-rollback", ("left",), "Lambda 経路を切ったとき", aux=True)
+    e("lambda-cfn-deploy", ("left",), "ssm-external-id", ("right",), "ExternalId を取得")
+    e("lambda-cfn-deploy", ("right",), "iam-competitor", ("left",), "AssumeRole（ExternalId 必須）")
+    e("lambda-cfn-deploy", ("bottom", 0.25), "s3-source", ("top", 0.25), "保存した catalogKey の source を読む", lab=(0, 0.92))
+    e("lambda-cfn-deploy", ("bottom", 0.75), "cloudwatch-deploy-logs", ("left",), "進捗ログ", via=[(1305, R6)], pos=0.4)
+    e("s3-competitor-bootstrap", ("right",), "iam-competitor", ("top",), "初期設定テンプレート（1 回だけ）", aux=True, via=[(2490, R4)], pos=-0.3)
+    e("iam-competitor", ("right",), "cfn-problem", ("left",), "CloudFormation API")
+    e("cfn-problem", ("bottom",), "problem-resources", ("top",), "作成・更新・削除")
     return d
+
 
 
 def aws_exercises():
@@ -280,7 +323,7 @@ def aws_exercises():
     frames = [
         ("aws-lite", "1", "AWS Cloud（開催基盤アカウント）", CLOUD, 20, 1760, 130),
         ("region-lite", "aws-lite", "開催基盤リージョン", REGION, 40, 1740, 300),
-        ("stack-problem-deploy", "region-lite", "CloudApplicationStack / CloudDataStack", BACKEND_STACK, 60, 1720, 360),
+        ("stack-problem-deploy", "region-lite", "ProblemDeployBackendStack", BACKEND_STACK, 60, 1720, 360),
         ("external", "1", "AWS Cloud（競技用アカウント・開催基盤とは分離）", EXTERNAL, 1860, 2730, 130),
         ("competitor-account", "external", "競技用リージョン（チームごとの割り当て）", REGION, 1880, 2710, 940),
         ("turso-boundary", "1", "外部 Turso（DynamoDB と択一）", EXTERNAL, 850, 1330, 1370),
@@ -289,38 +332,37 @@ def aws_exercises():
         ("user-organizer", "1", "user", "開催者", 640, YU),
         ("user-participants", "1", "users", "参加者", 2490, YU),
         ("lambda-api", "stack-problem-deploy", "lambda", "AWS Lambda\n大会・ジョブを受理", 640, R0),
-        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB（選択時のみ）\n所有権・試行・永続キュー", 1090, R0),
-        ("turso-control", "turso-boundary", "generic_database", "Turso（HTTPS / libSQL）\n所有権・試行・永続キュー\n指定 SSM token で接続", 1090, 1470),
-        ("eventbridge-problem-deploy", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\n1 分ごとの起動", 220, R1),
-        ("lambda-dispatcher", "stack-problem-deploy", "lambda", "AWS Lambda\nDispatcher", 640, R1),
-        ("sfn-deploy", "stack-problem-deploy", "step_functions", "AWS Step Functions\nClaim → Create → Describe → Finish\n失敗・タイムアウトを保存", 640, R2),
-        ("lambda-recovery", "stack-problem-deploy", "lambda", "AWS Lambda\n失敗した実行の Recovery", 1450, R2),
-        ("eventbridge-recovery", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\n失敗・中断・時間切れ", 1090, R2),
+        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB（選択時のみ）\n大会・チーム・配置・得点", 1090, R0),
+        ("turso-control", "turso-boundary", "generic_database", "Turso（HTTPS / libSQL）\n大会・チーム・配置・得点\n指定 SSM token で接続", 1090, 1470),
+        ("eventbridge-problem-deploy", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\n配置要求・予約実行", 220, R1),
+        ("lambda-dispatcher", "stack-problem-deploy", "codebuild", "AWS CodeBuild\n代替配置経路（任意）", 640, R1),
+        ("sfn-deploy", "stack-problem-deploy", "step_functions", "AWS Step Functions\nCreate → Describe → Finish\n失敗・タイムアウトを保存", 640, R2),
+        ("lambda-recovery", "stack-problem-deploy", "lambda", "AWS Lambda\n定期採点（GenericScoring）", 1450, R2),
+        ("eventbridge-recovery", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\n定期採点スケジュール", 1090, R2),
         ("lambda-cfn-deploy", "stack-problem-deploy", "lambda", "AWS Lambda\nCloudFormation Worker", 640, R3),
         ("ssm-external-id", "stack-problem-deploy", "systems_manager", "AWS Systems Manager\n共通 ExternalId を保持", 220, R3),
-        ("s3-source", "stack-problem-deploy", "s3", "Amazon S3\n固定した hello-world の\nテンプレート・metadata", 640, R4),
+        ("s3-source", "stack-problem-deploy", "s3", "Amazon S3\n固定 catalog・source・plugin\nsource ZIP は別バケットの固定 version", 640, R4),
         ("s3-competitor-bootstrap", "stack-problem-deploy", "s3", "Amazon S3\n公開 bootstrap テンプレート", 1450, R1),
-        ("lambda-participant-access", "stack-problem-deploy", "lambda", "AWS Lambda（同じ API）\n大会・チーム・配置を再検証", 1450, R4),
+        ("lambda-participant-access", "stack-problem-deploy", "lambda", "AWS Lambda（参加者 API）\n大会・チーム・配置を再検証", 1450, R4),
         ("iam-competitor", "external", "identity_and_access_management", "AWS IAM\n共通 CompetitorDeploy ロール\nExternalId 必須", 2110, R1),
         ("iam-viewer", "external", "identity_and_access_management", "AWS IAM\n配置ごとの ParticipantViewer\nExternalId は Job ID", 2490, R1),
         ("cfn-problem", "competitor-account", "cloudformation", "AWS CloudFormation\nチーム × 問題 × 試行", 2110, R3),
-        ("problem-resources", "competitor-account", "systems_manager", "AWS Systems Manager\nhello-world の Parameter", 2110, R4),
-        ("participant-cli", "1", "client", "参加者の AWS CLI\n対象 Parameter の読み取りだけ", 2490, 1480),
+        ("problem-resources", "competitor-account", "general", "競技用リソース\n問題テンプレートで定義", 2110, R4),
+        ("participant-cli", "1", "client", "参加者の AWS CLI\n対象配置の許可された操作", 2490, 1480),
     ]
     d = Diagram(frames, icons, align_bottoms=("aws-lite", "external"))
     e=d.edge
     e("user-organizer", ("bottom",), "lambda-api", ("top",), "認証済みの配置要求", lab=(0, 0.99))
-    e("lambda-api", ("right",), "dynamodb-control", ("left",), "ジョブ・outbox を保存")
-    e("stack-problem-deploy", ("bottom", 640), "turso-control", ("left",), "API・Dispatcher・Worker・Recovery\nTurso 選択時: HTTPS", via=[(640, 1470)], lab=(0, 0.28))
-    e("eventbridge-problem-deploy", ("right",), "lambda-dispatcher", ("left",), "起動", aux=True)
-    e("lambda-dispatcher", ("right",), "dynamodb-control", ("bottom",), "永続キューを確認", via=[(1090, R1)])
-    e("lambda-dispatcher", ("bottom",), "sfn-deploy", ("top",), "実行を開始")
-    e("sfn-deploy", ("right",), "eventbridge-recovery", ("left",), "失敗した実行の通知", aux=True)
-    e("eventbridge-recovery", ("right",), "lambda-recovery", ("left",), "復旧処理", aux=True)
-    e("lambda-recovery", ("right",), "dynamodb-control", ("top",), "失敗状態・所有権を照合", aux=True, via=[(1680, R2), (1680, 280), (1090, 280)], lab=(2, 0.5))
+    e("lambda-api", ("right",), "dynamodb-control", ("left",), "配置ジョブを保存")
+    e("stack-problem-deploy", ("bottom", 640), "turso-control", ("left",), "API・配置・参加者・採点\nTurso 選択時: HTTPS", via=[(640, 1470)], lab=(0, 0.28))
+    e("lambda-api", ("left",), "eventbridge-problem-deploy", ("top",), "配置要求を発行", via=[(220, R0)])
+    e("eventbridge-problem-deploy", ("bottom",), "sfn-deploy", ("left",), "実行を開始", via=[(220, R2)])
+    e("sfn-deploy", ("top",), "lambda-dispatcher", ("bottom",), "Lambda 経路を切ったとき", aux=True)
+    e("eventbridge-recovery", ("right",), "lambda-recovery", ("left",), "採点を起動", aux=True)
+    e("lambda-recovery", ("right",), "dynamodb-control", ("top",), "得点を記録", aux=True, via=[(1680, R2), (1680, 280), (1090, 280)], lab=(2, 0.5))
     e("sfn-deploy", ("bottom",), "lambda-cfn-deploy", ("top",), "作成・確認・削除")
     e("lambda-cfn-deploy", ("left",), "ssm-external-id", ("right",), "ExternalId を取得")
-    e("lambda-cfn-deploy", ("bottom",), "s3-source", ("top",), "artifact hash を検証")
+    e("lambda-cfn-deploy", ("bottom",), "s3-source", ("top",), "catalogKey と source hash を検証")
     e("lambda-cfn-deploy", ("right", 0.25), "dynamodb-control", ("right",), "進捗・試行を保存", via=[(1570, R3-15), (1570, R0)], lab=(0, 0.65))
     e("lambda-cfn-deploy", ("right",), "iam-competitor", ("bottom", 0.25), "AssumeRole（ExternalId）", via=[(1810, R3), (1810, 900), (2095, 900)], lab=(0, 0.6))
     e("s3-competitor-bootstrap", ("right",), "iam-competitor", ("left",), "所有者が初期設定（1 回）", aux=True)
@@ -328,8 +370,8 @@ def aws_exercises():
     e("cfn-problem", ("bottom",), "problem-resources", ("top",), "作成・削除")
     e("user-participants", ("left",), "lambda-participant-access", ("top",), "チームキーで CLI 資格情報を要求", via=[(1800, YU), (1800, 1080), (1450, 1080)], lab=(1, 0.4))
     e("lambda-participant-access", ("right",), "iam-viewer", ("bottom",), "対象配置を確認・AssumeRole", via=[(1770, R4), (1770, 880), (2490, 880)], lab=(2, 0.45))
-    e("lambda-participant-access", ("bottom",), "participant-cli", ("left",), "15 分の資格情報（最小権限）", via=[(1450, 1480)], lab=(1, 0.5))
-    e("participant-cli", ("top",), "problem-resources", ("right",), "対象 Parameter だけを読む", via=[(2490, R4)])
+    e("lambda-participant-access", ("bottom",), "participant-cli", ("left",), "15 分の資格情報（問題の IAM policy）", via=[(1450, 1480)], lab=(1, 0.5))
+    e("participant-cli", ("top",), "problem-resources", ("right",), "許可された競技用リソースを操作", via=[(2490, R4)])
     return d
 
 
@@ -394,14 +436,14 @@ def use_cases():
         ("uc-login", "チームキーで自分の大会に入る\nlocal / cloud"),
         ("uc-play", "自分の環境を Start / resume・Stop (keep data) する\nlocal の on-demand Compose"),
         ("uc-submit", "解答・checkpoint を送り、得点・順位を見る\n現在の対応問題に限る"),
-        ("uc-console", "hello-world 用の 15 分 CLI 資格情報を取得する\ncloud（対象 Parameter の読み取りのみ）"),
+        ("uc-console", "配置に結び付いた AWS 資格情報を取得する\ncloud（問題の許可範囲・短時間）"),
         ("uc-coordination", "native Cryptography Battle に参加する\nlocal / cloud（基盤に state を永続化）"),
     ]
     right = [
         (0,"uc-commit","問題の定義・検証コードを変更して CI で確認する\nproblems/（TenkaCloudChallenge）"),
         (2,"uc-practice","ローカルの大会を起動・停止する\nmake local / make down（データを保持）"),
         (4,"uc-bootstrap","競技用アカウントの IAM 初期設定を承認する\n共通ロール・必須 ExternalId"),
-        (6,"uc-platform","make deploy / make destroy（対象 installation を確認）\n通常は AWS 基盤・既定データを削除\n競技環境の撤去は --drain-events を明示"),
+        (6,"uc-platform","make deploy / make destroy（対象 installation を確認）\n通常は AWS 基盤・既定データを削除\n基盤削除の前に大会の Teardown で競技環境を撤去"),
         (8,"uc-cleanup","組織の複数アカウントに初期設定を配る\n任意の手動 Organizations / StackSets 手順"),
     ]
     frames=[("tenkacloud","1","TenkaCloud（現行の local / cloud）",lane("#FFFFFF","#232F3E",16),330,2110,130)]
@@ -434,8 +476,8 @@ def context():
         ("turso-boundary","1","外部 Turso（DynamoDB と択一）",EXTERNAL,1930,2610,780),
     ]
     boxes=[
-        ("mode-lite","aws-account","cloud: Lambda / API Gateway / Cognito\n保存先は DynamoDB または外部 Turso\nhello-world・native Cryptography Battle",1230,460,880,100,MODE),
-        ("cloud-cli","aws-account","make deploy / make destroy（AWS 基盤・既定データを削除）\n競技環境は --drain-events を明示／外部 Turso は通常保持",1230,650,880,80,MODE),
+        ("mode-lite","aws-account","cloud: Lambda / API Gateway / Cognito\n保存先は DynamoDB または外部 Turso\nAWS 問題・native 競技（Docker は local のみ）",1230,460,880,100,MODE),
+        ("cloud-cli","aws-account","make deploy / make destroy（AWS 基盤・既定データを削除）\n競技環境は大会の Teardown で先に撤去／外部 Turso は通常保持",1230,650,880,80,MODE),
         ("mode-local-host","pc","local\n単一 Bun プロセス + SQLite\n開催管理・参加者画面・native Cryptography Battle",1230,960,880,100,MODE),
         ("mode-local","pc","on-demand Docker / Compose（local のみ）\nチームごとの起動・停止とディスク状態の保持",1230,1150,880,80,MODE),
     ]
@@ -446,7 +488,7 @@ def context():
         ("local-operator","1","user","ローカルの開催者",200,1000),
         ("author","1","user","問題作成者",200,1300),
         ("iam-competitor","competitor-boundary","identity_and_access_management","AWS IAM\n共通ロール・ExternalId",2240,370),
-        ("competitor","competitor-boundary","cloudformation","AWS CloudFormation\n別アカウント、または\n同一競技用アカウントの別リージョン",2240,580),
+        ("competitor","competitor-boundary","cloudformation","AWS CloudFormation\n別の競技用アカウント\n複数チームの別リージョン割り当ても可",2240,580),
         ("turso-control","turso-boundary","generic_database","Turso\ncloud の永続ストア（選択時のみ）\nDynamoDB テーブルは作成しない",2240,890),
         ("challenge","1","documents","problems/（TenkaCloudChallenge）\n固定カタログ・テンプレート・plugin",2240,1150),
     ]
@@ -460,7 +502,7 @@ def context():
     e("iam-competitor",("bottom",),"competitor",("top",),"チームの割り当て先へ配置")
     e("aws-account",("right",710),"turso-control",("left",),"Turso 選択時: HTTPS",via=[(1800,710),(1800,890)],lab=(2,0.62))
     e("challenge",("left",),"mode-local",("right",),"local catalog")
-    e("challenge",("top",),"mode-lite",("right",),"cloud の対応 2 問だけを固定",via=[(1840,1060),(1840,460)],lab=(1,0.35))
+    e("challenge",("top",),"mode-lite",("right",),"cloud の有効な問題・pack（Docker を除外）",via=[(1840,1060),(1840,460)],lab=(1,0.35))
     e("author",("right",),"challenge",("bottom",),"変更・CI で検証",via=[(2240,1300)],lab=(0,0.5))
     return d
 

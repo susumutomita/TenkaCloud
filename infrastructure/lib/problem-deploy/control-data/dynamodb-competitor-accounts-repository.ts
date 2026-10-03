@@ -5,410 +5,167 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
-  TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { z } from "zod";
-import { COMMERCIAL_REGION } from "../../cloud-hosting/regions.js";
-import {
-  connectionKey,
-  connectionSchema,
-  eventGuard,
-  teamGuard,
-  type Write,
-} from "./deployment-storage.js";
+import type { CompetitorAccountItem } from "../handlers/competitor-accounts-handler/types.js";
 import type {
+  CompetitorAccountMutationOutcome,
   CompetitorAccountRecord,
   CompetitorAccountsRepository,
-} from "./domain/competitor-accounts.js";
-import { DeploymentConflict, type DeploymentConnection } from "./domain/deployment-work.js";
-import type { EventRecord } from "./domain/events.js";
-import type { TeamRecord } from "./domain/teams.js";
-import { type CloudTableNames, conflict, eventKey } from "./dynamodb-cloud-repository.js";
-import { installationIntakeGuard } from "./installation-control.js";
+  CreateCompetitorAccountOutcome,
+} from "./types.js";
 
-const id = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/u);
-const accountId = z.string().regex(/^\d{12}$/u);
-const recordSchema = z.object({
-  awsAccountId: accountId,
-  region: z.string().regex(COMMERCIAL_REGION),
-  competitorRoleName: z.string().regex(/^[A-Za-z0-9_+=,.@-]{1,64}$/u),
-  alias: z.string().min(1).max(120).optional(),
-  verified: z.boolean(),
-  verifiedAt: z.string().datetime().optional(),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-  createdBy: z.string().min(1),
-  registrationId: id,
-  revision: z.number().int().positive(),
-});
-const externalIdKey = { PK: "INSTALLATION#ACCOUNTS", SK: "EXTERNAL_ID" };
-function accountKey(value: string) {
-  return { PK: "INSTALLATION#ACCOUNTS", SK: `ACCOUNT#${accountId.parse(value)}` };
-}
-function referenceKey(value: string, eventId: string, teamId: string) {
-  return {
-    PK: `COMPETITOR#${accountId.parse(value)}`,
-    SK: `EVENT#${id.parse(eventId)}#TEAM#${id.parse(teamId)}`,
-  };
-}
-const referenceSchema = z.object({
-  awsAccountId: accountId,
-  eventId: id,
-  teamId: id,
-  registrationId: id,
-});
-function parseRecord(row: Record<string, unknown>): CompetitorAccountRecord {
-  const record = recordSchema.parse(row);
-  const key = accountKey(record.awsAccountId);
-  if (row.PK !== key.PK || row.SK !== key.SK)
-    throw new Error("Competitor registry scope mismatch.");
-  if (record.verified && !record.verifiedAt) throw new Error("Missing competitor verification.");
-  return record;
-}
-function revisionValues(record: CompetitorAccountRecord) {
-  return { ":registration": record.registrationId, ":revision": record.revision };
-}
-function conditionalConflict(error: unknown): boolean {
-  return (
-    (error instanceof Error && error.name === "ConditionalCheckFailedException") || conflict(error)
-  );
-}
-function throwIfIntakeClosed(error: unknown): void {
-  if (!conflict(error)) return;
-  const parsed = z
-    .object({ CancellationReasons: z.array(z.object({ Code: z.string() })) })
-    .safeParse(error);
-  if (parsed.success && parsed.data.CancellationReasons[0]?.Code === "ConditionalCheckFailed")
-    throw new DeploymentConflict("installation_draining");
-}
-const revisionCondition = "registrationId = :registration AND revision = :revision";
+/**
+ * [Issue #2442 / Phase C2] DynamoDB implementation of {@link CompetitorAccountsRepository}.
+ * A behavior-preserving extraction of the DDB access
+ * `handlers/competitor-accounts-handler/store.ts` previously performed
+ * inline: the SAME table, keys, `ConditionExpression` / `UpdateExpression` /
+ * `ProjectionExpression`, and marshalling. It is the default backend —
+ * flipping to SQLite is a one-flag rollback (`CONTROL_DATA_BACKEND`).
+ *
+ * Physical shape (unchanged, `competitor-accounts-table.ts`):
+ *   PK = `TENANT#<tenantId>` / SK = `ACCOUNT#<awsAccountId>`
+ * No GSI — `listAccounts` / `hasRemainingAccounts` scope to the base table via
+ * `begins_with(SK, "ACCOUNT#")`.
+ */
+const PK = (tenantId: string) => `TENANT#${tenantId}`;
+const SK = (awsAccountId: string) => `ACCOUNT#${awsAccountId}`;
+const DDB_KEY_ATTRS: ReadonlySet<string> = new Set(["PK", "SK"]);
 
-/** Reuses the historical conditional account adapter on the existing installation Events table. */
+function isConditionalCheckFailed(err: unknown): boolean {
+  return err instanceof Error && err.name === "ConditionalCheckFailedException";
+}
+
+/** Strip the two physical DDB keys, yielding the domain {@link CompetitorAccountRecord}. */
+function itemToRecord(item: Record<string, unknown>): CompetitorAccountRecord {
+  const record: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(item)) {
+    if (DDB_KEY_ATTRS.has(key)) continue;
+    record[key] = value;
+  }
+  return record as unknown as CompetitorAccountRecord;
+}
+
 export class DynamoDbCompetitorAccountsRepository implements CompetitorAccountsRepository {
   constructor(
     private readonly ddb: DynamoDBDocumentClient,
-    private readonly tables: CloudTableNames,
+    private readonly tableName: string,
   ) {}
-  /** Missing key material may be initialized only before this registry has ever used it. */
-  async reserveExternalIdInitialization(parameterArn: string): Promise<boolean> {
-    if (await this.read(externalIdKey)) return false;
-    if ((await this.query("INSTALLATION#ACCOUNTS", "ACCOUNT#")).length) return false;
-    if (await this.hasSecretReferences(parameterArn)) return false;
+
+  async createAccount(record: CompetitorAccountRecord): Promise<CreateCompetitorAccountOutcome> {
+    const item = { PK: PK(record.tenantId), SK: SK(record.awsAccountId), ...record };
     try {
       await this.ddb.send(
-        new TransactWriteCommand({
-          TransactItems: [
-            installationIntakeGuard(this.tables.events),
-            {
-              Put: {
-                TableName: this.tables.events,
-                Item: { ...externalIdKey, parameterArn, state: "INITIALIZING" },
-                ConditionExpression: "attribute_not_exists(PK)",
-              },
-            },
-          ],
+        new PutCommand({
+          TableName: this.tableName,
+          Item: item,
+          ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
         }),
       );
-      return true;
-    } catch (error) {
-      throwIfIntakeClosed(error);
-      if (conditionalConflict(error)) return false;
-      throw error;
+    } catch (err) {
+      if (isConditionalCheckFailed(err)) return { outcome: "conflict" };
+      throw err;
     }
+    return { outcome: "created" };
   }
-  /** Retained even after every account is removed, so a missing key cannot silently reset old trust. */
-  async observeExternalId(parameterArn: string): Promise<void> {
-    await this.ddb.send(
-      new PutCommand({
-        TableName: this.tables.events,
-        Item: { ...externalIdKey, parameterArn, state: "INITIALIZED" },
-        ConditionExpression:
-          "attribute_not_exists(PK) OR (parameterArn = :parameter AND #state IN (:initializing, :initialized))",
-        ExpressionAttributeNames: { "#state": "state" },
-        ExpressionAttributeValues: {
-          ":parameter": parameterArn,
-          ":initializing": "INITIALIZING",
-          ":initialized": "INITIALIZED",
-        },
+
+  async listAccounts(tenantId: string): Promise<readonly CompetitorAccountRecord[]> {
+    const out = await this.ddb.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: { ":pk": PK(tenantId), ":sk": "ACCOUNT#" },
       }),
     );
+    return ((out.Items ?? []) as Record<string, unknown>[]).map(itemToRecord);
   }
-  private async hasSecretReferences(parameterArn: string): Promise<boolean> {
-    for (const table of [this.tables.events, this.tables.deployments]) {
-      let cursor: Record<string, unknown> | undefined;
-      do {
-        const output = await this.ddb.send(
-          new ScanCommand({
-            TableName: table,
-            ConsistentRead: true,
-            Select: "COUNT",
-            Limit: 100,
-            ExclusiveStartKey: cursor,
-            FilterExpression:
-              "begins_with(PK, :references) OR externalIdParameter = :parameter OR #connection.externalIdParameter = :parameter",
-            ExpressionAttributeNames: { "#connection": "connection" },
-            ExpressionAttributeValues: { ":references": "COMPETITOR#", ":parameter": parameterArn },
-          }),
-        );
-        const page = z
-          .object({
-            Count: z.number().int().nonnegative(),
-            LastEvaluatedKey: z.record(z.unknown()).optional(),
-          })
-          .parse(output);
-        if (page.Count > 0) return true;
-        cursor = page.LastEvaluatedKey;
-      } while (cursor && Object.keys(cursor).length > 0);
-    }
-    return false;
+
+  async getAccount(
+    tenantId: string,
+    awsAccountId: string,
+  ): Promise<CompetitorAccountRecord | undefined> {
+    const out = await this.ddb.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { PK: PK(tenantId), SK: SK(awsAccountId) },
+      }),
+    );
+    return out.Item ? itemToRecord(out.Item as Record<string, unknown>) : undefined;
   }
-  async listAccounts(): Promise<readonly CompetitorAccountRecord[]> {
-    const rows = await this.query("INSTALLATION#ACCOUNTS", "ACCOUNT#");
-    return rows.map(parseRecord);
-  }
-  async getAccount(value: string): Promise<CompetitorAccountRecord | undefined> {
-    const row = await this.read(accountKey(value));
-    if (!row) return undefined;
-    const record = parseRecord(row);
-    if (record.awsAccountId !== value) throw new Error("Competitor registry scope mismatch.");
-    return record;
-  }
-  async createAccount(input: CompetitorAccountRecord): Promise<"created" | "conflict"> {
-    const record = recordSchema.parse(input);
-    if (record.verified || record.verifiedAt || record.revision !== 1)
-      throw new Error("New competitor registrations must be unverified.");
+
+  async markVerified(
+    tenantId: string,
+    awsAccountId: string,
+    verifiedAt: string,
+  ): Promise<CompetitorAccountMutationOutcome> {
     try {
-      await this.ddb.send(
-        new TransactWriteCommand({
-          TransactItems: [
-            installationIntakeGuard(this.tables.events),
-            {
-              ConditionCheck: {
-                TableName: this.tables.events,
-                Key: externalIdKey,
-                ConditionExpression: "#state = :ready",
-                ExpressionAttributeNames: { "#state": "state" },
-                ExpressionAttributeValues: { ":ready": "INITIALIZED" },
-              },
-            },
-            {
-              Put: {
-                TableName: this.tables.events,
-                Item: { ...record, ...accountKey(record.awsAccountId) },
-                ConditionExpression: "attribute_not_exists(PK)",
-              },
-            },
-          ],
-        }),
-      );
-      return "created";
-    } catch (error) {
-      throwIfIntakeClosed(error);
-      if (conditionalConflict(error)) return "conflict";
-      throw error;
-    }
-  }
-  async setVerified(record: CompetitorAccountRecord, verified: boolean, at: string) {
-    recordSchema.parse(record);
-    z.string().datetime().parse(at);
-    try {
-      const result = await this.ddb.send(
+      const out = await this.ddb.send(
         new UpdateCommand({
-          TableName: this.tables.events,
-          Key: accountKey(record.awsAccountId),
-          UpdateExpression: verified
-            ? "SET verified = :verified, verifiedAt = :at, updatedAt = :at, revision = :next"
-            : "SET verified = :verified, updatedAt = :at, revision = :next REMOVE verifiedAt",
-          ConditionExpression: revisionCondition,
-          ExpressionAttributeValues: {
-            ...revisionValues(record),
-            ":verified": verified,
-            ":at": at,
-            ":next": record.revision + 1,
-          },
+          TableName: this.tableName,
+          Key: { PK: PK(tenantId), SK: SK(awsAccountId) },
+          UpdateExpression: "SET verified = :v, verifiedAt = :va, updatedAt = :ua",
+          ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)",
+          ExpressionAttributeValues: { ":v": true, ":va": verifiedAt, ":ua": verifiedAt },
           ReturnValues: "ALL_NEW",
         }),
       );
-      if (!result.Attributes) throw new Error("Missing competitor verification result.");
-      return parseRecord(result.Attributes);
-    } catch (error) {
-      if (conditionalConflict(error)) return undefined;
-      throw error;
+      return {
+        outcome: "updated",
+        record: itemToRecord((out.Attributes ?? {}) as Record<string, unknown>),
+      };
+    } catch (err) {
+      if (isConditionalCheckFailed(err)) return { outcome: "not_found" };
+      throw err;
     }
   }
-  async deleteAccount(record: CompetitorAccountRecord): Promise<"deleted" | "in_use" | "conflict"> {
-    recordSchema.parse(record);
-    const references = await this.query(`COMPETITOR#${record.awsAccountId}`, "EVENT#");
-    const checked = new Set<string>();
-    for (const row of references) {
-      const reference = referenceSchema.parse(row);
-      const key = referenceKey(reference.awsAccountId, reference.eventId, reference.teamId);
-      if (reference.awsAccountId !== record.awsAccountId || row.PK !== key.PK || row.SK !== key.SK)
-        throw new Error("Competitor reference scope mismatch.");
-      if (checked.has(reference.eventId)) continue;
-      checked.add(reference.eventId);
-      const event = await this.read(eventKey(reference.eventId));
-      // ARCHIVED is terminal. Missing/legacy/incomplete teardown is never evidence of no resources.
-      if (
-        event?.eventId !== reference.eventId ||
-        event.status !== "ARCHIVED" ||
-        !Number.isSafeInteger(event.teardownExpected) ||
-        Number(event.teardownExpected) < 0 ||
-        event.teardownExpected !== event.teardownCompleted
-      )
-        return "in_use";
-    }
+
+  async deleteAccount(
+    tenantId: string,
+    awsAccountId: string,
+  ): Promise<CompetitorAccountMutationOutcome> {
     try {
       await this.ddb.send(
         new DeleteCommand({
-          TableName: this.tables.events,
-          Key: accountKey(record.awsAccountId),
-          ConditionExpression: revisionCondition,
-          ExpressionAttributeValues: revisionValues(record),
+          TableName: this.tableName,
+          Key: { PK: PK(tenantId), SK: SK(awsAccountId) },
+          ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)",
         }),
       );
-      return "deleted";
-    } catch (error) {
-      if (conditionalConflict(error)) return "conflict";
-      throw error;
+    } catch (err) {
+      if (isConditionalCheckFailed(err)) return { outcome: "not_found" };
+      throw err;
     }
+    return { outcome: "updated" };
   }
-  /** Link the existing connection and its deletion fence atomically; no account-sharing rule is inferred. */
-  async saveConnection(input: {
-    readonly record: CompetitorAccountRecord;
-    readonly event: EventRecord;
-    readonly team: TeamRecord;
-    readonly connection: DeploymentConnection;
-    readonly previousVersion?: number;
-    readonly now: number;
-  }): Promise<"saved" | "conflict"> {
-    const { record, event, team, connection, previousVersion, now } = input;
-    recordSchema.parse(record);
-    connectionSchema.parse(connection);
-    if (
-      !record.verified ||
-      event.eventId !== team.eventId ||
-      connection.eventId !== event.eventId ||
-      connection.teamId !== team.teamId ||
-      connection.accountId !== record.awsAccountId ||
-      (team.awsAccountId !== undefined && team.awsAccountId !== record.awsAccountId) ||
-      (team.region !== undefined && team.region !== connection.region) ||
-      (team.region === undefined &&
-        event.problems.some((problem) => problem.defaultRegion !== connection.region)) ||
-      connection.roleArn !==
-        `arn:aws:iam::${record.awsAccountId}:role/${record.competitorRoleName}` ||
-      connection.bindingId !== `account-${record.registrationId.toLowerCase()}` ||
-      connection.registrationId !== record.registrationId ||
-      connection.version !== (previousVersion ?? 0) + 1
-    )
-      throw new Error("Competitor connection scope mismatch.");
-    try {
-      await this.ddb.send(
-        new TransactWriteCommand({
-          TransactItems: [
-            installationIntakeGuard(this.tables.events),
-            eventGuard(this.tables.events, event, now),
-            teamGuard(this.tables.teams, team, now),
-            {
-              Update: {
-                TableName: this.tables.events,
-                Key: accountKey(record.awsAccountId),
-                UpdateExpression: "SET revision = :next",
-                ConditionExpression: `${revisionCondition} AND verified = :yes`,
-                ExpressionAttributeValues: {
-                  ...revisionValues(record),
-                  ":yes": true,
-                  ":next": record.revision + 1,
-                },
-              },
-            },
-            {
-              Put: {
-                TableName: this.tables.events,
-                Item: {
-                  ...referenceKey(record.awsAccountId, event.eventId, team.teamId),
-                  awsAccountId: record.awsAccountId,
-                  eventId: event.eventId,
-                  teamId: team.teamId,
-                  registrationId: record.registrationId,
-                },
-              },
-            },
-            {
-              Put: {
-                TableName: this.tables.events,
-                Item: { ...connection, ...connectionKey(event.eventId, team.teamId) },
-                ConditionExpression:
-                  previousVersion === undefined
-                    ? "attribute_not_exists(PK)"
-                    : "version = :previous",
-                ...(previousVersion === undefined
-                  ? {}
-                  : { ExpressionAttributeValues: { ":previous": previousVersion } }),
-              },
-            },
-          ],
-        }),
-      );
-      return "saved";
-    } catch (error) {
-      throwIfIntakeClosed(error);
-      if (conditionalConflict(error)) return "conflict";
-      throw error;
-    }
-  }
-  private async read(key: Record<string, string>) {
-    return (
-      await this.ddb.send(
-        new GetCommand({ TableName: this.tables.events, Key: key, ConsistentRead: true }),
-      )
-    ).Item;
-  }
-  private async query(pk: string, prefix: string) {
-    const rows: Record<string, unknown>[] = [];
-    let cursor: Record<string, unknown> | undefined;
-    do {
-      const page = await this.ddb.send(
-        new QueryCommand({
-          TableName: this.tables.events,
-          KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
-          ExpressionAttributeValues: { ":pk": pk, ":prefix": prefix },
-          ConsistentRead: true,
-          ExclusiveStartKey: cursor,
-        }),
-      );
-      rows.push(...(page.Items ?? []));
-      cursor = page.LastEvaluatedKey;
-    } while (cursor && Object.keys(cursor).length > 0);
-    return rows;
-  }
-}
 
-/** Optional only for the previously shipped exact-binding records; registry jobs always get an atomic current-row guard. */
-export async function registeredAccountGuard(
-  ddb: DynamoDBDocumentClient,
-  tables: CloudTableNames,
-  connection: DeploymentConnection,
-): Promise<Write | undefined> {
-  if (connection.registrationId === undefined) return undefined;
-  connectionSchema.parse(connection);
-  const record = await new DynamoDbCompetitorAccountsRepository(ddb, tables).getAccount(
-    connection.accountId,
-  );
-  if (
-    !record?.verified ||
-    connection.bindingId !== `account-${record.registrationId.toLowerCase()}` ||
-    connection.registrationId !== record.registrationId ||
-    connection.roleArn !== `arn:aws:iam::${record.awsAccountId}:role/${record.competitorRoleName}`
-  )
-    throw new DeploymentConflict("competitor_account_changed");
-  return {
-    ConditionCheck: {
-      TableName: tables.events,
-      Key: accountKey(record.awsAccountId),
-      ConditionExpression: `${revisionCondition} AND verified = :yes`,
-      ExpressionAttributeValues: { ...revisionValues(record), ":yes": true },
-    },
-  };
+  async hasRemainingAccounts(tenantId: string): Promise<boolean> {
+    const out = await this.ddb.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: { ":pk": PK(tenantId), ":sk": "ACCOUNT#" },
+        Select: "COUNT",
+        Limit: 1,
+        ConsistentRead: true,
+      }),
+    );
+    return (out.Count ?? 0) > 0;
+  }
+
+  async forEachCompetitorAccountPage(
+    onPage: (items: readonly Partial<CompetitorAccountItem>[]) => Promise<void>,
+  ): Promise<void> {
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+    do {
+      const out = await this.ddb.send(
+        new ScanCommand({
+          TableName: this.tableName,
+          ProjectionExpression: "tenantId, awsAccountId, rotatedAt, createdAt",
+          ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+        }),
+      );
+      await onPage((out.Items ?? []) as Partial<CompetitorAccountItem>[]);
+      exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (exclusiveStartKey);
+  }
 }

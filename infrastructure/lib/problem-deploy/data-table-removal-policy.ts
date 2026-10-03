@@ -28,3 +28,12 @@ import { RemovalPolicy } from "aws-cdk-lib";
 export function dataTableRemovalPolicy(retain: boolean | undefined): RemovalPolicy {
   return retain === true ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY;
 }
+
+/** 8 つの control-data table construct が共通で受け取る props。 */
+export interface DataTableProps {
+  /**
+   * table の `RemovalPolicy`。未指定なら DESTROY (= 既定)。呼び出し側は
+   * `dataTableRemovalPolicy(config.retainDataTables)` を渡す。
+   */
+  readonly removalPolicy?: RemovalPolicy;
+}

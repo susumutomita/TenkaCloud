@@ -1,10 +1,11 @@
+import type { TursoResetTarget } from "./turso-reset";
 /** Preserve the old purge-or-warn contract, using deployed identity instead of a changed .env. */
 export type TursoTeardownPlan =
   | { readonly kind: "not-turso" }
   | { readonly kind: "warn" | "unverified"; readonly message: string }
   | {
       readonly kind: "purge";
-      readonly target: { readonly databaseUrl: string; readonly parameterName: string };
+      readonly target: Omit<TursoResetTarget, "region">;
     };
 export function planDeployedTursoTeardown(
   outputs: Readonly<Record<string, string>>,
@@ -21,7 +22,8 @@ export function planDeployedTursoTeardown(
     return {
       kind: "unverified",
       message:
-        "Deployed control-data provider could not be verified from stack outputs. Ordinary platform removal remains available; external database rows may remain. Purge requires the deployed provider/target identity, never a changed local .env.",
+        "Deployed control-data provider could not be verified from stack outputs or its original template. Ordinary platform removal remains available; external database rows may remain. Purge requires the deployed provider/target identity, never a changed local .env." +
+        (outputs.CloudDataIdentityError ? ` ${outputs.CloudDataIdentityError}` : ""),
     };
   if (!purge)
     return {
@@ -50,5 +52,15 @@ export function planDeployedTursoTeardown(
     throw new Error(
       "Deployed Turso URL or SSM parameter identity is invalid; purge stopped before mutation.",
     );
-  return { kind: "purge", target: { databaseUrl, parameterName } };
+  const composition = outputs.CloudComposition;
+  if (composition && composition !== "lite-baseline-v1")
+    throw new Error("Unknown deployed composition; Turso purge stopped before mutation.");
+  return {
+    kind: "purge",
+    target: {
+      databaseUrl,
+      parameterName,
+      schema: composition === "lite-baseline-v1" ? "lite-baseline-v1" : "cloud-v1",
+    },
+  };
 }

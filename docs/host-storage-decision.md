@@ -40,14 +40,22 @@ KMS-protected secret store.
 
 The cloud candidate uses Lambda with Turso or DynamoDB, reusing the former
 single-installation cloud path without SaaS/SBT provisioning. Both adapters store
-events, teams, deployment work, scoring and retry receipts with conditional atomic
-writes. Turso uses the HTTP client and an exact SSM token parameter; no DynamoDB
+the original event, team, deployment, scoring, endpoint and coordination records
+with their repository transaction contracts. Both providers admit 99 event teams;
+SQL coordination retains the original 4 MiB state policy. Turso uses the HTTP client and an exact SSM token parameter; no DynamoDB
 tables are created in that mode. Local hosting continues to use SQLite.
 Provider changes do not migrate data and are rejected for an existing installation.
+Published cloud-v1 stack resource IDs are incompatible with the restored Lite
+layout; deployment refuses to overwrite them. Turso preflight rejects nonempty or
+unrecognized `cloud_*` schemas. Known version-1 retired tables left empty after
+explicit purge may coexist without being dropped or migrated. Original unpinned
+Lite upgrades also require confirmation that no active competitions remain before
+bootstrap/source upload/deployment; keep active events on the installed version. A
+legacy catalog key does not replace that check or migrate historical data.
 See [cloud status and database setup](../infrastructure/README.md#database-selection).
 
-The opt-in flag runner assumes only explicitly configured competitor role ARNs
-and reads ExternalId values from their configured SSM parameter ARNs. These values
+The restored deployment workflows use registered competitor roles and mandatory
+ExternalId values from the existing SSM path. These values
 are not browser configuration. Local data-directory keys are not uploaded or
 adopted automatically. This candidate does not guarantee zero AWS charges.
 

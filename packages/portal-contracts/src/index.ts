@@ -246,6 +246,8 @@ export interface ParticipantProblemView {
   /** Native in-platform execution; it has no AWS account, region or external console. */
   readonly runtimeKind?: "coordination";
   readonly coordination?: true;
+  /** Cloud coordination pointer: "default" initially, then the reset run ID. Local runs use jobId. */
+  readonly coordinationRunId?: string;
   readonly problemId: string;
   /** Host-owned Docker terminal capability, independent of legacy practice lifecycle controls. */
   readonly terminal?: true;

@@ -1,4 +1,4 @@
-# Community host architecture
+# Competition hosting architecture
 
 This describes the unreleased integration candidate. It does not describe a
 released cloud service or claim that every restored catalog entry is playable.
@@ -31,43 +31,76 @@ stacks. Explicit event teardown and ordinary shutdown are separate operations.
 
 ## Storage and cloud boundary
 
-Local hosting uses SQLite. Cloud hosting uses API Gateway, Lambda, Cognito and
-either Turso or three DynamoDB tables (Events, Teams and Deployments), reusing
-reviewed serverless components without SaaS / SBT. Turso mode uses an exact SSM
-token parameter and creates no DynamoDB tables. Both SPAs and their runtime configuration are served
-from private S3 origins through CloudFront origin access control.
-AWS service problems require cloud hosting. Docker/Compose exercises are local-only
-and are not listed in the cloud catalog. Native Cryptography Battle runs on both
-hosting options; the DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; AWS performance remains unmeasured.
-`make deploy` and `make destroy` call the current cloud CLI after
-reviewed IAM setup. The supported cloud catalog includes hello-world with scoped CLI
-access and native Cryptography Battle. Destroy confirms the exact platform and deletes default-owned data. `destroy-all`
-purges stack-owned retained data; recorded competition cleanup requires the explicit
-`--drain-events` option or an event Teardown action.
-A container build, remote-driver experiment or schema declaration is not an
-end-to-end cloud rehearsal or zero-fixed-cost guarantee.
+Local hosting uses SQLite. Cloud hosting reuses the original SBT-free Lite
+composition: API Gateway, Lambda, Cognito, CloudFront, Step Functions, CodeBuild
+and either Turso or the original DynamoDB control-data resources. Turso uses the
+configured SSM token and creates no DynamoDB tables. The organizer and participant
+SPAs retain their separate authentication surfaces. Cognito role values
+`TenantAdmin`, `TenantOperator` and `TenantViewer` map to organizer roles; the
+internal fixed `tenantId=local` does not create a user-facing tenant concept.
 
-AWS exercise execution is enabled only in cloud hosting. Accepted jobs and the
-dispatch queue are saved before a one-minute dispatcher starts the Step Functions
-workflow. Lambda workers claim, create, describe and finish the exact owned
-CloudFormation attempt; terminal failures have a recovery path. Workers assume a
-verified competitor deployment role with the required installation ExternalId.
+Cloud AWS workflows retain generic CloudFormation create, update, no-op, recreate
+and delete through their original Lambda/CodeBuild paths. Flag/multi-flag and
+scheduled endpoint scoring, participant Console/CLI access, and native coordination
+are restored. Workers use registered competitor roles and mandatory ExternalId.
+Deployment credentials are not participant credentials. The reviewed native
+Cryptography Battle profile with score stealing disabled needs no competitor AWS
+account; enabling its score-steal parameter keeps the AWS-backed variant. State
+and scores use the selected backend, or SQLite for local hosting.
+Docker/Compose remains local-only. Nine canonical templates exceed the restored
+CloudFormation TemplateBody limit of 51,200 bytes; TemplateURL is not implemented.
+Catalog presence therefore does not imply all AWS problems are deployable.
 
-Participant access uses the verified deployment-bound viewer role with the job ID
-as ExternalId. The currently supported hello-world access is a 15-minute CLI credential set
-restricted to its Parameter. Native Cryptography Battle executes in the platform
-and persists its state and scoring in the same selected-database transaction boundary.
-The competitor-template AdministratorAccess grant stays confined to competitor
-initialization. Standard CDK platform execution authority is reviewed separately;
-application and participant runtime roles do not receive it. Existing STS sessions can outlive
-event end; new access issuance is checked against current event/team state.
+Cloud execution snapshots catalog maps, hints, plugins and raw sources. Saved
+events and deployments retain their `catalogKey`, so catalog A continues after B
+is deployed or removes a problem. Readers verify the saved sources; CodeBuild uses
+the exact source ZIP version. Older unpinned records need the verified original
+snapshot through `CDK_LEGACY_CATALOG_KEY`, never an assumed current catalog. A legacy
+key does not prove a safe active-event upgrade: original competitions must finish
+on their installed version before the initial upgrade.
+Platform teardown removes its owned execution artifacts. The separate source ZIP
+bucket survives; current unique archive keys are not removed by noncurrent-version
+expiration and incur storage until separately reviewed source-bucket cleanup.
 
-Competitor accounts are separate from the platform account. Teams may use separate
-competitor accounts or different regions within the same competitor account. IAM
-roles are global, so the latter share the installation role and ExternalId.
-Organizations / StackSets is an additional manual bootstrap procedure; ordinary
-platform deployment does not activate trusted access. Cloud Docker/Compose and the
-AWS endpoint-based hello-world-battle are outside the current supported catalog.
+Both cloud providers preserve 99-team admission; SQL coordination retains the
+original 4 MiB state policy. The official local libSQL protocol run passed with
+25 teams and 100 concurrent authentication reads (p95 186 ms). This is not a
+native Battle throughput test, hosted Turso measurement or live AWS rehearsal.
+See [recorded verification](../../infrastructure/README.md#verification).
+
+`make deploy` performs account/environment/credential preflight, reuses standard
+CDKToolkit or bootstraps it automatically when missing, and builds/uploads the
+source archive consumed by CodeBuild. Every upload uses a fresh private
+`<configured-key>.executions/<uuid>.zip` key and exact S3 `VersionId`; the pinned
+cloud path rejects explicitly disabled versioning. New installations retain Lite
+physical stack names; the CLI discovers existing Lite/cloud pairs and requires
+explicit selection when both exist. Original Lite updates verify ownership and
+persistent resource identities, then require explicit confirmation that no active
+competitions remain before bootstrap, source upload or deployment. Noninteractive
+original upgrades require `--confirm-no-active-events` after operator verification;
+generic `--yes` cannot bypass the guard. New/already-restored deployments keep their
+automatic flow. Published cloud-v1 stack updates and nonempty or
+unrecognized cloud-v1 SQL data are refused; no automatic migration occurs.
+
+`make destroy` confirms the selected owned resources and follows deployed
+Delete/Retain policies. It works without database access or application Outputs,
+including failed/partial-stack recovery, and empties verified owned versioned
+buckets before removal. DynamoDB defaults to Delete; ordinary destroy leaves
+external Turso rows. `destroy-all` explicitly purges supported retained data and
+known deployed Turso rows. Finish event Teardown before platform removal;
+`--drain-events` is rejected here. The source bucket, CDKToolkit and competitor
+bootstrap roles remain outside platform destruction.
+
+Teams may use separate competitor accounts or different problem regions within
+the same competitor account. IAM and other global services remain shared in the
+latter. Organizations/StackSets is an optional account-owner bootstrap procedure;
+platform deployment does not enable its trusted access. AWS resource exercises
+require a separate competitor account; hosting-account targets are rejected before
+resource mutation and participant STS denies them. Same-hosting-account exercises
+remain unsupported and unverified. Different regions in a shared competitor account
+do not establish complete IAM isolation. The catalog IAM audit has unresolved
+findings, so restoration is not a least-privilege certification. Previously issued
+credentials can outlive event end; current event/team state governs applicable new access.
 
 ## Runtime coverage
 
@@ -93,16 +126,16 @@ The Mermaid sources below describe the current boundaries:
 - [Editable Draw.io document](diagrams/system-architecture.drawio): five current
   pages for cloud infrastructure, AWS exercise execution, the unified local runtime,
   use cases and system boundaries. Existing page IDs, AWS4 official icons and the
-  original frame/connector style are retained; obsolete SaaS/Lite cells are replaced
+  original frame/connector style are retained; SaaS provisioning cells are replaced by the restored cloud composition
   and remaining nodes are moved only to fit the current boundaries.
 
 Regenerate Draw.io with `python3 docs/architecture/diagrams/system-architecture.gen.py`.
 Its first two page IDs (`saas-physical`, `lite-physical`) remain stable identifiers,
 not supported product modes. Regions are chosen by the operator; the diagrams do
-not imply a fixed production region. The three DynamoDB tables share one service
-icon, and worker operations share one Lambda icon. Page 02 expands the exercise
-execution path; logs in page 01 summarize Lambda handler/worker diagnostics.
-Step Functions logs use ERROR level without execution data. The AWS4
+not imply a fixed production region. DynamoDB icons summarize the selected provider's original control-data tables,
+and worker icons summarize their operations. The source-artifact S3 icons summarize
+the separate private execution-snapshot and source-ZIP buckets. Page 02 expands the exercise execution
+path; logs in page 01 summarize backend diagnostics. The AWS4
 icon and connector conventions follow the requested
 [aws-drawio-diagram skill](https://github.com/sagochiko/aws-drawio-diagram-skill),
 while retaining the original frame styles.

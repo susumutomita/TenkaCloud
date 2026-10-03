@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { cloudStackTags } from "../../infrastructure/lib/cloud-hosting/stack-names";
+import { assertHistoricalLiteTemplate } from "../../infrastructure/lib/cloud-hosting/historical-lite";
 import type { PlatformStack } from "./failed-creation";
 import type { ProcessResult } from "./process";
+import { expectedStackTags } from "./stack-check";
 
 interface TeardownContext {
   readonly account: string;
@@ -120,7 +121,7 @@ async function verifyBucketOwnership(
     .object({ TagSet: z.array(z.object({ Key: z.string(), Value: z.string() })) })
     .parse(result);
   const expected = {
-    ...cloudStackTags(context.environment),
+    ...expectedStackTags(context.environment, bucket.stackArn),
     "aws:cloudformation:stack-id": bucket.stackArn,
     "aws:cloudformation:logical-id": bucket.logicalId,
   };
@@ -245,7 +246,7 @@ async function ownedTable(
     })
     .parse(await read(context, ["dynamodb", "list-tags-of-resource", "--resource-arn", arn]));
   if (
-    !Object.entries(cloudStackTags(context.environment)).every(
+    !Object.entries(expectedStackTags(context.environment, stack.arn)).every(
       ([key, value]) => tags.filter((tag) => tag.Key === key && tag.Value === value).length === 1,
     )
   )
@@ -264,12 +265,41 @@ async function ownedTable(
     protected: table.DeletionProtectionEnabled,
   };
 }
+function recoverHistoricalProvider(
+  stack: PlatformStack,
+  rawTemplate: unknown,
+  outputs: Record<string, string>,
+): void {
+  if (
+    !outputs.CloudControlDataBackend &&
+    (stack.name === "tenkacloud-lite" || stack.name.startsWith("tenkacloud-lite-"))
+  ) {
+    try {
+      const provider = assertHistoricalLiteTemplate(
+        rawTemplate,
+        stack.name.includes("-problem-deploy") ? "backend" : "app",
+      );
+      outputs.CloudControlDataBackend = provider.kind;
+      outputs.CloudComposition = "lite-baseline-v1";
+      if (provider.kind === "turso") {
+        outputs.TursoDatabaseUrl = provider.databaseUrl;
+        outputs.TursoAuthTokenParameterName = provider.authTokenParameterName;
+      }
+    } catch (error) {
+      // Ordinary owned-stack teardown still works without Outputs; an unproven external
+      // database can never be selected for purge and its diagnostic is shown to the operator.
+      outputs.CloudDataIdentityError = error instanceof Error ? error.message : String(error);
+    }
+  }
+}
 function recoverStorageOutputs(
   stack: PlatformStack,
   template: z.infer<typeof templateSchema>,
+  rawTemplate: unknown,
 ): Readonly<Record<string, string>> {
   const outputs = { ...stack.outputs };
   for (const key of [
+    "CloudComposition",
     "CloudControlDataBackend",
     "TursoDatabaseUrl",
     "TursoAuthTokenParameterName",
@@ -288,6 +318,7 @@ function recoverStorageOutputs(
     })
   )
     outputs.CloudControlDataBackend = "dynamodb";
+  recoverHistoricalProvider(stack, rawTemplate, outputs);
   return outputs;
 }
 function retainedResource(
@@ -343,11 +374,11 @@ async function discoverStack(context: TeardownContext, stack: PlatformStack) {
   const raw = z
     .object({ TemplateBody: z.unknown() })
     .parse(await read(context, ["cloudformation", "get-template", "--stack-name", stack.arn]));
-  const template = templateSchema.parse(
+  const rawTemplate =
     typeof raw.TemplateBody === "string"
       ? (JSON.parse(raw.TemplateBody) as unknown)
-      : raw.TemplateBody,
-  );
+      : raw.TemplateBody;
+  const template = templateSchema.parse(rawTemplate);
   const inventory = inventorySchema.parse(
     await read(context, ["cloudformation", "list-stack-resources", "--stack-name", stack.arn]),
   );
@@ -387,7 +418,7 @@ async function discoverStack(context: TeardownContext, stack: PlatformStack) {
     tables,
     logGroups: resources.logGroupNames,
     retainedResources,
-    outputs: recoverStorageOutputs(stack, template),
+    outputs: recoverStorageOutputs(stack, template, rawTemplate),
   };
 }
 /** Read-only physical ownership/protection proof. No data scans, prefix adoption or protection changes. */

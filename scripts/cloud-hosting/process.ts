@@ -1,18 +1,13 @@
-import { spawn } from "node:child_process";
+import { type StdioOptions, spawn } from "node:child_process";
 import { createInterface } from "node:readline/promises";
-import { probeTursoConnection } from "../../infrastructure/lib/problem-deploy/control-data/sql-executor-cache";
 import {
   createDestroyAssembly,
   type DestroyAssembly,
   type DestroyAssemblyTarget,
 } from "./destroy-assembly";
-import {
-  type CloudInstallation,
-  type InstallationLocation,
-  openCloudInstallation,
-} from "./installation";
 import type { TursoTokenProbe } from "./turso-preflight";
-import { purgeTursoControlData } from "./turso-reset";
+import { purgeTursoControlData, type TursoResetTarget } from "./turso-reset";
+import { probeTursoConnection } from "./turso-schema";
 
 export interface ProcessRequest {
   readonly command: string;
@@ -20,6 +15,8 @@ export interface ProcessRequest {
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
   readonly inherit?: boolean;
+  /** Stream build output while retaining the receipt returned by source preparation. */
+  readonly captureOutput?: boolean;
 }
 export interface ProcessResult {
   readonly code: number;
@@ -33,13 +30,8 @@ export interface CloudCliIo {
   stdout(text: string): void;
   stderr(text: string): void;
   confirm(question: string): Promise<boolean>;
-  openInstallation(location: InstallationLocation): CloudInstallation | Promise<CloudInstallation>;
   probeTurso?: TursoTokenProbe;
-  purgeTursoControlData?(target: {
-    readonly databaseUrl: string;
-    readonly parameterName: string;
-    readonly region: string;
-  }): Promise<void>;
+  purgeTursoControlData?(target: TursoResetTarget): Promise<void>;
   now(): number;
   wait(ms: number): Promise<void>;
 }
@@ -52,28 +44,32 @@ export function systemCloudIo(): CloudCliIo {
     // This CLI runs one command per process; it never writes an operator's files.
     configureEnvironment: (env) => Object.assign(process.env, env),
     createDestroyAssembly,
-    openInstallation: openCloudInstallation,
     purgeTursoControlData,
     probeTurso: (url, authToken) => probeTursoConnection({ url, authToken }),
     now: Date.now,
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     run: (request) =>
       new Promise((resolve) => {
-        const process = spawn(request.command, [...request.args], {
+        let stdio: StdioOptions = "pipe";
+        if (request.inherit)
+          stdio = request.captureOutput ? ["inherit", "pipe", "pipe"] : "inherit";
+        const child = spawn(request.command, [...request.args], {
           cwd: request.cwd,
           env: request.env,
-          stdio: request.inherit ? "inherit" : "pipe",
+          stdio,
         });
         let stdout = "";
         let stderr = "";
-        process.stdout?.on("data", (chunk: Buffer) => {
+        child.stdout?.on("data", (chunk: Buffer) => {
           stdout += chunk.toString();
+          if (request.inherit) process.stdout.write(chunk);
         });
-        process.stderr?.on("data", (chunk: Buffer) => {
+        child.stderr?.on("data", (chunk: Buffer) => {
           stderr += chunk.toString();
+          if (request.inherit) process.stderr.write(chunk);
         });
-        process.once("error", (error) => resolve({ code: 1, stdout, stderr: error.message }));
-        process.once("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+        child.once("error", (error) => resolve({ code: 1, stdout, stderr: error.message }));
+        child.once("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
       }),
     stdout: (text) => process.stdout.write(text),
     stderr: (text) => process.stderr.write(text),

@@ -38,6 +38,7 @@ export function viewIsUnchanged(
       p.provider !== n.provider ||
       p.runtimeKind !== n.runtimeKind ||
       p.coordination !== n.coordination ||
+      p.coordinationRunId !== n.coordinationRunId ||
       p.awsAccountId !== n.awsAccountId ||
       p.region !== n.region ||
       JSON.stringify(p.accessCapabilities) !== JSON.stringify(n.accessCapabilities) ||

@@ -7,6 +7,7 @@ export function applyOwnershipTags(stack: Stack, environment: string): void {
   Aspects.of(stack).add({
     visit(node) {
       if (node instanceof CfnRole) {
+        node.tags.setTag("Project", "TenkaCloud");
         node.tags.setTag("TenkaCloudProject", "cloud-hosting");
         node.tags.setTag("Environment", environment);
         node.tags.setTag("TenkaCloudRegion", stack.region);
@@ -14,6 +15,7 @@ export function applyOwnershipTags(stack: Stack, environment: string): void {
         // CDK's built-in S3 cleanup provider creates a generic CfnResource role,
         // which the normal role TagManager does not visit.
         node.addPropertyOverride("Tags", [
+          { Key: "Project", Value: "TenkaCloud" },
           { Key: "TenkaCloudProject", Value: "cloud-hosting" },
           { Key: "Environment", Value: environment },
           { Key: "TenkaCloudRegion", Value: stack.region },

@@ -1,8 +1,8 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
-import { createClient as createLocalClient } from "@libsql/client";
-import { type Client, createClient } from "@libsql/client/http";
+import type { Client } from "@libsql/client/http";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { selectBackend } from "../../lib/problem-deploy/control-data/backend-config.js";
+import { resetKnownTursoData } from "../../../scripts/cloud-hosting/turso-reset.js";
+import { assertTursoSchemaCompatible } from "../../../scripts/cloud-hosting/turso-schema.js";
 import {
   initializeControlDataSchema,
   LibsqlExecutor,
@@ -10,60 +10,26 @@ import {
 import {
   createDefaultSqlExecutorCache,
   createSqlExecutorCache,
-  probeTursoConnection,
   type RuntimeDependencies,
 } from "../../lib/problem-deploy/control-data/sql-executor-cache.js";
-import { resetControlData } from "../../lib/problem-deploy/control-data/sql-reset.js";
-import {
-  sqlChangesGuard,
-  sqlCommit,
-  sqlGuard,
-} from "../../lib/problem-deploy/control-data/sql-transaction.js";
 import { sqlHttpFixture } from "./sql-http-fixture.js";
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   for (const close of cleanup.splice(0).reverse()) close();
 });
 function httpFixture() {
-  const fixture = sqlHttpFixture();
-  cleanup.push(fixture.close);
-  return fixture;
+  const f = sqlHttpFixture();
+  cleanup.push(f.close);
+  return f;
 }
 const environment = {
   CONTROL_DATA_BACKEND: "turso",
   TURSO_DATABASE_URL: "libsql://fixture.invalid",
   TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/turso/auth-token",
 };
-
-describe("read-only deploy connectivity probe", () => {
-  it("uses the production HTTP client for SELECT 1 without creating control-data tables", async () => {
-    const f = httpFixture();
-    vi.stubGlobal("fetch", f.fetch);
-    try {
-      await probeTursoConnection({ url: "https://fixture.invalid", authToken: "synthetic-token" });
-    } finally {
-      vi.unstubAllGlobals();
-    }
-    expect(f.executedStatements).toEqual(["SELECT 1 AS reachable"]);
-    expect(f.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all()).toEqual([]);
-  });
-  it.each(["query-failed", "bad-result"])("closes its client after %s", async (outcome) => {
-    const close = vi.fn();
-    const execute = vi.fn().mockImplementation(async () => {
-      if (outcome === "query-failed") throw new Error("rejected");
-      return { rows: [] };
-    });
-    await expect(
-      probeTursoConnection(
-        { url: "https://fixture.invalid", authToken: "synthetic-token" },
-        () => ({ close, execute }) as unknown as Pick<Client, "execute" | "close">,
-      ),
-    ).rejects.toThrow();
-    expect(close).toHaveBeenCalledOnce();
-  });
-});
 function cacheFixture() {
   const f = httpFixture();
   const send = vi
@@ -78,151 +44,50 @@ function cacheFixture() {
   return { ...f, deps, send, factory, acquire: createSqlExecutorCache(deps) };
 }
 
-describe("restored cloud backend choice", () => {
-  it.each([undefined, "", "  ", "DynamoDB"])("keeps DynamoDB default: %s", (value) =>
-    expect(selectBackend({ CONTROL_DATA_BACKEND: value })).toEqual({ kind: "dynamodb" }),
-  );
-  it("accepts Turso and rejects legacy aliases instead of changing storage silently", () => {
-    expect(selectBackend({ CONTROL_DATA_BACKEND: " Turso " })).toEqual({ kind: "turso" });
-    for (const value of ["sql", "sqlite", "pure", "mirror", "other"])
-      expect(() => selectBackend({ CONTROL_DATA_BACKEND: value })).toThrow(
-        "expected one of: dynamodb, turso",
-      );
-  });
-});
-
-describe("production libSQL HTTP executor against in-memory SQLite", () => {
-  it("maps bind parameters, reads and affected-row counts through the real HTTP client", async () => {
+describe("restored SQL schema through the production HTTP client", () => {
+  it("checks compatibility without creating a schema, then restores the original table names", async () => {
     const f = httpFixture();
+    await assertTursoSchemaCompatible(f.client);
+    expect(f.db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all()).toEqual([]);
     await initializeControlDataSchema(f.client);
+    const names = f.db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+      .all()
+      .map((row) => row.name);
+    expect(names).toEqual(
+      expect.arrayContaining(["events", "teams", "deployments", "coordination_run"]),
+    );
+    expect(names.some((name) => String(name).startsWith("cloud_"))).toBe(false);
+    await assertTursoSchemaCompatible(f.client);
+    await initializeControlDataSchema(f.client);
+  });
+  it("rejects a published cloud-v1 database without adopting or changing its rows", async () => {
+    const f = httpFixture();
+    f.db.exec(
+      "CREATE TABLE cloud_events (payload TEXT); INSERT INTO cloud_events VALUES ('preserve');",
+    );
+    await expect(assertTursoSchemaCompatible(f.client)).rejects.toThrow("cloud-v1");
+    expect(f.db.prepare("SELECT payload FROM cloud_events").get()).toEqual({ payload: "preserve" });
+    expect(
+      f.db.prepare("SELECT name FROM sqlite_master WHERE name='events'").get(),
+    ).toBeUndefined();
+  });
+  it("binds values and propagates transaction rollback through actual libSQL protocol errors", async () => {
+    const f = httpFixture();
     const sql = new LibsqlExecutor(f.client);
-    await sql.run("CREATE TABLE sample (id TEXT PRIMARY KEY, value INTEGER, optional TEXT)");
-    expect(await sql.run("INSERT INTO sample VALUES (?, ?, ?)", ["one", 7, null])).toEqual({
-      changes: 1,
-    });
-    expect(await sql.get("SELECT * FROM sample WHERE id = ?", ["one"])).toMatchObject({
-      id: "one",
+    await sql.run("CREATE TABLE rehearsal (id TEXT PRIMARY KEY, value INTEGER)");
+    await sql.run("INSERT INTO rehearsal VALUES (?, ?)", ["quoted ' value", 7]);
+    expect(await sql.get("SELECT * FROM rehearsal WHERE id=?", ["quoted ' value"])).toEqual({
+      id: "quoted ' value",
       value: 7,
-      optional: null,
     });
-    expect(await sql.all("SELECT id FROM sample")).toEqual([{ id: "one" }]);
-    expect(await sql.get("SELECT id FROM sample WHERE id = ?", ["absent"])).toBeUndefined();
-    expect(
-      await sql.all("UPDATE sample SET value = value + 1 WHERE id = ? RETURNING value", ["one"]),
-    ).toEqual([{ value: 8 }]);
-  });
-  it("bootstraps one current schema atomically and reruns without changing records", async () => {
-    const f = httpFixture();
-    await initializeControlDataSchema(f.client);
-    const sql = new LibsqlExecutor(f.client);
-    await sql.run("INSERT INTO cloud_events VALUES ('fixture', '{\"retained\":true}')");
-    await initializeControlDataSchema(f.client);
-    expect(await sql.get("SELECT payload FROM cloud_events")).toEqual({
-      payload: '{"retained":true}',
-    });
-    expect(await sql.get("SELECT version FROM cloud_schema")).toEqual({ version: 1 });
-    expect(
-      (await sql.all("SELECT name FROM sqlite_master WHERE type = 'table'")).map((row) => row.name),
-    ).toEqual(
-      expect.arrayContaining(["cloud_deployments", "cloud_coordination_runs", "cloud_connections"]),
-    );
-    const batches = f.requests.filter((request) => request.type === "batch");
-    expect(batches).toHaveLength(5);
-    expect(batches[0]?.batch.steps[0]?.stmt.sql).toBe("BEGIN IMMEDIATE");
-    await sql.run("UPDATE cloud_schema SET version = 999");
-    await expect(initializeControlDataSchema(f.client)).rejects.toThrow(
-      "Unsupported cloud control-data schema",
-    );
-  });
-  it("routes get/all in one primary write batch, without changing the routing row", async () => {
-    const f = httpFixture();
-    await initializeControlDataSchema(f.client);
-    const sql = new LibsqlExecutor(f.client);
-    for (const read of [
-      () => sql.get("SELECT ? AS value", ["one"]),
-      () => sql.all("SELECT ? AS value", ["two"]),
-    ]) {
-      const before = f.httpRequests.length;
-      const beforeStatements = f.executedStatements.length;
-      await read();
-      expect(f.httpRequests).toHaveLength(before + 1);
-      expect(f.executedStatements.slice(beforeStatements, beforeStatements + 3)).toEqual([
-        "BEGIN IMMEDIATE",
-        "UPDATE cloud_schema SET version = version WHERE 0",
-        "SELECT ? AS value",
-      ]);
-    }
-    expect(f.db.prepare("SELECT version FROM cloud_schema WHERE id = 1").get()).toEqual({
-      version: 1,
-    });
-    expect(f.db.prepare("SELECT total_changes() AS count").get()).toEqual({ count: 1 });
-  });
-  it("propagates authoritative read failures instead of returning missing rows", async () => {
-    const f = httpFixture();
-    await initializeControlDataSchema(f.client);
-    const sql = new LibsqlExecutor(f.client);
-    await expect(sql.get("SELECT * FROM missing_table")).rejects.toMatchObject({
-      code: "SQLITE_ERROR",
-    });
-    await expect(sql.all("SELECT * FROM missing_table")).rejects.toMatchObject({
-      code: "SQLITE_ERROR",
-    });
-    const incomplete = new LibsqlExecutor({
-      execute: vi.fn(),
-      batch: vi.fn().mockResolvedValue([]),
-    });
-    await expect(incomplete.get("SELECT 1")).rejects.toThrow(
-      "Missing authoritative SQL query result",
-    );
-  });
-  it("rolls back zero-row CAS and key collisions using actual HTTP error shapes", async () => {
-    const f = httpFixture();
-    await initializeControlDataSchema(f.client);
-    const sql = new LibsqlExecutor(f.client);
-    expect(
-      await sqlCommit(sql, [
-        { sql: "INSERT INTO cloud_events VALUES ('one', '{}')" },
-        { sql: "UPDATE cloud_events SET payload = '{}' WHERE event_id = 'absent'" },
-        sqlChangesGuard(),
-        { sql: "INSERT INTO cloud_events VALUES ('two', '{}')" },
-      ]),
-    ).toBe(false);
-    expect(await sql.all("SELECT * FROM cloud_events")).toEqual([]);
-    await sql.run("INSERT INTO cloud_events VALUES ('one', '{}')");
-    expect(
-      await sqlCommit(sql, [
-        { sql: "INSERT INTO cloud_events VALUES ('two', '{}')" },
-        { sql: "INSERT INTO cloud_events VALUES ('one', '{}')" },
-      ]),
-    ).toBe(false);
-    expect(await sql.all("SELECT event_id FROM cloud_events")).toEqual([{ event_id: "one" }]);
-  });
-  it("also recognizes real local libSQL extended codes without native drivers in production imports", async () => {
-    const client = createLocalClient({ url: "file::memory:" });
-    cleanup.push(() => client.close());
-    await initializeControlDataSchema(client);
-    const sql = new LibsqlExecutor(client);
-    expect(await sqlCommit(sql, [sqlGuard("0")])).toBe(false);
-    await sql.run("INSERT INTO cloud_events VALUES ('one', '{}')");
-    expect(await sqlCommit(sql, [{ sql: "INSERT INTO cloud_events VALUES ('one', '{}')" }])).toBe(
-      false,
-    );
     await expect(
-      sql.batch([{ sql: "INSERT INTO cloud_events VALUES ('null', NULL)" }]),
-    ).rejects.toMatchObject({ extendedCode: "SQLITE_CONSTRAINT_NOTNULL" });
-  });
-  it("propagates transport failures without treating them as conflicts", async () => {
-    const error = new Error("network failed with SQLITE_CONSTRAINT in server logs");
-    const client = createClient({
-      url: "https://fixture.invalid",
-      fetch: async () => {
-        throw error;
-      },
-    });
-    cleanup.push(() => client.close());
-    await expect(sqlCommit(new LibsqlExecutor(client), [sqlGuard("1")])).rejects.toThrow(
-      "network failed",
-    );
+      sql.batch([
+        { sql: "INSERT INTO rehearsal VALUES ('next', 8)" },
+        { sql: "INSERT INTO rehearsal VALUES (?, 9)", params: ["quoted ' value"] },
+      ]),
+    ).rejects.toThrow("UNIQUE");
+    expect(await sql.all("SELECT id FROM rehearsal")).toEqual([{ id: "quoted ' value" }]);
   });
 });
 
@@ -337,43 +202,30 @@ describe("SSM SecureString executor cache", () => {
   });
 });
 
-describe("explicit current SQL data reset", () => {
-  it("atomically clears owned records and stop markers, preserving schema and unrelated/legacy rows", async () => {
+describe("explicit restored SQL data reset", () => {
+  it("clears only original competition tables, preserving migration records and unrelated data", async () => {
     const f = httpFixture();
     await initializeControlDataSchema(f.client);
-    const sql = new LibsqlExecutor(f.client);
-    await sql.run("CREATE TABLE events (id TEXT)");
-    await sql.run("INSERT INTO events VALUES ('legacy-lite')");
-    await sql.run("CREATE TABLE another_application (id TEXT)");
-    await sql.run("INSERT INTO another_application VALUES ('unrelated')");
-    await sql.run("INSERT INTO cloud_events VALUES ('one', '{}')");
-    await sql.run("INSERT INTO cloud_installation_control VALUES (1, '{}')");
-    await sql.run("INSERT INTO cloud_coordination_runs VALUES ('event', 'problem', '{}', '{}')");
-    await sql.run(
-      "INSERT INTO cloud_coordination_history VALUES ('event', 'problem', 'run', '{}', '{}')",
+    f.db.exec(
+      "CREATE TABLE unrelated (id TEXT); INSERT INTO unrelated VALUES ('keep'); INSERT INTO events VALUES ('event','local','DRAFT','2026-10-03T00:00:00Z',4102444800,'{}');",
     );
-    await resetControlData(sql);
-    expect(await sql.all("SELECT * FROM cloud_events")).toEqual([]);
-    expect(await sql.all("SELECT * FROM cloud_installation_control")).toEqual([]);
-    expect(await sql.all("SELECT * FROM cloud_coordination_runs")).toEqual([]);
-    expect(await sql.all("SELECT * FROM cloud_coordination_history")).toEqual([]);
-    expect(await sql.get("SELECT version FROM cloud_schema")).toEqual({ version: 1 });
-    expect(await sql.get("SELECT * FROM events")).toEqual({ id: "legacy-lite" });
-    expect(await sql.get("SELECT * FROM another_application")).toEqual({ id: "unrelated" });
-    await resetControlData(sql);
+    await resetKnownTursoData(f.client, "lite-baseline-v1");
+    expect(f.db.prepare("SELECT * FROM events").all()).toEqual([]);
+    expect(f.db.prepare("SELECT * FROM unrelated").get()).toEqual({ id: "keep" });
+    expect(
+      f.db.prepare("SELECT COUNT(*) AS count FROM control_data_migrations").get()?.count,
+    ).toBeGreaterThan(0);
     await initializeControlDataSchema(f.client);
   });
-  it("rolls back earlier deletions when any owned-table deletion fails", async () => {
+  it("rolls back all deletions when a later table refuses deletion", async () => {
     const f = httpFixture();
     await initializeControlDataSchema(f.client);
-    const sql = new LibsqlExecutor(f.client);
-    await sql.run("INSERT INTO cloud_events VALUES ('one', '{}')");
-    await sql.run("INSERT INTO cloud_teams VALUES ('one', 'team', '{}')");
-    await sql.run(
-      "CREATE TRIGGER fail_reset BEFORE DELETE ON cloud_teams BEGIN SELECT RAISE(ABORT, 'fixture reset failed'); END",
+    f.db.exec(
+      "INSERT INTO events VALUES ('event','local','DRAFT','2026-10-03T00:00:00Z',4102444800,'{}'); CREATE TRIGGER reject_event_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'fixture reset failed'); END;",
     );
-    await expect(resetControlData(sql)).rejects.toThrow("fixture reset failed");
-    expect(await sql.all("SELECT event_id FROM cloud_events")).toEqual([{ event_id: "one" }]);
-    expect(await sql.all("SELECT team_id FROM cloud_teams")).toEqual([{ team_id: "team" }]);
+    await expect(resetKnownTursoData(f.client, "lite-baseline-v1")).rejects.toThrow(
+      "fixture reset failed",
+    );
+    expect(f.db.prepare("SELECT event_id FROM events").all()).toEqual([{ event_id: "event" }]);
   });
 });

@@ -1,220 +1,279 @@
-import { lstatSync, readFileSync, realpathSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { RemovalPolicy } from "aws-cdk-lib";
+import { lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { CfnOutput, RemovalPolicy, Stack, Stage } from "aws-cdk-lib";
+import { PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
-import type { Construct } from "constructs";
-import { buildSync } from "esbuild";
-import { z } from "zod";
-import { contentDigest } from "../problem-deploy/control-data/domain/deployment-work.js";
+import { Construct } from "constructs";
+import type {
+  PackAsset,
+  ProblemsCatalogBundle,
+} from "../../../scripts/problem-pack/catalog-types.js";
 import {
-  executionCatalogSchema,
-  type RunnerBinding,
-} from "../problem-deploy/handlers/cloud-api/execution-config.js";
+  contentDigest,
+  type ExecutionCatalog,
+  MAX_EXECUTION_CATALOG_BYTES,
+  MAX_EXECUTION_PLUGIN_BYTES,
+  MAX_EXECUTION_SOURCE_BYTES,
+  parseExecutionCatalog,
+} from "../problem-deploy/handlers/shared/execution-catalog.js";
 import { deploymentLogGroup } from "../utils/deployment-log-group.js";
+import { repositoryArtifactFile } from "./execution-artifact-path.js";
+import { nativeBattleArtifact } from "./native-battle-artifact.js";
 
-export function repositoryArtifactFile(repositoryRoot: string, artifact: string): string {
-  const selectedRoot = resolve(repositoryRoot);
-  const selected = lstatSync(selectedRoot);
-  if (selected.isSymbolicLink()) {
-    throw new Error("Execution artifact paths must not contain symbolic links");
-  }
-  if (!selected.isDirectory()) {
-    throw new Error("Execution artifacts require a repository directory");
-  }
-  // Resolve filesystem aliases above the selected root (for example macOS /tmp and /var).
-  // The root itself and every repository-controlled artifact component must remain unlinked.
-  const root = realpathSync(selectedRoot);
-  const file = resolve(root, artifact);
-  const withinRoot = relative(root, file);
-  if (
-    !withinRoot ||
-    withinRoot === ".." ||
-    withinRoot.startsWith(`..${sep}`) ||
-    isAbsolute(withinRoot)
-  ) {
-    throw new Error("Execution artifacts must be inside the repository");
-  }
-  // Checking only realpath containment would admit links to internal files or directories.
-  let current = root;
-  const components = relative(current, file).split(sep);
-  for (const [index, component] of components.entries()) {
-    current = join(current, component);
-    const entry = lstatSync(current);
-    if (entry.isSymbolicLink()) {
-      throw new Error("Execution artifact paths must not contain symbolic links");
-    }
-    if (index === components.length - 1 ? !entry.isFile() : !entry.isDirectory()) {
-      throw new Error("Execution artifacts must be regular files with directory path components");
-    }
-  }
-  return file;
+export interface CloudExecutionArtifactInput {
+  /** Exact recovered legacy catalog; absence must never adopt the current snapshot. */
+  readonly legacyCatalogKey?: string;
+  readonly repositoryRoot: string;
+  readonly bundle: ProblemsCatalogBundle;
+  readonly packAssets?: readonly PackAsset[];
+  readonly sourceArchive: ExecutionCatalog["sourceArchive"];
 }
 
-/** Build only the reviewed pure plugin closure; never upload its CloudFormation placeholder. */
-export function nativeBattleArtifact(repositoryRoot: string) {
-  const problemDir = "problems/battles/ac26-crypto-battle";
-  const entry = `${problemDir}/coordination/crypto-battle.ts`;
-  const metadata = z
-    .object({
-      id: z.literal("ac26-crypto-battle"),
-      name: z.string(),
-      description: z.string(),
-      instructions: z.string(),
-      interTeamCoordination: z.object({
-        plugin: z.literal("coordination/crypto-battle.ts"),
-        stateBudget: z.object({ bytesPerTeam: z.literal(31744), baseBytes: z.literal(1536) }),
-      }),
-      i18n: z.object({
-        en: z.object({ name: z.string(), description: z.string(), instructions: z.string() }),
-      }),
-    })
-    .parse(
-      JSON.parse(
-        readFileSync(repositoryArtifactFile(repositoryRoot, `${problemDir}/metadata.json`), "utf8"),
-      ) as unknown,
-    );
-  const result = buildSync({
-    absWorkingDir: realpathSync(repositoryRoot),
-    entryPoints: [repositoryArtifactFile(repositoryRoot, entry)],
-    bundle: true,
-    format: "esm",
-    platform: "node",
-    target: "node24",
-    write: false,
-    metafile: true,
-    logLevel: "silent",
-  });
-  for (const [input, details] of Object.entries(result.metafile.inputs)) {
-    const path = relative(
-      realpathSync(repositoryRoot),
-      resolve(realpathSync(repositoryRoot), input),
-    )
-      .split(sep)
-      .join("/");
-    if (
-      path !== entry &&
-      !path.startsWith(`${problemDir}/game/src/`) &&
-      !path.startsWith("packages/coordination-plugin-sdk/src/")
-    )
-      throw new Error("Native plugin import is outside the reviewed closure.");
-    repositoryArtifactFile(repositoryRoot, path);
-    if (details.imports.some((item) => item.external && item.path !== "node:crypto"))
-      throw new Error("Native plugin has an unreviewed external import.");
+function sourceRoot(
+  input: CloudExecutionArtifactInput,
+  directory: string,
+): { root: string; directory: string } {
+  if (directory.startsWith("problems/")) return { root: input.repositoryRoot, directory };
+  for (const asset of input.packAssets ?? []) {
+    const prefix = `pack-problems/${asset.packId}/${asset.version}/`;
+    if (directory.startsWith(prefix))
+      return { root: asset.problemsRootAbs, directory: directory.slice(prefix.length) };
   }
-  for (const output of Object.values(result.metafile.outputs))
-    if (output.imports.some((item) => !item.external || item.path !== "node:crypto"))
-      throw new Error("Native plugin bundle is not self-contained.");
-  const source = result.outputFiles?.[0]?.text;
+  throw new Error(`Execution catalog has no owned source root for ${directory}.`);
+}
+const asMap = (value: unknown): Record<string, unknown> => {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Execution projection must be an object.");
+  return value as Record<string, unknown>;
+};
+
+function sourceFiles(selected: { root: string; directory: string }, subdirectory = ""): string[] {
+  const target = resolve(selected.root, selected.directory, subdirectory);
+  const within = relative(resolve(selected.root), target);
   if (
-    !source ||
-    Buffer.byteLength(source) > 1024 * 1024 ||
-    /\b(?:require|import)\s*\(/u.test(source)
+    !within ||
+    within.startsWith(`..${sep}`) ||
+    within === ".." ||
+    isAbsolute(within) ||
+    lstatSync(target).isSymbolicLink()
   )
-    throw new Error("Native plugin bundle contains an unsupported dynamic import.");
-  const artifactDigest = contentDigest(source);
-  const pluginKey = `plugins/${artifactDigest}.mjs`;
-  return {
-    source,
-    descriptor: {
-      kind: "coordination" as const,
-      problemId: metadata.id,
-      problemDir,
-      artifactDigest,
-      pluginKey,
-      stateBudget: metadata.interTeamCoordination.stateBudget,
-      name: metadata.name,
-      description: metadata.description,
-      instructions: metadata.instructions,
-      i18n: metadata.i18n,
-    },
-  };
+    throw new Error("Unsafe execution source directory.");
+  const files: string[] = [];
+  const entries = readdirSync(target, { withFileTypes: true }).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  for (const entry of entries) {
+    if (["node_modules", ".git", ".DS_Store"].includes(entry.name)) continue;
+    const relativePath = [subdirectory, entry.name].filter(Boolean).join("/");
+    if (entry.isSymbolicLink())
+      throw new Error("Execution source must not contain symbolic links.");
+    if (entry.isDirectory()) files.push(...sourceFiles(selected, relativePath));
+    else files.push(relativePath);
+  }
+  return files;
 }
 
-/** Initial vertical slice uses the real, reviewed hello-world flag challenge, never a synthetic production fixture. */
-export function cloudExecutionArtifacts(
-  scope: Construct,
-  repositoryRoot: string,
-  bindings: readonly RunnerBinding[],
+function captureProblemSource(
+  selected: { root: string; directory: string },
+  objects: Map<string, Uint8Array>,
 ) {
-  // Validate both paths before reading either artifact, even when only the template is unsafe.
-  const metadataFile = repositoryArtifactFile(
-    repositoryRoot,
-    "problems/challenges/hello-world/metadata.json",
-  );
-  const templateFile = repositoryArtifactFile(
-    repositoryRoot,
-    "problems/challenges/hello-world/template.yaml",
-  );
-  const metadata = z
-    .object({
-      id: z.literal("hello-world"),
-      cfnParameters: z.record(z.string()),
-      scoring: z.object({
-        kind: z.literal("flag"),
-        points: z.number(),
-        flagOutputKey: z.string(),
-        wrongAnswerPenalty: z.number(),
-      }),
-    })
-    .passthrough()
-    .parse(JSON.parse(readFileSync(metadataFile, "utf8")) as unknown);
-  const templateBody = readFileSync(templateFile, "utf8");
-  const native = nativeBattleArtifact(repositoryRoot);
-  const catalog = executionCatalogSchema.parse({
-    version: 1,
-    nativeProblems: [native.descriptor],
-    problems: [
-      {
-        problemId: metadata.id,
-        problemDir: "problems/challenges/hello-world",
-        templateBody,
-        artifactDigest: contentDigest(templateBody),
-        parameters: metadata.cfnParameters,
-        scoring: {
-          kind: "flag",
-          points: metadata.scoring.points,
-          flagOutputKey: metadata.scoring.flagOutputKey,
-          wrongPenalty: metadata.scoring.wrongAnswerPenalty,
-        },
-        capabilities: ["CAPABILITY_NAMED_IAM"],
-        publicOutputKeys: ["NamePrefix", "ParameterName", "ParameterConsoleUrl"],
-      },
-    ],
-  });
-  const rawCatalog = JSON.stringify(catalog);
-  const rawBindings = JSON.stringify(bindings);
-  const catalogKey = `catalogs/${contentDigest(rawCatalog)}.json`;
-  const bindingsKey = `bindings/${contentDigest(rawBindings)}.json`;
-  const bucket = new Bucket(scope, "ExecutionArtifacts", {
-    blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
-    encryption: BucketEncryption.S3_MANAGED,
-    enforceSSL: true,
-    versioned: true,
-    removalPolicy: RemovalPolicy.DESTROY,
-    autoDeleteObjects: true,
-  });
-  const deployment = new BucketDeployment(scope, "ExecutionArtifactUpload", {
-    logGroup: deploymentLogGroup(scope),
-    destinationBucket: bucket,
-    sources: [
-      Source.data(catalogKey, rawCatalog),
-      Source.data(bindingsKey, rawBindings),
-      Source.data(native.descriptor.pluginKey, native.source),
-    ],
-    prune: false,
-    retainOnDelete: false,
-  });
-  deployment.node.addDependency(bucket);
-  return {
-    bucket,
-    catalogKey,
-    bindingsKey,
-    deployment,
-    pluginKey: native.descriptor.pluginKey,
-    nativeProblemIds: (catalog.nativeProblems ?? []).map((problem) => problem.problemId),
-    problemIds: [...catalog.problems, ...(catalog.nativeProblems ?? [])].map(
-      (problem) => problem.problemId,
-    ),
+  const files: ExecutionCatalog["sources"][string] = {};
+  let hints: unknown;
+  for (const relativePath of sourceFiles(selected)) {
+    const file = repositoryArtifactFile(selected.root, `${selected.directory}/${relativePath}`);
+    if (lstatSync(file).size > MAX_EXECUTION_SOURCE_BYTES)
+      throw new Error("Execution source file exceeds byte limit.");
+    const bytes = readFileSync(file);
+    const digest = contentDigest(bytes);
+    const key = `sources/${digest}`;
+    objects.set(key, bytes);
+    files[relativePath] = { key, digest };
+    if (relativePath === "metadata.json") {
+      const metadata = JSON.parse(bytes.toString("utf8")) as { hints?: unknown };
+      hints = metadata.hints;
+    }
+  }
+  if (!files["metadata.json"]) throw new Error("Execution source metadata missing.");
+  return { files, hints };
+}
+
+function captureNativeProfile(
+  input: CloudExecutionArtifactInput,
+  sources: ExecutionCatalog["sources"],
+  plugins: ExecutionCatalog["plugins"],
+  objects: Map<string, Uint8Array>,
+) {
+  const problemId = "ac26-crypto-battle";
+  if (asMap(input.bundle.catalog)[problemId] !== "problems/battles/ac26-crypto-battle") return [];
+  const metadataKey = sources[problemId]?.["metadata.json"]?.key;
+  const bytes = metadataKey ? objects.get(metadataKey) : undefined;
+  if (!bytes) throw new Error("Native problem metadata is missing.");
+  const metadata = JSON.parse(Buffer.from(bytes).toString("utf8")) as {
+    cfnParameters?: { ScoreStealEnabled?: string };
   };
+  // The existing optional AWS score-steal variant retains its CloudFormation runtime.
+  if (metadata.cfnParameters?.ScoreStealEnabled !== "false") return [];
+  const native = nativeBattleArtifact(input.repositoryRoot);
+  plugins[problemId] = {
+    key: native.descriptor.pluginKey,
+    digest: native.descriptor.artifactDigest,
+  };
+  objects.set(native.descriptor.pluginKey, Buffer.from(native.source));
+  return [native.descriptor];
+}
+
+/** Snapshot every runtime source file and bundle projection together, before publication. */
+export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput) {
+  const rawCatalog = asMap(input.bundle.catalog);
+  const catalog: Record<string, string> = {};
+  const sources: ExecutionCatalog["sources"] = {};
+  const hints: Record<string, unknown> = {};
+  const objects = new Map<string, Uint8Array>();
+  for (const [problemId, directory] of Object.entries(rawCatalog)) {
+    if (typeof directory !== "string")
+      throw new Error("Execution problem directory must be a string.");
+    catalog[problemId] = directory;
+    const captured = captureProblemSource(sourceRoot(input, directory), objects);
+    sources[problemId] = captured.files;
+    if (captured.hints !== undefined) hints[problemId] = captured.hints;
+  }
+  const plugins: ExecutionCatalog["plugins"] = {};
+  for (const [problemId, source] of Object.entries(asMap(input.bundle.coordinationBundles))) {
+    if (
+      !Object.hasOwn(catalog, problemId) ||
+      typeof source !== "string" ||
+      !source ||
+      Buffer.byteLength(source) > MAX_EXECUTION_PLUGIN_BYTES
+    )
+      throw new Error("Invalid execution plugin bundle.");
+    const digest = contentDigest(source);
+    const key = `plugins/${digest}.mjs`;
+    plugins[problemId] = { key, digest };
+    objects.set(key, Buffer.from(source));
+  }
+  const nativeProblems = captureNativeProfile(input, sources, plugins, objects);
+  const artifact = parseExecutionCatalog(
+    JSON.stringify({
+      version: 1,
+      catalog,
+      sources,
+      plugins,
+      hints,
+      ...Object.fromEntries(
+        [
+          "scoring",
+          "endpoints",
+          "phases",
+          "visibility",
+          "runtimes",
+          "disruptions",
+          "writeups",
+          "provenance",
+          "coordination",
+        ].map((key) => [key, asMap(input.bundle[key as keyof ProblemsCatalogBundle])]),
+      ),
+      sourceArchive: input.sourceArchive,
+      ...(nativeProblems.length ? { nativeProblems } : {}),
+    }),
+  );
+  const serialized = JSON.stringify(artifact);
+  if (Buffer.byteLength(serialized) > MAX_EXECUTION_CATALOG_BYTES)
+    throw new Error("Execution catalog exceeds byte limit.");
+  const catalogKey = `catalogs/${contentDigest(serialized)}.json`;
+  objects.set(catalogKey, Buffer.from(serialized));
+  return { catalog: artifact, catalogKey, objects };
+}
+
+export class CloudExecutionArtifacts extends Construct {
+  readonly bucket: Bucket;
+  readonly catalogKey: string;
+  readonly supportedProblemIds: readonly string[];
+  readonly nativeProblemIds: readonly string[];
+  readonly deployment: BucketDeployment;
+  readonly legacyCatalogKey?: string;
+  constructor(scope: Construct, id: string, input: CloudExecutionArtifactInput) {
+    super(scope, id);
+    if (input.legacyCatalogKey && !/^catalogs\/[a-f0-9]{64}\.json$/u.test(input.legacyCatalogKey))
+      throw new Error("Invalid recovered legacy catalog identity.");
+    this.legacyCatalogKey = input.legacyCatalogKey;
+    const snapshot = buildCloudExecutionArtifacts(input);
+    this.catalogKey = snapshot.catalogKey;
+    this.supportedProblemIds = Object.keys(snapshot.catalog.catalog);
+    this.nativeProblemIds = (snapshot.catalog.nativeProblems ?? []).map(
+      (problem) => problem.problemId,
+    );
+    this.bucket = new Bucket(this, "Bucket", {
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+      encryption: BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      versioned: true,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+    const assembly = Stage.of(this);
+    if (!assembly) throw new Error("Execution artifacts require a CDK assembly.");
+    // Keep reusable synth inputs under the owned assembly, never loose in the
+    // operating-system temp directory. CDK's normal outdir cleanup owns them.
+    const staging = join(assembly.outdir, "execution-inputs", snapshot.catalogKey.slice(9, -5));
+    mkdirSync(staging, { recursive: true });
+    for (const [key, bytes] of snapshot.objects) {
+      mkdirSync(dirname(join(staging, key)), { recursive: true });
+      writeFileSync(join(staging, key), bytes);
+    }
+    this.deployment = new BucketDeployment(this, "Deploy", {
+      logGroup: deploymentLogGroup(this, "UploadLogs"),
+      sources: [Source.asset(staging)],
+      destinationBucket: this.bucket,
+      prune: false,
+      retainOnDelete: false,
+      memoryLimit: 512,
+    });
+  }
+
+  bindReaders(scope: Construct) {
+    const readerIds = [
+      "DeployApi",
+      "EventApi",
+      "ParticipantPortalLambda",
+      "GenericScoring",
+      "DisruptionExecutor",
+      "CfnDeploy",
+      "CoordinationDispatcher",
+    ];
+    for (const node of scope.node.findAll()) {
+      if (!(node instanceof NodejsFunction)) continue;
+      const parts = node.node.path.split("/");
+      if (!readerIds.some((id) => parts.includes(id))) continue;
+      const prefixes: ("catalogs" | "sources" | "plugins")[] = ["catalogs"];
+      if (["DeployApi", "EventApi", "CfnDeploy"].some((id) => parts.includes(id)))
+        prefixes.push("sources");
+      // EventApi only verifies saved plugin bytes before admitting a reset;
+      // actual plugin execution stays in CoordinationDispatcher.
+      if (["EventApi", "CoordinationDispatcher"].some((id) => parts.includes(id)))
+        prefixes.push("plugins");
+      this.bind(node, prefixes);
+    }
+    new CfnOutput(scope, "ExecutionArtifactBucket", { value: this.bucket.bucketName });
+    new CfnOutput(scope, "ExecutionCatalogKey", { value: this.catalogKey });
+    if (this.legacyCatalogKey)
+      new CfnOutput(scope, "LegacyExecutionCatalogKey", { value: this.legacyCatalogKey });
+  }
+
+  /** Private backend readers only; no portal client receives an artifact URL or IAM grant. */
+  bind(fn: NodejsFunction, prefixes: readonly ("catalogs" | "sources" | "plugins")[]) {
+    fn.addEnvironment("CLOUD_ARTIFACT_BUCKET", this.bucket.bucketName);
+    fn.addEnvironment("CLOUD_CATALOG_KEY", this.catalogKey);
+    fn.addEnvironment("CONTROL_PLANE_ACCOUNT", Stack.of(this).account);
+    if (this.legacyCatalogKey) fn.addEnvironment("CLOUD_LEGACY_CATALOG_KEY", this.legacyCatalogKey);
+    fn.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: prefixes.map((prefix) => this.bucket.arnForObjects(`${prefix}/*`)),
+      }),
+    );
+    fn.node.addDependency(this.deployment);
+  }
 }

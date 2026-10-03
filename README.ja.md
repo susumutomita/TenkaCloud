@@ -92,7 +92,9 @@ Codespace を作成し、依存関係の準備が終わったらターミナル�
 
 ### AWS にデプロイする
 
-クラウド開催は Lambda、Cognito と、選択した Turso または DynamoDB を使います。現在のクラウド問題は、限定した CLI アクセスを使う hello-world と組み込みの Cryptography Battle です。Docker / Compose 問題はローカルで実行します。この checkout は**統合検証中の候補版**です。実 AWS での大会全体のリハーサルと、Battle の一斉アクセス性能には検証が残っています。環境ファイルの `CDK_PARAM_CONTROL_DATA_BACKEND` で `turso` または `dynamodb` を選択します。Turso には DB URL と既存の SSM トークンパラメーターが必要です。[DB 設定](./infrastructure/README.md#database-selection)を参照してください。
+クラウド開催は SBT を使わない旧 Lite の処理を再利用し、Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカルで実行します。この checkout は**統合検証中の候補版**です。実 AWS での大会全体のリハーサルと、Battle の一斉アクセス性能には検証が残っています。環境ファイルの `CDK_PARAM_CONTROL_DATA_BACKEND` で `turso` または `dynamodb` を選択します。Turso には DB URL と既存の SSM トークンパラメーターが必要です。[DB 設定](./infrastructure/README.md#database-selection)を参照してください。
+
+物理 stack 名は旧 `tenkacloud-lite` 系を維持し、CLI が Lite / cloud の既存環境を検出します。両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` を明示します。公開 cloud-v1 の DB・resource 構成は自動移行しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。現行の 9 template は `TemplateBody` 上限を超えるため、全 AWS 問題の配置を保証しません。[互換性と制限](./infrastructure/README.md#existing-installations-and-resource-identity)を確認してください。
 
 AWS CLI のプロファイル、アカウント、リージョン、開催者のメールアドレスを用意します。`infrastructure/environments/{development,staging,production}/.env.example` を、同じディレクトリの `.env` がなければコピーして編集します。
 
@@ -101,15 +103,19 @@ aws sts get-caller-identity
 make deploy ENV=development
 ```
 
-`make deploy` は標準の `CDKToolkit` を検証して再利用し、存在しない場合だけ固定版の公式 CDK bootstrap で作成します。続けて `--require-approval never` で配置します。CI でも追加のフラグや承認入力は不要です。コマンドは配置先・権限・費用の注意事項を表示します。[bootstrap と呼び出し元の権限](./infrastructure/BOOTSTRAP-IAM.md)を確認してください。標準の CloudFormation 実行 role はデフォルトで `AdministratorAccess` を使います。アプリケーションの実行 role には付与しません。
+`make deploy` は標準の `CDKToolkit` を検証して再利用し、存在しない場合だけ固定版の公式 CDK bootstrap で作成します。続けて `--require-approval never` で配置します。新規環境と復旧済み環境では CI でも追加のフラグや承認入力は不要です。catalog pin のない旧 Lite の初回更新は、大会が進行中でないことの明示確認が必要です。コマンドは配置先・権限・費用の注意事項を表示します。[bootstrap と呼び出し元の権限](./infrastructure/BOOTSTRAP-IAM.md)を確認してください。標準の CloudFormation 実行 role はデフォルトで `AdministratorAccess` を使います。アプリケーションの実行 role には付与しません。配置時には CodeBuild 用の非公開 source ZIP を毎回別 key に upload し、正確な S3 version を保存します。source bucket は基盤の destroy 後も残り、別途確認して清掃するまで保存料金が発生します。保存した大会・配置は catalog 更新後も元の snapshot を使います。[catalog の固定と旧データの回復](./infrastructure/README.md#update-the-problem-catalog)を参照してください。
 
 AWS コンソールから配置する場合は、[クラウド pipeline](./infrastructure/README.md#cloud-deployment-pipeline)のソース設定と、CodeBuild role の配置権限を確認します。launcher の作成と build の開始は別の操作です。build の開始権限は、配置先を管理できる担当者に限定してください。
 
 参加者を招く前に、テスト用の大会とチームで問題を開き、解答を送信して得点まで確認します。
 
-**大会が終わったら:** `make destroy ENV=development` でアカウント・リージョン・所有する対象を確認し、基盤とデフォルトの所有データを削除します。問題環境は大会の Teardown 操作、または明示した `CLOUD_ARGS="--drain-events"` で撤収します。DynamoDB テーブルはデフォルトで削除し、明示的に retain を設定した場合だけ保持します。通常の destroy は外部 Turso の行を残します。`make destroy-all` はその行のリセットと、スタックが所有していた保持データの削除を明示的に実行します。残したストレージや AWS リソースには料金が発生する場合があります。現行の処理と復旧手順は[配置と撤収](./infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を参照してください。
+**大会が終わったら:** `make destroy ENV=development` でアカウント・リージョン・所有する対象を確認し、基盤とデフォルトの所有データを削除します。問題環境は基盤を削除する前に大会の Teardown 操作で撤収します。DynamoDB テーブルはデフォルトで削除し、明示的に retain を設定した場合だけ保持します。通常の destroy は外部 Turso の行を残します。`make destroy-all` はその行のリセットと、スタックが所有していた保持データの削除を明示的に実行します。残したストレージや AWS リソースには料金が発生する場合があります。現行の処理と復旧手順は[配置と撤収](./infrastructure/README.md#current-checkouts-setup-and-teardown-boundary)を参照してください。
 
-destroy は承認後、CloudFormation の所有情報を検証した S3 バケットのうち、配置済みの削除ポリシーが `Delete` のものだけを空にします。オブジェクトのバージョンと削除マーカーも削除してから、スタックを撤収します。通常の destroy は `Retain` ポリシーのバケットと内容を残します。明示した `destroy-all` は保持対象の内容も空にしますが、`Retain` ポリシーのバケット本体は残ります。呼び出し元には、CloudFormation の実行権限とは別に[直接 S3 を清掃する権限](./infrastructure/BOOTSTRAP-IAM.md#deployment-authority-versus-ordinary-use)が必要です。
+destroy は承認後、CloudFormation の所有情報を検証した S3 バケットのうち、配置済みの削除ポリシーが `Delete` のものだけを空にします。オブジェクトのバージョンと削除マーカーも削除してから、スタックを撤収します。通常の destroy は `Retain` ポリシーのバケットと内容を残します。明示した `destroy-all` は保持対象の内容も空にしますが、`Retain` ポリシーのバケット本体は残ります。呼び出し元には、CloudFormation の実行権限とは別に[直接 S3 を清掃する権限](./infrastructure/BOOTSTRAP-IAM.md#direct-deployment-and-cleanup-permissions)が必要です。
+
+AWS 資源を使う問題には、開催基盤とは別の検証済み競技者アカウントが必要です。hosting account は資源変更前に拒否します。同じ競技者アカウントの別 region に複数チームを配置できますが、global IAM は共有され、問題ごとの権限確認が必要です。Cryptography Battle は得点を奪う機能を無効にした native 版なら競技者アカウント不要で、有効にすると AWS 版を維持します。
+
+catalog pin のない旧 Lite 環境は、resource / schema の検査後、bootstrap・source upload・配置の前に、進行中の大会がないことを初回だけ明示確認します。開催中の大会は完了まで配置済みの版で継続してください。大会が残っていないことを運用者が確認してから対話で承認し、非対話の更新には `CLOUD_ARGS="--confirm-no-active-events"` を使います。通常の `--yes` ではこの確認を省略できません。legacy catalog key だけでは安全な更新を証明できず、過去のデータも自動移行しません。新規環境と復旧済み環境は通常の `make deploy` で自動配置します。
 
 AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` または `make destroy CLOUD_ARGS="--help"` を使います。
 

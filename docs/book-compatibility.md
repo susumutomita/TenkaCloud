@@ -2,7 +2,8 @@
 
 This is a repository-side compatibility note for
 [自分で作るクラウド競技](https://zenn.dev/bull/books/cloud-competition).
-The external book has not been changed by this work. Its published operating
+The external book has not been changed by this work; update it only after this
+restoration merges to main. Its published operating
 instructions include legacy local-practice and Lite paths.
 
 ## Current replacement commands
@@ -13,14 +14,19 @@ instructions include legacy local-practice and Lite paths.
 | make local-down clears progress | make down preserves DB, scores, keys, writable layers and volumes; new Docker jobs remain stopped until participant resume, with no RAM retention |
 | make host | Removed public target; use make local |
 | Local organizer username/password or SAML | Current local hosting uses one organizer key; make local-reset rotates organizer access and revokes organizer sessions while preserving event/participant/runtime state |
-| Lite launcher / CodeBuild platform setup | cloud-pipeline.yaml defaults to reviewed current sources using standard CDKToolkit (official bootstrap only if missing); review its broad CodeBuild role and CDK execution authority before launch. Exercise coverage remains partial |
+| Lite launcher / CodeBuild platform setup | cloud-pipeline.yaml defaults to reviewed current sources using standard CDKToolkit (official bootstrap only if missing); review its broad CodeBuild role and CDK execution authority before launch. Restored generic CloudFormation/flag/multi-flag/endpoint and native paths; nine oversized TemplateBody templates remain unsupported |
 | ACTION=destroy-all | Current make destroy-all confirms and purges stack-owned retained data and selected Turso rows; ordinary make destroy removes platform/default-owned data and leaves external Turso rows |
 | pack activate for a tenant | Retained local record only; does not add problems to current events |
 
-Local SQLite is implemented. Cloud Lambda / DynamoDB hosting is being restored.
+Local SQLite is implemented. Cloud hosting restores the SBT-free Lite Lambda
+backend with a choice of Turso or DynamoDB, preserving its original resource
+identities and deployment paths. Published cloud-v1 resources/schema are incompatible
+with in-place restoration; no data migration is automatic.
 AWS service problems are cloud-only. Docker/Compose exercises are local-only and
 are not listed in the cloud catalog. Native Cryptography Battle runs on both hosting
-options using the platform itself; the DynamoDB Local 100-participant burst took 5.910 seconds, exceeding the five-second refresh interval; AWS performance remains unmeasured. Ordinary local shutdown
+options using the platform itself. Both cloud databases retain 99-team admission
+and SQL retains its 4 MiB coordination state policy; hosted event capacity remains
+unmeasured. Ordinary local shutdown
 does not remove AWS resources created by an earlier revision.
 
 ## Teaching examples and verification
@@ -31,14 +37,14 @@ is not silently reclassified as a current cloud exercise.
 | Example | Current scope and evidence |
 | --- | --- |
 | sqli-demo | Local Docker Challenge; the real SQL/browser rehearsal covers the supported competition path |
-| hello-world | Cloud AWS flag Challenge with scoped 15-minute CLI access; API/storage/worker contracts verified offline, live AWS rehearsal remains separate |
-| ac26-crypto-battle | Native local/cloud Battle; shared reducer, private team state, scoring and replay verified; synchronized local-DB load remains above the five-second refresh interval |
-| hello-world-battle | Historical AWS endpoint Battle; absent from the current cloud catalog and refused for local hosting. The retained uptime browser test injects Fake AWS/probes into the local engine; it is not proof of a current cloud runtime |
+| hello-world | Cloud AWS flag Challenge using the restored generic deployment and participant Console/CLI paths; offline contracts are covered, live AWS rehearsal remains separate |
+| ac26-crypto-battle | Native local/cloud Battle; shared reducer and original selected-database coordination backend. Hosted synchronized-load capacity remains unverified |
+| hello-world-battle | Cloud AWS endpoint Battle using the restored generic deployment/scheduled-scoring paths; refused for local hosting. Local fake-AWS tests are not evidence of live AWS playability |
 | wp-exposed-backup and renamed starter | Local catalog/authoring coverage is not a complete reader walkthrough. Verify the actual instructions, answers, hints, team isolation, restart and cleanup before presenting the new recipe as tested |
 
-Revise the endpoint-Battle chapter only when its cloud lifecycle is implemented
-or the chapter is deliberately rewritten around a supported scenario. Do not present the Cryptography Battle as the same AWS uptime
-lesson. Likewise, validating or installing an external Pack does not make its
+The endpoint-Battle lifecycle is restored, but its exact template and participant
+route still need a recorded rehearsal before the chapter claims verified playability.
+Do not present Cryptography Battle as the same AWS uptime lesson. Likewise, validating or installing an external Pack does not make its
 problems executable in a current event.
 
 Built-in local Course tracks now shows only the team's assigned problems, uses

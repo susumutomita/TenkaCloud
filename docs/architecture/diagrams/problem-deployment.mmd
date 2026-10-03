@@ -3,7 +3,10 @@ sequenceDiagram
   actor Participant
   participant Host as Authorized event service
   participant DB as Persistent store
-  participant Runtime as Owned runtime adapter
+  participant Artifacts as Private pinned execution artifacts
+  participant Bus as EventBridge event bus
+  participant Flow as Step Functions
+  participant Runtime as Runtime worker (Docker, Lambda or CodeBuild)
   Note over Host,DB: Local: persistent SQLite; cloud: selected Turso or DynamoDB
   Organizer->>Host: Prepare selected event problems
   Host->>Host: Validate event, team and runtime
@@ -20,19 +23,33 @@ sequenceDiagram
     Host->>Runtime: Stop; retain writable layer and volumes, not RAM
     Host->>DB: Persist stopped status and retained runtime ports
   else Cloud AWS problem
-    Host->>DB: Atomically retain owned deployment and dispatch outbox
+    Host->>Host: Require verified competitor account separate from hosting account
+    Host->>Artifacts: Resolve event's saved catalogKey and source identity
+    Host->>DB: Retain deployment and catalogKey
+    Host->>Bus: Publish DeployCreateRequested or BulkDeployCreateRequested
     Host-->>Organizer: Accepted job reference
-    Runtime->>DB: Dispatcher claims pending work
-    Runtime->>Runtime: Step Functions invokes owned CloudFormation workers
+    Bus->>Flow: Start restored deployment workflow
+    alt Lambda deployment path
+      Flow->>Runtime: Invoke CfnDeploy and poll DescribeStack
+      Runtime->>Artifacts: Read pinned template and metadata; verify content hashes
+    else CodeBuild deployment path
+      Flow->>Runtime: Start build with saved source ZIP key and VersionId
+      Runtime->>Artifacts: Read exact source archive from private source bucket
+    end
     Runtime->>Runtime: Assume verified competitor role with required ExternalId
-    Runtime->>DB: Persist progress, exact stack identity and terminal result
+    Runtime->>Runtime: CloudFormation create, update, no-op or recreate
+    Flow->>DB: Persist status directly (DynamoDB) or through StatusWriter (Turso)
+    Organizer->>Host: Event Teardown before platform removal
+    Host->>Bus: Publish DeployDeleteRequested for owned deployments
+    Bus->>Flow: Run delete workflow and persist result
   else Native Cryptography Battle
-    Host->>DB: Retain plugin identity and native state
-    Host-->>Organizer: Ready without Docker or a competitor stack
+    Host->>DB: Retain pinned plugin identity and native state
+    Host-->>Organizer: Ready without Docker or competitor account when score stealing is disabled
   else Legacy local Docker event
     Host->>Runtime: Existing deployment lifecycle
     Runtime-->>Host: Outputs or failure
     Host->>DB: Persist status and private runtime data
   end
+  Note over Host,Artifacts: Saved cloud events and deployments keep catalog A after catalog B or removal; unpinned legacy data requires a verified original snapshot
   Note over Host,Runtime: No automatic eviction or reset; synthetic allocation is not a Docker benchmark
-  Note over Organizer,Runtime: Ordinary make destroy removes the AWS platform, default data and S3; external Turso is retained. Explicit --drain-events removes recorded competitor resources first.
+  Note over Organizer,Runtime: Ordinary make destroy removes the AWS platform and default owned data; external Turso and the separate source bucket remain. --drain-events is rejected.

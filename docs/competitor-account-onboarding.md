@@ -8,8 +8,10 @@ Use the existing **Competitor Accounts** screen and
 - **No Organizations, or accounts outside the organization:** each account owner creates
   an individual CloudFormation stack using the same template and parameters
 
-Register each AWS account once. Teams can use separate accounts or share an account
-with different problem deployment regions. The named IAM bootstrap role is global:
+AWS resource exercises require an account separate from the TenkaCloud hosting
+account. A hosting-account target is rejected before resource mutation with setup
+guidance. Register and verify each competitor AWS account once. Teams can use
+separate competitor accounts or share one with different problem deployment regions. The named IAM bootstrap role is global:
 **create it in only one bootstrap region per account**, regardless of the regions
 chosen for teams. Deploying the same named role into a second region causes a name
 collision; it does not add regional isolation. The registration's region is not a
@@ -173,11 +175,17 @@ Bootstrap distribution only establishes the operator's deployment role. Assign
 accounts and supported problem regions to teams in event setup. Account sharing
 with different regions still shares global IAM and other account-wide services;
 it does not establish a security boundary for arbitrary problems. Check each
-problem's participant permissions. The cloud hello-world participant slice issues
-only scoped CLI credentials; it does not enable AWS Console federation.
+problem's participant permissions. The restored participant API supports Console
+and CLI access through the problem's separate participant role. The platform
+hosting account is unsupported and unverified: both resource deployment and
+participant STS reject it. Different-region team allocation is supported but does
+not prove full IAM isolation. The catalog IAM audit still has unresolved findings;
+review the selected problem rather than assuming every policy is least privilege.
 
-Removing a registration blocks new TenkaCloud use but retains the bootstrap role
-and shared ExternalId. Finish teardown of event resources before removing the
+Finish event teardown before unregistering accounts. Registration removal is not
+bootstrap role deletion or immediate STS revocation. Preserve and verify the
+existing ExternalId/trust relationship; serialize register/unregister operations
+using the restored account lifecycle. Finish teardown before removing the
 role, or cleanup can lose access. With automatic deployment disabled, moving an
 account out of an OU does not remove its role. StackSets owners revoke centrally by deleting
 the selected stack instances **without retaining stacks**, then checking results;

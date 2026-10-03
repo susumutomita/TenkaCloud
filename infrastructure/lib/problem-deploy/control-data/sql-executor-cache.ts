@@ -18,23 +18,6 @@ export interface RuntimeDependencies {
   readonly createClient: (config: { readonly url: string; readonly authToken: string }) => Client;
 }
 
-/** Authenticated connectivity only: deploy preflight must never initialize or mutate a database. */
-export async function probeTursoConnection(
-  config: { readonly url: string; readonly authToken: string },
-  connect: (config: {
-    readonly url: string;
-    readonly authToken: string;
-  }) => Pick<Client, "execute" | "close"> = createClient,
-): Promise<void> {
-  const client = connect(config);
-  try {
-    const result = await client.execute("SELECT 1 AS reachable");
-    if (result.rows[0]?.reachable !== 1) throw new Error("Unexpected Turso connectivity result.");
-  } finally {
-    client.close();
-  }
-}
-
 function required(value: string | undefined, name: string): string {
   const normalized = value?.trim();
   if (!normalized) {

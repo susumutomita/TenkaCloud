@@ -40,30 +40,42 @@ preview and does not establish a shared competition's authentication or scores.
 
 The single console launcher is
 [`infrastructure/templates/cloud-pipeline.yaml`](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/cloud-pipeline.yaml).
-It preserves the previous full deployment and teardown flow and its fixed
-platform/catalog refs. The filename change does not switch those refs to the
-unfinished current Lambda/DynamoDB restoration. See the
-[deployment guide](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md)
-for that pinned flow, permissions, retained resources and destructive cleanup.
-Creating the launcher alone does not deploy the platform: a deployment administrator
-explicitly starts CodeBuild. Its role can execute source and command overrides,
-so access belongs only to trusted deployment administrators. AWS resources and
-build time can incur charges. Do not promise zero cost or invoke teardown merely
-because a deployment failed. In the pinned flow, `ACTION=destroy` and
-`ACTION=destroy-all` have different retained-data consequences; follow the pinned
-guide instead of treating either as a simple stop command.
+It preserves the original CodeBuild source-selection and deployment workflow.
+Review its source contract and exact platform/catalog refs using the
+[deployment guide](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md).
+A historical pinned source runs that source's behavior; custom refs must satisfy
+the launcher's checked contract. Creating the launcher does not start a build.
+Only trusted deployment administrators should control the privileged CodeBuild role,
+source settings and build execution. AWS resources and builds can incur charges.
+The launcher distinguishes ACTION=destroy from ACTION=destroy-all using the
+selected source contract's ordinary teardown and explicit retained-data purge.
 
-The current integration uses local SQLite and restores Lambda/DynamoDB for cloud
-hosting without SaaS/SBT. Its `make deploy` and `make destroy` use the current CLI
-after reviewed IAM setup, with ownership-checked coordinated teardown and retained
-data. The current cloud catalog includes hello-world with scoped CLI access and
-native Cryptography Battle. Docker/Compose exercises are local-only and are not
-listed in the cloud catalog. Synchronized Battle load exceeds the five-second refresh interval. Read
-[the implementation status](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/README.md)
-before describing any cloud capability as working. The historical launcher's older
-backend options are not additional current hosting modes. Do not print credentials
-or ask users to paste them into chat. A successful build is not an event rehearsal:
-check organizer/participant sign-in, team isolation, scoring, restart and cleanup.
+Cloud hosting restores the SBT-free Lite backend: Lambda, Cognito and selectable
+Turso or DynamoDB; original Lambda/CodeBuild CloudFormation create/update/no-op/
+recreate paths; flag/multi-flag and scheduled scoring; participant Console/CLI;
+and native coordination including Cryptography Battle. Docker/Compose stays local.
+Both cloud providers admit 99 teams and SQL coordination retains its 4 MiB policy.
+Nine current catalog templates exceed the 51,200-byte TemplateBody limit and
+TemplateURL is not implemented. Live AWS/hosted Turso and full catalog playability
+are not established by offline tests or local SQL measurements.
+
+Ordinary make deploy handles standard CDKToolkit bootstrap when missing, builds
+both applications and uploads the original source archive for CodeBuild. Physical
+names retain tenkacloud-lite by default. The CLI discovers existing Lite/cloud
+pairs; if both exist, require explicit TENKACLOUD_STACK_LAYOUT=lite or cloud.
+Original Lite adoption verifies tags and persistent resource IDs. Published
+cloud-v1 resource/database layouts cannot be updated in place; no automatic
+migration is performed. Use the matching release or a separate environment/database.
+
+Finish event Teardown before platform removal; --drain-events is unavailable here.
+make destroy honors deployed removal policies, works without application Outputs
+or DB access and defaults DynamoDB data to Delete. Explicit retention survives.
+Ordinary destroy preserves external Turso rows; destroy-all explicitly resets
+known owned rows and purges supported retained data. Source buckets, CDKToolkit
+and competitor bootstrap roles are outside platform destruction. Keep ownership
+records for recovery. Do not print credentials or ask users to paste them into chat.
+See [cloud operations](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/README.md)
+for the exact setup, compatibility and teardown boundaries.
 
 ## Read the code by the symptom
 
@@ -75,7 +87,7 @@ before making a small change.
 | --- | --- |
 | Local startup or catalog availability | `scripts/local-host/main.ts`, `scripts/local-host/` |
 | Event/team setup | `apps/application-admin-console/src/pages/EventDetail.tsx` |
-| Participant answer or score display | `apps/participant-portal/src/`, then `scripts/local-host/service.ts` or `infrastructure/lib/problem-deploy/handlers/cloud-api/` |
+| Participant answer or score display | `apps/participant-portal/src/`, then `scripts/local-host/service.ts` or `infrastructure/lib/problem-deploy/handlers/participant-handler/` |
 | Deployment or backend configuration | `infrastructure/templates/cloud-pipeline.yaml`, `scripts/cloud-hosting/main.ts`, `infrastructure/lib/problem-deploy/control-data/` |
 | Problem rules, hints, or game UI | `problems/<category>/<problem>/metadata.json`, its runtime/plugin, and `portal/` |
 | Shared API or scoring contract | `packages/portal-contracts/`, `packages/problem-sdk/`, corresponding producers and consumers |
@@ -90,7 +102,7 @@ shared-environment changes, or secret access. Read-only investigation can procee
 ## Prompts a user can give their assistant
 
 - 「TenkaCloud をローカルで試したい。この端末の前提条件を確認して、問題を1つ開始し、回答の結果が見えるところまで進めて。」
-- 「TenkaCloud を AWS に構築したい。現行 Lambda/DynamoDB の対応範囲、既存環境の有無と必要な設定を調べて。構成・費用・撤去方法を提示してからデプロイする。」
+- 「TenkaCloud を AWS に構築したい。現行 Lambda + Turso/DynamoDB の対応範囲、既存環境の有無と必要な設定を調べて。構成・費用・撤去方法を提示してからデプロイする。」
 - 「この不具合について、画面から API、保存、得点表示までの関係を該当ファイルで説明して。根拠を確認してから修正し、実行した検証と未確認事項を分けて報告して。」
 
 ## Book

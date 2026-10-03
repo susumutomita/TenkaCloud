@@ -12,7 +12,7 @@ import type { ProcessResult } from "./process";
 
 const account = "123456789012";
 const region = "ap-northeast-1";
-const stackArn = `arn:aws:cloudformation:${region}:${account}:stack/owned/stack-id`;
+const stackArn = `arn:aws:cloudformation:${region}:${account}:stack/tenkacloud-cloud-test/stack-id`;
 const tableArn = `arn:aws:dynamodb:${region}:${account}:table/owned-events`;
 const resources = [
   {
@@ -115,7 +115,7 @@ function fixture(
         environment: "test",
         stacks: [
           {
-            name: "owned",
+            name: "tenkacloud-cloud-test",
             arn: overrides.arn ?? stackArn,
             outputs: {},
             status: overrides.status ?? "CREATE_FAILED",

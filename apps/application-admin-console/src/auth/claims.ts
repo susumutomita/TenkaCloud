@@ -2,8 +2,9 @@
  * Cognito JWT (id_token) の payload を読む util。署名検証は API gateway authorizer 側で
  * 行うので frontend ではデコードのみ。秘匿情報は出さない (mask 画面表示用)。
  *
- * 現行のクラウド開催は custom:userRole の Admin / Operator / Viewer を使用する。
- * 旧 claim の型と別名は既存 token の表示互換用であり、API の認可には使わない。
+ * 復元したクラウド開催は custom:userRole の TenantAdmin / TenantOperator / TenantViewer、
+ * local host は custom:organizerRole を使用する。API は各方式の claim を独立に認可する。
+ * Admin / Operator / Viewer の別名も既存 cloud-host token の表示互換用に保持する。
  */
 export interface IdTokenClaims {
   sub?: string;

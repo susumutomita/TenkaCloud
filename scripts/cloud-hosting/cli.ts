@@ -6,10 +6,6 @@ import {
 } from "../../infrastructure/lib/cloud-hosting/config";
 import { assertCommercialRegion } from "../../infrastructure/lib/cloud-hosting/regions";
 import { cloudStackNames } from "../../infrastructure/lib/cloud-hosting/stack-names";
-import { contentDigest } from "../../infrastructure/lib/problem-deploy/control-data/domain/deployment-work";
-import type { CloudTableNames } from "../../infrastructure/lib/problem-deploy/control-data/dynamodb-cloud-repository";
-import type { InstallationScope } from "../../infrastructure/lib/problem-deploy/control-data/installation-control";
-import { parseRunnerBindings } from "../../infrastructure/lib/problem-deploy/handlers/cloud-api/execution-config";
 import { STANDARD_TOOLKIT_STACK } from "./bootstrap-check";
 import {
   assertPurgeAllowed,
@@ -22,15 +18,14 @@ import {
 } from "./complete-teardown";
 import { cloudEnvironmentInstructions, loadCloudEnvironment } from "./environment";
 import { canRecoverCreation, type PlatformStack } from "./failed-creation";
-import {
-  type CloudInstallation,
-  drainInstallation,
-  type InstallationLocation,
-} from "./installation";
+import { selectCloudInstallation } from "./installation-selection";
 import type { CloudCliIo, ProcessResult } from "./process";
 import { setupCloudToolkit, showCloudToolkit } from "./setup";
-import { assertOwnedStack, assertRunnerChange, isMissingStack } from "./stack-check";
+import { prepareCloudSourceBundle } from "./source-bundle";
+import { assertOwnedStack, isMissingStack } from "./stack-check";
+import { assertCompatibleStack } from "./stack-compatibility";
 import { verifyTursoBeforeDeployment } from "./turso-preflight";
+import type { TursoResetTarget } from "./turso-reset";
 import { planDeployedTursoTeardown, type TursoTeardownPlan } from "./turso-teardown";
 
 export interface CloudCliOptions {
@@ -118,18 +113,6 @@ async function resolveCloudContext(context: Context): Promise<Context> {
     },
   };
 }
-async function buildApplications(context: Context): Promise<void> {
-  for (const application of ["application-admin-console", "participant-portal"])
-    assertSuccess(
-      await run(
-        context,
-        "bun",
-        ["run", "--cwd", join(context.root, "apps", application), "build"],
-        true,
-      ),
-      `Build ${application}`,
-    );
-}
 type OwnedPlatformStack = PlatformStack;
 const outputsSchema = z.array(z.object({ OutputKey: z.string(), OutputValue: z.string() }));
 function stackOutputs(text: string, allowMissing: boolean): Readonly<Record<string, string>> {
@@ -200,7 +183,6 @@ async function platformPreflight(
       status,
       outputs: stackOutputs(result.stdout, mode === "down"),
     });
-    if (mode === "up") validateRunnerTransition(context, name, result.stdout);
   }
   return stacks;
 }
@@ -222,19 +204,6 @@ function validatePlatformStatus(
       `Stack ${name} is ${status}. Review the stack state, then run make destroy ENV=${environment} before deploying again. Review the deployed retention/protection with CLOUD_ARGS="--plan" if cleanup fails.`,
     );
   return status;
-}
-function validateRunnerTransition(context: Context, name: string, output: string): void {
-  if (name !== context.stacks.app) return;
-  assertRunnerChange(
-    output,
-    contentDigest(
-      JSON.stringify(
-        context.env.TENKACLOUD_RUNNER_BINDINGS === undefined
-          ? []
-          : parseRunnerBindings(context.env.TENKACLOUD_RUNNER_BINDINGS),
-      ),
-    ),
-  );
 }
 async function output(context: Context, stack: string, name: string): Promise<string> {
   const result = await run(context, "aws", [
@@ -268,7 +237,7 @@ async function ensureOrganizer(context: Context, email: string): Promise<void> {
     "--user-attributes",
     `Name=email,Value=${email}`,
     "Name=email_verified,Value=True",
-    "Name=custom:userRole,Value=Admin",
+    "Name=custom:userRole,Value=TenantAdmin",
     "--desired-delivery-mediums",
     "EMAIL",
   ]);
@@ -277,12 +246,9 @@ async function ensureOrganizer(context: Context, email: string): Promise<void> {
 async function validateDeploymentData(
   context: Context,
   desiredData: CloudControlDataConfiguration,
-  backend: OwnedPlatformStack | undefined,
+  deployed: readonly OwnedPlatformStack[],
 ): Promise<void> {
-  const location = backend
-    ? deployedInstallationLocation(backend, context.env.REGION ?? "")
-    : undefined;
-  if (location) assertDataTransition(desiredData, location);
+  for (const stack of deployed) assertDataTransition(desiredData, stack.outputs);
   if (desiredData.kind === "turso") {
     if (!context.io.probeTurso)
       throw new Error("Turso preflight is unavailable; deployment stopped.");
@@ -295,16 +261,91 @@ async function validateDeploymentData(
       output: context.io.stdout,
     });
   }
-  if (location) {
-    const installation = await context.io.openInstallation(location);
-    try {
-      await installation.repository.assertAcceptingInstallation();
-    } finally {
-      installation.close();
-    }
-  }
 }
-async function up(context: Context): Promise<number> {
+
+async function selectInstallation(context: Context): Promise<Context> {
+  const layout = await selectCloudInstallation({
+    environment: context.env.CDK_PARAM_ENVIRONMENT ?? "development",
+    account: context.env.ACCOUNT_ID ?? "",
+    region: context.env.REGION ?? "",
+    explicitLayout: context.env.TENKACLOUD_STACK_LAYOUT,
+    run: (args) => run(context, "aws", args),
+  });
+  return {
+    ...context,
+    stacks: cloudStackNames(context.env.CDK_PARAM_ENVIRONMENT ?? "development", layout),
+    env: { ...context.env, TENKACLOUD_STACK_LAYOUT: layout },
+  };
+}
+async function resolvedInstallation(context: Context): Promise<Context> {
+  return selectInstallation(await resolveCloudContext(context));
+}
+async function verifyDeploymentCompatibility(
+  context: Context,
+  deployed: readonly OwnedPlatformStack[],
+): Promise<{ readonly stacks: OwnedPlatformStack[]; readonly original: readonly string[] }> {
+  const verified: OwnedPlatformStack[] = [];
+  const original: string[] = [];
+  for (const stack of deployed) {
+    const template = await run(context, "aws", [
+      "cloudformation",
+      "get-template",
+      "--stack-name",
+      stack.arn,
+      "--region",
+      context.env.REGION ?? "",
+      "--output",
+      "json",
+    ]);
+    assertSuccess(template, `Inspect resource compatibility for ${stack.name}`);
+    const historical = assertCompatibleStack(stack, template.stdout);
+    if (historical) original.push(stack.arn);
+    verified.push(
+      historical
+        ? {
+            ...stack,
+            outputs: {
+              ...stack.outputs,
+              CloudControlDataBackend: historical.kind,
+              ...(historical.kind === "turso"
+                ? {
+                    TursoDatabaseUrl: historical.databaseUrl,
+                    TursoAuthTokenParameterName: historical.authTokenParameterName,
+                  }
+                : {}),
+            },
+          }
+        : stack,
+    );
+  }
+  return { stacks: verified, original };
+}
+
+async function confirmOriginalUpgrade(
+  context: Context,
+  original: readonly string[],
+  noActiveEventsConfirmed: boolean,
+): Promise<void> {
+  if (original.length === 0) return;
+  const warning = `Original installation detected:\n${original.join("\n")}\nResource IDs match, but original event records do not prove their execution catalog. Updating during an active competition can stop scoring and problem access. Complete all competitions with the installed version before this initial upgrade. Historical data is not automatically migrated, and a configured legacy catalog key alone is not proof of a safe running-event upgrade.`;
+  context.io.stdout(`[cloud] ${warning}\n`);
+  if (noActiveEventsConfirmed) {
+    context.io.stdout(
+      "[cloud] Operator explicitly confirmed that no active competitions remain.\n",
+    );
+    return;
+  }
+  if (
+    await context.io.confirm(
+      "Have you verified that all competitions are complete and no active event needs this installation before upgrading? [y/N] ",
+    )
+  )
+    return;
+  throw new Error(
+    'Original installation upgrade paused before bootstrap, source upload or deployment. Keep active competitions on the installed version. After verifying that none remain, rerun make deploy and confirm; noninteractive execution requires CLOUD_ARGS="--confirm-no-active-events". No resources were changed.',
+  );
+}
+async function up(context: Context, noActiveEventsConfirmed: boolean): Promise<number> {
   const desiredData = cloudControlDataConfiguration(context.env);
   const email = context.env.TENKACLOUD_ADMIN_EMAIL?.trim() ?? "";
   const parts = email.split("@");
@@ -319,12 +360,14 @@ async function up(context: Context): Promise<number> {
       `Set TENKACLOUD_ADMIN_EMAIL before cloud deployment. ${cloudEnvironmentInstructions(context.env.ENV ?? "development")}`,
     );
   if (context.env.TENKACLOUD_RUNNER_BINDINGS !== undefined)
-    parseRunnerBindings(context.env.TENKACLOUD_RUNNER_BINDINGS);
+    throw new Error(
+      "TENKACLOUD_RUNNER_BINDINGS belongs to the incompatible cloud-v1 runner. Use a separate environment with the restored competition backend, and register competitor accounts in its organizer console. No resources were changed.",
+    );
   context.io.stdout(
-    `[cloud] Supported cloud exercises: hello-world with scoped participant AWS CLI access, and native Cryptography Battle backed by ${desiredData.kind === "turso" ? "Turso" : "DynamoDB"}. AWS usage and retained storage can incur charges; see infrastructure/README.md for feature and capacity limits.\n`,
+    `[cloud] Deploying the competition backend with event, account, deployment and scoring services backed by ${desiredData.kind === "turso" ? "Turso" : "DynamoDB"}. AWS usage and retained storage can incur charges.\n`,
   );
 
-  const resolved = await resolveCloudContext(context);
+  const resolved = await resolvedInstallation(context);
   context.io.stdout(
     `[cloud] Deployment target: account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}. make deploy uses automatic CDK approval and creates standard CDKToolkit only when missing.\n`,
   );
@@ -340,20 +383,20 @@ async function up(context: Context): Promise<number> {
       throw new Error(`${error.message}\n${operatorInstructions}`);
     throw error;
   }
-  await validateDeploymentData(
-    resolved,
-    desiredData,
-    deployed.find((stack) => stack.name === context.stacks.backend),
-  );
+  const verified = await verifyDeploymentCompatibility(resolved, deployed);
+  await validateDeploymentData(resolved, desiredData, verified.stacks);
+  await confirmOriginalUpgrade(resolved, verified.original, noActiveEventsConfirmed);
   await setupCloudToolkit({ cwd: resolved.root, env: resolved.env }, context.io, true, "deploy");
-  context.io.stdout("[cloud] [1/3] Building both web applications for CDK asset publishing\n");
-  await buildApplications(resolved);
+  context.io.stdout(
+    "[cloud] [1/3] Building applications and preparing the CodeBuild source bundle\n",
+  );
+  const prepared = { ...resolved, env: await prepareCloudSourceBundle(resolved, context.io) };
   context.io.stdout("[cloud] [2/3] Deploying cloud application and backend stacks\n");
   assertSuccess(
-    await cdk(resolved, [
+    await cdk(prepared, [
       "deploy",
-      context.stacks.backend,
-      context.stacks.app,
+      resolved.stacks.backend,
+      resolved.stacks.app,
       "--require-approval",
       "never",
     ]),
@@ -361,139 +404,38 @@ async function up(context: Context): Promise<number> {
   );
   context.io.stdout("[cloud] [3/3] Preparing organizer sign-in and access URLs\n");
   await ensureOrganizer(resolved, email);
-  const consoleUrl = await output(resolved, context.stacks.app, "ApplicationAdminConsoleUrl");
-  const portalUrl = await output(resolved, context.stacks.backend, "ParticipantPortalApiUrl");
+  const consoleUrl = await output(resolved, resolved.stacks.app, "ApplicationAdminConsoleUrl");
+  const portalUrl = await output(resolved, resolved.stacks.backend, "ParticipantPortalUrl");
   context.io.stdout(
-    `Cloud hosting deployed for hello-world (scoped participant AWS CLI) and native Cryptography Battle.\nOrganizer console: ${consoleUrl}\nParticipant portal: ${portalUrl}\n`,
+    `Cloud competition hosting deployed.\nOrganizer console: ${consoleUrl}\nParticipant portal: ${portalUrl}\n`,
   );
   return 0;
 }
-/** Deployed Outputs are authoritative; local edits never select an existing installation's data. */
-function deployedInstallationLocation(
-  backend: OwnedPlatformStack,
-  region: string,
-): InstallationLocation {
-  const kind = backend.outputs.CloudControlDataBackend;
-  if (kind === "turso") {
-    const selected = cloudControlDataConfiguration({
-      CDK_PARAM_CONTROL_DATA_BACKEND: "turso",
-      CDK_PARAM_TURSO_DATABASE_URL: backend.outputs.TursoDatabaseUrl,
-      CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: backend.outputs.TursoAuthTokenParameterName,
-    });
-    if (selected.kind !== "turso") throw new Error("Invalid deployed Turso provider identity.");
-    return {
-      region,
-      backend: "turso",
-      turso: {
-        databaseUrl: selected.databaseUrl,
-        authTokenParameterName: selected.authTokenParameterName,
-      },
-    };
-  }
-  if (kind && kind !== "dynamodb")
-    throw new Error("Unknown deployed cloud data backend; no resources were changed.");
-  // Older current-cloud stacks emitted only these three owned physical names.
-  return { region, backend: "dynamodb", tables: installationTables(backend) };
-}
+/** Existing provider identity is never replaced by a changed local environment. */
 function assertDataTransition(
   desired: CloudControlDataConfiguration,
-  deployed: InstallationLocation,
+  outputs: Readonly<Record<string, string>>,
 ): void {
+  const kind = outputs.CloudControlDataBackend;
+  if (kind !== "dynamodb" && kind !== "turso")
+    throw new Error(
+      "Existing backend provider is missing or unknown; deployment stopped before mutation.",
+    );
   if (
-    desired.kind !== deployed.backend ||
-    (desired.kind === "turso" && desired.databaseUrl !== deployed.turso?.databaseUrl)
+    desired.kind !== kind ||
+    (desired.kind === "turso" && desired.databaseUrl !== outputs.TursoDatabaseUrl)
   )
     throw new Error(
       "Changing the deployed cloud data backend or Turso database URL requires an explicit data migration or separate installation. No automatic data migration is performed; deployment stopped before mutation.",
     );
 }
-function installationTables(backend: OwnedPlatformStack): CloudTableNames {
-  const result = {
-    events: backend.outputs.EventsTableName ?? "",
-    teams: backend.outputs.TeamsTableName ?? "",
-    deployments: backend.outputs.DeploymentsTableName ?? "",
-  };
-  for (const [kind, value] of Object.entries(result)) {
-    const resource = kind[0]?.toUpperCase() + kind.slice(1);
-    // CDK-generated physical names are stack-scoped. Never adopt an arbitrary table output.
-    if (!value.startsWith(`${backend.name}-${resource}`) || !/^[A-Za-z0-9_.-]{3,255}$/u.test(value))
-      throw new Error(
-        `Missing or unowned ${resource} table output; no platform stacks were destroyed.`,
-      );
-  }
-  if (new Set(Object.values(result)).size !== 3)
-    throw new Error("Cloud table outputs must be distinct.");
-  return result;
-}
-function nativeInstallationArtifacts(
-  context: Context,
-  stacks: readonly OwnedPlatformStack[],
-): InstallationLocation["native"] {
-  const app = stacks.find((stack) => stack.name === context.stacks.app);
-  if (app?.outputs.CloudInstallationControlVersion !== "2") return undefined;
-  const artifactBucket = app.outputs.CloudExecutionArtifactBucket;
-  const catalogKey = app.outputs.CloudExecutionCatalogKey;
-  if (
-    !artifactBucket ||
-    !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/u.test(artifactBucket) ||
-    artifactBucket.includes("..") ||
-    !catalogKey ||
-    !/^catalogs\/[a-f0-9]{64}\.json$/u.test(catalogKey)
-  )
-    throw new Error(
-      "Native coordination artifact outputs are missing or invalid; no resources were removed.",
-    );
-  return { artifactBucket, catalogKey, expectedBucketOwner: context.env.ACCOUNT_ID ?? "" };
-}
-
-async function teardownScope(
-  context: Context,
-  stacks: readonly OwnedPlatformStack[],
-  installation: CloudInstallation,
-): Promise<InstallationScope> {
-  const backend = stacks.find((stack) => stack.name === context.stacks.backend);
-  const app = stacks.find((stack) => stack.name === context.stacks.app);
-  if (!backend)
-    throw new Error(
-      "Backend is missing; unable to prove event cleanup. No hosting resources were removed.",
-    );
-  if (
-    app &&
-    (!["1", "2"].includes(app.outputs.CloudInstallationControlVersion ?? "") ||
-      !["true", "false"].includes(app.outputs.CloudRunnerEnabled ?? ""))
-  )
-    throw new Error(
-      "Deployed application does not advertise the durable intake-fence version. Update the matching installation before coordinated destroy; no resources were removed.",
-    );
-  if (app)
-    return {
-      account: context.env.ACCOUNT_ID ?? "",
-      region: context.env.REGION ?? "",
-      environment: context.env.CDK_PARAM_ENVIRONMENT ?? "development",
-      applicationStackId: app.arn,
-      backendStackId: backend.arn,
-    };
-  const control = await installation.repository.installationControl();
-  if (
-    control?.status !== "DRAINED" ||
-    control.scope.backendStackId !== backend.arn ||
-    control.scope.account !== context.env.ACCOUNT_ID ||
-    control.scope.region !== context.env.REGION ||
-    control.scope.environment !== context.env.CDK_PARAM_ENVIRONMENT
-  )
-    throw new Error(
-      "Application stack is absent without a matching completed drain; refusing to infer cleanup.",
-    );
-  return control.scope;
-}
 interface DownOptions {
   readonly yes: boolean;
   readonly purge: boolean;
   readonly plan: boolean;
-  readonly drain: boolean;
 }
 async function down(context: Context, options: DownOptions): Promise<void> {
-  const resolved = await resolveCloudContext(context);
+  const resolved = await resolvedInstallation(context);
   const stacks = await platformPreflight(resolved, "down");
   if (stacks.length === 0) {
     if (options.purge || options.plan)
@@ -507,9 +449,11 @@ async function down(context: Context, options: DownOptions): Promise<void> {
   }
   const cleanup = await readCleanupPlan(resolved, stacks, options);
   if (options.plan) return;
-  const backend = stacks.find((stack) => stack.name === resolved.stacks.backend);
+  const storageStack =
+    stacks.find((stack) => stack.name === resolved.stacks.backend) ??
+    stacks.find((stack) => stack.name === resolved.stacks.app);
   const turso = planDeployedTursoTeardown(
-    (backend && cleanup?.storageOutputs[backend.arn]) ?? backend?.outputs ?? {},
+    (storageStack && cleanup.storageOutputs[storageStack.arn]) ?? storageStack?.outputs ?? {},
     options.purge,
   );
   validateTursoPlan(turso, options.purge, context.io);
@@ -519,7 +463,6 @@ async function down(context: Context, options: DownOptions): Promise<void> {
     context.io.stdout("Cloud teardown cancelled\n");
     return;
   }
-  if (options.drain) await drainPlatformInstallation(resolved, stacks);
   await emptyStackOwnedBuckets(cleanup, (args) => run(resolved, "aws", args), options.purge);
   if (options.purge) await purgeStackOwnedResources(cleanup, (args) => run(resolved, "aws", args));
   if (turso.kind === "purge") await resetTursoBeforeStackRemoval(resolved, turso.target);
@@ -567,7 +510,7 @@ function validateTursoPlan(plan: TursoTeardownPlan, purge: boolean, io: CloudCli
 }
 async function resetTursoBeforeStackRemoval(
   context: Context,
-  target: { readonly databaseUrl: string; readonly parameterName: string },
+  target: Omit<TursoResetTarget, "region">,
 ): Promise<void> {
   if (!context.io.purgeTursoControlData)
     throw new Error("Turso reset is unavailable; platform removal stopped.");
@@ -585,36 +528,13 @@ function teardownConfirmation(
   options: DownOptions,
   turso: TursoTeardownPlan,
 ): string {
-  const consequences = `Destroy platform stacks in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stacks.map((stack) => stack.arn).join("\n")}\nStack-owned DynamoDB tables and all rows, Cognito accounts, S3 objects, CloudFront distributions and managed logs are deleted under the default policy. Existing deployed Retain policies are honored; retained storage may continue to incur charges. ${options.purge ? "Additionally permanently purge the exact stack-owned tables, CloudWatch logs and S3 object versions/delete markers listed above, including retained data. Retain-policy bucket containers remain; only their contents are emptied. This cannot be undone. No deletion protection is changed. " : ""}${options.drain ? "First stop new competition work and remove recorded event exercise resources using their stored ownership records. " : "Competition exercise resources are not cleaned up by this command; use each event's Teardown action before removing its platform if needed. "}CDKToolkit, its shared assets, competitor bootstrap stacks/IAM roles and unrelated or separately deployed exercise resources are untouched.`;
+  const consequences = `Destroy platform stacks in account ${resolved.env.ACCOUNT_ID}, region ${resolved.env.REGION}, environment ${resolved.env.CDK_PARAM_ENVIRONMENT}?\n${stacks.map((stack) => stack.arn).join("\n")}\nStack-owned DynamoDB tables and all rows, Cognito accounts, S3 objects, CloudFront distributions and managed logs are deleted under the default policy. Existing deployed Retain policies are honored; retained storage may continue to incur charges. ${options.purge ? "Additionally permanently purge the exact stack-owned tables, CloudWatch logs and S3 object versions/delete markers listed above, including retained data. Retain-policy bucket containers remain; only their contents are emptied. This cannot be undone. No deletion protection is changed. " : ""}Competition exercise resources are not cleaned up by this command; use the organizer console's deployment cleanup before removing its platform if needed. CDKToolkit, its shared assets, competitor bootstrap stacks/IAM roles and unrelated or separately deployed exercise resources are untouched.`;
   return (
     consequences +
     (turso.kind === "purge"
       ? ` Turso control-data rows in ${turso.target.databaseUrl} will also be permanently deleted before removing the AWS stacks; schema and migration state remain. Authentication uses the deployed SSM parameter ${turso.target.parameterName}.`
       : "")
   );
-}
-async function drainPlatformInstallation(
-  context: Context,
-  stacks: readonly OwnedPlatformStack[],
-): Promise<void> {
-  const backend = stacks.find((stack) => stack.name === context.stacks.backend);
-  if (!backend)
-    throw new Error(
-      "Backend is missing; explicit event drain cannot verify its stored work. Ordinary make destroy does not require event drain.",
-    );
-  const installation = await context.io.openInstallation({
-    ...deployedInstallationLocation(backend, context.env.REGION ?? ""),
-    native: nativeInstallationArtifacts(context, stacks),
-  });
-  try {
-    await drainInstallation(
-      installation,
-      await teardownScope(context, stacks, installation),
-      context.io,
-    );
-  } finally {
-    installation.close();
-  }
 }
 async function deletePlatformStacks(
   context: Context,
@@ -668,17 +588,26 @@ async function status(context: Context): Promise<number> {
   return 0;
 }
 const HELP =
-  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. CDK_PARAM_CONTROL_DATA_BACKEND selects dynamodb (default) or turso; Turso also requires CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME, naming an existing SSM SecureString. Existing deployments cannot switch data backends or database URLs without an explicit migration or separate installation. Exported variables override file values; AWS credentials come from your intended profile/role. make deploy reuses standard CDKToolkit unchanged; if missing, it explains the standard bootstrap IAM/resources, runs the pinned official cdk bootstrap aws://account/region and continues deployment. Standard bootstrap uses an AdministratorAccess CloudFormation execution role by default. Optional --show-setup prints the bootstrap plan and official template offline; --setup creates only a missing toolkit and never updates an existing one. As in the original deployment command, ordinary up uses automatic bootstrap and --require-approval never, including CI/noninteractive runs; no extra approval flag is required. Review the target and permissions before running it. Existing --yes/--setup-if-needed options remain accepted for compatibility; setup-only automation can use --setup --yes. down accepts --yes, --purge-retained-data (make destroy-all), --plan (read-only exact-resource/retention/protection inventory), and --drain-events (explicitly stop intake and remove recorded competition exercise resources before platform removal). Ordinary destroy does not require database access or application Outputs. Purge never disables deletion protection.\n';
+  'TenkaCloud cloud hosting\nUsage: make deploy ENV=development | make destroy ENV=development [CLOUD_ARGS="--yes"]\nHelp: make deploy CLOUD_ARGS="--help" | make destroy CLOUD_ARGS="--help"\nSource CLI: bun run --no-env-file scripts/cloud-hosting/main.ts <up|down|status|console-url|portal-url>\nSelect ENV or matching CDK_PARAM_ENVIRONMENT (default development). Samples exist for development, staging and production; custom lowercase environment names remain supported. Copy infrastructure/environments/<environment>/.env.example to .env in the same directory only if absent, then configure TENKACLOUD_ADMIN_EMAIL, ACCOUNT_ID and AWS_REGION. CDK_PARAM_CONTROL_DATA_BACKEND selects dynamodb (default) or turso; Turso also requires CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME, naming an existing SSM SecureString. Existing deployments cannot switch data backends or database URLs without an explicit migration or separate installation. Published cloud-v1 resource/database layouts cannot be upgraded in place: use their matching release and a separate ENV/database for the restored competition backend. Source preparation builds both applications and uploads an environment-scoped source archive; the source bucket is outside CloudFormation ownership and remains after destroy. Exported variables override file values; AWS credentials come from your intended profile/role. make deploy reuses standard CDKToolkit unchanged; if missing, it explains the standard bootstrap IAM/resources, runs the pinned official cdk bootstrap aws://account/region and continues deployment. Standard bootstrap uses an AdministratorAccess CloudFormation execution role by default. Optional --show-setup prints the bootstrap plan and official template offline; --setup creates only a missing toolkit and never updates an existing one. As in the original deployment command, ordinary up uses automatic bootstrap and --require-approval never, including CI/noninteractive runs; no extra approval flag is required for new or already-restored installations. An original installation without catalog pins requires a one-time confirmation that all competitions are complete before any bootstrap or deployment; noninteractive upgrades require --confirm-no-active-events after verifying that condition. Generic --yes does not acknowledge it. Review the target and permissions before running it. Existing --yes/--setup-if-needed options remain accepted for compatibility; setup-only automation can use --setup --yes. down accepts --yes, --purge-retained-data (make destroy-all), --plan (read-only exact-resource/retention/protection inventory). --drain-events is unavailable because it belongs to the incompatible cloud-v1 intake model; use the matching old release for a cloud-v1 event drain before platform removal. Ordinary destroy does not require database access or application Outputs. Purge never disables deletion protection.\n';
 function assertCommandArguments(command: string, args: readonly string[]): void {
   let permitted: readonly string[] = [];
-  if (command === "up") permitted = ["--setup", "--show-setup", "--setup-if-needed", "--yes", "-y"];
+  if (command === "up")
+    permitted = [
+      "--setup",
+      "--show-setup",
+      "--setup-if-needed",
+      "--yes",
+      "-y",
+      "--confirm-no-active-events",
+    ];
   if (command === "down")
     permitted = ["--yes", "-y", "--purge-retained-data", "--plan", "--drain-events"];
   if (
     args.some((arg) => !permitted.includes(arg)) ||
     (command === "up" &&
       ((args.includes("--show-setup") && args.length !== 1) ||
-        (args.includes("--setup") && args.includes("--setup-if-needed"))))
+        (args.includes("--setup") &&
+          (args.includes("--setup-if-needed") || args.includes("--confirm-no-active-events")))))
   )
     throw new Error("Unknown or conflicting cloud command argument.");
 }
@@ -727,27 +656,30 @@ export async function runCloudCli(
           );
           return 0;
         }
-        return await up(context);
+        return await up(context, args.includes("--confirm-no-active-events"));
       case "down":
+        if (args.includes("--drain-events"))
+          throw new Error(
+            "--drain-events requires the published cloud-v1 intake model and is unavailable in the restored backend. Use the matching published release to drain cloud-v1 events, or finish exercise cleanup in the organizer console before ordinary make destroy. No resources were changed.",
+          );
         await down(context, {
           yes: args.some((arg) => ["--yes", "-y"].includes(arg)),
           purge: args.includes("--purge-retained-data"),
           plan: args.includes("--plan"),
-          drain: args.includes("--drain-events"),
         });
         return 0;
       case "status":
-        return await status(await resolveCloudContext(context));
-      case "console-url":
-        io.stdout(
-          `${await output(await resolveCloudContext(context), context.stacks.app, "ApplicationAdminConsoleUrl")}\n`,
-        );
+        return await status(await resolvedInstallation(context));
+      case "console-url": {
+        const resolved = await resolvedInstallation(context);
+        io.stdout(`${await output(resolved, resolved.stacks.app, "ApplicationAdminConsoleUrl")}\n`);
         return 0;
-      case "portal-url":
-        io.stdout(
-          `${await output(await resolveCloudContext(context), context.stacks.backend, "ParticipantPortalApiUrl")}\n`,
-        );
+      }
+      case "portal-url": {
+        const resolved = await resolvedInstallation(context);
+        io.stdout(`${await output(resolved, resolved.stacks.backend, "ParticipantPortalUrl")}\n`);
         return 0;
+      }
       default:
         throw new Error(`Unknown cloud command: ${command}`);
     }

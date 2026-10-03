@@ -3,8 +3,8 @@ import {
   type PortalCoordinationClient,
   type PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
-import { render, screen, waitFor } from "@testing-library/react";
-import { lazy } from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { lazy, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -37,6 +37,27 @@ const props = {
 // 指定 slot だけ与えた lazy を返し、 他は undefined。
 const onlyFirst = (comp: ReturnType<typeof lazy>) => (_: string, slot: string) =>
   slot === SLOT ? comp : undefined;
+
+function pendingOperationPanel(clients: PortalCoordinationClient[], op: unknown) {
+  return function OperationPanel({ coordinationClient }: PortalSlotProps) {
+    const [status, setStatus] = useState("ready");
+    if (coordinationClient) clients.push(coordinationClient);
+    return (
+      <>
+        <output aria-label="operation state">{status}</output>
+        <button
+          type="button"
+          onClick={() => {
+            setStatus("pending");
+            void coordinationClient?.submitOp(op).then((result) => setStatus(result.kind));
+          }}
+        >
+          Submit move
+        </button>
+      </>
+    );
+  };
+}
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -175,4 +196,59 @@ describe("PortalPluginSlots", () => {
     expect(rotated.body).toBe(JSON.stringify({ op, runId: nextRunId }));
     expect(rotated.headers["Idempotency-Key"]).not.toBe(first.headers["Idempotency-Key"]);
   });
+
+  it.each(["default", "01K00000000000000000000004"])(
+    "pins a cloud operation to %s and clears slot state when only the shared run rotates",
+    async (coordinationRunId) => {
+      // Only catalog/slot loading is stubbed; the real client serializes runId + idempotency key.
+      const clients: PortalCoordinationClient[] = [];
+      const op = { kind: "ready" };
+      const capture = lazy(async () => ({
+        default: pendingOperationPanel(clients, op),
+      }));
+      mockLoad.mockImplementation(onlyFirst(capture));
+      let resolvePending: ((response: Response) => void) | undefined;
+      const pending = new Promise<Response>((resolve) => {
+        resolvePending = resolve;
+      });
+      const fetch = vi.fn().mockResolvedValue({ status: 503 }).mockReturnValueOnce(pending);
+      vi.stubGlobal("fetch", fetch);
+      const active = {
+        ...props,
+        jobId: "unchanged-cloud-deployment",
+        coordinationRunId,
+        coordinationApiUrl: "https://coord.example.com",
+        sessionToken: "team-key",
+      };
+      const { rerender } = render(<PortalPluginSlots {...active} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Submit move" }));
+      expect(screen.getByLabelText("operation state")).toHaveTextContent("pending");
+      const original = clients.at(-1);
+      if (!original) throw new Error("Coordination client is missing");
+      const first = fetch.mock.calls[0]?.[1];
+      expect(first.body).toBe(JSON.stringify({ op, runId: coordinationRunId }));
+      rerender(<PortalPluginSlots {...active} score={1} />);
+      expect(clients.at(-1)).toBe(original);
+      expect(screen.getByLabelText("operation state")).toHaveTextContent("pending");
+
+      const nextRunId = "01K00000000000000000000005";
+      rerender(<PortalPluginSlots {...active} coordinationRunId={nextRunId} />);
+      expect(screen.getByLabelText("operation state")).toHaveTextContent("ready");
+      const next = clients.at(-1);
+      if (!next || next === original) throw new Error("Reset must create a new run client");
+      await next.submitOp(op);
+      expect(fetch.mock.calls[1]?.[1].body).toBe(JSON.stringify({ op, runId: nextRunId }));
+      expect(fetch.mock.calls[1]?.[1].headers["Idempotency-Key"]).not.toBe(
+        first.headers["Idempotency-Key"],
+      );
+      // A retained retry closure must never move the old uncertain intent to the new run.
+      await original.submitOp(op);
+      expect(fetch.mock.calls[2]?.[1]).toEqual(first);
+      await act(async () => {
+        resolvePending?.(Response.json({ projection: { oldRun: true } }));
+        await pending;
+      });
+      expect(screen.getByLabelText("operation state")).toHaveTextContent("ready");
+    },
+  );
 });
