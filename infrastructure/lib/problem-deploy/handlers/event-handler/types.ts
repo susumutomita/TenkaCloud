@@ -1,10 +1,12 @@
 import { z } from "zod";
-import type {
-  EventProblemTarget,
-  EventRecord,
-  EventStatus,
+import {
+  type EventProblemTarget,
+  type EventRecord,
+  type EventStatus,
+  MAX_PROBLEMS_PER_EVENT,
 } from "../../control-data/domain/events.js";
 import { MAX_TEAMS_PER_EVENT, type TeamRecord } from "../../control-data/domain/teams.js";
+import { HostingAccountSelfTestRequestSchema } from "../shared/competitor-account-policy.js";
 import { ProgressionGateConfigSchema } from "../shared/progression-gate.js";
 import { PUBLIC_SCORE_EVENT_RESULTS, PUBLIC_SCORE_EVENT_SOURCES } from "../shared/score-event.js";
 
@@ -98,47 +100,40 @@ export interface TeamItem extends Omit<TeamRecord, "teamLoginKey"> {
  * `problems` には deploy する problemId と各々の default account / region。
  */
 export const CreateEventRequestSchema = z.object({
+  hostingAccountSelfTest: HostingAccountSelfTestRequestSchema.optional(),
   name: z.string().min(1).max(120),
   teams: z
     .array(
-      z
-        .object({
-          internalSlug: z
-            .string()
-            .min(1)
-            .max(40)
-            .regex(
-              /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/,
-              "internalSlug は a-z0-9- (RFC1035-ish) のみ",
-            ),
-          /** #528: AWS-only events require this; non-AWS single-provider events use teamSlug credentials. */
-          awsAccountId: z
-            .string()
-            .regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字")
-            .optional(),
-          /** #2563: Non-AWS credential lookup slug registered via /admin/team-cloud-credentials. */
-          nonAwsCredentialTeamSlug: z
-            .string()
-            .min(1)
-            .max(40)
-            .regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/, "teamSlug は a-z0-9- のみ")
-            .optional(),
-          /**
-           * [Issue #3173] この team の deploy 先 region。 省略時は problem.defaultRegion。
-           * 同じ regex を使う (= 問題側と 1 文字も違わない形式検証)。
-           */
-          region: z
-            .string()
-            .regex(/^[a-z]{2}-[a-z]+-\d+$/, "AWS region 形式が不正です")
-            .optional(),
-        })
-        .refine(
-          (team) => team.awsAccountId !== undefined || team.nonAwsCredentialTeamSlug !== undefined,
-          {
-            message:
-              "awsAccountId (AWS event) か nonAwsCredentialTeamSlug (non-AWS event) のどちらかが必須",
-          },
-        ),
+      z.object({
+        internalSlug: z
+          .string()
+          .min(1)
+          .max(40)
+          .regex(
+            /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/,
+            "internalSlug は a-z0-9- (RFC1035-ish) のみ",
+          ),
+        /** #528: AWS-only events require this; non-AWS single-provider events use teamSlug credentials. */
+        awsAccountId: z
+          .string()
+          .regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字")
+          .optional(),
+        /** #2563: Non-AWS credential lookup slug registered via /admin/team-cloud-credentials. */
+        nonAwsCredentialTeamSlug: z
+          .string()
+          .min(1)
+          .max(40)
+          .regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/, "teamSlug は a-z0-9- のみ")
+          .optional(),
+        /**
+         * [Issue #3173] この team の deploy 先 region。 省略時は problem.defaultRegion。
+         * 同じ regex を使う (= 問題側と 1 文字も違わない形式検証)。
+         */
+        region: z
+          .string()
+          .regex(/^[a-z]{2}-[a-z]+-\d+$/, "AWS region 形式が不正です")
+          .optional(),
+      }),
     )
     .min(1)
     // create.ts は event 1 行 + teams を 1 つの atomic TransactWrite で書く。 TransactWrite は
@@ -149,7 +144,7 @@ export const CreateEventRequestSchema = z.object({
       MAX_TEAMS_PER_EVENT,
       `1 event あたり最大 ${MAX_TEAMS_PER_EVENT} teams (event 1 行 + teams で DDB TransactWrite 100-item 上限)`,
     ),
-  problems: z.array(EventProblemTargetSchema).min(1).max(50),
+  problems: z.array(EventProblemTargetSchema).min(1).max(MAX_PROBLEMS_PER_EVENT),
 });
 export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
 
@@ -383,10 +378,11 @@ export type EventDetail = z.infer<typeof EventDetailSchema>;
  */
 export const BulkDeployRequestSchema = z
   .object({
+    hostingAccountSelfTest: HostingAccountSelfTestRequestSchema.strict().optional(),
     retryFailedOnly: z.literal(true).optional(),
     forceRedeploy: z.literal(true).optional(),
     teamIds: z.array(z.string().min(1)).min(1).max(100).optional(),
-    problemIds: z.array(z.string().min(1)).min(1).max(50).optional(),
+    problemIds: z.array(z.string().min(1)).min(1).max(MAX_PROBLEMS_PER_EVENT).optional(),
   })
   .strict()
   .refine((v) => !(v.retryFailedOnly && v.forceRedeploy), {

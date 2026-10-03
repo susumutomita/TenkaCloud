@@ -127,6 +127,8 @@ describe("ContainerWorkbenchPanel", () => {
       "course-problem",
       "sealed-source",
       "implement",
+      undefined,
+      expect.any(String),
     );
   });
 
@@ -173,6 +175,8 @@ describe("ContainerWorkbenchPanel", () => {
         "course-problem",
         "direct answer",
         "explain",
+        undefined,
+        expect.any(String),
       ),
     );
   });
@@ -194,6 +198,8 @@ describe("ContainerWorkbenchPanel", () => {
         "course-problem",
         "pass\n",
         "implement",
+        undefined,
+        expect.any(String),
       ),
     );
     expect(apiMocks.prepareWorkbench).toHaveBeenCalledWith(
@@ -227,6 +233,8 @@ describe("ContainerWorkbenchPanel", () => {
         "course-problem",
         JSON.stringify({ "solution.py": "pass\n", "helper.py": "VALUE = 1\n" }),
         "implement",
+        undefined,
+        expect.any(String),
       ),
     );
   });

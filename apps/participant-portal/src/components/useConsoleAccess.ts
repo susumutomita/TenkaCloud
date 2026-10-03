@@ -7,9 +7,12 @@ import {
   PortalValidationError,
 } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
+import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
+import { hasAwsAccessCapability } from "../data/providers";
 import { useT } from "../i18n";
+import { describeAwsAccessError } from "./describeAwsAccessError";
 
 type TranslateFn = (key: string, vars?: Record<string, string>) => string;
 
@@ -21,11 +24,7 @@ type TranslateFn = (key: string, vars?: Record<string, string>) => string;
 export function describeOpenConsoleError(err: unknown, t: TranslateFn): string {
   if (err instanceof PortalAuthError) return "auth_logout";
   if (err instanceof PortalAssumeRoleError) {
-    // Issue #1197: stage を翻訳して 「どちらの段が落ちたか」 を表示する。
-    return t("sso_credentials.cli.assume_role_failed", {
-      stage: t(`sso_credentials.cli.stage_${err.stage}`),
-      reason: err.reason,
-    });
+    return describeAwsAccessError(err, t);
   }
   if (err instanceof PortalValidationError) {
     return t("sso_credentials.validation_error", { errorCode: err.errorCode });
@@ -58,6 +57,7 @@ export interface ConsoleAccess {
  */
 export function useConsoleAccess(config: AppConfig): ConsoleAccess {
   const auth = useAuth();
+  const { view } = useTeamView();
   const t = useT();
   const isMock = useIsMock();
   const sessionToken = auth.session?.sessionToken ?? null;
@@ -70,6 +70,11 @@ export function useConsoleAccess(config: AppConfig): ConsoleAccess {
   const openConsole = useCallback(
     async (jobId: string) => {
       if (!sessionToken || pending) return;
+      const problem = view?.problems.find((item) => item.jobId === jobId);
+      if (!problem || !hasAwsAccessCapability(problem, "console")) {
+        setError({ message: t("sso_credentials.aws_access_unavailable"), isMock: false });
+        return;
+      }
       // dev-mock mode: backend を呼ぶと localhost への fetch が "Failed to fetch" になるため、
       // 試行せず info メッセージで「モックでは AWS Console を開けません」 を表示する (= LP demo
       // 訪問者が clicked して赤い error alert に驚かないようにする)。
@@ -93,7 +98,7 @@ export function useConsoleAccess(config: AppConfig): ConsoleAccess {
         setPending(null);
       }
     },
-    [sessionToken, pending, isMock, t, config.apiBaseUrl, auth],
+    [sessionToken, pending, isMock, t, config.apiBaseUrl, auth, view],
   );
 
   return { openConsole, pending, error, dismissError };

@@ -1,8 +1,15 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  CompositeDeployRequestSchema,
+  DeployRequestSchema,
+} from "../../lib/problem-deploy/handlers/deploy-handler/types";
 import { bulkDeployEvent } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy";
+import { indexExistingDeployments } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy/existing-index";
+import { buildBulkDeployPlan } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy/plan-builder";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { BulkDeployRequestSchema } from "../../lib/problem-deploy/handlers/event-handler/types";
 import { buildShared, NOW_MS, sampleEvent, sampleTeams } from "./event-bulk-deploy.test-helpers";
 
 describe("bulkDeployEvent — verification, ExternalId & distributed map path", () => {
@@ -202,4 +209,120 @@ describe("bulkDeployEvent — verification, ExternalId & distributed map path", 
     // 旧 path は DeployCreateRequested を publish (= BulkDeployCreateRequested ではない)
     expect(eventCalls[0]?.input.Entries?.[0]?.DetailType).toBe("DeployCreateRequested");
   });
+});
+
+describe("bulk deploy hosting-account acknowledgment", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const acknowledgment = {
+    awsAccountId: "111111111111",
+    riskVersion: "hosting-account-self-test-v1",
+    acknowledgedBy: "operator-a",
+    acknowledgedAt: "2026-10-03T00:00:00.000Z",
+  };
+  const arrange = (consent: unknown = acknowledgment) => {
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "111111111111");
+    const f = buildShared();
+    f.ddbSend.mockResolvedValueOnce({ Item: sampleEvent({ hostingAccountSelfTest: consent }) });
+    f.ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    f.ddbSend.mockResolvedValueOnce({ Items: [] });
+    f.ddbSend.mockResolvedValue({});
+    f.eventsSend.mockResolvedValue({});
+    return f;
+  };
+  it.each([{ eventId: "different-event" }, { tenantId: "different-tenant" }])(
+    "rejects saved consent from a different event or tenant before creating a plan: %s",
+    (mismatch) => {
+      const { shared, ddbSend, eventsSend } = buildShared();
+      const event = sampleEvent({ hostingAccountSelfTest: acknowledgment });
+
+      expect(() =>
+        buildBulkDeployPlan({
+          shared,
+          tenantId: "tenant-acme",
+          eventId: "EV1",
+          nowMs: NOW_MS,
+          event: { ...event, status: "DRAFT", ...mismatch },
+          selected: {
+            teams: sampleTeams(1).map(({ teamLoginKey, ...team }) => ({
+              ...team,
+              credential: { kind: "plaintext" as const, value: teamLoginKey },
+              createdAt: new Date(NOW_MS).toISOString(),
+              updatedAt: new Date(NOW_MS).toISOString(),
+              expiresAt: Math.floor(NOW_MS / 1000) + 86_400,
+            })),
+            problems: event.problems,
+          },
+          existing: indexExistingDeployments([]),
+          verified: new Map(),
+          nonAwsCredentials: new Set(),
+          retryFailedOnly: false,
+          forceRedeploy: false,
+        }),
+      ).toThrow("Self-test acknowledgment must belong to the event being deployed");
+      expect(ddbSend).not.toHaveBeenCalled();
+      expect(eventsSend).not.toHaveBeenCalled();
+    },
+  );
+
+  it("composes the trusted dispatch from saved event consent and the persisted job", async () => {
+    const f = arrange();
+    await bulkDeployEvent(f.shared, "tenant-acme", "EV1", NOW_MS);
+    const queued = f.eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    const detail = JSON.parse(queued.input.Entries?.[0]?.Detail ?? "{}");
+    const write = f.ddbSend.mock.calls
+      .map(([command]) => command)
+      .find((command) => command instanceof TransactWriteCommand) as TransactWriteCommand;
+    const row = write.input.TransactItems?.[0]?.Put?.Item;
+    expect(detail.hostingAccountSelfTest).toEqual({
+      ...acknowledgment,
+      eventId: row?.eventId,
+      tenantId: row?.tenantId,
+      jobId: row?.jobId,
+    });
+    expect(detail.eventId).toBe(row?.eventId);
+    expect(detail.awsAccountId).toBe(row?.awsAccountId);
+    expect(detail.competitorRoleArn).toBe(row?.competitorRoleArn);
+  });
+  it.each([
+    null,
+    { ...acknowledgment, awsAccountId: "222222222222" },
+    { ...acknowledgment, riskVersion: "invalid" },
+  ])("refuses unacknowledged or mismatched events before mutations: %s", async (consent) => {
+    const f = arrange(consent);
+    await expect(bulkDeployEvent(f.shared, "tenant-acme", "EV1", NOW_MS)).rejects.toMatchObject({
+      code: "unsupported_hosting_account",
+    });
+    expect(f.eventsSend).not.toHaveBeenCalled();
+    expect(f.ddbSend.mock.calls.some(([command]) => command instanceof TransactWriteCommand)).toBe(
+      false,
+    );
+  });
+  it("still requires the verified competitor role", async () => {
+    const f = arrange();
+    f.setVerifiedAccounts(new Set());
+    const result = await bulkDeployEvent(f.shared, "tenant-acme", "EV1", NOW_MS);
+    expect(result).toMatchObject({ kind: "ok", result: { enqueued: 0, unverified: 1 } });
+    expect(f.eventsSend).not.toHaveBeenCalled();
+  });
+});
+
+it("public standalone/composite/bulk request extras cannot provide a trusted self-test dispatch", () => {
+  const request = {
+    teamName: "self",
+    awsAccountId: "111111111111",
+    region: "ap-northeast-1",
+    eventId: "spoof",
+    hostingAccountSelfTest: { riskVersion: "hosting-account-self-test-v1" },
+  };
+  expect(
+    BulkDeployRequestSchema.safeParse({
+      eventId: request.eventId,
+      hostingAccountSelfTest: request.hostingAccountSelfTest,
+    }).success,
+  ).toBe(false);
+  for (const schema of [DeployRequestSchema, CompositeDeployRequestSchema]) {
+    const parsed = schema.parse(request);
+    expect(parsed).not.toHaveProperty("hostingAccountSelfTest");
+    expect(parsed).not.toHaveProperty("eventId");
+  }
 });

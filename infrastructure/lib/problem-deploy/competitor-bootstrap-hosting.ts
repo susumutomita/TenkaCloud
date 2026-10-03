@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
+import { AnyPrincipal, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
@@ -38,17 +39,25 @@ export class CompetitorBootstrapHosting extends Construct {
       encryption: BucketEncryption.S3_MANAGED,
       enforceSSL: true,
       blockPublicAccess: new BlockPublicAccess({
-        blockPublicAcls: false,
+        blockPublicAcls: true,
         blockPublicPolicy: false,
-        ignorePublicAcls: false,
+        ignorePublicAcls: true,
         restrictPublicBuckets: false,
       }),
-      publicReadAccess: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
 
-    new BucketDeployment(this, "Deployment", {
+    templateBucket.addToResourcePolicy(
+      new PolicyStatement({
+        // eslint-disable-next-line sonarjs/aws-iam-public-access -- Only this public bootstrap template is readable; no bucket listing or other object is public.
+        principals: [new AnyPrincipal()],
+        actions: ["s3:GetObject"],
+        resources: [templateBucket.arnForObjects("competitor-bootstrap.yaml")],
+      }),
+    );
+
+    const deployment = new BucketDeployment(this, "Deployment", {
       logGroup: deploymentLogGroup(this, "DeploymentLogs"),
       sources: [
         Source.asset(path.join(import.meta.dirname, "..", "..", "templates"), {
@@ -57,7 +66,9 @@ export class CompetitorBootstrapHosting extends Construct {
       ],
       destinationBucket: templateBucket,
       prune: false,
+      retainOnDelete: false,
     });
+    deployment.node.addDependency(templateBucket);
 
     this.templateUrl = `https://${templateBucket.bucketName}.s3.${cdk.Stack.of(this).region}.amazonaws.com/competitor-bootstrap.yaml`;
   }

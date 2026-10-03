@@ -6,7 +6,6 @@ import {
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
 import { ProgressionGateConfigSchema } from "../../shared/progression-gate.js";
-import { auditEventAction } from "../audit.js";
 import { removeProgressionGate, setProgressionGate } from "../progression-gate.js";
 import { handleRouteError, parseJsonBody, withEventId } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
@@ -47,7 +46,6 @@ export function registerProgressionGateRoutes(app: Hono, shared: EventSharedReso
               StatusCodes.BAD_REQUEST,
             );
           }
-          auditEventAction(c, "set_progression_gate", eventId);
           return c.json({ progressionGate: outcome.progressionGate }, StatusCodes.OK);
         } catch (err) {
           return handleRouteError(c, "[events] setProgressionGate failed", { eventId }, err);
@@ -70,7 +68,6 @@ export function registerProgressionGateRoutes(app: Hono, shared: EventSharedReso
           );
           if (outcome.kind === "not_found")
             return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-          auditEventAction(c, "remove_progression_gate", eventId);
           return c.json({ removed: outcome.removed }, StatusCodes.OK);
         } catch (err) {
           return handleRouteError(c, "[events] removeProgressionGate failed", { eventId }, err);

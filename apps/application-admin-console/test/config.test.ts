@@ -10,7 +10,7 @@ const env = {
 
 describe("loadConfig", () => {
   describe("when /runtime-config.json returns all required fields", () => {
-    async function loadWithFullRuntime() {
+    async function loadWithFullRuntime(eventLimits?: unknown) {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation(() =>
@@ -19,6 +19,7 @@ describe("loadConfig", () => {
               JSON.stringify({
                 cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
                 userClientId: "prod-client-id",
+                eventLimits,
                 tenantId: "tenant-prod-1",
                 tenantName: "Acme Manufacturing Division",
                 apiUrl: "https://prod-api.example.com/prod",
@@ -30,6 +31,25 @@ describe("loadConfig", () => {
       );
       return loadConfig(env);
     }
+
+    it("loads cloud limits from the same runtime configuration as the API URL", async () => {
+      const limits = { maxTeams: 49, maxProblems: 50 };
+      expect((await loadWithFullRuntime(limits)).eventLimits).toEqual(limits);
+    });
+
+    it.each([
+      undefined,
+      null,
+      {},
+      [],
+      { maxTeams: 0, maxProblems: 50 },
+      { maxTeams: 49.5, maxProblems: 50 },
+      { maxTeams: 49, maxProblems: "50" },
+      { maxTeams: 100, maxProblems: 50 },
+      { maxTeams: 49, maxProblems: 0 },
+    ])("keeps creation unavailable for missing or invalid cloud limits %j", async (limits) => {
+      expect((await loadWithFullRuntime(limits)).eventLimits).toBeUndefined();
+    });
 
     it("should take cognitoDomain from runtime-config", async () => {
       expect((await loadWithFullRuntime()).cognitoDomain).toBe(
@@ -95,7 +115,7 @@ describe("loadConfig", () => {
       expect(config.cognitoDomain).toBe("https://dev-cognito.example.com");
       expect(config.cognitoClientId).toBe("dev-client-id");
       expect(config.tenantId).toBe("dev-local");
-      expect(config.tenantName).toBe("Local Dev Tenant");
+      expect(config.tenantName).toBe("Local development");
       expect(config.apiBaseUrl).toBe("http://localhost:3999");
     });
 
@@ -352,6 +372,107 @@ describe("loadConfig", () => {
       expect(config.participantPortalUrl).toBe("https://portal.example.com");
       expect(config.competitorBootstrapTemplateUrl).toBe("https://s3.example/bootstrap.yaml");
       expect(config.isolation).toBe("silo");
+    });
+    it("does not fall back to another hosting mode for invalid explicit runtime mode", async () => {
+      await expect(loadWithRuntime({ mode: "unsupported" })).rejects.toThrow(
+        "Unsupported cloud hosting runtime mode",
+      );
+    });
+    it("loads cloud hosting capabilities and keeps unsupported feature toggles off", async () => {
+      const loaded = await loadWithRuntime({
+        mode: "cloud-host",
+        supportedProblemIds: ["hello-world"],
+        features: {
+          redTeam: true,
+          samlSso: true,
+          nonAwsRuntime: true,
+          challengePrerequisiteGate: true,
+        },
+      });
+      expect(loaded.mode).toBe("cloud-host");
+      expect(loaded.supportedProblemIds).toEqual(["hello-world"]);
+      expect(loaded.features).toEqual({
+        redTeam: false,
+        samlSso: false,
+        nonAwsRuntime: false,
+        challengePrerequisiteGate: false,
+      });
+    });
+    it.each(
+      [
+        undefined,
+        null,
+        "hello-world",
+        ["hello-world", "hello-world"],
+        ["../escape"],
+        [2],
+        Array.from({ length: 513 }, (_, i) => `problem-${i}`),
+      ].map((supportedProblemIds) => ({ supportedProblemIds })),
+    )(
+      "reports invalid cloud catalog configuration rather than silently using an empty picker: %s",
+      async ({ supportedProblemIds }) => {
+        await expect(loadWithRuntime({ mode: "cloud-host", supportedProblemIds })).rejects.toThrow(
+          "Cloud execution catalog capability list is missing or invalid",
+        );
+      },
+    );
+    it.each([undefined, "cloud-host"] as const)(
+      "loads native IDs as a subset of the supported catalog for mode %s",
+      async (mode) => {
+        const loaded = await loadWithRuntime({
+          mode,
+          supportedProblemIds: ["hello-world", "ac26-crypto-battle"],
+          nativeProblemIds: ["ac26-crypto-battle"],
+        });
+        expect(loaded.mode).toBe(mode);
+        expect(loaded.supportedProblemIds).toEqual(["hello-world", "ac26-crypto-battle"]);
+        expect(Object.isFrozen(loaded.supportedProblemIds)).toBe(true);
+        expect(loaded.nativeProblemIds).toEqual(["ac26-crypto-battle"]);
+        expect(Object.isFrozen(loaded.nativeProblemIds)).toBe(true);
+        expect(
+          (await loadWithRuntime({ mode, supportedProblemIds: ["hello-world"] })).nativeProblemIds,
+        ).toEqual([]);
+      },
+    );
+    it("preserves restored cloud features alongside execution capabilities", async () => {
+      const loaded = await loadWithRuntime({
+        supportedProblemIds: ["ac26-crypto-battle"],
+        nativeProblemIds: ["ac26-crypto-battle"],
+        features: { redTeam: true, samlSso: true },
+      });
+      expect(loaded.mode).toBeUndefined();
+      expect(loaded.features?.redTeam).toBe(true);
+      expect(loaded.features?.samlSso).toBe(true);
+    });
+    it.each([
+      { supportedProblemIds: null },
+      { supportedProblemIds: ["hello-world", "hello-world"] },
+      { supportedProblemIds: ["../escape"] },
+      { nativeProblemIds: ["ac26-crypto-battle"] },
+      { supportedProblemIds: [], nativeProblemIds: ["ac26-crypto-battle"] },
+      { supportedProblemIds: ["ac26-crypto-battle"], nativeProblemIds: null },
+    ])("rejects invalid restored cloud capabilities %j", async (capabilities) => {
+      await expect(loadWithRuntime(capabilities)).rejects.toThrow();
+    });
+    it.each([
+      { nativeProblemIds: ["unavailable"] },
+      { nativeProblemIds: null },
+      { nativeProblemIds: ["hello-world", "hello-world"] },
+    ])("rejects invalid native capabilities %j", async ({ nativeProblemIds }) => {
+      await expect(
+        loadWithRuntime({
+          mode: "cloud-host",
+          supportedProblemIds: ["hello-world"],
+          nativeProblemIds,
+        }),
+      ).rejects.toThrow();
+    });
+    it("loads only the fixed installation competitor role format", async () => {
+      const role = `TenkaCloud-${"a".repeat(24)}-deploy-Role`;
+      expect((await loadWithRuntime({ competitorRoleName: role })).competitorRoleName).toBe(role);
+      for (const competitorRoleName of [false, "OtherRole", `${role}/suffix`, ""]) {
+        expect((await loadWithRuntime({ competitorRoleName })).competitorRoleName).toBeUndefined();
+      }
     });
 
     it("should drop non-string optional URLs to undefined and non-silo isolation to pooled", async () => {

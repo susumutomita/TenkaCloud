@@ -20,7 +20,9 @@ import { DeployCreateStateMachine } from "../../lib/problem-deploy/deploy-create
  * JSONPath を resolve して Lambda に渡す)。
  */
 
-function buildTestStack(opts: { deployViaLambda?: boolean; statusWriter?: boolean } = {}): {
+function buildTestStack(
+  opts: { deployViaLambda?: boolean; statusWriter?: boolean; requirePinnedSource?: boolean } = {},
+): {
   stack: cdk.Stack;
   template: Template;
 } {
@@ -58,6 +60,7 @@ function buildTestStack(opts: { deployViaLambda?: boolean; statusWriter?: boolea
   // Issue #2291: Lambda path は失敗 event の PutEvents 先として EventBus が必須。
   const eventBus = new EventBus(stack, "Bus");
   new DeployCreateStateMachine(stack, "Sm", {
+    requirePinnedSource: opts.requirePinnedSource,
     codeBuildProject,
     describeStackFunction: describeStackFn,
     deploymentsTable: deployments,
@@ -404,5 +407,92 @@ describe("DeployCreateStateMachine SQL status-writer branch (#2441 Phase B PR-5)
         },
       ]);
     }
+  });
+});
+
+describe("DeployCreateStateMachine immutable source replay", () => {
+  it("pins competitor builds to the captured S3 version for public and private problems", () => {
+    const definition = JSON.parse(definitionJson(buildTestStack().template));
+    for (const name of ["StartPinnedDeployCodeBuildCrossAccount"]) {
+      const task = definition.States[name];
+      expect(task.Parameters["SourceVersion.$"]).toBe("$.detail.sourceVersion");
+      expect(task.Parameters["SourceLocationOverride.$"]).toBe("$.detail.sourceLocation");
+      expect(task.Resource).toContain("codebuild:startBuild.sync");
+      expect(task.Next).toBe("DescribeStack");
+      expect(task.Catch[0].Next).toBe("RouteFailedDeployment");
+      expect(
+        task.Parameters.EnvironmentVariablesOverride.map((value: { Name: string }) => value.Name),
+      ).not.toContain("CHALLENGE_PAYLOAD_URL");
+    }
+    expect(definition.States.StartPinnedDeployCodeBuild).toBeUndefined();
+    expect(definition.States.RoutePinnedCreateInput.Default).toBe("InvalidAssumeRoleMetadata");
+    expect(definition.States.VerifyPinnedCompetitorRole.Default).toBe("InvalidAssumeRoleMetadata");
+    expect(definition.States.VerifyPinnedCompetitorRole.Choices[0].And[0]).toEqual({
+      Variable: "$.competitorRole.account",
+      StringEqualsPath: "$.detail.awsAccountId",
+    });
+    const hostingPolicy = definition.States.VerifyPinnedCompetitorRole.Choices[0].And[1].Or;
+    expect(hostingPolicy[0]).toEqual({
+      Not: {
+        Variable: "$.competitorRole.account",
+        StringEquals: "ARN_PLACEHOLDER",
+      },
+    });
+    expect(hostingPolicy[1].And).toEqual(
+      expect.arrayContaining([
+        {
+          Variable: "$.detail.hostingAccountSelfTest.riskVersion",
+          StringEquals: "hosting-account-self-test-v1",
+        },
+        ...["eventId", "tenantId", "jobId", "awsAccountId"].map((field) => ({
+          Variable: `$.detail.hostingAccountSelfTest.${field}`,
+          StringEqualsPath: `$.detail.${field}`,
+        })),
+        { Variable: "$.detail.hostingAccountSelfTest.acknowledgedAt", IsTimestamp: true },
+        { Variable: "$.detail.hostingAccountSelfTest.acknowledgedBy", IsString: true },
+      ]),
+    );
+    expect(definition.States.RouteCapturedSource.Choices[0].Next).toBe("RoutePinnedCreateInput");
+    expect(definition.States.RouteCapturedSource.Default).toBe("InvalidCapturedSource");
+    expect(definition.States.InvalidCapturedSource.Next).toBe("MarkFailedWithoutBuildId");
+  });
+
+  it("rejects configured cloud jobs without all saved source identities before starting CodeBuild", () => {
+    const definition = JSON.parse(
+      definitionJson(buildTestStack({ requirePinnedSource: true }).template),
+    );
+    const route = definition.States.RouteCapturedSource;
+    expect(route.Choices).toHaveLength(1);
+    expect(route.Default).toBe("InvalidCapturedSource");
+    expect(route.Choices[0].And).toContainEqual({
+      Variable: "$.detail.sourceVersion",
+      IsPresent: true,
+    });
+    expect(route.Choices[0].And).toContainEqual({
+      Variable: "$.detail.catalogKey",
+      IsPresent: true,
+    });
+    expect(route.Choices[0].And).toContainEqual({
+      Variable: "$.detail.sourceLocation",
+      IsPresent: true,
+    });
+    expect(definition.States.StartDeployCodeBuild).toBeUndefined();
+    expect(definition.States.StartDeployCodeBuildCrossAccount).toBeUndefined();
+  });
+
+  it("retains legacy unconfigured inputs without reading a missing sourceVersion JSONPath", () => {
+    const definition = JSON.parse(definitionJson(buildTestStack().template));
+    expect(definition.States.StartDeployCodeBuild.Parameters).not.toHaveProperty("SourceVersion.$");
+    expect(definition.States.StartDeployCodeBuildCrossAccount.Parameters).not.toHaveProperty(
+      "SourceVersion.$",
+    );
+    expect(definition.States.RouteCapturedSource.Choices[1]).toEqual({
+      And: [
+        { Not: { Variable: "$.detail.catalogKey", IsPresent: true } },
+        { Not: { Variable: "$.detail.sourceVersion", IsPresent: true } },
+        { Not: { Variable: "$.detail.sourceLocation", IsPresent: true } },
+      ],
+      Next: "RouteCreateInput",
+    });
   });
 });

@@ -168,3 +168,54 @@ describe("createEventsRepository", () => {
     }
   });
 });
+
+describe.each(["dynamodb", "sql"] as const)(
+  "self-test acknowledgment survives %s repository restart",
+  (backend) => {
+    it("persists the event-scoped acknowledgment atomically with teams and keeps other events closed", async () => {
+      const ddb = makeFakeDdb();
+      const sql = makeSqliteExecutor();
+      const fresh = () =>
+        backend === "dynamodb"
+          ? new DynamoDbEventsRepository(ddb, TABLE, "Teams")
+          : new SqlEventsRepository(sql);
+      const event = sampleRecord({
+        hostingAccountSelfTest: {
+          awsAccountId: "111111111111",
+          riskVersion: "hosting-account-self-test-v1",
+          acknowledgedBy: "operator-a",
+          acknowledgedAt: "2026-10-03T00:00:00.000Z",
+        },
+      });
+      expect(
+        await fresh().createEventWithTeams(event, [
+          {
+            eventId: event.eventId,
+            teamId: "team-a",
+            tenantId: event.tenantId,
+            internalSlug: "alpha",
+            teamLoginKey: "new-team-key",
+            awsAccountId: "111111111111",
+            createdAt: event.createdAt,
+            updatedAt: event.updatedAt,
+            expiresAt: event.expiresAt,
+          },
+        ]),
+      ).toEqual({ outcome: "created" });
+      expect(
+        (await fresh().getEvent(event.tenantId, event.eventId, true))?.hostingAccountSelfTest,
+      ).toEqual(event.hostingAccountSelfTest);
+      expect(
+        await fresh().markDeploying(event.tenantId, event.eventId, "2026-10-03T00:01:00.000Z"),
+      ).toEqual({ outcome: "updated" });
+      expect(
+        (await fresh().getEvent(event.tenantId, event.eventId, true))?.hostingAccountSelfTest,
+      ).toEqual(event.hostingAccountSelfTest);
+      await fresh().putEvent(sampleRecord({ eventId: "other-event" }));
+      expect(
+        (await fresh().getEvent(event.tenantId, "other-event", true))?.hostingAccountSelfTest,
+      ).toBeUndefined();
+      expect(await fresh().getEvent("other-tenant", event.eventId, true)).toBeUndefined();
+    });
+  },
+);

@@ -183,6 +183,8 @@ describe("MultiFlagSubmissionPanel", () => {
         "net-evo",
         "answer-ep02",
         "ep02",
+        undefined,
+        expect.any(String),
       ),
     );
     expect(onScored).toHaveBeenCalled();
@@ -212,6 +214,8 @@ describe("MultiFlagSubmissionPanel", () => {
         "net-evo",
         "def advance():\n  return 1",
         "ep01",
+        undefined,
+        expect.any(String),
       ),
     );
   });

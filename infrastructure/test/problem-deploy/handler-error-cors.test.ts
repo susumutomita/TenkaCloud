@@ -81,6 +81,29 @@ eventApp.get(TEST_THROW_PATH, () => {
 });
 
 describe("Hono handler onError (#559 defensive layer)", () => {
+  it.each([
+    ["deploy", deployApp, "/problems/security-battle-royale/deploy"],
+    ["event", eventApp, "/events"],
+  ])(
+    "%s accepts an unauthenticated mutation preflight with an idempotency key",
+    async (_name, app, path) => {
+      const response = await app.request(path, {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://organizer.example.test",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "authorization,content-type,idempotency-key",
+        },
+      });
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe("*");
+      expect(response.headers.get("access-control-allow-methods")?.split(",")).toContain("POST");
+      expect(
+        response.headers.get("access-control-allow-headers")?.toLowerCase().split(","),
+      ).toEqual(expect.arrayContaining(["authorization", "content-type", "idempotency-key"]));
+    },
+  );
+
   it("deploy-handler: should return 500 + CORS headers + JSON `error` even on uncaught throws", async () => {
     const res = await deployApp.request(TEST_THROW_PATH);
     expect(res.status).toBe(500);

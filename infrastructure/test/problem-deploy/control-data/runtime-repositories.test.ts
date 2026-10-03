@@ -35,7 +35,7 @@ function mockLibsqlClient() {
     rows: [],
     rowsAffected: 0,
   } as unknown as ResultSet);
-  const client = { batch, execute } as unknown as Client;
+  const client = { batch, execute, close: vi.fn() } as unknown as Client;
   return { batch, execute, client };
 }
 
@@ -108,7 +108,9 @@ describe("control-data runtime repository resolver", () => {
   });
 
   it("should share one SSM fetch and libsql client across all aggregate resolvers on turso", async () => {
-    const send = vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } });
+    const send = vi
+      .fn()
+      .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "secret-token" } });
     const { batch, client } = mockLibsqlClient();
     const createClient = vi.fn().mockReturnValue(client);
     const runtime = createControlDataRuntime({
@@ -154,7 +156,9 @@ describe("control-data runtime repository resolver", () => {
   });
 
   it("should return pure SQL implementations on turso without ddb or table names", async () => {
-    const send = vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } });
+    const send = vi
+      .fn()
+      .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "secret-token" } });
     const { client } = mockLibsqlClient();
     const runtime = createControlDataRuntime({
       env: {
@@ -219,7 +223,7 @@ describe("control-data runtime repository resolver", () => {
         TURSO_DATABASE_URL: "libsql://example.turso.io",
         TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
       },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: " " } }) },
+      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Type: "SecureString", Value: " " } }) },
       createClient: vi.fn(),
     });
 
@@ -232,7 +236,7 @@ describe("control-data runtime repository resolver", () => {
     const send = vi
       .fn()
       .mockRejectedValueOnce(new Error("temporary SSM outage"))
-      .mockResolvedValueOnce({ Parameter: { Value: "secret-token" } });
+      .mockResolvedValueOnce({ Parameter: { Type: "SecureString", Value: "secret-token" } });
     const { batch, client } = mockLibsqlClient();
     const createClient = vi.fn().mockReturnValue(client);
     const runtime = createControlDataRuntime({
@@ -264,7 +268,9 @@ describe("control-data runtime repository resolver", () => {
   });
 
   it("should keep teams-only pure SQL resolution free of any DDB or events-table requirement", async () => {
-    const send = vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } });
+    const send = vi
+      .fn()
+      .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "secret-token" } });
     const { client } = mockLibsqlClient();
     const runtime = createControlDataRuntime({
       env: {
@@ -340,7 +346,11 @@ describe("control-data runtime repository resolver", () => {
         TURSO_DATABASE_URL: "libsql://example.turso.io",
         TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
       },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+      ssm: {
+        send: vi
+          .fn()
+          .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "secret-token" } }),
+      },
       createClient: vi.fn().mockReturnValue(client),
     });
 

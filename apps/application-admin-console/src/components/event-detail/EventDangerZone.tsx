@@ -8,7 +8,7 @@ import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import TimeInput from "@cloudscape-design/components/time-input";
 import { useEffect, useState } from "react";
-import { isLocalHost } from "../../config";
+import { isCloudHost, isLocalHost } from "../../config";
 import { SendNotificationModal } from "../SendNotificationModal";
 import type {
   ConfirmOperationModel,
@@ -134,6 +134,7 @@ function ForceArchiveModal({
 function TeardownModal({
   canMutateTenant,
   localHost,
+  nativeCleanup,
   model,
   problemCount,
   teamCount,
@@ -141,6 +142,7 @@ function TeardownModal({
 }: {
   readonly canMutateTenant: boolean;
   readonly localHost: boolean;
+  readonly nativeCleanup: boolean;
   readonly model: TeardownOperationModel;
   readonly problemCount: number;
   readonly teamCount: number;
@@ -180,6 +182,7 @@ function TeardownModal({
           {t(blastRadiusBodyKey, { teamCount, problemCount })}
         </Alert>
         <Box>{t(bodyKey)}</Box>
+        {nativeCleanup && <Box>{t("event_detail.modal_teardown_native_body")}</Box>}
         <Box variant="small" color="text-status-warning">
           {t(extraKey)}
         </Box>
@@ -449,6 +452,7 @@ export function EventDangerZone({
       <TeardownModal
         canMutateTenant={canMutateTenant}
         localHost={isLocalHost(config)}
+        nativeCleanup={isCloudHost(config) && (detail?.nativeRuns?.length ?? 0) > 0}
         model={controller.teardown}
         problemCount={detail?.problems.length ?? 0}
         teamCount={detail?.teams.length ?? 0}

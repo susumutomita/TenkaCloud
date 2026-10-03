@@ -57,7 +57,11 @@ export async function requestTeardown(
   if (!item) return { kind: "not_found" };
   if (item.tenantId !== tenantId) return { kind: "not_found" };
   const status = (item.status ?? "PENDING") as DeploymentStatus;
-  if (status === "DELETING" || status === "DELETED") return { kind: "already_deleted" };
+  if (status === "DELETED") return { kind: "already_deleted" };
+  if (item.runtimeProvider === "native" && item.runtimeEngine === "coordination") {
+    return teardownNativeDeployment(shared, tenantId, jobId, item, status, nowMs);
+  }
+  if (status === "DELETING") return { kind: "already_deleted" };
 
   // [#1410-1412] 非 AWS runtime (sakura/azure/gcp) は CFn DeleteStack ではなく
   // adapter.destroy (cloud REST) で teardown する。 runtimeProvider が無い行は従来どおり AWS/CFn 経路。
@@ -121,6 +125,26 @@ export async function requestTeardown(
  * (adapter.getStatus → destroyed) が確定する想定 (= AWS の State Machine 確定と同じ非同期セマンティクス)。
  * adapter.destroy 失敗時は DELETING → FAILED に巻き戻す (= AWS publish 失敗時と同じ補償)。
  */
+async function teardownNativeDeployment(
+  shared: DeploySharedResources,
+  tenantId: string,
+  jobId: string,
+  item: Partial<DeploymentItem>,
+  status: DeploymentStatus,
+  nowMs: number,
+): Promise<TeardownOutcome> {
+  const at = new Date(nowMs).toISOString();
+  if (status !== "DELETING") {
+    const transition = await transitionTeardownToDeleting(shared, tenantId, jobId, at, nowMs);
+    if (transition) return transition;
+  }
+  const repository = await resolveDeploymentsRepository(shared);
+  const deleted = await repository.markDeleted(jobId, at);
+  if (deleted.outcome !== "updated") return { kind: "race", reason: "tenant_or_status_mismatch" };
+  await cleanupCoordinationStateAfterTeardown(shared, tenantId, item);
+  return { kind: "accepted", previousStatus: status };
+}
+
 async function teardownViaAdapter(
   shared: DeploySharedResources,
   tenantId: string,

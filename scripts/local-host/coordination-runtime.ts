@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { buildSync } from "esbuild";
 import type { HostPlugin } from "./coordination-core";
 import { privateDirectory } from "./files";
-import { HostError, type Problem } from "./model";
+import { HostError, organizerProblemContent, type Problem } from "./model";
 
 interface CoordinationDefinition {
   kind: "coordination";
@@ -14,10 +14,6 @@ interface CoordinationDefinition {
   digest: string;
 }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
-
-export function isCoordination(definition: string): boolean {
-  return (JSON.parse(definition) as { kind?: string }).kind === "coordination";
-}
 
 /** Reviewed local compatibility list. Game rules remain in the catalog's SDK plugin. */
 export function coordinationCatalog(root: string): Problem[] {
@@ -53,6 +49,7 @@ export function coordinationCatalog(root: string): Problem[] {
     {
       problemId,
       name: String(metadata.name),
+      organizerContent: organizerProblemContent(metadata),
       runtime: "coordination",
       definition: JSON.stringify({
         kind: "coordination",

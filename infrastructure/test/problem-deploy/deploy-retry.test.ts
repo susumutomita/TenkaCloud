@@ -1,5 +1,5 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeploySharedResources } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 import {
@@ -38,7 +38,16 @@ function buildShared(): {
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",
     eventBusName: "test-bus",
-    ddb: { send: ddbSend } as unknown as DeploySharedResources["ddb"],
+    ddb: {
+      send: (command: unknown) => {
+        if (command instanceof GetCommand && command.input.TableName === "TestCompetitorAccounts") {
+          return Promise.resolve({
+            Item: { verified: true, competitorRoleName: "CurrentRole", region: "ap-northeast-1" },
+          });
+        }
+        return ddbSend(command);
+      },
+    } as unknown as DeploySharedResources["ddb"],
     events: { send: eventsSend } as unknown as DeploySharedResources["events"],
     problemsCatalog: {
       "hello-world": "problems/challenges/hello-world",
@@ -169,6 +178,7 @@ describe("retryDeployments", () => {
     const res = await retryDeployments(shared, "tenant-a", { failedJobIds: [VALID_JOB_ID] });
 
     expect(res.items[0]?.reason).toBe("unknown_problem");
+    expect(ddbSend).toHaveBeenCalledOnce(); // Catalog failures must leave the row FAILED.
     expect(eventsSend).not.toHaveBeenCalled();
   });
 

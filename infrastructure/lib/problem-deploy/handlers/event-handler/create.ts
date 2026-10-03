@@ -6,7 +6,14 @@ import {
 import type { EventRecord } from "../../control-data/events-repository.js";
 import type { TeamRecord } from "../../control-data/teams-repository.js";
 import { generateTeamLoginKey } from "../deploy-handler/team-key.js";
+import { captureCurrentCatalog } from "../shared/execution-catalog.js";
+import {
+  eventCatalogContext,
+  executionCatalogConfigured,
+  isNativeExecutionProblem,
+} from "../shared/execution-catalog-context.js";
 import { warnOnCoordinationCapacity } from "./coordination-capacity-warning.js";
+import { validateSelfTestAcknowledgment } from "./self-test-consent.js";
 import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 import type { CreateEventRequest, CreateEventResponse } from "./types.js";
 
@@ -17,6 +24,7 @@ const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
 export interface CreateEventContext {
   readonly tenantId: string;
   readonly nowMs: number;
+  readonly actor?: string;
   readonly ttlMs?: number;
 }
 
@@ -55,7 +63,20 @@ export async function createEvent(
 ): Promise<CreateEventResponse> {
   validateNoDuplicateSlugs(req);
   validateNoDuplicateProblems(req);
+  if (executionCatalogConfigured())
+    shared = eventCatalogContext(shared, await captureCurrentCatalog());
 
+  if (
+    req.problems.some(
+      (problem) => !isNativeExecutionProblem(shared.executionCatalog, problem.problemId),
+    ) &&
+    req.teams.some((team) => !team.awsAccountId && !team.nonAwsCredentialTeamSlug)
+  ) {
+    throw new EventTeamCredentialRequiredError();
+  }
+
+  validateCurrentCatalogProblems(shared, req);
+  const hostingAccountSelfTest = validateSelfTestAcknowledgment(shared, ctx, req);
   const eventId = ulid();
   const nowMs = ctx.nowMs;
   const createdAt = new Date(nowMs).toISOString();
@@ -88,7 +109,9 @@ export async function createEvent(
     createdAt,
     updatedAt: createdAt,
     expiresAt,
+    ...(hostingAccountSelfTest ? { hostingAccountSelfTest } : {}),
     ...buildEventCatalogPin(shared, ctx.tenantId),
+    ...(shared.executionCatalog ? { catalogKey: shared.executionCatalog.catalogKey } : {}),
   };
 
   // [Issue #3169] Computed BEFORE the write, not after.
@@ -190,5 +213,32 @@ function validateNoDuplicateProblems(req: CreateEventRequest): void {
       throw new DuplicateProblemIdError(p.problemId);
     }
     seen.add(p.problemId);
+  }
+}
+
+export class EventTeamCredentialRequiredError extends Error {
+  constructor() {
+    super(
+      "A cloud exercise requires an AWS competitor account or a registered non-AWS team credential.",
+    );
+    this.name = "EventTeamCredentialRequiredError";
+  }
+}
+
+function validateCurrentCatalogProblems(
+  shared: EventSharedResources,
+  req: CreateEventRequest,
+): void {
+  if (!shared.executionCatalog) return;
+  const unknown = req.problems.find(
+    (problem) => !shared.executionCatalog?.catalog[problem.problemId],
+  );
+  if (unknown) throw new UnknownEventProblemError(unknown.problemId);
+}
+
+export class UnknownEventProblemError extends Error {
+  constructor(readonly problemId: string) {
+    super(`Problem ${problemId} is unavailable in the current catalog.`);
+    this.name = "UnknownEventProblemError";
   }
 }

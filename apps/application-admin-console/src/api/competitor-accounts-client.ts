@@ -1,10 +1,10 @@
-import type { ApiClient } from "./client";
+import type { ApiClient } from "./client-contract";
 
 /**
  * Issue #459: mandatory ExternalId を使う cross-account Competitor Accounts API client。
  *
- * tenant API の `/admin/competitor-accounts*` routes を叩く。`tenantId` は JWT claim
- * から backend が解決するので、frontend では path に乗せない。
+ * 既存の `/admin/competitor-accounts*` wire contract を使う。
+ * 現行クラウドは単独開催の registry を持ち、frontend から tenant selector は送らない。
  */
 
 export interface CompetitorAccountSummary {

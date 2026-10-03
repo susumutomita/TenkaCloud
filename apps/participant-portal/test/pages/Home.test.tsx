@@ -91,6 +91,12 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("HomePage", () => {
+  it("does not mount an unsupported optional score timeline", () => {
+    render(<HomePage config={{ ...config, scoreTimelineEnabled: false }} />);
+    expect(screen.getByTestId("team-score-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("score-chart")).not.toBeInTheDocument();
+  });
+
   it("should greet the team and show the dashboard panels when a view is present", () => {
     renderHome();
     expect(screen.getByText('home.welcome|{"teamName":"Alpha"}')).toBeInTheDocument();

@@ -1,4 +1,4 @@
-import { Duration } from "aws-cdk-lib";
+import { Aws, Duration } from "aws-cdk-lib";
 import type { Project } from "aws-cdk-lib/aws-codebuild";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
@@ -13,6 +13,7 @@ import {
   JsonPath,
   LogLevel,
   Pass,
+  type QueryLanguage,
   Result,
   StateMachine,
   TaskInput,
@@ -33,7 +34,26 @@ import {
 } from "./deploy-cost-model.js";
 import { deploymentKey, stateEnteredTime } from "./state-machine-helpers.js";
 
+/** CDK does not expose StartBuild source overrides; retain its integration and IAM generation. */
+class PinnedSourceCodeBuildStartBuild extends CodeBuildStartBuild {
+  protected override _renderTask(topLevelQueryLanguage?: QueryLanguage): Record<string, unknown> {
+    const task = super._renderTask(topLevelQueryLanguage) as {
+      Parameters: Record<string, unknown>;
+    };
+    return {
+      ...task,
+      Parameters: {
+        ...task.Parameters,
+        "SourceVersion.$": "$.detail.sourceVersion",
+        "SourceLocationOverride.$": "$.detail.sourceLocation",
+      },
+    };
+  }
+}
+
 export interface DeployCreateStateMachineProps {
+  /** Configured cloud jobs must carry their saved catalog, source location, and archive version. */
+  readonly requirePinnedSource?: boolean;
   /** 実体の deploy を担う CodeBuild Project (= `scripts/deploy-battles.sh` を実行)。 */
   readonly codeBuildProject?: Project;
   /**
@@ -182,8 +202,8 @@ export class DeployCreateStateMachine extends Construct {
 
   /**
    * 在来の CodeBuild `.sync` 定義。`deployViaLambda` が false / 未指定のとき使う (app config の既定は true)。
-   * 生成する construct ID / chain / StateMachine props は #2291 前と完全一致させ、
-   * flag OFF の synth を byte 互換に保つ (= additive リソースは一切増やさない)。
+   * Saved source versions select the immutable path. Unconfigured legacy jobs retain their
+   * original source selection and account routing.
    */
   private buildCodeBuildDefinition(
     props: DeployCreateStateMachineProps,
@@ -203,25 +223,9 @@ export class DeployCreateStateMachine extends Construct {
     // できるようにする。 batchId は bulk 発火 (= 同一 event で N×M 個の deploy を撒く
     // ケース) で 1 batch を識別する。 単発 / authoring iteration では未指定 = jobId と
     // 同値 fallback で扱う (= deploy-battles.sh 側で fallback)。
-    const startCodeBuildSameAccount = new CodeBuildStartBuild(this, "StartDeployCodeBuild", {
-      project: codeBuildProject,
-      integrationPattern: IntegrationPattern.RUN_JOB,
-      environmentVariablesOverride: {
-        BATTLE_PROBLEM_DIR: { value: JsonPath.stringAt("$.detail.problemDir") },
-        TEAM_SLUG: { value: JsonPath.stringAt("$.detail.teamSlug") },
-        DEPLOY_REGION: { value: JsonPath.stringAt("$.detail.region") },
-        PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
-        TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
-        TENKACLOUD_TENANT_ID: { value: JsonPath.stringAt("$.detail.tenantId") },
-        TENKACLOUD_JOB_ID: { value: JsonPath.stringAt("$.detail.jobId") },
-      },
-      resultPath: "$.codebuild",
-    });
-
-    const startCodeBuildCrossAccount = new CodeBuildStartBuild(
-      this,
-      "StartDeployCodeBuildCrossAccount",
-      {
+    const createBuildTask = (id: string, crossAccount: boolean, pinned: boolean) => {
+      const BuildTask = pinned ? PinnedSourceCodeBuildStartBuild : CodeBuildStartBuild;
+      return new BuildTask(this, id, {
         project: codeBuildProject,
         integrationPattern: IntegrationPattern.RUN_JOB,
         environmentVariablesOverride: {
@@ -232,41 +236,138 @@ export class DeployCreateStateMachine extends Construct {
           TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
           TENKACLOUD_TENANT_ID: { value: JsonPath.stringAt("$.detail.tenantId") },
           TENKACLOUD_JOB_ID: { value: JsonPath.stringAt("$.detail.jobId") },
-          COMPETITOR_ROLE_ARN: {
-            value: JsonPath.stringAt("$.detail.competitorRoleArn"),
-          },
-          EXTERNAL_ID_SSM_PARAMETER: {
-            value: JsonPath.stringAt("$.detail.externalIdParameterName"),
-          },
+          ...(crossAccount
+            ? {
+                COMPETITOR_ROLE_ARN: { value: JsonPath.stringAt("$.detail.competitorRoleArn") },
+                EXTERNAL_ID_SSM_PARAMETER: {
+                  value: JsonPath.stringAt("$.detail.externalIdParameterName"),
+                },
+              }
+            : {}),
         },
         resultPath: "$.codebuild",
-      },
+      });
+    };
+    const startPinnedCodeBuildCrossAccount = createBuildTask(
+      "StartPinnedDeployCodeBuildCrossAccount",
+      true,
+      true,
     );
 
     const invalidAssumeRoleMetadata = new Pass(this, "InvalidAssumeRoleMetadata", {
       result: Result.fromObject({
         Cause:
-          "competitorRoleArn and externalIdParameterName must be provided together for cross-account deploy",
+          "a matching competitorRoleArn and externalIdParameterName are required for cloud deploy into a separate competitor account",
       }),
       resultPath: "$.error",
     });
 
-    const routeCreateInput = new Choice(this, "RouteCreateInput")
+    const routeAccount = (
+      id: string,
+      sameAccount: CodeBuildStartBuild,
+      crossAccount: CodeBuildStartBuild,
+    ) =>
+      new Choice(this, id)
+        .when(
+          Condition.and(
+            Condition.isPresent("$.detail.competitorRoleArn"),
+            Condition.isPresent("$.detail.externalIdParameterName"),
+          ),
+          crossAccount,
+        )
+        .when(
+          Condition.and(
+            Condition.not(Condition.isPresent("$.detail.competitorRoleArn")),
+            Condition.not(Condition.isPresent("$.detail.externalIdParameterName")),
+          ),
+          sameAccount,
+        )
+        .otherwise(invalidAssumeRoleMetadata);
+    const legacyBuilds: CodeBuildStartBuild[] = [];
+    let routeCreateInput: Choice | undefined;
+    if (!props.requirePinnedSource) {
+      const startCodeBuildSameAccount = createBuildTask("StartDeployCodeBuild", false, false);
+      const startCodeBuildCrossAccount = createBuildTask(
+        "StartDeployCodeBuildCrossAccount",
+        true,
+        false,
+      );
+      routeCreateInput = routeAccount(
+        "RouteCreateInput",
+        startCodeBuildSameAccount,
+        startCodeBuildCrossAccount,
+      );
+      legacyBuilds.push(startCodeBuildSameAccount, startCodeBuildCrossAccount);
+    }
+    // Validate the actual role account as well as the declared target. Pinned cloud jobs
+    // must never fall back to this workflow's hosting-account credentials.
+    const verifyPinnedCompetitorRole = new Choice(this, "VerifyPinnedCompetitorRole")
+      .when(
+        Condition.and(
+          Condition.stringEqualsJsonPath("$.competitorRole.account", "$.detail.awsAccountId"),
+          Condition.or(
+            Condition.not(Condition.stringEquals("$.competitorRole.account", Aws.ACCOUNT_ID)),
+            acknowledgedHostingAccountSelfTest(),
+          ),
+        ),
+        startPinnedCodeBuildCrossAccount,
+      )
+      .otherwise(invalidAssumeRoleMetadata);
+    const parsePinnedCompetitorRole = new Pass(this, "ParsePinnedCompetitorRole", {
+      parameters: {
+        "account.$": "States.ArrayGetItem(States.StringSplit($.detail.competitorRoleArn, ':'), 4)",
+      },
+      resultPath: "$.competitorRole",
+    }).next(verifyPinnedCompetitorRole);
+    const routePinnedCreateInput = new Choice(this, "RoutePinnedCreateInput")
       .when(
         Condition.and(
           Condition.isPresent("$.detail.competitorRoleArn"),
+          Condition.isString("$.detail.competitorRoleArn"),
+          Condition.stringMatches("$.detail.competitorRoleArn", "arn:*:iam::*:role/*"),
           Condition.isPresent("$.detail.externalIdParameterName"),
+          Condition.isString("$.detail.externalIdParameterName"),
+          Condition.not(Condition.stringEquals("$.detail.externalIdParameterName", "")),
+          Condition.isPresent("$.detail.awsAccountId"),
+          Condition.isString("$.detail.awsAccountId"),
         ),
-        startCodeBuildCrossAccount,
-      )
-      .when(
-        Condition.and(
-          Condition.not(Condition.isPresent("$.detail.competitorRoleArn")),
-          Condition.not(Condition.isPresent("$.detail.externalIdParameterName")),
-        ),
-        startCodeBuildSameAccount,
+        parsePinnedCompetitorRole,
       )
       .otherwise(invalidAssumeRoleMetadata);
+    const invalidCapturedSource = new Pass(this, "InvalidCapturedSource", {
+      result: Result.fromObject({
+        Cause:
+          "execution_source_unpinned: a saved catalog requires its captured source archive location and version",
+      }),
+      resultPath: "$.error",
+    });
+    const routeCapturedSource = new Choice(this, "RouteCapturedSource")
+      .when(
+        Condition.and(
+          Condition.isPresent("$.detail.sourceVersion"),
+          Condition.isString("$.detail.sourceVersion"),
+          Condition.not(Condition.stringEquals("$.detail.sourceVersion", "")),
+          Condition.not(Condition.stringEquals("$.detail.sourceVersion", "null")),
+          Condition.isPresent("$.detail.sourceLocation"),
+          Condition.isString("$.detail.sourceLocation"),
+          Condition.not(Condition.stringEquals("$.detail.sourceLocation", "")),
+          Condition.isPresent("$.detail.catalogKey"),
+          Condition.isString("$.detail.catalogKey"),
+          Condition.not(Condition.stringEquals("$.detail.catalogKey", "")),
+        ),
+        routePinnedCreateInput,
+      )
+      .otherwise(invalidCapturedSource);
+    if (routeCreateInput) {
+      routeCapturedSource.when(
+        Condition.and(
+          Condition.not(Condition.isPresent("$.detail.catalogKey")),
+          Condition.not(Condition.isPresent("$.detail.sourceVersion")),
+          Condition.not(Condition.isPresent("$.detail.sourceLocation")),
+        ),
+        routeCreateInput,
+      );
+    }
 
     // CodeBuild 完了後に CFn から Outputs と StackId を取得。verified deployment は
     // competitor account への AssumeRole が必要なので DescribeStackLambda に detail (= 元
@@ -337,15 +438,16 @@ export class DeployCreateStateMachine extends Construct {
     // buildId は StartDeployCodeBuild が正常 output を返した後だけ存在するため、pre-CodeBuild
     // 失敗では従来通り buildId 無しで FAILED を書く。
     markInProgress.addCatch(routeFailedDeployment, { resultPath: "$.error" });
-    startCodeBuildSameAccount.addCatch(routeFailedDeployment, { resultPath: "$.error" });
-    startCodeBuildCrossAccount.addCatch(routeFailedDeployment, { resultPath: "$.error" });
+    for (const build of [...legacyBuilds, startPinnedCodeBuildCrossAccount]) {
+      build.addCatch(routeFailedDeployment, { resultPath: "$.error" });
+      build.next(describeStacks);
+    }
     describeStacks.addCatch(routeFailedDeployment, { resultPath: "$.error" });
     describeStacks.next(routeDescribedStackStatus);
-    startCodeBuildSameAccount.next(describeStacks);
-    startCodeBuildCrossAccount.next(describeStacks);
     invalidAssumeRoleMetadata.next(markFailedWithoutBuildId);
+    invalidCapturedSource.next(markFailedWithoutBuildId);
 
-    return markInProgress.next(routeCreateInput);
+    return markInProgress.next(routeCapturedSource);
   }
 
   /**
@@ -643,4 +745,29 @@ export class DeployCreateStateMachine extends Construct {
       ...(resultPath ? { resultPath } : {}),
     });
   }
+}
+
+/** The API writes this snapshot from the persisted event; this workflow is not a public API. */
+function acknowledgedHostingAccountSelfTest(): Condition {
+  const scope = "$.detail.hostingAccountSelfTest";
+  return Condition.and(
+    Condition.isPresent(scope),
+    Condition.isPresent("$.detail.eventId"),
+    Condition.isPresent(`${scope}.eventId`),
+    Condition.isPresent(`${scope}.tenantId`),
+    Condition.isPresent(`${scope}.jobId`),
+    Condition.isPresent(`${scope}.awsAccountId`),
+    Condition.isPresent(`${scope}.riskVersion`),
+    Condition.isPresent(`${scope}.acknowledgedAt`),
+    Condition.isPresent(`${scope}.acknowledgedBy`),
+    Condition.not(Condition.stringEquals("$.detail.eventId", "")),
+    Condition.stringEquals(`${scope}.riskVersion`, "hosting-account-self-test-v1"),
+    Condition.stringEqualsJsonPath(`${scope}.eventId`, "$.detail.eventId"),
+    Condition.stringEqualsJsonPath(`${scope}.tenantId`, "$.detail.tenantId"),
+    Condition.stringEqualsJsonPath(`${scope}.jobId`, "$.detail.jobId"),
+    Condition.stringEqualsJsonPath(`${scope}.awsAccountId`, "$.detail.awsAccountId"),
+    Condition.isTimestamp(`${scope}.acknowledgedAt`),
+    Condition.isString(`${scope}.acknowledgedBy`),
+    Condition.not(Condition.stringEquals(`${scope}.acknowledgedBy`, "")),
+  );
 }

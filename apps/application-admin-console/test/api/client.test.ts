@@ -1,6 +1,11 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, createApiClient, useApiClient } from "../../src/api/client";
+import {
+  ApiError,
+  canManageConnections,
+  createApiClient,
+  useApiClient,
+} from "../../src/api/client";
 import type { AppConfig } from "../../src/config";
 
 const { mockUseAuth } = vi.hoisted(() => ({ mockUseAuth: vi.fn() }));
@@ -53,6 +58,37 @@ describe("createApiClient", () => {
       const token = makeJwt({ "custom:userRole": "TenantViewer" });
       const api = createApiClient(config.apiBaseUrl, token);
       expect(api.tenantAccess).toEqual({ role: "viewer", canMutateTenant: false });
+    });
+    it.each([
+      "Admin",
+      "Operator",
+      "Viewer",
+      "TenantAdmin",
+      "TenantOperator",
+      "TenantViewer",
+      "unknown",
+      undefined,
+    ])("allows only the appropriate cloud administrator to manage connections: %s", (role) => {
+      const api = createApiClient(config.apiBaseUrl, makeJwt({ "custom:userRole": role }));
+      expect(canManageConnections(config, api)).toBe(role === "Admin" || role === "TenantAdmin");
+      expect(canManageConnections({ ...config, mode: "cloud-host" }, api)).toBe(role === "Admin");
+      expect(canManageConnections({ ...config, mode: "local-host" }, api)).toBe(false);
+    });
+    it("uses each hosting model's own role claim and keeps a missing session denied", () => {
+      const localAdmin = createApiClient(
+        config.apiBaseUrl,
+        makeJwt({ "custom:userRole": "Operator", "custom:organizerRole": "Admin" }),
+      );
+      expect(canManageConnections({ ...config, mode: "local-host" }, localAdmin)).toBe(true);
+      expect(canManageConnections(config, localAdmin)).toBe(false);
+      const cloudAdmin = createApiClient(
+        config.apiBaseUrl,
+        makeJwt({ "custom:userRole": "Admin", "custom:organizerRole": "Viewer" }),
+      );
+      expect(canManageConnections({ ...config, mode: "local-host" }, cloudAdmin)).toBe(false);
+      expect(canManageConnections(config, cloudAdmin)).toBe(true);
+      expect(canManageConnections({ ...config, mode: "demo" }, localAdmin)).toBe(true);
+      expect(canManageConnections(config, null)).toBe(false);
     });
   });
 

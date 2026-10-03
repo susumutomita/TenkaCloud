@@ -1,19 +1,15 @@
-import Alert from "@cloudscape-design/components/alert";
-import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import type React from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { decodeIdToken } from "../auth/claims";
 import { listProblemSummaries } from "../data/problems";
 import { useT } from "../i18n";
-import { resolveTenantDisplayName } from "../lib/tenant-display";
 
 // #542: 初回 operator 向けの onboarding section を dismiss 可能にするための localStorage key。
 // 2 回目以降の visit では「次のアクション」 section を出さず、画面上半分を進行中 Event 一覧
@@ -48,31 +44,13 @@ function writeOnboardingDismissed(value: boolean): void {
   }
 }
 
-/**
- * TenantAdmin のホーム画面。
- *
- *  - hero: ようこそ + テナント識別
- *  - 問題カタログのプレビュー (登録数 / Battle / Challenge)
- *  - テナント情報 (JWT claims)
- *
- * テナント名は JWT (custom:tenantName / custom:tenantId) から取り出す。
- * pooled stack の placeholder テナント名は使わない。
- */
+/** Organizer landing page for a single competition installation. */
 export function HomePage() {
   const navigate = useNavigate();
   const auth = useAuth();
   const t = useT();
   const claims = auth.tokens ? decodeIdToken(auth.tokens.idToken) : null;
-  const tenantName = claims?.["custom:tenantName"];
-  const tenantId = claims?.["custom:tenantId"];
-  const tenantTier = claims?.["custom:tenantTier"];
-
-  // Issue #831: userEmail は TopNav 右上に移動済。 Home page で参照しない。
-  // Issue #830: welcome 文に UUID を出さない。 tenantName が無いときは fallback (= "テナント")
-  // を使い、 raw tenantId は 「テナント情報」 panel 側でのみ表示する。
-  const { displayName: resolvedName, fromFallback: tenantNameMissing } =
-    resolveTenantDisplayName(claims);
-  const displayName = resolvedName ?? t("home.welcome_fallback_name");
+  const displayName = claims?.email ?? t("home.welcome_fallback_name");
 
   const problems = listProblemSummaries();
   const totalCount = problems.length;
@@ -93,12 +71,6 @@ export function HomePage() {
       >
         {t("home.welcome", { displayName })}
       </Header>
-
-      {tenantNameMissing && (
-        <Alert type="warning" header={t("home.tenant_name_missing_header")}>
-          {t("home.tenant_name_missing_body")}
-        </Alert>
-      )}
 
       <Container header={<Header variant="h2">{t("home.catalog_header")}</Header>}>
         <ColumnLayout columns={3} variant="text-grid">
@@ -137,22 +109,6 @@ export function HomePage() {
           <Box variant="p">{t("home.next_action_body")}</Box>
         </Container>
       )}
-
-      <Container header={<Header variant="h2">{t("home.tenant_info_header")}</Header>}>
-        <ColumnLayout columns={2} variant="text-grid">
-          <KeyValue
-            label={t("home.tenant_info_name")}
-            value={tenantName ?? t("home.value_unset")}
-          />
-          <KeyValue label={t("home.tenant_info_id")} value={tenantId ?? t("home.value_unknown")} />
-          <KeyValue
-            label={t("home.tenant_info_tier")}
-            valueNode={
-              tenantTier ? <Badge>{tenantTier}</Badge> : <span>{t("home.value_unknown")}</span>
-            }
-          />
-        </ColumnLayout>
-      </Container>
     </SpaceBetween>
   );
 }
@@ -164,23 +120,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <Box fontSize="display-l" fontWeight="bold">
         {value}
       </Box>
-    </div>
-  );
-}
-
-function KeyValue({
-  label,
-  value,
-  valueNode,
-}: {
-  label: string;
-  value?: string;
-  valueNode?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <Box variant="awsui-key-label">{label}</Box>
-      {valueNode ?? <Box variant="p">{value}</Box>}
     </div>
   );
 }

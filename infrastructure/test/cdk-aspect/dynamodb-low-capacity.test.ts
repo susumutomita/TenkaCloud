@@ -21,9 +21,11 @@ describe("DynamoDbLowCapacity aspect", () => {
     });
     Aspects.of(app).add(new DynamoDbLowCapacity(1, 1));
     const template = Template.fromStack(stack);
-    template.hasResourceProperties("AWS::DynamoDB::Table", {
-      ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
-    });
+    expect(() =>
+      template.hasResourceProperties("AWS::DynamoDB::Table", {
+        ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
+      }),
+    ).not.toThrow();
   });
 
   it("should leave PAY_PER_REQUEST tables untouched (no ProvisionedThroughput injected)", () => {
@@ -56,10 +58,12 @@ describe("DynamoDbLowCapacity aspect", () => {
       }),
     );
     const template = Template.fromStack(stack);
-    template.hasResourceProperties("AWS::DynamoDB::Table", {
-      BillingMode: "PROVISIONED",
-      ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
-    });
+    expect(() =>
+      template.hasResourceProperties("AWS::DynamoDB::Table", {
+        BillingMode: "PROVISIONED",
+        ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
+      }),
+    ).not.toThrow();
   });
 
   it("should overwrite each GlobalSecondaryIndex throughput when CfnTable exposes a concrete array", () => {
@@ -86,15 +90,17 @@ describe("DynamoDbLowCapacity aspect", () => {
     });
     Aspects.of(app).add(new DynamoDbLowCapacity(1, 1));
     const template = Template.fromStack(stack);
-    template.hasResourceProperties("AWS::DynamoDB::Table", {
-      ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: "byEmail",
-          ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
-        },
-      ],
-    });
+    expect(() =>
+      template.hasResourceProperties("AWS::DynamoDB::Table", {
+        ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: "byEmail",
+            ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
+          },
+        ],
+      }),
+    ).not.toThrow();
   });
 
   it("should apply a raised capacity to both the table and its GSIs (Issue #2679 deploy knob)", () => {
@@ -122,14 +128,16 @@ describe("DynamoDbLowCapacity aspect", () => {
     });
     Aspects.of(app).add(new DynamoDbLowCapacity(25, 10));
     const template = Template.fromStack(stack);
-    template.hasResourceProperties("AWS::DynamoDB::Table", {
-      ProvisionedThroughput: { ReadCapacityUnits: 25, WriteCapacityUnits: 10 },
-      GlobalSecondaryIndexes: [
-        {
-          IndexName: "byEmail",
-          ProvisionedThroughput: { ReadCapacityUnits: 25, WriteCapacityUnits: 10 },
-        },
-      ],
-    });
+    expect(() =>
+      template.hasResourceProperties("AWS::DynamoDB::Table", {
+        ProvisionedThroughput: { ReadCapacityUnits: 25, WriteCapacityUnits: 10 },
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: "byEmail",
+            ProvisionedThroughput: { ReadCapacityUnits: 25, WriteCapacityUnits: 10 },
+          },
+        ],
+      }),
+    ).not.toThrow();
   });
 });

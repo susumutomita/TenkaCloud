@@ -161,7 +161,6 @@ describe("repo parity (the reviewable seam)", () => {
   const workspaces = discoverWorkspaces(repoRoot);
 
   const appsAlphabetical = [
-    "apps/admin-console",
     "apps/application-admin-console",
     "apps/developer-portal",
     "apps/participant-portal",
@@ -180,20 +179,18 @@ describe("repo parity (the reviewable seam)", () => {
     "packages/problem-test-harness",
     "packages/saml-utils",
     "packages/security-harness",
-    "packages/standalone-cli",
-    "packages/tcloud",
     "packages/trust-bridge",
     "packages/web-kit",
   ];
 
   const allWorkspaces = ["infrastructure", ...appsAlphabetical, ...packagesAlphabetical];
 
-  it("should discover exactly 21 workspaces from the root package.json", () => {
-    expect(workspaces).toHaveLength(21);
+  it("should discover exactly 18 workspaces from the root package.json", () => {
+    expect(workspaces).toHaveLength(18);
     expect(workspaces.map((w) => w.dir).sort()).toEqual([...allWorkspaces].sort());
   });
 
-  it("should plan build as infrastructure + every apps/* workspace (packages/* excluded)", () => {
+  it("should plan build as infrastructure and every apps/* workspace (packages/* excluded)", () => {
     const plan = planTask("build", workspaces);
     expect(plan.included.map((w) => w.dir)).toEqual(["infrastructure", ...appsAlphabetical]);
   });

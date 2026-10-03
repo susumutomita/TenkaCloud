@@ -115,8 +115,13 @@ function EventReportLoaded({
 
   const summary = useMemo(() => summarizeEvent(detail), [detail]);
   const scoreboard = useMemo(
-    () => buildScoreboard(detail.teams, detail.scoreEventsByTeam),
-    [detail.teams, detail.scoreEventsByTeam],
+    () =>
+      buildScoreboard(
+        detail.teams,
+        detail.scoreEventsByTeam,
+        detail.scoreHistoryAvailable !== false,
+      ),
+    [detail.teams, detail.scoreEventsByTeam, detail.scoreHistoryAvailable],
   );
   const breakdown = useMemo(() => buildProblemBreakdown(detail), [detail]);
   const disruptions = useMemo(() => buildDisruptionLog(detail), [detail]);
@@ -167,6 +172,7 @@ function EventReportLoaded({
           t={t}
           tenantName={config.tenantName}
         />
+        {exportView.dataAvailabilityNote && <p>{exportView.dataAvailabilityNote}</p>}
         <SummarySection summary={summary} t={t} />
         <ScoreboardSection rows={scoreboard} t={t} />
         <ProblemBreakdownSection rows={breakdown} t={t} />

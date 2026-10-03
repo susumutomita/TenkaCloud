@@ -38,6 +38,7 @@ const T: Record<string, string> = {
   "event_list.archive_modal_body": "archive body {name}",
   "event_list.archive_conflict_known": "{name} cannot archive from {current}",
   "event_list.archive_conflict_unknown": "{name} archive conflict",
+  "event_list.archive_environments_remain": "Open {name} and tear down remaining environments",
 };
 vi.mock("../../src/i18n", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/i18n")>();
@@ -71,6 +72,11 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("describeArchiveError", () => {
+  it("explains the cleanup required by a local runtime archive refusal", () => {
+    const err = new ApiError(409, JSON.stringify({ error: "environments_remain" }));
+    expect(describeArchiveError(err, "Ev", t)).toBe("Open Ev and tear down remaining environments");
+  });
+
   it("should describe a 409 with a known currentStatus", () => {
     const err = new ApiError(409, 'conflict {"currentStatus":"READY"}');
     expect(describeArchiveError(err, "Ev", t)).toBe("Ev cannot archive from READY");

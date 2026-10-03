@@ -2,19 +2,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProblemSummary } from "../../src/data/problems";
 
-/**
- * HomePage: welcome hero + catalog stats (total / Battle / Challenge) + onboarding next-action
- * (dismiss 可) + tenant info。 tokens 有無 / tenantName 欠落 warning / stats 集計 /
- * catalog & view-all navigate / onboarding の close→localStorage 永続 + 再訪で非表示 /
- * tenantTier badge 有無 / localStorage 例外時の安全側 fallback を pin。 useNavigate / useAuth /
- * decodeIdToken / listProblemSummaries / useT / resolveTenantDisplayName を mock。
- */
-const { mockNav, mockAuth, mockDecode, mockListProblems, mockResolveName } = vi.hoisted(() => ({
+/** Organizer identity, catalog navigation and durable onboarding dismissal. */
+const { mockNav, mockAuth, mockDecode, mockListProblems } = vi.hoisted(() => ({
   mockNav: vi.fn(),
   mockAuth: vi.fn(),
   mockDecode: vi.fn(),
   mockListProblems: vi.fn(),
-  mockResolveName: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({ useNavigate: () => mockNav }));
@@ -22,7 +15,6 @@ vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
 vi.mock("../../src/auth/claims", () => ({ decodeIdToken: mockDecode }));
 vi.mock("../../src/data/problems", () => ({ listProblemSummaries: mockListProblems }));
 vi.mock("../../src/i18n", () => ({ useT: () => (k: string) => k }));
-vi.mock("../../src/lib/tenant-display", () => ({ resolveTenantDisplayName: mockResolveName }));
 
 const { HomePage } = await import("../../src/pages/Home");
 
@@ -72,12 +64,7 @@ beforeEach(() => {
   window.localStorage.clear();
   mockNav.mockClear();
   mockAuth.mockReturnValue({ tokens: { idToken: "tok" } });
-  mockDecode.mockReturnValue({
-    "custom:tenantName": "Acme",
-    "custom:tenantId": "t-1",
-    "custom:tenantTier": "PLATINUM",
-  });
-  mockResolveName.mockReturnValue({ displayName: "Acme", fromFallback: false });
+  mockDecode.mockReturnValue({ email: "organizer@example.test", "custom:userRole": "Admin" });
   mockListProblems.mockReturnValue([
     summary({ id: "a", category: "Battle" }),
     summary({ id: "b", category: "Challenge" }),
@@ -87,33 +74,32 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("HomePage", () => {
-  it("should render the welcome hero, catalog stats, and tenant info from claims", () => {
+  it("renders an organizer without requiring SaaS tenant claims or a plan", () => {
     render(<HomePage />);
     expect(screen.getByText("home.welcome")).toBeInTheDocument();
-    expect(screen.getByText("Acme")).toBeInTheDocument(); // tenant name
-    expect(screen.getByText("t-1")).toBeInTheDocument(); // tenant id
-    expect(screen.getByText("PLATINUM")).toBeInTheDocument(); // tier badge
-    // stats: total 3 / Battle 1 / Challenge 2
     expect(screen.getByText("home.stat_challenge")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument(); // total
-    expect(screen.getByText("2")).toBeInTheDocument(); // challenge count
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.queryByText("home.tenant_name_missing_header")).not.toBeInTheDocument();
+    expect(screen.queryByText("home.tenant_info_header")).not.toBeInTheDocument();
   });
 
-  it("should show the tenant-name-missing warning when the name falls back", () => {
-    mockResolveName.mockReturnValue({ displayName: null, fromFallback: true });
+  it("ignores legacy tenant identity and subscription claims", () => {
+    mockDecode.mockReturnValue({
+      "custom:tenantName": "Legacy tenant",
+      "custom:tenantTier": "PLATINUM",
+    });
     render(<HomePage />);
-    expect(screen.getByText("home.tenant_name_missing_body")).toBeInTheDocument();
+    expect(screen.queryByText("Legacy tenant")).not.toBeInTheDocument();
+    expect(screen.queryByText("PLATINUM")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("should not decode a token and show unset placeholders when signed out", () => {
+  it("does not decode a token or ask for tenant settings when signed out", () => {
     mockAuth.mockReturnValue({ tokens: null });
-    mockDecode.mockReturnValue(null);
-    mockResolveName.mockReturnValue({ displayName: null, fromFallback: true });
     render(<HomePage />);
     expect(mockDecode).not.toHaveBeenCalled();
-    expect(screen.getByText("home.value_unset")).toBeInTheDocument(); // tenant name unset
-    expect(screen.getAllByText("home.value_unknown").length).toBeGreaterThan(0); // id + tier
+    expect(screen.queryByText("home.tenant_info_header")).not.toBeInTheDocument();
   });
 
   it("should navigate to the catalog from the header button", () => {

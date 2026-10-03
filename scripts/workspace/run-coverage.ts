@@ -1,22 +1,9 @@
 #!/usr/bin/env bun
 /**
- * Issue #2513: PR CI の `Run tests with coverage` ステップが ~17m13s かかっている問題への対処。
- *
- * これまで root package.json の `test:coverage` は 17 workspace の `test:coverage` script を
- * `&&` で直列に繋ぐだけだった (= ほぼ全 CI 時間がここに集中)。 本 script はその直列実行を
- * ワークスペース定義として一箇所に集約し (`COVERAGE_WORKSPACES`)、 CI からは
- * `--shard <infrastructure|spas|packages>` で 3 分割 matrix として並列実行できるようにする。
- * `--shard` を渡さなければ従来どおり全 workspace を直列実行する
- * (= `make test-coverage` / `make ci-local` はこのモードのまま、 挙動を変えない)。
- *
- * 各 workspace の実行前後を `▶ <dir>` / `✅ <dir> (<duration>)` で標準出力へ boundary 表示し、
- * 全 workspace 完了後に per-workspace timing summary を表示する。 `GITHUB_STEP_SUMMARY` が
- * 設定されていれば (= GitHub Actions 実行時) 同じ表を GitHub-flavored markdown で追記する。
- *
- * 失敗時は現行の `&&` chain と同じ fail-fast semantics を保つ (最初に失敗した workspace で
- * 停止し、 そこまでの timing summary を表示してから exit 1 = 失敗が workspace に紐づけて追える)。
- * 全 workspace 成功後は `scripts/workspace/fix-coverage-paths.ts` (#993、 idempotent かつ absent file は
- * skip するので shard mode でも安全) を実行し、 その exit code をそのまま伝播する。
+ * Run coverage for the 18 entries in COVERAGE_WORKSPACES.
+ * --shard selects infrastructure, portal, app-admin or packages; without it, all entries run sequentially.
+ * Each failure stops the run after writing its timing summary. Successful runs normalize
+ * LCOV source paths using the same workspace registry before returning.
  */
 
 import { spawnSync } from "node:child_process";
@@ -25,13 +12,12 @@ import { resolve } from "node:path";
 
 const REPO_ROOT = resolve(import.meta.dir, "../..");
 
-export type ShardName = "infrastructure" | "portal" | "app-admin" | "admin" | "packages";
+export type ShardName = "infrastructure" | "portal" | "app-admin" | "packages";
 
 export const SHARD_NAMES: readonly ShardName[] = [
   "infrastructure",
   "portal",
   "app-admin",
-  "admin",
   "packages",
 ];
 
@@ -41,20 +27,9 @@ export interface CoverageWorkspace {
   readonly shard: ShardName;
 }
 
-// Issue #2513 / #2756: the single source of truth for which workspaces `test:coverage` covers.
-// Order + membership must stay identical to the (now-retired) root package.json chain plus
-// developer-portal (#2756) and tcloud (#2951) — scripts/workspace/run-coverage.test.ts hardcodes
-// the expected 21-dir list to catch accidental drops.
-//
-// The `shard` field is the CI matrix leg a workspace runs on. The original 3 shards
-// (infrastructure / spas / packages) were balanced when they were written, but the suites grew
-// unevenly: measured on a 4-core runner the three SPAs are ~37s (admin-console), ~95s
-// (participant-portal) and ~174s (application-admin-console), so a single `spas` leg is paced by
-// its slowest member and idles the rest. Each heavy SPA therefore gets its own shard, and a shard
-// holding exactly one workspace can be split further with `--part` (see `parseArgs`).
+// The root suite and CI shards share this registry. run-coverage.test.ts pins all 18 entries.
+// A shard containing one workspace can split its test files with --part.
 export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
-  { dir: "infrastructure", filter: "@TenkaCloud/infrastructure", shard: "infrastructure" },
-  { dir: "apps/admin-console", filter: "@TenkaCloud/admin-console", shard: "admin" },
   {
     dir: "apps/application-admin-console",
     filter: "@TenkaCloud/application-admin-console",
@@ -85,9 +60,6 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   // but its tests never ran in CI (the ci job runs no tests; only this coverage matrix does).
   // Placed on the packages shard, the fastest shard to absorb the addition.
   { dir: "apps/developer-portal", filter: "@TenkaCloud/developer-portal", shard: "packages" },
-  // Issue #2951: the tcloud operator CLI. Its tests are pure (fetch / clock / config I/O are
-  // injected), so it lands on the packages shard alongside the other dependency-light packages.
-  { dir: "packages/tcloud", filter: "@tenkacloud/tcloud", shard: "packages" },
   // Issue #2936 Phase 1: the AI evaluation contracts. Pure and AWS-independent, so it sits on
   // the packages shard with the other dependency-light packages.
   { dir: "packages/ai-eval", filter: "@tenkacloud/ai-eval", shard: "packages" },
@@ -95,6 +67,7 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   // schema, finding/patch verdict engine). Pure and AWS-independent, so it sits on the packages
   // shard with the other dependency-light packages.
   { dir: "packages/security-harness", filter: "@tenkacloud/security-harness", shard: "packages" },
+  { dir: "infrastructure", filter: "@tenkacloud/infrastructure", shard: "infrastructure" },
 ];
 
 function shardDirs(shard: ShardName): readonly string[] {
@@ -109,34 +82,21 @@ export const SHARDS: Readonly<Record<ShardName, readonly string[]>> = {
   infrastructure: shardDirs("infrastructure"),
   portal: shardDirs("portal"),
   "app-admin": shardDirs("app-admin"),
-  admin: shardDirs("admin"),
   packages: shardDirs("packages"),
 };
 
 /**
- * How many runners each shard's test files are split across in CI (`--part <i>/<N>`).
- *
- * This is the CI matrix, declared next to the shards it splits so the two cannot drift: the
- * workflow's matrix legs and `codecov.yml`'s `after_n_builds` are both asserted against it in
- * scripts/workspace/run-coverage.test.ts.
- *
- * The counts are capped by runner concurrency, not by how finely the suites could be split.
- * Measured on run 33624913783 (the first green run of this matrix): 17 jobs started at once and
- * the 18th — `build` — sat queued for 42s waiting for `gates` to free a runner, which put it on
- * the critical path and cost more than the extra split saved. So the whole workflow is sized to
- * 17 concurrent jobs: 13 coverage legs plus gates / lint-ts / typecheck / build.
- *
- * Within that budget the legs are balanced by measured test-step time on a GitHub runner:
- * infrastructure 32-74s per part, application-admin-console 36-65s, participant-portal 49-63s,
- * admin-console 39s, packages 45s. Raising a count here without dropping one elsewhere puts a job
- * back in the queue; scripts/workspace/run-coverage.test.ts pins ci.yml and codecov.yml to it.
- * A shard split across parts must hold exactly one workspace — see `parseArgs`.
+ * Keep infrastructure's six-way split from #3167: the restored cloud suite took 3m7.5s
+ * inside the serial packages leg (run 37107265986), making it the CI critical path.
+ * Twelve coverage legs + gates / lint-ts / typecheck / build + the macOS source check
+ * stay within the earlier 17-job concurrency budget.
+ * run-coverage.test.ts checks the workflow matrix and Codecov build count against this map.
+ * A shard split with --part must contain exactly one workspace.
  */
 export const COVERAGE_PARTS: Readonly<Record<ShardName, number>> = {
   infrastructure: 6,
   "app-admin": 3,
   portal: 2,
-  admin: 1,
   packages: 1,
 };
 

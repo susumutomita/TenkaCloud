@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCognitoDomainPrefix } from "../../lib/tenant-template/identity-provider";
+import { buildCognitoDomainPrefix } from "../../lib/tenant-template/identity-provider.js";
 
 const COGNITO_LIMIT = 63;
 // 実アカウント ID ではなくダミー。 pin したいのは書式と長さ (12 桁) であって値ではない。

@@ -74,12 +74,15 @@ const baseDetail: EventDetail = {
 const { EventDetailPage } = await import("../../src/pages/EventDetail");
 const { I18nProvider } = await import("../../src/i18n");
 
-function renderPage(initialPath = `/events/${EVENT_ID}`) {
+function renderPage(initialPath = `/events/${EVENT_ID}`, configOverride: Partial<AppConfig> = {}) {
   return render(
     <I18nProvider>
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
-          <Route path="/events/:eventId" element={<EventDetailPage config={config} />} />
+          <Route
+            path="/events/:eventId"
+            element={<EventDetailPage config={{ ...config, ...configOverride }} />}
+          />
         </Routes>
       </MemoryRouter>
     </I18nProvider>,
@@ -100,6 +103,23 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventDetailPage #1318 tabs", () => {
+  it.each(["notifications", "gate"])(
+    "does not mount unsupported cloud %s routes even via a saved hash",
+    async (tab) => {
+      mocks.getEvent.mockResolvedValueOnce(baseDetail);
+      window.history.replaceState(null, "", `${window.location.pathname}#tab=${tab}`);
+      renderPage(undefined, { mode: "cloud-host" });
+      expect(await screen.findByRole("tab", { name: /Overview|概要/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(screen.queryByRole("tab", { name: /Notifications|通知/ })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("tab", { name: /Progression|進行 \/ Gate/ }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
   it("should render all 8 workflow tabs", async () => {
     mocks.getEvent.mockResolvedValueOnce(baseDetail);
     renderPage();
@@ -150,6 +170,40 @@ describe("EventDetailPage #1318 tabs", () => {
     });
   });
 
+  it.each(["COMPLETE", "CLOSED"] as const)(
+    "shows a persisted native %s run without inventing an AWS job",
+    async (status) => {
+      mocks.getEvent.mockResolvedValueOnce({
+        ...baseDetail,
+        status: status === "CLOSED" ? "ENDED" : "READY",
+        problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "ap-northeast-1" }],
+        deploymentsByProblem: {},
+        nativeRuns: [
+          { runId: "persisted-native-run", problemId: "ac26-crypto-battle", status, revision: 2 },
+        ],
+      });
+      window.history.replaceState(null, "", `${window.location.pathname}#tab=problems`);
+      renderPage(undefined, { mode: "cloud-host", nativeProblemIds: ["ac26-crypto-battle"] });
+      expect(await screen.findByText("persisted-native-run")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          status === "CLOSED" ? "終了済み（TenkaCloud 内）" : "準備済み（TenkaCloud 内）",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "persisted-native-run" })).not.toBeInTheDocument();
+      expect(screen.queryByText("ap-northeast-1")).not.toBeInTheDocument();
+    },
+  );
+  it("shows native initialization separately before a run exists", async () => {
+    mocks.getEvent.mockResolvedValueOnce({
+      ...baseDetail,
+      problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "ap-northeast-1" }],
+      nativeRuns: [],
+    });
+    window.history.replaceState(null, "", `${window.location.pathname}#tab=problems`);
+    renderPage(undefined, { mode: "cloud-host", nativeProblemIds: ["ac26-crypto-battle"] });
+    expect(await screen.findByText("未初期化（TenkaCloud 内）")).toBeInTheDocument();
+  });
   it("should keep TEARDOWN rescue Force ARCHIVED button accessible (Operations tab)", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "TEARDOWN" });
     renderPage();
@@ -162,4 +216,22 @@ describe("EventDetailPage #1318 tabs", () => {
       expect(screen.getByTestId("force-archive-button")).toBeInTheDocument();
     });
   });
+});
+
+it("renders real cloud team totals while clearly distinguishing unavailable history", async () => {
+  mocks.getEvent.mockResolvedValueOnce({
+    ...baseDetail,
+    scoreHistoryAvailable: false,
+    scoreEventsByTeam: [
+      { teamId: "t1", teamName: "Alpha", projectedTotal: 75, events: [] },
+      { teamId: "t2", teamName: "Beta", projectedTotal: 0, events: [] },
+    ],
+  });
+  window.history.replaceState(null, "", `${window.location.pathname}#tab=scoreboard`);
+  renderPage(undefined, { mode: "cloud-host" });
+  expect(await screen.findByText("75 pt")).toBeInTheDocument();
+  expect(screen.getByText("0 pt")).toBeInTheDocument();
+  expect(screen.getByText(/完全な得点履歴、正解問題数、問題別平均点は未対応/)).toBeInTheDocument();
+  expect(screen.getByText("Alpha")).toBeInTheDocument();
+  expect(screen.getByText("Beta")).toBeInTheDocument();
 });

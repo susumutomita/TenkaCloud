@@ -1,3 +1,4 @@
+import Alert from "@cloudscape-design/components/alert";
 /**
  * Issue #1318: Event Detail 画面を 7 workflow tabs に再編する構造。
  *
@@ -24,7 +25,7 @@ import { EventTeamsPanel } from "../../components/event-detail/EventTeamsPanel";
 import { LocalEnvironmentsPanel } from "../../components/event-detail/LocalEnvironmentsPanel";
 import { TeamRankingPanel } from "../../components/TeamRankingPanel";
 import { TeamScoreEventsPanel } from "../../components/TeamScoreEventsPanel";
-import { isLocalHost } from "../../config";
+import { isCloudHost, isLocalHost } from "../../config";
 import { DisruptionsPanel } from "./DisruptionsPanel";
 import type { EventTabContentProps } from "./tab-content-props";
 
@@ -89,6 +90,7 @@ export function ScheduleTab({
       freezeMinutesInFlight={operations.freezeMinutesInFlight}
       freezeMinutesInput={operations.freezeMinutesInput}
       localHost={isLocalHost(config)}
+      cloudHost={isCloudHost(config)}
       onBulkDeploy={(b) => void operations.handleBulkDeploy(b)}
       onConfirmTeardown={() => operations.setConfirmTeardown(true)}
       onEndNowSchedule={() => void operations.handleEndNowSchedule()}
@@ -109,7 +111,14 @@ export function ScheduleTab({
 }
 
 export function ProblemsTab({ config, detail, t }: EventTabContentProps) {
-  return <EventProblemSetPanel detail={detail} localHost={isLocalHost(config)} t={t} />;
+  return (
+    <EventProblemSetPanel
+      detail={detail}
+      localHost={isLocalHost(config)}
+      nativeProblemIds={config.nativeProblemIds}
+      t={t}
+    />
+  );
 }
 
 export function TeamsTab({
@@ -120,13 +129,11 @@ export function TeamsTab({
   manualRefresh,
   t,
 }: EventTabContentProps) {
-  // Issue #3226: the local host has no self-registration pool; each team's own environment
-  // is operated from this tab instead.
   const localHost = isLocalHost(config);
   return (
     <>
       <EventParticipantsPanel config={config} detail={detail} t={t} />
-      {localHost ? (
+      {localHost && (
         <LocalEnvironmentsPanel
           apiClient={apiClient}
           canMutateTenant={canMutateTenant}
@@ -134,7 +141,8 @@ export function TeamsTab({
           onRefresh={manualRefresh}
           t={t}
         />
-      ) : (
+      )}
+      {!isCloudHost(config) && (
         <EventRegistrationPanel
           key={detail.eventId}
           apiClient={apiClient}
@@ -148,17 +156,23 @@ export function TeamsTab({
         canMutateTenant={canMutateTenant}
         detail={detail}
         onRefresh={manualRefresh}
-        showAccount={!localHost}
+        showAccount={
+          !localHost &&
+          detail.problems.some((problem) => !config.nativeProblemIds?.includes(problem.problemId))
+        }
         t={t}
       />
     </>
   );
 }
 
-export function ScoreboardTab({ detail }: EventTabContentProps) {
+export function ScoreboardTab({ detail, t }: EventTabContentProps) {
   return (
     <>
-      {detail.scoreEventsByTeam && (
+      {detail.scoreHistoryAvailable === false && (
+        <Alert type="info">{t("event_detail.score_history_unavailable")}</Alert>
+      )}
+      {detail.scoreEventsByTeam && detail.scoreHistoryAvailable !== false && (
         <TeamScoreEventsPanel teams={detail.scoreEventsByTeam} startsAt={detail.startsAt} />
       )}
       {detail.scoreEventsByTeam && <TeamRankingPanel teams={detail.scoreEventsByTeam} />}
@@ -191,6 +205,7 @@ export function DisruptionsTab({ apiClient, canMutateTenant, detail, t }: EventT
 // [#2283] Progression / Gate (Advanced) tab。 保存成功 / 除去成功時に manualRefresh で
 // detail を取り直す (= progressionGate の反映)。
 export function GateTab({
+  config,
   apiClient,
   canMutateTenant,
   detail,
@@ -199,6 +214,7 @@ export function GateTab({
 }: EventTabContentProps) {
   return (
     <EventProgressionGatePanel
+      localHost={isLocalHost(config)}
       apiClient={apiClient}
       canMutateTenant={canMutateTenant}
       detail={detail}

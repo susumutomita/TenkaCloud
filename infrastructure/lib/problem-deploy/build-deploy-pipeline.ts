@@ -4,7 +4,7 @@ import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { ILogGroup } from "aws-cdk-lib/aws-logs";
-import { Bucket } from "aws-cdk-lib/aws-s3";
+import { Bucket, type IBucket } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
 import type { PackAsset } from "../app-config/types.js";
@@ -23,6 +23,7 @@ import { DeployStatusWriterLambda } from "./deploy-status-writer-lambda.js";
 import { DescribeStackLambda } from "./describe-stack-lambda.js";
 
 export interface BuildDeployPipelineArgs {
+  readonly requirePinnedSource?: boolean;
   /**
    * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合
@@ -123,6 +124,7 @@ export function buildDeployPipeline(
       concurrentBuildLimit: args.deployConcurrentBuildLimit,
       environmentName: args.environmentName,
     });
+    grantSavedSourceReads(sourceBucket, codeBuild.project, args);
   }
 
   const describeStack = new DescribeStackLambda(scope, "DescribeStack", {
@@ -224,6 +226,7 @@ export function buildDeployPipeline(
     : undefined;
 
   const stateMachine = new DeployCreateStateMachine(scope, "DeployCreate", {
+    requirePinnedSource: args.requirePinnedSource,
     codeBuildProject: codeBuild?.project,
     describeStackFunction: describeStack.fn,
     deploymentsTable: args.deploymentsTable,
@@ -282,4 +285,20 @@ export function buildDeployPipeline(
     // default CodeBuild path (flag OFF) → dashboard adds no CfnDeploy widget (default-safe).
     ...(cfnDeployFunction ? { cfnDeployLambdaName: cfnDeployFunction.functionName } : {}),
   };
+}
+
+function grantSavedSourceReads(
+  bucket: IBucket,
+  project: IProject,
+  args: BuildDeployPipelineArgs,
+): void {
+  if (!args.requirePinnedSource) return;
+  const archiveMarker = ".executions/";
+  const markerIndex = args.sourceObjectKey.lastIndexOf(archiveMarker);
+  if (markerIndex < 0) return;
+  const originalKey = args.sourceObjectKey.slice(0, markerIndex);
+  // Source.s3 grants only today's exact object. Saved jobs need prior immutable
+  // archives and the original source key used by explicitly recovered legacy pins.
+  bucket.grantRead(project, `${originalKey}${archiveMarker}*`);
+  bucket.grantRead(project, originalKey);
 }

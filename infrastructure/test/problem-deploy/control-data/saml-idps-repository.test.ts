@@ -7,13 +7,13 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import type { SamlIdpConfig } from "@tenkacloud/saml-utils";
 import { describe, expect, it, vi } from "vitest";
-import type { IdpScope } from "../../../lib/control-plane/handlers/idp-handler/core";
 import { createControlDataRuntime } from "../../../lib/problem-deploy/control-data/runtime-repositories";
 import {
   createSamlIdpsRepository,
   DynamoDbSamlIdpsRepository,
   SqlSamlIdpsRepository,
 } from "../../../lib/problem-deploy/control-data/saml-idps-repository";
+import type { IdpScope } from "../../../lib/shared/idp/core";
 import { makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
@@ -300,7 +300,11 @@ describe("resolveSamlIdpsRepository (runtime)", () => {
           TURSO_DATABASE_URL: "file:local.db",
           TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
         },
-        ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+        ssm: {
+          send: vi
+            .fn()
+            .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "secret-token" } }),
+        },
         createClient: vi.fn().mockReturnValue({
           execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
           batch: vi.fn().mockResolvedValue([]),

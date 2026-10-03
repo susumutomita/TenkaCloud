@@ -773,7 +773,11 @@ describe("resolveDeploymentsRepository (runtime)", () => {
         TURSO_DATABASE_URL: "file:local.db",
         TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
       },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+      ssm: {
+        send: vi
+          .fn()
+          .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "secret-token" } }),
+      },
       createClient: vi.fn().mockReturnValue({
         execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
         batch: vi.fn().mockResolvedValue([]),

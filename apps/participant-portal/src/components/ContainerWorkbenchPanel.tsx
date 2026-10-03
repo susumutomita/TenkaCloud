@@ -6,7 +6,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MultiFlagEntryView } from "../api/portal-client";
 import {
   getWorkbenchConfig,
@@ -21,6 +21,12 @@ import { useT } from "../i18n";
 import { CodeTextarea } from "./CodeTextarea";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
+import {
+  readWorkbenchDraft,
+  saveWorkbenchDraft,
+  type WorkbenchDraftIssue,
+  workbenchDraftKey,
+} from "./workbench-drafts";
 
 interface LoadedWorkbench {
   readonly config: WorkbenchConfig;
@@ -30,7 +36,7 @@ interface LoadedWorkbench {
 type LoadState =
   | { readonly kind: "loading" }
   | { readonly kind: "unsupported" }
-  | { readonly kind: "error"; readonly message: string }
+  | { readonly kind: "error"; readonly error: unknown }
   | { readonly kind: "loaded"; readonly value: LoadedWorkbench };
 
 function validateWorkbench(
@@ -76,31 +82,46 @@ function fallbackSubmission(
   return JSON.stringify(files);
 }
 
-/**
- * Generic local container editor. Capability discovery is a 404-safe probe, so
- * ordinary container problems retain the existing multi-checkpoint form unchanged.
- */
-export function ContainerWorkbenchPanel({
-  apiBaseUrl,
-  sessionToken,
-  problemId,
-  flags,
-  onScored,
-  revealOrder,
-}: {
+interface ContainerWorkbenchPanelProps {
   readonly apiBaseUrl: string;
   readonly sessionToken: string;
   readonly problemId: string;
+  readonly jobId?: string;
   readonly flags: readonly MultiFlagEntryView[];
   readonly onScored: () => Promise<void>;
   readonly revealOrder?: "flat" | "sequential";
-}) {
+}
+
+/** A scope switch unmounts all editor/action state, without putting credentials in a key. */
+export function ContainerWorkbenchPanel(props: ContainerWorkbenchPanelProps) {
+  return (
+    <WorkbenchSession
+      key={JSON.stringify([props.apiBaseUrl, props.jobId, props.problemId])}
+      {...props}
+    />
+  );
+}
+
+/** Capability discovery is a 404-safe probe for ordinary container problems. */
+function WorkbenchSession({
+  apiBaseUrl,
+  sessionToken,
+  problemId,
+  jobId,
+  flags,
+  onScored,
+  revealOrder,
+}: ContainerWorkbenchPanelProps) {
   const t = useT();
   const flagContract = JSON.stringify(
     flags.map((flag) => ({ id: flag.id, input: flag.input ?? "text" })),
   );
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [files, setFiles] = useState<WorkbenchFiles>({});
+  const [draftIssue, setDraftIssue] = useState<WorkbenchDraftIssue>();
+  const draftKey = workbenchDraftKey(apiBaseUrl, jobId, problemId);
+  const blockDraftOverwrite = useRef(false);
+  const activeRequest = useRef<AbortSignal | undefined>(undefined);
   const [inspectOutput, setInspectOutput] = useState<string>();
   const [testResult, setTestResult] = useState<{ passed: boolean; output: string }>();
   const [actionError, setActionError] = useState<string>();
@@ -109,12 +130,16 @@ export function ContainerWorkbenchPanel({
 
   useEffect(() => {
     const controller = new AbortController();
+    activeRequest.current = controller.signal;
     setLoad({ kind: "loading" });
     setInspectOutput(undefined);
     setTestResult(undefined);
     setActionError(undefined);
+    setInspecting(false);
+    setTesting(false);
     void getWorkbenchConfig(apiBaseUrl, sessionToken, problemId, controller.signal)
       .then(async (config) => {
+        if (controller.signal.aborted) return;
         if (!config) {
           setLoad({ kind: "unsupported" });
           return;
@@ -125,23 +150,24 @@ export function ContainerWorkbenchPanel({
           problemId,
           controller.signal,
         );
+        if (controller.signal.aborted) return;
         const expectedFlags = JSON.parse(flagContract) as Pick<
           MultiFlagEntryView,
           "id" | "input"
         >[];
         const loaded = validateWorkbench(problemId, expectedFlags, config, starter);
-        setFiles(loaded.starter);
+        const draft = readWorkbenchDraft(draftKey, loaded.starter);
+        blockDraftOverwrite.current = draft.issue === "restore_failed";
+        setDraftIssue(draft.issue);
+        setFiles(draft.files);
         setLoad({ kind: "loaded", value: loaded });
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
-        setLoad({
-          kind: "error",
-          message: formatProblemPanelActionError(t, error, "problem_panel.validation_error"),
-        });
+        setLoad({ kind: "error", error });
       });
     return () => controller.abort();
-  }, [apiBaseUrl, flagContract, problemId, sessionToken, t]);
+  }, [apiBaseUrl, draftKey, flagContract, problemId, sessionToken]);
 
   const checkpointById = useMemo(
     () =>
@@ -175,32 +201,46 @@ export function ContainerWorkbenchPanel({
   if (load.kind === "error") {
     return (
       <Alert type="error" header={t("workbench.unavailable_header")}>
-        {load.message}
+        {formatProblemPanelActionError(t, load.error, "problem_panel.validation_error")}
       </Alert>
     );
   }
 
+  const updateFiles = (next: WorkbenchFiles, replaceUnreadable = false) => {
+    setFiles(next);
+    // Preserve unreadable data until the participant explicitly restores the starter.
+    if (blockDraftOverwrite.current && !replaceUnreadable) return;
+    blockDraftOverwrite.current = false;
+    setDraftIssue(saveWorkbenchDraft(draftKey, next));
+  };
+
   const runInspect = async () => {
+    const signal = activeRequest.current;
     setInspecting(true);
     setActionError(undefined);
     try {
-      setInspectOutput((await inspectWorkbench(apiBaseUrl, sessionToken, problemId)).output);
+      const result = await inspectWorkbench(apiBaseUrl, sessionToken, problemId);
+      if (!signal?.aborted) setInspectOutput(result.output);
     } catch (error) {
+      if (signal?.aborted) return;
       setActionError(formatProblemPanelActionError(t, error, "problem_panel.validation_error"));
     } finally {
-      setInspecting(false);
+      if (!signal?.aborted) setInspecting(false);
     }
   };
 
   const runTests = async () => {
+    const signal = activeRequest.current;
     setTesting(true);
     setActionError(undefined);
     try {
-      setTestResult(await testWorkbench(apiBaseUrl, sessionToken, problemId, files));
+      const result = await testWorkbench(apiBaseUrl, sessionToken, problemId, files);
+      if (!signal?.aborted) setTestResult(result);
     } catch (error) {
+      if (signal?.aborted) return;
       setActionError(formatProblemPanelActionError(t, error, "problem_panel.validation_error"));
     } finally {
-      setTesting(false);
+      if (!signal?.aborted) setTesting(false);
     }
   };
 
@@ -208,12 +248,15 @@ export function ContainerWorkbenchPanel({
     flagId: string,
     values: Readonly<Record<string, string>>,
   ): Promise<string> => {
+    const signal = activeRequest.current;
+    signal?.throwIfAborted();
     const manual = Object.fromEntries(
       load.value.config.checkpoints
         .filter((checkpoint) => checkpoint.kind === "answer")
         .map((checkpoint) => [checkpoint.id, values[checkpoint.id] ?? ""]),
     );
     const prepared = await prepareWorkbench(apiBaseUrl, sessionToken, problemId, files, manual);
+    signal?.throwIfAborted();
     if (!prepared.ok) throw new Error(prepared.output);
     const supplied = prepared.submissions[flagId];
     if (supplied !== undefined && supplied.length > 0) return supplied;
@@ -240,6 +283,13 @@ export function ContainerWorkbenchPanel({
         }
       >
         <SpaceBetween size="m">
+          {draftIssue ? (
+            <Alert type="warning" header={t("workbench.draft_warning")}>
+              {t(`workbench.draft_${draftIssue}`)}
+            </Alert>
+          ) : (
+            <Box color="text-body-secondary">{t("workbench.draft_local")}</Box>
+          )}
           {load.value.config.submittedFiles.map((file) => (
             <FormField
               key={file}
@@ -248,7 +298,7 @@ export function ContainerWorkbenchPanel({
             >
               <CodeTextarea
                 value={files[file] as string}
-                onChange={(value) => setFiles((current) => ({ ...current, [file]: value }))}
+                onChange={(value) => updateFiles({ ...files, [file]: value })}
                 rows={16}
                 disabled={testing}
               />
@@ -263,7 +313,7 @@ export function ContainerWorkbenchPanel({
             </Button>
             <Button
               onClick={() => {
-                setFiles(load.value.starter);
+                updateFiles(load.value.starter, true);
                 setTestResult(undefined);
                 setActionError(undefined);
               }}

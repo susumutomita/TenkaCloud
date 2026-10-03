@@ -3,14 +3,8 @@
 import { REFERENCE_DATA } from "@/content/reference-data";
 import { MaturityBadge } from "./MaturityBadge";
 
-const GITHUB_ISSUES = "https://github.com/susumutomita/TenkaCloud/issues";
-
 function requiredLabel(required: boolean): string {
   return required ? "Required" : "Optional";
-}
-
-function capabilityLabel(value: boolean): string {
-  return value ? "yes" : "no";
 }
 
 export function ManifestFieldTable() {
@@ -64,58 +58,6 @@ export function MetadataFieldTable() {
             </td>
             <td>{requiredLabel(field.required)}</td>
             <td>{field.description}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-export function RuntimeMatrixTable() {
-  return (
-    <table className="reference-table" data-reference="runtime-matrix">
-      <thead>
-        <tr>
-          <th>Provider</th>
-          <th>Engine</th>
-          <th>Mode</th>
-          <th>Recognized</th>
-          <th>Adapter wired</th>
-          <th>Executable</th>
-          <th>Live verified</th>
-          <th>Maturity</th>
-          <th>Blocking issues</th>
-          <th>Evidence</th>
-        </tr>
-      </thead>
-      <tbody>
-        {REFERENCE_DATA.runtimeMatrix.map((row) => (
-          <tr key={`${row.provider}/${row.engine}`}>
-            <td>
-              <code>{row.provider}</code>
-            </td>
-            <td>
-              <code>{row.engine}</code>
-            </td>
-            <td>{row.executionMode}</td>
-            <td>{capabilityLabel(row.recognized)}</td>
-            <td>{capabilityLabel(row.adapterWired)}</td>
-            <td>{capabilityLabel(row.executable)}</td>
-            <td>{capabilityLabel(row.liveVerified)}</td>
-            <td>
-              <MaturityBadge level={row.maturity} />
-            </td>
-            <td>
-              {row.blockingIssues.length === 0
-                ? "—"
-                : row.blockingIssues.map((issue, index) => (
-                    <span key={issue}>
-                      {index > 0 ? ", " : ""}
-                      <a href={`${GITHUB_ISSUES}/${issue}`}>#{issue}</a>
-                    </span>
-                  ))}
-            </td>
-            <td>{row.evidence}</td>
           </tr>
         ))}
       </tbody>

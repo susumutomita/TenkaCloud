@@ -26,9 +26,9 @@ import {
   type IdpDirectory,
   parseSamlIdpConfig as parseSamlIdpConfigBase,
   type SamlIdpConfig,
-} from "../control-plane/saml-identity-providers.js";
+} from "../shared/saml-identity-providers.js";
 
-export type { IdpDirectory, SamlIdpConfig } from "../control-plane/saml-identity-providers.js";
+export type { IdpDirectory, SamlIdpConfig } from "../shared/saml-identity-providers.js";
 
 /**
  * `TENANT_SAML_IDPS` (JSON 配列) を parse・validate する。 Phase 1 の汎用 parser を

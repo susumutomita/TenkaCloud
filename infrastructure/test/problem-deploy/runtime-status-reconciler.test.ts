@@ -60,6 +60,27 @@ describe("runtime-status-reconciler — mapRuntimeStatus", () => {
 });
 
 describe("runtime-status-reconciler — reconcileRuntimeDeployment", () => {
+  it("never calls a provider adapter or writes native coordination deployments", async () => {
+    const send = vi.fn();
+    const ssm = vi.fn();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    await reconcileRuntimeDeployment(
+      deps(send, ssm),
+      {
+        runtimeProvider: "native",
+        runtimeEngine: "coordination",
+        runtimeEntry: "coordination",
+        jobId: "native",
+        tenantId: "tenant",
+        status: "COMPLETE",
+      },
+      NOW,
+    );
+    expect(send).not.toHaveBeenCalled();
+    expect(ssm).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllGlobals());
 

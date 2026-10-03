@@ -49,18 +49,16 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html" aria-current="page">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -68,6 +66,9 @@
 <main class="doc">
 <article>
 <h1>Security and provenance model <span class="doc-badge doc-badge--stable">Stable</span></h1>
+<blockquote>
+<p>Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate&#39;s event catalog. Activation is an offline catalog record, not a current hosting workflow.</p>
+</blockquote>
 <p>A problem pack must be reproducible and tamper-evident. The facts below are
 <strong>normative reference</strong> derived from the pack manifest&#39;s inert-by-design schema and
 the immutable snapshot / lock model in the pack installer.</p>

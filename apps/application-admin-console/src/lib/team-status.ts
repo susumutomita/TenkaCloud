@@ -38,7 +38,7 @@ export interface TeamStatusRow {
   readonly teamId: string;
   readonly teamName: string;
   readonly totalScore: number;
-  readonly problemsSolved: number;
+  readonly problemsSolved: number | null;
   readonly deploy: TeamDeployStatus;
   /** 直近の採点 event。 まだ 1 件も無ければ null。 */
   readonly latest: TeamLatestScoring | null;
@@ -96,7 +96,11 @@ export function assembleTeamStatus(
   detail: EventDetail,
   audit: readonly DisruptionAuditRow[],
 ): readonly TeamStatusRow[] {
-  return buildScoreboard(detail.teams, detail.scoreEventsByTeam).map((row) => {
+  return buildScoreboard(
+    detail.teams,
+    detail.scoreEventsByTeam,
+    detail.scoreHistoryAvailable !== false,
+  ).map((row) => {
     const { count, lastFiredAt } = disruptionsForTeam(audit, row.teamId);
     return {
       rank: row.rank,

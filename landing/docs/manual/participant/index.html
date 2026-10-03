@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/" aria-current="page">競技参加者マニュアル</a></li>
@@ -43,141 +43,48 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>競技参加者マニュアル <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>TenkaCloudの問題を解く人のためのマニュアルです。AWSの構成、データベース、
-デプロイ用パラメータ、問題の作り方を理解している必要はありません。</p>
-<h2>あなたのゴール</h2>
-<p>1問を選び、説明に沿って操作し、回答が受理されたことを確認します。
-<code>TC{...}</code>を提出する問題、回答欄へ数を入れる問題、ゲーム画面を操作する問題があります。
-その問題に表示された方法で答えます。</p>
-<h2>問題を解く5つの手順</h2>
-<ol>
-<li><strong>問題一覧</strong>を開き、挑戦できる問題を1つ選ぶ。</li>
-<li>状況、ゴール、最初の行動、完了条件を読む。</li>
-<li><strong>問題を開始</strong>を押し、問題環境が起動するまで待つ。</li>
-<li>表示された接続先、コンソール、問題画面で課題を解く。</li>
-<li>指定された形式で回答する。flagの問題では<code>TC{...}</code>全体を提出する。</li>
+<h1>競技参加者マニュアル <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<h2 id="your-goal">あなたのゴール</h2><p>開催者から受け取った参加者 URL とチームの参加リンクまたはキーを使います。キーは他のチームへ渡さないでください。準備済みの大会へ参加するために、クラウド基盤や開催者アカウントを作る必要はありません。</p>
+<h2 id="solve-a-problem-in-five-steps">問題を解く五つの手順</h2><ol>
+<li>自分のチームキーでサインインします。</li>
+<li>開催者が jobs を準備し、大会を始めるまで待ちます。</li>
+<li>問題を開き、状況、最初の一手、ゴールを読みます。新しい Docker 大会では <strong>Start / resume</strong> を選び、起動を待ちます。</li>
+<li>指示に沿って問題 URL、workbench、解答欄、AWS のアクセスを使い、指定された checkpoint へ答えや完全な flag を提出します。</li>
+<li>判定と得点を確認します。ヒントや誤答で点数が変わる場合があります。環境を使えないときは、起動を繰り返す前に開催者へ伝えます。</li>
 </ol>
-<p>結果のメッセージ、得点、完了表示を確認します。複数の段階がある問題では、
-次に表示された操作へ進んでください。</p>
-<h2>クラウドアカウントなしで練習する</h2>
-<p>自分のパソコンで練習するときは、<a href="/docs/getting-started/#local-drills">Getting startedのローカルドリル</a>
-を使います。ローカルモードはDockerで分離された問題環境を作り、AWSへ接続しません。</p>
-<pre><code class="language-bash">make local
-</code></pre>
-<p>Participant Portalが開いたら、画面から問題を選んで開始します。終了時は問題画面の
-<strong>停止</strong>を押すか、ローカルセッション全体を終了します。</p>
-<pre><code class="language-bash">make local-down
-</code></pre>
-<p>開催中の競技へ参加する場合は、開催者から明示されない限りDockerを設定する必要は
-ありません。開催者から渡されたParticipant PortalのURLとteam keyを使います。</p>
-<h2>画面に出る言葉</h2>
-<table>
-<thead>
-<tr>
-<th>用語</th>
-<th>やさしい意味</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>サーバー</td>
-<td>Webサイトやアプリを動かし続けるコンピューター</td>
-</tr>
-<tr>
-<td>クラウド</td>
-<td>事業者が用意したサーバーや保存場所を利用する仕組み</td>
-</tr>
-<tr>
-<td>Docker</td>
-<td>アプリと必要なソフトをまとめ、同じ練習環境を再現しやすくする仕組み</td>
-</tr>
-<tr>
-<td>問題環境</td>
-<td>1つの問題を試すために分離して起動した環境</td>
-</tr>
-<tr>
-<td>接続先</td>
-<td>問題環境を開くURLやアドレス</td>
-</tr>
-<tr>
-<td>flag</td>
-<td>採点できる<code>TC{...}</code>形式の完了証拠</td>
-</tr>
-<tr>
-<td>ヒント</td>
-<td>任意の助け。得点を消費する場合は、開く前に画面へ表示される</td>
-</tr>
-<tr>
-<td>リセット</td>
-<td>現在の練習状態を破棄し、同じ問題環境を作り直す操作</td>
-</tr>
-</tbody></table>
-<h2>うまく動かないとき</h2>
-<table>
-<thead>
-<tr>
-<th>症状</th>
-<th>確認すること</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><strong>開始</strong>を押せない</td>
-<td>競技開始前、または問題のデプロイ中ではないか</td>
-</tr>
-<tr>
-<td>起動がエラーで終わる</td>
-<td>1度だけ再実行する。開催中なら表示されたエラーを開催者へ送る</td>
-</tr>
-<tr>
-<td>接続先が開かない</td>
-<td><strong>起動中</strong>から<strong>実行中</strong>へ変わるまで待ち、問題画面に出た接続先を使う</td>
-</tr>
-<tr>
-<td>flagが拒否される</td>
-<td><code>TC{</code>から最後の<code>}</code>まで欠けずにコピーしたか</td>
-</tr>
-<tr>
-<td>開き直すと表示が古い</td>
-<td>新しい環境を起動する前にPortalを再読み込みする</td>
-</tr>
-<tr>
-<td>最初からやり直したい</td>
-<td><strong>リセット</strong>、または<strong>停止</strong>してから<strong>開始</strong>を使う</td>
-</tr>
-</tbody></table>
-<p>team keyや非公開競技のflagを他チームへ送らないでください。問題文と実際の環境が
-一致しない場合は、問題IDと画面に出たエラーを報告し、認証情報は含めません。</p>
-<h2>次に読むもの</h2>
-<ul>
-<li>ローカル環境の対応範囲と停止処理は
-<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md">Local play</a>。</li>
-<li>問題の構造を知りたい場合は役割を切り替え、
-<a href="/docs/manual/problem-author/">問題作成者マニュアル</a>。</li>
+<p><strong>Stop (keep data)</strong> で停止すると同時起動枠を空けられます。同じ環境を再開すると書き込みレイヤーと volume は残りますが、RAM は残りません。自動退避や初期化は行いません。デフォルトではチームごとに 3 環境、host 全体で 12 環境まで起動でき、メモリー上限の合計でも制限されます。上限に達したら不要な環境を停止するか、開催者へ相談してください。<code>make down</code> / <code>make local</code> の後も、新しい Docker jobs は参加者が再開するまで停止したままです。既存大会は従来の lifecycle を維持します。</p>
+<p>PostgreSQL terminal は実 Docker とブラウザで接続・3 checkpoints の採点・チーム分離・停止再開後の 7 行の保持を確認しています。全 15 種の terminal と全問題を通して確認したわけではありません。問題が一覧にあっても、すべての操作が確認済みとは限りません。</p>
+<h2 id="practice-without-a-cloud-account">自分でローカル大会を試す</h2><p>自分が開催者も兼ねる場合は<a href="/docs/getting-started/">はじめに</a>へ進みます。<code>make local</code> で同じ大会・チームのシステムを起動し、<code>make down</code> でデータを保持して停止します。個人練習専用のログインや、自動で進捗を消す動作はありません。</p>
+<h2 id="words-you-will-see">画面の用語</h2><ul>
+<li>Docker: アプリと必要なソフトをまとめ、同じ練習環境を再現しやすくする仕組み</li>
+<li>問題環境: 自分のチームへ割り当てられたアプリやクラウドのリソース</li>
+<li>endpoint: 開いたり登録したりするサービスのアドレス</li>
+<li>flag: 問題が提出を求める証拠の文字列全体</li>
+<li>hint: 追加の手がかり。開く前に表示される点数を確認します</li>
 </ul>
+<h2 id="when-something-goes-wrong">困ったとき</h2><p>問題名、表示されたエラー、発生時刻を開催者へ伝えます。キー、答え、AWS 認証情報は貼り付けないでください。大会終了後は新しい解答やアクセス発行が止まりますが、発行済み AWS session は期限まで残る場合があります。</p>
 
 </article>
 </main>

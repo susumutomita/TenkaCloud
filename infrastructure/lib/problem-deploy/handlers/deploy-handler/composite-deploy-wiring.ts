@@ -51,8 +51,16 @@ export function buildCompositeDeployDeps(
     materialize: (input) =>
       materializeCompositeDeployment(
         {
-          createParent: (parentInput) => createCompositeParent(repo, parentInput),
-          createTarget: (targetInput) => createCompositeTarget(repo, targetInput),
+          createParent: (parentInput) =>
+            createCompositeParent(repo, {
+              ...parentInput,
+              ...(ctx.executionCatalog ? { catalogKey: ctx.executionCatalog.catalogKey } : {}),
+            }),
+          createTarget: (targetInput) =>
+            createCompositeTarget(repo, {
+              ...targetInput,
+              ...(ctx.executionCatalog ? { catalogKey: ctx.executionCatalog.catalogKey } : {}),
+            }),
           newDeploymentId: ulid,
           newTeamLoginKey: generateTeamLoginKey,
           now: ctx.now,

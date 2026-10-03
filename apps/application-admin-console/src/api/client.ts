@@ -2,7 +2,7 @@ import { createCoreApiClient } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { decodeIdToken, resolveTenantConsoleAccess } from "../auth/claims";
-import type { AppConfig } from "../config";
+import { type AppConfig, isLocalHost } from "../config";
 import type { ApiClient } from "./client-contract";
 // Issue #1954: demo mode の fixture client (call-time のみ参照)。
 import { createDemoApiClient } from "./demo-client";
@@ -15,15 +15,30 @@ export { ApiError } from "@tenkacloud/web-kit";
 export type { ApiClient } from "./client-contract";
 
 export function createApiClient(baseUrl: string, idToken: string): ApiClient {
+  const claims = decodeIdToken(idToken);
   return {
     ...createCoreApiClient(baseUrl, idToken),
-    tenantAccess: resolveTenantConsoleAccess(decodeIdToken(idToken)),
+    tenantAccess: resolveTenantConsoleAccess(claims),
+    organizerRole: claims?.["custom:organizerRole"],
+    cloudOrganizerRole: claims?.["custom:userRole"],
   };
 }
 
 export function canMutateTenant(apiClient: ApiClient | null): boolean {
   if (!apiClient) return false;
   return apiClient.tenantAccess?.canMutateTenant ?? true;
+}
+
+export function canManageConnections(config: AppConfig, apiClient: ApiClient | null): boolean {
+  if (!canMutateTenant(apiClient)) return false;
+  if (isLocalHost(config)) return apiClient?.organizerRole === "Admin";
+  if (config.mode === "demo") return true;
+  // The restored cloud API checks TenantAdmin; the earlier cloud-host API used Admin.
+  // Neither operator role may manage the competitor-account trust relationship.
+  return (
+    apiClient?.cloudOrganizerRole === "Admin" ||
+    (config.mode === undefined && apiClient?.cloudOrganizerRole === "TenantAdmin")
+  );
 }
 
 export function useApiClient(config: AppConfig): ApiClient | null {

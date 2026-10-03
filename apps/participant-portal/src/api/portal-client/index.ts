@@ -23,6 +23,7 @@
 
 export * from "./endpoints";
 export * from "./errors";
+export * from "./host-container";
 export * from "./leaderboard";
 export * from "./lifecycle";
 export * from "./notifications";

@@ -6,16 +6,7 @@ import {
   synthWithAuditLogDisabled,
 } from "../problem-deploy-backend-stack.test-helpers";
 
-/**
- * Issue #2311: 監査ログ feature flag が ProblemDeployBackendStack の監査 Lambda 群
- * (DeployApi / EventApi / CompetitorAccountsApi / SystemAuditWriter) の env に正しく
- * 反映されることを検証する。
- *
- * - auditLogEnabled: false → 各 Lambda env に AUDIT_LOG_ENABLED="false" (= writeAuditEvent 無効化)
- * - default (未指定) → env に AUDIT_LOG_ENABLED を含めない (= 既存テンプレートと byte 互換、CFn 差分 0)
- */
-
-// これらの construct id 断片を含む AWS::Lambda::Function が監査を書く 4 Lambda。
+/** Legacy stack options cannot reactivate the removed audit writer. */
 const AUDIT_LAMBDA_IDS = [
   "DeployApi",
   "EventApi",
@@ -35,20 +26,20 @@ function envOf(tpl: Template, idFragment: string): Record<string, unknown> {
   );
 }
 
-describe("audit-log feature flag env wiring (#2311)", () => {
+describe("retired audit options do not inject writer controls", () => {
   it(
-    "should inject AUDIT_LOG_ENABLED='false' into every audit-writing Lambda when disabled",
+    "does not inject a collection flag for legacy disabled options",
     () => {
       const tpl = synthWithAuditLogDisabled();
       for (const id of AUDIT_LAMBDA_IDS) {
-        expect(envOf(tpl, id).AUDIT_LOG_ENABLED, id).toBe("false");
+        expect(envOf(tpl, id).AUDIT_LOG_ENABLED, id).toBeUndefined();
       }
     },
     SYNTH_TIMEOUT_MS,
   );
 
   it(
-    "should NOT add AUDIT_LOG_ENABLED by default (byte-compat, no regression)",
+    "does not inject a collection flag by default",
     () => {
       const tpl = synthDefault();
       for (const id of AUDIT_LAMBDA_IDS) {

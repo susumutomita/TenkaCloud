@@ -2,6 +2,7 @@ import type { ParticipantProgressionView, ParticipantTeamView } from "@tenkaclou
 import type { ProblemWriteup } from "../../../utils/writeup-metadata.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
 import {
   CHALLENGE_PREREQUISITE_GATE_FLAG,
   computeLockedProblemIds,
@@ -15,6 +16,7 @@ import { type EventGate, evaluateGate, type GateBlock, getEventGate } from "./ev
 import {
   type ParticipantSharedResources,
   queryTeamItems,
+  resolveDeploymentsRepository,
   resolveFeatureFlagsRepository,
 } from "./shared.js";
 
@@ -254,10 +256,43 @@ export async function decorateTeamView(
   );
   return {
     ...view,
-    problems,
+    problems: await attachCoordinationRuns(shared, items, problems),
     eventGate: block ?? { kind: "ok" },
     ...(progression ? { progression } : {}),
   };
+}
+
+/** GET and PATCH team views must name the same shared run the dispatcher will guard. */
+async function attachCoordinationRuns(
+  shared: ParticipantSharedResources,
+  items: readonly Partial<DeploymentItem>[],
+  problems: ParticipantTeamView["problems"],
+): Promise<ParticipantTeamView["problems"]> {
+  const configured = new Set(shared.coordinationProblemIds);
+  if (configured.size === 0) return problems;
+  const rows = new Map(items.map((item) => [item.jobId, item]));
+  const runs = new Map<string, Promise<string>>();
+  return Promise.all(
+    problems.map(async (problem) => {
+      if (!configured.has(problem.problemId)) return problem;
+      const item = rows.get(problem.jobId);
+      if (!item?.tenantId || !item.eventId) return problem;
+      const key = {
+        tenantId: item.tenantId,
+        eventId: item.eventId,
+        problemId: problem.problemId,
+      };
+      const cacheKey = JSON.stringify(key);
+      let run = runs.get(cacheKey);
+      if (!run) {
+        run = resolveDeploymentsRepository(shared).then((repository) =>
+          resolveCurrentCoordinationRunId(repository, key),
+        );
+        runs.set(cacheKey, run);
+      }
+      return { ...problem, coordinationRunId: await run };
+    }),
+  );
 }
 
 export function isProblemSolvedForWriteup(

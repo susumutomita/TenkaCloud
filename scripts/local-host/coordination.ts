@@ -5,6 +5,7 @@ import {
   transitionMatch,
 } from "./coordination-core";
 import { type Gate, gate, HostError, type HostedEvent, object, type Problem } from "./model";
+import { projectedScore } from "./score";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
 import { digest } from "./store";
 
@@ -99,6 +100,8 @@ export class LocalCoordination {
     this.host.store.transaction(() => {
       this.host.store.putCoordination(event.eventId, problem.problemId, body);
       this.award(event, problem, result.deltas);
+      this.host.progression.captureEvent(event.eventId);
+      this.host.disruptions.captureTriggers(event);
       receipt?.();
     });
     row.body = body;
@@ -111,22 +114,24 @@ export class LocalCoordination {
     for (const [teamId, delta] of Object.entries(deltas)) {
       if (!delta) continue;
       const team = this.host.store.team(teamId);
+      if (!this.host.progression.allowed(team, problem.problemId)) continue;
       const jobId = this.host.store.jobId(event.eventId, teamId, problem.problemId);
       if (!jobId) throw new HostError(503, "Coordination roster has no deployment.");
+      const scoreEvents = [
+        {
+          jobId,
+          problemId: problem.problemId,
+          source: "coordination",
+          points: delta,
+          result: delta > 0 ? ("ok" as const) : ("wrong" as const),
+          occurredAt,
+        },
+        ...team.scoreEvents,
+      ];
       this.host.store.putTeam({
         ...team,
-        score: team.score + delta,
-        scoreEvents: [
-          {
-            jobId,
-            problemId: problem.problemId,
-            source: "coordination",
-            points: delta,
-            result: delta > 0 ? "ok" : "wrong",
-            occurredAt,
-          },
-          ...team.scoreEvents,
-        ],
+        score: projectedScore(event, scoreEvents).total,
+        scoreEvents,
       });
     }
   }
@@ -204,6 +209,7 @@ export class LocalCoordination {
     const event = this.host.store.event(team.eventId);
     const problem = this.problem(event);
     if (!problem) throw new HostError(404, "No coordination Battle in this event.");
+    this.host.progression.assertAccess(team, problem.problemId);
     const job = this.host.store
       .jobs(event.eventId, team.teamId)
       .find((item) => item.problemId === problem.problemId);

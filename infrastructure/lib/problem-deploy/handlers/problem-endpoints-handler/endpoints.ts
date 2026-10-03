@@ -1,6 +1,10 @@
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { getPrerequisiteBlockByEventId } from "../participant-handler/challenge-access.js";
-import { type ParticipantSharedResources, queryTeamItems } from "../participant-handler/shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveParticipantCatalog,
+} from "../participant-handler/shared.js";
 import { isSsrfSafeUrl } from "../shared/ssrf-guard.js";
 import { type ResolvedEndpoint, resolveEndpoints } from "./resolve.js";
 import { deleteOverride, putOverride, queryOverrides } from "./store.js";
@@ -81,6 +85,7 @@ export async function listProblemEndpoints(
   const deployment = items.find((i) => i.problemId === problemId);
   if (!isAuthorizedDeployment(deployment)) return { kind: "unauthorized" };
 
+  shared = await resolveParticipantCatalog(shared, items);
   const slots = shared.problemsEndpoints[problemId] ?? [];
   if (slots.length === 0) return { kind: "no_endpoints" };
 
@@ -163,6 +168,7 @@ export async function upsertProblemEndpointOverride(
   const deployment = items.find((i) => i.problemId === problemId);
   if (!isAuthorizedDeployment(deployment)) return { kind: "unauthorized" };
 
+  shared = await resolveParticipantCatalog(shared, items);
   const slots = shared.problemsEndpoints[problemId] ?? [];
   if (slots.length === 0) return { kind: "no_endpoints" };
 
@@ -236,6 +242,7 @@ export async function deleteProblemEndpointOverride(
   const deployment = items.find((i) => i.problemId === problemId);
   if (!isAuthorizedDeployment(deployment)) return { kind: "unauthorized" };
 
+  shared = await resolveParticipantCatalog(shared, items);
   const slots = shared.problemsEndpoints[problemId] ?? [];
   if (slots.length === 0) return { kind: "no_endpoints" };
   if (!slots.some((s) => s.slot === slot)) return { kind: "unknown_slot" };

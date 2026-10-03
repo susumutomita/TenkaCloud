@@ -52,6 +52,7 @@ export interface GcpDeploymentSpec {
 
 /** [Issue #2745] `materializeBlueprint` に渡す、 Terraform source 解決に要る最小 input。 */
 export interface MaterializeGcpBlueprintInput {
+  readonly catalogKey?: string;
   readonly tenantId: string;
   readonly teamSlug: string;
   readonly problemId: string;
@@ -124,6 +125,7 @@ export class GcpInfraManagerRuntimeAdapter implements ProblemRuntimeAdapter {
     // second WIF exchange per deploy.
     const credential = await this.ctx.getCredential();
     const blueprintRef = await this.ctx.materializeBlueprint(credential, {
+      ...(input.catalogKey ? { catalogKey: input.catalogKey } : {}),
       tenantId: input.tenantId,
       teamSlug: input.teamSlug,
       problemId: input.problemId,

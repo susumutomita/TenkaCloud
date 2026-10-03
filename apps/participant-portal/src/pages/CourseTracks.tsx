@@ -24,15 +24,18 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { useTeamView } from "../auth/TeamViewProvider";
+import { useAppConfig } from "../config-context";
 import {
   buildCourseTracks,
   type CourseProblemView,
   type CourseTrackView,
+  recommendNext,
   toProblemProgress,
 } from "../data/course-track";
 import { listProblemCatalog } from "../data/problems";
 import { useT } from "../i18n";
 import { visibleCourseCatalog } from "../lib/draft-visibility";
+import { gateProblemDisplayName } from "../lib/progression";
 
 /** role → i18n key。未知の role は素の文字列を出す (= 新しい role で画面が壊れない)。 */
 const ROLE_KEYS: Readonly<Record<string, string>> = {
@@ -46,11 +49,15 @@ const ROLE_KEYS: Readonly<Record<string, string>> = {
 function ProblemRow({
   problem,
   recommended,
+  locked,
+  href,
   onOpen,
   t,
 }: {
   readonly problem: CourseProblemView;
   readonly recommended: boolean;
+  readonly locked: boolean;
+  readonly href: string;
   readonly onOpen: (problemId: string) => void;
   readonly t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
 }) {
@@ -60,7 +67,7 @@ function ProblemRow({
       <SpaceBetween size="xxs">
         <SpaceBetween size="xs" direction="horizontal">
           <Link
-            href={`/problems/${encodeURIComponent(problem.problemId)}`}
+            href={href}
             onFollow={(event) => {
               event.preventDefault();
               onOpen(problem.problemId);
@@ -70,6 +77,7 @@ function ProblemRow({
           </Link>
           {problem.progress.solved ? <Badge color="green">{t("course_track.solved")}</Badge> : null}
           {recommended ? <Badge color="blue">{t("course_track.recommended")}</Badge> : null}
+          {locked ? <Badge color="grey">{t("quests.locked_badge")}</Badge> : null}
           {roleKey ? <Badge>{t(roleKey)}</Badge> : null}
           {roleKey === undefined && problem.role !== undefined ? (
             <Badge>{problem.role}</Badge>
@@ -118,14 +126,24 @@ function ProblemRow({
 export function CourseTrackCard({
   track,
   onOpen,
+  problemHref,
+  lockedProblemIds,
+  gateName,
   t,
 }: {
   readonly track: CourseTrackView;
   readonly onOpen: (problemId: string) => void;
+  readonly problemHref: (problemId: string) => string;
+  readonly lockedProblemIds: readonly string[];
+  readonly gateName: string;
   readonly t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
 }) {
-  // 1 度だけ narrow して以降は non-optional として扱う (= 到達しない fallback を作らない)。
-  const recommended = track.recommendedNext;
+  // Track order suggests a next step; only the existing event gate enforces access.
+  const recommended = recommendNext(
+    track.chapters.flatMap((chapter) =>
+      chapter.problems.filter((problem) => !lockedProblemIds.includes(problem.problemId)),
+    ),
+  );
   return (
     <Container
       header={
@@ -153,11 +171,17 @@ export function CourseTrackCard({
           <Alert type="info" data-testid="course-recommended">
             {t("course_track.recommended_next", { name: recommended.name })}
           </Alert>
-        ) : (
+        ) : null}
+        {!recommended && track.solvedProblems === track.totalProblems ? (
           <Alert type="success" data-testid="course-complete">
             {t("course_track.all_done")}
           </Alert>
-        )}
+        ) : null}
+        {!recommended && track.solvedProblems < track.totalProblems ? (
+          <Alert type="info" data-testid="course-locked">
+            {t("quests.locked_unlock_condition", { gateName })}
+          </Alert>
+        ) : null}
 
         {track.totalCheckpoints > 0 ? (
           <ProgressBar
@@ -183,6 +207,8 @@ export function CourseTrackCard({
                   key={problem.problemId}
                   problem={problem}
                   recommended={recommended?.problemId === problem.problemId}
+                  locked={lockedProblemIds.includes(problem.problemId)}
+                  href={problemHref(problem.problemId)}
                   onOpen={onOpen}
                   t={t}
                 />
@@ -197,22 +223,29 @@ export function CourseTrackCard({
 
 export function CourseTracksPage() {
   const { view, error } = useTeamView();
+  const config = useAppConfig();
   const navigate = useNavigate();
   const t = useT();
 
   const tracks = useMemo(() => {
     const problems = view?.problems ?? [];
-    // Quests の draft toggle と同じ好みを尊重する (詳細は lib/draft-visibility.ts)。
-    const catalog = visibleCourseCatalog(listProblemCatalog(), problems);
+    // Local hosting reuses the event/team projection, never the whole bundled catalog.
+    // Assigned drafts remain visible, just as they do in the competition problem list.
+    const assignedIds = new Set(problems.map((problem) => problem.problemId));
+    const catalog =
+      config.cloudMode === "local"
+        ? visibleCourseCatalog(listProblemCatalog(), problems)
+        : listProblemCatalog().filter((entry) => assignedIds.has(entry.id));
     return buildCourseTracks(catalog, toProblemProgress(problems));
-  }, [view]);
+  }, [config.cloudMode, view]);
 
   // deploy された問題の jobId は問題 id と別なので、 catalog の problemId から引き直す。
   // 未 deploy の問題は開けないため、 一覧 (`/problems`) へ送る。
-  const openProblem = (problemId: string) => {
+  const problemHref = (problemId: string) => {
     const deployed = (view?.problems ?? []).find((p) => p.problemId === problemId);
-    navigate(deployed ? `/problems/${encodeURIComponent(deployed.jobId)}` : "/problems");
+    return deployed ? `/problems/${encodeURIComponent(deployed.jobId)}` : "/problems";
   };
+  const openProblem = (problemId: string) => navigate(problemHref(problemId));
 
   return (
     <SpaceBetween size="l">
@@ -236,6 +269,9 @@ export function CourseTracksPage() {
             key={`${track.trackId}:${track.edition ?? ""}`}
             track={track}
             onOpen={openProblem}
+            problemHref={problemHref}
+            lockedProblemIds={view?.progression?.lockedProblemIds ?? []}
+            gateName={gateProblemDisplayName(view?.progression, view?.problems)}
             t={t}
           />
         ))

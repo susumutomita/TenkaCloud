@@ -26,7 +26,7 @@ export class ApiError extends Error {
 
 export interface CoreApiClient {
   get<T>(path: string): Promise<T>;
-  post<T>(path: string, body: unknown): Promise<T>;
+  post<T>(path: string, body: unknown, operationKey?: string): Promise<T>;
   put<T>(path: string, body: unknown): Promise<T>;
   patch<T>(path: string, body: unknown): Promise<T>;
   del(path: string): Promise<void>;
@@ -71,9 +71,13 @@ export function createCoreApiClient(baseUrl: string, idToken: string): CoreApiCl
     async get<T>(path: string): Promise<T> {
       return (await request(path)).json() as Promise<T>;
     },
-    async post<T>(path: string, body: unknown): Promise<T> {
+    async post<T>(path: string, body: unknown, operationKey?: string): Promise<T> {
       return (
-        await request(path, { method: "POST", body: JSON.stringify(body) })
+        await request(path, {
+          method: "POST",
+          body: JSON.stringify(body),
+          ...(operationKey ? { headers: { "Idempotency-Key": operationKey } } : {}),
+        })
       ).json() as Promise<T>;
     },
     async put<T>(path: string, body: unknown): Promise<T> {

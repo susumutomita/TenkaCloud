@@ -20,7 +20,11 @@ import { parseEndpointsHealth } from "../shared/endpoints-health.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { decorateTeamView } from "./challenge-access.js";
 import { warnLoginUnauthorized } from "./login-diagnostics.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveParticipantCatalog,
+} from "./shared.js";
 import { getSolvedFlagIds } from "./submit-flag.js";
 
 /**
@@ -367,6 +371,26 @@ export async function lookupTeamByLoginKey(
   teamLoginKey: string,
 ): Promise<ParticipantTeamView | undefined> {
   const items = await queryTeamItems(shared, teamLoginKey);
+  try {
+    shared = await resolveParticipantCatalog(shared, items);
+  } catch (error) {
+    // Keep saved status and scores readable while refusing to guess answer keys,
+    // hint content, writeups, or plugin configuration from today's catalog.
+    console.warn("[portal] saved catalog unavailable; showing history only", {
+      message: String(error),
+    });
+    const history = buildTeamView(
+      items.map((item) => ({ ...item, stackOutputs: "{}" })),
+      {},
+    );
+    return history
+      ? decorateTeamView(
+          { ...shared, problemsWriteups: {}, coordinationProblemIds: [] },
+          items,
+          history,
+        )
+      : undefined;
+  }
   const view = buildTeamView(items, shared.problemsScoring);
   if (!view) {
     // Issue #2675: emit a server-side triage line before the opaque 401. The HTTP

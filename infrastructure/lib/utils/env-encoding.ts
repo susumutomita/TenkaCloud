@@ -1,4 +1,4 @@
-import { gunzipSync, gzipSync } from "node:zlib";
+import { gunzipSync } from "node:zlib";
 
 /**
  * Issue #810: Lambda environment variables の合計サイズが AWS 上限 4 KB を超過した
@@ -15,15 +15,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
  * 本文の Option A)。 本実装は最小差分の中間策。
  */
 
-const GZIP_BASE64_MAGIC_PREFIX = "H4s"; // base64 of bytes 0x1f 0x8b 0x08 (gzip header)
-
-/**
- * 大きい JSON を Lambda env に積めるよう gzip + base64 で圧縮する。 CDK 側で env
- * value 構築時に通す。
- */
-export function encodeLargeEnvValue(json: string): string {
-  return gzipSync(json).toString("base64");
-}
+const GZIP_BASE64_MAGIC_PREFIX = "H4s";
 
 /**
  * env value を decode する。 `H4s` 始まりなら gzip+base64、 そうでなければ plain

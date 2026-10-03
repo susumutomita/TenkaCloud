@@ -67,6 +67,7 @@ export interface EventCreateProblemsetSectionProps {
    * disabled, and the cloud-only region / cost columns are not shown.
    */
   hostSupportedProblemIds?: ReadonlySet<string>;
+  maxProblems?: number;
   onProblemsChange: (next: readonly MultiselectProps.Option[]) => void;
   onUpdateProblemRow: (problemId: string, patch: Partial<ProblemRow>) => void;
 }
@@ -77,6 +78,7 @@ export function EventCreateProblemsetSection({
   problemRows,
   nonAwsRuntimeEnabled,
   hostSupportedProblemIds,
+  maxProblems,
   onProblemsChange,
   onUpdateProblemRow,
 }: EventCreateProblemsetSectionProps) {
@@ -90,18 +92,24 @@ export function EventCreateProblemsetSection({
     [nonAwsRuntimeEnabled],
   );
   // #1414 / #2167: 選択不可 runtime の問題は disabled + 「近日対応」 tag。
-  const problemOptions = useMemo(
-    () =>
-      hostSupportedProblemIds
-        ? buildProblemOptions(
-            filtered,
-            t("local_host.problem_unsupported_tag"),
-            enabledProviders,
-            hostSupportedProblemIds,
-          )
-        : buildProblemOptions(filtered, t("event_create.problem_reserved_tag"), enabledProviders),
-    [filtered, t, enabledProviders, hostSupportedProblemIds],
-  );
+  const problemOptions = useMemo(() => {
+    const options = buildProblemOptions(
+      filtered,
+      t(
+        hostSupportedProblemIds
+          ? "local_host.problem_unsupported_tag"
+          : "event_create.problem_reserved_tag",
+      ),
+      enabledProviders,
+      hostSupportedProblemIds,
+    );
+    if (maxProblems === undefined || selectedProblems.length < maxProblems) return options;
+    const selected = new Set(selectedProblems.map((option) => option.value));
+    return options.map((option) => ({
+      ...option,
+      disabled: option.disabled || !selected.has(option.value),
+    }));
+  }, [filtered, t, enabledProviders, hostSupportedProblemIds, maxProblems, selectedProblems]);
   const tagFacets = useMemo(() => collectTagFacets(problems), [problems]);
   const scoringKindFacets = useMemo(() => collectScoringKindFacets(problems), [problems]);
 
@@ -238,7 +246,14 @@ export function EventCreateProblemsetSection({
 
         <FormField
           label={t("event_create.use_problems_label")}
-          description={t("event_create.use_problems_description")}
+          description={
+            maxProblems === undefined
+              ? t("event_create.use_problems_description")
+              : t("event_create.problem_selection_count", {
+                  count: selectedProblems.length,
+                  max: maxProblems,
+                })
+          }
         >
           <Multiselect
             data-testid="problem-select"
@@ -246,7 +261,10 @@ export function EventCreateProblemsetSection({
             options={[...problemOptions]}
             placeholder={t("event_create.problemset_placeholder")}
             empty={t("problem_search.empty_filtered")}
-            onChange={({ detail }) => onProblemsChange(detail.selectedOptions)}
+            onChange={({ detail }) => {
+              if (maxProblems === undefined || detail.selectedOptions.length <= maxProblems)
+                onProblemsChange(detail.selectedOptions);
+            }}
           />
         </FormField>
 
@@ -275,6 +293,7 @@ export function EventCreateProblemsetSection({
                 id: "region",
                 header: t("event_create.col_region"),
                 cell: (r) => {
+                  if (r.runtimeProvider === "native") return t("event_create.native_execution");
                   const options = resolveRegionOptions(r.supportedRegions, REGION_OPTIONS);
                   return (
                     <Select
@@ -297,9 +316,12 @@ export function EventCreateProblemsetSection({
               {
                 id: "estimatedCost",
                 header: t("event_create.col_estimated_cost"),
-                cell: (r) => (
-                  <ProblemCostSummary estimate={r.costEstimate} showResourceTypes={false} t={t} />
-                ),
+                cell: (r) =>
+                  r.runtimeProvider === "native" ? (
+                    "—"
+                  ) : (
+                    <ProblemCostSummary estimate={r.costEstimate} showResourceTypes={false} t={t} />
+                  ),
               },
             ]}
           />

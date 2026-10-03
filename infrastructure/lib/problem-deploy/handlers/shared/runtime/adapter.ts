@@ -50,6 +50,9 @@ export interface RuntimeDeployInput {
   readonly tenantId: string;
   readonly problemId: string;
   readonly problemDir: string;
+  readonly catalogKey?: string;
+  readonly sourceVersion?: string;
+  readonly sourceLocation?: string;
   readonly teamSlug: string;
   readonly namePrefix: string;
   readonly region: string;

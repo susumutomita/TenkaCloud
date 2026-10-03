@@ -6,7 +6,8 @@ import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { memo, useState } from "react";
+import { PendingOperation } from "@tenkacloud/web-kit";
+import { memo, useRef, useState } from "react";
 import {
   type HintRevealMode,
   type ParticipantHintView,
@@ -51,6 +52,7 @@ export function FlagSubmissionPanel({
   // context から直接読む (= 旧 isMock prop drill を撤去)。
   const isMock = useIsMock();
   const [flag, setFlag] = useState("");
+  const submission = useRef(new PendingOperation());
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -110,9 +112,22 @@ export function FlagSubmissionPanel({
     setSubmitError(null);
     setOutcome(null);
     try {
+      const operationKey = submission.current.keyFor(
+        JSON.stringify([apiBaseUrl, sessionToken, problemId]),
+        { flag },
+      );
       const result = isMock
         ? evaluateMockFlag(flag, points)
-        : await submitFlag(apiBaseUrl, sessionToken, problemId, flag);
+        : await submitFlag(
+            apiBaseUrl,
+            sessionToken,
+            problemId,
+            flag,
+            undefined,
+            undefined,
+            operationKey,
+          );
+      submission.current.acknowledge(operationKey);
       setOutcome(result);
       if (!isMock && shouldRefreshAfterFlagSubmit(result)) await onScored();
     } catch (err) {

@@ -19,9 +19,12 @@ import { portsFree } from "../ports";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { ExerciseFixture } from "./exercise-fixture";
+import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 // eslint-disable-next-line sonarjs/no-hardcoded-ip -- RFC1918 parser test vector; no connection is made.
 const TEST_PRIVATE_ADDRESS = "192.168.1.2";
+// eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Negative credential for disposable host fixtures.
+const INVALID_ORGANIZER_PASSWORD = "invalid";
 
 interface ResponseData<Body = Record<string, unknown>> {
   status: number;
@@ -170,8 +173,27 @@ async function createFixture() {
     };
   }
   async function login(): Promise<void> {
-    const response = await request("admin", "/api/host/login", "POST", { key }, "");
-    assert.equal(response.status, 200);
+    const bootstrap = await request<{ bootstrapCompleted: boolean }>(
+      "admin",
+      "/api/host/bootstrap-status",
+      "GET",
+      undefined,
+      "",
+    );
+    assert.equal(bootstrap.status, 200);
+    const firstVisit = !bootstrap.body.bootstrapCompleted;
+    const response = await request(
+      "admin",
+      firstVisit ? "/api/host/bootstrap" : "/api/host/login",
+      "POST",
+      {
+        ...(firstVisit ? { key } : {}),
+        username: REHEARSAL_ORGANIZER.username,
+        password: REHEARSAL_ORGANIZER.password,
+      },
+      "",
+    );
+    assert.equal(response.status, firstVisit ? 201 : 200);
     adminToken = response.body.idToken as string;
     refreshToken = response.body.refreshToken as string;
   }
@@ -309,7 +331,15 @@ test("No automatic login, and public configuration has no host/team credentials"
     assert.equal((await f.request("admin", "/api/events", "GET", undefined, "")).status, 401);
     assert.equal((await f.request("participant", "/api/portal/me")).status, 401);
     assert.equal(
-      (await f.request("admin", "/api/host/login", "POST", { key: "incorrect" }, "")).status,
+      (
+        await f.request(
+          "admin",
+          "/api/host/login",
+          "POST",
+          { username: REHEARSAL_ORGANIZER.username, password: INVALID_ORGANIZER_PASSWORD },
+          "",
+        )
+      ).status,
       401,
     );
   }));
@@ -457,6 +487,48 @@ test("Real HTTP exercise, separate team flags and single award under concurrent 
       b.teamLoginKey,
     );
     assert.equal(forged.status, 400);
+  }));
+test("Sealed workbench answers fit the bounded scoring request without widening other routes", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const team = required(event.teams[0]);
+    // A valid workbench input below 64 KiB can exceed 64 KiB after sealing.
+    const flag = `tcw1.${Buffer.from(JSON.stringify({ answer: "x".repeat(60_000) })).toString("base64url")}.synthetic`;
+    assert.ok(flag.length > 64 * 1024);
+    const submitted = await f.request(
+      "participant",
+      "/api/portal/me/submit-flag",
+      "POST",
+      { problemId: "sqli-demo", flag },
+      team.teamLoginKey,
+    );
+    assert.equal(submitted.status, 200);
+    assert.equal(
+      submitted.body.kind,
+      "wrong",
+      "The test verifier receives the answer; this is not a real code verdict.",
+    );
+    for (const oversized of ["x".repeat(128 * 1024), "あ".repeat(45_000)]) {
+      const rejected = await f.request(
+        "participant",
+        "/api/portal/me/submit-flag",
+        "POST",
+        { problemId: "sqli-demo", flag: oversized },
+        team.teamLoginKey,
+      );
+      assert.equal(rejected.status, 413);
+    }
+    assert.equal(f.store.team(team.teamId).score, -5, "Oversized requests never reach scoring.");
+    const ordinary = await f.request(
+      "participant",
+      "/api/portal/me",
+      "PATCH",
+      { teamName: "x".repeat(70_000) },
+      team.teamLoginKey,
+    );
+    assert.equal(ordinary.status, 413);
   }));
 test("Idempotent wrong submissions, hint charges and payload conflict detection", () =>
   fixture(async (f) => {
@@ -757,11 +829,27 @@ test("Session revocation, expiration and invalid-login rate limiting", () =>
     f.advance(60_001);
     for (let index = 0; index < 10; index++)
       assert.equal(
-        (await f.request("admin", "/api/host/login", "POST", { key: "invalid" }, "")).status,
+        (
+          await f.request(
+            "admin",
+            "/api/host/login",
+            "POST",
+            { username: REHEARSAL_ORGANIZER.username, password: INVALID_ORGANIZER_PASSWORD },
+            "",
+          )
+        ).status,
         401,
       );
     assert.equal(
-      (await f.request("admin", "/api/host/login", "POST", { key: "invalid" }, "")).status,
+      (
+        await f.request(
+          "admin",
+          "/api/host/login",
+          "POST",
+          { username: REHEARSAL_ORGANIZER.username, password: INVALID_ORGANIZER_PASSWORD },
+          "",
+        )
+      ).status,
       429,
     );
   }));
@@ -895,13 +983,17 @@ const c = import.meta.glob("../../../../.tenkacloud/pack-store/snapshots/**/meta
       "/repo/apps/participant-portal/src/plugins/loader.ts",
     ),
   );
-  assert.ok(plugins.includes("problems/{challenges/sqli-demo,battles/ac26-crypto-battle}/portal/"));
+  assert.ok(plugins.includes("problems/battles/ac26-crypto-battle/portal/"));
   assert.doesNotThrow(() =>
     assertHostingModule("/repo/problems/challenges/sqli-demo/metadata.json"),
   );
   assert.throws(() =>
     assertHostingModule("/repo/problems/challenges/sqli-demo/local/app/server.mjs"),
   );
+  assert.doesNotThrow(() =>
+    assertHostingModule("/repo/problems/challenges/hello-world/metadata.json"),
+  );
+  assert.throws(() => assertHostingModule("/repo/problems/challenges/hello-world/template.yaml"));
   assert.throws(() => assertHostingModule("/repo/problems/challenges/other/metadata.json"));
   assert.throws(() => assertHostingModule("/repo/.tenkacloud/pack-store/snapshots/secret.json"));
   assert.throws(() =>
@@ -1144,9 +1236,13 @@ test("Without a Docker daemon, deployment reports that cause and retry advice", 
     const problem = required(engine.catalog()[0]);
     const session = await service.admin({
       method: "POST",
-      path: "/host/login",
+      path: "/host/bootstrap",
       query: new URLSearchParams(),
-      body: { key: persistentKey(join(data, "host-key")) },
+      body: {
+        key: persistentKey(join(data, "host-key")),
+        username: REHEARSAL_ORGANIZER.username,
+        password: REHEARSAL_ORGANIZER.password,
+      },
       token: "",
     });
     const token = String(object(session.body).idToken);
@@ -1162,9 +1258,21 @@ test("Without a Docker daemon, deployment reports that cause and retry advice", 
       ).body,
     );
     const eventId = String(created.eventId);
+    assert.equal((await call("POST", `/events/${eventId}/deploy`)).status, 202);
+    await service.drain();
+    assert.ok(store.jobs(eventId).every((job) => job.status === "STOPPED" && !job.unit));
+    await call("PATCH", `/events/${eventId}/schedule`, { startNow: true });
     for (let attempt = 0; attempt < 2; attempt++) {
-      assert.equal((await call("POST", `/events/${eventId}/deploy`)).status, 202);
-      await service.drain();
+      for (const team of store.teams(eventId)) {
+        await service.participant({
+          method: "POST",
+          path: `/portal/me/problems/${problem.problemId}/container/start`,
+          query: new URLSearchParams(),
+          body: {},
+          token: team.loginKey,
+        });
+        await service.drain();
+      }
       const jobs = store.jobs(eventId);
       assert.equal(jobs.length, 2);
       for (const job of jobs) {
@@ -1174,7 +1282,7 @@ test("Without a Docker daemon, deployment reports that cause and retry advice", 
         assert.equal(job.error, DAEMON_UNAVAILABLE_MESSAGE);
         assert.ok(job.unit, "Ownership is retained until a cleanup succeeds.");
       }
-      assert.equal(store.event(eventId).status, "DEPLOYING");
+      assert.equal(store.event(eventId).status, "READY");
     }
   } finally {
     process.env.PATH = path;

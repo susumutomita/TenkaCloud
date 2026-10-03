@@ -67,6 +67,11 @@ describe("allowedLocalOperations", () => {
       restart: false,
       teardown: true,
     });
+    expect(allowedLocalOperations("READY", { status: "COMPLETE", stopSupported: false })).toEqual({
+      stop: false,
+      restart: true,
+      teardown: true,
+    });
     expect(allowedLocalOperations("READY", { status: "DELETED" }).teardown).toBe(false);
     expect(allowedLocalOperations("ARCHIVED", { status: "FAILED" }).teardown).toBe(false);
     for (const blocked of [
@@ -82,6 +87,33 @@ describe("allowedLocalOperations", () => {
 });
 
 describe("LocalEnvironmentsPanel", () => {
+  it("shows a retained cloud environment without offering a stop request", () => {
+    const cloud = detail();
+    const environment = cloud.deploymentsByProblem["sqli-demo"]?.[0];
+    if (!environment) throw new Error("Expected a deployed environment.");
+    render(
+      <LocalEnvironmentsPanel
+        apiClient={apiClient}
+        canMutateTenant
+        detail={{
+          ...cloud,
+          deploymentsByProblem: {
+            "sqli-demo": [{ ...environment, stopSupported: false }],
+          },
+        }}
+        onRefresh={vi.fn()}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("local_host.env_stop_unsupported")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: 'local_host.env_stop_aria|{"team":"team-a"}' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: 'local_host.env_teardown_aria|{"team":"team-a"}' }),
+    ).toBeEnabled();
+  });
+
   it("lists each team's environment with its gateway port and failure reason", () => {
     render(
       <LocalEnvironmentsPanel

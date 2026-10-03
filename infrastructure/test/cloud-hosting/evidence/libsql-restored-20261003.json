@@ -1,0 +1,21 @@
+{
+  "outcome": "passed",
+  "server": "sqld sqld 0.24.32 (40c272de 2025-02-14)",
+  "serverSha256": "0863c3fbe68ac9714bca2cec1330def7a0ba5e4a29f199bf60ef46fa0c95b895",
+  "target": "official local sqld; synthetic data; not hosted Turso or AWS",
+  "teams": 25,
+  "maximumTeams": 99,
+  "concurrentAuthenticationReads": 100,
+  "p50Ms": 125,
+  "p95Ms": 186,
+  "p99Ms": 187,
+  "hintAndScoreExactlyOnce": true,
+  "rotationRevokesOldKey": true,
+  "restartPreservesState": true,
+  "explicitResetPreservesUnrelatedTables": true,
+  "recordedAt": "2026-10-03T03:11:54Z",
+  "sourceBaseline": "825415fcda5075ad723daf9e4514eac47d7b8bb9",
+  "candidateBase": "da2b2998e6aab9d736edf5e89fc3a476670c6339",
+  "commandFromRepositoryRoot": "node --import tsx infrastructure/verification/libsql-protocol-check.ts /absolute/path/to/official/sqld",
+  "scope": "Restored SQL repositories on one local primary. This is not a Lambda, AWS, hosted Turso, replica-failover or native Battle throughput measurement."
+}

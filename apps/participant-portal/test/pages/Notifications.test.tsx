@@ -32,6 +32,21 @@ const teamView = (over: Record<string, unknown>) => ({
 afterEach(() => vi.clearAllMocks());
 
 describe("NotificationsPage", () => {
+  it("explains an unavailable direct route without pretending the participant lacks an event", () => {
+    mockIsMock.mockReturnValue(false);
+    mockTeamView.mockReturnValue(
+      teamView({
+        notificationsNoEvent: true,
+        notifications: { items: [{ occurredAt: "2026-01-01" }] },
+      }),
+    );
+    render(<NotificationsPage enabled={false} />);
+    expect(screen.getByText("notifications.unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("notifications.no_event_header")).not.toBeInTheDocument();
+    expect(screen.queryByText("notifications.loading")).not.toBeInTheDocument();
+    expect(mockSeen).not.toHaveBeenCalled();
+  });
+
   it("should show an error alert", () => {
     mockIsMock.mockReturnValue(false);
     mockTeamView.mockReturnValue(teamView({ notificationsError: "boom" }));

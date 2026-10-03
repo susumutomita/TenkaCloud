@@ -13,7 +13,9 @@ const NAMES_SH = resolve(__dirname, "..", "..", "..", "scripts", "lib", "names.s
 
 /** Source names.sh and evaluate one helper call, returning its trimmed stdout. */
 function callHelper(call: string): string {
-  const result = spawnSync("bash", ["-c", `source "${NAMES_SH}"; ${call}`], { encoding: "utf8" });
+  const result = spawnSync("/bin/bash", ["-c", `source "${NAMES_SH}"; ${call}`], {
+    encoding: "utf8",
+  });
   expect(result.status, result.stderr).toBe(0);
   return result.stdout.trim();
 }

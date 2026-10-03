@@ -5,7 +5,6 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
-import { auditEventAction } from "../audit.js";
 import { endEvent } from "../end-event.js";
 import { handleRouteError, parseJsonBody, withEventId } from "../route-helpers.js";
 import { type SetEventScheduleOutcome, setEventSchedule } from "../schedule.js";
@@ -152,7 +151,6 @@ export function registerLifecycleRoutes(app: Hono, shared: EventSharedResources)
             scoreboardFreezeMinutes: parsed.data.scoreboardFreezeMinutes,
             nowMs,
           });
-          if (outcome.kind === "ok") auditEventAction(c, "schedule_event", eventId);
           return scheduleOutcomeResponse(c, outcome);
         } catch (err) {
           return handleRouteError(c, "[events] setEventSchedule failed", { eventId }, err);
@@ -176,7 +174,6 @@ export function registerLifecycleRoutes(app: Hono, shared: EventSharedResources)
               StatusCodes.CONFLICT,
             );
           }
-          auditEventAction(c, "end_event", eventId);
           return c.json(
             { endsAt: outcome.endsAt, updatedDeployments: outcome.updatedDeployments },
             StatusCodes.OK,

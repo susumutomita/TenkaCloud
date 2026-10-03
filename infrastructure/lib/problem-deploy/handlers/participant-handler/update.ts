@@ -10,6 +10,7 @@ import {
   type ParticipantSharedResources,
   queryTeamItems,
   resolveDeploymentsRepository,
+  resolveParticipantCatalog,
 } from "./shared.js";
 
 const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
@@ -62,6 +63,7 @@ export async function setDisplayTeamName(
   });
   if (editable.length === 0) return { kind: "unauthorized" };
 
+  shared = await resolveParticipantCatalog(shared, items);
   const now = new Date().toISOString();
   // [Issue #2441 / Phase B2] `updateDisplayTeamName` is unconditional (no
   // ConditionExpression) — the outcome is always `updated` with the ALL_NEW

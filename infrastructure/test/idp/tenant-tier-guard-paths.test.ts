@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * 経路 (49-55) が未カバー。 auth (isTenantAdmin / resolveTenantId) を mock して 4 分岐を pin する。
  */
 const mocks = vi.hoisted(() => ({ isTenantAdmin: vi.fn(), resolveTenantId: vi.fn() }));
-vi.mock("../../lib/control-plane/handlers/idp-handler/auth", () => ({
+vi.mock("../../lib/shared/idp/auth", () => ({
   isTenantAdmin: mocks.isTenantAdmin,
   resolveTenantId: mocks.resolveTenantId,
 }));

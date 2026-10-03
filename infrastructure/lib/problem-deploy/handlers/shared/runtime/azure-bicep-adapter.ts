@@ -61,6 +61,8 @@ export interface AzureDeploymentStackSpec {
 
 /** `runtime.entry` を materialize する場所の情報 (= 1 deployment 分、 adapter.deploy() が組む)。 */
 export interface AzureArtifactLocation {
+  readonly problemId: string;
+  readonly catalogKey?: string;
   readonly problemDir: string;
   readonly challengePayloadUrl?: string;
 }
@@ -125,6 +127,8 @@ export class AzureBicepRuntimeAdapter implements ProblemRuntimeAdapter {
     // path traversal) never reaches `getCredential`/`upsertStack`, so no credential is minted and
     // no Deployment Stack is ever created/updated from an un-inlined template.
     const template = await this.ctx.materialize(this.runtime.entry, {
+      problemId: input.problemId,
+      ...(input.catalogKey ? { catalogKey: input.catalogKey } : {}),
       problemDir: input.problemDir,
       ...(input.challengePayloadUrl ? { challengePayloadUrl: input.challengePayloadUrl } : {}),
     });

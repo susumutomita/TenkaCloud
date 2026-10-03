@@ -1,28 +1,45 @@
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { revealHint, submitFlag } from "../local-play/api-scoring";
-import { createLocalPlayState, sessionScore } from "../local-play/api-state";
-import { teamView } from "../local-play/api-views";
-import { assertComposePolicy } from "../local-play/compose-policy";
-import type { LocalComposeUnit, StartedContainer } from "../local-play/container-runner";
 import {
   type ComposeCli,
   composeArgsForCli,
   generateSecretEnv,
   isComposeUnitRunning,
   resolveComposeCli,
-} from "../local-play/docker-adapter";
-import { type ContainerProblem, loadContainerProblem } from "../local-play/manifest";
-import { remapComposeHostPorts, remapContainerProblem } from "../local-play/port-remap";
+} from "./container/compose-cli";
+import { assertComposePolicy } from "./container/compose-policy";
+import type { LocalComposeUnit, StartedContainer } from "./container/container-runner";
+import { remapContainerProblem } from "./container/port-remap";
+import { revealContainerHint, submitFlag } from "./container/scoring";
+import { createContainerState } from "./container/session";
+import { sessionScore } from "./container/state";
 import {
   parseLocalPlaySnapshot,
   restoreLocalPlayState,
   snapshotLocalPlayState,
-} from "../local-play/state-store";
-import { verifySubmission } from "../local-play/verify-client";
-import { privateDirectory } from "./files";
+} from "./container/state-store";
+import {
+  spawnDeclaredTerminal,
+  type TerminalHandlers,
+  type TerminalProcess,
+} from "./container/terminal-shell";
+import { verifySubmission } from "./container/verify-client";
+import { teamView } from "./container/views";
+import { requestWorkbench, type WorkbenchAction } from "./container/workbench-client";
+import { boundedCompose } from "./container-budget";
+import {
+  type DockerDefinition as Definition,
+  dockerDefinitionOf as definitionOf,
+  loadDockerCatalog,
+} from "./docker-catalog";
+import {
+  allocateNetworkSubnets,
+  applyNetworkSubnets,
+  DockerNetworkInventoryError,
+  type NetworkSubnets,
+  occupiedDockerSubnets,
+} from "./docker-networks";
 import {
   type Context,
   type EngineResult,
@@ -32,57 +49,8 @@ import {
   type Problem,
   type RuntimeEngine,
 } from "./model";
-
-interface Definition {
-  problem: ContainerProblem;
-  hashes: Record<string, string>;
-  composeText: string;
-}
-const fingerprint = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const packFiles = [
-  "metadata.json",
-  "local/docker-compose.yml",
-  "local/Dockerfile",
-  "local/app/server.mjs",
-];
-/** Deliberately small compatibility matrix: extending it requires reviewing the
- * challenge's HTTP surface, origin requirements and runtime isolation as well. */
-function loadCatalog(repositoryRoot: string): Problem[] {
-  const directory = join(repositoryRoot, "problems/challenges/sqli-demo");
-  const problem = loadContainerProblem(directory);
-  if (
-    problem.scoring.kind !== "verify" ||
-    problem.terminal ||
-    Object.keys(problem.challengeEndpoints).join() !== "Web"
-  ) {
-    throw new Error("sqli-demo's runtime contract changed; review local-host compatibility.");
-  }
-  const definition: Definition = {
-    problem,
-    composeText: readFileSync(problem.composePath, "utf8"),
-    hashes: Object.fromEntries(packFiles.map((path) => [path, fingerprint(join(directory, path))])),
-  };
-  return [
-    {
-      problemId: problem.problemId,
-      name: problem.name,
-      definition: JSON.stringify(definition),
-    },
-  ];
-}
-
-function definitionOf(job: Job, verifySources: boolean): Definition {
-  const definition = JSON.parse(job.definition) as Definition;
-  if (!verifySources) return definition;
-  for (const [path, expected] of Object.entries(definition.hashes)) {
-    if (fingerprint(join(definition.problem.problemDir, path)) !== expected) {
-      throw new Error(
-        "The event's pinned problem files changed. Restore the original catalog before continuing.",
-      );
-    }
-  }
-  return definition;
-}
+import { prepareRuntimeDirectory, removeRuntimeFiles } from "./runtime-directory";
+import { type RuntimePorts, remapRuntimeComposePorts } from "./runtime-ports";
 
 type ComposeAction = "up" | "down" | "stop" | "restart";
 
@@ -157,7 +125,7 @@ async function compose(
       else if (/all predefined address pools have been fully subnetted/iu.test(tail))
         reject(
           new Error(
-            "Docker has no free network address pool. Review unused Docker networks on the host and remove only those no longer needed, then retry the failed deployment. Existing team environments are unchanged.",
+            "Docker has no free network address pool. Stopping an environment preserves its network and unfinished work. Configure a non-overlapping --docker-network-pool for new environments, or explicitly retire completed environments. No unrelated networks or retained team data were removed.",
           ),
         );
       else
@@ -185,24 +153,32 @@ async function ready(url: string): Promise<void> {
 }
 
 export class DockerHostingEngine implements RuntimeEngine {
+  readonly supportsOnDemand = true;
+  containerCost(definition: string) {
+    return boundedCompose((JSON.parse(definition) as Definition).composeText).cost;
+  }
   private readonly problems: Problem[];
   private readonly running = new Map<string, StartedContainer>();
+  private readonly networkReservations = new Map<string, readonly string[]>();
   constructor(
     repositoryRoot: string,
     private readonly dataDirectory: string,
+    private readonly networkPool?: string,
   ) {
-    this.problems = loadCatalog(repositoryRoot);
+    this.problems = loadDockerCatalog(repositoryRoot);
   }
   catalog(): readonly Problem[] {
     return this.problems;
   }
-  hostPorts(definition: string, offset: number): readonly number[] {
+  hostPorts(definition: string, offset: number, runtimePorts?: RuntimePorts): readonly number[] {
     const { composeText } = JSON.parse(definition) as Definition;
-    return [...remapComposeHostPorts(composeText, offset).portMap.values()];
+    return [...remapRuntimeComposePorts(composeText, offset, runtimePorts).portMap.values()];
   }
   private plan(
     job: Job,
     verifySources = true,
+    newSubnets?: NetworkSubnets,
+    claimNewDirectory = false,
   ): {
     started: StartedContainer;
     composeText: string;
@@ -214,8 +190,13 @@ export class DockerHostingEngine implements RuntimeEngine {
       problemDir: problem.problemDir,
       composePath: problem.composePath,
     });
-    const remapped = remapComposeHostPorts(source, job.offset);
-    const directory = privateDirectory(join(this.dataDirectory, "runtimes", job.jobId));
+    const remapped = remapRuntimeComposePorts(source, job.offset, job.runtimePorts);
+    let plannedCompose = job.runtimePorts ? boundedCompose(remapped.text).text : remapped.text;
+    const networkSubnets =
+      newSubnets ??
+      (job.unit ? (JSON.parse(job.unit) as LocalComposeUnit).networkSubnets : undefined);
+    if (networkSubnets) plannedCompose = applyNetworkSubnets(plannedCompose, networkSubnets);
+    const directory = prepareRuntimeDirectory(this.dataDirectory, job.jobId, claimNewDirectory);
     const composePath = join(directory, `${problem.composeProjectName}.compose.yml`);
     const unit: LocalComposeUnit = {
       problemId: job.problemId,
@@ -225,17 +206,34 @@ export class DockerHostingEngine implements RuntimeEngine {
       secretEnv: problem.secretEnv,
       projectDirectory: dirname(problem.composePath),
       remappedComposePath: composePath,
+      ...(networkSubnets ? { networkSubnets } : {}),
     };
     return {
       started: { unit, problem: remapContainerProblem(problem, remapped.portMap) },
-      composeText: remapped.text,
+      composeText: plannedCompose,
       directory,
     };
+  }
+  private allocateNetworks(job: Job): NetworkSubnets | undefined {
+    if (!this.networkPool || !job.runtimePorts) return undefined;
+    try {
+      return allocateNetworkSubnets(definitionOf(job, true).composeText, this.networkPool, [
+        ...occupiedDockerSubnets(),
+        ...[...this.networkReservations.values()].flat(),
+      ]);
+    } catch (cause) {
+      if (cause instanceof DockerNetworkInventoryError && cause.daemonUnavailable)
+        throw new DockerDaemonUnavailableError();
+      throw cause;
+    }
   }
   async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
     // Readiness of the CLI is checked on deploy, never on host startup.
     resolveComposeCli();
-    const plan = this.plan(job);
+    if (job.unit) throw new Error("A retained environment must be resumed, never recreated.");
+    const networkSubnets = this.allocateNetworks(job);
+    const plan = this.plan(job, true, networkSubnets, true);
+    if (networkSubnets) this.networkReservations.set(job.jobId, Object.values(networkSubnets));
     const unit = plan.started.unit;
     writeFileSync(unit.composePath, plan.composeText, { mode: 0o600 });
     retain(JSON.stringify(unit));
@@ -243,13 +241,14 @@ export class DockerHostingEngine implements RuntimeEngine {
     try {
       await compose(unit, "up", { ...process.env, ...generated });
       await ready(plan.started.problem.verifyUrl);
-      await ready(this.surfaceFrom(plan.started));
+      await this.readySurfaces(plan.started);
       this.running.set(job.jobId, plan.started);
     } catch (error) {
       try {
         await compose(unit, "down", { ...process.env, ...generated });
-        unlinkSync(unit.composePath);
+        removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
         retain(null);
+        this.networkReservations.delete(job.jobId);
       } catch (cleanup) {
         throw startupCleanupFailure(error, cleanup);
       }
@@ -259,6 +258,8 @@ export class DockerHostingEngine implements RuntimeEngine {
   async recover(job: Job): Promise<void> {
     const plan = this.plan(job);
     const unit = this.validatedUnit(job, plan.started.unit);
+    if (unit.networkSubnets)
+      this.networkReservations.set(job.jobId, Object.values(unit.networkSubnets));
     if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
       throw new Error("Recorded runtime composition changed; refusing to adopt it.");
     if (!isComposeUnitRunning(unit))
@@ -266,7 +267,7 @@ export class DockerHostingEngine implements RuntimeEngine {
         "The recorded problem environment is not running. Retry deployment from the host console.",
       );
     await ready(plan.started.problem.verifyUrl);
-    await ready(this.surfaceFrom(plan.started));
+    await this.readySurfaces(plan.started);
     this.running.set(job.jobId, plan.started);
   }
   private validatedUnit(job: Job, expected: LocalComposeUnit): LocalComposeUnit {
@@ -290,7 +291,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   async stop(job: Job): Promise<void> {
     // Cleanup must remain possible after a catalog update. The private persisted
     // compose text is the original creation plan, not the new checkout's file.
-    const plan = this.plan(job, false);
+    const plan = this.plan(job, false, undefined, true);
     const unit = this.validatedUnit(job, plan.started.unit);
     // Reconstruct only a missing file from the private pinned plan. A different
     // existing file is a conflict, never something we execute or overwrite.
@@ -305,7 +306,8 @@ export class DockerHostingEngine implements RuntimeEngine {
     );
     await compose(unit, "down", { ...process.env, ...cleanupEnvironment });
     this.running.delete(job.jobId);
-    unlinkSync(unit.composePath);
+    this.networkReservations.delete(job.jobId);
+    removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
   }
   /** Validated, unchanged private plan of an owned environment. */
   private ownedUnit(
@@ -338,13 +340,49 @@ export class DockerHostingEngine implements RuntimeEngine {
     const generated = generateSecretEnv(directory, job.problemId, unit.secretEnv);
     await compose(unit, "restart", { ...process.env, ...generated });
     await ready(plan.started.problem.verifyUrl);
-    await ready(this.surfaceFrom(plan.started));
+    await this.readySurfaces(plan.started);
     this.running.set(job.jobId, plan.started);
   }
   private surfaceFrom(started: StartedContainer): string {
-    const url = started.problem.challengeEndpoints.Web;
-    if (!url) throw new Error("This problem has no reviewed Web surface.");
-    return url;
+    const url = Object.values(started.problem.challengeEndpoints)[0];
+    if (!url) throw new Error("This problem has no participant HTTP surface.");
+    return new URL(url).origin;
+  }
+  private async readySurfaces(started: StartedContainer): Promise<void> {
+    for (const url of new Set(Object.values(started.problem.challengeEndpoints))) await ready(url);
+  }
+  surfaces(job: Job): Readonly<Record<string, string>> {
+    const started = this.running.get(job.jobId);
+    if (!started) throw new HostError(409, "Problem environment has not been recovered.");
+    return started.problem.challengeEndpoints;
+  }
+  gatewayPolicy(job: Job): { applicationRoutes: boolean; deniedPaths: readonly string[] } {
+    const started = this.running.get(job.jobId);
+    if (!started) throw new HostError(409, "Problem environment has not been recovered.");
+    const verify = new URL(started.problem.verifyUrl);
+    return {
+      applicationRoutes: true,
+      deniedPaths: verify.origin === this.surfaceFrom(started) ? [verify.pathname] : [],
+    };
+  }
+  terminalSupported(job: Job): boolean {
+    return Boolean(this.running.get(job.jobId)?.problem.terminal);
+  }
+  async openTerminal(
+    job: Job,
+    handlers: TerminalHandlers,
+    assertCurrent: () => void,
+  ): Promise<TerminalProcess> {
+    const { unit } = this.ownedUnit(job, true);
+    const terminal = this.running.get(job.jobId)?.problem.terminal;
+    if (!terminal) throw new HostError(409, "This problem has no running participant terminal.");
+    return spawnDeclaredTerminal(unit, terminal.service, handlers, assertCurrent);
+  }
+  async workbench(job: Job, action: WorkbenchAction, body?: unknown): Promise<unknown> {
+    this.ownedUnit(job, true);
+    const started = this.running.get(job.jobId);
+    if (!started) throw new HostError(409, "Problem environment has not been recovered.");
+    return requestWorkbench(started.problem.verifyUrl, action, body);
   }
   surface(job: Job): string {
     const started = this.running.get(job.jobId);
@@ -355,36 +393,29 @@ export class DockerHostingEngine implements RuntimeEngine {
     const problems = context.event.problems.map(
       (problem) => (JSON.parse(problem.definition) as Definition).problem,
     );
-    const state = createLocalPlayState(
-      { problems },
-      {
-        teamName: context.team.displayName,
-        maxRunning: Math.max(1, problems.length),
-        verify: (url, submission, verifyContext, options) =>
-          verifySubmission(
-            url,
-            submission,
-            { ...verifyContext, teamId: context.team.teamId },
-            {
-              ...options,
-              fetchImpl: (input, init) =>
-                fetch(input, { ...init, signal: AbortSignal.timeout(5000) }),
-            },
-          ),
-        startContainer: async (problem) => {
-          const job = context.jobs.find(
-            (candidate) =>
-              candidate.problemId === problem.problemId && candidate.status === "COMPLETE",
-          );
-          const started = job && this.running.get(job.jobId);
-          if (!started) throw new Error("Host-owned problem runtime is unavailable.");
-          return started;
-        },
-        stopContainer: async () => {
-          throw new Error("Participant state may not stop host-owned environments.");
-        },
+    const state = createContainerState(problems, {
+      teamName: context.team.displayName,
+      verify: (url, submission, verifyContext, options) =>
+        verifySubmission(
+          url,
+          submission,
+          { ...verifyContext, teamId: context.team.teamId },
+          {
+            ...options,
+            fetchImpl: (input, init) =>
+              fetch(input, { ...init, signal: AbortSignal.timeout(5000) }),
+          },
+        ),
+      startContainer: async (problem) => {
+        const job = context.jobs.find(
+          (candidate) =>
+            candidate.problemId === problem.problemId && candidate.status === "COMPLETE",
+        );
+        const started = job && this.running.get(job.jobId);
+        if (!started) throw new Error("Host-owned problem runtime is unavailable.");
+        return started;
       },
-    );
+    });
     if (context.team.snapshot)
       restoreLocalPlayState(state, parseLocalPlaySnapshot(context.team.snapshot));
     for (const job of context.jobs) {
@@ -440,7 +471,12 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   async hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
     const state = await this.state(context);
-    const response = revealHint(problemId, hintId, state, new Date(context.now).toISOString());
+    const response = revealContainerHint(
+      problemId,
+      hintId,
+      state,
+      new Date(context.now).toISOString(),
+    );
     return this.result(state, response, context);
   }
 }

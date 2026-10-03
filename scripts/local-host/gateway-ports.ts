@@ -1,4 +1,4 @@
-import { HostError } from "./model";
+import { HostError, type Job } from "./model";
 
 /** Host-port distance between two runtime slots; slot `n` uses offset `n * SLOT_STRIDE`. */
 export const SLOT_STRIDE = 1000;
@@ -48,4 +48,9 @@ export function gatewayPort(range: GatewayPortRange, offset: number): number {
       `Runtime slot ${String(slot)} has no exercise gateway port in ${formatGatewayPorts(range)}. Restart the host with a wider --gateway-ports range.`,
     );
   return range.start + slot - 1;
+}
+
+/** New dense-port jobs lease a gateway only while active; older jobs retain their fixed offset. */
+export function gatewayOffset(job: Job): number {
+  return job.runtimePorts ? (job.gatewaySlot ?? 0) * SLOT_STRIDE : job.offset;
 }

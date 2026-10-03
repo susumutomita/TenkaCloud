@@ -56,13 +56,9 @@ jobs:
             echo "short=$(git -C problems rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Setup Bun
+      - name: Install pinned dependencies for candidate sync
         if: steps.bump.outputs.changed == 'true'
-        # oven-sh/setup-bun v2.0.2 (pinned, matches ci.yml). The release scripts import only
-        # node built-ins and repository sources, so no dependency install is needed here.
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
-        with:
-          bun-version: "1.3.11"
+        uses: ./.github/actions/bun-install
 
       - name: Push the pin-bump branch
         if: steps.bump.outputs.changed == 'true'
@@ -76,12 +72,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
           git add problems
-          # The release BOM pins the catalog the platform ships with, and identity validation
-          # refuses to publish a tag whose gitlink and manifest disagree (#3024). Advance the
-          # manifest with the pin — from the staged gitlink, never retyped — so `main` stays
-          # taggable and `release:check` stays green.
-          bun run release:catalog-pin
-          git add release/tenkacloud-release.json release/tenkacloud-release.md
+          # Advance only the unpublished candidate from the staged gitlink. Published release
+          # history and built image identities are never rewritten by this automation.
+          bun run scripts/release/host-candidate.ts --sync-catalog
+          git add release/host-candidate.json
           git commit -m "chore(problems): bump submodule pin to latest ($SHORT) [automated]"
           git push --force-with-lease -u origin "$BRANCH"
           # The branch IS the deliverable — see the header comment for why this stops here.
@@ -89,7 +83,7 @@ jobs:
           {
             echo "## Pin bump ready on \`$BRANCH\`"
             echo
-            echo "Advanced the \`problems/\` pin to \`$SHORT\` and the release BOM catalog pin with it."
+            echo "Advanced the \`problems/\` pin to \`$SHORT\` and the unpublished host candidate catalog pin with it."
             echo
             echo "**Open the PR:** https://github.com/$REPO/compare/main...$BRANCH?expand=1"
             echo

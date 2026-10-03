@@ -90,6 +90,7 @@ export function nonAwsCredentialKey(provider: string, teamSlug: string): string 
  * forceRedeploy の置換対象) を持つ — `persistence.ts` はこの共通 2 field だけを読む。
  */
 export type PlanEntry =
+  | { readonly kind: "native"; readonly item: DeploymentItem; readonly replacesJobId?: string }
   | {
       readonly kind: "eventbridge";
       readonly item: DeploymentItem;

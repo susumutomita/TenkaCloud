@@ -1,4 +1,4 @@
-import { RemovalPolicy } from "aws-cdk-lib";
+import { IgnoreMode, RemovalPolicy } from "aws-cdk-lib";
 import {
   Distribution,
   HttpVersion,
@@ -82,19 +82,24 @@ export function buildSpaHosting(scope: Construct, props: SpaHostingProps): SpaHo
     ],
   });
 
-  new BucketDeployment(scope, "SiteDeployment", {
+  const assets = new BucketDeployment(scope, "SiteDeployment", {
     logGroup: spaDeploymentLogGroup(scope),
     sources: [
-      props.sourceExclude
-        ? Source.asset(props.distDir, { exclude: [...props.sourceExclude] })
-        : Source.asset(props.distDir),
+      Source.asset(props.distDir, {
+        exclude: [".env*", ".git", ...(props.sourceExclude ?? [])],
+        ignoreMode: IgnoreMode.GIT,
+      }),
     ],
     destinationBucket: siteBucket,
     distribution,
     ...(props.distributionPaths ? { distributionPaths: [...props.distributionPaths] } : {}),
     // runtime-config.json は別 deployment が書くので他 key を消さない
     prune: false,
+    retainOnDelete: false,
   });
+
+  // Arm owned-bucket cleanup before uploads, so rollback removes data before cleanup.
+  assets.node.addDependency(siteBucket);
 
   return { siteBucket, distribution };
 }
@@ -128,13 +133,15 @@ export function deployRuntimeConfigJson(
   target: SpaHostingResult,
   data: Record<string, unknown>,
 ): void {
-  new BucketDeployment(scope, "RuntimeConfigDeployment", {
+  const runtimeConfig = new BucketDeployment(scope, "RuntimeConfigDeployment", {
     logGroup: spaDeploymentLogGroup(scope),
     sources: [Source.jsonData("runtime-config.json", data)],
     destinationBucket: target.siteBucket,
     distribution: target.distribution,
     distributionPaths: ["/runtime-config.json"],
     prune: false,
+    retainOnDelete: false,
     cacheControl: [CacheControl.noStore(), CacheControl.noCache(), CacheControl.mustRevalidate()],
   });
+  runtimeConfig.node.addDependency(target.siteBucket);
 }

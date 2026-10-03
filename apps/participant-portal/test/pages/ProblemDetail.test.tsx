@@ -20,6 +20,7 @@ const {
   mockNarrative,
   mockFindDiagram,
   mockUseProblemEndpoints,
+  mockUseProblemInstructions,
   mockEndpointOverrideForm,
   mockPortalPluginSlots,
 } = vi.hoisted(() => ({
@@ -32,6 +33,7 @@ const {
   mockNarrative: vi.fn(),
   mockFindDiagram: vi.fn(),
   mockUseProblemEndpoints: vi.fn(),
+  mockUseProblemInstructions: vi.fn(),
   mockEndpointOverrideForm: vi.fn(),
   mockPortalPluginSlots: vi.fn(),
 }));
@@ -43,6 +45,9 @@ vi.mock("react-router", () => ({
 }));
 vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
 vi.mock("../../src/auth/TeamViewProvider", () => ({ useTeamView: mockTeamView }));
+vi.mock("../../src/hooks/useProblemInstructions", () => ({
+  useProblemInstructions: mockUseProblemInstructions,
+}));
 vi.mock("../../src/hooks/useProblemEndpoints", () => ({
   useProblemEndpoints: mockUseProblemEndpoints,
 }));
@@ -138,6 +143,7 @@ const viewWith = (over: Record<string, any> = {}): any => ({
 const renderPage = () => render(<ProblemDetailPage config={config} />);
 
 beforeEach(() => {
+  mockUseProblemInstructions.mockReturnValue({ loading: false, retry: vi.fn() });
   mockParams.mockReturnValue({ jobId: "job-1" });
   mockAuth.mockReturnValue({ session: { sessionToken: "tok" } });
   mockTeamView.mockReturnValue(teamView());
@@ -176,6 +182,44 @@ describe("visibility helpers", () => {
 });
 
 describe("ProblemDetailPage", () => {
+  it.each([
+    ["en", "JA", "EN", "EN"],
+    ["en", "JA", undefined, "JA"],
+    ["ja", "JA", "EN", "JA"],
+  ] as const)(
+    "renders lazy instructions with locale fallback (%s)",
+    (locale, instructions, englishInstructions, expected) => {
+      mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+      mockFindMeta.mockReturnValue(meta({ id: "hello-world" }));
+      mockLocale.value = locale;
+      mockUseProblemInstructions.mockReturnValue({
+        value: { instructions, englishInstructions },
+        loading: false,
+        retry: vi.fn(),
+      });
+      renderPage();
+      expect(screen.getByText(expected)).toBeVisible();
+    },
+  );
+
+  it("shows narrative loading and an actionable failure without replacing the live problem", async () => {
+    mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+    mockFindMeta.mockReturnValue(meta({ id: "hello-world" }));
+    const retry = vi.fn();
+    mockUseProblemInstructions.mockReturnValue({ loading: true, retry });
+    const { rerender } = renderPage();
+    expect(screen.getByText("app.loading")).toBeVisible();
+    const panel = screen.getByTestId("problem-panel");
+    mockUseProblemInstructions.mockReturnValue({ loading: false, error: "network failed", retry });
+    rerender(<ProblemDetailPage config={config} />);
+    expect(screen.getByText("network failed")).toBeVisible();
+    expect(screen.getByTestId("problem-panel")).toBe(panel);
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "problem_detail.instructions_retry" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
   it.each([undefined, { status: "running", runtimeKind: "docker" }])(
     "shows problem information before an active Battle and preserves its answer (lifecycle: %j)",
     async (lifecycle) => {
@@ -840,6 +884,25 @@ describe("ProblemDetailPage", () => {
 
     expect(mockPortalPluginSlots).toHaveBeenLastCalledWith(
       expect.objectContaining({ eventEndsAt: undefined }),
+    );
+  });
+
+  it("passes the cloud coordination pointer independently of the deployment jobId", () => {
+    mockFindMeta.mockReturnValue(meta());
+    mockTeamView.mockReturnValue(
+      teamView({ view: viewWith({ problems: [problem({ coordinationRunId: "default" })] }) }),
+    );
+    const page = renderPage();
+    expect(mockPortalPluginSlots).toHaveBeenLastCalledWith(
+      expect.objectContaining({ jobId: "job-1", coordinationRunId: "default" }),
+    );
+    const nextRunId = "01K00000000000000000000005";
+    mockTeamView.mockReturnValue(
+      teamView({ view: viewWith({ problems: [problem({ coordinationRunId: nextRunId })] }) }),
+    );
+    page.rerender(<ProblemDetailPage config={config} />);
+    expect(mockPortalPluginSlots).toHaveBeenLastCalledWith(
+      expect.objectContaining({ jobId: "job-1", coordinationRunId: nextRunId }),
     );
   });
 

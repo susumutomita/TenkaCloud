@@ -1,4 +1,9 @@
+import {
+  eventCatalogContext,
+  savedExecutionCatalog,
+} from "../../shared/execution-catalog-context.js";
 import { logDeployTrace } from "../../shared/trace-log.js";
+import { acknowledgeExistingEventSelfTest } from "../self-test-consent.js";
 import { type EventSharedResources, queryDeploymentsByEvent } from "../shared.js";
 import type { BulkDeployRequest } from "../types.js";
 import { dispatchBulkAdapterEntries } from "./adapter-dispatch.js";
@@ -9,7 +14,6 @@ import {
 import { indexExistingDeployments } from "./existing-index.js";
 import { markPublishFailuresFailed, writeBulkDeployPlan } from "./persistence.js";
 import { buildBulkDeployPlan } from "./plan-builder.js";
-import { writePackProvenanceAudit } from "./provenance-audit.js";
 import { publishBulkDeployPlan } from "./publish.js";
 import { buildResult, emptyBulkDeployResult } from "./result.js";
 import { loadBulkDeployTargets, selectBulkDeployTargets } from "./targets.js";
@@ -53,9 +57,12 @@ export async function bulkDeployEvent(
   eventId: string,
   nowMs: number,
   request?: BulkDeployRequest,
+  actor?: string,
 ): Promise<BulkDeployOutcome> {
   const loaded = await loadBulkDeployTargets(shared, tenantId, eventId);
   if (!loaded) return { kind: "not_found" };
+  const catalog = await savedExecutionCatalog(loaded.event.catalogKey);
+  if (catalog) shared = eventCatalogContext(shared, catalog);
   if (loaded.allTeams.length === 0 || loaded.allProblems.length === 0) {
     traceEmptyBulkDeploy(eventId, tenantId, loaded, request);
     return emptyBulkDeployResult(eventId);
@@ -105,6 +112,17 @@ export async function bulkDeployEvent(
     };
   }
   const existingDeployments = await queryDeploymentsByEvent(shared, tenantId, eventId);
+  assertDeploymentCatalogMatches(catalog?.catalogKey, existingDeployments);
+  const event = await acknowledgeExistingEventSelfTest({
+    shared,
+    tenantId,
+    eventId,
+    event: loaded.event,
+    selected,
+    request: request?.hostingAccountSelfTest,
+    nowMs,
+    actor,
+  });
   const existing = indexExistingDeployments(existingDeployments);
   const retryFailedOnly = request?.retryFailedOnly === true;
   const forceRedeploy = request?.forceRedeploy === true;
@@ -121,7 +139,7 @@ export async function bulkDeployEvent(
     tenantId,
     eventId,
     nowMs,
-    event: loaded.event,
+    event,
     selected,
     existing,
     verified,
@@ -165,11 +183,6 @@ export async function bulkDeployEvent(
     );
   }
 
-  // [#2096] Append-only audit of pack-sourced deployments. Best-effort (no-op
-  // when the audit table is unwired or no pack rows exist), so it never blocks
-  // the deploy and core-only events behave exactly as before.
-  await writePackProvenanceAudit({ tenantId, eventId, nowMs }, plan.entries);
-
   return {
     kind: "ok",
     result: buildResult({ eventId, enqueued: plan.entries.length, ...plan }),
@@ -193,7 +206,21 @@ function partitionBulkPlanEntries(entries: readonly PlanEntry[]): {
   const adapterEntries: AdapterPlanEntry[] = [];
   for (const entry of entries) {
     if (entry.kind === "eventbridge") eventBridgeEntries.push(entry);
-    else adapterEntries.push(entry);
+    else if (entry.kind === "adapter") adapterEntries.push(entry);
   }
   return { eventBridgeEntries, adapterEntries };
+}
+
+function assertDeploymentCatalogMatches(
+  catalogKey: string | undefined,
+  deployments: readonly { readonly catalogKey?: string }[],
+): void {
+  if (
+    catalogKey &&
+    deployments.some((deployment) => deployment.catalogKey && deployment.catalogKey !== catalogKey)
+  ) {
+    throw new Error(
+      "catalog_pin_mismatch: event and deployment reference different execution catalogs",
+    );
+  }
 }

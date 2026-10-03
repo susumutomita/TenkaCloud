@@ -40,15 +40,6 @@ export const BIND_RESOURCE_SERVER_PREFIX = "tc-tenant-";
 /** bind resource server が持つ唯一の scope 名。 */
 export const BIND_SCOPE_NAME = "bind";
 
-/** audit log の `actor` に付ける machine principal prefix (= `m2m:<clientId>`)。 */
-export const MACHINE_ACTOR_PREFIX = "m2m:";
-
-/** machine client を発行するときの Cognito app client name prefix。 */
-export const MACHINE_CLIENT_NAME_PREFIX = "tc-m2m-";
-
-/** access token TTL (分)。#2939 §5 の owner 判断で 15 分に確定。 */
-export const MACHINE_ACCESS_TOKEN_VALIDITY_MINUTES = 15;
-
 /**
  * capability。`disruptions.fire` / `audit.read` は名前を予約するが宣言しない (= Cognito が
  * そもそも発行できない)。

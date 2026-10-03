@@ -27,6 +27,7 @@ vi.mock("../../src/api/competitor-accounts-client", async (importOriginal) => {
 import type { AppConfig } from "../../src/config";
 
 const config: AppConfig = {
+  eventLimits: { maxTeams: 99, maxProblems: 50 },
   cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
   cognitoClientId: "abc",
   redirectUri: "http://localhost:5174/callback",

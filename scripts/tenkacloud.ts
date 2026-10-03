@@ -1,82 +1,48 @@
 #!/usr/bin/env bun
-
 import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { defaultLocalCommandDeps, runLocalCommand } from "./cli/local-command";
+import { resolve } from "node:path";
 import { systemProcessRunner } from "./cli/process";
 import { installTursoCli } from "./cli/turso-cli-installer";
 import { runTursoLiveCommand, terminalConfirm, terminalPrompt } from "./cli/turso-live-command";
+import { runCloudCli } from "./cloud-hosting/cli";
+import { systemCloudIo } from "./cloud-hosting/process";
+import { runPackCli } from "./problem-pack/pack-cli";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-export function tenkaCloudUsage(): string {
-  return [
-    "Usage: tenkacloud <command>",
-    "",
-    "Commands:",
-    "  tenkacloud local [subcommand] [--database sqlite|turso] [--problem ID]",
-    "        Start local play; SQLite is the default and requires no cloud account",
-    "  tenkacloud doctor [--profile minimum|recommended|full] [--probe-disk]",
-    "        Diagnose host Bun/Vite developer prerequisites without changing the machine;",
-    "        --profile also compares Docker's resources against that profile's",
-    "        measured configuration (--probe-disk adds free space, pulls busybox)",
-    "  tenkacloud onboard [--yes]",
-    "        Interactively repair missing local prerequisites",
-    "  tenkacloud turso-live [guide|preflight|deploy|verify-cloudformation|reset|rotate-token]",
-    "        Guided Turso/AWS live verification; rotate-token reissues the Turso database",
-    "        token into SSM SecureString without ever printing it",
-  ].join("\n");
-}
-
-export async function runTenkaCloudCli(args: readonly string[]): Promise<number> {
-  const [command, ...rest] = args;
-  if (command === "local") {
-    return runLocalCommand(rest, defaultLocalCommandDeps(REPO_ROOT, systemProcessRunner));
-  }
-  if (command === "doctor" || command === "onboard") {
-    return systemProcessRunner.run(
-      process.execPath,
-      [
-        "run",
-        resolve(REPO_ROOT, "scripts", "tenkacloud-onboard.ts"),
-        command === "doctor" ? "doctor" : "preflight",
-        ...rest,
-      ],
-      { inherit: true, cwd: REPO_ROOT },
-    ).status;
-  }
-  if (command === "turso-live") {
-    return runTursoLiveCommand(rest, process.env, {
-      repoRoot: REPO_ROOT,
+const [command, ...args] = process.argv.slice(2);
+if (command === "pack") {
+  process.exitCode = runPackCli(args, (line) => console.log(line));
+} else if (command === "turso-live" && args[0] === "reset") {
+  process.exitCode = await runCloudCli(["turso-reset", ...args.slice(1)], systemCloudIo(), {
+    root: resolve(import.meta.dirname, ".."),
+    env: process.env,
+  });
+} else if (command === "turso-live") {
+  try {
+    process.exitCode = await runTursoLiveCommand(args, process.env, {
+      repoRoot: resolve(import.meta.dirname, ".."),
       processRunner: systemProcessRunner,
-      interactive: Boolean(process.stdin.isTTY) && !process.env.CI,
+      interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY && !process.env.CI),
       platform: process.platform,
       architecture: process.arch,
       homeDirectory: homedir(),
       installTursoCli: () =>
         installTursoCli({
+          platform: process.platform,
           architecture: process.arch,
           homeDirectory: homedir(),
-          platform: process.platform,
           processRunner: systemProcessRunner,
         }),
       confirm: terminalConfirm,
       prompt: terminalPrompt,
       log: console.log,
     });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   }
-  console.log(tenkaCloudUsage());
-  return command === undefined || command === "help" || command === "--help" ? 0 : 1;
-}
-
-if (import.meta.main) {
-  void runTenkaCloudCli(process.argv.slice(2))
-    .then((status) => {
-      process.exitCode = status;
-    })
-    .catch((error) => {
-      console.error(error instanceof Error ? error.message : String(error));
-      process.exitCode = 1;
-    });
+} else {
+  console.log(
+    "Usage: tenkacloud pack <command>\nHost a competition with: make local [LOCAL_ARGS=...]\nStop it with: make down [LOCAL_ARGS=...]\nCloud hosting: make deploy / make destroy [CLOUD_ARGS=...]\nCloud setup: make env-init / make turso-live\nTurso credentials: make turso-token-rotate [ROTATE_ARGS=...]\nTurso data reset: make turso-reset [CLOUD_ARGS=...] or tenkacloud turso-live reset [--plan|--yes]",
+  );
+  process.exitCode = command === undefined || command === "--help" || command === "help" ? 0 : 1;
 }

@@ -7,7 +7,7 @@ import type { ProblemSummary } from "../../src/data/problems";
 /**
  * Issue #3226: the normal event-creation page on the local competition host. The host's own
  * catalog decides which problems are selectable, no AWS account or competitor-account data is
- * requested, teams carry only their slug, and "Deploy now" prepares the local environments.
+ * requested, teams carry only their slug, and preparation leaves Docker environments stopped.
  */
 const mocks = vi.hoisted(() => ({
   useApiClient: vi.fn(),
@@ -90,7 +90,8 @@ const multiselect = (container: HTMLElement) =>
 describe("EventCreatePage on the local competition host", () => {
   it("creates a slug-only event from a host-supported problem and deploys it", async () => {
     const { container } = render(<EventCreatePage config={config} />);
-    expect(screen.getByText("local_host.create_header")).toBeInTheDocument();
+    expect(screen.queryByText("local_host.create_header")).toBeNull();
+    expect(screen.queryByText("local_host.create_body")).toBeNull();
     await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
     // No AWS competitor accounts are requested on the local host.
     expect(get).not.toHaveBeenCalledWith("admin/competitor-accounts");
@@ -116,6 +117,138 @@ describe("EventCreatePage on the local competition host", () => {
     fireEvent.click(await screen.findByTestId("deploy-prompt-now"));
     await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
     expect(mocks.navigate).toHaveBeenCalledWith("/events/01HZX0K3M3K9ZQHB3MRQHBA1B2");
+  });
+
+  it("keeps the explicit legacy adapter fixture separate from production local startup", async () => {
+    get.mockImplementation(async (path: string) => {
+      if (path === "host/catalog")
+        return { items: [{ problemId: "cloud-only", runtime: "cloudformation" }] };
+      if (path === "admin/competitor-accounts")
+        return {
+          items: [
+            {
+              awsAccountId: "111111111111",
+              region: "ap-northeast-1",
+              competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+              verified: true,
+              createdAt: "2026-09-30T00:00:00.000Z",
+              updatedAt: "2026-09-30T00:00:00.000Z",
+            },
+          ],
+        };
+      throw new Error(`Unexpected host API path: ${path}`);
+    });
+    const { container } = render(
+      <EventCreatePage config={{ ...config, hostAwsRegion: "ap-northeast-1" }} />,
+    );
+    await waitFor(() => expect(get).toHaveBeenCalledWith("admin/competitor-accounts"));
+    const wrapper = createWrapper(container);
+    wrapper.findAllInputs()[1]?.setInputValue("1");
+    wrapper.findAllInputs()[0]?.setInputValue("Cloud Cup");
+    const picker = multiselect(container);
+    picker?.openDropdown();
+    picker?.selectOptionByValue("cloud-only");
+    await waitFor(() =>
+      expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("event_create.col_team_region")).toBeInTheDocument();
+    const accountSelect = wrapper.findAllSelects()[0];
+    accountSelect?.openDropdown();
+    await waitFor(() =>
+      expect(
+        accountSelect
+          ?.findDropdown({ expandToViewport: true })
+          .findOptions()
+          .some((option) => option.getElement().textContent?.includes("111111111111")),
+      ).toBe(true),
+    );
+    accountSelect?.selectOptionByValue("111111111111", { expandToViewport: true });
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
+    const request = mocks.createEvent.mock.calls[0]?.[1];
+    expect(request.teams).toEqual([{ internalSlug: "team-1", awsAccountId: "111111111111" }]);
+    expect(request.problems).toEqual([
+      { problemId: "cloud-only", defaultRegion: "ap-northeast-1" },
+    ]);
+  });
+
+  it.each([
+    { maxTeams: 40, maxEventJobs: 512, teams: 5, problems: 20 },
+    { maxTeams: 40, maxEventJobs: 99, teams: 5, problems: 19 },
+    { maxTeams: 4, maxEventJobs: 512, teams: 4, problems: 20 },
+  ])(
+    "bounds a requested 5-team × 20-problem event before submission: %j",
+    async (limits) => {
+      const problems = Array.from({ length: 20 }, (_, i) =>
+        problem(`exercise-${i}`, "docker", "compose"),
+      );
+      mocks.listProblemSummaries.mockReturnValue(problems);
+      get.mockResolvedValue({
+        limits: { maxTeams: limits.maxTeams, maxEventJobs: limits.maxEventJobs },
+        items: problems.map((item) => ({ problemId: item.id, runtime: "docker" })),
+      });
+      const { container } = render(<EventCreatePage config={config} />);
+      await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
+      const wrapper = createWrapper(container);
+      wrapper.findAllInputs()[0]?.setInputValue("100 entries");
+      wrapper.findAllInputs()[1]?.setInputValue("5");
+      const picker = multiselect(container);
+      picker?.openDropdown();
+      await waitFor(() => expect(picker?.findDropdown().findOptions()).toHaveLength(20));
+      for (const item of problems) picker?.selectOptionByValue(item.id);
+      const submit = screen.getByRole("button", { name: "event_create.submit" });
+      expect(submit).toBeEnabled();
+      expect(wrapper.findAllInputs()[1]?.findNativeInput().getElement()).toHaveValue(limits.teams);
+      expect(screen.queryByText("local_host.job_count_invalid")).toBeNull();
+      fireEvent.click(submit);
+      await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
+      const body = mocks.createEvent.mock.calls[0]?.[1];
+      expect(body.teams).toHaveLength(limits.teams);
+      expect(body.problems).toHaveLength(limits.problems);
+      // Twenty real Cloudscape selection/rerender cycles exceed the default five seconds
+      // under CI coverage instrumentation. Keep every capacity assertion and bound this
+      // full-size interaction separately; this is not a production latency threshold.
+    },
+    20_000,
+  );
+
+  it("reopens capacity after deselection and limits team increases without dropping selected problems", async () => {
+    const problems = [
+      problem("first", "docker", "compose"),
+      problem("second", "docker", "compose"),
+      problem("third", "docker", "compose"),
+    ];
+    mocks.listProblemSummaries.mockReturnValue(problems);
+    get.mockResolvedValue({
+      limits: { maxTeams: 40, maxEventJobs: 6 },
+      items: problems.map((item) => ({ problemId: item.id, runtime: "docker" })),
+    });
+    const { container } = render(<EventCreatePage config={config} />);
+    await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
+    const wrapper = createWrapper(container);
+    const picker = multiselect(container);
+    picker?.openDropdown();
+    picker?.selectOptionByValue("first");
+    picker?.selectOptionByValue("second");
+    const third = () =>
+      picker
+        ?.findDropdown()
+        .findOptions()
+        .find((option) => option.getElement().textContent?.includes("third"));
+    expect(third()?.isDisabled()).toBe(true);
+    wrapper.findAllInputs()[1]?.setInputValue("40");
+    expect(wrapper.findAllInputs()[1]?.findNativeInput().getElement()).toHaveValue(3);
+    picker?.selectOptionByValue("second");
+    expect(third()?.isDisabled()).toBe(false);
+    picker?.selectOptionByValue("third");
+    wrapper.findAllInputs()[0]?.setInputValue("Bounded selection");
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createEvent.mock.calls[0]?.[1].problems.map(
+        (item: { problemId: string }) => item.problemId,
+      ),
+    ).toEqual(["first", "third"]);
   });
 
   it("says so when the host catalog cannot be loaded", async () => {

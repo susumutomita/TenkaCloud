@@ -3,9 +3,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "../App";
-import type { AppConfig } from "../config";
 import { AppConfigProvider } from "../config-context";
 import { I18nProvider } from "../i18n";
+import { localCompetitionConfig } from "./config";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing root element.");
@@ -17,27 +17,9 @@ async function boot(root: HTMLElement): Promise<void> {
     mode?: string;
     role?: string;
     apiBaseUrl?: string;
+    hasAws?: boolean;
   };
-  const expected = `${window.location.origin}/api`;
-  if (
-    runtime.mode !== "local-host" ||
-    runtime.role !== "participant" ||
-    runtime.apiBaseUrl !== expected
-  )
-    throw new Error(
-      "Invalid competition configuration. No demo or automatic-login fallback is permitted.",
-    );
-  // The normal competition portal and its real team-key login are reused. This
-  // entry cannot acquire localTeamLoginKey or activate the individual-practice UI.
-  const config: AppConfig = {
-    apiBaseUrl: expected,
-    coordinationApiUrl: expected,
-    eventTitle: "TenkaCloud Local Competition",
-    eventRegion: "local",
-    mode: "backend",
-    cloudMode: "real",
-    hasAws: false,
-  };
+  const config = localCompetitionConfig(runtime, window.location.origin);
   createRoot(root).render(
     <StrictMode>
       <I18nProvider>

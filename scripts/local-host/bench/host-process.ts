@@ -1,11 +1,8 @@
-import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { Readable } from "node:stream";
 import type { GatewayPortRange } from "../gateway-ports";
 import { formatGatewayPorts } from "../gateway-ports";
 import { portsFree } from "../ports";
-
-type HostChildProcess = ChildProcessByStdio<null, Readable, Readable>;
+import { type PrivateKeyProcess, spawnPrivateKeyProcess } from "../private-key-process";
 
 export interface HostProcessInfo {
   readonly adminOrigin: string;
@@ -20,7 +17,7 @@ export interface HostProcessHandle {
   stop(): Promise<void>;
 }
 
-/** Mutable while the startup banner is still being parsed line by line. */
+/** Public startup addresses and the organizer key from the private parent pipe. */
 interface PartialHostProcessInfo {
   adminOrigin?: string;
   participantOrigin?: string;
@@ -32,11 +29,9 @@ interface PartialHostProcessInfo {
 function parseStartupLine(line: string, partial: PartialHostProcessInfo): void {
   const admin = /^Host console: (.+)$/u.exec(line);
   const participant = /^Participant portal: (.+)$/u.exec(line);
-  const key = /^Host login key: (.+)$/u.exec(line);
   const database = /^State: (.+)$/u.exec(line);
   if (admin?.[1]) partial.adminOrigin = admin[1];
   if (participant?.[1]) partial.participantOrigin = participant[1];
-  if (key?.[1]) partial.hostKey = key[1];
   if (database?.[1]) partial.databasePath = database[1];
 }
 
@@ -72,13 +67,13 @@ export interface SpawnHostOptions {
   readonly readyTimeoutMs: number;
 }
 
-/** Spawns the same entry point `bun start` runs, bypassing package.json script-arg forwarding. */
-export function spawnHostProcess(options: SpawnHostOptions): Promise<HostProcessHandle> {
-  const child: HostChildProcess = spawn(
-    process.execPath,
+/** Runs the production local host through the benchmark's private organizer-key wrapper. */
+export async function spawnHostProcess(options: SpawnHostOptions): Promise<HostProcessHandle> {
+  const processHandle = spawnPrivateKeyProcess(
     [
+      process.execPath,
       "run",
-      "scripts/local-host/main.ts",
+      "scripts/local-host/bench/host-entry.ts",
       "--no-build",
       "--data",
       options.dataDirectory,
@@ -89,22 +84,35 @@ export function spawnHostProcess(options: SpawnHostOptions): Promise<HostProcess
       "--gateway-ports",
       formatGatewayPorts(options.gatewayPorts),
     ],
-    { cwd: options.repositoryRoot, stdio: ["ignore", "pipe", "pipe"] },
+    { cwd: options.repositoryRoot },
   );
+  try {
+    return await waitForHostProcess(processHandle, options.readyTimeoutMs);
+  } catch (error) {
+    await stopHostProcess(processHandle);
+    throw error;
+  }
+}
+
+function waitForHostProcess(
+  processHandle: PrivateKeyProcess,
+  readyTimeoutMs: number,
+): Promise<HostProcessHandle> {
+  const { child, stdout, stderr, privateOutput } = processHandle;
   const stderrChunks: string[] = [];
-  child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk.toString("utf8")));
-  const lines = createInterface({ input: child.stdout });
+  stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk.toString("utf8")));
+  const lines = createInterface({ input: stdout });
+  const privateLines = createInterface({ input: privateOutput });
   return new Promise<HostProcessHandle>((accept, reject) => {
     const partial: PartialHostProcessInfo = {};
     const timeout = setTimeout(() => {
       cleanup();
-      child.kill("SIGKILL");
-      reject(
-        new Error(
-          `Local host did not print its startup banner within ${String(options.readyTimeoutMs)}ms.`,
-        ),
-      );
-    }, options.readyTimeoutMs);
+      reject(new Error(`Local host did not become ready within ${String(readyTimeoutMs)}ms.`));
+    }, readyTimeoutMs);
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
     const onExit = (code: number | null) => {
       cleanup();
       reject(
@@ -115,11 +123,26 @@ export function spawnHostProcess(options: SpawnHostOptions): Promise<HostProcess
     };
     function cleanup(): void {
       clearTimeout(timeout);
-      child.off("exit", onExit);
       lines.off("line", onLine);
+      privateLines.off("line", onKey);
+      lines.close();
+      stdout.resume();
+      privateLines.close();
+      privateOutput.resume();
     }
     function onLine(line: string): void {
       parseStartupLine(line, partial);
+      acceptReady();
+    }
+    function onKey(line: string): void {
+      if (!/^[A-Za-z0-9_-]{43}$/u.test(line)) {
+        onError(new Error("Benchmark host returned an invalid private organizer key."));
+        return;
+      }
+      partial.hostKey = line;
+      acceptReady();
+    }
+    function acceptReady(): void {
       if (!isComplete(partial)) return;
       cleanup();
       const info: HostProcessInfo = {
@@ -129,29 +152,44 @@ export function spawnHostProcess(options: SpawnHostOptions): Promise<HostProcess
         databasePath: partial.databasePath,
       };
       const pid = child.pid;
-      if (pid === undefined) {
-        child.kill("SIGKILL");
-        reject(new Error("Local host process has no pid."));
-        return;
-      }
       accept({
         info,
         pid,
         databasePath: info.databasePath,
-        stop: () => stopHostProcess(child),
+        stop: () => stopHostProcess(processHandle),
       });
     }
-    child.once("exit", onExit);
+    void child.exited.then(onExit, onError);
     lines.on("line", onLine);
+    privateLines.on("line", onKey);
   });
 }
 
-async function stopHostProcess(child: HostChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
+async function stopHostProcess(processHandle: PrivateKeyProcess): Promise<void> {
+  const { child } = processHandle;
+  if (child.exitCode !== null || child.signalCode !== null) {
+    await processHandle.exited;
+    return;
+  }
   child.kill("SIGINT");
-  const exited = await Promise.race([
-    new Promise<boolean>((accept) => child.once("exit", () => accept(true))),
-    new Promise<boolean>((accept) => setTimeout(() => accept(false), 10_000)),
-  ]);
-  if (!exited && child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  if (await waitForExit(child, 10_000)) {
+    await processHandle.exited;
+    return;
+  }
+  child.kill("SIGKILL");
+  if (!(await waitForExit(child, 10_000)))
+    throw new Error("Benchmark child did not exit; retaining its temporary data.");
+  await processHandle.exited;
+}
+
+function waitForExit(child: PrivateKeyProcess["child"], timeoutMs: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise((accept) => {
+    const onExit = () => {
+      clearTimeout(timeout);
+      accept(true);
+    };
+    const timeout = setTimeout(() => accept(false), timeoutMs);
+    void child.exited.then(onExit);
+  });
 }

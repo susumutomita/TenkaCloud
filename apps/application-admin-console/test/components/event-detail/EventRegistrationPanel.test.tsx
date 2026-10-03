@@ -247,8 +247,15 @@ describe("event invitation settings", () => {
     fixture({ api, detail: { endsAt: "2027-02-01T09:00:00.000Z" } });
     await screen.findByText('registration.closed:{"claimed":0,"capacity":0}');
     const open = screen.getByRole("button", { name: "registration.open_button" });
-    const deadline = screen.getByLabelText("registration.deadline") as HTMLInputElement;
-    expect(new Date(deadline.value).toISOString()).toBe("2027-02-01T09:00:00.000Z");
+    const date = screen.getByRole("textbox", {
+      name: /registration.deadline_date$/u,
+    }) as HTMLInputElement;
+    const time = screen.getByRole("textbox", {
+      name: /registration.deadline_time$/u,
+    }) as HTMLInputElement;
+    expect(new Date(`${date.value.replaceAll("/", "-")}T${time.value}`).toISOString()).toBe(
+      "2027-02-01T09:00:00.000Z",
+    );
     fireEvent.click(screen.getByRole("checkbox"));
     expect(open).toBeDisabled();
 
@@ -258,9 +265,16 @@ describe("event invitation settings", () => {
     multiselect.selectOptionByValue("t2");
     multiselect.closeDropdown();
     expect(multiselect.findTokens()[0]?.getElement()).toHaveTextContent("Bravo");
-    fireEvent.change(deadline, { target: { value: "" } });
+    fireEvent.change(date, { target: { value: "" } });
     expect(open).toBeDisabled();
-    fireEvent.change(deadline, { target: { value: "2027-01-02T15:30" } });
+    fireEvent.change(date, { target: { value: "2027/02/" } });
+    expect(open).toBeDisabled();
+    fireEvent.change(date, { target: { value: "2027/01/02" } });
+    fireEvent.change(time, { target: { value: "" } });
+    expect(open).toBeDisabled();
+    fireEvent.change(time, { target: { value: "15:" } });
+    expect(open).toBeDisabled();
+    fireEvent.change(time, { target: { value: "15:30" } });
     expect(open).toBeEnabled();
     fireEvent.click(open);
 
@@ -269,7 +283,8 @@ describe("event invitation settings", () => {
       teamIds: ["t2"],
       closesAt: new Date("2027-01-02T15:30").toISOString(),
     });
-    expect(deadline).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: /registration.deadline_date$/u })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: /registration.deadline_time$/u })).toBeDisabled();
     expect(screen.getByRole("checkbox")).toBeDisabled();
     expect(multiselect.isDisabled()).toBe(true);
     expect(screen.getByRole("button", { name: "registration.refresh" })).toBeDisabled();
@@ -282,7 +297,8 @@ describe("event invitation settings", () => {
     expect(await screen.findByRole("textbox", { name: "registration.link" })).toHaveValue(
       "https://portal.example.test/join/tenant/e1#invite=new-invitation",
     );
-    expect(deadline).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: /registration.deadline_date$/u })).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: /registration.deadline_time$/u })).toBeEnabled();
   });
 
   it("refreshes claimed labels, selected slots, and the deadline from the server", async () => {
@@ -308,8 +324,15 @@ describe("event invitation settings", () => {
     expect(multiselect?.findTokens()[0]?.getElement()).toHaveTextContent(
       "registration.unallocated",
     );
-    const deadline = screen.getByLabelText("registration.deadline") as HTMLInputElement;
-    expect(new Date(deadline.value).toISOString()).toBe("2027-01-02T00:00:00.000Z");
+    const date = screen.getByRole("textbox", {
+      name: /registration.deadline_date$/u,
+    }) as HTMLInputElement;
+    const time = screen.getByRole("textbox", {
+      name: /registration.deadline_time$/u,
+    }) as HTMLInputElement;
+    expect(new Date(`${date.value.replaceAll("/", "-")}T${time.value}`).toISOString()).toBe(
+      "2027-01-02T00:00:00.000Z",
+    );
   });
 
   it("copies an invitation, replaces it on reissue, and reports clipboard failures", async () => {
@@ -322,6 +345,7 @@ describe("event invitation settings", () => {
     const original =
       "https://portal.example.test/participant/join/tenant/e1#invite=test-invitation";
     expect(link).toHaveValue(original);
+    expect(link).toHaveAttribute("readonly");
     fireEvent.click(screen.getByRole("button", { name: "registration.copy" }));
     expect(await screen.findByRole("button", { name: "registration.copied" })).toBeEnabled();
     expect(writeText).toHaveBeenCalledWith(original);
@@ -480,4 +504,120 @@ describe("event invitation settings", () => {
     expect(screen.getByRole("button", { name: "registration.close_button" })).toBeDisabled();
     expect(screen.queryByRole("textbox", { name: "registration.link" })).not.toBeInTheDocument();
   });
+});
+
+describe("host registration feature and permissions", () => {
+  it("explains a rejected host team pool without issuing an invitation", async () => {
+    const api = makeApi();
+    api.get.mockRejectedValue(new ApiError(409, JSON.stringify({ error: "invalid_pool" })));
+    fixture({ api, config: { mode: "local-host" } });
+
+    expect(await screen.findByText("registration.host_error_invalid_pool")).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("allows Admin to enable the default-off flag before opening registration", async () => {
+    const api = makeApi();
+    api.get.mockResolvedValue({
+      ...summary,
+      enabled: false,
+      featureEnabled: false,
+      canConfigure: true,
+    });
+    fixture({ api, config: { mode: "local-host" } });
+    expect(await screen.findByText("registration.feature_off")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    api.get.mockResolvedValue({
+      ...summary,
+      enabled: false,
+      featureEnabled: true,
+      canConfigure: true,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "registration.enable_feature" }));
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith("/feature-flags", {
+        key: "registration",
+        enabled: true,
+      }),
+    );
+    expect(await screen.findByText("registration.feature_on")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeEnabled();
+    expect(screen.getByText("registration.host_description")).toBeInTheDocument();
+  });
+  it("keeps settings read-only when the current host principal cannot configure, even if the tenant claim allows mutation", async () => {
+    const api = makeApi();
+    api.get.mockResolvedValue({ ...summary, featureEnabled: true, canConfigure: false });
+    fixture({ api, config: { mode: "local-host" }, canMutateTenant: true });
+    expect(
+      await screen.findByRole("button", { name: "registration.disable_feature" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "registration.close_button" })).toBeDisabled();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it("does not toggle the host feature after its authenticated API client disappears", async () => {
+    const api = makeApi();
+    api.get.mockResolvedValue({ ...summary, featureEnabled: true, canConfigure: true });
+    const view = fixture({ api, config: { mode: "local-host" } });
+    await screen.findByText("registration.feature_on");
+    api.get.mockClear();
+
+    view.update({ apiClient: null });
+    fireEvent.click(screen.getByRole("button", { name: "registration.disable_feature" }));
+
+    expect(api.put).not.toHaveBeenCalled();
+    expect(api.get).not.toHaveBeenCalled();
+    expect(screen.getByText("registration.feature_on")).toBeInTheDocument();
+  });
+
+  it("does not refresh registration after leaving while the feature toggle is pending", async () => {
+    const api = makeApi();
+    api.get.mockResolvedValue({
+      ...summary,
+      enabled: false,
+      featureEnabled: false,
+      canConfigure: true,
+    });
+    const toggle = deferred<unknown>();
+    api.put.mockReturnValue(toggle.promise);
+    const view = fixture({ api, config: { mode: "local-host" } });
+    fireEvent.click(await screen.findByRole("button", { name: "registration.enable_feature" }));
+    expect(api.put).toHaveBeenCalledWith("/feature-flags", {
+      key: "registration",
+      enabled: true,
+    });
+    const loads = api.get.mock.calls.length;
+
+    view.unmount();
+    await act(async () => toggle.resolve(undefined));
+
+    expect(api.get).toHaveBeenCalledTimes(loads);
+  });
+});
+
+describe("leaving registration while a save is pending", () => {
+  it.each(["succeeds", "fails"])(
+    "ignores a save response that %s after leaving",
+    async (outcome) => {
+      const api = makeApi();
+      const saving = deferred<typeof summary & { invitation: string }>();
+      api.put.mockReturnValue(saving.promise);
+      const view = fixture({ api });
+      fireEvent.click(await screen.findByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "registration.reissue" }));
+      expect(api.put).toHaveBeenCalledWith("/events/e1/registration", {
+        enabled: true,
+        teamIds: ["t1"],
+        closesAt: summary.closesAt,
+      });
+
+      view.unmount();
+      await act(async () => {
+        if (outcome === "succeeds") saving.resolve({ ...summary, invitation: "late-invitation" });
+        else saving.reject(new Error("connection lost"));
+      });
+      expect(screen.queryByRole("textbox", { name: "registration.link" })).not.toBeInTheDocument();
+    },
+  );
 });

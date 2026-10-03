@@ -103,6 +103,52 @@ describe("DynamoDbAdminAuditLogRepository", () => {
       userAgent: "Mozilla/5.0",
       extra: { reason: "downgrade" },
     });
+
+    const page = await repo.listPage("TENANT#tenant-a", { limit: 10 });
+    expect(page.items).toEqual([
+      row({
+        actorUsername: "alice@example.com",
+        target: "bob@example.com",
+        ipAddress: "203.0.113.5",
+        userAgent: "Mozilla/5.0",
+        extra: { reason: "downgrade" },
+      }),
+    ]);
+  });
+
+  it("keeps legacy history readable when actor-index keys and TTL were not stored", async () => {
+    const legacy = {
+      PK: "TENANT#tenant-a",
+      SK: "AUDIT#01HX",
+      actor: "operator-a",
+      action: "create_event",
+      outcome: "success",
+      occurredAt: "2026-05-20T12:00:00.000Z",
+    };
+    // This historical shape was read by the retired tenant audit handler. Its
+    // retained repository must still read saved rows without rewriting them.
+    const { ddb, commands } = recording();
+    await ddb.send(new PutCommand({ TableName: TABLE, Item: legacy }));
+    commands.length = 0;
+    const repo = new DynamoDbAdminAuditLogRepository(ddb, TABLE);
+
+    const page = await repo.listPage("TENANT#tenant-a", { limit: 10 });
+
+    expect(page.items).toEqual([
+      {
+        pk: legacy.PK,
+        sk: legacy.SK,
+        gsi1pk: "",
+        gsi1sk: "",
+        actor: legacy.actor,
+        action: legacy.action,
+        outcome: legacy.outcome,
+        occurredAt: legacy.occurredAt,
+        ttl: 0,
+      },
+    ]);
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toBeInstanceOf(QueryCommand);
   });
 
   it("should round-trip an appended row through listPage, newest-first", async () => {
@@ -401,7 +447,11 @@ describe("resolveAdminAuditLogRepository (runtime)", () => {
         TURSO_DATABASE_URL: "file:local.db",
         TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
       },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+      ssm: {
+        send: vi
+          .fn()
+          .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "secret-token" } }),
+      },
       createClient: vi.fn().mockReturnValue({
         execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
         batch: vi.fn().mockResolvedValue([]),

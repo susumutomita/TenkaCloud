@@ -2,88 +2,38 @@ import { MaturityBadge } from "@/components/MaturityBadge";
 
 export const metadata = { title: "Platform architecture" };
 
-# Platform architecture <MaturityBadge level="stable" />
-
-Read the platform through its users, responsibilities, components, and operation sequences.
-These diagrams describe the implementation, not an inventory of deployed AWS resources.
+# Platform architecture <MaturityBadge level="preview" />
 
 <h2 id="reading-order">Reading order</h2>
 
-Start with **05 System context → 04 Use cases** in the
-[Draw.io source](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio).
-Then read the views below. Use **01 SaaS / 02 Lite / 03 Local** for physical placement and wiring.
+Read the responsibilities and trust boundaries before selecting an execution environment. This draft candidate unifies local and cloud competition workflows without SaaS/SBT tenant provisioning.
 
-The [developer architecture guide](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/README.md)
-links each operation to its source files, completion criteria, and failure diagnostics.
-The shared diagrams use Japanese labels alongside implementation names.
+<h2 id="local-play-and-docker">Local competition and Docker</h2>
 
-<h2 id="cloud-responsibilities">Cloud responsibilities</h2>
+`make local` serves organizer and participant applications from one Bun process. Organizer roles and event/team keys authorize separate HTTP surfaces. SQLite and private key files retain competition state and runtime ownership. `make down` stops owned local runtimes while preserving data; explicit teardown is separate.
 
-[![Logical architecture](/docs/assets/architecture/logical.svg)](/docs/assets/architecture/logical.svg)
+New Docker events prepare up to 512 dormant jobs, then participants Start / resume and Stop (keep data). Defaults are team 3 / host 12 active environments and 4096 MiB summed memory caps. The 40 gateway slots are active-only; runtime ports persist while stopped. Writable layers and volumes survive, not RAM. There is no automatic eviction or reset. Existing events keep their legacy lifecycle. The generic catalog and workbench expose all 106 former local definitions as Challenges and 15 declared terminals. Real Docker/browser verification covers representative SQL, PostgreSQL terminal and Battle flows; full play-throughs of all definitions remain incomplete. Verifiers must remain separate from public challenge surfaces and other teams.
 
-SaaS uses SBT to manage tenants. Lite omits that tenant-management layer.
-Pooled and silo describe where organizer applications are placed, not additional logical responsibilities.
-The boxes do not correspond one-to-one to CDK stacks or AWS accounts.
+<h2 id="cloud-components">AWS exercises and cloud platform</h2>
 
-<h2 id="cloud-components">Cloud components</h2>
+AWS-service problems are cloud-only. The restored CloudFormation workflows use registered competitor roles and mandatory ExternalId in SSM. Participant Console and CLI sessions use the problem's separate participant role. [First-account IAM setup](https://github.com/susumutomita/TenkaCloud/blob/integration/host-only-20261001/infrastructure/BOOTSTRAP-IAM.md) uses standard `CDKToolkit`; ordinary `make deploy` creates it automatically only when missing, after displaying the target and permission scope. Deployment credentials are never participant credentials. Live AWS access remains a separate rehearsal.
 
-[![Cloud components](/docs/assets/architecture/cloud-components.svg)](/docs/assets/architecture/cloud-components.svg)
+The cloud foundation uses Lambda, Cognito and selectable Turso or DynamoDB, with the restored EventBridge → Step Functions → Lambda/CodeBuild deployment paths. `make deploy` and `make destroy` use the scoped CLI with reviewed IAM setup and ownership-checked teardown. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified.
 
-Event APIs, deployment workflows, participant APIs, the coordination dispatcher, and scheduled scoring have different owners.
-Tenant isolation combines request authentication and scope checks with storage keys and stack boundaries.
-Supported Turso configurations update deployment state through the StatusWriter Lambda; Step Functions does not connect directly to SQL.
+AWS resource exercises require a registered, verified competitor account. For your own self-test, confirm the hosting-account risk in the event creation dialog before an event or login keys are created. The acknowledgment is saved only for that event. Problem and participant roles may access or change hosting configuration and data, including across regions; consent does not provide isolation. A separate competitor account is recommended when third parties participate. For an existing event, choose Schedule → Deploy now and confirm the risk when prompted. Consent is saved before deployment continues; cancelling keeps the event unchanged. No recreation or key rotation is needed. Standalone and composite deployments without event membership remain closed to hosting-account targets. Multiple teams may share a separate competitor account in different regions, but global IAM remains shared and the catalog IAM audit has unresolved findings. This is not proof of complete isolation or least privilege for every problem.
 
-<h2 id="local-play-and-docker">Local play and Docker</h2>
+The reviewed native `ac26-crypto-battle` profile with `defaultScoreStealEnabled=false` needs no Docker or competitor AWS account. Setting the score-steal parameter to true retains its AWS-backed variant and requires a verified competitor account.
 
-[![Local Docker components](/docs/assets/architecture/local-components.svg)](/docs/assets/architecture/local-components.svg)
+<h2 id="problem-deployment">Problem deployment and scoring</h2>
 
-`make local` is a personal-practice path with a fixed local event and team.
-The control container and problem containers run under the same Docker daemon.
-Problem correctness is checked through HTTP `/verify`, progress is saved in SQLite,
-and containers are started and stopped through the Docker socket.
-A read-only socket mount does not make Docker API operations read-only.
+An authenticated organizer requests an event operation. Ownership is saved before external creation. Status, errors and recovery remain durable. Participant requests recheck team, event, problem and time; verified scores, progression and retry receipts commit together before success is returned. A failed verifier or uncertain cloud operation is not a success.
 
-The in-development multi-team local host and the crypto-battle development harness are separate paths.
-The `make local-dev` Simulator is enabled only by explicit opt-in; Docker problems do not require it.
+Cloud events and deployments save `catalogKey` for a private snapshot of catalog maps, hints, plugins and raw sources. An event created with catalog A continues using A after B is deployed or removes its problem. Lambda verifies pinned source hashes; CodeBuild uses the saved source ZIP key and exact S3 `VersionId`. Older unpinned records require recovery of their verified original snapshot through `CDK_LEGACY_CATALOG_KEY`; never assign the current catalog by guesswork. This recovery setting does not authorize upgrading an active original installation; finish its competitions on the installed version and satisfy the no-active-events preflight first.
 
-<h2 id="saas-tenant-onboarding">SaaS tenant onboarding</h2>
+<h2 id="diagram-sources">Editable diagram sources</h2>
 
-[![Tenant onboarding sequence](/docs/assets/architecture/tenant-onboarding.svg)](/docs/assets/architecture/tenant-onboarding.svg)
+The repository's `docs/architecture/README.md` identifies the restored AWS-icon `system-architecture.drawio` and its generator. The drawing preserves the AWS icons and layout conventions while documenting the current local and cloud boundaries. A diagram is not evidence of an AWS event rehearsal.
 
-Registration acceptance is separate from tenant readiness. Check the SBT lifecycle result.
-PLATINUM deploys a dedicated stack; other tiers use the existing pooled stack.
+<h2 id="cloud-design">Cloud design</h2>
 
-<h2 id="problem-deployment">Problem deployment</h2>
-
-[![Cloud problem deployment sequence](/docs/assets/architecture/problem-deployment.svg)](/docs/assets/architecture/problem-deployment.svg)
-
-This shows the AWS Lambda deployment path. HTTP acceptance counts are not successful deployment counts.
-Check each deployment job's COMPLETE or FAILED result.
-For cross-account deployment and status polling, each worker invocation retrieves the mandatory ExternalId from SSM SecureString and calls STS AssumeRole for the competitor role before calling CloudFormation with temporary credentials.
-The same-account development path may omit both role and ExternalId parameter; configuring only one is an error.
-The guide describes the Distributed Map alternative and the omitted CodeBuild path.
-
-<h2 id="cloud-answers-and-scoring">Cloud answers and scoring</h2>
-
-[![Cloud participant scoring sequence](/docs/assets/architecture/participant-scoring.svg)](/docs/assets/architecture/participant-scoring.svg)
-
-Flag submission and coordination operations use separate paths.
-Coordination state persistence and score delivery are also separate: pending scores are saved and delivery is retried.
-Scheduled scoring is triggered independently of participant submissions.
-
-<h2 id="local-play-startup-and-scoring">Local play startup and scoring</h2>
-
-[![Local startup and scoring sequence](/docs/assets/architecture/local-play-sequence.svg)](/docs/assets/architecture/local-play-sequence.svg)
-
-Starting a problem returns 202 before the actual Docker startup completes.
-Answers are checked by the problem verifier, then progress is persisted before the response.
-Verifier connection failures remain errors; they are not converted to incorrect answers or success.
-
-<h2 id="next-steps">Next steps</h2>
-
-- [Run an event](/developers/docs/operate/run-an-event/)
-- [Deployment and launch paths](/developers/docs/operate/deploy-paths/)
-- [Costs and verification boundaries](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md)
-
-Passing Turso tests does not verify a live event or its bill.
-SaaS's SBT DynamoDB resources and Lite's control-data configuration have different boundaries.
+The current cloud foundation selectively reuses single-installation Lambda + Turso/DynamoDB and Step Functions mechanisms. Logical event/team responsibilities are retained without speculative SaaS abstractions.

@@ -2,7 +2,7 @@ import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type ApiClient, ApiError } from "../../../src/api/client";
+import { type ApiClient, ApiError, createApiClient } from "../../../src/api/client";
 import type { EventDetail, ProgressionGateConfig } from "../../../src/api/events-client";
 import { EventProgressionGatePanel } from "../../../src/components/event-detail/EventProgressionGatePanel";
 
@@ -36,7 +36,7 @@ vi.mock("../../../src/api/events-client", async (importOriginal) => {
 const t = (key: string, params?: Record<string, string | number>) =>
   params ? `${key}:${JSON.stringify(params)}` : key;
 
-const fakeApi = {} as ApiClient;
+const fakeApi = createApiClient("https://host.example/api", "a.e30.c");
 
 const storedGate: ProgressionGateConfig = {
   gateProblemId: "p-gate",
@@ -65,6 +65,7 @@ const detail = (over: Partial<EventDetail> = {}): EventDetail =>
 const renderPanel = (
   args: {
     apiClient?: ApiClient | null;
+    localHost?: boolean;
     canMutateTenant?: boolean;
     detail?: EventDetail;
     onRefresh?: () => void;
@@ -72,6 +73,7 @@ const renderPanel = (
 ) =>
   render(
     <EventProgressionGatePanel
+      localHost={args.localHost}
       apiClient={args.apiClient === undefined ? fakeApi : args.apiClient}
       canMutateTenant={args.canMutateTenant ?? true}
       detail={args.detail ?? detail()}
@@ -128,6 +130,9 @@ describe("EventProgressionGatePanel", () => {
     );
     // 有効化に成功すると editor が現れる。
     expect(await screen.findByText("gate.save_button")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^gate\.gate_problem_label/u })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^gate\.unlock_targets_label/u })).toBeEnabled();
+    expect(screen.getByRole("spinbutton", { name: "gate.default_bonus_label" })).toBeEnabled();
   });
 
   it("should re-fetch the current flags right before the toggle PUT and merge onto them", async () => {
@@ -657,7 +662,7 @@ describe("EventProgressionGatePanel", () => {
 
   it("should ignore the flags response arriving after unmount", async () => {
     // effect の cancelled guard: unmount 後に届いた応答で setState しない。
-    let resolveFlags: (flags: Record<string, boolean>) => void = () => {};
+    let resolveFlags!: (flags: Record<string, boolean>) => void;
     getFlags.mockImplementationOnce(
       () =>
         new Promise<Record<string, boolean>>((resolve) => {
@@ -673,7 +678,7 @@ describe("EventProgressionGatePanel", () => {
 
   it("should ignore a flags fetch failure arriving after unmount", async () => {
     // effect の cancelled guard (エラー側): unmount 後の失敗を error state に反映しない。
-    let rejectFlags: (err: Error) => void = () => {};
+    let rejectFlags!: (err: Error) => void;
     getFlags.mockImplementationOnce(
       () =>
         new Promise<Record<string, boolean>>((_resolve, reject) => {
@@ -686,4 +691,47 @@ describe("EventProgressionGatePanel", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(getFlags).toHaveBeenCalledTimes(1);
   });
+});
+
+it("updates only the host gate flag with the local Admin API contract", async () => {
+  const put = vi.fn().mockResolvedValue({ flags: { challengePrerequisiteGate: true, saml: true } });
+  const adminApi: ApiClient = { ...fakeApi, put, organizerRole: "Admin" };
+  renderPanel({ localHost: true, apiClient: adminApi });
+  await screen.findByText("gate.host_disabled_alert_body");
+  toggle()?.findNativeInput().getElement().click();
+  await waitFor(() =>
+    expect(put).toHaveBeenCalledWith("feature-flags", {
+      key: "challengePrerequisiteGate",
+      enabled: true,
+    }),
+  );
+  expect(putFlags).not.toHaveBeenCalled();
+  await screen.findByText("gate.save_button");
+});
+
+it("lets a host Operator edit enabled gates while reserving the feature toggle for Admin", async () => {
+  getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+  const operatorApi: ApiClient = { ...fakeApi, organizerRole: "Operator" };
+  renderPanel({ localHost: true, apiClient: operatorApi });
+  await screen.findByText("gate.save_button");
+  expect(toggle()?.findNativeInput().getElement()).toBeDisabled();
+  expect(screen.getByRole("button", { name: /^gate\.gate_problem_label/u })).toBeEnabled();
+});
+
+it("warns a host Admin about invalid saved gate settings before confirming their removal", async () => {
+  getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+  const adminApi: ApiClient = { ...fakeApi, organizerRole: "Admin" };
+  renderPanel({
+    localHost: true,
+    apiClient: adminApi,
+    detail: detail({
+      progressionGate: storedGate,
+      progressionGateError: "invalid_progression_gate",
+    }),
+  });
+  expect(await screen.findByText("gate.host_invalid_config")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("gate.remove_button"));
+  expect(await screen.findByText("gate.host_modal_remove_body")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("gate.modal_cancel"));
+  expect(deleteGate).not.toHaveBeenCalled();
 });

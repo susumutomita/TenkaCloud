@@ -43,7 +43,10 @@ vi.mock("../../src/hooks/useEventOperations", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/hooks/useEventOperations")>();
   return { ...actual, useEventOperations: h.useEventOperations };
 });
-vi.mock("../../src/i18n", () => ({ useT: () => (k: string) => k }));
+vi.mock("../../src/i18n", () => ({
+  useT: () => (key: string, values?: Record<string, unknown>) =>
+    key === "event_detail.bulk_result_failed" ? `${key}:${String(values?.failed)}` : key,
+}));
 
 // EventHeaderActions stub: 各 action callback を 1 button で叩けるようにする。
 vi.mock("../../src/components/event-detail/EventHeaderActions", () => ({
@@ -206,7 +209,7 @@ const loadedDetail: EventDetail = {
 // useEventOperations の返り値 fixture (全 handler / setter は spy、 state は default)。
 const makeOperations = () => ({
   bulkInFlight: null,
-  bulkResult: null as { enqueued: number; skipped: number } | null,
+  bulkResult: null as { enqueued: number; skipped: number; failed?: number } | null,
   confirmEnd: false,
   confirmForceArchive: false,
   confirmTeardown: false,
@@ -331,6 +334,22 @@ describe("EventDetailPage wiring", () => {
     expect(ops.handleUnlockScoring).toHaveBeenCalled();
   });
 
+  it("warns about partial bulk acceptance instead of presenting complete success", () => {
+    ops.bulkResult = { enqueued: 3, skipped: 1, failed: 2 };
+    h.useEventDetail.mockReturnValue(detailHook({ detail: loadedDetail, error: null }));
+    const view = render(<EventDetailPage config={config} />);
+    expect(screen.getByText("event_detail.bulk_result_failed:2")).toBeInTheDocument();
+    expect(view.container.querySelector('[class*="type-warning"]')).toBeInTheDocument();
+    expect(view.container.querySelector('[class*="type-success"]')).toBeNull();
+  });
+  it.each([undefined, 0])("keeps the accepted-work message when failed is %s", (failed) => {
+    ops.bulkResult = { enqueued: 3, skipped: 1, failed };
+    h.useEventDetail.mockReturnValue(detailHook({ detail: loadedDetail, error: null }));
+    const view = render(<EventDetailPage config={config} />);
+    expect(screen.getByText("event_detail.bulk_result_body")).toBeInTheDocument();
+    expect(screen.queryByText(/event_detail.bulk_result_failed/u)).toBeNull();
+    expect(view.container.querySelector('[class*="type-success"]')).toBeInTheDocument();
+  });
   it("should render loaded and wire header / danger-zone / bulk-result / tabs", () => {
     ops.bulkResult = { enqueued: 3, skipped: 1 };
     h.useEventDetail.mockReturnValue(

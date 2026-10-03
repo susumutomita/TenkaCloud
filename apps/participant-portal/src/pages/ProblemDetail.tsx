@@ -28,6 +28,7 @@ import {
 } from "../data/problems";
 import { providerLabel } from "../data/providers";
 import { useProblemEndpoints } from "../hooks/useProblemEndpoints";
+import { useProblemInstructions } from "../hooks/useProblemInstructions";
 import { useI18n, useT } from "../i18n";
 import {
   findGateProblem,
@@ -71,6 +72,31 @@ function problemEndpointsRequest(
     problemId: problem?.problemId ?? "",
     enabled,
   };
+}
+
+function ProblemInstructionsStatus({
+  instructions,
+  t,
+}: {
+  instructions: ReturnType<typeof useProblemInstructions>;
+  t: (key: string) => string;
+}) {
+  return (
+    <>
+      {instructions.loading && <Box>{t("app.loading")}</Box>}
+      {instructions.error && (
+        <Alert
+          type="error"
+          header={t("problem_detail.instructions_error")}
+          action={
+            <Button onClick={instructions.retry}>{t("problem_detail.instructions_retry")}</Button>
+          }
+        >
+          {instructions.error}
+        </Alert>
+      )}
+    </>
+  );
 }
 
 function PlacedProblemVideo({ canRender, videoUrl }: { canRender: boolean; videoUrl?: string }) {
@@ -127,16 +153,6 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   // ja / metadata.i18n 不在 / 該当 field 不在は元の ja narrative にフォールバック (helper 側で処理)。
   // ローカル大会 (#3226) では catalog 投影に instructions が無く、認証済み team view の
   // gate 済み本文で補う (withGatedInstructions)。
-  const narrative = useMemo(
-    () =>
-      metadata
-        ? withGatedInstructions(
-            resolveLocalizedNarrative(metadata, locale),
-            localizedProblem?.instructions,
-          )
-        : undefined,
-    [metadata, locale, localizedProblem],
-  );
   const locked = isProblemDetailLocked(view?.eventGate);
   // Issue #2283: Progression Gate。 event gate (scoring_not_started) と同じ方針で
   // prerequisite-locked 問題も body / flag 提出 / endpoint form を render しない。
@@ -152,6 +168,19 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   const gateName = gateProblem?.name ?? view?.progression?.gateProblemId ?? "";
   const anyLocked = locked || prereqLocked;
   const canRenderBody = canRenderProblemDetailBody({ hasProblem: !!problem, locked: anyLocked });
+  const instructions = useProblemInstructions(metadata?.id, canRenderBody);
+  const narrative = useMemo(() => {
+    if (!metadata) return undefined;
+    const localized = resolveLocalizedNarrative(metadata, locale);
+    const bundled =
+      locale === "en"
+        ? (instructions.value?.englishInstructions ?? instructions.value?.instructions)
+        : instructions.value?.instructions;
+    return withGatedInstructions(
+      { ...localized, instructions: bundled ?? localized.instructions },
+      localizedProblem?.instructions,
+    );
+  }, [metadata, locale, localizedProblem, instructions.value]);
   const canRenderEndpoints = canRenderEndpointOverride({
     hasProblem: !!problem,
     hasMetadata: !!metadata,
@@ -183,6 +212,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。
        *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
+      {canRenderBody && <ProblemInstructionsStatus instructions={instructions} t={t} />}
       {canRenderBody && metadata && narrative && (
         <ProblemInfoSection metadata={metadata} narrative={narrative} t={t} />
       )}
@@ -197,6 +227,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       {/* Issue #1038 P0 #2: ProblemPanel (= flag 提出 / hint reveal の UI 本体) も lock。 */}
       {canRenderBody && problem && (
         <ProblemPanel
+          key={problem.jobId}
           problem={problem}
           apiBaseUrl={config.apiBaseUrl}
           sessionToken={sessionToken ?? ""}
@@ -229,6 +260,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           key={problem.jobId}
           problemId={problem.problemId}
           jobId={problem.jobId}
+          coordinationRunId={problem.coordinationRunId}
           score={problem.score}
           locale={locale}
           posture={problem.posture}

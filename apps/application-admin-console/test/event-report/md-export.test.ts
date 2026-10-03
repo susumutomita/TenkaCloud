@@ -171,3 +171,18 @@ describe("escapeMarkdownCell", () => {
     expect(escapeMarkdownCell("a | b\nc\\d")).toBe("a \\| b c\\\\d");
   });
 });
+
+it("preserves unavailable history and missing values in the exported report", () => {
+  const fixture = makeExport();
+  const result = buildEventReportMarkdown(
+    makeExport({
+      dataAvailabilityNote: "History is unavailable.",
+      scoreboard: fixture.scoreboard.map((row) => ({ ...row, problemsSolved: null })),
+      breakdown: fixture.breakdown.map((row) => ({ ...row, solvedCount: null, avgScore: null })),
+      disruptions: [],
+    }),
+  );
+  expect(result).toContain("History is unavailable.");
+  expect(result).toContain("—");
+  expect(result).not.toContain("null");
+});

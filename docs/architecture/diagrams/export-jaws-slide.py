@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the JAWS Yokohama 2026 slide diagrams from page 01 of system-architecture.drawio.
+"""Export the historical JAWS Yokohama 2026 diagrams from their preserved Draw.io copy.
 
 The slide zooms into page 01 by changing the viewBox of an <svg> that shows
 architecture-saas.svg, and swaps in a focused SVG that draws only one area.
@@ -23,8 +23,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
-SOURCE = REPO / "docs/architecture/diagrams/system-architecture.drawio"
 ASSETS = REPO / "landing/jaws-yokohama-2026/assets"
+# This talk describes the pinned legacy architecture, not the current cloud/local host.
+SOURCE = ASSETS / "system-architecture.drawio"
 PAGE = "saas-physical"
 TITLE = "TenkaCloud SaaSモード AWS物理構成図"
 MARGIN = 20
@@ -208,10 +209,9 @@ def main():
         capture_output=True,
         text=True,
     ).stdout.strip()
-    source = f"Source: docs/architecture/diagrams/system-architecture.drawio / {PAGE} at {commit}."
+    source = f"Source: landing/jaws-yokohama-2026/assets/system-architecture.drawio / {PAGE} at {commit}."
     note = "Draw.io CLI SVG export with no border; SVG coordinates equal the model coordinates."
 
-    shutil.copyfile(SOURCE, ASSETS / "system-architecture.drawio")
     model = page_model(SOURCE)
     out = ASSETS / "architecture-saas.svg"
     svg, width, height = export_svg(anchored(model), out)

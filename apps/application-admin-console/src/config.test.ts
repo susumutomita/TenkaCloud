@@ -38,7 +38,7 @@ describe("loadConfig demo mode (#1954)", () => {
   it("should return a no-AWS demo config without reading runtime-config or env vars", async () => {
     const cfg = await loadConfig({ VITE_DEMO_MODE: "1" });
     expect(cfg.mode).toBe("demo");
-    expect(cfg.tenantName).toBe("Demo Tenant");
+    expect(cfg.tenantName).toBe("Demo competition");
     expect(cfg.apiBaseUrl).toBe("https://demo.invalid");
     expect(cfg.samlIdpDirectory).toEqual({});
     expect(cfg.features).toBeDefined();

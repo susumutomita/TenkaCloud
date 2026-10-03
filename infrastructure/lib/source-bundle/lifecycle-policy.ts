@@ -1,4 +1,7 @@
-import type { SourceBundleConfig } from "../config/config-interface.js";
+export interface SourceBundleConfig {
+  readonly keepNoncurrentVersions?: number | string;
+  readonly expireAfterDays?: number | string;
+}
 
 /**
  * Issue #1056: deploy artifact (= `source.zip`) bucket の lifecycle policy。
@@ -15,7 +18,7 @@ const DEFAULT_KEEP_NONCURRENT_VERSIONS = 5;
 const DEFAULT_EXPIRE_AFTER_DAYS = 1;
 
 export interface SourceBundleLifecyclePolicy {
-  readonly Rules: ReadonlyArray<{
+  readonly Rules: readonly {
     readonly ID: string;
     readonly Status: "Enabled";
     readonly Filter: Record<string, never>;
@@ -23,7 +26,7 @@ export interface SourceBundleLifecyclePolicy {
       readonly NoncurrentDays: number;
       readonly NewerNoncurrentVersions: number;
     };
-  }>;
+  }[];
 }
 
 export function buildSourceBundleLifecyclePolicy(
@@ -33,6 +36,7 @@ export function buildSourceBundleLifecyclePolicy(
     config?.keepNoncurrentVersions,
     DEFAULT_KEEP_NONCURRENT_VERSIONS,
   );
+  if (keep > 100) throw new Error("sourceBundleConfig keepNoncurrentVersions must not exceed 100");
   const days = normalizePositiveInteger(config?.expireAfterDays, DEFAULT_EXPIRE_AFTER_DAYS);
   return {
     Rules: [
@@ -52,10 +56,12 @@ export function buildSourceBundleLifecyclePolicy(
 function normalizePositiveInteger(value: number | string | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
-    throw new Error(
-      `sourceBundleConfig value must be a positive integer, got ${JSON.stringify(value)}`,
-    );
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    !Number.isSafeInteger(n) ||
+    n < 1
+  ) {
+    throw new Error("sourceBundleConfig value must be a positive safe integer");
   }
   return n;
 }

@@ -19,9 +19,7 @@ const LOCALE_NAME: Record<LocaleCode, string> = {
  * application-admin-console の shell。TopNavigation はサインアウトのみ、
  * SideNavigation は ホーム / 問題 (catalog)。今後の PR で「競技イベント」「参加者」等が増える。
  *
- * テナント名は build 時 config.tenantName が pooled stack だと "Shared Pooled Tenant"
- * placeholder のまま漏れるので、ここでは表示しない。Home ページ側で JWT custom 属性
- * (custom:tenantId / 将来 custom:tenantName) からユーザの所属テナントを描画する。
+ * 開催環境の入口とサインイン中の運営者を表示する。SaaS のテナント情報は表示しない。
  *
  * shell 構造 (TopNav + SideNav + AppLayout) は @tenkacloud/web-kit の ShellLayout に集約し、
  * ここでは admin-console との差分 (= product title + user-menu + per-app nav) だけを props で渡す。
@@ -32,6 +30,8 @@ export function ShellLayout({
   demoMode = false,
   demoParticipantUrl,
   localHost = false,
+  cloudHost = false,
+  hostAwsEnabled = false,
 }: {
   children: ReactNode;
   /** Feature-flagged: show the Identity providers (SAML SSO) nav item only when enabled. */
@@ -42,6 +42,8 @@ export function ShellLayout({
   demoParticipantUrl?: string;
   /** Issue #3226: `bun start` のローカル大会。 cloud 専用の画面を nav に出さない。 */
   localHost?: boolean;
+  cloudHost?: boolean;
+  hostAwsEnabled?: boolean;
 }) {
   const auth = useAuth();
   const location = useLocation();
@@ -85,14 +87,12 @@ export function ShellLayout({
       text: t("nav.content_section"),
       items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
     },
-    // 管理系 (監査ログ / IdP) は日常運用メニューと混ざると見つけにくいので、 1 つの
+    // 管理系 (ユーザー / IdP) は日常運用メニューと混ざると見つけにくいので、 1 つの
     // category section にまとめて flat な羅列を解消する。
     {
       type: "section",
       text: t("nav.admin_section"),
       items: [
-        // Issue #1292: 自テナント監査ログ (= deploy / event 操作の audit)。
-        { type: "link", href: "/audit-log", text: t("nav.audit_log") },
         { type: "link", href: "/users", text: t("nav.tenant_users") },
         // Issue #2231: per-tenant runtime feature-flag toggle.
         { type: "link", href: "/settings", text: t("nav.settings") },
@@ -110,27 +110,43 @@ export function ShellLayout({
       ],
     },
   ];
-  // The local host runs events only; accounts, users, audit log and SAML are cloud features.
+  const cloudHostNavItems: SideNavigationProps.Item[] = [
+    {
+      type: "section",
+      text: t("nav.event_ops_section"),
+      items: [
+        { type: "link", href: "/events", text: t("nav.events") },
+        { type: "link", href: "/competitor-accounts", text: t("nav.competitor_accounts") },
+      ],
+    },
+  ];
   const localHostNavItems: SideNavigationProps.Item[] = [
     {
       type: "section",
       text: t("nav.event_ops_section"),
-      items: [{ type: "link", href: "/events", text: t("nav.events") }],
+      items: [
+        { type: "link", href: "/events", text: t("nav.events") },
+        ...(hostAwsEnabled
+          ? [
+              {
+                type: "link" as const,
+                href: "/competitor-accounts",
+                text: t("nav.competitor_accounts"),
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      type: "section",
+      text: t("nav.content_section"),
+      items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
     },
   ];
 
-  // Issue #3226 / #1954: a mode banner above the page for local hosting and the public demo.
+  // Public demo guidance is separate from the local competition's normal page content.
   let content: ReactNode = children;
-  if (localHost)
-    content = (
-      <SpaceBetween size="m">
-        <Alert type="info" header={t("local_host.banner_header")}>
-          {t("local_host.banner_body")}
-        </Alert>
-        {children}
-      </SpaceBetween>
-    );
-  else if (demoMode)
+  if (demoMode)
     content = (
       <SpaceBetween size="m">
         <Alert type="info" header={t("demo.banner_header")}>
@@ -147,11 +163,12 @@ export function ShellLayout({
       </SpaceBetween>
     );
 
+  const hostedNavItems = cloudHost ? cloudHostNavItems : cloudNavItems;
   return (
     <WebKitShellLayout<LocaleCode>
       title={localHost ? t("local_host.app_title") : t("app.title")}
       navHeaderText={t("nav.menu")}
-      navItems={localHost ? localHostNavItems : cloudNavItems}
+      navItems={localHost ? localHostNavItems : hostedNavItems}
       activeHref={location.pathname}
       onNavigate={(href) => navigate(href)}
       isAuthenticated={Boolean(auth.tokens)}

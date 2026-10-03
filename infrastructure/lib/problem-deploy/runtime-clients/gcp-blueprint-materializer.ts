@@ -68,6 +68,9 @@ import {
   fetchChallengePayloadDirectory,
 } from "../challenge-payload-artifacts.js";
 
+import { loadExecutionSourceBytes } from "../handlers/shared/execution-catalog.js";
+import { resolvePinnedExecutionSource } from "./pinned-execution-source.js";
+
 /** One file of a Terraform root module, path-relative to that module's own root. */
 export interface TerraformSourceFile {
   readonly relativePath: string;
@@ -76,6 +79,8 @@ export interface TerraformSourceFile {
 
 /** Where to read a GCP problem's Terraform root module from. */
 export interface GcpBlueprintSource {
+  readonly problemId?: string;
+  readonly catalogKey?: string;
   /** `problems/<category>/<id>` — the materialized-tree prefix (public-problem path only). */
   readonly problemDir: string;
   /** `runtime.entry` (or a composite target's `entry`) — relative to `problemDir`. */
@@ -192,6 +197,25 @@ export async function resolveGcpTerraformSource(
   deps: GcpBlueprintMaterializerDeps,
 ): Promise<readonly TerraformSourceFile[]> {
   assertRelativeEntry(source.entry);
+  const catalog = await resolvePinnedExecutionSource(source);
+  if (catalog && source.problemId) {
+    const problemId = source.problemId;
+    const paths = Object.keys(catalog.sources[problemId] ?? {});
+    const prefix = `${source.entry}/`;
+    const directoryPaths = paths.filter((path) => path.startsWith(prefix)).sort();
+    const singleFile = paths.includes(source.entry) ? [source.entry] : [];
+    const selected = directoryPaths.length > 0 ? directoryPaths : singleFile;
+    if (selected.length === 0) throw new Error("Pinned GCP Terraform source is missing.");
+    return Promise.all(
+      selected.map(async (path) => ({
+        relativePath:
+          directoryPaths.length > 0
+            ? path.slice(prefix.length)
+            : path.slice(path.lastIndexOf("/") + 1),
+        bytes: await loadExecutionSourceBytes(catalog, problemId, path),
+      })),
+    );
+  }
   if (source.challengePayloadUrl) {
     const fetchPayloadDirectory = deps.fetchPayloadDirectory ?? fetchChallengePayloadDirectory;
     return fetchPayloadDirectory(source.challengePayloadUrl, source.entry);
@@ -278,7 +302,7 @@ async function uploadOrReuseBlueprint(args: {
       Authorization: `Bearer ${args.accessToken}`,
       "Content-Type": "application/zip",
     },
-    body: args.zipBytes,
+    body: new Uint8Array(args.zipBytes),
   });
 
   if (uploadRes.status === StatusCodes.PRECONDITION_FAILED) {

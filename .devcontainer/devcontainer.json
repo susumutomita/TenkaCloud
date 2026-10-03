@@ -1,5 +1,5 @@
 {
-  "name": "TenkaCloud (local play, no AWS)",
+  "name": "TenkaCloud host development",
   "image": "mcr.microsoft.com/devcontainers/universal:noble",
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:4": {},
@@ -11,20 +11,15 @@
     "cpus": 8,
     "memory": "32gb"
   },
-  "postCreateCommand": "sh scripts/onboard/codespaces-setup.sh",
-  "postStartCommand": "sh scripts/onboard/codespaces-start-local.sh",
-  "forwardPorts": [3199, 5175, 18080, 18180, 18280],
+  "postCreateCommand": "bun install --frozen-lockfile --ignore-scripts && git submodule update --init problems",
+  "forwardPorts": [5174, 5175],
   "portsAttributes": {
-    "3199": {
-      "label": "Participant Portal dev-mock API (bun run dev, not make local)",
-      "onAutoForward": "silent"
+    "5174": {
+      "label": "Host organizer",
+      "onAutoForward": "notify"
     },
     "5175": {
-      "label": "Participant Portal + local-play API (make local)",
-      "onAutoForward": "openPreview"
-    },
-    "18080-18580": {
-      "label": "Problem challenge surface (loopback-only — use the integrated terminal or the Ports tab, see README)",
+      "label": "Participant portal",
       "onAutoForward": "notify"
     }
   }

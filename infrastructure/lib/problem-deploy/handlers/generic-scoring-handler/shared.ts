@@ -11,12 +11,26 @@ import { readCatalogBlob } from "../../../utils/read-catalog-blob.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
 import type { DisruptionsRepository } from "../../control-data/disruptions-repository.js";
+import type { EventRecord } from "../../control-data/events-repository.js";
 import type { ProblemEndpointsRepository } from "../../control-data/problem-endpoints-repository.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
+import { loadSavedCatalog, type ResolvedExecutionCatalog } from "../shared/execution-catalog.js";
+import {
+  type CatalogScope,
+  liveEventRoundWindow,
+  resolveSavedCatalogContext,
+  type SavedCatalogLoader,
+  savedScoringMap,
+} from "../shared/saved-catalog-context.js";
+import { isScoringActive } from "./scoring-active.js";
 
 /** Lambda-only composition for scoring, reconciliation, and Composite DAG continuation. */
 export interface GenericScoringSharedResources {
+  readonly catalogLoader?: SavedCatalogLoader;
+  readonly executionCatalog?: ResolvedExecutionCatalog;
+  readonly liveEvent?: EventRecord;
   readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly deploymentsTableName: string;
@@ -38,6 +52,7 @@ export interface GenericScoringSharedResources {
 export function buildSharedResources(runtime: ControlDataRuntime): GenericScoringSharedResources {
   return {
     runtime,
+    catalogLoader: loadSavedCatalog,
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
@@ -102,3 +117,31 @@ export function resolveDisruptionsRepository(
 }
 
 export * from "./scoring-kernel.js";
+
+export async function resolveScoringCatalog(
+  shared: GenericScoringSharedResources,
+  item: CatalogScope,
+): Promise<GenericScoringSharedResources> {
+  const context = await resolveSavedCatalogContext(shared, item);
+  if (!context) return shared;
+  const { catalog, event } = context;
+  return {
+    ...shared,
+    executionCatalog: catalog,
+    liveEvent: event,
+    problemsCatalog: { ...catalog.catalog },
+    problemsScoring: savedScoringMap(catalog),
+    problemsEndpoints: parseEndpointsEnv(JSON.stringify(catalog.endpoints)),
+    problemsDisruptions: parseDisruptionsCatalogEnv(JSON.stringify(catalog.disruptions)),
+  };
+}
+
+export async function resolveScoringDeployment(
+  shared: GenericScoringSharedResources,
+  item: Partial<DeploymentItem>,
+  nowIso: string,
+) {
+  const scoped = await resolveScoringCatalog(shared, item);
+  const current = { ...item, ...liveEventRoundWindow(scoped.liveEvent, item) };
+  return isScoringActive(current, nowIso) ? { shared: scoped, item: current } : undefined;
+}

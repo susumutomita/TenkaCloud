@@ -1,3 +1,4 @@
+import { assertSeparateCompetitorAccount } from "../shared/competitor-account-policy.js";
 /**
  * [Composite Runtime / Issue #2075] Route a `runtime.kind=composite` deploy
  * request through materialization (#2063) then per-target dispatch (#2066).
@@ -146,6 +147,8 @@ export async function startCompositeDeployment(
   if (planHasAwsTarget(plan) && (!request.awsAccountId || !request.region)) {
     throw new CompositeAwsInputRequiredError();
   }
+
+  if (planHasAwsTarget(plan)) assertSeparateCompetitorAccount(request.awsAccountId as string);
 
   // 3. Authorization is enforced by the route (Cognito JWT + role). The deploy
   //    quota is enforced ONCE for the whole parent — never once per target.

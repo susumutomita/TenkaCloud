@@ -414,6 +414,34 @@ describe("EventDangerZone teardown modal copy (local hosting vs SaaS)", () => {
     expect(dialog.queryByText(/Phase 3/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    [
+      en,
+      "Private native match data and saved match history will be permanently deleted. Event details, scores, and score history are kept.",
+    ],
+    [
+      ja,
+      "ネイティブ対戦の非公開データと保存された対戦履歴は完全に削除されます。イベント情報、スコア、スコア履歴は保持されます。",
+    ],
+  ] as const)(
+    "explains native cleanup and score retention before confirmation",
+    (dictionary, copy) => {
+      const c = controller({
+        config: { ...localHostConfig, mode: "cloud-host" },
+        detail: {
+          ...twoTeamsOneProblem,
+          nativeRuns: [
+            { runId: "run-1", problemId: "ac26-crypto-battle", status: "CLOSED", revision: 3 },
+          ],
+        },
+        teardown: { open: true },
+      });
+      render(<EventDangerZone controller={c} t={realT(dictionary)} />);
+      expect(screen.getByText(copy)).toBeInTheDocument();
+      expect(screen.getByTestId("modal-teardown-confirm")).toBeDisabled();
+    },
+  );
+
   it("should show accurate local-hosting copy in Japanese with no competitor-account wording", () => {
     const c = controller({
       config: localHostConfig,

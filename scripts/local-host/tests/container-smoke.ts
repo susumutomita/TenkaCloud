@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
+import { organizerToken } from "./organizer-login";
 
 const IMAGE = process.env.TENKACLOUD_HOST_IMAGE ?? "tenkacloud-host";
 const NAME = `tenkacloud-host-smoke-${String(process.pid)}`;
@@ -21,6 +22,25 @@ function docker(args: string[], check = true): string {
   if (check && result.status !== 0)
     throw new Error(`docker ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
   return `${result.stdout}${check ? "" : result.stderr}`.trim();
+}
+
+/** Capture this private exec terminal only in memory; never include its output in diagnostics. */
+function rotateOrganizerKey(): string {
+  const result = runDocker([
+    "exec",
+    "-t",
+    NAME,
+    "bun",
+    "run",
+    "scripts/local-host/local.ts",
+    "reset",
+    "--data",
+    "/data",
+  ]);
+  assert.ok(result.status === 0, "private organizer-key rotation failed");
+  const key = /Organizer key \(shown once\): ([A-Za-z0-9_-]{43})/u.exec(result.stdout)?.[1];
+  assert.ok(key, "private key display was absent");
+  return key;
 }
 
 async function freePort(): Promise<number> {
@@ -70,6 +90,7 @@ async function main(): Promise<void> {
   docker([
     "run",
     "--detach",
+    "--tty",
     "--name",
     NAME,
     "--read-only",
@@ -96,10 +117,14 @@ async function main(): Promise<void> {
     await waitFor("the participant health check", async () =>
       (await fetch(`${participant}/healthz`)).ok ? true : undefined,
     );
-    const key = docker(["exec", NAME, "cat", "/data/host-key"]);
+    const key = rotateOrganizerKey();
     const printed = docker(["logs", NAME], false);
-    assert.ok(printed.includes("Host login key: stored in /data/host-key"), printed);
-    assert.ok(!printed.includes(key), "the host key must not appear in container logs");
+    assert.ok(printed.includes("Organizer key: use make local-reset"), "missing recovery guidance");
+    assert.ok(
+      !printed.includes("Organizer key (shown once):"),
+      "a public container startup TTY must never display a key",
+    );
+    assert.ok(!printed.includes(key), "the organizer key must not appear in container logs");
 
     for (const origin of [admin, participant]) {
       const page = await fetch(`${origin}/`);
@@ -115,11 +140,12 @@ async function main(): Promise<void> {
       apiBaseUrl: `${admin}/api`,
       participantPortalUrl: participant,
       role: "admin",
+      hasAws: false,
     });
 
-    const login = await api(admin, "POST", "/host/login", "", { key });
-    assert.equal(login.status, 200, JSON.stringify(login.body));
-    const token = String(login.body.idToken);
+    const firstToken = await organizerToken({ admin, key });
+    const token = await organizerToken({ admin, key });
+    assert.ok(firstToken !== token, "each organizer-key login must receive an independent session");
 
     const catalog = await api(admin, "GET", "/host/catalog", token);
     assert.deepEqual(
@@ -165,7 +191,31 @@ async function main(): Promise<void> {
       teams[0]?.teamLoginKey ?? "",
     );
     assert.equal(projection.status, 200, JSON.stringify(projection.body));
-    console.log(`PASS container smoke: ${IMAGE} served a started Cryptography Battle to 2 teams.`);
+    const before = projection.body.projection as { ready: unknown; vault: unknown };
+    assert.deepEqual(before.ready, { count: 2, total: 2, me: true });
+    assert.ok(before.vault, "the original match must contain the team vault");
+    docker(["restart", NAME]);
+    await waitFor("participant recovery after container restart", async () =>
+      (await fetch(`${participant}/healthz`)).ok ? true : undefined,
+    );
+    await organizerToken({ admin, key });
+    for (const team of teams) {
+      const recovered = await api(participant, "GET", "/portal/me", team.teamLoginKey);
+      assert.equal(recovered.status, 200, JSON.stringify(recovered.body));
+    }
+    const recoveredProjection = await api(
+      participant,
+      "GET",
+      "/portal/me/coordination/projection",
+      teams[0]?.teamLoginKey ?? "",
+    );
+    assert.equal(recoveredProjection.status, 200, JSON.stringify(recoveredProjection.body));
+    const after = recoveredProjection.body.projection as { ready: unknown; vault: unknown };
+    assert.deepEqual(after.ready, before.ready, "both ready players must survive restart");
+    assert.deepEqual(after.vault, before.vault, "the same team vault must survive restart");
+    console.log(
+      `PASS container smoke: ${IMAGE} served a started Cryptography Battle to 2 teams; same-volume restart preserved keys, readiness and vault.`,
+    );
   } finally {
     docker(["rm", "--force", NAME], false);
     docker(["volume", "rm", VOLUME], false);

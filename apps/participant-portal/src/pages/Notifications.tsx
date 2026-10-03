@@ -27,7 +27,7 @@ const SEVERITY_COLOR: Record<NotificationView["severity"], "blue" | "red"> = {
  * Phase 1 以前の旧 deployment (eventId 無し) は backend が 404 を返すので、
  * `notificationsNoEvent` で告知して空白を出す。
  */
-export function NotificationsPage() {
+export function NotificationsPage({ enabled = true }: { enabled?: boolean } = {}) {
   const { notifications, notificationsError, notificationsNoEvent, markNotificationsSeen } =
     useTeamView();
   const t = useT();
@@ -38,14 +38,16 @@ export function NotificationsPage() {
   // page を開いたら latest occurredAt を context+localStorage に書いて未読 badge を **即時** 0 化。
   // markNotificationsSeen は巻き戻し防止 + 同値 skip なので no-op が連続しても害なし。
   useEffect(() => {
-    if (items && items.length > 0) {
+    if (enabled && items && items.length > 0) {
       // length>0 を確認済なので items[0] は必ず存在する (= ?. / ?? "" は noUncheckedIndexedAccess
       // 用の防御で実行時には到達不能)。
       /* v8 ignore next */
       const latest = items[0]?.occurredAt ?? "";
       markNotificationsSeen(latest);
     }
-  }, [items, markNotificationsSeen]);
+  }, [enabled, items, markNotificationsSeen]);
+
+  if (!enabled) return <Alert type="info">{t("notifications.unavailable")}</Alert>;
 
   const severityLabel = (s: NotificationView["severity"]) =>
     s === "info" ? t("notifications.severity_info") : t("notifications.severity_warning");

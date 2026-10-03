@@ -54,6 +54,10 @@ export interface DeployLogsResponse {
 }
 
 export type AssumeRoleStage = "competitor" | "participant_viewer";
+export type AwsAccessOperation =
+  | "ssm:GetParameter"
+  | "sts:AssumeRole"
+  | "cloudformation:DescribeStackResource";
 
 /**
  * Phase 3: 自チームのスコア変動履歴 (時系列降順)。
@@ -115,15 +119,7 @@ export interface LeaderboardScoreEventsResponse {
  *   - 残り TTL countdown を表示 (= expiration ISO 8601)
  * の用途に使う。 localStorage 等への persist は避ける (= 漏洩窓を伸ばさない)。
  */
-export interface CliCredentialsView {
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
-  readonly sessionToken: string;
-  /** ISO 8601 string。 STS Credentials.Expiration を直接 echo。 */
-  readonly expiration: string;
-  readonly region: string;
-  readonly awsAccountId: string;
-}
+export type { CliCredentialsView } from "@tenkacloud/portal-contracts";
 
 /**
  * 自 team の指定 deployment における attack-detected event の participant-safe な時系列。

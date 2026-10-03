@@ -9,8 +9,10 @@ import {
 } from "../../control-data/coordination-artifact-store.js";
 import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { S3CoordinationArtifactStore } from "../../control-data/s3-coordination-artifact-store.js";
+import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
 import {
   type CoordinationHandlerDeps,
+  coordinationScoreModes,
   handleCoordinationArtifactFetch,
   handleCoordinationOp,
   handleCoordinationProjection,
@@ -27,12 +29,16 @@ import { parseJsonBody, withBearerAuth } from "../participant-handler/route-help
 import { CoordinationOpBodySchema } from "../participant-handler/schemas.js";
 import { buildParticipantSharedResources } from "../participant-handler/shared.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
+import {
+  liveEventRoundWindow,
+  resolveSavedCatalogContext,
+} from "../shared/saved-catalog-context.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import {
   createScoreDeliveryControlDataRuntime,
   createScoreDeliveryDdbClient,
 } from "./coordination-backends.js";
-import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
+import { defaultS3PluginImporter, executionPluginImporter } from "./s3-plugin-importer.js";
 
 /**
  * Issue #1420: inter-team coordination dispatch を participant-portal Lambda から
@@ -104,6 +110,24 @@ const tickDeps: CoordinationTickDeps = {
   importer: coordinationImporter,
   store: coordinationDeps.store,
   config: coordinationConfig,
+  resolveCatalog: async (target, nowIso) => {
+    const context = await resolveSavedCatalogContext(shared, target);
+    if (!context) throw new Error("catalog_pin_missing: coordination tick catalog unavailable");
+    const { catalog, event } = context;
+    const stopped = event && !isScoringActive(liveEventRoundWindow(event, {}), nowIso);
+    const config =
+      stopped && !target.drainOnly && !target.initializeRunId
+        ? {}
+        : parseCoordinationConfig(JSON.stringify(catalog.coordination));
+    const importer = executionPluginImporter(catalog);
+    // Missing/corrupt artifacts cannot mutate state, leases, TTLs, or scoring.
+    if (config[target.moduleRef]) await importer(target.moduleRef);
+    return {
+      importer,
+      config,
+      store: { ...coordinationDeps.store, coordinationScoreModes: coordinationScoreModes(config) },
+    };
+  },
 };
 
 /** coordination handler の outcome を HTTP 応答に写す (= StatusCodes 名で意図を明示)。 */
@@ -118,6 +142,8 @@ function respondCoordination(
       return c.json({ error: outcome.error }, StatusCodes.UNPROCESSABLE_ENTITY);
     case "conflict":
       return c.json({ error: "conflict" }, StatusCodes.CONFLICT);
+    case "run_changed":
+      return c.json({ error: "coordination_run_changed" }, StatusCodes.CONFLICT);
     case "unavailable":
       return c.json({ error: "unavailable" }, StatusCodes.SERVICE_UNAVAILABLE);
     // [Issue #3125] 候補が複数で problemId 省略。 どれかを勝手に選ぶと 2 問目が永久に
@@ -192,6 +218,7 @@ app.post("/portal/me/coordination/op", (c) =>
         new Date().toISOString(),
         parsed.data.problemId,
         parsed.data.artifacts,
+        parsed.data.runId,
       );
       return respondCoordination(c, outcome);
     },

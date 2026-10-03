@@ -134,6 +134,28 @@ describe("POST /portal/me/coordination/op", () => {
     mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "conflict" });
     expect((await send("POST", OP, { op: {} })).status).toBe(StatusCodes.CONFLICT);
   });
+  it("rejects a stale captured run with the client-recognized terminal error", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "run_changed" });
+    const op = { kind: "inc", opId: "same-retry-id" };
+    const response = await send("POST", OP, { op, runId: "previous-run" });
+    expect(response.status).toBe(StatusCodes.CONFLICT);
+    expect(await response.json()).toEqual({ error: "coordination_run_changed" });
+    expect(mocks.handleCoordinationOp).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      op,
+      expect.any(String),
+      undefined,
+      undefined,
+      "previous-run",
+    );
+  });
+
+  it.each(["", 123, null, "r".repeat(201)])("rejects malformed runId %j", async (runId) => {
+    const response = await send("POST", OP, { op: {}, runId });
+    expect(response.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.handleCoordinationOp).not.toHaveBeenCalled();
+  });
   it("should 503 when the plugin is unavailable (importer seam)", async () => {
     mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "unavailable" });
     expect((await send("POST", OP, { op: {} })).status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
@@ -209,6 +231,7 @@ describe("POST /portal/me/coordination/op", () => {
       "p2",
       // [Issue #3152] The artifacts slot, empty for an op that submits none.
       undefined,
+      undefined,
     );
   });
 
@@ -221,6 +244,7 @@ describe("POST /portal/me/coordination/op", () => {
       expect.any(String),
       { kind: "inc" },
       expect.any(String),
+      undefined,
       undefined,
       undefined,
     );
@@ -240,6 +264,7 @@ describe("POST /portal/me/coordination/op", () => {
       expect.any(String),
       undefined,
       artifacts,
+      undefined,
     );
   });
 

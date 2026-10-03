@@ -14,6 +14,7 @@ import {
   type ParticipantSharedResources,
   queryTeamItems,
   resolveDeploymentsRepository,
+  resolveParticipantCatalog,
 } from "./shared.js";
 
 /**
@@ -84,7 +85,8 @@ export async function submitFlag(
   const blocked = await getCompetitionAccessBlock(shared, items, item);
   if (blocked) return blocked;
 
-  const scoring = scoringMap[item.problemId];
+  shared = await resolveParticipantCatalog(shared, items);
+  const scoring = (shared.executionCatalog ? shared.problemsScoring : scoringMap)[item.problemId];
   // Issue #1796: multi-flag は gate を通過した後の照合経路だけが分岐する (= gate / 認可は共通)。
   if (scoring?.kind === "multi-flag") {
     return submitMultiFlag(shared, item, scoring.flags, submittedFlag, flagId);

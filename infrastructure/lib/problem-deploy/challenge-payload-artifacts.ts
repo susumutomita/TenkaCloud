@@ -195,7 +195,9 @@ function enforceEntryBackstops(
   }
   let decompressedTotal = 0;
   for (const name of entryNames) {
-    decompressedTotal += entries[name].byteLength;
+    const entry = entries[name];
+    if (!entry) throw new Error(`challenge payload entry is missing: ${name}`);
+    decompressedTotal += entry.byteLength;
     if (decompressedTotal > limits.maxDecompressedBytes) {
       throw new Error(
         `challenge payload decompressed size exceeds the ${limits.maxDecompressedBytes}-byte cap`,
@@ -327,7 +329,11 @@ export async function fetchChallengePayloadDirectory(
   );
 
   return entryNames
-    .map((name) => ({ relativePath: relativeToEntryDir(name, entryDir), bytes: entries[name] }))
+    .map((name) => {
+      const bytes = entries[name];
+      if (!bytes) throw new Error(`challenge payload entry is missing: ${name}`);
+      return { relativePath: relativeToEntryDir(name, entryDir), bytes };
+    })
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 

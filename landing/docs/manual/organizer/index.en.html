@@ -49,18 +49,16 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -68,200 +66,20 @@
 <main class="doc">
 <article>
 <h1>Competition organizer manual <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>This manual is for someone who prepares TenkaCloud in their own AWS account and
-runs an event. Its executable instructions cover <strong>Lite mode</strong>, the path that
-can currently be offered to organizers. SaaS is kept separate in
-<a href="#saas-operating-status">SaaS operating status</a>.</p>
-<p>For your first event, start with the <a href="/docs/operate/run-an-event/index.en.html">event runbook</a> to plan attendance, helpers, venue and deadlines. It also links to a local organizer rehearsal problem.</p>
-<h2>What this manual helps you do</h2>
-<ul>
-<li>Decide whether your use case calls for Lite or SaaS.</li>
-<li>Prepare TenkaCloud with the Lite deployment pipeline.</li>
-<li>Confirm the Application Admin Console and Participant Portal.</li>
-<li>Rehearse problem start, scoring, reset, and stop with a test team.</li>
-<li>Find the input contract and exact error guidance before changing a setting.</li>
-</ul>
-<h2>Choose Lite or SaaS by use case</h2>
-<table>
-<thead>
-<tr>
-<th>Use case</th>
-<th>Mode</th>
-<th>Why</th>
-<th>Current guidance</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>One organizing group runs an event for a company, school, or meetup in its own AWS account</td>
-<td><strong>Lite</strong></td>
-<td>You need one TenkaCloud environment, not a tenant service</td>
-<td><strong>Recommended path in this manual</strong></td>
-</tr>
-<tr>
-<td>A problem author rehearses a complete event in their own AWS account</td>
-<td><strong>Lite</strong></td>
-<td>The same environment can exercise the organizer and participant screens</td>
-<td><strong>Recommended path in this manual</strong></td>
-</tr>
-<tr>
-<td>A service operator continuously provides separate administrators and tenants to multiple companies or schools</td>
-<td>SaaS</td>
-<td>You need tenant lifecycle and multi-tenant rollout</td>
-<td><strong>No recent end-to-end live verification; not provided as an organizer procedure</strong></td>
-</tr>
-<tr>
-<td>You operate TenkaCloud itself as a multi-tenant SaaS</td>
-<td>SaaS</td>
-<td>You need System Admin, pooled and silo tenants, and fleet updates</td>
-<td><strong>Code exists, but it is not the current self-service setup path</strong></td>
-</tr>
-</tbody></table>
-<p>Choose Lite when in doubt. Even when a use case belongs to SaaS, do not use the
-SaaS path for a live event unless your team has verified it in a real
-environment and can operate incident recovery.</p>
-<h2>The Lite deployment pipeline</h2>
-<p>“Deployment pipeline” here means a CloudFormation template that creates one
-CodeBuild project. CodeBuild then fetches the source, installs the required
-software, runs <code>make deploy</code>, and prints the access URLs in sequence. It does
-<strong>not</strong> use the AWS product named CodePipeline.</p>
-<p>The source is
-<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml"><code>infrastructure/templates/lite-pipeline.yaml</code></a>.</p>
-<h3>Deploy from the AWS console (recommended)</h3>
-<ol>
-<li>Open <a href="/docs/getting-started/index.en.html#lite-console-launcher">Getting started: Lite console launcher</a>.</li>
-<li>Sign in to AWS and enter <code>TenantAdminEmail</code> in CloudFormation.</li>
-<li>Read the IAM acknowledgement and create the stack.</li>
-<li>Open the CodeBuild link in the stack output and press <strong>Start build</strong>.</li>
-<li>Wait for the build status to become <code>Succeeded</code>.</li>
-<li>Copy the Application Admin Console and Participant Portal URLs from the end of the log.</li>
-<li>Use the invitation sent to <code>TenantAdminEmail</code> for the first sign-in.</li>
-</ol>
-<p>If the build fails, find the first <code>ERROR</code> in the CodeBuild log. Do not delete
-the launcher first. Look up the same text in the
-<a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a>.</p>
-<h3>Deploy from a local checkout</h3>
-<p>Use this path only when you can operate the repository:</p>
-<pre><code class="language-bash">make env-init ENV=development
-make deploy ENV=development
-</code></pre>
-<p><code>make env-init</code> asks for required values and creates
-<code>infrastructure/environments/development/.env</code>. Editing <code>.env</code> does not update
-a running environment; run <code>make deploy</code> after reviewing the change.</p>
-<h2>The Lite event flow</h2>
-<ol>
-<li>Sign in to the Application Admin Console as the organizer.</li>
-<li>Choose catalog problems. If you use a private Problem Pack, install and activate it before deployment.</li>
-<li>Create the event, teams, and problem selection.</li>
-<li>Register a test competitor AWS account.</li>
-<li>Start a problem for the test team and open its endpoint.</li>
-<li>Perform the scored action requested by the problem (a flag, answer, or game action) and confirm the score changes.</li>
-<li>Reset the problem and confirm a new environment can start.</li>
-<li>Stop the problem and confirm its stack is gone from the competitor account.</li>
-<li>Give participants only the Participant Portal URL, team key, start time, and
-<a href="/docs/manual/participant/index.en.html">participant manual</a>.</li>
-</ol>
-<p>For screen-level details, see
-<a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a>.</p>
-<h2>Choose where control data is stored</h2>
-<p>Control data means events, teams, problem state, endpoints, scores, organizer
-accounts, and audit records. It is separate from a participant&#39;s problem
-environment.</p>
-<table>
-<thead>
-<tr>
-<th>Choice</th>
-<th>Storage</th>
-<th>Use it when</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>dynamodb</code> (default)</td>
-<td>AWS DynamoDB</td>
-<td>You want control data stored within AWS</td>
-</tr>
-<tr>
-<td><code>turso</code></td>
-<td>Turso/libSQL</td>
-<td>You want to reduce database cost; Lite creates no DynamoDB tables or indexes</td>
-</tr>
-</tbody></table>
-<p><strong>To reduce DB cost, follow the <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md">Turso setup guide</a>.</strong>
-In the launcher, set <code>ControlDataBackend=turso</code>, <code>TursoDatabaseUrl</code>, and
-<code>TursoAuthTokenParameterName</code>. The last value is the SSM parameter name, not the
-token itself. From a checkout, <code>make turso-live ENV=development</code> guides setup.</p>
-<p>Other AWS costs and Turso usage limits still apply. The Turso path is covered by
-unit tests and CDK synth, but it has not been live-verified as a complete
-real-Turso, fresh-AWS, and billing flow. Rehearse your chosen setup before the event.</p>
-<p>Changing the backend later does not migrate data. DynamoDB and Turso do not
-synchronize, and retained DynamoDB tables can continue to incur cost.</p>
-<h2>Change settings</h2>
-<p>A first-time Lite setup asks for three values:</p>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Input</th>
-<th>Example</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>TENANT_ADMIN_EMAIL</code></td>
-<td>Email address for the first organizer sign-in</td>
-<td><code>organizer@example.com</code></td>
-</tr>
-<tr>
-<td><code>AWS_REGION</code></td>
-<td>AWS Region that will contain TenkaCloud</td>
-<td><code>ap-northeast-1</code></td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DEPLOY_EXTERNAL_ID</code></td>
-<td>Matching value used when TenkaCloud enters a competitor AWS account; 16–128 ASCII letters, digits, and <code>_ = , . @ : / -</code></td>
-<td><code>tc-school-2026-a91f</code></td>
-</tr>
-</tbody></table>
-<p>The <a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a> lists
-the purpose, format, default, character or numeric limits, example, and invalid
-input behavior for the remaining settings. The
-<a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a>
-lists each emitted message with its cause and operator action.</p>
-<h3>Scoring and cost warning email</h3>
-<p>When <code>CDK_PARAM_OPS_ALERT_EMAIL</code> is set, AWS sends a subscription confirmation
-email. After confirmation, email is sent for exactly these three conditions:</p>
-<ol>
-<li>The scoring function records at least one error in five minutes.</li>
-<li>The scoring function has no invocation for five consecutive minutes.</li>
-<li>Actual monthly AWS spend exceeds <code>CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD</code>.</li>
-</ol>
-<p>This does not notify every failure in problem start, stop, or cleanup. When the
-email setting is absent, these three warnings are not sent.</p>
-<h2>Before participants arrive</h2>
-<ul>
-<li>A test team used the same permissions and Region as participants.</li>
-<li>Every endpoint opened from the expected network.</li>
-<li>Each selected problem&#39;s scoring method changed the test team&#39;s score.</li>
-<li>Reset created a fresh problem environment.</li>
-<li>Stop removed the problem stack from the competitor account.</li>
-<li>The event time, team-key delivery, and support contact are decided.</li>
-<li>AWS administrator credentials, <code>.env</code>, and database tokens are not shared.</li>
-</ul>
-<h2>Teardown</h2>
-<p>Remove Lite first and the launcher CloudFormation stack last:</p>
-<pre><code class="language-bash">make destroy-all ENV=development
-</code></pre>
-<p>For a console deployment, run the launcher&#39;s CodeBuild project with
-<code>ACTION=destroy-all</code>. Deleting the launcher first removes the same automation
-path used to clean up Lite.</p>
-<h2>SaaS operating status</h2>
-<p>The repository contains <code>make deploy-saas</code>, the SBT control plane, tenant
-provisioning code, and the <code>tenkacloud-saas-pipeline</code> that updates existing
-tenants. However, there is no recent recorded run that takes a fresh AWS
-environment through setup, tenant creation, problem start, scoring, and
-teardown.</p>
-<p>This manual therefore does not present SaaS commands as an alternative Lite
-procedure. Use <a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a>
-only as an architecture reference, then verify the full flow in a dedicated
-environment before evaluating SaaS.</p>
+<p>This documents the unpublished integration candidate. Local event/team operation is implemented; cloud platform deployment and complete catalog playability are not verified release claims.</p>
+<h2 id="prepare-local-host">Prepare the local host</h2><p>Follow <a href="/docs/getting-started/index.en.html">getting started</a> with <code>make local</code>. Keep one process per private data directory. Sign in with the organizer key only; no username, password or local SAML account is needed. If lost, run <code>make local-reset</code> in an interactive terminal with the same data directory. It rotates organizer access and signs out organizers while preserving events, scores, progress, participant keys and problem environments.</p>
+<h2 id="run-the-event">Run the event</h2><p>Create teams and select problems, prepare dormant Docker jobs, inspect failures, then start the schedule. Participants start each Docker environment when needed; AWS deployment remains a separate operation. Distribute each team&#39;s invitation only to that team. Rehearse correct and incorrect submissions, hints, scores, one team&#39;s failure, restart and teardown. End Event stops scoring; it does not prove resources were removed.</p>
+<p>All 106 former local problems are intended to become Challenge competitions. The generic catalog/workbench is implemented. Real Docker/browser checks covered SQL access and a PostgreSQL terminal, three checkpoints, team isolation and data-preserving restart. Other problem and terminal variants remain unverified. Use the actual selected problem&#39;s evidence, not its presence in a picker, to decide event readiness.</p>
+<h2 id="aws-problems">AWS problems use cloud hosting</h2><p>AWS-service problems are for cloud hosting only. Local hosting rejects the old AWS-region switch. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Ordinary deploy automatically bootstraps a missing standard CDKToolkit after displaying its scope; review the <a href="https://github.com/susumutomita/TenkaCloud/blob/integration/host-only-20261001/infrastructure/BOOTSTRAP-IAM.md">IAM setup guide</a>. Deployment operators can administer TenkaCloud resources across environments in the selected account; environment names are not an IAM security boundary. Live AWS deployment remains unverified. Live AWS and hosted Turso event capacity remain unverified. Do not use a local command as an alternative cloud launcher. Existing AWS resources require their original reviewed cleanup procedure; keep their ownership records.</p>
+<p>AWS resource exercises require a registered, verified competitor account. For your own self-test, confirm the hosting-account risk in the event creation dialog before an event or login keys are created. The acknowledgment is saved only for that event. Problem and participant roles may access or change hosting configuration and data, including across regions; consent does not provide isolation. A separate competitor account is recommended when third parties participate. For an existing event, choose Schedule → Deploy now and confirm the risk when prompted. Consent is saved before deployment continues; cancelling keeps the event unchanged. No recreation or key rotation is needed. Standalone and composite deployments without event membership remain closed to hosting-account targets. Multiple teams may share a separate competitor account in different regions, but global IAM remains shared and the catalog IAM audit has unresolved findings. This is not proof of complete isolation or least privilege for every problem.</p>
+<p>The reviewed native <code>ac26-crypto-battle</code> profile with <code>defaultScoreStealEnabled=false</code> needs no Docker or competitor AWS account. Setting the score-steal parameter to true retains its AWS-backed variant and requires a verified competitor account.</p>
+<p>Before an original unpinned Lite upgrade, finish all competitions on the installed version and satisfy the explicit <a href="/docs/operate/deploy-paths/index.en.html">no-active-events preflight</a>. Generic <code>--yes</code> and a legacy catalog key do not bypass it; historical data is not migrated automatically.</p>
+<h2 id="storage-and-shutdown">Storage and shutdown</h2><p>The local database is SQLite. Back up the complete private data directory consistently, including key files. <code>make down</code> preserves event data and stopped Docker state; use the same data directory on restart. New on-demand Docker environments stay stopped after <code>make local</code> until a participant resumes them. It does not delete AWS resources or reset the event clock. Never delete state that still owns environments.</p>
+<p>Cloud hosting reuses the original Lambda + Turso/DynamoDB backend; <code>make deploy</code> requires reviewed IAM setup; <code>make destroy</code> confirms targets and deletes platform-owned data by default. It leaves external Turso rows; <code>make destroy-all</code> explicitly resets them. Exercise cleanup uses event Teardown before platform removal. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified. A zero-fixed-cost cloud platform has not been established. AWS exercise charges are separate.</p>
+<p>New Docker events prepare dormant team/problem jobs, up to 512 per event. Participants use <strong>Start / resume</strong> and <strong>Stop (keep data)</strong>. Stop retains the existing writable layer and volumes, not RAM; there is no automatic eviction or reset. Existing events retain their legacy lifecycle.</p>
+<p>Defaults allow 3 active environments per team, 12 across the host and a 4096 MiB sum of configured container-memory caps. These are admission limits, not measured usage or machine-size guarantees. New Compose plans preserve authored caps and add 512 MiB memory, 1 CPU and 256 PIDs where missing. Override admission limits with <code>make local LOCAL_ARGS=&quot;--max-active-per-team 3 --max-active-environments 12 --container-memory-mib 4096&quot;</code> after reviewing the workload.</p>
+<p>The 40 gateway slots apply only to active environments. Dense runtime-port assignments survive Stop. A synthetic 20-problem × 5-team plan allocated 100 jobs using 105 runtime ports; this proves allocation and lifecycle behavior, not concurrent Docker performance. See <code>docs/local-play-requirements.md</code> for measurement guidance.</p>
+<p><code>--drain-events</code> is rejected in the restored backend; finish event Teardown before removing the platform.</p>
 
 </article>
 </main>

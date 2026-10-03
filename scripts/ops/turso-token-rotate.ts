@@ -1,4 +1,29 @@
-import { resolveTursoTargetOrLog, type TursoOpsDeps, type TursoResetTarget } from "./turso-reset";
+import { cloudControlDataConfiguration } from "../../infrastructure/lib/cloud-hosting/config";
+import type { ProcessRunner } from "../cli/process";
+
+interface TursoResetTarget {
+  readonly databaseUrl: string;
+  readonly parameterName: string;
+}
+interface TursoOpsDeps {
+  readonly env: NodeJS.ProcessEnv;
+  readonly environment: string;
+  readonly processRunner: ProcessRunner;
+  readonly httpPost: (url: string, authToken: string, body: unknown) => Promise<unknown>;
+  readonly confirm: (question: string) => Promise<boolean>;
+  readonly log: (message: string) => void;
+  readonly interactive: boolean;
+  readonly assumeYes: boolean;
+}
+function resolveTursoTargetOrLog(env: NodeJS.ProcessEnv): TursoResetTarget {
+  const configuration = cloudControlDataConfiguration(env);
+  if (configuration.kind !== "turso")
+    throw new Error("Token rotation requires CDK_PARAM_CONTROL_DATA_BACKEND=turso.");
+  return {
+    databaseUrl: configuration.databaseUrl,
+    parameterName: configuration.authTokenParameterName,
+  };
+}
 
 /**
  * `make turso-token-rotate` (= `tenkacloud turso-live rotate-token`) の本体。
@@ -119,7 +144,23 @@ function resolveDatabaseName(
   target: TursoResetTarget,
 ): string | undefined {
   const explicit = deps.database?.trim();
-  if (explicit) return explicit;
+  if (explicit) {
+    const shown = deps.processRunner.run(deps.tursoExecutable, [
+      "db",
+      "show",
+      explicit,
+      "--http-url",
+    ]);
+    if (
+      shown.status !== 0 ||
+      normalizeDatabaseHost(shown.stdout) !== normalizeDatabaseHost(target.databaseUrl)
+    ) {
+      throw new Error(
+        "The explicit Turso database does not match the selected database URL; no token was changed.",
+      );
+    }
+    return explicit;
+  }
   const listed = deps.processRunner.run(deps.tursoExecutable, ["db", "list"]);
   if (listed.status !== 0) {
     const detail = listed.stderr.trim() || listed.stdout.trim() || `exit ${listed.status}`;
@@ -244,11 +285,15 @@ function storeToken(
 
 /** 万一 Turso 側の応答が token を echo しても表示されないようにする。 */
 function redactToken(message: string, token: string): string {
-  return message.split(token).join("***");
+  return [token, JSON.stringify(token).slice(1, -1), encodeURIComponent(token)].reduce(
+    (text, secret) => text.split(secret).join("***"),
+    message,
+  );
 }
 
 interface PipelineResult {
   readonly type?: string;
+  readonly response?: { readonly type?: string };
   readonly error?: { readonly message?: string };
 }
 
@@ -274,8 +319,12 @@ async function verifyToken(
       token,
       SELECT_ONE_BODY,
     )) as { readonly results?: readonly PipelineResult[] };
-    const failed = (raw.results ?? []).find((result) => result.type === "error");
-    return failed ? fail(failed.error?.message ?? "unknown pipeline error") : true;
+    const first = raw?.results?.[0];
+    const failed = raw?.results?.find((result) => result.type === "error");
+    if (failed) return fail(failed.error?.message ?? "unknown pipeline error");
+    return first?.type === "ok" && first.response?.type === "execute"
+      ? true
+      : fail("invalid SELECT 1 response");
   } catch (error) {
     return fail(error instanceof Error ? error.message : String(error));
   }
@@ -307,7 +356,7 @@ function logPlan(deps: TursoTokenRotateDeps, target: TursoResetTarget, databaseN
 }
 
 export async function runTursoTokenRotate(deps: TursoTokenRotateDeps): Promise<number> {
-  const target = resolveTursoTargetOrLog(deps.env, deps.log);
+  const target = resolveTursoTargetOrLog(deps.env);
   if (!target) return 1;
 
   const databaseName = resolveDatabaseName(deps, target);

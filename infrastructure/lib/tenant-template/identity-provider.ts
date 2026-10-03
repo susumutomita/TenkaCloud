@@ -1,6 +1,5 @@
 import { aws_cognito, Duration, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
-import type { IdentityDetails } from "../interfaces/identity-details.js";
 import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
 import { attachCognitoCustomLoginDomain } from "../security/cognito-custom-domain.js";
 import {
@@ -149,7 +148,6 @@ export class IdentityProvider extends Construct {
    * 例: `https://TenkaCloud-app-tenant1.auth.ap-northeast-1.amazoncognito.com`
    */
   public readonly cognitoDomainUrl: string;
-  public readonly identityDetails: IdentityDetails;
   /**
    * Issue #1340 Phase 2: SAML IdP attach 用に CfnUserPoolClient (L1) を expose する。
    * `attachTenantSamlIdentityProviders` が SupportedIdentityProviders に追加するため
@@ -369,13 +367,5 @@ export class IdentityProvider extends Construct {
       userPoolId: this.tenantUserPool.userPoolId,
       config: props.loginCustomDomain,
     });
-
-    this.identityDetails = {
-      name: "Cognito",
-      details: {
-        userPoolId: this.tenantUserPool.userPoolId,
-        appClientId: this.tenantUserPoolClient.userPoolClientId,
-      },
-    };
   }
 }

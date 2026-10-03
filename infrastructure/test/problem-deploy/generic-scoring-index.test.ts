@@ -797,3 +797,45 @@ describe("parsePhasesEnv (exported)", () => {
     expect(parsePhasesEnv(raw)).toEqual({ p1: [{ name: "x", afterMinutes: 1, effect: {} }] });
   });
 });
+
+describe("saved scoring catalog", () => {
+  it("uses saved A rules and phases after live B removes the problem", async () => {
+    shared.catalogLoader = vi.fn(async () => ({
+      catalogKey: "catalogs/saved-A.json",
+      catalog: { p1: "p1" },
+      scoring: {
+        p1: {
+          kind: "uptime-flat",
+          pointsPerSuccess: 7,
+          endpoints: [{ outputKey: "Url", path: "/", expectStatus: [200] }],
+        },
+      },
+      endpoints: {},
+      disruptions: {},
+      phases: { p1: [{ name: "A phase", afterMinutes: 0 }] },
+      coordination: {},
+    }));
+    await runWith({ ...baseItem(), eventId: undefined, catalogKey: "catalogs/saved-A.json" });
+    expect(mocks.runUptimeFlatKind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scoring: expect.objectContaining({ pointsPerSuccess: 7 }),
+        phases: [{ name: "A phase", afterMinutes: 0 }],
+      }),
+    );
+    expect(shared.problemsScoring).toEqual({});
+  });
+
+  it("does not award scores or gate bonuses when saved catalog cannot be verified", async () => {
+    shared.catalogLoader = vi.fn(async () => {
+      throw new Error("Execution artifact integrity mismatch.");
+    });
+    shared.problemsScoring = { p1: { kind: "uptime-flat" } };
+    await runWith({ ...baseItem(), eventId: undefined, catalogKey: "catalogs/saved-A.json" });
+    expect(mocks.runUptimeFlatKind).not.toHaveBeenCalled();
+    expect(
+      ddb.send.mock.calls.some(
+        ([command]) => command instanceof UpdateCommand || command instanceof PutCommand,
+      ),
+    ).toBe(false);
+  });
+});

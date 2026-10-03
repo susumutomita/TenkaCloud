@@ -1,6 +1,14 @@
-import { spawnSync } from "node:child_process";
+import { type SpawnSyncReturns, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -63,9 +71,9 @@ function writePackStoreFixture(root: string): void {
 function packageFixture(
   root: string,
   workDir: string,
-  env: Record<string, string> = {},
-): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", [PACKAGE_SCRIPT], {
+  env: NodeJS.ProcessEnv = {},
+): SpawnSyncReturns<string> {
+  return spawnSync("/bin/bash", [PACKAGE_SCRIPT], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -77,7 +85,7 @@ function packageFixture(
 }
 
 function listArchive(archive: string): string[] {
-  const result = spawnSync("unzip", ["-Z1", archive], { encoding: "utf8" });
+  const result = spawnSync("/usr/bin/unzip", ["-Z1", archive], { encoding: "utf8" });
   expect(result.status).toBe(0);
   return result.stdout.trim().split("\n");
 }
@@ -88,7 +96,7 @@ afterEach(() => {
   }
 });
 
-describe("scripts/package-source-bundle.sh (#1552)", () => {
+describe("scripts/package-source-bundle.sh (#1552)", { timeout: 30_000 }, () => {
   // bash + zip を spawn する実 I/O テスト。単体では ~2s だが全 suite 並列時は
   // fork 飽和で default 5s を超え flake するため、明示 timeout を持つ。
   it("should package allowlisted source roots without AWS credentials", { timeout: 30_000 }, () => {
@@ -107,7 +115,7 @@ describe("scripts/package-source-bundle.sh (#1552)", () => {
     expect(files).toContain("scripts/runtime.sh");
     expect(files).toContain("problems/challenges/demo/metadata.json");
     expect(files).toContain("packages/runtime/src/index.ts");
-    expect(files).toContain("apps/admin-console/dist/index.html");
+    expect(files.some((file) => file.startsWith("apps/admin-console/"))).toBe(false);
     expect(files).toContain("apps/application-admin-console/dist/index.html");
     expect(files).toContain("apps/participant-portal/dist/index.html");
     expect(files.some((file) => file.includes("cdk.out"))).toBe(false);
@@ -116,7 +124,7 @@ describe("scripts/package-source-bundle.sh (#1552)", () => {
     // No `.tenkacloud/pack-store` on disk (packs are optional) → bundle unchanged.
     expect(files.some((file) => file.includes(".tenkacloud"))).toBe(false);
 
-    const packageJson = spawnSync("unzip", ["-p", archive, "package.json"], {
+    const packageJson = spawnSync("/usr/bin/unzip", ["-p", archive, "package.json"], {
       encoding: "utf8",
     });
     expect(packageJson.status).toBe(0);
@@ -211,6 +219,77 @@ describe("scripts/package-source-bundle.sh (#1552)", () => {
 
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}\n${result.stderr}`).toContain("archive exceeds upload limit");
+  });
+
+  it("should exclude dotenv and private credentials from every source and application dist", () => {
+    const { root, workDir } = makeFixture();
+    for (const path of [
+      "infrastructure/.env",
+      "infrastructure/.env.production",
+      "scripts/.env.local",
+      "packages/runtime/.aws/credentials",
+      "problems/demo/private.pem",
+      "apps/application-admin-console/dist/.env.production",
+      "apps/participant-portal/dist/key.key",
+    ])
+      write(root, path, "DO_NOT_UPLOAD_SECRET");
+    const result = packageFixture(root, workDir);
+    expect(result.status, result.stderr).toBe(0);
+    const files = listArchive(join(workDir, "source.zip"));
+    expect(files.some((file) => /\.env|credentials|private\.pem|key\.key/.test(file))).toBe(false);
+  });
+
+  it("should preserve unrelated data in a nonempty custom work directory", () => {
+    const { root, workDir } = makeFixture();
+    write(root, ".cache/bundle-test/keep.txt", "keep");
+    const result = packageFixture(root, workDir);
+    expect(result.status).not.toBe(0);
+    expect(readFileSync(join(workDir, "keep.txt"), "utf8")).toBe("keep");
+  });
+
+  it("should reject traversing work and archive paths before touching files", () => {
+    const { root, workDir } = makeFixture();
+    write(root, "keep.txt", "keep");
+    for (const env of [
+      { SOURCE_BUNDLE_WORK_DIR: `${workDir}/../..` },
+      { SOURCE_BUNDLE_ARCHIVE_PATH: `${workDir}/../../outside.zip` },
+    ]) {
+      const result = packageFixture(root, workDir, env);
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toContain("parent traversal");
+    }
+    expect(readFileSync(join(root, "keep.txt"), "utf8")).toBe("keep");
+  });
+
+  it("should reject work directories reached through a symlink", () => {
+    const { root } = makeFixture();
+    mkdirSync(join(root, "actual"));
+    symlinkSync(join(root, "actual"), join(root, "linked"), "dir");
+    const result = packageFixture(root, join(root, "linked", "work"));
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain("symlink");
+  });
+
+  it.each(["scripts/private.txt", "apps/participant-portal/dist/private.txt"])(
+    "should reject source symlinks before secrets outside the allowlist can be archived (%s)",
+    (link) => {
+      const { root, workDir } = makeFixture();
+      write(root, "private.txt", "DO_NOT_UPLOAD_SECRET");
+      symlinkSync(join(root, "private.txt"), join(root, link));
+      const result = packageFixture(root, workDir);
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}\n${result.stderr}`).toContain("symlink");
+      expect(existsSync(join(workDir, "source.zip"))).toBe(false);
+    },
+  );
+
+  it("should produce the same archive on repeat packaging without retaining staging files", () => {
+    const { root, workDir } = makeFixture();
+    expect(packageFixture(root, workDir).status).toBe(0);
+    const first = readFileSync(join(workDir, "source.zip"));
+    expect(packageFixture(root, workDir).status).toBe(0);
+    expect(readFileSync(join(workDir, "source.zip"))).toEqual(first);
+    expect(existsSync(join(workDir, "staging"))).toBe(false);
   });
 
   it("should reject archive paths outside the cleaned work directory", () => {

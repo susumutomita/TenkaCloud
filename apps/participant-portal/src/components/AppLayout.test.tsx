@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CloudMode } from "../config";
+import { hasAwsFeatures } from "../config";
+import { localCompetitionConfig } from "../local-host/config";
 import { buildSideNavItems } from "./AppLayout";
 
 /**
@@ -10,8 +12,8 @@ import { buildSideNavItems } from "./AppLayout";
  * 出ていた。デモは AC26 の講座を受講していない人が触る導線なので、そこに講座前提の
  * 学習経路が並ぶと、デモが何の画面なのか読めなくなる。
  *
- * `mock` だけを外すのではなく `local` のときだけ出す形にしている。実イベント
- * (`real`) は主催者が問題を選んで出すもので、受講者ごとの自習経路とは別物のため。
+ * ローカル開催・cloud と公開 demo は opt-in せず、競技用の navigation を保つ。
+ * 自習用 local と明示的な学習設定では講座への入口を保つ。
  */
 
 const t = (key: string) => key;
@@ -40,6 +42,43 @@ describe("buildSideNavItems", () => {
   it("should offer the course tracks in local mode", () => {
     expect(hrefsOf(buildSideNavItems(0, t, "local", "ja", true))).toContain("/course-tracks");
   });
+
+  it("preserves courses for an explicitly enabled learning entry", () => {
+    const hrefs = hrefsOf(buildSideNavItems(0, t, "real", "ja", false, true, true));
+    expect(hrefs).toContain("/course-tracks");
+    expect(hrefs).toContain("/problems");
+    expect(hrefs).not.toContain("/tools/sso");
+  });
+
+  it.each([false, true])(
+    "keeps local competition navigation focused on the assigned problem list (AWS: %s)",
+    (hasAws) => {
+      const config = localCompetitionConfig(
+        {
+          mode: "local-host",
+          role: "participant",
+          apiBaseUrl: "http://localhost:8080/api",
+          hasAws,
+        },
+        "http://localhost:8080",
+      );
+      const hrefs = hrefsOf(
+        buildSideNavItems(
+          0,
+          t,
+          config.cloudMode,
+          "ja",
+          hasAwsFeatures(config),
+          config.notificationsEnabled,
+          config.courseTracksEnabled,
+        ),
+      );
+      expect(hrefs).not.toContain("/course-tracks");
+      expect(hrefs).toContain("/problems");
+      expect(hrefs).toContain("/scoreboard");
+      expect(hrefs.includes("/tools/sso")).toBe(hasAws);
+    },
+  );
 
   it.each(["real", "mock"] as const)("should not offer the course tracks in %s mode", (mode) => {
     expect(hrefsOf(buildSideNavItems(0, t, mode, "ja", true))).not.toContain("/course-tracks");

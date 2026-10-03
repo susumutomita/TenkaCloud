@@ -273,7 +273,8 @@ export function generateEnglishLanding(): string {
     .replaceAll("./privacy.html", "./privacy.en.html")
     .replaceAll("./terms.html", "./terms.en.html")
     .replaceAll("./legal.html", "./legal.en.html")
-    .replaceAll('href="./docs/"', 'href="./docs/index.en.html"');
+    .replaceAll('href="./docs/"', 'href="./docs/index.en.html"')
+    .replaceAll('href="./docs/manual/organizer/"', 'href="./docs/manual/organizer/index.en.html"');
 
   return html;
 }

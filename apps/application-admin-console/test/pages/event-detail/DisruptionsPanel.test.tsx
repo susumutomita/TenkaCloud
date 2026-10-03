@@ -1,7 +1,7 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ApiClient } from "../../../src/api/client";
+import { type ApiClient, createApiClient } from "../../../src/api/client";
 import type { EventDetail, TeamSummary } from "../../../src/api/events-client";
 import { DisruptionsPanel } from "../../../src/pages/event-detail/DisruptionsPanel";
 import type { EventTabContentProps } from "../../../src/pages/event-detail/tab-content-props";
@@ -45,8 +45,8 @@ const t = (key: string, params?: Record<string, string | number>) =>
   params ? `${key}:${JSON.stringify(params)}` : key;
 
 const teams: TeamSummary[] = [
-  { teamId: "t1", internalSlug: "team-a", displayName: "Alpha" } as TeamSummary,
-  { teamId: "t2", internalSlug: "team-b" } as TeamSummary,
+  { teamId: "t1", internalSlug: "team-a", displayName: "Alpha" },
+  { teamId: "t2", internalSlug: "team-b" },
 ];
 
 const catalogEntry = {
@@ -60,7 +60,7 @@ const catalogEntry = {
   },
 };
 
-const fakeApi = {} as ApiClient;
+const fakeApi = createApiClient("https://host.example/api", "a.e30.c");
 const detail = (over: Partial<EventDetail> = {}): EventDetail =>
   ({
     eventId: "EVT1",
@@ -91,7 +91,10 @@ beforeEach(() => {
   mockRecurring.mockReset().mockResolvedValue({ items: [] });
   mockCancelRecurring.mockReset().mockResolvedValue({ ok: true });
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.useRealTimers();
+});
 
 describe("DisruptionsPanel", () => {
   it("should load and list the catalog", async () => {
@@ -153,6 +156,179 @@ describe("DisruptionsPanel", () => {
     expect(await screen.findByRole("button", { name: "disruptions.fire_button" })).toBeDisabled();
   });
 
+  it("explains and disables declarations the host cannot execute", async () => {
+    mockCatalog.mockResolvedValue({
+      entries: [
+        {
+          ...catalogEntry,
+          disruption: { ...catalogEntry.disruption, unavailableReason: "no_action" },
+        },
+      ],
+    });
+    renderPanel();
+    expect(await screen.findByText("disruptions.unavailable_no_action")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "disruptions.fire_button" })).toBeDisabled();
+  });
+
+  it("shows accepted work separately from command completion and refreshes its outcome", async () => {
+    const execution = {
+      id: "execution-1",
+      teamId: "t1",
+      tick: 1,
+      status: "inject_unknown",
+      reason: "The command outcome is unknown.",
+      dueAt: "2026-06-03T00:00:00Z",
+      updatedAt: "2026-06-03T00:00:00Z",
+    };
+    const audit = {
+      auditId: "a1",
+      problemId: "security-battle-royale",
+      disruptionId: "availability-flood",
+      firedBy: "operator",
+      firedAt: "2026-06-03T00:00:00Z",
+      scope: "all",
+      targetTeamIds: ["t1"],
+      parameters: {},
+      requestId: "fire-test-00000001",
+      executions: [execution],
+    };
+    mockFire.mockResolvedValue({
+      status: "accepted",
+      auditId: "a1",
+      firedAt: audit.firedAt,
+      affectedTeamIds: ["t1"],
+    });
+    mockAudit.mockResolvedValueOnce({ items: [] }).mockResolvedValue({ items: [audit] });
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "disruptions.fire_button" }));
+    fireEvent.click(screen.getByRole("button", { name: "disruptions.confirm_fire" }));
+    expect(await screen.findByText("disruptions.accepted_flash")).toBeInTheDocument();
+    expect(await screen.findByText(/disruptions.status_inject_unknown/u)).toBeInTheDocument();
+    mockAudit.mockResolvedValue({
+      items: [
+        {
+          ...audit,
+          executions: [
+            {
+              ...execution,
+              status: "revert_command_completed",
+              reason: "Frontend health has not been verified.",
+            },
+          ],
+        },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "disruptions.refresh" }));
+    expect(
+      await screen.findByText(/disruptions.status_revert_command_completed/u),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Frontend health has not been verified.")).toBeInTheDocument();
+  });
+
+  it("identifies an execution for a team no longer in the event without inventing a failure reason", async () => {
+    mockAudit.mockResolvedValue({
+      items: [
+        {
+          auditId: "a1",
+          problemId: "security-battle-royale",
+          disruptionId: "availability-flood",
+          firedBy: "operator",
+          firedAt: "2026-06-03T00:00:00Z",
+          scope: "all",
+          targetTeamIds: ["removed-team"],
+          parameters: {},
+          requestId: "fire-test-00000001",
+          executions: [
+            {
+              id: "execution-removed",
+              teamId: "removed-team",
+              tick: 2,
+              status: "inject_command_completed",
+              dueAt: "2026-06-03T00:00:00Z",
+              updatedAt: "2026-06-03T00:00:00Z",
+            },
+          ],
+        },
+      ],
+    });
+    renderPanel();
+    expect(await screen.findByText(/removed-team/u)).toHaveTextContent(
+      /^removed-team · #2: disruptions.status_inject_command_completed$/u,
+    );
+  });
+
+  it("polls execution outcomes, preserves the last result on failure, and stops after leaving", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const execution = {
+      id: "execution-1",
+      teamId: "t1",
+      tick: 1,
+      status: "inject_pending",
+      dueAt: "2026-06-03T00:00:00Z",
+      updatedAt: "2026-06-03T00:00:00Z",
+    };
+    const audit = {
+      auditId: "a1",
+      problemId: "security-battle-royale",
+      disruptionId: "availability-flood",
+      firedBy: "operator",
+      firedAt: "2026-06-03T00:00:00Z",
+      scope: "all",
+      targetTeamIds: ["t1"],
+      parameters: {},
+      requestId: "fire-test-00000001",
+      executions: [execution],
+    };
+    mockAudit.mockResolvedValueOnce({ items: [audit] }).mockResolvedValueOnce({
+      items: [{ ...audit, executions: [{ ...execution, status: "inject_command_completed" }] }],
+    });
+    const view = renderPanel();
+    expect(await screen.findByText(/disruptions.status_inject_pending/u)).toBeInTheDocument();
+
+    await act(async () => vi.advanceTimersByTimeAsync(4999));
+    expect(mockAudit).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(mockAudit).toHaveBeenLastCalledWith(fakeApi, "EVT1", { limit: 20 });
+    expect(screen.getByText(/disruptions.status_inject_command_completed/u)).toBeInTheDocument();
+
+    mockAudit.mockRejectedValueOnce(new Error("Execution status unavailable"));
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(screen.getByText("Execution status unavailable")).toBeInTheDocument();
+    expect(screen.getByText(/disruptions.status_inject_command_completed/u)).toBeInTheDocument();
+    expect(mockAudit).toHaveBeenCalledTimes(3);
+
+    view.unmount();
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    expect(mockAudit).toHaveBeenCalledTimes(3);
+  });
+
+  it("reports a manual audit refresh failure without losing the loaded catalog", async () => {
+    renderPanel();
+    await screen.findByText("Availability flood");
+    mockAudit.mockRejectedValueOnce(new Error("Audit refresh unavailable"));
+
+    fireEvent.click(screen.getByRole("button", { name: "disruptions.refresh" }));
+
+    expect(await screen.findByText("Audit refresh unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Availability flood")).toBeInTheDocument();
+    expect(mockAudit).toHaveBeenCalledTimes(2);
+    expect(mockFire).not.toHaveBeenCalled();
+  });
+
+  it("preserves the successful fire notice if reloading its audit fails", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByRole("button", { name: "disruptions.fire_button" }));
+    mockAudit.mockRejectedValueOnce(new Error("New audit unavailable"));
+
+    fireEvent.click(screen.getByRole("button", { name: "disruptions.confirm_fire" }));
+
+    expect(await screen.findByText("New audit unavailable")).toBeInTheDocument();
+    expect(screen.getByText(/disruptions.fired_flash/u)).toBeInTheDocument();
+    expect(modal()).toBeNull();
+    expect(mockFire).toHaveBeenCalledTimes(1);
+    expect(mockAudit).toHaveBeenCalledTimes(2);
+  });
+
   it("should show the empty state when no disruptions are declared", async () => {
     mockCatalog.mockResolvedValue({ entries: [] });
     renderPanel();
@@ -201,16 +377,15 @@ describe("DisruptionsPanel", () => {
     );
   });
 
-  it("should fire at scope=random-n with a randomCount from the selected pool", async () => {
+  it("should fire at scope=random-n with the requested number of event teams", async () => {
     renderPanel();
     fireEvent.click(await screen.findByText("disruptions.fire_button"));
     const select = fireModalScopeSelect();
     select?.openDropdown();
     select?.selectOptionByValue("random-n");
-    const ms = modal()?.findContent().findMultiselect();
-    ms?.openDropdown();
-    ms?.selectOptionByValue("t1");
-    ms?.selectOptionByValue("t2");
+    fireEvent.change(screen.getByLabelText("disruptions.random_label"), { target: { value: "3" } });
+    expect(screen.getByRole("button", { name: "disruptions.confirm_fire" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("disruptions.random_label"), { target: { value: "2" } });
     fireEvent.click(screen.getByText("disruptions.confirm_fire"));
     await waitFor(() =>
       expect(mockFire).toHaveBeenCalledWith(

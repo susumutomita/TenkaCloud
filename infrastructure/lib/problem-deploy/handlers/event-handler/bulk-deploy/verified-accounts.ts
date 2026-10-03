@@ -4,6 +4,7 @@ import {
   resolveVerifiedCompetitorAccount,
   type VerifiedCompetitorAccount,
 } from "../../shared/competitor-account-lookup.js";
+import { isNativeExecutionProblem } from "../../shared/execution-catalog-context.js";
 import { NON_AWS_CONFIG_GETTERS } from "../../shared/non-aws-credential-getters.js";
 import { isReservedRuntime, type ReservedProvider } from "../../shared/runtime/index.js";
 import type { EventSharedResources } from "../shared.js";
@@ -23,7 +24,18 @@ export async function resolveBulkVerifiedAccounts(
   teams: readonly TeamDeploymentRecord[],
   problems: readonly EventProblemTarget[],
 ): Promise<Map<string, VerifiedCompetitorAccount>> {
-  const accountIds = candidateBulkAccountIds(teams, problems);
+  const awsProblems = problems.filter((problem) => {
+    if (isNativeExecutionProblem(shared.executionCatalog, problem.problemId)) return false;
+    const runtime = shared.resolveProblemRuntimeDescriptor?.(problem.problemId);
+    return (
+      !runtime ||
+      ("kind" in runtime
+        ? runtime.targets.some((target) => target.provider === "aws")
+        : runtime.provider === "aws")
+    );
+  });
+  const accountIds =
+    awsProblems.length > 0 ? candidateBulkAccountIds(teams, awsProblems) : new Set<string>();
   const verified = new Map<string, VerifiedCompetitorAccount>();
   await Promise.all(
     Array.from(accountIds).map(async (accountId) => {

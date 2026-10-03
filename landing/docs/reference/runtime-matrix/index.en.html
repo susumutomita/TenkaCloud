@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Runtime capability matrix — TenkaCloud Docs</title>
+<title>Runtime execution status — TenkaCloud Docs</title>
 <link rel="canonical" href="https://tenkacloud.com/docs/reference/runtime-matrix/index.en.html" />
 <link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/reference/runtime-matrix/" />
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/reference/runtime-matrix/index.en.html" />
@@ -49,56 +49,56 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html" aria-current="page">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html" aria-current="page">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Runtime capability matrix <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>A pack declares the <code>(provider, engine)</code> runtimes it requires. The matrix below is a
-<strong>normative reference</strong> generated from <code>RUNTIME_CAPABILITIES</code> in
-<code>@tenkacloud/problem-runtime/capabilities</code>.</p>
-<h2>Matrix</h2>
-<table class="reference-table"><thead><tr><th>Provider</th><th>Engine</th><th>Mode</th><th>Recognized</th><th>Adapter wired</th><th>Executable</th><th>Live verified</th><th>Maturity</th><th>Blocking issues</th><th>Evidence</th></tr></thead><tbody>
-<tr><td><code>aws</code></td><td><code>cloudformation</code></td><td>cloud</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td><span class="doc-badge doc-badge--stable">Stable</span></td><td>—</td><td>Default competitor-account CloudFormation lifecycle is production and live verified.</td></tr>
-<tr><td><code>azure</code></td><td><code>bicep</code></td><td>cloud</td><td>yes</td><td>yes</td><td>no</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter, credential wiring, and inline-ARM-template materialization (precompiled JSON or a Bicep compile, fail-closed when neither is available) ship; live acceptance remains open.</td></tr>
-<tr><td><code>docker</code></td><td><code>compose</code></td><td>local</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td>—</td><td>Executable and verified through the AWS-free make local lifecycle; never cloud deployed.</td></tr>
-<tr><td><code>gcp</code></td><td><code>infra-manager</code></td><td>cloud</td><td>yes</td><td>yes</td><td>no</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter, WIF wiring, and Terraform source materialization to GCS ship; only live acceptance remains open.</td></tr>
-<tr><td><code>sakura</code></td><td><code>apprun</code></td><td>cloud</td><td>yes</td><td>yes</td><td>yes</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter and current AppRun API wire contract ship; real-account lifecycle acceptance remains open.</td></tr>
-</tbody></table><h2>Independent capability facts</h2>
-<ul>
-<li><strong>Recognized</strong> — metadata and schema accept the exact provider/engine pair. This
-does not imply that deployment code exists.</li>
-<li><strong>Adapter wired</strong> — a concrete adapter plus its credential/composition wiring ships
-in the repository. This still does not prove artifact handling or provider API
-correctness.</li>
-<li><strong>Executable</strong> — the complete materialization and provider wire path is expected to
-run in its declared mode (<code>cloud</code> or <code>local</code>).</li>
-<li><strong>Live verified</strong> — a real lifecycle has been demonstrated. Mock and unit tests are
-required regression evidence, but they never count as live verification.</li>
-</ul>
-<p>Azure, GCP, and Sakura are adapter-wired. Their live verification remains false while
-<a href="https://github.com/susumutomita/TenkaCloud/issues/2081">multicloud acceptance #2081</a>
-is open. Azure and GCP also remain non-executable until their artifact/output blockers
-shown in the table are closed. Sakura&#39;s API contract is executable after #2746, but it
-is not competition-ready until the real-account lifecycle is attached to #2081.</p>
-<p>The local <code>docker/compose</code> runtime is independently executable and verified in the
-<code>make local</code> mode; it is not a cloud runtime. AWS CloudFormation is the default stable,
-live-verified cloud runtime.</p>
-<p>Related: <a href="/docs/reference/problem-metadata/index.en.html">problem metadata reference</a>.</p>
+<h1>Runtime execution status <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<h2 id="matrix">Current candidate</h2><table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Current boundary</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Local Docker Compose</td>
+<td>Local-only; not listed in the cloud catalog. New events prepare up to 512 dormant jobs; participant Start / resume and Stop (keep data). Defaults: team 3, host 12 active environments, 4096 MiB summed memory caps. 106 catalog entries are not 106 verified playable exercises</td>
+</tr>
+<tr>
+<td>Terminal inside a Docker problem</td>
+<td>15 declared problems; real PostgreSQL terminal exec, three checkpoints, team separation and restart were verified. Other terminal problem variants still need representative checks</td>
+</tr>
+<tr>
+<td>Native Cryptography Battle</td>
+<td>Reviewed ac26-crypto-battle with score stealing disabled needs no competitor account; enabling score stealing retains the AWS variant. Local SQLite or cloud Turso/DynamoDB; original coordination backend and private team views/scoring. Both cloud providers admit 99 teams; SQL state policy is 4 MiB. Hosted event capacity remains unverified</td>
+</tr>
+<tr>
+<td>AWS CloudFormation</td>
+<td>Cloud-only with a verified competitor account; hosting-account self-tests require explicit per-event risk acknowledgment before event/key creation. Problem roles may reach hosting data; separate accounts are recommended for third-party events; create/update/no-op/recreate, flag/multi-flag and scheduled scoring, participant Console/CLI restored. Nine current templates exceed the 51,200-byte TemplateBody limit; TemplateURL is not implemented. Live AWS remains a separate rehearsal</td>
+</tr>
+<tr>
+<td>Cloud platform with Lambda + Turso/DynamoDB</td>
+<td>Original SBT-free Lite backend, Lambda/CodeBuild paths and make deploy/destroy; standard CDK bootstrap, saved catalogKey and exact private source archive key/VersionId across updates. Docker/Compose stays local-only; no automatic migration</td>
+</tr>
+<tr>
+<td>External packs, Azure, GCP, Sakura and other scoring kinds</td>
+<td>Schema/authoring declarations do not establish current event execution</td>
+</tr>
+</tbody></table>
+<h2 id="support-classes">Read the evidence precisely</h2><p>Recognized metadata, a loaded catalog row, a wired adapter, fixture tests, a real Docker/browser route and live cloud verification are separate facts. None implies the next. See <a href="/docs/operate/deploy-paths/index.en.html">deployment boundaries</a> and record Not run when a route has not been exercised.</p>
 
 </article>
 </main>

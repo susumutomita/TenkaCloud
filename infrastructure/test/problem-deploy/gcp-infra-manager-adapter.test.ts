@@ -101,6 +101,17 @@ describe("GcpInfraManagerRuntimeAdapter (#1411)", () => {
     });
   });
 
+  it("passes the saved catalog identity to source materialization with current credentials", async () => {
+    const { ctx, getCredential, materializeBlueprint } = makeCtx(client);
+    const catalogKey = `catalogs/${"a".repeat(64)}.json`;
+    await new GcpInfraManagerRuntimeAdapter(ctx, runtime).deploy({ ...deployInput, catalogKey });
+    expect(materializeBlueprint).toHaveBeenCalledWith(
+      { accessToken: "tok" },
+      expect.objectContaining({ catalogKey, problemId: deployInput.problemId }),
+    );
+    expect(getCredential).toHaveBeenCalledOnce();
+  });
+
   it("should pass challengePayloadUrl through to materializeBlueprint for a private problem", async () => {
     const { ctx, materializeBlueprint } = makeCtx(client);
     await new GcpInfraManagerRuntimeAdapter(ctx, runtime).deploy({

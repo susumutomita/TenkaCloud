@@ -238,7 +238,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     // 呼び出し元の useEffect が同条件を gate 済み (refresh と違い context に露出しない) ため
     // true 分岐は不到達。 防御的に残す。
     /* v8 ignore next */
-    if (isMock || !sessionToken) return;
+    if (isMock || !sessionToken || config.notificationsEnabled === false) return;
     try {
       const next = await getNotifications(config.apiBaseUrl, sessionToken);
       if (next === undefined) {
@@ -259,7 +259,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
       }
       setNotificationsError(toErrorMessage(err));
     }
-  }, [isMock, sessionToken, config.apiBaseUrl, auth, eventIdForKey]);
+  }, [isMock, sessionToken, config.apiBaseUrl, config.notificationsEnabled, auth, eventIdForKey]);
 
   // LP 「モックで試す」 動線: dev-mock mode + session 在りのとき、 backend API が無くても
   // 各画面が空にならないよう固定 fixture を 1 度だけ seed する。 polling は走らない。
@@ -297,7 +297,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
   // notifications は単純な「即時 + interval + cleanup」 なので usePolling (web-kit) に集約 (#1418 DRY)。
   // enabled gate により refreshNotifications 冒頭の同条件 guard は不到達のまま (= v8 ignore 維持)。
   usePolling(refreshNotifications, NOTIFICATIONS_POLL_INTERVAL_MS, {
-    enabled: !isMock && Boolean(sessionToken),
+    enabled: !isMock && Boolean(sessionToken) && config.notificationsEnabled !== false,
   });
 
   // page を開いた瞬間の既読化を **localStorage と Context state 両方** に

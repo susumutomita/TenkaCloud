@@ -88,6 +88,7 @@ describe("AzureBicepRuntimeAdapter (#1410 / #2743)", () => {
     const result = await new AzureBicepRuntimeAdapter(ctx, runtime).deploy(deployInput);
     expect(result).toEqual({ status: "deploying" });
     expect(materialize).toHaveBeenCalledWith("main.bicep", {
+      problemId: "azure-fn",
       problemDir: "problems/challenges/azure-fn",
     });
     expect(getCredential).toHaveBeenCalledTimes(1);
@@ -102,6 +103,18 @@ describe("AzureBicepRuntimeAdapter (#1410 / #2743)", () => {
     });
   });
 
+  it("passes the saved catalog identity to source materialization while resolving current credentials", async () => {
+    const { ctx, getCredential, materialize } = makeCtx(client);
+    const catalogKey = `catalogs/${"a".repeat(64)}.json`;
+    await new AzureBicepRuntimeAdapter(ctx, runtime).deploy({ ...deployInput, catalogKey });
+    expect(materialize).toHaveBeenCalledWith("main.bicep", {
+      problemId: deployInput.problemId,
+      problemDir: deployInput.problemDir,
+      catalogKey,
+    });
+    expect(getCredential).toHaveBeenCalledOnce();
+  });
+
   it("should pass challengePayloadUrl through to materialize's artifact location", async () => {
     const { ctx, materialize } = makeCtx(client);
     await new AzureBicepRuntimeAdapter(ctx, runtime).deploy({
@@ -109,6 +122,7 @@ describe("AzureBicepRuntimeAdapter (#1410 / #2743)", () => {
       challengePayloadUrl: "https://s3.example/presigned",
     });
     expect(materialize).toHaveBeenCalledWith("main.bicep", {
+      problemId: "azure-fn",
       problemDir: "problems/challenges/azure-fn",
       challengePayloadUrl: "https://s3.example/presigned",
     });

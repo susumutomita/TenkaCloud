@@ -7,29 +7,13 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import type { SamlIdpConfig } from "@tenkacloud/saml-utils";
 import { describe, expect, it } from "vitest";
-import {
-  createDdbIdpStore,
-  createSeamIdpStore,
-} from "../../lib/control-plane/handlers/idp-handler/ddb-store";
-import { DynamoDbSamlIdpsRepository } from "../../lib/problem-deploy/control-data/dynamodb-saml-idps-repository";
+import { createSeamIdpStore } from "../../lib/shared/idp/ddb-store";
 import { makeTestControlDataRuntime } from "../problem-deploy/control-data/runtime.test-helpers";
 
 /**
- * [Issue #2442 / Phase C5] `createDdbIdpStore` / `createSeamIdpStore` coverage.
- *
- * `createDdbIdpStore` is the backward-compatible wrapper that always forces the
- * DynamoDB backend (existing tests / callers that want DDB regardless of
- * `CONTROL_DATA_BACKEND`) — pinned here to be backed by the canonical
- * {@link DynamoDbSamlIdpsRepository}.
- *
- * `createSeamIdpStore` is what both Lambda entry points actually wire. It is
- * exercised here only against the **default (dynamodb) backend** — the deeper
- * five-value `CONTROL_DATA_BACKEND` selection logic is already fully covered by
- * `resolveSamlIdpsRepository (runtime)` in
- * `test/problem-deploy/control-data/saml-idps-repository.test.ts` against a
- * locally constructed `createControlDataRuntime`, same as the injected test
- * runtime here — hitting `turso`/`sql` through a real runtime here would
- * require live SSM / libSQL network calls.
+ * The retained cloud IdP handler selects its repository through the injected runtime.
+ * Exercise the actual DynamoDB backend with a local DocumentClient fake. SQL backend
+ * parity is covered by problem-deploy/control-data/saml-idps-repository-parity.test.ts.
  */
 
 const TABLE = "SamlIdps";
@@ -38,8 +22,7 @@ const TABLE = "SamlIdps";
 function makeFakeIdpDdb(): DynamoDBDocumentClient {
   const store = new Map<string, Record<string, unknown>>();
   const keyOf = (pk: unknown, sk: unknown): string => `${String(pk)} ${String(sk)}`;
-  // biome-ignore lint/suspicious/noExplicitAny: fake dispatches by command class.
-  const send = async (cmd: any): Promise<unknown> => {
+  const send = async (cmd: unknown): Promise<unknown> => {
     if (cmd instanceof PutCommand) {
       const item = cmd.input.Item as Record<string, unknown>;
       store.set(keyOf(item.pk, item.sk), item);
@@ -58,7 +41,7 @@ function makeFakeIdpDdb(): DynamoDBDocumentClient {
       const pk = cmd.input.ExpressionAttributeValues?.[":pk"];
       return { Items: [...store.values()].filter((it) => it.pk === pk) };
     }
-    throw new Error(`FakeIdpDdb: unsupported command ${cmd?.constructor?.name}`);
+    throw new Error("FakeIdpDdb: unsupported command");
   };
   return { send } as unknown as DynamoDBDocumentClient;
 }
@@ -76,24 +59,6 @@ function record(over: Partial<SamlIdpConfig> = {}): SamlIdpConfig {
     ...over,
   };
 }
-
-describe("createDdbIdpStore", () => {
-  it("should be backed by DynamoDbSamlIdpsRepository", () => {
-    const store = createDdbIdpStore({ ddb: makeFakeIdpDdb(), tableName: TABLE });
-    expect(store).toBeInstanceOf(DynamoDbSamlIdpsRepository);
-  });
-
-  it("should put/get/delete through the DynamoDB backend", async () => {
-    const store = createDdbIdpStore({ ddb: makeFakeIdpDdb(), tableName: TABLE });
-    const scope = { kind: "tenant" as const, tenantId: "tenant-a" };
-
-    await store.put(scope, record());
-    expect(await store.get(scope, "okta")).toEqual(record());
-
-    await store.delete(scope, "okta");
-    expect(await store.get(scope, "okta")).toBeNull();
-  });
-});
 
 describe("createSeamIdpStore (default dynamodb backend)", () => {
   it("should round-trip put/get/list/delete via the resolved DynamoDB backend", async () => {

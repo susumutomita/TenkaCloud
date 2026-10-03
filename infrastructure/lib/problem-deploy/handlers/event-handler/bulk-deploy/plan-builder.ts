@@ -3,6 +3,7 @@ import type { TeamDeploymentRecord } from "../../../control-data/teams-repositor
 import { buildStackPrefix, slugify } from "../../deploy-handler/naming.js";
 import { type DeploymentItem, runtimeItemFields } from "../../deploy-handler/types.js";
 import type { VerifiedCompetitorAccount } from "../../shared/competitor-account-lookup.js";
+import { assertEventCompetitorAccount } from "../../shared/competitor-account-policy.js";
 import {
   provenanceItemFields,
   toDeploymentProvenance,
@@ -12,6 +13,10 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
 } from "../../shared/events.js";
+import {
+  executionDispatchFields,
+  isNativeExecutionProblem,
+} from "../../shared/execution-catalog-context.js";
 import {
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
@@ -54,6 +59,12 @@ export interface BuildBulkDeployPlanArgs {
  * unsupportedRuntimeProblems に計上する (#2571: 下の buildBulkPlanEntry コメント参照)。
  */
 export function buildBulkDeployPlan(args: BuildBulkDeployPlanArgs): BulkDeployPlan {
+  if (
+    args.event.hostingAccountSelfTest &&
+    (args.event.eventId !== args.eventId || args.event.tenantId !== args.tenantId)
+  ) {
+    throw new Error("Self-test acknowledgment must belong to the event being deployed");
+  }
   const createdAt = new Date(args.nowMs).toISOString();
   const acc = createBulkPlanAccumulator();
   for (const team of args.selected.teams) {
@@ -136,6 +147,32 @@ function buildBulkPlanEntry(
   if (shouldSkipExistingPlanTarget(args, key, replacement)) return { kind: "skip" };
   const problemDir = args.shared.problemsCatalog[problem.problemId];
   if (!problemDir) return { kind: "skip" };
+  if (isNativeExecutionProblem(args.shared.executionCatalog, problem.problemId)) {
+    const jobId = ulid();
+    const item = createDeploymentItem(
+      args,
+      team,
+      problem,
+      jobId,
+      buildStackPrefix(problem.problemId, team.internalSlug),
+      createdAt,
+      { awsAccountId: "", region: "" },
+      {
+        runtimeProvider: "native",
+        runtimeEngine: "coordination",
+        runtimeEntry: "coordination",
+      },
+    );
+    return {
+      kind: "entry",
+      entry: {
+        kind: "native",
+        item: { ...item, status: "COMPLETE" },
+        replacesJobId: replacement?.jobId,
+      },
+    };
+  }
+
   const runtime = args.shared.resolveProblemRuntimeDescriptor?.(problem.problemId);
   const dispatch = classifyBulkRuntimeDispatch(runtime);
   if (dispatch.channel === "adapter") {
@@ -154,6 +191,7 @@ function buildBulkPlanEntry(
   }
   const awsAccountId = team.awsAccountId ?? problem.defaultAwsAccountId;
   if (!awsAccountId) return { kind: "skip" };
+  assertEventCompetitorAccount(awsAccountId, args.event);
   const verified = args.verified.get(awsAccountId);
   if (!verified) return { kind: "unverified", accountId: awsAccountId };
   return {
@@ -194,15 +232,23 @@ type BulkRuntimeDispatch =
  * `verified-accounts.ts`'s `candidateNonAwsProviders` uses (#2562), so the two
  * call sites cannot drift apart.
  *
- * A composite descriptor (`"kind" in runtime`) or an absent resolver result
- * (`runtime === undefined`) keeps the pre-#2571 AWS-path behavior
- * byte-identically — this gate only narrows what a *resolved single*
- * descriptor does.
+ * Cloud-only composite descriptors and absent resolver results keep the
+ * historical AWS path. Container targets are refused before any queue write,
+ * including when they are nested in a composite descriptor.
  */
 function classifyBulkRuntimeDispatch(
   runtime: ProblemRuntimeDescriptor | undefined,
 ): BulkRuntimeDispatch {
-  if (runtime === undefined || "kind" in runtime) return { channel: "aws" };
+  if (runtime === undefined) return { channel: "aws" };
+  if ("kind" in runtime) {
+    // Local container targets must never fall through to the cloud CFN queue,
+    // even when an event bypasses the filtered cloud catalog.
+    return runtime.targets.some(
+      (target) => target.provider === "docker" || target.engine === "compose",
+    )
+      ? { channel: "unsupported" }
+      : { channel: "aws" };
+  }
   if (runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE) {
     return { channel: "aws" };
   }
@@ -289,6 +335,7 @@ function createAwsPlanEntry(
     competitorRoleArn: verified.competitorRoleArn,
   });
   const detail = createDeployDetail(
+    args.shared,
     args.tenantId,
     team,
     problem,
@@ -305,7 +352,20 @@ function createAwsPlanEntry(
       EventBusName: args.shared.eventBusName,
       Source: EVENT_SOURCE,
       DetailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
-      Detail: JSON.stringify(detail),
+      Detail: JSON.stringify({
+        ...detail,
+        ...(args.event.hostingAccountSelfTest && awsAccountId === process.env.CONTROL_PLANE_ACCOUNT
+          ? {
+              eventId: args.eventId,
+              hostingAccountSelfTest: {
+                ...args.event.hostingAccountSelfTest,
+                eventId: args.eventId,
+                tenantId: args.tenantId,
+                jobId,
+              },
+            }
+          : {}),
+      }),
       Resources: [`tenkacloud:deployment:${jobId}`],
     },
     replacesJobId: replacement?.jobId,
@@ -397,6 +457,9 @@ function createDeploymentItem(
     GSI1SK: createdAt,
     jobId,
     problemId: problem.problemId,
+    ...(args.shared.executionCatalog
+      ? { catalogKey: args.shared.executionCatalog.catalogKey }
+      : {}),
     tenantId: args.tenantId,
     awsAccountId: aws.awsAccountId,
     ...(aws.competitorRoleArn ? { competitorRoleArn: aws.competitorRoleArn } : {}),
@@ -438,6 +501,7 @@ function resolvePlanProvenance(args: BuildBulkDeployPlanArgs, problemId: string)
 }
 
 function createDeployDetail(
+  shared: EventSharedResources,
   tenantId: string,
   team: TeamDeploymentRecord,
   problem: EventProblemTarget,
@@ -453,6 +517,7 @@ function createDeployDetail(
     tenantId,
     problemId: problem.problemId,
     problemDir,
+    ...executionDispatchFields(shared.executionCatalog),
     teamSlug: slugify(team.internalSlug),
     namePrefix,
     region: team.region ?? problem.defaultRegion,

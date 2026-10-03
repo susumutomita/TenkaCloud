@@ -76,6 +76,28 @@ describe("SsoCredentialsPage render branches", () => {
     expect(screen.getByText("sso_credentials.howto_body")).toBeInTheDocument();
   });
 
+  it("does not advertise cloud accounts or credentials for a native Battle", () => {
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [
+          {
+            jobId: "native-run",
+            problemId: "ac26-crypto-battle",
+            runtimeKind: "coordination",
+            coordination: true,
+            accessCapabilities: [],
+          },
+        ],
+      },
+      error: undefined,
+    });
+    renderPage();
+    expect(screen.getByText("sso_credentials.empty_problems")).toBeInTheDocument();
+    expect(screen.queryByText("ac26-crypto-battle")).not.toBeInTheDocument();
+    expect(screen.queryByText("sso_credentials.label_aws_account")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("cli-native-run")).not.toBeInTheDocument();
+  });
+
   it("should show a team-view error alert", () => {
     mockTeamView.mockReturnValue({ view: undefined, error: "boom" });
     renderPage();
@@ -98,6 +120,24 @@ describe("SsoCredentialsPage render branches", () => {
     expect(screen.getByText("sso_credentials.empty_problems")).toBeInTheDocument();
   });
 
+  it("shows only issued CLI access and removes its panel if capabilities are withdrawn", () => {
+    mockTeamView.mockReturnValue({
+      view: { problems: [problem({ accessCapabilities: ["cli-credentials"] })] },
+      error: undefined,
+    });
+    const rendered = renderPage();
+    expect(screen.getByTestId("cli-job-1")).toBeInTheDocument();
+    expect(screen.queryByText("sso_credentials.open_console_button")).not.toBeInTheDocument();
+    mockTeamView.mockReturnValue({
+      view: { problems: [problem({ accessCapabilities: [] })] },
+      error: undefined,
+    });
+    rendered.rerender(<SsoCredentialsPage config={config} />);
+    expect(screen.queryByTestId("cli-job-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("sso_credentials.open_console_button")).not.toBeInTheDocument();
+    expect(screen.getByText("sso_credentials.aws_access_unavailable")).toBeInTheDocument();
+    expect(mockSignin).not.toHaveBeenCalled();
+  });
   it("should treat a legacy problem without provider as AWS", () => {
     // 旧 backend 応答 (provider 欠落) は行契約どおり aws 扱い — 表示・導線は従来どおり。
     mockTeamView.mockReturnValue({ view: { problems: [problem()] }, error: undefined });

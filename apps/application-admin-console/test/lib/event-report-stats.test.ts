@@ -3,6 +3,7 @@ import type { EventDetail } from "../../src/api/events-client";
 import {
   buildDisruptionLog,
   buildProblemBreakdown,
+  buildScoreboard,
   formatPercent,
   isReportReady,
 } from "../../src/lib/event-report-stats";
@@ -169,4 +170,21 @@ describe("formatPercent", () => {
     expect(formatPercent(Number.NaN)).toBe("—");
     expect(formatPercent(Number.POSITIVE_INFINITY)).toBe("—");
   });
+});
+
+it("does not report missing cloud history as zero solved problems or zero average", () => {
+  const teams = [{ teamId: "t1", internalSlug: "alpha" }];
+  const scores = [{ teamId: "t1", teamName: "Alpha", projectedTotal: 75, events: [] }];
+  const rows = buildScoreboard(teams, scores, false);
+  expect(rows[0]).toMatchObject({ totalScore: 75, problemsSolved: null });
+  const breakdown = buildProblemBreakdown(
+    makeDetail({
+      teams,
+      scoreEventsByTeam: scores,
+      scoreHistoryAvailable: false,
+      problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "ap-northeast-1" }],
+      nativeRuns: [{ runId: "r1", problemId: "ac26-crypto-battle", revision: 5, status: "CLOSED" }],
+    }),
+  );
+  expect(breakdown[0]).toMatchObject({ defaultRegion: "—", solvedCount: null, avgScore: null });
 });

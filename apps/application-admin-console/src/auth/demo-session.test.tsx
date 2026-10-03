@@ -22,7 +22,7 @@ describe("demo token fixtures", () => {
     const claims = decodeIdToken(DEMO_ID_TOKEN);
     expect(claims?.email).toBe("demo-operator@tenkacloud.example");
     expect(claims?.["custom:userRole"]).toBe("TenantAdmin");
-    expect(claims?.["custom:tenantName"]).toBe("Demo Tenant");
+    expect(claims?.["custom:tenantName"]).toBe("Demo competition");
   });
 
   it("should provide a non-expiring TokenSet", () => {

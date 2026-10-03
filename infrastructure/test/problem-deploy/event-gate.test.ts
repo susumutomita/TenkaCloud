@@ -187,7 +187,9 @@ describe("getEventGate", () => {
       },
       {
         ssm: {
-          send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }),
+          send: vi
+            .fn()
+            .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "secret-token" } }),
         } as unknown as Pick<SSMClient, "send">,
         createClient: () => client,
       },

@@ -4,9 +4,8 @@ import { UserPool } from "aws-cdk-lib/aws-cognito";
 import { Code, Function as LambdaFunction } from "aws-cdk-lib/aws-lambda";
 import type { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { ApiGateway } from "../../lib/tenant-template/api-gateway";
-import type { CustomApiKey } from "../../lib/tenant-template/interfaces/custom-api-key";
-import { LAMBDA_NODEJS_RUNTIME } from "../../lib/utils/lambda-runtime";
+import { ApiGateway } from "../../lib/tenant-template/api-gateway.js";
+import { LAMBDA_NODEJS_RUNTIME } from "../../lib/utils/lambda-runtime.js";
 
 /**
  * The tenant REST API lists its routes one by one; there is no `{proxy+}`. A handler route
@@ -19,11 +18,11 @@ const BACKENDS = ["DeployApi", "EventApi", "CompetitorAccountsApi", "SamlIdp"] a
 type Backend = (typeof BACKENDS)[number];
 
 const HANDLER_APPS: Record<Backend, () => Promise<{ app: Hono }>> = {
-  DeployApi: () => import("../../lib/problem-deploy/handlers/deploy-handler/index"),
-  EventApi: () => import("../../lib/problem-deploy/handlers/event-handler/index"),
+  DeployApi: () => import("../../lib/problem-deploy/handlers/deploy-handler/index.js"),
+  EventApi: () => import("../../lib/problem-deploy/handlers/event-handler/index.js"),
   CompetitorAccountsApi: () =>
-    import("../../lib/problem-deploy/handlers/competitor-accounts-handler/index"),
-  SamlIdp: () => import("../../lib/tenant-template/handlers/idp-handler/index"),
+    import("../../lib/problem-deploy/handlers/competitor-accounts-handler/index.js"),
+  SamlIdp: () => import("../../lib/tenant-template/handlers/idp-handler/index.js"),
 };
 
 // The entry modules compose their shared resources at import time and throw on these.
@@ -113,33 +112,13 @@ function synthGateway(nonAwsRuntime: boolean): GatewaySide {
       }),
     ]),
   ) as Record<Backend, LambdaFunction>;
-  const apiKey: CustomApiKey = {
-    id: "key-id",
-    apiKey: { keyId: "k", keyArn: "arn:aws:apigateway:::/apikeys/k", keyName: "k" },
-    apiKeyValue: "val",
-  };
   const tenantApi = new ApiGateway(stack, "ApiGateway", {
     tenantId: "tenant-acme",
-    isPooledDeploy: false,
-    idpDetails: {
-      idpName: "COGNITO",
-      details: {
-        userPoolId: "u",
-        appClientId: "c",
-        cognitoDomain: "d",
-        authorizationServerUrl: "https://example",
-        authorizerArn: "arn",
-      },
-    },
     userPool,
     deployApiLambda: functions.DeployApi,
     eventApiLambda: functions.EventApi,
     competitorAccountsApiLambda: functions.CompetitorAccountsApi,
     samlIdpLambda: functions.SamlIdp,
-    apiKeyBasicTier: apiKey,
-    apiKeyStandardTier: apiKey,
-    apiKeyPremiumTier: apiKey,
-    apiKeyPlatinumTier: apiKey,
     teamCloudCredentialsRoutes: nonAwsRuntime,
   });
   const template = Template.fromStack(Stack.of(tenantApi));

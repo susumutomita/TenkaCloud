@@ -72,11 +72,28 @@ describe("bulkCreateCompetitorAccounts", () => {
     const puts = ssmSend.mock.calls.filter(([cmd]) => cmd instanceof PutParameterCommand);
     expect(puts.length).toBe(1);
     expect(out.created).toBe(3);
-    expect(ddbSend.mock.calls.length).toBe(3);
+    expect(ddbSend.mock.calls.length).toBe(4);
     // The one value is handed back once for all three rows.
     const putCommand = puts[0]?.[0] as PutParameterCommand | undefined;
     expect(putCommand).toBeInstanceOf(PutParameterCommand);
     expect(out.externalId).toBe(putCommand?.input.Value);
+  });
+
+  it("refuses bulk registration after the existing ExternalId is lost", async () => {
+    const { shared, ddbSend, ssmSend } = buildShared();
+    ssmSend.mockRejectedValueOnce(
+      Object.assign(new Error("missing"), { name: "ParameterNotFound" }),
+    );
+    ddbSend.mockResolvedValueOnce({ Count: 1 });
+    await expect(
+      bulkCreateCompetitorAccounts(shared, CTX, {
+        defaults: { competitorRoleName: "TenkaCloud-acme-deploy-Role" },
+        accounts: [{ awsAccountId: "333333333333" }],
+      }),
+    ).rejects.toThrow("restore the existing secret");
+    expect(ssmSend).toHaveBeenCalledTimes(1);
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+    expect(ddbSend.mock.calls[0]?.[0].input.ConsistentRead).toBe(true);
   });
 
   it("should keep the good rows when one row is already registered", async () => {

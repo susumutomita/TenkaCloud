@@ -77,6 +77,17 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     }
   });
 
+  it("should describe issued expiry without promising legacy Console permissions or a one-hour session", () => {
+    for (const locale of ["ja", "en"] as const) {
+      const dict = _testInternals.LOCALE_DICTIONARIES[locale];
+      const body = _testInternals.resolveKey(dict, "sso_credentials.cli.body");
+      const demo = _testInternals.resolveKey(dict, "sso_credentials.cli.mock_blocked_body");
+      expect(body).toMatch(/期限|expiry/);
+      expect(body).not.toMatch(/1.hour|1\s*時間|same IAM scope|Console と同じ/i);
+      expect(demo).not.toMatch(/2.stage|2 段/i);
+    }
+  });
+
   it("should update <html lang> when locale changes", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("en"));

@@ -241,8 +241,21 @@ export type ProblemRuntimeKind = "docker" | "simulated-cloud";
  * Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
  */
 export interface ParticipantProblemView {
+  /** Native runs use their persisted run ID here for the existing Portal route. */
   readonly jobId: string;
+  /** Native in-platform execution; it has no AWS account, region or external console. */
+  readonly runtimeKind?: "coordination";
+  readonly coordination?: true;
+  /** Cloud coordination pointer: "default" initially, then the reset run ID. Local runs use jobId. */
+  readonly coordinationRunId?: string;
   readonly problemId: string;
+  /** Host-owned Docker terminal capability, independent of legacy practice lifecycle controls. */
+  readonly terminal?: true;
+  /** State-preserving on-demand Docker controls authorized by the competition host. */
+  readonly containerSession?: {
+    readonly status: "stopped" | "starting" | "running" | "stopping" | "error";
+    readonly error?: string;
+  };
   /**
    * #1975: 問題文 (metadata.json 由来)。 local mode の Participant API は同梱して返すので、
    * portal は「何の問題か / 何をすべきか」 を表示できる。 AWS mode の participant-handler は
@@ -307,10 +320,11 @@ export interface ParticipantProblemView {
    * sends this field.
    */
   readonly recommended?: true;
-  readonly region: string;
+  /** Present for cloud-resource exercises; native runs omit it. */
+  readonly region?: string;
   /** 競技アカウント ID。 SSO Credentials の AWS Console federation で使う。
    *  (機密ではない — IAM role 信頼ポリシーや CFn template にも露出する。) */
-  readonly awsAccountId: string;
+  readonly awsAccountId?: string;
   /**
    * [#2233] 問題が動く cloud provider。 canonical 値は "aws" | "sakura" | "azure" | "gcp"。
    * 現行 backend (participant-handler lookup) は常に返すが、 旧 backend 応答との互換のため
@@ -473,4 +487,14 @@ export interface LeaderboardResponse {
   readonly scoreboardFrozen?: boolean;
   /** event の終了予定時刻 (ISO 8601、 UI で「あと N 分で公開」 表示用)。 */
   readonly endsAt?: string;
+}
+
+/** Temporary credentials for one participant viewer role, never the deploy role. */
+export interface CliCredentialsView {
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+  readonly sessionToken: string;
+  readonly expiration: string;
+  readonly region: string;
+  readonly awsAccountId: string;
 }

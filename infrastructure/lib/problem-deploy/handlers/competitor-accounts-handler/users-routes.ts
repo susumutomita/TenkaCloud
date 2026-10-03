@@ -19,7 +19,6 @@ import {
   TENANT_VIEWER_ROLE,
   type TenantRole,
 } from "../deploy-handler/auth.js";
-import { extractAuditContext, writeAuditEvent } from "../shared/audit-log.js";
 import { extractUserPoolIdFromIss } from "./cognito-saml.js";
 import type { CompetitorAccountsSharedResources } from "./shared.js";
 
@@ -215,36 +214,6 @@ function isTenantScoped(
   return attrs["custom:tenantId"] === tenantId;
 }
 
-function auditBase(
-  c: Context,
-  tenantId: string,
-): ReturnType<typeof extractAuditContext> & {
-  readonly tenantId: string;
-} {
-  return { tenantId, ...extractAuditContext(c) };
-}
-
-function writeUserAudit(
-  audit: ReturnType<typeof auditBase>,
-  action: string,
-  outcome: "success" | "not_found" | "conflict" | "error",
-  target: string | undefined,
-  extra?: Readonly<Record<string, string>>,
-): void {
-  void writeAuditEvent({
-    tenantId: audit.tenantId,
-    actor: audit.actor,
-    actorUsername: audit.actorUsername,
-    action,
-    outcome,
-    target,
-    ipAddress: audit.ipAddress,
-    userAgent: audit.userAgent,
-    occurredAtMs: Date.now(),
-    extra,
-  });
-}
-
 async function getTenantUser(
   shared: CompetitorAccountsSharedResources,
   userPoolId: string,
@@ -329,8 +298,6 @@ export async function routeCreateUser(
 
   const parsed = await readAndValidateBody(c, InviteUserRequestSchema);
   if (!parsed.ok) return parsed.result;
-
-  const audit = auditBase(c, tenantId);
   const actorSub = resolveCognitoSub(c);
   try {
     const response = await deps.shared.cognito.send(
@@ -350,9 +317,6 @@ export async function routeCreateUser(
         },
       }),
     );
-    writeUserAudit(audit, "invite_user", "success", parsed.data.email, {
-      role: parsed.data.role,
-    });
     return {
       status: StatusCodes.CREATED,
       body: {
@@ -372,13 +336,11 @@ export async function routeCreateUser(
     };
   } catch (err) {
     if (isNamedAwsError(err, ["UsernameExistsException"])) {
-      writeUserAudit(audit, "invite_user", "conflict", parsed.data.email);
       return {
         status: StatusCodes.CONFLICT,
         body: { error: "duplicate_user", email: parsed.data.email },
       };
     }
-    writeUserAudit(audit, "invite_user", "error", parsed.data.email);
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[tenant-users] invite failed", { message });
     return { status: StatusCodes.INTERNAL_SERVER_ERROR, body: { error: "internal_error" } };
@@ -394,17 +356,14 @@ export async function routeDeleteUser(
   if (!userPoolId) return missingCognitoContext();
   const username = c.req.param("username");
   if (!username) return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_username" } };
-  const audit = auditBase(c, tenantId);
 
   try {
     const existing = await getTenantUser(deps.shared, userPoolId, tenantId, username);
     if (!existing.found || !existing.tenantScoped) {
-      writeUserAudit(audit, "delete_user", "not_found", username);
       return { status: StatusCodes.NOT_FOUND, body: { error: "not_found" } };
     }
     const actorSub = resolveCognitoSub(c);
     if (actorSub !== "unknown" && (existing.subject === actorSub || username === actorSub)) {
-      writeUserAudit(audit, "delete_user", "conflict", username);
       return { status: StatusCodes.CONFLICT, body: { error: "cannot_delete_self" } };
     }
     await deps.shared.cognito.send(
@@ -413,10 +372,8 @@ export async function routeDeleteUser(
         Username: username,
       }),
     );
-    writeUserAudit(audit, "delete_user", "success", username);
     return { status: StatusCodes.OK, body: { deleted: true } };
   } catch (err) {
-    writeUserAudit(audit, "delete_user", "error", username);
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[tenant-users] delete failed", { username, message });
     return { status: StatusCodes.INTERNAL_SERVER_ERROR, body: { error: "internal_error" } };
@@ -435,17 +392,13 @@ export async function routeChangeUserRole(
 
   const parsed = await readAndValidateBody(c, ChangeRoleRequestSchema);
   if (!parsed.ok) return parsed.result;
-
-  const audit = auditBase(c, tenantId);
   try {
     const existing = await getTenantUser(deps.shared, userPoolId, tenantId, username);
     if (!existing.found || !existing.tenantScoped) {
-      writeUserAudit(audit, "patch_user_role", "not_found", username);
       return { status: StatusCodes.NOT_FOUND, body: { error: "not_found" } };
     }
     const actorSub = resolveCognitoSub(c);
     if (actorSub !== "unknown" && (existing.subject === actorSub || username === actorSub)) {
-      writeUserAudit(audit, "patch_user_role", "conflict", username);
       return { status: StatusCodes.CONFLICT, body: { error: "cannot_change_own_role" } };
     }
     await deps.shared.cognito.send(
@@ -460,12 +413,8 @@ export async function routeChangeUserRole(
       role: parsed.data.role,
       updatedAt: new Date().toISOString(),
     };
-    writeUserAudit(audit, "patch_user_role", "success", username, {
-      role: parsed.data.role,
-    });
     return { status: StatusCodes.OK, body: { item: updated } };
   } catch (err) {
-    writeUserAudit(audit, "patch_user_role", "error", username);
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[tenant-users] patch role failed", { username, message });
     return { status: StatusCodes.INTERNAL_SERVER_ERROR, body: { error: "internal_error" } };

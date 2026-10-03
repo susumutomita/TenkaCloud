@@ -19,7 +19,7 @@ const DEMO_CLAIMS = {
   email: "demo-operator@tenkacloud.example",
   "custom:userRole": "TenantAdmin",
   "custom:tenantId": "demo-tenant",
-  "custom:tenantName": "Demo Tenant",
+  "custom:tenantName": "Demo competition",
 } as const;
 
 export const DEMO_ID_TOKEN = `${base64Url({ alg: "none", typ: "JWT" })}.${base64Url(DEMO_CLAIMS)}.demo-signature`;

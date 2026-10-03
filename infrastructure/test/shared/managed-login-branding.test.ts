@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildInkManagedLoginAssets,
   buildInkManagedLoginSettings,
-} from "../../lib/shared/managed-login-branding";
+} from "../../lib/shared/managed-login-branding.js";
 
 /**
  * Cognito Managed login の settings / assets は schema が厳格で、 無効キーは synth では通り

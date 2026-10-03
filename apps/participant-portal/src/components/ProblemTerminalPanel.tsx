@@ -30,6 +30,7 @@ import { formatProblemPanelActionError, type ProblemPanelT } from "./ProblemPane
  */
 
 const MAX_SCROLLBACK_LINES = 500;
+const MAX_SCROLLBACK_CHARACTERS = 1024 * 1024;
 
 const SCROLLBACK_STYLE: CSSProperties = {
   margin: 0,
@@ -71,7 +72,8 @@ type InboundFrame =
  * 結合後にまとめて split する。
  */
 function appendScrollback(current: string, chunk: string): string {
-  const combined = current + chunk;
+  // A newline-free command output must not bypass the line-count limit.
+  const combined = (current + chunk).slice(-MAX_SCROLLBACK_CHARACTERS);
   const lines = combined.split("\n");
   if (lines.length <= MAX_SCROLLBACK_LINES) return combined;
   return lines.slice(lines.length - MAX_SCROLLBACK_LINES).join("\n");

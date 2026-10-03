@@ -5,17 +5,18 @@ import Button from "@cloudscape-design/components/button";
 import Form from "@cloudscape-design/components/form";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { toErrorMessage } from "@tenkacloud/web-kit";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ApiError, PendingOperation, toErrorMessage } from "@tenkacloud/web-kit";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { canMutateTenant, useApiClient } from "../api/client";
 import {
   bulkDeployEvent,
   type CoordinationCapacityWarning,
+  type CreateEventRequest,
   type CreateEventResponse,
   createEvent,
 } from "../api/events-client";
-import { type AppConfig, isLocalHost } from "../config";
+import { type AppConfig, isCloudHost, isLocalHost } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
 import { useT } from "../i18n";
@@ -25,6 +26,10 @@ import { EventCreateAccountsAlerts } from "./event-create/EventCreateAccountsAle
 import { EventCreateBasicInfoSection } from "./event-create/EventCreateBasicInfoSection";
 import { EventCreateDeployPromptModal } from "./event-create/EventCreateDeployPromptModal";
 import { EventCreateProblemsetSection } from "./event-create/EventCreateProblemsetSection";
+import {
+  EventCreateSelfTestModal,
+  hostingAccountRequiringConsent,
+} from "./event-create/EventCreateSelfTestModal";
 import { EventCreateTeamsSection } from "./event-create/EventCreateTeamsSection";
 import {
   buildVerifiedAccountOption,
@@ -33,12 +38,14 @@ import {
   type ProblemRow,
   resizeTeamRows,
   resolveEventProviderMode,
-  TEAMS_MAX,
-  TEAMS_MIN,
   type TeamRow,
   validateTeamRows,
 } from "./event-create/helpers";
-import { LocalHostEventCreateNotice, useHostCatalog } from "./event-create/LocalHostEventCreate";
+import {
+  EventCreateCapacityNotice,
+  eventCapacity,
+  useHostCatalog,
+} from "./event-create/LocalHostEventCreate";
 import { useCompetitorAccountsLoader } from "./event-create/useCompetitorAccountsLoader";
 
 // 既存テストが `from "./EventCreate"` で import している pure helpers / 型は
@@ -90,10 +97,30 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const canMutate = canMutateTenant(apiClient);
   const navigate = useNavigate();
   const t = useT();
+  const creation = useRef(new PendingOperation());
+  const deployment = useRef(new PendingOperation());
+  const submissionInFlight = useRef(false);
+  const selfTestConsent = useRef<
+    | {
+        body: string;
+        acknowledgment: NonNullable<CreateEventRequest["hostingAccountSelfTest"]>;
+      }
+    | undefined
+  >(undefined);
+  const [selfTestPrompt, setSelfTestPrompt] = useState<{
+    body: CreateEventRequest;
+    awsAccountId: string;
+  } | null>(null);
 
   // 問題 option 化 (#1414 の disabled 出し分け) と検索 / filter (#1776) は
   // EventCreateProblemsetSection 側の責務。 ここは catalog 全件を渡すだけ。
-  const allProblems = useMemo(() => listProblemSummaries(), []);
+  const cloudHost = isCloudHost(config);
+  const allProblems = useMemo(() => {
+    const catalog = listProblemSummaries();
+    return cloudHost || config.supportedProblemIds !== undefined
+      ? catalog.filter((problem) => config.supportedProblemIds?.includes(problem.id))
+      : catalog;
+  }, [cloudHost, config.supportedProblemIds]);
 
   // Phase 2.2 (Issue #459): verified=true な CompetitorAccounts のみを Select の選択肢にする。
   // fetch + window focus 再取得は hook に切り出し済 (Issue #1241)。
@@ -155,11 +182,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             // selected options are built from this exact catalog, so a miss is unreachable.
             /* v8 ignore next */
             if (!meta) throw new Error(`selected problem is missing from catalog: ${opt.value}`);
-            return newProblemRow(meta, opt.value);
+            const row = newProblemRow(meta, opt.value);
+            return !isLocalHost(config) && config.nativeProblemIds?.includes(opt.value)
+              ? { ...row, runtimeProvider: "native", composite: false }
+              : row;
           });
       });
     },
-    [allProblems],
+    [allProblems, config],
   );
 
   const updateProblemRow = useCallback((problemId: string, patch: Partial<ProblemRow>) => {
@@ -171,10 +201,12 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   // Issue #3226: the local competition host deploys Docker environments on this computer.
   const localHost = isLocalHost(config);
   const hostCatalog = useHostCatalog(localHost ? apiClient : null);
-  const providerMode = useMemo<ReturnType<typeof resolveEventProviderMode>>(
-    () => (localHost ? { kind: "local" } : resolveEventProviderMode(problemRows)),
-    [localHost, problemRows],
-  );
+  const providerMode = useMemo<ReturnType<typeof resolveEventProviderMode>>(() => {
+    if (!localHost) return resolveEventProviderMode(problemRows);
+    return problemRows.some((row) => hostCatalog.cloud.has(row.problemId))
+      ? { kind: "aws" }
+      : { kind: "local" };
+  }, [localHost, problemRows, hostCatalog.cloud]);
   const teamValidation = useMemo(
     () => validateTeamRows(teamRows, providerMode),
     [teamRows, providerMode],
@@ -183,7 +215,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   // shallow identity で再 render 判定するので、毎 render 新 array を渡すと無駄に重い
   // (= 99 行 × 2 column の Input が全部 reconcile される)。
   const teamTableItems = useMemo(() => teamRows.map((tr, i) => ({ ...tr, idx: i })), [teamRows]);
-  const teamCountInvalid = teamRows.length < TEAMS_MIN || teamRows.length > TEAMS_MAX;
+  const capacity = eventCapacity(
+    localHost,
+    hostCatalog,
+    teamRows.length,
+    problemRows.length,
+    config.eventLimits,
+  );
+  const { maxTeams, teamCountInvalid, jobCountInvalid, problemCountInvalid } = capacity;
   const nameInvalid = name.length === 0 || name.length > NAME_MAX;
   const canSubmit =
     !!apiClient &&
@@ -191,6 +230,8 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     !submitting &&
     !nameInvalid &&
     !teamCountInvalid &&
+    !jobCountInvalid &&
+    !problemCountInvalid &&
     problemRows.length > 0 &&
     teamValidation.allSlugsValid &&
     teamValidation.allAccountsValid &&
@@ -211,6 +252,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     warnings: readonly CoordinationCapacityWarning[];
   } | null>(null);
   const [deployStarting, setDeployStarting] = useState(false);
+  const [hostingAccountRejected, setHostingAccountRejected] = useState(false);
 
   // Issue #2696: Lite mode でだけ 「初回イベント作成」 ドリルのチェックポイントを出す。
   // 一度表示したら二度と出さない (2026-07-21) — 毎回の event 作成で再表示されていたため。
@@ -231,36 +273,48 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     }
   }, [deployPromptTarget, config]);
 
-  const handleSubmit = async () => {
-    // submit button は disabled={!canSubmit} なので canSubmit 偽では発火し得ず、 canSubmit 真なら
-    // apiClient は非 null (canSubmit に含む)。 = この guard の return は UI 経路では不到達 (防御)。
-    /* v8 ignore next */
+  const handleSubmit = () => {
     if (!canSubmit || !apiClient) return;
+    const body: CreateEventRequest = {
+      name,
+      teams: teamRows.map((tr) => ({
+        internalSlug: tr.internalSlug,
+        ...(providerMode.kind === "aws" ||
+        (providerMode.kind === "composite" && providerMode.providers.includes("aws"))
+          ? { awsAccountId: tr.awsAccountId }
+          : {}),
+        ...(providerMode.kind === "nonAws" ||
+        (providerMode.kind === "composite" && providerMode.providers.some((p) => p !== "aws"))
+          ? { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug }
+          : {}),
+        // [Issue #3173] Omitted when blank, so a team that follows the
+        // problem's region stores nothing and every existing event is
+        // unaffected.
+        ...(tr.region ? { region: tr.region } : {}),
+      })),
+      problems: problemRows.map((r) => ({
+        problemId: r.problemId,
+        defaultRegion: r.defaultRegion,
+      })),
+    };
+    const consent = selfTestConsent.current;
+    void submitEvent(
+      consent?.body === JSON.stringify(body)
+        ? { ...body, hostingAccountSelfTest: consent.acknowledgment }
+        : body,
+    );
+  };
+
+  const submitEvent = async (body: CreateEventRequest) => {
+    if (!apiClient || submissionInFlight.current) return;
+    submissionInFlight.current = true;
     setSubmitting(true);
     setError(null);
+    if (body.hostingAccountSelfTest) setSelfTestPrompt(null);
     try {
-      const res = await createEvent(apiClient, {
-        name,
-        teams: teamRows.map((tr) => ({
-          internalSlug: tr.internalSlug,
-          ...(providerMode.kind === "aws" ||
-          (providerMode.kind === "composite" && providerMode.providers.includes("aws"))
-            ? { awsAccountId: tr.awsAccountId }
-            : {}),
-          ...(providerMode.kind === "nonAws" ||
-          (providerMode.kind === "composite" && providerMode.providers.some((p) => p !== "aws"))
-            ? { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug }
-            : {}),
-          // [Issue #3173] Omitted when blank, so a team that follows the
-          // problem's region stores nothing and every existing event is
-          // unaffected.
-          ...(tr.region ? { region: tr.region } : {}),
-        })),
-        problems: problemRows.map((r) => ({
-          problemId: r.problemId,
-          defaultRegion: r.defaultRegion,
-        })),
-      });
+      const operationKey = creation.current.keyFor(`${config.apiBaseUrl}/events`, body);
+      const res = await createEvent(apiClient, body, operationKey);
+      creation.current.acknowledge(operationKey);
       // Issue #1067: 即 navigate せず deploy 促し modal を出す。
       setDeployPromptTarget({
         eventId: res.eventId,
@@ -268,10 +322,26 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         warnings: res.warnings ?? [],
       });
     } catch (err) {
-      setError(toErrorMessage(err));
+      const account = hostingAccountRequiringConsent(err);
+      if (account && !body.hostingAccountSelfTest) {
+        setSelfTestPrompt({ body, awsAccountId: account });
+      } else {
+        setError(toErrorMessage(err));
+      }
     } finally {
+      submissionInFlight.current = false;
       setSubmitting(false);
     }
+  };
+
+  const confirmSelfTest = () => {
+    if (!selfTestPrompt) return;
+    const acknowledgment = {
+      awsAccountId: selfTestPrompt.awsAccountId,
+      riskVersion: "hosting-account-self-test-v1" as const,
+    };
+    selfTestConsent.current = { body: JSON.stringify(selfTestPrompt.body), acknowledgment };
+    void submitEvent({ ...selfTestPrompt.body, hostingAccountSelfTest: acknowledgment });
   };
 
   const handleDeployNow = async () => {
@@ -282,16 +352,29 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     setDeployStarting(true);
     try {
       // 全 team × 全 problem を bulk deploy (= 既存 Issue #910 経路)。
-      await bulkDeployEvent(apiClient, deployPromptTarget.eventId);
+      const operationKey = deployment.current.keyFor(deployPromptTarget.eventId, {});
+      await bulkDeployEvent(apiClient, deployPromptTarget.eventId, {}, operationKey);
+      deployment.current.acknowledge(operationKey);
       navigate(`/events/${deployPromptTarget.eventId}`);
+      setDeployPromptTarget(null);
     } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.status === 422 &&
+        /"error"\s*:\s*"unsupported_hosting_account"/u.test(err.message)
+      ) {
+        // Preserve the one-time keys and the actionable refusal instead of navigating
+        // to a DRAFT event whose polling cannot recover this rejected deploy request.
+        setHostingAccountRejected(true);
+        return;
+      }
       // bulk deploy 失敗時も Event 自体は作成済なので EventDetail に navigate して
       // operator が手動 deploy できる経路を残す。 error 表示は EventDetail 側 polling で拾われる。
       setError(toErrorMessage(err));
       navigate(`/events/${deployPromptTarget.eventId}`);
+      setDeployPromptTarget(null);
     } finally {
       setDeployStarting(false);
-      setDeployPromptTarget(null);
     }
   };
 
@@ -322,21 +405,26 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             onNameChange={setName}
             nameInvalid={nameInvalid}
             teamCount={teamRows.length}
-            onTeamCountChange={handleTeamCountChange}
+            onTeamCountChange={(next) =>
+              handleTeamCountChange(localHost ? Math.min(maxTeams, Math.max(1, next)) : next)
+            }
             teamCountInvalid={teamCountInvalid}
+            maxTeams={maxTeams}
           />
 
-          {localHost && <LocalHostEventCreateNotice catalog={hostCatalog} />}
+          <EventCreateCapacityNotice local={localHost} catalog={hostCatalog} capacity={capacity} />
 
           {/* #528 / Phase 2.2 (Issue #459): Teams 入力の上に置く 3 種 Alert。
            *   load error / loading / 0-verified hint をまとめた小 component。 */}
-          <EventCreateAccountsAlerts
-            accountsLoadError={accountsLoadError}
-            accountsLoading={accountsLoading}
-            showLoadingHint={competitorAccounts === null && accountsLoading && !accountsLoadError}
-            showNoVerifiedAccountsHint={showNoVerifiedAccountsHint}
-            onReload={() => void fetchAccounts()}
-          />
+          {providerMode.kind !== "native" && (
+            <EventCreateAccountsAlerts
+              accountsLoadError={accountsLoadError}
+              accountsLoading={accountsLoading}
+              showLoadingHint={competitorAccounts === null && accountsLoading && !accountsLoadError}
+              showNoVerifiedAccountsHint={showNoVerifiedAccountsHint && providerMode.kind === "aws"}
+              onReload={() => void fetchAccounts()}
+            />
+          )}
 
           <EventCreateTeamsSection
             teamTableItems={teamTableItems}
@@ -355,6 +443,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             problemRows={problemRows}
             nonAwsRuntimeEnabled={config.features?.nonAwsRuntime ?? false}
             hostSupportedProblemIds={localHost ? hostCatalog.supported : undefined}
+            maxProblems={localHost ? capacity.maxProblems : undefined}
             onProblemsChange={onProblemsChange}
             onUpdateProblemRow={updateProblemRow}
           />
@@ -375,11 +464,21 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         </SpaceBetween>
       </Form>
 
+      {selfTestPrompt && (
+        <EventCreateSelfTestModal
+          visible
+          awsAccountId={selfTestPrompt.awsAccountId}
+          onCancel={() => setSelfTestPrompt(null)}
+          onConfirm={confirmSelfTest}
+        />
+      )}
+
       <EventCreateDeployPromptModal
         visible={deployPromptTarget !== null}
         canMutateTenant={canMutate}
         deployStarting={deployStarting}
-        bulkDeploySupported={providerMode.kind === "aws" || providerMode.kind === "local"}
+        hostingAccountRejected={hostingAccountRejected}
+        bulkDeploySupported={["aws", "local", "native"].includes(providerMode.kind)}
         participantPortalUrl={config.participantPortalUrl}
         teams={deployPromptTarget?.teams ?? []}
         capacityWarnings={deployPromptTarget?.warnings ?? []}

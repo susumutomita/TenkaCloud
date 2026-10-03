@@ -116,7 +116,7 @@ describe("score delivery backend request bounds", () => {
       vi.stubEnv("TURSO_AUTH_TOKEN_PARAMETER_NAME", "/local/fixture");
       const ssm = vi
         .spyOn(SSMClient.prototype, "send")
-        .mockResolvedValue({ Parameter: { Value: "local-fixture-token" } });
+        .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "local-fixture-token" } });
       const started = performance.now();
       try {
         await expect(
@@ -209,7 +209,8 @@ describe("normal participant backend settings", () => {
           this: SSMClient,
         ) {
           attempts = await this.config.maxAttempts();
-          return { Parameter: { Value: "local-fixture-token" } };
+          expect(this.config.ignoreConfiguredEndpointUrls).toBe(true);
+          return { Parameter: { Type: "SecureString", Value: "local-fixture-token" } };
         });
         try {
           // The backend error arrives after 750ms. A delivery runtime aborts before it can read it.

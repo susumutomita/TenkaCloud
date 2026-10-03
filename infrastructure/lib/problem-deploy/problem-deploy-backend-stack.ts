@@ -6,6 +6,10 @@ import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { Construct } from "constructs";
 import type { PackAsset } from "../app-config/types.js";
+import {
+  type CloudExecutionArtifactInput,
+  CloudExecutionArtifacts,
+} from "../cloud-hosting/execution-artifacts.js";
 import { buildApiLambdas } from "./build-api-lambdas.js";
 import { buildControlDataTables } from "./build-control-data-tables.js";
 import { buildDeployPipeline } from "./build-deploy-pipeline.js";
@@ -20,6 +24,7 @@ import type { OpsMonitoringConfig } from "./ops-monitoring.js";
 import type { ParticipantPortalRuntimeConfig } from "./participant-portal-hosting.js";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
+  readonly executionArtifacts?: CloudExecutionArtifactInput;
   /**
    * SBT ControlPlane の EventBus ARN。Deploy 系イベントを流す。
    *
@@ -116,12 +121,7 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * no `BucketDeployment` = CFn テンプレ byte 互換。
    */
   readonly packAssets?: readonly PackAsset[];
-  /**
-   * Issue #2311: 監査ログ出力を on/off する。default (未指定 / true) は
-   * 従来どおり監査 Lambda 群 (deploy-api / event-api / competitor-accounts-api /
-   * system-audit-writer) が `writeAuditEvent` する。false のとき各 Lambda env に
-   * `AUDIT_LOG_ENABLED="false"` を注入し no-op 化する (= 書き込みコスト節約)。
-   */
+  /** @deprecated Accepted for legacy stack inputs; audit collection cannot be re-enabled. */
   readonly auditLogEnabled?: boolean;
   /**
    * Issue #2290: control-plane data backend の選択 (`dynamodb` | `turso` | `sql`)。
@@ -229,6 +229,7 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
  * `deployApiLambda` を `LambdaIntegration` で invoke する形に組む。
  */
 export class ProblemDeployBackendStack extends cdk.Stack {
+  readonly executionArtifacts?: CloudExecutionArtifacts;
   /** tenant API から `LambdaIntegration` で invoke される Lambda。 */
   public readonly deployApiLambda: IFunction;
   /**
@@ -350,6 +351,10 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
     };
 
+    this.executionArtifacts = props.executionArtifacts
+      ? new CloudExecutionArtifacts(this, "CoordinationPluginBundle", props.executionArtifacts)
+      : undefined;
+
     // [#2527 Slice 5] Subsystem: control-data tables + capacity runbook + table-name outputs。
     const tables = buildControlDataTables(this, {
       pureSql,
@@ -419,6 +424,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // pipeline (build-deploy-pipeline.ts)。`bulkPayloadBucket` は API family 側で作られる
     // (EventApiLambda が PutObject する — bucket logical ID unchanged)。
     const deployPipeline = buildDeployPipeline(this, {
+      requirePinnedSource: props.executionArtifacts !== undefined,
       deploymentsTable: tables.deployments?.table,
       eventBus,
       bulkPayloadBucket: apiLambdas.bulkPayloadBucket,
@@ -477,6 +483,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         problemsEndpoints: props.problemsEndpoints,
         problemsCoordination: props.problemsCoordination ?? {},
         problemsCoordinationBundles: props.problemsCoordinationBundles ?? {},
+        executionArtifactBucket: this.executionArtifacts?.bucket,
         environmentName: props.environmentName,
         runtimeConfig: props.participantPortal.runtimeConfig,
         region: this.region,
@@ -544,6 +551,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         exceededEvent: COORDINATION_BUDGET_EXCEEDED_EVENT,
       });
     }
+
+    this.executionArtifacts?.bindReaders(this);
 
     new CfnOutput(this, "DeployCreateStateMachineArn", {
       value: this.deployCreateStateMachineArn,

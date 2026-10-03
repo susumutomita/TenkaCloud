@@ -17,6 +17,7 @@ import {
 import { ParticipantPortalLambda } from "./participant-portal-lambda.js";
 
 export interface BuildParticipantPortalSubsystemArgs {
+  readonly executionArtifactBucket?: IBucket;
   readonly teamsTable?: Table;
   /**
    * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
@@ -121,6 +122,7 @@ export function buildParticipantPortalSubsystem(
     problemsScoring: args.problemsScoring,
     problemsWriteups: args.problemsWriteups,
     problemsEndpoints: args.problemsEndpoints,
+    problemsCoordination: args.problemsCoordination,
     environmentName: args.environmentName,
     ...(args.deployCodeBuildProject ? { deployCodeBuildProject: args.deployCodeBuildProject } : {}),
     // #2291: only when the Lambda deploy path is on (flag OFF → absent, no extra grant/env).
@@ -137,7 +139,9 @@ export function buildParticipantPortalSubsystem(
     description: "Participant Portal Lambda Function URL (auth via teamLoginKey bearer).",
   });
 
-  const coordinationBucket = coordinationPluginBucket(scope, args.problemsCoordinationBundles);
+  const coordinationBucket =
+    args.executionArtifactBucket ??
+    coordinationPluginBucket(scope, args.problemsCoordinationBundles);
   // [Issue #3152] Created alongside the plugin bucket and on the same condition:
   // an event with no coordination problem has nothing to submit, and a bucket
   // nothing writes to is standing cost for no behaviour.
@@ -151,7 +155,12 @@ export function buildParticipantPortalSubsystem(
     // config layer: 問題の coordination plugin path を scope resolver へ渡す。
     problemsCoordination: args.problemsCoordination,
     // plugin.mjs を materialize する bucket (宣言問題がある時のみ)。
-    ...(coordinationBucket ? { pluginBucket: coordinationBucket } : {}),
+    ...(coordinationBucket
+      ? {
+          pluginBucket: coordinationBucket,
+          ...(args.executionArtifactBucket ? { pluginKeyPattern: "plugins/*" } : {}),
+        }
+      : {}),
     ...(artifactBucket ? { artifactBucket } : {}),
     // data layer: 純 SQL profile では table が無いので、seam が SQL executor を組み立てるための
     // backend 三点を渡す。 dynamodb default では env も IAM も増えない。

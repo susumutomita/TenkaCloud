@@ -7,7 +7,6 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { grantChallengePayloadRead } from "../utils/iam-helpers.js";
-import { auditLogEnabledEnv } from "./audit-log-env.js";
 import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
@@ -81,11 +80,7 @@ export interface DeployApiLambdaProps {
    * 未指定なら writeAuditEvent は env 不在で no-op を選ぶ (= 旧 stack 互換、 audit 行 0 件)。
    */
   readonly adminAuditLogTable?: Table;
-  /**
-   * Issue #2311: 監査ログ feature flag。false で env `AUDIT_LOG_ENABLED="false"` を注入し
-   * `writeAuditEvent` を no-op 化する (= 書き込みコスト節約)。default (undefined/true) は env を
-   * 足さず従来どおり (byte 互換)。
-   */
+  /** @deprecated Accepted for stack compatibility; dedicated audit collection is removed. */
   readonly auditLogEnabled?: boolean;
   /**
    * Issue #2290: control-plane data backend (dynamodb|turso)。監査 Lambda 群と
@@ -179,8 +174,6 @@ export class DeployApiLambda extends Construct {
         CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
         // Issue #950: audit log table 名 (未配線なら空文字、 handler の writeAuditEvent が no-op)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
-        // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
-        ...auditLogEnabledEnv(props.auditLogEnabled),
         // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
         ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
         // [Issue #2560] EventApi と同型: 純 SQL 選択時、本 Lambda も deploymentsRepository /
@@ -219,7 +212,6 @@ export class DeployApiLambda extends Construct {
     props.eventBus.grantPutEventsTo(this.fn);
     // Issue #950: admin 操作 audit log を append-only 書き込む。
     // Read は付与しない (= write-only から query を起こす経路を作らない)。
-    props.adminAuditLogTable?.grantWriteData(this.fn);
 
     // #534: deploy job 詳細ページから CFn StackEvents / StackResources を引く読み取り権限。
     // same-account 経路 (= dev / 旧 deployment 行) では本 Lambda Role が直接呼ぶため Describe*

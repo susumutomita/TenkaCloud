@@ -184,7 +184,8 @@
     "empty_header": "まだ通知はありません",
     "empty_hint": "運営者が application admin console から発信した通知をここに表示します。",
     "severity_info": "Info",
-    "severity_warning": "Warning"
+    "severity_warning": "Warning",
+    "unavailable": "この開催環境はポータル通知に対応していません。開催者から案内された連絡方法を使ってください。"
   },
   "scoreboard": {
     "title": "Scoreboard",
@@ -254,6 +255,8 @@
     "coordination_duel-deadline": "DUEL の不戦勝とお題の期限切れ"
   },
   "problem_detail": {
+    "instructions_error": "問題の手順を読み込めませんでした",
+    "instructions_retry": "再試行",
     "reference_header": "問題情報と環境の状態",
     "back_button": "問題一覧へ戻る",
     "video_header": "動画でわかる操作の流れ",
@@ -310,14 +313,15 @@
     "difficulty_5": "エキスパート"
   },
   "sso_credentials": {
+    "aws_access_unavailable": "この問題環境の AWS アクセスはまだ利用できません。現在の状態を確認するか、開催者へ問い合わせてください。",
     "title": "SSO Credentials",
-    "description": "AWS Console にワンクリックで federate ログイン。 参加者個人の AWS アカウントは不要 — 主催者が用意した環境へポータルから安全にアクセスできます。",
+    "description": "主催者がチーム用に用意した AWS 環境への一時アクセスです。利用できる方法は問題ごとに異なります。",
     "open_failed_header": "AWS Console を開けませんでした",
     "mock_open_header": "モックモードでは AWS Console を開けません",
     "mock_open_blocked": "このデモはモックモード (= local mock cloud adapter) で動作しています。 実際の AWS Console を開くには、 本物のイベントへの参加 (= backend mode 配信) が必要です。",
     "validation_error": "バリデーションエラー: {errorCode}",
     "howto_header": "使い方",
-    "howto_body": "下のボタンを押すと新しいタブで AWS Console (CloudFormation スタック画面) が自動でログイン状態で開きます。session の TTL は 1 時間です。",
+    "howto_body": "問題ごとに表示される入口を使ってください。Console が有効なら新しいタブで開きます。CLI 資格情報は表示された期限まで利用できます。鍵を commit したり、他の人へ共有したりしないでください。",
     "empty_problems": "問題がありません",
     "open_console_button": "AWS Console を開く",
     "open_console_aria": "{problemId} の AWS Console を開く",
@@ -330,7 +334,7 @@
     "external_portal_hint": "この問題は {provider} 上で動作します。プロバイダのポータルを開き、主催者から配布されたアカウントでサインインしてください — TenkaCloud はサインインセッションを仲介しません。",
     "cli": {
       "section_header": "CLI / SDK の一時資格情報",
-      "body": "AWS CLI / boto3 / Terraform などから直接操作したい場合に、 1 時間有効の一時資格情報を発行します。 IAM スコープは Console と同じ (ParticipantViewerRole)。",
+      "body": "AWS CLI / SDK から、この問題で許可された操作を行うための一時資格情報を発行します。利用できる操作と有効期限は開催環境ごとに異なります。発行結果に表示される期限を確認してください。",
       "issue_button": "資格情報を発行する",
       "reissue_button": "再発行",
       "clear_button": "画面から消す",
@@ -345,7 +349,8 @@
       "expired_status": "Expired",
       "error_header": "資格情報の発行に失敗しました",
       "mock_blocked_header": "モックモードでは発行できません",
-      "mock_blocked_body": "このデモはモックモードで動作しているため、 CLI / SDK 用の一時資格情報は発行できません。 本物のイベントでは、 backend が 2 段 AssumeRole を実行して実 credentials を返します。",
+      "mock_blocked_body": "このデモはモックモードのため、CLI / SDK 用の一時資格情報は発行できません。実際の開催環境では、利用権限を確認したうえで問題用の資格情報を発行します。",
+      "operation_failed": "AWS アクセスの確認に失敗しました ({operation}): {reason}",
       "assume_role_failed": "AssumeRole が失敗しました ({stage}): {reason}",
       "stage_competitor": "競技者アカウントへの AssumeRole",
       "stage_participant_viewer": "問題ごとの ParticipantViewerRole",
@@ -516,7 +521,12 @@
     "action_failed": "問題エディタの操作に失敗しました",
     "inspect_error": "証拠の取得に失敗しました",
     "test_error": "公開テストの実行に失敗しました",
-    "editor_keys": "Tab でインデント、Shift+Tab で戻す。Cmd/Ctrl+/ でコメント切り替え。Enter は前の行のインデントを引き継ぐ。Esc を押してから Tab でフォーカス移動。"
+    "editor_keys": "Tab でインデント、Shift+Tab で戻す。Cmd/Ctrl+/ でコメント切り替え。Enter は前の行のインデントを引き継ぐ。Esc を押してから Tab でフォーカス移動。",
+    "draft_warning": "コードの下書きを保持できていません",
+    "draft_unscoped": "この環境には下書きの保存先IDがありません。編集はできますが、ページを離れる・再読込する前にコードをコピーしてください。",
+    "draft_restore_failed": "保存済みの下書きを読み込めなかったため、スターターを表示しています。元の下書きは変更していません。「初期状態に戻す」を選ぶまで編集内容は保存されません。ページを離れる前にコードをコピーしてください。",
+    "draft_save_failed": "最新のコードをこのブラウザに保存できませんでした。ページを開いたままにするか、離れる・再読込する前にコードをコピーしてください。再度編集すると保存を再試行します。",
+    "draft_local": "コードの編集内容は、この問題環境用として、このブラウザ内だけに保存されます。再読込や停止・再開後に復元できます。"
   },
   "onboarding_tutorial": {
     "panel_title": "動画から実操作へ・6つのステップ",
@@ -710,6 +720,8 @@
     "error_conflict": "申込みが重なりました。もう一度確認してください。枠は二重に割り当てません。",
     "error_rate_limited": "少し待ってから、もう一度確認してください。",
     "error_registration_unavailable": "通信または保存に失敗しました。ブラウザの保存設定と接続を確認し、同じ画面からやり直してください。",
-    "error_unsupported": "この参加リンクはAWS版のイベントで使用します。主催者へ参加先を確認してください。"
+    "error_unsupported": "このポータルでは参加登録リンクを利用できません。主催者に URL を確認してください。",
+    "error_not_ready": "割り当て可能な準備済み環境がありません。主催者に確認し、この画面で再試行してください。",
+    "error_feature_disabled": "参加登録機能が無効です。主催者に確認してください。"
   }
 }

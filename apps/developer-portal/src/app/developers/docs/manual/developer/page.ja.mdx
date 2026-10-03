@@ -1,85 +1,57 @@
-import { MaturityBadge } from "@/components/MaturityBadge";
-
 export const metadata = { title: "開発者マニュアル" };
 
-# 開発者マニュアル <MaturityBadge level="stable" />
+# 開発者マニュアル
 
-TenkaCloud本体、インフラコード、共通パッケージ、各Portal、リポジトリのツールを変更
-する人のためのマニュアルです。本体のコードを変えずに競技をデプロイする作業は
-競技開催者の役割です。
+現在のブランチはローカル・クラウド開催を統合検証中の Draft です。
+`CONTRIBUTING.md`と
+`docs/host-retirement.md`を確認してください。
+データの自動移行は行いません。
 
-## あなたのゴール
+## 準備と起動
 
-プラットフォームの契約を壊さず、必要なリポジトリ検査に通る、範囲の明確な変更を
-1つ作ります。
-
-## リポジトリを準備する
-
-[Contributing](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md)に沿って固定バージョンのツールを用意してから実行します。
-
-```bash
-mise exec -- make install
-git submodule update --init --recursive problems
+```sh
+git submodule update --init --recursive
+bun install --frozen-lockfile --ignore-scripts
+bun run build:host
+make local LOCAL_ARGS="--no-build"
 ```
 
-ローカルプレイの開発では `mise exec -- make doctor-dev` で Bun・Docker CLI・Compose・
-daemon を診断できます。設定変更は行いません。ローカルプレイを使わない文書・API・
-インフラの変更では、この Docker 診断は不要です。別の `make doctor` は Bun 不要の
-参加者向け Docker 経路を診断します。[Getting started](/developers/docs/getting-started/)から
-必要な実行経路だけを選びます。
+Bun 1.3.11 を使います。host は開催者・参加者アプリを配信し、競技状態を SQLite に保存します。
+専用の非公開データディレクトリを用意してください。
+ローカルの Docker 問題には Docker が必要です。AWS サービスの問題はクラウド開催専用です。
+Lambda + Turso/DynamoDB によるクラウド開催と配置・撤収は検証中です。
+組み込みの Battle は Bun で動作します。
 
-## 変更前に担当場所を見つける
+## 担当コード
 
-| パス | 担当 |
+| 領域 | ソース |
 | --- | --- |
-| `apps/` | 管理者・参加者・開発者向けWebアプリ |
-| `infrastructure/` | AWS CDK stack、環境設定、デプロイ経路 |
-| `packages/` | 共通contract、SDK、runtime adapter、CLI |
-| `scripts/` | リポジトリ検査、デプロイ補助、生成物 |
-| `problems/` | commitを固定した公式問題カタログsubmodule |
+| HTTP、永続化、認証、実行アダプター | `scripts/local-host/` |
+| Docker の検証・採点・Compose | `scripts/local-host/container/` |
+| 共通の純粋な処理と ExternalId | `scripts/lib/` |
+| クラウド API、永続化した処理、CDK 基盤 | `infrastructure/lib/cloud-hosting/`、`infrastructure/lib/problem-deploy/` |
+| 開催者アプリ | `apps/application-admin-console/` |
+| 参加者アプリ | `apps/participant-portal/` |
+| pack 作成・検証・保存 | `scripts/problem-pack/` |
+| 公開 SDK と作者向けツール | `packages/` |
+| 問題コンテンツと CloudFormation | pin した `problems/` submodule |
+| 競技者アカウントの初期設定 | `infrastructure/templates/competitor-bootstrap.yaml` |
 
-ローカル大会(`make host`、Bun + SQLite)は`scripts/local-host/`が API と Docker 環境を担当し、
-画面は通常の管理コンソールと参加者ポータルを local-host mode で使います。
-手順、ポート、検証コマンドは[ローカル大会の開催](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md)にあります。
+## 確認
 
-契約を変える前に、最寄りのテストとリポジトリ内の指示を読みます。
-[プラットフォーム構成](/developers/docs/concepts/architecture/)はplane間の責務とevent
-契約を説明しています。
+`bun run test:host`、`bun run test:authoring`、`bun run typecheck` と
+`make before-commit` を実行します。既存の lint と coverage の基準を維持してください。
+永続化や認証の変更は実 HTTP/SQLite 経路で確認します。
+配布に関わる変更では
+`docs/host-build-verification.md`
+も確認します。ブラウザ検証と任意の実 AWS・IdP 検証は、ローカルテストと分けて報告します。
 
-LLMに調査や修正を頼むときは、[目的別ガイドとコードの見取り図](https://tenkacloud.com/llms-full.txt)
-から担当ファイルを探します。画面の入力→処理→保存→結果表示の順に、1つの症状を追います。
-必要な文書だけを読みます。
+`make down` は大会と Docker のデータを保持します。クラウドの `make deploy` / `make destroy` は、権限設定と所有対象を確認する既存 CLI を実行します。クラウド開催は SBT を使わない旧 Lite の処理を再利用し、Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。実 AWS・hosted Turso での大会性能は未検証です。`CLOUD_ARGS="--help"` で AWS に接続せず説明を確認できます。
 
-## 変更の流れ
+新規クラウド環境の stack 名は `tenkacloud-cloud` 系です。既存の `tenkacloud-lite` 系 stack は名前を維持します。CLI は Lite / cloud の既存 stack を検出し、両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` の明示指定が必要です。旧 Lite の更新は所有情報と永続 resource ID を検証します。 catalog pin のない旧 Lite 環境は、resource / schema の検査後、bootstrap・source upload・配置の前に、進行中の大会がないことを初回だけ明示確認します。開催中の大会は完了まで配置済みの版で継続してください。大会が残っていないことを運用者が確認してから対話で承認し、非対話の更新には `CLOUD_ARGS="--confirm-no-active-events"` を使います。通常の `--yes` ではこの確認を省略できません。legacy catalog key だけでは安全な更新を証明できず、過去のデータも自動移行しません。新規環境と復旧済み環境は通常の `make deploy` で自動配置します。公開 cloud-v1 の resource / DB schema への上書き更新は拒否し、データは自動移行しません。`--drain-events` は使えません。問題環境を大会の Teardown で撤収してから基盤を削除してください。
 
-1. 依頼やIssueから、何を確認できれば完了かを決める。
-2. 最小の担当moduleと既存テストを見つける。
-3. 実装と利用者向け文書を同時に更新する。
-4. 作業中は範囲を絞ったテストを実行する。
-5. commit前に`make before-commit`を通す。pre-commit hookが自動で実行する。
-6. 最終差分を確認し、対象ファイルだけをstageする。
+両 DB とも 99 チーム、SQL coordination は旧 4 MiB 上限です。現行 catalog の 9 template は `TemplateBody` の 51,200 bytes 上限を超え、`TemplateURL` は未実装です。全 AWS 問題の配置確認済みを意味しません。
 
-`.env`、認証情報、生成されたsecret、無関係な変更をcommitしません。単体テストが
-greenでも、実AWSデプロイやブラウザ操作まで証明したことにはなりません。未確認の
-境界は正確に報告します。
+クラウドの大会と配置は、catalog の各 map、hint、plugin、元の問題ファイルを含む非公開 snapshot の `catalogKey` を保存します。A で作成した大会は、B の配置や B からの問題削除後も A を使います。Lambda は固定した source の hash を検証し、CodeBuild は保存した source ZIP の key と正確な S3 `VersionId` を使います。pin のない旧データは、元の snapshot を確認して復元した場合だけ `CDK_LEGACY_CATALOG_KEY` で回復します。現在の catalog を推測で割り当ててはいけません。 この回復設定だけで開催中の旧環境を更新してはいけません。配置済みの版で大会を完了し、進行中の大会がないことの事前確認を満たしてから更新します。
 
-## コード変更か環境設定か
-
-- 対応済みの値へ開催者が変えるだけなら、既存の`.env`パラメータを使い、説明を
-  更新します。[競技開催者マニュアル](/developers/docs/manual/organizer/)を参照。
-- 受け付ける値、検証、生成リソース、実行時の挙動を変えるなら、担当コード、テスト、
-  `.env.example`、マニュアルを同じPull Requestで更新します。
-- データベース保存先の変更では、データ移行とロールバックの境界を明示します。
-  暗黙のdual writeを追加しません。
-
-## レビュー依頼前の確認
-
-- 新しい挙動を確認する範囲の絞られたテストがある。
-- 利用者向けの英語と日本語が一致している。
-- 生成物と索引が最新である。
-- link、type、format、関係するbuildが通る。
-- 未実施のライブ検証を**Not run**と書く。
-- IssueとPull Requestがコード差分だけでなく利用者への影響を説明している。
-
-問題内容を変更する作業はpackの担当です。その場合は
-[問題作成者マニュアル](/developers/docs/manual/problem-author/)を使ってください。
+クラウド配置ごとに `<configured-key>.executions/<uuid>.zip` を新しく upload し、source bucket の versioning を必須とします。別々の key の current version は noncurrent version 用の lifecycle で削除されません。参照する大会が終了し、所有する source bucket を別途確認して清掃するまで保存料金が発生します。基盤の destroy は所有する execution snapshot を削除しますが、別の source archive bucket は残ります。ソースのテストや synth は実 AWS・hosted Turso のリハーサルではありません。

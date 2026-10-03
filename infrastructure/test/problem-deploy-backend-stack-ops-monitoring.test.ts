@@ -17,10 +17,10 @@ describe("ProblemDeployBackendStack ops monitoring (#2406)", () => {
     () => {
       const tpl = synthDefault();
 
-      tpl.resourceCountIs("AWS::SNS::Topic", 0);
-      tpl.resourceCountIs("AWS::SNS::Subscription", 0);
-      tpl.resourceCountIs("AWS::Budgets::Budget", 0);
-      tpl.resourceCountIs("AWS::CloudWatch::Alarm", 0);
+      expect(() => tpl.resourceCountIs("AWS::SNS::Topic", 0)).not.toThrow();
+      expect(() => tpl.resourceCountIs("AWS::SNS::Subscription", 0)).not.toThrow();
+      expect(() => tpl.resourceCountIs("AWS::Budgets::Budget", 0)).not.toThrow();
+      expect(() => tpl.resourceCountIs("AWS::CloudWatch::Alarm", 0)).not.toThrow();
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -30,13 +30,15 @@ describe("ProblemDeployBackendStack ops monitoring (#2406)", () => {
     () => {
       const tpl = synthWithOpsMonitoring();
 
-      tpl.resourceCountIs("AWS::SNS::Topic", 1);
-      tpl.hasResourceProperties("AWS::SNS::Subscription", {
-        Protocol: "email",
-        Endpoint: "ops@example.com",
-      });
-      tpl.resourceCountIs("AWS::Budgets::Budget", 1);
-      tpl.resourceCountIs("AWS::CloudWatch::Alarm", 2);
+      expect(() => tpl.resourceCountIs("AWS::SNS::Topic", 1)).not.toThrow();
+      expect(() =>
+        tpl.hasResourceProperties("AWS::SNS::Subscription", {
+          Protocol: "email",
+          Endpoint: "ops@example.com",
+        }),
+      ).not.toThrow();
+      expect(() => tpl.resourceCountIs("AWS::Budgets::Budget", 1)).not.toThrow();
+      expect(() => tpl.resourceCountIs("AWS::CloudWatch::Alarm", 2)).not.toThrow();
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -46,17 +48,19 @@ describe("ProblemDeployBackendStack ops monitoring (#2406)", () => {
     () => {
       const tpl = synthWithOpsMonitoring();
 
-      tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
-        MetricName: "Errors",
-        Namespace: "AWS/Lambda",
-        Statistic: "Sum",
-        Threshold: 0,
-        ComparisonOperator: "GreaterThanThreshold",
-        Period: 300,
-        EvaluationPeriods: 1,
-        Dimensions: Match.arrayWith([Match.objectLike({ Name: "FunctionName" })]),
-        AlarmActions: Match.anyValue(),
-      });
+      expect(() =>
+        tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+          MetricName: "Errors",
+          Namespace: "AWS/Lambda",
+          Statistic: "Sum",
+          Threshold: 0,
+          ComparisonOperator: "GreaterThanThreshold",
+          Period: 300,
+          EvaluationPeriods: 1,
+          Dimensions: Match.arrayWith([Match.objectLike({ Name: "FunctionName" })]),
+          AlarmActions: Match.anyValue(),
+        }),
+      ).not.toThrow();
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -66,18 +70,20 @@ describe("ProblemDeployBackendStack ops monitoring (#2406)", () => {
     () => {
       const tpl = synthWithOpsMonitoring();
 
-      tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
-        MetricName: "Invocations",
-        Namespace: "AWS/Lambda",
-        Statistic: "Sum",
-        Threshold: 1,
-        ComparisonOperator: "LessThanThreshold",
-        Period: 60,
-        EvaluationPeriods: 5,
-        TreatMissingData: "breaching",
-        Dimensions: Match.arrayWith([Match.objectLike({ Name: "FunctionName" })]),
-        AlarmActions: Match.anyValue(),
-      });
+      expect(() =>
+        tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+          MetricName: "Invocations",
+          Namespace: "AWS/Lambda",
+          Statistic: "Sum",
+          Threshold: 1,
+          ComparisonOperator: "LessThanThreshold",
+          Period: 60,
+          EvaluationPeriods: 5,
+          TreatMissingData: "breaching",
+          Dimensions: Match.arrayWith([Match.objectLike({ Name: "FunctionName" })]),
+          AlarmActions: Match.anyValue(),
+        }),
+      ).not.toThrow();
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -87,24 +93,26 @@ describe("ProblemDeployBackendStack ops monitoring (#2406)", () => {
     () => {
       const tpl = synthWithOpsMonitoring();
 
-      tpl.hasResourceProperties("AWS::Budgets::Budget", {
-        Budget: {
-          BudgetType: "COST",
-          TimeUnit: "MONTHLY",
-          BudgetLimit: { Amount: 25, Unit: "USD" },
-        },
-        NotificationsWithSubscribers: [
-          {
-            Notification: {
-              NotificationType: "ACTUAL",
-              ComparisonOperator: "GREATER_THAN",
-              Threshold: 90,
-              ThresholdType: "PERCENTAGE",
-            },
-            Subscribers: [{ SubscriptionType: "SNS", Address: Match.anyValue() }],
+      expect(() =>
+        tpl.hasResourceProperties("AWS::Budgets::Budget", {
+          Budget: {
+            BudgetType: "COST",
+            TimeUnit: "MONTHLY",
+            BudgetLimit: { Amount: 25, Unit: "USD" },
           },
-        ],
-      });
+          NotificationsWithSubscribers: [
+            {
+              Notification: {
+                NotificationType: "ACTUAL",
+                ComparisonOperator: "GREATER_THAN",
+                Threshold: 90,
+                ThresholdType: "PERCENTAGE",
+              },
+              Subscribers: [{ SubscriptionType: "SNS", Address: Match.anyValue() }],
+            },
+          ],
+        }),
+      ).not.toThrow();
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -136,13 +144,15 @@ describe("ProblemDeployBackendStack coordination state budget alerting (#3151)",
         expect(filters).toContainEqual(
           expect.objectContaining({ FilterPattern: `{ $.event = "${event}" }` }),
         );
-        tpl.hasResourceProperties("AWS::Logs::MetricFilter", {
-          FilterPattern: `{ $.event = "${event}" }`,
-          LogGroupName: Match.anyValue(),
-          MetricTransformations: Match.arrayWith([
-            Match.objectLike({ MetricValue: "1", DefaultValue: 0 }),
-          ]),
-        });
+        expect(() =>
+          tpl.hasResourceProperties("AWS::Logs::MetricFilter", {
+            FilterPattern: `{ $.event = "${event}" }`,
+            LogGroupName: Match.anyValue(),
+            MetricTransformations: Match.arrayWith([
+              Match.objectLike({ MetricValue: "1", DefaultValue: 0 }),
+            ]),
+          }),
+        ).not.toThrow();
       }
     },
     SYNTH_TIMEOUT_MS,
@@ -164,15 +174,17 @@ describe("ProblemDeployBackendStack coordination state budget alerting (#3151)",
         "CoordinationStateBudgetRefusals",
       ]) {
         expect(alarmMetrics).toContain(metricName);
-        tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
-          MetricName: metricName,
-          Namespace: "TenkaCloud/tenkacloud-development",
-          Statistic: "Sum",
-          Threshold: 0,
-          ComparisonOperator: "GreaterThanThreshold",
-          EvaluationPeriods: 1,
-          AlarmActions: Match.anyValue(),
-        });
+        expect(() =>
+          tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+            MetricName: metricName,
+            Namespace: "TenkaCloud/tenkacloud-development",
+            Statistic: "Sum",
+            Threshold: 0,
+            ComparisonOperator: "GreaterThanThreshold",
+            EvaluationPeriods: 1,
+            AlarmActions: Match.anyValue(),
+          }),
+        ).not.toThrow();
       }
     },
     SYNTH_TIMEOUT_MS,

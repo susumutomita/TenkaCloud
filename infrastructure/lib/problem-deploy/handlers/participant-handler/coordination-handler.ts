@@ -3,10 +3,13 @@ import type { CoordinationArtifactStore } from "../../control-data/coordination-
 import type { CoordinationArtifactRef } from "../../control-data/domain/coordination-artifact.js";
 import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
+import { executionPluginImporter } from "../coordination-dispatcher-handler/s3-plugin-importer.js";
+import type { DeploymentItem } from "../deploy-handler/types.js";
 import type { RoundWindow } from "../generic-scoring-handler/round-liveness.js";
 import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
 import { isCoordinationDeploymentPlayable } from "../shared/coordination-liveness.js";
 import { resolvePlayableCoordinationRunId } from "../shared/coordination-run.js";
+import { liveEventRoundWindow } from "../shared/saved-catalog-context.js";
 import { getPrerequisiteBlockByEventId } from "./challenge-access.js";
 import {
   type ArtifactFetchOutcome,
@@ -37,6 +40,7 @@ import {
   type ParticipantSharedResources,
   queryTeamItems,
   resolveDeploymentsRepository,
+  resolveParticipantCatalog,
 } from "./shared.js";
 
 /**
@@ -67,6 +71,8 @@ export interface CoordinationScope {
   readonly initializationBusy?: true;
   /** 問題が宣言する plugin module path (= interTeamCoordination.plugin)。 */
   readonly moduleRef: string;
+  readonly importer?: PluginImporter;
+  readonly coordinationScoreModes?: CoordinationStoreDeps["coordinationScoreModes"];
   /** projection 失敗 / 未初期化時に返す安全な既定 (= 他 team の機密を出さない)。 */
   readonly fallbackProjection: unknown;
   /**
@@ -91,6 +97,8 @@ export interface CoordinationHandlerDeps {
     purpose?: "initialize" | "preview",
     /** Server operation timestamp; never taken from the submitted operation. */
     nowIso?: string,
+    /** Optional run captured by the participant; checked before initialization. */
+    expectedRunId?: string,
   ) => Promise<CoordinationScopeResolution>;
   /**
    * [Issue #3152] Where immutable submission bodies live.
@@ -117,6 +125,7 @@ export interface CoordinationHandlerDeps {
  */
 export type CoordinationScopeResolution =
   | { readonly kind: "scope"; readonly scope: CoordinationScope }
+  | { readonly kind: "run_changed" }
   /** 認証不可 / 当該 event に coordination 宣言が無い / 指定 problemId が当該 team に無い。 */
   | { readonly kind: "not_configured" }
   /** `problemId` 省略で候補が複数。 候補を返して選択を要求する。 */
@@ -129,6 +138,7 @@ export type CoordinationScopeResolution =
 
 export type CoordinationHandlerOutcome =
   | { readonly kind: "ok"; readonly projection: unknown }
+  | { readonly kind: "run_changed" }
   | { readonly kind: "rejected"; readonly error: string }
   | { readonly kind: "conflict" }
   /** plugin が load 不可 (= importer 未配線 / 壊れた問題 plugin)。 op は適用されない。 */
@@ -180,12 +190,22 @@ export async function handleCoordinationOp(
    * most of them.
    */
   rawArtifacts?: unknown,
+  expectedRunId?: string,
 ): Promise<CoordinationHandlerOutcome> {
-  const resolution = await deps.resolveScope(teamLoginKey, problemId, "initialize", nowIso);
+  const resolution = await deps.resolveScope(
+    teamLoginKey,
+    problemId,
+    "initialize",
+    nowIso,
+    expectedRunId,
+  );
   if (resolution.kind !== "scope") return resolution;
   const scope = resolution.scope;
+  deps = scopedCoordinationDeps(deps, scope);
   if (scope.initializationBusy) return { kind: "conflict" };
   try {
+    if (expectedRunId !== undefined && expectedRunId !== scope.state.runId)
+      return { kind: "run_changed" };
     return await handleScopedCoordinationOp(deps, scope, op, nowIso, rawArtifacts);
   } finally {
     if (scope.initializationLease)
@@ -261,6 +281,7 @@ export async function handleCoordinationProjection(
   const resolution = await deps.resolveScope(teamLoginKey, problemId, "preview");
   if (resolution.kind !== "scope") return resolution;
   const scope = resolution.scope;
+  deps = scopedCoordinationDeps(deps, scope);
   const outcome = await loadAndProjectCoordinationForTeam(
     deps.importer,
     scope.moduleRef,
@@ -306,12 +327,14 @@ export async function handleCoordinationArtifactFetch(
       | { kind: "ambiguous" }
       | { kind: "schema_mismatch" }
       | { kind: "locked" }
+      | { kind: "run_changed" }
       | { kind: "unavailable" }
     >
 > {
   const resolution = await deps.resolveScope(teamLoginKey, problemId, "preview");
   if (resolution.kind !== "scope") return resolution;
   const scope = resolution.scope;
+  deps = scopedCoordinationDeps(deps, scope);
   const projected = await loadAndProjectCoordinationForTeam(
     deps.importer,
     scope.moduleRef,
@@ -394,30 +417,20 @@ export function makeCoordinationScopeResolver(
   shared: ParticipantSharedResources,
   config: CoordinationConfig,
 ): CoordinationHandlerDeps["resolveScope"] {
-  return async (teamLoginKey, problemId, purpose = "preview", nowIso) => {
+  return async (teamLoginKey, problemId, purpose = "preview", nowIso, expectedRunId) => {
     const items = await queryTeamItems(shared, teamLoginKey);
     // [Issue #3125] 候補を**全部**集める。 以前はループ内で最初の 1 件を return していたため、
     // 同じ team に 2 つ目の coordination problem が deploy されていても到達できなかった。
-    const candidates = items.filter(
-      (item) =>
-        item.problemId &&
-        item.tenantId &&
-        item.eventId &&
-        item.teamId &&
-        config[item.problemId]?.plugin &&
-        isCoordinationDeploymentPlayable(item),
-    );
-    const wanted = problemId
-      ? candidates.filter((item) => item.problemId === problemId)
-      : candidates;
+    const saved = await resolveCoordinationCatalog(shared, items, config);
+    const scoped = saved.shared;
+    const wanted = coordinationCandidates(items, saved.config, problemId);
     // problemId 指定で該当なし = その team にその問題は無い。 存在する別問題を代わりに
     // 返すと、 参加者は指定した問題を操作したつもりで別の試合を動かすことになる。
-    if (wanted.length === 0) return { kind: "not_configured" };
     const problemIds = [...new Set(wanted.map((item) => String(item.problemId)))].sort();
     // Duplicate deployment rows for the same problem do not make the choice ambiguous.
     if (problemIds.length > 1) return { kind: "ambiguous", problemIds };
     const item = wanted[0];
-    if (!item?.problemId || !item.tenantId || !item.eventId || !item.teamId) {
+    if (!isScopedCoordinationItem(item)) {
       return { kind: "not_configured" };
     }
     const resolvedProblemId = item.problemId;
@@ -449,8 +462,14 @@ export function makeCoordinationScopeResolver(
     const repository = await resolveDeploymentsRepository(shared);
     const runId = await resolvePlayableCoordinationRunId(repository, runKey);
     if (runId === undefined) return { kind: "not_configured" };
+    // Reject a stale tab before acquiring an initialization lease, materializing
+    // a roster, storing submitted artifacts, or dispatching the operation.
+    if (expectedRunId !== undefined && expectedRunId !== runId) return { kind: "run_changed" };
+    // Verify/load saved bytes before roster materialization or initialization leases.
+    await saved.scopeOverrides.importer?.(resolvedProblemId);
+
     const stateScope = { ...runKey, runId };
-    const window = { eventStartsAt: item.eventStartsAt, eventEndsAt: item.eventEndsAt };
+    const window = liveEventRoundWindow(scoped.liveEvent, item);
     const roster = await resolveInitializationRoster(shared, stateScope, item.teamId, purpose, {
       window,
       nowIso,
@@ -483,10 +502,28 @@ export function makeCoordinationScopeResolver(
         // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
         // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
         moduleRef: resolvedProblemId,
+        ...saved.scopeOverrides,
         fallbackProjection: {},
       },
     };
   };
+}
+
+function coordinationCandidates(
+  items: readonly Partial<DeploymentItem>[],
+  config: CoordinationConfig,
+  problemId?: string,
+): readonly Partial<DeploymentItem>[] {
+  return items.filter(
+    (item) =>
+      item.problemId &&
+      item.tenantId &&
+      item.eventId &&
+      item.teamId &&
+      config[item.problemId]?.plugin &&
+      isCoordinationDeploymentPlayable(item) &&
+      (!problemId || item.problemId === problemId),
+  );
 }
 
 /** Never accepts a participant timestamp; ended events remain read-only. */
@@ -554,4 +591,61 @@ async function resolveInitializationRoster(
     await releaseCoordinationInitialization(shared, lease);
     throw error;
   }
+}
+
+export function coordinationScoreModes(
+  config: CoordinationConfig,
+): NonNullable<CoordinationStoreDeps["coordinationScoreModes"]> {
+  return Object.fromEntries(
+    Object.entries(config).map(([id, entry]) => [
+      id,
+      entry.scoreMode === "exclusive" ? "exclusive" : "additive",
+    ]),
+  );
+}
+
+function scopedCoordinationDeps(
+  deps: CoordinationHandlerDeps,
+  scope: CoordinationScope,
+): CoordinationHandlerDeps {
+  return {
+    ...deps,
+    importer: scope.importer ?? deps.importer,
+    store: scope.coordinationScoreModes
+      ? { ...deps.store, coordinationScoreModes: scope.coordinationScoreModes }
+      : deps.store,
+  };
+}
+
+function isScopedCoordinationItem(
+  item: Partial<DeploymentItem> | undefined,
+): item is Partial<DeploymentItem> & {
+  problemId: string;
+  tenantId: string;
+  eventId: string;
+  teamId: string;
+} {
+  return !!(item?.problemId && item.tenantId && item.eventId && item.teamId);
+}
+
+async function resolveCoordinationCatalog(
+  shared: ParticipantSharedResources,
+  items: readonly Partial<DeploymentItem>[],
+  config: CoordinationConfig,
+): Promise<{
+  shared: ParticipantSharedResources;
+  config: CoordinationConfig;
+  scopeOverrides: Pick<CoordinationScope, "importer" | "coordinationScoreModes">;
+}> {
+  const scoped = await resolveParticipantCatalog(shared, items);
+  if (!scoped.executionCatalog) return { shared: scoped, config, scopeOverrides: {} };
+  const savedConfig = parseCoordinationConfig(JSON.stringify(scoped.executionCatalog.coordination));
+  return {
+    shared: scoped,
+    config: savedConfig,
+    scopeOverrides: {
+      importer: executionPluginImporter(scoped.executionCatalog),
+      coordinationScoreModes: coordinationScoreModes(savedConfig),
+    },
+  };
 }

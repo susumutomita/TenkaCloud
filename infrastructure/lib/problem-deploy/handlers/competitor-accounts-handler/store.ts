@@ -33,6 +33,28 @@ function resolveRepository(
   });
 }
 
+async function ensureRegistrationExternalId(
+  shared: CompetitorAccountsSharedResources,
+  repository: CompetitorAccountsRepository,
+  tenantId: string,
+): Promise<string> {
+  const { externalId } = await ensureExternalId(
+    {
+      ssm: shared.ssm as SSMClient,
+      env: shared.env,
+      assertCanInitialize: async () => {
+        if (await repository.hasRemainingAccounts(tenantId)) {
+          throw new Error(
+            "ExternalId is missing for registered accounts; restore the existing secret before registering another account",
+          );
+        }
+      },
+    },
+    tenantId,
+  );
+  return externalId;
+}
+
 const toSummary = (record: Partial<CompetitorAccountRecord>): CompetitorAccountSummary => ({
   awsAccountId: String(record.awsAccountId ?? ""),
   region: String(record.region ?? "ap-northeast-1"),
@@ -94,10 +116,8 @@ export async function createCompetitorAccount(
   ctx: CreateCompetitorAccountContext,
   req: CreateCompetitorAccountRequest,
 ): Promise<CreateCompetitorAccountResponse> {
-  const { externalId } = await ensureExternalId(
-    { ssm: shared.ssm as SSMClient, env: shared.env },
-    ctx.tenantId,
-  );
+  const repository = await resolveRepository(shared);
+  const externalId = await ensureRegistrationExternalId(shared, repository, ctx.tenantId);
 
   const nowIso = new Date(ctx.nowMs).toISOString();
   const record: CompetitorAccountRecord = {
@@ -112,7 +132,6 @@ export async function createCompetitorAccount(
     createdBy: ctx.createdBy,
   };
 
-  const repository = await resolveRepository(shared);
   const outcome = await repository.createAccount(record);
   if (outcome.outcome === "conflict") {
     throw new DuplicateCompetitorAccountError(req.awsAccountId);
@@ -224,13 +243,10 @@ export async function bulkCreateCompetitorAccounts(
   onCreated?: (awsAccountId: string) => void,
   onRejected?: (awsAccountId: string, outcome: BulkCompetitorAccountResult["outcome"]) => void,
 ): Promise<BulkCreateCompetitorAccountsResponse> {
-  const { externalId } = await ensureExternalId(
-    { ssm: shared.ssm as SSMClient, env: shared.env },
-    ctx.tenantId,
-  );
+  const repository = await resolveRepository(shared);
+  const externalId = await ensureRegistrationExternalId(shared, repository, ctx.tenantId);
 
   const nowIso = new Date(ctx.nowMs).toISOString();
-  const repository = await resolveRepository(shared);
   const results: BulkCompetitorAccountResult[] = [];
   const seen = new Set<string>();
 

@@ -33,6 +33,7 @@ import {
   isUptimeScoring,
   resolveProblemTitle,
   shouldRefreshAfterFlagSubmit,
+  shouldShowContainerTerminal,
   splitStackOutputs,
 } from "./ProblemPanel.helpers";
 
@@ -529,6 +530,82 @@ describe("ProblemPanel render branches", () => {
       "local",
     );
     expect(screen.getByTestId("container-workbench-panel")).toBeInTheDocument();
+  });
+
+  it("renders a host-owned Docker workbench without participant lifecycle controls", () => {
+    renderPanel({
+      status: "COMPLETE",
+      provider: "docker",
+      scoring: {
+        kind: "multi-flag",
+        points: 100,
+        flags: [
+          { id: "implement", label: "Implement", points: 100, solved: false, input: "multiline" },
+        ],
+      },
+    });
+    expect(screen.getByTestId("container-workbench-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("multi-flag-panel")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Start|Stop|起動|停止)$/u })).toBeNull();
+  });
+
+  it("requires an explicit host terminal capability on a running Docker problem", () => {
+    expect(
+      shouldShowContainerTerminal({ ...baseProblem, status: "COMPLETE", provider: "docker" }),
+    ).toBe(false);
+    expect(
+      shouldShowContainerTerminal({
+        ...baseProblem,
+        status: "COMPLETE",
+        provider: "docker",
+        terminal: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowContainerTerminal({
+        ...baseProblem,
+        status: "COMPLETE",
+        provider: "aws",
+        terminal: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowContainerTerminal({
+        ...baseProblem,
+        status: "DELETED",
+        provider: "docker",
+        terminal: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowContainerTerminal({
+        ...baseProblem,
+        status: "COMPLETE",
+        provider: "docker",
+        terminal: true,
+        containerSession: { status: "stopped" },
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps host start controls visible while a stopped session hides play surfaces", () => {
+    renderPanel({
+      status: "COMPLETE",
+      provider: "docker",
+      terminal: true,
+      containerSession: { status: "stopped" },
+      scoring: {
+        kind: "multi-flag",
+        points: 100,
+        flags: [
+          { id: "implement", label: "Implement", points: 100, solved: false, input: "multiline" },
+        ],
+      },
+    });
+    expect(screen.getByRole("button", { name: /Start \/ resume|起動・再開/u })).toBeInTheDocument();
+    expect(screen.queryByTestId("container-workbench-panel")).toBeNull();
+    expect(screen.queryByTestId("multi-flag-panel")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^(Connect|接続)$/u })).toBeNull();
   });
 
   it("should keep the intro tutorial focused by hiding its long statement and deployment facts", () => {

@@ -5,7 +5,7 @@ import {
   PutCommand,
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
-import type { IdpScope } from "../../control-plane/handlers/idp-handler/core.js";
+import type { IdpScope } from "../../shared/idp/core.js";
 import type { SamlIdpRecord, SamlIdpsRepository } from "./types.js";
 
 /**

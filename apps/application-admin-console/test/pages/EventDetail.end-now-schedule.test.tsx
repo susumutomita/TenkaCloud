@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   useApiClient: vi.fn(),
   getEvent: vi.fn(),
   setEventSchedule: vi.fn(),
+  endEvent: vi.fn(),
 }));
 
 vi.mock("../../src/api/client", async (importOriginal) => {
@@ -22,6 +23,7 @@ vi.mock("../../src/api/events-client", async (importOriginal) => {
     ...actual,
     getEvent: mocks.getEvent,
     setEventSchedule: mocks.setEventSchedule,
+    endEvent: mocks.endEvent,
   };
 });
 
@@ -59,12 +61,15 @@ const baseDetail: EventDetail = {
 const { EventDetailPage } = await import("../../src/pages/EventDetail");
 const { I18nProvider } = await import("../../src/i18n");
 
-function renderPage() {
+function renderPage(mode?: AppConfig["mode"]) {
   return render(
     <I18nProvider>
       <MemoryRouter initialEntries={[`/events/${EVENT_ID}`]}>
         <Routes>
-          <Route path="/events/:eventId" element={<EventDetailPage config={config} />} />
+          <Route
+            path="/events/:eventId"
+            element={<EventDetailPage config={{ ...config, mode }} />}
+          />
         </Routes>
       </MemoryRouter>
     </I18nProvider>,
@@ -77,6 +82,7 @@ beforeEach(() => {
   mocks.useApiClient.mockReturnValue({});
   mocks.getEvent.mockResolvedValue(baseDetail);
   mocks.setEventSchedule.mockResolvedValue({ endsAt: NOW_ISO });
+  mocks.endEvent.mockResolvedValue({ endsAt: NOW_ISO, updatedDeployments: 1 });
   window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
 });
 
@@ -89,20 +95,68 @@ describe("EventDetailPage #740 competition schedule end operations", () => {
     fireEvent.click(scheduleTab);
   }
 
-  it("should call schedule API with endsAt=now when the 'End immediately' button is pressed", async () => {
-    renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByText(/Schedule Action Event/).length).toBeGreaterThan(0),
-    );
-    await openScheduleTab();
+  it.each(["local-host", "cloud-host"] as const)(
+    "ends immediately through the server-clock API in %s mode",
+    async (mode) => {
+      renderPage(mode);
+      await openScheduleTab();
+      fireEvent.click(await screen.findByRole("button", { name: "即座に終了" }));
 
+      await waitFor(() => expect(mocks.endEvent).toHaveBeenCalledTimes(1));
+      expect(mocks.endEvent).toHaveBeenCalledWith(expect.anything(), EVENT_ID);
+      expect(mocks.setEventSchedule).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps legacy cloud end-now on the schedule API with READY status and editable scheduling", async () => {
+    mocks.setEventSchedule.mockImplementation(async () => {
+      mocks.getEvent.mockResolvedValue({ ...baseDetail, status: "READY", endsAt: NOW_ISO });
+      return { endsAt: NOW_ISO, updatedDeployments: 1 };
+    });
+    renderPage();
+    await openScheduleTab();
     fireEvent.click(await screen.findByRole("button", { name: "即座に終了" }));
 
-    await waitFor(() => expect(mocks.setEventSchedule).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.setEventSchedule).toHaveBeenCalledTimes(1));
     expect(mocks.setEventSchedule).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
       endsAt: NOW_ISO,
     });
-  }, 15_000);
+    expect(mocks.endEvent).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.getEvent).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: "日時を指定して終了" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "即座に開始" })).toBeEnabled();
+  });
+
+  it("preserves legacy cloud schedule editing for an ended event", async () => {
+    mocks.getEvent.mockResolvedValue({ ...baseDetail, status: "ENDED", endsAt: NOW_ISO });
+    renderPage();
+    await openScheduleTab();
+    expect(screen.getByRole("button", { name: "日時を指定して終了" })).toBeEnabled();
+  });
+
+  it("uses the same end API from the header confirmation", async () => {
+    renderPage("local-host");
+    fireEvent.click(await screen.findByRole("button", { name: "Event を終了" }));
+    fireEvent.click(await screen.findByRole("button", { name: "終了" }));
+
+    await waitFor(() => expect(mocks.endEvent).toHaveBeenCalledTimes(1));
+    expect(mocks.endEvent).toHaveBeenCalledWith(expect.anything(), EVENT_ID);
+    expect(mocks.setEventSchedule).not.toHaveBeenCalled();
+  });
+
+  it("disables local schedule actions after refreshing the ended event", async () => {
+    mocks.endEvent.mockImplementation(async () => {
+      mocks.getEvent.mockResolvedValue({ ...baseDetail, status: "ENDED", endsAt: NOW_ISO });
+      return { endsAt: NOW_ISO, updatedDeployments: 1 };
+    });
+    renderPage("local-host");
+    await openScheduleTab();
+    fireEvent.click(await screen.findByRole("button", { name: "即座に終了" }));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "即座に終了" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "日時を指定して終了" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "即座に開始" })).toBeDisabled();
+  });
 
   it("should NOT show internal issue numbers in the competition schedule section description", async () => {
     renderPage();
@@ -112,6 +166,6 @@ describe("EventDetailPage #740 competition schedule end operations", () => {
     await openScheduleTab();
 
     expect(screen.queryByText(/#\d{3,}/)).not.toBeInTheDocument();
-    expect(await screen.findByText(/status は変えずに採点 gate を閉じます/)).toBeInTheDocument();
+    expect(await screen.findByText(/採点期間を設定します/)).toBeInTheDocument();
   });
 });

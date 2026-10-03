@@ -1,3 +1,5 @@
+import type { ProgressionGateConfig } from "@tenkacloud/problem-sdk/internal";
+
 /** Local hosting's durable records. Private runtime descriptors never enter browser responses. */
 type SqlBinding = string | number | null;
 
@@ -18,7 +20,40 @@ export interface Problem {
   problemId: string;
   name: string;
   definition: string;
-  runtime?: "docker" | "coordination";
+  runtime?: "docker" | "coordination" | "cloudformation";
+  /** Organizer-only catalog text; never copied into a participant response. */
+  organizerContent?: OrganizerProblemContent;
+}
+
+export interface OrganizerProblemContent {
+  readonly description: string;
+  readonly learningGoals: readonly string[];
+}
+
+/** Optional display text must not add runtime requirements to an existing problem. */
+export function organizerProblemContent(metadata: {
+  description?: unknown;
+  learningGoals?: unknown;
+}): OrganizerProblemContent | undefined {
+  const learningGoals = metadata.learningGoals ?? [];
+  if (
+    typeof metadata.description !== "string" ||
+    !metadata.description.trim() ||
+    !Array.isArray(learningGoals) ||
+    !learningGoals.every((goal) => typeof goal === "string")
+  )
+    return undefined;
+  return { description: metadata.description, learningGoals };
+}
+
+/** Which runtime owns a pinned problem definition. */
+export type DefinitionKind = "compose" | "coordination" | "cloudformation";
+
+export function definitionKind(definition: string): DefinitionKind {
+  const { kind } = JSON.parse(definition) as { kind?: unknown };
+  if (kind === undefined) return "compose";
+  if (kind === "coordination" || kind === "cloudformation") return kind;
+  throw new Error(`Unknown problem definition kind: ${JSON.stringify(kind)}`);
 }
 
 export interface HostedEvent {
@@ -36,6 +71,8 @@ export interface HostedEvent {
   coordinationPausedMs?: number;
   scoreboardFreezeMinutes: number;
   problems: Problem[];
+  progressionGate?: ProgressionGateConfig;
+  containerMode?: "on-demand";
 }
 
 export interface ScoreEvent {
@@ -45,6 +82,13 @@ export interface ScoreEvent {
   points: number;
   result: "ok" | "wrong";
   occurredAt: string;
+  /** The revealed hint of a `hint` event whose runtime keeps no other record of reveals. */
+  hintId?: string;
+}
+
+/** An accepted answer. A problem counts as completed once it has one. */
+export function isSolve(event: ScoreEvent): boolean {
+  return event.source === "flag" && event.result === "ok";
 }
 
 export interface Team {
@@ -57,6 +101,34 @@ export interface Team {
   score: number;
   completedProblems: number;
   scoreEvents: ScoreEvent[];
+  /** Where this team's cloud problems are deployed; required when the event has one. */
+  aws?: AwsTarget;
+}
+
+/** A competitor account prepared with `competitor-bootstrap.yaml`. */
+export interface AwsTarget {
+  accountId: string;
+  roleName: string;
+}
+
+/** Registration is host-local; the shared ExternalId stays in its private key file. */
+export interface CompetitorAccount {
+  awsAccountId: string;
+  region: string;
+  competitorRoleName: string;
+  alias?: string;
+  verified: boolean;
+  verifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Supplied only when the host starts with AWS enabled; tests inject a local verifier. */
+export interface AccountConnection {
+  readonly region: string;
+  readonly operatorAccountId: string;
+  readonly externalId: string;
+  verify(accountId: string, roleName: string): Promise<void>;
 }
 
 export interface Job {
@@ -66,13 +138,49 @@ export interface Job {
   problemId: string;
   definition: string;
   offset: number;
+  /** Exact Compose port ownership, retained while stopped. Missing means a legacy offset plan. */
+  runtimePorts?: import("./runtime-ports").RuntimePorts;
+  /** Active-only gateway slot; releasing it never changes the runtime port map. */
+  gatewaySlot?: number;
   /** `STOPPED`: the organizer halted this one environment; containers and data are kept. */
   status: "PENDING" | "IN_PROGRESS" | "COMPLETE" | "FAILED" | "STOPPED" | "DELETING" | "DELETED";
   /** Committed before a runtime can be created; retained until physical cleanup succeeds. */
   unit: string | null;
   error?: string;
+  /** Successful creation time for this deployment generation; resuming preserves it. */
+  deployedAt?: number;
   /** An organizer operation on this single environment that has not finished yet. */
   operation?: JobOperation;
+  /** A managed local shutdown stopped this runtime; resume in place without recreating it. */
+  resumeAfterLocalDown?: boolean;
+}
+
+/** One team's uptime scorer state. The generation changes when its stack is redeployed. */
+export interface UptimeState {
+  revision: number;
+  generation?: string;
+  readyAt?: number;
+  endpointsHealth?: string;
+  lastResult?: "ok" | "fail";
+  hostHintHealth?: { frontend: boolean; api: boolean; checkedAt: string };
+}
+
+export interface UptimeOverride {
+  slot: string;
+  overrideUrl: string;
+  updatedAt: string;
+}
+
+export interface UptimeObservation {
+  eventId: string;
+  teamId: string;
+  problemId: string;
+  minute: number;
+  generation: string;
+  checkedAt: string;
+  scoreDelta: number;
+  endpointsHealth: string;
+  hostHintHealth: UptimeState["hostHintHealth"];
 }
 
 /** Organizer operations on one team/problem environment. */
@@ -88,13 +196,22 @@ export interface Context {
 export interface EngineResult {
   status: number;
   body: Record<string, unknown>;
-  snapshot: string;
+  snapshot: string | null;
   score: number;
   completedProblems: number;
   scoreEvents: ScoreEvent[];
 }
 
 export interface RuntimeEngine {
+  readonly supportsOnDemand?: boolean;
+  containerCost?(definition: string): import("./container-budget").ContainerCost;
+  disruptionAdapter?(): import("./disruption-model").DisruptionAdapter | undefined;
+  readonly hasAws?: boolean;
+  participantAwsAccess?(args: {
+    kind: import("./participant-aws-access").ParticipantAwsAccess["kind"];
+    job: Job;
+    assertCurrent: () => void;
+  }): Promise<import("./participant-aws-access").ParticipantAwsAccess>;
   catalog(): readonly Problem[];
   requiresGateway?(definition: string): boolean;
   coordinationPlugin?(problem: Problem): import("./coordination-core").HostPlugin;
@@ -110,8 +227,25 @@ export interface RuntimeEngine {
   submit(context: Context, body: Record<string, unknown>): Promise<EngineResult>;
   hint(context: Context, problemId: string, hintId: string): Promise<EngineResult>;
   surface(job: Job): string;
+  surfaces?(job: Job): Readonly<Record<string, string>>;
+  gatewayPolicy?(job: Job): { applicationRoutes: boolean; deniedPaths: readonly string[] };
+  terminalSupported?(job: Job): boolean;
+  openTerminal?(
+    job: Job,
+    handlers: import("./container/terminal-shell").TerminalHandlers,
+    assertCurrent: () => void,
+  ): Promise<import("./container/terminal-shell").TerminalProcess>;
+  workbench?(
+    job: Job,
+    action: import("./container/workbench-client").WorkbenchAction,
+    body?: unknown,
+  ): Promise<unknown>;
   /** Host ports the problem would publish at `offset`, so a slot can be probed before use. */
-  hostPorts?(definition: string, offset: number): readonly number[];
+  hostPorts?(
+    definition: string,
+    offset: number,
+    runtimePorts?: import("./runtime-ports").RuntimePorts,
+  ): readonly number[];
 }
 
 export class HostError extends Error {

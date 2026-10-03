@@ -14,7 +14,7 @@ function tableLogicalIds(tpl: Template): string[] {
 /**
  * Issue #2290 / #2440: control-plane data backend フラグが
  * ProblemDeployBackendStack の監査 Lambda 群 (DeployApi / EventApi / CompetitorAccountsApi /
- * SystemAuditWriter / ExternalIdAudit) + repository seam を実際に使う GenericScoring の env に
+ * ExternalIdAudit) + repository seam を実際に使う GenericScoring の env に
  * 正しく反映されることを検証する (`audit-log-feature-flag.test.ts` の mirror)。
  *
  * - controlDataBackend: "turso" → 各 Lambda env に CONTROL_DATA_BACKEND="turso"
@@ -28,14 +28,13 @@ function tableLogicalIds(tpl: Template): string[] {
  * 側で検証する (本 file の `synthWithControlDataBackendTurso` は participantPortal 無効)。
  */
 
-// これらの construct id 断片を含む AWS::Lambda::Function が CONTROL_DATA_BACKEND を配線される 7 Lambda。
+// これらの construct id 断片を含む AWS::Lambda::Function が CONTROL_DATA_BACKEND を配線される 6 Lambda。
 // [Issue #2442 / Phase C2] ExternalIdAudit を追加 (CompetitorAccounts repository seam の日次監査)。
 // [Issue #2442 / Phase C3] DisruptionExecutor を追加 (Disruptions EXEC# claim repository seam)。
 const BACKEND_LAMBDA_IDS = [
   "DeployApi",
   "EventApi",
   "CompetitorAccountsApi",
-  "SystemAuditWriter",
   "GenericScoring",
   "ExternalIdAudit",
   "DisruptionExecutor",
@@ -122,13 +121,14 @@ describe("control-data backend feature flag env wiring (#2290)", () => {
       expect(envOf(tpl, "DisruptionExecutor").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
         "/tenkacloud/development/turso-token",
       );
-      // [Issue #2442 / Phase C4] SystemAuditWriter actually calls `writeAuditEvent` (SBT tenant
-      // onboarding/offboarding audit), so it now "opens the DB" for the AdminAuditLog repository
-      // seam and carries the same Turso executor wiring.
-      expect(envOf(tpl, "SystemAuditWriter").TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
-      expect(envOf(tpl, "SystemAuditWriter").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
-        "/tenkacloud/development/turso-token",
-      );
+      // The retained audit Lambda is inert and must not receive database credentials.
+      for (const key of [
+        "CONTROL_DATA_BACKEND",
+        "TURSO_DATABASE_URL",
+        "TURSO_AUTH_TOKEN_PARAMETER_NAME",
+        "ADMIN_AUDIT_LOG_TABLE_NAME",
+      ])
+        expect(envOf(tpl, "SystemAuditWriter")[key]).toBeUndefined();
       // [Issue #2560] DeployApi *does* open the DB: `startDeployment` resolves
       // `resolveDeploymentsRepository` and `resolveVerifiedCompetitorAccount` resolves
       // `resolveCompetitorAccountsRepository`, both of which acquire a SQL executor in pure

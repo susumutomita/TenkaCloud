@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,24 +43,22 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/" aria-current="page">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -68,10 +66,12 @@
 <main class="doc">
 <article>
 <h1>CLI リファレンス <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p><code>tenkacloud pack</code> CLI はオフラインのパックツールです。すべてのコマンドは、
-クラウドやリモートへの呼び出しを行わずローカルで実行されます。以下のコマンド表は
+<p><code>bun run pack</code> は作問用 CLI です。ローカルディレクトリの操作はクラウドを使いません。
+Git install は指定した HTTPS repository へ接続します。以下のコマンド表は
 CLI 自身の usage 文字列から解析された<strong>規範的リファレンス</strong>であり、ドキュメントに
 記載されたコマンド名とオプションは常にコードと一致します。</p>
+<p>現在の起動は <code>make local</code>、データを保持する停止は <code>make down</code> です。<code>make deploy</code> は権限設定の事前確認が必要です。<code>make destroy</code> は対象を確認して基盤とデフォルトの所有データを削除します。外部 Turso の行は残し、<code>make destroy-all</code> で明示的にリセットします。問題環境は基盤を削除する前に大会の Teardown で撤収します。クラウド開催は SBT を使わない旧 Lite の処理を再利用し、Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。実 AWS・hosted Turso での大会性能は未検証です。pack activate/deactivate はオフラインのカタログ記録であり、現在の大会カタログへ問題を追加しません。</p>
+<p>catalog pin のない旧 Lite 環境は、resource / schema の検査後、bootstrap・source upload・配置の前に、進行中の大会がないことを初回だけ明示確認します。開催中の大会は完了まで配置済みの版で継続してください。大会が残っていないことを運用者が確認してから対話で承認し、非対話の更新には <code>CLOUD_ARGS=&quot;--confirm-no-active-events&quot;</code> を使います。通常の <code>--yes</code> ではこの確認を省略できません。legacy catalog key だけでは安全な更新を証明できず、過去のデータも自動移行しません。新規環境と復旧済み環境は通常の <code>make deploy</code> で自動配置します。</p>
 <h2>コマンド</h2>
 <table class="reference-table"><thead><tr><th>Command</th><th>Usage</th></tr></thead><tbody>
 <tr><td><code>activate</code></td><td><code>tenkacloud pack activate &lt;id@version&gt; --tenant &lt;t&gt; [--store &lt;dir&gt;]</code></td></tr>
@@ -95,9 +95,9 @@ CLI 自身の usage 文字列から解析された<strong>規範的リファレ�
 <p><code>update</code> コマンドは意図的に存在しません。新しいバージョンは別個の <code>install</code> として扱います。</p>
 <h2>例</h2>
 <p>以下の例は説明用であり、規範的なものではありません。</p>
-<pre><code class="language-bash">tenkacloud pack init ./my-pack --runtime aws/cloudformation
-tenkacloud pack validate ./my-pack --json
-tenkacloud pack install ./my-pack
+<pre><code class="language-bash">bun run pack init ./my-pack --runtime aws/cloudformation
+bun run pack validate ./my-pack --json
+bun run pack install ./my-pack
 </code></pre>
 <p>関連: <a href="/docs/reference/validation-errors/">検証エラーリファレンス</a>。</p>
 

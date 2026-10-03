@@ -6,12 +6,29 @@ import type {
 import { ULID_RE as JOB_ID_RE } from "../shared/constants.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
-  type DeployCreateRequestedDetail,
-  EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
-  publishProblemEvent,
-} from "../shared/events.js";
+  deploymentCatalogContext,
+  executionDispatchFields,
+  savedExecutionCatalog,
+} from "../shared/execution-catalog-context.js";
+import {
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+  type ProblemRuntime,
+  selectAdapter,
+} from "../shared/runtime/index.js";
 import { logDeployTrace } from "../shared/trace-log.js";
-import type { DeploySharedResources } from "./deploy.js";
+import { buildAdapterDependencies } from "./adapter-dependencies.js";
+import {
+  buildContext,
+  type DeploySharedResources,
+  resolveDeployAuthorization,
+  UnknownProblemError,
+} from "./deploy.js";
+import { slugify } from "./naming.js";
+import {
+  dispatchPreparedDeployment,
+  type PreparedDeploymentDispatch,
+} from "./prepared-dispatch.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 import type { DeploymentItem } from "./types.js";
 
@@ -119,31 +136,36 @@ async function retryOne(
     return { jobId, action: "skipped", reason: "not_failed" };
   }
 
-  // FAILED → PENDING に巻き戻す。 ConditionExpression で並走時の race (= 既に他経路で再 trigger
-  // されている / 同じ retry 配列内の重複) を防ぐ。
+  // Resolve immutable execution and live authorization before changing status.
+  let prepared: PreparedDeploymentDispatch;
+  try {
+    prepared = await prepareRetry(shared, item, callerTenantId, jobId);
+  } catch (error) {
+    const reason = retryPreflightReason(error);
+    return { jobId, action: "skipped", reason };
+  }
   const updated = await transitionRetryToPending(shared, callerTenantId, jobId, now);
   if (!updated) return { jobId, action: "skipped", reason: "not_failed" };
-
-  // 元 deploy 時に書いた item + shared.problemsCatalog から DeployCreateRequestedDetail
-  // を再構築する。 namePrefix / region / awsAccountId / competitor metadata は item に持って
-  // いる。 problemDir は shared.problemsCatalog (= module-load 時の static catalog) で
-  // problemId から解決。
-  const detail = buildRetryDetail(shared, item, callerTenantId, jobId);
-  if (!detail) return { jobId, action: "skipped", reason: "unknown_problem" };
-  // 既知 limitation: challengePayloadUrl (= private 問題用 presigned URL) は retry で再生成
-  // しない。 期限切れ URL を渡すと CodeBuild 内で 403 になり再度 FAILED に倒れる。 private
-  // 問題の retry は当面 manual (= operator が新 deploy として再投入) で運用、 Phase 2.D
-  // follow-up で presigned URL regen を入れる予定。
-  const published = await publishRetryEvent(shared, callerTenantId, jobId, detail, now);
-  if (!published) return { jobId, action: "skipped", reason: "publish_failed" };
+  try {
+    await dispatchPreparedDeployment(prepared);
+  } catch {
+    await compensateRetryPublishFailure(shared, callerTenantId, jobId, now);
+    return { jobId, action: "skipped", reason: "publish_failed" };
+  }
 
   logDeployTrace("deploy.retry.requeued", {
     jobId,
     correlationId: jobId,
     tenantId: callerTenantId,
-    problemId: detail.problemId,
+    problemId: prepared.problemId,
   });
   return { jobId, action: "requeued" };
+}
+
+function retryPreflightReason(error: unknown): string {
+  if (error instanceof UnknownProblemError) return "unknown_problem";
+  if (error instanceof Error && "code" in error) return String(error.code);
+  return error instanceof Error ? error.name : "preflight_failed";
 }
 
 async function transitionRetryToPending(
@@ -161,58 +183,51 @@ async function transitionRetryToPending(
   return outcome.outcome === "updated";
 }
 
-function buildRetryDetail(
+async function prepareRetry(
   shared: DeploySharedResources,
   item: Partial<DeploymentItem>,
   tenantId: string,
   jobId: string,
-): DeployCreateRequestedDetail | undefined {
+): Promise<PreparedDeploymentDispatch> {
+  const catalog = await savedExecutionCatalog(item.catalogKey);
+  const base = buildContext(shared, tenantId);
+  const ctx = catalog ? deploymentCatalogContext(base, catalog) : base;
   const problemId = String(item.problemId ?? "");
-  const problemDir = shared.problemsCatalog[problemId];
-  if (!problemDir) return undefined;
+  const problemDir = ctx.problemsCatalog[problemId];
+  if (!problemDir) throw new UnknownProblemError(problemId);
+  const runtime: ProblemRuntime =
+    item.runtimeProvider && item.runtimeEngine && item.runtimeEntry
+      ? { provider: item.runtimeProvider, engine: item.runtimeEngine, entry: item.runtimeEntry }
+      : (ctx.resolveProblemRuntime?.(problemId) ?? {
+          provider: EXECUTABLE_PROVIDER,
+          engine: EXECUTABLE_ENGINE,
+          entry: "template.yaml",
+        });
+  const teamName = String(item.teamName ?? "");
+  const teamSlug = slugify(teamName);
+  const adapter = selectAdapter(runtime, buildAdapterDependencies(ctx, runtime, teamSlug));
+  const authorization = await resolveDeployAuthorization(
+    ctx,
+    runtime,
+    {
+      problemId,
+      teamName,
+      awsAccountId: item.awsAccountId,
+      region: item.region,
+    },
+    teamSlug,
+  );
   return {
+    adapter,
     jobId,
-    correlationId: jobId,
     tenantId,
     problemId,
     problemDir,
-    teamSlug: String(item.teamName ?? ""),
+    teamSlug,
     namePrefix: String(item.namePrefix ?? ""),
-    region: String(item.region ?? ""),
-    awsAccountId: String(item.awsAccountId ?? ""),
-    ...(item.competitorRoleArn ? { competitorRoleArn: item.competitorRoleArn } : {}),
-    ...(item.externalIdParameterName
-      ? { externalIdParameterName: item.externalIdParameterName }
-      : {}),
+    ...authorization,
+    ...executionDispatchFields(catalog),
   };
-}
-
-async function publishRetryEvent(
-  shared: DeploySharedResources,
-  tenantId: string,
-  jobId: string,
-  detail: DeployCreateRequestedDetail,
-  now: () => number,
-): Promise<boolean> {
-  try {
-    await publishProblemEvent({
-      client: shared.events,
-      busName: shared.eventBusName,
-      detailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
-      jobId,
-      detail,
-    });
-    return true;
-  } catch (err) {
-    await compensateRetryPublishFailure(shared, tenantId, jobId, now);
-    logDeployTrace("deploy.retry.publish_failed", {
-      jobId,
-      correlationId: jobId,
-      tenantId,
-      message: err instanceof Error ? err.message : "unknown",
-    });
-    return false;
-  }
 }
 
 async function compensateRetryPublishFailure(

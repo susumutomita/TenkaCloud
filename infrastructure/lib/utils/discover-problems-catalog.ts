@@ -5,25 +5,17 @@ import {
   normalizeRuntime,
   type ProblemRuntimeDescriptor,
 } from "@tenkacloud/problem-runtime";
-import { type ProblemEndpointSlot, parseEndpointSlot } from "./endpoints-metadata.js";
 import {
   type DisruptionAction,
   type DisruptionActionKind,
   type DisruptionEffect,
   type DisruptionTrigger,
   type ProblemDisruptionEntry,
-  type ProblemPhaseEntry,
   parseDisruptionAction,
   parseDisruptionEffect,
-  parseDisruptionEntry,
   parseDisruptionsCatalogEnv,
   parseDisruptionTriggers,
-  parsePhaseEntry,
 } from "./metadata-parser.js";
-import { type ProblemScoringMetadata, parseScoringMetadata } from "./scoring-metadata.js";
-import type { ProblemWriteup } from "./writeup-metadata.js";
-
-export type { ProblemEndpointSlot, ProblemScoringMetadata, ProblemWriteup };
 
 // metadata-parser.ts に移した pure parser / 型は、 従来 import 元 (この catalog file) から
 // 引き続き import できるよう re-export する (= 既存 importer の互換維持)。
@@ -33,7 +25,6 @@ export {
   type DisruptionEffect,
   type DisruptionTrigger,
   type ProblemDisruptionEntry,
-  type ProblemPhaseEntry,
   parseDisruptionAction,
   parseDisruptionEffect,
   parseDisruptionsCatalogEnv,
@@ -48,114 +39,6 @@ export function discoverProblemsCatalog(problemsRoot: string): Record<string, st
   const result: Record<string, string> = {};
   for (const meta of iterateProblemsMetadata(problemsRoot)) {
     result[meta.id] = `problems/${meta.category}/${meta.dirName}`;
-  }
-  return result;
-}
-
-/**
- * `discoverProblemsCatalog` の sibling。同じ走査で `scoring` section を抜き、
- * `{ [problemId]: ProblemScoringMetadata }` の map を返す。`scoring` を持たない
- * 問題はキーごと出さない (= scoring 無効)。
- *
- * Lambda env vars (`BATTLE_PROBLEMS_SCORING`) として deploy-handler / participant-
- * handler に渡し、両 Lambda が同じ scoring 規則を共有する。
- */
-export function discoverProblemsScoring(
-  problemsRoot: string,
-): Record<string, ProblemScoringMetadata> {
-  const result: Record<string, ProblemScoringMetadata> = {};
-  for (const meta of iterateProblemsMetadata(problemsRoot)) {
-    const cfg = parseScoringMetadata(meta.scoring);
-    if (cfg) result[meta.id] = cfg;
-  }
-  return result;
-}
-
-/**
- * Issue #2191: JA/EN writeup pairs are bundled only into the participant backend Lambda.
- * They are deliberately excluded from the participant SPA catalog because browser-bundled
- * writeups would be readable through DevTools before the competition ends.
- */
-export function discoverProblemsWriteups(problemsRoot: string): Record<string, ProblemWriteup> {
-  const result: Record<string, ProblemWriteup> = {};
-  for (const meta of iterateProblemsMetadata(problemsRoot)) {
-    const ja = meta.writeup;
-    const en = (meta.i18n as { en?: { writeup?: unknown } } | undefined)?.en?.writeup;
-    if (
-      typeof ja === "string" &&
-      ja.trim().length > 0 &&
-      typeof en === "string" &&
-      en.trim().length > 0
-    ) {
-      result[meta.id] = { ja, en };
-    }
-  }
-  return result;
-}
-
-/**
- * `discoverProblemsCatalog` の sibling。`endpoints` section を抜き、
- * `{ [problemId]: ProblemEndpointSlot[] }` の map を返す。`endpoints` を持たない問題は
- * キーごと出さない (= endpoint 無効、Challenge 系 flag-only 問題が該当)。
- *
- * Lambda env (`PROBLEM_ENDPOINTS`) として Participant Portal handler / scoring dispatcher
- * に渡し、各 Lambda が default URL を CFn output から read-through 算出する。
- */
-export function discoverProblemsEndpoints(
-  problemsRoot: string,
-): Record<string, readonly ProblemEndpointSlot[]> {
-  const result: Record<string, readonly ProblemEndpointSlot[]> = {};
-  for (const meta of iterateProblemsMetadata(problemsRoot)) {
-    if (!Array.isArray(meta.endpoints)) continue;
-    const slots: ProblemEndpointSlot[] = [];
-    for (const entry of meta.endpoints) {
-      const slot = parseEndpointSlot(entry);
-      if (slot) slots.push(slot);
-    }
-    if (slots.length > 0) result[meta.id] = slots;
-  }
-  return result;
-}
-
-/**
- * `discoverProblemsCatalog` の sibling。`phases` section を抜き、
- * `{ [problemId]: PhaseEntry[] }` の map を返す。`phases` を持たない問題はキーごと出さない。
- *
- * `phased-polling` kind の dispatcher が time-based rule 切替に参照する。CDK synth 時に
- * metadata.json を走査し、Lambda 起動時 (`BATTLE_PROBLEMS_PHASES` env) に再度 file IO せず
- * 単一 JSON 文字列で受け取る (= cold start 削減)。
- */
-export function discoverProblemsPhases(
-  problemsRoot: string,
-): Record<string, readonly ProblemPhaseEntry[]> {
-  const result: Record<string, readonly ProblemPhaseEntry[]> = {};
-  for (const meta of iterateProblemsMetadata(problemsRoot)) {
-    if (!Array.isArray(meta.phases)) continue;
-    const phases: ProblemPhaseEntry[] = [];
-    for (const entry of meta.phases) {
-      const phase = parsePhaseEntry(entry);
-      if (phase) phases.push(phase);
-    }
-    if (phases.length > 0) result[meta.id] = phases;
-  }
-  return result;
-}
-
-/**
- * `discoverProblemsCatalog` の sibling (Issue #642)。
- * `metadata.visibility === "private"` の問題 id のみを抜いて map で返す。
- * public 問題は省略 (= env var を最小化、 default 動作を維持)。
- *
- * Lambda env (`BATTLE_PROBLEMS_VISIBILITY`) として deploy-handler に渡し、
- * `CHALLENGE_PAYLOAD_BUCKET` env と組み合わせて S3 presigned URL を発行する判定に使う。
- * 両 env が空のときは従来の local-path 経路で動作 (= dormant default)。
- */
-export function discoverProblemsVisibility(problemsRoot: string): Record<string, "private"> {
-  const result: Record<string, "private"> = {};
-  for (const meta of iterateProblemsMetadata(problemsRoot)) {
-    if (meta.visibility === "private") {
-      result[meta.id] = "private";
-    }
   }
   return result;
 }
@@ -248,31 +131,6 @@ function parseStateBudget(raw: unknown): CoordinationStateBudgetDeclaration | un
     typeof baseBytes === "number" && Number.isSafeInteger(baseBytes) && baseBytes >= 0;
   if (!validPerTeam || !validBase) return undefined;
   return { bytesPerTeam, baseBytes };
-}
-
-/**
- * Issue #888: 各 problem metadata.json から `disruptions[]` 宣言を抽出する。
- *
- * Lambda runtime に渡す形は `{ [problemId]: ProblemDisruptionEntry[] }`。 fire API が
- * `(problemId, disruptionId)` の組で declaration を引き、 `operatorEditable` allow-list /
- * `eventDetailType` などを参照する。
- *
- * `disruptions` を持たない問題はキーごと出さない (= env var を最小化)。
- */
-export function discoverProblemsDisruptions(
-  problemsRoot: string,
-): Record<string, readonly ProblemDisruptionEntry[]> {
-  const result: Record<string, readonly ProblemDisruptionEntry[]> = {};
-  for (const meta of iterateProblemsMetadata(problemsRoot)) {
-    if (!Array.isArray(meta.disruptions)) continue;
-    const entries: ProblemDisruptionEntry[] = [];
-    for (const raw of meta.disruptions) {
-      const entry = parseDisruptionEntry(raw);
-      if (entry) entries.push(entry);
-    }
-    if (entries.length > 0) result[meta.id] = entries;
-  }
-  return result;
 }
 
 interface ProblemMetadataEntry {

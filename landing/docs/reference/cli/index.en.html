@@ -49,18 +49,16 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html" aria-current="page">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -68,10 +66,11 @@
 <main class="doc">
 <article>
 <h1>CLI reference <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>The <code>tenkacloud pack</code> CLI is the offline pack tool. Every command runs locally with
-no cloud or remote calls. The command table below is <strong>normative reference</strong> parsed
+<p>The <code>tenkacloud pack</code> CLI is the offline pack tool. Local-directory commands do not call cloud services; Git installation contacts its HTTPS source. The command table below is <strong>normative reference</strong> parsed
 from the CLI&#39;s own usage strings, so the documented command names and options
 always match the code.</p>
+<p>Current launch commands are <code>make local</code> and state-preserving <code>make down</code>. <code>make deploy</code> requires reviewed AWS setup. <code>make destroy</code> confirms targets and deletes platform-owned data by default. It leaves external Turso rows; <code>make destroy-all</code> explicitly resets them. Exercise cleanup uses event Teardown before platform removal. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified. Pack activate/deactivate manage offline catalog records and do not add problems to the current event catalog.</p>
+<p>Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use <code>CLOUD_ARGS=&quot;--confirm-no-active-events&quot;</code> for a noninteractive upgrade; generic <code>--yes</code> cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic <code>make deploy</code> behavior.</p>
 <h2>Commands</h2>
 <table class="reference-table"><thead><tr><th>Command</th><th>Usage</th></tr></thead><tbody>
 <tr><td><code>activate</code></td><td><code>tenkacloud pack activate &lt;id@version&gt; --tenant &lt;t&gt; [--store &lt;dir&gt;]</code></td></tr>
@@ -94,9 +93,9 @@ target / unsupported runtime / missing flag value)</li>
 <p>There is deliberately no <code>update</code> command: a new version is a separate <code>install</code>.</p>
 <h2>Example</h2>
 <p>The example below is illustrative, not normative.</p>
-<pre><code class="language-bash">tenkacloud pack init ./my-pack --runtime aws/cloudformation
-tenkacloud pack validate ./my-pack --json
-tenkacloud pack install ./my-pack
+<pre><code class="language-bash">bun run pack init ./my-pack --runtime aws/cloudformation
+bun run pack validate ./my-pack --json
+bun run pack install ./my-pack
 </code></pre>
 <p>Related: <a href="/docs/reference/validation-errors/index.en.html">validation error reference</a>.</p>
 

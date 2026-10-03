@@ -35,6 +35,29 @@ const view = (over: Record<string, unknown> = {}): ParticipantTeamView =>
   }) as ParticipantTeamView;
 
 describe("team-view-diff (Issue #2222)", () => {
+  it("refreshes removed or newly constrained access even when score and deployment status are unchanged", () => {
+    const legacy = view({ problems: [prob()] });
+    const cliOnly = view({ problems: [prob({ accessCapabilities: ["cli-credentials"] })] });
+    const unavailable = view({ problems: [prob({ accessCapabilities: [] })] });
+    expect(viewIsUnchanged(legacy, cliOnly)).toBe(false);
+    expect(viewIsUnchanged(cliOnly, unavailable)).toBe(false);
+    expect(viewIsUnchanged(unavailable, structuredClone(unavailable))).toBe(true);
+  });
+  it("refreshes native runtime identity even when the score and run ID are unchanged", () => {
+    const previous = view();
+    for (const native of [{ runtimeKind: "coordination" }, { coordination: true }])
+      expect(viewIsUnchanged(previous, view({ problems: [prob(native)] }))).toBe(false);
+  });
+  it("refreshes a cloud coordination reset even when its deployment and score stay unchanged", () => {
+    const initial = view({ problems: [prob({ coordinationRunId: "default" })] });
+    const reset = view({
+      problems: [prob({ coordinationRunId: "01K00000000000000000000005" })],
+    });
+    expect(viewIsUnchanged(view(), initial)).toBe(false);
+    expect(viewIsUnchanged(initial, structuredClone(initial))).toBe(true);
+    expect(viewIsUnchanged(initial, reset)).toBe(false);
+    expect(viewIsUnchanged(reset, view())).toBe(false);
+  });
   it("should distinguish view / notifications / leaderboard changes independent of the Provider", () => {
     const a = view();
     const b = view({ problems: [prob({ status: "FAILED" }) as ParticipantProblemView] });

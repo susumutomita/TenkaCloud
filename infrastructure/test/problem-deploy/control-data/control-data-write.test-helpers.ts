@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { isDeepStrictEqual } from "node:util";
 import {
   BatchGetCommand,
   DeleteCommand,
@@ -66,7 +67,7 @@ function tokenize(expr: string): string[] {
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  return isDeepStrictEqual(a, b);
 }
 
 function containsValue(container: unknown, needle: unknown): boolean {
@@ -135,8 +136,8 @@ export function evalConditionExpression(
   function parseComparison(): boolean {
     const left = next();
     const op = next();
-    if (op === "=") return operandValue(left) === operandValue(next());
-    if (op === "<>") return operandValue(left) !== operandValue(next());
+    if (op === "=") return deepEqual(operandValue(left), operandValue(next()));
+    if (op === "<>") return !deepEqual(operandValue(left), operandValue(next()));
     if (op === "<=") return Number(operandValue(left)) <= Number(operandValue(next()));
     if (op === "<") return Number(operandValue(left)) < Number(operandValue(next()));
     if (op === "IN") {

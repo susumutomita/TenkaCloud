@@ -1,5 +1,6 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { LITE_DRILL_CHECKPOINTS } from "@tenkacloud/portal-contracts";
+import { ApiError } from "@tenkacloud/web-kit";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompetitorAccountSummary } from "../../src/api/competitor-accounts-client";
@@ -98,7 +99,7 @@ const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
     ...over,
   }) as ProblemSummary;
 
-let config: AppConfig = {} as AppConfig;
+let config: AppConfig = { eventLimits: { maxTeams: 99, maxProblems: 50 } } as AppConfig;
 const renderPage = () => render(<EventCreatePage config={config} />);
 const w = (c: HTMLElement) => createWrapper(c);
 // #1776: 問題選択 Multiselect の前に filter 用 Multiselect (difficulty / scoring kind / tags)
@@ -119,7 +120,7 @@ function fillValidForm(container: HTMLElement) {
 }
 
 beforeEach(() => {
-  config = {} as AppConfig;
+  config = { eventLimits: { maxTeams: 99, maxProblems: 50 } } as AppConfig;
   window.localStorage.clear();
   mockApiClient.mockReturnValue({ post: vi.fn() });
   mockNav.mockClear();
@@ -143,6 +144,141 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("EventCreatePage flow", () => {
+  it.each([undefined, "cloud-host"] as const)(
+    "submits two teams in one separate competitor account with independent regions in mode %s",
+    async (mode) => {
+      config = {
+        ...config,
+        mode,
+        hostAwsRegion: "ap-northeast-1",
+        supportedProblemIds: ["p1"],
+      };
+      const { container } = renderPage();
+      w(container).findAllInputs()[1]?.setInputValue("2");
+      w(container).findAllInputs()[0]?.setInputValue("Shared account event");
+      const selector = problemSelect(container);
+      selector?.openDropdown();
+      selector?.selectOptionByValue("p1");
+      expect(screen.getByText("event_create.col_team_region")).toBeInTheDocument();
+      for (const [index, region] of ["ap-northeast-1", "us-east-1"].entries()) {
+        const selects = w(container).findAllSelects();
+        selects[index * 2]?.openDropdown();
+        selects[index * 2]?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
+        selects[index * 2 + 1]?.openDropdown();
+        selects[index * 2 + 1]?.selectOptionByValue(region, { expandToViewport: true });
+      }
+      expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
+      fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+      await waitFor(() => expect(mockCreate).toHaveBeenCalledOnce());
+      expect(mockCreate.mock.calls[0]?.[1].teams).toEqual([
+        { internalSlug: "team-1", awsAccountId: ACCOUNT_ID, region: "ap-northeast-1" },
+        { internalSlug: "team-2", awsAccountId: ACCOUNT_ID, region: "us-east-1" },
+      ]);
+    },
+  );
+  it.each([undefined, "cloud-host"] as const)(
+    "shows only problems advertised by the execution catalog in mode %s",
+    (mode) => {
+      config = { ...config, mode, supportedProblemIds: ["p1"] };
+      const { container } = renderPage();
+      const select = problemSelect(container);
+      select?.openDropdown();
+      expect(select?.findDropdown()?.findOptionByValue("p1")).not.toBeNull();
+      expect(select?.findDropdown()?.findOptionByValue("p2")).toBeNull();
+      select?.selectOptionByValue("p1");
+      expect(screen.getByText("Problem 1")).toBeInTheDocument();
+    },
+  );
+  it.each([{ supportedProblemIds: undefined }, { supportedProblemIds: [] }])(
+    "offers no cloud problem when its capability list is %s",
+    ({ supportedProblemIds }) => {
+      config = { ...config, mode: "cloud-host", supportedProblemIds };
+      const { container } = renderPage();
+      const select = problemSelect(container);
+      select?.openDropdown();
+      expect(select?.findDropdown()?.findOptionByValue("p1")).toBeNull();
+      expect(select?.findDropdown()?.findOptionByValue("p2")).toBeNull();
+      expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+      expect(mockCreate).not.toHaveBeenCalled();
+    },
+  );
+  it.each([undefined, "cloud-host"] as const)(
+    "creates and initializes a native-only event without a competitor account in mode %s",
+    async (mode) => {
+      config = {
+        ...config,
+        mode,
+        supportedProblemIds: ["p1", "p2"],
+        nativeProblemIds: ["p1"],
+      };
+      mockLoader.mockReturnValue({
+        competitorAccounts: [],
+        accountsLoadError: null,
+        accountsLoading: false,
+        fetchAccounts,
+      });
+      const { container } = renderPage();
+      w(container).findAllInputs()[1]?.setInputValue("1");
+      w(container).findAllInputs()[0]?.setInputValue("Native event");
+      const selector = problemSelect(container);
+      selector?.openDropdown();
+      selector?.selectOptionByValue("p1");
+      expect(screen.getByText("event_create.teams_description_native")).toBeInTheDocument();
+      expect(screen.queryByText("event_create.col_aws_account")).not.toBeInTheDocument();
+      expect(screen.getByText("event_create.native_execution")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
+      fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+      await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+      expect(mockCreate.mock.calls[0]?.[1].teams).toEqual([{ internalSlug: "team-1" }]);
+      fireEvent.click(screen.getByTestId("deploy-prompt-now"));
+      await waitFor(() => expect(mockBulk).toHaveBeenCalled());
+    },
+  );
+  it.each([undefined, "cloud-host"] as const)(
+    "requires a competitor account for mixed native and AWS problems in mode %s",
+    async (mode) => {
+      config = {
+        ...config,
+        mode,
+        supportedProblemIds: ["p1", "p2"],
+        nativeProblemIds: ["p1"],
+      };
+      const { container } = renderPage();
+      w(container).findAllInputs()[1]?.setInputValue("1");
+      w(container).findAllInputs()[0]?.setInputValue("Mixed event");
+      const selector = problemSelect(container);
+      selector?.openDropdown();
+      selector?.selectOptionByValue("p1");
+      selector?.selectOptionByValue("p2");
+      expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+      const accountSelect = w(container).findAllSelects()[0];
+      accountSelect?.openDropdown();
+      accountSelect?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
+      expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
+      fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+      await waitFor(() => expect(mockCreate).toHaveBeenCalledOnce());
+      expect(mockCreate.mock.calls[0]?.[1].teams).toEqual([
+        { internalSlug: "team-1", awsAccountId: ACCOUNT_ID },
+      ]);
+    },
+  );
+  it("does not present competitor-account failures as blockers for a native-only event", () => {
+    config = { ...config, supportedProblemIds: ["p1"], nativeProblemIds: ["p1"] };
+    mockLoader.mockReturnValue({
+      competitorAccounts: null,
+      accountsLoadError: "accounts unavailable",
+      accountsLoading: false,
+      fetchAccounts,
+    });
+    const { container } = renderPage();
+    w(container).findAllInputs()[0]?.setInputValue("Native event");
+    const selector = problemSelect(container);
+    selector?.openDropdown();
+    selector?.selectOptionByValue("p1");
+    expect(screen.queryByText("accounts unavailable")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
+  });
   it("should create the event then bulk-deploy and navigate on 'deploy now'", async () => {
     const { container } = renderPage();
     fillValidForm(container);
@@ -150,12 +286,14 @@ describe("EventCreatePage flow", () => {
     await waitFor(() => expect(mockCreate).toHaveBeenCalled());
     // deploy 促し modal の primary を押す。
     fireEvent.click(screen.getByTestId("deploy-prompt-now"));
-    await waitFor(() => expect(mockBulk).toHaveBeenCalledWith(expect.anything(), "e1"));
+    await waitFor(() =>
+      expect(mockBulk).toHaveBeenCalledWith(expect.anything(), "e1", {}, expect.any(String)),
+    );
     expect(mockNav).toHaveBeenCalledWith("/events/e1");
   });
 
   it("should mark the first-event-created drill checkpoint shown once revealed in Lite mode (#2696)", async () => {
-    config = { tenantId: "local" } as AppConfig;
+    config = { tenantId: "local", eventLimits: { maxTeams: 99, maxProblems: 50 } } as AppConfig;
     const { container } = renderPage();
     fillValidForm(container);
     fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
@@ -193,6 +331,37 @@ describe("EventCreatePage flow", () => {
     await waitFor(() => expect(mockCreate).toHaveBeenCalled());
     fireEvent.click(screen.getByTestId("deploy-prompt-now"));
     await waitFor(() => expect(mockNav).toHaveBeenCalledWith("/events/e1"));
+  });
+
+  it("keeps login keys visible and links to account setup after the hosting-account refusal", async () => {
+    mockBulk.mockRejectedValue(
+      new ApiError(
+        422,
+        JSON.stringify({
+          error: "unsupported_hosting_account",
+          awsAccountId: ACCOUNT_ID,
+          message: "AWS resource exercises cannot target the platform hosting account.",
+        }),
+      ),
+    );
+    const { container } = renderPage();
+    fillValidForm(container);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByTestId("deploy-prompt-now"));
+    expect(
+      await screen.findByText("event_create.hosting_account_rejected_body"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("ONE-TIME-KEY")).toBeInTheDocument();
+    expect(mockNav).not.toHaveBeenCalled();
+    const setup = screen.getByRole("link", { name: "event_create.go_to_competitor_accounts" });
+    expect(setup).toHaveAttribute("href", "/competitor-accounts");
+    expect(setup).toHaveAttribute("target", "_blank");
+    expect(screen.getByTestId("deploy-prompt-now")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("deploy-prompt-now"));
+    expect(mockBulk).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "event_create.deploy_modal_later" }));
+    expect(mockNav).toHaveBeenCalledWith("/events/e1");
   });
 
   it("should stringify a non-Error create rejection", async () => {
@@ -354,5 +523,113 @@ describe("EventCreatePage flow", () => {
     // team-2 の slug を team-1 に揃えて重複させる (slug input は [2], [3])。
     w(container).findAllInputs()[3]?.setInputValue("team-1");
     expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+  });
+});
+
+describe("EventCreatePage hosting-account confirmation", () => {
+  const rejection = () =>
+    new ApiError(
+      422,
+      JSON.stringify({
+        error: "unsupported_hosting_account",
+        awsAccountId: ACCOUNT_ID,
+      }),
+    );
+
+  it("shows risk before keys, cancels without another request, and confirms the selected event", async () => {
+    mockCreate.mockRejectedValueOnce(rejection());
+    const { container } = renderPage();
+    fillValidForm(container);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    expect(await screen.findByText("event_create.self_test_risk")).toBeInTheDocument();
+    expect(mockCreate).toHaveBeenCalledOnce();
+    expect(mockCreate.mock.calls[0]?.[1].hostingAccountSelfTest).toBeUndefined();
+    expect(screen.queryByText("ONE-TIME-KEY")).not.toBeInTheDocument();
+    createWrapper(document.body)
+      .findModal('[data-testid="self-test-prompt"]')
+      ?.findDismissButton()
+      ?.click();
+    await waitFor(() =>
+      expect(screen.queryByText("event_create.self_test_risk")).not.toBeInTheDocument(),
+    );
+    expect(mockCreate).toHaveBeenCalledOnce();
+    mockCreate.mockRejectedValueOnce(rejection());
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "event_create.self_test_confirm" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(3));
+    expect(mockCreate.mock.calls[2]?.[1]).toEqual({
+      ...mockCreate.mock.calls[0]?.[1],
+      hostingAccountSelfTest: {
+        awsAccountId: ACCOUNT_ID,
+        riskVersion: "hosting-account-self-test-v1",
+      },
+    });
+    expect(await screen.findByText("ONE-TIME-KEY")).toBeInTheDocument();
+  });
+
+  it("handles an actual HTTP 422 and posts consent through the real API client", async () => {
+    const { createCoreApiClient } = await import("@tenkacloud/web-kit");
+    const realEvents = await vi.importActual<typeof import("../../src/api/events-client")>(
+      "../../src/api/events-client",
+    );
+    const requests: { body: Record<string, unknown>; headers: Headers }[] = [];
+    const fetchHttp = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(new URL(String(input)).pathname).toBe("/api/events");
+      expect(init?.method).toBe("POST");
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requests.push({ body, headers: new Headers(init?.headers) });
+      if (!body.hostingAccountSelfTest)
+        return Response.json(
+          {
+            error: "unsupported_hosting_account",
+            awsAccountId: ACCOUNT_ID,
+            message:
+              "Using the hosting AWS account requires explicit self-test risk acknowledgment before event creation.",
+          },
+          { status: 422 },
+        );
+      return Response.json({
+        eventId: "e1",
+        teams: [{ teamId: "t1", internalSlug: "team-1", teamLoginKey: "ONE-TIME-KEY" }],
+      });
+    });
+    vi.stubGlobal("fetch", fetchHttp);
+    try {
+      config = { ...config, apiBaseUrl: "https://synthetic.invalid/api" };
+      mockApiClient.mockReturnValue(createCoreApiClient(config.apiBaseUrl, "synthetic-id-token"));
+      mockCreate.mockImplementation(realEvents.createEvent);
+      const { container } = renderPage();
+      fillValidForm(container);
+      fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+      expect(await screen.findByText("event_create.self_test_risk")).toBeInTheDocument();
+      expect(requests).toHaveLength(1);
+      expect(screen.queryByText("ONE-TIME-KEY")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "event_create.self_test_confirm" }));
+      expect(await screen.findByText("ONE-TIME-KEY")).toBeInTheDocument();
+      expect(requests).toHaveLength(2);
+      expect(requests[1]?.body.hostingAccountSelfTest).toEqual({
+        awsAccountId: ACCOUNT_ID,
+        riskVersion: "hosting-account-self-test-v1",
+      });
+      expect(requests[0]?.headers.get("authorization")).toBe("Bearer synthetic-id-token");
+      expect(requests[1]?.headers.get("Idempotency-Key")).toBeTruthy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("retains acknowledgment and operation key after a lost response; repeated confirmation sends once", async () => {
+    mockCreate.mockRejectedValueOnce(rejection()).mockRejectedValueOnce(new Error("response lost"));
+    const { container } = renderPage();
+    fillValidForm(container);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    const confirm = await screen.findByRole("button", { name: "event_create.self_test_confirm" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    expect(await screen.findByText("response lost")).toBeInTheDocument();
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(3));
+    expect(mockCreate.mock.calls[2]?.slice(1)).toEqual(mockCreate.mock.calls[1]?.slice(1));
   });
 });

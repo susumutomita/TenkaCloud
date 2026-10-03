@@ -1,9 +1,12 @@
+import type { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
-import { createCognitoIdpAdapter } from "../../lib/control-plane/handlers/idp-handler/cognito-adapter.ts";
-import type { IdpHandlerDeps } from "../../lib/control-plane/handlers/idp-handler/core.ts";
-import { createDdbIdpStore } from "../../lib/control-plane/handlers/idp-handler/ddb-store.ts";
-import { buildIdpApp } from "../../lib/control-plane/handlers/idp-handler/routes.ts";
+import { createCognitoIdpAdapter } from "../../lib/shared/idp/cognito-adapter.ts";
+import type { IdpHandlerDeps } from "../../lib/shared/idp/core.ts";
+import { createSeamIdpStore } from "../../lib/shared/idp/ddb-store.ts";
+import { buildIdpApp } from "../../lib/shared/idp/routes.ts";
 import { createTenantIdpResolveScope } from "../../lib/tenant-template/handlers/idp-handler/tier-guard.ts";
+import { makeTestControlDataRuntime } from "../problem-deploy/control-data/runtime.test-helpers";
 
 /**
  * Defense-in-depth tier guard for the Application Plane IdP CRUD Lambda.
@@ -29,12 +32,13 @@ function buildTestApp(tierGuard: string | undefined) {
   // so stub clients are safe here. We still need real factory objects to
   // satisfy the IdpHandlerDeps shape.
   const deps: IdpHandlerDeps = {
-    store: createDdbIdpStore({
-      ddb: { send: vi.fn() } as never,
+    store: createSeamIdpStore({
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send: vi.fn() } as unknown as DynamoDBDocumentClient,
       tableName: "TestSamlIdps",
     }),
     cognito: createCognitoIdpAdapter({
-      client: { send: vi.fn() } as never,
+      client: { send: vi.fn() } as unknown as CognitoIdentityProviderClient,
       userPoolId: "us-east-1_TEST",
     }),
     now: () => new Date("2026-01-01T00:00:00Z"),
@@ -75,8 +79,7 @@ describe("Application Plane IdP handler tier guard", () => {
     const app = buildTestApp("silo");
     const res = await app.fetch(buildAuthedRequest());
     // With the guard cleared but no valid JWT, the auth layer rejects.
-    // The point of THIS test is only that the response is no longer the
-    // tier-guard 503. Any non-503 response means we passed the guard.
-    expect(res.status).not.toBe(503);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "forbidden" });
   });
 });

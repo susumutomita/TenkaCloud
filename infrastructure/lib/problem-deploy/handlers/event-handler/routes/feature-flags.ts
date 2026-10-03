@@ -7,7 +7,6 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_ROLES,
 } from "../../deploy-handler/auth.js";
-import { auditEventAction } from "../audit.js";
 import { FeatureFlagsPatchSchema, getFeatureFlags, putFeatureFlags } from "../feature-flags.js";
 import { handleRouteError, withJsonBody } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
@@ -50,7 +49,6 @@ export function registerFeatureFlagsRoutes(app: Hono, shared: EventSharedResourc
             resolveCognitoSub(c),
             Date.now(),
           );
-          auditEventAction(c, "update_feature_flags", "feature-flags");
           return c.json({ flags }, StatusCodes.OK);
         } catch (err) {
           return handleRouteError(c, "[events] putFeatureFlags failed", {}, err);

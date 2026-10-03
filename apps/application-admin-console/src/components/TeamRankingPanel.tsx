@@ -24,7 +24,7 @@ interface RankingRow {
 
 export function computeRanking(teams: readonly TeamScoreEvents[]): readonly RankingRow[] {
   const aggregated = teams.map((t) => {
-    const total = t.events.reduce((acc, e) => acc + e.points, 0);
+    const total = t.projectedTotal ?? t.events.reduce((acc, e) => acc + e.points, 0);
     const lastUpdate =
       t.events.length > 0
         ? Math.max(...t.events.map((e) => new Date(e.occurredAt).getTime()))
