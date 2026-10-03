@@ -54,6 +54,10 @@ export interface DeployLogsResponse {
 }
 
 export type AssumeRoleStage = "competitor" | "participant_viewer";
+export type AwsAccessOperation =
+  | "ssm:GetParameter"
+  | "sts:AssumeRole"
+  | "cloudformation:DescribeStackResource";
 
 /**
  * Phase 3: 自チームのスコア変動履歴 (時系列降順)。

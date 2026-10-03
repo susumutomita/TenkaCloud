@@ -40,6 +40,12 @@ make local
 
 Options use `LOCAL_ARGS`, for example `make local LOCAL_ARGS="--no-build"`. When using a custom `--data` directory, pass the same directory to `make down`.
 
+<h2 id="cloud-setup">Set up cloud hosting</h2>
+
+Select your intended AWS CLI profile and check it with `aws sts get-caller-identity`. Run `make env-init ENV=development` to enter the organizer email, hosting account ID and region. The wizard creates the selected `.env` only if it is absent. Existing files must be edited when their settings need changes.
+
+For Turso, run `make turso-live ENV=development`. It guides CLI installation/login, database creation, SSM token storage and an authenticated check, then asks before deployment. For DynamoDB, run `make deploy ENV=development` after `env-init`. `make turso-live-guide` shows offline instructions; `make turso-token-rotate ENV=development` renews the database token without printing it. Use `ROTATE_ARGS="--expiration 30d"` for a finite lifetime, and rotate before it expires. See the checkout's `infrastructure/README.md` for prerequisites, profile selection and every confirmation.
+
 <h2 id="cloud-status">Cloud deployment status</h2>
 
 `make deploy` and `make destroy` use the current Lambda + Turso/DynamoDB CLI after reviewed IAM setup. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Destroy confirms targets and honors deployed removal policies. Ordinary destroy leaves external Turso rows; destroy-all explicitly resets them. Exercise teardown is separate. The restored cloud backend does not promise a zero-cost deployment. AWS-service problems are cloud-only. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified. The cloud pipeline defaults to the current CLI; review its source settings and deployment role before starting a build.

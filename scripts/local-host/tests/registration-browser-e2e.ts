@@ -41,14 +41,18 @@ async function main(): Promise<void> {
     for (const label of ["team-1", "team-2"])
       await organizer.getByRole("option", { name: new RegExp(label, "u") }).click();
     await organizer.keyboard.press("Escape");
-    await organizer.getByLabel("Registration deadline (this device’s time)").fill(
-      await organizer.evaluate((now) => {
-        const date = new Date(now + 3600_000);
-        return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-          .toISOString()
-          .slice(0, 16);
-      }, fixture.now),
-    );
+    const deadline = await organizer.evaluate((now) => {
+      const date = new Date(now + 3600_000);
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+    }, fixture.now);
+    await organizer
+      .getByRole("textbox", { name: /Registration end date$/u })
+      .fill(deadline.slice(0, 10).replaceAll("-", "/"));
+    await organizer
+      .getByRole("textbox", { name: /Registration end time$/u })
+      .fill(deadline.slice(11));
     await organizer
       .getByRole("checkbox", {
         name: "These ready team environments may be assigned to participants.",

@@ -593,6 +593,7 @@ export class HostingService {
           problemId: problem.problemId,
           name: problem.name,
           runtime: problem.runtime ?? "docker",
+          ...(problem.organizerContent ? { content: problem.organizerContent } : {}),
         })),
       });
     }
@@ -875,7 +876,9 @@ export class HostingService {
       const problem = catalog.find((candidate) => candidate.problemId === problemId);
       if (!problem)
         throw new HostError(422, `Problem is not supported by local hosting: ${problemId}`);
-      return { ...problem };
+      const pinnedProblem = { ...problem };
+      delete pinnedProblem.organizerContent;
+      return pinnedProblem;
     });
     if (problems.filter((problem) => problem.runtime === "coordination").length > 1)
       throw new HostError(422, "Choose at most one coordination Battle per event.");
@@ -1132,8 +1135,17 @@ export class HostingService {
   private archive(event: HostedEvent): ApiResponse {
     if (!["DRAFT", "ENDED", "TEARDOWN"].includes(event.status))
       throw new HostError(409, "Event is not archivable.");
-    if (this.store.jobs(event.eventId).some((job) => job.unit))
-      throw new HostError(409, "Tear down all environments before archiving.");
+    // Native Battle units identify stored match state; they do not own external resources.
+    if (
+      this.store
+        .jobs(event.eventId)
+        .some((job) => job.unit !== null && definitionKind(job.definition) !== "coordination")
+    )
+      throw new HostError(
+        409,
+        "Tear down all environments before archiving.",
+        "environments_remain",
+      );
     event.status = "ARCHIVED";
     this.saveEvent(event);
     return ok({ archivedAt: event.updatedAt });

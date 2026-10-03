@@ -36,6 +36,7 @@ import {
   HostError,
   isSolve,
   type Job,
+  organizerProblemContent,
   type Problem,
   type RuntimeEngine,
   type ScoreEvent,
@@ -129,6 +130,8 @@ const REVIEWED_STACK_PROBLEMS = [
 
 interface StackMetadata {
   name: string;
+  description?: string;
+  learningGoals?: string[];
   instructions: string;
   cfnTemplate: string;
   cfnParameters?: Record<string, string>;
@@ -226,6 +229,7 @@ function stackProblem(
     problemId,
     name: metadata.name,
     definition: JSON.stringify(definition),
+    organizerContent: organizerProblemContent(metadata),
     runtime: "cloudformation",
   };
 }

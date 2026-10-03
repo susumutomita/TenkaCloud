@@ -1,4 +1,4 @@
-import type { AssumeRoleStage } from "./types";
+import type { AssumeRoleStage, AwsAccessOperation } from "./types";
 
 /**
  * Portal API 共通 error classes。 caller (= UI / hook) は instanceof で振り分けて
@@ -60,21 +60,15 @@ export class PortalScoringGateError extends Error {
 }
 
 /**
- * Issue #1197: backend が `assume_role_failed` を返した時に stage / reason を保持する error。
- *
- * stage:
- *  - `competitor`: tenant の CompetitorDeployRole を AssumeRole 失敗。 ExternalId 不一致 /
- *    trust policy 不備 / role 未作成 が主因。
- *  - `participant_viewer`: 問題ごとの ParticipantViewerRole 失敗。 stack output の
- *    `ParticipantViewerRoleArn` が trust policy で CompetitorDeployRole を許可していない、
- *    または ExternalId (= jobId) が伝搬していない。
- *
- * UI は stage に応じて 「どちら側を直すべきか」 を競技者 / operator に案内できる。
+ * Retains the legacy stage/reason error contract. New responses also identify the
+ * failed AWS API: competitor-stage verification includes SSM and CloudFormation.
+ * Viewer AssumeRole uses operator credentials with the deployment job ExternalId.
  */
 export class PortalAssumeRoleError extends Error {
   constructor(
     public readonly stage: AssumeRoleStage,
     public readonly reason: string,
+    public readonly operation?: AwsAccessOperation,
   ) {
     super(`Portal AssumeRole failed (${stage}): ${reason}`);
     this.name = "PortalAssumeRoleError";

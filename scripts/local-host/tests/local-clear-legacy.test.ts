@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { remapComposeHostPorts } from "../container/port-remap";
 import type { DockerDefinition } from "../docker-catalog";
+import { DockerHostingEngine } from "../docker-engine";
 import { clearLocalHistory, type LocalClearIo } from "../local-clear";
 import type { Job } from "../model";
 import { HostStore } from "../store";
@@ -47,6 +48,7 @@ function setup() {
     join(root, "bin", "docker"),
     `#!/bin/sh
 case " $* " in
+  *" up "*) exit 1 ;;
   *" down "*) printf '%s\\n' "$*" >> "$TENKA_TEST_DOCKER_CALLS"
     if [ -f "$TENKA_TEST_DOCKER_FAIL" ]; then exit 1; fi ;;
 esac
@@ -177,16 +179,73 @@ test("clear accepts the actual old generated layout after displaying every legac
     }
   }));
 
-for (const remainder of ["seed", "empty"] as const) {
-  test(`clear resumes a known old DELETED job with ${remainder} remainder without Docker`, async () =>
+test("previously supported DELETED remainders do not need a newer pinned definition or seed", async () =>
+  fixture(async (f) => {
+    updateJob(f, { status: "DELETED", unit: null, definition: "{}" });
+    fs.unlinkSync(f.compose);
+    fs.writeFileSync(f.seed, "retained legacy seed");
+    await f.clear();
+    expect(f.calls()).toEqual([]);
+    expect(fs.existsSync(f.runtime)).toBe(false);
+  }));
+
+test("previously supported durable legacy ownership does not require a newer seed format", async () =>
+  fixture(async (f) => {
+    fs.writeFileSync(f.seed, "retained legacy seed");
+    await f.clear();
+    expect(f.calls()).toHaveLength(1);
+    expect(fs.existsSync(f.runtime)).toBe(false);
+  }));
+
+for (const status of ["DELETED", "FAILED", "PENDING", "IN_PROGRESS", "DELETING"] as const) {
+  for (const remainder of ["seed", "empty"] as const) {
+    test(`clear resumes a known old ${status} job with ${remainder} remainder without Docker`, async () =>
+      fixture(async (f) => {
+        updateJob(f, { status, unit: null });
+        fs.unlinkSync(f.compose);
+        if (remainder === "empty") fs.unlinkSync(f.seed);
+        f.io.confirm = async () => {
+          expect(f.messages.join("\n")).toContain(f.runtime);
+          if (remainder === "seed") expect(f.messages.join("\n")).toContain(f.seed);
+          expect(fs.existsSync(f.runtime)).toBe(true);
+          return true;
+        };
+        await f.clear();
+        expect(f.calls()).toEqual([]);
+        expect(fs.existsSync(f.runtime)).toBe(false);
+      }));
+  }
+}
+
+for (const composeText of [undefined, "not a Compose plan", "services: {}\n"]) {
+  test(`clear accepts a failed legacy start's seed after rollback (${composeText ?? "valid plan"})`, async () =>
     fixture(async (f) => {
-      const store = f.open();
-      store.putJob({ ...f.job, status: "DELETED", unit: null });
-      store.close();
-      fs.unlinkSync(f.compose);
-      if (remainder === "empty") fs.unlinkSync(f.seed);
+      const definition = JSON.parse(f.job.definition) as DockerDefinition;
+      const job: Job = {
+        ...f.job,
+        status: "IN_PROGRESS",
+        unit: null,
+        definition: JSON.stringify({
+          ...definition,
+          composeText: composeText ?? definition.composeText,
+        }),
+      };
+      fs.unlinkSync(f.seed);
+      const engine = new DockerHostingEngine(f.catalog, f.data);
+      await expect(
+        engine.start(job, (unit) => {
+          job.unit = unit;
+          updateJob(f, job);
+        }),
+      ).rejects.toThrow("Compose up failed");
+      updateJob(f, { ...job, status: "FAILED" });
+      expect(job.unit).toBeNull();
+      expect(fs.existsSync(f.compose)).toBe(false);
+      expect(fs.existsSync(f.seed)).toBe(true);
+      expect(fs.existsSync(join(f.runtime, ".tenkacloud-runtime-owner"))).toBe(false);
+      expect(f.calls()).toHaveLength(1);
       await f.clear();
-      expect(f.calls()).toEqual([]);
+      expect(f.calls()).toHaveLength(1);
       expect(fs.existsSync(f.runtime)).toBe(false);
     }));
 }
@@ -208,6 +267,16 @@ function updateJob(f: ReturnType<typeof setup>, patch: Partial<Job>): void {
   }
 }
 
+function updateLegacyCompose(f: ReturnType<typeof setup>, composeText: string): void {
+  const definition = JSON.parse(f.job.definition) as DockerDefinition;
+  updateJob(f, {
+    status: "FAILED",
+    unit: null,
+    definition: JSON.stringify({ ...definition, composeText }),
+  });
+  fs.unlinkSync(f.compose);
+}
+
 const legacyFaults: Record<string, (f: ReturnType<typeof setup>) => void> = {
   compose: (f) => fs.writeFileSync(f.compose, "changed plan"),
   unit: (f) =>
@@ -224,8 +293,36 @@ const legacyFaults: Record<string, (f: ReturnType<typeof setup>) => void> = {
     fs.symlinkSync(f.databasePath, f.seed);
   },
   "seed hardlink": (f) => fs.linkSync(f.seed, join(f.root, "other-seed-link")),
-  "unowned seed": (f) => {
+  "invalid seed": (f) => {
     updateJob(f, { status: "FAILED", unit: null });
+    fs.unlinkSync(f.compose);
+    fs.writeFileSync(f.seed, "not a generated problem seed\n");
+  },
+  "missing pinned definition": (f) => {
+    updateJob(f, { status: "FAILED", unit: null, definition: "{}" });
+    fs.unlinkSync(f.compose);
+  },
+  "unsafe pinned compose": (f) =>
+    updateLegacyCompose(f, "services:\n  app:\n    image: alpine\n    privileged: true\n"),
+  "different problem": (f) => {
+    updateJob(f, { status: "FAILED", unit: null, problemId: "somebody-else" });
+    fs.unlinkSync(f.compose);
+  },
+  "coordination runtime": (f) => {
+    updateJob(f, { status: "FAILED", unit: null, definition: '{"kind":"coordination"}' });
+    fs.unlinkSync(f.compose);
+  },
+  "cloud runtime": (f) => {
+    updateJob(f, { status: "FAILED", unit: null, definition: '{"kind":"cloudformation"}' });
+    fs.unlinkSync(f.compose);
+  },
+  "failed with compose": (f) => updateJob(f, { status: "FAILED", unit: null }),
+  "stopped without ownership": (f) => {
+    updateJob(f, { status: "STOPPED", unit: null });
+    fs.unlinkSync(f.compose);
+  },
+  "complete without ownership": (f) => {
+    updateJob(f, { status: "COMPLETE", unit: null });
     fs.unlinkSync(f.compose);
   },
 };
@@ -253,6 +350,50 @@ test("a legacy file replaced with a symlink during confirmation is refused befor
     await expect(f.clear()).rejects.toThrow("Unsafe runtime file");
     expect(f.calls()).toEqual([]);
     expect(fs.readFileSync(f.databasePath)).toEqual(before);
+  }));
+
+for (const plan of [false, true]) {
+  test(`failed legacy remainder ${plan ? "preview" : "cancellation"} keeps seed and history`, async () =>
+    fixture(async (f) => {
+      updateJob(f, { status: "FAILED", unit: null });
+      fs.unlinkSync(f.compose);
+      f.io.confirm = async () => false;
+      const before = fs.readFileSync(f.databasePath);
+      await clearLocalHistory(f.catalog, f.data, { plan, yes: false }, f.io);
+      expect(f.messages.join("\n")).toContain(f.seed);
+      expect(f.calls()).toEqual([]);
+      expect(fs.existsSync(f.seed)).toBe(true);
+      expect(fs.readFileSync(f.databasePath)).toEqual(before);
+    }));
+}
+
+test("failed legacy remainder cleanup failure retains history and can retry without Docker", async () =>
+  fixture(async (f) => {
+    updateJob(f, { status: "FAILED", unit: null });
+    fs.unlinkSync(f.compose);
+    const unlink = fs.unlinkSync;
+    const refuseUnlink = spyOn(fs, "unlinkSync").mockImplementation(
+      (...args: Parameters<typeof fs.unlinkSync>) => {
+        if (String(args[0]) === f.seed) throw new Error("Synthetic seed unlink failure");
+        return unlink(...args);
+      },
+    );
+    try {
+      await expect(f.clear()).rejects.toThrow("Synthetic seed unlink failure");
+    } finally {
+      refuseUnlink.mockRestore();
+    }
+    const store = f.open();
+    try {
+      expect(store.job(f.job.jobId)).toMatchObject({ status: "FAILED", unit: null });
+      expect(store.team(f.job.teamId).score).toBe(9);
+      expect(store.events()).toHaveLength(1);
+    } finally {
+      store.close();
+    }
+    await f.clear();
+    expect(f.calls()).toEqual([]);
+    expect(fs.existsSync(f.runtime)).toBe(false);
   }));
 
 test("failed legacy Docker teardown retains the full unit and retries production validation", async () =>

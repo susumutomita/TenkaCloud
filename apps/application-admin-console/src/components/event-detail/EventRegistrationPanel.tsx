@@ -2,10 +2,13 @@ import Alert from "@cloudscape-design/components/alert";
 import Button from "@cloudscape-design/components/button";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Container from "@cloudscape-design/components/container";
+import DatePicker from "@cloudscape-design/components/date-picker";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
+import Input from "@cloudscape-design/components/input";
 import Multiselect from "@cloudscape-design/components/multiselect";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import TimeInput from "@cloudscape-design/components/time-input";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ApiClient, ApiError } from "../../api/client";
 import type { EventDetail } from "../../api/events-client";
@@ -43,6 +46,15 @@ function localDateTime(iso: string): string {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
+function isValidLocalDateTime(value: string): boolean {
+  const date = new Date(value);
+  return (
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/u.test(value) &&
+    Number.isFinite(date.getTime()) &&
+    localDateTime(date.toISOString()) === value
+  );
+}
+
 export function EventRegistrationPanel({
   apiClient,
   config,
@@ -65,6 +77,8 @@ export function EventRegistrationPanel({
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
+  const [deadlineDate = "", deadlineTime = ""] = closesAt.split("T");
+  const validDeadline = isValidLocalDateTime(closesAt);
   const path = `/events/${detail.eventId}/registration`;
   const pending = useRef<AbortController | null>(null);
   const showError = useCallback(
@@ -128,7 +142,7 @@ export function EventRegistrationPanel({
 
   async function save(enabled: boolean) {
     if (!apiClient || busy) return;
-    if (enabled && !config.participantPortalUrl) return;
+    if (enabled && (!config.participantPortalUrl || !validDeadline)) return;
     setError("");
     setCopied(false);
     await runMutation(async (signal) => {
@@ -166,6 +180,7 @@ export function EventRegistrationPanel({
   }
 
   const canSave = registrationPermission(summary, localHost, canMutateTenant);
+  const controlsDisabled = !canSave || busy;
   if (config.mode === "demo") return null;
   const options = detail.teams.map((team) => ({
     label: team.displayName ?? team.internalSlug,
@@ -202,22 +217,40 @@ export function EventRegistrationPanel({
                 change.selectedOptions.flatMap((option) => (option.value ? [option.value] : [])),
               )
             }
-            disabled={!canSave || busy}
+            disabled={controlsDisabled}
             placeholder={t("registration.select")}
           />
         </FormField>
-        <FormField label={t("registration.deadline")} controlId="registration-deadline">
-          <input
-            id="registration-deadline"
-            type="datetime-local"
-            value={closesAt}
-            disabled={!canSave || busy}
-            onChange={(event) => setClosesAt(event.target.value)}
-          />
+        <FormField label={t("registration.deadline")}>
+          <SpaceBetween direction="horizontal" size="s">
+            <FormField label={t("registration.deadline_date")}>
+              <DatePicker
+                value={deadlineDate}
+                placeholder="YYYY/MM/DD"
+                disabled={controlsDisabled}
+                i18nStrings={{
+                  openCalendarAriaLabel: () => t("registration.deadline_date"),
+                  previousMonthAriaLabel: t("registration.previous_month"),
+                  nextMonthAriaLabel: t("registration.next_month"),
+                  todayAriaLabel: t("registration.today"),
+                }}
+                onChange={({ detail: change }) => setClosesAt(`${change.value}T${deadlineTime}`)}
+              />
+            </FormField>
+            <FormField label={t("registration.deadline_time")}>
+              <TimeInput
+                value={deadlineTime}
+                format="hh:mm"
+                placeholder="hh:mm"
+                disabled={controlsDisabled}
+                onChange={({ detail: change }) => setClosesAt(`${deadlineDate}T${change.value}`)}
+              />
+            </FormField>
+          </SpaceBetween>
         </FormField>
         <Checkbox
           checked={confirmed}
-          disabled={!canSave || busy}
+          disabled={controlsDisabled}
           onChange={({ detail: change }) => setConfirmed(change.checked)}
         >
           {t(localHost ? "registration.host_confirm" : "registration.confirm")}
@@ -227,7 +260,11 @@ export function EventRegistrationPanel({
             variant="primary"
             loading={busy}
             disabled={
-              !canSave || !confirmed || !teamIds.length || !closesAt || !config.participantPortalUrl
+              !canSave ||
+              !confirmed ||
+              !teamIds.length ||
+              !validDeadline ||
+              !config.participantPortalUrl
             }
             onClick={() => void save(true)}
           >
@@ -240,13 +277,7 @@ export function EventRegistrationPanel({
         {link && (
           <FormField label={t("registration.link")} description={t("registration.link_help")}>
             <SpaceBetween size="s">
-              <input
-                aria-label={t("registration.link")}
-                type="text"
-                value={link}
-                readOnly
-                style={{ width: "100%", boxSizing: "border-box", padding: "10px" }}
-              />
+              <Input ariaLabel={t("registration.link")} value={link} readOnly />
               <Button
                 iconName="copy"
                 onClick={() => {

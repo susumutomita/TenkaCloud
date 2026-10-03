@@ -25,7 +25,7 @@ vi.mock("../../src/data/problems", async (importOriginal) => {
 
 // Run the real Node-side build projection before rendering it in jsdom. Vite rewrites
 // import.meta.url in jsdom, so the build plugin must run in its normal Bun environment.
-const publicProblems = JSON.parse(
+const catalogProblems = JSON.parse(
   execFileSync(
     // eslint-disable-next-line sonarjs/no-os-command-from-path -- re-entrant Bun build fixture, fixed source and arguments
     "bun",
@@ -34,20 +34,22 @@ const publicProblems = JSON.parse(
       `
   import { readFileSync } from "node:fs";
   import { publicMetadata } from "./scripts/local-host/browser-metadata";
-  const paths = ["challenges/sqli-demo", "battles/ac26-crypto-battle", "challenges/hello-world", "battles/hello-world-battle"];
+  const paths = ["challenges/ac26-bridge-clock", "battles/ac26-crypto-battle", "challenges/hello-world", "battles/hello-world-battle"];
   console.log(JSON.stringify(paths.map((path) => {
     const filename = process.cwd() + "/problems/" + path + "/metadata.json";
-    const safe = publicMetadata(readFileSync(filename, "utf8"), filename);
+    const source = readFileSync(filename, "utf8");
+    const raw = JSON.parse(source);
+    const safe = publicMetadata(source, filename);
     if (!safe) throw new Error("Missing host public projection");
-    return JSON.parse(safe);
+    return { public: JSON.parse(safe), content: { description: raw.description, learningGoals: raw.learningGoals } };
   })));
 `,
     ],
     { cwd: resolve(process.cwd(), "../.."), encoding: "utf8" },
   ),
-) as ProblemMetadata[];
-const projected = publicProblems.map((metadata) => metadataToDetail(metadata));
-const sqlMetadata = projected[0];
+) as { public: ProblemMetadata; content: Pick<ProblemMetadata, "description" | "learningGoals"> }[];
+const projected = catalogProblems.map((entry) => metadataToDetail(entry.public));
+const challengeMetadata = projected[0];
 const sampleMetadata = projected[2];
 const config: AppConfig = {
   mode: "local-host",
@@ -60,7 +62,11 @@ const config: AppConfig = {
   apiBaseUrl: "http://localhost/api",
   samlIdpDirectory: {},
 };
-const supported = { items: [{ problemId: "sqli-demo" }, { problemId: "ac26-crypto-battle" }] };
+const supported = {
+  items: catalogProblems
+    .slice(0, 2)
+    .map((entry) => ({ problemId: entry.public.id, content: entry.content })),
+};
 
 function renderCatalog(path = "/problems") {
   return render(
@@ -85,24 +91,35 @@ beforeEach(() => {
 
 describe("local catalog with production public metadata", () => {
   it("browses only runnable problems and opens safe projected details", async () => {
-    const sql = projected[0];
-    expect(sql.description).toBeUndefined();
-    expect(sql.exposedPorts).toBeUndefined();
-    expect(sql.learningGoals).toEqual([]);
+    const challenge = projected[0];
+    expect(challenge.description).toBeUndefined();
+    expect(challenge.exposedPorts).toBeUndefined();
+    expect(challenge.learningGoals).toEqual([]);
     renderCatalog();
-    fireEvent.click(await screen.findByRole("link", { name: sql.name }));
+    fireEvent.click(await screen.findByRole("link", { name: challenge.name }));
     expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: sql.name, level: 1 })).toBeInTheDocument();
-    expect(screen.getByText(sql.shortDescription)).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Description" })).toBeNull();
+    expect(screen.getByRole("heading", { name: challenge.name, level: 1 })).toBeInTheDocument();
+    expect(screen.getByText(challenge.shortDescription)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Description" })).toBeInTheDocument();
+    expect(screen.getByText(catalogProblems[0].content.learningGoals[0])).toBeInTheDocument();
+    expect(screen.getByText(catalogProblems[0].content.description)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Endpoints issued to participants" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Cost estimate" })).toBeNull();
     expect(get.mock.calls.every(([path]) => path === "host/catalog")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Back to list" }));
-    expect(await screen.findByRole("link", { name: sql.name })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: challenge.name })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: projected[1].name })).toBeInTheDocument();
     for (const sample of projected.slice(2))
       expect(screen.queryByRole("link", { name: sample.name })).toBeNull();
+  });
+
+  it("reports missing organizer content instead of silently rendering an empty detail", async () => {
+    get.mockResolvedValue({ items: [{ problemId: projected[0].id }] });
+    renderCatalog(`/problems/${projected[0].id}`);
+    expect(
+      await screen.findByText(/host did not return the problem description/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Description" })).toBeNull();
   });
 
   it("does not show an unsupported sample through a direct URL", async () => {
@@ -120,17 +137,17 @@ describe("local catalog with production public metadata", () => {
     );
     renderCatalog();
     await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
-    expect(screen.queryByRole("link", { name: sqlMetadata.name })).toBeNull();
+    expect(screen.queryByRole("link", { name: challengeMetadata.name })).toBeNull();
     expect(screen.queryByText("No problems found")).toBeNull();
     resolveCatalog(supported);
-    expect(await screen.findByRole("link", { name: sqlMetadata.name })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: challengeMetadata.name })).toBeInTheDocument();
   });
 
   it("reports an API failure instead of falling back to the build catalog", async () => {
     get.mockRejectedValue(new Error("Host catalog unavailable"));
     renderCatalog();
     expect(await screen.findByText("Host catalog unavailable")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: sqlMetadata.name })).toBeNull();
+    expect(screen.queryByRole("link", { name: challengeMetadata.name })).toBeNull();
     expect(screen.queryByRole("link", { name: sampleMetadata.name })).toBeNull();
   });
 });

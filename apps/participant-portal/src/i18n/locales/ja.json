@@ -350,6 +350,7 @@
       "error_header": "資格情報の発行に失敗しました",
       "mock_blocked_header": "モックモードでは発行できません",
       "mock_blocked_body": "このデモはモックモードのため、CLI / SDK 用の一時資格情報は発行できません。実際の開催環境では、利用権限を確認したうえで問題用の資格情報を発行します。",
+      "operation_failed": "AWS アクセスの確認に失敗しました ({operation}): {reason}",
       "assume_role_failed": "AssumeRole が失敗しました ({stage}): {reason}",
       "stage_competitor": "競技者アカウントへの AssumeRole",
       "stage_participant_viewer": "問題ごとの ParticipantViewerRole",

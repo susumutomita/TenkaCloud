@@ -10,13 +10,22 @@ import { logDeployTrace } from "../shared/trace-log.js";
 import { evaluateGate } from "./event-gate.js";
 import { type ParticipantSharedResources, resolveDeploymentsRepository } from "./shared.js";
 
-/** Retain the response contract; this implementation only uses participant_viewer. */
+/** Retain the legacy stage contract; operation identifies the actual failed API. */
 export type AssumeRoleStage = "competitor" | "participant_viewer";
+type AwsAccessOperation =
+  | "ssm:GetParameter"
+  | "sts:AssumeRole"
+  | "cloudformation:DescribeStackResource";
 type AccessFailure =
   | { kind: "unauthorized" }
   | { kind: "not_ready" }
   | { kind: "invalid_jobid" }
-  | { kind: "assume_role_failed"; stage: AssumeRoleStage; reason: string };
+  | {
+      kind: "assume_role_failed";
+      stage: AssumeRoleStage;
+      reason: string;
+      operation?: AwsAccessOperation;
+    };
 export type SsoOutcome =
   | { kind: "ok"; loginUrl: string }
   | AccessFailure
@@ -259,6 +268,7 @@ async function verifyParticipantRole(
   jobId: string,
   deps: SsoDeploymentDeps,
 ): Promise<AccessFailure | undefined> {
+  let operation: AwsAccessOperation = "ssm:GetParameter";
   try {
     if (!shared.ssm || !shared.env) throw new Error("ExternalId store not configured");
     const secret = await shared.ssm.send(
@@ -270,6 +280,7 @@ async function verifyParticipantRole(
     if (secret.Parameter?.Type !== "SecureString" || !secret.Parameter.Value) {
       throw new Error("ExternalId SecureString missing");
     }
+    operation = "sts:AssumeRole";
     const verified = await (deps.verificationSts ?? sts).send(
       new AssumeRoleCommand({
         RoleArn: ready.competitorRoleArn,
@@ -310,6 +321,7 @@ async function verifyParticipantRole(
       sessionToken: credentials.SessionToken,
       expiration: credentials.Expiration,
     };
+    operation = "cloudformation:DescribeStackResource";
     const cfn =
       deps.buildVerificationClient?.(config, ready.region) ??
       new CloudFormationClient({ region: ready.region, credentials: config });
@@ -333,8 +345,8 @@ async function verifyParticipantRole(
     return undefined;
   } catch (error) {
     const reason = error instanceof Error ? error.name : "Unknown";
-    console.error("[sso] Viewer ownership verification failed", { jobId, reason });
-    return { kind: "assume_role_failed", stage: "competitor", reason };
+    console.error("[sso] Viewer ownership verification failed", { jobId, reason, operation });
+    return { kind: "assume_role_failed", stage: "competitor", reason, operation };
   }
 }
 
@@ -389,6 +401,7 @@ async function assumeParticipantCredentials(
         kind: "assume_role_failed",
         stage: "participant_viewer",
         reason: "Invalid credentials",
+        operation: "sts:AssumeRole",
       };
     }
     return {
@@ -402,8 +415,14 @@ async function assumeParticipantCredentials(
     };
   } catch (error) {
     const reason = error instanceof Error ? error.name : "Unknown";
-    console.error("[sso] AssumeRole failed", { jobId, stage: "participant_viewer", reason });
-    return { kind: "assume_role_failed", stage: "participant_viewer", reason };
+    const operation = "sts:AssumeRole";
+    console.error("[sso] AssumeRole failed", {
+      jobId,
+      stage: "participant_viewer",
+      reason,
+      operation,
+    });
+    return { kind: "assume_role_failed", stage: "participant_viewer", reason, operation };
   }
 }
 

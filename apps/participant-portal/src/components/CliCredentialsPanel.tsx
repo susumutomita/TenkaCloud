@@ -14,6 +14,7 @@ import {
   PortalValidationError,
 } from "../api/portal-client";
 import { useT } from "../i18n";
+import { describeAwsAccessError } from "./describeAwsAccessError";
 
 /**
  * Issue #1197: CLI / SDK 用一時資格情報を取得して表示する 1 problem 単位の panel。
@@ -61,12 +62,7 @@ export function CliCredentialsPanel({
         return;
       }
       if (err instanceof PortalAssumeRoleError) {
-        setError(
-          t("sso_credentials.cli.assume_role_failed", {
-            stage: t(`sso_credentials.cli.stage_${err.stage}`),
-            reason: err.reason,
-          }),
-        );
+        setError(describeAwsAccessError(err, t));
         return;
       }
       if (err instanceof PortalValidationError) {

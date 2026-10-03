@@ -21,6 +21,29 @@ export interface Problem {
   name: string;
   definition: string;
   runtime?: "docker" | "coordination" | "cloudformation";
+  /** Organizer-only catalog text; never copied into a participant response. */
+  organizerContent?: OrganizerProblemContent;
+}
+
+export interface OrganizerProblemContent {
+  readonly description: string;
+  readonly learningGoals: readonly string[];
+}
+
+/** Optional display text must not add runtime requirements to an existing problem. */
+export function organizerProblemContent(metadata: {
+  description?: unknown;
+  learningGoals?: unknown;
+}): OrganizerProblemContent | undefined {
+  const learningGoals = metadata.learningGoals ?? [];
+  if (
+    typeof metadata.description !== "string" ||
+    !metadata.description.trim() ||
+    !Array.isArray(learningGoals) ||
+    !learningGoals.every((goal) => typeof goal === "string")
+  )
+    return undefined;
+  return { description: metadata.description, learningGoals };
 }
 
 /** Which runtime owns a pinned problem definition. */

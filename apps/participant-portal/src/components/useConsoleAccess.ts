@@ -12,6 +12,7 @@ import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { hasAwsAccessCapability } from "../data/providers";
 import { useT } from "../i18n";
+import { describeAwsAccessError } from "./describeAwsAccessError";
 
 type TranslateFn = (key: string, vars?: Record<string, string>) => string;
 
@@ -23,11 +24,7 @@ type TranslateFn = (key: string, vars?: Record<string, string>) => string;
 export function describeOpenConsoleError(err: unknown, t: TranslateFn): string {
   if (err instanceof PortalAuthError) return "auth_logout";
   if (err instanceof PortalAssumeRoleError) {
-    // Issue #1197: stage を翻訳して 「どちらの段が落ちたか」 を表示する。
-    return t("sso_credentials.cli.assume_role_failed", {
-      stage: t(`sso_credentials.cli.stage_${err.stage}`),
-      reason: err.reason,
-    });
+    return describeAwsAccessError(err, t);
   }
   if (err instanceof PortalValidationError) {
     return t("sso_credentials.validation_error", { errorCode: err.errorCode });

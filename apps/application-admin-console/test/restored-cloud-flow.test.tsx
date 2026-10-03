@@ -270,7 +270,7 @@ describe("restored cloud SPA with synthetic HTTP", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Notifications/ }));
     expect(await screen.findByRole("button", { name: "Send notification" })).toBeEnabled();
     fireEvent.click(screen.getByRole("tab", { name: /^Teams$/ }));
-    await screen.findByRole("heading", { name: "Let participants claim their environment" });
+    await screen.findByRole("heading", { name: "Assign teams through a registration link" });
     await waitFor(() =>
       expect(requests.some(({ url }) => url.pathname.endsWith("/registration"))).toBe(true),
     );

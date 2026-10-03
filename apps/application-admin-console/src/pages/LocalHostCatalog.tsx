@@ -1,5 +1,6 @@
 import Alert from "@cloudscape-design/components/alert";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import { useParams } from "react-router";
 import { useApiClient } from "../api/client";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
@@ -16,6 +17,7 @@ export function LocalHostCatalogPage({
   detail?: boolean;
 }) {
   const catalog = useHostCatalog(useApiClient(config));
+  const { problemId } = useParams<{ problemId: string }>();
   const t = useT();
   if (catalog.loading) return <StatusIndicator type="loading">{t("app.loading")}</StatusIndicator>;
   if (catalog.error)
@@ -25,7 +27,11 @@ export function LocalHostCatalogPage({
       </Alert>
     );
   return detail ? (
-    <ProblemDetailPage config={config} supportedProblemIds={catalog.supported} />
+    <ProblemDetailPage
+      config={config}
+      supportedProblemIds={catalog.supported}
+      organizerContent={problemId ? catalog.content?.get(problemId) : undefined}
+    />
   ) : (
     <ProblemsPage localHost supportedProblemIds={catalog.supported} />
   );

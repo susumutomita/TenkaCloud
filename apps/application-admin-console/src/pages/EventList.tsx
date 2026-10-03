@@ -106,6 +106,8 @@ type TFn = (key: string) => string;
  */
 export function describeArchiveError(err: unknown, name: string, t: TFn): string {
   if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
+    if (/"error"\s*:\s*"environments_remain"/.test(err.message))
+      return interpolate(t("event_list.archive_environments_remain"), { name });
     const match = err.message.match(/"currentStatus"\s*:\s*"([A-Z_]+)"/);
     const current = match?.[1];
     return current

@@ -10,6 +10,7 @@ import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useEffect, useState } from "react";
 import type { ApiClient } from "../../api/client";
 import type { EventLimits } from "../../config";
+import type { ProblemDetail } from "../../data/problems";
 import { useT } from "../../i18n";
 
 interface HostLimits {
@@ -20,7 +21,11 @@ const LEGACY_LIMITS: HostLimits = { maxTeams: 40, maxEventJobs: 40 };
 
 interface HostCatalogResponse {
   readonly limits?: HostLimits;
-  readonly items: readonly { readonly problemId: string; readonly runtime: string }[];
+  readonly items: readonly {
+    readonly problemId: string;
+    readonly runtime: string;
+    readonly content?: Pick<ProblemDetail, "description" | "learningGoals">;
+  }[];
 }
 
 export interface HostCatalog {
@@ -30,6 +35,7 @@ export interface HostCatalog {
   readonly error: string | null;
   readonly loading: boolean;
   readonly limits: HostLimits;
+  readonly content?: ReadonlyMap<string, Pick<ProblemDetail, "description" | "learningGoals">>;
 }
 
 const EMPTY: ReadonlySet<string> = new Set();
@@ -38,6 +44,7 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
   const [supported, setSupported] = useState<ReadonlySet<string>>(EMPTY);
   const [cloud, setCloud] = useState<ReadonlySet<string>>(EMPTY);
   const [limits, setLimits] = useState<HostLimits>(LEGACY_LIMITS);
+  const [content, setContent] = useState<HostCatalog["content"]>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -49,6 +56,13 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
       .then((response) => {
         if (!active) return;
         setLimits(response.limits ?? LEGACY_LIMITS);
+        setContent(
+          new Map(
+            response.items.flatMap((item) =>
+              item.content ? [[item.problemId, item.content]] : [],
+            ),
+          ),
+        );
         setSupported(new Set(response.items.map((item) => item.problemId)));
         setCloud(
           new Set(
@@ -70,7 +84,7 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
       active = false;
     };
   }, [apiClient]);
-  return { supported, cloud, error, limits, loading };
+  return { supported, cloud, content, error, limits, loading };
 }
 
 function LocalHostEventCreateNotice({

@@ -247,8 +247,15 @@ describe("event invitation settings", () => {
     fixture({ api, detail: { endsAt: "2027-02-01T09:00:00.000Z" } });
     await screen.findByText('registration.closed:{"claimed":0,"capacity":0}');
     const open = screen.getByRole("button", { name: "registration.open_button" });
-    const deadline = screen.getByLabelText("registration.deadline") as HTMLInputElement;
-    expect(new Date(deadline.value).toISOString()).toBe("2027-02-01T09:00:00.000Z");
+    const date = screen.getByRole("textbox", {
+      name: /registration.deadline_date$/u,
+    }) as HTMLInputElement;
+    const time = screen.getByRole("textbox", {
+      name: /registration.deadline_time$/u,
+    }) as HTMLInputElement;
+    expect(new Date(`${date.value.replaceAll("/", "-")}T${time.value}`).toISOString()).toBe(
+      "2027-02-01T09:00:00.000Z",
+    );
     fireEvent.click(screen.getByRole("checkbox"));
     expect(open).toBeDisabled();
 
@@ -258,9 +265,16 @@ describe("event invitation settings", () => {
     multiselect.selectOptionByValue("t2");
     multiselect.closeDropdown();
     expect(multiselect.findTokens()[0]?.getElement()).toHaveTextContent("Bravo");
-    fireEvent.change(deadline, { target: { value: "" } });
+    fireEvent.change(date, { target: { value: "" } });
     expect(open).toBeDisabled();
-    fireEvent.change(deadline, { target: { value: "2027-01-02T15:30" } });
+    fireEvent.change(date, { target: { value: "2027/02/" } });
+    expect(open).toBeDisabled();
+    fireEvent.change(date, { target: { value: "2027/01/02" } });
+    fireEvent.change(time, { target: { value: "" } });
+    expect(open).toBeDisabled();
+    fireEvent.change(time, { target: { value: "15:" } });
+    expect(open).toBeDisabled();
+    fireEvent.change(time, { target: { value: "15:30" } });
     expect(open).toBeEnabled();
     fireEvent.click(open);
 
@@ -269,7 +283,8 @@ describe("event invitation settings", () => {
       teamIds: ["t2"],
       closesAt: new Date("2027-01-02T15:30").toISOString(),
     });
-    expect(deadline).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: /registration.deadline_date$/u })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: /registration.deadline_time$/u })).toBeDisabled();
     expect(screen.getByRole("checkbox")).toBeDisabled();
     expect(multiselect.isDisabled()).toBe(true);
     expect(screen.getByRole("button", { name: "registration.refresh" })).toBeDisabled();
@@ -282,7 +297,8 @@ describe("event invitation settings", () => {
     expect(await screen.findByRole("textbox", { name: "registration.link" })).toHaveValue(
       "https://portal.example.test/join/tenant/e1#invite=new-invitation",
     );
-    expect(deadline).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: /registration.deadline_date$/u })).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: /registration.deadline_time$/u })).toBeEnabled();
   });
 
   it("refreshes claimed labels, selected slots, and the deadline from the server", async () => {
@@ -308,8 +324,15 @@ describe("event invitation settings", () => {
     expect(multiselect?.findTokens()[0]?.getElement()).toHaveTextContent(
       "registration.unallocated",
     );
-    const deadline = screen.getByLabelText("registration.deadline") as HTMLInputElement;
-    expect(new Date(deadline.value).toISOString()).toBe("2027-01-02T00:00:00.000Z");
+    const date = screen.getByRole("textbox", {
+      name: /registration.deadline_date$/u,
+    }) as HTMLInputElement;
+    const time = screen.getByRole("textbox", {
+      name: /registration.deadline_time$/u,
+    }) as HTMLInputElement;
+    expect(new Date(`${date.value.replaceAll("/", "-")}T${time.value}`).toISOString()).toBe(
+      "2027-01-02T00:00:00.000Z",
+    );
   });
 
   it("copies an invitation, replaces it on reissue, and reports clipboard failures", async () => {
@@ -322,6 +345,7 @@ describe("event invitation settings", () => {
     const original =
       "https://portal.example.test/participant/join/tenant/e1#invite=test-invitation";
     expect(link).toHaveValue(original);
+    expect(link).toHaveAttribute("readonly");
     fireEvent.click(screen.getByRole("button", { name: "registration.copy" }));
     expect(await screen.findByRole("button", { name: "registration.copied" })).toBeEnabled();
     expect(writeText).toHaveBeenCalledWith(original);

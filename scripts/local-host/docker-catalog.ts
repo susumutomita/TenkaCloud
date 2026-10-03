@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assertComposePolicy } from "./container/compose-policy";
 import { type ContainerProblem, loadContainerProblem } from "./container/manifest";
-import type { Job, Problem } from "./model";
+import { type Job, organizerProblemContent, type Problem } from "./model";
 
 export interface DockerDefinition {
   readonly problem: ContainerProblem;
@@ -69,6 +69,7 @@ function catalogProblem(directory: string): Problem | undefined {
   return {
     problemId: problem.problemId,
     name: problem.name,
+    organizerContent: organizerProblemContent(metadata),
     runtime: "docker",
     definition: JSON.stringify(definition),
   };

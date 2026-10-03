@@ -190,6 +190,23 @@ destroy-all: ## Purge exact stack-owned retained data, then delete platform stac
 	bun run --no-env-file scripts/cloud-hosting/main.ts down --purge-retained-data $(CLOUD_ARGS)
 turso-reset: ## Delete selected Turso control-data rows, preserving schema | 選択したTursoのcontrol-data行を削除(スキーマ維持)
 	bun run --no-env-file scripts/cloud-hosting/main.ts turso-reset $(CLOUD_ARGS)
+# Existing first-run and credential commands, backed by the current cloud configuration.
+.PHONY: env-init turso-live turso-live-guide turso-live-preflight turso-deploy-preflight turso-live-verify-cfn turso-token-rotate
+env-init: ## Create the cloud .env interactively without overwriting it | 既存設定を保ちcloud用.envを対話作成
+	bun run --no-env-file scripts/ops/env-init.ts
+turso-live: ## Set up Turso and SSM, then confirm cloud deployment | Turso・SSMを対話設定してcloud配置を確認
+	bun run --no-env-file scripts/tenkacloud.ts turso-live
+turso-live-guide: ## Show the Turso setup and rotation guide offline | Tursoの設定・更新手順をオフライン表示
+	bun run --no-env-file scripts/tenkacloud.ts turso-live guide
+turso-live-preflight: ## Validate selected AWS and Turso credentials read-only | 選択したAWS・Turso認証を読み取り検証
+	bun run --no-env-file scripts/tenkacloud.ts turso-live preflight
+turso-deploy-preflight: ## Check Turso before deployment (skip DynamoDB) | 配置前にTursoを検証 (DynamoDBは対象外)
+	bun run --no-env-file scripts/ops/turso-deploy-preflight.ts
+turso-live-verify-cfn: ## Verify selected stacks and zero DynamoDB tables | 選択したstackとDynamoDB 0件を検証
+	bun run --no-env-file scripts/tenkacloud.ts turso-live verify-cloudformation
+turso-token-rotate: ## Reissue the Turso token into SSM without printing it | Turso tokenを表示せず再発行してSSMへ保存
+	bun run --no-env-file scripts/tenkacloud.ts turso-live rotate-token $(ROTATE_ARGS)
+
 release-check: ## Validate the unpublished host candidate contract | 未公開 host candidate の契約を検証
 	bun run release:check
 release-candidate: ## Record an already built image digest and source pins | build 済み image digest と source pin を記録

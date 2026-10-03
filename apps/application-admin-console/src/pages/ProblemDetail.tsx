@@ -19,7 +19,7 @@ import {
 } from "../components/deployment-columns";
 import { ProblemCostSummary } from "../components/ProblemCostSummary";
 import { type AppConfig, isLocalHost } from "../config";
-import { findProblem } from "../data/problems";
+import { findProblem, type ProblemDetail } from "../data/problems";
 import { usePollingList } from "../hooks/usePollingList";
 import { useT } from "../i18n";
 import {
@@ -34,9 +34,11 @@ type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => 
 export function ProblemDetailPage({
   config,
   supportedProblemIds,
+  organizerContent,
 }: {
   config: AppConfig;
   supportedProblemIds?: ReadonlySet<string>;
+  organizerContent?: Pick<ProblemDetail, "description" | "learningGoals">;
 }) {
   const { problemId } = useParams<{ problemId: string }>();
   const navigate = useNavigate();
@@ -54,6 +56,7 @@ export function ProblemDetailPage({
     );
   }
 
+  const content = isLocalHost(config) ? organizerContent : problem;
   return (
     <SpaceBetween size="l">
       <Header
@@ -95,48 +98,54 @@ export function ProblemDetailPage({
         </ColumnLayout>
       </Container>
 
-      {!isLocalHost(config) && (
+      {content ? (
         <>
           <Container
             header={<Header variant="h2">{t("problem_detail.section_description")}</Header>}
           >
             {/* Issue #1700: description は markdown (見出し / コードブロック / 画像) を含むため、
             plain pre-wrap でなく web-kit の <Markdown> (marked + DOMPurify sanitize) で描画する。 */}
-            <Markdown source={problem.description} />
+            <Markdown source={content.description} />
           </Container>
 
-          <Container header={<Header variant="h2">{t("problem_detail.section_cost")}</Header>}>
-            <ProblemCostSummary estimate={problem.costEstimate} t={t} />
-          </Container>
+          {!isLocalHost(config) && (
+            <Container header={<Header variant="h2">{t("problem_detail.section_cost")}</Header>}>
+              <ProblemCostSummary estimate={problem.costEstimate} t={t} />
+            </Container>
+          )}
 
           <Container
             header={<Header variant="h2">{t("problem_detail.section_learning_goals")}</Header>}
           >
             <ul>
-              {problem.learningGoals.map((g) => (
+              {content.learningGoals.map((g) => (
                 <li key={g}>{g}</li>
               ))}
             </ul>
           </Container>
-
-          <Container header={<Header variant="h2">{t("problem_detail.section_endpoints")}</Header>}>
-            <SpaceBetween size="s">
-              <Box variant="p">{t("problem_detail.endpoints_intro")}</Box>
-              <ul>
-                {problem.exposedPorts.map((p) => (
-                  <li key={`${p.name}-${p.port}`}>
-                    {p.name} (port {p.port})
-                  </li>
-                ))}
-              </ul>
-              <Alert type="info" header={t("problem_detail.endpoints_access_header")}>
-                {t("problem_detail.endpoints_access_body_pre")}{" "}
-                <strong>{t("problem_detail.endpoints_access_strong")}</strong>{" "}
-                {t("problem_detail.endpoints_access_body_post")}
-              </Alert>
-            </SpaceBetween>
-          </Container>
         </>
+      ) : (
+        <Alert type="error">{t("problem_detail.content_unavailable")}</Alert>
+      )}
+
+      {!isLocalHost(config) && (
+        <Container header={<Header variant="h2">{t("problem_detail.section_endpoints")}</Header>}>
+          <SpaceBetween size="s">
+            <Box variant="p">{t("problem_detail.endpoints_intro")}</Box>
+            <ul>
+              {problem.exposedPorts.map((p) => (
+                <li key={`${p.name}-${p.port}`}>
+                  {p.name} (port {p.port})
+                </li>
+              ))}
+            </ul>
+            <Alert type="info" header={t("problem_detail.endpoints_access_header")}>
+              {t("problem_detail.endpoints_access_body_pre")}{" "}
+              <strong>{t("problem_detail.endpoints_access_strong")}</strong>{" "}
+              {t("problem_detail.endpoints_access_body_post")}
+            </Alert>
+          </SpaceBetween>
+        </Container>
       )}
 
       <Container header={<Header variant="h2">{t("problem_detail.section_tags")}</Header>}>

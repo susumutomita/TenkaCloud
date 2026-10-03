@@ -77,7 +77,8 @@ CDK_PARAM_TURSO_DATABASE_URL=libsql://your-database.turso.io
 CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/tenkacloud/turso/auth-token
 ```
 
-The token must already exist as an SSM SecureString in the selected AWS region.
+Use [the setup wizard](#first-run-setup-and-turso-credential-rotation) to create the
+database and its SSM SecureString token in the selected AWS region before deployment.
 Before bootstrap, source upload or deployment, the CLI reads that exact parameter
 and performs a read-only authenticated connection/schema check. It does not print
 the token, create schema or modify data during preflight. Nonempty or unrecognized
@@ -99,6 +100,80 @@ when needed. Mixing profile selection with access keys is rejected because CLI
 and JavaScript SDK credential precedence differs. `AWS_DEFAULT_PROFILE` is accepted;
 if both profile variables are set, they must agree. The selected identity and region
 also apply to the in-process SDK. No credentials or profile files are rewritten.
+
+## First-run setup and Turso credential rotation
+
+Start with the AWS CLI profile authorized for your hosting account. Run
+`aws sts get-caller-identity` to check the account, then:
+
+```bash
+make env-init ENV=development
+# For Turso, continue with the existing interactive setup wizard:
+make turso-live ENV=development
+# For DynamoDB, deploy after env-init:
+make deploy ENV=development
+```
+
+`env-init` asks for the organizer invitation email (`TENKACLOUD_ADMIN_EMAIL`),
+12-digit hosting account (`ACCOUNT_ID`) and `AWS_REGION`. It creates the selected
+`.env` with owner-only permissions and preserves an existing file. In an
+unattended shell, export those three values first; missing values fail instead of
+creating placeholder credentials. Custom lowercase environment names use the
+development example when they have no example of their own.
+
+The Turso wizard preserves the existing setup sequence: locate the Turso CLI,
+offer the pinned official binary with checksum verification if needed, check
+login, select or create a database, and create its token in the selected account's
+SSM SecureString. Each creation asks for confirmation. The database name defaults
+to `tenkacloud-lite` for development and `tenkacloud-lite-<ENV>` otherwise, so
+existing names remain usable. It will not silently switch an existing environment
+to another database. Only public selectors are saved in `.env`; token values are
+passed to the AWS CLI over stdin and are never printed or included in argv.
+
+After saving, the wizard runs the same authenticated `SELECT 1` preflight as
+cloud deployment. It asks for the exact word `deploy` before invoking the current
+`make deploy`, then verifies the selected cloud or existing Lite stack pair has
+zero DynamoDB tables. Deployment retains its existing toolkit, IAM and active
+competition checks. The wizard does not enable unrelated features or migrate
+existing provider data. Read the offline guide or resume an individual stage:
+
+```bash
+make turso-live-guide ENV=development
+make turso-live-preflight ENV=development
+make turso-deploy-preflight ENV=development
+make turso-live-verify-cfn ENV=development
+```
+
+The checks use the selected `.env`, AWS profile, account and region. Exported
+values override file settings. `turso-deploy-preflight` skips DynamoDB and does
+not require an installed Turso CLI. Verification discovers cloud/Lite stack names
+using the same selection rule as deploy; specify `TENKACLOUD_STACK_LAYOUT` if
+both installations exist. The setup wizard needs an interactive terminal.
+
+Rotate an expired or expiring database token without copying a secret manually:
+
+```bash
+make turso-token-rotate ENV=development
+make turso-token-rotate ENV=development ROTATE_ARGS="--expiration 30d"
+# Existing source CLI alias:
+bun run --no-env-file scripts/tenkacloud.ts turso-live rotate-token --expiration 30d
+```
+
+The command checks AWS identity, resolves the database name by its configured
+URL, confirms the target, issues a replacement, overwrites that exact SSM
+SecureString and verifies authenticated `SELECT 1`. A failed verification is an
+error and reports that SSM was already changed. `--database <name>` is available
+when needed, but its URL must match the selected configuration. The default
+expiration is `never`; `TURSO_TOKEN_EXPIRATION` or `--expiration` selects another
+lifetime. Rotate before a finite expiration date.
+
+`ROTATE_ARGS="--yes"` is the explicit unattended path. The Turso CLI must already
+be authenticated, or receive `TURSO_API_TOKEN` from the operator's secret provider.
+`--invalidate` additionally revokes every previous token for that database; use
+it only when that disruption is intended. Existing warm Lambda instances may
+briefly keep an invalidated token until recycled. This command rotates Turso's
+database token, not AWS profile credentials. It preserves the existing
+[standalone data reset](#standalone-turso-data-reset) command.
 
 ## Cloud deployment pipeline
 

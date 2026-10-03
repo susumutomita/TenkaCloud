@@ -96,12 +96,15 @@ Codespace を作成し、依存関係の準備が終わったらターミナル�
 
 新規環境の stack 名は `tenkacloud-cloud` 系とし、既存の `tenkacloud-lite` 系 stack は名前を維持します。CLI が Lite / cloud の既存環境を検出します。両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` を明示します。公開 cloud-v1 の DB・resource 構成は自動移行しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。現行の 9 template は `TemplateBody` 上限を超えるため、全 AWS 問題の配置を保証しません。[互換性と制限](./infrastructure/README.md#existing-installations-and-resource-identity)を確認してください。
 
-AWS CLI のプロファイル、アカウント、リージョン、開催者のメールアドレスを用意します。`infrastructure/environments/{development,staging,production}/.env.example` を、同じディレクトリの `.env` がなければコピーして編集します。
+AWS CLI のプロファイル、アカウント、リージョン、開催者のメールアドレスを用意します。`make env-init` で公開設定を入力すると、選択した `infrastructure/environments/<ENV>/.env` を所有者だけが読める権限で作成します。既存ファイルは保持するため、設定を変更する場合は編集してください。
 
 ```bash
 aws sts get-caller-identity
+make env-init ENV=development
 make deploy ENV=development
 ```
+
+Turso を使う場合は、`env-init` の後に `make turso-live ENV=development` を実行します。対話ウィザードで CLI・ログイン・DB・SSM トークンを設定し、配置前に確認します。`make turso-live-guide` は手順を表示し、`make turso-token-rotate ENV=development` はトークンを表示せずに再発行します。[初回設定とローテーション](./infrastructure/README.md#first-run-setup-and-turso-credential-rotation)を参照してください。
 
 `make deploy` は標準の `CDKToolkit` を検証して再利用し、存在しない場合だけ固定版の公式 CDK bootstrap で作成します。続けて `--require-approval never` で配置します。新規環境と復旧済み環境では CI でも追加のフラグや承認入力は不要です。catalog pin のない旧 Lite の初回更新は、大会が進行中でないことの明示確認が必要です。コマンドは配置先・権限・費用の注意事項を表示します。[bootstrap と呼び出し元の権限](./infrastructure/BOOTSTRAP-IAM.md)を確認してください。標準の CloudFormation 実行 role はデフォルトで `AdministratorAccess` を使います。アプリケーションの実行 role には付与しません。配置時には CodeBuild 用の非公開 source ZIP を毎回別 key に upload し、正確な S3 version を保存します。source bucket は基盤の destroy 後も残り、別途確認して清掃するまで保存料金が発生します。保存した大会・配置は catalog 更新後も元の snapshot を使います。[catalog の固定と旧データの回復](./infrastructure/README.md#update-the-problem-catalog)を参照してください。
 

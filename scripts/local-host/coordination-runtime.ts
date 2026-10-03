@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { buildSync } from "esbuild";
 import type { HostPlugin } from "./coordination-core";
 import { privateDirectory } from "./files";
-import { HostError, type Problem } from "./model";
+import { HostError, organizerProblemContent, type Problem } from "./model";
 
 interface CoordinationDefinition {
   kind: "coordination";
@@ -49,6 +49,7 @@ export function coordinationCatalog(root: string): Problem[] {
     {
       problemId,
       name: String(metadata.name),
+      organizerContent: organizerProblemContent(metadata),
       runtime: "coordination",
       definition: JSON.stringify({
         kind: "coordination",

@@ -23,6 +23,9 @@
     "scripts/security/audit-dependencies.ts",
     "scripts/cloud-hosting/**/*.ts",
     "scripts/release/**/*.ts",
-    "scripts/problem-pack/**/*.ts"
+    "scripts/problem-pack/**/*.ts",
+    "scripts/cli/**/*.ts",
+    "scripts/ops/env-init.ts",
+    "scripts/ops/turso-*.ts"
   ]
 }

@@ -26,6 +26,13 @@ test("default bilingual help includes hosting, catalog updates and development c
       "deploy",
       "destroy",
       "turso-reset",
+      "env-init",
+      "turso-live",
+      "turso-live-guide",
+      "turso-live-preflight",
+      "turso-deploy-preflight",
+      "turso-live-verify-cfn",
+      "turso-token-rotate",
       "submodule-latest",
       "validate-problems",
       "build",
@@ -420,7 +427,7 @@ test("cloud product commands reach the existing scoped CLI without replacing loc
   expect(local.stdout).not.toContain("cloud-hosting");
 });
 
-test("the old Turso reset alias exposes offline help without restoring the retired wizard", () => {
+test("the Turso reset and credential aliases expose offline help", () => {
   const result = spawnSync(
     process.execPath,
     ["run", "--no-env-file", "scripts/tenkacloud.ts", "turso-live", "reset", "--help"],
@@ -428,10 +435,31 @@ test("the old Turso reset alias exposes offline help without restoring the retir
   );
   expect(result.status).toBe(0);
   expect(result.stdout).toContain("Standalone make turso-reset");
-  const retired = spawnSync(
+  const rotation = spawnSync(
     process.execPath,
-    ["run", "--no-env-file", "scripts/tenkacloud.ts", "turso-live", "rotate-token"],
+    ["run", "--no-env-file", "scripts/tenkacloud.ts", "turso-live", "rotate-token", "--help"],
     { cwd: root, env: process.env, encoding: "utf8" },
   );
-  expect(retired.status).toBe(1);
+  expect(rotation.status).toBe(0);
+  expect(rotation.stdout).toContain("credential rotation");
+});
+
+test("restored Turso Make targets retain their source CLI and argument contract", () => {
+  for (const [target, command] of [
+    ["turso-live", ""],
+    ["turso-live-guide", " guide"],
+    ["turso-live-preflight", " preflight"],
+    ["turso-live-verify-cfn", " verify-cloudformation"],
+    ["turso-token-rotate", " rotate-token --expiration 30d --yes"],
+  ]) {
+    const result = make("-n", target ?? "", "ENV=staging", "ROTATE_ARGS=--expiration 30d --yes");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      `bun run --no-env-file scripts/tenkacloud.ts turso-live${command}`,
+    );
+  }
+  expect(make("-n", "env-init").stdout).toContain("bun run --no-env-file scripts/ops/env-init.ts");
+  expect(make("-n", "turso-deploy-preflight").stdout).toContain(
+    "bun run --no-env-file scripts/ops/turso-deploy-preflight.ts",
+  );
 });

@@ -4,7 +4,9 @@ import { lstatSync, readdirSync, readFileSync, rmdirSync, unlinkSync } from "nod
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
+import { assertComposePolicy } from "./container/compose-policy";
 import { PROBLEM_SECRET_FILE } from "./container/problem-secrets";
+import type { DockerDefinition } from "./docker-catalog";
 import { DockerHostingEngine } from "./docker-engine";
 import { hasDatabaseState, prepareDatabase, privateDirectory } from "./files";
 import { localJobDescription, localRuntimeFailure } from "./local-runtime-report";
@@ -158,23 +160,39 @@ interface RuntimeDirectory {
   readonly files: readonly string[];
 }
 
+function verifyLegacyRemainder(path: string, job: Job): void {
+  // Failed startup rolled back Docker and cleared its unit before recording FAILED.
+  // A crash, retry or teardown can leave that same seed-only remainder in these states.
+  const states: readonly Job["status"][] = ["FAILED", "PENDING", "IN_PROGRESS", "DELETING"];
+  const definition = JSON.parse(job.definition) as DockerDefinition;
+  if (
+    !states.includes(job.status) ||
+    definition.problem?.problemId !== job.problemId ||
+    typeof definition.composeText !== "string" ||
+    typeof definition.problem.problemDir !== "string" ||
+    typeof definition.problem.composePath !== "string"
+  )
+    throw new Error(
+      `Unverified legacy runtime directory ${JSON.stringify(path)}; history retained.`,
+    );
+  assertComposePolicy(definition.composeText, definition.problem);
+}
+
 function inspectRuntimeDirectory(directory: string, job: Job): RuntimeDirectory {
   const path = privateDirectory(join(directory, "runtimes", job.jobId));
   const marker = join(path, ".tenkacloud-runtime-owner");
   const legacy = !lstatSync(marker, { throwIfNoEntry: false });
+  // Preserve established DELETED/unit-backed cleanup; verify only the new rollback states.
+  const verifyRemainder = legacy && job.unit === null && job.status !== "DELETED";
   const allowed = new Set([PROBLEM_SECRET_FILE]);
   if (!legacy) {
     safeRuntimeFile(marker);
     if (readFileSync(marker, "utf8") !== `tenkacloud-runtime-v1:${job.jobId}\n`)
       throw new Error(`Runtime ownership changed for ${JSON.stringify(path)}; history retained.`);
     allowed.add(".tenkacloud-runtime-owner");
-  } else if (job.unit === null && job.status !== "DELETED") {
-    throw new Error(
-      `Unverified legacy runtime directory ${JSON.stringify(path)}; history retained.`,
-    );
-  }
-  // Old successful teardown removed Compose but retained the seed. Other unmarked
-  // directories need a durable unit, whose full Compose validation is done by engine.stop.
+  } else if (verifyRemainder) verifyLegacyRemainder(path, job);
+  // Old teardown and successful startup rollback removed Compose but retained the seed.
+  // Other unmarked directories need a durable unit, validated in full by engine.stop.
   if (!legacy || job.unit !== null) allowed.add(`tch-${job.jobId.toLowerCase()}.compose.yml`);
   const files = readdirSync(path).sort((left, right) => left.localeCompare(right));
   for (const file of files) {
@@ -183,6 +201,14 @@ function inspectRuntimeDirectory(directory: string, job: Job): RuntimeDirectory 
         `Unknown runtime file ${JSON.stringify(join(path, file))}; history retained.`,
       );
     safeRuntimeFile(join(path, file));
+    if (
+      verifyRemainder &&
+      file === PROBLEM_SECRET_FILE &&
+      !/^[0-9a-f]{64}\n$/u.test(readFileSync(join(path, file), "utf8"))
+    )
+      throw new Error(
+        `Unverified legacy runtime seed ${JSON.stringify(join(path, file))}; history retained.`,
+      );
   }
   return { jobId: job.jobId, legacy, files };
 }

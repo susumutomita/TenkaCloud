@@ -46,6 +46,29 @@ describe("describeOpenConsoleError", () => {
     expect(message).toContain("denied");
   });
 
+  it.each(["ssm:GetParameter", "cloudformation:DescribeStackResource"] as const)(
+    "describes %s without incorrectly claiming AssumeRole failed",
+    (operation) => {
+      const message = describeOpenConsoleError(
+        new PortalAssumeRoleError("competitor", "AccessDenied", operation),
+        t,
+      );
+      expect(message).toContain("sso_credentials.cli.operation_failed");
+      expect(message).toContain(operation);
+      expect(message).toContain("AccessDenied");
+      expect(message).not.toContain("assume_role_failed");
+    },
+  );
+
+  it("keeps the role stage for a classified STS failure", () => {
+    const message = describeOpenConsoleError(
+      new PortalAssumeRoleError("competitor", "AccessDenied", "sts:AssumeRole"),
+      t,
+    );
+    expect(message).toContain("sso_credentials.cli.assume_role_failed");
+    expect(message).toContain("sso_credentials.cli.stage_competitor");
+  });
+
   it("should render a validation message with the error code", () => {
     const message = describeOpenConsoleError(new PortalValidationError("bad_input"), t);
     expect(message).toContain("sso_credentials.validation_error");

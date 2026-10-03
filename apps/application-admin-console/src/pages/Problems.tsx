@@ -2,6 +2,8 @@ import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Cards from "@cloudscape-design/components/cards";
+import ColumnLayout from "@cloudscape-design/components/column-layout";
+import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Link from "@cloudscape-design/components/link";
@@ -227,83 +229,92 @@ export function ProblemsPage({
         {t("problems.header")}
       </Header>
 
-      <SpaceBetween size="s">
-        <Input
-          type="search"
-          value={criteria.search}
-          placeholder={t("problems.search_placeholder")}
-          onChange={({ detail }) => setCriteria((prev) => ({ ...prev, search: detail.value }))}
-        />
-        <SpaceBetween direction="horizontal" size="s">
-          <SegmentedControl
-            selectedId={criteria.categories.length === 1 ? criteria.categories[0] : "all"}
-            options={categorySegments}
-            label={t("problems.category_label")}
-            onChange={({ detail }) =>
-              setCriteria((prev) => ({
-                ...prev,
-                categories:
-                  detail.selectedId === "all"
-                    ? []
-                    : [detail.selectedId as ProblemSummary["category"]],
-              }))
-            }
+      <SpaceBetween size="m">
+        <FormField label={t("problems.search_label")} stretch>
+          <Input
+            type="search"
+            value={criteria.search}
+            placeholder={t("problems.search_placeholder")}
+            onChange={({ detail }) => setCriteria((prev) => ({ ...prev, search: detail.value }))}
           />
-        </SpaceBetween>
-        <SpaceBetween direction="horizontal" size="s">
-          <Multiselect
-            placeholder={t("problems.difficulty_placeholder")}
-            options={difficultyOptions}
-            selectedOptions={difficultySelected}
-            tokenLimit={5}
-            onChange={({ detail }) =>
-              setCriteria((prev) => ({
-                ...prev,
-                difficulties: detail.selectedOptions
-                  .map((o) => Number(o.value))
-                  .filter((n): n is DifficultyLevel =>
-                    DIFFICULTY_LEVELS.includes(n as DifficultyLevel),
-                  ),
-              }))
-            }
-          />
-          <Multiselect
-            placeholder={
-              criteria.tagMatchMode === "and"
-                ? t("problems.tag_placeholder_and")
-                : t("problems.tag_placeholder_or")
-            }
-            options={tagOptions}
-            selectedOptions={tagSelected}
-            tokenLimit={10}
-            // タグ数が増えると dropdown を縦スクロールで探すのが辛い (= 利用者報告)。
-            // filteringType="auto" で dropdown 上部に inline search box を出す。
-            filteringType="auto"
-            filteringPlaceholder={t("problems.tag_filter_placeholder")}
-            onChange={({ detail }) =>
-              setCriteria((prev) => ({
-                ...prev,
-                tags: detail.selectedOptions
-                  .map((o) => o.value)
-                  .filter((v): v is string => typeof v === "string"),
-              }))
-            }
-          />
-          {criteria.tags.length > 1 && (
-            <Button
-              onClick={() =>
+        </FormField>
+        <FormField label={t("problems.theme_label")} stretch>
+          <SpaceBetween size="xs">
+            <Multiselect
+              placeholder={
+                criteria.tagMatchMode === "and"
+                  ? t("problems.tag_placeholder_and")
+                  : t("problems.tag_placeholder_or")
+              }
+              options={tagOptions}
+              selectedOptions={tagSelected}
+              tokenLimit={10}
+              filteringType="auto"
+              filteringPlaceholder={t("problems.tag_filter_placeholder")}
+              filteringAriaLabel={t("problems.tag_filter_placeholder")}
+              empty={t("problems.theme_empty")}
+              noMatch={t("problems.theme_no_match")}
+              onChange={({ detail }) =>
                 setCriteria((prev) => ({
                   ...prev,
-                  tagMatchMode: prev.tagMatchMode === "and" ? "or" : "and",
+                  tags: detail.selectedOptions
+                    .map((o) => o.value)
+                    .filter((v): v is string => typeof v === "string"),
                 }))
               }
-            >
-              {criteria.tagMatchMode === "and"
-                ? t("problems.tag_match_and_button")
-                : t("problems.tag_match_or_button")}
-            </Button>
-          )}
-        </SpaceBetween>
+            />
+            {criteria.tags.length > 1 && (
+              <Button
+                onClick={() =>
+                  setCriteria((prev) => ({
+                    ...prev,
+                    tagMatchMode: prev.tagMatchMode === "and" ? "or" : "and",
+                  }))
+                }
+              >
+                {criteria.tagMatchMode === "and"
+                  ? t("problems.tag_match_and_button")
+                  : t("problems.tag_match_or_button")}
+              </Button>
+            )}
+          </SpaceBetween>
+        </FormField>
+        <ColumnLayout columns={2}>
+          <FormField label={t("problems.category_label")}>
+            <SegmentedControl
+              selectedId={criteria.categories.length === 1 ? criteria.categories[0] : "all"}
+              options={categorySegments}
+              label={t("problems.category_label")}
+              onChange={({ detail }) =>
+                setCriteria((prev) => ({
+                  ...prev,
+                  categories:
+                    detail.selectedId === "all"
+                      ? []
+                      : [detail.selectedId as ProblemSummary["category"]],
+                }))
+              }
+            />
+          </FormField>
+          <FormField label={t("problems.difficulty_label")}>
+            <Multiselect
+              placeholder={t("problems.difficulty_placeholder")}
+              options={difficultyOptions}
+              selectedOptions={difficultySelected}
+              tokenLimit={5}
+              onChange={({ detail }) =>
+                setCriteria((prev) => ({
+                  ...prev,
+                  difficulties: detail.selectedOptions
+                    .map((o) => Number(o.value))
+                    .filter((n): n is DifficultyLevel =>
+                      DIFFICULTY_LEVELS.includes(n as DifficultyLevel),
+                    ),
+                }))
+              }
+            />
+          </FormField>
+        </ColumnLayout>
       </SpaceBetween>
 
       <Cards

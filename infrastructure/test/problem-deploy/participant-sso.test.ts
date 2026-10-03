@@ -250,6 +250,50 @@ describe("participant console SSO: direct operator viewer access", () => {
     expect(f.stsSend).not.toHaveBeenCalled();
   });
 
+  describe.each(["console", "cli"] as const)("%s AWS operation diagnostics", (access) => {
+    it.each([
+      "ssm:GetParameter",
+      "sts:AssumeRole",
+      "cloudformation:DescribeStackResource",
+    ] as const)("identifies %s without exposing service messages", async (operation) => {
+      const f = fixture();
+      const send = {
+        "ssm:GetParameter": f.ssmSend,
+        "sts:AssumeRole": f.verificationSend,
+        "cloudformation:DescribeStackResource": f.cfnSend,
+      }[operation];
+      const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      send.mockRejectedValueOnce(
+        Object.assign(new Error("private-service-detail"), { name: "AccessDenied" }),
+      );
+      try {
+        const outcome =
+          access === "console"
+            ? await f.issue()
+            : await getCliCredentials(f.shared, KEY, JOB, f.deps);
+        expect(outcome).toEqual({
+          kind: "assume_role_failed",
+          stage: "competitor",
+          reason: "AccessDenied",
+          operation,
+        });
+        expect(log).toHaveBeenCalledWith("[sso] Viewer ownership verification failed", {
+          jobId: JOB,
+          reason: "AccessDenied",
+          operation,
+        });
+        expect(JSON.stringify([outcome, log.mock.calls])).not.toContain("private-service-detail");
+        expect(f.stsSend).not.toHaveBeenCalled();
+        expect(f.fetchClient).not.toHaveBeenCalled();
+        if (operation === "ssm:GetParameter") expect(f.verificationSend).not.toHaveBeenCalled();
+        if (operation !== "cloudformation:DescribeStackResource")
+          expect(f.cfnSend).not.toHaveBeenCalled();
+      } finally {
+        log.mockRestore();
+      }
+    });
+  });
+
   it("rejects invalid job IDs before reading or issuing credentials", async () => {
     const f = fixture();
     expect(await f.issue("not-ulid")).toEqual({ kind: "invalid_jobid" });
@@ -371,6 +415,7 @@ describe("participant console SSO: direct operator viewer access", () => {
       kind: "assume_role_failed",
       stage: "participant_viewer",
       reason: "AccessDenied",
+      operation: "sts:AssumeRole",
     });
     expect(f.fetchClient).not.toHaveBeenCalled();
   });

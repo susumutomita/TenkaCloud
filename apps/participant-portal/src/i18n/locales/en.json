@@ -350,6 +350,7 @@
       "error_header": "Failed to issue credentials",
       "mock_blocked_header": "Not available in mock mode",
       "mock_blocked_body": "This demo runs in mock mode, so CLI / SDK temporary credentials cannot be issued. A live hosting environment checks your access before issuing credentials for the problem.",
+      "operation_failed": "AWS access verification failed ({operation}): {reason}",
       "assume_role_failed": "AssumeRole failed ({stage}): {reason}",
       "stage_competitor": "AssumeRole into the competitor account",
       "stage_participant_viewer": "AssumeRole into per-problem ParticipantViewerRole",

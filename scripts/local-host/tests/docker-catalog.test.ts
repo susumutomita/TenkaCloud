@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,4 +63,22 @@ test("catalog rejects symbolic links and duplicate IDs instead of adopting ambig
     cpSync(directory, join(copied, "problems", "another", "sqli-demo"), { recursive: true });
     expect(() => loadDockerCatalog(copied)).toThrow("Duplicate local problem ID");
   });
+});
+
+test("optional organizer text does not make an existing runtime problem unsupported", () => {
+  for (const omitDescription of [false, true])
+    fixture((copied, directory) => {
+      const path = join(directory, "metadata.json");
+      const metadata = JSON.parse(readFileSync(path, "utf8"));
+      delete metadata.learningGoals;
+      if (omitDescription) delete metadata.description;
+      writeFileSync(path, JSON.stringify(metadata));
+      const problem = loadDockerCatalog(copied)[0];
+      expect(problem?.problemId).toBe("sqli-demo");
+      expect(problem?.organizerContent).toEqual(
+        omitDescription ? undefined : { description: metadata.description, learningGoals: [] },
+      );
+      if (!problem) throw new Error("Expected the existing runtime problem.");
+      expect(JSON.parse(problem.definition).problem.description).toBe(metadata.description ?? "");
+    });
 });

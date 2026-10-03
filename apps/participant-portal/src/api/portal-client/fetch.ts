@@ -7,7 +7,7 @@ import {
   PortalScoringGateError,
   PortalValidationError,
 } from "./errors";
-import type { AssumeRoleStage } from "./types";
+import type { AssumeRoleStage, AwsAccessOperation } from "./types";
 
 /**
  * Portal API 共通 fetch 層。 全 endpoint で共有する error mapping (401 → PortalAuthError /
@@ -44,6 +44,8 @@ interface PortalErrorBody {
   /** Issue #1197: assume_role_failed の付加情報。 stage = どちらの段で落ちたか、 reason = STS error name。 */
   readonly stage?: string;
   readonly reason?: string;
+  /** Optional fixed API identifier; absent on older backend responses. */
+  readonly operation?: string;
   /** Issue #1315: hint_out_of_order の 「次に開けるべき直前 hint」 id。 */
   readonly missingHintId?: string;
   /** Issue #2283: challenge_prerequisite_not_met の 「先に完了すべき Gate 問題」 id。 */
@@ -52,6 +54,14 @@ interface PortalErrorBody {
 
 function isAssumeRoleStage(value: unknown): value is AssumeRoleStage {
   return value === "competitor" || value === "participant_viewer";
+}
+
+function isAwsAccessOperation(value: unknown): value is AwsAccessOperation {
+  return (
+    value === "ssm:GetParameter" ||
+    value === "sts:AssumeRole" ||
+    value === "cloudformation:DescribeStackResource"
+  );
 }
 
 function buildPortalUrl(apiBaseUrl: string, path: string): URL {
@@ -126,7 +136,8 @@ async function throwAssumeRoleFailedError(res: Response): Promise<never> {
   const body = await readPortalErrorBody(res);
   if (body.error === "assume_role_failed") {
     const stage = isAssumeRoleStage(body.stage) ? body.stage : "competitor";
-    throw new PortalAssumeRoleError(stage, body.reason ?? "Unknown");
+    const operation = isAwsAccessOperation(body.operation) ? body.operation : undefined;
+    throw new PortalAssumeRoleError(stage, body.reason ?? "Unknown", operation);
   }
   throw new PortalNetworkError(res.status, body.error ?? "internal_error");
 }

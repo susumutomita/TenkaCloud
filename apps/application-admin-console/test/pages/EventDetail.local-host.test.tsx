@@ -112,7 +112,7 @@ describe("EventDetailPage on the local competition host", () => {
     expect(within(betaRow).getByText("5201")).toBeInTheDocument();
     expect(within(betaRow).getByText("Stopped")).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: /AWS account/u })).toBeNull();
-    expect(screen.getByText("Let participants claim their environment")).toBeInTheDocument();
+    expect(screen.getByText("Assign teams through a registration link")).toBeInTheDocument();
   });
 
   it("shows only the problem and its status, not cloud account, region or job links", async () => {

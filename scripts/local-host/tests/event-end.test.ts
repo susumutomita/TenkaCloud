@@ -159,3 +159,42 @@ test("a future scheduled end remains supported and end retries retain its scorin
   expect(f.store.teams(f.event.eventId)).toEqual(teams);
   expect((await f.admin("/schedule", "PATCH", { startNow: true })).status).toBe(409);
 });
+
+test("an ended native Battle archives without resource teardown and retains its results", async () => {
+  const f = await fixture();
+  expect((await f.admin("/archive")).status).toBe(409);
+  await f.admin("/end");
+  const teams = f.store.teams(f.event.eventId);
+  const jobs = f.store.jobs(f.event.eventId);
+  const state = f.store.coordination(f.event.eventId, PROBLEM_ID);
+  expect(jobs.every((job) => job.unit !== null)).toBe(true);
+  expect((await f.admin("/archive", "POST", {}, f.first.teamLoginKey)).status).toBe(401);
+  expect((await f.admin("/archive")).status).toBe(200);
+  expect(f.store.event(f.event.eventId).status).toBe("ARCHIVED");
+  expect(f.store.teams(f.event.eventId)).toEqual(teams);
+  expect(f.store.jobs(f.event.eventId)).toEqual(jobs);
+  expect(f.store.coordination(f.event.eventId, PROBLEM_ID)).toBe(state);
+  expect(f.store.event(f.other.eventId).status).toBe("READY");
+  expect(
+    (await f.participant("/portal/me/coordination/op", "POST", { op: { kind: "noop" } })).status,
+  ).toBe(422);
+});
+
+test("archive still requires teardown for owned Docker and historical cloud resources", async () => {
+  const f = await fixture();
+  await f.admin("/end");
+  const job = f.store.jobs(f.event.eventId)[0];
+  if (!job) throw new Error("Expected a prepared environment.");
+  const originalDefinition = job.definition;
+  for (const definition of ["{}", JSON.stringify({ kind: "cloudformation" })]) {
+    job.definition = definition;
+    f.store.putJob(job);
+    const rejected = await f.admin("/archive");
+    expect(rejected.status).toBe(409);
+    expect(rejected.body.error).toBe("environments_remain");
+    expect(f.store.event(f.event.eventId).status).toBe("ENDED");
+    expect(f.store.job(job.jobId).unit).toBe(job.unit);
+  }
+  job.definition = originalDefinition;
+  f.store.putJob(job);
+});
