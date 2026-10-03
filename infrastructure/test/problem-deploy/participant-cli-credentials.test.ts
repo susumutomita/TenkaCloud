@@ -176,6 +176,7 @@ describe("participant CLI credentials", () => {
       kind: "assume_role_failed",
       stage: "participant_viewer",
       reason: "AccessDenied",
+      operation: "sts:AssumeRole",
     });
   });
 });

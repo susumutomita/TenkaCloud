@@ -315,13 +315,13 @@ async function main(): Promise<void> {
     assert.equal(await organizer.getByRole("link", { name: "Settings", exact: true }).count(), 0);
     await organizer.getByRole("link", { name: "Problems", exact: true }).click();
     await organizer.getByRole("heading", { name: /Problem catalog/u }).waitFor();
-    await organizer
-      .getByPlaceholder("Search by name / description / tag (substring, case-insensitive)")
-      .fill("sqli");
+    await organizer.getByRole("searchbox", { name: "Keyword", exact: true }).fill("sqli");
     await organizer.locator('a[href="/problems/sqli-demo"]').waitFor();
     await captureVerifiedUi(organizer, "local-catalog.png", [info.key]);
     await organizer.locator('a[href="/problems/sqli-demo"]').click();
     await organizer.getByRole("heading", { name: "Overview", exact: true }).waitFor();
+    await organizer.getByRole("heading", { name: "Description", exact: true }).waitFor();
+    await organizer.getByRole("heading", { name: "Learning goals", exact: true }).waitFor();
     await organizer.getByRole("button", { name: "Back to list", exact: true }).click();
     await organizer.getByRole("heading", { name: /Problem catalog/u }).waitFor();
     await organizer.getByRole("link", { name: "Events", exact: true }).click();
