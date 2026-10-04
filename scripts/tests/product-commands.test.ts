@@ -57,6 +57,22 @@ test("default bilingual help includes hosting, catalog updates and development c
     expect(result.stdout).not.toMatch(/legacy|従来|旧方式/iu);
   }
 });
+test("VS Code hosting tasks use supported Make targets", () => {
+  const configuration = JSON.parse(readFileSync(join(root, ".vscode/tasks.json"), "utf8")) as {
+    tasks: { command: string; label: string; detail: string }[];
+  };
+  expect(configuration.tasks.length).toBeGreaterThan(0);
+  for (const task of configuration.tasks) {
+    const target = /^make ([a-z-]+)$/u.exec(task.command)?.[1];
+    expect(target).toBeDefined();
+    expect(target).not.toBe("host");
+    expect(make("-n", target ?? "").status).toBe(0);
+    expect(task.detail).toContain(task.command);
+  }
+  const local = configuration.tasks.find((task) => task.command === "make local");
+  expect(local?.label).toContain("ローカル開催");
+  expect(local?.detail).toContain("local hosting");
+});
 test("local-reset reaches only key rotation, not shutdown or cloud teardown", () => {
   const result = make("-n", "local-reset", "LOCAL_ARGS=--data /tmp/synthetic-host");
   expect(result.status).toBe(0);
@@ -450,7 +466,11 @@ test("Turso clear and all-control-data reset use distinct entrypoints and forwar
       writeFileSync(join(directory, target), "synthetic file\n");
       const variants = [[], ["--plan"], ["--yes"], ["-y"], ["--plan", "--yes"], ["--help"]];
       if (target === "turso-clear")
-        variants.push(["--credentials", "ssm", "--plan"], ["--credentials", "ssm", "--yes"]);
+        variants.push(
+          ["--credentials", "ssm", "--plan"],
+          ["--credentials", "ssm", "--yes"],
+          ["--credentials", "direct", "--plan"],
+        );
       for (const args of variants) {
         for (const exit of [0, 7]) {
           writeFileSync(capture, "");
@@ -493,7 +513,7 @@ test("Turso clear and all-control-data reset use distinct entrypoints and forwar
   }
 });
 
-test("Turso clear help and the offline guide explain direct credentials and preserved settings", () => {
+test("Turso clear help and the offline guide explain credential selection and preserved settings", () => {
   const clear = spawnSync(
     process.execPath,
     ["run", "--no-env-file", "scripts/cloud-hosting/main.ts", "turso-clear", "--help"],
@@ -501,9 +521,19 @@ test("Turso clear help and the offline guide explain direct credentials and pres
   );
   expect(clear.status).toBe(0);
   expect(clear.stdout).toContain("TURSO_AUTH_TOKEN");
-  expect(clear.stdout).toContain("--credentials ssm");
+  expect(clear.stdout).toContain("--credentials <direct|ssm>");
   expect(clear.stdout).not.toContain("TenkaCloud cloud hosting");
   expect(clear.stdout).not.toContain("cdk bootstrap");
+  const usage = spawnSync(
+    process.execPath,
+    ["run", "--no-env-file", "scripts/tenkacloud.ts", "--help"],
+    { cwd: root, env: {}, encoding: "utf8" },
+  );
+  expect(usage.status).toBe(0);
+  expect(usage.stdout).toContain("--credentials <direct|ssm> overrides");
+  expect(usage.stdout).toContain(
+    "nonblank process-only TURSO_AUTH_TOKEN, otherwise configured SSM",
+  );
   const guide = spawnSync(
     process.execPath,
     ["run", "--no-env-file", "scripts/tenkacloud.ts", "turso-live", "guide"],
@@ -512,11 +542,16 @@ test("Turso clear help and the offline guide explain direct credentials and pres
   expect(guide.status).toBe(0);
   expect(guide.stdout).toContain('make turso-clear ENV=staging CLOUD_ARGS="--plan"');
   expect(guide.stdout).toContain("process-only TURSO_AUTH_TOKEN");
-  expect(guide.stdout).toContain("No AWS account, region, profile or calls are needed");
+  expect(guide.stdout).toContain("Direct access needs no AWS account, region, profile or calls");
   expect(guide.stdout).toContain("admin audit logs");
   expect(guide.stdout).toContain("delete all known control-data rows");
   expect(guide.stdout).toContain("SSM only retrieves the existing Turso token");
   for (const output of [clear.stdout, guide.stdout]) {
+    expect(output).toContain("nonblank process-only TURSO_AUTH_TOKEN selects direct");
+    expect(output).toContain("otherwise it reads the configured SSM SecureString");
+    expect(output).toContain("--credentials <direct|ssm> overrides");
+    expect(output).toContain("Tokens in .env are ignored");
+    expect(output).toContain("retry with another source");
     expect(output).toContain("ssm:GetParameter");
     expect(output).toMatch(/exact (?:account\/region-qualified )?parameter ARN/u);
     expect(output).toContain("kms:Decrypt");

@@ -2,10 +2,10 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "▷ ローカルプレイ開始",
-      "detail": "make host — starts the scoring API and browser portal.",
+      "label": "▷ ローカル開催を開始",
+      "detail": "make local — starts local hosting with the organizer console and participant portal.",
       "type": "shell",
-      "command": "make host",
+      "command": "make local",
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",

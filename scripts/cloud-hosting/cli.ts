@@ -24,7 +24,7 @@ import { setupCloudToolkit, showCloudToolkit } from "./setup";
 import { prepareCloudSourceBundle } from "./source-bundle";
 import { assertOwnedStack, isMissingStack } from "./stack-check";
 import { assertCompatibleStack } from "./stack-compatibility";
-import { runTursoClear, TURSO_CLEAR_HELP } from "./turso-clear";
+import { runTursoClear, TURSO_CLEAR_HELP, tursoClearCredentialSource } from "./turso-clear";
 import { verifyTursoBeforeDeployment } from "./turso-preflight";
 import type { TursoResetTarget } from "./turso-reset";
 import { planDeployedTursoTeardown, type TursoTeardownPlan } from "./turso-teardown";
@@ -647,6 +647,7 @@ export async function runCloudCli(
   io: CloudCliIo,
   options: CloudCliOptions,
 ): Promise<number> {
+  let usesAwsCredentials = argv[0] !== "turso-clear";
   try {
     const [command, ...args] = argv;
     if (
@@ -660,7 +661,9 @@ export async function runCloudCli(
       return 0;
     }
     if (command === "turso-clear") {
-      await runTursoClear(args, io, options);
+      const source = tursoClearCredentialSource(args, options.env.TURSO_AUTH_TOKEN);
+      usesAwsCredentials = source === "ssm";
+      await runTursoClear(args, io, options, source);
       return 0;
     }
     assertCommandArguments(command, args);
@@ -722,18 +725,15 @@ export async function runCloudCli(
         throw new Error(`Unknown cloud command: ${command}`);
     }
   } catch (error) {
-    io.stderr(`[cloud] ${cloudErrorMessage(error, argv)}\n`);
+    io.stderr(`[cloud] ${cloudErrorMessage(error, usesAwsCredentials)}\n`);
     return 1;
   }
 }
 
-function cloudErrorMessage(error: unknown, argv: readonly string[]): string {
+function cloudErrorMessage(error: unknown, usesAwsCredentials: boolean): string {
   if (error instanceof z.ZodError)
     return "AWS returned incomplete or malformed platform metadata. Inspect the selected stack state and retry; no success was assumed.";
   const message = error instanceof Error ? error.message : String(error);
-  const usesAwsCredentials =
-    argv[0] !== "turso-clear" ||
-    argv.some((argument, index) => argument === "--credentials" && argv[index + 1] === "ssm");
   if (!usesAwsCredentials) return message;
   const name = error instanceof Error ? error.name : "";
   const awsCredentialFailure =
