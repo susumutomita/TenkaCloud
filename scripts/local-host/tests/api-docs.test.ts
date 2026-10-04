@@ -34,7 +34,7 @@ test("initial prepare and schedule examples are valid and schedule selectors are
   const schedule =
     paths["/events/{eventId}/schedule"]?.patch?.requestBody?.content["application/json"];
   const ajv = new Ajv();
-  addFormats(ajv);
+  ajv.addFormat("date-time", addFormats.get("date-time"));
   const validatePrepare = ajv.compile(prepare?.schema as object);
   const validateSchedule = ajv.compile(schedule?.schema as object);
   expect(validatePrepare(prepare?.example)).toBe(true);
