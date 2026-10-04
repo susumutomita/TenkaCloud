@@ -24,7 +24,7 @@ interface HostCatalogResponse {
   readonly items: readonly {
     readonly problemId: string;
     readonly runtime: string;
-    readonly content?: Pick<ProblemDetail, "description" | "learningGoals">;
+    readonly content?: Pick<ProblemDetail, "description" | "learningGoals" | "i18n">;
   }[];
 }
 
@@ -35,7 +35,10 @@ export interface HostCatalog {
   readonly error: string | null;
   readonly loading: boolean;
   readonly limits: HostLimits;
-  readonly content?: ReadonlyMap<string, Pick<ProblemDetail, "description" | "learningGoals">>;
+  readonly content?: ReadonlyMap<
+    string,
+    Pick<ProblemDetail, "description" | "learningGoals" | "i18n">
+  >;
 }
 
 const EMPTY: ReadonlySet<string> = new Set();

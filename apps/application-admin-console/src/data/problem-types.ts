@@ -31,7 +31,17 @@ export type ProblemRuntimeSummary =
       readonly targets: readonly ProblemCompositeRuntimeTargetSummary[];
     };
 
+/** Authored display text only; never instructions, hints or deployment definitions. */
+export interface ProblemTranslation {
+  readonly name?: string;
+  readonly shortDescription?: string;
+  readonly description?: string;
+  readonly estimatedDuration?: string;
+  readonly learningGoals?: readonly string[];
+}
+
 export interface ProblemSummary {
+  readonly i18n?: { readonly en?: ProblemTranslation };
   id: string;
   name: string;
   category: ProblemCategory;
@@ -96,6 +106,7 @@ export interface ProblemDetail extends ProblemSummary {
  * `ProblemDetail` には map しない。
  */
 export interface ProblemMetadata {
+  readonly i18n?: { readonly en?: ProblemTranslation };
   $schema?: string;
   id: string;
   name: string;

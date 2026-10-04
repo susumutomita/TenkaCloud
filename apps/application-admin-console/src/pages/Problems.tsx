@@ -16,6 +16,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { ProblemCostSummary } from "../components/ProblemCostSummary";
+import { localizeProblemText } from "../data/problem-locale";
 import {
   listProblemSummaries,
   PROVIDER_LABEL,
@@ -23,7 +24,7 @@ import {
   type ProblemSummary,
   runtimeProviders,
 } from "../data/problems";
-import { interpolate, useT } from "../i18n";
+import { interpolate, useI18n, useT } from "../i18n";
 import {
   collectTagFacets,
   DIFFICULTY_LEVELS,
@@ -140,9 +141,7 @@ function ProblemPackGuidanceModal({
  * Issue #834 / #835: 検索 box / category / status / 難易度 / タグ filter を提供。
  * tag badge は click で 「そのタグだけで絞り込み」 (= toggle、 同タグ 2 回 click で解除)。
  *
- * i18n: 全 UI strings は \`t()\` 経由で locale に追従する。 problem metadata (name /
- * shortDescription / tag literal) は author が書いた JP 文字列なので i18n 対象外
- * (= 別 issue で metadata に \`description_en\` 等を加える必要がある)。
+ * Problem narrative uses authored locale overrides with per-field Japanese fallbacks.
  */
 export function ProblemsPage({
   localHost = false,
@@ -153,9 +152,10 @@ export function ProblemsPage({
 }) {
   const navigate = useNavigate();
   const t = useT();
-  const problems = listProblemSummaries().filter(
-    (problem) => supportedProblemIds === undefined || supportedProblemIds.has(problem.id),
-  );
+  const { locale } = useI18n();
+  const problems = listProblemSummaries()
+    .map((problem) => localizeProblemText(problem, locale))
+    .filter((problem) => supportedProblemIds === undefined || supportedProblemIds.has(problem.id));
   const [criteria, setCriteria] = useState<ProblemFilterCriteria>(EMPTY_FILTER_CRITERIA);
   const [packGuidanceOpen, setPackGuidanceOpen] = useState(false);
 

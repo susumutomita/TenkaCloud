@@ -74,7 +74,8 @@ async function main(): Promise<void> {
         gatewayPorts: parseGatewayPorts(process.env.HOST_E2E_GATEWAY_PORTS ?? "5300-5339"),
       },
       (directory) => {
-        if (engineKind === "coordination") return new CompetitionEngine(root, directory, false);
+        if (engineKind === "coordination")
+          return new CompetitionEngine(root, directory, process.env.HOST_E2E_CATALOG_ALL === "1");
         if (engineKind === "docker") return new DockerHostingEngine(root, directory);
         return fixture;
       },

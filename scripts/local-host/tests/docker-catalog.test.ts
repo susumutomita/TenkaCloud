@@ -76,7 +76,18 @@ test("optional organizer text does not make an existing runtime problem unsuppor
       const problem = loadDockerCatalog(copied)[0];
       expect(problem?.problemId).toBe("sqli-demo");
       expect(problem?.organizerContent).toEqual(
-        omitDescription ? undefined : { description: metadata.description, learningGoals: [] },
+        omitDescription
+          ? undefined
+          : {
+              description: metadata.description,
+              learningGoals: [],
+              i18n: {
+                en: {
+                  description: metadata.i18n.en.description,
+                  learningGoals: metadata.i18n.en.learningGoals,
+                },
+              },
+            },
       );
       if (!problem) throw new Error("Expected the existing runtime problem.");
       expect(JSON.parse(problem.definition).problem.description).toBe(metadata.description ?? "");
