@@ -59,6 +59,9 @@
     "test:host:browser": "bun run scripts/local-host/tests/organizer-browser-e2e.ts && bun run scripts/local-host/tests/browser-e2e.ts && bun run scripts/local-host/tests/cloud-browser-e2e.ts && bun run scripts/local-host/tests/accounts-browser-e2e.ts && bun run scripts/local-host/tests/participant-aws-browser-e2e.ts && bun run scripts/local-host/tests/saml-browser-e2e.ts && bun run scripts/local-host/tests/audit-browser-e2e.ts && bun run scripts/local-host/tests/disruption-browser-e2e.ts && bun run scripts/local-host/tests/uptime-browser-e2e.ts && bun run scripts/local-host/tests/progression-browser-e2e.ts && bun run scripts/local-host/tests/course-tracks-browser-e2e.ts"
   },
   "trustedDependencies": [],
+  "scarfSettings": {
+    "enabled": false
+  },
   "keywords": [],
   "packageManager": "bun@1.3.11",
   "engines": {

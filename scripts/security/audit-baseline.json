@@ -33,6 +33,7 @@
     "@lezer/yaml": ["prepare"],
     "@marijn/find-cluster-break": ["prepare"],
     "@node-saml/node-saml": ["prepare"],
+    "@scarf/scarf": ["postinstall"],
     "@sindresorhus/is": ["prepare"],
     "@so-ric/colorspace": ["prepare"],
     "@swc/core": ["postinstall"],

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import Ajv from "ajv";
 import { localOpenApi } from "../openapi";
 import { apiDocsFixture } from "./api-docs-fixture";
@@ -8,6 +9,14 @@ const create = {
   teams: [{ internalSlug: "test-team" }],
   problems: [{ problemId: "sqli-demo" }],
 };
+test("Swagger dependency is pinned and install analytics remain disabled and untrusted", () => {
+  const rootPackage = JSON.parse(
+    readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+  );
+  expect(rootPackage.dependencies["swagger-ui-dist"]).toBe("5.32.3");
+  expect(rootPackage.scarfSettings.enabled).toBe(false);
+  expect(rootPackage.trustedDependencies).not.toContain("@scarf/scarf");
+});
 test("curated request schemas match validation boundaries", () => {
   const schema =
     localOpenApi("admin").paths["/events"]?.post?.requestBody?.content["application/json"].schema;
