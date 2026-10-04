@@ -30,21 +30,24 @@ export type TursoClearTarget = {
     }
 );
 
-export const TURSO_CLEAR_HELP = `Standalone make turso-clear ENV=development [CLOUD_ARGS="--plan|--yes"] clears competition data only. It uses the selected CDK_PARAM_TURSO_DATABASE_URL and an existing TURSO_AUTH_TOKEN supplied only to the process; tokens in .env are ignored. No AWS settings or commands are needed. Missing direct credentials never fall back to AWS. To read the configured SSM SecureString instead, explicitly use CLOUD_ARGS="--credentials ssm --plan" with matching ACCOUNT_ID and AWS_REGION. SSM is used only to retrieve the existing Turso token: the selected AWS caller needs ssm:GetParameter on that exact account/region-qualified parameter ARN and kms:Decrypt authorization for its KMS key when a customer-managed key is used. No SSM write/list permissions are needed. Clear does not call STS, CloudFormation or bootstrap. Stop writers and finish exercise Teardown first; this does not remove AWS/Docker resources or reset configuration.\nLite competition tables (when present): ${LITE_TURSO_COMPETITION_TABLES.join(", ")}.\nPublished cloud-v1 competition tables (when present): ${CLOUD_TURSO_COMPETITION_TABLES.join(", ")}.\nAccount, authentication, connection, feature-flag, admin-audit and migration settings remain. make turso-reset and tenkacloud turso-live reset delete all known control-data rows, including account, IdP, connection, feature-flag and admin-audit data where present; schema, migration markers, unrelated tables and configuration files remain; the SSM parameter and Turso database itself are also preserved. Reset retrieves the existing token from SSM and checks the AWS account with STS GetCallerIdentity, which needs valid AWS credentials but no explicit IAM permission grant.\n`;
+export const TURSO_CLEAR_HELP = `Standalone make turso-clear ENV=development [CLOUD_ARGS="--plan|--yes"] clears competition data only. It uses the selected CDK_PARAM_TURSO_DATABASE_URL. By default, a nonblank process-only TURSO_AUTH_TOKEN selects direct access; otherwise it reads the configured SSM SecureString with matching ACCOUNT_ID and AWS_REGION. Tokens in .env are ignored. Direct access needs no AWS settings or commands. Explicit --credentials <direct|ssm> overrides this selection; a failed credential never triggers a retry with another source. SSM is used only to retrieve the existing Turso token: the selected AWS caller needs ssm:GetParameter on that exact account/region-qualified parameter ARN and kms:Decrypt authorization for its KMS key when a customer-managed key is used. No SSM write/list permissions are needed. Clear does not call STS, CloudFormation or bootstrap. Stop writers and finish exercise Teardown first; this does not remove AWS/Docker resources or reset configuration.\nLite competition tables (when present): ${LITE_TURSO_COMPETITION_TABLES.join(", ")}.\nPublished cloud-v1 competition tables (when present): ${CLOUD_TURSO_COMPETITION_TABLES.join(", ")}.\nAccount, authentication, connection, feature-flag, admin-audit and migration settings remain. make turso-reset and tenkacloud turso-live reset delete all known control-data rows, including account, IdP, connection, feature-flag and admin-audit data where present; schema, migration markers, unrelated tables and configuration files remain; the SSM parameter and Turso database itself are also preserved. Reset retrieves the existing token from SSM and checks the AWS account with STS GetCallerIdentity, which needs valid AWS credentials but no explicit IAM permission grant.\n`;
 
-function credentialSource(args: readonly string[]): "direct" | "ssm" {
-  let source: "direct" | "ssm" = "direct";
+export function tursoClearCredentialSource(
+  args: readonly string[],
+  processToken: string | undefined,
+): "direct" | "ssm" {
+  let source: "direct" | "ssm" = processToken?.trim() ? "direct" : "ssm";
   let specified = false;
   for (let index = 0; index < args.length; index++) {
     const argument = args[index];
     if (["--yes", "-y", "--plan"].includes(argument ?? "")) continue;
     if (argument !== "--credentials" || specified)
       throw new Error(
-        "Unknown or conflicting turso-clear argument. Use --plan, --yes or --credentials direct|ssm.",
+        "Unknown or conflicting turso-clear argument. Use --plan, --yes or --credentials <direct|ssm>.",
       );
     const value = args[++index];
     if (value !== "direct" && value !== "ssm")
-      throw new Error("--credentials requires direct or ssm.");
+      throw new Error("Credential mode must be direct or ssm.");
     source = value;
     specified = true;
   }
@@ -68,7 +71,7 @@ function ssmTarget(env: NodeJS.ProcessEnv): Extract<TursoClearTarget, { credenti
   const regions = [env.REGION, env.AWS_REGION, env.AWS_DEFAULT_REGION, env.CDK_DEFAULT_REGION]
     .filter((value) => value !== undefined)
     .map((value) => value.trim());
-  if (!regions.length || new Set(regions).size !== 1)
+  if (!regions.length || regions.some((value) => !value) || new Set(regions).size !== 1)
     throw new Error(
       "SSM credentials require an explicit AWS_REGION; configured region values must match.",
     );
@@ -85,13 +88,13 @@ function ssmTarget(env: NodeJS.ProcessEnv): Extract<TursoClearTarget, { credenti
   };
 }
 
-/** Own command: direct credentials are process-only and never fall back to AWS. */
+/** Select the credential source once; file tokens and credential failures never change it. */
 export async function runTursoClear(
   args: readonly string[],
   io: CloudCliIo,
   options: CloudCliOptions,
+  source: "direct" | "ssm",
 ): Promise<void> {
-  const source = credentialSource(args);
   // Capture before any environment configuration; a file token must never acquire process provenance.
   const authToken = options.env.TURSO_AUTH_TOKEN?.trim();
   const env = loadCloudEnvironment(options.root, options.env, {

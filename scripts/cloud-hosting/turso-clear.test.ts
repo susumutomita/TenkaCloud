@@ -65,6 +65,7 @@ describe("standalone competition-data clear credentials", () => {
     expect(
       await f.run(
         {
+          ...ssm,
           ...direct,
           AWS_PROFILE: "one",
           AWS_DEFAULT_PROFILE: "two",
@@ -87,18 +88,58 @@ describe("standalone competition-data clear credentials", () => {
     expect(f.output.join("")).not.toContain("synthetic");
   });
   it.each([undefined, "", "  "])(
-    "requires a nonempty process token and never falls back to SSM: %j",
+    "defaults to configured SSM when the process token is absent or blank: %j",
     async (token) => {
-      const f = fixture("TURSO_AUTH_TOKEN=synthetic-file-secret\n");
+      const file = `${Object.entries(ssm)
+        .map(([key, value]) => `${key}=${value}`)
+        .join("\n")}\nTURSO_AUTH_TOKEN=synthetic-file-secret\n`;
+      const f = fixture(file);
       f.io.configureEnvironment = (env) => {
         env.TURSO_AUTH_TOKEN = "synthetic-injected-secret";
       };
-      expect(await f.run({ ...ssm, TURSO_AUTH_TOKEN: token })).toBe(1);
+      expect(await f.run({ TURSO_AUTH_TOKEN: token })).toBe(0);
+      expect(f.targets).toEqual([
+        {
+          credentials: "ssm",
+          databaseUrl: "https://synthetic.turso.io",
+          environment: "staging",
+          account: "123456789012",
+          region: "ap-northeast-1",
+          parameterName:
+            "arn:aws:ssm:ap-northeast-1:123456789012:parameter/TenkaCloud/staging/turso/token",
+        },
+      ]);
+      expect(readFileSync(f.path, "utf8")).toBe(file);
+      expect(f.output.join("")).not.toContain("synthetic");
+    },
+  );
+  it.each([undefined, "", "  "])(
+    "requires a process token for explicit direct access even with SSM configured: %j",
+    async (token) => {
+      const f = fixture("TURSO_AUTH_TOKEN=synthetic-file-secret\n");
+      expect(await f.run({ ...ssm, TURSO_AUTH_TOKEN: token }, ["--credentials", "direct"])).toBe(1);
       expect(f.targets).toEqual([]);
+      expect(f.configured()).toBe(0);
+      expect(f.output.join("")).toContain("Direct turso-clear requires TURSO_AUTH_TOKEN");
       expect(f.output.join("")).toContain("Tokens in .env files are ignored");
       expect(f.output.join("")).not.toContain("synthetic");
     },
   );
+  it("honors explicit direct access and trims its inherited process token", async () => {
+    const f = fixture("TURSO_AUTH_TOKEN=synthetic-file-secret\n");
+    expect(
+      await f.run({ ...ssm, ...direct, TURSO_AUTH_TOKEN: `  ${direct.TURSO_AUTH_TOKEN}  ` }, [
+        "--credentials",
+        "direct",
+        "--plan",
+      ]),
+    ).toBe(0);
+    expect(f.targets[0]).toMatchObject({
+      credentials: "direct",
+      authToken: direct.TURSO_AUTH_TOKEN,
+    });
+    expect(f.configured()).toBe(0);
+  });
   it.each([
     {
       name: "ExpiredTokenException",
@@ -111,18 +152,22 @@ describe("standalone competition-data clear credentials", () => {
   ])(
     "explains AWS session renewal after an SSM credential failure: %j",
     async ({ name, message }) => {
-      const f = fixture();
-      f.io.clearSelectedTursoData = async () => {
-        throw Object.assign(new Error(message), { name });
-      };
-      expect(await f.run(ssm, ["--credentials", "ssm", "--plan"])).toBe(1);
-      expect(f.output.join("")).toContain(message);
-      expect(f.output.join("")).toContain(
-        "Reauthenticate the intended AWS profile using its configured AWS login or SSO method, then retry",
-      );
-      expect(f.output.join("")).toContain(
-        "For an SSO profile, use aws sso login --profile <profile>",
-      );
+      for (const args of [["--plan"], ["--credentials", "ssm", "--plan"]]) {
+        const f = fixture();
+        f.io.clearSelectedTursoData = async (target) => {
+          f.targets.push(target);
+          throw Object.assign(new Error(message), { name });
+        };
+        expect(await f.run(ssm, args)).toBe(1);
+        expect(f.targets.map((target) => target.credentials)).toEqual(["ssm"]);
+        expect(f.output.join("")).toContain(message);
+        expect(f.output.join("")).toContain(
+          "Reauthenticate the intended AWS profile using its configured AWS login or SSO method, then retry",
+        );
+        expect(f.output.join("")).toContain(
+          "For an SSO profile, use aws sso login --profile <profile>",
+        );
+      }
     },
   );
   it.each([
@@ -138,10 +183,13 @@ describe("standalone competition-data clear credentials", () => {
     "does not suggest AWS login for direct Turso errors, regardless of provider name: %j",
     async ({ name, message, args }) => {
       const f = fixture();
-      f.io.clearSelectedTursoData = async () => {
+      f.io.clearSelectedTursoData = async (target) => {
+        f.targets.push(target);
         throw Object.assign(new Error(message), { name });
       };
-      expect(await f.run(direct, [...args])).toBe(1);
+      expect(await f.run({ ...ssm, ...direct }, [...args])).toBe(1);
+      expect(f.targets.map((target) => target.credentials)).toEqual(["direct"]);
+      expect(f.configured()).toBe(0);
       expect(f.output.join("")).toContain(message);
       expect(f.output.join("")).not.toContain("AWS profile");
     },
@@ -169,6 +217,38 @@ describe("standalone competition-data clear credentials", () => {
     expect(f.configured()).toBe(1);
     expect(f.output.join("")).not.toContain("ignored-direct-secret");
   });
+  it("does not retry an explicit SSM failure with an available process token", async () => {
+    const f = fixture();
+    f.io.clearSelectedTursoData = async (target) => {
+      f.targets.push(target);
+      throw new Error("SSM retrieval failed");
+    };
+    expect(await f.run({ ...ssm, ...direct }, ["--credentials", "ssm", "--plan"])).toBe(1);
+    expect(f.targets.map((target) => target.credentials)).toEqual(["ssm"]);
+    expect(f.output.join("")).toContain("SSM retrieval failed");
+  });
+  it.each([
+    ["CDK_PARAM_TURSO_DATABASE_URL", "CDK_PARAM_TURSO_DATABASE_URL is required"],
+    ["CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME", "must name one exact rooted SSM parameter"],
+    ["ACCOUNT_ID", "SSM credentials require one explicit 12-digit ACCOUNT_ID"],
+    ["AWS_REGION", "SSM credentials require an explicit AWS_REGION"],
+  ])("explains missing or blank default SSM configuration: %s", async (key, message) => {
+    const f = fixture(
+      Object.entries(ssm)
+        .map(([name, value]) => `${name}=${value}`)
+        .join("\n"),
+    );
+    for (const value of ["", "  "]) {
+      expect(await f.run({ [key]: value }, ["--plan"])).toBe(1);
+      expect(f.targets).toEqual([]);
+      expect(f.configured()).toBe(0);
+      expect(f.output.join("")).toContain(message);
+    }
+    const missing = fixture();
+    expect(await missing.run({ ...ssm, [key]: undefined }, ["--plan"])).toBe(1);
+    expect(missing.targets).toEqual([]);
+    expect(missing.output.join("")).toContain(message);
+  });
   it.each([
     { ACCOUNT_ID: undefined },
     { ACCOUNT_ID: "invalid" },
@@ -184,9 +264,11 @@ describe("standalone competition-data clear credentials", () => {
     { AWS_PROFILE: "one", AWS_DEFAULT_PROFILE: "two" },
   ])("refuses ambiguous SSM scope before connection: %j", async (override) => {
     const f = fixture();
-    expect(await f.run({ ...ssm, ...override }, ["--credentials", "ssm"])).toBe(1);
-    expect(f.targets).toEqual([]);
-    expect(f.configured()).toBe(0);
+    for (const args of [[], ["--credentials", "ssm"]]) {
+      expect(await f.run({ ...ssm, ...override }, args)).toBe(1);
+      expect(f.targets).toEqual([]);
+      expect(f.configured()).toBe(0);
+    }
   });
   it.each([
     undefined,

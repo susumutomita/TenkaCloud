@@ -392,11 +392,17 @@ exact inventory and plan any import/recovery separately.
 
 ### Standalone Turso data reset
 
-`make turso-clear ENV=development` connects directly to the selected environment's
-`CDK_PARAM_TURSO_DATABASE_URL` using `TURSO_AUTH_TOKEN` inherited from the process.
-Provide an existing token through your secret provider or process environment;
-never put it in `.env`, command arguments or logs. The command does not read tokens
-from `.env`, generate or save them, or print them. Direct mode makes no AWS calls
+`make turso-clear ENV=development` uses the selected environment's
+`CDK_PARAM_TURSO_DATABASE_URL`. By default, a nonblank `TURSO_AUTH_TOKEN` inherited
+from the process selects direct access. When it is absent or blank, clear retrieves
+the existing token from the configured SSM SecureString, so the same command works
+with centralized token storage. Explicit `--credentials direct` or `--credentials ssm`
+overrides this selection. Missing required configuration stops before connection;
+a failed credential never triggers a retry with another source.
+
+Provide a direct token through your secret provider or process environment;
+never put it in `.env`, command arguments or logs. The command ignores tokens in
+`.env` and never generates, saves or prints tokens. Direct mode makes no AWS calls
 and needs no AWS account, region or profile, even after both platform stacks are gone.
 
 Preview the target, competition-data tables and remaining deployment count first:
@@ -440,12 +446,15 @@ Custom triggers or references from preserved tables stop the clear for operator 
 A failed request is not reported as success; inspect the database before retrying
 if a lost response leaves the commit outcome unknown.
 
-To use an existing SSM SecureString instead of a process token, opt in explicitly:
+To choose the credential source explicitly, including SSM when a process token is present:
 
 ```sh
 make turso-clear ENV=development CLOUD_ARGS="--credentials ssm --plan"
 make turso-clear ENV=development CLOUD_ARGS="--credentials ssm --yes"
+make turso-clear ENV=development CLOUD_ARGS="--credentials direct --plan"
 ```
+
+Explicit direct mode requires a nonblank process token even when SSM is configured.
 
 SSM mode requires the configured `ACCOUNT_ID`, region (`REGION`, `AWS_REGION` or
 `AWS_DEFAULT_REGION`) and `CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME`. It reads only
