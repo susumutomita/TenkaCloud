@@ -1,6 +1,7 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import Link from "@cloudscape-design/components/link";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
@@ -22,6 +23,8 @@ export interface EventCreateDeployPromptModalProps {
   visible: boolean;
   canMutateTenant: boolean;
   deployStarting: boolean;
+  /** The event exists, but its AWS target is the platform account and cannot be deployed. */
+  hostingAccountRejected?: boolean;
   /**
    * [#2563 v1] Bulk deploy rides the AWS/CFn pipeline only; a non-AWS
    * single-provider event hides "Deploy now" and points the operator at the
@@ -57,6 +60,7 @@ export function EventCreateDeployPromptModal({
   visible,
   canMutateTenant,
   deployStarting,
+  hostingAccountRejected = false,
   bulkDeploySupported = true,
   teams,
   participantPortalUrl,
@@ -87,7 +91,7 @@ export function EventCreateDeployPromptModal({
               <Button
                 variant="primary"
                 loading={deployStarting}
-                disabled={!canMutateTenant || copyPending}
+                disabled={!canMutateTenant || copyPending || hostingAccountRejected}
                 onClick={onDeployNow}
                 data-testid="deploy-prompt-now"
               >
@@ -99,6 +103,16 @@ export function EventCreateDeployPromptModal({
       }
     >
       <SpaceBetween size="m">
+        {hostingAccountRejected && (
+          <Alert type="error" header={t("event_create.hosting_account_rejected_header")}>
+            <SpaceBetween size="xs">
+              {t("event_create.hosting_account_rejected_body")}
+              <Link href="/competitor-accounts" external target="_blank">
+                {t("event_create.go_to_competitor_accounts")}
+              </Link>
+            </SpaceBetween>
+          </Alert>
+        )}
         <Alert type="warning" header={t("event_create.login_keys_header")}>
           {t("event_create.login_keys_body")}
         </Alert>

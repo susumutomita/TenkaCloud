@@ -48,6 +48,20 @@ describe("createCoreApiClient", () => {
     expect(patchInit.method).toBe("PATCH");
   });
 
+  it("preserves the caller's operation key without changing authentication or the payload", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response("{}")));
+    vi.stubGlobal("fetch", fetchMock);
+    const api = createCoreApiClient("https://api.example.test", "synthetic-token");
+    await api.post("events", { name: "Cup" }, "operation-key-123");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ name: "Cup" }),
+      headers: { authorization: "Bearer synthetic-token", "Idempotency-Key": "operation-key-123" },
+    });
+    await api.post("events", { name: "Legacy caller" });
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).not.toHaveProperty("Idempotency-Key");
+  });
+
   it("should issue a DELETE for del() and resolve void", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);

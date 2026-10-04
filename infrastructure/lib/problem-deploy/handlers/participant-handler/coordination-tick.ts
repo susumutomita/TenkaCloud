@@ -61,6 +61,10 @@ export interface CoordinationTickDeps {
   readonly store: CoordinationStoreDeps;
   /** 宣言 gate: `config[moduleRef]` を持つ問題だけ tick する (= 未宣言 ref を load させない)。 */
   readonly config: CoordinationConfig;
+  readonly resolveCatalog?: (
+    target: CoordinationTickTarget,
+    nowIso: string,
+  ) => Promise<CoordinationTickDeps>;
 }
 
 /** batch 処理の結果サマリ (= async invoke 応答は捨てられるが、 直接テスト / ログ用に返す)。 */
@@ -106,14 +110,16 @@ export async function handleCoordinationTickBatch(
   let written = 0;
   const scoreBudgetMs = COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   for (const target of batch.targets) {
-    let work: Promise<boolean>;
-    if (target.initializeRunId) {
-      work = initializeAcceptedCoordinationReset(deps, target, batch.nowIso);
-    } else if (target.drainOnly) {
-      work = drainSavedCoordinationScores(deps, target).then(() => false);
-    } else {
-      work = tickCoordinationEvent(deps, target, batch.nowIso, scoreBudgetMs);
-    }
+    const work = (async () => {
+      const scoped = deps.resolveCatalog ? await deps.resolveCatalog(target, batch.nowIso) : deps;
+      if (target.initializeRunId) {
+        return initializeAcceptedCoordinationReset(scoped, target, batch.nowIso);
+      } else if (target.drainOnly) {
+        return drainSavedCoordinationScores(scoped, target).then(() => false);
+      } else {
+        return tickCoordinationEvent(scoped, target, batch.nowIso, scoreBudgetMs);
+      }
+    })();
     const didWrite = await work.catch((err) => {
       console.warn(`[coordination-dispatcher] tick failed event=${target.eventId}`, {
         message: err instanceof Error ? err.message : String(err),

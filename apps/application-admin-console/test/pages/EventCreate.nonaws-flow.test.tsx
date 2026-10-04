@@ -84,7 +84,10 @@ const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
   }) as ProblemSummary;
 
 // #2167: 非 AWS 問題は features.nonAwsRuntime ON のときだけ picker で選択可能。
-const config = { features: { nonAwsRuntime: true } } as AppConfig;
+const config = {
+  features: { nonAwsRuntime: true },
+  eventLimits: { maxTeams: 99, maxProblems: 50 },
+} as AppConfig;
 const renderPage = () => render(<EventCreatePage config={config} />);
 const w = (c: HTMLElement) => createWrapper(c);
 const problemSelect = (c: HTMLElement) => w(c).findMultiselect('[data-testid="problem-select"]');

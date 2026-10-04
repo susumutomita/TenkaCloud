@@ -1,12 +1,8 @@
 import type { SamlIdpConfig } from "@tenkacloud/saml-utils";
 import type { Context } from "hono";
 import { describe, expect, it } from "vitest";
-import type {
-  CognitoIdpAdapter,
-  IdpScope,
-  IdpStore,
-} from "../../lib/control-plane/handlers/idp-handler/core";
-import { buildIdpApp } from "../../lib/control-plane/handlers/idp-handler/routes";
+import type { CognitoIdpAdapter, IdpScope, IdpStore } from "../../lib/shared/idp/core";
+import { buildIdpApp } from "../../lib/shared/idp/routes";
 
 const VALID_METADATA = `<?xml version="1.0"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="http://idp.test/entity">
   <md:IDPSSODescriptor>
@@ -48,15 +44,21 @@ function makeFakeStore(): IdpStore {
 
 function makeFakeCognito(): CognitoIdpAdapter {
   return {
-    async createIdp() {},
-    async updateIdp() {},
-    async deleteIdp() {},
+    async createIdp() {
+      return undefined;
+    },
+    async updateIdp() {
+      return undefined;
+    },
+    async deleteIdp() {
+      return undefined;
+    },
   };
 }
 
 function buildApp(scope: IdpScope | "forbidden") {
   return buildIdpApp({
-    pathPrefix: "/admin/idp",
+    pathPrefix: "/tenant/idp",
     resolveScope: (c: Context) => {
       if (scope === "forbidden") {
         return { forbidden: c.json({ error: "forbidden" }, 403) };
@@ -74,13 +76,13 @@ function buildApp(scope: IdpScope | "forbidden") {
 describe("IdP API routes", () => {
   it("should return 403 when the caller is not authorized", async () => {
     const app = buildApp("forbidden");
-    const res = await app.request("/admin/idp", { method: "POST" });
+    const res = await app.request("/tenant/idp", { method: "POST" });
     expect(res.status).toBe(403);
   });
 
   it("should accept POST + return 201 + return the persisted config", async () => {
-    const app = buildApp({ kind: "system" });
-    const res = await app.request("/admin/idp", {
+    const app = buildApp({ kind: "tenant", tenantId: "local" });
+    const res = await app.request("/tenant/idp", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(happyBody),
@@ -92,8 +94,8 @@ describe("IdP API routes", () => {
   });
 
   it("should return 400 when body is missing required fields", async () => {
-    const app = buildApp({ kind: "system" });
-    const res = await app.request("/admin/idp", {
+    const app = buildApp({ kind: "tenant", tenantId: "local" });
+    const res = await app.request("/tenant/idp", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ idpId: "x" }),
@@ -102,50 +104,50 @@ describe("IdP API routes", () => {
   });
 
   it("should return 400 for an invalid idpId in path params", async () => {
-    const app = buildApp({ kind: "system" });
-    const res = await app.request("/admin/idp/has%20space", { method: "DELETE" });
+    const app = buildApp({ kind: "tenant", tenantId: "local" });
+    const res = await app.request("/tenant/idp/has%20space", { method: "DELETE" });
     expect(res.status).toBe(400);
   });
 
   it("should return 404 on GET for unknown idp", async () => {
-    const app = buildApp({ kind: "system" });
-    const res = await app.request("/admin/idp/missing");
+    const app = buildApp({ kind: "tenant", tenantId: "local" });
+    const res = await app.request("/tenant/idp/missing");
     expect(res.status).toBe(404);
   });
 
   it("should strip metadataXml from the list response (no log/network bloat)", async () => {
-    const app = buildApp({ kind: "system" });
-    await app.request("/admin/idp", {
+    const app = buildApp({ kind: "tenant", tenantId: "local" });
+    await app.request("/tenant/idp", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(happyBody),
     });
-    const res = await app.request("/admin/idp");
+    const res = await app.request("/tenant/idp");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { items: Array<Record<string, unknown>> };
+    const body = (await res.json()) as { items: Record<string, unknown>[] };
     expect(body.items).toHaveLength(1);
     expect(body.items[0].metadataXml).toBeUndefined();
     expect(body.items[0].displayName).toBe("Acme Okta");
   });
 
   it("should support full CRUD lifecycle (create → get → patch → delete → 404)", async () => {
-    const app = buildApp({ kind: "system" });
-    await app.request("/admin/idp", {
+    const app = buildApp({ kind: "tenant", tenantId: "local" });
+    await app.request("/tenant/idp", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(happyBody),
     });
-    const get1 = await app.request("/admin/idp/okta-acme");
+    const get1 = await app.request("/tenant/idp/okta-acme");
     expect(get1.status).toBe(200);
-    const patched = await app.request("/admin/idp/okta-acme", {
+    const patched = await app.request("/tenant/idp/okta-acme", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ displayName: "Renamed Okta" }),
     });
     expect(patched.status).toBe(200);
-    const deleted = await app.request("/admin/idp/okta-acme", { method: "DELETE" });
+    const deleted = await app.request("/tenant/idp/okta-acme", { method: "DELETE" });
     expect(deleted.status).toBe(204);
-    const get2 = await app.request("/admin/idp/okta-acme");
+    const get2 = await app.request("/tenant/idp/okta-acme");
     expect(get2.status).toBe(404);
   });
 });
@@ -190,7 +192,7 @@ describe("tenant isolation at the route layer", () => {
     expect(cross.status).toBe(404);
     // Tenant A's list only shows tenant A's idp.
     const listRes = await aApp.request("/tenant/idp");
-    const listBody = (await listRes.json()) as { items: Array<{ idpId: string }> };
+    const listBody = (await listRes.json()) as { items: { idpId: string }[] };
     expect(listBody.items.map((i) => i.idpId)).toEqual(["acme-okta"]);
 
     // Tenant A trying to delete tenant B's idp is a 404 (= isolation).

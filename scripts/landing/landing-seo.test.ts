@@ -145,12 +145,32 @@ describe("documentation home by role", () => {
     expect(english).not.toContain("<h1>Developer docs</h1>");
   });
 
-  it("should publish the problem-author flow diagram and Lite references", () => {
+  it("should publish the author diagram and current setup guidance", () => {
     const author = read("landing/docs/manual/problem-author/index.html");
     expect(author).toContain("/docs/assets/problem-author-flow.ja.svg");
     expect(read("landing/docs/assets/problem-author-flow.ja.svg")).toContain("<title");
-    expect(read("landing/docs/reference/lite-settings/index.html")).toContain("16〜128文字");
-    expect(read("landing/docs/reference/lite-messages/index.html")).toContain("システムの処置");
+    for (const suffix of ["index.html", "index.en.html"]) {
+      const gettingStarted = read(`landing/docs/getting-started/${suffix}`);
+      expect(gettingStarted).toContain("make local-reset");
+      expect(gettingStarted).toContain("make destroy");
+      expect(gettingStarted).not.toContain("825415fcda5075ad723daf9e4514eac47d7b8bb9");
+      expect(read(`landing/docs/${suffix}`)).not.toContain("reference/lite-settings");
+      expect(read(`landing/docs/${suffix}`)).not.toContain("reference/lite-messages");
+    }
+  });
+  it("keeps current local/cloud guidance consistent without relabeling the historical setup", () => {
+    for (const suffix of ["index.html", "index.en.html"]) {
+      for (const page of ["getting-started", "concepts/architecture", "reference/runtime-matrix"]) {
+        const document = read(`landing/docs/${page}/${suffix}`);
+        expect(document).toContain("Lambda");
+        expect(document).toContain("DynamoDB");
+        expect(document).not.toContain("Cloud Turso");
+        expect(document).not.toContain("クラウド用 Turso");
+      }
+    }
+    expect(read("README.md")).not.toContain("CDK/Lambda\nplatform deployment are retired");
+    expect(read("README.ja.md")).not.toContain("CDK/Lambda による基盤配置は廃止");
+    expect(read("docs/local-hosting.md")).toContain("AWS-service problems belong to cloud hosting");
   });
 });
 
@@ -201,10 +221,10 @@ describe("landing hero quest card (Issue #2711)", () => {
     expect(hero).not.toContain("Codespaces");
   });
 
-  it("should demote the organizer links to a text row with data-cta and hrefs preserved", () => {
+  it("routes the organizer CTA to the current hosting guide while preserving the pricing CTA", () => {
     const hero = heroSection(index);
     expect(hero).toContain('data-cta="deploy-aws"');
-    expect(hero).toContain('href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws"');
+    expect(hero).toContain('href="./docs/manual/organizer/"');
     expect(hero).toContain('data-cta="get-quote"');
     expect(hero).toContain('href="#pricing"');
   });
@@ -225,6 +245,7 @@ describe("landing hero quest card (Issue #2711)", () => {
   it("should publish the same quest-card structure on the generated English landing page", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
+    expect(hero).toContain('href="./docs/manual/organizer/index.en.html"');
     expect(hero).not.toContain("cta-primary");
     expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
     expect(hero).toContain('data-cta="start-drill"');

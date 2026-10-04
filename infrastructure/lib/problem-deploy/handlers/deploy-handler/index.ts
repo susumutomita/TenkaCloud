@@ -5,7 +5,13 @@ import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
+import { UnsupportedHostingAccountError } from "../shared/competitor-account-policy.js";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
+import {
+  captureDeploymentCatalog,
+  ExecutionCatalogUnavailableError,
+  isNativeExecutionProblem,
+} from "../shared/execution-catalog-context.js";
 import { parseSchema } from "../shared/http-parse.js";
 import { createMachineGuardMiddleware } from "../shared/machine-principal.js";
 import {
@@ -37,7 +43,6 @@ import {
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "./deploy.js";
-import { recordDeployAudit, recordRetryAudit } from "./deploy-audit.js";
 import { DeployQuotaExceededError, type QuotaTier, resolveQuotaTier } from "./deploy-quota.js";
 import { beginIdempotent, finishIdempotent, hashRequest } from "./idempotency.js";
 import { getDeployment, listDeployments } from "./list.js";
@@ -91,7 +96,7 @@ app.use(
   "*",
   cors({
     origin: "*",
-    allowHeaders: ["Authorization", "Content-Type"],
+    allowHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
     allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
     maxAge: 600,
   }),
@@ -202,6 +207,14 @@ function mapDeployError(c: Context, problemId: string, err: unknown): Response {
   if (err instanceof CompositeAwsInputRequiredError) {
     return c.json({ error: "aws_input_required", message: err.message }, StatusCodes.BAD_REQUEST);
   }
+  if (err instanceof ExecutionCatalogUnavailableError)
+    return c.json({ error: err.code, message: err.message }, StatusCodes.CONFLICT);
+  if (err instanceof UnsupportedHostingAccountError) {
+    return c.json(
+      { error: err.code, awsAccountId: err.awsAccountId, message: err.message },
+      StatusCodes.UNPROCESSABLE_ENTITY,
+    );
+  }
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[deploy] startDeployment failed", { problemId, message });
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
@@ -266,8 +279,10 @@ app.post("/problems/:problemId/deploy", async (c) => {
   // 結果の記録は 1 つの closure に閉じ込める。 分岐先 (composite / 単一 / 失敗) ごとに
   // `if (idempotency)` を書くと、 同じ条件が 3 箇所へ散り、 1 つ書き忘れるとその経路だけ
   // 再送で二重に走る。
-  let recordIdempotentResult: (status: number, resultBody: unknown) => Promise<void> = async () =>
-    undefined;
+  let recordIdempotentResult: (status: number, resultBody: unknown) => Promise<void> = async (
+    _status,
+    _resultBody,
+  ) => undefined;
   if (idempotencyKey !== undefined) {
     const repository = await resolveIdempotencyRepository(shared);
     const decision = await beginIdempotent({
@@ -290,7 +305,14 @@ app.post("/problems/:problemId/deploy", async (c) => {
       });
   }
 
-  const ctx = buildContext(shared, tenantId);
+  let ctx: DeployContext;
+  try {
+    ctx = await captureDeploymentCatalog(buildContext(shared, tenantId));
+  } catch (error) {
+    const failure = mapDeployError(c, problemId, error);
+    await recordIdempotentResult(failure.status, await failure.clone().json());
+    return failure;
+  }
   // #1766: quota tier は JWT claim から route で解決し、enforcement 自体は
   // startDeployment / startCompositeDeployment 内で行う (PR-1803 review)。
   const quotaTier = resolveQuotaTier(c);
@@ -303,12 +325,6 @@ app.post("/problems/:problemId/deploy", async (c) => {
   const composite = asCompositeDescriptor(descriptor);
   if (composite) {
     const response = await handleCompositeDeploy(c, ctx, problemId, composite, quotaTier, body);
-    await recordDeployAudit(
-      c,
-      tenantId,
-      problemId,
-      response.status === StatusCodes.ACCEPTED ? "success" : "error",
-    );
     // composite も同じ route なので、 記録しないとここだけ再送で二重に走る。
     await recordIdempotentResult(response.status, await response.clone().json());
     return response;
@@ -323,7 +339,9 @@ app.post("/problems/:problemId/deploy", async (c) => {
   const isNonAwsSingleProvider = runtime !== undefined && runtime.provider !== EXECUTABLE_PROVIDER;
   const parsed = parseSchema(
     c,
-    isNonAwsSingleProvider ? CompositeDeployRequestSchema : DeployRequestSchema,
+    isNonAwsSingleProvider || isNativeExecutionProblem(ctx.executionCatalog, problemId)
+      ? CompositeDeployRequestSchema
+      : DeployRequestSchema,
     body,
   );
   if (!parsed.ok) return parsed.response;
@@ -334,11 +352,9 @@ app.post("/problems/:problemId/deploy", async (c) => {
       problemId,
       quotaTier,
     });
-    await recordDeployAudit(c, tenantId, problemId, "success");
     await recordIdempotentResult(StatusCodes.ACCEPTED, response);
     return c.json(response, StatusCodes.ACCEPTED);
   } catch (err) {
-    await recordDeployAudit(c, tenantId, problemId, "error");
     const failure = mapDeployError(c, problemId, err);
     // 失敗も記録する。 Stripe と同じで、 同じキーの再送には成功・失敗を問わず 1 回目の
     // 結果を返す。 失敗を記録しないと、 再送のたびに実処理が走ってしまう。
@@ -484,11 +500,8 @@ app.post("/deployments/retry", async (c) => {
   const retryTenantId = resolveTenantId(c);
   try {
     const result = await retryDeployments(shared, retryTenantId, request);
-    // #2955: 再投入は deploy と同じく mutating なので、同じ粒度で監査に残す。
-    await recordRetryAudit(c, retryTenantId, result.items.length, "success");
     return c.json(result, StatusCodes.OK);
   } catch (err) {
-    await recordRetryAudit(c, retryTenantId, request.failedJobIds.length, "error");
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] retryDeployments failed", { message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);

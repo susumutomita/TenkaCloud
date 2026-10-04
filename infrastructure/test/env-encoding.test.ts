@@ -1,8 +1,9 @@
+import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { decodeLargeEnvValue, encodeLargeEnvValue } from "../lib/utils/env-encoding";
+import { decodeLargeEnvValue } from "../lib/utils/env-encoding";
 
 /**
- * Issue #810: gzip+base64 encoder/decoder の挙動 pin。
+ * Issue #810: 保存済み gzip+base64 環境値の decoder 互換性を確認。
  *
  * 重要な要件:
  *   - roundtrip で同じ JSON が返る
@@ -11,29 +12,24 @@ import { decodeLargeEnvValue, encodeLargeEnvValue } from "../lib/utils/env-encod
  *   - 壊れた base64 / truncated input は raw を返して JSON parse fail に任せる
  */
 
-describe("encodeLargeEnvValue + decodeLargeEnvValue (#810)", () => {
-  it("should restore the original JSON string through encode → decode", () => {
+describe("decodeLargeEnvValue (#810)", () => {
+  it("should decode a saved gzip/base64 JSON value", () => {
     const original = JSON.stringify({
       "hello-world": { kind: "flag", flagOutputKey: "ParameterValue", points: 100 },
     });
-    const encoded = encodeLargeEnvValue(original);
+    const encoded = gzipSync(original).toString("base64");
     const decoded = decodeLargeEnvValue(encoded);
     expect(decoded).toBe(original);
   });
 
-  it("should roundtrip JSON containing UTF-8 multibyte (JA description)", () => {
+  it("should decode gzip/base64 JSON containing Japanese text", () => {
     const original = JSON.stringify({
       "hello-world": {
         description: "AWS Console から SSM Parameter Store にアクセスして値を読む問題",
       },
     });
-    const encoded = encodeLargeEnvValue(original);
+    const encoded = gzipSync(original).toString("base64");
     expect(decodeLargeEnvValue(encoded)).toBe(original);
-  });
-
-  it("encode output should be base64 prefixed with gzip magic (H4s)", () => {
-    const encoded = encodeLargeEnvValue('{"a":1}');
-    expect(encoded.startsWith("H4s")).toBe(true);
   });
 
   it("should return plain JSON (legacy format / test fixture) without decoding (backward compat)", () => {
@@ -55,7 +51,7 @@ describe("encodeLargeEnvValue + decodeLargeEnvValue (#810)", () => {
     expect(decodeLargeEnvValue(broken)).toBe(broken);
   });
 
-  it("should roundtrip actual problem metadata (all 5 kinds)", () => {
+  it("should decode saved scoring metadata for multiple problem kinds", () => {
     const big = JSON.stringify({
       "hello-world": {
         kind: "flag",
@@ -75,15 +71,6 @@ describe("encodeLargeEnvValue + decodeLargeEnvValue (#810)", () => {
         platformRules: { ec2: { points: 100 } },
       },
     });
-    expect(decodeLargeEnvValue(encodeLargeEnvValue(big))).toBe(big);
-  });
-
-  it("compression ratio: encoded size should be smaller than the original for 1000+ byte JSON with JA description", () => {
-    const verbose = JSON.stringify({
-      p1: { description: "あ".repeat(500), kind: "flag" },
-      p2: { description: "い".repeat(500), kind: "flag" },
-    });
-    const encoded = encodeLargeEnvValue(verbose);
-    expect(encoded.length).toBeLessThan(verbose.length);
+    expect(decodeLargeEnvValue(gzipSync(big).toString("base64"))).toBe(big);
   });
 });

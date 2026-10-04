@@ -142,7 +142,13 @@ export function ShellLayout<L extends string>({
     <>
       <TopNavigation
         className="tenkacloud-shell-top-navigation"
-        identity={createTenkaCloudTopNavigationIdentity(title)}
+        identity={{
+          ...createTenkaCloudTopNavigationIdentity(title),
+          onFollow: (event) => {
+            event.preventDefault();
+            onNavigate("/");
+          },
+        }}
         utilities={
           isAuthenticated
             ? [refreshUtility, localeUtility, userMenuUtility ?? signOutButton].filter(

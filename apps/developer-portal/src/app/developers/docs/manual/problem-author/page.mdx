@@ -2,11 +2,13 @@ import { MaturityBadge } from "@/components/MaturityBadge";
 
 export const metadata = { title: "Problem author manual" };
 
-# Problem author manual <MaturityBadge level="stable" />
+# Problem author manual <MaturityBadge level="preview" />
 
 Use this manual when you create or maintain the content participants solve:
 the scenario, deployable environment, verifier, scoring metadata, and hints.
-You do not need to operate a TenkaCloud tenant or change platform code.
+You do not need to operate a TenkaCloud event or change platform code.
+
+Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate's event catalog. Activation is an offline catalog record, not a current hosting workflow.
 
 ## Your goal
 
@@ -36,7 +38,7 @@ make pack-validate ARGS="./my-first-pack"
 
 The [first pack tutorial](/developers/docs/tutorials/first-pack/) follows one
 minimal pack from scaffold to validation, immutable Git pin, install,
-activation, and removal.
+local inspection, and removal.
 
 ## Author the participant experience
 
@@ -110,3 +112,5 @@ defines what a pack may contain. Validator messages are listed in
 If the pack requires a new platform capability rather than problem content,
 open a platform Issue and switch to the
 [developer manual](/developers/docs/manual/developer/).
+
+The catalog/workbench for all 106 former local problems and 15 declared terminal variants are connected to Challenge competitions. Real Docker/browser rehearsals cover the SQL and PostgreSQL terminal representative paths. This is not a completed walkthrough of every problem or terminal variant; record each unverified participant path as Not run.

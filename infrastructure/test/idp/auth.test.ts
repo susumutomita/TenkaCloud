@@ -1,11 +1,6 @@
 import type { Context } from "hono";
 import { describe, expect, it } from "vitest";
-import {
-  isSystemAdmin,
-  isTenantAdmin,
-  resolveCognitoSub,
-  resolveTenantId,
-} from "../../lib/control-plane/handlers/idp-handler/auth";
+import { isTenantAdmin, resolveCognitoSub, resolveTenantId } from "../../lib/shared/idp/auth";
 
 function ctx(claims?: Record<string, unknown>): Context {
   return {
@@ -23,19 +18,12 @@ function restApiCtx(claims?: Record<string, unknown>): Context {
   } as unknown as Context;
 }
 
-describe("isSystemAdmin", () => {
-  it("should be true only when custom:userRole === SystemAdmin", () => {
-    expect(isSystemAdmin(ctx({ "custom:userRole": "SystemAdmin" }))).toBe(true);
-    expect(isSystemAdmin(ctx({ "custom:userRole": "TenantAdmin" }))).toBe(false);
-    expect(isSystemAdmin(ctx({ "custom:userRole": "" }))).toBe(false);
-    expect(isSystemAdmin(ctx())).toBe(false);
-  });
-});
-
 describe("isTenantAdmin", () => {
   it("should be true only when custom:userRole === TenantAdmin", () => {
     expect(isTenantAdmin(ctx({ "custom:userRole": "TenantAdmin" }))).toBe(true);
     expect(isTenantAdmin(ctx({ "custom:userRole": "SystemAdmin" }))).toBe(false);
+    expect(isTenantAdmin(ctx({ "custom:userRole": "" }))).toBe(false);
+    expect(isTenantAdmin(ctx())).toBe(false);
   });
 
   it("should read custom:userRole from the REST API Cognito authorizer claims path", () => {

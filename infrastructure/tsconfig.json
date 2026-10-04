@@ -3,24 +3,14 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["es2022"],
-    "outDir": "./dist",
-    "declaration": true,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "aws-lambda"],
     "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "noImplicitThis": true,
-    "alwaysStrict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    "noUncheckedIndexedAccess": true,
     "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": false,
-    "inlineSourceMap": true,
-    "inlineSources": true,
-    "experimentalDecorators": true,
-    "strictPropertyInitialization": false,
     "skipLibCheck": true,
-    "typeRoots": ["./node_modules/@types"]
+    "noEmit": true
   },
-  "exclude": ["node_modules", "cdk.out", "dist", "test"]
+  "include": ["bin/**/*.ts", "lib/**/*.ts", "test/cloud-hosting/**/*.ts"],
+  "exclude": ["node_modules", "cdk.out"]
 }

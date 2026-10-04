@@ -209,6 +209,31 @@ describe("GET /portal/me/cli-credentials", () => {
   });
 });
 
+describe.each([
+  ["console-signin-url", mocks.getConsoleSigninUrl],
+  ["cli-credentials", mocks.getCliCredentials],
+] as const)("%s AWS operation errors", (path, issue) => {
+  it.each(["ssm:GetParameter", "sts:AssumeRole", "cloudformation:DescribeStackResource"])(
+    "preserves compatible error fields and carries %s",
+    async (operation) => {
+      issue.mockResolvedValueOnce({
+        kind: "assume_role_failed",
+        stage: "competitor",
+        reason: "AccessDenied",
+        operation,
+      });
+      const res = await get(`/portal/me/${path}?jobId=${JOB_ID}`);
+      expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+      expect(await res.json()).toEqual({
+        error: "assume_role_failed",
+        stage: "competitor",
+        reason: "AccessDenied",
+        operation,
+      });
+    },
+  );
+});
+
 describe("GET /portal/me/notifications", () => {
   it("should 400 on a non-numeric limit", async () => {
     expect((await get("/portal/me/notifications?limit=abc")).status).toBe(StatusCodes.BAD_REQUEST);

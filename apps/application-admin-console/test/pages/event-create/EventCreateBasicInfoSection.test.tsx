@@ -56,4 +56,23 @@ describe("EventCreateBasicInfoSection", () => {
     render(<EventCreateBasicInfoSection {...props({ teamCountInvalid: true })} />);
     expect(screen.getByText("event_create.team_count_invalid")).toBeInTheDocument();
   });
+
+  it("disables team counts until host limits are available, then restores validation", () => {
+    const p = props({ maxTeams: 0, teamCountInvalid: true });
+    const { rerender } = render(<EventCreateBasicInfoSection {...p} />);
+    expect(screen.getByText("event_create.limits_unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton")).toBeDisabled();
+    expect(screen.getByRole("spinbutton")).toHaveValue(3);
+    expect(screen.queryByText("event_create.team_count_invalid")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeEnabled();
+    expect(p.onTeamCountChange).not.toHaveBeenCalled();
+
+    rerender(<EventCreateBasicInfoSection {...p} maxTeams={10} />);
+    expect(screen.queryByText("event_create.limits_unavailable")).not.toBeInTheDocument();
+    expect(screen.getByText("event_create.team_count_description")).toBeInTheDocument();
+    expect(screen.getByText("event_create.team_count_invalid")).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton")).toBeEnabled();
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "5" } });
+    expect(p.onTeamCountChange).toHaveBeenCalledWith(5);
+  });
 });

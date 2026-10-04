@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ランタイム対応マトリクス — TenkaCloud Docs</title>
+<title>runtime の実行状況 — TenkaCloud Docs</title>
 <link rel="canonical" href="https://tenkacloud.com/docs/reference/runtime-matrix/" />
 <link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/reference/runtime-matrix/" />
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/reference/runtime-matrix/index.en.html" />
@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,61 +43,62 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/" aria-current="page">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/" aria-current="page">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>ランタイム対応マトリクス <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>パックは、必要とする <code>(provider, engine)</code> ランタイムを宣言します。以下のマトリクスは、
-<code>@tenkacloud/problem-runtime/capabilities</code> の <code>RUNTIME_CAPABILITIES</code> から生成される
-<strong>規範的リファレンス</strong>です。</p>
-<h2>マトリクス</h2>
-<table class="reference-table"><thead><tr><th>Provider</th><th>Engine</th><th>Mode</th><th>Recognized</th><th>Adapter wired</th><th>Executable</th><th>Live verified</th><th>Maturity</th><th>Blocking issues</th><th>Evidence</th></tr></thead><tbody>
-<tr><td><code>aws</code></td><td><code>cloudformation</code></td><td>cloud</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td><span class="doc-badge doc-badge--stable">Stable</span></td><td>—</td><td>Default competitor-account CloudFormation lifecycle is production and live verified.</td></tr>
-<tr><td><code>azure</code></td><td><code>bicep</code></td><td>cloud</td><td>yes</td><td>yes</td><td>no</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter, credential wiring, and inline-ARM-template materialization (precompiled JSON or a Bicep compile, fail-closed when neither is available) ship; live acceptance remains open.</td></tr>
-<tr><td><code>docker</code></td><td><code>compose</code></td><td>local</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td>—</td><td>Executable and verified through the AWS-free make local lifecycle; never cloud deployed.</td></tr>
-<tr><td><code>gcp</code></td><td><code>infra-manager</code></td><td>cloud</td><td>yes</td><td>yes</td><td>no</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter, WIF wiring, and Terraform source materialization to GCS ship; only live acceptance remains open.</td></tr>
-<tr><td><code>sakura</code></td><td><code>apprun</code></td><td>cloud</td><td>yes</td><td>yes</td><td>yes</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter and current AppRun API wire contract ship; real-account lifecycle acceptance remains open.</td></tr>
-</tbody></table><h2>独立した capability 事実</h2>
-<ul>
-<li><strong>Recognized</strong> — メタデータと schema が正確な provider / engine の組を受理します。
-デプロイ実装が存在することまでは意味しません。</li>
-<li><strong>Adapter wired</strong> — 具体的な adapter と credential / composition の配線が repository に
-含まれます。artifact 処理や provider API 契約の正しさを証明するものではありません。</li>
-<li><strong>Executable</strong> — materialization から provider wire までの経路が、宣言された mode
-(<code>cloud</code> または <code>local</code>) で実行可能です。</li>
-<li><strong>Live verified</strong> — mock ではなく実際の lifecycle が実証済みです。unit / mock test は
-必須の回帰証拠ですが、live verification の代わりにはなりません。</li>
-</ul>
-<p>Azure、GCP、Sakura は adapter-wired です。
-<a href="https://github.com/susumutomita/TenkaCloud/issues/2081">multicloud acceptance #2081</a>
-が open の間は live verified ではありません。Azure と GCP は、表に示す artifact / output の
-blocker が閉じるまで executable でもありません。Sakura は #2746 後に API 契約上 executable
-ですが、実 account lifecycle が #2081 に添付されるまでは競技 ready としません。</p>
-<p>ローカルの <code>docker/compose</code> は <code>make local</code> mode で独立に executable / verified ですが、
-クラウドランタイムではありません。AWS CloudFormation は既定の stable / live-verified
-クラウドランタイムです。</p>
-<p>関連: <a href="/docs/reference/problem-metadata/">問題メタデータリファレンス</a>。</p>
+<h1>runtime の実行状況 <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<h2 id="matrix">現行 candidate</h2><table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>現在の境界</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ローカル Docker Compose</td>
+<td>ローカル開催専用で、クラウドのカタログには表示しない。新しい大会は最大 512 件の停止中 jobs を準備。参加者が起動・再開・停止する。デフォルトはチーム 3、host 全体 12 環境、メモリー上限の合計 4096 MiB。106 問の表示は全問のプレイ確認ではない</td>
+</tr>
+<tr>
+<td>Docker 問題内の terminal</td>
+<td>15 問が宣言。実 PostgreSQL terminal の exec、3 checkpoints、チーム分離、再起動を確認。他の terminal 問題には追加の代表経路確認が必要</td>
+</tr>
+<tr>
+<td>組み込みの Cryptography Battle</td>
+<td>確認した ac26-crypto-battle は得点を奪う機能が無効なら競技者アカウント不要。有効時は AWS 版を維持。ローカル SQLite またはクラウド Turso / DynamoDB。旧 coordination の非公開チーム表示と採点。両クラウド DB とも 99 チーム、SQL state は 4 MiB。実環境の大会性能は未検証</td>
+</tr>
+<tr>
+<td>AWS CloudFormation</td>
+<td>クラウド開催専用。検証済み競技者アカウントが必要。開催用アカウントでの自己検証はイベント作成・キー発行前のリスク確認が必要。問題用ロールが基盤のデータへ到達し得るため、第三者が参加する本格開催には別アカウントを推奨。create / update / no-op / recreate、flag / multi-flag・定期採点、参加者 Console / CLI を復旧。現行 catalog の 9 template は TemplateBody の 51,200 bytes を超え、TemplateURL は未実装。実 AWS は別途リハーサル</td>
+</tr>
+<tr>
+<td>Lambda + Turso/DynamoDB のクラウド基盤</td>
+<td>旧 Lite の基盤、Lambda / CodeBuild の配置経路、組み込み Battle と make deploy/destroy CLI を復旧。標準 CDK bootstrap を使い、保存した catalogKey と非公開 source archive の key / VersionId を更新後も維持。Docker / Compose 問題はローカル開催専用</td>
+</tr>
+<tr>
+<td>外部 pack、Azure、GCP、Sakura、その他の採点方式</td>
+<td>schema・作問用の宣言だけでは大会での実行対応になりません</td>
+</tr>
+</tbody></table>
+<h2 id="support-classes">確認結果を区別する</h2><p>metadata の受理、一覧への表示、adapter 接続、fixture テスト、実 Docker・ブラウザ、実クラウドの確認はそれぞれ別です。<a href="/docs/operate/deploy-paths/">配置の境界</a>を確認し、通していない経路は Not run と記録してください。</p>
 
 </article>
 </main>

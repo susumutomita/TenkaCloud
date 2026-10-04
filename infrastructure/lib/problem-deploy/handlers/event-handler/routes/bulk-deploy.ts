@@ -1,13 +1,14 @@
 import type { Hono } from "hono";
 import { StatusCodes } from "http-status-codes";
 import {
+  resolveCognitoSub,
   resolveTenantId,
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
-import { auditEventAction } from "../audit.js";
 import { bulkDeployEvent } from "../bulk-deploy.js";
 import { handleRouteError, parseOptionalJsonBody, withEventId } from "../route-helpers.js";
+import { SelfTestAcknowledgmentConflictError } from "../self-test-consent.js";
 import type { EventSharedResources } from "../shared.js";
 import { BulkDeployRequestSchema } from "../types.js";
 
@@ -33,6 +34,7 @@ export function registerBulkDeployRoutes(app: Hono, shared: EventSharedResources
             eventId,
             Date.now(),
             parsed.data,
+            resolveCognitoSub(c),
           );
           if (outcome.kind === "not_found")
             return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
@@ -46,9 +48,13 @@ export function registerBulkDeployRoutes(app: Hono, shared: EventSharedResources
               { error: "coordination_capacity_exceeded", refusals: outcome.refusals },
               StatusCodes.UNPROCESSABLE_ENTITY,
             );
-          auditEventAction(c, "bulk_deploy", eventId);
           return c.json(outcome.result, StatusCodes.ACCEPTED);
         } catch (err) {
+          if (err instanceof SelfTestAcknowledgmentConflictError)
+            return c.json(
+              { error: "self_test_acknowledgment_conflict", message: err.message },
+              StatusCodes.CONFLICT,
+            );
           return handleRouteError(c, "[events] bulkDeployEvent failed", { eventId }, err);
         }
       },

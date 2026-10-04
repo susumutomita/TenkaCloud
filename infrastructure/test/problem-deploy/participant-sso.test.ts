@@ -1,619 +1,489 @@
 import { AssumeRoleCommand } from "@aws-sdk/client-sts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
-import { getConsoleSigninUrl } from "../../lib/problem-deploy/handlers/participant-handler/sso";
+import {
+  getCliCredentials,
+  getConsoleSigninUrl,
+} from "../../lib/problem-deploy/handlers/participant-handler/sso";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
-const { stsSend, stsClientConfigs, ssmSend } = vi.hoisted(() => ({
-  stsSend: vi.fn(),
-  stsClientConfigs: [] as unknown[],
-  ssmSend: vi.fn(),
-}));
-
-vi.mock("@aws-sdk/client-sts", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@aws-sdk/client-sts")>();
-  return {
-    ...actual,
-    STSClient: class {
-      constructor(config?: unknown) {
-        stsClientConfigs.push(config);
-      }
-      send = stsSend;
-    },
-  };
+const JOB = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
+const KEY = "TEAM_KEY";
+const PREFIX = "tc-security-battle-royale-alpha";
+const ACCOUNT = "999999999999";
+const ROLE = `arn:aws:iam::${ACCOUNT}:role/${PREFIX}-participant-viewer`;
+const STACK =
+  "arn:aws:cloudformation:ap-northeast-1:999999999999:stack/tc-security-battle-royale-alpha/stack-id";
+const row = (over: Record<string, unknown> = {}) => ({
+  PK: `DEPLOYMENT#${JOB}`,
+  SK: "META",
+  jobId: JOB,
+  teamLoginKey: KEY,
+  problemId: "security-battle-royale",
+  tenantId: "tenant-acme",
+  region: "ap-northeast-1",
+  namePrefix: PREFIX,
+  awsAccountId: ACCOUNT,
+  status: "COMPLETE",
+  stackId: STACK,
+  competitorRoleArn: `arn:aws:iam::${ACCOUNT}:role/TenkaCloud-CompetitorDeploy-Role`,
+  stackOutputs: JSON.stringify({ ParticipantViewerRoleArn: ROLE }),
+  expiresAt: Math.floor(Date.now() / 1000) + 7200,
+  ...over,
 });
-
-const VALID_JOB_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
-const TEAM_KEY = "KEY1";
-
-function buildShared(): { shared: ParticipantSharedResources; ddbSend: ReturnType<typeof vi.fn> } {
-  const ddbSend = vi.fn();
-  ssmSend.mockResolvedValue({ Parameter: { Value: "tenant-external-id-123456" } });
+const eventRow = (over: Record<string, unknown> = {}) => ({
+  eventId: "event-one",
+  tenantId: "tenant-acme",
+  status: "READY",
+  problems: [{ problemId: "security-battle-royale", defaultRegion: "ap-northeast-1" }],
+  startsAt: new Date(Date.now() - 60_000).toISOString(),
+  endsAt: new Date(Date.now() + 1800_000).toISOString(),
+  expiresAt: Math.floor(Date.now() / 1000) + 3600,
+  ...over,
+});
+function fixture(deployment = row(), event = eventRow()) {
+  const ddbSend = vi.fn(async (command: GetCommand) => ({
+    Item: command.input.TableName === "Events" ? event : deployment,
+  }));
+  const ssmSend = vi
+    .fn()
+    .mockResolvedValue({ Parameter: { Type: "SecureString", Value: "tenant-external-id" } });
   const shared: ParticipantSharedResources = {
     runtime: makeTestControlDataRuntime(),
-    tableName: "TestDeployments",
-    eventsTableName: "TestEvents",
+    tableName: "Deployments",
+    eventsTableName: "Events",
+    endpointsTableName: "",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],
     ssm: { send: ssmSend } as unknown as ParticipantSharedResources["ssm"],
     env: "development",
     problemsScoring: {},
     problemsEndpoints: {},
   };
-  return { shared, ddbSend };
+  const stsSend = vi.fn().mockResolvedValue({
+    Credentials: {
+      AccessKeyId: "ASIA_VIEWER",
+      SecretAccessKey: "VIEWER_SECRET",
+      SessionToken: "VIEWER_TOKEN",
+      Expiration: new Date(Date.now() + 3600_000),
+    },
+  });
+  const verificationSend = vi.fn().mockResolvedValue({
+    Credentials: {
+      AccessKeyId: "ASIA_PROOF",
+      SecretAccessKey: "PROOF_SECRET",
+      SessionToken: "PROOF_TOKEN",
+      Expiration: new Date(Date.now() + 900_000),
+    },
+  });
+  const cfnSend = vi.fn().mockResolvedValue({
+    StackResourceDetail: {
+      StackId: STACK,
+      LogicalResourceId: "ParticipantViewerRole",
+      ResourceType: "AWS::IAM::Role",
+      ResourceStatus: "CREATE_COMPLETE",
+      PhysicalResourceId: ROLE.split("/").at(-1),
+    },
+  });
+  const buildVerificationClient = vi.fn().mockReturnValue({ send: cfnSend });
+  const fetchClient = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify({ SigninToken: "TOKEN" })));
+  const deps = {
+    sts: { send: stsSend },
+    verificationSts: { send: verificationSend },
+    buildVerificationClient,
+    fetchClient: fetchClient as unknown as typeof fetch,
+  };
+  return {
+    shared,
+    verificationSend,
+    cfnSend,
+    buildVerificationClient,
+    ddbSend,
+    ssmSend,
+    stsSend,
+    fetchClient,
+    deps,
+    issue: (job = JOB) => getConsoleSigninUrl(shared, KEY, job, deps),
+  };
 }
+afterEach(() => vi.unstubAllEnvs());
 
-const sampleRow = (over: Record<string, unknown> = {}) => ({
-  PK: `DEPLOYMENT#${VALID_JOB_ID}`,
-  SK: "META",
-  GSI2PK: `TEAMKEY#${TEAM_KEY}`,
-  jobId: VALID_JOB_ID,
-  problemId: "security-battle-royale",
-  region: "ap-northeast-1",
-  awsAccountId: "999999999999",
-  namePrefix: "tc-security-battle-royale-alpha",
-  tenantId: "tenant-acme",
-  competitorRoleArn: "arn:aws:iam::999999999999:role/TenkaCloud-CompetitorDeploy-Role",
-  stackOutputs: JSON.stringify({
-    ParticipantViewerRoleArn:
-      "arn:aws:iam::999999999999:role/tc-security-battle-royale-alpha-participant-viewer",
-  }),
-  status: "COMPLETE",
-  ...over,
-});
-
-describe("getConsoleSigninUrl", () => {
-  const fetchSpy = vi.spyOn(globalThis, "fetch");
-
-  beforeEach(() => {
-    stsSend.mockReset();
-    ssmSend.mockReset();
-    stsClientConfigs.length = 0;
-    fetchSpy.mockReset();
-  });
-
-  afterEach(() => fetchSpy.mockReset());
-
-  it("should return invalid_jobid for invalid jobId (not ULID form)", async () => {
-    const { shared } = buildShared();
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, "not-ulid");
-    expect(result).toEqual({ kind: "invalid_jobid" });
-  });
-
-  it("should return unauthorized when teamLoginKey has no matching deployments", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [] });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "unauthorized" });
-  });
-
-  it("should return unauthorized when jobId is not in the team's deployment list", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B3" })] });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "unauthorized" });
-  });
-
-  it("DELETED な deployment には access させない (unauthorized)", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "DELETED" })] });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "unauthorized" });
-  });
-
-  it("should return not_ready without AssumeRole for IN_PROGRESS deployments", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "IN_PROGRESS" })] });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-    expect(stsSend).not.toHaveBeenCalled();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("should return not_ready without AssumeRole for PENDING deployments", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "PENDING" })] });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-    expect(stsSend).not.toHaveBeenCalled();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("namePrefix 未設定 (stack 未起動) は not_ready", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({
-      Items: [sampleRow({ namePrefix: undefined, status: "PENDING" })],
-    });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-  });
-
-  it("Issue #862: namePrefix が injection-pattern (= 特殊文字含) なら not_ready", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({
-      Items: [sampleRow({ namePrefix: "tc-abc#evil&injection" })],
-    });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-  });
-
-  it("Issue #862: region が AWS region pattern に合わなければ not_ready", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({
-      Items: [sampleRow({ region: "evil-region; rm -rf" })],
-    });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-  });
-
-  it("Issue #862: competitorRoleArn が IAM Role ARN 形式でなければ not_ready", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({
-      Items: [sampleRow({ competitorRoleArn: "not-an-arn-at-all" })],
-    });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-  });
-
-  it("normal case: should return signin login URL via STS AssumeRole + getSigninToken fetch", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIADEPLOY",
-        SecretAccessKey: "DEPLOYSECRET",
-        SessionToken: "DEPLOYTOKEN",
-        Expiration: new Date(),
-      },
-    });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIAFAKE",
-        SecretAccessKey: "SECRETFAKE",
-        SessionToken: "TOKENFAKE",
-        Expiration: new Date(),
-      },
-    });
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ SigninToken: "SIGNIN_TOKEN_VALUE" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
-
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-
-    expect(stsSend).toHaveBeenCalledTimes(2);
-    expect(stsSend.mock.calls[0]?.[0]).toBeInstanceOf(AssumeRoleCommand);
-    expect(stsSend.mock.calls[1]?.[0]).toBeInstanceOf(AssumeRoleCommand);
+describe("participant console SSO: direct operator viewer access", () => {
+  it("uses the operator client once with exact owned output and mandatory job ExternalId", async () => {
+    const f = fixture();
+    const result = await f.issue();
     expect(result.kind).toBe("ok");
-    if (result.kind !== "ok") return;
-    expect(result.loginUrl).toContain("https://signin.aws.amazon.com/federation");
-    expect(result.loginUrl).toContain("Action=login");
-    expect(result.loginUrl).toContain("SigninToken=SIGNIN_TOKEN_VALUE");
-    // destination は問題のデプロイリージョン (= ready.region) の AWS Console home に固定
-    expect(result.loginUrl).toContain(
-      encodeURIComponent(
+    expect(f.stsSend).toHaveBeenCalledTimes(1);
+    const command = f.stsSend.mock.calls[0]?.[0] as AssumeRoleCommand;
+    expect(command).toBeInstanceOf(AssumeRoleCommand);
+    expect(command.input).toMatchObject({
+      RoleArn: ROLE,
+      ExternalId: JOB,
+      RoleSessionName: `security-battle-royale-${JOB}`,
+      DurationSeconds: 3600,
+    });
+    expect(f.ssmSend).toHaveBeenCalledOnce();
+    expect(f.ddbSend).toHaveBeenCalledTimes(2);
+    for (const [read] of f.ddbSend.mock.calls) {
+      expect(read).toBeInstanceOf(GetCommand);
+      expect(read.input).toMatchObject({
+        Key: { PK: `DEPLOYMENT#${JOB}`, SK: "META" },
+        ConsistentRead: true,
+      });
+    }
+    const url = new URL(String(f.fetchClient.mock.calls[0]?.[0]));
+    expect(url.searchParams.get("SessionDuration")).toBeNull();
+    expect(JSON.parse(url.searchParams.get("Session") ?? "{}")).toEqual({
+      sessionId: "ASIA_VIEWER",
+      sessionKey: "VIEWER_SECRET",
+      sessionToken: "VIEWER_TOKEN",
+    });
+    if (result.kind === "ok") {
+      const login = new URL(result.loginUrl);
+      expect(login.searchParams.get("SigninToken")).toBe("TOKEN");
+      expect(login.searchParams.get("Destination")).toBe(
         "https://ap-northeast-1.console.aws.amazon.com/console/home?region=ap-northeast-1",
-      ),
-    );
-
-    // #747: getSigninToken request URL に SessionDuration param が含まれてはいけない
-    // (AssumeRole 由来 credentials では federation endpoint が 400 を返すため)。
-    const fetchedUrl = fetchSpy.mock.calls[0]?.[0]?.toString() ?? "";
-    expect(fetchedUrl).toContain("Action=getSigninToken");
-    expect(fetchedUrl).not.toContain("SessionDuration");
-  });
-
-  it("should return not_ready when stackOutputs lacks ParticipantViewerRoleArn", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ stackOutputs: JSON.stringify({}) })] });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-    expect(stsSend).not.toHaveBeenCalled();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("should role-chain from CompetitorDeployRole to ParticipantViewerRole", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIADEPLOY",
-        SecretAccessKey: "DEPLOYSECRET",
-        SessionToken: "DEPLOYTOKEN",
-        Expiration: new Date(),
-      },
-    });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIAFAKE",
-        SecretAccessKey: "SECRETFAKE",
-        SessionToken: "TOKENFAKE",
-        Expiration: new Date(),
-      },
-    });
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ SigninToken: "TOKEN" }), { status: 200 }),
-    );
-
-    await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-
-    const first = stsSend.mock.calls[0]?.[0] as AssumeRoleCommand;
-    expect(first.input).toMatchObject({
-      RoleArn: "arn:aws:iam::999999999999:role/TenkaCloud-CompetitorDeploy-Role",
-      RoleSessionName: `participant-sso-${VALID_JOB_ID}`,
-      ExternalId: "tenant-external-id-123456",
-      DurationSeconds: 3600,
-    });
-    expect(first.input.Policy).toBeUndefined();
-
-    const second = stsSend.mock.calls[1]?.[0] as AssumeRoleCommand;
-    expect(second.input).toMatchObject({
-      RoleArn: "arn:aws:iam::999999999999:role/tc-security-battle-royale-alpha-participant-viewer",
-      // Audit #8: session name に problemId を含める (= AWS Console 上部の federated user 表示で
-      // 問題名が判別できるようにする、 image #30 の改善)。 `${problemId}-${jobId}` 形式。
-      RoleSessionName: `security-battle-royale-${VALID_JOB_ID}`,
-      ExternalId: VALID_JOB_ID,
-      DurationSeconds: 3600,
-    });
-    expect(second.input.Policy).toBeUndefined();
-    expect(stsClientConfigs).toContainEqual({
-      credentials: {
-        accessKeyId: "AKIADEPLOY",
-        secretAccessKey: "DEPLOYSECRET",
-        sessionToken: "DEPLOYTOKEN",
-      },
-    });
-  });
-
-  it("getSigninToken が 5xx を返したら federation_endpoint_failed (#705)", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIADEPLOY",
-        SecretAccessKey: "DEPLOYSECRET",
-        SessionToken: "DEPLOYTOKEN",
-        Expiration: new Date(),
-      },
-    });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIAFAKE",
-        SecretAccessKey: "SECRETFAKE",
-        SessionToken: "TOKENFAKE",
-        Expiration: new Date(),
-      },
-    });
-    fetchSpy.mockResolvedValueOnce(new Response("server error", { status: 500 }));
-
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "federation_endpoint_failed", status: 500 });
-  });
-
-  it("should return assume_role_failed + reason (error name) when STS AssumeRole throws (#705, #864)", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    // Issue #864: reason は error.name (= 種別) のみを返す。 message / ARN は log に残さない。
-    stsSend.mockRejectedValueOnce(
-      Object.assign(new Error("role not assumable"), { name: "AccessDenied" }),
-    );
-
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result.kind).toBe("assume_role_failed");
-    if (result.kind === "assume_role_failed") {
-      expect(result.reason).toBe("AccessDenied");
+      );
     }
   });
 
-  it("should return assume_role_failed when STS Credentials are empty (#705)", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    stsSend.mockResolvedValueOnce({ Credentials: undefined });
-
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result.kind).toBe("assume_role_failed");
-  });
-
-  it("federation token JSON が malformed なら federation_token_malformed (#705)", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIADEPLOY",
-        SecretAccessKey: "DEPLOYSECRET",
-        SessionToken: "DEPLOYTOKEN",
-        Expiration: new Date(),
-      },
-    });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIAFAKE",
-        SecretAccessKey: "SECRETFAKE",
-        SessionToken: "TOKENFAKE",
-        Expiration: new Date(),
-      },
-    });
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ NotSigninToken: 123 }), { status: 200 }),
-    );
-
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "federation_token_malformed" });
-  });
-});
-
-/**
- * Issue #759: 各 not_ready 経路は structured log を 1 件 emit すべき。
- * CloudWatch Logs Insights `filter event like /^portal\.sso\.not_ready\./` で
- * どの gate で死んだか 1 引きで切り分け可能にする受入条件。
- */
-describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () => {
-  const logSpy = vi.spyOn(console, "log");
-
-  beforeEach(() => {
-    stsSend.mockReset();
-    ssmSend.mockReset();
-    stsClientConfigs.length = 0;
-    logSpy.mockReset();
-    logSpy.mockImplementation(() => undefined);
-  });
-
-  afterEach(() => logSpy.mockReset());
-
-  function findEvent(name: string): Record<string, unknown> | undefined {
-    for (const call of logSpy.mock.calls) {
-      const raw = call[0];
-      if (typeof raw !== "string") continue;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        continue;
-      }
-      if (parsed && typeof parsed === "object" && (parsed as { event?: unknown }).event === name) {
-        return parsed as Record<string, unknown>;
-      }
-    }
-    return undefined;
-  }
-
-  it("should info log portal.sso.not_ready.in_progress for IN_PROGRESS deployments", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ status: "IN_PROGRESS" })] });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-    const payload = findEvent("portal.sso.not_ready.in_progress");
-    expect(payload).toBeDefined();
-    expect(payload?.level).toBe("info");
-    expect(payload?.jobId).toBe(VALID_JOB_ID);
-    expect(payload?.problemId).toBe("security-battle-royale");
-    expect(payload?.status).toBe("IN_PROGRESS");
-  });
-
-  it("should info log portal.sso.not_ready.namePrefix_missing when namePrefix is unset", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({
-      Items: [sampleRow({ namePrefix: undefined, status: "COMPLETE" })],
-    });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-    const payload = findEvent("portal.sso.not_ready.namePrefix_missing");
-    expect(payload).toBeDefined();
-    expect(payload?.jobId).toBe(VALID_JOB_ID);
-  });
-
-  it("should info log portal.sso.not_ready.region_missing when region is unset", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({
-      Items: [sampleRow({ region: undefined })],
-    });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-    const payload = findEvent("portal.sso.not_ready.region_missing");
-    expect(payload).toBeDefined();
-    expect(payload?.jobId).toBe(VALID_JOB_ID);
-  });
-
-  it("should info log portal.sso.not_ready.tenantId_missing when tenantId is unset", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({
-      Items: [sampleRow({ tenantId: undefined })],
-    });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-    const payload = findEvent("portal.sso.not_ready.tenantId_missing");
-    expect(payload).toBeDefined();
-    expect(payload?.jobId).toBe(VALID_JOB_ID);
-  });
-
-  it("should info log portal.sso.not_ready.competitorRoleArn_missing when competitorRoleArn is unset", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({
-      Items: [sampleRow({ competitorRoleArn: undefined })],
-    });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-    const payload = findEvent("portal.sso.not_ready.competitorRoleArn_missing");
-    expect(payload).toBeDefined();
-    expect(payload?.jobId).toBe(VALID_JOB_ID);
-    expect(payload?.tenantId).toBe("tenant-acme");
-  });
-
-  it("should emit an info log with outputKeys when ParticipantViewerRoleArn is absent (quick generation-mismatch identification)", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({
-      Items: [
-        sampleRow({
+  it.each([
+    `${PREFIX}-ParticipantViewerRole-ABC123`,
+    "tc-security-battle-ParticipantViewerRole-ABC123",
+    "tc-very-long-stack-Participa-ABC123",
+  ])(
+    "accepts canonical generated viewer name %s, including truncated stack prefixes",
+    async (name) => {
+      const f = fixture(
+        row({
           stackOutputs: JSON.stringify({
-            BaseUrl: "http://example.com",
-            NamePrefix: "tc-foo-bar",
+            ParticipantViewerRoleArn: `arn:aws:iam::${ACCOUNT}:role/${name}`,
           }),
         }),
-      ],
+      );
+      f.cfnSend.mockResolvedValueOnce({
+        StackResourceDetail: {
+          StackId: STACK,
+          LogicalResourceId: "ParticipantViewerRole",
+          ResourceType: "AWS::IAM::Role",
+          ResourceStatus: "CREATE_COMPLETE",
+          PhysicalResourceId: name,
+        },
+      });
+      expect((await f.issue()).kind).toBe("ok");
+      expect(f.stsSend.mock.calls[0]?.[0].input.RoleArn).toBe(
+        `arn:aws:iam::${ACCOUNT}:role/${name}`,
+      );
+    },
+  );
+
+  it("uses a separate read-only verification session for the exact stack", async () => {
+    const f = fixture();
+    expect((await f.issue()).kind).toBe("ok");
+    const proof = f.verificationSend.mock.calls[0]?.[0] as AssumeRoleCommand;
+    expect(proof.input).toMatchObject({
+      RoleArn: `arn:aws:iam::${ACCOUNT}:role/TenkaCloud-CompetitorDeploy-Role`,
+      ExternalId: "tenant-external-id",
+      DurationSeconds: 900,
     });
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result).toEqual({ kind: "not_ready" });
-    const payload = findEvent("portal.sso.not_ready.participantViewerRole_missing");
-    expect(payload).toBeDefined();
-    expect(payload?.jobId).toBe(VALID_JOB_ID);
-    expect(payload?.outputKeys).toEqual(expect.arrayContaining(["BaseUrl", "NamePrefix"]));
-    expect(payload?.outputKeys).not.toContain("ParticipantViewerRoleArn");
+    expect(JSON.parse(proof.input.Policy ?? "{}").Statement).toEqual([
+      { Effect: "Allow", Action: "cloudformation:DescribeStackResource", Resource: STACK },
+      { Effect: "Deny", NotAction: "cloudformation:DescribeStackResource", Resource: "*" },
+      { Effect: "Deny", Action: "cloudformation:DescribeStackResource", NotResource: STACK },
+    ]);
+    expect(f.cfnSend.mock.calls[0]?.[0].input).toEqual({
+      StackName: STACK,
+      LogicalResourceId: "ParticipantViewerRole",
+    });
+    expect(f.buildVerificationClient).toHaveBeenCalledWith(
+      {
+        accessKeyId: "ASIA_PROOF",
+        secretAccessKey: "PROOF_SECRET",
+        sessionToken: "PROOF_TOKEN",
+        expiration: expect.any(Date),
+      },
+      "ap-northeast-1",
+    );
+    expect(f.ssmSend.mock.calls[0]?.[0].input).toEqual({
+      Name: "/development/tenants/tenant-acme/external-id",
+      WithDecryption: true,
+    });
+    expect(f.stsSend).toHaveBeenCalledOnce();
+    expect(f.stsSend.mock.calls[0]?.[0].input.ExternalId).toBe(JOB);
   });
 
-  it("should not emit any not_ready logs on the success path", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIADEPLOY",
-        SecretAccessKey: "DEPLOYSECRET",
-        SessionToken: "DEPLOYTOKEN",
-        Expiration: new Date(),
+  it.each([
+    { StackId: `${STACK}-another` },
+    { LogicalResourceId: "DeploymentRole" },
+    { ResourceType: "AWS::SSM::Parameter" },
+    { ResourceStatus: "DELETE_COMPLETE" },
+    { PhysicalResourceId: "tc-another-team-viewer" },
+    { PhysicalResourceId: undefined },
+  ])("rejects an unproven viewer resource %j", async (over) => {
+    const f = fixture();
+    f.cfnSend.mockResolvedValueOnce({
+      StackResourceDetail: {
+        StackId: STACK,
+        LogicalResourceId: "ParticipantViewerRole",
+        ResourceType: "AWS::IAM::Role",
+        ResourceStatus: "CREATE_COMPLETE",
+        PhysicalResourceId: ROLE.split("/").at(-1),
+        ...over,
       },
     });
-    stsSend.mockResolvedValueOnce({
-      Credentials: {
-        AccessKeyId: "AKIAFAKE",
-        SecretAccessKey: "SECRETFAKE",
-        SessionToken: "TOKENFAKE",
-        Expiration: new Date(),
-      },
-    });
-    const fetchSpy2 = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ SigninToken: "TOKEN" }), { status: 200 }),
+    expect(await f.issue()).toEqual({ kind: "not_ready" });
+    expect(f.stsSend).not.toHaveBeenCalled();
+    expect(f.fetchClient).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    undefined,
+    { Type: "String", Value: "tenant-external-id" },
+    { Type: "SecureString", Value: "" },
+  ])("requires the tenant SecureString before any verification session", async (Parameter) => {
+    const f = fixture();
+    f.ssmSend.mockResolvedValueOnce({ Parameter });
+    expect((await f.issue()).kind).toBe("assume_role_failed");
+    expect(f.verificationSend).not.toHaveBeenCalled();
+    expect(f.stsSend).not.toHaveBeenCalled();
+  });
+
+  describe.each(["console", "cli"] as const)("%s AWS operation diagnostics", (access) => {
+    it.each([
+      "ssm:GetParameter",
+      "sts:AssumeRole",
+      "cloudformation:DescribeStackResource",
+    ] as const)("identifies %s without exposing service messages", async (operation) => {
+      const f = fixture();
+      const send = {
+        "ssm:GetParameter": f.ssmSend,
+        "sts:AssumeRole": f.verificationSend,
+        "cloudformation:DescribeStackResource": f.cfnSend,
+      }[operation];
+      const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      send.mockRejectedValueOnce(
+        Object.assign(new Error("private-service-detail"), { name: "AccessDenied" }),
       );
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
-    expect(result.kind).toBe("ok");
-    const notReadyEvents = logSpy.mock.calls.filter((c) => {
-      const raw = c[0];
-      if (typeof raw !== "string") return false;
       try {
-        const parsed = JSON.parse(raw) as { event?: string };
-        return typeof parsed.event === "string" && parsed.event.startsWith("portal.sso.not_ready.");
-      } catch {
-        return false;
+        const outcome =
+          access === "console"
+            ? await f.issue()
+            : await getCliCredentials(f.shared, KEY, JOB, f.deps);
+        expect(outcome).toEqual({
+          kind: "assume_role_failed",
+          stage: "competitor",
+          reason: "AccessDenied",
+          operation,
+        });
+        expect(log).toHaveBeenCalledWith("[sso] Viewer ownership verification failed", {
+          jobId: JOB,
+          reason: "AccessDenied",
+          operation,
+        });
+        expect(JSON.stringify([outcome, log.mock.calls])).not.toContain("private-service-detail");
+        expect(f.stsSend).not.toHaveBeenCalled();
+        expect(f.fetchClient).not.toHaveBeenCalled();
+        if (operation === "ssm:GetParameter") expect(f.verificationSend).not.toHaveBeenCalled();
+        if (operation !== "cloudformation:DescribeStackResource")
+          expect(f.cfnSend).not.toHaveBeenCalled();
+      } finally {
+        log.mockRestore();
       }
     });
-    expect(notReadyEvents).toHaveLength(0);
-    fetchSpy2.mockRestore();
+  });
+
+  it("rejects invalid job IDs before reading or issuing credentials", async () => {
+    const f = fixture();
+    expect(await f.issue("not-ulid")).toEqual({ kind: "invalid_jobid" });
+    expect(f.ddbSend).not.toHaveBeenCalled();
+    expect(f.stsSend).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["revoked bearer", { teamLoginKey: undefined }, "unauthorized"],
+    ["another team", { teamLoginKey: "OTHER_KEY" }, "unauthorized"],
+    ["composite target", { parentDeploymentId: "parent-job" }, "unauthorized"],
+    ["another job", { jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B3" }, "unauthorized"],
+    ["deleted", { status: "DELETED" }, "unauthorized"],
+    ["teardown requested", { teardownRequestedAt: "2026-01-01T00:00:00Z" }, "unauthorized"],
+    ["expired", { expiresAt: 1 }, "unauthorized"],
+    ["missing expiry", { expiresAt: undefined }, "unauthorized"],
+    ["failed", { status: "FAILED" }, "not_ready"],
+    ["pending", { status: "PENDING" }, "not_ready"],
+    ["in progress", { status: "IN_PROGRESS" }, "not_ready"],
+    ["missing stack identity", { stackId: undefined }, "not_ready"],
+    ["another stack", { stackId: STACK.replace("alpha/", "other/") }, "not_ready"],
+    ["another stack account", { stackId: STACK.replace(ACCOUNT, "888888888888") }, "not_ready"],
+    [
+      "another stack region",
+      { stackId: STACK.replace("ap-northeast-1", "us-east-1") },
+      "not_ready",
+    ],
+    ["missing name", { namePrefix: undefined }, "not_ready"],
+    ["injected name", { namePrefix: "tc-evil#x" }, "not_ready"],
+    ["injected region", { region: "evil-region; rm -rf" }, "not_ready"],
+    ["missing tenant", { tenantId: undefined }, "not_ready"],
+    ["missing problem", { problemId: undefined }, "not_ready"],
+    ["malformed deploy role", { competitorRoleArn: "bad-arn" }, "not_ready"],
+    ["mismatched account", { awsAccountId: "888888888888" }, "not_ready"],
+    ["missing viewer output", { stackOutputs: "{}" }, "not_ready"],
+  ])("rejects %s before AWS access", async (_name, over, kind) => {
+    const f = fixture(row(over as Record<string, unknown>));
+    expect(await f.issue()).toEqual({ kind });
+    expect(f.stsSend).not.toHaveBeenCalled();
+    expect(f.fetchClient).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    `arn:aws:iam::888888888888:role/${PREFIX}-participant-viewer`,
+    `arn:aws:iam::${ACCOUNT}:role/TenkaCloud-CompetitorDeploy-Role`,
+    `arn:aws:iam::${ACCOUNT}:role/OtherAdmin`,
+    `arn:aws:iam::${ACCOUNT}:role/tc-other-team-participant-viewer`,
+    `arn:aws:iam::${ACCOUNT}:role/tc-other-team-ParticipantViewerRole-ABC`,
+    `arn:aws:iam::${ACCOUNT}:role/path/${PREFIX}-participant-viewer`,
+  ])("rejects unowned or non-viewer output %s", async (arn) => {
+    const f = fixture(row({ stackOutputs: JSON.stringify({ ParticipantViewerRoleArn: arn }) }));
+    expect(await f.issue()).toEqual({ kind: "not_ready" });
+    expect(f.stsSend).not.toHaveBeenCalled();
+  });
+
+  it("rejects the operator's own account", async () => {
+    vi.stubEnv("PARTICIPANT_OPERATOR_ACCOUNT_ID", ACCOUNT);
+    const f = fixture();
+    expect(await f.issue()).toEqual({ kind: "not_ready" });
+    expect(f.stsSend).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: "ENDED" },
+    { status: "TEARDOWN" },
+    { status: "ARCHIVED" },
+    { scoringLocked: true },
+    { startsAt: undefined },
+    { startsAt: "invalid" },
+    { startsAt: new Date(Date.now() + 3600_000).toISOString() },
+    { endsAt: new Date(Date.now() - 1000).toISOString() },
+    { endsAt: "invalid" },
+    { tenantId: "another-tenant" },
+    { problems: [] },
+  ])("rejects unavailable event %j", async (over) => {
+    const f = fixture(row({ eventId: "event-one" }), eventRow(over));
+    expect(await f.issue()).toEqual({ kind: "not_ready" });
+    expect(f.stsSend).not.toHaveBeenCalled();
+  });
+
+  it("rejects an expired event before AWS access", async () => {
+    const f = fixture(row({ eventId: "event-one" }), eventRow({ expiresAt: 1 }));
+    expect(await f.issue()).toEqual({ kind: "unauthorized" });
+    expect(f.stsSend).not.toHaveBeenCalled();
+  });
+
+  it("binds session use to the event end using an explicit deny", async () => {
+    const event = eventRow();
+    const f = fixture(row({ eventId: event.eventId }), event);
+    expect((await f.issue()).kind).toBe("ok");
+    const policy = JSON.parse(f.stsSend.mock.calls[0]?.[0].input.Policy);
+    expect(policy.Statement).toContainEqual({
+      Effect: "Deny",
+      Action: "*",
+      Resource: "*",
+      Condition: { DateGreaterThanEquals: { "aws:CurrentTime": event.endsAt } },
+    });
+    expect(f.ddbSend.mock.calls.filter(([read]) => read.input.TableName === "Events")).toHaveLength(
+      2,
+    );
+  });
+
+  it.each([{ teamLoginKey: "ROTATED" }, { status: "DELETING" }, { expiresAt: 1 }])(
+    "does not return a sign-in URL when access changes during federation: %j",
+    async (change) => {
+      const f = fixture();
+      f.ddbSend.mockResolvedValueOnce({ Item: row() }).mockResolvedValueOnce({ Item: row(change) });
+      expect((await f.issue()).kind).toBe("unauthorized");
+      expect(f.stsSend).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("reports direct viewer AssumeRole failures without exposing error messages", async () => {
+    const f = fixture();
+    f.stsSend.mockRejectedValueOnce(
+      Object.assign(new Error("sensitive ARN"), { name: "AccessDenied" }),
+    );
+    expect(await f.issue()).toEqual({
+      kind: "assume_role_failed",
+      stage: "participant_viewer",
+      reason: "AccessDenied",
+      operation: "sts:AssumeRole",
+    });
+    expect(f.fetchClient).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    undefined,
+    {},
+    { AccessKeyId: "A", SecretAccessKey: "S", SessionToken: "T" },
+    { AccessKeyId: "A", SecretAccessKey: "S", SessionToken: "T", Expiration: new Date(0) },
+  ])("rejects malformed or expired STS credentials", async (Credentials) => {
+    const f = fixture();
+    f.stsSend.mockResolvedValueOnce({ Credentials });
+    expect((await f.issue()).kind).toBe("assume_role_failed");
+    expect(f.fetchClient).not.toHaveBeenCalled();
+  });
+
+  it("returns federation endpoint failures", async () => {
+    const f = fixture();
+    f.fetchClient.mockResolvedValueOnce(new Response("failure", { status: 503 }));
+    expect(await f.issue()).toEqual({ kind: "federation_endpoint_failed", status: 503 });
+  });
+  it.each(["not-json", "{}", '{"SigninToken":""}'])("rejects malformed token %s", async (body) => {
+    const f = fixture();
+    f.fetchClient.mockResolvedValueOnce(new Response(body));
+    expect(await f.issue()).toEqual({ kind: "federation_token_malformed" });
   });
 });
 
-describe("getConsoleSigninUrl (issue #2214: STS/HTTP via deps injection, no vi.mock)", () => {
-  it("should complete the full chain using only deps (sts / buildParticipantClient / fetchClient)", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-
-    const stage1Send = vi.fn().mockResolvedValue({
-      Credentials: {
-        AccessKeyId: "AKIADEPLOY",
-        SecretAccessKey: "DEPLOYSECRET",
-        SessionToken: "DEPLOYTOKEN",
-        Expiration: new Date(),
-      },
-    });
-    const stage2Send = vi.fn().mockResolvedValue({
-      Credentials: {
-        AccessKeyId: "AKIAFAKE",
-        SecretAccessKey: "SECRETFAKE",
-        SessionToken: "TOKENFAKE",
-        Expiration: new Date(),
-      },
-    });
-    const fetchClient = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ SigninToken: "SIGNIN_TOKEN_VALUE" }), { status: 200 }),
+describe("hosting-account participant access is bound to the live event", () => {
+  const consent = {
+    awsAccountId: ACCOUNT,
+    riskVersion: "hosting-account-self-test-v1",
+    acknowledgedBy: "operator-a",
+    acknowledgedAt: "2026-10-03T00:00:00.000Z",
+  };
+  it.each(["console", "cli"] as const)(
+    "permits %s through the same owned role proof with persisted event consent",
+    async (kind) => {
+      vi.stubEnv("PARTICIPANT_OPERATOR_ACCOUNT_ID", ACCOUNT);
+      const f = fixture(
+        row({ eventId: "event-one" }),
+        eventRow({ hostingAccountSelfTest: consent }),
       );
-    const buildParticipantClient = vi.fn().mockReturnValue({ send: stage2Send });
-
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID, {
-      sts: { send: stage1Send },
-      buildParticipantClient,
-      fetchClient: fetchClient as unknown as typeof fetch,
-    });
-
-    expect(result.kind).toBe("ok");
-    expect(stage1Send).toHaveBeenCalledTimes(1);
-    expect(stage2Send).toHaveBeenCalledTimes(1);
-    expect(buildParticipantClient).toHaveBeenCalledWith({
-      accessKeyId: "AKIADEPLOY",
-      secretAccessKey: "DEPLOYSECRET",
-      sessionToken: "DEPLOYTOKEN",
-      expiration: expect.any(Date),
-    });
-    expect(fetchClient).toHaveBeenCalledTimes(1);
-  });
-
-  it("should surface a stage=competitor assume_role_failed when the injected stage-1 sts client rejects", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    const stage1Send = vi.fn().mockRejectedValue(new Error("AccessDenied"));
-    const fetchClient = vi.fn();
-
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID, {
-      sts: { send: stage1Send },
-      fetchClient: fetchClient as unknown as typeof fetch,
-    });
-
-    expect(result).toEqual({ kind: "assume_role_failed", stage: "competitor", reason: "Error" });
-    expect(fetchClient).not.toHaveBeenCalled();
-  });
-
-  it("should surface a stage=participant_viewer assume_role_failed when the injected stage-2 client rejects", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    const stage1Send = vi.fn().mockResolvedValue({
-      Credentials: {
-        AccessKeyId: "AKIADEPLOY",
-        SecretAccessKey: "DEPLOYSECRET",
-        SessionToken: "DEPLOYTOKEN",
-      },
-    });
-    const stage2Send = vi.fn().mockRejectedValue(new Error("AccessDenied"));
-    const fetchClient = vi.fn();
-
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID, {
-      sts: { send: stage1Send },
-      buildParticipantClient: () => ({ send: stage2Send }),
-      fetchClient: fetchClient as unknown as typeof fetch,
-    });
-
-    expect(result).toEqual({
-      kind: "assume_role_failed",
-      stage: "participant_viewer",
-      reason: "Error",
-    });
-    expect(fetchClient).not.toHaveBeenCalled();
-  });
-
-  it("should use the injected fetchClient (not global fetch) for the federation token exchange", async () => {
-    const { shared, ddbSend } = buildShared();
-    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
-    const globalFetchSpy = vi.spyOn(globalThis, "fetch");
-    const okCreds = {
-      Credentials: {
-        AccessKeyId: "AKIA",
-        SecretAccessKey: "SECRET",
-        SessionToken: "TOKEN",
-      },
-    };
-    const fetchClient = vi
-      .fn()
-      .mockResolvedValue(new Response(JSON.stringify({ SigninToken: "T" }), { status: 200 }));
-
-    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID, {
-      sts: { send: vi.fn().mockResolvedValue(okCreds) },
-      buildParticipantClient: () => ({ send: vi.fn().mockResolvedValue(okCreds) }),
-      fetchClient: fetchClient as unknown as typeof fetch,
-    });
-
-    expect(result.kind).toBe("ok");
-    expect(fetchClient).toHaveBeenCalledTimes(1);
-    expect(globalFetchSpy).not.toHaveBeenCalled();
-    globalFetchSpy.mockRestore();
-  });
+      const result =
+        kind === "console" ? await f.issue() : await getCliCredentials(f.shared, KEY, JOB, f.deps);
+      expect(result.kind).toBe("ok");
+      expect(f.verificationSend).toHaveBeenCalledOnce();
+      expect(f.stsSend.mock.calls[0]?.[0].input).toMatchObject({ RoleArn: ROLE, ExternalId: JOB });
+      expect(
+        f.ddbSend.mock.calls.some(
+          ([command]) => command.input.TableName === "Events" && command.input.ConsistentRead,
+        ),
+      ).toBe(true);
+    },
+  );
+  it.each([
+    undefined,
+    { ...consent, awsAccountId: "888888888888" },
+    { ...consent, riskVersion: "other" },
+  ])(
+    "refuses credentials for unacknowledged/mismatched events: %s",
+    async (hostingAccountSelfTest) => {
+      vi.stubEnv("PARTICIPANT_OPERATOR_ACCOUNT_ID", ACCOUNT);
+      const f = fixture(row({ eventId: "event-one" }), eventRow({ hostingAccountSelfTest }));
+      expect(await getCliCredentials(f.shared, KEY, JOB, f.deps)).toEqual({ kind: "not_ready" });
+      expect(f.ssmSend).not.toHaveBeenCalled();
+      expect(f.verificationSend).not.toHaveBeenCalled();
+      expect(f.stsSend).not.toHaveBeenCalled();
+    },
+  );
 });

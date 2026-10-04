@@ -103,6 +103,46 @@ describe("portalFetch", () => {
     expect((err as PortalAssumeRoleError).reason).toBe("AccessDenied");
   });
 
+  it.each(["ssm:GetParameter", "sts:AssumeRole", "cloudformation:DescribeStackResource"])(
+    "preserves fixed operation %s on AWS access failures",
+    async (operation) => {
+      mockFetch(
+        jsonRes(500, {
+          error: "assume_role_failed",
+          stage: "competitor",
+          reason: "AccessDenied",
+          operation,
+        }),
+      );
+      await expect(
+        portalFetch(BASE, "x", KEY, { throwOnAssumeRoleFailed: true }),
+      ).rejects.toMatchObject({
+        stage: "competitor",
+        reason: "AccessDenied",
+        operation,
+      });
+    },
+  );
+
+  it.each([undefined, "unknown-operation", { private: "detail" }])(
+    "ignores absent or unrecognized operation metadata: %j",
+    async (operation) => {
+      mockFetch(
+        jsonRes(500, {
+          error: "assume_role_failed",
+          stage: "competitor",
+          reason: "AccessDenied",
+          operation,
+        }),
+      );
+      const error = await portalFetch(BASE, "x", KEY, { throwOnAssumeRoleFailed: true }).catch(
+        (err) => err,
+      );
+      expect(error).toBeInstanceOf(PortalAssumeRoleError);
+      expect((error as PortalAssumeRoleError).operation).toBeUndefined();
+    },
+  );
+
   it("should default the stage to competitor and reason to Unknown for a malformed assume_role_failed", async () => {
     mockFetch(jsonRes(500, { error: "assume_role_failed", stage: "bogus" }));
     const err = await portalFetch(BASE, "x", KEY, { throwOnAssumeRoleFailed: true }).catch(

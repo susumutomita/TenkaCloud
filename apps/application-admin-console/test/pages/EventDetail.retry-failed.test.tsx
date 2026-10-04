@@ -128,9 +128,12 @@ describe("EventDetailPage #555 retry-failed button", () => {
     const button = await screen.findByText(/失敗分を再実行 \(1 件\)/);
     await userEvent.click(button);
     await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
-    expect(mocks.bulkDeployEvent).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
-      retryFailedOnly: true,
-    });
+    expect(mocks.bulkDeployEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      EVENT_ID,
+      { retryFailedOnly: true },
+      expect.stringMatching(/^[0-9a-f]{32}$/u),
+    );
   });
 
   it("should disable button when event is in ARCHIVED state", async () => {
@@ -169,9 +172,12 @@ describe("EventDetailPage #756 re-deploy (即座にデプロイ on the Schedule 
     // 全デプロイ済みなので破壊的な再デプロイ扱い → confirm modal を経由する
     await userEvent.click(await screen.findByRole("button", { name: "再デプロイする" }));
     await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
-    expect(mocks.bulkDeployEvent).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
-      forceRedeploy: true,
-    });
+    expect(mocks.bulkDeployEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      EVENT_ID,
+      { forceRedeploy: true },
+      expect.stringMatching(/^[0-9a-f]{32}$/u),
+    );
   });
 
   it("should deploy immediately (no confirm) when some pairs are not yet deployed", async () => {

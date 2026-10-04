@@ -1,7 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { parseGatewayPorts } from "../gateway-ports";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { assertPortsFree, type HostProcessHandle, spawnHostProcess } from "./host-process";
 import { adminLogin, apiCall, createEvent, expectOk, waitForReady } from "./http-client";
 import { onInterrupt } from "./interrupt";
@@ -141,15 +139,25 @@ export async function runHttpMode(options: HttpRunOptions): Promise<HttpRunResul
   warnIfAboveFetchCap(options.tabCounts, options.log);
   const gatewayRange = parseGatewayPorts(options.gatewayPorts);
   await assertPortsFree(options.adminPort, options.participantPort, gatewayRange);
-  const dataDirectory = mkdtempSync(join(tmpdir(), "tenka-bench-http-"));
+  const dataDirectory = createTemporaryDirectory(options.repositoryRoot, "tenka-bench-http-");
   let host: HostProcessHandle | undefined;
+  let starting: Promise<HostProcessHandle> | undefined;
+  let closing: Promise<void> | undefined;
   const stopTabs: (() => void)[] = [];
-  const releaseInterrupt = onInterrupt(() => {
-    if (host) process.kill(host.pid, "SIGKILL");
-    rmSync(dataDirectory, { recursive: true, force: true });
-  });
+  const close = () => {
+    closing ??= (async () => {
+      for (const stop of stopTabs) stop();
+      // An interrupt may arrive before the startup banner. Wait for that exact child,
+      // never treat an unresolved startup as permission to delete its SQLite files.
+      const running = host ?? (await starting);
+      await running?.stop();
+      removeTemporaryDirectory(options.repositoryRoot, dataDirectory);
+    })();
+    return closing;
+  };
+  const releaseInterrupt = onInterrupt(close);
   try {
-    host = await spawnHostProcess({
+    starting = spawnHostProcess({
       repositoryRoot: options.repositoryRoot,
       dataDirectory,
       adminPort: options.adminPort,
@@ -157,6 +165,7 @@ export async function runHttpMode(options: HttpRunOptions): Promise<HttpRunResul
       gatewayPorts: gatewayRange,
       readyTimeoutMs: 30_000,
     });
+    host = await starting;
     const running = host;
     options.log(
       `http mode: host up at ${running.info.adminOrigin} / ${running.info.participantOrigin}`,
@@ -263,9 +272,10 @@ export async function runHttpMode(options: HttpRunOptions): Promise<HttpRunResul
     }
     return { teams: options.teams, steps, stoppedEarly };
   } finally {
-    for (const stop of stopTabs) stop();
-    await host?.stop();
-    rmSync(dataDirectory, { recursive: true, force: true });
-    releaseInterrupt();
+    try {
+      await close();
+    } finally {
+      releaseInterrupt();
+    }
   }
 }

@@ -10,7 +10,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { parse } from "dotenv";
+import { cloudStackNames } from "../../infrastructure/lib/cloud-hosting/stack-names";
+import { loadCloudEnvironment } from "../cloud-hosting/environment";
 
 export interface LoadedTursoLiveEnvironment {
   readonly path: string;
@@ -19,6 +20,7 @@ export interface LoadedTursoLiveEnvironment {
 }
 
 export function tursoLiveEnvironmentPath(repoRoot: string, environment: string): string {
+  cloudStackNames(environment);
   return join(repoRoot, "infrastructure", "environments", environment, ".env");
 }
 
@@ -34,15 +36,14 @@ export function loadTursoLiveEnvironment(
   processEnvironment: NodeJS.ProcessEnv,
 ): LoadedTursoLiveEnvironment {
   const path = tursoLiveEnvironmentPath(repoRoot, environment);
-  if (!existsSync(path)) {
-    return { path, exists: false, env: { ...processEnvironment, ENV: environment } };
-  }
-  assertRegularEnvironmentFile(path);
-  const fromFile = parse(readFileSync(path, "utf8"));
+  if (existsSync(path)) assertRegularEnvironmentFile(path);
+  const env = loadCloudEnvironment(repoRoot, { ...processEnvironment, ENV: environment });
+  env.ACCOUNT_ID ??= env.AWS_ACCOUNT_ID;
+  env.TENKACLOUD_ADMIN_EMAIL ??= env.TENANT_ADMIN_EMAIL;
   return {
     path,
-    exists: true,
-    env: { ...fromFile, ...processEnvironment, ENV: environment },
+    exists: existsSync(path),
+    env,
   };
 }
 
@@ -61,7 +62,7 @@ function renderEnvironmentUpdate(
 ): string {
   const seen = new Set<string>();
   const lines = original.split("\n").map((line) => {
-    const match = /^\s*([A-Z][A-Z0-9_]*)=/.exec(line);
+    const match = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=/.exec(line);
     const key = match?.[1];
     if (!key || !Object.hasOwn(overrides, key)) return line;
     seen.add(key);
@@ -112,18 +113,4 @@ export function writeTursoLiveEnvironment(
     if (existsSync(temporary)) unlinkSync(temporary);
   }
   return path;
-}
-
-export function mergeSamlSsoFeature(raw: string | undefined): string {
-  if (!raw?.trim()) return '{"samlSso":true}';
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("CDK_PARAM_FEATURES must be a JSON object before enabling samlSso");
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("CDK_PARAM_FEATURES must be a JSON object before enabling samlSso");
-  }
-  return JSON.stringify({ ...(parsed as Readonly<Record<string, unknown>>), samlSso: true });
 }

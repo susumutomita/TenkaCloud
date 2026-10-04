@@ -313,7 +313,19 @@ async function prepareBulkTeardownEntry(
   item: Partial<DeploymentItem>,
 ): Promise<UpdateOutcome> {
   const status = (item.status ?? "PENDING") as DeploymentStatus;
-  if (status === "DELETING" || status === "DELETED") return { skip: true, deletedLike: true };
+  if (status === "DELETED") return { skip: true, deletedLike: true };
+  if (item.runtimeProvider === "native" && item.runtimeEngine === "coordination") {
+    const jobId = String(item.jobId ?? "");
+    if (
+      status !== "DELETING" &&
+      !(await transitionBulkTargetToDeleting(shared, tenantId, updatedAt, jobId))
+    )
+      return { skip: true };
+    const repository = await resolveDeploymentsRepository(shared);
+    const deleted = await repository.markDeleted(jobId, updatedAt);
+    return deleted.outcome === "updated" ? { adapterEnqueued: jobId } : { adapterFailed: jobId };
+  }
+  if (status === "DELETING") return { skip: true, deletedLike: true };
 
   // [#2571] Non-AWS runtime (sakura/azure/gcp) rows never carry a region /
   // awsAccountId CFn can act on (both persisted as "", #2571 plan-builder) —

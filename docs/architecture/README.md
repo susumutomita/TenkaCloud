@@ -1,145 +1,149 @@
-# アーキテクチャの読み方
+# Competition hosting architecture
 
-TenkaCloud の開発者向けに、利用者・責務・実行担当・操作順を分けて説明します。
-確認基準は `80dfebb145fc8df2fbe93f3259e5342f75d72da9` の実装です。
-Draw.io の 5 ページは、`308c5dfc91282d3e35bf7098b85df570b5685cb9` の実装と部品・線・名前を突き合わせています。
-図はコードの構造を示し、実 AWS のリソース一覧や稼働実績を示すものではありません。
+This describes the unreleased integration candidate. It does not describe a
+released cloud service or claim that every restored catalog entry is playable.
 
-## 最初に読む順番
+## Current responsibilities
 
-1. [既存 Draw.io 原本](diagrams/system-architecture.drawio)の **05 システムコンテキスト**で、利用者と外部システムを確認する。
-2. 同原本の **04 ユースケース**で、開催者・参加者・開発者の操作を確認する。
-3. [論理アーキテクチャ](#論理アーキテクチャ)で、責務を確認する。
-4. [クラウドのコンポーネント](#クラウドのコンポーネント)または[ローカルのコンポーネント](#ローカルのコンポーネント)から、実装の担当へ進む。
-5. 操作別のシーケンス図で、受付から完了までを追う。
-6. 最後に Draw.io の **01 SaaS / 02 Lite / 03 Local** で、物理的な配置と配線を確認する。
+- One Bun process serves the organizer and participant applications
+- The local organizer key is separate from event-owned participant team keys
+- Event/team state, operation ownership, scores, receipts and authentication live
+  in local SQLite with private original key files
+- New Docker events prepare up to 512 dormant jobs; participants Start / resume
+  and Stop (keep data), with no automatic eviction or reset
+- Defaults admit 3 active environments per team, 12 per host and 4096 MiB of
+  summed configured memory caps. The 40 gateway slots are active-only; dense
+  runtime-port assignments are retained when stopped
+- New Compose plans preserve authored caps and fill missing memory/CPU/PID limits
+  with 512 MiB, 1 CPU and 256 PIDs per service; old events keep their legacy lifecycle
+- Runtime adapters manage owned Docker environments, the in-process Battle and
+  coordination exercises; HTTP boundaries do not trust a submitted team identity
+- Accepted operation/ownership state is retained before external work; uncertain
+  outcomes remain visible and recoverable
+- Verifiers judge submissions; the platform serializes and persists scoring,
+  progress and retry receipts before replying
 
-| モード | 利用目的 | 実行経路 |
-| --- | --- | --- |
-| SaaS | 複数組織によるクラウド競技の開催 | SBT による組織管理、pooled / silo の開催アプリ、共通の問題配置・参加者処理 |
-| Lite | 一つの開催環境でのクラウド競技 | SBT の組織管理を置かず、開催アプリと問題配置・参加者処理を使う |
-| Local play | 手元での個人練習 | `make local`、固定の `eventId=local / teamId=local`、SQLite と Docker 問題 |
+`make local` starts the managed runtime. `make down` stops owned local runtimes
+and preserves data. New on-demand Docker jobs remain stopped after startup until
+participants resume them. Stop retains writable layers and volumes, not RAM.
+It does not reset the event clock or delete AWS exercise
+stacks. Explicit event teardown and ordinary shutdown are separate operations.
 
-開発中の複数チーム向け `local-host` と、暗号バトル専用の開発ハーネスは、ここで説明する `make local` の経路に含めません。
-`make local-dev` は Bun と Vite で動かす開発経路です。Docker 問題にも対応し、Simulator は明示的に有効化した場合だけ使います。
+## Storage and cloud boundary
 
-## 論理アーキテクチャ
+Local hosting uses SQLite. Cloud hosting reuses the original SBT-free Lite
+composition: API Gateway, Lambda, Cognito, CloudFront, Step Functions, CodeBuild
+and either Turso or the original DynamoDB control-data resources. Turso uses the
+configured SSM token and creates no DynamoDB tables. The organizer and participant
+SPAs retain their separate authentication surfaces. Cognito role values
+`TenantAdmin`, `TenantOperator` and `TenantViewer` map to organizer roles; the
+internal fixed `tenantId=local` does not create a user-facing tenant concept.
 
-![クラウド開催の論理責務](../../apps/developer-portal/public/docs/assets/architecture/logical.svg)
+Cloud AWS workflows retain generic CloudFormation create, update, no-op, recreate
+and delete through their original Lambda/CodeBuild paths. Flag/multi-flag and
+scheduled endpoint scoring, participant Console/CLI access, and native coordination
+are restored. Workers use registered competitor roles and mandatory ExternalId.
+Deployment credentials are not participant credentials. The reviewed native
+Cryptography Battle profile with score stealing disabled needs no competitor AWS
+account; enabling its score-steal parameter keeps the AWS-backed variant. State
+and scores use the selected backend, or SQLite for local hosting.
+Docker/Compose remains local-only. Nine canonical templates exceed the restored
+CloudFormation TemplateBody limit of 51,200 bytes; TemplateURL is not implemented.
+Catalog presence therefore does not imply all AWS problems are deployable.
 
-利用組織の管理、開催管理、問題環境の管理、競技実行の責務です。箱の数は CDK スタックや AWS アカウントの数ではありません。
-SaaS の pooled / silo は開催管理環境の配置方法の違いです。Lite に SBT の組織管理はありません。
+Cloud execution snapshots catalog maps, hints, plugins and raw sources. Saved
+events and deployments retain their `catalogKey`, so catalog A continues after B
+is deployed or removes a problem. Readers verify the saved sources; CodeBuild uses
+the exact source ZIP version. Older unpinned records need the verified original
+snapshot through `CDK_LEGACY_CATALOG_KEY`, never an assumed current catalog. A legacy
+key does not prove a safe active-event upgrade: original competitions must finish
+on their installed version before the initial upgrade.
+Platform teardown removes its owned execution artifacts. The separate source ZIP
+bucket survives; current unique archive keys are not removed by noncurrent-version
+expiration and incur storage until separately reviewed source-bucket cleanup.
 
-根拠: [app-wiring/wire.ts](../../infrastructure/lib/app-wiring/wire.ts)。開催側へ共有バックエンドの Lambda 参照を渡すため、開催処理のすべてが TenantTemplateStack 内で動くわけではありません。
+Both cloud providers preserve 99-team admission; SQL coordination retains the
+original 4 MiB state policy. The official local libSQL protocol run passed with
+25 teams and 100 concurrent authentication reads (p95 186 ms). This is not a
+native Battle throughput test, hosted Turso measurement or live AWS rehearsal.
+See [recorded verification](../../infrastructure/README.md#verification).
 
-## クラウドのコンポーネント
+`make deploy` performs account/environment/credential preflight, reuses standard
+CDKToolkit or bootstraps it automatically when missing, and builds/uploads the
+source archive consumed by CodeBuild. Every upload uses a fresh private
+`<configured-key>.executions/<uuid>.zip` key and exact S3 `VersionId`; the pinned
+cloud path rejects explicitly disabled versioning. New installations use cloud
+physical stack names. Existing Lite stacks keep their names. The CLI discovers
+existing Lite/cloud pairs and requires explicit selection when both exist. Original Lite updates verify ownership and
+persistent resource identities, then require explicit confirmation that no active
+competitions remain before bootstrap, source upload or deployment. Noninteractive
+original upgrades require `--confirm-no-active-events` after operator verification;
+generic `--yes` cannot bypass the guard. New/already-restored deployments keep their
+automatic flow. Published cloud-v1 stack updates and nonempty or
+unrecognized cloud-v1 SQL data are refused; no automatic migration occurs.
 
-![クラウド側の実行担当](../../apps/developer-portal/public/docs/assets/architecture/cloud-components.svg)
+`make destroy` confirms the selected owned resources and follows deployed
+Delete/Retain policies. It works without database access or application Outputs,
+including failed/partial-stack recovery, and empties verified owned versioned
+buckets before removal. DynamoDB defaults to Delete; ordinary destroy leaves
+external Turso rows. `destroy-all` explicitly purges supported retained data and
+known deployed Turso rows. Finish event Teardown before platform removal;
+`--drain-events` is rejected here. The source bucket, CDKToolkit and competitor
+bootstrap roles remain outside platform destruction.
 
-開催 API、問題配置、参加者 API、独自競技プラグイン、定期採点は別の担当です。
-参加者の通常のリクエストが、毎回 SBT の登録処理や問題配置の Step Functions を通るわけではありません。
+Teams may use separate competitor accounts or different problem regions within
+the same competitor account. IAM and other global services remain shared in the
+latter. Organizations/StackSets is an optional account-owner bootstrap procedure;
+platform deployment does not enable its trusted access. AWS resource exercises
+require a verified competitor account. An explicit self-test acknowledgment before
+event creation permits the hosting account for that event. Participant STS rechecks
+the saved event consent. Problem and participant roles may reach hosting
+configuration and data; this opt-in does not provide isolation. Use a separate
+account when third parties participate. Live AWS self-tests remain unverified. Different regions in a shared competitor account
+do not establish complete IAM isolation. The catalog IAM audit has unresolved
+findings, so restoration is not a least-privilege certification. Previously issued
+credentials can outlive event end; current event/team state governs applicable new access.
 
-- 開催・配置: [problem-deploy](../../infrastructure/lib/problem-deploy/)。`buildDeployPipeline()` が配置ワークフローを組み立てる。
-- 参加者: `buildParticipantPortalSubsystem()` が参加者 API と Coordination Dispatcher を分離する。
-- 定期採点: `buildScoringSubsystem()` が GenericScoring を配線し、独自競技の tick を Dispatcher へ委譲する。
-- 保存: DynamoDB、または対応する Turso 構成。Turso の状態更新は StatusWriter Lambda を経由し、Step Functions が SQL に直接接続するわけではない。
+## Runtime coverage
 
-Dispatcher の分離は、フェデレーション用の権限をプラグイン実行担当から外すためです。任意コードを安全に動かす sandbox ではなく、信頼するプラグインを前提にしています。
-テナント分離はストレージやスタックだけに任せず、API の認証・scope 検証も必要です。
+The target is all 106 former local Compose problems as Challenge competitions.
+Generic catalog/workbench integration is implemented. Real Docker/browser checks
+covered SQL access and a PostgreSQL terminal, three checkpoints, team isolation,
+and stop/restart with the same container and seven inserted rows intact.
+Other problem and terminal variants remain unverified. A synthetic 100-job / 105-port event proves allocation and lifecycle,
+not Docker performance or machine capacity. Preserve capability
+failures, per-team verifier separation, safe endpoint routing and native hardware
+requirements. Catalog visibility alone is not execution evidence.
 
-## ローカルのコンポーネント
+## Diagram sources
 
-![make local の Docker コンポーネント](../../apps/developer-portal/public/docs/assets/architecture/local-components.svg)
+The Mermaid sources below describe the current boundaries:
 
-既存 Draw.io の **03 Local** にある Docker 構成を、処理担当に絞った図です。
-`tenkacloud-local` が Portal と API を配信し、問題コンテナを同じ Docker daemon 上の別コンテナとして起動します。制御用コンテナの内部に問題コンテナを起動する構成ではありません。
+- [Logical responsibilities](diagrams/logical.mmd)
+- [Local components](diagrams/local-components.mmd)
+- [AWS exercise and cloud platform boundary](diagrams/cloud-components.mmd)
+- [Problem deployment](diagrams/problem-deployment.mmd)
+- [Participant scoring](diagrams/participant-scoring.mmd)
+- [State-preserving local lifecycle](diagrams/local-play-sequence.mmd)
+- [Editable Draw.io document](diagrams/system-architecture.drawio): five current
+  pages for cloud infrastructure, AWS exercise execution, the unified local runtime,
+  use cases and system boundaries. Existing page IDs, AWS4 official icons and the
+  original frame/connector style are retained; SaaS provisioning cells are replaced by the restored cloud composition
+  and remaining nodes are moved only to fit the current boundaries.
 
-起動・停止は Docker ソケット、正誤照会は loopback HTTP の `/verify`、学習進捗の保存は SQLite です。
-`local-data-permissions` が volume の所有者を調整した後、uid 1000 の制御用コンテナが起動します。
+Regenerate Draw.io with `python3 docs/architecture/diagrams/system-architecture.gen.py`.
+Its first two page IDs (`saas-physical`, `lite-physical`) remain stable identifiers,
+not supported product modes. Regions are chosen by the operator; the diagrams do
+not imply a fixed production region. DynamoDB icons summarize the selected provider's original control-data tables,
+and worker icons summarize their operations. The source-artifact S3 icons summarize
+the separate private execution-snapshot and source-ZIP buckets. Page 02 expands the exercise execution
+path; logs in page 01 summarize backend diagnostics. The AWS4
+icon and connector conventions follow the requested
+[aws-drawio-diagram skill](https://github.com/sagochiko/aws-drawio-diagram-skill),
+while retaining the original frame styles.
 
-根拠: [compose.local.yaml](../../compose.local.yaml)、[docker-launcher.sh](../../scripts/local/docker-launcher.sh)、[server.ts](../../scripts/local-play/server.ts)、[container-runner.ts](../../scripts/local-play/container-runner.ts)。
-
-Docker ソケットの `:ro` は、Docker API の作成・削除操作を読み取り専用にはしません。
-`assertComposePolicy()` は起動・復旧時に Compose を検査しますが、独立した権限仲介サービスではありません。
-問題コンテナへ Docker ソケットを渡さない境界を維持してください。
-
-## テナント登録のシーケンス
-
-![SaaS のテナント登録](../../apps/developer-portal/public/docs/assets/architecture/tenant-onboarding.svg)
-
-対象は SaaS。管理画面からの登録受付と、テナントの利用準備完了は別です。
-PLATINUM は専用スタックを配置し、それ以外は既存 pooled スタックの情報を使います。
-CodeBuild を起動しただけでは Complete ではなく、SBT への結果通知まで確認します。
-
-根拠: [tenants.ts](../../apps/admin-console/src/api/tenants.ts)、[provision-tenant.sh](../../scripts/provision-tenant.sh)。失敗時はライフサイクルジョブと CodeBuild の結果を確認します。
-
-## 問題配置のシーケンス
-
-![クラウド問題の配置](../../apps/developer-portal/public/docs/assets/architecture/problem-deployment.svg)
-
-対象は SaaS / Lite の AWS Lambda 配置経路です。
-`bulkDeployEvent()` が対象・権限・容量・重複を確認し、配置計画を保存してから非同期処理へ渡します。
-クロスアカウントの配置と状態確認は、各 Lambda 呼び出しで SSM SecureString から ExternalId を取得し、必須の ExternalId を付けて STS `AssumeRole` で競技用ロールを引き受けます。その一時認証情報で CloudFormation を呼びます。
-同一アカウントの開発経路ではロール ARN と ExternalId パラメーターを両方省略できます。片方だけの指定はエラーであり、クロスアカウント時に ExternalId を省略する例外ではありません。
-共通処理は [assume-competitor-role.ts](../../infrastructure/lib/problem-deploy/handlers/shared/assume-competitor-role.ts) を参照してください。
-
-HTTP の受付件数は配置成功件数ではありません。チーム・問題別の COMPLETE / FAILED を確認します。
-
-`useBulkDistributedMap` が有効なら S3 の計画から子実行を開始し、無効なら個別イベントを発行します。CodeBuild の配置経路は図から省略しています。
-
-根拠: [bulk-deploy](../../infrastructure/lib/problem-deploy/handlers/event-handler/bulk-deploy/)、[deploy-create-state-machine.ts](../../infrastructure/lib/problem-deploy/deploy-create-state-machine.ts)。失敗時は配置レコード、Step Functions の履歴、対象スタックのイベントを確認します。
-
-## クラウドでの回答と採点
-
-![クラウド参加者の回答と採点](../../apps/developer-portal/public/docs/assets/architecture/participant-scoring.svg)
-
-通常の flag 提出と独自競技の操作は別の API です。参加者の所属は、提出本文の teamId を信用せずチームキーから解決します。
-独自競技では `validateOp`、`applyOp`、`projectForTeam` を使い、チームに見せてよい情報だけを返します。
-
-状態保存と得点反映は常に同時ではありません。`pendingScores` を保存し、`tryDeliverCoordinationScores()` で反映を試行します。
-競合・版不整合・容量超過を成功扱いせず、応答と保存状態を確認します。定期採点の GenericScoring は、提出とは別の起動経路です。
-
-根拠: [submit-flag.ts](../../infrastructure/lib/problem-deploy/handlers/participant-handler/submit-flag.ts)、[coordination-dispatcher-handler](../../infrastructure/lib/problem-deploy/handlers/coordination-dispatcher-handler/)。
-
-## Local play の開始と採点
-
-![Local play の開始・回答・保存](../../apps/developer-portal/public/docs/assets/architecture/local-play-sequence.svg)
-
-開始 API は 202 で受け付け、実 Docker の起動結果を後から取得します。正誤判定は問題コンテナの `/verify` に委譲し、基盤が加減点・解答済み状態・履歴を更新します。
-HTTP サーバーは変更後に `persist()` を待ってから応答します。
-
-起動失敗、停止中の提出、検証器への接続失敗は別の結果です。接続失敗を不正解に置き換えません。
-既提出なら検証器を再度呼ばず、重複加点を避けます。
-
-根拠: [api.ts](../../scripts/local-play/api.ts)、[api-scoring.ts](../../scripts/local-play/api-scoring.ts)、[server.ts](../../scripts/local-play/server.ts)。起動エラーは ContainerRunner と問題コンテナのログ、`verify_unavailable` は検証器の到達性を確認します。
-
-## 図の更新
-
-物理構成・コンテキスト・ユースケースの正本は [Draw.io](diagrams/system-architecture.drawio) です。
-Draw.io の 5 ページは[生成スクリプト](diagrams/system-architecture.gen.py)で作ります。
-図を直すときは、スクリプトの部品・線・座標を編集してから実行します。
-draw.io で直接編集した内容は、次の実行で上書きされます。
-
-```bash
-python3 docs/architecture/diagrams/system-architecture.gen.py
-```
-
-実行したら draw.io の CLI で PNG に書き出し、ラベルと線が重なっていないかを確かめます。
-
-JAWS-UG 横浜 2026 の発表資料は、01 ページを SVG にして表示しています。
-01 ページを変えたら次のスクリプトで書き出し直し、表示された範囲を `landing/jaws-yokohama-2026/index.html` の `data-view-box` に反映します。
-
-```bash
-python3 docs/architecture/diagrams/export-jaws-slide.py
-```
-
-追加した責務・操作順の図は [Mermaid 原稿](diagrams/)を編集し、developer-portal の `public/docs/assets/architecture/` にある SVG を再生成します。
-再生成は Mermaid CLI 11.17.0 を使用します。ブラウザ実行環境に合わせた Puppeteer 設定を指定してください。
-
-```bash
-docs/architecture/diagrams/render.sh
-```
-
-SVG はブラウザで開けるため、マニュアルを読むために図の編集ツールを起動する必要はありません。
-
-クラウドでの請求や実開催の確認範囲は [running-costs.md](../running-costs.md)、個人練習の起動手順は [local-play.md](../local-play.md) を参照してください。
+Mermaid sources can be rendered with `diagrams/render.sh` when its documented
+Mermaid CLI is available. Previously generated Mermaid/JAWS slide exports are
+historical; current guides do not embed those stale images as current evidence.
+The JAWS exporter reads its preserved landing-page Draw.io copy, so regenerating
+that historical talk cannot overwrite the current diagram or mix architectures.

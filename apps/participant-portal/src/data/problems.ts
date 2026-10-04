@@ -16,22 +16,42 @@
  * ドリフトが起きない。ここが持つのは「どの供給源を今使うか」だけ。
  */
 
-import { metadataToEntry, type ProblemMetadata } from "@tenkacloud/portal-contracts";
-
 // 既存 import 元を変えずに済むよう、 画面側が実際に使う型だけ re-export する
 // (それ以外は `@tenkacloud/portal-contracts` から直接 import する)。
 export type {
   ProblemCatalogEntry,
   ProblemDashboardSlots,
-  ProblemTrackPosition,
 } from "@tenkacloud/portal-contracts";
 
 import type { ProblemCatalogEntry } from "@tenkacloud/portal-contracts";
 
-const metadataModules = import.meta.glob<{ default: ProblemMetadata }>(
+const metadataModules = import.meta.glob<{ default: ProblemCatalogEntry }>(
   "../../../../problems/*/*/metadata.json",
-  { eager: true },
+  { eager: true, query: "?portal-catalog" },
 );
+
+export interface ProblemInstructions {
+  readonly instructions?: string;
+  readonly englishInstructions?: string;
+}
+
+// Only the selected problem loads its narrative. Catalog cards and login do not fetch it.
+const instructionModules = import.meta.glob<ProblemInstructions>(
+  "../../../../problems/*/*/metadata.json",
+  { query: "?portal-instructions", import: "default" },
+);
+const instructionLoaders = new Map(
+  Object.entries(instructionModules).map(([path, load]) => [path.split("/").at(-2), load]),
+);
+
+/** Runtime catalogs already carry their authorized content; never replace it with bundled text. */
+export async function loadProblemInstructions(
+  problemId: string,
+): Promise<ProblemInstructions | undefined> {
+  if (activeCatalog !== BUILD_TIME_CATALOG) return undefined;
+  const instructions = await instructionLoaders.get(problemId)?.();
+  return activeCatalog === BUILD_TIME_CATALOG ? instructions : undefined;
+}
 
 // Phase 1c (#1929): per-problem architecture diagram. `problems/<category>/<id>/diagram.svg`
 // is bundled by Vite as a URL asset; the portal renders it on the problem page as the
@@ -49,7 +69,7 @@ const englishDiagramModules = import.meta.glob<string>("../../../../problems/*/*
 });
 
 const BUILD_TIME_CATALOG: readonly ProblemCatalogEntry[] = Object.values(metadataModules)
-  .map((mod) => metadataToEntry(mod.default))
+  .map((mod) => mod.default)
   .sort((a, b) => a.id.localeCompare(b.id));
 
 /**

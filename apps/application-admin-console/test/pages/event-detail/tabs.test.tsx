@@ -122,7 +122,7 @@ const props = (over: Partial<EventTabContentProps> = {}): EventTabContentProps =
     canMutateTenant: true,
     config: {} as never,
     counts: { completeCount: 0, totalDeployCount: 0 } as never,
-    detail: { eventId: "e1" } as unknown as EventDetail,
+    detail: { eventId: "e1", problems: [] } as unknown as EventDetail,
     manualRefresh: vi.fn(),
     manualRefreshInFlight: false,
     operations: operations(),
@@ -222,4 +222,26 @@ describe("tab wrappers", () => {
     fireEvent.click(screen.getByTestId("gate-refresh"));
     expect(manualRefresh).toHaveBeenCalled();
   });
+});
+
+it("keeps cloud team login controls without calling unavailable self-registration", () => {
+  render(<TeamsTab {...props({ config: { ...props().config, mode: "cloud-host" } })} />);
+  expect(screen.getByTestId("participants-panel")).toBeInTheDocument();
+  expect(screen.queryByTestId("registration-panel")).not.toBeInTheDocument();
+});
+
+it("shows authoritative totals with an explicit unavailable-history notice instead of an empty chart", () => {
+  render(
+    <ScoreboardTab
+      {...props({
+        detail: {
+          scoreEventsByTeam: [{ teamId: "t1", teamName: "Alpha", projectedTotal: 75, events: [] }],
+          scoreHistoryAvailable: false,
+        } as unknown as EventDetail,
+      })}
+    />,
+  );
+  expect(screen.getByTestId("ranking-panel")).toBeInTheDocument();
+  expect(screen.queryByTestId("score-events-panel")).not.toBeInTheDocument();
+  expect(screen.getByText("event_detail.score_history_unavailable")).toBeInTheDocument();
 });

@@ -4,11 +4,9 @@ import {
   ForbiddenRoleError,
   MissingTenantClaimError,
   requireRole,
-  resolveTenantId,
   TenantSuspendedError,
 } from "../deploy-handler/auth.js";
-import { extractAuditContext, writeAuditEvent } from "./audit-log.js";
-import { MachineRouteDeniedError, machineActor } from "./machine-principal.js";
+import { MachineRouteDeniedError } from "./machine-principal.js";
 
 /**
  * Shared auth-error onError handler + role-check middleware for the tenant-facing
@@ -39,40 +37,18 @@ export type AuthErrorHandler = (err: Error, c: Context) => Response | Promise<Re
  * (e.g. `"[deploy]"` / `"[events]"`); it is the only difference between the two
  * call sites.
  */
-/**
- * Issue #2948: machine principal の拒否を 403 `forbidden_machine_route` にして監査に残す。
- *
- * human 経路の挙動は一切変わらない (= `MachineRouteDeniedError` は machine token でしか
- * 発生しない)。拒否は #2911 が要求する監査の一部なので、principal が判っているときだけ
- * audit 行を書く。principal を解決できなかった拒否 (`not_a_machine_principal`) は tenant も
- * actor も特定できないため CloudWatch Logs の 1 行に留める (= 偽の tenant 行を作らない)。
- *
- * 独自 `onError` を持つ competitor-accounts-handler からも同じ実装を呼ぶ。
- */
-export async function respondMachineRouteDenied(
+/** Keep normal denial responses and operational warnings without dedicated audit storage. */
+export function respondMachineRouteDenied(
   err: MachineRouteDeniedError,
   c: Context,
   logPrefix: string,
-): Promise<Response> {
+): Response {
   console.warn(`${logPrefix} machine route denied`, {
     path: err.path,
     method: err.method,
     reason: err.reason,
     clientId: err.principal?.clientId,
   });
-  if (err.principal) {
-    const auditContext = extractAuditContext(c);
-    await writeAuditEvent({
-      tenantId: err.principal.tenantId,
-      actor: machineActor(err.principal),
-      action: `${err.method} ${err.path}`,
-      outcome: "forbidden",
-      target: err.reason,
-      ipAddress: auditContext.ipAddress,
-      userAgent: auditContext.userAgent,
-      occurredAtMs: Date.now(),
-    });
-  }
   return c.json(
     {
       error: "forbidden_machine_route",
@@ -83,39 +59,8 @@ export async function respondMachineRouteDenied(
   );
 }
 
-/**
- * #2954: role 拒否を admin audit log へ書く。competitor-accounts-handler が既に持っていた形と
- * 同じ row を、deploy / event Lambda でも書けるようにしたもの。
- *
- * tenantId が解決できない拒否 (= claim 不在 / 越境) でも `"unknown"` で行を残す。「弾かれた
- * こと自体」が監査対象であり、tenant が引けないからといって記録しないほうが穴になる。
- */
-async function writeForbiddenAuditEvent(c: Context, err: ForbiddenRoleError): Promise<void> {
-  const auditContext = extractAuditContext(c);
-  let tenantId = "unknown";
-  try {
-    tenantId = resolveTenantId(c);
-  } catch {
-    // tenantId 不明でも audit は試みる (= competitor-accounts-handler と同じ判断)。
-  }
-  await writeAuditEvent({
-    tenantId,
-    actor: auditContext.actor,
-    actorUsername: auditContext.actorUsername,
-    action: `${c.req.method} ${c.req.path}`,
-    outcome: "forbidden",
-    ipAddress: auditContext.ipAddress,
-    userAgent: auditContext.userAgent,
-    occurredAtMs: Date.now(),
-    extra: {
-      actualRole: err.actualRole ?? "(none)",
-      requiredRoles: err.requiredRoles.join(","),
-    },
-  });
-}
-
 export function buildAuthErrorHandler({ logPrefix }: { logPrefix: string }): AuthErrorHandler {
-  return async (err, c) => {
+  return (err, c) => {
     if (err instanceof MachineRouteDeniedError) {
       return respondMachineRouteDenied(err, c, logPrefix);
     }
@@ -139,11 +84,6 @@ export function buildAuthErrorHandler({ logPrefix }: { logPrefix: string }): Aut
         actualRole: err.actualRole,
         requiredRoles: err.requiredRoles,
       });
-      // #2954: 拒否を audit 行にも残す。競技運営 API (deploy / event) は今まで console.warn
-      // だけで、competitor-accounts だけが行を書いていた。この非対称のせいで「誰が何を試みて
-      // 弾かれたか」は Lambda ごとに違う場所を見る必要があり、admin console の audit 画面には
-      // deploy / event の拒否が 1 件も出てこなかった。
-      await writeForbiddenAuditEvent(c, err);
       return c.json(
         {
           error: "forbidden_role",

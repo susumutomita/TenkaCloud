@@ -1,6 +1,6 @@
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { PendingOperation, toErrorMessage } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { type ApiClient, ApiError } from "../api/client";
 import {
   archiveEvent,
@@ -14,6 +14,7 @@ import {
   setEventSchedule,
   unlockEventScoring,
 } from "../api/events-client";
+import { hostingAccountRequiringConsent } from "../pages/event-create/EventCreateSelfTestModal";
 import {
   type EndsAtValidation,
   formatEndEventError,
@@ -25,6 +26,21 @@ import {
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
+interface ConfirmedSelfTest {
+  eventId: string;
+  acknowledgment: NonNullable<BulkDeployBody["hostingAccountSelfTest"]>;
+}
+
+function deploymentRequestBody(
+  eventId: string,
+  body: BulkDeployBody,
+  consent: ConfirmedSelfTest | null,
+): BulkDeployBody {
+  return consent?.eventId === eventId && !body.hostingAccountSelfTest
+    ? { ...body, hostingAccountSelfTest: consent.acknowledgment }
+    : body;
+}
+
 // Issue #2221: the 4 pure validators/formatters below now live in
 // event-operations-validation.ts; re-exported here so existing imports of
 // useEventOperations (this hook's public interface) don't need to change.
@@ -34,6 +50,8 @@ export { validateDeployAtInput, validateEndsAtInput, validateTeardownAtInput };
 export function useEventOperations(args: {
   readonly apiClient: ApiClient | null;
   readonly canMutateTenant: boolean;
+  readonly cloudHost?: boolean;
+  readonly localHost?: boolean;
   readonly detail: EventDetail | null;
   readonly eventId: string;
   readonly refresh: () => Promise<void>;
@@ -41,6 +59,14 @@ export function useEventOperations(args: {
   readonly t: Translate;
 }) {
   const { apiClient, canMutateTenant, detail, eventId, refresh, setError, t } = args;
+  const deployment = useRef(new PendingOperation());
+  const deploymentInFlight = useRef(false);
+  const confirmedSelfTest = useRef<ConfirmedSelfTest | null>(null);
+  const [selfTestPrompt, setSelfTestPrompt] = useState<{
+    eventId: string;
+    awsAccountId: string;
+    body: BulkDeployBody;
+  } | null>(null);
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   // #555/#756: deploy 系操作は同じ POST /deploy 経路。in-flight 状態だけ分けて表示する。
   const [bulkInFlight, setBulkInFlight] = useState<
@@ -79,21 +105,44 @@ export function useEventOperations(args: {
   // #558: scoring lock/unlock の in-flight 状態。"lock" / "unlock" / null を持つ。
   const [scoringLockInFlight, setScoringLockInFlight] = useState<"lock" | "unlock" | null>(null);
 
+  const handleDeployFailure = (error: unknown, body: BulkDeployBody) => {
+    const account = hostingAccountRequiringConsent(error);
+    if (account && !body.hostingAccountSelfTest)
+      setSelfTestPrompt({ eventId, awsAccountId: account, body });
+    else setError(toErrorMessage(error));
+  };
+
   const handleBulkDeploy = async (body: BulkDeployBody = {}) => {
-    if (!apiClient || !canMutateTenant || bulkInFlight) return;
+    if (!apiClient || !canMutateTenant || bulkInFlight || deploymentInFlight.current) return;
+    const request = deploymentRequestBody(eventId, body, confirmedSelfTest.current);
+    deploymentInFlight.current = true;
     setBulkInFlight(
       body.retryFailedOnly ? "retry-failed" : body.forceRedeploy ? "redeploy" : "deploy",
     );
     setError(null);
+    if (request.hostingAccountSelfTest) setSelfTestPrompt(null);
     try {
-      const res = await bulkDeployEvent(apiClient, eventId, body);
+      const operationKey = deployment.current.keyFor(eventId, request);
+      const res = await bulkDeployEvent(apiClient, eventId, request, operationKey);
+      deployment.current.acknowledge(operationKey);
       setBulkResult(res);
       await refresh();
     } catch (err) {
-      setError(toErrorMessage(err));
+      handleDeployFailure(err, request);
     } finally {
+      deploymentInFlight.current = false;
       setBulkInFlight(null);
     }
+  };
+
+  const handleConfirmHostingAccountSelfTest = () => {
+    if (!selfTestPrompt || selfTestPrompt.eventId !== eventId) return;
+    const acknowledgment = {
+      awsAccountId: selfTestPrompt.awsAccountId,
+      riskVersion: "hosting-account-self-test-v1" as const,
+    };
+    confirmedSelfTest.current = { eventId, acknowledgment };
+    void handleBulkDeploy({ ...selfTestPrompt.body, hostingAccountSelfTest: acknowledgment });
   };
 
   const handleBulkTeardown = async () => {
@@ -177,7 +226,11 @@ export function useEventOperations(args: {
     setEndsAtInFlight(true);
     setError(null);
     try {
-      await setEventSchedule(apiClient, eventId, { endsAt: new Date(Date.now()).toISOString() });
+      // Native hosts settle immediate ends with the server clock. Keep the legacy cloud
+      // schedule contract, which closes scoring without transitioning the event status.
+      if (args.cloudHost || args.localHost) await endEvent(apiClient, eventId);
+      else
+        await setEventSchedule(apiClient, eventId, { endsAt: new Date(Date.now()).toISOString() });
       await refresh();
     } catch (err) {
       setError(toErrorMessage(err));
@@ -332,6 +385,9 @@ export function useEventOperations(args: {
   // Issue #2020: this flat return is each operation's display + input state + action; the danger
   // zone groups it into per-operation models via `buildEventDangerZoneController` at the seam.
   return {
+    hostingAccountSelfTestPrompt: selfTestPrompt?.eventId === eventId ? selfTestPrompt : null,
+    handleConfirmHostingAccountSelfTest,
+    cancelHostingAccountSelfTest: () => setSelfTestPrompt(null),
     bulkInFlight,
     bulkResult,
     confirmEnd,

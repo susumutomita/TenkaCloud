@@ -18,6 +18,11 @@ interface ApplicationAdminConsoleHostingProps {
 }
 
 interface RuntimeConfigProps {
+  /** Public IDs from the installation's exact immutable execution snapshot. */
+  readonly supportedProblemIds?: readonly string[];
+  readonly nativeProblemIds?: readonly string[];
+  /** Shared server limits used to validate event creation in the current organizer UI. */
+  readonly eventLimits: { readonly maxTeams: number; readonly maxProblems: number };
   /**
    * Cognito Hosted UI の base URL。
    * 例: `https://TenkaCloud-app-tenant1.auth.ap-northeast-1.amazoncognito.com`
@@ -176,6 +181,11 @@ export class ApplicationAdminConsoleHosting extends Construct {
       userClientId: props.cognitoClientId,
       tenantId: props.tenantId,
       tenantName: props.tenantName,
+      eventLimits: props.eventLimits,
+      ...(props.supportedProblemIds !== undefined
+        ? { supportedProblemIds: props.supportedProblemIds }
+        : {}),
+      ...(props.nativeProblemIds !== undefined ? { nativeProblemIds: props.nativeProblemIds } : {}),
       apiUrl: props.apiUrl.replace(/\/$/, ""),
       isolation: props.isolation,
       // Issue #1340 Phase 2: SAML 未設定なら空 object `{}` で焼く (= frontend は loadConfig 側で

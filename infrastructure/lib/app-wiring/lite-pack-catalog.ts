@@ -1,8 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import {
+  ActivationStore,
+  tenantCatalogSource,
+} from "../../../scripts/problem-pack/pack-activation.js";
 import type { PackAsset } from "../app-config/types.js";
 import type { CatalogSource } from "../problem-pack/catalog-source.js";
-import { ActivationStore, tenantCatalogSource } from "../problem-pack/pack-activation.js";
 
 /**
  * [Issue #2459] Resolve the Lite catalog source + pack assets from the local activation store,

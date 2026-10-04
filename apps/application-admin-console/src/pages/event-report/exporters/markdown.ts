@@ -75,7 +75,7 @@ function renderScoreboard(exp: EventReportExport): string {
         String(r.rank),
         r.teamName,
         `${r.totalScore} pt`,
-        String(r.problemsSolved),
+        String(r.problemsSolved ?? "—"),
       ] as readonly string[],
   );
   return [
@@ -95,8 +95,8 @@ function renderBreakdown(exp: EventReportExport): string {
       [
         `\`${r.problemId}\``,
         r.defaultRegion,
-        String(r.solvedCount),
-        String(r.avgScore),
+        String(r.solvedCount ?? "—"),
+        String(r.avgScore ?? "—"),
         `${r.successfulCount} / ${r.deploymentsCount}`,
       ] as readonly string[],
   );
@@ -165,6 +165,7 @@ function renderFooter(exp: EventReportExport): string {
 export function buildEventReportMarkdown(exp: EventReportExport): string {
   const body = [
     renderHeader(exp),
+    exp.dataAvailabilityNote ?? "",
     renderSummary(exp),
     renderScoreboard(exp),
     renderBreakdown(exp),

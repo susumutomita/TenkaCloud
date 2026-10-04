@@ -371,6 +371,21 @@ describe("ProblemTerminalPanel (#2846)", () => {
     expect(text.endsWith("line-509")).toBe(true);
   });
 
+  it("caps long output even when the shell never prints a newline", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel();
+    const ws = await connectAndOpen(user);
+    act(() =>
+      ws.onmessage?.({
+        data: JSON.stringify({ type: "data", data: `old${"x".repeat(1024 * 1024)}tail` }),
+      }),
+    );
+    const text = scrollbackText(container);
+    expect(text).toHaveLength(1024 * 1024);
+    expect(text).not.toContain("old");
+    expect(text.endsWith("tail")).toBe(true);
+  });
+
   it("should still connect when React double-invokes the mount effect (StrictMode)", async () => {
     // Repro: `main.tsx` renders the app inside <StrictMode>, so in dev every effect runs
     // mount → cleanup → mount. The cleanup arms the in-flight-handoff guard, and the

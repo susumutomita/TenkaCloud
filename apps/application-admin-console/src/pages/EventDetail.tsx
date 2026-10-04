@@ -10,11 +10,12 @@ import { EVENT_ID_RE, type EventDetail } from "../api/events-client";
 import { EventDangerZone } from "../components/event-detail/EventDangerZone";
 import { EventHeaderActions } from "../components/event-detail/EventHeaderActions";
 import { buildEventDangerZoneController } from "../components/event-detail/event-danger-zone-models";
-import { type AppConfig, isLocalHost } from "../config";
+import { type AppConfig, isCloudHost, isLocalHost } from "../config";
 import { useEventDetail } from "../hooks/useEventDetail";
 import { useEventOperations, validateEndsAtInput } from "../hooks/useEventOperations";
 import { useT } from "../i18n";
 import { computeEventWizardState, type WizardState } from "../lib/event-wizard";
+import { EventCreateSelfTestModal } from "./event-create/EventCreateSelfTestModal";
 import {
   DisruptionsTab,
   EVENT_TAB_IDS,
@@ -32,10 +33,21 @@ import {
 
 type EventOperations = ReturnType<typeof useEventOperations>;
 
+function ExistingEventSelfTestPrompt({ operations }: { readonly operations: EventOperations }) {
+  const prompt = operations.hostingAccountSelfTestPrompt;
+  return prompt ? (
+    <EventCreateSelfTestModal
+      visible
+      existingEvent
+      awsAccountId={prompt.awsAccountId}
+      onCancel={operations.cancelHostingAccountSelfTest}
+      onConfirm={operations.handleConfirmHostingAccountSelfTest}
+    />
+  ) : null;
+}
+
 /** Local Docker environments settle within seconds; 3s keeps the tables live without load. */
 const LOCAL_HOST_IN_FLIGHT_POLL_MS = 3_000;
-/** Issue #3226: tabs whose features need cloud infrastructure the local host does not have. */
-const CLOUD_ONLY_TABS: ReadonlySet<EventTabId> = new Set(["disruptions", "gate"]);
 type Translate = ReturnType<typeof useT>;
 
 interface DeploymentCounts {
@@ -67,6 +79,10 @@ function summarizeDeployments(detail: EventDetail): DeploymentCounts {
     },
     { completeCount: 0, failedCount: 0, inFlightCount: 0, totalDeployCount: 0 },
   );
+  for (const run of detail.nativeRuns ?? []) {
+    counts.totalDeployCount++;
+    if (run.status === "COMPLETE" || run.status === "CLOSED") counts.completeCount++;
+  }
   return {
     ...counts,
     allDoneCount: counts.completeCount + counts.failedCount,
@@ -136,6 +152,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const operations = useEventOperations({
     apiClient,
     canMutateTenant: canMutate,
+    cloudHost: isCloudHost(config),
+    localHost: isLocalHost(config),
     detail,
     eventId: eventIdForOperations,
     refresh,
@@ -207,6 +225,7 @@ function EventDetailErrorOnly({
 }) {
   return (
     <SpaceBetween size="l">
+      <ExistingEventSelfTestPrompt operations={operations} />
       <Header
         variant="h1"
         description={`Event ID: ${eventId}`}
@@ -292,13 +311,15 @@ function renderTabs({
   } as const;
   // The red-team Disruptions tab is feature-flagged (config.features.redTeam) — hidden until the
   // cross-account executor is verified live, so operators don't fire into an unproven path.
-  return EVENT_TAB_IDS.filter((id) => id !== "disruptions" || config.features?.redTeam)
-    .filter((id) => !isLocalHost(config) || !CLOUD_ONLY_TABS.has(id))
-    .map((id) => ({
-      id,
-      label: t(`event_detail.tab_${id}`),
-      content: <SpaceBetween size="l">{contentByTab[id]}</SpaceBetween>,
-    }));
+  return EVENT_TAB_IDS.filter(
+    (id) =>
+      (id !== "disruptions" || config.features?.redTeam) &&
+      (!isCloudHost(config) || (id !== "notifications" && id !== "gate")),
+  ).map((id) => ({
+    id,
+    label: t(`event_detail.tab_${id}`),
+    content: <SpaceBetween size="l">{contentByTab[id]}</SpaceBetween>,
+  }));
 }
 
 function EventDetailLoaded({
@@ -348,6 +369,7 @@ function EventDetailLoaded({
 
   return (
     <SpaceBetween size="l">
+      <ExistingEventSelfTestPrompt operations={operations} />
       <Header
         variant="h1"
         description={`Event ID: ${eventId}`}
@@ -379,7 +401,7 @@ function EventDetailLoaded({
       )}
       {operations.bulkResult && (
         <Alert
-          type="success"
+          type={(operations.bulkResult.failed ?? 0) > 0 ? "warning" : "success"}
           dismissible
           onDismiss={() => operations.setBulkResult(null)}
           header={t("event_detail.bulk_result_header")}
@@ -388,11 +410,27 @@ function EventDetailLoaded({
             enqueued: operations.bulkResult.enqueued,
             skipped: operations.bulkResult.skipped,
           })}
+          {(operations.bulkResult.initialized ?? 0) > 0 && (
+            <p>
+              {t("event_detail.bulk_native_initialized", {
+                count: operations.bulkResult.initialized ?? 0,
+              })}
+            </p>
+          )}
+          {(operations.bulkResult.failed ?? 0) > 0 && (
+            <p>
+              {t("event_detail.bulk_result_failed", { failed: operations.bulkResult.failed ?? 0 })}
+            </p>
+          )}
         </Alert>
       )}
 
       <Tabs
-        activeTabId={activeTab}
+        activeTabId={
+          isCloudHost(config) && (activeTab === "notifications" || activeTab === "gate")
+            ? "overview"
+            : activeTab
+        }
         onChange={({ detail: d }) => {
           // Cloudscape の TabChangeDetail.activeTabId は string。 既知 id にのみ反映。
           const next = d.activeTabId;

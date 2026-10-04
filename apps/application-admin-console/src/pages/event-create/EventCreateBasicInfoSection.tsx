@@ -25,6 +25,7 @@ export interface EventCreateBasicInfoSectionProps {
   teamCount: number;
   onTeamCountChange: (next: number) => void;
   teamCountInvalid: boolean;
+  maxTeams?: number;
 }
 
 export function EventCreateBasicInfoSection({
@@ -34,6 +35,7 @@ export function EventCreateBasicInfoSection({
   teamCount,
   onTeamCountChange,
   teamCountInvalid,
+  maxTeams = TEAMS_MAX,
 }: EventCreateBasicInfoSectionProps) {
   const t = useT();
   return (
@@ -52,15 +54,23 @@ export function EventCreateBasicInfoSection({
         </FormField>
         <FormField
           label={t("event_create.team_count_label")}
-          description={t("event_create.team_count_description", {
-            min: TEAMS_MIN,
-            max: TEAMS_MAX,
-          })}
-          errorText={getTeamCountErrorText(t, teamCountInvalid)}
+          description={
+            maxTeams > 0
+              ? t("event_create.team_count_description", {
+                  min: TEAMS_MIN,
+                  max: maxTeams,
+                })
+              : t("event_create.limits_unavailable")
+          }
+          errorText={
+            maxTeams > 0 ? getTeamCountErrorText(t, teamCountInvalid, maxTeams) : undefined
+          }
         >
           <Input
+            disabled={maxTeams < 1}
             type="number"
             inputMode="numeric"
+            nativeInputAttributes={{ min: TEAMS_MIN, max: maxTeams }}
             value={String(teamCount)}
             onChange={({ detail }) => {
               const next = parseTeamCountInput(detail.value);

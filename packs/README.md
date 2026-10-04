@@ -7,9 +7,11 @@ tree) with its own README — worked examples and fixtures, not the community
 catalog (that's the [`problems/`](../problems/) submodule →
 [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)).
 
-To install / activate any pack for a tenant, see the top-level README's
-[Add your own problems / Option B](../README.md#add-your-own-problems)
-(`make pack-init` / `pack-validate` / `pack-install` / `pack-activate`).
+Use `bun run pack validate <directory>` from the repository root to validate a
+pack. [Authoring and immutable installation](../README.md#add-your-own-problems)
+are available offline; installation and activation records do not add problems
+to the current event runtime. These examples are exercised by
+[`scripts/problem-pack/test/`](../scripts/problem-pack/test/) and public SDK tests.
 
 ## Golden packs (`golden/`)
 

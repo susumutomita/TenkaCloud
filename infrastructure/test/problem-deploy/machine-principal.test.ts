@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { extractAuditContext } from "../../lib/problem-deploy/handlers/shared/audit-log";
 import {
   isHumanClaims,
   parseMachinePrincipal,
@@ -146,45 +145,5 @@ describe("machine route matcher (#2948 T-9 parity)", () => {
       const shim = findMachineRoute(probe.method, probe.path);
       expect(shim?.honoPath ?? null, `${probe.method} ${probe.path}`).toBe(body.matched);
     }
-  });
-});
-
-describe("extractAuditContext with a machine token (#2948 T-10)", () => {
-  function contextWithClaims(claims: Record<string, string>) {
-    return {
-      env: {
-        event: {
-          requestContext: {
-            authorizer: { claims },
-            identity: { sourceIp: "203.0.113.7", userAgent: "tcloud/1.0" },
-          },
-        },
-      },
-    };
-  }
-
-  it("should set actor to m2m:<client_id> and drop actorUsername", () => {
-    const ctx = extractAuditContext(contextWithClaims(machineClaims()));
-    expect(ctx.actor).toBe("m2m:machine-client-1");
-    expect(ctx.actorUsername).toBeUndefined();
-    expect(ctx.ipAddress).toBe("203.0.113.7");
-  });
-
-  it("should fall back to m2m:unknown (never a bare unknown) when client_id is missing", () => {
-    const claims = machineClaims();
-    delete (claims as Record<string, string | undefined>).client_id;
-    expect(extractAuditContext(contextWithClaims(claims)).actor).toBe("m2m:unknown");
-  });
-
-  it("should leave the human path completely unchanged", () => {
-    const ctx = extractAuditContext(
-      contextWithClaims({
-        sub: "cognito-sub-1",
-        "cognito:username": "operator@example.com",
-        "custom:tenantId": "tenant-1",
-      }),
-    );
-    expect(ctx.actor).toBe("cognito-sub-1");
-    expect(ctx.actorUsername).toBe("operator@example.com");
   });
 });

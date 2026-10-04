@@ -4,7 +4,6 @@ import { HOME_COPY } from "@/content/site-copy";
 import { catalogCounts } from "@/lib/catalog";
 import { htmlLang, type Locale } from "@/lib/i18n";
 import {
-  CONTACT_FORM,
   catalogPath,
   GITHUB_DISCUSSIONS,
   GITHUB_REPO,
@@ -57,7 +56,7 @@ export function MarketingHome({ locale }: { locale: Locale }) {
               <a
                 className={styles.heroActionPrimary}
                 data-cta="home-enterprise-contact"
-                href={CONTACT_FORM}
+                href={GITHUB_DISCUSSIONS}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -322,7 +321,7 @@ export function MarketingHome({ locale }: { locale: Locale }) {
                 <a
                   className={index === 1 ? "pricing-cta primary" : "pricing-cta secondary"}
                   data-cta="home-quote"
-                  href={CONTACT_FORM}
+                  href={GITHUB_DISCUSSIONS}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -343,15 +342,6 @@ export function MarketingHome({ locale }: { locale: Locale }) {
             <div className="btns">
               <a
                 className="btn-primary"
-                data-cta="home-contact-form"
-                href={CONTACT_FORM}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {product.contact.formCta}
-              </a>
-              <a
-                className="btn-ghost"
                 data-cta="home-discussions"
                 href={GITHUB_DISCUSSIONS}
                 target="_blank"
@@ -360,7 +350,6 @@ export function MarketingHome({ locale }: { locale: Locale }) {
                 {product.contact.discussionsCta}
               </a>
             </div>
-            <p className="contact-fineprint">{product.contact.fineprint}</p>
             <p className="contact-legal">
               <a href={privacyPath(locale)}>{privacyLabel}</a>
               {" / "}

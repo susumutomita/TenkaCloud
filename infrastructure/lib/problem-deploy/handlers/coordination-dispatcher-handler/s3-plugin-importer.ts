@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import type { PluginImporter } from "../participant-handler/coordination-plugin-loader.js";
+import {
+  loadCoordinationPlugin,
+  type PluginImporter,
+} from "../participant-handler/coordination-plugin-loader.js";
+import {
+  loadExecutionPluginSource,
+  type ResolvedExecutionCatalog,
+} from "../shared/execution-catalog.js";
 
 /**
  * Issue #1420: coordination plugin の実 importer。
@@ -104,4 +111,39 @@ async function verifyDigestIfConfigured(
       `coordination plugin digest mismatch for ${moduleRef}: expected ${expected}, got ${actual}`,
     );
   }
+}
+
+/** Verified content-addressed modules share a cache only when their actual bytes match. */
+export function createExecutionPluginImporter(
+  loadSource: typeof loadExecutionPluginSource = loadExecutionPluginSource,
+): (catalog: ResolvedExecutionCatalog) => PluginImporter {
+  const cache = new Map<string, Promise<unknown>>();
+  return (catalog) => (problemId) => {
+    const artifact = catalog.plugins[problemId];
+    if (!artifact) return Promise.reject(new Error(`catalog_plugin_missing: ${problemId}`));
+    let loaded = cache.get(artifact.digest);
+    if (!loaded) {
+      loaded = materializeExecutionPlugin(catalog, problemId, loadSource);
+      cache.set(artifact.digest, loaded);
+      loaded.catch(() => cache.delete(artifact.digest));
+    }
+    return loaded;
+  };
+}
+
+export const executionPluginImporter = createExecutionPluginImporter();
+
+async function materializeExecutionPlugin(
+  catalog: ResolvedExecutionCatalog,
+  problemId: string,
+  loadSource: typeof loadExecutionPluginSource,
+): Promise<unknown> {
+  const source = await loadSource(catalog, problemId);
+  const dir = await mkdtemp(join(tmpdir(), "saved-coord-plugin-"));
+  const file = join(dir, "plugin.mjs");
+  await writeFile(file, source, "utf8");
+  const module = await import(pathToFileURL(file).href);
+  const checked = await loadCoordinationPlugin(async () => module, problemId);
+  if (checked.kind !== "ok") throw new Error(`catalog_plugin_invalid: ${checked.kind}`);
+  return module;
 }

@@ -158,25 +158,40 @@ export class DynamoDbDeploymentsScoring implements DeploymentsScoringPort {
     hint: Parameters<DeploymentsRepository["applyHintPenalty"]>[1],
     at: string,
   ): Promise<DeploymentMutationOutcome> {
-    return this.core.conditionalUpdate(
-      jobId,
-      {
-        UpdateExpression:
-          "SET hintsRevealed = list_append(if_not_exists(hintsRevealed, :empty), :record), updatedAt = :now " +
-          "ADD score :neg",
-        ConditionExpression:
-          "attribute_not_exists(hintsRevealed) OR NOT contains(hintsRevealed, :recordForContains)",
-        ExpressionAttributeValues: {
-          ":empty": [],
-          ":record": [hint],
-          ":recordForContains": hint,
-          ":now": at,
-          ":neg": hint.penaltyApplied === 0 ? 0 : -hint.penaltyApplied,
+    // Keep the existing list shape, but fence the snapshot used to check hintId.
+    // Comparing the full incoming record makes a later timestamp a second charge.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const current = await this.core.getDeployment(jobId, { consistentRead: true });
+      if (!current) return { outcome: "not_found" };
+      if (current.hintsRevealed?.some((entry) => entry.hintId === hint.hintId)) {
+        return { outcome: "conflict", record: current };
+      }
+      const prior = current.hintsRevealed;
+      const result = await this.core.conditionalUpdate(
+        jobId,
+        {
+          UpdateExpression:
+            "SET hintsRevealed = list_append(if_not_exists(hintsRevealed, :empty), :record), updatedAt = :now " +
+            "ADD score :neg",
+          ConditionExpression:
+            "attribute_exists(PK) AND " +
+            (prior === undefined
+              ? "attribute_not_exists(hintsRevealed)"
+              : "hintsRevealed = :prior"),
+          ExpressionAttributeValues: {
+            ":empty": [],
+            ":record": [hint],
+            ":now": at,
+            ":neg": hint.penaltyApplied === 0 ? 0 : -hint.penaltyApplied,
+            ...(prior === undefined ? {} : { ":prior": prior }),
+          },
+          ReturnValues: "ALL_NEW",
         },
-        ReturnValues: "ALL_NEW",
-      },
-      "conflict",
-    );
+        "conflict",
+      );
+      if (result.outcome !== "conflict") return result;
+    }
+    return { outcome: "conflict" };
   }
 
   async updateDisplayTeamName(

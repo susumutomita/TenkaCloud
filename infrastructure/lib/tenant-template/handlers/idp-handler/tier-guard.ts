@@ -19,11 +19,8 @@
 
 import type { Context } from "hono";
 import { StatusCodes } from "http-status-codes";
-import {
-  isTenantAdmin,
-  resolveTenantId,
-} from "../../../control-plane/handlers/idp-handler/auth.js";
-import type { IdpScope } from "../../../control-plane/handlers/idp-handler/core.js";
+import { isTenantAdmin, resolveTenantId } from "../../../shared/idp/auth.js";
+import type { IdpScope } from "../../../shared/idp/core.js";
 
 export function createTenantIdpResolveScope(
   tierGuard: string | undefined,

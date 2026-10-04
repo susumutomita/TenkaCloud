@@ -2,7 +2,9 @@ import type { Context, Handler } from "hono";
 import { StatusCodes } from "http-status-codes";
 import type { z } from "zod";
 import { requireRole, requireTenantNotSuspended } from "../deploy-handler/auth.js";
+import { UnsupportedHostingAccountError } from "../shared/competitor-account-policy.js";
 import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
+import { ExecutionCatalogUnavailableError } from "../shared/execution-catalog-context.js";
 import { parseJsonBody, parseOptionalJsonBody } from "../shared/http-parse.js";
 import { isEventOwnedByTenant } from "./disruption-fire.js";
 import type { EventSharedResources } from "./shared.js";
@@ -82,6 +84,14 @@ export function handleRouteError(
   fields: Record<string, unknown>,
   err: unknown,
 ): Response {
+  if (err instanceof ExecutionCatalogUnavailableError)
+    return c.json({ error: err.code, message: err.message }, StatusCodes.CONFLICT);
+  if (err instanceof UnsupportedHostingAccountError) {
+    return c.json(
+      { error: err.code, awsAccountId: err.awsAccountId, message: err.message },
+      StatusCodes.UNPROCESSABLE_ENTITY,
+    );
+  }
   const message = err instanceof Error ? err.message : "unknown error";
   console.error(logMessage, { ...fields, message });
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);

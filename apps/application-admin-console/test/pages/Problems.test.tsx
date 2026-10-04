@@ -71,7 +71,7 @@ const CATALOG: ProblemSummary[] = [
 ];
 
 const renderPage = () => render(<ProblemsPage />);
-const searchBox = () => screen.getByPlaceholderText("problems.search_placeholder");
+const searchBox = () => screen.getByRole("searchbox", { name: "problems.search_label" });
 
 beforeEach(() => {
   mockNav.mockClear();
@@ -249,19 +249,60 @@ describe("ProblemsPage", () => {
 
   // Cloudscape Multiselect は role="option" の素朴な click では onChange が発火しないため、
   // 公式 test-utils (createWrapper → openDropdown → selectOptionByValue) で駆動する。
-  // findAllMultiselects() は DOM 順 = [difficulty, tag]。
+  // findAllMultiselects() は DOM 順 = [theme/tag, difficulty]。
   it("should filter by difficulty via the difficulty multiselect", () => {
     const { container } = renderPage();
-    const difficultyMs = createWrapper(container).findAllMultiselects()[0];
+    const difficultyMs = createWrapper(container).findAllMultiselects()[1];
     difficultyMs.openDropdown();
     difficultyMs.selectOptionByValue("1"); // difficulty 1 → Alpha のみ (Bravo は 5)
     expect(screen.getByText("Alpha")).toBeInTheDocument();
     expect(screen.queryByText("Bravo")).not.toBeInTheDocument();
   });
 
+  it("combines theme, keyword, and format filters and resets an empty result", () => {
+    const { container } = renderPage();
+    const theme = createWrapper(container).findAllMultiselects()[0];
+    expect(screen.getByText("problems.theme_label")).toBeInTheDocument();
+    theme.openDropdown();
+    theme.selectOptionByValue("crypto");
+    theme.closeDropdown();
+    fireEvent.change(searchBox(), { target: { value: " BRAVO " } });
+    expect(screen.getByRole("link", { name: "Bravo" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Alpha" })).toBeNull();
+    expect(screen.getByText("(1 / 2)")).toBeInTheDocument();
+
+    createWrapper(container).findSegmentedControl()?.findSegmentById("Battle")?.click();
+    expect(screen.getByText("problems.empty_filtered")).toBeInTheDocument();
+    expect(screen.getByText("(0 / 2)")).toBeInTheDocument();
+    const clearButtons = screen.getAllByRole("button", { name: "problems.clear_filter" });
+    fireEvent.click(clearButtons[clearButtons.length - 1]);
+    expect(screen.getByRole("link", { name: "Alpha" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Bravo" })).toBeInTheDocument();
+    expect(searchBox()).toHaveValue("");
+    expect(theme.findTokens()).toHaveLength(0);
+    expect(screen.getByText("(2)")).toBeInTheDocument();
+  });
+
+  it("offers themes only from the supported host catalog and can search the options", () => {
+    const { container } = render(<ProblemsPage localHost supportedProblemIds={new Set(["a"])} />);
+    const theme = createWrapper(container).findAllMultiselects()[0];
+    theme.openDropdown();
+    expect(theme.findDropdown().findOptionByValue("web")).not.toBeNull();
+    expect(theme.findDropdown().findOptionByValue("sqli")).not.toBeNull();
+    expect(theme.findDropdown().findOptionByValue("crypto")).toBeNull();
+    theme.findFilteringInput()?.setInputValue("missing-theme");
+    expect(screen.getByText("problems.theme_no_match")).toBeInTheDocument();
+    theme.findFilteringInput()?.setInputValue("sqli");
+    theme.selectOptionByValue("sqli");
+    theme.closeDropdown();
+    expect(screen.getByRole("link", { name: "Alpha" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Bravo" })).toBeNull();
+    expect(screen.getByText("(1 / 1)")).toBeInTheDocument();
+  });
+
   it("should select multiple tags, reveal the match-mode toggle, and switch or→and", () => {
     const { container } = renderPage();
-    const tagMs = createWrapper(container).findAllMultiselects()[1];
+    const tagMs = createWrapper(container).findAllMultiselects()[0];
     tagMs.openDropdown();
     tagMs.selectOptionByValue("web"); // tags=[web] (A,B 両方が持つ)
     // Multiselect は選択後も dropdown が開いたままなので再 open は不要 (= toggle で閉じてしまう)。

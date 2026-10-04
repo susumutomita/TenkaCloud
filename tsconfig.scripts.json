@@ -21,15 +21,11 @@
   },
   "include": [
     "scripts/security/audit-dependencies.ts",
-    "scripts/lib/lite-residual-scan.ts",
-    "scripts/lib/lite-residual-scan-aws.ts",
-    "scripts/ops/scan-lite-residual-resources.ts",
-    "scripts/release/manifest.ts",
-    "scripts/release/manifest-fields.ts",
-    "scripts/release/generate-release-report.ts",
-    "scripts/release/identity.ts",
-    "scripts/release/verify-release-identity.ts",
-    "scripts/release/generate-launcher-defaults.ts",
-    "scripts/release/generate-release-attestation.ts"
+    "scripts/cloud-hosting/**/*.ts",
+    "scripts/release/**/*.ts",
+    "scripts/problem-pack/**/*.ts",
+    "scripts/cli/**/*.ts",
+    "scripts/ops/env-init.ts",
+    "scripts/ops/turso-*.ts"
   ]
 }

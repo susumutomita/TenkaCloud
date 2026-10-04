@@ -9,6 +9,9 @@
 import type { EventRegistration, RegistrationUpdate } from "./event-registration.js";
 import type { TeamRecord } from "./teams.js";
 
+/** Shared event catalog limit for API validation and organizer runtime configuration. */
+export const MAX_PROBLEMS_PER_EVENT = 50;
+
 /**
  * [Issue #2527 Slice 1 step 2] Event lifecycle status — the domain union is the
  * source of truth; the request-validation Zod enum in
@@ -96,7 +99,18 @@ export type ProgressionGateConfig = {
  * adding the physical keys — a new event attribute is added HERE and flows to
  * the handler layer, never the reverse.
  */
+export interface HostingAccountSelfTestAcknowledgment {
+  readonly awsAccountId: string;
+  readonly riskVersion: "hosting-account-self-test-v1";
+  readonly acknowledgedAt: string;
+  readonly acknowledgedBy: string;
+}
+
 export type EventRecord = {
+  /** Explicit per-event self-test consent. This does not provide account isolation. */
+  hostingAccountSelfTest?: HostingAccountSelfTestAcknowledgment;
+  /** Immutable execution artifact catalog; never inferred from the current installation. */
+  catalogKey?: string;
   /** Never project invitation/receipt hashes into public event or leaderboard responses. */
   registration?: EventRegistration;
   eventId: string;
@@ -323,6 +337,17 @@ export interface EventsRepository {
     eventId: string,
     consistentRead?: boolean,
   ): Promise<EventRecord | undefined>;
+  /**
+   * Save explicit self-test consent on an existing deployable event. This partial CAS
+   * preserves every other field and the first audit stamp on duplicate requests.
+   * The catalog pin and prior consent must still match the validated snapshot.
+   */
+  acknowledgeHostingAccountSelfTest(
+    tenantId: string,
+    eventId: string,
+    acknowledgment: HostingAccountSelfTestAcknowledgment,
+    expected: Pick<EventRecord, "catalogKey" | "hostingAccountSelfTest">,
+  ): Promise<EventMutationOutcome>;
   /** Upsert one event row. */
   putEvent(record: EventRecord): Promise<void>;
   /** Delete one event row by its domain identifier. */

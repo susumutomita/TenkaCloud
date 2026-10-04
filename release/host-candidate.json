@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "status": "unpublished",
+  "sources": {
+    "platformCommit": null,
+    "catalogCommit": "4bb3a116c545fc46ed6a39ffcc5117fb914947f4"
+  },
+  "image": null,
+  "limitations": [
+    "This is an unpublished integration candidate. No reviewed release image or source release tag has been published.",
+    "The existing v1.11.0 launcher release and release/tenkacloud-release files are historical records, not this integration release.",
+    "Cloud hosting uses Lambda with selectable Turso or DynamoDB and standard CDK bootstrap. Exercise execution currently covers hello-world AWS flags and native Cryptography Battle. Generic legacy AWS runtimes/scorers and a live AWS/Turso end-to-end rehearsal remain incomplete. AWS usage and retained storage can incur charges.",
+    "The 106 local Compose problems share the competition runtime. Representative real Docker/browser flows passed; full-catalog variants and network-address capacity still require validation.",
+    "Built-in local course tracks are integrated. External pack execution and final published-book alignment remain incomplete; book publication follows the platform merge."
+  ]
+}

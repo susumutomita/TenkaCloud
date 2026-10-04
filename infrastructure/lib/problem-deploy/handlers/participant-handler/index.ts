@@ -143,14 +143,18 @@ app.get("/portal/me/console-signin-url", (c) =>
     if (outcome.kind === "assume_role_failed") {
       // Issue #1197: 500 body に stage / reason を含める (= UI が 「どちらの段で / なぜ
       // 落ちたか」 を表示できる)。 機微情報 (= ARN や ExternalId 値) は含めない、 種別のみ。
-      return respondError(c, outcome.kind, { stage: outcome.stage, reason: outcome.reason });
+      return respondError(c, outcome.kind, {
+        stage: outcome.stage,
+        reason: outcome.reason,
+        operation: outcome.operation,
+      });
     }
     return respondError(c, outcome.kind);
   }),
 );
 
 /**
- * Issue #1197: CLI / SDK 用一時資格情報。 Console federation と同じ 2 段 AssumeRole で発行
+ * Issue #1197: CLI / SDK 用一時資格情報。 Console federation と同じ所有権確認と viewer AssumeRole で発行
  * した credentials を JSON で返す。 IAM scope は Console と同一 (= ParticipantViewerRole)。
  *
  * rate limit: WRITE_LOW — 「credentials 発行」 は 1 セッション 1 回相当の希少 operation、
@@ -170,7 +174,11 @@ app.get("/portal/me/cli-credentials", (c) =>
       if (outcome.kind === "ok")
         return c.json({ credentials: outcome.credentials }, StatusCodes.OK);
       if (outcome.kind === "assume_role_failed") {
-        return respondError(c, outcome.kind, { stage: outcome.stage, reason: outcome.reason });
+        return respondError(c, outcome.kind, {
+          stage: outcome.stage,
+          reason: outcome.reason,
+          operation: outcome.operation,
+        });
       }
       return respondError(c, outcome.kind);
     },
@@ -220,7 +228,11 @@ app.get(
         });
         if (outcome.kind === "ok") return c.json({ loginUrl: outcome.loginUrl }, StatusCodes.OK);
         if (outcome.kind === "assume_role_failed") {
-          return respondError(c, outcome.kind, { stage: outcome.stage, reason: outcome.reason });
+          return respondError(c, outcome.kind, {
+            stage: outcome.stage,
+            reason: outcome.reason,
+            operation: outcome.operation,
+          });
         }
         if (outcome.kind === "capability_mismatch") {
           return respondError(c, outcome.kind, { provider: outcome.provider });
@@ -255,7 +267,11 @@ app.get(
         if (outcome.kind === "ok")
           return c.json({ credentials: outcome.credentials }, StatusCodes.OK);
         if (outcome.kind === "assume_role_failed") {
-          return respondError(c, outcome.kind, { stage: outcome.stage, reason: outcome.reason });
+          return respondError(c, outcome.kind, {
+            stage: outcome.stage,
+            reason: outcome.reason,
+            operation: outcome.operation,
+          });
         }
         if (outcome.kind === "capability_mismatch") {
           return respondError(c, outcome.kind, { provider: outcome.provider });

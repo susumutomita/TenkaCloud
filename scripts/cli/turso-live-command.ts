@@ -1,12 +1,14 @@
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { runCloudCli } from "../cloud-hosting/cli";
+import { systemCloudIo } from "../cloud-hosting/process";
 import {
   renderTursoLiveGuide,
   runCloudFormationVerification,
   runTursoLivePreflight,
   validateTursoLiveEnvironment,
+  verifyTursoAwsIdentity,
 } from "../ops/turso-live-guide";
-import { runTursoReset, tursoPipelinePost } from "../ops/turso-reset";
 import { DEFAULT_TURSO_TOKEN_EXPIRATION, runTursoTokenRotate } from "../ops/turso-token-rotate";
 import type { ProcessRunner } from "./process";
 import { loadTursoLiveEnvironment } from "./turso-live-environment";
@@ -20,6 +22,8 @@ export interface TursoLiveCommandDeps {
   readonly architecture: NodeJS.Architecture;
   readonly homeDirectory: string;
   readonly installTursoCli: () => string;
+  readonly httpPost?: (url: string, authToken: string, body: unknown) => Promise<unknown>;
+  readonly probeTurso?: (databaseUrl: string, authToken: string) => Promise<void>;
   readonly confirm: (question: string) => Promise<boolean>;
   readonly prompt: (question: string) => Promise<string>;
   readonly log: (message: string) => void;
@@ -101,26 +105,31 @@ export async function runTursoLiveCommand(
 ): Promise<number> {
   const command = args[0];
   const environment = environmentName(env);
-  if (command === "guide") {
+  if (command === "guide" || args.includes("--help") || command === "help") {
     deps.log(renderTursoLiveGuide(environment));
     return 0;
   }
+  if (command && command !== "rotate-token" && command !== "reset" && args.length !== 1)
+    throw new Error("Unexpected turso-live argument.");
   const loaded = loadTursoLiveEnvironment(deps.repoRoot, environment, env).env;
+  if (loaded.REGION?.trim()) loaded.AWS_REGION = loaded.REGION.trim();
+  const runner = deps.processRunner;
+  deps = {
+    ...deps,
+    processRunner: {
+      run: (executable, executableArgs, options) =>
+        runner.run(executable, executableArgs, {
+          ...options,
+          cwd: options?.cwd ?? deps.repoRoot,
+          env: { ...loaded, ...options?.env },
+        }),
+    },
+  };
   const directResult = await runDirectTursoCommand(args, environment, loaded, deps);
   if (directResult !== undefined) return directResult;
   if (command) throw new Error(`Unknown turso-live command: ${command}`);
 
-  if (!deps.interactive) {
-    deps.log(
-      "対話 wizard には TTY が必要です。設定確認だけなら `turso-live guide` を使ってください。",
-    );
-    if (env.CODEBUILD_BUILD_ID || env.CI) {
-      deps.log(
-        "CodeBuild/CI では Turso CLI をイメージに事前導入し、TURSO_API_TOKEN を secret 環境変数で渡してください。",
-      );
-    }
-    return 1;
-  }
+  if (!wizardIsInteractive(env, deps)) return 1;
 
   const tursoExecutable = await ensureTursoCli(deps);
   if (!tursoExecutable || !(await ensureTursoAuthentication(tursoExecutable, deps))) {
@@ -129,18 +138,14 @@ export async function runTursoLiveCommand(
   }
   const setup = await runTursoLiveSetup(environment, loaded, { ...deps, tursoExecutable });
   if (!setup.ok) return 1;
-  const preflight = runTursoLivePreflight(setup.env, (executable, executableArgs) =>
-    deps.processRunner.run(executable === "turso" ? tursoExecutable : executable, executableArgs),
-  );
+  const setupRunner = (executable: string, executableArgs: readonly string[]) =>
+    deps.processRunner.run(executable, executableArgs, { env: setup.env });
+  const preflight = await runTursoLivePreflight(setup.env, setupRunner, deps.probeTurso);
   deps.log(preflight.output);
   if (!preflight.ok) return 1;
   const deploy = await deployTursoLive(environment, setup.env, deps);
   if (deploy !== 0) return deploy;
-  const verification = runCloudFormationVerification(
-    environment,
-    setup.env,
-    (executable, executableArgs) => deps.processRunner.run(executable, executableArgs),
-  );
+  const verification = await runCloudFormationVerification(environment, setup.env, setupRunner);
   deps.log(verification.output);
   if (!verification.ok) return 1;
   deps.log("✓ AWS deploy と DynamoDB 0-table 検証が完了しました。次は画面上の主要フローです。");
@@ -165,22 +170,16 @@ async function runDirectTursoCommand(
   return runReadOnlyTursoCommand(command, environment, env, deps);
 }
 
-/** destructive: 全 control-data 行の削除 (スキーマ / マイグレーション状態は維持)。 */
+/** Keep reset on the existing scoped cloud implementation. */
 function resetTursoControlData(
   args: readonly string[],
-  environment: string,
+  _environment: string,
   env: NodeJS.ProcessEnv,
   deps: TursoLiveCommandDeps,
 ): Promise<number> {
-  return runTursoReset({
+  return runCloudCli(["turso-reset", ...args.slice(1)], systemCloudIo(), {
+    root: deps.repoRoot,
     env,
-    environment,
-    processRunner: deps.processRunner,
-    httpPost: tursoPipelinePost,
-    confirm: deps.confirm,
-    log: deps.log,
-    interactive: deps.interactive,
-    assumeYes: args.includes("--yes"),
   });
 }
 
@@ -204,7 +203,11 @@ async function deployTursoLive(
     deps.log("Deploy を中止しました。");
     return 1;
   }
-  return deps.processRunner.run("make", ["deploy", `ENV=${environment}`], { inherit: true }).status;
+  return deps.processRunner.run("make", ["deploy", `ENV=${environment}`], {
+    inherit: true,
+    cwd: deps.repoRoot,
+    env,
+  }).status;
 }
 
 /**
@@ -228,6 +231,8 @@ async function rotateTursoToken(
   env: NodeJS.ProcessEnv,
   deps: TursoLiveCommandDeps,
 ): Promise<number> {
+  assertRotateArguments(args.slice(1));
+  verifyTursoAwsIdentity(env, deps.processRunner.run);
   const expiration = flagValue(args, "--expiration");
   if (expiration === null) {
     deps.log("✗ --expiration には値が必要です (例: --expiration never / --expiration 30d)。");
@@ -249,7 +254,7 @@ async function rotateTursoToken(
     environment,
     processRunner: deps.processRunner,
     tursoExecutable,
-    httpPost: tursoPipelinePost,
+    httpPost: deps.httpPost ?? tursoPipelinePost,
     confirm: deps.confirm,
     log: deps.log,
     interactive: deps.interactive,
@@ -261,26 +266,64 @@ async function rotateTursoToken(
   });
 }
 
-function runReadOnlyTursoCommand(
+async function runReadOnlyTursoCommand(
   command: string | undefined,
   environment: string,
   env: NodeJS.ProcessEnv,
   deps: TursoLiveCommandDeps,
-): number | undefined {
+): Promise<number | undefined> {
   if (command === "preflight") {
     const tursoExecutable = resolveTursoCli(deps) ?? "turso";
-    const result = runTursoLivePreflight(env, (executable, args) =>
-      deps.processRunner.run(executable === "turso" ? tursoExecutable : executable, args),
+    const result = await runTursoLivePreflight(
+      env,
+      (executable, args) =>
+        deps.processRunner.run(executable === "turso" ? tursoExecutable : executable, args),
+      deps.probeTurso,
     );
     deps.log(result.output);
     return result.ok ? 0 : 1;
   }
   if (command === "verify-cloudformation") {
-    const result = runCloudFormationVerification(environment, env, (executable, args) =>
+    const result = await runCloudFormationVerification(environment, env, (executable, args) =>
       deps.processRunner.run(executable, args),
     );
     deps.log(result.output);
     return result.ok ? 0 : 1;
   }
   return undefined;
+}
+
+function assertRotateArguments(args: readonly string[]): void {
+  const seen = new Set<string>();
+  for (let index = 0; index < args.length; index++) {
+    const flag = args[index] ?? "";
+    if (!["--yes", "--invalidate", "--database", "--expiration"].includes(flag) || seen.has(flag))
+      throw new Error("Unknown or duplicate rotate-token argument.");
+    seen.add(flag);
+    if (flag === "--database" || flag === "--expiration") {
+      const value = args[++index];
+      if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value.`);
+    }
+  }
+}
+async function tursoPipelinePost(url: string, authToken: string, body: unknown): Promise<unknown> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(`Turso HTTP ${response.status} (response body redacted)`);
+  return response.json();
+}
+
+function wizardIsInteractive(env: NodeJS.ProcessEnv, deps: TursoLiveCommandDeps): boolean {
+  if (deps.interactive) return true;
+  deps.log(
+    "対話 wizard には TTY が必要です。設定確認だけなら `turso-live guide` を使ってください。",
+  );
+  if (env.CODEBUILD_BUILD_ID || env.CI)
+    deps.log(
+      "CodeBuild/CI では Turso CLI を事前導入し、TURSO_API_TOKEN を secret 環境変数で渡してください。",
+    );
+  return false;
 }

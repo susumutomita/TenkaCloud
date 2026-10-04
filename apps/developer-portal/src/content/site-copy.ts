@@ -93,9 +93,7 @@ export interface ContactCopy {
   readonly eyebrow: string;
   readonly heading: string;
   readonly body: string;
-  readonly formCta: string;
   readonly discussionsCta: string;
-  readonly fineprint: string;
 }
 
 export interface PageMeta {
@@ -230,7 +228,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
             "公開問題セットから選定",
           ],
           fineprint: "※ AWS アカウントはお客様側でご用意ください。",
-          cta: "お見積もりを依頼",
+          cta: "GitHub で公開相談",
         },
         {
           tier: "Hosted Event",
@@ -246,7 +244,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
           ],
           fineprint:
             "※ AWS アカウントはお客様側でご用意ください。こちらで用意する場合は別途お見積もり。",
-          cta: "お見積もりを依頼",
+          cta: "GitHub で公開相談",
         },
         {
           tier: "Annual Arena",
@@ -260,7 +258,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
             "事後レポート PDF（採点履歴 / チーム別進捗 / 攻撃可視化、1 イベント 1 部）",
           ],
           fineprint: "※ 規模 / 内容に応じて見積もり。AWS アカウントはお客様側でご用意ください。",
-          cta: "プログラムについて相談",
+          cta: "GitHub で公開相談",
         },
       ],
     },
@@ -268,10 +266,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
       eyebrow: "どのプランがよいか分からない",
       heading: "まずは話してみませんか。",
       body: "クラウド人材育成プログラム、内製化推進、継続的な AWS 演習 ── 規模・期間・参加者像を聞いた上で、適切なプランを一緒に決めます。",
-      formCta: "お問い合わせフォーム",
-      discussionsCta: "GitHub Discussions",
-      fineprint:
-        "フォームの回答は Google フォーム（Google が管理）に保存され、お問い合わせ対応と見積もり提示のみに利用します。",
+      discussionsCta: "GitHub Discussions (公開)",
     },
     legalLine: "プライバシーポリシー / 利用規約 / 特定商取引法に基づく表記",
   },
@@ -380,7 +375,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
             "Selected from the public problem set",
           ],
           fineprint: "* You bring your own AWS account.",
-          cta: "Request a quote",
+          cta: "Discuss publicly on GitHub",
         },
         {
           tier: "Hosted Event",
@@ -396,7 +391,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
           ],
           fineprint:
             "* You bring your own AWS account. If we need to provide one, we quote separately.",
-          cta: "Request a quote",
+          cta: "Discuss publicly on GitHub",
         },
         {
           tier: "Annual Arena",
@@ -410,7 +405,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
             "Post-event PDF report (scoring history, team progress, attack timeline — one per event)",
           ],
           fineprint: "* Quoted by scope and scale. You bring your own AWS account.",
-          cta: "Talk about a program",
+          cta: "Discuss publicly on GitHub",
         },
       ],
     },
@@ -418,10 +413,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
       eyebrow: "Not sure which plan fits",
       heading: "Let's talk.",
       body: "Cloud enablement programs, internal onboarding, recurring AWS drills — share your scale, cadence, and audience, and we'll figure out the right setup together.",
-      formCta: "Open the contact form",
-      discussionsCta: "GitHub Discussions",
-      fineprint:
-        "Responses are stored in a Google Form (managed by Google) and used only for replying and quoting.",
+      discussionsCta: "GitHub Discussions (public)",
     },
     legalLine: "Privacy Policy / Terms of Service / Business identification (Japan TokushoHo)",
   },

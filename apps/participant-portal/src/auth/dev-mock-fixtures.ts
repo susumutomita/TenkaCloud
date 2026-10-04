@@ -60,8 +60,8 @@ const HOUR = 60 * MIN;
 const iso = (offsetMs: number): string => new Date(now + offsetMs).toISOString();
 // 自動削除は常に「まだ先」に置く (= expired 警告を出さない)。
 const DEPLOY_EXPIRES_AT = Math.floor((now + 4 * HOUR) / SEC);
-const LITE_PIPELINE_TEMPLATE_URL =
-  "https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml";
+const CLOUD_PIPELINE_TEMPLATE_URL =
+  "https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/cloud-pipeline.yaml";
 const LITE_CLOUDFORMATION_CREATE_STACK_URL =
   "https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template";
 
@@ -252,9 +252,9 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       // (ProblemPanel が <Markdown> で描画する唯一の確実な経路)。 instructions は将来
       // metadata 経路が通ったときのための短い要約に留める。
       description: [
-        "チュートリアルの仕上げ。デモの外に出て、自分の AWS アカウントに **本物の TenkaCloud Lite** を立ち上げる。",
+        "チュートリアルの仕上げ。デモの外に出て、自分の AWS アカウントに **TenkaCloud のクラウド開催環境** を立ち上げる。この入口はテンプレートに固定された従来版を使い、統合中の新構成へ自動で切り替わるものではない。",
         "手順を正しく実行するたびに、実環境の画面にチェックポイントコード `TC{...}` が現れる。それを下の対応する提出欄に貼って得点しよう。",
-        "`lite-pipeline.yaml` は、CloudFormationに読み込ませる**自動デプロイ環境のひな形**。名前にpipelineとあるが、AWS CodePipelineは使わない。CloudFormationがCodeBuildとIAM Roleを用意するので、`Start build` を押せば、細かいデプロイ手順を知らなくてもLiteを自動構築できる。",
+        "`cloud-pipeline.yaml` は、CloudFormationに読み込ませる**自動デプロイ環境のひな形**。名前にpipelineとあるが、AWS CodePipelineは使わない。CloudFormationがCodeBuildとIAM Roleを用意するので、`Start build` を押せば、細かいデプロイ手順を知らなくてもクラウド開催環境を自動構築できる。",
         "",
         "#### AWSサービスの役割",
         "",
@@ -297,9 +297,9 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
           videoUrl: "https://www.youtube.com/embed/7LjkPdf5zM0",
           name: "Deploy your own TenkaCloud Lite",
           description: [
-            "The tutorial finale. Step outside the demo and stand up a **real TenkaCloud Lite** in your own AWS account.",
+            "The tutorial finale. Step outside the demo and stand up **TenkaCloud cloud hosting** in your own AWS account. This launcher uses its pinned previous implementation; it does not automatically switch to the new integration architecture.",
             "Each step you complete reveals a `TC{...}` checkpoint code on the real screens — paste it into the matching submission box below to score.",
-            "`lite-pipeline.yaml` is an **automatic deployment setup template** that you load into CloudFormation. Despite the filename, it does not use the AWS CodePipeline service. CloudFormation creates a CodeBuild project and IAM Role, so pressing `Start build` deploys Lite automatically without learning every underlying deployment step.",
+            "`cloud-pipeline.yaml` is an **automatic deployment setup template** that you load into CloudFormation. Despite the filename, it does not use the AWS CodePipeline service. CloudFormation creates a CodeBuild project and IAM Role, so pressing `Start build` deploys the cloud hosting platform automatically without learning every underlying deployment step.",
             "",
             "#### What the AWS services do",
             "",
@@ -361,7 +361,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 penalty: 0,
                 revealed: false,
                 content: [
-                  `[TenkaCloud の lite-pipeline.yaml](${LITE_PIPELINE_TEMPLATE_URL}) をダウンロードする。`,
+                  `[TenkaCloud の cloud-pipeline.yaml](${CLOUD_PIPELINE_TEMPLATE_URL}) をダウンロードする。`,
                   `[AWS CloudFormation の「スタックの作成」](${LITE_CLOUDFORMATION_CREATE_STACK_URL}) を開き、**テンプレートファイルのアップロード**で先ほどの YAML を選ぶ。`,
                   "スタック名は `tenkacloud-lite-launcher`。必須入力は `TenantAdminEmail` のみで、IAM acknowledge にチェックする。",
                   "`tenkacloud-lite-launcher` は自動デプロイ環境のCloudFormation stack名。CloudFormationがCodeBuildとIAM Roleを作り、そのCodeBuildが必要な処理を自動化するため、利用者が `git clone`・`make deploy`・CDKを手動で操作する必要はない。次のステップで `Start build` を押すと、`tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の2スタックが作られる。",
@@ -370,7 +370,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 i18n: {
                   en: {
                     content: [
-                      `[Download TenkaCloud's lite-pipeline.yaml](${LITE_PIPELINE_TEMPLATE_URL}).`,
+                      `[Download TenkaCloud's cloud-pipeline.yaml](${CLOUD_PIPELINE_TEMPLATE_URL}).`,
                       `[Open AWS CloudFormation Create stack](${LITE_CLOUDFORMATION_CREATE_STACK_URL}), choose **Upload a template file**, and select the YAML you downloaded.`,
                       "Use `tenkacloud-lite-launcher` as the stack name. The only required input is `TenantAdminEmail`; check the IAM acknowledgement.",
                       "`tenkacloud-lite-launcher` is the CloudFormation stack name for the automatic deployment setup. CloudFormation creates the CodeBuild project and IAM Role, and CodeBuild automates the required work, so you do not operate `git clone`, `make deploy`, or CDK manually. In the next step, press `Start build` to create the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks.",

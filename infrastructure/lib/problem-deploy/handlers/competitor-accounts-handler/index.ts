@@ -13,7 +13,6 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
-import { type AuditOutcome, extractAuditContext, writeAuditEvent } from "../shared/audit-log.js";
 import { respondMachineRouteDenied } from "../shared/auth-wiring.js";
 import { parseJsonBody } from "../shared/http-parse.js";
 import {
@@ -95,7 +94,7 @@ app.onError(async (err, c) => {
   // #2948: machine guard の拒否。この Lambda で guard は **load-bearing ではない** —
   // `/admin/*` blanket は `TENANT_ROLES` のままなので、machine principal は guard が無くても
   // `ForbiddenRoleError` で fail-closed になる。guard を mount する目的は「より早く落とし、
-  // 拒否理由を audit に残す」ことだけである。
+  // 拒否理由を通常の運用ログに残す」。
   if (err instanceof MachineRouteDeniedError) {
     return respondMachineRouteDenied(err, c, "[competitor-accounts]");
   }
@@ -114,29 +113,6 @@ app.onError(async (err, c) => {
       method: c.req.method,
       actualRole: err.actualRole,
       requiredRoles: err.requiredRoles,
-    });
-    // Issue #950: forbidden_role を audit に残す (「誰が何を試みたか」 が
-    // 1 query で引ける)。 tenantId 不明 (= claim 不在 / 越境) の場合は "unknown" を入れる。
-    const auditCtx = extractAuditContext(c);
-    let tenantId = "unknown";
-    try {
-      tenantId = resolveTenantId(c);
-    } catch {
-      // tenantId 不明でも audit は試みる
-    }
-    void writeAuditEvent({
-      tenantId,
-      actor: auditCtx.actor,
-      actorUsername: auditCtx.actorUsername,
-      action: `${c.req.method} ${c.req.path}`,
-      outcome: "forbidden",
-      ipAddress: auditCtx.ipAddress,
-      userAgent: auditCtx.userAgent,
-      occurredAtMs: Date.now(),
-      extra: {
-        actualRole: err.actualRole ?? "(none)",
-        requiredRoles: err.requiredRoles.join(","),
-      },
     });
     return c.json(
       {
@@ -161,7 +137,7 @@ app.onError(async (err, c) => {
 // 必要、 Viewer も verified accounts を見る)。 SAML 設定 / user 管理 は GET も含めて Admin only
 // (= sensitive config / user 一覧)。
 // healthz は role check 自体を skip。
-// #2948: machine guard を blanket より前に mount する (= 拒否理由を audit に残す)。
+// The machine guard preserves early denial and its normal operational warning.
 // blanket は `TENANT_ROLES` のまま **widen しない**。
 app.use("*", createMachineGuardMiddleware());
 
@@ -229,7 +205,6 @@ app.post("/admin/competitor-accounts", async (c) => {
   const parsed = await parseJsonBody(c, CreateCompetitorAccountRequestSchema);
   if (!parsed.ok) return parsed.response;
   const tenantIdForCreate = resolveTenantId(c);
-  const auditCreate = extractAuditContext(c);
   try {
     const response = await createCompetitorAccount(
       shared,
@@ -240,32 +215,9 @@ app.post("/admin/competitor-accounts", async (c) => {
       },
       parsed.data,
     );
-    // Issue #950: success audit (= 「誰が tenant にどの competitor account を追加したか」)
-    void writeAuditEvent({
-      tenantId: tenantIdForCreate,
-      actor: auditCreate.actor,
-      actorUsername: auditCreate.actorUsername,
-      action: "create_competitor_account",
-      outcome: "success",
-      target: parsed.data.awsAccountId,
-      ipAddress: auditCreate.ipAddress,
-      userAgent: auditCreate.userAgent,
-      occurredAtMs: Date.now(),
-    });
     return c.json(response, StatusCodes.CREATED);
   } catch (err) {
     if (err instanceof DuplicateCompetitorAccountError) {
-      void writeAuditEvent({
-        tenantId: tenantIdForCreate,
-        actor: auditCreate.actor,
-        actorUsername: auditCreate.actorUsername,
-        action: "create_competitor_account",
-        outcome: "conflict",
-        target: err.awsAccountId,
-        ipAddress: auditCreate.ipAddress,
-        userAgent: auditCreate.userAgent,
-        occurredAtMs: Date.now(),
-      });
       return c.json(
         { error: "duplicate_account", awsAccountId: err.awsAccountId },
         StatusCodes.CONFLICT,
@@ -283,7 +235,7 @@ app.post("/admin/competitor-accounts", async (c) => {
  *
  * **全体で 1 つの transaction にはしない。** 1 行が登録済みだからといって残りを捨てると、
  * operator は「どこまで入ったか」を自分で突き合わせる羽目になる。 行ごとの outcome を
- * 返し、 作成できた行だけ audit に残す。 body 自体が壊れている (= schema 違反、 0 件、
+ * 返す。 body 自体が壊れている (= schema 違反、 0 件、
  * 上限超過) ときだけ 400 で全体を拒否する。
  */
 app.post("/admin/competitor-accounts/bulk", async (c) => {
@@ -291,20 +243,6 @@ app.post("/admin/competitor-accounts/bulk", async (c) => {
   const parsed = await parseJsonBody(c, BulkCreateCompetitorAccountsRequestSchema);
   if (!parsed.ok) return parsed.response;
   const tenantIdForBulk = resolveTenantId(c);
-  const auditBulk = extractAuditContext(c);
-  const writeBulkAudit = (target: string, outcome: AuditOutcome) => {
-    void writeAuditEvent({
-      tenantId: tenantIdForBulk,
-      actor: auditBulk.actor,
-      actorUsername: auditBulk.actorUsername,
-      action: "create_competitor_account",
-      outcome,
-      target,
-      ipAddress: auditBulk.ipAddress,
-      userAgent: auditBulk.userAgent,
-      occurredAtMs: Date.now(),
-    });
-  };
   try {
     const response = await bulkCreateCompetitorAccounts(
       shared,
@@ -314,11 +252,6 @@ app.post("/admin/competitor-accounts/bulk", async (c) => {
         createdBy: resolveCognitoSub(c),
       },
       parsed.data,
-      // audit は行ごとに書く。 単体 create と同じ action / target なので、 監査ログ側は
-      // 「1 件ずつ登録したか一括で登録したか」 に関係なく account 単位で追える。
-      (awsAccountId) => writeBulkAudit(awsAccountId, "success"),
-      (awsAccountId, outcome) =>
-        writeBulkAudit(awsAccountId, outcome === "duplicate" ? "conflict" : "error"),
     );
     return c.json(response, StatusCodes.OK);
   } catch (err) {
@@ -387,21 +320,8 @@ app.delete("/admin/competitor-accounts/:awsAccountId", async (c) => {
     return c.json({ error: "invalid_account_id" }, StatusCodes.BAD_REQUEST);
   }
   const tenantIdForDelete = resolveTenantId(c);
-  const auditDelete = extractAuditContext(c);
   try {
     await deleteCompetitorAccount(shared, tenantIdForDelete, awsAccountId);
-    // Issue #950: success audit (= competitor account 削除は IAM 越境表面に影響)
-    void writeAuditEvent({
-      tenantId: tenantIdForDelete,
-      actor: auditDelete.actor,
-      actorUsername: auditDelete.actorUsername,
-      action: "delete_competitor_account",
-      outcome: "success",
-      target: awsAccountId,
-      ipAddress: auditDelete.ipAddress,
-      userAgent: auditDelete.userAgent,
-      occurredAtMs: Date.now(),
-    });
     return c.json({ deleted: true }, StatusCodes.OK);
   } catch (err) {
     if (err instanceof CompetitorAccountNotFoundError) {
@@ -439,7 +359,6 @@ app.put("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
     return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
   }
   const tenantId = resolveTenantId(c);
-  const audit = extractAuditContext(c);
   try {
     const result = await handleRegisterTeamCredential(
       { shared },
@@ -448,17 +367,6 @@ app.put("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
       params.teamSlug,
       body,
     );
-    void writeAuditEvent({
-      tenantId,
-      actor: audit.actor,
-      actorUsername: audit.actorUsername,
-      action: "register_team_cloud_credential",
-      outcome: result.status === StatusCodes.CREATED ? "success" : "error",
-      target: `${params.provider}:${params.teamSlug}`,
-      ipAddress: audit.ipAddress,
-      userAgent: audit.userAgent,
-      occurredAtMs: Date.now(),
-    });
     return c.json(result.body, result.status);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
@@ -475,7 +383,6 @@ app.delete("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
   const params = resolveTeamCredentialParams(c);
   if ("error" in params) return c.json({ error: params.error }, StatusCodes.BAD_REQUEST);
   const tenantId = resolveTenantId(c);
-  const audit = extractAuditContext(c);
   try {
     const result = await handleDeleteTeamCredential(
       { shared },
@@ -483,17 +390,6 @@ app.delete("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
       tenantId,
       params.teamSlug,
     );
-    void writeAuditEvent({
-      tenantId,
-      actor: audit.actor,
-      actorUsername: audit.actorUsername,
-      action: "revoke_team_cloud_credential",
-      outcome: "success",
-      target: `${params.provider}:${params.teamSlug}`,
-      ipAddress: audit.ipAddress,
-      userAgent: audit.userAgent,
-      occurredAtMs: Date.now(),
-    });
     return c.json(result.body, result.status);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";

@@ -8,7 +8,7 @@
  * チェックポイントコードを demo portal へ提出して得点する。
  *
  * コードの印字箇所 (= 学習者がその手順を実行しないと画面に出ない場所):
- *   - launcherCreated    → `infrastructure/templates/lite-pipeline.yaml` の CFn Outputs
+ *   - launcherCreated    → `infrastructure/templates/cloud-pipeline.yaml` の CFn Outputs
  *   - deployComplete     → `scripts/tenkacloud-lite.ts` の post-deploy guide (CodeBuild ログ末尾)
  *   - competitorVerified → Application Admin Console の Competitor Accounts 検証成功 Alert (Lite のみ)
  *   - firstEventCreated  → Application Admin Console の Event 作成成功 modal (Lite のみ)

@@ -6,7 +6,6 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
-import { auditEventAction } from "../audit.js";
 import { fireDisruption, listDisruptionAudit, listDisruptionCatalog } from "../disruption-fire.js";
 import { cancelRecurring, listActiveRecurring } from "../disruption-recurring.js";
 import type { DisruptionFireOutcome } from "../disruption-types.js";
@@ -80,7 +79,6 @@ async function handleRecurringCancel(
   if (ownershipError) return ownershipError;
   const outcome = await cancelRecurring(shared, eventId, tenantId, requestId, Date.now());
   if (outcome === "not_found") return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-  auditEventAction(c, "cancel_recurring_disruption", eventId);
   return c.json({ ok: true }, StatusCodes.OK);
 }
 
@@ -130,7 +128,6 @@ async function handleDisruptionFire(
     firedBy: resolveCognitoSub(c),
     nowMs: Date.now(),
   });
-  if (outcome.kind === "ok") auditEventAction(c, "fire_disruption", eventId);
   return disruptionFireOutcomeResponse(c, outcome);
 }
 

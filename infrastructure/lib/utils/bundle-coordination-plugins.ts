@@ -137,7 +137,9 @@ export function bundleCoordinationPlugins(problemsRoot: string): Record<string, 
       metafile: true,
     });
     assertPluginImportsAllowed(problemId, result.metafile);
-    out[problemId] = result.outputFiles[0].text;
+    const output = result.outputFiles[0];
+    if (!output) throw new Error(`Coordination plugin produced no bundle: ${problemId}`);
+    out[problemId] = output.text;
   }
   return out;
 }

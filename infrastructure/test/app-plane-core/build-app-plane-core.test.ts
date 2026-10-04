@@ -4,7 +4,7 @@ import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildAppPlaneCore } from "../../lib/app-plane-core";
+import { buildAppPlaneCore } from "../../lib/app-plane-core/index.js";
 
 /**
  * BucketDeployment(Source.asset(dist)) は synth 時に path 存在を検証する。
@@ -13,6 +13,7 @@ import { buildAppPlaneCore } from "../../lib/app-plane-core";
  * 同じ pattern で placeholder dist を mkdir する。
  */
 const distDir = path.join(__dirname, "..", "..", "..", "apps", "application-admin-console", "dist");
+let defaultTemplate: Template;
 beforeAll(() => {
   if (!fs.existsSync(distDir)) {
     fs.mkdirSync(distDir, { recursive: true });
@@ -21,7 +22,9 @@ beforeAll(() => {
       "<!doctype html><html><body>placeholder</body></html>",
     );
   }
-});
+  // 各 assertion は同じ構成を読むので、default の construct 生成と synth は 1 回だけ行う。
+  defaultTemplate = synth();
+}, 120_000);
 
 /**
  * Issue #778: AppPlaneCore builder の契約 pin。
@@ -49,27 +52,17 @@ function synth(features?: Readonly<Record<string, boolean>>): Template {
     tenantId: "tenant-1",
     tenantName: "Tenant 1",
     environment: "development",
-    isPooledDeploy: false,
     deployApiLambda: buildStubLambda(stack, "StubDeploy"),
     eventApiLambda: buildStubLambda(stack, "StubEvent"),
     competitorAccountsApiLambda: buildStubLambda(stack, "StubCompetitorAccounts"),
     ...(features ? { features } : {}),
-    apiKeyConfig: {
-      ssmParameterNames: {
-        basic: { keyId: "basic-id", value: "basic-val" },
-        standard: { keyId: "standard-id", value: "standard-val" },
-        premium: { keyId: "premium-id", value: "premium-val" },
-        platinum: { keyId: "platinum-id", value: "platinum-val" },
-      },
-      ssmLookup: (name: string) => `SSM:${name}`,
-    },
   });
   return Template.fromStack(stack);
 }
 
 describe("buildAppPlaneCore", () => {
   it("should generate ApplicationAdminConsoleHosting / IdentityProvider / ApiGateway directly under the Stack (= 0 CFn physical diff invariant)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // builder は scope = stack に対して 3 つの sub-construct を生成する。
     // 各 sub-construct は内部に複数の CFn resource を持つ。 stack 直下に下記が存在することで
     // logical ID パスが旧 TenantTemplateStack と一致していることを確認する。
@@ -83,14 +76,14 @@ describe("buildAppPlaneCore", () => {
   });
 
   it("should create 1 BucketDeployment custom resource for runtime-config.json (evidence that deployRuntimeConfig was invoked)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // BucketDeployment は AWS::CloudFormation::CustomResource として template に乗る。
     // hosting の runtime-config.json が apiGateway 確定後に配置されることを示す。
     template.hasResource("Custom::CDKBucketDeployment", Match.objectLike({}));
   });
 
   it("UserPoolClient callback URL should reference the ApplicationAdminConsoleHosting distribution URL", () => {
-    const template = synth();
+    const template = defaultTemplate;
     // UserPoolClient の CallbackURLs / LogoutURLs に CloudFront distribution domain への
     // Fn::Join 参照が入る (= 順序依存)。 hosting が先に作られて identity に URL を渡す
     // フローが壊れていないか確認する。 string では引けない (= CDK token なので) ため、
@@ -108,7 +101,7 @@ describe("buildAppPlaneCore", () => {
   // CFn 物理差分が 0 件であることを機械的に保証する。
 
   it("should NOT attach a Pre-Token Generation Lambda when liteAdminClaimsInjection is not set (SaaS mode regression guard)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     const userPools = template.findResources("AWS::Cognito::UserPool");
     const userPool = Object.values(userPools)[0];
     const lambdaConfig = (userPool?.Properties as { LambdaConfig?: Record<string, unknown> })
@@ -128,20 +121,10 @@ describe("buildAppPlaneCore", () => {
       tenantId: "tenant-1",
       tenantName: "Tenant 1",
       environment: "development",
-      isPooledDeploy: false,
       deployApiLambda: buildStubLambda(stack, "StubDeploy"),
       eventApiLambda: buildStubLambda(stack, "StubEvent"),
       competitorAccountsApiLambda: buildStubLambda(stack, "StubCompetitorAccounts"),
       liteAdminClaimsInjection: true,
-      apiKeyConfig: {
-        ssmParameterNames: {
-          basic: { keyId: "basic-id", value: "basic-val" },
-          standard: { keyId: "standard-id", value: "standard-val" },
-          premium: { keyId: "premium-id", value: "premium-val" },
-          platinum: { keyId: "platinum-id", value: "platinum-val" },
-        },
-        ssmLookup: (name: string) => `SSM:${name}`,
-      },
     });
     const template = Template.fromStack(stack);
     // #1358: V2 trigger を採用すると Cognito UserPool は LambdaConfig.PreTokenGenerationConfig
@@ -176,19 +159,9 @@ describe("buildAppPlaneCore", () => {
       tenantId: "tenant-1",
       tenantName: "Tenant 1",
       environment: "development",
-      isPooledDeploy: false,
       deployApiLambda: buildStubLambda(stack, "StubDeploy"),
       eventApiLambda: buildStubLambda(stack, "StubEvent"),
       competitorAccountsApiLambda: buildStubLambda(stack, "StubCompetitorAccounts"),
-      apiKeyConfig: {
-        ssmParameterNames: {
-          basic: { keyId: "b", value: "b" },
-          standard: { keyId: "s", value: "s" },
-          premium: { keyId: "p", value: "p" },
-          platinum: { keyId: "pl", value: "pl" },
-        },
-        ssmLookup: () => "SSM:x",
-      },
     });
     expect(handles.applicationAdminConsoleUrl).toBe(
       handles.applicationAdminConsoleHosting.distributionUrl,
@@ -198,7 +171,7 @@ describe("buildAppPlaneCore", () => {
   // Issue #1340 Phase 2: SAML attach の挙動 (= 未指定で no-op、 指定時のみ provider + allowlist 配線)。
 
   it("should NOT create a UserPoolIdentityProvider when samlIdps is omitted (= no CFn physical diff for existing tenants)", () => {
-    const template = synth();
+    const template = defaultTemplate;
     template.resourceCountIs("AWS::Cognito::UserPoolIdentityProvider", 0);
   });
 
@@ -211,7 +184,6 @@ describe("buildAppPlaneCore", () => {
       tenantId: "tenant-1",
       tenantName: "Tenant 1",
       environment: "development",
-      isPooledDeploy: false,
       deployApiLambda: buildStubLambda(stack, "StubDeploy"),
       eventApiLambda: buildStubLambda(stack, "StubEvent"),
       competitorAccountsApiLambda: buildStubLambda(stack, "StubCompetitorAccounts"),
@@ -223,15 +195,6 @@ describe("buildAppPlaneCore", () => {
         },
       ],
       samlAdminAllowlist: ["tenant-entra/admin@acme.example"],
-      apiKeyConfig: {
-        ssmParameterNames: {
-          basic: { keyId: "b", value: "b" },
-          standard: { keyId: "s", value: "s" },
-          premium: { keyId: "p", value: "p" },
-          platinum: { keyId: "pl", value: "pl" },
-        },
-        ssmLookup: () => "SSM:x",
-      },
     });
     expect(handles.samlIdpDirectory).toEqual({ "acme.example": ["tenant-entra"] });
 
@@ -259,21 +222,11 @@ describe("buildAppPlaneCore", () => {
       tenantId: "tenant-1",
       tenantName: "Tenant 1",
       environment: "development",
-      isPooledDeploy: false,
       deployApiLambda: buildStubLambda(stack, "StubDeploy"),
       eventApiLambda: buildStubLambda(stack, "StubEvent"),
       competitorAccountsApiLambda: buildStubLambda(stack, "StubCompetitorAccounts"),
       samlIdps: [],
       samlAdminAllowlist: ["tenant-entra/admin@acme.example"],
-      apiKeyConfig: {
-        ssmParameterNames: {
-          basic: { keyId: "b", value: "b" },
-          standard: { keyId: "s", value: "s" },
-          premium: { keyId: "p", value: "p" },
-          platinum: { keyId: "pl", value: "pl" },
-        },
-        ssmLookup: () => "SSM:x",
-      },
     });
     const template = Template.fromStack(stack);
     const userPools = template.findResources("AWS::Cognito::UserPool");
@@ -300,7 +253,7 @@ describe("buildAppPlaneCore", () => {
         .sort();
     };
 
-    expect(teamCloudCredentialMethods(synth())).toEqual([]);
+    expect(teamCloudCredentialMethods(defaultTemplate)).toEqual([]);
     expect(teamCloudCredentialMethods(synth({ nonAwsRuntime: false }))).toEqual([]);
     expect(teamCloudCredentialMethods(synth({ nonAwsRuntime: true }))).toEqual([
       "DELETE",

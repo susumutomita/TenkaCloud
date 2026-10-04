@@ -1,10 +1,14 @@
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Hono } from "hono";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as teamKeys from "../../lib/problem-deploy/handlers/deploy-handler/team-key";
 import {
   createEvent,
   DuplicateInternalSlugError,
   DuplicateProblemIdError,
+  EventTeamCredentialRequiredError,
 } from "../../lib/problem-deploy/handlers/event-handler/create";
+import { registerEventRoutes } from "../../lib/problem-deploy/handlers/event-handler/routes/events";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import {
   type CreateEventRequest,
@@ -45,13 +49,13 @@ describe("CreateEventRequestSchema teams cap (event 1 row + teams must fit one 1
     );
   });
 
-  it("should reject a team carrying neither awsAccountId nor nonAwsCredentialTeamSlug (#2563)", () => {
+  it("defers native versus cloud team account validation to the captured catalog", () => {
     expect(
       CreateEventRequestSchema.safeParse({
         ...base,
         teams: [{ internalSlug: "team-1" }],
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("should accept a non-AWS team bound only by its credential teamSlug (#2563)", () => {
@@ -345,5 +349,284 @@ describe("createEvent", () => {
 
     // Nothing was written, so there are no login keys to have lost.
     expect(ddbSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("hosting-account self-test consent precedes event creation", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+  const acknowledgment = {
+    awsAccountId: "111111111111",
+    riskVersion: "hosting-account-self-test-v1" as const,
+  };
+
+  it("rejects a cloud team without credentials before generating keys or writing rows", async () => {
+    const generate = vi.spyOn(teamKeys, "generateTeamLoginKey");
+    const { shared, ddbSend } = buildShared();
+
+    await expect(
+      createEvent(
+        shared,
+        { tenantId: "tenant-a", nowMs: NOW_MS },
+        sampleRequest({ teams: [{ internalSlug: "without-credentials" }] }),
+      ),
+    ).rejects.toBeInstanceOf(EventTeamCredentialRequiredError);
+
+    expect(generate).not.toHaveBeenCalled();
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
+  it("accepts a non-AWS team credential without requiring an AWS account", async () => {
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "111111111111");
+    const { shared, ddbSend } = buildShared({
+      resolveProblemRuntimeDescriptor: () => ({
+        provider: "gcp",
+        engine: "infra-manager",
+        entry: "main.yaml",
+      }),
+    });
+    ddbSend.mockResolvedValue({});
+
+    const result = await createEvent(
+      shared,
+      { tenantId: "tenant-a", nowMs: NOW_MS },
+      sampleRequest({ teams: [{ internalSlug: "gcp-team", nonAwsCredentialTeamSlug: "gcp" }] }),
+    );
+
+    expect(result.teams[0]?.teamLoginKey).toBeTruthy();
+    const writes = firstTransactWriteCommand(ddbSend).input.TransactItems;
+    expect(writes?.[0]?.Put?.Item?.hostingAccountSelfTest).toBeUndefined();
+    expect(writes?.[1]?.Put?.Item).toMatchObject({
+      internalSlug: "gcp-team",
+      nonAwsCredentialTeamSlug: "gcp",
+    });
+  });
+
+  it.each([true, false])(
+    "requires hosting-account consent only for composites containing AWS targets: %s",
+    async (includesAws) => {
+      vi.stubEnv("CONTROL_PLANE_ACCOUNT", "111111111111");
+      const generate = vi.spyOn(teamKeys, "generateTeamLoginKey");
+      const { shared, ddbSend } = buildShared({
+        resolveProblemRuntimeDescriptor: () => ({
+          kind: "composite",
+          targets: [
+            { id: "gcp", provider: "gcp", engine: "infra-manager", entry: "main.yaml" },
+            includesAws
+              ? { id: "aws", provider: "aws", engine: "cloudformation", entry: "template.yaml" }
+              : { id: "azure", provider: "azure", engine: "bicep", entry: "main.bicep" },
+          ],
+        }),
+      });
+      ddbSend.mockResolvedValue({});
+      const pending = createEvent(
+        shared,
+        { tenantId: "tenant-a", nowMs: NOW_MS, actor: "operator-a" },
+        sampleRequest(),
+      );
+
+      if (includesAws) {
+        await expect(pending).rejects.toMatchObject({ code: "unsupported_hosting_account" });
+        expect(generate).not.toHaveBeenCalled();
+        expect(ddbSend).not.toHaveBeenCalled();
+      } else {
+        expect((await pending).teams).toHaveLength(2);
+        expect(
+          firstTransactWriteCommand(ddbSend).input.TransactItems?.[0]?.Put?.Item
+            ?.hostingAccountSelfTest,
+        ).toBeUndefined();
+      }
+    },
+  );
+
+  it("accepts consent through the real event route using the authenticated actor", async () => {
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "111111111111");
+    vi.spyOn(Date, "now").mockReturnValue(NOW_MS);
+    const generate = vi.spyOn(teamKeys, "generateTeamLoginKey");
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValue({});
+    const app = new Hono();
+    registerEventRoutes(app, shared);
+    const env = {
+      event: {
+        requestContext: {
+          authorizer: {
+            claims: {
+              sub: "operator-from-cognito",
+              "custom:tenantId": "tenant-from-cognito",
+              "custom:userRole": "TenantAdmin",
+            },
+          },
+        },
+      },
+    };
+    const post = (body: unknown) =>
+      app.request(
+        "/events",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        env,
+      );
+
+    const refused = await post(sampleRequest());
+    expect(refused.status).toBe(422);
+    expect(await refused.json()).toMatchObject({
+      error: "unsupported_hosting_account",
+      awsAccountId: acknowledgment.awsAccountId,
+    });
+    expect(generate).not.toHaveBeenCalled();
+    expect(ddbSend).not.toHaveBeenCalled();
+
+    const accepted = await post({
+      ...sampleRequest(),
+      hostingAccountSelfTest: {
+        ...acknowledgment,
+        acknowledgedBy: "forged-client-actor",
+        acknowledgedAt: "2000-01-01T00:00:00.000Z",
+      },
+    });
+    expect(accepted.status).toBe(201);
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+    const event = firstTransactWriteCommand(ddbSend).input.TransactItems?.[0]?.Put?.Item;
+    expect(event).toMatchObject({
+      tenantId: "tenant-from-cognito",
+      hostingAccountSelfTest: {
+        ...acknowledgment,
+        acknowledgedBy: "operator-from-cognito",
+        acknowledgedAt: CREATED_AT,
+      },
+    });
+    const body = await accepted.json();
+    expect(body.teams).toHaveLength(2);
+    expect(body.teams[0].teamLoginKey).toBeTruthy();
+  });
+
+  it.each([undefined, { ...acknowledgment, awsAccountId: "222222222222" }])(
+    "rejects missing or wrong-account consent without keys or writes: %s",
+    async (consent) => {
+      vi.stubEnv("CONTROL_PLANE_ACCOUNT", "111111111111");
+      const generate = vi.spyOn(teamKeys, "generateTeamLoginKey");
+      const { shared, ddbSend } = buildShared();
+      await expect(
+        createEvent(
+          shared,
+          { tenantId: "tenant-a", nowMs: NOW_MS, actor: "operator-a" },
+          sampleRequest({ hostingAccountSelfTest: consent }),
+        ),
+      ).rejects.toMatchObject({ code: "unsupported_hosting_account" });
+      expect(generate).not.toHaveBeenCalled();
+      expect(ddbSend).not.toHaveBeenCalled();
+    },
+  );
+
+  it("records only the authenticated actor and server time with the new event", async () => {
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "111111111111");
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValue({});
+    const request = CreateEventRequestSchema.parse({
+      ...sampleRequest(),
+      hostingAccountSelfTest: {
+        ...acknowledgment,
+        acknowledgedBy: "spoofed",
+        acknowledgedAt: "2000-01-01T00:00:00Z",
+        eventId: "other-event",
+      },
+    });
+    await createEvent(
+      shared,
+      { tenantId: "tenant-a", nowMs: NOW_MS, actor: "operator-a" },
+      request,
+    );
+    const event = firstTransactWriteCommand(ddbSend).input.TransactItems?.[0]?.Put?.Item;
+    expect(event?.hostingAccountSelfTest).toEqual({
+      ...acknowledgment,
+      acknowledgedBy: "operator-a",
+      acknowledgedAt: CREATED_AT,
+    });
+  });
+
+  it("rejects consent without an authenticated actor", async () => {
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "111111111111");
+    const { shared, ddbSend } = buildShared();
+    await expect(
+      createEvent(
+        shared,
+        { tenantId: "tenant-a", nowMs: NOW_MS },
+        sampleRequest({ hostingAccountSelfTest: acknowledgment }),
+      ),
+    ).rejects.toMatchObject({ code: "unsupported_hosting_account" });
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
+  it("accepts a separate shared competitor account across team regions without consent", async () => {
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "999999999999");
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValue({});
+    const result = await createEvent(
+      shared,
+      { tenantId: "tenant-a", nowMs: NOW_MS },
+      sampleRequest({
+        teams: [
+          { internalSlug: "alpha", awsAccountId: "111111111111", region: "ap-northeast-1" },
+          { internalSlug: "beta", awsAccountId: "111111111111", region: "us-east-1" },
+        ],
+      }),
+    );
+    expect(result.teams).toHaveLength(2);
+    expect(
+      firstTransactWriteCommand(ddbSend).input.TransactItems?.[0]?.Put?.Item
+        ?.hostingAccountSelfTest,
+    ).toBeUndefined();
+  });
+
+  it("keeps native Battle without AWS credentials available", async () => {
+    vi.stubEnv("CONTROL_PLANE_ACCOUNT", "111111111111");
+    const executionCatalog: NonNullable<EventSharedResources["executionCatalog"]> = {
+      version: 1,
+      catalogKey: `catalogs/${"a".repeat(64)}.json`,
+      catalog: { "ac26-crypto-battle": "problems/battles/ac26-crypto-battle" },
+      nativeProblems: [
+        {
+          problemId: "ac26-crypto-battle",
+          kind: "coordination",
+          problemDir: "problems/battles/ac26-crypto-battle",
+          artifactDigest: "a".repeat(64),
+          pluginKey: `plugins/${"a".repeat(64)}.mjs`,
+          stateBudget: { bytesPerTeam: 100, baseBytes: 0 },
+          name: "Crypto",
+          description: "Native battle",
+          instructions: "Play",
+        },
+      ],
+      scoring: {},
+      hints: {},
+      endpoints: {},
+      phases: {},
+      visibility: {},
+      runtimes: {},
+      disruptions: {},
+      writeups: {},
+      provenance: {},
+      coordination: {},
+      plugins: {},
+      sources: {},
+      sourceArchive: { bucket: "test", key: "source.zip", versionId: "1" },
+    };
+    const { shared, ddbSend } = buildShared({ executionCatalog });
+    ddbSend.mockResolvedValue({});
+    const result = await createEvent(
+      shared,
+      { tenantId: "tenant-a", nowMs: NOW_MS },
+      sampleRequest({
+        teams: [{ internalSlug: "self" }],
+        problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "ap-northeast-1" }],
+      }),
+    );
+    expect(result.teams).toHaveLength(1);
   });
 });

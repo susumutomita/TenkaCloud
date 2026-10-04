@@ -41,7 +41,7 @@ const submitBtn = () =>
   screen.getByRole("button", { name: "competitor_accounts.add_modal_submit" });
 
 beforeEach(() => {
-  mockUseApiClient.mockReturnValue({ fetch: vi.fn() });
+  mockUseApiClient.mockReturnValue({ fetch: vi.fn(), cloudOrganizerRole: "Admin" });
   mockCreate.mockReset().mockResolvedValue({
     tenkaCloudAccountId: "999988887777",
     externalId: "ext-123",
@@ -52,6 +52,25 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("AddAccountModal", () => {
+  it("uses the installation-provided role in the existing modal and request", async () => {
+    const role = `TenkaCloud-${"a".repeat(24)}-deploy-Role`;
+    render(<AddAccountModal {...props({ config: { ...config, competitorRoleName: role } })} />);
+    expect(screen.getByDisplayValue(role)).toBeDisabled();
+    fireEvent.change(accountInput(), { target: { value: "123456789012" } });
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ competitorRoleName: role }),
+    );
+  });
+  it.each(["Operator", "Viewer"])("keeps cloud %s connection changes disabled", (role) => {
+    mockUseApiClient.mockReturnValue({ fetch: vi.fn(), cloudOrganizerRole: role });
+    render(<AddAccountModal {...props()} />);
+    fireEvent.change(accountInput(), { target: { value: "123456789012" } });
+    expect(submitBtn()).toBeDisabled();
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
   it("should keep submit disabled until a 12-digit account id is entered", () => {
     render(<AddAccountModal {...props()} />);
     expect(submitBtn()).toBeDisabled(); // empty

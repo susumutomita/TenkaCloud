@@ -16,7 +16,8 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers"
  * 差し替えるので実 SDK は不要。
  */
 
-vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
+vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
   queryTeamItems: vi.fn(),
 }));
 

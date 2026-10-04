@@ -48,6 +48,7 @@ export interface CoordinationDispatcherLambdaProps {
    * 省略時は importer 未配線 → 全 route `unavailable`。
    */
   readonly pluginBucket?: IBucket;
+  readonly pluginKeyPattern?: string;
   /**
    * [Issue #3152] Bucket holding immutable submission artifacts (proofs,
    * ciphertexts, transcripts). The dispatcher reads and writes ONLY under
@@ -188,7 +189,7 @@ export class CoordinationDispatcherLambda extends Construct {
 
     // レビュー済み plugin bundle を読むための bucket access。同一 process で実行する plugin は
     // Lambda role を共有し、DynamoDB backend では table-wide Query / GetItem / PutItem も実行できる。
-    props.pluginBucket?.grantRead(this.fn);
+    props.pluginBucket?.grantRead(this.fn, props.pluginKeyPattern ?? "*");
 
     // [Issue #3152] Read/write, scoped to the coordination prefix rather than the
     // whole bucket. Delete is included because this Lambda withdraws its OWN
@@ -214,7 +215,7 @@ export class CoordinationDispatcherLambda extends Construct {
       cors: {
         allowedOrigins: ["*"],
         allowedMethods: [HttpMethod.GET, HttpMethod.POST],
-        allowedHeaders: ["content-type", "authorization"],
+        allowedHeaders: ["content-type", "authorization", "idempotency-key"],
         maxAge: Duration.minutes(10),
       },
     });

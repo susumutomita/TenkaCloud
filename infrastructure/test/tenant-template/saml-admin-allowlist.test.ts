@@ -5,13 +5,29 @@ import { describe, expect, it } from "vitest";
 import {
   attachTenantFederatedAdminAllowlist,
   parseTenantAdminAllowlist,
-} from "../../lib/tenant-template/saml-admin-allowlist";
+} from "../../lib/tenant-template/saml-admin-allowlist.js";
 
 /**
  * Issue #1340 Phase 2: per-tenant federated TenantAdmin allowlist wrapper の動作と
  * tenant 既定 envVarName (`TENANT_SAML_ADMIN_ALLOWLIST`) を pinning する。
  */
 describe("parseTenantAdminAllowlist (#1340)", () => {
+  it("validates the legacy email shape without ambiguous regex backtracking", () => {
+    for (const email of ["a@example.com", "a@a.b.", "a@.a.b", "a@a..b"]) {
+      expect(parseTenantAdminAllowlist(`corp-entra/${email}`)).toEqual([`corp-entra/${email}`]);
+    }
+    for (const email of [
+      "a@.b",
+      "a@a.",
+      "@a.b",
+      "a@@a.b",
+      "a@a/b.c",
+      `a@${".".repeat(100_000)}/`,
+    ]) {
+      expect(() => parseTenantAdminAllowlist(`corp-entra/${email}`)).toThrow(/email is invalid/u);
+    }
+  });
+
   it("should return empty array for undefined / empty input (= fail-safe = deny all federated)", () => {
     expect(parseTenantAdminAllowlist(undefined)).toEqual([]);
     expect(parseTenantAdminAllowlist("")).toEqual([]);

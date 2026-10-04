@@ -12,7 +12,12 @@ import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
 import { useConsoleAccess } from "../components/useConsoleAccess";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
-import { externalPortalUrl, problemProvider, providerLabel } from "../data/providers";
+import {
+  externalPortalUrl,
+  hasAwsAccessCapability,
+  problemProvider,
+  providerLabel,
+} from "../data/providers";
 import { useT } from "../i18n";
 
 /**
@@ -40,6 +45,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
   const sessionToken = auth.session?.sessionToken ?? null;
   const { view, error } = useTeamView();
   const isMock = useIsMock();
+  const accessProblems = view?.problems.filter((problem) => problemProvider(problem) !== "native");
   const { openConsole, pending, error: openError, dismissError } = useConsoleAccess(config);
 
   return (
@@ -74,7 +80,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
 
       {!isMock && !view && !error && <Box>{t("app.loading")}</Box>}
 
-      {view && view.problems.length === 0 && (
+      {view && accessProblems?.length === 0 && (
         <Container>
           <Box textAlign="center" padding="l">
             <Box variant="strong">{t("sso_credentials.empty_problems")}</Box>
@@ -86,7 +92,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
           して external-portal 対象として表示する (アクセス導線の配信は RC-32 第3弾)。
           以前の `.filter((p) => p.awsAccountId)` は非 AWS 行 (deploy request 由来の
           awsAccountId を持つ) に AWS Console ボタンを誤表示していた。 */}
-      {view?.problems.map((problem) =>
+      {accessProblems?.map((problem) =>
         problemProvider(problem) === "aws" ? (
           <Container
             key={problem.jobId}
@@ -94,18 +100,20 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
               <Header
                 variant="h2"
                 actions={
-                  <Button
-                    variant="primary"
-                    iconName="external"
-                    loading={pending === problem.jobId}
-                    disabled={pending !== null && pending !== problem.jobId}
-                    ariaLabel={t("sso_credentials.open_console_aria", {
-                      problemId: problem.problemId,
-                    })}
-                    onClick={() => void openConsole(problem.jobId)}
-                  >
-                    {t("sso_credentials.open_console_button")}
-                  </Button>
+                  hasAwsAccessCapability(problem, "console") && (
+                    <Button
+                      variant="primary"
+                      iconName="external"
+                      loading={pending === problem.jobId}
+                      disabled={pending !== null && pending !== problem.jobId}
+                      ariaLabel={t("sso_credentials.open_console_aria", {
+                        problemId: problem.problemId,
+                      })}
+                      onClick={() => void openConsole(problem.jobId)}
+                    >
+                      {t("sso_credentials.open_console_button")}
+                    </Button>
+                  )
                 }
               >
                 <code>{problem.problemId}</code>
@@ -113,6 +121,10 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
             }
           >
             <SpaceBetween size="m">
+              {!hasAwsAccessCapability(problem, "console") &&
+                !hasAwsAccessCapability(problem, "cli-credentials") && (
+                  <Box>{t("sso_credentials.aws_access_unavailable")}</Box>
+                )}
               <KeyValuePairs
                 columns={2}
                 items={[
@@ -123,7 +135,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
                   { label: t("sso_credentials.label_region"), value: problem.region },
                 ]}
               />
-              {sessionToken && (
+              {sessionToken && hasAwsAccessCapability(problem, "cli-credentials") && (
                 <CliCredentialsPanel
                   apiBaseUrl={config.apiBaseUrl}
                   sessionToken={sessionToken}

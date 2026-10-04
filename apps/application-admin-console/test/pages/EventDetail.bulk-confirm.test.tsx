@@ -5,7 +5,7 @@
  * 同時に blast radius (= 何 team × 何 problem の削除か) を Alert で明示する。
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,6 +30,7 @@ vi.mock("../../src/api/events-client", async (importOriginal) => {
   };
 });
 
+import { ApiError } from "../../src/api/client";
 import type { EventDetail } from "../../src/api/events-client";
 import type { AppConfig } from "../../src/config";
 
@@ -66,12 +67,12 @@ const baseDetail: EventDetail = {
 const { EventDetailPage } = await import("../../src/pages/EventDetail");
 const { I18nProvider } = await import("../../src/i18n");
 
-function renderPage() {
+function renderPage(pageConfig = config) {
   return render(
     <I18nProvider>
       <MemoryRouter initialEntries={[`/events/${EVENT_ID}`]}>
         <Routes>
-          <Route path="/events/:eventId" element={<EventDetailPage config={config} />} />
+          <Route path="/events/:eventId" element={<EventDetailPage config={pageConfig} />} />
         </Routes>
       </MemoryRouter>
     </I18nProvider>,
@@ -93,6 +94,70 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("EventDetail existing-event self-test consent", () => {
+  // The full-page cancel/reopen/confirm flow takes about 4 s under CI coverage.
+  // Keep bounded DOM waits while giving this scenario its own 10 s budget.
+  it("confirms and deploys an existing event through the real HTTP client without recreating it", async () => {
+    const { createCoreApiClient } = await import("@tenkacloud/web-kit");
+    const detail: EventDetail = { ...baseDetail, status: "DRAFT", expiresAt: 4_102_444_800 };
+    mocks.getEvent.mockResolvedValue(detail);
+    window.localStorage.setItem("tenkacloud.application-admin.locale", "en");
+    const requests: { body: Record<string, unknown>; headers: Headers }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(new URL(String(input)).pathname).toBe(`/api/events/${EVENT_ID}/deploy`);
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        requests.push({ body, headers: new Headers(init?.headers) });
+        return body.hostingAccountSelfTest
+          ? Response.json({ eventId: EVENT_ID, enqueued: 2, skipped: 0, failed: 0 })
+          : Response.json(
+              { error: "unsupported_hosting_account", awsAccountId: "111111111111" },
+              { status: 422 },
+            );
+      }),
+    );
+    try {
+      mocks.useApiClient.mockReturnValue(
+        createCoreApiClient("https://synthetic.invalid/api", "synthetic-id-token"),
+      );
+      renderPage();
+      fireEvent.click(await screen.findByRole("tab", { name: "Schedule" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Deploy now" }));
+      expect(
+        await screen.findByRole("button", { name: "Accept risk and deploy" }),
+      ).toBeInTheDocument();
+      expect(requests).toHaveLength(1);
+      fireEvent.click(
+        within(screen.getByTestId("self-test-prompt")).getByRole("button", { name: "Cancel" }),
+      );
+      expect(
+        screen.queryByRole("button", { name: "Accept risk and deploy" }),
+      ).not.toBeInTheDocument();
+      expect(requests).toHaveLength(1);
+      expect(mocks.getEvent).toHaveBeenCalledOnce();
+      fireEvent.click(screen.getByRole("button", { name: "Deploy now" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Accept risk and deploy" }));
+      await waitFor(() => expect(mocks.getEvent).toHaveBeenCalledTimes(2));
+      expect(requests).toHaveLength(3);
+      expect(requests[2]?.body).toEqual({
+        hostingAccountSelfTest: {
+          awsAccountId: "111111111111",
+          riskVersion: "hosting-account-self-test-v1",
+        },
+      });
+      expect(requests[2]?.headers.get("authorization")).toBe("Bearer synthetic-id-token");
+      expect(requests[2]?.headers.get("Idempotency-Key")).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Accept risk and deploy" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }, 10_000);
+});
 
 describe("EventDetail bulk teardown confirm dialog #1350", () => {
   it("should show the blast radius alert with team / problem counts", async () => {
@@ -148,4 +213,93 @@ describe("EventDetail bulk teardown confirm dialog #1350", () => {
     const confirm = screen.getByTestId("modal-teardown-confirm");
     await waitFor(() => expect(confirm).not.toBeDisabled());
   });
+
+  it.each(["pending", undefined] as const)(
+    "retries archived cleanup with purge state %s through typed confirmation and disables it after completion",
+    async (purgeState) => {
+      const pending: EventDetail = {
+        ...baseDetail,
+        status: "ARCHIVED",
+        nativeRuns: [
+          {
+            runId: "run-1",
+            problemId: "ac26-crypto-battle",
+            status: "CLOSED",
+            revision: 3,
+            purgeState,
+          },
+        ],
+      };
+      const complete: EventDetail = {
+        ...pending,
+        nativeRuns: pending.nativeRuns?.map((run) => ({ ...run, purgeState: "complete" })),
+      };
+      const delJson = vi
+        .fn()
+        .mockRejectedValueOnce(new ApiError(409, '{"error":"coordination_purge_conflict"}'))
+        .mockResolvedValueOnce({ eventId: EVENT_ID, enqueued: 0, skipped: 0, failed: 0 });
+      mocks.useApiClient.mockReturnValue({ delJson });
+      const actual = await vi.importActual<typeof import("../../src/api/events-client")>(
+        "../../src/api/events-client",
+      );
+      mocks.bulkTeardownEvent.mockImplementation(actual.bulkTeardownEvent);
+      mocks.getEvent.mockResolvedValueOnce(pending).mockResolvedValue(complete);
+      renderPage({ ...config, mode: "cloud-host" });
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
+      const cleanup = await screen.findByRole("button", { name: "即座に撤去" });
+      expect(cleanup).toBeEnabled();
+      await user.click(cleanup);
+      expect(screen.getByTestId("modal-teardown-confirm")).toBeDisabled();
+      fireEvent.change(await screen.findByPlaceholderText("DELETE"), {
+        target: { value: "DELETE" },
+      });
+      await user.click(screen.getByTestId("modal-teardown-confirm"));
+      expect(delJson).toHaveBeenCalledExactlyOnceWith(`events/${EVENT_ID}`);
+      expect(
+        await screen.findByText('API 409: {"error":"coordination_purge_conflict"}'),
+      ).toBeInTheDocument();
+      expect(mocks.getEvent).toHaveBeenCalledOnce();
+      expect(cleanup).toBeEnabled();
+      await user.click(cleanup);
+      fireEvent.change(await screen.findByPlaceholderText("DELETE"), {
+        target: { value: "DELETE" },
+      });
+      await user.click(screen.getByTestId("modal-teardown-confirm"));
+      await waitFor(() => expect(mocks.getEvent).toHaveBeenCalledTimes(2));
+      expect(delJson).toHaveBeenNthCalledWith(2, `events/${EVENT_ID}`);
+      await waitFor(() => expect(cleanup).toBeDisabled());
+      expect(
+        screen.queryByText('API 409: {"error":"coordination_purge_conflict"}'),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["pending", undefined] as const)(
+    "keeps archived cleanup with purge state %s disabled for read-only organizers",
+    async (purgeState) => {
+      mocks.getEvent.mockResolvedValue({
+        ...baseDetail,
+        status: "ARCHIVED",
+        nativeRuns: [
+          {
+            runId: "run-1",
+            problemId: "ac26-crypto-battle",
+            status: "CLOSED",
+            revision: 3,
+            purgeState,
+          },
+        ],
+      });
+      mocks.useApiClient.mockReturnValue({
+        tenantAccess: { canMutateTenant: false },
+        cloudOrganizerRole: "Viewer",
+      });
+      renderPage({ ...config, mode: "cloud-host" });
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
+      expect(await screen.findByRole("button", { name: "即座に撤去" })).toBeDisabled();
+      expect(mocks.bulkTeardownEvent).not.toHaveBeenCalled();
+    },
+  );
 });

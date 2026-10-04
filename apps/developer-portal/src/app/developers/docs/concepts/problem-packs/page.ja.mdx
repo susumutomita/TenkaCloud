@@ -2,23 +2,20 @@ import { MaturityBadge } from "@/components/MaturityBadge";
 
 export const metadata = { title: "問題パック" };
 
-# 問題パック <MaturityBadge level="stable" />
+# 問題パック <MaturityBadge level="preview" />
 
-**問題パック**は、TenkaCloud における競技コンテンツの単位です。
+pack は競技の内容を version ごとに確認・保存する単位です。manifest に識別情報、必要な runtime、問題ファイルを記述します。artifact は runtime によって異なり、CloudFormation template はその一例です。
 
 ## 問題パックとは
 
-各パックには、メタデータ、競技者アカウントへ直接デプロイされる単一ページの
-CloudFormation テンプレート、およびオプションのポータルプラグインが含まれます。
+現在の CLI は雛形作成、検証、内容確認、不変 revision の保存を行えます。install や activate では現在の大会カタログへ追加されません。activation はオフラインのカタログ記録であり、現行の競技実行手順ではありません。
 
 ## Battle と Challenge
 
-- **Battle** パックは、リアルタイムの対戦形式です。
-- **Challenge** パックは、自分のペースで取り組める常設形式です。
+Challenge と Battle は操作と採点の形式であり、実行場所とは別です。旧ローカル Compose 問題はすべて Challenge 競技へ対応させる方針です。汎用カタログ・workbench の復旧と terminal・ブラウザ検証は進行中です。
 
-## スコアリング種別
+## 採点方式
 
-スコアリングは、6 つの組み込み種別 — `flag`、`multi-flag`、`uptime-flat`、
-`uptime-multi`、`phased-polling`、`attack-detection` — のいずれか 1 つを問題ごとに使用します。
+schema の受理だけでは実行対応を証明できません。ローカルカタログは verify / multi-verify、確認対象の AWS 例は flag / uptime-flat を使います。他の SDK の形式や外部 pack の runtime を、検証成功だけでプレイ可能と案内しないでください。[実行状況](/developers/docs/reference/runtime-matrix/)を参照します。
 
-[はじめに](/developers/docs/getting-started/)に戻る。
+[最初の pack](/developers/docs/tutorials/first-pack/)または[既存 pack](/developers/docs/operate/use-existing-pack/)へ進んでください。

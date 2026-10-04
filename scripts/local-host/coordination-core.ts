@@ -7,7 +7,7 @@ import {
 import {
   pluginStateSchemaVersion,
   reconcileStateSchema,
-} from "../../infrastructure/lib/problem-deploy/handlers/participant-handler/coordination-state-schema";
+} from "../lib/coordination-state-schema.js";
 
 export type HostPlugin = CoordinationPlugin<unknown, unknown>;
 export interface LocalMatch {

@@ -1326,3 +1326,52 @@ describe("create-stack Lambda handler configuration (#2291)", () => {
     }
   });
 });
+
+describe("acknowledged hosting-account CFn dispatch", () => {
+  const acknowledged = () =>
+    validDetail({
+      eventId: "event-self-test",
+      hostingAccountSelfTest: {
+        awsAccountId: "123456789012",
+        riskVersion: "hosting-account-self-test-v1",
+        acknowledgedBy: "operator-a",
+        acknowledgedAt: "2026-10-03T00:00:00.000Z",
+        eventId: "event-self-test",
+        tenantId: "tenant-acme",
+        jobId: VALID_JOB_ID,
+      },
+    });
+  it("requires AssumeRole with ExternalId, never host credential fallback", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const deps = { ...crossAccountDeps(cfn), tenkaCloudAccountId: "123456789012" };
+    await createStackForDeployment({ detail: acknowledged() }, deps);
+    expect(deps._stsSend.mock.calls[0]?.[0].input).toMatchObject({
+      RoleArn: validDetail().competitorRoleArn,
+      ExternalId: "external-id-secret-value",
+    });
+    expect(deps.cfnClient.mock.calls[0]?.[0].credentials).toBeDefined();
+    const create = cfn.send.mock.calls
+      .map(([command]) => command)
+      .find((command) => command instanceof CreateStackCommand) as CreateStackCommand;
+    expect(create.input.RoleARN).toBeUndefined();
+  });
+  it.each([
+    { hostingAccountSelfTest: undefined },
+    { eventId: "wrong-event" },
+    { tenantId: "wrong-tenant" },
+    { jobId: "wrong-job" },
+    { competitorRoleArn: undefined },
+    { externalIdParameterName: undefined },
+    { competitorRoleArn: "arn:aws:iam::999999999999:role/TenkaCloud-Other" },
+  ])("rejects mismatched scope or missing role before artifacts/AWS: %s", async (override) => {
+    const cfn = fakeCfn({ describeResponses: [], commands: [] });
+    const deps = { ...crossAccountDeps(cfn), tenkaCloudAccountId: "123456789012" };
+    await expect(
+      createStackForDeployment({ detail: { ...acknowledged(), ...override } }, deps),
+    ).rejects.toThrow();
+    expect(deps.resolveArtifacts).not.toHaveBeenCalled();
+    expect(deps._ssmSend).not.toHaveBeenCalled();
+    expect(deps._stsSend).not.toHaveBeenCalled();
+    expect(cfn.send).not.toHaveBeenCalled();
+  });
+});

@@ -1,191 +1,163 @@
 #!/usr/bin/env bash
-# Build the local source.zip consumed by CodeBuild without touching AWS.
-# prepare-source-bundle.sh owns remote bucket setup and upload; this script owns
-# the deterministic local packaging contract so it can be tested with fixtures.
+# Build the source.zip consumed by CodeBuild without installing dependencies or
+# touching AWS. Only the two host applications' built distributions are included.
 set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SOURCE_BUNDLE_ROOT="${SOURCE_BUNDLE_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
-SOURCE_BUNDLE_WORK_DIR="${SOURCE_BUNDLE_WORK_DIR:-${SOURCE_BUNDLE_ROOT}/.cache/source-bundle}"
-SOURCE_BUNDLE_STAGING_DIR="${SOURCE_BUNDLE_WORK_DIR}/staging"
-SOURCE_BUNDLE_ARCHIVE_PATH="${SOURCE_BUNDLE_ARCHIVE_PATH:-${SOURCE_BUNDLE_WORK_DIR}/source.zip}"
-SOURCE_BUNDLE_MAX_STAGING_MB="${SOURCE_BUNDLE_MAX_STAGING_MB:-256}"
-SOURCE_BUNDLE_MAX_ARCHIVE_MB="${SOURCE_BUNDLE_MAX_ARCHIVE_MB:-128}"
+export SOURCE_BUNDLE_ROOT="${SOURCE_BUNDLE_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+export SOURCE_BUNDLE_WORK_DIR="${SOURCE_BUNDLE_WORK_DIR:-${SOURCE_BUNDLE_ROOT}/.cache/source-bundle}"
+export SOURCE_BUNDLE_ARCHIVE_PATH="${SOURCE_BUNDLE_ARCHIVE_PATH:-${SOURCE_BUNDLE_WORK_DIR}/source.zip}"
 
-case "${SOURCE_BUNDLE_WORK_DIR}" in
-  "" | "/" | "${SOURCE_BUNDLE_ROOT}")
-    echo "[package-source-bundle] ERROR: unsafe SOURCE_BUNDLE_WORK_DIR=${SOURCE_BUNDLE_WORK_DIR}" >&2
-    exit 1
-    ;;
-esac
+python3 - <<'PY'
+import fnmatch
+import json
+import os
+from pathlib import Path
+import shutil
+import stat
+import sys
+import zipfile
 
-case "${SOURCE_BUNDLE_WORK_DIR}" in
-  /*) ;;
-  *)
-    echo "[package-source-bundle] ERROR: SOURCE_BUNDLE_WORK_DIR must be absolute" >&2
-    exit 1
-    ;;
-esac
 
-if [ -L "${SOURCE_BUNDLE_WORK_DIR}" ]; then
-  echo "[package-source-bundle] ERROR: SOURCE_BUNDLE_WORK_DIR must not be a symlink" >&2
-  exit 1
-fi
+def fail(message):
+    sys.exit('[package-source-bundle] ERROR: ' + message)
 
-case "${SOURCE_BUNDLE_ARCHIVE_PATH}" in
-  "${SOURCE_BUNDLE_WORK_DIR}/"*) ;;
-  *)
-    echo "[package-source-bundle] ERROR: archive path must stay inside work directory" >&2
-    exit 1
-    ;;
-esac
 
-case "${SOURCE_BUNDLE_ARCHIVE_PATH}" in
-  "${SOURCE_BUNDLE_STAGING_DIR}" | "${SOURCE_BUNDLE_STAGING_DIR}/"*)
-    echo "[package-source-bundle] ERROR: archive path must be outside staging directory" >&2
-    exit 1
-    ;;
-esac
+def checked_path(raw, description):
+    path = Path(raw)
+    if not path.is_absolute():
+        fail(description + ' must be absolute')
+    if '..' in path.parts:
+        fail(description + ' must not contain parent traversal')
+    for item in (path, *path.parents):
+        if item.is_symlink():
+            fail(description + ' must not contain a symlink')
+    return path.resolve()
 
-for value in SOURCE_BUNDLE_MAX_STAGING_MB SOURCE_BUNDLE_MAX_ARCHIVE_MB; do
-  if ! [[ "${!value}" =~ ^[1-9][0-9]*$ ]]; then
-    echo "[package-source-bundle] ERROR: ${value} must be a positive integer" >&2
-    exit 1
-  fi
-done
 
-clean_work_dir() {
-  if [ -d "${SOURCE_BUNDLE_WORK_DIR}" ]; then
-    find "${SOURCE_BUNDLE_WORK_DIR}" -depth -mindepth 1 -delete
-  fi
-}
+root = checked_path(os.environ['SOURCE_BUNDLE_ROOT'], 'SOURCE_BUNDLE_ROOT')
+work = checked_path(os.environ['SOURCE_BUNDLE_WORK_DIR'], 'SOURCE_BUNDLE_WORK_DIR')
+archive = checked_path(os.environ['SOURCE_BUNDLE_ARCHIVE_PATH'], 'archive path')
+if work == root or work in root.parents or work == Path('/'):
+    fail('unsafe SOURCE_BUNDLE_WORK_DIR')
+if root in work.parents and root / '.cache' not in work.parents:
+    fail('repository work directory must be inside .cache')
+if work not in archive.parents:
+    fail('archive path must stay inside work directory')
+staging = work / 'staging'
+if archive == staging or staging in archive.parents:
+    fail('archive path must be outside staging directory')
+marker = work / '.tenkacloud-source-bundle'
+if archive == marker:
+    fail('archive path must not overwrite the work directory marker')
+if work.exists() and not work.is_dir():
+    fail('SOURCE_BUNDLE_WORK_DIR must be a directory')
+# Never clear an arbitrary existing directory, even if a caller chooses it.
+if work.exists() and any(work.iterdir()) and not marker.is_file():
+    fail('nonempty work directory is not owned by source-bundle packaging')
+if marker.is_symlink() or (marker.exists() and marker.read_text() != str(root)):
+    fail('work directory marker does not match SOURCE_BUNDLE_ROOT')
 
-RSYNC_EXCLUDES=(
-  --exclude=node_modules
-  --exclude='cdk.out*'
-  --exclude=dist
-  --exclude=coverage
-  --exclude=.cache
-  --exclude=.git
-  --exclude='.env*'
-  --exclude=.DS_Store
+
+def limit(name, default):
+    raw = os.environ.get(name, str(default))
+    if not raw.isdecimal() or int(raw) < 1:
+        fail(name + ' must be a positive integer')
+    return int(raw) * 1024 * 1024
+
+
+max_staging = limit('SOURCE_BUNDLE_MAX_STAGING_MB', 256)
+max_archive = limit('SOURCE_BUNDLE_MAX_ARCHIVE_MB', 128)
+# Used by preparation to validate cleanup targets before setting an EXIT trap.
+if os.environ.get('SOURCE_BUNDLE_VALIDATE_ONLY') == '1':
+    sys.exit(0)
+if os.environ.get('SOURCE_BUNDLE_CLEANUP_ONLY') == '1':
+    if marker.exists():
+        shutil.rmtree(work)
+    sys.exit(0)
+
+excluded = (
+    'node_modules', 'cdk.out*', 'dist', 'coverage', '.cache', '.git', '.env*',
+    '.DS_Store', '.aws', '.ssh', '.npmrc', '.netrc', 'credentials',
+    '*.pem', '*.key', '*.p12', '*.pfx',
 )
 
-copy_tree() {
-  local source_dir="$1"
-  local target_dir="$2"
-  if [ ! -d "${SOURCE_BUNDLE_ROOT}/${source_dir}" ]; then
-    echo "[package-source-bundle] ERROR: required directory missing: ${source_dir}" >&2
-    exit 1
-  fi
-  echo "[package-source-bundle] copying ${source_dir}/ -> ${target_dir}/"
-  mkdir -p "${SOURCE_BUNDLE_STAGING_DIR}/${target_dir}"
-  rsync -a "${RSYNC_EXCLUDES[@]}" \
-    "${SOURCE_BUNDLE_ROOT}/${source_dir}/" "${SOURCE_BUNDLE_STAGING_DIR}/${target_dir}/"
-}
 
-# The problem catalog ships from the `problems` git submodule. An uninitialised
-# submodule leaves problems/ as an empty mount point, so copy_tree's existence
-# check passes but the bundle would carry zero problems. Every per-team deploy
-# would then abort at deploy-battles.sh's "template not found" guard BEFORE any
-# CloudFormation request is made (the failure an operator sees as a deploy that
-# "never reaches CloudFormation"). Fail loudly here instead of shipping an empty
-# catalog. metadata.json presence is the signal: every problem dir ships one.
-require_problem_catalog() {
-  local catalog_dir="${SOURCE_BUNDLE_ROOT}/problems"
-  local found
-  found="$(set +o pipefail; find "${catalog_dir}" -name metadata.json -type f 2>/dev/null | head -n 1)"
-  if [ -z "${found}" ]; then
-    echo "[package-source-bundle] ERROR: ${catalog_dir} contains no metadata.json — the problem catalog submodule is not checked out. Run 'git submodule update --init --recursive' before packaging." >&2
-    exit 1
-  fi
-}
+def is_excluded(name):
+    return any(fnmatch.fnmatch(name, pattern) for pattern in excluded)
 
-# [Problem Packs / #2459 gap 2] `.tenkacloud/pack-store` holds installed pack
-# snapshots plus the `packs-lock.json` lock file + `pack-activations.json`
-# (#2090 / #2462) — repo-root local state, gitignored (`.tenkacloud/` in
-# .gitignore), created by `pack-cli install` / `activate`. It is OPTIONAL: a
-# checkout with no packs installed has no `.tenkacloud/` directory at all, so
-# unlike copy_tree's REQUIRED-directory contract this must not fail when the
-# store is absent. When it IS present, copy failures still fail loudly like
-# every other copy_tree call (set -euo pipefail makes rsync's exit fatal) —
-# there is no silent fallback the other way. Only `pack-store` is copied, not
-# all of `.tenkacloud/` — `.tenkacloud/local/` is unrelated Docker local-play
-# state (`make local`, scripts/tenkacloud-local.ts) that has no business in a
-# CodeBuild source bundle.
-copy_pack_store_if_present() {
-  local pack_store_dir="${SOURCE_BUNDLE_ROOT}/.tenkacloud/pack-store"
-  if [ ! -d "${pack_store_dir}" ]; then
-    echo "[package-source-bundle] no .tenkacloud/pack-store found, skipping (packs are optional)"
-    return 0
-  fi
-  copy_tree ".tenkacloud/pack-store" ".tenkacloud/pack-store"
-}
 
-copy_dist() {
-  local app="$1"
-  local dist="${SOURCE_BUNDLE_ROOT}/apps/${app}/dist"
-  if [ ! -d "${dist}" ]; then
-    echo "[package-source-bundle] ERROR: required app build missing: apps/${app}/dist" >&2
-    exit 1
-  fi
-  echo "[package-source-bundle] adding apps/${app}/dist"
-  mkdir -p "${SOURCE_BUNDLE_STAGING_DIR}/apps/${app}"
-  cp -R "${dist}" "${SOURCE_BUNDLE_STAGING_DIR}/apps/${app}/"
-}
+def require_regular(source):
+    if source.is_symlink() or not source.is_file():
+        fail('source must be a regular file, not a symlink: ' + str(source.relative_to(root)))
 
-echo "[package-source-bundle] resetting work directory ${SOURCE_BUNDLE_WORK_DIR}"
-clean_work_dir
-mkdir -p "${SOURCE_BUNDLE_STAGING_DIR}"
 
-# Root allowlist: unknown repo-local directories are excluded by construction.
-copy_tree "infrastructure" "cdk"
-copy_tree "scripts" "scripts"
-copy_tree "problems" "problems"
-require_problem_catalog
-copy_tree "packages" "packages"
-copy_pack_store_if_present
-cp "${SOURCE_BUNDLE_ROOT}/.nvmrc" "${SOURCE_BUNDLE_STAGING_DIR}/.nvmrc"
-cp "${SOURCE_BUNDLE_ROOT}/package.json" "${SOURCE_BUNDLE_STAGING_DIR}/package.json"
+def copy_tree(relative, target):
+    source = root / relative
+    checked_path(str(source), 'source directory')
+    if not source.is_dir():
+        fail('required directory missing: ' + relative)
+    for directory, dirs, files in os.walk(source, followlinks=False):
+        dirs[:] = sorted(name for name in dirs if not is_excluded(name))
+        for name in dirs:
+            if (Path(directory) / name).is_symlink():
+                fail('source directory must not contain a symlink: ' + str(Path(directory) / name))
+        destination = staging / target / Path(directory).relative_to(source)
+        destination.mkdir(parents=True, exist_ok=True)
+        for name in sorted(files):
+            if not is_excluded(name):
+                item = Path(directory) / name
+                require_regular(item)
+                shutil.copy2(item, destination / name)
 
-echo "[package-source-bundle] rewriting workspace path infrastructure -> cdk"
-python3 - "${SOURCE_BUNDLE_STAGING_DIR}/package.json" <<'PY'
-import json
-import sys
 
-path = sys.argv[1]
-with open(path) as source:
-    package = json.load(source)
-package["workspaces"] = [
-    workspace if workspace != "infrastructure" else "cdk"
-    for workspace in package.get("workspaces", [])
-]
-with open(path, "w") as target:
-    json.dump(package, target, indent=2)
+work.mkdir(parents=True, exist_ok=True)
+marker.write_text(str(root))
+if staging.is_symlink():
+    fail('staging directory must not be a symlink')
+if staging.exists():
+    shutil.rmtree(staging)
+if archive.exists():
+    archive.unlink()
+try:
+    for source, target in [('infrastructure', 'cdk'), ('scripts', 'scripts'),
+                           ('problems', 'problems'), ('packages', 'packages')]:
+        copy_tree(source, target)
+    if not any((staging / 'problems').rglob('metadata.json')):
+        fail('problem catalog submodule is not checked out; run git submodule update --init --recursive')
+    pack_store = root / '.tenkacloud' / 'pack-store'
+    if pack_store.exists() or pack_store.is_symlink():
+        copy_tree('.tenkacloud/pack-store', '.tenkacloud/pack-store')
+    else:
+        print('[package-source-bundle] no .tenkacloud/pack-store found, skipping (packs are optional)')
+    for name in ['.nvmrc', 'package.json']:
+        require_regular(root / name)
+        shutil.copy2(root / name, staging / name)
+    package_path = staging / 'package.json'
+    package = json.loads(package_path.read_text())
+    package['workspaces'] = [item if item != 'infrastructure' else 'cdk'
+                             for item in package.get('workspaces', [])]
+    package_path.write_text(json.dumps(package, indent=2) + '\n')
+    for app in ['application-admin-console', 'participant-portal']:
+        copy_tree('apps/' + app + '/dist', 'apps/' + app + '/dist')
+    files = sorted(item for item in staging.rglob('*') if item.is_file())
+    size = sum(item.stat().st_size for item in files)
+    if size > max_staging:
+        fail('staged bundle exceeds limit before archive creation')
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as bundle:
+        for item in files:
+            info = zipfile.ZipInfo(item.relative_to(staging).as_posix())
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = (stat.S_IFREG | stat.S_IMODE(item.stat().st_mode)) << 16
+            bundle.writestr(info, item.read_bytes())
+    if archive.stat().st_size > max_archive:
+        fail('archive exceeds upload limit')
+    print('[package-source-bundle] archive ready at ' + str(archive))
+except BaseException:
+    if archive.is_file():
+        archive.unlink()
+    raise
+finally:
+    if staging.is_dir():
+        shutil.rmtree(staging)
 PY
-
-for app in admin-console application-admin-console participant-portal; do
-  copy_dist "${app}"
-done
-
-staging_kib="$(du -sk "${SOURCE_BUNDLE_STAGING_DIR}" | awk '{print $1}')"
-max_staging_kib="$((SOURCE_BUNDLE_MAX_STAGING_MB * 1024))"
-echo "[package-source-bundle] staged size=${staging_kib} KiB limit=${max_staging_kib} KiB"
-if [ "${staging_kib}" -gt "${max_staging_kib}" ]; then
-  echo "[package-source-bundle] ERROR: staged bundle exceeds limit before archive creation" >&2
-  exit 1
-fi
-
-echo "[package-source-bundle] creating archive ${SOURCE_BUNDLE_ARCHIVE_PATH}"
-mkdir -p "$(dirname "${SOURCE_BUNDLE_ARCHIVE_PATH}")"
-(cd "${SOURCE_BUNDLE_STAGING_DIR}" && zip -rq "${SOURCE_BUNDLE_ARCHIVE_PATH}" .)
-
-archive_bytes="$(wc -c < "${SOURCE_BUNDLE_ARCHIVE_PATH}" | tr -d '[:space:]')"
-max_archive_bytes="$((SOURCE_BUNDLE_MAX_ARCHIVE_MB * 1024 * 1024))"
-echo "[package-source-bundle] archive size=${archive_bytes} bytes limit=${max_archive_bytes} bytes"
-if [ "${archive_bytes}" -gt "${max_archive_bytes}" ]; then
-  echo "[package-source-bundle] ERROR: archive exceeds upload limit" >&2
-  exit 1
-fi
-
-echo "[package-source-bundle] archive ready at ${SOURCE_BUNDLE_ARCHIVE_PATH}"

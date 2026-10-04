@@ -2,13 +2,12 @@ import type { ProblemEndpointSlot } from "../../../utils/endpoints-metadata.js";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import {
   type ProbeFn,
-  type ProbeOptions,
   type ProbeResult,
   probeUrl,
 } from "../../runtime-clients/http-probe-client.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
-export type { ProbeFn, ProbeOptions, ProbeResult };
+export type { ProbeFn, ProbeResult };
 export { probeUrl };
 
 /** Pure scoring state shared by Lambda and the AWS-free local Simulator. */
@@ -62,7 +61,7 @@ export function parseScoringState(raw: string | undefined): DeploymentScoringSta
       ? Object.fromEntries(
           Object.entries(value.bonusAwarded as Record<string, unknown>).filter(
             ([, enabled]) => enabled === true,
-          ) as Array<[string, true]>,
+          ) as [string, true][],
         )
       : undefined;
   const attackCount = typeof value.attackCount === "number" ? value.attackCount : undefined;

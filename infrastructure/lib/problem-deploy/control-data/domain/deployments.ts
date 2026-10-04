@@ -88,6 +88,8 @@ export interface DeploymentProvenance {
  * exactly as the Teams seam handled it (#2290).
  */
 export type DeploymentRecord = {
+  /** Immutable execution artifact catalog; never inferred from the current installation. */
+  catalogKey?: string;
   jobId: string;
   problemId: string;
   tenantId: string;
@@ -296,6 +298,8 @@ export type DeploymentRecord = {
  * of truth; the physical row (`composite-deployment.ts`) adds PK/SK.
  */
 export type CompositeParentDeploymentRecord = {
+  /** Same immutable catalog as every target, including retries. */
+  catalogKey?: string;
   jobId: string;
   tenantId: string;
   problemId: string;

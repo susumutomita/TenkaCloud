@@ -34,7 +34,7 @@ export class ExerciseFixture implements RuntimeEngine {
       {
         problemId: "sqli-demo",
         name: "SQL injection exercise fixture",
-        definition: "private-fixture-descriptor",
+        definition: JSON.stringify({ fixture: "private-fixture-descriptor" }),
       },
     ];
   }

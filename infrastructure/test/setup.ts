@@ -59,11 +59,7 @@ process.env.CDK_CONTEXT_JSON = JSON.stringify({
 // here — setup runs before EVERY test file — makes the precondition belong to the suite instead
 // of to a lucky ordering. A real `vite build` overwrites it, so this has no effect on a built tree.
 const REPO_ROOT = resolve(__dirname, "..", "..");
-const PLACEHOLDER_DIST_APPS = [
-  "application-admin-console",
-  "admin-console",
-  "participant-portal",
-] as const;
+const PLACEHOLDER_DIST_APPS = ["application-admin-console", "participant-portal"] as const;
 
 for (const app of PLACEHOLDER_DIST_APPS) {
   const distDir = join(REPO_ROOT, "apps", app, "dist");

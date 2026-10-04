@@ -11,7 +11,14 @@ import type { ControlDataRuntime } from "../../control-data/runtime-repositories
 import { getAzureCredential } from "../shared/azure-credential-store.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
+import { assertSeparateCompetitorAccount } from "../shared/competitor-account-policy.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
+import type { ResolvedExecutionCatalog } from "../shared/execution-catalog.js";
+import {
+  captureDeploymentCatalog,
+  executionDispatchFields,
+  isNativeExecutionProblem,
+} from "../shared/execution-catalog-context.js";
 import { getGcpCredential } from "../shared/gcp-credential-store.js";
 import {
   AZURE_PROVIDER,
@@ -59,6 +66,7 @@ import {
  * visibility / runtime resolver を追加する。
  */
 export interface DeployContext extends AdapterDependencyConfig {
+  readonly executionCatalog?: ResolvedExecutionCatalog;
   /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
   readonly runtime: ControlDataRuntime;
   readonly tableName: string;
@@ -143,6 +151,7 @@ async function resolveChallengePayloadUrl(
   ctx: DeployContext,
   problemId: string,
 ): Promise<string | undefined> {
+  if (ctx.executionCatalog) return undefined;
   const privateBucket = resolveChallengePayloadBucket({
     problemId,
     visibility: ctx.problemsVisibility,
@@ -251,7 +260,7 @@ interface DeployAuthorization {
  * keep the provider branch — and its cognitive complexity — out of the main
  * DDB-Put/EventBridge-publish orchestration.
  */
-async function resolveDeployAuthorization(
+export async function resolveDeployAuthorization(
   ctx: DeployContext,
   runtime: ProblemRuntime,
   request: DeployInvocation,
@@ -262,6 +271,7 @@ async function resolveDeployAuthorization(
     return { awsAccountId: "", region: "" };
   }
   if (!request.awsAccountId || !request.region) throw new AwsAccountRequiredError();
+  assertSeparateCompetitorAccount(request.awsAccountId);
   // Phase 2.2 (Issue #459): verified=true な行が無ければ deploy しない (= fail-closed)。
   // 同 account deploy の dev fallback も廃止 — 全 deploy は verified なれた account のみ。
   const verified = await resolveVerifiedCompetitorAccount(
@@ -293,8 +303,11 @@ export async function startDeployment(
   ctx: DeployContext,
   request: DeployInvocation,
 ): Promise<DeployResponse> {
+  ctx = await captureDeploymentCatalog(ctx);
   const problemDir = ctx.problemsCatalog[request.problemId];
   if (!problemDir) throw new UnknownProblemError(request.problemId);
+  if (isNativeExecutionProblem(ctx.executionCatalog, request.problemId))
+    return startNativeDeployment(ctx, request);
 
   // [Issue #1268] Resolve runtime BEFORE any cloud mutation. Default
   // is aws/cloudformation, which keeps legacy problems and explicit AWS declarations on the
@@ -340,6 +353,7 @@ export async function startDeployment(
   const item: Omit<DeploymentItem, "PK" | "SK" | "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK"> = {
     jobId,
     problemId: request.problemId,
+    ...(ctx.executionCatalog ? { catalogKey: ctx.executionCatalog.catalogKey } : {}),
     tenantId: ctx.tenantId,
     // [Issue #2561] "" for a non-AWS single-provider deploy (mirrors the composite
     // parent row's exact `?? ""` precedent, `composite-deploy.ts`) — the row is
@@ -405,6 +419,7 @@ export async function startDeployment(
       tenantId: item.tenantId,
       problemId: item.problemId,
       problemDir,
+      ...executionDispatchFields(ctx.executionCatalog),
       teamSlug,
       namePrefix: item.namePrefix,
       region: item.region,
@@ -507,6 +522,45 @@ export interface DeploySharedResources {
    * `"shadow"` (= unset / anything but `"enforce"`) keeps the legacy path.
    */
   readonly cloudActionEnforcementMode: CloudActionEnforcementMode;
+}
+
+async function startNativeDeployment(
+  ctx: DeployContext,
+  request: DeployInvocation,
+): Promise<DeployResponse> {
+  await enforceDeployQuota(
+    { runtime: ctx.runtime, ddb: ctx.ddb, tableName: ctx.tableName, quota: ctx.deployQuota },
+    ctx.tenantId,
+    request.quotaTier ?? "basic",
+  );
+  const jobId = ulid();
+  const teamLoginKey = generateTeamLoginKey();
+  const namePrefix = buildStackPrefix(request.problemId, request.teamName);
+  const nowMs = ctx.now();
+  const createdAt = new Date(nowMs).toISOString();
+  const expiresAt = toEpochSeconds(nowMs + (ctx.ttlMs ?? DEFAULT_TTL_MS));
+  const repository = await resolveDeploymentsRepository(ctx);
+  await repository.putDeployment({
+    jobId,
+    tenantId: ctx.tenantId,
+    problemId: request.problemId,
+    catalogKey: ctx.executionCatalog?.catalogKey,
+    teamName: request.teamName,
+    namePrefix,
+    teamLoginKey,
+    awsAccountId: "",
+    region: "",
+    status: "COMPLETE",
+    runtimeProvider: "native",
+    runtimeEngine: "coordination",
+    runtimeEntry: "coordination",
+    createdAt,
+    updatedAt: createdAt,
+    expiresAt,
+    accountGroupId: request.accountGroupId,
+    problemSetId: request.problemSetId,
+  });
+  return { jobId, status: "COMPLETE", namePrefix, teamLoginKey, expiresAt };
 }
 
 export function buildSharedResources(runtime: ControlDataRuntime): DeploySharedResources {

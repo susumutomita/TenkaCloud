@@ -13,7 +13,6 @@ import {
   normalizeJsonValue,
   SCORE_EVENT_SK_PREFIX,
   type SqlDeploymentsCore,
-  sameJsonValue,
   scoreEventFromPayload,
 } from "./sql-deployments-core.js";
 import type {
@@ -167,7 +166,7 @@ export class SqlDeploymentsScoring implements DeploymentsScoringPort {
     return this.core.mutateExisting({
       jobId,
       predicate: (record) =>
-        !(record.hintsRevealed ?? []).some((entry) => sameJsonValue(entry, hint)),
+        !(record.hintsRevealed ?? []).some((entry) => entry.hintId === hint.hintId),
       mutate: (record) => {
         record.hintsRevealed = [...(record.hintsRevealed ?? []), hint];
         record.updatedAt = at;

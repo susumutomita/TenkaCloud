@@ -4,8 +4,8 @@ import * as cdk from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { describe, expect, it } from "vitest";
-import { HUMAN_AUTHORIZER_REJECTS_ACCESS_TOKENS_FEATURE_KEY } from "../../lib/app-config/index";
-import { buildAppPlaneCore } from "../../lib/app-plane-core/index";
+import { HUMAN_AUTHORIZER_REJECTS_ACCESS_TOKENS_FEATURE_KEY } from "../../lib/app-config/index.js";
+import { buildAppPlaneCore } from "../../lib/app-plane-core/index.js";
 
 /**
  * Issue #2953: human TenantAPI authorizer で access token を弾く。
@@ -38,22 +38,12 @@ function synth(features?: Readonly<Record<string, boolean>>): Template {
     tenantId: "tenant-1",
     tenantName: "Tenant 1",
     environment: "development",
-    isPooledDeploy: false,
     deployApiLambda: makeStubLambda("DeployApi"),
     eventApiLambda: makeStubLambda("EventApi"),
     competitorAccountsApiLambda: makeStubLambda("CompetitorAccountsApi"),
     samlIdps: [],
     samlAdminAllowlist: [],
     ...(features ? { features } : {}),
-    apiKeyConfig: {
-      ssmParameterNames: {
-        basic: { keyId: "b", value: "b" },
-        standard: { keyId: "s", value: "s" },
-        premium: { keyId: "p", value: "p" },
-        platinum: { keyId: "pl", value: "pl" },
-      },
-      ssmLookup: (name: string) => name,
-    },
   });
   return Template.fromStack(stack);
 }
@@ -102,7 +92,6 @@ describe("#2953: identityValidationExpression is opt-in", () => {
 describe("#2953: the console keeps sending an ID token", () => {
   it.each([
     "apps/application-admin-console/src/api/client.ts",
-    "apps/application-admin-console/src/api/audit-log-client.ts",
     "apps/application-admin-console/src/api/idp-client.ts",
   ])("should authenticate %s with an ID token, not an access token", (relativePath) => {
     const source = readFileSync(

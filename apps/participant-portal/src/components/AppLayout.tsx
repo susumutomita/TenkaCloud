@@ -16,7 +16,7 @@ import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-cli
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
 import { type AppConfig, type CloudMode, hasAwsFeatures, showsCourseTracks } from "../config";
-import { problemProvider } from "../data/providers";
+import { hasAwsAccessCapability, problemProvider } from "../data/providers";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
 import {
@@ -142,6 +142,7 @@ export function buildConsoleUtility(
     readonly problemId: string;
     readonly awsAccountId?: string;
     readonly provider?: string;
+    readonly accessCapabilities?: readonly string[];
   }[],
   openConsole: (jobId: string) => void,
   navigate: (href: string) => void,
@@ -149,7 +150,7 @@ export function buildConsoleUtility(
 ): TopNavigationProps.Utility {
   // [#2234] 非 AWS 行も deploy request 由来の awsAccountId を持つため、 provider でゲートする
   // (= Sakura/Azure/GCP 問題に "Open AWS Console" を誤表示しない)。
-  const consolable = problems.filter((p) => problemProvider(p) === "aws" && p.awsAccountId);
+  const consolable = problems.filter((p) => hasAwsAccessCapability(p, "console") && p.awsAccountId);
   if (consolable.length === 0) {
     return {
       type: "button",
@@ -258,6 +259,8 @@ export function buildSideNavItems(
   cloudMode: CloudMode,
   locale: LocaleCode,
   showsAwsFeatures: boolean,
+  notificationsEnabled = true,
+  courseTracksEnabled = false,
 ): SideNavigationProps.Item[] {
   const isLocal = cloudMode === "local";
   const eventItems: SideNavigationProps.Item[] = [
@@ -265,7 +268,7 @@ export function buildSideNavItems(
     { type: "link", href: "/scoreboard", text: t("nav.scoreboard") },
     { type: "link", href: "/score-events", text: t("nav.score_events") },
   ];
-  if (!isLocal) {
+  if (!isLocal && notificationsEnabled) {
     eventItems.push({
       type: "link",
       href: "/notifications",
@@ -280,10 +283,10 @@ export function buildSideNavItems(
       type: "section",
       text: t("nav.quests_section"),
       items: [
-        // 講座トラックは自習経路なので local だけ (判定は `showsCourseTracks`)。
+        // Self-paced and explicitly enabled learning entries put their course view first.
         // 一覧を先に置く順は採らない — 2 項目しかない並びでは順番が案内そのもので、
         // 先に出るほうに着いた学習者は 71 件のフラットな一覧の前で止まる。
-        ...(showsCourseTracks(cloudMode)
+        ...(showsCourseTracks(cloudMode, courseTracksEnabled)
           ? [{ type: "link" as const, href: "/course-tracks", text: t("nav.course_tracks") }]
           : []),
         { type: "link", href: "/problems", text: t("nav.problems") },
@@ -327,7 +330,16 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
 
   const { locale, setLocale, t } = useI18n();
   const consoleAccess = useConsoleAccess(config);
-  const showsAwsFeatures = hasAwsFeatures(config);
+  const showsAwsFeatures =
+    hasAwsFeatures(config) &&
+    (!teamView.view ||
+      teamView.view.problems.length === 0 ||
+      teamView.view.problems.some((problem) => problemProvider(problem) !== "native"));
+  const showsConsole =
+    showsAwsFeatures &&
+    (!teamView.view ||
+      teamView.view.problems.length === 0 ||
+      teamView.view.problems.some((problem) => hasAwsAccessCapability(problem, "console")));
 
   const utilities = useMemo<TopNavigationProps.Utility[]>(() => {
     // Issue #583 Phase 1.A: locale switcher utility は session 有無に依存しない (= ログイン
@@ -344,7 +356,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
       // Issue #1919: AWS Console 導線を右上常設にして「入口が分からない」を解消する。
       // Issue #2474: ただし local (単独ドリル) は federate 先の AWS が無く Console を開けない
       // (= "Portal API 404") ので、 AWS の無い構成では常設 utility から外す。
-      ...(showsAwsFeatures
+      ...(showsConsole
         ? [
             buildConsoleUtility(
               teamView.view?.problems ?? [],
@@ -375,7 +387,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     teamView.leaderboard,
     teamView.leaderboardNoEvent,
     config.mode,
-    showsAwsFeatures,
+    showsConsole,
     locale,
     setLocale,
     t,
@@ -389,8 +401,18 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
         config.cloudMode,
         locale,
         showsAwsFeatures,
+        config.notificationsEnabled !== false,
+        config.courseTracksEnabled,
       ),
-    [teamView.unreadNotificationCount, t, config.cloudMode, locale, showsAwsFeatures],
+    [
+      teamView.unreadNotificationCount,
+      t,
+      config.cloudMode,
+      config.notificationsEnabled,
+      config.courseTracksEnabled,
+      locale,
+      showsAwsFeatures,
+    ],
   );
 
   return (

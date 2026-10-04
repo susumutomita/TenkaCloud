@@ -14,6 +14,7 @@ import { type RunningLocalHost, startLocalHost } from "../server";
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const ADMIN = "https://admin.example.test";
 const PLAY = "https://play.example.test";
+const INVALID_KEY = "wrong";
 const running: RunningLocalHost[] = [];
 const directories: string[] = [];
 afterEach(async () => {
@@ -101,7 +102,14 @@ async function host(options: { public: boolean; behindProxy?: boolean }) {
     () => undefined,
   );
   running.push(started);
-  return { started, adminPort, participantPort };
+  const bootstrap = await call(adminPort, {
+    path: "/api/host/login",
+    method: "POST",
+    host: options.public ? "admin.example.test" : `127.0.0.1:${adminPort}`,
+    body: { key: started.organizerKey },
+  });
+  if (bootstrap.status !== 200) throw new Error("Public-mode organizer-key sign-in failed.");
+  return { started, adminPort, participantPort, adminToken: String(bootstrap.body.idToken) };
 }
 
 function call(
@@ -166,6 +174,7 @@ test("the host console answers only at its advertised origin and links the adver
     apiBaseUrl: `${ADMIN}/api`,
     participantPortalUrl: PLAY,
     role: "admin",
+    hasAws: false,
   });
 });
 
@@ -189,7 +198,7 @@ async function failLogins(port: number, forwardedFor: (attempt: number) => strin
       method: "POST",
       host: "admin.example.test",
       headers: { "x-forwarded-for": forwardedFor(attempt) },
-      body: { key: "wrong" },
+      body: { key: INVALID_KEY },
     });
 }
 
@@ -199,7 +208,7 @@ const login = (port: number, forwardedFor: string) =>
     method: "POST",
     host: "admin.example.test",
     headers: { "x-forwarded-for": forwardedFor },
-    body: { key: "wrong" },
+    body: { key: INVALID_KEY },
   });
 
 test("behind a proxy, one client's failed logins do not lock out the others", async () => {
@@ -216,20 +225,22 @@ test("without --behind-proxy, X-Forwarded-For is ignored", async () => {
 });
 
 test("public mode offers only problems that need no per-team gateway", async () => {
-  const { started, adminPort } = await host({ public: true });
-  const session = await call(adminPort, {
-    path: "/api/host/login",
-    method: "POST",
-    host: "admin.example.test",
-    body: { key: started.masterKey },
-  });
+  const { adminPort, adminToken } = await host({ public: true });
   const catalog = await call(adminPort, {
     path: "/api/host/catalog",
     host: "admin.example.test",
-    headers: { authorization: `Bearer ${String(session.body.idToken)}` },
+    headers: { authorization: `Bearer ${adminToken}` },
   });
   expect(catalog.body.items).toEqual([
-    { problemId: "ac26-crypto-battle", name: expect.any(String), runtime: "coordination" },
+    {
+      problemId: "ac26-crypto-battle",
+      name: expect.any(String),
+      runtime: "coordination",
+      content: {
+        description: expect.any(String),
+        learningGoals: expect.arrayContaining([expect.any(String)]),
+      },
+    },
   ]);
 });
 

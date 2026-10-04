@@ -83,6 +83,49 @@ function deps(over: Partial<CoordinationHandlerDeps> = {}): CoordinationHandlerD
 }
 
 describe("handleCoordinationOp", () => {
+  it("refuses a stale captured run before plugin, artifact, or state work", async () => {
+    const store = fakeStore();
+    const artifacts = fakeArtifactStore();
+    const importer = vi.fn(importerOf(counter));
+    const resolveScope = vi.fn(async () => ({ kind: "scope" as const, scope }));
+    const result = await handleCoordinationOp(
+      deps({ store, artifacts, importer, resolveScope }),
+      "key",
+      { kind: "inc", opId: "same-retry-id" },
+      "2026-06-01T00:00:00Z",
+      "p1",
+      { proof: { contentType: "text/plain", contentBase64: "aGk=" } },
+      "previous-run",
+    );
+    expect(result).toEqual({ kind: "run_changed" });
+    expect(resolveScope).toHaveBeenCalledWith(
+      "key",
+      "p1",
+      "initialize",
+      "2026-06-01T00:00:00Z",
+      "previous-run",
+    );
+    expect(importer).not.toHaveBeenCalled();
+    expect(store.ddb.send).not.toHaveBeenCalled();
+    expect(artifacts.stored.size).toBe(0);
+  });
+
+  it("accepts a captured current run without changing the operation payload", async () => {
+    const op = { kind: "inc" as const, opId: "same-retry-id" };
+    const applyOp = vi.fn(counter.applyOp);
+    const result = await handleCoordinationOp(
+      deps({ importer: importerOf({ ...counter, applyOp }) }),
+      "key",
+      op,
+      "2026-06-01T00:00:00Z",
+      undefined,
+      undefined,
+      "default",
+    );
+    expect(result).toEqual({ kind: "ok", projection: { count: 1 } });
+    expect(applyOp.mock.calls[0]?.[2]).toEqual(op);
+  });
+
   it("should return not_configured when scope cannot be resolved", async () => {
     const out = await handleCoordinationOp(
       deps({ resolveScope: async () => ({ kind: "not_configured" as const }) }),
@@ -329,6 +372,38 @@ describe("parseCoordinationConfig", () => {
 });
 
 describe("makeCoordinationScopeResolver", () => {
+  it("rejects a rotated run before state reads, roster materialization, or initialization writes", async () => {
+    const shared = fakeParticipantSharedWithItems([
+      { tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status: "COMPLETE" },
+    ]);
+    const send = vi.mocked(shared.ddb.send);
+    const original = send.getMockImplementation();
+    send.mockImplementation(async (command) => {
+      if (command instanceof GetCommand && String(command.input.Key?.PK).startsWith("COORDRUN#")) {
+        return { Item: { runId: "successor-run", startedAt: "", history: ["default"] } };
+      }
+      if (!original) throw new Error("missing fixture implementation");
+      return original(command);
+    });
+    const resolve = makeCoordinationScopeResolver(shared, { p1: { plugin: "counter" } });
+    expect(await resolve("key", "p1", "initialize", "2026-06-01T00:00:00Z", "default")).toEqual({
+      kind: "run_changed",
+    });
+    expect(
+      send.mock.calls.some(
+        ([command]) => command instanceof GetCommand && command.input.Key?.SK === "STATE",
+      ),
+    ).toBe(false);
+    expect(
+      vi
+        .mocked(shared.ddb.send)
+        .mock.calls.every(
+          ([command]) =>
+            !(command instanceof PutCommand || command instanceof TransactWriteCommand),
+        ),
+    ).toBe(true);
+  });
+
   function fakeShared(items: Partial<DeploymentItem>[]): ParticipantSharedResources {
     return fakeParticipantSharedWithItems(items);
   }

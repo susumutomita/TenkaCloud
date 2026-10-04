@@ -124,6 +124,8 @@ export const CoordinationOpBodySchema = z.object({
    * 2 つ以上あるときに省略すると `ambiguous` (409) が返り、 候補が示される。
    */
   problemId: z.string().min(1).max(200).optional(),
+  /** Shared coordination run shown by the portal; never a deployment jobId. */
+  runId: z.string().min(1).max(200).optional(),
 });
 
 /**

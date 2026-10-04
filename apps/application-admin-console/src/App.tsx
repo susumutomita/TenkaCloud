@@ -5,9 +5,8 @@ import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { DemoSessionBootstrap } from "./auth/demo-session";
 import { buildLoginReturnPath, readLoginReturnPathState } from "./auth/login-return-path";
 import { ShellLayout } from "./components/AppLayout";
-import { type AppConfig, isLocalHost } from "./config";
+import { type AppConfig, isCloudHost, isLocalHost } from "./config";
 import { useEffectiveFeatures } from "./hooks/useEffectiveFeatures";
-import { AuditLogPage } from "./pages/AuditLog";
 import { CallbackPage } from "./pages/Callback";
 import { CompetitorAccountsPage } from "./pages/CompetitorAccounts";
 import { DeploymentDetailPage } from "./pages/DeploymentDetail";
@@ -18,6 +17,7 @@ import { EventListPage } from "./pages/EventList";
 import { EventReportPage } from "./pages/EventReport";
 import { HomePage } from "./pages/Home";
 import { IdentityProvidersPage } from "./pages/IdentityProviders";
+import { LocalHostCatalogPage } from "./pages/LocalHostCatalog";
 import { LocalHostLoginPage } from "./pages/LocalHostLogin";
 import { LocalHostUnavailablePage } from "./pages/LocalHostUnavailable";
 import { LoginPage } from "./pages/Login";
@@ -43,6 +43,8 @@ function guarded(element: React.ReactNode, config: AppConfig) {
         samlSsoEnabled={config.features?.samlSso}
         demoMode={config.mode === "demo"}
         localHost={isLocalHost(config)}
+        cloudHost={isCloudHost(config)}
+        hostAwsEnabled={Boolean(config.hostAwsRegion)}
         // The banner only renders the link when demoMode is true, so passing the URL
         // unconditionally is safe (and avoids an untested non-demo ternary branch).
         demoParticipantUrl={config.participantPortalUrl}
@@ -56,7 +58,7 @@ function guarded(element: React.ReactNode, config: AppConfig) {
 function LoginRoute({ config }: { config: AppConfig }) {
   const location = useLocation();
   const returnPath = readLoginReturnPathState(location.state);
-  // Issue #3226: the local competition host signs in with its host key, not Cognito.
+  // Local hosting exchanges the organizer key for a memory-only session.
   return isLocalHost(config) ? (
     <LocalHostLoginPage config={config} returnPath={returnPath} />
   ) : (
@@ -65,8 +67,8 @@ function LoginRoute({ config }: { config: AppConfig }) {
 }
 
 /**
- * Issue #3226: a local host session has an absolute lifetime (the host issues 15 minutes) in
- * addition to the shared idle logout. Sign out when it ends instead of letting every later
+ * A local host session has an absolute lifetime in addition to the shared idle logout.
+ * Sign out when it ends instead of letting every later
  * request fail with 401; the event and its results are unaffected.
  */
 function LocalHostSessionExpiry() {
@@ -103,6 +105,7 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
   const config: AppConfig = { ...baseConfig, features };
 
   if (isLocalHost(config)) return <LocalHostRoutes config={config} />;
+  if (isCloudHost(config)) return <CloudHostRoutes config={config} />;
   return (
     <Routes>
       <Route path="/login" element={<LoginRoute config={config} />} />
@@ -133,8 +136,6 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
         path="/events/:eventId/report"
         element={guarded(<EventReportPage config={config} />, config)}
       />
-      {/* Issue #1292: Tenant Admin 向け audit log view (= 自テナント scope only) */}
-      <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />, config)} />
       <Route path="/users" element={guarded(<TenantUsersPage config={config} />, config)} />
       {/* Issue #2231: per-tenant runtime feature-flag toggle. */}
       <Route path="/settings" element={guarded(<SettingsPage config={config} />, config)} />
@@ -150,13 +151,45 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
 
 /**
  * Issue #3226: the local competition host serves the normal event pages against its own API.
- * Screens that need cloud infrastructure (AWS accounts, Cognito users, audit log, SAML, the
- * catalog's cloud deployments) explain that instead of calling an API that does not exist.
+ * Screens that need cloud infrastructure explain that instead of calling an API that does not exist.
  */
 function LocalHostRoutes({ config }: { config: AppConfig }) {
   return (
     <Routes>
       <Route path="/login" element={<LoginRoute config={config} />} />
+      <Route path="/" element={<Navigate to="/events" replace />} />
+      <Route path="/events" element={guarded(<EventListPage config={config} />, config)} />
+      <Route path="/events/new" element={guarded(<EventCreatePage config={config} />, config)} />
+      <Route path="/problems" element={guarded(<LocalHostCatalogPage config={config} />, config)} />
+      <Route
+        path="/problems/:problemId"
+        element={guarded(<LocalHostCatalogPage config={config} detail />, config)}
+      />
+      {config.hostAwsRegion && (
+        <Route
+          path="/competitor-accounts"
+          element={guarded(<CompetitorAccountsPage config={config} />, config)}
+        />
+      )}
+      <Route
+        path="/events/:eventId"
+        element={guarded(<EventDetailPage config={config} />, config)}
+      />
+      <Route
+        path="/events/:eventId/report"
+        element={guarded(<EventReportPage config={config} />, config)}
+      />
+      <Route path="*" element={guarded(<LocalHostUnavailablePage />, config)} />
+    </Routes>
+  );
+}
+
+/** Single-installation cloud pages only; legacy tenant management is not a working cloud API. */
+function CloudHostRoutes({ config }: { config: AppConfig }) {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginRoute config={config} />} />
+      <Route path="/callback" element={<CallbackPage config={config} />} />
       <Route path="/" element={<Navigate to="/events" replace />} />
       <Route path="/events" element={guarded(<EventListPage config={config} />, config)} />
       <Route path="/events/new" element={guarded(<EventCreatePage config={config} />, config)} />
@@ -168,7 +201,11 @@ function LocalHostRoutes({ config }: { config: AppConfig }) {
         path="/events/:eventId/report"
         element={guarded(<EventReportPage config={config} />, config)}
       />
-      <Route path="*" element={guarded(<LocalHostUnavailablePage />, config)} />
+      <Route
+        path="/competitor-accounts"
+        element={guarded(<CompetitorAccountsPage config={config} />, config)}
+      />
+      <Route path="*" element={guarded(<LocalHostUnavailablePage cloudHost />, config)} />
     </Routes>
   );
 }

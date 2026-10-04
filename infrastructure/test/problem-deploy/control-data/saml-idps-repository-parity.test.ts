@@ -2,12 +2,12 @@ import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { SamlIdpConfig } from "@tenkacloud/saml-utils";
 import { describe, expect, it } from "vitest";
-import type { IdpScope } from "../../../lib/control-plane/handlers/idp-handler/core";
 import {
   DynamoDbSamlIdpsRepository,
   SqlSamlIdpsRepository,
 } from "../../../lib/problem-deploy/control-data/saml-idps-repository";
 import type { SamlIdpsRepository } from "../../../lib/problem-deploy/control-data/types";
+import type { IdpScope } from "../../../lib/shared/idp/core";
 import { makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**

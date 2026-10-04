@@ -56,6 +56,7 @@ function stubLoginExchange(claims: Record<string, string>) {
           { status: 200, headers: { "content-type": "application/json" } },
         );
       }
+      if (url.endsWith("/feature-flags")) return Response.json({ flags: {} });
       return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
     }),
   );
@@ -123,45 +124,83 @@ describe("App", () => {
   });
 
   describe("when completing the Cognito callback with a valid in-memory token", () => {
-    it("should display JWT custom:tenantName in the greeting", async () => {
-      stubLoginExchange({
-        email: "admin@example.com",
-        "custom:tenantId": "t-acme",
-        "custom:tenantName": "ACME 株式会社",
-        "custom:tenantTier": "BASIC",
-      });
+    it("greets a cloud organizer without requiring tenant claims", async () => {
+      stubLoginExchange({ email: "admin@example.com", "custom:userRole": "Admin" });
       renderApp(CALLBACK_PATH);
       expect(
-        await screen.findByRole("heading", { level: 1, name: /ACME 株式会社 さん/ }),
+        await screen.findByRole("heading", { level: 1, name: /admin@example.com さん/ }),
       ).toBeInTheDocument();
+      expect(screen.queryByText(/テナント名が JWT/)).toBeNull();
+      expect(screen.queryByText("テナント情報")).toBeNull();
     });
 
-    it("should use the fallback placeholder when custom:tenantName is missing (= do not show a UUID-like tenantId in the welcome, Issue #830)", async () => {
+    it("uses an organizer fallback without exposing legacy identifiers", async () => {
       stubLoginExchange({
-        email: "admin@example.com",
+        "custom:userRole": "Operator",
         "custom:tenantId": "3f01a734-9652-4065-a391-fa1b4d45ae26",
         "custom:tenantTier": "BASIC",
       });
       renderApp(CALLBACK_PATH);
-      // welcome 文に UUID が漏れず、 fallback (= "テナント") に倒れる
       expect(
-        await screen.findByRole("heading", { level: 1, name: /テナント さん/ }),
+        await screen.findByRole("heading", { level: 1, name: /開催者 さん/ }),
       ).toBeInTheDocument();
-      expect(screen.queryByRole("heading", { name: /3f01a734/ })).toBeNull();
-      // tenantName 欠落の Alert が表示される (= operator に再ログインを促す)
-      expect(screen.getByText(/テナント名が JWT に含まれていません/)).toBeInTheDocument();
+      expect(screen.queryByText(/3f01a734/)).toBeNull();
+      expect(screen.queryByText("BASIC")).toBeNull();
+      expect(screen.queryByText(/テナント名が JWT/)).toBeNull();
     });
 
-    it("should NOT show the config.tenantName placeholder ('Shared Pooled Tenant') on screen", async () => {
+    it.each(["/", "/audit-log?from=2026-01-01"])(
+      "keeps cloud audit UI unavailable after returning to %s",
+      async (returnPath) => {
+        stubLoginExchange({ email: "admin@example.com", "custom:userRole": "TenantAdmin" });
+        sessionStorage.setItem("TenkaCloud.application_admin.login_return_path", returnPath);
+        renderApp(CALLBACK_PATH, {
+          ...config,
+          features: {
+            samlSso: true,
+            nonAwsRuntime: false,
+            redTeam: false,
+            challengePrerequisiteGate: false,
+          },
+        });
+        expect(
+          await screen.findByRole("heading", { level: 1, name: /admin@example.com/ }),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: /監査ログ|Audit log/u })).toBeNull();
+        expect(screen.queryByRole("heading", { name: "監査ログ" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "CSV エクスポート" })).toBeNull();
+        for (const label of [
+          "Events",
+          "Deployments",
+          "Competitor Accounts",
+          "Problems",
+          "ユーザー",
+          "設定",
+          "ID プロバイダ",
+        ])
+          expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+        expect(
+          vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/admin/audit-log")),
+        ).toBe(false);
+        expect(
+          vi
+            .mocked(fetch)
+            .mock.calls.some(([, init]) => init?.method === "PUT" || init?.method === "DELETE"),
+        ).toBe(false);
+      },
+    );
+
+    it("does not display the shared placeholder or legacy tenant identity", async () => {
       stubLoginExchange({
         email: "admin@example.com",
+        "custom:userRole": "Viewer",
         "custom:tenantId": "t-acme",
         "custom:tenantName": "ACME 株式会社",
       });
       renderApp(CALLBACK_PATH);
-      // tenantName 表示が完了するまで待つ
-      await screen.findByRole("heading", { level: 1, name: /ACME 株式会社/ });
+      await screen.findByRole("heading", { level: 1, name: /admin@example.com/ });
       expect(screen.queryByText(/Shared Pooled Tenant/)).toBeNull();
+      expect(screen.queryByText(/ACME 株式会社/)).toBeNull();
     });
   });
 });

@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>イベントをエンドツーエンドで運営する — TenkaCloud Docs</title>
+<title>大会を最後まで運営する — TenkaCloud Docs</title>
 <link rel="canonical" href="https://tenkacloud.com/docs/operate/run-an-event/" />
 <link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/operate/run-an-event/" />
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/operate/run-an-event/index.en.html" />
@@ -32,7 +32,7 @@
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
 <section><h5>役割別マニュアル</h5><ul>
-<li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
+<li><a href="/docs/manual/">役割別マニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
@@ -43,337 +43,43 @@
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
-<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
+<li><a href="/docs/concepts/architecture/">アーキテクチャ</a></li>
 </ul></section>
 <section><h5>チュートリアル</h5><ul>
 <li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
 <section><h5>運用</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
-<li><a href="/docs/operate/run-an-event/" aria-current="page">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
+<li><a href="/docs/operate/run-an-event/" aria-current="page">大会を最後まで運営する</a></li>
 <li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
-<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/runtime-matrix/">runtime の実行状況</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
 <li><a href="/docs/reference/onboarding-analytics/">オンボーディングA/B計測</a></li>
-<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
-<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>イベントをエンドツーエンドで運営する <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>これは運営者向けのウォークスルーです。現在開催手順として案内するのはLiteです。
-SaaSのテナント作成とマルチクラウドは末尾に分離し、コード構成の参考として説明します。</p>
-<h2>同じ会場で学び、交流するなら</h2>
-<p>普段は異なる拠点で働くエンジニアが、同じ会場に集まってAWSを学びながら交流する企画です。拠点・AWS経験を混ぜた4人チームで、<strong>実AWSの準備Challenge → Gate修了 → 復旧Battle</strong> と進む<a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/office-link-battle">つながるオフィス</a>を使えます。同じ机で画面を見て相談し、操作と説明を交代する共同作業が、交流のきっかけになります。</p>
-<table>
-<thead>
-<tr>
-<th>段階</th>
-<th>チームですること</th>
-<th>得点・次への条件</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>準備Challenge</td>
-<td>EC2起動 → 外への出口を接続 → 経路設定 → Session Manager接続 → HTTP許可。実操作と短い説明を1題ずつ</td>
-<td>全5段階を終えて合言葉を1つ提出。100点で本戦解放。途中の加点なし</td>
-</tr>
-<tr>
-<td>復旧Battle</td>
-<td>本戦用の別EC2で、出口・経路・管理ロール・HTTPの障害を1つずつ直す</td>
-<td>Endpoint登録後、正常な採点は+100、不通・管理アクセス不備は−100。説明は次のラウンドへ進む条件</td>
-</tr>
-<tr>
-<td>振り返り</td>
-<td>仲間の説明で分かったことを1人ずつ伝える</td>
-<td>発言量を採点しない</td>
-</tr>
-</tbody></table>
-<p>本戦では運営が <strong>A〜Dのカードを1人1枚</strong> 配ります。手がかりを持ち寄って4人が確認を送り、指定された操作担当が復旧を確認、別の説明担当が理由を答えます。ラウンドごとに担当が交代し、手がかりも足し算・経路の並べ替え・ペアの組み合わせへ変わります。AIで答えが分かっても、各カードからの確認と役割の引き継ぎは残ります。欠席時は運営が補助できますが、カードの所持は人の同一性の証明ではありません。</p>
-<p>別チームと合言葉を交換し、双方が相手の合言葉を送ると <strong>各20点、異なる3組まで最大60点</strong> の交流ボーナスを得られます。確認待ちや不参加で減点されません。上限に達したチームも、遅れて参加したチームの交換に協力できます。</p>
-<p>初回は導入5分、準備約40分、本戦約30〜45分、振り返り10分を目安に <strong>90〜120分</strong> を仮確保し、リハーサルで調整します。本戦の採点は通常1分周期です。準備を早く終えたチームは仲間に構成を説明し、本戦の登録・開始は司会がそろえます。問題画面の確認・ヒントは無料。準備の公式合言葉を誤提出すると5点減点。本戦は稼働時間で点が変わるため、イベント合計200点という固定上限ではありません。</p>
-<p>イベントには <strong>office-link-gate / office-link-battle の2問だけ</strong>を登録します。イベント詳細の「進行 / Gate」でTenantAdminが機能をONにし、Gate challengeに準備、アンロック対象に本戦だけを指定。policyはrequired、追加ボーナス0、チーム上書きは継承。既定OFFなので、保存後に未修了チームから本戦がロックされることを確認します。各問題の内部も1段階ずつ進むため、未完了課題を1つに絞れます。<a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/battles/office-link-battle/OPERATOR.ja.md">開催ランブック</a>に運営用の障害開始・復旧・撤収手順があります。</p>
-<p>追加題材は <strong>S3保存、S3復旧、Lambda実行、ログ調査、DynamoDBの引き継ぎ、SQSの受渡し、CloudWatch監視</strong> の7つです。それぞれ独立した難易度1のChallengeとして、目的に合うものを別イベントで選びます。全てを初回へ詰め込みません。</p>
-<p>このセットは実AWSを操作します。チームごとの競技アカウント、EC2・EBS・公開IPv4・関数・ログ等の費用と削除担当が必要です。本戦のラウンド状態には問題専用のDynamoDBも使います。本体のDBにTursoを選んでも、問題側のAWS費用はなくなりません。ローカルプレビューは画面用テストデータであり、AWS接続・権限・採点の確認ではありません。初回は2〜4チームで実AWSのリハーサルを行い、反映待ちを含む時間と役割交代を確かめます。</p>
-<p>公開コードと標準問題を使って自社開催できます。設計・準備・当日運営の支援は有償、企業固有の問題は個別見積もりです。交流用の得点だけで採用や社内認定の判定を行わず、評価目的の場合は別に基準を設計します。</p>
-<h3>デプロイする問題の版を固定する</h3>
-<p>Liteランチャーの既定 <code>ProblemsRepoRef</code> は最後に公開したリリースを指すため、この新しいセットを含むとは限りません。リハーサルで使う本体チェックアウトの <code>release/tenkacloud-release.json</code> にある <code>sources.catalog.commit</code> を控え、ランチャーの <strong>ProblemsRepoRef</strong> へ指定します。本体の <strong>RepoRef</strong> もリハーサルするコミットへ固定してください。公開済みリリースに収録されるまでは候補版での開催準備です。</p>
-<p>ローカルから <code>make deploy</code> する場合も、本体の <code>problems</code> をそのgitlinkへ合わせます。デプロイ前に <code>challenges/office-link-gate/metadata.json</code> と <code>battles/office-link-battle/metadata.json</code> の両方が存在することを確認します。版を変えても既存イベントに問題やGate設定が自動登録されるわけではありません。</p>
-<h2>開催までの道のり</h2>
-<p>「開催したい人はいるが、運営経験がない」状態から使える準備表です。まず、責任者と協力者で開催計画を1枚にまとめます。以下の時期と作業時間は<strong>初回開催の見積り</strong>です。会場の予約期限や社内承認に合わせて前倒しし、開催後に実績で更新してください。</p>
-<p><strong>企画 → 人と場所 → 環境 → リハーサル → 開催 → 撤収・振り返り</strong></p>
-<p>参加受付は、イベントの「チーム」タブにある <strong>参加者が自分で環境を受け取る</strong> で設定できます。運営がAWS環境を用意したチーム枠と受付期限を選び、招待リンクを発行します。代表者1人がリンクから申し込むと1枠を確保し、全問題の準備が終わると既存のチーム設定へ進めます。1チームにつき1回申し込みます。新規AWSアカウントの作成やFree Projectの自動発行は行いません。<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/participant-self-registration.md">受付・再開・締切の手順</a>を確認してください。</p>
-<p><a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/event-host-rehearsal">問題として練習する：はじめての開催責任者</a>。Dockerを使うローカル専用の問題です。AWS上の問題ピッカーには表示されません。仮想の開催計画を作り、4つのチェックポイントで確認します。合格は本番環境の準備完了を意味しません。</p>
-<h3>いつまでに、何を用意する？</h3>
-<table>
-<thead>
-<tr>
-<th>時期の目安</th>
-<th>担当と作業時間の見積り</th>
-<th>用意するもの・数量</th>
-<th>完了条件・間に合わないとき</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>4週間前</td>
-<td>責任者＋協力者、60分</td>
-<td>目的・参加者属性・日時・予算上限を記入した企画書1枚</td>
-<td>責任者と開催目的が決まる。担当がいなければ募集前に協力者を探す</td>
-</tr>
-<tr>
-<td>3週間前</td>
-<td>会場担当＋募集担当、各60〜120分</td>
-<td>会場またはオンライン接続先1つ、定員、電源・通信の確認記録、募集文1本</td>
-<td>場所と定員を確定して募集する。未確保なら日程・規模を変更する</td>
-</tr>
-<tr>
-<td>2週間前</td>
-<td>技術担当＋進行担当、各60〜120分</td>
-<td>チーム案、問題一覧、使うバージョン、必要機材表、当日役割表</td>
-<td>対象者に合う問題と担当が決まる。難しければ出題数を減らす</td>
-</tr>
-<tr>
-<td>1週間前</td>
-<td>当日担当全員、競技時間＋60分</td>
-<td>テストチーム、当日と同じ設定、司会台本、障害連絡表</td>
-<td>ログイン→練習→回答→得点→終了→撤収を通す。採点・接続が未確認なら本番開始を約束しない</td>
-</tr>
-<tr>
-<td>前日</td>
-<td>技術担当＋受付担当、30〜60分</td>
-<td>確定名簿、チーム別配布物、予備機材、連絡先、固定したコミット番号</td>
-<td>全担当が配布先と手順を確認。欠席時の代役を決める</td>
-</tr>
-<tr>
-<td>当日60分前</td>
-<td>技術担当＋会場担当、30分</td>
-<td>接続・電源・画面・問い合わせ先の確認</td>
-<td>不調を切り分ける。再開条件を責任者が判断する</td>
-</tr>
-<tr>
-<td>当日30分前</td>
-<td>受付担当＋司会、30分</td>
-<td>受付、チーム別ログイン情報、練習時間</td>
-<td>全チームの接続を確認して開始時刻を案内。未接続なら原因を確認し開始を調整する</td>
-</tr>
-<tr>
-<td>競技中</td>
-<td>司会＋質問担当＋技術担当、競技時間</td>
-<td>残り時間案内、質問・障害の記録</td>
-<td>公平な同一案内を全員へ出す。停止・再開の判断者を一本化する</td>
-</tr>
-<tr>
-<td>終了後</td>
-<td>責任者＋技術担当、30〜60分</td>
-<td>得点確認、結果、アンケート、撤収記録</td>
-<td>得点を確定し、不要環境の削除結果と費用を確認する。削除要求だけで完了としない</td>
-</tr>
-<tr>
-<td>翌週</td>
-<td>担当全員、30分</td>
-<td>実績時間・困りごと・改善案1枚</td>
-<td>次回テンプレートの担当・数量・見積りを更新する</td>
-</tr>
-</tbody></table>
-<h3>開催計画と協力者を1枚にする</h3>
-<p>この表をコピーして主催者の管理場所に保存します。氏名・連絡先・ログイン鍵を公開Issueや公開資料に貼らないでください。</p>
-<table>
-<thead>
-<tr>
-<th>記入欄</th>
-<th>今回の計画</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>目的・対象者</td>
-<td>何を体験してほしいか／暗号・AWSの経験／必要な配慮</td>
-</tr>
-<tr>
-<td>日時・形式・会場</td>
-<td>受付・練習・競技・発表・撤収の時間／対面またはオンライン</td>
-</tr>
-<tr>
-<td>人数・定員・チーム</td>
-<td>参加人数／1チームの人数／チーム数／欠席時の組み替え</td>
-</tr>
-<tr>
-<td>責任者・代役</td>
-<td>開始・中断・再開・得点確定を判断する担当</td>
-</tr>
-<tr>
-<td>募集・会場・受付</td>
-<td>担当／対応可能時間／代役／内部の連絡方法</td>
-</tr>
-<tr>
-<td>司会・質問対応・技術</td>
-<td>担当／対応可能時間／代役／競技中に同時対応できるか</td>
-</tr>
-<tr>
-<td>予算・環境</td>
-<td>上限／使用環境／費用確認担当／撤収担当・期限</td>
-</tr>
-<tr>
-<td>教材・バージョン</td>
-<td>問題一覧／競技時間／問題設定／リハーサル済みコミット番号</td>
-</tr>
-</tbody></table>
-<p>兼任は可能ですが、受付中の障害対応など、同時に起こる仕事を一人へ集中させないようにします。必要人数は運営規模とリハーサル結果で決めます。</p>
-<h3>数量を決める：23人・1チーム4人の例</h3>
-<p>チーム数は、人数を4で割って端数を切り上げます。23人なら6チームです。これは準備計算であり、システムの最大収容人数の保証ではありません。</p>
-<table>
-<thead>
-<tr>
-<th>品目</th>
-<th>数え方</th>
-<th>23人の例</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>チーム別ログイン情報・配布先</td>
-<td>チーム数分。鍵の一覧を公開せず、再配布担当を決める</td>
-<td>6組</td>
-</tr>
-<tr>
-<td>PC</td>
-<td>全員で操作するなら参加人数＋予備数。チーム共有なら事前に共有方式を告知</td>
-<td>23台＋予備2台＝25台（この例の方針）</td>
-</tr>
-<tr>
-<td>電源・通信</td>
-<td>参加PC＋運営PC。会場の口数・回線・利用規約を実地確認</td>
-<td>必要台数を会場担当へ渡して確認</td>
-</tr>
-<tr>
-<td>紙・筆記具</td>
-<td>手計算する参加人数分＋予備</td>
-<td>23組＋予備</td>
-</tr>
-<tr>
-<td>進行表・障害連絡表</td>
-<td>各担当が参照できる共通の最新版</td>
-<td>1つの正本を共有</td>
-</tr>
-</tbody></table>
-<p>AWSアカウントの必要数や構成は選ぶ問題と開催方式によります。チーム数だけで決めず、下のデプロイ手順と問題READMEを確認してください。</p>
-<h3>当日の司会台本</h3>
-<ol>
-<li><strong>受付</strong>：「自分のチーム名とログイン先を確認してください。鍵は他チームに共有しません。接続できない方は受付へお知らせください。」</li>
-<li><strong>練習</strong>：「最初の1問で、回答する場所と得点の表示を確認します。練習と本番の得点・時間の扱いは今回の設定で説明します。」</li>
-<li><strong>開始前</strong>：「正解・不正解・期限切れの扱いを確認します。困ったらこちらの窓口へ。全チームの準備を確認してから開始します。」</li>
-<li><strong>競技中</strong>：「残り時間は画面で確認できます。共通の変更や障害案内はこちらから全チームへお伝えします。」</li>
-<li><strong>終了</strong>：「回答受付を終了します。記録を確認してから得点と順位を確定します。結果に疑問がある場合は窓口へお知らせください。」</li>
+<h1>大会を最後まで運営する <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<h2 id="prepare">準備とリハーサル</h2><p><a href="/docs/manual/organizer/">開催者マニュアル</a>と <code>make local</code> を使います。実際の問題とチーム数を選び、ソース・カタログの revision、必要な機器、確認結果、運営担当、時間、連絡経路、撤収担当を記録します。カタログ対応は進行中です。Docker や terminal の全問確認済みとは扱わないでください。</p>
+<h2 id="connect-a-competitor-account">任意の競技者アカウントを接続する</h2><p>AWS 問題にはアカウント、region、リソース、削除の合意が必要です。<code>infrastructure/templates/competitor-bootstrap.yaml</code> と、表示された運営アカウント、正確な role 名、保存された ExternalId を使います。各アカウントを検証してからチームへ割り当てます。参加者へ配置 role の認証情報を配布しないでください。</p>
+<h2 id="deploy-a-problem">配置・開始・採点</h2><ol>
+<li>大会、チーム、問題を作成します。</li>
+<li>停止状態の Docker jobs の準備結果をチームごとに確認し、失敗した操作だけを所有情報に基づいて再試行します。AWS 問題は別途配置します。</li>
+<li>Schedule から開始し、正しいチームの参加リンクを配ります。</li>
+<li>参加者の Start / resume、Stop (keep data)、容量超過時の拒否、正答、誤答、ヒント、順位、チーム分離、環境障害を確認します。</li>
+<li>AWS Battle は両方の URL、採点、対象チームへの障害、revert と実際の復旧まで確認します。</li>
 </ol>
-<h3>困ったときの判断表</h3>
-<table>
-<thead>
-<tr>
-<th>状況</th>
-<th>最初の確認</th>
-<th>判断者と次の行動</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>主担当が欠席</td>
-<td>代役の連絡・権限・手順の所持</td>
-<td>責任者が役割を再配置。対応できなければ規模・開始を変更</td>
-</tr>
-<tr>
-<td>1チームだけ未接続</td>
-<td>URL、チーム別ログイン情報、端末、回線</td>
-<td>受付→技術担当へ。鍵を全員向けに貼って解決しない</td>
-</tr>
-<tr>
-<td>全チームが接続不可</td>
-<td>共通の回線・Portal・環境状態</td>
-<td>技術担当が切り分け、責任者が開始延期と次回案内時刻を通知</td>
-</tr>
-<tr>
-<td>回答したのに得点が合わない</td>
-<td>オーダー番号、時刻、画面、採点記録</td>
-<td>技術担当が照合。確認前に再送を繰り返させたり点数を書き換えたりしない</td>
-</tr>
-<tr>
-<td>中断が必要</td>
-<td>影響範囲、記録、現在の時間・得点</td>
-<td>責任者が全員へ案内。一時停止できるとは仮定せず、使うモードで確認済みの手順を使う</td>
-</tr>
-<tr>
-<td>撤収に失敗</td>
-<td>残ったリソースと削除失敗の理由</td>
-<td>技術担当が残件と期限を記録し引き継ぐ。費用確認を継続する</td>
-</tr>
-</tbody></table>
-<h3>開催後に更新する記録</h3>
-<table>
-<thead>
-<tr>
-<th>工程</th>
-<th>見積り／実績時間</th>
-<th>参加・チーム数</th>
-<th>担当不足・多かった質問</th>
-<th>障害と対応</th>
-<th>次回変えること・担当・期限</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>今回の記録</td>
-<td>記入</td>
-<td>記入</td>
-<td>記入</td>
-<td>記入</td>
-<td>記入</td>
-</tr>
-</tbody></table>
-<p>実開催を重ねてこの表を更新します。まだ開催していない工程は「未計測」と記録します。技術的な障害対応・撤収の詳細は<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/event-runbook.md">イベント運用Runbook</a>、暗号バトル固有の設定は<a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/battles/ac26-crypto-battle/README.ja.md">問題README</a>を参照します。</p>
-<h2>Liteで競技を運営する</h2>
-<ol>
-<li>LiteのApplication Admin Consoleへログインする。</li>
-<li>イベント、テストチーム、問題を作る。</li>
-<li>下記の手順でテスト競技者AWSアカウントを接続する。</li>
-<li>問題を起動し、接続先を開く。</li>
-<li>問題を解いて本物の<code>TC{...}</code>を提出し、得点を確認する。</li>
-<li>リセットして再起動できることを確認する。</li>
-<li>停止し、競技者AWSの問題スタックが削除されたことを確認する。</li>
-<li>Participant PortalのURL、team key、開始時刻を参加者へ渡す。</li>
-</ol>
-<h2>管理者SSOを企業IdPに接続する</h2>
-<p>管理者SSOはParticipant Portalのチームログイン鍵とは別の認証経路です。TenkaCloudではCognito User PoolをSAML Service Providerとして使い、Microsoft Entra ID、Google Workspace、AWS IAM Identity CenterなどのSAML 2.0 IdPと接続できます。</p>
-<p>Application Admin ConsoleのSAML SSOは実験的機能で、デフォルトでは無効です。tenant単位のIdP設定はLiteまたはsilo tierの専用User Poolで使い、pooled tenantでは使用しません。本番イベントの前に非本番環境で一連のログインを確認してください。</p>
-<ol>
-<li>Application Admin Consoleの「ID プロバイダ」画面を開き、表示されたACS URL、SPエンティティID、email attribute mappingを取得する。ドキュメント中の例ではなく、画面に表示された値を正本にする。</li>
-<li>IdP側でSAML 2.0アプリケーションを作成し、ACS URLとSPエンティティIDを設定する。<code>NameID</code>は同一ユーザーで安定した値にし、通常はemailを使う。</li>
-<li>IdP側でテストユーザーまたはテストグループをアプリケーションへ割り当て、IdP metadata XMLを取得する。AWS IAM Identity Centerは汎用SAMLとして設定する。</li>
-<li>TenkaCloudへmetadata XMLを登録し、email attribute mappingを確認する。最初はgroup-to-role mappingを空にし、基本ログインが成功してから認可設定を追加する。</li>
-<li>private browsing windowからTenkaCloudのログインを開始し、IdP認証、Cognito callback、Application Admin Consoleへの復帰までを確認する。IdPのポータルから直接開くだけではなく、TenkaCloudから開始するSP-initiated loginを確認する。</li>
-<li>通常ログインでも同じIdPへルーティングされること、ログイン後のemail、tenant、roleが期待どおりであることを確認する。IdP登録と通常ログインのルーティングは別の設定経路なので、登録だけで完了と判断しない。</li>
-<li>SSO障害時に備え、既存のCognito local administratorを少なくとも1名維持する。SAML assertion、ID token、metadata XMLは組織情報を含むため、Issueやチャットへ無加工で貼らない。</li>
-</ol>
-<p>証明書更新、障害切り分け、IdPの撤去を含む詳細手順は<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/cognito-saml-idp-playbook.md">管理者向けCognito / SAML IdP接続プレイブック</a>を参照してください。</p>
-<h2>SaaSでテナントを作成する（構成参考）</h2>
-<p>SaaS モードでは、System Admin が <code>admin-console</code>からテナントを作成するコードがあります。
-しかし、最近の新規AWS環境でテナント作成から採点・削除までを通した記録はありません。
-本番手順として使用せず、専用環境で再検証してください。</p>
-<h2>競技者アカウントを接続する</h2>
-<p>参加する各チームは、CloudFormationテンプレート
-<code>infrastructure/templates/competitor-bootstrap.yaml</code>を自分のAWSアカウントへ
-1回デプロイします。<code>ExternalId</code>は開催者が設定した値と同じ、16〜128文字の半角英数字と
-<code>_ = , . @ : / -</code>を使います。作成されたロールARNを開催者へ共有します。秘密鍵や
-AWS管理者認証情報は共有しません。詳細は<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md">競技者セットアップガイド</a>にあります。</p>
-<p>参加アカウントがAWS Organizationsの1つのOUにまとまっている場合は、同じテンプレートをStackSetでOU全体へ一括配布できます。3つのパラメータはテナント内で共通です。手順はセットアップガイドの<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md#%E8%A4%87%E6%95%B0%E3%82%A2%E3%82%AB%E3%82%A6%E3%83%B3%E3%83%88%E3%82%92%E4%B8%80%E6%8B%AC%E3%81%A7-bootstrap-%E3%81%99%E3%82%8B-aws-organizations--stacksets">一括bootstrap</a>を参照してください。TenkaCloud側へは、Competitor Accountsの「JSONで一括登録」でアカウントIDをまとめて貼り付けて登録し、「未検証N件をまとめてVerify」で疎通確認します。</p>
-<h2>問題をデプロイする</h2>
-<p><code>application-admin-console</code> でイベントを作成し、カタログから問題を選び（ピッカーに表示されるのはクラウドにデプロイ可能な問題だけです。ローカル専用のコンテナ問題は除外され、非 AWS の問題はマルチクラウドを有効にすると表示されます）、各チームのアカウントとリージョンを割り当てて、デプロイします。各デプロイは ExternalId を使ってチームのロールを AssumeRole し、チームのアカウントで CloudFormation を実行します。デプロイメントが終了状態に達するまでポーリングでステータスを見守り、イベントが終わったら同じコンソールから撤収します。</p>
-<h2>マルチクラウドを有効にする（構成参考）</h2>
-<p>Sakura / Azure / GCPは一律に実行可能とは限りません。先に
-<a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a>で対象問題の
-状態を確認し、実行可能と記載されたruntimeだけを専用のテストイベントで検証します。</p>
-<p>関連: <a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a>、<a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a>。</p>
+<h2 id="finish">安全に終了する</h2><p>End Event で採点を止め、コンソールの teardown で所有する環境を削除し、完了を確認します。結果を保持し、ディレクトリ全体をバックアップします。通常のローカル停止は <code>make down</code>、再開は同じディレクトリで <code>make local</code> です。停止は AWS の削除ではありません。クラウドの <code>make deploy</code> は権限設定の確認が必要です。<code>make destroy</code> は対象を確認して基盤とデフォルトの所有データを削除します。外部 Turso の行は残し、<code>make destroy-all</code> で明示的にリセットします。問題環境は基盤を削除する前に大会の Teardown で撤収します。クラウド開催は SBT を使わない旧 Lite の処理を再利用し、Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。実 AWS・hosted Turso での大会性能は未検証です。</p>
+<p>運用チェックリストはリポジトリの <code>docs/operations/event-runbook.md</code> を参照してください。</p>
+<p>新しい Docker 大会は、停止状態のチーム・問題 jobs を大会ごとに最大 512 件準備します。参加者が <strong>Start / resume</strong> と <strong>Stop (keep data)</strong> を使います。停止は既存の書き込みレイヤーと volume を保持しますが、RAM は保持しません。自動退避や初期化は行いません。既存大会は従来の lifecycle を維持します。</p>
+<p>デフォルトの同時起動上限はチームごとに 3 環境、host 全体で 12 環境です。さらに、コンテナに設定されたメモリー上限の合計を 4096 MiB までに制限します。これは起動の受付制限であり、実測使用量や必要な機器の保証ではありません。新しい Compose 計画は作問者の上限を保持し、未指定の項目に 512 MiB、1 CPU、256 PIDs を補います。必要な負荷を確認したうえで <code>make local LOCAL_ARGS=&quot;--max-active-per-team 3 --max-active-environments 12 --container-memory-mib 4096&quot;</code> から受付制限を指定できます。</p>
+<p>40 個の gateway 枠は起動中の環境だけに使います。必要な数だけ割り当てた runtime port は停止後も保持します。20 問 × 5 チームの synthetic テストでは 100 jobs と 105 runtime ports を割り当てました。これは割り当てと lifecycle の確認であり、実 Docker の同時実行性能を示しません。測定項目は <code>docs/local-play-requirements.md</code> を参照してください。</p>
 
 </article>
 </main>

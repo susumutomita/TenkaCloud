@@ -262,6 +262,62 @@ function LocalDeployTeardownFields({
   );
 }
 
+/** Cloud hosting uses explicit preparation/cleanup; neither recreates live resources. */
+function CloudDeployTeardownFields({
+  apiClient,
+  bulkInFlight,
+  canMutateTenant,
+  detail,
+  onBulkDeploy,
+  onConfirmTeardown,
+  t,
+}: Pick<
+  Parameters<typeof EventSchedulePanel>[0],
+  | "apiClient"
+  | "bulkInFlight"
+  | "canMutateTenant"
+  | "detail"
+  | "onBulkDeploy"
+  | "onConfirmTeardown"
+  | "t"
+>) {
+  const blocked = !apiClient || !canMutateTenant || bulkInFlight !== null;
+  const nativeCleanupAvailable = detail.nativeRuns?.some(
+    (run) =>
+      run.purgeState === "pending" || (run.status === "CLOSED" && run.purgeState === undefined),
+  );
+  return (
+    <Box margin={{ top: "m" }}>
+      <SpaceBetween size="s">
+        <Box variant="small" color="text-status-inactive">
+          {t("event_detail.cloud_manual_lifecycle")}
+        </Box>
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button
+            loading={bulkInFlight === "deploy"}
+            disabled={
+              blocked ||
+              isTerminalEventStatus(detail.status) ||
+              detail.teams.length === 0 ||
+              detail.problems.length === 0
+            }
+            onClick={() => onBulkDeploy()}
+          >
+            {t("event_detail.cloud_prepare")}
+          </Button>
+          <Button
+            loading={bulkInFlight === "teardown"}
+            disabled={blocked || (detail.status === "ARCHIVED" && !nativeCleanupAvailable)}
+            onClick={onConfirmTeardown}
+          >
+            {t("event_detail.teardown_at_now")}
+          </Button>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Box>
+  );
+}
+
 /**
  * The local host refuses teardown for an archived event and for a torn-down event whose
  * environments are all removed; a torn-down event with a failed cleanup can retry.
@@ -280,6 +336,10 @@ function localTeardownOwed(detail: EventDetail): boolean {
   );
 }
 
+function hostScheduleClosed(detail: EventDetail, localHost: boolean, cloudHost: boolean): boolean {
+  return (localHost || cloudHost) && isTerminalEventStatus(detail.status);
+}
+
 export function EventSchedulePanel({
   apiClient,
   bulkInFlight,
@@ -291,6 +351,7 @@ export function EventSchedulePanel({
   freezeMinutesInFlight,
   freezeMinutesInput,
   localHost = false,
+  cloudHost = false,
   onBulkDeploy,
   onConfirmTeardown,
   onEndNowSchedule,
@@ -318,6 +379,7 @@ export function EventSchedulePanel({
   readonly freezeMinutesInput: string;
   /** Issue #3226: the local competition host (no scheduled deploy/teardown, no force redeploy). */
   readonly localHost?: boolean;
+  readonly cloudHost?: boolean;
   readonly onBulkDeploy: (body?: BulkDeployBody) => void;
   readonly onConfirmTeardown: () => void;
   readonly onEndNowSchedule: () => void;
@@ -335,10 +397,18 @@ export function EventSchedulePanel({
   readonly t: Translate;
   readonly wizard: WizardState | null;
 }) {
+  const closedEvent = hostScheduleClosed(detail, localHost, cloudHost);
   return (
     <Container
       header={
-        <Header variant="h2" description={t("event_detail.schedule_description")}>
+        <Header
+          variant="h2"
+          description={t(
+            cloudHost
+              ? "event_detail.cloud_schedule_description"
+              : "event_detail.schedule_description",
+          )}
+        >
           {t("event_detail.schedule_header")}
         </Header>
       }
@@ -356,14 +426,18 @@ export function EventSchedulePanel({
             <SpaceBetween direction="horizontal" size="xs">
               <Button
                 onClick={onOpenScheduleModal}
-                disabled={!apiClient || !canMutateTenant || scheduleInFlight !== null}
+                disabled={
+                  !apiClient || !canMutateTenant || closedEvent || scheduleInFlight !== null
+                }
               >
                 {t("event_detail.starts_at_pick")}
               </Button>
               <Button
                 variant={wizard?.primary === "start" ? "primary" : "normal"}
                 loading={scheduleInFlight === "now"}
-                disabled={!apiClient || !canMutateTenant || scheduleInFlight === "scheduled"}
+                disabled={
+                  !apiClient || !canMutateTenant || closedEvent || scheduleInFlight === "scheduled"
+                }
                 onClick={onStartNow}
               >
                 {t("event_detail.starts_at_now")}
@@ -383,13 +457,13 @@ export function EventSchedulePanel({
             <SpaceBetween direction="horizontal" size="xs">
               <Button
                 onClick={onOpenEndsAtModal}
-                disabled={!apiClient || !canMutateTenant || endsAtInFlight}
+                disabled={!apiClient || !canMutateTenant || closedEvent || endsAtInFlight}
               >
                 {t("event_detail.ends_at_pick")}
               </Button>
               <Button
                 loading={endsAtInFlight}
-                disabled={!apiClient || !canMutateTenant}
+                disabled={!apiClient || !canMutateTenant || closedEvent}
                 onClick={onEndNowSchedule}
               >
                 {t("event_detail.ends_at_now")}
@@ -417,11 +491,13 @@ export function EventSchedulePanel({
               placeholder={t("event_detail.freeze_placeholder")}
               value={freezeMinutesInput}
               onChange={({ detail: d }) => onUpdateFreezeMinutes(d.value)}
-              disabled={!canMutateTenant || freezeMinutesInFlight}
+              disabled={!canMutateTenant || closedEvent || freezeMinutesInFlight}
             />
             <Button
               loading={freezeMinutesInFlight}
-              disabled={!apiClient || !canMutateTenant || freezeMinutesInput.trim() === ""}
+              disabled={
+                !apiClient || !canMutateTenant || closedEvent || freezeMinutesInput.trim() === ""
+              }
               onClick={onSaveFreezeMinutes}
             >
               {t("event_detail.freeze_save")}
@@ -429,7 +505,18 @@ export function EventSchedulePanel({
           </SpaceBetween>
         </Field>
       </Box>
-      {localHost ? (
+      {cloudHost && (
+        <CloudDeployTeardownFields
+          apiClient={apiClient}
+          bulkInFlight={bulkInFlight}
+          canMutateTenant={canMutateTenant}
+          detail={detail}
+          onBulkDeploy={onBulkDeploy}
+          onConfirmTeardown={onConfirmTeardown}
+          t={t}
+        />
+      )}
+      {!cloudHost && localHost && (
         <LocalDeployTeardownFields
           apiClient={apiClient}
           bulkInFlight={bulkInFlight}
@@ -441,7 +528,8 @@ export function EventSchedulePanel({
           t={t}
           wizard={wizard}
         />
-      ) : (
+      )}
+      {!cloudHost && !localHost && (
         <DeployTeardownFields
           apiClient={apiClient}
           bulkInFlight={bulkInFlight}

@@ -1,12 +1,12 @@
-import { GetParameterCommand, type SSMClient } from "@aws-sdk/client-ssm";
-import type { Client } from "@libsql/client/http";
+import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
+import { type Client, createClient } from "@libsql/client/http";
 import type { RuntimeEnvironment } from "./backend-config.js";
 import { initializeControlDataSchema, LibsqlExecutor } from "./libsql-executor.js";
-import type { SqlExecutor } from "./types.js";
+import type { SqlExecutor } from "./sql-port.js";
 
 /**
- * [#2527 Slice 4] The SQL-executor cold-start cache, extracted verbatim from
- * `runtime-repositories.ts`. One acquire() per runtime: the decrypted Turso
+ * The historical SQL-executor cold-start cache. One acquire() per runtime:
+ * the decrypted Turso
  * token and libSQL client are fetched/built once and reused across warm
  * invocations; a failed SSM/token fetch self-evicts so the next invocation
  * retries instead of caching the rejection (fail-loud, never fall back).
@@ -46,6 +46,12 @@ function describeCause(err: unknown): string {
   return `${err.name}: ${err.message}${suffix}`;
 }
 
+function redactToken(message: string, token: string): string {
+  // Client/header validation can quote or URL-encode its input in diagnostics.
+  const forms = [token, JSON.stringify(token).slice(1, -1), encodeURIComponent(token)];
+  return forms.reduce((text, secret) => text.split(secret).join("[REDACTED]"), message);
+}
+
 export function createSqlExecutorCache(deps: RuntimeDependencies): () => Promise<SqlExecutor> {
   let cachedSql: Promise<SqlExecutor> | undefined;
 
@@ -66,18 +72,35 @@ export function createSqlExecutorCache(deps: RuntimeDependencies): () => Promise
               `Underlying: ${describeCause(err)}`,
           );
         });
-      const authToken = response.Parameter?.Value?.trim();
+      if (response.Parameter?.Type !== "SecureString") {
+        throw new Error(`Turso auth token must be an SSM SecureString: ${parameterName}`);
+      }
+      const authToken = response.Parameter.Value?.trim();
       if (!authToken) {
         throw new Error(`Turso auth token not found in SSM SecureString: ${parameterName}`);
       }
 
-      const client = deps.createClient({ url, authToken });
-      await initializeControlDataSchema(client).catch((err: unknown) => {
+      let client: Client;
+      try {
+        client = deps.createClient({ url, authToken });
+      } catch (error) {
         throw new Error(
-          `Turso control-data schema bootstrap failed against ${url}. ` +
-            `A 401 / UNAUTHORIZED here means the token in ${parameterName} is rejected by that ` +
-            "database (expired, revoked, or issued for a different one). " +
-            `Underlying: ${describeCause(err)}`,
+          redactToken(
+            `Turso control-data client initialization failed. Underlying: ${describeCause(error)}`,
+            authToken,
+          ),
+        );
+      }
+      await initializeControlDataSchema(client).catch((err: unknown) => {
+        client.close();
+        throw new Error(
+          redactToken(
+            `Turso control-data schema bootstrap failed against ${url}. ` +
+              `A 401 / UNAUTHORIZED here means the token in ${parameterName} is rejected by that ` +
+              "database (expired, revoked, or issued for a different one). " +
+              `Underlying: ${describeCause(err)}`,
+            authToken,
+          ),
         );
       });
       return new LibsqlExecutor(client);
@@ -87,4 +110,18 @@ export function createSqlExecutorCache(deps: RuntimeDependencies): () => Promise
     });
     return cachedSql;
   };
+}
+
+export function createDefaultSqlExecutorCache(
+  env: RuntimeEnvironment = {
+    CONTROL_DATA_BACKEND: process.env.CONTROL_DATA_BACKEND,
+    TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL,
+    TURSO_AUTH_TOKEN_PARAMETER_NAME: process.env.TURSO_AUTH_TOKEN_PARAMETER_NAME,
+  },
+): () => Promise<SqlExecutor> {
+  return createSqlExecutorCache({
+    env,
+    ssm: new SSMClient({ ignoreConfiguredEndpointUrls: true }),
+    createClient,
+  });
 }

@@ -1,5 +1,4 @@
 import type { ProblemScoringMetadata, ProgressiveHint } from "../../../utils/scoring-metadata.js";
-import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { buildScoreEventRecord } from "../shared/score-event.js";
@@ -8,6 +7,7 @@ import {
   type ParticipantSharedResources,
   queryTeamItems,
   resolveDeploymentsRepository,
+  resolveParticipantCatalog,
 } from "./shared.js";
 
 /**
@@ -71,7 +71,8 @@ export async function revealHint(
   const blocked = await getCompetitionAccessBlock(shared, items, item);
   if (blocked) return blocked;
 
-  const scoring = scoringMap[item.problemId];
+  shared = await resolveParticipantCatalog(shared, items);
+  const scoring = (shared.executionCatalog ? shared.problemsScoring : scoringMap)[item.problemId];
   // Phase 3 は flag kind 限定で hints をサポート (= Phase 5 で他 4 kind に拡張)。
   if (scoring?.kind !== "flag") return { kind: "not_flag_problem" };
 
@@ -143,17 +144,19 @@ async function updateHintReveal(
   const now = new Date().toISOString();
   const record = { hintId: hint.id, revealedAt: now, penaltyApplied: hint.penalty };
   const jobId = String(item.jobId ?? "");
-  // [Issue #2441 / Phase B2] `applyHintPenalty` folds the CCF into `conflict`
-  // (no probe) instead of throwing.
-  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
+  const repository = await resolveDeploymentsRepository(shared);
   const outcome = await repository.applyHintPenalty(jobId, record, now);
   if (outcome.outcome !== "updated") {
-    // Race: 同 hintId が他経路で既に append された。 already_revealed として返す。
+    // A lost write is not proof the hint was charged. Confirm the winning row
+    // before returning its content, original penalty and current score.
+    const current = await repository.getDeployment(jobId, { consistentRead: true });
+    const existing = current?.hintsRevealed?.find((entry) => entry.hintId === hintId);
+    if (!existing) throw new Error("Hint reveal did not persist; retry the request");
     return {
       kind: "already_revealed",
       content: hint.content,
-      penaltyApplied: hint.penalty,
-      totalScore: Number(item.score ?? 0),
+      penaltyApplied: existing.penaltyApplied,
+      totalScore: Number(current?.score ?? 0),
     };
   }
   const totalScore = Number(outcome.record?.score ?? -hint.penalty);
@@ -181,7 +184,7 @@ async function writeHintScoreEvent(
   // 握り潰す fallback 禁止」 違反だったので、 失敗は log した上で throw し、
   // route-helpers の internal_error 経路で 500 を返す (= CloudWatch + Portal retry に乗せる)。
   try {
-    const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
+    const repository = await resolveDeploymentsRepository(shared);
     await repository.appendScoreEvent(
       buildScoreEventRecord(
         {

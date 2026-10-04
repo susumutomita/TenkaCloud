@@ -1,26 +1,55 @@
 # Local competition hosting
 
-Local hosting runs a competition on the organizer's computer. It is a different
-entry point from `make local`: individual practice and its existing login flow
-are unchanged. The host console requires a host key, while participants sign in
-with the team keys issued for their event.
+Local hosting runs a competition on the organizer's computer through `make local`.
+The host console uses
+one organizer key, with no username, password or local SAML sign-in. Participants
+sign in with the separate team keys issued for their event. Cloud organizer
+authentication remains Cognito.
 
 ## Supported problems
 
-The application server uses Bun and a local SQLite file. There is no AWS,
-Cognito, external database, or application container to provision. The browser
-interfaces are built using the repository's existing Vite pipelines.
+The application server uses Bun and a local SQLite file. There is no Cognito,
+external database, or application container to provision. The local entrypoint does
+not use AWS credentials; [AWS problems require cloud hosting](#aws-problems-use-cloud-hosting). The browser interfaces are built
+using the repository's existing Vite pipelines.
 
 | Problem | Runtime | Requirements |
 | --- | --- | --- |
-| SQL injection (`challenges/sqli-demo`) | One isolated Docker Compose project per team | Docker |
+| 106 local Compose exercises, including `sqli-demo` | One isolated, on-demand Compose project per team/problem; workbenches and 15 opted-in terminals | Docker |
 | Cryptography Battle (`battles/ac26-crypto-battle`) | Shared match on the host; private view per team | Bun + SQLite, no Docker or AWS |
 
-Both reuse the catalog's statements, rules and scoring. You can include both in
-one event; their points contribute to the same leaderboard. A local event can
-have one shared Battle. Other catalog problems require a compatibility and
-isolation review before being enabled. The SQL exercise gateway is not a generic
-proxy or a sandbox for arbitrary workloads.
+The local exercises reuse their catalog statements, verifiers, hints and scoring.
+The four former local Battle-shaped exercises are offered as Challenges; native
+Cryptography Battle retains its shared-match rules. Catalog/workbench/terminal
+boundary tests do not establish real Docker playability of every exercise.
+Installed pack activation records are not yet part of the host runtime catalog.
+
+### Structured local practice
+
+For individual practice, create a normal event with one team and select the built-in
+Docker exercises you want to study. The participant sidebar's **Course tracks** view
+groups only that team's assigned problems by their authored track/chapter order.
+Assigned drafts remain visible. Unassigned exercises are not offered as next steps;
+the ordinary **Problems** list still contains every assigned problem.
+
+Checkpoint and completion progress come from the same team scoring state as the
+competition pages and survive a host restart. The existing optional event progression
+gate remains authoritative: locked problems are labeled and are not recommended until
+unlocked. Track order is guidance, not an additional prerequisite graph. A one-team
+event retains the normal event timing, hint penalties and writeup disclosure rules.
+
+This reuses the local competition host and team-key sign-in. It does not restore the
+retired individual-practice backend, execute installed external Packs, or offer Docker
+courses in cloud hosting. Course source links omit embargoed alignment; problem answers,
+writeups, hints and executable Pack plugins remain outside the public metadata bundle.
+
+New Docker events prepare dormant jobs. Participants start or resume their own
+environments as needed. Stopping preserves container writable layers and volumes,
+not process memory. There is no automatic eviction of another problem or team.
+The HTTP gateway supports the owned application's paths, assets, forms and
+server-managed cookies; application cookies are namespaced per job because browser
+cookies do not isolate TCP ports. Custom apps that manipulate Cookie names directly
+in browser JavaScript require a compatibility check.
 
 ## Start
 
@@ -29,12 +58,14 @@ point. From the repository root:
 
 ```sh
 git submodule update --init --recursive
-bun install --frozen-lockfile
-make host      # the same as: bun start
+bun install --frozen-lockfile --ignore-scripts
+make local      # foreground console; keep this terminal open
+# In a second terminal, with the same --data option if one was used:
+make down       # stop owned local runtimes; preserve event and runtime data
 ```
 
-Pass options through `HOST_ARGS`, for example
-`make host HOST_ARGS="--no-build"`.
+Pass options through `LOCAL_ARGS`, for example
+`make local LOCAL_ARGS="--no-build"`.
 
 Use the repository-pinned Bun version, currently 1.3.11 at the implementation
 base. Startup builds the host and participant interfaces and creates
@@ -48,39 +79,78 @@ mode and refuses to change the permissions of an existing one, so pointing
 `--data` at a shared project or home directory fails instead of locking other
 users and services out of unrelated files.
 
-The terminal prints the two URLs, the exercise-gateway port range and the host
-login key. The defaults are the host console at `http://127.0.0.1:5174`, the
+The terminal prints the two URLs and the exercise-gateway port range. A newly
+generated organizer key is shown once on the interactive terminal, never in
+redirected output or container logs. The defaults are the host console at `http://127.0.0.1:5174`, the
 participant portal at `http://127.0.0.1:5175` and exercise gateways on ports
 `5200-5239`. Use the printed URLs exactly; arbitrary Host aliases are not
-accepted. The host key is not included in public browser configuration.
+accepted. The organizer key is not included in browser configuration and the
+browser keeps it only until submission. SQLite stores only its SHA-256 hash and
+rotation version. The private `host-key` file is an internal token-signing key,
+not the organizer login key; keep it with the database when backing up state.
 
 The host console is the normal Application Admin Console running in local-host
 mode: the same event list, event creation page, event detail tabs, schedule,
-scoreboard, notifications and report, served against this computer's API. Sign in
-with the terminal's host key (there is no Cognito). Then:
+scoreboard, notifications and report, served against this computer's API. On the
+first and later visits, enter the organizer key. The key grants organizer Admin
+access. Local **Users**, password and SAML management are not offered. Dedicated
+audit collection, settings and read/export endpoints are retired. This change does
+not migrate or purge existing audit tables or rows. Older organizer records remain historical
+state and cannot authenticate after key mode is enabled. There is no local Cognito.
+
+If the key is lost, run `make local-reset` in an interactive terminal. For a custom
+state directory use the same `LOCAL_ARGS="--data <directory>"`. Rotation works with
+the managed host running or stopped. It invalidates the old organizer key and all
+organizer sessions, preserving events, scores, progress, participant keys and
+running/stopped problem environments. It does not stop containers or delete data.
+A redirected or noninteractive reset refuses before mutation. An unrecognized or
+unreachable running controller is not replaced and no process is killed. Before upgrading an
+already running older host, stop it with Ctrl+C in its original terminal. New
+commands refuse controllers without directory-bound request support; copied
+launcher metadata cannot rotate or stop a different live host.
+
+After signing in:
 
 1. **Create event**: name the event, set the team count and choose the problem.
    Only problems this host can run are selectable; the others are listed as not
-   supported locally. There is no AWS account or region to choose. The dialog after
+   supported locally. Local Docker and Battle events do not select an AWS account. The dialog after
    creation shows each team's key and invitation link once; keys stay copyable in
    the **Teams** tab.
-2. **Deploy**: choose **Deploy now** in that dialog, or prepare the environments from
-   the **Schedule** tab. Each Docker team/problem environment gets its own block of host
-   ports; the application skips occupied blocks and moves a retried environment
-   when its previous ports were taken. Cryptography Battle runs in the participant
-   portal and does not allocate exercise ports.
+2. **Prepare**: choose **Deploy now** in that dialog or the **Schedule** tab.
+   New Docker jobs receive exact durable port maps but stay stopped. Native Battle
+   preparation keeps its existing behavior. Docker port reservations are
+   retained while stopped so resume never recreates a played environment merely
+   to move its ports. Only active jobs lease an exercise-gateway slot.
 3. **Start**: in the **Schedule** tab, choose **Start now** (or pick a start time) and,
    optionally, an end time. **End Event** in the page header stops scoring.
 
 Participants use the normal Participant Portal and its actual backend login, not
-the practice-mode or demo login.
+the practice-mode or demo login. They use **Start / resume** and **Stop (keep data)**
+for on-demand exercises. Admission errors do not stop another environment.
+A played generation is always resumed in place; a first start that never became
+playable can clean up its owned partial resources before retrying.
 
-Console features that need cloud infrastructure are not offered: AWS competitor
-accounts, tenant users, the audit log, SAML, the problem catalog's cloud
-deployments, disruptions, the progression gate, registration links, capacity
-monitoring, scheduled deploy and automatic teardown. Their navigation entries and
+Cloud-only features that are not implemented by this local host are not offered:
+capacity monitoring, scheduled deploy and automatic teardown. Their navigation entries and
 tabs are hidden; opening such a URL shows an explanation instead of a failing
 request.
+
+### Disruptions (Red Team)
+
+The retained disruption engine and its tests cover SSM inject/revert ownership,
+scheduled work, uncertain outcomes and durable cleanup. This is not an available
+AWS execution feature of `make local`: the current entrypoint does not configure
+AWS clients, and `hello-world-battle` is not selectable for local hosting.
+
+AWS disruption execution and its cloud UI/API wiring remain part of cloud-hosting
+acceptance. Retaining these modules or displaying authored fault declarations does
+not make those actions executable. Unsupported declarations must not be reported
+as successful fires.
+
+For an event created by an earlier AWS-enabled host revision, retain that exact
+revision and its private state for reviewed cleanup. Pending SSM revert work must
+not be redirected to a new account or replacement stack. See
+[AWS problems use cloud hosting](#aws-problems-use-cloud-hosting).
 
 ### Play Cryptography Battle
 
@@ -106,6 +176,33 @@ end time remains fixed. Teardown settles elapsed play before closing access.
 The optional AWS Parameter Store item is not enabled in local hosting. Battle parameters currently use the catalog
 defaults; local event duration can be set from Schedule.
 
+### Progression gates
+
+Open **Progression / Gate** in the event detail page. The host flag
+`challengePrerequisiteGate` defaults to OFF. Enable it, choose one gate problem
+and the problems it unlocks, then save. Team overrides can bypass the prerequisite
+or change the completion bonus. With the flag OFF, the host retains the settings
+and permits ordinary play, while rejecting gate configuration PUT and DELETE.
+The flag itself remains editable by an Admin; viewing saved settings remains available.
+
+The first positive cumulative score or correct flag completes a problem. SQLite
+records that fact under the event, team and problem, independently of deployments.
+Removing and adding the configuration, rebuilding the environment, changing the
+bonus or switching the feature OFF and ON does not erase completion or award the
+bonus twice. A completion recorded while OFF can receive its configured bonus
+when the feature is enabled. A zero bonus is also recorded as settled.
+
+Locked problems reveal only their card identity. Their instructions, hints,
+outputs and endpoints are withheld; flag submissions, hint reveals, Battle
+operations and exercise-gateway requests are rejected. Shared Battle time still
+advances; scores for locked teams are skipped and are not awarded retroactively.
+Invalid stored gate settings close participant access until an organizer repairs
+them; the host and admin settings remain available.
+
+This gate controls local host APIs and newly issued exercise access. Cloud AWS
+resource isolation requires its own account/role policy review. A host progression
+gate is not proof that already-issued AWS sessions have been revoked.
+
 ### One team's environment
 
 The **Teams** tab lists every team/problem environment with its status and gateway
@@ -115,7 +212,9 @@ scores are not touched. Battle access controls are described above:
 - **Stop** halts the containers (`docker compose stop`) and keeps their data. The team
   sees the problem as stopped and cannot submit to it.
 - **Restart** starts a stopped or running environment again with its data
-  (`docker compose restart`). A failed or removed environment is rebuilt from scratch.
+  (`docker compose restart`). On-demand environments retain their played generation
+  even after a failed resume; only an incomplete first start is cleaned up and retried.
+  Legacy eager events retain the older failed/removed-environment rebuild behavior.
   Restart is available while the event is being prepared or is ready.
 - **Tear down** removes that team's containers and volumes. Scores and submissions stay.
 
@@ -127,19 +226,20 @@ even if one environment was lost, so the scoring gate is not closed, or kept fro
 opening at the scheduled time, for every team; restart that environment from the
 **Teams** tab. Only an event without a start time returns to its deployment state. The
 event-level deploy never redeploys a stopped environment (redeploying discards its
-data), and **Retry failed** redeploys failed environments only. A consequence: an
-event that is still being prepared does not become ready while one of its
-environments is stopped; the **Schedule** tab says so, and restarting that
-environment from the **Teams** tab completes the preparation.
+data), and **Retry failed** redeploys failed environments only. New on-demand
+events are ready while Docker jobs remain stopped: participants start them when needed.
+Older eager events still require every prepared environment to be running.
 
-The initial host sign-in has a 15-minute absolute lifetime, in addition to the
-existing idle logout. Sign in again with the terminal key after expiration;
-this does not stop the event or discard its results.
+An organizer login expires after eight hours or 15 minutes without a request.
+Sign in again with the organizer key after expiration. `make local-reset`
+revokes all organizer sessions, including sessions issued before an upgrade from
+password/SAML authentication. Participant access is independent. Expiry and key
+rotation do not stop the event or discard its results.
 
 Subsequent runs may reuse the compiled interfaces:
 
 ```sh
-bun start --no-build
+make local LOCAL_ARGS="--no-build"
 ```
 
 Rebuild after changing source code. To build without starting servers:
@@ -148,6 +248,64 @@ Rebuild after changing source code. To build without starting servers:
 bun run build:host
 ```
 
+## Update the problem catalog
+
+Source updates and running-host updates are separate. `make submodule-latest`
+fetches the tracked branch of `problems/` and stages a fast-forward Git pin for review.
+It does not rebuild the browser interfaces, reload a running process, or change
+saved event definitions. Use it between events, before creating the next event.
+
+`submodule-latest` follows the configured `main` branch, unless overridden in
+the submodule settings. Its tip can be older than an ahead-of-main trial pin.
+Keep that reviewed pin until the tracked branch contains its commits. The updater rejects
+older or divergent targets before checkout or staging, including squash-equivalent
+history. A deliberate switch to divergent history requires a separately reviewed
+pin selection; this command has no force option.
+
+The updater requires an initialized catalog and refuses staged, unstaged or
+untracked problem-source changes, or a checkout that differs from the staged pin.
+It does not stash or discard work. Unrelated platform files and staged changes
+are preserved. Fetch failure or unknown ancestry also stops the update; a failed
+guard leaves source files and the index unchanged, although fetched Git objects
+and remote refs may have advanced.
+
+Local events copy their selected problem definitions when they are created.
+Docker definitions also pin the original source directory and every source-file
+hash. Replacing those files can block an existing job's start, recovery or resume,
+even after a normal stop/restart. Stopping retains data; it does not make a catalog
+replacement safe for an event you still need to resume. Keep its original checkout
+and data directory intact and use a separate clone for the next catalog revision
+when old and new events must coexist. A different `--data` directory alone does
+not preserve the old problem source files.
+
+For an installation whose previous events no longer need their original sources:
+
+```sh
+# Use the same LOCAL_ARGS (especially --data) as the running host.
+make down
+git -C problems rev-parse HEAD # record the old catalog commit
+make submodule-latest
+git diff --cached --submodule=log -- problems
+make validate-problems
+make local                    # rebuild both interfaces and load the catalog
+```
+
+If you deliberately checked out another problem commit, stage it with
+`git add problems` before validation and skip `make submodule-latest`.
+`make validate-problems` initializes/aligns the submodule to its staged pin;
+it must not be used to select a newer commit. Review local content edits with
+`git -C problems diff` as well. The validator installs the catalog's locked
+dependencies with lifecycle scripts disabled and checks schemas and both READMEs.
+
+Do not pass `--no-build` after replacing catalog content unless you have already
+run `bun run build:host` against that exact content. `make build` also includes
+the host build, but builds the other workspaces too. Building alone does not
+reload the server's in-memory catalog; restart with `make local`, then reload the
+browser and create a new test event. Check the problem statement, verifier and
+score before admitting participants. Existing events retain their saved definitions;
+they are not upgraded to the new catalog by these commands. No AWS deployment is
+needed for this local workflow.
+
 ## Participants on another computer
 
 The host console always listens on loopback. To expose only the participant
@@ -155,11 +313,8 @@ portal and authorized exercise gateways on the organizer's private network,
 select an explicit private IPv4 address of that computer. For example:
 
 ```sh
-bun start --lan 192.168.1.20 --unsafe-lan
+make local LOCAL_ARGS="--lan 192.168.1.20 --unsafe-lan"
 ```
-
-With `make host`, pass the same options as
-`make host HOST_ARGS="--lan 192.168.1.20 --unsafe-lan"`.
 
 The address above is an example, not an automatically discovered address. This
 mode uses unencrypted HTTP. The explicit `--unsafe-lan` acknowledgement is
@@ -181,14 +336,39 @@ gateway port is held by another process is skipped when environments are
 prepared. Choose another range with `--gateway-ports`, for example
 `--gateway-ports 6200-6239`; it must lie within 1024-65535 and not include the
 console or portal port. The host refuses to start when the range overlaps a port a
-supported problem publishes in any runtime slot. An event whose teams × Docker problems
-exceeds the range is refused at creation and deployment with an error naming
-`--gateway-ports`. Gateway ports are probed on the address the gateways listen on
+supported problem publishes in a legacy runtime slot. New on-demand events can
+have more dormant jobs than gateway ports: a slot is leased only while active.
+Legacy eager events still need a gateway slot for every Docker job. Gateway ports are probed on the address the gateways listen on
 (the `--lan` address in LAN mode); problem ports are probed on loopback, where
 Compose publishes them.
 
-Battle teams do not reserve or probe exercise-gateway ports. The overall limit
-of 40 team/problem environments still applies.
+Battle teams do not reserve or probe exercise-gateway ports. New events support up
+to 512 team/problem entries; the active Docker budget is separate.
+
+### Docker network address capacity
+
+Stopping a container preserves its private network as well as its unfinished work.
+The active CPU/memory limit therefore does not bound retained Docker network count.
+A host can run out of Docker's default address pools after visiting many problems,
+even when only a few environments are active. The host does not prune networks or
+silently delete stopped work to make room.
+
+For a larger event, an organizer can supply a private IPv4 pool with
+`--docker-network-pool <CIDR>` in `LOCAL_ARGS`. It must be an aligned `/16` through
+`/24` range that does not overlap the organizer's LAN, VPN, or other routed networks.
+Do not copy a subnet from an example without checking the local network.
+
+New environments then get separate project-owned `/28` subnets. The allocator
+checks existing Docker networks, local interface ranges and current reservations;
+it fails when no free subnet remains. It preserves declared network separation
+and internal-network settings. Subnets are saved with runtime ownership and kept
+on stop/resume; only explicit teardown releases the owned environment. Existing
+Docker daemon settings and unrelated networks are not changed. Older environments
+keep their original plans. VPN routes not visible as local interface ranges still
+need the organizer's review before choosing the pool.
+
+This is capacity planning, not a guarantee that 100 running containers fit the host.
+See Docker's [per-project IPAM options](https://docs.docker.com/reference/compose-file/networks/#ipam).
 
 The exercise containers' verifier ports remain loopback-only; do not expose them
 or rewrite their Compose bindings to `0.0.0.0`.
@@ -198,10 +378,35 @@ and single-use, and each browser receives its own HttpOnly Cookie. Different
 teammates can open independent links concurrently. Team-key rotation revokes
 old team access, including existing exercise-gateway sessions.
 
+## AWS problems use cloud hosting
+
+AWS-service problems belong to cloud hosting. `make local` refuses the old
+`--aws-region` option before initializing AWS clients. Local hosting offers the
+non-AWS Compose catalog and native Battle games; it does not create AWS resources.
+
+Cloud hosting reuses the SBT-free Lite backend with Lambda and Turso or DynamoDB:
+generic CloudFormation deployment, flag/multi-flag and scheduled scoring,
+participant Console/CLI access and native coordination. Docker/Compose remains
+local-only. `make deploy` handles standard CDK bootstrap and source-bundle upload;
+see the [cloud setup guide](../infrastructure/README.md#current-checkouts-setup-and-teardown-boundary).
+Finish event Teardown before platform `make destroy`; `--drain-events` is unavailable.
+Destroy honors deployed removal policies. DynamoDB defaults to Delete; external
+Turso rows remain unless explicitly reset with `make destroy-all`. Source buckets,
+CDKToolkit and competitor bootstrap roles remain outside platform destruction.
+Live AWS/hosted Turso performance and all-catalog playability are unverified; nine
+current AWS templates exceed the restored deployer's TemplateBody size limit.
+
+If an earlier integration revision created AWS resources, keep its private state
+and account records. Use that exact reviewed revision for an explicitly authorized
+cleanup, or a verified cloud migration procedure. The new local entrypoint does not
+adopt, delete or reset those AWS resources. It reports unsupported legacy jobs
+without losing their resource references or tournament results.
+
 ## Hosting behind a TLS proxy
 
-The same host runs as one container image on a VM or container platform. A
-TLS-terminating proxy publishes the host console and the participant portal at two
+This optional local-runtime rehearsal image is separate from Lambda-based cloud
+hosting and is not the implementation of `make deploy`. It can run behind a
+TLS-terminating proxy, which publishes the host console and participant portal at two
 HTTPS origins, and the host checks every request's Host and Origin against them:
 
 ```sh
@@ -220,7 +425,7 @@ docker run --read-only --tmpfs /tmp --cap-drop ALL \
   Host and `X-Forwarded-For` headers, and would speak plain HTTP. On a container
   platform, keep the ports private to its load balancer.
 - **The image refuses to start without the public origins.** Inside a container
-  loopback is unreachable, and the log would carry the host key.
+  loopback is unreachable from the proxy.
 - **The proxy must pass the original Host header.** Caddy does this by default.
   nginx needs `proxy_set_header Host $host`. A request with another Host is refused
   with `Untrusted Host header. Expected <host>.`
@@ -230,40 +435,42 @@ docker run --read-only --tmpfs /tmp --cap-drop ALL \
   would lock out everyone. Use the flag only when the proxy sets that header.
 - **HTTPS only.** Public origins must be `https:`. `--unsafe-http` exists for local
   smoke tests only.
-- **The host login key.** It is not printed, because platforms retain container
-  logs. Read it with `docker exec <container> cat /data/host-key`. The database and
-  the key live in the `/data` volume, so use a platform that provides a persistent
-  volume.
+- **The organizer key.** It never enters container logs. Generate/recover it with
+  `docker exec -it <container> bun run scripts/local-host/local.ts reset --data /data`
+  in a private terminal. This rotates organizer access while preserving the event
+  and participant keys. The `/data` volume contains the hash, database and internal
+  signing key; `cat /data/host-key` is not a login or recovery procedure.
 - **Health checks.** `GET /healthz` answers on either port whatever the Host header,
   and returns only a status.
 - **Supported problems.** Docker Compose problems are not offered. Their sibling
   containers publish on the host's loopback, which the container cannot reach. The
-  Cryptography Battle runs in-process and is offered. To use Docker problems on a
-  VM, run `make host` directly on that VM.
+  Cryptography Battle runs in-process and is offered. AWS service problems are not
+  offered by this entrypoint. The image is a native-Battle rehearsal target.
 
 `bun run test:host:container` runs a built image, logs in, and plays a started
 Cryptography Battle for two teams at the advertised origins.
 
 ## Stop, restart and teardown
 
-Ctrl+C closes the host's HTTP listeners first, waits for environment
-operations that are already in flight, and then closes SQLite. It preserves
-SQLite state and running problem environments. Restart using the same data
-directory to recover event state, team credentials, score history and
-environment ownership; recorded environments are re-adopted concurrently, so an
-unreachable environment delays startup by one readiness timeout, not one per
-environment.
+For a host started with `make local`, Ctrl+C or `make down` closes HTTP listeners,
+waits for in-flight operations, stops owned Docker environments and closes SQLite.
+SQLite state, runtime Compose plans, problem seeds, container writable layers and
+volumes are retained. Restart using the same data directory to recover event state,
+team credentials, scores and environment ownership. Participants resume on-demand
+problems from their portal; retained eager events keep their restart behavior.
 
 If an environment disappeared or recovery fails, the event returns to a
 retryable deployment state. The host console can retry failed environments.
 The original event timestamps are retained, so a recovery does not secretly
 extend the competition deadline.
 
-When Docker is not running, preparing SQL exercise environments fails with
+Preparing on-demand jobs does not require a Docker daemon. Starting a problem
+while Docker is unavailable reports
 `Docker daemon is unavailable. Start Docker Desktop or Docker Engine, then retry
 the deployment from the host console.` Ownership of any partial environment is
-kept. Start Docker and deploy again from the **Schedule** tab (or **Retry failed**):
-the retry removes what the failed attempt left and starts the environments.
+kept. Start Docker and retry **Start / resume** in the participant portal.
+A partial first deployment is cleaned up before retry; a previously playable
+environment keeps its data and resumes in place.
 
 Use the host console's teardown action to remove the event's Docker projects
 and volumes. This keeps event records and results. Failed cleanup retains its
@@ -277,6 +484,93 @@ contains the safe cleanup plan and per-deployment secrets.
 An archive request is refused while environments remain owned. Ending an event
 prevents further scoring but does not itself remove its Docker resources.
 
+### Clear local event history
+
+Use `make local-clear` when you want to discard the local competition history and
+start fresh. This is separate from `make down` (stop and retain) and
+`make local-reset` (rotate the organizer key). Stop the host first:
+
+```sh
+make down
+make local-clear
+```
+
+The clear command lists the exact `hosting.sqlite` path, event IDs and names,
+team/job counts and owned Docker projects, then asks for confirmation in the same
+terminal. Answer `y` or `yes` to proceed. For a custom data directory, pass the same
+`LOCAL_ARGS="--data /absolute/private/directory"` to both commands.
+
+```sh
+# Optional preview; no event or Docker data is changed.
+make local-clear LOCAL_ARGS="--data /absolute/private/directory --plan"
+# Explicit noninteractive confirmation, after reviewing the target and impact.
+make local-clear LOCAL_ARGS="--data /absolute/private/directory --yes"
+```
+
+Clearing removes every event, team, participant login key, result, score,
+submission receipt, progress snapshot, registration and event/audit/uptime/disruption
+history in that database. The existing per-project Compose teardown uses
+`down --volumes --remove-orphans`: it removes owned containers, writable layers,
+volumes and networks, including files and databases edited inside the exercises.
+Owned generated Compose plans and problem seeds are also removed. This cannot be
+undone without a backup. The SQLite file, organizer keys and sessions, host settings,
+account connections, installed problems and cached plugin code are retained.
+
+The command refuses a running host, retained AWS ownership, unknown database tables,
+untracked runtime directories, unknown files and unsafe links. It never searches for unrelated Docker resources or
+prunes shared images and caches. Preserve and review ambiguous legacy files rather
+than deleting the state directory to get past a refusal.
+
+Old generated directories from before ownership markers are supported when their
+job retains a valid Compose ownership record. The existing engine validates the
+saved paths, project and Compose plan before teardown. A job already recorded as
+`DELETED` with no owned environment can also have the seed-only directory left by
+old successful teardown, or an empty directory left by interrupted file cleanup.
+Only the expected regular files in that job's private directory are accepted;
+the command lists their exact paths before confirmation. It does not adopt the
+directory, create an ownership marker or read seed values to infer ownership.
+A legacy directory with no matching job, an unresolved job with no ownership record,
+or additional files remains blocked.
+
+Successful Docker teardown is recorded before legacy seed and empty-directory
+removal. If either file operation fails, all event/history rows remain, and retry
+finishes the known remainder without repeating the completed Docker teardown.
+
+If any owned teardown fails, event/history rows and failed ownership plans remain.
+Successful removals are recorded immediately, so the next `make local-clear` retries
+only the remaining owned environments. A database or file cleanup failure is reported
+without claiming the history was cleared. Start Docker Desktop or Docker Engine if
+it is unavailable, resolve the reported job's error, and retry with the same data
+directory. Backups and browser downloads are outside this cleanup.
+
+When `make down` reports, for example, `2 owned Docker jobs are not confirmed stopped`,
+that means two retained team/problem environments, not necessarily two containers.
+It can include earlier failed deployments that were already unresolved before
+shutdown. The report identifies each event, team, problem, job, expected Compose
+project, status and safe error category. No keys or raw Docker output are printed.
+
+## Generated files and retained data
+
+- `.tenkacloud/host/`, or the selected `--data` directory, holds resumable event
+  data. Its SQLite database, keys and `runtimes/<jobId>/` files are not a cache.
+  Normal `make down` retains them, including each problem's seed and Compose plan.
+- After a successful explicit Docker teardown, a newly marked runtime directory
+  loses only its known generated Compose file, seed and ownership marker. Failed
+  teardown retains those files. Unknown files, changed markers and symbolic links
+  stop file cleanup. Legacy unmarked runtime directories retain their other files;
+  they are not automatically adopted or recursively deleted.
+- Shared fixture helpers, browser-rehearsal data and host benchmarks use
+  `.tenkacloud/cache/tmp/`. Cleanup checks the owning process and run marker, then
+  waits for the run's children and resources to close. Interrupted runs, reused PIDs
+  and old or unmarked temporary directories are not automatically swept.
+- `.tenkacloud/host-build/` is replaced at its fixed paths by the next host build.
+  Screenshots in `.tenkacloud/*-e2e/` and reports in `.tenkacloud/bench/` remain as
+  diagnostic evidence. Docker images and shared build caches are not pruned.
+
+Do not delete the entire `.tenkacloud/` tree to clear temporary files. It also
+contains the event database and optional installed pack snapshots. Review retained
+ownership before removing old files; age or a `tmp`/`cache` name alone is insufficient.
+
 ## Persistence and trust boundaries
 
 SQLite and its state directory are private to the operating-system user.
@@ -286,7 +580,7 @@ JSON file. Back up the entire data directory after stopping the application;
 when using a custom backup process, include SQLite's WAL state correctly.
 
 The host console, participant portal and exercise pages use separate origins.
-Host APIs require a host sign-in token issued by the application. Participant identity is derived from
+Host APIs require an organizer sign-in token issued by the application. Participant identity is derived from
 the authenticated team key, never from a submitted `teamId`. The exercise
 proxy does not forward portal credentials, cookies or the verifier endpoint.
 Submitted answers, hint fees and score updates are serialized per event and
@@ -300,8 +594,9 @@ The normal portal's existing submission interface is retained.
 
 The build has a separate allowlist for catalog metadata. Author descriptions,
 writeups, hint content and problem implementation files must not be distributed
-through browser metadata. Only reviewed SQL metadata and the Battle portal are included in
-hosting catalog/plugin globs; server reducers, fixtures and private seeds are excluded. Participant instructions are returned by the
+through browser metadata. The safe catalog projection covers all 106 local Compose
+IDs and the supported AWS entries. Cryptography Battle remains the only executable
+portal plugin; server reducers, fixtures and private seeds are excluded. Participant instructions are returned by the
 authenticated backend after the event starts.
 
 The organizer's own account, local operating-system processes and the checked-out
@@ -310,12 +605,29 @@ organizer or an attacker already running code as that operating-system user.
 
 ## Capacity
 
-Fixed limits:
+New-event limits and defaults:
 
-- 1–40 teams per event, and at most 40 team/problem pairs per event.
-- At most 40 Docker exercise environments at once on one host, across all events (one
-  exercise-gateway port each). A Battle uses no such environment.
-- A Battle's saved match state must stay under 2 MiB.
+- 1–40 teams and at most 512 team/problem entries per event
+- Three active Docker environments per team and twelve across the host
+- 4096 MiB for the sum of configured container memory caps, across active and uncertain jobs
+- New Compose plans preserve authored resource limits; missing limits become 512 MiB, one CPU and 256 PIDs per service
+- At most 40 active gateway slots with the default range; stopped jobs keep runtime ports but release gateways
+- A Battle's saved match state must stay under 2 MiB
+
+Tune admission with `LOCAL_ARGS="--max-active-per-team 3 --max-active-environments 12 --container-memory-mib 4096"`.
+These are conservative admission controls, not measured capacity or a guarantee
+that a Docker VM has enough memory. Reserve capacity for Docker, images and the
+host itself. Some multi-service problems consume more than one environment's worth
+of RAM. Start with representative exercises and measure your machine.
+
+A synthetic plan using 20 real catalog definitions and five teams allocated 100
+dormant jobs in 105 distinct runtime ports, without launching 100 containers.
+Synthetic lifecycle tests cover admission, state-preserving stop/resume and
+failure recovery. This is not a 100-container performance benchmark. Storage usage
+still grows with created images, stopped containers and volumes; only an explicit
+owned-environment teardown removes that state. No automatic data eviction runs.
+
+Existing eager events retain their prior 40-job contract.
 
 One host process serves every request on one thread, so the number of open
 participant browser tabs sets the load. Measured in a browser, a tab on the
@@ -395,7 +707,7 @@ environment while checking that the other team's containers, gateway and score
 are unchanged.
 
 The browser rehearsal builds the interfaces and drives them in Chromium: the
-organizer signs in with the host key in the normal console, creates a two-team
+organizer signs in with the key, verifies key rotation and sign-in revocation, then creates a two-team
 event, deploys and starts it; two independent participant browsers sign in with
 their team keys, open their own exercise, submit its flag and see the ranking;
 the organizer then ends the event and tears the environments down:
@@ -404,6 +716,16 @@ the organizer then ends the event and tears the environments down:
 bun run test:host:e2e                          # test-only exercise adapter
 HOST_E2E_ENGINE=docker bun run test:host:e2e   # the real sqli-demo in Docker
 ```
+
+The same command also runs a cloud rehearsal with a test-only AWS adapter. It
+creates a two-team event through the real HTTP API, then checks each participant
+portal in Chromium, submits the team's flag, checks the score, and tears down.
+This checks the host application without creating resources in AWS.
+
+The course rehearsal uses the real local HTTP/SQLite host, built participant UI
+and built-in Docker metadata. Saved checkpoints are seeded to check course order,
+assigned-problem visibility, gate state, team isolation and restart persistence;
+this rehearsal does not execute Docker verifiers.
 
 It uses an installed Chromium (`HOST_E2E_CHROMIUM`, or Playwright's browser under
 `PLAYWRIGHT_BROWSERS_PATH`) and never downloads one itself. Failure screenshots
@@ -423,7 +745,13 @@ key and direct attempts to access host or other-team resources fail.
 ## Not included
 
 Single-binary release packaging, identity verification, wallet integration,
-participant payments, cost splitting, cloud provisioning from local hosting,
+participant payments, cost splitting,
 automatic deploy/teardown schedules, arbitrary problem packs, Docker problems in
 the hosted container, and platforms without a persistent volume are not implemented
 yet.
+
+## Participant registration
+
+The Teams tab can issue a shared link that allocates prepared team environments.
+See [host participant registration](host-participant-registration.md) for the
+feature flag, receipt recovery and key-rotation behavior.

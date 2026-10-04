@@ -6,6 +6,7 @@
  */
 export const PROVIDER_LABEL: Record<string, string> = {
   aws: "AWS",
+  native: "TenkaCloud",
   sakura: "Sakura Cloud",
   azure: "Azure",
   gcp: "Google Cloud",
@@ -20,7 +21,14 @@ export function providerLabel(provider: string): string {
  * ParticipantProblemView の provider を backend の resolveViewProvider と同じ規則で解決する:
  * provider 欠落 / 空 = aws (旧 backend 応答 / legacy 行との互換)。
  */
-export function problemProvider(problem: { readonly provider?: string }): string {
+interface RuntimeProviderView {
+  readonly provider?: string;
+  readonly runtimeKind?: string;
+  readonly coordination?: boolean;
+}
+
+export function problemProvider(problem: RuntimeProviderView): string {
+  if (problem.runtimeKind === "coordination" || problem.coordination === true) return "native";
   return typeof problem.provider === "string" && problem.provider !== "" ? problem.provider : "aws";
 }
 
@@ -39,4 +47,16 @@ export const EXTERNAL_PORTAL_URL: Record<string, string> = {
 /** external-portal の宛先 URL。マップ外 (aws / 未知 provider) は undefined (prototype 連鎖は引かない)。 */
 export function externalPortalUrl(provider: string): string | undefined {
   return Object.hasOwn(EXTERNAL_PORTAL_URL, provider) ? EXTERNAL_PORTAL_URL[provider] : undefined;
+}
+
+/** Explicit capabilities are authoritative; an omitted list preserves the old backend contract. */
+export function hasAwsAccessCapability(
+  problem: RuntimeProviderView & { readonly accessCapabilities?: readonly string[] },
+  capability: "console" | "cli-credentials",
+): boolean {
+  if (problemProvider(problem) !== "aws") return false;
+  return (
+    problem.accessCapabilities === undefined ||
+    (Array.isArray(problem.accessCapabilities) && problem.accessCapabilities.includes(capability))
+  );
 }

@@ -1,5 +1,6 @@
 import { buildAdapterDependencies } from "../../deploy-handler/adapter-dependencies.js";
 import { dispatchPreparedDeployment } from "../../deploy-handler/prepared-dispatch.js";
+import { executionDispatchFields } from "../../shared/execution-catalog-context.js";
 import { selectAdapter } from "../../shared/runtime/index.js";
 import type { EventSharedResources } from "../shared.js";
 import type { AdapterPlanEntry, PublishFailure } from "./types.js";
@@ -58,6 +59,7 @@ async function dispatchOneAdapterEntry(
       tenantId,
       problemId: entry.item.problemId,
       problemDir: entry.problemDir,
+      ...executionDispatchFields(shared.executionCatalog),
       teamSlug: entry.teamSlug,
       namePrefix: entry.item.namePrefix,
       // [#2571 review-fix] Read straight off the persisted row instead of

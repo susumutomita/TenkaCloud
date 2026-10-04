@@ -72,7 +72,7 @@ export async function getEventGate(
       ddb: shared.ddb,
       eventsTableName: shared.eventsTableName,
     });
-    const event = await events.getEvent(tenantId, eventId);
+    const event = await events.getEvent(tenantId, eventId, true);
     if (!event) return undefined;
     return {
       scoringLocked: event.scoringLocked === true,

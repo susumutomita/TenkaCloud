@@ -3,18 +3,23 @@ flowchart LR
   PortalUI["Participant Portal"]
 
   EventAPI["開催API<br/>event-handler"]
-  DeployFlow["配置ワークフロー<br/>DeployCreateStateMachine"]
-  Worker["配置担当<br/>CfnDeploy / DescribeStack"]
+  Bus["Amazon EventBridge<br/>Deploy*Requested"]
+  DeployFlow["配置・削除ワークフロー<br/>Step Functions"]
+  Worker["配置担当<br/>CfnDeploy / DescribeStack または CodeBuild"]
+  Artifacts["非公開の実行 snapshot<br/>catalogKey・source ZIP の key / VersionId"]
   PortalAPI["参加者API<br/>participant-handler"]
   Dispatcher["独自競技の実行担当<br/>coordination-dispatcher-handler"]
   Plugin["問題同梱のプラグイン<br/>validateOp / applyOp / projectForTeam"]
   Scorer["定期採点・状態調整<br/>GenericScoring"]
   Timer["EventBridgeの定期実行"]
   Store["保存用Repository<br/>DynamoDB / 対応するTurso構成"]
-  Runtime["競技用AWS環境"]
+  Runtime["開催基盤と別アカウントの競技用AWS環境"]
 
   AdminUI -->|"管理者JWT・開催API"| EventAPI
-  EventAPI -->|"配置要求イベント"| DeployFlow
+  EventAPI -->|"保存した catalogKey・配置要求"| Bus
+  Bus --> DeployFlow
+  Worker -->|"固定した source を読む"| Artifacts
+  Dispatcher -->|"固定した plugin を読む"| Artifacts
   DeployFlow --> Worker
   Worker -->|"対象権限でCloudFormation操作"| Runtime
   PortalUI -->|"チームキー"| PortalAPI

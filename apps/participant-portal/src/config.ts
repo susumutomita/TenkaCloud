@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Participant Portal の runtime config。
  *
@@ -8,7 +10,7 @@
  * `eventTitle` は TopBar / Home に表示される現在のイベント名。
  * `mode` は backend 連携モード。`"dev-mock"` はフロント単体動作 (mock auth が有効)。
  *   `"backend"` は本物の backend API を呼ぶ。runtime-config の値が優先、なければ
- *   fallback で `"dev-mock"` 扱い。
+ *   開発中のみ fallback で `"dev-mock"` 扱い。本番では設定不備を起動エラーにする。
  * `cloudMode` は実際に問題環境を作る provider execution mode。frontend はこれを見て
  * offline/mock/local の警告 UI を出すが、認証 skip には使わない。
  */
@@ -23,20 +25,21 @@ export type CloudMode = "real" | "mock" | "local";
  * `cloudMode === "mock"` で動くため、AC26 を受講していない人が最初に触る画面に講座前提の
  * 学習経路が並んでいた。
  *
- * 出すのは `local` — `make local` の単独ドリル、つまり自習している人の環境だけ。実イベント
- * (`real`) を含めないのは、そこで解く問題は主催者が選んで出すものであり、受講者ごとの
- * 学習経路とは別物だから。
+ * 自習用の `local` と明示的な学習設定で有効にする。ローカル開催の競技画面は
+ * `cloudMode: "real"` を使い、この capability を有効にしない。
+ * この capability は provider / 認証 mode とは独立し、cloud と公開 demo でも既定で無効。
  *
  * nav と route の両方がこれを見る。link を隠すだけでは URL が生きたままになり、共有された
  * `/course-tracks` を踏めば同じ画面に着く。
  */
-export function showsCourseTracks(cloudMode: CloudMode): boolean {
-  return cloudMode === "local";
+export function showsCourseTracks(cloudMode: CloudMode, courseTracksEnabled = false): boolean {
+  return cloudMode === "local" || courseTracksEnabled === true;
 }
 
 /**
  * AWS-only features (Console handoff, Tools > SSO Credentials). Local hosting keeps
- * `cloudMode: "real"` for the full competition portal, so it opts out with `hasAws: false`.
+ * `cloudMode: "real"` for the full competition portal. Its runtime config enables AWS
+ * only when the host has a cloud engine.
  */
 export function hasAwsFeatures(config: Pick<AppConfig, "cloudMode" | "hasAws">): boolean {
   return config.cloudMode !== "local" && config.hasAws !== false;
@@ -48,6 +51,8 @@ export interface AppConfig {
   readonly eventRegion: string;
   readonly mode: AppMode;
   readonly cloudMode: CloudMode;
+  /** Explicit learning entry point; competition hosting does not enable it by default. */
+  readonly courseTracksEnabled?: boolean;
   /** Random local-session login key, present only in generated local runtime config. */
   readonly localTeamLoginKey?: string;
   /**
@@ -56,11 +61,17 @@ export interface AppConfig {
    * portal slot は coordination-client 経由で呼び出す。
    */
   readonly coordinationApiUrl?: string;
-  /** False for the local-host build, which has no AWS. Absent means true. */
+  /** False when the host has no cloud engine. Absent means true for legacy hosting configurations. */
   readonly hasAws?: boolean;
+  /** Omitted preserves legacy/local endpoints; false means this host does not serve them. */
+  readonly notificationsEnabled?: boolean;
+  readonly scoreTimelineEnabled?: boolean;
 }
 
 interface RuntimeConfig {
+  readonly hasAws?: unknown;
+  readonly notificationsEnabled?: unknown;
+  readonly scoreTimelineEnabled?: unknown;
   readonly apiBaseUrl?: string;
   readonly eventTitle?: string;
   readonly eventRegion?: string;
@@ -68,6 +79,35 @@ interface RuntimeConfig {
   readonly cloudMode?: CloudMode;
   readonly localTeamLoginKey?: string;
   readonly coordinationApiUrl?: string;
+}
+
+const ProductionRuntimeConfigSchema = z.object({
+  mode: z.enum(["dev-mock", "backend"]),
+  apiBaseUrl: z.string().min(1).optional(),
+  eventTitle: z.string().optional(),
+  eventRegion: z.string().optional(),
+  cloudMode: z.enum(["real", "mock", "local"]).optional(),
+  localTeamLoginKey: z.string().optional(),
+  coordinationApiUrl: z.string().optional(),
+  hasAws: z.unknown().optional(),
+  notificationsEnabled: z.unknown().optional(),
+  scoreTimelineEnabled: z.unknown().optional(),
+});
+
+function readRuntimeConfig(value: unknown): RuntimeConfig {
+  if (!import.meta.env.PROD) return value as RuntimeConfig;
+  const runtime = ProductionRuntimeConfigSchema.parse(value);
+  if (runtime.mode === "backend" && !runtime.apiBaseUrl)
+    throw new Error("Missing backend API URL.");
+  return runtime;
+}
+
+function unavailableConfig(): AppConfig {
+  if (import.meta.env.PROD)
+    throw new Error(
+      "Participant runtime configuration is missing or invalid. Check runtime-config.json.",
+    );
+  return DEV_FALLBACK;
 }
 
 const DEV_FALLBACK: AppConfig = {
@@ -107,8 +147,16 @@ function isLoopbackHttpUrl(value: string): boolean {
   }
 }
 
+function allowedApiUrl(mode: AppMode, value: string): boolean {
+  return mode !== "backend" || !value || isHttpsUrl(value) || isLoopbackHttpUrl(value);
+}
+
 function isCloudMode(value: unknown): value is CloudMode {
   return value === "real" || value === "mock" || value === "local";
+}
+
+function advertisedCapability(value: unknown): boolean | undefined {
+  return value === undefined ? undefined : value === true;
 }
 
 function defaultCloudMode(mode: AppMode): CloudMode {
@@ -125,36 +173,29 @@ export async function loadConfig(): Promise<AppConfig> {
       cache: "no-store",
     });
     if (!res.ok) {
-      // Issue #1247: 旧来は console.info の silent fallback だった (= production 配信
-      // で runtime-config.json を S3/CloudFront 配備し忘れたとき、 dev-mock に倒れて
-      // 「動くように見える」 misconfig 事故が起きた)。 fetch 自体が失敗 (= 404 / 5xx)
-      // した時点で、 ブラウザの DevTools にも残るよう console.error に格上げ。 fallback
-      // は dev 体験のため依然 DEV_FALLBACK を返すが、 operator が気付けるシグナルは出す。
+      // Missing production configuration must reach the existing boot error screen,
+      // never turn a real event into the demo. Development keeps its explicit fallback.
       console.error("[config] runtime-config.json not reachable", {
         url: `${import.meta.env.BASE_URL}runtime-config.json`,
         status: res.status,
         statusText: res.statusText,
-        fallback: DEV_FALLBACK.mode,
+        developmentFallbackEnabled: !import.meta.env.PROD,
       });
-      return DEV_FALLBACK;
+      return unavailableConfig();
     }
-    const runtime = (await res.json()) as RuntimeConfig;
+    const value: unknown = await res.json();
+    const runtime = readRuntimeConfig(value);
     const mode = runtime.mode ?? DEV_FALLBACK.mode;
     const cloudMode = isCloudMode(runtime.cloudMode) ? runtime.cloudMode : defaultCloudMode(mode);
     const apiBaseUrl = runtime.apiBaseUrl ?? DEV_FALLBACK.apiBaseUrl;
     // Issue #871: backend mode は HTTPS 必須 (= teamLoginKey を attacker に漏らさない)。
     // Issue #1975: ただし loopback http (= local self-paced mode の `http://127.0.0.1:<port>`) は
     // 同一マシン内で外部に出ず bearer 漏洩経路にならないため例外的に許容する。
-    if (
-      mode === "backend" &&
-      apiBaseUrl &&
-      !isHttpsUrl(apiBaseUrl) &&
-      !isLoopbackHttpUrl(apiBaseUrl)
-    ) {
+    if (!allowedApiUrl(mode, apiBaseUrl)) {
       console.error("[config] runtime-config.json apiBaseUrl is not HTTPS in backend mode", {
         apiBaseUrl,
       });
-      return DEV_FALLBACK;
+      return unavailableConfig();
     }
     // #1420: coordination dispatcher URL も backend mode では HTTPS 必須 (= teamLoginKey 漏洩防止)。
     // 非 HTTPS なら coordination だけ無効化し (= undefined)、 portal 本体は通常起動させる。
@@ -168,12 +209,15 @@ export async function loadConfig(): Promise<AppConfig> {
       eventRegion: runtime.eventRegion ?? DEV_FALLBACK.eventRegion,
       mode,
       cloudMode,
+      hasAws: advertisedCapability(runtime.hasAws),
+      notificationsEnabled: advertisedCapability(runtime.notificationsEnabled),
+      scoreTimelineEnabled: advertisedCapability(runtime.scoreTimelineEnabled),
       ...(cloudMode === "local" && runtime.localTeamLoginKey
         ? { localTeamLoginKey: runtime.localTeamLoginKey }
         : {}),
       ...(coordinationApiUrl ? { coordinationApiUrl } : {}),
     };
   } catch {
-    return DEV_FALLBACK;
+    return unavailableConfig();
   }
 }

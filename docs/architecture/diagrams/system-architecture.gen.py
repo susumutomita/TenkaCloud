@@ -1,10 +1,9 @@
-"""system-architecture.drawio の 5 ページを生成する。
+"""既存の system-architecture.drawio の 5 ページを現行実装に合わせて更新する。
 
-ファイルの外枠（<mxfile> と各 <diagram> の id・名前）は残し、5 ページの中身を毎回まるごと作り直す。
-01 SaaS・02 Lite の境界（AWS Cloud、Region、各スタック、External trust boundaries、競技用アカウント）の枠は
-元の図と同じ書式にし、中身は aws-drawio-diagram Skill の描き方（公式アイコン、ラベルはアイコンの下、直角の線）に合わせる。
-03〜05 も同じ描き方にそろえる。内容はすべてコードで確かめたものだけを書く。
-座標はすべて絶対座標で書き、親の枠からの相対座標へ変換する。
+元の mxfile・ページ ID、AWS4 公式アイコン、枠・ラベル・直角コネクタの書式を保つ。
+旧 SaaS / Lite 固有のセルは現行の cloud / local 境界に置き換え、残るサービスは同じ ID を使う。
+旧版の JAWS スライドは landing 側の固定済みコピーから書き出す。
+座標は絶対座標で定義し、親の枠からの相対座標へ変換する。
 """
 
 import re
@@ -193,8 +192,10 @@ class Diagram:
         ids = [re.search(r'id="([^"]+)"', c).group(1) for c in cells]
         assert len(ids) == len(set(ids)), "id が重複している"
         body = "\n                ".join(cells)
-        width = max(r[2] for r in self.rect.values()) + 200
-        height = max(r[3] for r in self.rect.values()) + 100
+        # Page extents include actors and labels outside frames (for example the participant CLI).
+        label_half = lambda label: max(sum(12 if ord(c) > 0x2000 else 7 for c in line) for line in label.split("\n")) / 2
+        width = max([r[2] for r in self.rect.values()] + [cx + max(HALF, label_half(label)) for _, _, _, label, cx, _ in self.icons]) + 100
+        height = max([r[3] for r in self.rect.values()] + [cy + HALF + 16 * (label.count("\n") + 1) for _, _, _, label, _, cy in self.icons]) + 100
         return (
             f'<mxGraphModel adaptiveColors="auto" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="0" page="1" pageScale="1" pageWidth="{width:g}" pageHeight="{height:g}" math="0" shadow="0">\n'
             f"            <root>\n                {body}\n            </root>\n        </mxGraphModel>"
@@ -218,179 +219,15 @@ def label_orient(points, pos):
     return "h" if a[1] == b[1] else "v"
 
 
-def saas():
-    frames = [
-        ("aws-tenkacloud", "1", "AWS Cloud", CLOUD, 20, 4430, 130),
-        ("region-tenkacloud", "aws-tenkacloud", "AWS Region — account / environment boundary", REGION, 40, 4410, 300, 1720),
-        ("stack-runtime-config", "region-tenkacloud", "AdminConsoleRuntimeConfigStack", CONSOLE_STACK, 60, 350, 360),
-        ("stack-admin-hosting", "region-tenkacloud", "AdminConsoleHostingStack", CONSOLE_STACK, 375, 745, 360),
-        ("stack-control-plane", "region-tenkacloud", "ControlPlaneStack（SBT）", CONSOLE_STACK, 760, 1400, 360),
-        ("stack-bootstrap", "region-tenkacloud", "BootstrapTemplateStack", LIFECYCLE_STACK, 760, 1400, 910),
-        ("stack-insight", "region-tenkacloud", "AdminConsoleInsightStack", CONSOLE_STACK, 1430, 1850, 360),
-        ("stack-observability", "region-tenkacloud", "ObservabilityStack", PLATFORM_STACK, 1430, 1850, 910),
-        ("stack-pipeline", "region-tenkacloud", "ServerlessSaaSPipeline", PLATFORM_STACK, 1650, 2320, 1250),
-        ("stack-tenant-template", "region-tenkacloud", "TenantTemplateStack（pooled・silo）", TENANT_STACK, 1880, 2760, 360),
-        ("stack-problem-deploy", "region-tenkacloud", "ProblemDeployBackendStack", BACKEND_STACK, 2790, 3990, 360),
-        ("stack-challenge-payload", "region-tenkacloud", "ChallengePayloadStack（任意）", OPTIONAL_STACK, 4020, 4390, 360),
-        ("external", "1", "External trust boundaries", EXTERNAL, 4530, 5130, 130),
-        ("competitor-account", "external", "Competitor AWS account", BACKEND_STACK, 4570, 5090, 1080),
-    ]
-    icons = [
-        ("user-system-admin", "1", "user", "システム管理者", 1090, YU),
-        ("user-operator", "1", "user", "運用担当者", 1865, YU),
-        ("user-organizer", "1", "user", "開催者", 2450, YU),
-        ("user-participants", "1", "users", "参加者", 3500, YU),
-        ("user-author", "1", "user", "問題作成者", 5300, YU),
-        ("lambda-runtime-config", "stack-runtime-config", "lambda", "AWS Lambda\nBucketDeployment", 250, R0),
-        ("cloudfront-admin", "stack-admin-hosting", "cloudfront", "Amazon CloudFront\nシステム管理コンソール", 630, R0),
-        ("s3-admin", "stack-admin-hosting", "s3", "Amazon S3\n管理コンソール", 630, R1),
-        ("apigw-control-plane", "stack-control-plane", "api_gateway", "Amazon API Gateway\nコントロールプレーン API", 1090, R1),
-        ("cognito-system-admin", "stack-control-plane", "cognito", "Amazon Cognito\nシステム管理者（MFA・SAML 任意）", 1310, R1),
-        ("dynamodb-tenant-details", "stack-control-plane", "dynamodb", "Amazon DynamoDB\nテナント情報・登録・SAML IdP", 870, R2),
-        ("lambda-sbt", "stack-control-plane", "lambda", "AWS Lambda\nテナント・IdP の管理", 1090, R2),
-        ("eventbridge-sbt", "stack-control-plane", "eventbridge", "Amazon EventBridge\nSBT のイベントバス", 1310, R2),
-        ("sfn-lifecycle", "stack-bootstrap", "step_functions", "AWS Step Functions\nテナントの配置・撤去", 1090, R3),
-        ("eventbridge-bootstrap", "stack-bootstrap", "eventbridge", "Amazon EventBridge\nSBT バスのルール", 1310, R3),
-        ("dynamodb-tenant-mapping", "stack-bootstrap", "dynamodb", "Amazon DynamoDB\nテナントとスタックの対応表", 870, R4),
-        ("codebuild-lifecycle", "stack-bootstrap", "codebuild", "AWS CodeBuild\nテナント配置スクリプト", 1090, R4),
-        ("lambda-reconciler", "stack-bootstrap", "lambda", "AWS Lambda\n状態の突き合わせ", 870, R5),
-        ("ssm-tier-api-keys", "stack-bootstrap", "systems_manager", "AWS Systems Manager\n階層別 API キーの ID（4 種）", 1090, R5),
-        ("lambda-sign-in-audit", "stack-insight", "lambda", "AWS Lambda\nサインイン監査（CloudTrail）", 1540, R1),
-        ("apigw-insight", "stack-insight", "api_gateway", "Amazon API Gateway\n閲覧・復旧 API", 1760, R1),
-        ("lambda-insight", "stack-insight", "lambda", "AWS Lambda\n閲覧・復旧", 1760, R2),
-        ("budgets", "stack-observability", "budgets", "AWS Budgets\n費用の通知（任意）", 1540, R3),
-        ("cloudwatch-dashboard", "stack-observability", "cloudwatch_2", "Amazon CloudWatch\nダッシュボード", 1760, R3),
-        ("s3-source", "region-tenkacloud", "s3", "Amazon S3\nソースバケット（stack の外で作成）", 1540, R5),
-        ("codepipeline", "stack-pipeline", "codepipeline", "AWS CodePipeline\nプラットフォーム更新", 1760, R5),
-        ("lambda-prep-deploy", "stack-pipeline", "lambda", "AWS Lambda\n配置の準備", 1760, R6),
-        ("sfn-wave", "stack-pipeline", "step_functions", "AWS Step Functions\nウェーブ単位の更新", 2000, R5),
-        ("codebuild-update-tenant", "stack-pipeline", "codebuild", "AWS CodeBuild\nテナントの更新", 2230, R5),
-        ("lambda-tenant-mapping", "stack-tenant-template", "lambda", "AWS Lambda\n対応表の登録（カスタムリソース）", 1990, R1),
-        ("cloudfront-organizer", "stack-tenant-template", "cloudfront", "Amazon CloudFront\n開催管理コンソール", 2230, R0),
-        ("s3-organizer", "stack-tenant-template", "s3", "Amazon S3\n開催管理コンソール", 2230, R1),
-        ("apigw-tenant", "stack-tenant-template", "api_gateway", "Amazon API Gateway\nテナント REST API", 2450, R1),
-        ("cognito-tenant", "stack-tenant-template", "cognito", "Amazon Cognito\n開催者（MFA・silo は SAML 任意）", 2670, R1),
-        ("cloudfront-portal", "stack-problem-deploy", "cloudfront", "Amazon CloudFront\n参加者ポータル", 3300, R0),
-        ("s3-portal", "stack-problem-deploy", "s3", "Amazon S3\n参加者ポータル", 3300, R1),
-        ("lambda-portal", "stack-problem-deploy", "lambda", "AWS Lambda\n参加者 API（関数 URL）", 3500, R1),
-        ("lambda-coordination", "stack-problem-deploy", "lambda", "AWS Lambda\n独自競技の中継（関数 URL）", 3700, R1),
-        ("s3-coordination", "stack-problem-deploy", "s3", "Amazon S3\n独自競技のプラグイン", 3900, R1),
-        ("lambda-api", "stack-problem-deploy", "lambda", "AWS Lambda\n配置・大会・アカウント API", 3100, R2),
-        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB\n制御データ（大会・チーム・配置・監査）", 3500, R2),
-        ("lambda-audit", "stack-problem-deploy", "lambda", "AWS Lambda\n監査の記録・ExternalId の点検", 3900, R2),
-        ("eventbridge-problem-deploy", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\nSBT バスのルール・スケジュール", 3100, R3),
-        ("lambda-scoring", "stack-problem-deploy", "lambda", "AWS Lambda\n定期採点（GenericScoring）", 3500, R3),
-        ("lambda-describe-stack", "stack-problem-deploy", "lambda", "AWS Lambda\nスタックの状態確認", 2900, R4),
-        ("sfn-deploy", "stack-problem-deploy", "step_functions", "AWS Step Functions\n配置・削除・一括配置", 3100, R4),
-        ("codebuild-rollback", "stack-problem-deploy", "codebuild", "AWS CodeBuild\n旧来の配置経路", 3300, R4),
-        ("cloudwatch-ops-alarms", "stack-problem-deploy", "cloudwatch_2", "Amazon CloudWatch\n運用アラーム・SNS（任意）", 3700, R4),
-        ("s3-competitor-bootstrap", "stack-problem-deploy", "s3", "Amazon S3\n競技用アカウントの初期設定", 3900, R4),
-        ("ssm-external-id", "stack-problem-deploy", "systems_manager", "AWS Systems Manager\nParameter Store（ExternalId）", 2900, R5),
-        ("lambda-cfn-deploy", "stack-problem-deploy", "lambda", "AWS Lambda\nスタック操作（CfnDeploy）", 3100, R5),
-        ("s3-bulk-plan", "stack-problem-deploy", "s3", "Amazon S3\n一括配置の計画", 2900, R6),
-        ("cloudwatch-deploy-logs", "stack-problem-deploy", "cloudwatch_2", "Amazon CloudWatch\n配置ジョブのログ（参加者 API が読む）", 3300, R6),
-        ("iam-github-oidc", "stack-challenge-payload", "identity_and_access_management", "AWS IAM\nGitHub OIDC 用ロール", 4300, R0),
-        ("s3-challenge-payload", "stack-challenge-payload", "s3", "Amazon S3\n非公開の問題データ", 4300, R1),
-        ("idp", "external", "corporate_data_center", "社内・テナントの IdP\n（SAML 2.0、任意）", 4680, 460),
-        ("turso", "external", "traditional_server", "Turso（libSQL）\n制御データの代替（任意）", 4680, 630),
-        ("non-aws-providers", "external", "traditional_server", "AWS 以外のクラウド\nAzure・GCP・さくら（画面は既定で非表示）", 4680, 800),
-        ("github-actions", "external", "traditional_server", "GitHub Actions\n（該当ワークフローは今なし）", 4920, 970),
-        ("iam-competitor", "competitor-account", "identity_and_access_management", "AWS IAM\nTenkaCloud-CompetitorDeploy-Role", 4700, R5),
-        ("cfn-problem", "competitor-account", "cloudformation", "AWS CloudFormation\n問題のスタック（チーム×問題）", 4940, R5),
-        ("problem-resources", "competitor-account", "general", "問題のリソース\n（テンプレートで定義）", 4940, R6),
-    ]
-    d = Diagram(frames, icons, align_bottoms=("aws-tenkacloud", "external"))
-    e = d.edge
-
-    # 利用者
-    e("user-system-admin", ("left",), "cloudfront-admin", ("top",), "画面（HTTPS）", via=[(630, YU)])
-    e("user-system-admin", ("bottom",), "apigw-control-plane", ("top",), "API（JWT）", lab=(0, 0.727))
-    e("user-system-admin", ("right",), "apigw-insight", ("top",), "閲覧・復旧 API（JWT）", via=[(1760, YU)])
-    e("user-operator", ("bottom",), "cloudwatch-dashboard", ("right",), "監視・復旧", via=[(1865, R3)], lab=(0, 0.944))
-    e("user-organizer", ("left",), "cloudfront-organizer", ("top",), "画面（HTTPS）", via=[(2230, YU)])
-    e("user-organizer", ("bottom",), "apigw-tenant", ("top",), "API（JWT）", lab=(0, 0.727))
-    e("user-participants", ("left",), "cloudfront-portal", ("top",), "画面（HTTPS）", via=[(3300, YU)])
-    e("user-participants", ("bottom",), "lambda-portal", ("top",), "API（チームのキー）", lab=(0, 0.727))
-    e("user-participants", ("right", 0.75), "lambda-coordination", ("top",), "独自競技の操作", via=[(3700, 75)], lab=(1, 0.748))
-    e("user-participants", ("right", 0.25), "problem-resources", ("right",), "問題への解答操作", via=[(5190, 45), (5190, R6)], pos=-0.7)
-    e("user-author", ("bottom",), "github-actions", ("right",), "公開", via=[(5300, 970)])
-
-    # 管理コンソールの配信と設定
-    e("cloudfront-admin", ("bottom",), "s3-admin", ("top",), "静的ファイル（OAI）")
-    e("lambda-runtime-config", ("right",), "cloudfront-admin", ("left",), "キャッシュを無効化")
-    e("lambda-runtime-config", ("bottom",), "s3-admin", ("left",), "runtime-config.json を配置", via=[(250, R1)], lab=(1, 0.6))
-
-    # テナントの登録
-    e("apigw-control-plane", ("right",), "cognito-system-admin", ("left",), "JWT を検証", aux=True)
-    e("apigw-control-plane", ("bottom",), "lambda-sbt", ("top",), "テナントの操作")
-    e("lambda-sbt", ("left",), "dynamodb-tenant-details", ("right",), "読み書き")
-    e("lambda-sbt", ("right",), "eventbridge-sbt", ("left",), "オンボーディング")
-    e("eventbridge-sbt", ("bottom",), "eventbridge-bootstrap", ("top",), "同じバス", lab=(0, 0.1))
-    e("eventbridge-bootstrap", ("left",), "sfn-lifecycle", ("right",), "ルールの宛先")
-    e("sfn-lifecycle", ("bottom",), "codebuild-lifecycle", ("top",), "RUN_JOB・完了待ち")
-    e("codebuild-lifecycle", ("left",), "dynamodb-tenant-mapping", ("right",), "対応表を読む（撤去時）")
-    e("codebuild-lifecycle", ("right",), "stack-tenant-template", ("bottom", 2100), "silo は作成・pooled は再利用", via=[(2100, R4)], pos=-0.4)
-    e("lambda-reconciler", ("top",), "dynamodb-tenant-mapping", ("bottom",), "2 分ごとに突き合わせ")
-    e("lambda-tenant-mapping", ("bottom",), "dynamodb-tenant-mapping", ("left",), "対応表に登録", via=[(1990, 893), (740, 893), (740, R4)], lab=(0, 0.6))
-
-    # 管理者向けの閲覧
-    e("apigw-insight", ("bottom",), "lambda-insight", ("top",), "呼び出し")
-
-    # プラットフォームの更新
-    e("s3-source", ("right",), "codepipeline", ("left",), "ソース")
-    e("codepipeline", ("bottom",), "lambda-prep-deploy", ("top",), "配置の準備")
-    e("codepipeline", ("right",), "sfn-wave", ("left",), "ウェーブを実行")
-    e("sfn-wave", ("right",), "codebuild-update-tenant", ("left",), "テナントごとに更新")
-    e("codebuild-update-tenant", ("top",), "stack-tenant-template", ("bottom", 2230), "スタックを更新", pos=0.4)
-
-    # 開催管理
-    e("cloudfront-organizer", ("bottom",), "s3-organizer", ("top",), "静的ファイル（OAI）")
-    e("apigw-tenant", ("right",), "cognito-tenant", ("left",), "JWT を検証", aux=True)
-    e("apigw-tenant", ("bottom",), "lambda-api", ("left",), "Lambda 統合（スタックをまたぐ）", via=[(2450, R2)], lab=(1, 0.3))
-
-    # 外部の信頼境界（リージョンの上の帯を通す。遠くへ行く線ほど上、帯の右の通り道は外側ほど右）
-    e("idp", ("left", 0.25), "cognito-system-admin", ("top",), "SAML アサーション", via=[(4515, 445), (4515, BAND_A), (1310, BAND_A)], lab=(3, 0.7))
-    e("idp", ("left", 0.75), "cognito-tenant", ("top",), "SAML（silo のみ）", via=[(4500, 475), (4500, BAND_B), (2670, BAND_B)], lab=(3, 0.68))
-    e("lambda-api", ("top", 0.25), "turso", ("left",), "libSQL（Turso 構成のとき）", via=[(3085, BAND_D), (4480, BAND_D), (4480, 630)], lab=(1, 0.548))
-    e("lambda-api", ("top", 0.75), "non-aws-providers", ("left",), "AWS 以外への配置", via=[(3115, BAND_E), (4465, BAND_E), (4465, 800)], lab=(1, 0.767))
-    e("github-actions", ("left",), "iam-github-oidc", ("top",), "OIDC で引き受け", via=[(4445, 970), (4445, BAND_C), (4300, BAND_C)], lab=(2, 0.5))
-    e("iam-github-oidc", ("bottom",), "s3-challenge-payload", ("top",), "PutObject のみ")
-
-    # 問題の配置と参加者
-    e("cloudfront-portal", ("bottom",), "s3-portal", ("top",), "静的ファイル（OAI）")
-    e("lambda-portal", ("bottom",), "dynamodb-control", ("top",), "読み書き")
-    e("lambda-coordination", ("right",), "s3-coordination", ("left",), "プラグインを読む")
-    e("lambda-api", ("right",), "dynamodb-control", ("left",), "読み書き")
-    e("lambda-audit", ("left",), "dynamodb-control", ("right",), "監査ログ")
-    e("lambda-api", ("bottom",), "eventbridge-problem-deploy", ("top",), "Deploy*Requested")
-    e("eventbridge-problem-deploy", ("bottom",), "sfn-deploy", ("top",), "ルールの宛先")
-    e("eventbridge-problem-deploy", ("right",), "lambda-scoring", ("left",), "1 分ごとに起動")
-    e("lambda-scoring", ("top",), "dynamodb-control", ("bottom",), "得点を記録")
-    e("lambda-scoring", ("right",), "lambda-coordination", ("bottom",), "tick を委譲", via=[(3700, R3)], pos=-0.3)
-    e("lambda-scoring", ("bottom", 0.25), "problem-resources", ("left",), "HTTP(S) で確認", via=[(3485, R6)], pos=0.2)
-    e("lambda-scoring", ("bottom", 0.75), "cloudwatch-ops-alarms", ("left",), "エラー・停止", aux=True, via=[(3515, R4)])
-    e("sfn-deploy", ("bottom",), "lambda-cfn-deploy", ("top",), "スタック操作")
-    e("sfn-deploy", ("left",), "lambda-describe-stack", ("right",), "状態を確認")
-    e("sfn-deploy", ("right",), "codebuild-rollback", ("left",), "Lambda 経路を切ったとき", aux=True)
-    e("lambda-cfn-deploy", ("left",), "ssm-external-id", ("right",), "ExternalId を取得")
-    e("lambda-cfn-deploy", ("right",), "iam-competitor", ("left",), "AssumeRole（ExternalId 必須）")
-    e("lambda-cfn-deploy", ("bottom", 0.25), "s3-source", ("bottom",), "テンプレートと metadata を読む", via=[(3085, 1670), (1540, 1670)], lab=(1, 0.5))
-    e("lambda-cfn-deploy", ("bottom", 0.75), "cloudwatch-deploy-logs", ("left",), "進捗ログ", via=[(3115, R6)], pos=0.4)
-    e("s3-competitor-bootstrap", ("right",), "iam-competitor", ("top",), "初期設定テンプレート（1 回だけ）", aux=True, via=[(4700, R4)], pos=-0.3)
-    e("iam-competitor", ("right",), "cfn-problem", ("left",), "CloudFormation API")
-    e("cfn-problem", ("bottom",), "problem-resources", ("top",), "作成・更新・削除")
-    return d
-
-
-def lite():
-    # Lite は SaaS の右半分に近い。stack は 2 つで、SBT・テナントのライフサイクルは無い。
+def cloud():
+    # Original single-installation layout and resource relationships from 825415fc.
     frames = [
         ("aws-lite", "1", "AWS Cloud", CLOUD, 20, 2220, 130),
-        ("region-lite", "aws-lite", "AWS Region — Lite deployment account", REGION, 40, 2200, 300, 1820),
-        ("stack-lite", "region-lite", "TenkaCloudLiteStack", TENANT_STACK, 60, 950, 360),
+        ("region-lite", "aws-lite", "開催基盤リージョン", REGION, 40, 2200, 300, 1820),
+        ("stack-lite", "region-lite", "TenkaCloud（開催管理スタック）", TENANT_STACK, 60, 950, 360),
         ("stack-problem-deploy", "region-lite", "ProblemDeployBackendStack", BACKEND_STACK, 980, 2180, 360),
-        ("external", "1", "External boundaries", EXTERNAL, 2320, 2920, 130),
-        ("competitor-account", "external", "Competitor AWS account", BACKEND_STACK, 2360, 2880, 1080),
+        ("external", "1", "外部サービス・競技用 AWS アカウント", EXTERNAL, 2320, 2920, 130),
+        ("competitor-account", "external", "競技用 AWS アカウント", BACKEND_STACK, 2360, 2880, 1080),
     ]
     icons = [
         ("user-organizer", "1", "user", "開催者", 640, YU),
@@ -398,34 +235,34 @@ def lite():
         ("lambda-pre-token", "stack-lite", "lambda", "AWS Lambda\n管理者 claims の追加", 200, R1),
         ("cognito-tenant", "stack-lite", "cognito", "Amazon Cognito\n開催者（tenant=local）", 420, R1),
         ("apigw-tenant", "stack-lite", "api_gateway", "Amazon API Gateway\nテナント REST API", 640, R1),
-        ("cloudfront-organizer", "stack-lite", "cloudfront", "Amazon CloudFront\n開催管理コンソール", 860, R0),
+        ("cloudfront-organizer", "aws-lite", "cloudfront", "Amazon CloudFront\n開催管理コンソール", 860, 220),
         ("s3-organizer", "stack-lite", "s3", "Amazon S3\n開催管理コンソール", 860, R1),
-        ("dynamodb-saml", "stack-lite", "dynamodb", "Amazon DynamoDB\nSamlIdps", 200, R2),
+        ("dynamodb-saml", "stack-lite", "dynamodb", "Amazon DynamoDB（選択時）\nSamlIdps", 200, R2),
         ("lambda-saml", "stack-lite", "lambda", "AWS Lambda\nSAML IdP の管理", 420, R2),
-        ("cloudfront-portal", "stack-problem-deploy", "cloudfront", "Amazon CloudFront\n参加者ポータル", 1490, R0),
+        ("cloudfront-portal", "aws-lite", "cloudfront", "Amazon CloudFront\n参加者ポータル", 1490, 220),
         ("s3-portal", "stack-problem-deploy", "s3", "Amazon S3\n参加者ポータル", 1490, R1),
         ("lambda-portal", "stack-problem-deploy", "lambda", "AWS Lambda\n参加者 API（関数 URL）", 1690, R1),
         ("lambda-coordination", "stack-problem-deploy", "lambda", "AWS Lambda\n独自競技の中継（関数 URL）", 1890, R1),
         ("s3-coordination", "stack-problem-deploy", "s3", "Amazon S3\n独自競技のプラグイン", 2090, R1),
         ("lambda-api", "stack-problem-deploy", "lambda", "AWS Lambda\n配置・大会・アカウント API", 1290, R2),
-        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB\n制御データ（7 テーブル）", 1690, R2),
+        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB（選択時）\n制御データ（7 テーブル）", 1690, R2),
         ("lambda-audit", "stack-problem-deploy", "lambda", "AWS Lambda\n監査の記録・ExternalId の点検", 2090, R2),
         ("eventbridge-problem-deploy", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\nこの stack のイベントバス・スケジュール", 1290, R3),
         ("lambda-scoring", "stack-problem-deploy", "lambda", "AWS Lambda\n定期採点（GenericScoring）", 1690, R3),
         ("lambda-describe-stack", "stack-problem-deploy", "lambda", "AWS Lambda\nスタックの状態確認", 1090, R4),
         ("sfn-deploy", "stack-problem-deploy", "step_functions", "AWS Step Functions\n配置・削除・一括配置", 1290, R4),
         ("codebuild-rollback", "stack-problem-deploy", "codebuild", "AWS CodeBuild\n旧来の配置経路", 1490, R4),
-        ("cloudwatch-ops-alarms", "stack-problem-deploy", "cloudwatch_2", "Amazon CloudWatch\n運用アラーム・SNS（任意）", 1890, R4),
+        ("cloudwatch-ops-alarms", "stack-problem-deploy", "cloudwatch_2", "Amazon CloudWatch\nログ・運用アラーム（任意）", 1890, R4),
         ("s3-competitor-bootstrap", "stack-problem-deploy", "s3", "Amazon S3\n競技用アカウントの初期設定", 2090, R4),
         ("ssm-external-id", "stack-problem-deploy", "systems_manager", "AWS Systems Manager\nParameter Store（ExternalId）", 1090, R5),
         ("lambda-cfn-deploy", "stack-problem-deploy", "lambda", "AWS Lambda\nスタック操作（CfnDeploy）", 1290, R5),
         ("s3-bulk-plan", "stack-problem-deploy", "s3", "Amazon S3\n一括配置の計画", 1090, R6),
         ("cloudwatch-deploy-logs", "stack-problem-deploy", "cloudwatch_2", "Amazon CloudWatch\n配置ジョブのログ（参加者 API が読む）", 1490, R6),
-        ("s3-source", "region-lite", "s3", "Amazon S3\nソースバケット（problems/・pack-problems/）", 1290, 1690),
+        ("s3-source", "region-lite", "s3", "Amazon S3\n非公開の実行 snapshot・source ZIP（別バケット）", 1290, 1690),
         ("idp", "external", "corporate_data_center", "テナントの IdP\n（SAML 2.0、任意）", 2470, 460),
-        ("turso", "external", "traditional_server", "Turso（libSQL）\n制御データの代替（任意）", 2470, 630),
+        ("turso", "external", "generic_database", "Turso（HTTPS / libSQL）\nDynamoDB と択一・指定 SSM token", 2470, 630),
         ("non-aws-providers", "external", "traditional_server", "AWS 以外のクラウド\nAzure・GCP・さくら（画面は既定で非表示）", 2470, 800),
-        ("iam-competitor", "competitor-account", "identity_and_access_management", "AWS IAM\nTenkaCloud-CompetitorDeploy-Role", 2490, R5),
+        ("iam-competitor", "competitor-account", "identity_and_access_management", "AWS IAM\n競技用デプロイロール・ExternalId 必須", 2490, R5),
         ("cfn-problem", "competitor-account", "cloudformation", "AWS CloudFormation\n問題のスタック（チーム×問題）", 2730, R5),
         ("problem-resources", "competitor-account", "general", "問題のリソース\n（テンプレートで定義）", 2730, R6),
     ]
@@ -451,7 +288,7 @@ def lite():
 
     # 外部の信頼境界（リージョンの上の帯を通す）
     e("idp", ("left",), "cognito-tenant", ("top",), "SAML アサーション", via=[(2305, 460), (2305, BAND_A), (420, BAND_A)], lab=(3, 0.7))
-    e("lambda-api", ("top", 0.25), "turso", ("left",), "libSQL（Turso 構成のとき）", via=[(1275, BAND_B), (2285, BAND_B), (2285, 630)], lab=(1, 0.6))
+    e("lambda-api", ("top", 0.25), "turso", ("left",), "API・参加者・採点・競技・SAML: HTTPS（Turso）", via=[(1275, BAND_B), (2285, BAND_B), (2285, 630)], lab=(1, 0.6))
     e("lambda-api", ("top", 0.75), "non-aws-providers", ("left",), "AWS 以外への配置", via=[(1305, BAND_D), (2265, BAND_D), (2265, 800)], lab=(1, 0.75))
 
     # 問題の配置と参加者
@@ -472,7 +309,7 @@ def lite():
     e("sfn-deploy", ("right",), "codebuild-rollback", ("left",), "Lambda 経路を切ったとき", aux=True)
     e("lambda-cfn-deploy", ("left",), "ssm-external-id", ("right",), "ExternalId を取得")
     e("lambda-cfn-deploy", ("right",), "iam-competitor", ("left",), "AssumeRole（ExternalId 必須）")
-    e("lambda-cfn-deploy", ("bottom", 0.25), "s3-source", ("top", 0.25), "テンプレートと metadata を読む", lab=(0, 0.92))
+    e("lambda-cfn-deploy", ("bottom", 0.25), "s3-source", ("top", 0.25), "保存した catalogKey の source を読む", lab=(0, 0.92))
     e("lambda-cfn-deploy", ("bottom", 0.75), "cloudwatch-deploy-logs", ("left",), "進捗ログ", via=[(1305, R6)], pos=0.4)
     e("s3-competitor-bootstrap", ("right",), "iam-competitor", ("top",), "初期設定テンプレート（1 回だけ）", aux=True, via=[(2490, R4)], pos=-0.3)
     e("iam-competitor", ("right",), "cfn-problem", ("left",), "CloudFormation API")
@@ -480,63 +317,108 @@ def lite():
     return d
 
 
-def local():
-    # make local（参加者の練習）と make local-dev（開発者）の実行時の構成。AWS のリソースは作らない。
-    r0, r1, r2, r3 = 360, 530, 700, 870
+
+def aws_exercises():
+    # プラットフォームと別の競技用アカウント。複数チームは同一競技用アカウントの別リージョンにも割り当て可能。
     frames = [
-        ("local-play", "1", "make local（参加者の練習・Docker だけ）", lane("#F7FCF9", "#2E7B50", 16), 20, 1880, 130),
-        ("host", "local-play", "Host OS / active Docker context", lane("#FFFFFF", "#405A78", 15, 1), 40, 1860, 190),
-        ("tenkacloud-local", "host", "tenkacloud-local（uid 1000）", CONSOLE_STACK, 280, 1140, 250),
-        ("problem-compose", "host", "問題の Compose（tc-local-<問題 ID>）", BACKEND_STACK, 1400, 1840, 420),
-        ("local-dev", "1", "make local-dev（開発者）", lane("#FBF9FF", "#7652B6", 16), 1920, 2880, 130),
+        ("aws-lite", "1", "AWS Cloud（開催基盤アカウント）", CLOUD, 20, 1760, 130),
+        ("region-lite", "aws-lite", "開催基盤リージョン", REGION, 40, 1740, 300),
+        ("stack-problem-deploy", "region-lite", "ProblemDeployBackendStack", BACKEND_STACK, 60, 1720, 360),
+        ("external", "1", "AWS Cloud（競技用アカウント・開催基盤とは分離）", EXTERNAL, 1860, 2730, 130),
+        ("competitor-account", "external", "競技用リージョン（チームごとの割り当て）", REGION, 1880, 2710, 940),
+        ("turso-boundary", "1", "外部 Turso（DynamoDB と択一）", EXTERNAL, 850, 1330, 1370),
     ]
     icons = [
-        ("browser", "1", "client", "参加者のブラウザ", 590, YU),
-        ("data-permissions", "host", "container_1", "local-data-permissions\n最初に 1 回・uid 0", 150, r0),
-        ("sqlite", "tenkacloud-local", "generic_database", "SQLite\n/data（named volume）", 370, r0),
-        ("http", "tenkacloud-local", "traditional_server", "Bun HTTP サーバー\nポータル・API（127.0.0.1:5175）\n読み取り専用 rootfs・host network", 590, r0),
-        ("scoring", "tenkacloud-local", "gear", "採点\n/verify の結果で加点・履歴", 810, r0),
-        ("problems", "tenkacloud-local", "documents", "problems/（読み取り専用）\nverify・multi-verify の Compose 問題", 370, r1),
-        ("lifecycle", "tenkacloud-local", "gear", "ProblemLifecycle\n起動・停止（同時 3 件・LRU）", 590, r1),
-        ("terminal", "tenkacloud-local", "traditional_server", "Terminal WebSocket\ncompose exec（1 問 4 セッション）", 1030, r1),
-        ("runner", "tenkacloud-local", "gear", "ContainerRunner\ndocker CLI・Compose v2", 590, r2),
-        ("docker-sock", "host", "disk", "docker.sock\n（:ro でも root 相当）", 1260, r2),
-        ("problem-container", "problem-compose", "container_1", "問題コンテナ\n挑戦用ポート・POST /verify\n秘密値は配置先の鍵から導出", 1720, r1),
-        ("developer", "1", "user", "開発者", 2240, YU),
-        ("vite", "local-dev", "traditional_server", "Vite\nポータル（127.0.0.1:5175）", 2240, r0),
-        ("api", "local-dev", "traditional_server", "tenkacloud local\nAPI（空きポート）", 2460, r0),
-        ("store", "local-dev", "generic_database", "SQLite（.tenkacloud/local）\nまたは Turso", 2680, r0),
-        ("docker-host", "local-dev", "container_1", "ホストの docker CLI\ntc-local-* の Compose 問題", 2240, r1),
-        ("classifier", "local-dev", "gear", "ランタイムの振り分け\n黙って別の実行方法に変えない", 2460, r1),
-        ("records", "local-dev", "document", "非公開のセッション記録\natomic write・復旧で突き合わせ", 2240, r2),
-        ("sim-runtime", "local-dev", "gear", "SimulatorLocalRuntime\nTENKACLOUD_LOCAL_SIMULATOR=1", 2460, r2),
-        ("simulator", "local-dev", "container_2", "TenkaCloud Simulator\nGHCR・digest 固定\nprotocol 2026-07-11", 2680, r2),
-        ("listeners", "local-dev", "traditional_server", "loopback のデータプレーン\n参加者向けの出力だけ", 2460, r3),
+        ("user-organizer", "1", "user", "開催者", 640, YU),
+        ("user-participants", "1", "users", "参加者", 2490, YU),
+        ("lambda-api", "stack-problem-deploy", "lambda", "AWS Lambda\n大会・ジョブを受理", 640, R0),
+        ("dynamodb-control", "stack-problem-deploy", "dynamodb", "Amazon DynamoDB（選択時のみ）\n大会・チーム・配置・得点", 1090, R0),
+        ("turso-control", "turso-boundary", "generic_database", "Turso（HTTPS / libSQL）\n大会・チーム・配置・得点\n指定 SSM token で接続", 1090, 1470),
+        ("eventbridge-problem-deploy", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\n配置要求・予約実行", 220, R1),
+        ("lambda-dispatcher", "stack-problem-deploy", "codebuild", "AWS CodeBuild\n代替配置経路（任意）", 640, R1),
+        ("sfn-deploy", "stack-problem-deploy", "step_functions", "AWS Step Functions\nCreate → Describe → Finish\n失敗・タイムアウトを保存", 640, R2),
+        ("lambda-recovery", "stack-problem-deploy", "lambda", "AWS Lambda\n定期採点（GenericScoring）", 1450, R2),
+        ("eventbridge-recovery", "stack-problem-deploy", "eventbridge", "Amazon EventBridge\n定期採点スケジュール", 1090, R2),
+        ("lambda-cfn-deploy", "stack-problem-deploy", "lambda", "AWS Lambda\nCloudFormation Worker", 640, R3),
+        ("ssm-external-id", "stack-problem-deploy", "systems_manager", "AWS Systems Manager\n共通 ExternalId を保持", 220, R3),
+        ("s3-source", "stack-problem-deploy", "s3", "Amazon S3\n固定 catalog・source・plugin\nsource ZIP は別バケットの固定 version", 640, R4),
+        ("s3-competitor-bootstrap", "stack-problem-deploy", "s3", "Amazon S3\n公開 bootstrap テンプレート", 1450, R1),
+        ("lambda-participant-access", "stack-problem-deploy", "lambda", "AWS Lambda（参加者 API）\n大会・チーム・配置を再検証", 1450, R4),
+        ("iam-competitor", "external", "identity_and_access_management", "AWS IAM\n共通 CompetitorDeploy ロール\nExternalId 必須", 2110, R1),
+        ("iam-viewer", "external", "identity_and_access_management", "AWS IAM\n配置ごとの ParticipantViewer\nExternalId は Job ID", 2490, R1),
+        ("cfn-problem", "competitor-account", "cloudformation", "AWS CloudFormation\nチーム × 問題 × 試行", 2110, R3),
+        ("problem-resources", "competitor-account", "general", "競技用リソース\n問題テンプレートで定義", 2110, R4),
+        ("participant-cli", "1", "client", "参加者の AWS CLI\n対象配置の許可された操作", 2490, 1480),
     ]
-    d = Diagram(frames, icons)
-    e = d.edge
-    e("browser", ("bottom",), "http", ("top",), "http://127.0.0.1:5175", lab=(0, 0.95))
-    e("browser", ("right", 0.75), "terminal", ("top",), "WebSocket（一回限りのチケット）", via=[(1030, 75)], lab=(0, 0.5))
-    e("browser", ("right", 0.25), "problem-container", ("top", 0.75), "挑戦用ポート（127.0.0.1）", via=[(1735, 45)], lab=(0, 0.6))
-    e("data-permissions", ("right",), "sqlite", ("left",), "所有者を調整", aux=True)
-    e("http", ("left", 0.25), "sqlite", ("right", 0.25), "読み書き")
-    e("http", ("left", 0.75), "problems", ("right",), "カタログ", via=[(450, r0 + 15), (450, r1)], lab=(0, 0.5))
-    e("http", ("right",), "scoring", ("left",), "解答を渡す")
-    e("http", ("bottom",), "lifecycle", ("top",), "起動・停止")
-    e("lifecycle", ("bottom",), "runner", ("top",), "docker compose")
-    e("runner", ("right", 0.75), "docker-sock", ("left", 0.75), "up・down")
-    e("terminal", ("bottom",), "docker-sock", ("left", 0.25), "compose exec", via=[(1030, r2 - 15)])
-    e("docker-sock", ("right",), "problem-container", ("bottom",), "起動・停止・exec", via=[(1720, r2)], lab=(0, 0.5))
-    e("scoring", ("right",), "problem-container", ("top", 0.25), "POST /verify（loopback）", via=[(1705, r0)], lab=(0, 0.5))
-    e("developer", ("bottom",), "vite", ("top",), "画面", lab=(0, 0.95))
-    e("developer", ("right",), "api", ("top",), "API", via=[(2460, YU)])
-    e("api", ("right",), "store", ("left",), "読み書き")
-    e("api", ("bottom",), "classifier", ("top",), "カタログ")
-    e("classifier", ("left",), "docker-host", ("right",), "Compose 問題")
-    e("classifier", ("bottom",), "sim-runtime", ("top",), "cloud・Composite 問題")
-    e("sim-runtime", ("right",), "simulator", ("left",), "deploy・delete（HTTP）")
-    e("sim-runtime", ("left",), "records", ("right",), "記録")
-    e("sim-runtime", ("bottom",), "listeners", ("top",), "出力を公開")
+    d = Diagram(frames, icons, align_bottoms=("aws-lite", "external"))
+    e=d.edge
+    e("user-organizer", ("bottom",), "lambda-api", ("top",), "認証済みの配置要求", lab=(0, 0.99))
+    e("lambda-api", ("right",), "dynamodb-control", ("left",), "配置ジョブを保存")
+    e("stack-problem-deploy", ("bottom", 640), "turso-control", ("left",), "API・配置・参加者・採点\nTurso 選択時: HTTPS", via=[(640, 1470)], lab=(0, 0.28))
+    e("lambda-api", ("left",), "eventbridge-problem-deploy", ("top",), "配置要求を発行", via=[(220, R0)])
+    e("eventbridge-problem-deploy", ("bottom",), "sfn-deploy", ("left",), "実行を開始", via=[(220, R2)])
+    e("sfn-deploy", ("top",), "lambda-dispatcher", ("bottom",), "Lambda 経路を切ったとき", aux=True)
+    e("eventbridge-recovery", ("right",), "lambda-recovery", ("left",), "採点を起動", aux=True)
+    e("lambda-recovery", ("right",), "dynamodb-control", ("top",), "得点を記録", aux=True, via=[(1680, R2), (1680, 280), (1090, 280)], lab=(2, 0.5))
+    e("sfn-deploy", ("bottom",), "lambda-cfn-deploy", ("top",), "作成・確認・削除")
+    e("lambda-cfn-deploy", ("left",), "ssm-external-id", ("right",), "ExternalId を取得")
+    e("lambda-cfn-deploy", ("bottom",), "s3-source", ("top",), "catalogKey と source hash を検証")
+    e("lambda-cfn-deploy", ("right", 0.25), "dynamodb-control", ("right",), "進捗・試行を保存", via=[(1570, R3-15), (1570, R0)], lab=(0, 0.65))
+    e("lambda-cfn-deploy", ("right",), "iam-competitor", ("bottom", 0.25), "AssumeRole（ExternalId）", via=[(1810, R3), (1810, 900), (2095, 900)], lab=(0, 0.6))
+    e("s3-competitor-bootstrap", ("right",), "iam-competitor", ("left",), "所有者が初期設定（1 回）", aux=True)
+    e("iam-competitor", ("bottom", 0.75), "cfn-problem", ("top", 0.75), "CloudFormation API", lab=(0, 0.52))
+    e("cfn-problem", ("bottom",), "problem-resources", ("top",), "作成・削除")
+    e("user-participants", ("left",), "lambda-participant-access", ("top",), "チームキーで CLI 資格情報を要求", via=[(1800, YU), (1800, 1080), (1450, 1080)], lab=(1, 0.4))
+    e("lambda-participant-access", ("right",), "iam-viewer", ("bottom",), "対象配置を確認・AssumeRole", via=[(1770, R4), (1770, 880), (2490, 880)], lab=(2, 0.45))
+    e("lambda-participant-access", ("bottom",), "participant-cli", ("left",), "15 分の資格情報（問題の IAM policy）", via=[(1450, 1480)], lab=(1, 0.5))
+    e("participant-cli", ("top",), "problem-resources", ("right",), "許可された競技用リソースを操作", via=[(2490, R4)])
+    return d
+
+
+def local():
+    # 旧 local / local-host を単一 Bun + SQLite に統合。Docker は Challenge を起動するときだけ。
+    r0, r1, r2, r3 = 360, 570, 780, 990
+    frames = [
+        ("local-play", "1", "Local 開催基盤", lane("#F7FCF9", "#2E7B50", 16), 20, 2180, 130),
+        ("host", "local-play", "開催者のコンピューター / active Docker context", lane("#FFFFFF", "#405A78", 15, 1), 40, 2160, 190),
+        ("tenkacloud-local", "host", "単一の Bun プロセス", CONSOLE_STACK, 80, 1260, 250, 1160),
+        ("problem-compose", "host", "所有するチームごとの Docker Compose（ローカル開催のみ）", BACKEND_STACK, 1510, 2120, 510),
+    ]
+    icons = [
+        ("organizer-browser", "1", "user", "開催者のブラウザ\n127.0.0.1:5174", 300, YU),
+        ("browser", "1", "client", "参加者のブラウザ\n既定 127.0.0.1:5175", 810, YU),
+        ("http", "tenkacloud-local", "traditional_server", "Bun HTTP サーバー\n開催者アカウント・チームキーを分離", 590, r0),
+        ("sqlite", "tenkacloud-local", "generic_database", "SQLite\n大会・認証・操作・得点を永続化", 300, r1),
+        ("scoring", "tenkacloud-local", "gear", "採点・チェックポイント\n判定と receipt を保存", 1030, r0),
+        ("problems", "tenkacloud-local", "documents", "problems/（読み取り専用）\nCompose カタログ・native plugin", 300, r2),
+        ("lifecycle", "tenkacloud-local", "gear", "Runtime adapters\n最大 512 個の休止ジョブを準備\n自動 eviction・reset なし", 590, r1),
+        ("terminal", "tenkacloud-local", "traditional_server", "認可付き Gateway / Terminal\n稼働中だけ 40 slots を使用", 1030, r1),
+        ("runner", "tenkacloud-local", "gear", "Container runner\n同時 team 3 / host 12\n設定 memory cap 合計 4096 MiB", 590, r2),
+        ("native-battle", "tenkacloud-local", "gear", "native Cryptography Battle\nBun + SQLite で実行", 1030, r2),
+        ("original-keys", "tenkacloud-local", "document", "原本キー・操作記録\n非公開のデータディレクトリ", 300, r3),
+        ("docker-sock", "host", "container_2", "Docker daemon\nDocker CLI / Compose", 1380, r2),
+        ("problem-container", "problem-compose", "container_1", "問題コンテナ\n参加者の Start / resume で起動", 1810, r1),
+        ("retained-data", "problem-compose", "disk", "停止した環境のデータ\n書き込み層・volume を保持\nRAM は破棄・大会の時計は継続", 1810, r3),
+    ]
+    d=Diagram(frames,icons)
+    e=d.edge
+    e("organizer-browser", ("bottom",), "http", ("top", 0.25), "開催者認証", via=[(300, 175), (575, 175)], lab=(1, 0.5))
+    e("browser", ("bottom",), "http", ("top", 0.75), "大会に属するチームキー", via=[(810, 240), (605, 240)], lab=(1, 0.5))
+    e("http", ("left",), "sqlite", ("top",), "認証・大会を読む", via=[(300, r0)])
+    e("http", ("right",), "scoring", ("left",), "解答を検証")
+    e("http", ("bottom",), "lifecycle", ("top",), "準備・開始・停止")
+    e("lifecycle", ("left",), "sqlite", ("right",), "所有権を先に保存")
+    e("lifecycle", ("bottom",), "runner", ("top",), "上限を確認・起動/再開")
+    e("runner", ("left",), "problems", ("right",), "安全な計画を作る")
+    e("runner", ("right",), "docker-sock", ("left",), "Compose 操作", via=[(690, r2), (690, 880), (1380, 880)], lab=(2, 0.5))
+    e("docker-sock", ("right",), "problem-container", ("bottom",), "作成・再開・停止", via=[(1810, r2)])
+    e("scoring", ("right",), "problem-container", ("top",), "private verifier", via=[(1810, r0)])
+    e("browser", ("right",), "terminal", ("top",), "認可された問題の操作", via=[(1190, YU), (1190, 490), (1030, 490)], lab=(0, 0.5))
+    e("terminal", ("right",), "problem-container", ("left",), "proxy / exec")
+    e("lifecycle", ("right", 0.75), "native-battle", ("top",), "native を初期化", via=[(790, r1+15), (790, 710), (1030, 710)], lab=(2, 0.5))
+    e("native-battle", ("bottom",), "sqlite", ("bottom",), "状態・得点を永続化", via=[(1030, 1120), (170, 1120), (170, 680), (300, 680)], lab=(1, 0.5))
+    e("sqlite", ("left",), "original-keys", ("left",), "原本を保持", aux=True, via=[(130, r1), (130, r3)], lab=(1, 0.65))
+    e("problem-container", ("right",), "retained-data", ("right",), "Stop / make down", via=[(2040, r1), (2040, r3)], lab=(2, 0.5))
     return d
 
 
@@ -544,58 +426,41 @@ USE_CASE = "rounded=1;arcSize=20;whiteSpace=wrap;html=1;fillColor=#F8FAFC;stroke
 
 
 def use_cases():
-    # 誰が何をできるか。2 行目に使えるモードを書く。関連は UML と同じく矢印の無い直線にする。
-    rows = [230 + i * 90 for i in range(16)]
+    rows = [230 + i * 100 for i in range(10)]
     left = [
-        ("uc-tenant", "テナントを作成・削除する（停止は表示だけ）\nSaaS"),
-        ("uc-insight", "全テナントの状態・監査・ジョブ・費用を見る\nSaaS（Admin Insight）"),
-        ("uc-cp-saml", "コントロールプレーンの SAML IdP を管理する\nSaaS（既定で非表示）"),
-        ("uc-event", "大会・チーム・日程を管理する（作成・配置・終了・アーカイブ）\nSaaS・Lite・local-host"),
-        ("uc-team-key", "チームキーを発行・再発行・配布する\nSaaS・Lite・local-host"),
-        ("uc-competitor", "競技用アカウントを登録・検証・削除する\nSaaS・Lite（ExternalId は再登録で変える）"),
-        ("uc-deploy", "問題を配置・再試行・撤去する（画面はイベント単位）\nSaaS・Lite・local-host"),
-        ("uc-disruption", "障害を発火する（復旧は自動・定期障害は早期に解除できる）\nSaaS・Lite・Local"),
-        ("uc-notify", "通知を送る・採点をロックする\nSaaS・Lite・local-host"),
-        ("uc-users", "ユーザーと SAML IdP を管理する（TenantAdmin だけ）\nユーザー: SaaS・Lite / SAML: silo・Lite（既定で非表示）"),
-        ("uc-login", "チームキーでログインする\nSaaS・Lite・local-host（Local はキーが入力済み）"),
-        ("uc-play", "問題を使う（自分で起動するのは Local だけ）\nSaaS・Lite・Local・local-host"),
-        ("uc-submit", "解答を送り、得点・ヒント・順位を見る\nSaaS・Lite・Local・local-host"),
-        ("uc-console", "チームの AWS コンソールを開く\nSaaS・Lite"),
-        ("uc-coordination", "独自競技の操作を送る（HUNT など）\nSaaS・Lite・local-host"),
-        ("uc-terminal", "ターミナル・シミュレーターを使う\nLocal（対応する問題）"),
+        ("uc-event", "大会・チーム・日程を管理する\nlocal / cloud"),
+        ("uc-team-key", "大会に属するチームキーを発行・再発行する\nlocal / cloud"),
+        ("uc-deploy", "問題を準備・配置・撤去する\nCompose は local / AWS 問題は cloud"),
+        ("uc-competitor", "競技用アカウントを登録・検証する\ncloud（開催基盤のアカウントとは分離）"),
+        ("uc-notify", "得点を確認し、採点をロック・大会を終了する\nlocal / cloud"),
+        ("uc-login", "チームキーで自分の大会に入る\nlocal / cloud"),
+        ("uc-play", "自分の環境を Start / resume・Stop (keep data) する\nlocal の on-demand Compose"),
+        ("uc-submit", "解答・checkpoint を送り、得点・順位を見る\n現在の対応問題に限る"),
+        ("uc-console", "配置に結び付いた AWS 資格情報を取得する\ncloud（問題の許可範囲・短時間）"),
+        ("uc-coordination", "native Cryptography Battle に参加する\nlocal / cloud（基盤に state を永続化）"),
     ]
     right = [
-        (0, "uc-commit", "問題リポジトリに commit し CI で検証する\nTenkaCloudChallenge"),
-        (1, "uc-pack", "Problem Pack を検証・導入・有効化する\nPack CLI（Lite）"),
-        (2, "uc-practice", "AWS なしで練習・検証する\nmake local・local-host・make dev"),
-        (3, "uc-payload", "非公開の問題データを公開する\nSaaS（基盤だけ・今は未使用）"),
-        (5, "uc-bootstrap", "初期設定のスタックを作成する（Launch Stack）\nSaaS・Lite"),
-        (7, "uc-platform", "基盤を配置・撤去する\nmake deploy・destroy"),
-        (8, "uc-cleanup", "失敗の後片付けをする\nmake・scripts"),
-        (10, "uc-machine", "API で問題を配置・再試行する\nSaaS（machine API・既定で無効）"),
+        (0,"uc-commit","問題の定義・検証コードを変更して CI で確認する\nproblems/（TenkaCloudChallenge）"),
+        (2,"uc-practice","ローカルの大会を起動・停止する\nmake local / make down（データを保持）"),
+        (4,"uc-bootstrap","競技用アカウントの IAM 初期設定を承認する\n共通ロール・必須 ExternalId"),
+        (6,"uc-platform","make deploy / make destroy（対象 installation を確認）\n通常は AWS 基盤・既定データを削除\n基盤削除の前に大会の Teardown で競技環境を撤去"),
+        (8,"uc-cleanup","組織の複数アカウントに初期設定を配る\n任意の手動 Organizations / StackSets 手順"),
     ]
-    frames = [("tenkacloud", "1", "TenkaCloud", lane("#FFFFFF", "#232F3E", 16), 330, 2110, 130)]
-    boxes = [(bid, "tenkacloud", label, 780, rows[i], 720, 64, USE_CASE) for i, (bid, label) in enumerate(left)]
-    boxes += [(bid, "tenkacloud", label, 1680, rows[i], 720, 64, USE_CASE) for i, bid, label in right]
-    icons = [
-        ("actor-system-admin", "1", "user", "システム管理者", 170, rows[1]),
-        ("actor-organizer", "1", "user", "開催者\n（TenantAdmin・TenantOperator）", 170, rows[6]),
-        ("actor-participant", "1", "users", "参加者", 170, (rows[12] + rows[13]) / 2),
-        ("actor-author", "1", "user", "問題作成者（CI）", 2260, (rows[1] + rows[2]) / 2),
-        ("actor-owner", "1", "user", "競技用アカウントの所有者", 2260, rows[5]),
-        ("actor-operator", "1", "user", "運用者\n（AWS 権限で make を実行）", 2260, (rows[7] + rows[8]) / 2),
-        ("actor-machine", "1", "client", "外部ツール\n（tcloud CLI）", 2260, rows[10]),
+    frames=[("tenkacloud","1","TenkaCloud（現行の local / cloud）",lane("#FFFFFF","#232F3E",16),330,2110,130)]
+    boxes=[(bid,"tenkacloud",label,780,rows[i],720,70,USE_CASE) for i,(bid,label) in enumerate(left)]
+    boxes += [(bid,"tenkacloud",label,1680,rows[i],720,70,USE_CASE) for i,bid,label in right]
+    icons=[
+        ("actor-organizer","1","user","開催者\n役割に応じた権限",170,rows[2]),
+        ("actor-participant","1","users","参加者",170,rows[7]),
+        ("actor-author","1","user","問題作成者",2260,rows[0]),
+        ("actor-owner","1","user","競技用アカウントの所有者",2260,rows[4]),
+        ("actor-operator","1","user","運用者",2260,rows[7]),
     ]
-    d = Diagram(frames, icons, boxes)
-    owners = {"actor-system-admin": range(0, 3), "actor-organizer": range(3, 10), "actor-participant": range(10, 16)}
-    for actor, idx in owners.items():
-        for i in idx:
-            d.edge(actor, ("right",), left[i][0], ("left",), "", straight=True, arrow=False)
-    right_owner = {"uc-commit": "actor-author", "uc-pack": "actor-author", "uc-practice": "actor-author", "uc-payload": "actor-author",
-                   "uc-bootstrap": "actor-owner", "uc-platform": "actor-operator", "uc-cleanup": "actor-operator", "uc-machine": "actor-machine"}
-    for bid, actor in right_owner.items():
-        d.edge(actor, ("left",), bid, ("right",), "", straight=True, arrow=False)
-    d.edge("uc-event", ("right",), "uc-deploy", ("right",), "含む（include）", aux=True, via=[(1210, rows[3]), (1210, rows[6])], lab=(1, 0.5))
+    d=Diagram(frames,icons,boxes)
+    for actor,indices in {"actor-organizer":range(5),"actor-participant":range(5,10)}.items():
+        for i in indices: d.edge(actor,("right",),left[i][0],("left",),"",straight=True,arrow=False)
+    for bid,actor in {"uc-commit":"actor-author","uc-practice":"actor-operator","uc-bootstrap":"actor-owner","uc-platform":"actor-operator","uc-cleanup":"actor-owner"}.items():
+        d.edge(actor,("left",),bid,("right",),"",straight=True,arrow=False)
     return d
 
 
@@ -603,66 +468,61 @@ MODE = "rounded=1;arcSize=12;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColo
 
 
 def context():
-    # TenkaCloud を 1 つの枠にし、4 つのモードと、人・外部システムとのつながりだけを描く。
-    frames = [
-        ("tenkacloud", "1", "TenkaCloud", lane("#FFFFFF", "#232F3E", 16), 700, 1760, 200, 1400),
-        ("aws-account", "tenkacloud", "AWS アカウント（SaaS・Lite）", lane("#FFFFFF", "#147EBA", 15, 1), 740, 1720, 260, 800),
-        ("pc", "tenkacloud", "PC（Local・local-host）", lane("#FAFBFC", "#405A78", 15, 1), 740, 1720, 840, 1380),
+    frames=[
+        ("tenkacloud","1","TenkaCloud",lane("#FFFFFF","#232F3E",16),700,1760,200),
+        ("aws-account","tenkacloud","AWS 開催基盤アカウント",lane("#FFFFFF","#147EBA",15,1),740,1720,260,760),
+        ("pc","tenkacloud","開催者のコンピューター",lane("#FAFBFC","#405A78",15,1),740,1720,800,1240),
+        ("competitor-boundary","1","AWS 競技用アカウント（開催基盤から分離）",EXTERNAL,1930,2610,260,720),
+        ("turso-boundary","1","外部 Turso（DynamoDB と択一）",EXTERNAL,1930,2610,780),
     ]
-    boxes = [
-        ("mode-saas", "aws-account", "SaaS\n複数の組織（SBT で組織を管理・pooled / silo）", 1230, 460, 880, 90, MODE),
-        ("mode-lite", "aws-account", "Lite\n1 つの組織（tenant=local・stack 2 つ）", 1230, 620, 880, 90, MODE),
-        ("mode-local", "pc", "Local（make local・make local-dev）\n1 人の練習・Docker・Simulator は開発者が有効にしたときだけ", 1230, 980, 880, 90, MODE),
-        ("mode-local-host", "pc", "local-host（make host）\n1 台の PC で複数チームの大会（Bun + SQLite）", 1230, 1140, 880, 90, MODE),
+    boxes=[
+        ("mode-lite","aws-account","cloud: Lambda / API Gateway / Cognito\n保存先は DynamoDB または外部 Turso\nAWS 問題・native 競技（Docker は local のみ）",1230,460,880,100,MODE),
+        ("cloud-cli","aws-account","make deploy / make destroy（AWS 基盤・既定データを削除）\n競技環境は大会の Teardown で先に撤去／外部 Turso は通常保持",1230,650,880,80,MODE),
+        ("mode-local-host","pc","local\n単一 Bun プロセス + SQLite\n開催管理・参加者画面・native Cryptography Battle",1230,960,880,100,MODE),
+        ("mode-local","pc","on-demand Docker / Compose（local のみ）\nチームごとの起動・停止とディスク状態の保持",1230,1150,880,80,MODE),
     ]
-    icons = [
-        ("participant", "1", "users", "参加者", 200, 330),
-        ("system-admin", "1", "user", "システム管理者", 200, 460),
-        ("operator", "1", "user", "運用者（AWS 権限）", 200, 690),
-        ("organizer", "1", "user", "開催者", 200, 1000),
-        ("author", "1", "user", "問題作成者（CI）", 200, 1300),
-        ("competitor", "1", "general", "競技用の AWS アカウント\n（チームごと）", 2150, 330),
-        ("idp", "1", "corporate_data_center", "社内・テナントの IdP\n（SAML 2.0、任意）", 2150, 460),
-        ("non-aws", "1", "internet", "AWS 以外のクラウド\nAzure・GCP・さくら", 2150, 590),
-        ("email", "1", "email", "メール\n（SNS の通知・Cognito の招待）", 2150, 720),
-        ("turso", "1", "generic_database", "Turso（libSQL）\n制御データの代替（任意）", 2150, 880),
-        ("ghcr", "1", "container_2", "GHCR\nSimulator のイメージ", 2150, 1030),
-        ("challenge", "1", "documents", "TenkaCloudChallenge\n（GitHub・submodule）", 2150, 1300),
-        ("packs", "1", "documents", "Problem Pack の\nリポジトリ", 2430, 1300),
+    icons=[
+        ("participant","1","users","参加者",200,330),
+        ("organizer","1","user","開催者",200,560),
+        ("operator","1","user","運用者（AWS 権限）",200,710),
+        ("local-operator","1","user","ローカルの開催者",200,1000),
+        ("author","1","user","問題作成者",200,1300),
+        ("iam-competitor","competitor-boundary","identity_and_access_management","AWS IAM\n共通ロール・ExternalId",2240,370),
+        ("competitor","competitor-boundary","cloudformation","AWS CloudFormation\n別の競技用アカウント\n複数チームの別リージョン割り当ても可",2240,580),
+        ("turso-control","turso-boundary","generic_database","Turso\ncloud の永続ストア（選択時のみ）\nDynamoDB テーブルは作成しない",2240,890),
+        ("challenge","1","documents","problems/（TenkaCloudChallenge）\n固定カタログ・テンプレート・plugin",2240,1150),
     ]
-    d = Diagram(frames, icons, boxes)
-    e = d.edge
-    e("participant", ("right",), "tenkacloud", ("left", 330), "解答・得点（チームキー）")
-    e("participant", ("top",), "competitor", ("top",), "問題の操作・AWS コンソール", via=[(200, 150), (2150, 150)], lab=(1, 0.5))
-    e("system-admin", ("right",), "mode-saas", ("left",), "組織の登録・監視")
-    e("operator", ("right",), "aws-account", ("left", 690), "make deploy・destroy")
-    e("organizer", ("right",), "tenkacloud", ("left", 1000), "大会の運営")
-    e("author", ("bottom", 0.25), "challenge", ("bottom",), "commit・CI", via=[(185, 1500), (2150, 1500)], lab=(1, 0.5))
-    e("author", ("bottom", 0.75), "packs", ("bottom",), "commit", via=[(215, 1530), (2430, 1530)], lab=(1, 0.85))
-    e("aws-account", ("right", 330), "competitor", ("left",), "AssumeRole（ExternalId 必須）・CloudFormation")
-    e("idp", ("left",), "aws-account", ("right", 460), "SAML アサーション")
-    e("aws-account", ("right", 590), "non-aws", ("left",), "provider REST（GCP は token exchange）")
-    e("aws-account", ("right", 720), "email", ("left",), "通知・招待")
-    e("tenkacloud", ("right", 880), "turso", ("left",), "libSQL（任意）")
-    e("pc", ("right", 1030), "ghcr", ("left",), "イメージを取得（local-dev）")
-    e("challenge", ("left",), "tenkacloud", ("right", 1300), "問題（CDK synth 時に読む）")
-    e("packs", ("top",), "tenkacloud", ("right", 1200), "Problem Pack（Lite・snapshot）", via=[(2430, 1200)])
+    d=Diagram(frames,icons,boxes)
+    e=d.edge
+    e("participant",("right",),"tenkacloud",("left",330),"チームキー・問題の操作・得点")
+    e("organizer",("right",),"tenkacloud",("left",560),"開催者認証・大会を運営")
+    e("operator",("right",),"cloud-cli",("left",),"配置・撤去",via=[(580,710),(580,650)])
+    e("local-operator",("right",),"pc",("left",1000),"make local / make down")
+    e("aws-account",("right",370),"iam-competitor",("left",),"AssumeRole（ExternalId 必須）")
+    e("iam-competitor",("bottom",),"competitor",("top",),"チームの割り当て先へ配置")
+    e("aws-account",("right",710),"turso-control",("left",),"Turso 選択時: HTTPS",via=[(1800,710),(1800,890)],lab=(2,0.62))
+    e("challenge",("left",),"mode-local",("right",),"local catalog")
+    e("challenge",("top",),"mode-lite",("right",),"cloud の有効な問題・pack（Docker を除外）",via=[(1840,1060),(1840,460)],lab=(1,0.35))
+    e("author",("right",),"challenge",("bottom",),"変更・CI で検証",via=[(2240,1300)],lab=(0,0.5))
     return d
 
 
-def replace_page(text, page_id, model):
+def replace_page(text, page_id, name, model):
     pattern = re.compile(rf'(<diagram id="{page_id}"[^>]*>)(.*?)(</diagram>)', re.S)
     assert len(pattern.findall(text)) == 1, f"{page_id} のページが 1 つだけ見つからない"
-    return pattern.sub(lambda m: m.group(1) + "\n        " + model + "\n    " + m.group(3), text)
+    return pattern.sub(lambda m: re.sub(r'name="[^"]*"', f'name="{attr(name)}"', m.group(1)) + "\n        " + model + "\n    " + m.group(3), text)
 
 
 def build():
     text = SRC.read_text(encoding="utf-8")
-    text = replace_page(text, "saas-physical", saas().model())
-    text = replace_page(text, "lite-physical", lite().model())
-    text = replace_page(text, "local-runtime", local().model())
-    text = replace_page(text, "use-cases", use_cases().model())
-    text = replace_page(text, "system-context", context().model())
+    for page_id,name,diagram in [
+        ("saas-physical","01 Cloud 開催基盤・AWS 物理構成",cloud()),
+        ("lite-physical","02 AWS 問題の実行・信頼境界",aws_exercises()),
+        ("local-runtime","03 Local・共通ランタイム",local()),
+        ("use-cases","04 現行のユースケース",use_cases()),
+        ("system-context","05 現行のシステム境界",context()),
+    ]:
+        text = replace_page(text,page_id,name,diagram.model())
     OUT.write_text(text, encoding="utf-8")
 
 

@@ -65,6 +65,8 @@ export interface ParticipantPortalLambdaProps {
    * GET /endpoints が default URL を CFn output から read-through 算出するため参照。
    */
   readonly problemsEndpoints: Readonly<Record<string, unknown>>;
+  /** Only the configured problem ids are bundled here; plugins stay in the dispatcher. */
+  readonly problemsCoordination?: Readonly<Record<string, unknown>>;
   /**
    * SSM SecureString path segment for tenant ExternalId lookup
    * (`/{environmentName}/tenants/{tenantId}/external-id`).
@@ -143,8 +145,8 @@ function registrationPolicies(props: ParticipantPortalLambdaProps): Record<strin
  * Participant Portal backend Lambda。Function URL (AuthType=NONE) で公開し、
  * `Authorization: Bearer <teamLoginKey>` を Lambda 内で検証する。
  *
- * IAM は最小限: participant state tables, tenant ExternalId SSM read, and the first
- * AssumeRole hop into the competitor deploy role. CFn/EventBridge write paths stay out.
+ * Participant sessions use operator-to-viewer STS directly. A separate read-only
+ * deployment-role session verifies the viewer belongs to the exact owned stack.
  */
 export class ParticipantPortalLambda extends Construct {
   public readonly fn: NodejsFunction;
@@ -245,22 +247,33 @@ export class ParticipantPortalLambda extends Construct {
               }),
             }
           : {}),
-        ConsoleSso: new PolicyDocument({
+        ConsoleSsoVerification: new PolicyDocument({
           statements: [
-            new PolicyStatement({
-              actions: ["ssm:GetParameter"],
-              resources: [ssmArn],
-            }),
+            new PolicyStatement({ actions: ["ssm:GetParameter"], resources: [ssmArn] }),
             new PolicyStatement({
               actions: ["kms:Decrypt"],
               resources: ["*"],
-              conditions: {
-                StringLike: { "kms:EncryptionContext:PARAMETER_ARN": ssmArn },
-              },
+              conditions: { StringLike: { "kms:EncryptionContext:PARAMETER_ARN": ssmArn } },
             }),
             new PolicyStatement({
               actions: ["sts:AssumeRole"],
               resources: ["arn:aws:iam::*:role/TenkaCloud-*"],
+              conditions: { StringLike: { "sts:ExternalId": "?*" } },
+            }),
+          ],
+        }),
+        ConsoleSso: new PolicyDocument({
+          statements: [
+            new PolicyStatement({
+              actions: ["sts:AssumeRole"],
+              // Canonical stacks live in tc-*. Exact logical-resource ownership is
+              // checked with DescribeStackResource; physical names may be truncated.
+              // Same-account access additionally requires persisted self-test consent
+              // in the event. A blanket host-account deny would reject that approved path.
+              resources: ["arn:aws:iam::*:role/tc-*"],
+              conditions: {
+                StringLike: { "sts:ExternalId": "??????????????????????????" },
+              },
             }),
           ],
         }),
@@ -352,6 +365,7 @@ export class ParticipantPortalLambda extends Construct {
           ? { PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName }
           : {}),
         DEPLOY_ENVIRONMENT: props.environmentName,
+        PARTICIPANT_OPERATOR_ACCOUNT_ID: stack.account,
         // [Issue #2440]: control-plane data backend (default dynamodb は env を足さず byte 互換)。
         ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
         ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
@@ -378,6 +392,7 @@ export class ParticipantPortalLambda extends Construct {
       bundledData: {
         BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
         BATTLE_PROBLEMS_WRITEUPS: JSON.stringify(props.problemsWriteups ?? {}),
+        COORDINATION_PROBLEM_IDS: JSON.stringify(Object.keys(props.problemsCoordination ?? {})),
       },
     });
 
@@ -391,7 +406,7 @@ export class ParticipantPortalLambda extends Construct {
         allowedOrigins: ["*"],
         // DELETE は endpoint override 解除 (default に戻す) で必要。
         allowedMethods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.POST, HttpMethod.DELETE],
-        allowedHeaders: ["content-type", "authorization"],
+        allowedHeaders: ["content-type", "authorization", "idempotency-key"],
         maxAge: Duration.minutes(10),
       },
     });

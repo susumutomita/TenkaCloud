@@ -2,19 +2,24 @@ import Alert from "@cloudscape-design/components/alert";
 import Button from "@cloudscape-design/components/button";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Container from "@cloudscape-design/components/container";
+import DatePicker from "@cloudscape-design/components/date-picker";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
+import Input from "@cloudscape-design/components/input";
 import Multiselect from "@cloudscape-design/components/multiselect";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import TimeInput from "@cloudscape-design/components/time-input";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ApiClient, ApiError } from "../../api/client";
 import type { EventDetail } from "../../api/events-client";
-import type { AppConfig } from "../../config";
+import { type AppConfig, isLocalHost } from "../../config";
 import { useT } from "../../i18n";
 
 interface RegistrationSummary {
   tenantId: string;
   enabled: boolean;
+  featureEnabled?: boolean;
+  canConfigure?: boolean;
   closesAt?: string;
   capacity: number;
   claimed: number;
@@ -41,6 +46,15 @@ function localDateTime(iso: string): string {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }
 
+function isValidLocalDateTime(value: string): boolean {
+  const date = new Date(value);
+  return (
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/u.test(value) &&
+    Number.isFinite(date.getTime()) &&
+    localDateTime(date.toISOString()) === value
+  );
+}
+
 export function EventRegistrationPanel({
   apiClient,
   config,
@@ -53,16 +67,18 @@ export function EventRegistrationPanel({
   canMutateTenant: boolean;
 }) {
   const t = useT();
+  const localHost = isLocalHost(config);
   const [summary, setSummary] = useState<RegistrationSummary | null>(null);
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [closesAt, setClosesAt] = useState(() =>
     localDateTime(detail.endsAt ?? new Date(Date.now() + 86400000).toISOString()),
   );
   const [confirmed, setConfirmed] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
+  const [deadlineDate = "", deadlineTime = ""] = closesAt.split("T");
+  const validDeadline = isValidLocalDateTime(closesAt);
   const path = `/events/${detail.eventId}/registration`;
   const pending = useRef<AbortController | null>(null);
   const showError = useCallback(
@@ -77,11 +93,24 @@ export function EventRegistrationPanel({
           /* Network responses may not contain JSON. */
         }
       }
-      const known = ["invalid_pool", "not_ready", "closed", "conflict", "login_key_missing"];
-      setError(t(`registration.error_${known.includes(code) ? code : "unavailable"}`));
+      const known = [
+        "invalid_pool",
+        "not_ready",
+        "closed",
+        "conflict",
+        "login_key_missing",
+        "feature_disabled",
+        "forbidden",
+      ];
+      const suffix = known.includes(code) ? code : "unavailable";
+      const hostError =
+        localHost && ["invalid_pool", "not_ready", "login_key_missing"].includes(suffix);
+      setError(t(`registration.${hostError ? "host_" : ""}error_${suffix}`));
     },
-    [t],
+    [t, localHost],
   );
+
+  const { busy, runMutation } = useRegistrationMutation(showError);
 
   const refresh = useCallback(() => {
     pending.current?.abort();
@@ -106,15 +135,17 @@ export function EventRegistrationPanel({
 
   useEffect(() => {
     refresh();
-    return () => pending.current?.abort();
+    return () => {
+      pending.current?.abort();
+    };
   }, [refresh]);
 
   async function save(enabled: boolean) {
-    if (!apiClient || (enabled && !config.participantPortalUrl) || busy) return;
-    setBusy(true);
+    if (!apiClient || busy) return;
+    if (enabled && (!config.participantPortalUrl || !validDeadline)) return;
     setError("");
     setCopied(false);
-    try {
+    await runMutation(async (signal) => {
       const response = await apiClient.put<RegistrationSummary>(
         path,
         enabled
@@ -125,29 +156,31 @@ export function EventRegistrationPanel({
             }
           : { enabled },
       );
+      if (signal.aborted) return;
       // The invitation is returned only by this PUT. A refresh GET still in flight would land
       // afterwards, clear the one-time link and restore the older summary, leaving the operator
       // no way to recover the link short of reissuing (and so revoking) it again. Supersede it
       // only on success: after a failed PUT that GET is still the best state to show.
       pending.current?.abort();
       setSummary(response);
-      setLink(
-        response.invitation && config.participantPortalUrl
-          ? buildRegistrationLink(
-              config.participantPortalUrl,
-              response.tenantId,
-              detail.eventId,
-              response.invitation,
-            )
-          : "",
-      );
-    } catch (cause) {
-      showError(cause);
-    } finally {
-      setBusy(false);
-    }
+      setLink(invitationLink(config.participantPortalUrl, detail.eventId, response));
+    });
   }
 
+  async function toggleFeature() {
+    if (!apiClient || busy) return;
+    setError("");
+    await runMutation(async (signal) => {
+      await apiClient.put("/feature-flags", {
+        key: "registration",
+        enabled: !summary?.featureEnabled,
+      });
+      if (!signal.aborted) refresh();
+    });
+  }
+
+  const canSave = registrationPermission(summary, localHost, canMutateTenant);
+  const controlsDisabled = !canSave || busy;
   if (config.mode === "demo") return null;
   const options = detail.teams.map((team) => ({
     label: team.displayName ?? team.internalSlug,
@@ -159,7 +192,10 @@ export function EventRegistrationPanel({
   return (
     <Container header={<Header variant="h2">{t("registration.title")}</Header>}>
       <SpaceBetween size="m">
-        <p>{t("registration.description")}</p>
+        <p>{t(localHost ? "registration.host_description" : "registration.description")}</p>
+        {localHost && (
+          <RegistrationFeature summary={summary} busy={busy} toggle={() => void toggleFeature()} />
+        )}
         <Button disabled={busy} onClick={refresh}>
           {t("registration.refresh")}
         </Button>
@@ -181,58 +217,67 @@ export function EventRegistrationPanel({
                 change.selectedOptions.flatMap((option) => (option.value ? [option.value] : [])),
               )
             }
-            disabled={!canMutateTenant || busy}
+            disabled={controlsDisabled}
             placeholder={t("registration.select")}
           />
         </FormField>
-        <FormField label={t("registration.deadline")} controlId="registration-deadline">
-          <input
-            id="registration-deadline"
-            type="datetime-local"
-            value={closesAt}
-            disabled={!canMutateTenant || busy}
-            onChange={(event) => setClosesAt(event.target.value)}
-          />
+        <FormField label={t("registration.deadline")}>
+          <SpaceBetween direction="horizontal" size="s">
+            <FormField label={t("registration.deadline_date")}>
+              <DatePicker
+                value={deadlineDate}
+                placeholder="YYYY/MM/DD"
+                disabled={controlsDisabled}
+                i18nStrings={{
+                  openCalendarAriaLabel: () => t("registration.deadline_date"),
+                  previousMonthAriaLabel: t("registration.previous_month"),
+                  nextMonthAriaLabel: t("registration.next_month"),
+                  todayAriaLabel: t("registration.today"),
+                }}
+                onChange={({ detail: change }) => setClosesAt(`${change.value}T${deadlineTime}`)}
+              />
+            </FormField>
+            <FormField label={t("registration.deadline_time")}>
+              <TimeInput
+                value={deadlineTime}
+                format="hh:mm"
+                placeholder="hh:mm"
+                disabled={controlsDisabled}
+                onChange={({ detail: change }) => setClosesAt(`${deadlineDate}T${change.value}`)}
+              />
+            </FormField>
+          </SpaceBetween>
         </FormField>
         <Checkbox
           checked={confirmed}
-          disabled={!canMutateTenant || busy}
+          disabled={controlsDisabled}
           onChange={({ detail: change }) => setConfirmed(change.checked)}
         >
-          {t("registration.confirm")}
+          {t(localHost ? "registration.host_confirm" : "registration.confirm")}
         </Checkbox>
         <SpaceBetween direction="horizontal" size="s">
           <Button
             variant="primary"
             loading={busy}
             disabled={
-              !canMutateTenant ||
+              !canSave ||
               !confirmed ||
               !teamIds.length ||
-              !closesAt ||
+              !validDeadline ||
               !config.participantPortalUrl
             }
             onClick={() => void save(true)}
           >
             {t(summary?.enabled ? "registration.reissue" : "registration.open_button")}
           </Button>
-          <Button
-            disabled={!canMutateTenant || !summary?.enabled || busy}
-            onClick={() => void save(false)}
-          >
+          <Button disabled={!canSave || !summary?.enabled || busy} onClick={() => void save(false)}>
             {t("registration.close_button")}
           </Button>
         </SpaceBetween>
         {link && (
           <FormField label={t("registration.link")} description={t("registration.link_help")}>
             <SpaceBetween size="s">
-              <input
-                aria-label={t("registration.link")}
-                type="text"
-                value={link}
-                readOnly
-                style={{ width: "100%", boxSizing: "border-box", padding: "10px" }}
-              />
+              <Input ariaLabel={t("registration.link")} value={link} readOnly />
               <Button
                 iconName="copy"
                 onClick={() => {
@@ -250,4 +295,65 @@ export function EventRegistrationPanel({
       </SpaceBetween>
     </Container>
   );
+}
+
+function invitationLink(
+  base: string | undefined,
+  eventId: string,
+  response: RegistrationSummary,
+): string {
+  return response.invitation && base
+    ? buildRegistrationLink(base, response.tenantId, eventId, response.invitation)
+    : "";
+}
+
+function RegistrationFeature({
+  summary,
+  busy,
+  toggle,
+}: {
+  summary: RegistrationSummary | null;
+  busy: boolean;
+  toggle: () => void;
+}) {
+  const t = useT();
+  if (!summary) return null;
+  return (
+    <SpaceBetween size="s">
+      <p>{t(summary.featureEnabled ? "registration.feature_on" : "registration.feature_off")}</p>
+      <Button disabled={!summary.canConfigure || busy} onClick={toggle}>
+        {t(summary.featureEnabled ? "registration.disable_feature" : "registration.enable_feature")}
+      </Button>
+    </SpaceBetween>
+  );
+}
+
+function registrationPermission(
+  summary: RegistrationSummary | null,
+  localHost: boolean,
+  canMutateTenant: boolean,
+): boolean {
+  return localHost
+    ? summary?.canConfigure === true && summary.featureEnabled === true
+    : canMutateTenant;
+}
+
+function useRegistrationMutation(showError: (cause: unknown) => void) {
+  const [busy, setBusy] = useState(false);
+  const pending = useRef<AbortController | null>(null);
+  useEffect(() => () => pending.current?.abort(), []);
+  async function runMutation(operation: (signal: AbortSignal) => Promise<void>) {
+    pending.current?.abort();
+    const request = new AbortController();
+    pending.current = request;
+    setBusy(true);
+    try {
+      await operation(request.signal);
+    } catch (cause) {
+      if (!request.signal.aborted) showError(cause);
+    } finally {
+      if (!request.signal.aborted) setBusy(false);
+    }
+  }
+  return { busy, runMutation };
 }

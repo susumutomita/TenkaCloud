@@ -1,4 +1,4 @@
-import type { IdpScope } from "../../control-plane/handlers/idp-handler/core.js";
+import type { IdpScope } from "../../shared/idp/core.js";
 import type { SamlIdpRecord, SamlIdpsRepository, SqlExecutor } from "./types.js";
 
 /**

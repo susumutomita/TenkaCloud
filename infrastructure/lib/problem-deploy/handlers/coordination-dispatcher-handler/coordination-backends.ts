@@ -35,7 +35,7 @@ export async function scoreDeliveryFetch(
 export function createScoreDeliveryControlDataRuntime() {
   return createControlDataRuntime({
     env: process.env,
-    ssm: new SSMClient({ maxAttempts: 1, requestHandler }),
+    ssm: new SSMClient({ maxAttempts: 1, requestHandler, ignoreConfiguredEndpointUrls: true }),
     createClient: (config) => createClient({ ...config, fetch: scoreDeliveryFetch }),
   });
 }

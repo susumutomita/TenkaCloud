@@ -2,6 +2,8 @@ import { isRoundTerminated } from "../generic-scoring-handler/round-liveness.js"
 import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
 import { isCoordinationDeploymentPlayable } from "../shared/coordination-liveness.js";
 import { startCoordinationRun } from "../shared/coordination-run.js";
+import { loadExecutionPluginSource } from "../shared/execution-catalog.js";
+import { eventCatalogContext, savedExecutionCatalog } from "../shared/execution-catalog-context.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import {
   type EventSharedResources,
@@ -90,11 +92,8 @@ export async function resetCoordinationRun(
   eventId: string,
   problemId: string,
 ): Promise<CoordinationResetOutcome> {
-  // Ordinary problems have no dispatcher that can complete an initialization.
-  // Do not create a durable reset obligation for an undeclared coordination scope.
-  if (!Object.hasOwn(shared.problemsCoordination ?? {}, problemId)) return { kind: "not_found" };
   const events = await resolveEventsRepository(shared);
-  const event = await events.getEvent(tenantId, eventId);
+  const event = await events.getEvent(tenantId, eventId, true);
   if (!event) return { kind: "not_found" };
   const nowIso = new Date().toISOString();
   if (
@@ -102,6 +101,9 @@ export async function resetCoordinationRun(
     isRoundTerminated({ eventStartsAt: event.startsAt, eventEndsAt: event.endsAt }, nowIso)
   )
     return { kind: "event_ended" };
+  // Resolve saved A before the support gate, even when publication B removed it.
+  shared = await resolveResetCatalog(shared, event.catalogKey, problemId);
+  if (!Object.hasOwn(shared.problemsCoordination ?? {}, problemId)) return { kind: "not_found" };
   const deployments = await queryDeploymentsByEvent(shared, tenantId, eventId);
   const repository = await resolveDeploymentsRepository(shared);
   let deployed = false;
@@ -144,4 +146,19 @@ export async function resetCoordinationRun(
       previousRunId: outcome.previousRunId,
     },
   };
+}
+
+async function resolveResetCatalog(
+  shared: EventSharedResources,
+  catalogKey: string | undefined,
+  problemId: string,
+): Promise<EventSharedResources> {
+  const catalog = await savedExecutionCatalog(catalogKey);
+  if (!catalog) return shared;
+  const scoped = eventCatalogContext(shared, catalog);
+  // Verify bytes before admitting a durable initialization obligation. Execution
+  // remains exclusively inside the coordination dispatcher role.
+  if (Object.hasOwn(catalog.coordination, problemId))
+    await loadExecutionPluginSource(catalog, problemId);
+  return scoped;
 }

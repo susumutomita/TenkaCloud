@@ -10,7 +10,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { randomToken } from "./auth";
 
 function assertOwner(uid: number): void {
@@ -75,20 +75,43 @@ export function prepareDatabase(path: string): void {
   closeSync(openPrivate(path, constants.O_RDWR | constants.O_CREAT));
 }
 
-export function persistentKey(path: string): string {
+/** Check before opening SQLite: a missing key must not migrate or initialize restored state. */
+export function hasDatabaseState(path: string): boolean {
+  let stat: ReturnType<typeof lstatSync>;
+  try {
+    stat = lstatSync(path);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+    throw error;
+  }
+  if (!stat.isFile() || stat.nlink !== 1)
+    throw new Error("Expected a regular private file, not a link.");
+  assertOwner(stat.uid);
+  return stat.size > 0;
+}
+
+export function persistentKey(path: string, allowCreate = true): string {
   let created = false;
   let descriptor: number;
   try {
-    descriptor = openPrivate(path, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL);
-    created = true;
+    descriptor = openPrivate(
+      path,
+      allowCreate ? constants.O_RDWR | constants.O_CREAT | constants.O_EXCL : constants.O_RDONLY,
+    );
+    created = allowCreate;
   } catch (error) {
+    if (!allowCreate && error instanceof Error && "code" in error && error.code === "ENOENT")
+      throw new Error(
+        `Missing ${basename(path)} file for existing host state; restore the complete data directory from backup. Refusing to generate a replacement.`,
+        { cause: error },
+      );
     if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
     descriptor = openPrivate(path, constants.O_RDONLY);
   }
   try {
     const value = created ? randomToken() : readFileSync(descriptor, "utf8").trim();
     if (!/^[A-Za-z0-9_-]{43}$/u.test(value))
-      throw new Error("Invalid host-key file; refusing to replace it.");
+      throw new Error(`Invalid ${basename(path)} file; refusing to replace it.`);
     if (created) {
       writeFileSync(descriptor, `${value}\n`);
       fsyncSync(descriptor);

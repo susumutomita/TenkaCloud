@@ -7,7 +7,7 @@ import {
   type IdpHandlerDeps,
   type IdpScope,
   updateIdp,
-} from "../../lib/control-plane/handlers/idp-handler/core";
+} from "../../lib/shared/idp/core";
 
 /**
  * Issue #1418: idp-handler/core.ts は 60% branch だった。 既存 core.test は happy / validation /
@@ -169,7 +169,7 @@ describe("deleteIdp", () => {
 
 describe("emitAudit", () => {
   it("should emit a system-scope audit line", () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     emitAudit({
       action: "idp.create",
       scope: { kind: "system" },
@@ -182,7 +182,7 @@ describe("emitAudit", () => {
     info.mockRestore();
   });
   it("should emit a tenant-scope audit line with the tenantId", () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     emitAudit({
       action: "idp.delete",
       scope: { kind: "tenant", tenantId: "t9" },

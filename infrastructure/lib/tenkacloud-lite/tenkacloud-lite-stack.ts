@@ -24,6 +24,9 @@ import type { SamlIdpConfig } from "../tenant-template/saml-identity-providers.j
  * ProblemDeployBackend stack を 1 コマンドで deploy する経路を整備する。
  */
 export interface TenkaCloudLiteStackProps extends StackProps {
+  /** Public IDs from the installation's exact immutable execution snapshot. */
+  readonly supportedProblemIds?: readonly string[];
+  readonly nativeProblemIds?: readonly string[];
   /** 環境名 (= development / staging / production)。 IdentityProvider が UserPool domain prefix に使う。 */
   readonly environment: string;
   /**
@@ -83,7 +86,7 @@ export interface TenkaCloudLiteStackProps extends StackProps {
  * として使う場面が出てきたら、 ここの値を起点に分岐する。
  */
 const LITE_TENANT_ID = "local" as const;
-const LITE_TENANT_NAME = "TenkaCloud Lite" as const;
+const LITE_TENANT_NAME = "TenkaCloud" as const;
 
 export class TenkaCloudLiteStack extends Stack {
   /** application-admin-console の CloudFront URL (= CLI が `tenkacloud lite up` 完了時に echo する)。 */
@@ -107,14 +110,6 @@ export class TenkaCloudLiteStack extends Stack {
   constructor(scope: Construct, id: string, props: TenkaCloudLiteStackProps) {
     super(scope, id, props);
 
-    // Lite mode は SBT の tier API key (= basic / standard / premium / platinum SSM
-    // Parameter) を使わない。 ApiGateway construct は CustomApiKey 4 つを必須引数で
-    // 受けるので、 placeholder 文字列を渡して Usage Plan が作られても dormant な状態に
-    // する (= Lite で API key 経路を使わない方針、 Phase 4-5 で ApiGateway 側に
-    // apiKeyConfig?: undefined を許容する path を追加する想定)。
-    const liteApiKeyPlaceholder = `tenkacloud-lite-${props.environment}-placeholder`;
-    const dummyLookup = (): string => liteApiKeyPlaceholder;
-
     // Issue #1312: SAML IdP CRUD 用 DDB Table を本 stack で立て、 AppPlaneCore に渡す。
     // helper は `attachSamlIdpLambda: true` 受け取り時に同 stack 内で `SamlIdpLambda` を立て、
     // ApiGateway に `/tenant/idp*` route を配線する (= UserPool と SAML IdP Lambda を同 stack
@@ -133,10 +128,11 @@ export class TenkaCloudLiteStack extends Stack {
 
     const appPlane = buildAppPlaneCore(this, {
       features: props.features,
+      supportedProblemIds: props.supportedProblemIds,
+      nativeProblemIds: props.nativeProblemIds,
       tenantId: LITE_TENANT_ID,
       tenantName: LITE_TENANT_NAME,
       environment: props.environment,
-      isPooledDeploy: false,
       deployApiLambda: props.deployApiLambda,
       eventApiLambda: props.eventApiLambda,
       competitorAccountsApiLambda: props.competitorAccountsApiLambda,
@@ -157,15 +153,6 @@ export class TenkaCloudLiteStack extends Stack {
       // SAML IdP / 監査ログ ページの `requireRole(c, [TENANT_ADMIN_ROLE])` を成立させる。
       // SaaS mode (= TenantTemplateStack) では本 flag は未指定 (= attach なし)。
       liteAdminClaimsInjection: true,
-      apiKeyConfig: {
-        ssmParameterNames: {
-          basic: { keyId: `${liteApiKeyPlaceholder}-basic-id`, value: liteApiKeyPlaceholder },
-          standard: { keyId: `${liteApiKeyPlaceholder}-standard-id`, value: liteApiKeyPlaceholder },
-          premium: { keyId: `${liteApiKeyPlaceholder}-premium-id`, value: liteApiKeyPlaceholder },
-          platinum: { keyId: `${liteApiKeyPlaceholder}-platinum-id`, value: liteApiKeyPlaceholder },
-        },
-        ssmLookup: dummyLookup,
-      },
     });
 
     this.applicationAdminConsoleUrl = appPlane.applicationAdminConsoleUrl;
@@ -176,8 +163,7 @@ export class TenkaCloudLiteStack extends Stack {
 
     new CfnOutput(this, "ApplicationAdminConsoleUrl", {
       value: this.applicationAdminConsoleUrl,
-      description:
-        "TenkaCloud Lite の Application Admin Console URL (= CLI `tenkacloud lite up` 完了時に echo)。",
+      description: "TenkaCloud organizer console URL.",
     });
     new CfnOutput(this, "CognitoDomainUrl", {
       value: this.cognitoDomainUrl,

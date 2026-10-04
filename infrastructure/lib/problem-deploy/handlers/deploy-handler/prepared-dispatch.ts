@@ -18,6 +18,9 @@ export interface PreparedDeploymentDispatch {
   readonly tenantId: string;
   readonly problemId: string;
   readonly problemDir: string;
+  readonly catalogKey?: string;
+  readonly sourceVersion?: string;
+  readonly sourceLocation?: string;
   readonly teamSlug: string;
   readonly namePrefix: string;
   readonly region: string;
@@ -36,6 +39,9 @@ export async function dispatchPreparedDeployment(input: PreparedDeploymentDispat
     tenantId: input.tenantId,
     problemId: input.problemId,
     problemDir: input.problemDir,
+    ...(input.catalogKey ? { catalogKey: input.catalogKey } : {}),
+    ...(input.sourceVersion ? { sourceVersion: input.sourceVersion } : {}),
+    ...(input.sourceLocation ? { sourceLocation: input.sourceLocation } : {}),
     teamSlug: input.teamSlug,
     namePrefix: input.namePrefix,
     region: input.region,

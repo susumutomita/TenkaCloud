@@ -51,6 +51,8 @@ export function generateExternalId(): string {
 export interface ExternalIdStoreDeps {
   readonly ssm: Pick<SSMClient, "send">;
   readonly env: string;
+  /** Confirm first registration before creating a missing value; existing values never call this. */
+  readonly assertCanInitialize?: () => Promise<void>;
 }
 
 /**
@@ -134,6 +136,7 @@ export async function ensureExternalId(
 ): Promise<{ readonly externalId: string; readonly created: boolean }> {
   const existing = await getExternalId(deps, tenantId);
   if (existing) return { externalId: existing, created: false };
+  await deps.assertCanInitialize?.();
   const name = buildExternalIdParameterName(deps.env, tenantId);
   const externalId = generateExternalId();
   await deps.ssm.send(

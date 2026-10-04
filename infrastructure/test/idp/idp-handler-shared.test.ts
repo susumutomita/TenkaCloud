@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildIdpSharedResources } from "../../lib/tenant-template/handlers/idp-handler/shared";
 
 /**
@@ -19,12 +19,11 @@ const REQUIRED_ENV = {
 };
 
 beforeEach(() => {
-  for (const [k, v] of Object.entries(REQUIRED_ENV)) process.env[k] = v;
-  process.env.SAML_IDPS_TABLE_NAME = "SamlIdps";
+  for (const [k, v] of Object.entries(REQUIRED_ENV)) vi.stubEnv(k, v);
+  vi.stubEnv("SAML_IDPS_TABLE_NAME", "SamlIdps");
 });
 afterEach(() => {
-  for (const k of Object.keys(REQUIRED_ENV)) delete process.env[k];
-  delete process.env.SAML_IDPS_TABLE_NAME;
+  vi.unstubAllEnvs();
 });
 
 describe("buildIdpSharedResources", () => {
@@ -37,13 +36,13 @@ describe("buildIdpSharedResources", () => {
   });
 
   it("should default tableName to '' when SAML_IDPS_TABLE_NAME is unset (pure SQL backend cold start)", () => {
-    delete process.env.SAML_IDPS_TABLE_NAME;
+    vi.stubEnv("SAML_IDPS_TABLE_NAME", undefined);
     expect(() => buildIdpSharedResources()).not.toThrow();
     expect(buildIdpSharedResources().tableName).toBe("");
   });
 
   it("should throw when TENANT_USER_POOL_ID (a still-required env) is missing", () => {
-    delete process.env.TENANT_USER_POOL_ID;
+    vi.stubEnv("TENANT_USER_POOL_ID", undefined);
     expect(() => buildIdpSharedResources()).toThrow();
   });
 });

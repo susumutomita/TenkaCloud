@@ -11,15 +11,11 @@ import { buildAuthErrorHandler } from "../../lib/problem-deploy/handlers/shared/
 const mocks = vi.hoisted(() => ({
   setProgressionGate: vi.fn(),
   removeProgressionGate: vi.fn(),
-  auditEventAction: vi.fn(),
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/event-handler/progression-gate", () => ({
   setProgressionGate: mocks.setProgressionGate,
   removeProgressionGate: mocks.removeProgressionGate,
-}));
-vi.mock("../../lib/problem-deploy/handlers/event-handler/audit", () => ({
-  auditEventAction: mocks.auditEventAction,
 }));
 
 const { registerProgressionGateRoutes } = await import(
@@ -60,7 +56,7 @@ afterEach(() => {
 });
 
 describe("PUT /events/:eventId/progression-gate", () => {
-  it("should save the gate config and audit for a TenantAdmin caller", async () => {
+  it("should save the gate config for a TenantAdmin caller", async () => {
     mocks.setProgressionGate.mockResolvedValueOnce({ kind: "ok", progressionGate: config });
 
     const res = await putGate(config);
@@ -73,11 +69,6 @@ describe("PUT /events/:eventId/progression-gate", () => {
       EVENT_ID,
       config,
       expect.any(Number),
-    );
-    expect(mocks.auditEventAction).toHaveBeenCalledWith(
-      expect.anything(),
-      "set_progression_gate",
-      EVENT_ID,
     );
   });
 
@@ -106,7 +97,6 @@ describe("PUT /events/:eventId/progression-gate", () => {
 
     expect(res.status).toBe(StatusCodes.CONFLICT);
     expect((await res.json()).error).toBe("feature_disabled");
-    expect(mocks.auditEventAction).not.toHaveBeenCalled();
   });
 
   it("should 400 with the machine-readable reason for cross-entity validation failures", async () => {
@@ -157,18 +147,13 @@ describe("PUT /events/:eventId/progression-gate", () => {
 });
 
 describe("DELETE /events/:eventId/progression-gate", () => {
-  it("should remove the config and audit", async () => {
+  it("should remove the config", async () => {
     mocks.removeProgressionGate.mockResolvedValueOnce({ kind: "ok", removed: true });
 
     const res = await buildApp().request(PATH, { method: "DELETE" });
 
     expect(res.status).toBe(StatusCodes.OK);
     expect(await res.json()).toEqual({ removed: true });
-    expect(mocks.auditEventAction).toHaveBeenCalledWith(
-      expect.anything(),
-      "remove_progression_gate",
-      EVENT_ID,
-    );
   });
 
   it("should stay 200 (idempotent) when nothing was stored", async () => {

@@ -60,9 +60,10 @@ export function resolveAllowedCidrParameterType(templateBody: string): string | 
   // than throwing, and collects genuine syntax errors on `doc.errors` instead
   // of throwing, so no custom tag handlers or try/catch are needed here.
   const doc = YAML.parseDocument(templateBody);
-  if (doc.errors.length > 0) {
+  const firstError = doc.errors[0];
+  if (firstError) {
     throw new Error(
-      `template.yaml could not be parsed while checking ${ALLOWED_CIDR_PARAMETER_NAME}: ${doc.errors[0].message}`,
+      `template.yaml could not be parsed while checking ${ALLOWED_CIDR_PARAMETER_NAME}: ${firstError.message}`,
     );
   }
   const root = asRecord(doc.toJSON());

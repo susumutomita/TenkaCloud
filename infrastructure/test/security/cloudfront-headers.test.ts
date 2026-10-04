@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildContentSecurityPolicy,
   buildSecurityHeadersPolicy,
-} from "../../lib/security/cloudfront-headers";
+} from "../../lib/security/cloudfront-headers.js";
 
 interface SecurityHeadersConfig {
   StrictTransportSecurity: {

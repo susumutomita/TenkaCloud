@@ -1,0 +1,96 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { cloudStackNames } from "../../infrastructure/lib/cloud-hosting/stack-names";
+
+const SAMPLE_ENVIRONMENTS = ["development", "staging", "production"];
+
+function selectedEnvironment(env: NodeJS.ProcessEnv): string {
+  const selectors = [env.ENV, env.CDK_PARAM_ENVIRONMENT].filter((value) => value !== undefined);
+  for (const value of selectors) cloudStackNames(value);
+  if (new Set(selectors).size > 1)
+    throw new Error("ENV and CDK_PARAM_ENVIRONMENT must select the same cloud environment.");
+  return selectors[0] ?? "development";
+}
+
+export function cloudEnvironmentInstructions(environment: string): string {
+  const directory = `infrastructure/environments/${environment}`;
+  const configuration = SAMPLE_ENVIRONMENTS.includes(environment)
+    ? `Configure ${directory}/.env using ${directory}/.env.example (copy only if .env does not exist)`
+    : `Configure exported variables or ${directory}/.env for this custom environment`;
+  return `${configuration}, or run make env-init ENV=${environment} to create a missing file interactively. For Turso use make turso-live ENV=${environment}; for DynamoDB run make deploy ENV=${environment}. The command reuses standard CDKToolkit or automatically bootstraps when missing. Optional offline preview: make deploy ENV=${environment} CLOUD_ARGS="--show-setup".`;
+}
+
+function parseValue(raw: string, location: string): string {
+  if (!raw.startsWith('"') && !raw.startsWith("'")) {
+    const comment = raw.search(/(?:^|\s)#/u);
+    return (comment < 0 ? raw : raw.slice(0, comment)).trim();
+  }
+  const quoted = /^(?:"([^"]*)"|'([^']*)')\s*(?:#.*)?$/u.exec(raw);
+  if (!quoted) throw new Error(`Invalid single-line quoted value in ${location}.`);
+  return quoted[1] ?? quoted[2] ?? "";
+}
+
+/** Deliberately small, single-line dotenv format: never shell execution or interpolation. */
+function parseEnvironmentFile(contents: string, path: string): NodeJS.ProcessEnv {
+  const values: NodeJS.ProcessEnv = {};
+  for (const [index, source] of contents.split(/\r?\n/u).entries()) {
+    const line = source.trim();
+    if (!line || line.startsWith("#")) continue;
+    const separator = line.indexOf("=");
+    const key = line
+      .slice(0, separator)
+      .replace(/^export\s+/u, "")
+      .trim();
+    if (separator < 0 || !/^[A-Za-z_]\w*$/u.test(key) || Object.hasOwn(values, key))
+      throw new Error(`Invalid or duplicate environment assignment in ${path}:${index + 1}.`);
+    const raw = line.slice(separator + 1).trim();
+    const value = parseValue(raw, `${path}:${index + 1}`);
+    Object.defineProperty(values, key, { value, enumerable: true, configurable: true });
+  }
+  return values;
+}
+
+/** Read only the selected environment; never create or modify an operator's .env. */
+export function loadCloudEnvironment(
+  root: string,
+  inherited: NodeJS.ProcessEnv,
+  options: { readonly validateAwsCredentials?: boolean } = {},
+): NodeJS.ProcessEnv & { ENV: string; CDK_PARAM_ENVIRONMENT: string } {
+  const environment = selectedEnvironment(inherited);
+  const path = join(root, "infrastructure", "environments", environment, ".env");
+  let file: NodeJS.ProcessEnv = {};
+  try {
+    file = parseEnvironmentFile(readFileSync(path, "utf8"), path);
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+  }
+  for (const selector of [file.ENV, file.CDK_PARAM_ENVIRONMENT]) {
+    if (selector !== undefined && selector !== environment)
+      throw new Error(`Environment selector in ${path} must match ${environment}.`);
+  }
+  // Exported variables win, including deliberate empty values. Undefined is absent.
+  const overrides = Object.fromEntries(
+    Object.entries(inherited).filter(([, value]) => value !== undefined),
+  );
+  const resolved: NodeJS.ProcessEnv & { ENV: string; CDK_PARAM_ENVIRONMENT: string } = {
+    ...file,
+    ...overrides,
+    ENV: environment,
+    CDK_PARAM_ENVIRONMENT: environment,
+  };
+  if (options.validateAwsCredentials !== false) normalizeAwsCredentialSource(resolved);
+  return resolved;
+}
+
+function normalizeAwsCredentialSource(resolved: NodeJS.ProcessEnv): void {
+  const profile = resolved.AWS_PROFILE;
+  const defaultProfile = resolved.AWS_DEFAULT_PROFILE;
+  if (profile && defaultProfile && profile !== defaultProfile)
+    throw new Error("AWS_PROFILE and AWS_DEFAULT_PROFILE must select the same profile.");
+  // The CLI accepts the legacy alias; the JavaScript SDK reads AWS_PROFILE.
+  if (!profile && defaultProfile) resolved.AWS_PROFILE = defaultProfile;
+  if (resolved.AWS_PROFILE && (resolved.AWS_ACCESS_KEY_ID || resolved.AWS_SECRET_ACCESS_KEY))
+    throw new Error(
+      "AWS profile and environment access keys are both configured. AWS CLI and JavaScript SDK give them different precedence. Choose one source: unset AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN to use the profile, or unset AWS_PROFILE/AWS_DEFAULT_PROFILE to use environment credentials. No AWS action was taken.",
+    );
+}

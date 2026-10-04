@@ -587,3 +587,55 @@ describe("requestTeardown coordination cleanup (#3149)", () => {
     expect(eventsSend).toHaveBeenCalled();
   });
 });
+
+describe("native deployment teardown", () => {
+  it.each(["COMPLETE", "DELETING"])(
+    "retires %s native metadata without provider calls",
+    async (status) => {
+      const { shared, ddbSend, eventsSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({
+        Item: sampleRow({
+          status,
+          runtimeProvider: "native",
+          runtimeEngine: "coordination",
+          runtimeEntry: "coordination",
+          awsAccountId: "",
+          region: "",
+        }),
+      });
+      ddbSend.mockResolvedValue({});
+      expect((await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS)).kind).toBe("accepted");
+      expect(
+        ddbSend.mock.calls.some(
+          ([cmd]) =>
+            cmd instanceof UpdateCommand &&
+            cmd.input.ExpressionAttributeValues?.[":status"] === "DELETED",
+        ),
+      ).toBe(true);
+      expect(eventsSend).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("removed saved problem teardown", () => {
+  it("deletes saved A by its owned stack ARN after catalog B removes the problem", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    const stackId = "arn:aws:cloudformation:ap-northeast-1:999999999999:stack/tc-p-t/saved-a";
+    ddbSend.mockResolvedValueOnce({
+      Item: sampleRow({ catalogKey: `catalogs/${"a".repeat(64)}.json`, stackId }),
+    });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+    expect(shared.problemsCatalog).toEqual({});
+    expect((await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS)).kind).toBe("accepted");
+    const command = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    const detail = JSON.parse(command.input.Entries?.[0]?.Detail ?? "{}");
+    expect(detail).toMatchObject({
+      stackName: stackId,
+      awsAccountId: "999999999999",
+      region: "ap-northeast-1",
+    });
+    expect(detail).not.toHaveProperty("problemDir");
+    expect(detail).not.toHaveProperty("catalogKey");
+  });
+});

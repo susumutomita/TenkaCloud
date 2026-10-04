@@ -4,75 +4,26 @@ export const metadata = { title: "既存パックを使う" };
 
 # 既存パックを使う <MaturityBadge level="preview" />
 
-これは、他の誰かがすでに作成したパックを使うための、5 分で終わる主催者向けの手順です。パックを自分で書いたり公開したりする場合は、[最初のパックのチュートリアル](/developers/docs/tutorials/first-pack/)から始めてください。モデルの全体像は[問題パック](/developers/docs/concepts/problem-packs/)を、コマンドの正式な一覧は [CLI リファレンス](/developers/docs/reference/cli/)を参照してください。
+pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。activate はオフラインのカタログ記録であり、現行の競技実行手順ではありません。
 
-## 前提条件
+<h2 id="prerequisites">前提条件</h2>
 
-次のいずれかを用意してください。
+信頼する pack のローカルディレクトリ、または HTTPS Git URL と完全な 40 桁 commit SHA を用意します。runtime、ファイル、provenance を確認してください。
 
-- パックの HTTPS Git URL と、実行対象となるイミュータブルな 40 桁 16 進の完全なコミット SHA。
-- ローカルのパックディレクトリ。パックが Git にピン留めされる前に、ローカルでリハーサルする場合に使います。
+<h2 id="install-the-pinned-git-revision">固定した revision を保存する</h2>
 
-以下の CLI コマンドは、TenkaCloud リポジトリのチェックアウトから `infrastructure` ワークスペースを通して実行します。主催者コンソールで実際のイベントを作成してデプロイするまで、AWS 認証情報は不要です。
-
-## 1. ピン留めした Git リビジョンをインストールする
-
-イベントで使う場合は Git 形式を推奨します。`sourceKind: "git"`、リポジトリ URL、解決されたコミット、サブディレクトリ（あれば）、コンテンツダイジェストが `packs-lock.json` に記録されます。`--commit` の値は 40 桁 16 進の完全な SHA でなければなりません。ブランチ、タグ、`HEAD`、短縮ハッシュは意図的に拒否されます。
-
-```bash
-make pack-install ARGS="git https://github.com/example/acme-pack.git --commit <40-hex-commit-sha>"
-```
-
-期待される出力:
-
-```text
-Pack installed: com.example.event-pack@1.0.0
-  source: git
-  digest: <sha256-content-digest>
-  problems: 3
-```
-
-リハーサル用にローカルのパックディレクトリを渡された場合は、代わりにローカル形式でインストールし、主催者に共有する前にピン留めした Git インストールへ移行してください。
-
-```bash
-make pack-install ARGS="./path/to/pack"
-```
-
-## 2. テナントに対してアクティベートする
-
-アクティベーションは、インストール済みのイミュータブルな 1 つのリビジョンを、1 つのテナントから見えるようにします。この操作もスナップショットストアに対してローカルで実行され、重複する問題 ID、利用できないランタイム、ダイジェストの不一致、未インストールのパックは拒否されます。
-
-```bash
-make pack-activate ARGS="com.example.event-pack@1.0.0 --tenant acme"
-```
-
-期待される出力:
-
-```text
-Pack activated for tenant 'acme': com.example.event-pack@1.0.0
-```
-
-## 3. インストール済みリビジョンを確認する
-
-`pack list` は、アクティベーションが指しているローカルのロックエントリを検証します。テナント単位のアクティベーション一覧ではないため、上のアクティベーション成功メッセージと合わせて確認してください。
-
-```bash
+```sh
+make pack-install ARGS="git <https-url> --commit <40-hex-commit-sha>"
 make pack-list
+bun run pack inspect <id@version>
 ```
 
-期待される出力:
+リポジトリのルートで実行します。既定の保存先は `.tenkacloud/pack-store` です。Git install はネットワークを使います。ローカルディレクトリの検証や保存はリソースを配置しません。
 
-```text
-Installed packs: 1
-  - com.example.event-pack@1.0.0 (git, 3 problems, <sha256-content-digest>)
-```
+<h2 id="verify-the-installed-revision">保存結果を確認する</h2>
 
-## 4. イベントを作成する <MaturityBadge level="preview" />
+取得元、解決済み commit、digest を確認します。install 成功は、任意コードの実行、endpoint の公開、クラウド作成の承認ではありません。
 
-`application-admin-console` で、同じテナントのイベントを作成します。イベントピッカーは公式カタログとそのテナントのアクティベート済みパックリビジョンを合成するため、アクティベートしたパックの問題が公式カタログの問題と並んで表示されます。
+<h2 id="create-the-event">大会への接続は未対応</h2>
 
-イベント作成の時点で、プラットフォームはその時点で有効なカタログスナップショットをピン留めします。その後の `install`、`activate`、`deactivate` 操作がそのイベントを書き換えることはありません。主催者が選択した問題をデプロイすると、デプロイメントはイベントにピン留めされたスナップショットに対して解決され、可変なカタログ参照ではなく、その問題のパック来歴 (provenance) を保持します。
-
-このブラウザーでのイベント作成経路は、まだライブでの一括検証が済んでいないため、最初のパックのチュートリアルのイベント手順と同じ preview バッジが付いています。運営フローの全体像は[イベントをエンドツーエンドで運営する](/developers/docs/operate/run-an-event/)に進んでください。
-
-パックが実際のデプロイに到達するのは Lite モード (`make deploy`) だけです。Lite は固定のテナント id `local` のアクティベーションを読み取るため、上のローカルリハーサルを終えたら、任意のテナント名ではなく `--tenant local` でアクティベートしてください。SaaS モード (`make deploy-saas`) は、パックのアクティベーションが 1 つでも存在する間は synth 自体を拒否します。プール型カタログから黙って除外することはありません。
+activate しても現在の大会選択欄へ pack の問題は追加されません。実装上の不足であり、実環境テストだけが未実施という状態ではありません。大会には対応する core catalog の問題を使い、pack の経路は Not run と記録します。[最初の pack](/developers/docs/tutorials/first-pack/)も参照してください。

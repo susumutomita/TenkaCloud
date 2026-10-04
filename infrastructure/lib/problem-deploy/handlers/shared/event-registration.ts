@@ -3,7 +3,10 @@ import type { DeploymentsRepository } from "../../control-data/deployments-repos
 import type { DeploymentRecord } from "../../control-data/domain/deployments.js";
 import type { EventRegistration } from "../../control-data/domain/event-registration.js";
 import type { EventRecord, EventsRepository } from "../../control-data/domain/events.js";
-import type { TeamsRepository } from "../../control-data/domain/teams.js";
+import { MAX_TEAMS_PER_EVENT, type TeamsRepository } from "../../control-data/domain/teams.js";
+
+const CLAIM_RETRY_BUDGET_MS = 3_000;
+const CLAIM_MAX_ATTEMPTS = MAX_TEAMS_PER_EVENT + 1;
 
 export interface RegistrationDeps {
   events: Pick<EventsRepository, "getEvent" | "updateRegistration">;
@@ -192,6 +195,13 @@ async function authorizedInvitation(
   return { event, registration: event.registration };
 }
 
+async function waitForRegistrationRetry(attempt: number, startedAt: number): Promise<void> {
+  const remaining = CLAIM_RETRY_BUDGET_MS - Math.max(0, Date.now() - startedAt);
+  if (attempt + 1 >= CLAIM_MAX_ATTEMPTS || remaining <= 0) return;
+  const delay = Math.min(remaining, randomInt(10, Math.min(400, 20 * 2 ** attempt) + 1));
+  await new Promise((resolve) => setTimeout(resolve, delay));
+}
+
 /** A browser-generated 256-bit receipt makes retry/reload idempotent, without storing PII. */
 export async function claimRegistration(
   deps: RegistrationDeps,
@@ -203,7 +213,11 @@ export async function claimRegistration(
 ) {
   const receiptHash = registrationDigest(receipt);
   const startedAt = Date.now();
-  for (let attempt = 0; attempt < 12; attempt++) {
+  for (
+    let attempt = 0;
+    attempt < CLAIM_MAX_ATTEMPTS && Date.now() - startedAt < CLAIM_RETRY_BUDGET_MS;
+    attempt++
+  ) {
     const { event, registration } = await authorizedInvitation(deps, tenantId, eventId, invitation);
     const attemptTime = now + Math.max(0, Date.now() - startedAt);
     if (registration.claims.some((claim) => claim.receiptHash === receiptHash)) {
@@ -244,11 +258,10 @@ export async function claimRegistration(
       return registrationStatus(deps, tenantId, eventId, receipt, attemptTime);
     // A shared invitation can produce up to 99 simultaneous claims. Jitter separates
     // competing writers instead of making them collide again in synchronized rounds.
-    // Keep retries bounded (at most about 3 seconds of waiting) and recheck deadlines.
-    if (attempt < 11) {
-      const delay = randomInt(10, Math.min(400, 20 * 2 ** attempt) + 1);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
+    // A 12-attempt cap could reject claimants while other teams were still making
+    // progress. Bound elapsed retry time explicitly and permit enough CAS rounds
+    // for the whole supported event; invitation deadlines are reread each time.
+    await waitForRegistrationRetry(attempt, startedAt);
   }
   throw new RegistrationError("conflict");
 }

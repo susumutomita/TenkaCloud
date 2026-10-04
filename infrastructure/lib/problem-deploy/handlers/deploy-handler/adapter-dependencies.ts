@@ -20,12 +20,14 @@ import {
 import { materializeGcpBlueprint } from "../../runtime-clients/gcp-blueprint-materializer.js";
 import { createGcpInfraManagerRestClient } from "../../runtime-clients/gcp-infra-manager-rest-client.js";
 import { createGcpStsRestClient } from "../../runtime-clients/gcp-sts-rest-client.js";
+import { resolvePinnedExecutionSource } from "../../runtime-clients/pinned-execution-source.js";
 import { createSakuraAppRunRestClient } from "../../runtime-clients/sakura-apprun-rest-client.js";
 import { getS3ObjectText } from "../../s3-artifact-text.js";
 import {
   type AzureDeployCredential,
   getAzureCredential,
 } from "../shared/azure-credential-store.js";
+import { loadExecutionSourceText } from "../shared/execution-catalog.js";
 import { getGcpCredential } from "../shared/gcp-credential-store.js";
 import {
   type AdapterDependencies,
@@ -123,6 +125,8 @@ async function resolveAzureArtifact(
   location: AzureArtifactLocation,
   entry: string,
 ): Promise<string> {
+  const catalog = await resolvePinnedExecutionSource(location);
+  if (catalog) return loadExecutionSourceText(catalog, location.problemId, entry);
   if (location.challengePayloadUrl) {
     return fetchChallengePayloadEntry(location.challengePayloadUrl, entry);
   }
@@ -274,7 +278,9 @@ function buildGcpAdapterContext(
           teamSlug: input.teamSlug,
           problemId: input.problemId,
           source: {
+            problemId: input.problemId,
             problemDir: input.problemDir,
+            ...(input.catalogKey ? { catalogKey: input.catalogKey } : {}),
             entry: input.entry,
             ...(input.challengePayloadUrl
               ? { challengePayloadUrl: input.challengePayloadUrl }

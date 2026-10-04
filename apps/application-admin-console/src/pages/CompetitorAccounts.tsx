@@ -12,9 +12,12 @@ import type {
 } from "../api/competitor-accounts-client";
 import { FriendlyErrorAlert } from "../components/FriendlyErrorAlert";
 import { LiteDrillCheckpointAlert } from "../components/LiteDrillCheckpointAlert";
-import type { AppConfig } from "../config";
+import { type AppConfig, isLocalHost } from "../config";
 import { useT } from "../i18n";
-import { isBootstrapUrlMissing } from "../lib/competitor-bootstrap";
+import {
+  COMPETITOR_ACCOUNT_ONBOARDING_URL,
+  isBootstrapUrlMissing,
+} from "../lib/competitor-bootstrap";
 import { liteDrillCheckpointCode, markLiteDrillCheckpointShown } from "../lib/lite-drill";
 import { AddAccountModal } from "./competitor-accounts/AddAccountModal";
 import { BulkImportModal } from "./competitor-accounts/BulkImportModal";
@@ -85,7 +88,11 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description={t("competitor_accounts.description")}
+        description={t(
+          isLocalHost(config)
+            ? "competitor_accounts.host_description"
+            : "competitor_accounts.description",
+        )}
         actions={
           <SpaceBetween direction="horizontal" size="xs">
             <Button disabled={!canMutateTenant} onClick={() => setBulkModalVisible(true)}>
@@ -104,11 +111,20 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         {t("competitor_accounts.title")}
       </Header>
 
-      {isBootstrapUrlMissing(config.competitorBootstrapTemplateUrl) && (
+      {!isLocalHost(config) && isBootstrapUrlMissing(config.competitorBootstrapTemplateUrl) && (
         <Alert type="warning" header={t("competitor_accounts.bootstrap_url_missing_header")}>
           {t("competitor_accounts.bootstrap_url_missing_body")}
         </Alert>
       )}
+
+      <Alert type="info" header={t("competitor_accounts.host_bootstrap_header")}>
+        <SpaceBetween size="xs">
+          {t("competitor_accounts.host_bootstrap_info")}
+          <a href={COMPETITOR_ACCOUNT_ONBOARDING_URL} target="_blank" rel="noreferrer noopener">
+            {t("competitor_accounts.bootstrap_guide_link")}
+          </a>
+        </SpaceBetween>
+      </Alert>
 
       {error && <FriendlyErrorAlert error={error} />}
 
@@ -183,12 +199,14 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         secret={showSecret}
         onDismiss={() => setShowSecret(null)}
         templateUrl={config.competitorBootstrapTemplateUrl}
+        localHost={isLocalHost(config)}
       />
 
       <CompetitorAccountDeleteModal
         target={deleteTarget}
         inFlight={deleteInFlight}
         canMutateTenant={canMutateTenant}
+        localHost={isLocalHost(config)}
         onDismiss={() => setDeleteTarget(null)}
         onConfirm={() => void handleConfirmDelete()}
       />

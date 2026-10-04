@@ -146,6 +146,7 @@ export class DynamoDbCompetitorAccountsRepository implements CompetitorAccountsR
         ExpressionAttributeValues: { ":pk": PK(tenantId), ":sk": "ACCOUNT#" },
         Select: "COUNT",
         Limit: 1,
+        ConsistentRead: true,
       }),
     );
     return (out.Count ?? 0) > 0;

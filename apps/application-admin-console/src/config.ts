@@ -3,7 +3,14 @@ import { resolveFeatureFlags } from "@tenkacloud/web-kit";
 import { type AppFeatures, FEATURE_REGISTRY } from "./features";
 import { LOCAL_HOST_BUILD } from "./local-host-build";
 
+export interface EventLimits {
+  readonly maxTeams: number;
+  readonly maxProblems: number;
+}
+
 export interface AppConfig {
+  /** Backend-advertised creation bounds; absent means creation is unavailable. */
+  readonly eventLimits?: EventLimits;
   readonly cognitoDomain: string;
   readonly cognitoClientId: string;
   readonly redirectUri: string;
@@ -32,6 +39,10 @@ export interface AppConfig {
    * fallback する (= dev / 初回 deploy 用、 deeplink としては不正だが手 download 可能)。
    */
   readonly competitorBootstrapTemplateUrl?: string;
+  /** Fixed installation role used by the cloud competitor-account registry. */
+  readonly competitorRoleName?: string;
+  /** Configured host AWS region; absent when local hosting runs only Docker/Battle. */
+  readonly hostAwsRegion?: string;
   /**
    * Issue #897: テナント isolation mode。 "pooled" は UserPool 共有なので SAML SSO のような
    * UserPool mutate 機能は提供しない。 "silo" (= PLATINUM) のみ有効化する。
@@ -62,7 +73,10 @@ export interface AppConfig {
    * 通常の console をそのまま使い、 認証は host key → session 交換、 API は同一 origin の
    * `/api`。 local hosting build (`vite.host.config.ts`) だけがこの mode に入れる。
    */
-  readonly mode?: "demo" | "local-host";
+  readonly mode?: "demo" | "local-host" | "cloud-host";
+  /** IDs in this installation's actual execution catalog, not the static authoring catalog. */
+  readonly supportedProblemIds?: readonly string[];
+  readonly nativeProblemIds?: readonly string[];
 }
 
 /** Issue #3226: `bun start` のローカル大会 console で動いているか。 */
@@ -70,7 +84,37 @@ export function isLocalHost(config: Pick<AppConfig, "mode">): boolean {
   return config.mode === "local-host";
 }
 
+export function isCloudHost(config: Pick<AppConfig, "mode">): boolean {
+  return config.mode === "cloud-host";
+}
+const CLOUD_HOST_FEATURES = {
+  samlSso: false,
+  nonAwsRuntime: false,
+  redTeam: false,
+  challengePrerequisiteGate: false,
+} as const;
+class CloudRuntimeConfigError extends Error {}
+
+function supportedCloudProblems(value: unknown): readonly string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length > 512 ||
+    value.some(
+      (id) => typeof id !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u.test(id),
+    ) ||
+    new Set(value).size !== value.length
+  )
+    throw new CloudRuntimeConfigError(
+      "Cloud execution catalog capability list is missing or invalid.",
+    );
+  return Object.freeze([...value] as string[]);
+}
+
 interface RuntimeConfig {
+  readonly mode?: "cloud-host";
+  readonly supportedProblemIds?: readonly string[];
+  readonly nativeProblemIds?: readonly string[];
+  readonly eventLimits?: EventLimits;
   readonly cognitoDomain: string;
   readonly userClientId: string;
   readonly tenantId: string;
@@ -78,14 +122,63 @@ interface RuntimeConfig {
   readonly apiUrl: string;
   readonly participantPortalUrl?: string;
   readonly competitorBootstrapTemplateUrl?: string;
+  readonly competitorRoleName?: string;
   readonly isolation?: "pooled" | "silo";
   readonly samlIdpDirectory?: Readonly<Record<string, readonly string[]>>;
   /** Raw `features` override object from runtime-config.json; resolved against the registry in loadConfig. */
   readonly features?: Readonly<Record<string, unknown>>;
 }
 
+function cloudEventLimits(value: unknown): EventLimits | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const limits = value as Record<string, unknown>;
+  if (
+    typeof limits.maxTeams !== "number" ||
+    !Number.isSafeInteger(limits.maxTeams) ||
+    limits.maxTeams < 1 ||
+    limits.maxTeams > 99 ||
+    typeof limits.maxProblems !== "number" ||
+    !Number.isSafeInteger(limits.maxProblems) ||
+    limits.maxProblems < 1 ||
+    limits.maxProblems > 512
+  )
+    return undefined;
+  return { maxTeams: limits.maxTeams, maxProblems: limits.maxProblems };
+}
+
 // Issue #871 / #1246: runtime-config.json URL validators (isHttpsUrl / isCognitoDomain) are
 // imported from @tenkacloud/auth-client to keep the allowlist identical across admin SPAs.
+
+function cloudRuntimeCapabilities(data: Partial<RuntimeConfig>) {
+  if (data.mode !== undefined && data.mode !== "cloud-host")
+    throw new CloudRuntimeConfigError("Unsupported cloud hosting runtime mode.");
+  const supportedProblemIds =
+    data.mode === "cloud-host" || data.supportedProblemIds !== undefined
+      ? supportedCloudProblems(data.supportedProblemIds)
+      : undefined;
+  const nativeProblemIds =
+    data.nativeProblemIds === undefined ? [] : supportedCloudProblems(data.nativeProblemIds);
+  if (nativeProblemIds.some((id) => !supportedProblemIds?.includes(id)))
+    throw new CloudRuntimeConfigError("Native problem is not in the supported cloud catalog.");
+  return {
+    mode: data.mode,
+    supportedProblemIds,
+    nativeProblemIds: Object.freeze(nativeProblemIds),
+  };
+}
+
+function configuredCompetitorRole(value: unknown): string | undefined {
+  return typeof value === "string" && /^TenkaCloud-[a-f0-9]{24}-deploy-Role$/u.test(value)
+    ? value
+    : undefined;
+}
+
+function runtimeFeatures(data: Partial<RuntimeConfig>): RuntimeConfig["features"] {
+  if (data.mode === "cloud-host") return CLOUD_HOST_FEATURES;
+  return data.features && typeof data.features === "object" && !Array.isArray(data.features)
+    ? data.features
+    : undefined;
+}
 
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
   try {
@@ -114,6 +207,8 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       return null;
     }
     return {
+      ...cloudRuntimeCapabilities(data),
+      eventLimits: cloudEventLimits(data.eventLimits),
       cognitoDomain: data.cognitoDomain,
       userClientId: data.userClientId,
       tenantId: data.tenantId,
@@ -125,6 +220,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
         typeof data.competitorBootstrapTemplateUrl === "string"
           ? data.competitorBootstrapTemplateUrl
           : undefined,
+      competitorRoleName: configuredCompetitorRole(data.competitorRoleName),
       isolation: data.isolation === "silo" ? "silo" : "pooled",
       // Issue #1340 Phase 2: SAML 未設定 stack も無音で動かすため空 object fallback。
       samlIdpDirectory:
@@ -132,18 +228,16 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
           ? data.samlIdpDirectory
           : {},
       // Raw feature overrides; resolved against the registry in loadConfig.
-      features:
-        data.features && typeof data.features === "object" && !Array.isArray(data.features)
-          ? data.features
-          : undefined,
+      features: runtimeFeatures(data),
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof CloudRuntimeConfigError) throw error;
     return null;
   }
 }
 
 const DEV_FALLBACK_TENANT_ID = "dev-local";
-const DEV_FALLBACK_TENANT_NAME = "Local Dev Tenant";
+const DEV_FALLBACK_TENANT_NAME = "Local development";
 const DEV_FALLBACK_API_BASE_URL = "http://localhost:3999";
 
 /**
@@ -175,7 +269,7 @@ function buildDemoConfig(
     cognitoDomain: "demo.auth.tenkacloud.example",
     cognitoClientId: "demo-client",
     tenantId: "demo-tenant",
-    tenantName: "Demo Tenant",
+    tenantName: "Demo competition",
     apiBaseUrl: "https://demo.invalid",
     isolation: "pooled",
     samlIdpDirectory: {},
@@ -183,6 +277,7 @@ function buildDemoConfig(
     redirectUri,
     scope,
     mode: "demo",
+    eventLimits: { maxTeams: 49, maxProblems: 50 },
     // 参加者 demo (participant-portal) への hand-off 先。 per-team の招待リンク
     // (EventTeamsPanel) とバナーの「参加者として見る」導線が使う。 ホスティング時は
     // VITE_DEMO_PARTICIPANT_URL で上書き、 既定は participant-portal の `/portal-demo/`。
@@ -190,11 +285,11 @@ function buildDemoConfig(
   };
 }
 
-/** Features that need cloud infrastructure; the local host API has none of them. */
+/** Feature availability provided by the local host API. */
 const LOCAL_HOST_FEATURES = {
   samlSso: false,
   nonAwsRuntime: false,
-  redTeam: false,
+  redTeam: true,
   challengePrerequisiteGate: false,
 } as const;
 
@@ -212,13 +307,14 @@ async function loadLocalHostConfig(): Promise<AppConfig> {
     role?: unknown;
     apiBaseUrl?: unknown;
     participantPortalUrl?: unknown;
+    awsRegion?: unknown;
   };
   if (
     runtime.mode !== "local-host" ||
     runtime.role !== "admin" ||
     runtime.apiBaseUrl !== `${origin}/api` ||
     typeof runtime.participantPortalUrl !== "string" ||
-    !/^http:\/\/[^/]+$/u.test(runtime.participantPortalUrl)
+    !/^https?:\/\/[^/]+$/u.test(runtime.participantPortalUrl)
   )
     throw new Error("Invalid local hosting configuration. No demo or cloud fallback is permitted.");
   return {
@@ -234,6 +330,10 @@ async function loadLocalHostConfig(): Promise<AppConfig> {
     redirectUri: `${origin}/callback`,
     scope: "",
     participantPortalUrl: runtime.participantPortalUrl,
+    ...(typeof runtime.awsRegion === "string" &&
+    /^[a-z]{2}(?:-gov)?-[a-z]+-\d$/u.test(runtime.awsRegion)
+      ? { hostAwsRegion: runtime.awsRegion }
+      : {}),
     features: resolveFeatureFlags(FEATURE_REGISTRY, LOCAL_HOST_FEATURES),
     mode: "local-host",
   };
@@ -255,6 +355,10 @@ export async function loadConfig(
   const runtime = await fetchRuntimeConfig();
   if (runtime) {
     return {
+      mode: runtime.mode,
+      supportedProblemIds: runtime.supportedProblemIds,
+      nativeProblemIds: runtime.nativeProblemIds,
+      eventLimits: runtime.eventLimits,
       cognitoDomain: runtime.cognitoDomain,
       cognitoClientId: runtime.userClientId,
       tenantId: runtime.tenantId,
@@ -262,6 +366,7 @@ export async function loadConfig(
       apiBaseUrl: runtime.apiUrl,
       participantPortalUrl: runtime.participantPortalUrl,
       competitorBootstrapTemplateUrl: runtime.competitorBootstrapTemplateUrl,
+      competitorRoleName: runtime.competitorRoleName,
       // fetchRuntimeConfig は isolation / samlIdpDirectory を常に populate する (= line 101 /
       // 103-106) ため、 ここの `??` fallback は到達不能。 値の解決自体は fetchRuntimeConfig 側の
       // テストで担保済。

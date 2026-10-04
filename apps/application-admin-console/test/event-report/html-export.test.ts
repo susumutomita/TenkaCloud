@@ -195,3 +195,18 @@ describe("escapeHtml", () => {
     expect(escapeHtml("a & b < c > d \" e ' f")).toBe("a &amp; b &lt; c &gt; d &quot; e &#39; f");
   });
 });
+
+it("preserves unavailable history and missing values in the exported report", () => {
+  const fixture = makeExport();
+  const result = buildEventReportHtml(
+    makeExport({
+      dataAvailabilityNote: "History is unavailable.",
+      scoreboard: fixture.scoreboard.map((row) => ({ ...row, problemsSolved: null })),
+      breakdown: fixture.breakdown.map((row) => ({ ...row, solvedCount: null, avgScore: null })),
+      disruptions: [],
+    }),
+  );
+  expect(result).toContain("History is unavailable.");
+  expect(result).toContain("—");
+  expect(result).not.toContain("null");
+});

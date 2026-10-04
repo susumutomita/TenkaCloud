@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { GITHUB_DISCUSSIONS } from "@/lib/links";
 import { isInternalHref, isKnownRoute } from "@/lib/routes";
 import EnglishHomePage from "./en/page";
 import HomePage from "./page";
@@ -22,8 +23,8 @@ describe("HomePage (Japanese, /)", () => {
 
   it("should make enterprise consultation the primary CTA", () => {
     render(<HomePage />);
-    const cta = screen.getByRole("link", { name: "企業導入を相談する" });
-    expect(cta.getAttribute("href")).toMatch(/^https:\/\/forms\.gle\//);
+    const cta = screen.getByRole("link", { name: "企業導入を GitHub で公開相談" });
+    expect(cta).toHaveAttribute("href", GITHUB_DISCUSSIONS);
     expect(cta).toHaveAttribute("data-cta", "home-enterprise-contact");
   });
 
@@ -80,14 +81,14 @@ describe("EnglishHomePage (/en/)", () => {
     expect(screen.getByRole("link", { name: "日本語" })).toHaveAttribute("href", "/");
   });
 
-  it("should only ever send interactive traffic to the OSS repo or the contact form externally", () => {
+  it("should only send interactive traffic to GitHub externally", () => {
     render(<EnglishHomePage />);
     const externalHrefs = screen
       .getAllByRole("link")
       .map((link) => link.getAttribute("href") ?? "")
       .filter((href) => href.startsWith("http"));
     for (const href of externalHrefs) {
-      expect(href).toMatch(/^https:\/\/(github\.com|forms\.gle)\//);
+      expect(href).toMatch(/^https:\/\/github\.com\//);
     }
   });
 });
@@ -101,12 +102,12 @@ describe("marketing home offerings", () => {
     }
   });
 
-  it("should route every quote CTA to the contact form", () => {
+  it("should route every public pricing discussion CTA to GitHub Discussions", () => {
     render(<HomePage />);
-    const quoteCtas = screen.getAllByRole("link", { name: "お見積もりを依頼" });
-    expect(quoteCtas.length).toBeGreaterThan(0);
-    for (const cta of quoteCtas) {
-      expect(cta.getAttribute("href")).toMatch(/^https:\/\/forms\.gle\//);
+    const discussionCtas = screen.getAllByRole("link", { name: "GitHub で公開相談" });
+    expect(discussionCtas.length).toBeGreaterThan(0);
+    for (const cta of discussionCtas) {
+      expect(cta).toHaveAttribute("href", GITHUB_DISCUSSIONS);
     }
   });
 

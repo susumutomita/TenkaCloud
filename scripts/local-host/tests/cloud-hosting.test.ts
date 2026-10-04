@@ -1,0 +1,286 @@
+import { Database } from "bun:sqlite";
+import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+import { apiRequest, HOST_KEY } from "../bench/state-setup";
+import { assertHostingModule, narrowCatalog, publicMetadata } from "../browser-metadata";
+import { connectCloudHosting } from "../cloud-hosting";
+import { CompetitionEngine } from "../competition-engine";
+import { parseOptions } from "../options";
+import { HostingService } from "../service";
+import { digest, HostStore } from "../store";
+import { FakeAws, OPERATOR_ACCOUNT } from "./fake-aws";
+import { bootstrapOrganizer } from "./organizer-fixture";
+
+const root = fileURLToPath(new URL("../../../", import.meta.url));
+const directories: string[] = [];
+afterEach(() => {
+  for (const directory of directories.splice(0))
+    rmSync(directory, { recursive: true, force: true });
+});
+
+function temporary(): string {
+  const directory = mkdtempSync(join(tmpdir(), "tenka-cloud-hosting-"));
+  directories.push(directory);
+  return directory;
+}
+
+test("local startup rejects every AWS-region switch, including commercial and public-mode requests", () => {
+  for (const region of ["ap-northeast-1", "us-east-2", "us-gov-west-1", "cn-north-1", "invalid"])
+    expect(() => parseOptions(["--aws-region", region], root)).toThrow(
+      "AWS problems require cloud hosting",
+    );
+  expect(() =>
+    parseOptions(
+      [
+        "--aws-region",
+        "ap-northeast-1",
+        "--public-admin-origin",
+        "https://admin.example.test",
+        "--public-participant-origin",
+        "https://play.example.test",
+      ],
+      root,
+    ),
+  ).toThrow("AWS problems require cloud hosting");
+  expect(parseOptions([], root, { AWS_REGION: "ap-northeast-1" })).not.toHaveProperty("awsRegion");
+});
+
+test("version 1 host sessions are revoked while account-registry data remains readable", () => {
+  const path = join(temporary(), "legacy.sqlite");
+  const database = new Database(path);
+  database.exec(`
+    CREATE TABLE host_schema(version INTEGER NOT NULL) STRICT;
+    INSERT INTO host_schema VALUES (1);
+    CREATE TABLE host_sessions(token_hash TEXT PRIMARY KEY, refresh_hash TEXT NOT NULL UNIQUE, expires INTEGER NOT NULL) STRICT;
+  `);
+  const now = Date.now();
+  const legacyInsert = database.prepare(
+    "INSERT INTO host_sessions(token_hash,refresh_hash,expires) VALUES (?,?,?)",
+  );
+  legacyInsert.run(digest("old-admin-token"), digest("old-refresh"), now + 60_000);
+  legacyInsert.finalize();
+  const migrated = new HostStore(database);
+  expect(() => migrated.authenticateAdmin("old-admin-token", now)).toThrow(
+    "Host session expired or invalid.",
+  );
+  expect(migrated.accounts()).toEqual([]);
+  migrated.close();
+  const reopened = new HostStore(new Database(path));
+  expect(() => reopened.authenticateAdmin("old-admin-token", now)).toThrow(
+    "Host session expired or invalid.",
+  );
+  reopened.close();
+});
+
+test("the ExternalId is one private key file, and the operator account is read once per start", async () => {
+  const data = temporary();
+  const aws = new FakeAws();
+  const clients = { sts: aws.sts as never, cloudFormation: aws.cloudFormation as never };
+  const hosting = await connectCloudHosting(root, data, "ap-northeast-1", clients);
+  const path = join(data, "competitor-external-id");
+  expect(hosting.externalIdPath).toBe(path);
+  expect(hosting.externalId).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+  expect(readFileSync(path, "utf8")).toBe(`${hosting.externalId}\n`);
+  expect(statSync(path).mode & 0o777).toBe(0o600);
+  expect(hosting.operatorAccountId).toBe(OPERATOR_ACCOUNT);
+
+  const store = new HostStore(new Database(join(data, "host.sqlite")));
+  try {
+    const engine = new CompetitionEngine(
+      root,
+      data,
+      true,
+      hosting.engine((job) => store.team(job.teamId)),
+    );
+    const service = new HostingService(store, engine, HOST_KEY);
+    service.accountConnection = hosting;
+    const token = await bootstrapOrganizer(service, HOST_KEY);
+    for (const awsAccountId of ["111111111111", "222222222222"]) {
+      await service.admin(
+        apiRequest({
+          method: "POST",
+          path: "/admin/competitor-accounts",
+          token,
+          body: { awsAccountId },
+        }),
+      );
+      await service.admin(
+        apiRequest({
+          method: "POST",
+          path: `/admin/competitor-accounts/${awsAccountId}/verify`,
+          token,
+        }),
+      );
+    }
+    const created = await service.admin(
+      apiRequest({
+        method: "POST",
+        path: "/events",
+        token,
+        body: {
+          name: "wiring",
+          teams: [
+            { internalSlug: "alpha", awsAccountId: "111111111111" },
+            { internalSlug: "beta", awsAccountId: "222222222222" },
+          ],
+          problems: [{ problemId: "hello-world" }],
+        },
+      }),
+    );
+    const { eventId } = created.body as { eventId: string };
+    await service.admin(apiRequest({ method: "POST", path: `/events/${eventId}/deploy`, token }));
+    await service.drain();
+    expect(store.jobs(eventId).map((job) => job.status)).toEqual(["COMPLETE", "COMPLETE"]);
+  } finally {
+    store.close();
+  }
+  expect(aws.identityCalls).toBe(1);
+  expect(aws.assumed.map((input) => input.ExternalId)).toContain(hosting.externalId);
+  expect(aws.assumed.every((input) => input.ExternalId === hosting.externalId)).toBe(true);
+  expect(
+    aws.created.map(
+      (input) =>
+        input.Parameters?.find((parameter) => parameter.ParameterKey === "TenkaCloudAccountId")
+          ?.ParameterValue,
+    ),
+  ).toEqual([OPERATOR_ACCOUNT, OPERATOR_ACCOUNT]);
+
+  const again = await connectCloudHosting(root, data, "ap-northeast-1", clients);
+  expect(again.externalId).toBe(hosting.externalId);
+  const refused = {
+    ...clients,
+    sts: {
+      send: async () => {
+        throw new Error("The security token included in the request is invalid.");
+      },
+    },
+  };
+  await expect(connectCloudHosting(root, data, "ap-northeast-1", refused)).rejects.toThrow(
+    "--aws-region needs usable AWS credentials. STS GetCallerIdentity failed: The security token included in the request is invalid.",
+  );
+  writeFileSync(path, "tampered\n");
+  await expect(connectCloudHosting(root, data, "ap-northeast-1", clients)).rejects.toThrow(
+    "Invalid competitor-external-id file; refusing to replace it.",
+  );
+});
+
+test("both browser catalogs carry reviewed hello-world metadata, and never its template", () => {
+  const catalog = `import.meta.glob("../../../../problems/*/*/metadata.json");
+import.meta.glob("../../../../problems/*/*/*.yaml");`;
+  const participant = narrowCatalog(catalog, "/repo/apps/participant-portal/src/data/problems.ts");
+  const hostConsole = narrowCatalog(
+    catalog,
+    "/repo/apps/application-admin-console/src/data/problems.ts",
+  );
+  expect(participant).toBe(hostConsole);
+  expect(participant).toContain("challenges/hello-world");
+  expect(participant).toContain("challenges/sqli-demo");
+  expect(participant).toContain("battles/ac26-crypto-battle");
+  expect(participant).toContain("battles/hello-world-battle");
+  expect(participant).toContain(
+    'import.meta.glob("../../../../problems/challenges/sqli-demo/__local_host_empty__/*.yaml");',
+  );
+  expect(participant).not.toContain("problems/*/*/");
+  expect(() =>
+    assertHostingModule("/repo/problems/challenges/hello-world/metadata.json"),
+  ).not.toThrow();
+  expect(() =>
+    assertHostingModule("/repo/problems/battles/hello-world-battle/metadata.json"),
+  ).not.toThrow();
+  expect(() =>
+    assertHostingModule("/repo/problems/battles/hello-world-battle/template.yaml"),
+  ).toThrow(
+    "Unreviewed problem content entered the hosting bundle: /repo/problems/battles/hello-world-battle/template.yaml",
+  );
+  expect(() => assertHostingModule("/repo/problems/challenges/hello-world/template.yaml")).toThrow(
+    "Unreviewed problem content entered the hosting bundle: /repo/problems/challenges/hello-world/template.yaml",
+  );
+});
+
+const EMPTY_DESCRIBE = new TextEncoder().encode(
+  '<DescribeStacksResponse xmlns="http://cloudformation.amazonaws.com/doc/2010-05-15/"><DescribeStacksResult><Stacks/></DescribeStacksResult><ResponseMetadata><RequestId>1</RequestId></ResponseMetadata></DescribeStacksResponse>',
+);
+
+/** Answers every request locally, so the real SDK client below never reaches AWS. */
+const localResponses = {
+  handle: async () => ({
+    response: { statusCode: 200, headers: { "content-type": "text/xml" }, body: EMPTY_DESCRIBE },
+  }),
+};
+
+/** The real SDK client as `cloud-hosting.ts` builds it; counts credential fetches. */
+function countingClient(lifetimeMs: number) {
+  let fetches = 0;
+  const client = new CloudFormationClient({
+    region: "ap-northeast-1",
+    credentials: async () => {
+      fetches += 1;
+      return {
+        accessKeyId: "AKIA",
+        secretAccessKey: "secret",
+        sessionToken: "token",
+        expiration: new Date(Date.now() + lifetimeMs),
+      };
+    },
+    requestHandler: localResponses as never,
+  });
+  return {
+    fetches: () => fetches,
+    describe: () => client.send(new DescribeStacksCommand({ StackName: "tc-hello-world-alpha" })),
+  };
+}
+
+test("the SDK reuses competitor credentials and fetches new ones as they near expiry", async () => {
+  const fresh = countingClient(15 * 60_000);
+  await fresh.describe();
+  await fresh.describe();
+  expect(fresh.fetches()).toBe(1);
+
+  const expiring = countingClient(4 * 60_000);
+  await expiring.describe();
+  const beforeSecondRequest = expiring.fetches();
+  await expiring.describe();
+  expect(expiring.fetches()).toBeGreaterThan(beforeSecondRequest);
+});
+
+test("reviewed Battle browser metadata retains endpoint fields without early instructions or scoring", () => {
+  const path = "/repo/problems/battles/hello-world-battle/metadata.json";
+  const raw = {
+    id: "hello-world-battle",
+    instructions: "early-instructions",
+    scoring: { flag: "private-answer" },
+    endpoints: [
+      {
+        slot: "frontend",
+        default: { from: "cfn-output", key: "FrontendUrl" },
+        overridable: true,
+        label: "early-label",
+        description: "early-endpoint-instructions",
+        secret: "private-endpoint-data",
+      },
+      {
+        slot: "api",
+        default: { from: "cfn-output", key: "ApiUrl" },
+        overridable: true,
+      },
+    ],
+  };
+  const sanitized = publicMetadata(JSON.stringify(raw), path);
+  if (!sanitized) throw new Error("Expected reviewed browser metadata.");
+  expect(JSON.parse(sanitized).endpoints).toEqual([
+    { slot: "frontend", default: { from: "cfn-output", key: "FrontendUrl" }, overridable: true },
+    { slot: "api", default: { from: "cfn-output", key: "ApiUrl" }, overridable: true },
+  ]);
+  for (const hidden of ["early-", "private-", "scoring", "secret"])
+    expect(sanitized).not.toContain(hidden);
+  expect(() => publicMetadata(JSON.stringify({ ...raw, endpoints: [{}] }), path)).toThrow(
+    "Reviewed Battle endpoint is invalid.",
+  );
+  expect(() => publicMetadata(JSON.stringify({ ...raw, endpoints: null }), path)).toThrow(
+    "Reviewed Battle endpoints are missing.",
+  );
+});

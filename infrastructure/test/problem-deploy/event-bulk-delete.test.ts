@@ -643,3 +643,34 @@ describe("bulkTeardownEvent (non-AWS runtime via adapter, #2571)", () => {
     expect(compensations[0]?.input.Key?.PK).toBe("DEPLOYMENT#01BAD");
   });
 });
+
+describe("native event teardown", () => {
+  it("retires native metadata and cleans coordination without provider calls", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        dep({
+          runtimeProvider: "native",
+          runtimeEngine: "coordination",
+          runtimeEntry: "coordination",
+          awsAccountId: "",
+          region: "",
+        }),
+      ],
+    });
+    ddbSend.mockResolvedValue({});
+    expect(await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS)).toMatchObject({
+      kind: "ok",
+      result: { enqueued: 1, failed: 0 },
+    });
+    expect(
+      ddbSend.mock.calls.some(
+        ([cmd]) =>
+          cmd instanceof UpdateCommand &&
+          cmd.input.ExpressionAttributeValues?.[":status"] === "DELETED",
+      ),
+    ).toBe(true);
+    expect(eventsSend).not.toHaveBeenCalled();
+  });
+});

@@ -49,38 +49,31 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Problem packs <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>A <strong>problem pack</strong> is the unit of competition content on TenkaCloud.</p>
+<h1>Problem packs <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<p>A pack is a versioned, inspectable unit of competition content. Its manifest declares identity, runtime requirements and problem files. The artifact depends on the runtime; a CloudFormation template is only one possibility.</p>
 <h2>What is a problem pack</h2>
-<p>Each pack carries metadata, a single-page CloudFormation template deployed
-straight into a competitor account, and an optional portal plugin.</p>
+<p>The current pack CLI can scaffold, validate, inspect and store immutable revisions. Installing or activating a pack does not add it to the current event catalog. Activation records are offline catalog metadata, not a current hosting workflow.</p>
 <h2>Battle versus Challenge</h2>
-<ul>
-<li><strong>Battle</strong> packs are real-time and head-to-head.</li>
-<li><strong>Challenge</strong> packs are self-paced and evergreen.</li>
-</ul>
+<p>Challenge and Battle describe a problem&#39;s interaction and scoring model. Runtime placement is a separate concern. All former local Compose problems are intended to run as Challenge competitions; generic catalog/workbench restoration and terminal/browser verification are still in progress.</p>
 <h2>Scoring kinds</h2>
-<p>Scoring uses one of six built-in kinds — <code>flag</code>, <code>multi-flag</code>, <code>uptime-flat</code>,
-<code>uptime-multi</code>, <code>phased-polling</code>, or <code>attack-detection</code> — one per problem.</p>
-<p>Back to <a href="/docs/getting-started/index.en.html">getting started</a>.</p>
+<p>Schema declarations are not proof of execution. The local catalog uses verify and multi-verify; the reviewed AWS examples use flag and uptime-flat. Other SDK kinds and external-pack runtimes must not be advertised as playable merely because validation accepts them. See <a href="/docs/reference/runtime-matrix/index.en.html">runtime status</a>.</p>
+<p>Continue with <a href="/docs/tutorials/first-pack/index.en.html">first pack</a> or <a href="/docs/operate/use-existing-pack/index.en.html">existing packs</a>.</p>
 
 </article>
 </main>

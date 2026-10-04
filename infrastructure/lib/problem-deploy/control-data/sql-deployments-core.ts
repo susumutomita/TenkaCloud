@@ -367,10 +367,6 @@ export function deploymentMutateParams(record: DeploymentWriteRecord): SqlParam[
   return [...params.slice(0, 6), ...params.slice(7)];
 }
 
-export function sameJsonValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(normalizeJsonValue(left)) === JSON.stringify(normalizeJsonValue(right));
-}
-
 export function statusIn(record: DeploymentRecord, statuses: readonly string[]): boolean {
   return statuses.includes(String(record.status));
 }

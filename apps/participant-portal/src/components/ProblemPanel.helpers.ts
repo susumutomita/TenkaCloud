@@ -422,6 +422,7 @@ export function getCompleteMultiFlagScoring(
  * starting / error の間は stackOutputs が空・ submit が 409 not_running になるため隠す。
  */
 export function isProblemPlayable(problem: ParticipantProblemView): boolean {
+  if (problem.containerSession) return problem.containerSession.status === "running";
   const status = problem.lifecycle?.status;
   return status === undefined || status === "running";
 }
@@ -438,6 +439,9 @@ export function isProblemPlayable(problem: ParticipantProblemView): boolean {
  * handoff も 404 になるので、 panel を出しても接続できない。
  */
 export function shouldShowContainerTerminal(problem: ParticipantProblemView): boolean {
+  if (problem.containerSession && problem.containerSession.status !== "running") return false;
+  if (problem.provider === "docker" && problem.terminal === true)
+    return problem.status === "COMPLETE";
   return problem.lifecycle?.runtimeKind === "docker" && problem.lifecycle.terminal === true;
 }
 

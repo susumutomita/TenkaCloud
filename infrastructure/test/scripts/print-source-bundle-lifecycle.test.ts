@@ -1,5 +1,6 @@
-import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { type SpawnSyncReturns, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { delimiter, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const SCRIPT = resolve(
@@ -17,19 +18,24 @@ const SCRIPT = resolve(
  * sourceBundle overrides are stripped first so the result does not depend on the
  * developer's shell — `overrides` then sets exactly what each test needs.
  */
-function runLifecycle(overrides: Record<string, string> = {}): ReturnType<typeof spawnSync> {
+function runLifecycle(overrides: Record<string, string> = {}): SpawnSyncReturns<string> {
   const env: Record<string, string | undefined> = { ...process.env };
   delete env.SYSTEM_ADMIN_EMAIL;
   delete env.SOURCE_BUNDLE_KEEP_VERSIONS;
   delete env.SOURCE_BUNDLE_EXPIRE_DAYS;
-  return spawnSync("bun", ["run", SCRIPT, "development"], {
+  const bun = (process.env.PATH ?? "")
+    .split(delimiter)
+    .map((dir) => join(dir, "bun"))
+    .find(existsSync);
+  if (!bun) throw new Error("Bun is required to test source-bundle lifecycle emission");
+  return spawnSync(bun, ["--no-env-file", "run", SCRIPT, "development"], {
     encoding: "utf8",
     env: { ...env, ...overrides },
   });
 }
 
 describe("scripts/ops/print-source-bundle-lifecycle.ts", () => {
-  it("should emit a policy in Lite mode without SYSTEM_ADMIN_EMAIL set", () => {
+  it("should emit a default policy without unrelated environment values", () => {
     // Reproduces the CodeBuild Lite-deploy failure: the buildspec injects
     // TENANT_ADMIN_EMAIL but not SYSTEM_ADMIN_EMAIL. The lifecycle policy must not
     // depend on that SaaS-only value (issue #2197 removed the old

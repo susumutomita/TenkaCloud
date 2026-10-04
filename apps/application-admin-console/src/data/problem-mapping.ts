@@ -13,12 +13,19 @@
  * so the cycle is broken. `problems.ts` re-exports these for its existing consumers.
  */
 
-import { analyzeProblemCost, type ProblemCostEstimate } from "@tenkacloud/problem-cost";
-import { EXECUTABLE_ENGINE, EXECUTABLE_PROVIDER } from "@tenkacloud/problem-runtime";
+// Source imports let Vite bundle this shared mapper into its build-time plugin too.
+import {
+  analyzeProblemCost,
+  type ProblemCostEstimate,
+} from "../../../../packages/problem-cost/src/index";
 import {
   findRuntimeCapability,
   RUNTIME_CAPABILITIES,
-} from "@tenkacloud/problem-runtime/capabilities";
+} from "../../../../packages/problem-runtime/src/capabilities";
+import {
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+} from "../../../../packages/problem-runtime/src/index";
 import type { ProblemCostEstimateSummary, ProblemDetail, ProblemMetadata } from "./problem-types";
 
 export function metadataRuntimeToSummary(metadata: ProblemMetadata): ProblemDetail["runtime"] {

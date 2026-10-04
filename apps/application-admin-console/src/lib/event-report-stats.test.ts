@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { EventDetail, TeamScoreEvents } from "../api/events-client";
+import { computeRanking } from "../components/TeamRankingPanel";
+import { buildChartView } from "../components/TeamScoreEventsPanel";
+import type { AppConfig } from "../config";
+import { buildExportView } from "../pages/event-report/export-view";
+import { buildEventReportHtml } from "../pages/event-report/exporters/html";
+import { buildEventReportMarkdown } from "../pages/event-report/exporters/markdown";
 import {
   buildDisruptionLog,
   buildProblemBreakdown,
@@ -99,6 +105,85 @@ function makeScoreEvents(): readonly TeamScoreEvents[] {
 }
 
 describe("event-report-stats", () => {
+  it("uses the host's pinned projection in ranking, graph, breakdown, and exports", () => {
+    const detail = makeDetail({
+      teams: [TEAM_ALPHA],
+      problems: [
+        { problemId: "hello-world", defaultRegion: "local" },
+        { problemId: "hello-world-battle", defaultRegion: "local" },
+      ],
+      deploymentsByProblem: {},
+      scoreEventsByTeam: [
+        {
+          teamId: "team-A",
+          teamName: "Team Alpha",
+          projectedTotal: -5,
+          projectedByProblem: { "hello-world": 95, "hello-world-battle": -100 },
+          events: [
+            {
+              jobId: "j1",
+              problemId: "hello-world",
+              source: "flag-wrong",
+              points: -5,
+              result: "wrong",
+              occurredAt: "2026-05-21T10:00:00Z",
+              projectedTotal: 0,
+            },
+            {
+              jobId: "j1",
+              problemId: "hello-world",
+              source: "flag",
+              points: 100,
+              result: "ok",
+              occurredAt: "2026-05-21T10:01:00Z",
+              projectedTotal: 95,
+            },
+            {
+              jobId: "j2",
+              problemId: "hello-world-battle",
+              source: "uptime",
+              points: -100,
+              result: "wrong",
+              occurredAt: "2026-05-21T10:02:00Z",
+              projectedTotal: -5,
+            },
+          ],
+        },
+      ],
+    });
+    const rows = buildScoreboard(detail.teams, detail.scoreEventsByTeam);
+    expect(rows[0]?.totalScore).toBe(-5);
+    expect(computeRanking(detail.scoreEventsByTeam ?? [])[0]?.totalScore).toBe(-5);
+    expect(
+      buildChartView(detail.scoreEventsByTeam ?? []).series[0]?.data.map((point) => point.y),
+    ).toEqual([0, 95, -5]);
+    const breakdown = buildProblemBreakdown(detail);
+    expect(breakdown.map((row) => row.avgScore)).toEqual([95, -100]);
+    const exportView = buildExportView({
+      config: {
+        cognitoDomain: "http://localhost/api/host",
+        cognitoClientId: "local-host",
+        redirectUri: "http://localhost/callback",
+        scope: "",
+        tenantId: "local",
+        tenantName: "Local",
+        apiBaseUrl: "/api",
+        samlIdpDirectory: {},
+        mode: "local-host",
+      } satisfies AppConfig,
+      coverNote: "Review",
+      detail,
+      summary: summarizeEvent(detail),
+      scoreboard: rows,
+      breakdown,
+      disruptions: buildDisruptionLog(detail),
+      generatedAt: "2026-05-21 10:03",
+      locale: "en",
+      t: (key) => key,
+    });
+    expect(buildEventReportMarkdown(exportView)).toContain("-5 pt");
+    expect(buildEventReportHtml(exportView)).toContain("-5 pt");
+  });
   describe("summarizeEvent", () => {
     it("should count teams / problems / deployments and compute success rate", () => {
       const summary = summarizeEvent(makeDetail());

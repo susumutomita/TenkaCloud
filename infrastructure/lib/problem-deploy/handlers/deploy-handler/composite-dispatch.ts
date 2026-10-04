@@ -1,3 +1,9 @@
+import { assertSeparateCompetitorAccount } from "../shared/competitor-account-policy.js";
+import type { ResolvedExecutionCatalog } from "../shared/execution-catalog.js";
+import {
+  executionDispatchFields,
+  savedExecutionCatalog,
+} from "../shared/execution-catalog-context.js";
 /**
  * [Composite Runtime / Issues #2066, #2747] Dispatch materialized Composite targets.
  *
@@ -213,6 +219,7 @@ interface ResolvedPreflight {
   readonly adapter: Pick<ProblemRuntimeAdapter, "deploy">;
   readonly connection: TargetConnection;
   readonly problemDir: string;
+  readonly executionCatalog?: ResolvedExecutionCatalog;
 }
 type PreflightOutcome =
   | ({ readonly ok: true } & ResolvedPreflight)
@@ -223,7 +230,9 @@ async function runPreflight(
   deps: CompositeDispatchDeps,
   target: CompositeTargetDeploymentRecord,
   base: Pick<CompositeTargetDispatchResult, "targetId" | "targetDeploymentId">,
+  executionCatalog: ResolvedExecutionCatalog | undefined,
 ): Promise<PreflightOutcome> {
+  if (target.runtimeProvider === "aws") assertSeparateCompetitorAccount(target.awsAccountId);
   if (!isCompositeProvider(target.runtimeProvider)) {
     await markTargetFailed(deps, target.jobId, "preflight failed: unknown provider");
     return { ok: false, result: { ...base, outcome: "preflight_failed" } };
@@ -252,7 +261,7 @@ async function runPreflight(
     return { ok: false, result: { ...base, outcome: "preflight_failed" } };
   }
 
-  const problemDir = deps.problemsCatalog[target.problemId];
+  const problemDir = (executionCatalog?.catalog ?? deps.problemsCatalog)[target.problemId];
   if (!problemDir) {
     await markTargetFailed(
       deps,
@@ -262,13 +271,14 @@ async function runPreflight(
     return { ok: false, result: { ...base, outcome: "preflight_failed" } };
   }
 
-  return { ok: true, adapter, connection, problemDir };
+  return { ok: true, adapter, connection, problemDir, executionCatalog };
 }
 
 async function dispatchReadyTarget(
   deps: CompositeDispatchDeps,
   target: CompositeTargetDeploymentRecord,
   byId: ReadonlyMap<string, CompositeTargetDeploymentRecord>,
+  executionCatalog: ResolvedExecutionCatalog | undefined,
 ): Promise<CompositeTargetDispatchResult> {
   const base = baseResult(target);
 
@@ -288,7 +298,7 @@ async function dispatchReadyTarget(
     return { ...base, outcome: "blocked" };
   }
 
-  const preflight = await runPreflight(deps, target, base);
+  const preflight = await runPreflight(deps, target, base, executionCatalog);
   if (!preflight.ok) return preflight.result;
   const { adapter, connection, problemDir } = preflight;
 
@@ -299,6 +309,7 @@ async function dispatchReadyTarget(
       tenantId: target.tenantId,
       problemId: target.problemId,
       problemDir,
+      ...executionDispatchFields(preflight.executionCatalog),
       teamSlug: slugify(target.teamName),
       namePrefix: target.namePrefix,
       region: target.region,
@@ -337,13 +348,25 @@ export async function dispatchCompositeDeployment(
     );
   }
 
+  const catalogs = new Map<string | undefined, ResolvedExecutionCatalog | undefined>();
+  for (const target of targets) {
+    if (parent.catalogKey && target.catalogKey && parent.catalogKey !== target.catalogKey) {
+      throw new CompositeDispatchError("composite parent and target catalog pins differ");
+    }
+    if (target.runtimeProvider === "aws") assertSeparateCompetitorAccount(target.awsAccountId);
+    const key = target.catalogKey ?? parent.catalogKey;
+    if (!catalogs.has(key)) catalogs.set(key, await savedExecutionCatalog(key));
+  }
+
   const ordered = [...targets].sort((left, right) => left.targetOrdinal - right.targetOrdinal);
   const byId = new Map(ordered.map((target) => [target.targetId, target]));
 
   // Promise.all preserves input ordering while allowing all ready nodes in the same wave to start
   // concurrently. Waiting/blocked nodes perform no provider call.
   const results = await Promise.all(
-    ordered.map((target) => dispatchReadyTarget(deps, target, byId)),
+    ordered.map((target) =>
+      dispatchReadyTarget(deps, target, byId, catalogs.get(target.catalogKey ?? parent.catalogKey)),
+    ),
   );
   return { parentDeploymentId, targets: results };
 }

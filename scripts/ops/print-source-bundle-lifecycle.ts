@@ -1,27 +1,18 @@
 #!/usr/bin/env bun
-/**
- * Issue #1056: deploy artifact bucket の lifecycle policy を stdout に JSON で emit する。
- *
- * `scripts/prepare-source-bundle.sh` が `aws s3api put-bucket-lifecycle-configuration` に
- * 渡すための AWS API shape を、 `infrastructure/environments/<env>/config.json` の
- * `sourceBundleConfig` を source of truth として組み立てる。 別 file `scripts/*.json` を
- * 持たず、 config が 1 箇所に集約される (= config 乱立を避ける運用判断)。
- *
- *   bun run scripts/print-source-bundle-lifecycle.ts [env]
- *
- * `env` を省略すると `${ENV:-development}` を使う。 placeholder expansion は emit script
- * で self-contained に行う (= `infrastructure/lib/utils/config-loader.ts` は ajv を import
- * するため repo-root context から呼ぶと module resolution に失敗する; 本 script で必要な
- * のは `${VAR:-default}` の最小展開だけなので 5 行で十分)。
- */
-import { readFileSync } from "node:fs";
+/** Emit only source-bundle retention settings, without loading unrelated secrets. */
+import { existsSync, readFileSync } from "node:fs";
 import * as path from "node:path";
-import type { SourceBundleConfig } from "../../infrastructure/lib/config/config-interface";
-import { buildSourceBundleLifecyclePolicy } from "../../infrastructure/lib/source-bundle/lifecycle-policy";
+import {
+  buildSourceBundleLifecyclePolicy,
+  type SourceBundleConfig,
+} from "../../infrastructure/lib/source-bundle/lifecycle-policy";
 
 const env = process.argv[2] ?? process.env.ENV ?? "development";
+if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(env)) {
+  throw new Error("Invalid environment name");
+}
 const configPath = path.resolve(
-  __dirname,
+  import.meta.dir,
   "..",
   "..",
   "infrastructure",
@@ -29,16 +20,12 @@ const configPath = path.resolve(
   env,
   "config.json",
 );
+const rawConfig = existsSync(configPath)
+  ? (JSON.parse(readFileSync(configPath, "utf-8")) as { sourceBundleConfig?: SourceBundleConfig })
+  : {};
 
-const content = readFileSync(configPath, "utf-8");
-
-// Expand ${VAR:-default} placeholders, but ONLY within the sourceBundleConfig
-// subtree. The rest of config.json carries placeholders that are irrelevant to
-// the lifecycle policy and unset in Lite mode — e.g. controlPlaneConfig.
-// systemAdminEmail = ${SYSTEM_ADMIN_EMAIL} (no default), which only SaaS mode
-// sets. Expanding the whole file would throw on those and break Lite `make
-// deploy`. The raw placeholders are valid JSON string values, so parse first,
-// then expand only the slice we actually consume.
+// Expand placeholders only inside the sourceBundleConfig subtree. Other config
+// values may contain unset credentials that source preparation never needs.
 function expandPlaceholders(raw: string): string {
   return raw.replace(/\$\{([^}]+)\}/g, (_, expression: string) => {
     const [rawVarName, ...defaultParts] = expression.split(":-");
@@ -51,12 +38,19 @@ function expandPlaceholders(raw: string): string {
   });
 }
 
-const rawConfig = JSON.parse(content) as { sourceBundleConfig?: SourceBundleConfig };
 const sourceBundleConfig =
   rawConfig.sourceBundleConfig === undefined
-    ? undefined
+    ? {}
     : (JSON.parse(
         expandPlaceholders(JSON.stringify(rawConfig.sourceBundleConfig)),
       ) as SourceBundleConfig);
-const policy = buildSourceBundleLifecyclePolicy(sourceBundleConfig);
+const policy = buildSourceBundleLifecyclePolicy({
+  ...sourceBundleConfig,
+  ...(process.env.SOURCE_BUNDLE_KEEP_VERSIONS
+    ? { keepNoncurrentVersions: process.env.SOURCE_BUNDLE_KEEP_VERSIONS }
+    : {}),
+  ...(process.env.SOURCE_BUNDLE_EXPIRE_DAYS
+    ? { expireAfterDays: process.env.SOURCE_BUNDLE_EXPIRE_DAYS }
+    : {}),
+});
 console.log(JSON.stringify(policy));

@@ -5,7 +5,8 @@ import {
   isHumanAuthorizerAudiencePinEnabled,
   isNonAwsRuntimeEnabled,
 } from "../app-config/index.js";
-import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
+import { MAX_PROBLEMS_PER_EVENT } from "../problem-deploy/control-data/domain/events.js";
+import { MAX_TEAMS_PER_EVENT } from "../problem-deploy/control-data/domain/teams.js";
 import { SamlIdpLambda } from "../problem-deploy/saml-idp-lambda.js";
 import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
 import { ApiGateway } from "../tenant-template/api-gateway.js";
@@ -31,7 +32,6 @@ import { LiteAdminClaimsLambda } from "./lite-admin-claims-lambda.js";
  * 抽出しない (= Full mode 固有、 TenantTemplateStack 側に残す):
  *   - TenantMappingTable への AwsCustomResource Put / Update / Delete (SBT pipeline 連携)
  *   - SBT tag (TenantId / IsPooledDeploy)
- *   - tier API key の SSM lookup (Lite mode では不要、 後続 phase で apiKeyConfig optional 化)
  *
  * ## CFn 物理差分 0 件 invariant
  *
@@ -44,21 +44,13 @@ import { LiteAdminClaimsLambda } from "./lite-admin-claims-lambda.js";
  * 将来 (= Phase 3) の TenkaCloudLiteStack は同じ builder を別 Stack で呼ぶだけ。
  */
 
-export interface AppPlaneCoreApiKeyConfig {
-  readonly ssmParameterNames: ApiKeySSMParameterNames;
-  /**
-   * SSM Parameter から値を引く関数。 stack の `valueForStringParameter` を bind した callback
-   * を受ける (= stack scope に依存しないため)。 Lite mode で API Key 経路を skip する場合は
-   * 本 prop ごと undefined を渡す (= 後続 phase で実装)。
-   */
-  readonly ssmLookup: (parameterName: string) => string;
-}
-
 export interface AppPlaneCoreProps {
+  /** Public IDs from the installation's exact immutable execution snapshot. */
+  readonly supportedProblemIds?: readonly string[];
+  readonly nativeProblemIds?: readonly string[];
   readonly tenantId: string;
   readonly tenantName: string;
   readonly environment: string;
-  readonly isPooledDeploy: boolean;
   /** Issue #1993 / #1994: tenant ログイン用 Cognito カスタムドメイン (任意、 未設定で NO-OP)。 */
   readonly loginCustomDomain?: CustomDomainConfig;
   readonly deployApiLambda: IFunction;
@@ -90,12 +82,6 @@ export interface AppPlaneCoreProps {
   readonly attachSamlIdpLambda?: boolean;
   readonly participantPortalUrl?: string;
   readonly competitorBootstrapTemplateUrl?: string;
-  /**
-   * Full mode (= SaaS pipeline 経由) では tier API key SSM lookup を渡す。
-   * Lite mode (= Phase 3 以降) では undefined を渡し、 API Gateway 側の Usage Plan / API Key
-   * 配線をスキップする (= 後続 phase で ApiGateway 側にも optional 化を入れる予定)。
-   */
-  readonly apiKeyConfig: AppPlaneCoreApiKeyConfig;
   /**
    * Issue #1327: Lite mode 専用の opt-in flag。 `true` のとき Cognito Pre-Token Generation
    * Lambda を UserPool に attach し、 JWT 発行直前に `custom:userRole = "TenantAdmin"` +
@@ -254,8 +240,6 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
 
   const apiGateway = new ApiGateway(scope, "ApiGateway", {
     tenantId: props.tenantId,
-    isPooledDeploy: props.isPooledDeploy,
-    idpDetails: identityProvider.identityDetails,
     userPool: identityProvider.tenantUserPool,
     ...(humanAudienceValidationExpression ? { humanAudienceValidationExpression } : {}),
     teamCloudCredentialsRoutes: isNonAwsRuntimeEnabled(props.features),
@@ -263,40 +247,27 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     eventApiLambda: props.eventApiLambda,
     competitorAccountsApiLambda: props.competitorAccountsApiLambda,
     ...(samlIdpLambda ? { samlIdpLambda: samlIdpLambda.fn } : {}),
-    apiKeyBasicTier: {
-      apiKeyId: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.basic.keyId),
-      value: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.basic.value),
-    },
-    apiKeyStandardTier: {
-      apiKeyId: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.standard.keyId),
-      value: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.standard.value),
-    },
-    apiKeyPremiumTier: {
-      apiKeyId: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.premium.keyId),
-      value: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.premium.value),
-    },
-    apiKeyPlatinumTier: {
-      apiKeyId: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.platinum.keyId),
-      value: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.platinum.value),
-    },
     // Issue #860: CORS allowOrigins を application-admin-console URL に絞る。
     applicationAdminConsoleUrl: applicationAdminConsoleHosting.distributionUrl,
     environment: props.environment,
   });
 
   applicationAdminConsoleHosting.deployRuntimeConfig({
+    supportedProblemIds: props.supportedProblemIds,
+    nativeProblemIds: props.nativeProblemIds,
     features: props.features,
     cognitoDomain: identityProvider.cognitoDomainUrl,
     cognitoClientId: identityProvider.tenantUserPoolClient.userPoolClientId,
     tenantId: props.tenantId,
     tenantName: props.tenantName,
+    eventLimits: { maxTeams: MAX_TEAMS_PER_EVENT, maxProblems: MAX_PROBLEMS_PER_EVENT },
     apiUrl: apiGateway.restApi.url,
     participantPortalUrl: props.participantPortalUrl,
     competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
     // Issue #897: pooled stack の UserPool は全 pooled tenant が共有するため、 SAML SSO のような
     // UserPool mutate を伴う機能は他 tenant に副作用を及ぼす。 frontend は isolation を見て
     // pooled では SAML SSO page を隠し、 silo (PLATINUM) でのみ有効にする。
-    isolation: props.isPooledDeploy ? "pooled" : "silo",
+    isolation: "silo",
     // Issue #1340 Phase 2: HRD directory を runtime-config.json に焼く (= 未認証 Login が読む
     // public metadata、 非秘匿)。 SAML 未設定なら `{}`。
     samlIdpDirectory,

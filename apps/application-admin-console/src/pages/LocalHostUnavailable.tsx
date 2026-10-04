@@ -9,17 +9,19 @@ import { useT } from "../i18n";
  * Issue #3226: a console screen that needs cloud infrastructure, opened on the local
  * competition host. It says so plainly instead of calling an API the host does not have.
  */
-export function LocalHostUnavailablePage() {
+export function LocalHostUnavailablePage({ cloudHost = false }: { readonly cloudHost?: boolean }) {
   const t = useT();
   const navigate = useNavigate();
   return (
     <SpaceBetween size="l">
-      <Header variant="h1">{t("local_host.unavailable_header")}</Header>
+      <Header variant="h1">
+        {t(cloudHost ? "cloud_host.unavailable_header" : "local_host.unavailable_header")}
+      </Header>
       <Alert
         type="info"
         action={<Button onClick={() => navigate("/events")}>{t("local_host.go_to_events")}</Button>}
       >
-        {t("local_host.unavailable_body")}
+        {t(cloudHost ? "cloud_host.unavailable_body" : "local_host.unavailable_body")}
       </Alert>
     </SpaceBetween>
   );

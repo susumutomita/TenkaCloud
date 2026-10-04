@@ -4,7 +4,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { DeployProgressPanel } from "../../components/event-detail/DeployProgressPanel";
 import { EventRescuePanel } from "../../components/event-detail/EventWizardPanel";
-import { isLocalHost } from "../../config";
+import { isCloudHost, isLocalHost } from "../../config";
 import { isEffectivelyEnded } from "../../lib/effective-event-status";
 import { CapacityPanel } from "./CapacityPanel";
 import type { EventTabContentProps } from "./tab-content-props";
@@ -39,13 +39,15 @@ export function OperationsTab({
         {t("event_detail.operations_intro")}
       </Alert>
 
-      <EventRescuePanel
-        canMutateTenant={canMutateTenant}
-        detail={detail}
-        forceArchiveInFlight={operations.forceArchiveInFlight}
-        onForceArchive={() => operations.setConfirmForceArchive(true)}
-        t={t}
-      />
+      {!isCloudHost(config) && (
+        <EventRescuePanel
+          canMutateTenant={canMutateTenant}
+          detail={detail}
+          forceArchiveInFlight={operations.forceArchiveInFlight}
+          onForceArchive={() => operations.setConfirmForceArchive(true)}
+          t={t}
+        />
+      )}
 
       <Container
         header={<Header variant="h3">{t("event_detail.operations_deploy_progress_header")}</Header>}
@@ -71,13 +73,17 @@ export function OperationsTab({
         )}
       </Container>
 
-      {isLocalHost(config) ? (
+      {isCloudHost(config) && (
+        <Alert type="info">{t("event_detail.cloud_operations_limits")}</Alert>
+      )}
+      {isLocalHost(config) && (
         // Issue #3226: say which console features need cloud infrastructure instead of
         // calling APIs the local host does not have.
         <Alert type="info" header={t("local_host.cloud_only_header")}>
           {t("local_host.cloud_only_body")}
         </Alert>
-      ) : (
+      )}
+      {!isCloudHost(config) && !isLocalHost(config) && (
         <CapacityPanel apiClient={apiClient} t={t} />
       )}
     </SpaceBetween>

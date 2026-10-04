@@ -241,6 +241,7 @@ export class CompositeAcceptanceHarness {
         return this.config.parentDeploymentId;
       }
       const target = this.config.targets[idCounter - 1];
+      if (!target) throw new Error("Composite acceptance target allocation exceeded the plan");
       idCounter += 1;
       return acceptanceTargetDeploymentId(target.targetId);
     };

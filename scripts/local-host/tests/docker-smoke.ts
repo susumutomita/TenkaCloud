@@ -4,19 +4,22 @@
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveComposeCli } from "../../local-play/docker-adapter";
 import { randomToken } from "../auth";
+import { resolveComposeCli } from "../container/compose-cli";
 import { DAEMON_UNAVAILABLE_MESSAGE, DockerHostingEngine } from "../docker-engine";
-import { persistentKey, prepareDatabase, privateDirectory } from "../files";
+import { persistentKey, prepareDatabase } from "../files";
 import { DEFAULT_GATEWAY_PORTS, parseGatewayPorts } from "../gateway-ports";
 import { SurfaceGateways } from "../gateways";
 import { type HttpHost, startHttpHost } from "../http";
 import { object, type Team } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
+import { verifyDockerTerminal } from "./docker-terminal-smoke";
+import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 interface CreatedEvent {
   eventId: string;
@@ -63,15 +66,12 @@ function projectContainers(jobId: string, includeStopped = false): string[] {
 
 async function main(): Promise<void> {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
-  const parent = join(root, ".tenkacloud");
-  mkdirSync(parent, { recursive: true });
-  // mkdtemp creates the directory with mode 0700; privateDirectory only verifies it.
-  const directory = privateDirectory(mkdtempSync(join(parent, "host-docker-smoke-")));
+  const directory = createTemporaryDirectory(root, "host-docker-smoke-");
   const databasePath = join(directory, "hosting.sqlite");
   prepareDatabase(databasePath);
   const masterKey = persistentKey(join(directory, "host-key"));
   let store = new HostStore(new Database(databasePath, { create: true, strict: true }));
-  let engine = new DockerHostingEngine(root, directory);
+  let engine = new DockerHostingEngine(root, directory, process.env.HOST_DOCKER_NETWORK_POOL);
   const gatewayPorts = smokeGatewayPorts();
   let service = new HostingService(store, engine, masterKey);
   service.gatewayPorts = gatewayPorts;
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
   let failed = false;
   async function attach(): Promise<void> {
     const currentSurfaces = surfaces;
-    service.surfaceLink = (job, team) => currentSurfaces.link(job, team);
+    service.surfaceLink = (job, team, path) => currentSurfaces.link(job, team, path);
     service.closeSurface = (jobId) => currentSurfaces.closeJob(jobId);
     const staticRoot = join(directory, "static");
     mkdirSync(staticRoot, { recursive: true });
@@ -132,11 +132,16 @@ async function main(): Promise<void> {
     return payload as Body;
   }
   async function login(): Promise<void> {
+    const status = await api<{ bootstrapCompleted: boolean }>("host", "/host/bootstrap-status");
+    const firstVisit = !status.bootstrapCompleted;
     const session = await api<{ idToken: string }>(
       "host",
-      "/host/login",
+      firstVisit ? "/host/bootstrap" : "/host/login",
       "POST",
-      { key: masterKey },
+      {
+        ...(firstVisit ? { key: masterKey } : {}),
+        ...REHEARSAL_ORGANIZER,
+      },
       "",
     );
     accessToken = session.idToken;
@@ -165,6 +170,18 @@ async function main(): Promise<void> {
     assert.equal(typeof result.flag, "string");
     return String(result.flag);
   }
+  async function startTeams(teams: CreatedEvent["teams"]): Promise<void> {
+    for (const team of teams) {
+      await api(
+        "portal",
+        "/portal/me/problems/sqli-demo/container/start",
+        "POST",
+        {},
+        team.teamLoginKey,
+      );
+      await service.drain();
+    }
+  }
   async function restart(): Promise<void> {
     await service.drain();
     await Promise.all([host?.close(), portal?.close()]);
@@ -173,7 +190,7 @@ async function main(): Promise<void> {
     await surfaces.close();
     store.close();
     store = new HostStore(new Database(databasePath, { create: true, strict: true }));
-    engine = new DockerHostingEngine(root, directory);
+    engine = new DockerHostingEngine(root, directory, process.env.HOST_DOCKER_NETWORK_POOL);
     service = new HostingService(store, engine, masterKey);
     service.gatewayPorts = gatewayPorts;
     await service.recover();
@@ -194,6 +211,15 @@ async function main(): Promise<void> {
       });
       await api("host", `/events/${unavailable.eventId}/deploy`, "POST", {});
       await service.drain();
+      await api("host", `/events/${unavailable.eventId}/schedule`, "PATCH", { startNow: true });
+      await api(
+        "portal",
+        "/portal/me/problems/sqli-demo/container/start",
+        "POST",
+        {},
+        unavailable.teams[0]?.teamLoginKey,
+      );
+      await service.drain();
     } finally {
       if (saved === undefined) delete process.env.DOCKER_HOST;
       else process.env.DOCKER_HOST = saved;
@@ -202,7 +228,13 @@ async function main(): Promise<void> {
     assert.equal(failedJob?.status, "FAILED");
     assert.equal(failedJob?.error, DAEMON_UNAVAILABLE_MESSAGE);
     assert.ok(failedJob?.unit, "Ownership is retained while cleanup could not run.");
-    await api("host", `/events/${unavailable.eventId}/deploy`, "POST", {});
+    await api(
+      "portal",
+      "/portal/me/problems/sqli-demo/container/start",
+      "POST",
+      {},
+      unavailable.teams[0]?.teamLoginKey,
+    );
     await service.drain();
     assert.equal(
       store.job(failedJob.jobId).status,
@@ -231,6 +263,28 @@ async function main(): Promise<void> {
     const scoresBefore = scores();
     const containersB = projectContainers(jobB);
     assert.ok(containersB.length > 0);
+    const retainedUnit = store.job(jobA).unit;
+    if (process.env.HOST_DOCKER_NETWORK_POOL) {
+      const networkA = JSON.parse(retainedUnit ?? "{}").networkSubnets;
+      const networkB = JSON.parse(store.job(jobB).unit ?? "{}").networkSubnets;
+      assert.ok(networkA?.default && networkB?.default, "Compact subnet allocations are durable.");
+      assert.notEqual(networkA.default, networkB.default, "Teams never share a subnet.");
+      const cli = resolveComposeCli();
+      assert.equal(cli.command, "docker");
+      const inspected = spawnSync(
+        cli.command,
+        [
+          "network",
+          "inspect",
+          "--format",
+          "{{json .IPAM.Config}}",
+          `tch-${jobA.toLowerCase()}_default`,
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(inspected.status, 0);
+      assert.equal(JSON.parse(inspected.stdout)[0].Subnet, networkA.default);
+    }
     const operate = async (method: string, suffix: string) => {
       await api("host", `/events/${eventId}/deployments/${jobA}${suffix}`, method, {});
       await service.drain();
@@ -249,6 +303,11 @@ async function main(): Promise<void> {
     await operate("POST", "/restart");
     assert.equal(store.job(jobA).status, "COMPLETE", store.job(jobA).error ?? "");
     assert.equal(await solve(first), flagA);
+    assert.equal(
+      store.job(jobA).unit,
+      retainedUnit,
+      "Stop/resume preserves the exact owned network and container plan.",
+    );
     await expectTeamBUntouched();
     await operate("DELETE", "");
     assert.equal(store.job(jobA).status, "DELETED", store.job(jobA).error ?? "");
@@ -276,13 +335,20 @@ async function main(): Promise<void> {
     assert.ok(first && second);
     await api("host", `/events/${eventId}/deploy`, "POST", {});
     await service.drain();
+    assert.ok(store.jobs(eventId).every((job) => job.status === "STOPPED" && job.runtimePorts));
+    await api("host", `/events/${eventId}/schedule`, "PATCH", {
+      startNow: true,
+      endsAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+    });
+    await startTeams([first, second]);
     const jobs = store.jobs(eventId);
     assert.equal(jobs.length, 2);
     assert.ok(
       jobs.every((job) => job.status === "COMPLETE" && job.unit),
       JSON.stringify(jobs.map((job) => ({ status: job.status, error: job.error }))),
     );
-    assert.notEqual(jobs[0]?.offset, jobs[1]?.offset);
+    assert.notDeepEqual(jobs[0]?.runtimePorts, jobs[1]?.runtimePorts);
+    assert.notEqual(jobs[0]?.gatewaySlot, jobs[1]?.gatewaySlot);
     checks.push(
       "Two production Docker environments, separate projects/ports and durable ownership",
     );
@@ -342,6 +408,19 @@ async function main(): Promise<void> {
     checks.push(
       "End state survives restart; physical teardown removes owned environments without deleting results",
     );
+    checks.push(
+      ...(await verifyDockerTerminal({
+        api,
+        drain: () => service.drain(),
+        restart,
+        store: () => store,
+        portalOrigin: () => {
+          assert.ok(portal);
+          return portal.origin;
+        },
+        containers: projectContainers,
+      })),
+    );
     console.log(checks.map((check) => `PASS ${check}`).join("\n"));
     if (process.env.HOST_DOCKER_REPORT)
       writeFileSync(
@@ -381,7 +460,7 @@ async function main(): Promise<void> {
     if (cleanupErrors.length) {
       console.error(`Cleanup failed; ownership records remain in ${directory}.`);
       if (!failed) process.exitCode = 1;
-    } else rmSync(directory, { recursive: true, force: true });
+    } else removeTemporaryDirectory(root, directory);
   }
 }
 void main().catch((error) => {

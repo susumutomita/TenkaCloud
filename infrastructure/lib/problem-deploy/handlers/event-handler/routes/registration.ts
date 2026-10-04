@@ -12,7 +12,6 @@ import {
   RegistrationError,
   registrationSummary,
 } from "../../shared/event-registration.js";
-import { auditEventAction } from "../audit.js";
 import { handleRouteError, withEventId, withJsonBody } from "../route-helpers.js";
 import {
   type EventSharedResources,
@@ -61,7 +60,6 @@ export function registerRegistrationAdminRoutes(app: Hono, shared: EventSharedRe
             eventId,
             body,
           );
-          auditEventAction(c, body.enabled ? "open_registration" : "close_registration", eventId);
           return c.json(result);
         } catch (error) {
           if (error instanceof RegistrationError)

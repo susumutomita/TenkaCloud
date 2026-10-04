@@ -1,12 +1,3 @@
-/**
- * Issue #3226: sign-in for the local competition host (`bun start`).
- *
- * The organizer types the host key printed in the terminal; the host exchanges it for a
- * short-lived session token held only in memory by the shared AuthProvider. There is no
- * Cognito redirect, no stored credential and no demo/practice fallback: a wrong key is shown
- * as a wrong key.
- */
-
 import type { TokenSet } from "@tenkacloud/auth-client";
 import { ConsoleAuthShell, toErrorMessage } from "@tenkacloud/web-kit";
 import { useState } from "react";
@@ -27,33 +18,27 @@ function isSession(value: SessionResponse): value is TokenSet & { refreshToken: 
   );
 }
 
-/** `POST /api/host/login`: the terminal's host key for a short-lived, memory-only session. */
-async function exchangeHostKey(
+async function exchangeCredentials(
   apiBaseUrl: string,
-  key: string,
-  t: (key: string) => string,
+  path: string,
+  body: unknown,
 ): Promise<TokenSet> {
-  const response = await fetch(`${apiBaseUrl}/host/login`, {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key }),
+    body: JSON.stringify(body),
   });
-  if (response.status === 401) throw new Error(t("local_host.login_invalid_key"));
   let parsed: unknown;
   try {
     parsed = await response.json();
   } catch {
-    // A proxy or crash page is not the host's JSON API; never show the parser's error.
-    throw new Error(t("local_host.login_failed"));
+    throw new Error("Host sign-in failed.");
   }
-  // `null`, arrays and scalars are valid JSON but not a session or an error object.
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-    throw new Error(t("local_host.login_failed"));
+    throw new Error("Host sign-in failed.");
   const value = parsed as SessionResponse;
   if (!response.ok || !isSession(value))
-    throw new Error(
-      typeof value.message === "string" ? value.message : t("local_host.login_failed"),
-    );
+    throw new Error(typeof value.message === "string" ? value.message : "Host sign-in failed.");
   return {
     idToken: value.idToken,
     accessToken: value.accessToken,
@@ -81,12 +66,14 @@ export function LocalHostLoginPage({
 
   const signIn = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!key) return;
+    if (busy || !key) return;
     setBusy(true);
     setError(undefined);
+    // Keep the organizer key only for this request, including failed attempts.
+    setKey("");
     try {
-      auth.setTokens(await exchangeHostKey(config.apiBaseUrl, key, t));
-      setKey("");
+      const tokens = await exchangeCredentials(config.apiBaseUrl, "/host/login", { key });
+      auth.setTokens(tokens);
       navigate(returnPath ?? "/events", { replace: true });
     } catch (cause) {
       setError(toErrorMessage(cause));
@@ -102,12 +89,12 @@ export function LocalHostLoginPage({
       locale={locale}
       onLocale={(code) => setLocale(code as LocaleCode)}
     >
-      {error ? (
+      {error && (
         <div className="error-line" role="alert">
           <span className="x">!</span>
           {error}
         </div>
-      ) : null}
+      )}
       <form onSubmit={(event) => void signIn(event)} noValidate>
         <div className="field">
           <label className="label" htmlFor="local-host-key">
@@ -119,7 +106,7 @@ export function LocalHostLoginPage({
               type="password"
               value={key}
               autoComplete="off"
-              spellCheck={false}
+              aria-describedby="local-host-key-reset"
               disabled={busy}
               onChange={(event) => setKey(event.target.value)}
             />
@@ -129,6 +116,12 @@ export function LocalHostLoginPage({
           {busy ? t("local_host.login_signing_in") : t("local_host.login_submit")}
           <ArrowIcon />
         </button>
+        <div className="note">
+          <span className="ic">i</span>
+          <p id="local-host-key-reset">
+            <b>{t("local_host.login_reset_lead")}</b> {t("local_host.login_reset_body")}
+          </p>
+        </div>
       </form>
     </ConsoleAuthShell>
   );

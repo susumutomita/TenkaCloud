@@ -1,0 +1,517 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  TenkaCloud cloud hosting launcher: Lambda, DynamoDB or Turso, Cognito and both existing web
+  applications. Review the broad CodeBuild caller role and selected sources before
+  creating this launcher or starting a build. Current deploy reuses standard CDKToolkit,
+  or runs official cdk bootstrap only if missing, with explicit unattended approval.
+  Standard bootstrap defaults to AdministratorAccess for CloudFormation execution.
+  Default current sources are pinned to an offline-verified
+  candidate; live AWS deployment remains unverified. Application-owned resources are deleted
+  on destroy by default; RetainDataTables=true explicitly retains DynamoDB history.
+  Turso uses an existing database and SSM SecureString token parameter. Ordinary destroy
+  preserves its external rows; destroy-all deletes verified deployment-owned control data.
+
+# One complete launcher for the current make deploy/destroy/destroy-all entrypoints.
+# Existing launcher physical names and the onboarding checkpoint remain stable.
+# No AWS execution or IAM change is performed by generating or reviewing this file.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Organizer (review privileged deployment role before use)"
+        Parameters:
+          - TenantAdminEmail
+      - Label:
+          default: "Advanced: repository sources and release classification"
+        Parameters:
+          - RepoUrl
+          - RepoRef
+          - ProblemsRepoUrl
+          - ProblemsRepoRef
+      - Label:
+          default: "Advanced: control-data backend (safe to leave alone)"
+        Parameters:
+          - ControlDataBackend
+          - TursoDatabaseUrl
+          - TursoAuthTokenParameterName
+      - Label:
+          default: "Advanced: retention and build tuning (safe to leave alone)"
+        Parameters:
+          - Environment
+          - Action
+          - RetainDataTables
+          - BunVersion
+          - CodeBuildTimeoutMinutes
+    ParameterLabels:
+      TenantAdminEmail:
+        default: "Organizer email (receives the Cognito invite after deploy)"
+
+Parameters:
+  Environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - staging
+      - production
+    Description: >-
+      Target environment. Cloud hosting uses the same selected environment
+      for its application and backend stacks; CDKToolkit is shared per account/region.
+
+  Action:
+    Type: String
+    Default: deploy
+    AllowedValues:
+      - deploy
+      - destroy
+      - destroy-all
+    Description: >-
+      Deploy starts hosting and destroy removes platform stacks and their DynamoDB data
+      unless RetainDataTables=true was selected at deploy time. destroy-all additionally
+      removes retained resources owned by the selected platform stacks and verified
+      deployment-owned Turso control-data rows. Ordinary destroy preserves external
+      Turso rows. Existing CDKToolkit resources remain unchanged.
+
+  TenantAdminEmail:
+    Type: String
+    Description: >-
+      Application Admin Console initial user (Tenant Admin). After the cloud deployment,
+      hosting creates this Cognito user and emails an invitation.
+    AllowedPattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
+    ConstraintDescription: Must be a valid email address.
+
+  RepoUrl:
+    Type: String
+    Default: https://github.com/susumutomita/TenkaCloud.git
+    Description: >-
+      Public git URL of the TenkaCloud platform repo to deploy. Override only when
+      deploying a fork.
+
+  RepoRef:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional full commit SHA, branch or tag. Empty uses the pinned current source
+      in SourceDefaults below. Current sources must implement current-cloud-v1; an
+      incompatible ref fails before AWS changes. main is development/unreleased.
+
+  ProblemsRepoUrl:
+    Type: String
+    Default: https://github.com/susumutomita/TenkaCloudChallenge.git
+    Description: >-
+      Public git URL cloned into problems/. The selected platform validates catalogs for
+      its supported AWS and native coordination contracts. Docker/Compose exercises
+      run only in local hosting.
+
+  ProblemsRepoRef:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional full commit SHA, branch or tag. Empty uses the pinned current catalog.
+      Revisions must satisfy the selected platform's cloud catalog and execution
+      contracts; unsupported runtimes are not enabled.
+
+  ControlDataBackend:
+    Type: String
+    Default: dynamodb
+    AllowedValues:
+      - dynamodb
+      - turso
+    Description: >-
+      CDK_PARAM_CONTROL_DATA_BACKEND: dynamodb (default) keeps cloud control data in
+      provisioned DynamoDB tables. turso uses an existing remote SQL database with no
+      DynamoDB tables and requires TursoDatabaseUrl + TursoAuthTokenParameterName.
+      This selection does not migrate existing data between backends.
+
+  TursoDatabaseUrl:
+    Type: String
+    Default: ""
+    Description: >-
+      Turso libsql:// or https:// database URL (from `turso db show <db> --url`). Required when
+      ControlDataBackend is turso; leave empty for dynamodb.
+
+  TursoAuthTokenParameterName:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$'
+    ConstraintDescription: Leave empty for DynamoDB or enter one exact rooted SSM parameter name without wildcards.
+    Description: >-
+      SSM Parameter Store name (SecureString) holding the Turso auth token - create it
+      first, e.g. `aws ssm put-parameter --name /TenkaCloud/development/turso/auth-token
+      --type SecureString --value <token>`. Required for turso. The runtime Lambdas and
+      explicit destroy-all read it through SSM; deploy forwards the name, never the token.
+
+  RetainDataTables:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "false"
+      - "true"
+    Description: >-
+      CDK_PARAM_RETAIN_DATA_TABLES applies to cloud DynamoDB tables.
+      Default false, so ACTION=destroy removes them along with the stacks. Set true only
+      if you want the history kept: retained tables can keep billing until explicitly
+      removed. This is read at DEPLOY time and baked into the
+      stack template, so flipping it later has no effect on a stack that is already
+      deployed; re-deploy first, then destroy.
+
+  BunVersion:
+    Type: String
+    Default: 1.3.11
+    Description: Bun version installed in the build (matches the repo toolchain).
+
+  CodeBuildTimeoutMinutes:
+    Type: Number
+    Default: 90
+    MinValue: 15
+    MaxValue: 480
+    Description: CodeBuild timeout in minutes (a cloud deployment usually finishes in 15-30).
+
+Mappings:
+  SourceDefaults:
+    current-cloud-v1:
+      # Offline-verified current CLI source; live AWS deployment is not validated.
+      CurrentPlatformCommit: 9044932eb08da3442d49c3f4157eab3fe8acc177
+      CatalogCommit: 4bb3a116c545fc46ed6a39ffcc5117fb914947f4
+      Classification: candidate/unreleased
+
+Conditions:
+  UsesTurso: !Equals [!Ref ControlDataBackend, turso]
+  UsesTursoAuthToken: !And
+    - !Condition UsesTurso
+    - !Not [!Equals [!Ref TursoAuthTokenParameterName, ""]]
+  HasPlatformOverride: !Not [!Equals [!Ref RepoRef, ""]]
+  HasCatalogOverride: !Not [!Equals [!Ref ProblemsRepoRef, ""]]
+  HasAnyOverride: !Or
+    - !Condition HasPlatformOverride
+    - !Condition HasCatalogOverride
+  UsesAnyMainRef: !Or
+    - !Equals [!Ref RepoRef, main]
+    - !Equals [!Ref ProblemsRepoRef, main]
+
+Resources:
+  LauncherLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      # A dedicated group keeps launcher logs separate from application-owned logs.
+      LogGroupName: !Sub /tenkacloud/codebuild/lite-launcher-${Environment}
+      RetentionInDays: 1
+
+  # =====================================
+  # CodeBuild project: clones the repos, installs bun, builds the SPAs, bootstraps CDK,
+  # runs `make deploy`. NO_SOURCE -> the buildspec fetches its own source via git clone.
+  # =====================================
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub tenkacloud-lite-${Environment}
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        # CDK asset bundling can fall back to Docker; PrivilegedMode keeps it reliable.
+        PrivilegedMode: true
+        ImagePullCredentialsType: CODEBUILD
+        EnvironmentVariables:
+          - Name: DEFAULT_CLASSIFICATION
+            Value: !FindInMap [SourceDefaults, current-cloud-v1, Classification]
+            Type: PLAINTEXT
+          - Name: DEFAULT_REPO_REF
+            Value: !FindInMap [SourceDefaults, current-cloud-v1, CurrentPlatformCommit]
+            Type: PLAINTEXT
+          - Name: DEFAULT_PROBLEMS_REPO_REF
+            Value: !FindInMap [SourceDefaults, current-cloud-v1, CatalogCommit]
+            Type: PLAINTEXT
+          - Name: ENVIRONMENT
+            Value: !Ref Environment
+            Type: PLAINTEXT
+          - Name: ACTION
+            Value: !Ref Action
+            Type: PLAINTEXT
+          - Name: TENANT_ADMIN_EMAIL
+            Value: !Ref TenantAdminEmail
+            Type: PLAINTEXT
+          - Name: REPO_URL
+            Value: !Ref RepoUrl
+            Type: PLAINTEXT
+          - Name: REPO_REF
+            Value: !If [HasPlatformOverride, !Ref RepoRef, !FindInMap [SourceDefaults, current-cloud-v1, CurrentPlatformCommit]]
+            Type: PLAINTEXT
+          - Name: PROBLEMS_REPO_URL
+            Value: !Ref ProblemsRepoUrl
+            Type: PLAINTEXT
+          - Name: PROBLEMS_REPO_REF
+            Value: !If [HasCatalogOverride, !Ref ProblemsRepoRef, !FindInMap [SourceDefaults, current-cloud-v1, CatalogCommit]]
+            Type: PLAINTEXT
+          - Name: CONTROL_DATA_BACKEND
+            Value: !Ref ControlDataBackend
+            Type: PLAINTEXT
+          - Name: TURSO_DATABASE_URL
+            Value: !Ref TursoDatabaseUrl
+            Type: PLAINTEXT
+          - Name: TURSO_AUTH_TOKEN_PARAMETER_NAME
+            Value: !Ref TursoAuthTokenParameterName
+            Type: PLAINTEXT
+          - Name: RETAIN_DATA_TABLES
+            Value: !Ref RetainDataTables
+            Type: PLAINTEXT
+          - Name: BUN_VERSION
+            Value: !Ref BunVersion
+            Type: PLAINTEXT
+          - Name: JSII_DEPRECATED
+            Value: quiet
+            Type: PLAINTEXT
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              # Node 22 is the newest version the managed CodeBuild standard image ships;
+              # node 24 is not yet a managed runtime (aws/aws-codebuild-docker-images#795).
+              # bun drives the toolchain and Node only backs the CDK CLI shebang + esbuild.
+              runtime-versions:
+                nodejs: 22
+              commands:
+                - |
+                  if [ "${REPO_REF}" = "main" ] || [ "${PROBLEMS_REPO_REF}" = "main" ]; then
+                    release_classification="development/unreleased"
+                  elif [ "${REPO_REF}" = "${DEFAULT_REPO_REF}" ] && [ "${PROBLEMS_REPO_REF}" = "${DEFAULT_PROBLEMS_REPO_REF}" ]; then
+                    release_classification="${DEFAULT_CLASSIFICATION}"
+                  else
+                    release_classification="custom/unverified"
+                  fi
+                  echo "Release classification: ${release_classification}"
+
+                  checkout_repo_ref() {
+                    checkout_repo_url="$1"
+                    checkout_requested_ref="$2"
+                    checkout_destination="$3"
+                    checkout_label="$4"
+
+                    if printf '%s' "${checkout_requested_ref}" | grep -Eq '^[0-9a-fA-F]{40}$'; then
+                      echo "Fetching ${checkout_label} ${checkout_repo_url} @ immutable commit ${checkout_requested_ref}"
+                      if ! git init --quiet "${checkout_destination}"; then
+                        echo "Failed to initialize ${checkout_label} checkout."
+                        return 1
+                      fi
+                      if ! git -C "${checkout_destination}" remote add origin "${checkout_repo_url}"; then
+                        echo "Failed to configure ${checkout_label} origin."
+                        return 1
+                      fi
+                      if ! git -C "${checkout_destination}" fetch --depth 1 origin "${checkout_requested_ref}"; then
+                        echo "Failed to fetch ${checkout_label} commit ${checkout_requested_ref}; refusing to fall back to another ref."
+                        return 1
+                      fi
+                      if ! checkout_resolved_ref="$(git -C "${checkout_destination}" rev-parse --verify 'FETCH_HEAD^{commit}')"; then
+                        echo "Fetched ${checkout_label} ref did not resolve to a commit."
+                        return 1
+                      fi
+                      checkout_normalized_ref="$(printf '%s' "${checkout_requested_ref}" | tr '[:upper:]' '[:lower:]')"
+                      if [ "${checkout_resolved_ref}" != "${checkout_normalized_ref}" ]; then
+                        echo "Resolved ${checkout_label} commit ${checkout_resolved_ref} does not match requested ${checkout_normalized_ref}."
+                        return 1
+                      fi
+                      if ! git -C "${checkout_destination}" checkout --quiet --detach "${checkout_resolved_ref}"; then
+                        echo "Failed to check out ${checkout_label} commit ${checkout_resolved_ref}."
+                        return 1
+                      fi
+                    else
+                      echo "Cloning ${checkout_label} ${checkout_repo_url} @ ${checkout_requested_ref}"
+                      if ! git clone --depth 1 --branch "${checkout_requested_ref}" "${checkout_repo_url}" "${checkout_destination}"; then
+                        echo "Failed to clone ${checkout_label} ref ${checkout_requested_ref}; no fallback ref will be used."
+                        return 1
+                      fi
+                    fi
+                  }
+
+                  # Public OSS repositories: no auth / GitHub connection. A full commit SHA
+                  # uses fetch + detached checkout because `git clone --branch <sha>` fails.
+                  checkout_repo_ref "${REPO_URL}" "${REPO_REF}" repo platform || exit 1
+                  # Replace the platform's catalog submodule with the independently selected
+                  # problem catalog so third parties can ship their own repository.
+                  if [ ! -f repo/scripts/cloud-hosting/launcher-check.ts ]; then
+                    echo "Selected platform ref does not implement current-cloud-v1; refusing incompatible deployment."
+                    exit 1
+                  fi
+                  rm -rf repo/problems
+                  checkout_repo_ref "${PROBLEMS_REPO_URL}" "${PROBLEMS_REPO_REF}" repo/problems catalog || exit 1
+                - cd repo
+                - echo "Installing bun ${BUN_VERSION}"
+                - npm install -g "bun@${BUN_VERSION}"
+                - bun --version
+                # Frozen + ignore-scripts matches the repo supply-chain policy (make install_ci).
+                - bun install --frozen-lockfile --ignore-scripts
+            pre_build:
+              commands:
+                - cd "${CODEBUILD_SRC_DIR}/repo"
+                - |
+                  export AWS_REGION="${AWS_DEFAULT_REGION}"
+                  bun scripts/cloud-hosting/launcher-check.ts || exit 1
+                  export TENKACLOUD_ADMIN_EMAIL="${TENANT_ADMIN_EMAIL}"
+                  export CDK_PARAM_ENVIRONMENT="${ENVIRONMENT}"
+                  export CDK_PARAM_RETAIN_DATA_TABLES="${RETAIN_DATA_TABLES}"
+                  export CDK_PARAM_CONTROL_DATA_BACKEND="${CONTROL_DATA_BACKEND}"
+                  export CDK_PARAM_TURSO_DATABASE_URL="${TURSO_DATABASE_URL}"
+                  export CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME="${TURSO_AUTH_TOKEN_PARAMETER_NAME}"
+                  export ENV="${ENVIRONMENT}"
+            build:
+              commands:
+                - cd "${CODEBUILD_SRC_DIR}/repo"
+                - |
+                  if [ "${ACTION}" = "deploy" ]; then
+                    # Starting this reviewed build approves missing standard bootstrap and app IAM changes.
+                    make deploy ENV="${ENVIRONMENT}" || exit $?
+                  elif [ "${ACTION}" = "destroy" ]; then
+                    make destroy ENV="${ENVIRONMENT}" CLOUD_ARGS="--yes" || exit $?
+                  elif [ "${ACTION}" = "destroy-all" ]; then
+                    make destroy-all ENV="${ENVIRONMENT}" CLOUD_ARGS="--yes" || exit $?
+                  else
+                    echo "Current hosting supports deploy/destroy/destroy-all."; exit 2
+                  fi
+            post_build:
+              commands:
+                - |
+                  if [ "${CODEBUILD_BUILD_SUCCEEDING}" != "1" ]; then
+                    echo "Build failed; no deployment or cleanup success is claimed."; exit 1
+                  fi
+                  if [ "${ACTION}" = "destroy" ] || [ "${ACTION}" = "destroy-all" ]; then
+                    echo "Teardown finished. Finally, delete the launcher stack you created from this"
+                    echo "template to remove the CodeBuild project, its role, and its log group."
+                  elif [ "${ACTION}" = "deploy" ]; then
+                    echo "Deploy finished. The Admin Console + Participant Portal URLs are in the"
+                    echo "CloudFormation Outputs of tenkacloud-cloud / tenkacloud-cloud-problem-deploy (with environment suffix outside development)."
+                  else
+                    echo "No supported launcher action completed."
+                  fi
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref LauncherLogGroup
+      TimeoutInMinutes: !Ref CodeBuildTimeoutMinutes
+
+  # =====================================
+  # IAM role for the deploy build
+  # =====================================
+  # Preserve the reviewed launcher caller policy.
+  # This is privileged bootstrap/deployment authority, including IAM, and persists
+  # after setup. Review all actions and who may create/update/start this build.
+  # Current CDK deployment uses standard bootstrap roles; no custom managed policy
+  # is installed or attached.
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub tenkacloud-lite-${Environment}-codebuild-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Preserved caller authority for cdk bootstrap, deploy and direct CLI operations.
+              # This is intentionally broad and is not a least-privilege policy.
+              - Sid: DeployServices
+                Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - iam:*
+                  - lambda:*
+                  - apigateway:*
+                  - cognito-idp:*
+                  - cognito-identity:*
+                  - dynamodb:*
+                  - s3:*
+                  - cloudfront:*
+                  - states:*
+                  - events:*
+                  - sns:*
+                  - sqs:*
+                  - ecr:*
+                  - codebuild:*
+                  - logs:*
+                Resource: "*"
+              # Authentication tokens are referenced through SSM Parameter Store.
+              - Sid: SsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                  - ssm:PutParameter
+                  - ssm:DeleteParameter
+                  - ssm:AddTagsToResource
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/TenkaCloud/*
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cdk-bootstrap/*
+              - Sid: KmsForBootstrapAndAssets
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: "*"
+              # cdk deploy assumes the bootstrap roles to publish assets / run the change set.
+              - Sid: AssumeCdkRoles
+                Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource:
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/cdk-*
+              - Sid: Identity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              # Read-only deploy preflight and explicit Turso destroy-all use this exact token.
+              # The parameter pattern forbids wildcards before this IAM policy is created.
+              - !If
+                - UsesTursoAuthToken
+                - Sid: TursoTokenForCleanup
+                  Effect: Allow
+                  Action:
+                    - ssm:GetParameter
+                  Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${TursoAuthTokenParameterName}
+                - !Ref AWS::NoValue
+
+Outputs:
+  ReleaseClassification:
+    Description: Saved source classification; build logs also classify one-build overrides.
+    Value: !If
+      - UsesAnyMainRef
+      - development/unreleased
+      - !If [HasAnyOverride, custom/unverified, !FindInMap [SourceDefaults, current-cloud-v1, Classification]]
+
+  CodeBuildProjectName:
+    Description: CodeBuild project name. Review privileged role and source refs before "Start build".
+    Value: !Ref CodeBuildProject
+
+  StartBuildConsoleUrl:
+    Description: >-
+      After reviewing the broad role and source refs, "Start build" approves deploy and
+      missing standard bootstrap (default AdministratorAccess execution). "Start build with overrides" with
+      ACTION=destroy removes current platform stacks and their data unless retention was
+      explicitly enabled at deploy time. ACTION=destroy-all additionally removes retained
+      resources owned by the selected platform stacks and verified deployment-owned
+      Turso control-data rows. Ordinary destroy preserves external Turso rows.
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-${Environment}?region=${AWS::Region}
+
+  # Issue #2696: onboarding drill checkpoint 1 ("launcher created"). Deliberately a fixed,
+  # public code -- it proves the learner reached this Outputs tab, not cryptographic
+  # possession. Keep the existing checkpoint stable for the cloud-hosting onboarding drill
+  # (pinned by infrastructure/test/cloud-hosting/launcher.test.ts).
+  OnboardingDrillCheckpoint:
+    Description: >-
+      Onboarding drill checkpoint 1. Paste this code into the "Deploy your own TenkaCloud
+      cloud hosting" drill in the landing demo portal to score the "launcher created" step.
+    Value: TC{LITE-LAUNCHER-READY}

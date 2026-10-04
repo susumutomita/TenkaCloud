@@ -10,7 +10,7 @@ const URL_BASE = "https://coord.example.com";
 function mockFetch(status: number, body?: unknown) {
   return vi.fn().mockResolvedValue({
     status,
-    json: async () => body ?? {},
+    json: async () => (body === undefined ? {} : body),
   });
 }
 
@@ -30,6 +30,48 @@ describe("submitCoordinationOp", () => {
     expect((init as RequestInit).method).toBe("POST");
     expect((init as RequestInit).headers).toMatchObject({ authorization: "Bearer key-1" });
     expect((init as RequestInit).body).toBe(JSON.stringify({ op: { kind: "ally" } }));
+  });
+
+  it("forwards a caller-owned operation key unchanged for safe retries", async () => {
+    const f = mockFetch(200, { projection: {} });
+    vi.stubGlobal("fetch", f);
+    await submitCoordinationOp(
+      URL_BASE,
+      "key-1",
+      { kind: "move" },
+      undefined,
+      "same-operation-key",
+    );
+    await submitCoordinationOp(
+      URL_BASE,
+      "key-1",
+      { kind: "move" },
+      undefined,
+      "same-operation-key",
+    );
+    for (const [, init] of f.mock.calls)
+      expect(init.headers["Idempotency-Key"]).toBe("same-operation-key");
+  });
+
+  it("pins retries to the caller's run without changing the operation or key", async () => {
+    const f = mockFetch(409, { error: "coordination_conflict" });
+    vi.stubGlobal("fetch", f);
+    const runId = "01K00000000000000000000004";
+    for (let attempt = 0; attempt < 2; attempt++)
+      expect(
+        await submitCoordinationOp(
+          URL_BASE,
+          "key-1",
+          { kind: "move" },
+          undefined,
+          "same-operation-key",
+          runId,
+        ),
+      ).toEqual({ kind: "conflict" });
+    for (const [, init] of f.mock.calls) {
+      expect(init.body).toBe(JSON.stringify({ op: { kind: "move" }, runId }));
+      expect(init.headers["Idempotency-Key"]).toBe("same-operation-key");
+    }
   });
 
   it("should map 422 to rejected with the backend error", async () => {
@@ -65,8 +107,37 @@ describe("submitCoordinationOp", () => {
     expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({ kind: "conflict" });
   });
 
-  it("should map 503 to unavailable", async () => {
-    vi.stubGlobal("fetch", mockFetch(503));
+  it("treats a changed run as a terminal rejection instead of a retryable conflict", async () => {
+    vi.stubGlobal("fetch", mockFetch(409, { error: "coordination_run_changed" }));
+    expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({
+      kind: "rejected",
+      error: "coordination_run_changed",
+    });
+  });
+
+  it.each([null, { error: "coordination_conflict" }])(
+    "preserves retryable conflicts for other response bodies (%s)",
+    async (body) => {
+      vi.stubGlobal("fetch", mockFetch(409, body));
+      expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({ kind: "conflict" });
+    },
+  );
+
+  it("preserves a retryable conflict when its body cannot be decoded", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 409,
+        json: async () => {
+          throw new Error("bad json");
+        },
+      }),
+    );
+    expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({ kind: "conflict" });
+  });
+
+  it.each([429, 500, 502, 503, 504])("maps transient HTTP %s to unavailable", async (status) => {
+    vi.stubGlobal("fetch", mockFetch(status));
     expect(await submitCoordinationOp(URL_BASE, "k", {})).toEqual({ kind: "unavailable" });
   });
 

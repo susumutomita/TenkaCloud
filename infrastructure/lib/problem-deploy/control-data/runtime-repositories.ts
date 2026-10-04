@@ -110,7 +110,7 @@ export function createControlDataRepositoryResolver(
 export function createDefaultControlDataRuntime(): ControlDataRuntime {
   return createControlDataRuntime({
     env: process.env,
-    ssm: new SSMClient({}),
+    ssm: new SSMClient({ ignoreConfiguredEndpointUrls: true }),
     createClient,
   });
 }

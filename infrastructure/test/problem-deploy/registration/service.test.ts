@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeploymentRecord } from "../../../lib/problem-deploy/control-data/domain/deployments";
 import type { EventRecord } from "../../../lib/problem-deploy/control-data/domain/events";
@@ -13,6 +14,11 @@ import {
   registrationSummary,
 } from "../../../lib/problem-deploy/handlers/shared/event-registration";
 import { makeSqliteExecutor } from "../control-data/control-data-write.test-helpers";
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return { ...actual, randomInt: vi.fn(actual.randomInt) };
+});
 
 function present<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Required fixture is missing");
@@ -519,19 +525,28 @@ describe("self-registration with real SQLite repositories", () => {
     await expect(open()).rejects.toThrow("closed");
   });
 
-  it("reports concurrent configuration changes and bounds allocation retries", async () => {
+  it.each([
+    { schedule: "maximum jitter", useMaximum: true, attempts: 11, elapsed: 3_000 },
+    { schedule: "minimum jitter", useMaximum: false, attempts: 100, elapsed: 990 },
+  ])("bounds allocation retries under $schedule", async ({ useMaximum, attempts, elapsed }) => {
     const update = vi.spyOn(events, "updateRegistration").mockResolvedValue("conflict");
     await expect(open()).rejects.toThrow("conflict");
     update.mockClear();
     vi.useFakeTimers();
+    vi.mocked(randomInt).mockImplementation((minimum, maximum) =>
+      useMaximum && typeof maximum === "number" ? maximum - 1 : minimum,
+    );
+    const started = Date.now();
     try {
       const failure = expect(claim(1)).rejects.toThrow("conflict");
       await vi.runAllTimersAsync();
       await failure;
+      expect(Date.now() - started).toBe(elapsed);
     } finally {
+      vi.mocked(randomInt).mockReset();
       vi.useRealTimers();
     }
-    expect(update).toHaveBeenCalledTimes(12);
+    expect(update).toHaveBeenCalledTimes(attempts);
     expect(
       (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
     ).toHaveLength(0);
@@ -588,6 +603,8 @@ describe("self-registration with real SQLite repositories", () => {
       return snapshot;
     });
     vi.useFakeTimers();
+    // The worst synchronized schedule must still make progress; do not rely on lucky jitter.
+    vi.mocked(randomInt).mockImplementation(() => 10);
     try {
       const allocations = Promise.all(Array.from({ length: 99 }, (_, i) => claim(i + 1)));
       await vi.runAllTimersAsync();
@@ -600,6 +617,7 @@ describe("self-registration with real SQLite repositories", () => {
       ).toHaveLength(99);
       await expect(claim(100)).rejects.toThrow("full");
     } finally {
+      vi.mocked(randomInt).mockReset();
       vi.useRealTimers();
     }
   });

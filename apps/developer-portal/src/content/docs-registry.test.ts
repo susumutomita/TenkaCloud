@@ -48,22 +48,6 @@ const PROBLEM_AUTHOR_MANUAL_JA_SOURCE = readFileSync(
   "src/app/developers/docs/manual/problem-author/page.ja.mdx",
   "utf8",
 );
-const LITE_SETTINGS_SOURCE = readFileSync(
-  "src/app/developers/docs/reference/lite-settings/page.mdx",
-  "utf8",
-);
-const LITE_SETTINGS_JA_SOURCE = readFileSync(
-  "src/app/developers/docs/reference/lite-settings/page.ja.mdx",
-  "utf8",
-);
-const LITE_MESSAGES_SOURCE = readFileSync(
-  "src/app/developers/docs/reference/lite-messages/page.mdx",
-  "utf8",
-);
-const LITE_MESSAGES_JA_SOURCE = readFileSync(
-  "src/app/developers/docs/reference/lite-messages/page.ja.mdx",
-  "utf8",
-);
 
 describe("docs registry — role manuals (#2818)", () => {
   it("should expose exactly the role chooser and four manuals in their own section", () => {
@@ -77,27 +61,25 @@ describe("docs registry — role manuals (#2818)", () => {
     for (const href of ROLE_MANUAL_HREFS) expect(routes).toContain(href);
   });
 
-  it("should find organizer database and parameter guidance in both languages", () => {
-    const english = searchIndex("organizer database parameters DynamoDB Turso");
-    expect(english.some((result) => result.href === "/developers/docs/manual/organizer/")).toBe(
-      true,
-    );
-
-    const japanese = searchIndex("競技開催者 データベース パラメータ");
-    expect(japanese.some((result) => result.href === "/developers/docs/manual/organizer/")).toBe(
-      true,
-    );
+  it("should find current organizer storage guidance in both languages", () => {
+    for (const query of [
+      "organizer database parameters SQLite Turso",
+      "競技開催者 データベース パラメータ",
+    ]) {
+      expect(
+        searchIndex(query).some((result) => result.href === "/developers/docs/manual/organizer/"),
+      ).toBe(true);
+    }
   });
 
-  it("should document the actual backend switch and its safety boundary in both languages", () => {
-    for (const source of [LITE_SETTINGS_SOURCE, LITE_SETTINGS_JA_SOURCE]) {
-      expect(source).toContain("CDK_PARAM_CONTROL_DATA_BACKEND");
-      expect(source).toContain("CDK_PARAM_TURSO_DATABASE_URL");
-      expect(source).toContain("CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME");
-      expect(source).toMatch(/do not synchronize|同期されません/);
+  it("should describe current cloud support without retired setup commands", () => {
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("has not been established");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("environment names are not an IAM security boundary");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("環境名は IAM の分離境界になりません");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("実 AWS への配置は未検証");
+    for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
+      for (const service of ["Lambda", "Turso", "DynamoDB"]) expect(source).toContain(service);
     }
-    expect(ORGANIZER_MANUAL_SOURCE).toContain("has not been");
-    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("ライブ検証は未実施");
   });
 
   it("should keep WordPress out of participant onboarding", () => {
@@ -117,20 +99,66 @@ describe("docs registry — role manuals (#2818)", () => {
   it("should use the public Make targets in the participant manual", () => {
     for (const source of [PARTICIPANT_MANUAL_SOURCE, PARTICIPANT_MANUAL_JA_SOURCE]) {
       expect(source).toContain("make local");
-      expect(source).toContain("make local-down");
+      expect(source).toContain("make down");
+      expect(source).not.toContain("make local-down");
+      expect(source).not.toContain("make host");
       expect(source).not.toContain("bun run tenkacloud local");
     }
   });
 
-  it("should separate the executable Lite path from unverified SaaS guidance", () => {
+  it("should document the unified local flow and scoped cloud commands", () => {
     for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
-      expect(source).toContain("lite-pipeline.yaml");
-      expect(source).toContain("CodeBuild");
-      expect(source).toContain("CodePipeline");
-      expect(source).toMatch(/no recent|最近の/);
-      expect(source).toContain("/developers/docs/reference/lite-settings/");
-      expect(source).toContain("/developers/docs/reference/lite-messages/");
+      for (const command of ["make local", "make down", "make deploy", "make destroy"]) {
+        expect(source).toContain(command);
+      }
+      expect(source).not.toContain("lite-pipeline.yaml");
+      expect(source).not.toContain("make deploy-saas");
+      expect(source).toContain("106");
+      for (const detail of [
+        "512",
+        "40",
+        "100",
+        "105",
+        "4096",
+        "Start / resume",
+        "Stop (keep data)",
+        "RAM",
+        "--max-active-per-team",
+        "--max-active-environments",
+        "--container-memory-mib",
+      ]) {
+        expect(source).toContain(detail);
+      }
+      expect(source).not.toContain("40 total jobs");
+      expect(source).not.toContain("100 jobs のため拒否");
     }
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("reviewed IAM setup");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("deletes platform-owned data by default");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("leaves external Turso rows");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("make destroy-all");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("--drain-events");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("権限設定");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("データを保持");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("基盤とデフォルトの所有データを削除");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("外部 Turso の行は残し");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("make destroy-all");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("--drain-events");
+  });
+
+  it("should distinguish participant resume, disk retention and representative real terminal evidence", () => {
+    for (const source of [PARTICIPANT_MANUAL_SOURCE, PARTICIPANT_MANUAL_JA_SOURCE]) {
+      for (const detail of ["Start / resume", "Stop (keep data)", "RAM", "PostgreSQL", "15"]) {
+        expect(source).toContain(detail);
+      }
+    }
+    expect(PARTICIPANT_MANUAL_SOURCE).toContain("does not automatically evict or reset");
+    expect(PARTICIPANT_MANUAL_SOURCE).toContain("real Docker/browser rehearsal");
+    expect(PARTICIPANT_MANUAL_SOURCE).toContain("does not verify every one");
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("実 Docker とブラウザ");
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("全問題を通して確認したわけではありません");
+    expect(PARTICIPANT_MANUAL_SOURCE).toContain("remain stopped until you resume");
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("自動退避や初期化は行いません");
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("再開するまで停止したまま");
   });
 
   it("should show the problem-author publication decision flow in both languages", () => {
@@ -143,40 +171,19 @@ describe("docs registry — role manuals (#2818)", () => {
   });
 });
 
-describe("docs registry — Lite technical references", () => {
-  const referenceHrefs = [
-    "/developers/docs/reference/lite-settings/",
-    "/developers/docs/reference/lite-messages/",
-  ];
-
-  it("should register the setting contract and message catalog", () => {
-    for (const href of referenceHrefs) expect(allRoutes()).toContain(href);
-    expect(findDocBySlug("reference/lite-settings")).toBeDefined();
-    expect(findDocBySlug("reference/lite-messages")).toBeDefined();
+describe("docs registry — current references", () => {
+  it("should remove retired Lite routes from navigation and search", () => {
+    for (const slug of ["reference/lite-settings", "reference/lite-messages"]) {
+      expect(findDocBySlug(slug)).toBeUndefined();
+      expect(allRoutes()).not.toContain(`/developers/docs/${slug}/`);
+    }
+    expect(DOC_SECTIONS.some((section) => section.title === "Legacy reference")).toBe(false);
   });
 
-  it("should define ExternalId format and the exact wizard message", () => {
-    for (const source of [LITE_SETTINGS_SOURCE, LITE_SETTINGS_JA_SOURCE]) {
-      expect(source).toContain("16");
-      expect(source).toContain("128");
-      expect(source).toContain("_ = , . @ : / -");
-    }
-    for (const source of [LITE_MESSAGES_SOURCE, LITE_MESSAGES_JA_SOURCE]) {
-      expect(source).toContain("16〜128文字で、半角英数字と _ = , . @ : / - を使ってください");
-      expect(source).toMatch(/System action|システムの処置/);
-      expect(source).toMatch(/Operator action|利用者の処置/);
-    }
-  });
-
-  it("should make settings and errors findable in Japanese and English", () => {
+  it("should keep current setup and recovery guidance searchable", () => {
     expect(
-      searchIndex("ExternalId 16 128").some(
-        (result) => result.href === "/developers/docs/reference/lite-settings/",
-      ),
-    ).toBe(true);
-    expect(
-      searchIndex("設定 メッセージ 要因 処置").some(
-        (result) => result.href === "/developers/docs/reference/lite-messages/",
+      searchIndex("local-reset organizer key").some(
+        (result) => result.href === "/developers/docs/getting-started/",
       ),
     ).toBe(true);
   });
@@ -253,8 +260,8 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
     expect(section?.pages.some((p) => p.href === ARCHITECTURE_HREF)).toBe(true);
   });
 
-  it("should find the deploy-paths page by a pipeline term in search", () => {
-    const results = searchIndex("CodePipeline tenant rollout");
+  it("should find the deploy-paths page by current deployment status", () => {
+    const results = searchIndex("standard CDKToolkit");
     expect(results.some((r) => r.href === "/developers/docs/operate/deploy-paths/")).toBe(true);
   });
 
@@ -278,11 +285,13 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
     expect(provenanceResults.some((r) => r.href === USE_EXISTING_PACK_HREF)).toBe(true);
   });
 
-  it("should keep the event-creation step preview until live verification is complete", () => {
-    expect(USE_EXISTING_PACK_SOURCE).toContain(
-      '## 4. Create the event <MaturityBadge level="preview" />',
-    );
-    expect(USE_EXISTING_PACK_SOURCE).toContain("pending live batch verification");
+  it("should distinguish missing pack event integration from missing live evidence", () => {
+    expect(USE_EXISTING_PACK_SOURCE).toContain("Event integration is unavailable");
+    expect(USE_EXISTING_PACK_SOURCE).toContain("implementation gap");
+    expect(USE_EXISTING_PACK_SOURCE).toContain("Installed packs do not appear");
+    expect(USE_EXISTING_PACK_SOURCE).not.toContain("make pack-activate ARGS=");
+    expect(FIRST_PACK_SOURCE).toContain("does not add");
+    expect(FIRST_PACK_SOURCE).not.toContain("--tenant acme");
   });
 
   it("should keep architecture search headings aligned with the actual page", () => {
@@ -295,8 +304,8 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
     expect(page?.headings).toEqual(headings);
     expect(source).not.toMatch(/^## /m);
     for (const [term, anchor] of [
-      ["Cloud components", "cloud-components"],
-      ["Local play and Docker", "local-play-and-docker"],
+      ["AWS exercises and cloud platform", "cloud-components"],
+      ["Local competition and Docker", "local-play-and-docker"],
     ]) {
       expect(
         searchIndex(term).some((result) => result.href === `${ARCHITECTURE_HREF}#${anchor}`),
@@ -307,5 +316,47 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
   it("should find the architecture page by a Japanese search term", () => {
     const results = searchIndex("アーキテクチャ プレーン");
     expect(results.some((r) => r.href === ARCHITECTURE_HREF)).toBe(true);
+  });
+});
+
+describe("integration candidate documentation contract", () => {
+  it("should keep both quickstarts explicit about safe shutdown and local-only Docker scope", () => {
+    for (const filename of ["page.mdx", "page.ja.mdx"]) {
+      const source = readFileSync(`src/app/developers/docs/getting-started/${filename}`, "utf8");
+      for (const command of ["make local", "make down", "make deploy", "make destroy"])
+        expect(source).toContain(command);
+      expect(source).not.toContain("make host");
+      expect(source).not.toContain("make local-down");
+      expect(source).toMatch(/preserv|保持/);
+      expect(source).toMatch(
+        /Docker\/Compose exercises are local-only|Docker \/ Compose 問題はローカル開催専用/,
+      );
+      expect(source).toMatch(/not listed in the cloud catalog|クラウドのカタログには表示しません/);
+      expect(source).toContain("Cryptography Battle");
+      expect(source).toMatch(
+        /Live AWS and hosted Turso event capacity remain unverified|実 AWS・hosted Turso での大会性能は未検証/,
+      );
+      expect(source).toMatch(/reviewed IAM|権限設定/);
+      expect(source).toMatch(/generic CloudFormation|汎用 CloudFormation/);
+      expect(source).toContain("106");
+      expect(source).toMatch(/in progress|進行中/);
+    }
+  });
+
+  it("should stop advertising executable legacy hosting in current search metadata", () => {
+    for (const slug of [
+      "getting-started",
+      "manual/organizer",
+      "operate/deploy-paths",
+      "operate/run-an-event",
+    ]) {
+      const page = findDocBySlug(slug);
+      expect(page?.maturity).toBe("preview");
+      expect(page?.body).not.toContain("currently recommended Lite deployment");
+      expect(page?.body).not.toContain("executable Lite procedure");
+      expect(page?.body).not.toContain("CDK_PARAM_CONTROL_DATA_BACKEND");
+      expect(page?.body).toContain("make local");
+      expect(page?.body).toContain("make down");
+    }
   });
 });

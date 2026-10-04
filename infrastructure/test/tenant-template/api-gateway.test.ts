@@ -3,9 +3,8 @@ import { Template } from "aws-cdk-lib/assertions";
 import { UserPool } from "aws-cdk-lib/aws-cognito";
 import { Code, Function as LambdaFunction } from "aws-cdk-lib/aws-lambda";
 import { describe, expect, it } from "vitest";
-import { ApiGateway } from "../../lib/tenant-template/api-gateway";
-import type { CustomApiKey } from "../../lib/tenant-template/interfaces/custom-api-key";
-import { LAMBDA_NODEJS_RUNTIME } from "../../lib/utils/lambda-runtime";
+import { ApiGateway } from "../../lib/tenant-template/api-gateway.js";
+import { LAMBDA_NODEJS_RUNTIME } from "../../lib/utils/lambda-runtime.js";
 
 /**
  * tenant API Gateway の resource / method shape を pin する。サイドバー「デプロイ履歴」が引く
@@ -33,38 +32,32 @@ function buildHarness() {
     code: Code.fromInline("exports.handler = async () => ({ statusCode: 200 })"),
     handler: "index.handler",
   });
-  const apiKey: CustomApiKey = {
-    id: "key-id",
-    apiKey: { keyId: "k", keyArn: "arn:aws:apigateway:::/apikeys/k", keyName: "k" },
-    apiKeyValue: "val",
-  };
   new ApiGateway(stack, "ApiGateway", {
     tenantId: "tenant-acme",
-    isPooledDeploy: false,
-    idpDetails: {
-      idpName: "COGNITO",
-      details: {
-        userPoolId: "u",
-        appClientId: "c",
-        cognitoDomain: "d",
-        authorizationServerUrl: "https://example",
-        authorizerArn: "arn",
-      },
-    },
     userPool,
     deployApiLambda: fn,
     eventApiLambda: eventFn,
     competitorAccountsApiLambda: competitorAccountsFn,
-    apiKeyBasicTier: apiKey,
-    apiKeyStandardTier: apiKey,
-    apiKeyPremiumTier: apiKey,
-    apiKeyPlatinumTier: apiKey,
   });
   return Template.fromStack(stack);
 }
 
 describe("tenant ApiGateway", () => {
   const tpl = buildHarness();
+
+  it("allows Idempotency-Key on browser preflight for current create and bulk clients", () => {
+    const options = Object.values(tpl.findResources("AWS::ApiGateway::Method")).filter(
+      (resource) => resource.Properties.HttpMethod === "OPTIONS",
+    );
+    expect(options.length).toBeGreaterThan(0);
+    for (const method of options) {
+      const headers =
+        method.Properties.Integration.IntegrationResponses[0].ResponseParameters[
+          "method.response.header.Access-Control-Allow-Headers"
+        ];
+      expect(headers).toContain("Idempotency-Key");
+    }
+  });
 
   /** PathPart で resource を 1 件抜く (`hasResourceProperties` だと 1 件以上の存在確認のみ)。 */
   function findResource(pathPart: string) {
@@ -221,33 +214,10 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("should bind GET /admin/audit-log and GET /admin/audit-log/export to the EventApi integration (#1292)", () => {
-    const adminResourceId = Object.entries(
-      tpl.findResources("AWS::ApiGateway::Resource", {
-        Properties: { PathPart: "admin" },
-      }),
-    )[0]?.[0];
-    expect(adminResourceId).toBeDefined();
-    const auditLogResourceId = Object.entries(
-      tpl.findResources("AWS::ApiGateway::Resource", {
-        Properties: { ParentId: { Ref: adminResourceId }, PathPart: "audit-log" },
-      }),
-    )[0]?.[0];
-    expect(auditLogResourceId).toBeDefined();
-    const exportResourceId = Object.entries(
-      tpl.findResources("AWS::ApiGateway::Resource", {
-        Properties: { ParentId: { Ref: auditLogResourceId }, PathPart: "export" },
-      }),
-    )[0]?.[0];
-    expect(exportResourceId).toBeDefined();
-    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
-      HttpMethod: "GET",
-      ResourceId: { Ref: auditLogResourceId },
-    });
-    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
-      HttpMethod: "GET",
-      ResourceId: { Ref: exportResourceId },
-    });
+  it("does not expose retired audit list or export resources", () => {
+    expect(findResource("admin")).toBeDefined();
+    expect(findResource("audit-log")).toBeUndefined();
+    expect(findResource("export")).toBeUndefined();
   });
 
   it("should bind GET and POST /admin/capacity to the EventApi integration (#2410 / #2680)", () => {

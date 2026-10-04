@@ -2,6 +2,8 @@ import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Cards from "@cloudscape-design/components/cards";
+import ColumnLayout from "@cloudscape-design/components/column-layout";
+import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Link from "@cloudscape-design/components/link";
@@ -142,10 +144,18 @@ function ProblemPackGuidanceModal({
  * shortDescription / tag literal) は author が書いた JP 文字列なので i18n 対象外
  * (= 別 issue で metadata に \`description_en\` 等を加える必要がある)。
  */
-export function ProblemsPage() {
+export function ProblemsPage({
+  localHost = false,
+  supportedProblemIds,
+}: {
+  localHost?: boolean;
+  supportedProblemIds?: ReadonlySet<string>;
+}) {
   const navigate = useNavigate();
   const t = useT();
-  const problems = listProblemSummaries();
+  const problems = listProblemSummaries().filter(
+    (problem) => supportedProblemIds === undefined || supportedProblemIds.has(problem.id),
+  );
   const [criteria, setCriteria] = useState<ProblemFilterCriteria>(EMPTY_FILTER_CRITERIA);
   const [packGuidanceOpen, setPackGuidanceOpen] = useState(false);
 
@@ -191,7 +201,7 @@ export function ProblemsPage() {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description={t("problems.description")}
+        description={localHost ? undefined : t("problems.description")}
         counter={
           isFilterActive(criteria)
             ? `(${filtered.length} / ${problems.length})`
@@ -204,96 +214,107 @@ export function ProblemsPage() {
                 {t("problems.clear_filter")}
               </Button>
             ) : null}
-            <Button
-              iconName="add-plus"
-              onClick={openPackGuidance}
-              data-testid="problem-pack-guidance-open-header"
-            >
-              {t("problems.pack_guidance_open")}
-            </Button>
+            {!localHost && (
+              <Button
+                iconName="add-plus"
+                onClick={openPackGuidance}
+                data-testid="problem-pack-guidance-open-header"
+              >
+                {t("problems.pack_guidance_open")}
+              </Button>
+            )}
           </SpaceBetween>
         }
       >
         {t("problems.header")}
       </Header>
 
-      <SpaceBetween size="s">
-        <Input
-          type="search"
-          value={criteria.search}
-          placeholder={t("problems.search_placeholder")}
-          onChange={({ detail }) => setCriteria((prev) => ({ ...prev, search: detail.value }))}
-        />
-        <SpaceBetween direction="horizontal" size="s">
-          <SegmentedControl
-            selectedId={criteria.categories.length === 1 ? criteria.categories[0] : "all"}
-            options={categorySegments}
-            label={t("problems.category_label")}
-            onChange={({ detail }) =>
-              setCriteria((prev) => ({
-                ...prev,
-                categories:
-                  detail.selectedId === "all"
-                    ? []
-                    : [detail.selectedId as ProblemSummary["category"]],
-              }))
-            }
+      <SpaceBetween size="m">
+        <FormField label={t("problems.search_label")} stretch>
+          <Input
+            type="search"
+            value={criteria.search}
+            placeholder={t("problems.search_placeholder")}
+            onChange={({ detail }) => setCriteria((prev) => ({ ...prev, search: detail.value }))}
           />
-        </SpaceBetween>
-        <SpaceBetween direction="horizontal" size="s">
-          <Multiselect
-            placeholder={t("problems.difficulty_placeholder")}
-            options={difficultyOptions}
-            selectedOptions={difficultySelected}
-            tokenLimit={5}
-            onChange={({ detail }) =>
-              setCriteria((prev) => ({
-                ...prev,
-                difficulties: detail.selectedOptions
-                  .map((o) => Number(o.value))
-                  .filter((n): n is DifficultyLevel =>
-                    DIFFICULTY_LEVELS.includes(n as DifficultyLevel),
-                  ),
-              }))
-            }
-          />
-          <Multiselect
-            placeholder={
-              criteria.tagMatchMode === "and"
-                ? t("problems.tag_placeholder_and")
-                : t("problems.tag_placeholder_or")
-            }
-            options={tagOptions}
-            selectedOptions={tagSelected}
-            tokenLimit={10}
-            // タグ数が増えると dropdown を縦スクロールで探すのが辛い (= 利用者報告)。
-            // filteringType="auto" で dropdown 上部に inline search box を出す。
-            filteringType="auto"
-            filteringPlaceholder={t("problems.tag_filter_placeholder")}
-            onChange={({ detail }) =>
-              setCriteria((prev) => ({
-                ...prev,
-                tags: detail.selectedOptions
-                  .map((o) => o.value)
-                  .filter((v): v is string => typeof v === "string"),
-              }))
-            }
-          />
-          {criteria.tags.length > 1 && (
-            <Button
-              onClick={() =>
+        </FormField>
+        <FormField label={t("problems.theme_label")} stretch>
+          <SpaceBetween size="xs">
+            <Multiselect
+              placeholder={
+                criteria.tagMatchMode === "and"
+                  ? t("problems.tag_placeholder_and")
+                  : t("problems.tag_placeholder_or")
+              }
+              options={tagOptions}
+              selectedOptions={tagSelected}
+              tokenLimit={10}
+              filteringType="auto"
+              filteringPlaceholder={t("problems.tag_filter_placeholder")}
+              filteringAriaLabel={t("problems.tag_filter_placeholder")}
+              empty={t("problems.theme_empty")}
+              noMatch={t("problems.theme_no_match")}
+              onChange={({ detail }) =>
                 setCriteria((prev) => ({
                   ...prev,
-                  tagMatchMode: prev.tagMatchMode === "and" ? "or" : "and",
+                  tags: detail.selectedOptions
+                    .map((o) => o.value)
+                    .filter((v): v is string => typeof v === "string"),
                 }))
               }
-            >
-              {criteria.tagMatchMode === "and"
-                ? t("problems.tag_match_and_button")
-                : t("problems.tag_match_or_button")}
-            </Button>
-          )}
-        </SpaceBetween>
+            />
+            {criteria.tags.length > 1 && (
+              <Button
+                onClick={() =>
+                  setCriteria((prev) => ({
+                    ...prev,
+                    tagMatchMode: prev.tagMatchMode === "and" ? "or" : "and",
+                  }))
+                }
+              >
+                {criteria.tagMatchMode === "and"
+                  ? t("problems.tag_match_and_button")
+                  : t("problems.tag_match_or_button")}
+              </Button>
+            )}
+          </SpaceBetween>
+        </FormField>
+        <ColumnLayout columns={2}>
+          <FormField label={t("problems.category_label")}>
+            <SegmentedControl
+              selectedId={criteria.categories.length === 1 ? criteria.categories[0] : "all"}
+              options={categorySegments}
+              label={t("problems.category_label")}
+              onChange={({ detail }) =>
+                setCriteria((prev) => ({
+                  ...prev,
+                  categories:
+                    detail.selectedId === "all"
+                      ? []
+                      : [detail.selectedId as ProblemSummary["category"]],
+                }))
+              }
+            />
+          </FormField>
+          <FormField label={t("problems.difficulty_label")}>
+            <Multiselect
+              placeholder={t("problems.difficulty_placeholder")}
+              options={difficultyOptions}
+              selectedOptions={difficultySelected}
+              tokenLimit={5}
+              onChange={({ detail }) =>
+                setCriteria((prev) => ({
+                  ...prev,
+                  difficulties: detail.selectedOptions
+                    .map((o) => Number(o.value))
+                    .filter((n): n is DifficultyLevel =>
+                      DIFFICULTY_LEVELS.includes(n as DifficultyLevel),
+                    ),
+                }))
+              }
+            />
+          </FormField>
+        </ColumnLayout>
       </SpaceBetween>
 
       <Cards
@@ -345,11 +366,17 @@ export function ProblemsPage() {
               id: "description",
               content: (item) => <Box variant="p">{item.shortDescription}</Box>,
             },
-            {
-              id: "cost",
-              header: t("problem_cost.header"),
-              content: (item) => <ProblemCostSummary estimate={item.costEstimate} t={t} />,
-            },
+            ...(!localHost
+              ? [
+                  {
+                    id: "cost",
+                    header: t("problem_cost.header"),
+                    content: (item: ProblemSummary) => (
+                      <ProblemCostSummary estimate={item.costEstimate} t={t} />
+                    ),
+                  },
+                ]
+              : []),
             {
               id: "tags",
               header: t("problems.tags_header"),
@@ -391,8 +418,12 @@ export function ProblemsPage() {
             ) : (
               <SpaceBetween size="s">
                 <Box variant="p">{t("problems.empty")}</Box>
-                <Box color="text-body-secondary">{t("problems.pack_guidance_empty_hint")}</Box>
-                <Button onClick={openPackGuidance}>{t("problems.pack_guidance_open")}</Button>
+                {!localHost && (
+                  <>
+                    <Box color="text-body-secondary">{t("problems.pack_guidance_empty_hint")}</Box>
+                    <Button onClick={openPackGuidance}>{t("problems.pack_guidance_open")}</Button>
+                  </>
+                )}
               </SpaceBetween>
             )}
           </Box>

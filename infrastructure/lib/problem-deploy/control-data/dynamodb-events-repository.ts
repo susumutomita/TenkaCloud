@@ -18,6 +18,7 @@ import {
   parseProgressionGate,
 } from "../handlers/shared/progression-gate.js";
 import type { RegistrationUpdate } from "./domain/event-registration.js";
+import type { HostingAccountSelfTestAcknowledgment } from "./domain/events.js";
 import { teamRecordToItem } from "./dynamodb-teams-repository.js";
 import { sweepExpiredRows } from "./dynamodb-ttl-sweep.js";
 import type {
@@ -343,8 +344,12 @@ export class DynamoDbEventsRepository implements EventsRepository {
    * mismatch folds to `not_found`, anything else is a state `conflict` carrying
    * the probed event.
    */
-  private async probeConflict(tenantId: string, eventId: string): Promise<EventMutationOutcome> {
-    const event = await this.getEvent(tenantId, eventId);
+  private async probeConflict(
+    tenantId: string,
+    eventId: string,
+    consistentRead = false,
+  ): Promise<EventMutationOutcome> {
+    const event = await this.getEvent(tenantId, eventId, consistentRead);
     if (!event) return { outcome: "not_found" };
     return { outcome: "conflict", event };
   }
@@ -372,7 +377,7 @@ export class DynamoDbEventsRepository implements EventsRepository {
     tenantId: string,
     eventId: string,
     input: Omit<UpdateCommandInput, "TableName" | "Key">,
-    onCcf: "probe" | "conflict" | "not_found",
+    onCcf: "probe" | "probe_consistent" | "conflict" | "not_found",
   ): Promise<EventMutationOutcome> {
     try {
       const out = await this.ddb.send(
@@ -390,8 +395,43 @@ export class DynamoDbEventsRepository implements EventsRepository {
       if (!isConditionalCheckFailed(err)) throw err;
       if (onCcf === "conflict") return { outcome: "conflict" };
       if (onCcf === "not_found") return { outcome: "not_found" };
-      return this.probeConflict(tenantId, eventId);
+      return this.probeConflict(tenantId, eventId, onCcf === "probe_consistent");
     }
+  }
+
+  async acknowledgeHostingAccountSelfTest(
+    tenantId: string,
+    eventId: string,
+    acknowledgment: HostingAccountSelfTestAcknowledgment,
+    expected: Pick<EventRecord, "catalogKey" | "hostingAccountSelfTest">,
+  ): Promise<EventMutationOutcome> {
+    const values: Record<string, unknown> = {
+      ":tenantId": tenantId,
+      ":acknowledgment": acknowledgment,
+      ":draft": "DRAFT",
+      ":ready": "READY",
+      ":deploying": "DEPLOYING",
+    };
+    const conditions = ["tenantId = :tenantId", "#status IN (:draft, :ready, :deploying)"];
+    for (const field of ["catalogKey", "hostingAccountSelfTest"] as const) {
+      if (expected[field] === undefined) conditions.push(`attribute_not_exists(${field})`);
+      else {
+        conditions.push(`${field} = :${field}`);
+        values[`:${field}`] = expected[field];
+      }
+    }
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression: "SET hostingAccountSelfTest = :acknowledgment",
+        ConditionExpression: conditions.join(" AND "),
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: values,
+        ReturnValues: "ALL_NEW",
+      },
+      "probe_consistent",
+    );
   }
 
   async endEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome> {

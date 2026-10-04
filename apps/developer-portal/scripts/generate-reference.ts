@@ -60,8 +60,8 @@ const OUTPUT_PATH = resolve(here, "..", "src", "content", "reference-data.ts");
 // are parsed so the `install` subcommand (whose usage lives in pack-cli-install)
 // is captured alongside the rest.
 const PACK_CLI_PATHS = [
-  resolve(REPO_ROOT, "infrastructure/lib/problem-pack/pack-cli.ts"),
-  resolve(REPO_ROOT, "infrastructure/lib/problem-pack/pack-cli-install.ts"),
+  resolve(REPO_ROOT, "scripts/problem-pack/pack-cli.ts"),
+  resolve(REPO_ROOT, "scripts/problem-pack/pack-cli-install.ts"),
 ];
 const DIAGNOSTICS_PATH = resolve(REPO_ROOT, "packages/problem-sdk/src/diagnostics.ts");
 

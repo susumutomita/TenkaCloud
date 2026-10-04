@@ -20,7 +20,7 @@ import type { Construct } from "constructs";
 import {
   attachFederatedAdminAllowlist as attachFederatedAdminAllowlistBase,
   parseAdminAllowlist as parseAdminAllowlistBase,
-} from "../control-plane/saml-admin-allowlist.js";
+} from "../shared/saml-admin-allowlist.js";
 
 /**
  * `TENANT_SAML_ADMIN_ALLOWLIST` env を parse する thin wrapper。 Phase 1 の汎用 parser を

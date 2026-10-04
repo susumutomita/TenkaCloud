@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { cloudControlDataConfiguration } from "../../infrastructure/lib/cloud-hosting/config";
 import {
   DEFAULT_TURSO_TOKEN_EXPIRATION,
   describeTursoTokenExpiry,
@@ -6,11 +7,7 @@ import {
   TURSO_TOKEN_EXPIRY_WARNING_MS,
 } from "../ops/turso-token-rotate";
 import type { ProcessResult, ProcessRunner } from "./process";
-import {
-  loadTursoLiveEnvironment,
-  mergeSamlSsoFeature,
-  writeTursoLiveEnvironment,
-} from "./turso-live-environment";
+import { loadTursoLiveEnvironment, writeTursoLiveEnvironment } from "./turso-live-environment";
 
 export interface TursoLiveSetupDeps {
   readonly repoRoot: string;
@@ -48,17 +45,17 @@ async function ensureEnvironmentFile(
   const loaded = loadTursoLiveEnvironment(deps.repoRoot, environment, baseEnv);
   if (loaded.exists) return true;
   deps.log(`設定ファイルがありません: ${loaded.path}`);
-  if (!(await deps.confirm("基本の Lite .env wizard を起動しますか?"))) return false;
+  if (!(await deps.confirm("基本の cloud .env wizard を起動しますか?"))) return false;
   const result = deps.processRunner.run(
     process.execPath,
-    ["run", resolve(deps.repoRoot, "scripts", "ops", "env-init.ts")],
+    ["run", "--no-env-file", resolve(deps.repoRoot, "scripts", "ops", "env-init.ts")],
     {
       cwd: deps.repoRoot,
       env: { ...baseEnv, ENV: environment },
       inherit: true,
     },
   );
-  if (result.status !== 0) throw new Error("Lite .env wizard failed");
+  if (result.status !== 0) throw new Error("Cloud .env wizard failed");
   return loadTursoLiveEnvironment(deps.repoRoot, environment, baseEnv).exists;
 }
 
@@ -85,7 +82,7 @@ async function selectedAwsRegion(
   loaded: NodeJS.ProcessEnv,
   deps: TursoLiveSetupDeps,
 ): Promise<string> {
-  const configured = loaded.AWS_REGION?.trim();
+  const configured = loaded.REGION?.trim() || loaded.AWS_REGION?.trim();
   if (configured) return configured;
   const fromCli = deps.processRunner.run("aws", ["configure", "get", "region"]);
   const fallback =
@@ -248,8 +245,13 @@ async function ensureSecureString(
       expiration,
     ]),
   );
-  const token = tokenResult.stdout.trim();
-  if (!token || /\s/.test(token)) throw new Error("Turso returned an invalid database token");
+  const candidates = tokenResult.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u.test(line));
+  const token = candidates[0];
+  if (candidates.length !== 1 || !token)
+    throw new Error("Turso returned an invalid database token (value redacted)");
   requiredSecretResult(
     "aws ssm put-parameter",
     deps.processRunner.run(
@@ -286,8 +288,16 @@ export async function runTursoLiveSetup(
     return { ok: false, env: baseEnv };
   }
   const loaded = loadTursoLiveEnvironment(deps.repoRoot, environment, baseEnv).env;
+  const originalRunner = deps.processRunner;
+  deps = {
+    ...deps,
+    processRunner: {
+      run: (command, args, options) =>
+        originalRunner.run(command, args, { ...options, env: { ...loaded, ...options?.env } }),
+    },
+  };
   const account = activeAwsAccount(deps);
-  if (!(await acceptActiveAccount(loaded.AWS_ACCOUNT_ID?.trim(), account, environment, deps))) {
+  if (!(await acceptActiveAccount(loaded.ACCOUNT_ID?.trim(), account, environment, deps))) {
     return { ok: false, env: loaded };
   }
   const region = await selectedAwsRegion(loaded, deps);
@@ -298,18 +308,38 @@ export async function runTursoLiveSetup(
   const parameterName =
     loaded.CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME?.trim() ||
     `/TenkaCloud/${environment}/turso/auth-token`;
+  const selected = cloudControlDataConfiguration({
+    ...loaded,
+    CDK_PARAM_CONTROL_DATA_BACKEND: "turso",
+    CDK_PARAM_TURSO_DATABASE_URL: database.url,
+    CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: parameterName,
+  });
+  if (selected.kind !== "turso") throw new Error("Turso configuration is required.");
+  if (loaded.CDK_PARAM_TURSO_DATABASE_URL?.trim()) {
+    const previous = cloudControlDataConfiguration({
+      ...loaded,
+      CDK_PARAM_CONTROL_DATA_BACKEND: "turso",
+      CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: parameterName,
+    });
+    if (previous.kind === "turso" && previous.databaseUrl !== selected.databaseUrl)
+      throw new Error(
+        "Selected database differs from the existing .env URL; use a separate environment or an explicit migration. No token was changed.",
+      );
+  }
   const secureStringReady = await ensureSecureString(
     { databaseName: database.name, parameterName, region, environment, env: loaded },
     deps,
   );
   if (!secureStringReady) return { ok: false, env: loaded };
   const overrides = {
-    AWS_ACCOUNT_ID: account,
+    ACCOUNT_ID: account,
+    ...(loaded.TENKACLOUD_ADMIN_EMAIL
+      ? { TENKACLOUD_ADMIN_EMAIL: loaded.TENKACLOUD_ADMIN_EMAIL }
+      : {}),
     AWS_REGION: region,
     CDK_PARAM_CONTROL_DATA_BACKEND: "turso",
     CDK_PARAM_TURSO_DATABASE_URL: database.url,
     CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: parameterName,
-    CDK_PARAM_FEATURES: mergeSamlSsoFeature(loaded.CDK_PARAM_FEATURES),
   } as const;
   if (!(await deps.confirm("公開設定を選択した .env に保存しますか?"))) {
     return { ok: false, env: loaded };

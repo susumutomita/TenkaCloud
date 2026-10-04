@@ -1,6 +1,8 @@
 import { isIPv4 } from "node:net";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { DEFAULT_CONTAINER_LIMITS } from "./container-budget";
+import { parseDockerNetworkPool } from "./docker-networks";
 import { DEFAULT_GATEWAY_PORTS, gatewayPortsOverlap, parseGatewayPorts } from "./gateway-ports";
 
 export function parseOptions(
@@ -19,11 +21,22 @@ export function parseOptions(
       "admin-port": { type: "string", default: "5174" },
       "participant-port": { type: "string", default: "5175" },
       "gateway-ports": { type: "string", default: DEFAULT_GATEWAY_PORTS },
+      "max-active-per-team": { type: "string", default: String(DEFAULT_CONTAINER_LIMITS.perTeam) },
+      "max-active-environments": {
+        type: "string",
+        default: String(DEFAULT_CONTAINER_LIMITS.global),
+      },
+      "container-memory-mib": {
+        type: "string",
+        default: String(DEFAULT_CONTAINER_LIMITS.memoryMiB),
+      },
+      "docker-network-pool": { type: "string" },
       "no-build": { type: "boolean", default: false },
       "public-admin-origin": { type: "string" },
       "public-participant-origin": { type: "string" },
       "behind-proxy": { type: "boolean", default: false },
       "unsafe-http": { type: "boolean", default: false },
+      "aws-region": { type: "string" },
       help: {
         type: "boolean",
         short: "h",
@@ -57,8 +70,20 @@ export function parseOptions(
     throw new Error(
       "--gateway-ports must not include the host console or participant portal port.",
     );
+  if (values["aws-region"] !== undefined)
+    throw new Error(
+      "AWS problems require cloud hosting. --aws-region is no longer accepted by make local; use the reviewed make deploy workflow when cloud hosting is ready.",
+    );
   return {
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
+    containerLimits: {
+      perTeam: positiveLimit(values["max-active-per-team"], 40),
+      global: positiveLimit(values["max-active-environments"], 40),
+      memoryMiB: positiveLimit(values["container-memory-mib"], 1024 * 1024),
+    },
+    ...(values["docker-network-pool"]
+      ? { dockerNetworkPool: parseDockerNetworkPool(values["docker-network-pool"]) }
+      : {}),
     hostname,
     adminPort,
     participantPort,
@@ -140,4 +165,10 @@ function listenAddress(lan: string | undefined, unsafeLan: boolean): string {
 
 function joinDefault(root: string): string {
   return resolve(root, ".tenkacloud/host");
+}
+
+function positiveLimit(raw: string, maximum: number): number {
+  if (!/^\d+$/u.test(raw) || Number(raw) < 1 || Number(raw) > maximum)
+    throw new Error(`Resource limit must be an integer from 1 to ${maximum}.`);
+  return Number(raw);
 }

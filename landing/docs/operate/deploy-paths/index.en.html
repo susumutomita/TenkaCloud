@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Deploy modes and launch paths — TenkaCloud Docs</title>
+<title>Launch and deployment boundaries — TenkaCloud Docs</title>
 <link rel="canonical" href="https://tenkacloud.com/docs/operate/deploy-paths/index.en.html" />
 <link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/operate/deploy-paths/" />
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/operate/deploy-paths/index.en.html" />
@@ -49,83 +49,31 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html" aria-current="page">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html" aria-current="page">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Deploy modes and launch paths <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>Lite and SaaS differ in audience, entry point, AWS services, and verification
-status. Use the <a href="/docs/manual/organizer/index.en.html">competition organizer manual</a>
-for the executable Lite procedure. The SaaS sections here describe repository
-architecture; they are not a recently live-verified setup procedure.</p>
-<h2>Two deploy modes</h2>
-<ul>
-<li><strong>Lite mode</strong> — One organizing group runs an event in its own AWS account. The
-recommended <code>lite-pipeline.yaml</code> entry point uses CloudFormation to create
-CodeBuild, which runs <code>make deploy</code>. It does not use AWS CodePipeline. A local
-checkout can also run <code>make deploy</code> directly.</li>
-<li><strong>SaaS mode</strong> — Repository architecture for serving tenants to multiple
-organizations. It contains <code>make deploy-saas</code>, pooled and silo tenants, System
-Admin, and a CodePipeline for existing-tenant updates, but no recent recorded
-fresh-AWS run covers setup through teardown.</li>
-</ul>
-<p>Treat Lite as the current organizer procedure. Re-verify SaaS in a dedicated
-environment before evaluating it.</p>
-<h2>How a new tenant is provisioned</h2>
-<blockquote>
-<p><strong>SaaS architecture reference:</strong> This and the next section are not used by a
-current Lite event.</p>
-</blockquote>
-<p>New-tenant provisioning and pipeline rollout are <strong>different paths</strong> — this is the
-distinction the old docs got wrong.</p>
-<ul>
-<li>A tenant creation event (<code>onboardingRequest</code>) is picked up by the SBT
-<code>BashJobRunner</code>, which runs <code>provision-tenant.sh</code>. By default the tenant is
-<strong>pooled</strong> (it shares the pooled stack); only a <code>PLATINUM</code> tier tenant gets a
-dedicated silo stack deployed directly (<code>bun run cdk -- deploy tenkacloud-tenant-template-&lt;id&gt;</code>).</li>
-</ul>
-<p>So creating one tenant does not run the CodePipeline; it runs a provisioning job.</p>
-<h2>What the SaaS pipeline is for</h2>
-<p><code>tenkacloud-saas-pipeline</code> (CodePipeline) exists to <strong>roll out tenant stacks across
-every existing tenant</strong>, not to create one. Its source is an S3 object
-(<code>source.zip</code>, uploaded by <code>prepare-source-bundle.sh</code> during <code>make deploy-saas</code>)
-that the pipeline polls; on a change it walks the tenant list from DynamoDB and
-deploys / updates each tenant stack in waves (a Step Functions WaveIterator driving
-CodeBuild). New-tenant creation and existing-tenant rollout therefore travel
-different routes.</p>
-<h2>How a problem deploys</h2>
-<p>When an organizer clicks <strong>Deploy</strong> in the console:</p>
-<ol>
-<li>The console calls the Deploy API, which validates the request, writes a row to
-the Deployments table, and puts a <code>DeployCreateRequested</code> event on the bus.</li>
-<li>A Step Functions execution starts a CodeBuild job (<code>.sync</code>).</li>
-<li>The worker assumes a role into the competitor account using the tenant&#39;s
-<strong>ExternalId</strong> (always required) and runs a CloudFormation <code>CreateStack</code> there.</li>
-</ol>
-<p>The console then polls deployment status until the stack reaches a terminal state.</p>
-<h2>Problem packs</h2>
-<p>Problem packs (see the <a href="/docs/tutorials/first-pack/index.en.html">first pack tutorial</a>)
-ride the Lite path only. Lite reads activations for the fixed tenant id <code>local</code> at
-synth time, so activate with <code>--tenant local</code> before <code>make deploy</code>. SaaS mode fails
-loud at synth instead when any pack activation exists — it does not silently drop
-them from the pooled catalog. Set <code>CDK_PARAM_SAAS_IGNORE_PACKS=true</code> to override and
-proceed anyway; the activations then simply do not appear in any tenant&#39;s catalog.</p>
-<p>Related: <a href="/docs/operate/run-an-event/index.en.html">run an event end to end</a> and the
-<a href="/docs/concepts/architecture/index.en.html">platform architecture</a>.</p>
+<h1>Launch and deployment boundaries <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<p>This documents the draft integration candidate. Local event/team operation is implemented; cloud platform deployment and complete catalog playability are not verified release claims.</p>
+<h2 id="local-platform">Local platform</h2><p><code>make local</code> runs the unified Bun server and two browser applications with persistent SQLite. <code>make down</code> stops owned local runtimes and preserves event data. The removed host target is not a second launch mode. See <a href="/docs/getting-started/index.en.html">getting started</a> for bootstrap, event creation and participant login.</p>
+<h2 id="cloud-platform">Cloud platform: restored competition backend</h2><p><code>make deploy</code> and <code>make destroy</code> execute the current Lambda setup and platform teardown CLI with selectable Turso/DynamoDB. They reuse the standard <code>CDKToolkit</code>; only a missing toolkit triggers reviewed official <code>cdk bootstrap</code> inside <code>make deploy</code>. The default bootstrap CloudFormation execution role uses <code>AdministratorAccess</code>, so review bootstrap trust, caller permissions and application IAM changes. Existing toolkits are not rewritten; earlier custom TenkaCloud toolkits remain untouched. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified. Destroy shows the account, region and owned targets, then removes platform hosting and its default-owned data. It leaves external Turso rows; <code>make destroy-all</code> explicitly resets them. Use event Teardown before platform removal for exercise cleanup. Retained resources can continue to incur charges. The preserved <code>infrastructure/templates/cloud-pipeline.yaml</code> defaults to the current CLI and explicitly approved unattended bootstrap/deployment. Review its broad CodeBuild caller role and source refs before creating or starting it. A container build is not deployment evidence or a zero-cost promise.</p>
+<p>Cloud events and deployments save <code>catalogKey</code> for a private snapshot of catalog maps, hints, plugins and raw sources. An event created with catalog A continues using A after B is deployed or removes its problem. Lambda verifies pinned source hashes; CodeBuild uses the saved source ZIP key and exact S3 <code>VersionId</code>. Older unpinned records require recovery of their verified original snapshot through <code>CDK_LEGACY_CATALOG_KEY</code>; never assign the current catalog by guesswork. This recovery setting does not authorize upgrading an active original installation; finish its competitions on the installed version and satisfy the no-active-events preflight first.</p>
+<p>Each cloud deployment uploads a fresh <code>&lt;configured-key&gt;.executions/&lt;uuid&gt;.zip</code> and requires source-bucket versioning. Current unique keys are not removed by the noncurrent-version lifecycle. Archives consume storage until separately reviewed source-bucket cleanup after referencing events finish. Platform destroy removes its owned execution snapshots, while the separate source archive bucket survives. Source tests and synthesis do not establish a live AWS or hosted Turso rehearsal.</p>
+<h2 id="exercise-deployment">Exercise deployment is separate</h2><p>Local events use owned Docker Compose projects or native Battle execution. AWS-service problems are cloud-only and require reviewed competitor account/region/role configuration with ExternalId. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Native Cryptography Battle runs on both hosting options. Exercise resources can incur charges; stopping a local process does not remove resources created by an older AWS-enabled revision.</p>
+<p>New installations use <code>tenkacloud-cloud</code> stack names; existing <code>tenkacloud-lite</code> stacks keep their names. The CLI discovers Lite/cloud installations; if both exist, explicitly choose <code>TENKACLOUD_STACK_LAYOUT=lite</code> or <code>cloud</code>. Original Lite updates verify ownership and persistent resource IDs. Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use <code>CLOUD_ARGS=&quot;--confirm-no-active-events&quot;</code> for a noninteractive upgrade; generic <code>--yes</code> cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic <code>make deploy</code> behavior. Published cloud-v1 resource/database layouts cannot be updated in place, and no data is migrated automatically. <code>--drain-events</code> is unavailable; finish event Teardown before removing the platform.</p>
+<p>Both databases admit 99 teams; SQL coordination retains the original 4 MiB state policy. Nine current catalog templates exceed the 51,200-byte <code>TemplateBody</code> limit, and <code>TemplateURL</code> is not implemented. This is not an all-AWS-problems deployment claim.</p>
 
 </article>
 </main>

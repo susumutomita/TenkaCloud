@@ -4,6 +4,7 @@ import {
   SYNTH_TIMEOUT_MS,
   synthCoordinationDispatcherLambdaOnly,
   synthCoordinationDispatcherLambdaPureTurso,
+  synthParticipantPortalLambdaOnly,
 } from "../problem-deploy-backend-stack.test-helpers";
 
 /**
@@ -61,6 +62,24 @@ function attachedActions(tpl: Template): string[] {
 }
 
 describe("CoordinationDispatcherLambda", () => {
+  it.each([
+    ["coordination dispatcher", synthCoordinationDispatcherLambdaOnly],
+    ["participant portal", synthParticipantPortalLambdaOnly],
+  ])(
+    "allows browser mutation preflights with an idempotency key on the %s Function URL",
+    (_name, synth) => {
+      synth().hasResourceProperties("AWS::Lambda::Url", {
+        Cors: {
+          AllowOrigins: ["*"],
+          AllowMethods: Match.arrayWith(["POST"]),
+          AllowHeaders: ["content-type", "authorization", "idempotency-key"],
+          MaxAge: 600,
+        },
+      });
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
   it(
     "should provision a Node.js 22 / arm64 Lambda with a Function URL (AuthType=NONE)",
     () => {

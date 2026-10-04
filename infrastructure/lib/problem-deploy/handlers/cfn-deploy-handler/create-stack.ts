@@ -47,11 +47,16 @@ import {
   parseDeployAllowedCidrs,
   resolveAllowedCidrOverride,
 } from "../../deploy-allowed-cidrs.js";
+import { resolvePinnedExecutionSource } from "../../runtime-clients/pinned-execution-source.js";
 import { getS3ObjectText } from "../../s3-artifact-text.js";
 import {
   type AssumeCompetitorRoleDeps,
   assumeCompetitorRole,
 } from "../shared/assume-competitor-role.js";
+import {
+  assertEventCompetitorAccount,
+  UnsupportedHostingAccountError,
+} from "../shared/competitor-account-policy.js";
 import {
   type DeploymentProgressWriter,
   writeDeploymentProgress,
@@ -60,6 +65,7 @@ import {
   type DeployCreateRequestedDetail,
   DeployCreateRequestedDetailSchema,
 } from "../shared/events.js";
+import { currentCatalogKey, loadExecutionSourceText } from "../shared/execution-catalog.js";
 import { logDeployTrace, warnDeployTrace } from "../shared/trace-log.js";
 import {
   type JobProgressLogger,
@@ -227,6 +233,14 @@ export function buildS3ArtifactsResolver(
   opts: { readonly sourceBucket: string },
 ): (detail: DeployCreateRequestedDetail) => Promise<DeployArtifacts> {
   return async (detail) => {
+    const catalog = await resolvePinnedExecutionSource(detail);
+    if (catalog) {
+      const [templateBody, metadataText] = await Promise.all([
+        loadExecutionSourceText(catalog, detail.problemId, "template.yaml"),
+        loadExecutionSourceText(catalog, detail.problemId, "metadata.json"),
+      ]);
+      return { templateBody, cfnParameters: parseCfnParameters(metadataText) };
+    }
     const templateBody = await getS3ObjectText(
       s3,
       opts.sourceBucket,
@@ -265,6 +279,9 @@ export function buildArtifactsResolver(
 ): (detail: DeployCreateRequestedDetail) => Promise<DeployArtifacts> {
   const fetchPayloadArtifacts = deps.fetchPayloadArtifacts ?? fetchChallengePayloadArtifacts;
   return async (detail) => {
+    // Private payload URLs expire and can refer to newly published bytes. A saved catalog
+    // owns both public and private sources and must always win during replay.
+    if (detail.catalogKey || currentCatalogKey()) return deps.resolveFromS3(detail);
     const payloadUrl = detail.challengePayloadUrl;
     if (typeof payloadUrl === "string" && payloadUrl.length > 0) {
       const { templateBody, metadataText } = await fetchPayloadArtifacts(payloadUrl);
@@ -469,6 +486,39 @@ async function updateHealthyStack(
   return { stackId: updateStackId, operation: "update" };
 }
 
+function assertCloudCompetitorTarget(
+  detail: DeployCreateRequestedDetail,
+  tenkaCloudAccountId: string,
+): void {
+  const acknowledgment = detail.hostingAccountSelfTest;
+  if (
+    acknowledgment &&
+    (acknowledgment.eventId !== detail.eventId ||
+      acknowledgment.tenantId !== detail.tenantId ||
+      acknowledgment.jobId !== detail.jobId ||
+      acknowledgment.awsAccountId !== detail.awsAccountId)
+  ) {
+    throw new UnsupportedHostingAccountError(detail.awsAccountId);
+  }
+  assertEventCompetitorAccount(detail.awsAccountId, detail);
+  assertEventCompetitorAccount(detail.awsAccountId, detail, tenkaCloudAccountId);
+  if (
+    detail.catalogKey ||
+    currentCatalogKey() ||
+    detail.awsAccountId === tenkaCloudAccountId ||
+    detail.awsAccountId === process.env.CONTROL_PLANE_ACCOUNT
+  ) {
+    const roleAccount = /^arn:[^:]+:iam::(\d{12}):role\/.+$/u.exec(
+      detail.competitorRoleArn ?? "",
+    )?.[1];
+    if (roleAccount !== detail.awsAccountId || !detail.externalIdParameterName) {
+      throw new Error(
+        "competitor_account_required: a verified competitor role and ExternalId are required for the target AWS account",
+      );
+    }
+  }
+}
+
 /**
  * Perform the create path for one `DeployCreateRequested` event. Returns after CreateStack
  * (non-blocking); the Step Functions poll loop drives the status → DDB transitions.
@@ -478,6 +528,7 @@ export async function createStackForDeployment(
   deps: CreateStackDeps,
 ): Promise<{ readonly stackId?: string; readonly operation: "create" | "update" | "noop" }> {
   const detail = DeployCreateRequestedDetailSchema.parse(input.detail);
+  assertCloudCompetitorTarget(detail, deps.tenkaCloudAccountId);
   const correlationId = detail.correlationId ?? detail.jobId;
   const generateToken = deps.generateToken ?? (() => generateRandomAlphanumeric(32));
   const jobProgress = deps.progressFactory?.(detail.jobId) ?? NOOP_JOB_PROGRESS_LOGGER;

@@ -45,10 +45,12 @@ export class CoordinationPluginBundle extends Construct {
       writeFileSync(path.join(dest, `${problemId}.mjs`), js);
     }
 
-    new BucketDeployment(this, "Deploy", {
+    const deployment = new BucketDeployment(this, "Deploy", {
       logGroup: deploymentLogGroup(this, "DeployLogs"),
       sources: [Source.asset(staging)],
       destinationBucket: this.bucket,
+      retainOnDelete: false,
     });
+    deployment.node.addDependency(this.bucket);
   }
 }

@@ -124,6 +124,30 @@ describe("CliCredentialsPanel fetch flow", () => {
     expect(screen.queryByText("sso_credentials.cli.error_header")).not.toBeInTheDocument();
   });
 
+  it.each(["ssm:GetParameter", "cloudformation:DescribeStackResource"] as const)(
+    "shows the failed %s operation in the CLI panel",
+    async (operation) => {
+      mockGet.mockRejectedValue(new PortalAssumeRoleError("competitor", "AccessDenied", operation));
+      renderPanel();
+      fireEvent.click(issueButton());
+      const message = await screen.findByText(/sso_credentials\.cli\.operation_failed/);
+      expect(message).toHaveTextContent(operation);
+      expect(message).toHaveTextContent("AccessDenied");
+      expect(message).not.toHaveTextContent("assume_role_failed");
+    },
+  );
+
+  it("keeps the role stage for a classified STS failure", async () => {
+    mockGet.mockRejectedValue(
+      new PortalAssumeRoleError("competitor", "AccessDenied", "sts:AssumeRole"),
+    );
+    renderPanel();
+    fireEvent.click(issueButton());
+    expect(await screen.findByText(/sso_credentials\.cli\.assume_role_failed/)).toHaveTextContent(
+      "sso_credentials.cli.stage_competitor",
+    );
+  });
+
   it("should show a stage-aware message on a PortalAssumeRoleError", async () => {
     mockGet.mockRejectedValue(new PortalAssumeRoleError("competitor", "denied"));
     renderPanel();

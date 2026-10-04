@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ParticipantProgressionView } from "../api/portal-client";
+import type { AppConfig } from "../config";
 import type { ProblemCatalogEntry } from "../data/problems";
 import { CourseTracksPage } from "./CourseTracks";
 
@@ -19,10 +21,16 @@ vi.mock("../i18n", () => ({
 }));
 
 const teamView: {
-  view: { problems: { problemId: string; jobId: string; scoring?: unknown }[] } | null;
+  view: {
+    problems: { problemId: string; jobId: string; name?: string; scoring?: unknown }[];
+    progression?: ParticipantProgressionView;
+  } | null;
   error: string | null;
 } = { view: null, error: null };
 vi.mock("../auth/TeamViewProvider", () => ({ useTeamView: () => teamView }));
+
+const config: { cloudMode: AppConfig["cloudMode"] } = { cloudMode: "local" };
+vi.mock("../config-context", () => ({ useAppConfig: () => config }));
 
 const navigate = vi.fn();
 vi.mock("react-router", () => ({ useNavigate: () => navigate }));
@@ -77,6 +85,7 @@ describe("CourseTracksPage (#2786)", () => {
     teamView.view = null;
     teamView.error = null;
     catalog.entries = [];
+    config.cloudMode = "local";
     navigate.mockReset();
   });
 
@@ -121,6 +130,7 @@ describe("CourseTracksPage (#2786)", () => {
     catalog.entries = [tracked("a", 10, "Week 1")];
     teamView.view = { problems: [{ problemId: "a", jobId: "job-1" }] };
     render(<CourseTracksPage />);
+    expect(screen.getByRole("link", { name: "a" })).toHaveAttribute("href", "/problems/job-1");
     await userEvent.click(screen.getByText("a"));
     expect(navigate).toHaveBeenCalledWith("/problems/job-1");
   });
@@ -234,5 +244,91 @@ describe("CourseTracksPage (#2786)", () => {
     await userEvent.click(week2 as HTMLElement);
     expect(week2).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByTestId("course-problem-b")).toBeInTheDocument();
+  });
+
+  it("limits local-host courses to assigned problems while retaining assigned drafts", () => {
+    config.cloudMode = "real";
+    catalog.entries = [
+      tracked("unassigned", 1, "Hidden chapter"),
+      tracked("assigned", 10, "Week 1", { status: "draft" }),
+    ];
+    teamView.view = { problems: [{ problemId: "assigned", jobId: "event-team-job" }] };
+    render(<CourseTracksPage />);
+    expect(screen.queryByTestId("course-problem-unassigned")).not.toBeInTheDocument();
+    expect(screen.queryByText("Hidden chapter")).not.toBeInTheDocument();
+    expect(screen.getByTestId("course-problem-assigned")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "assigned" })).toHaveAttribute(
+      "href",
+      "/problems/event-team-job",
+    );
+  });
+
+  it("does not suggest the bundled catalog while the local-host team view is unavailable", () => {
+    config.cloudMode = "real";
+    catalog.entries = [tracked("unassigned", 1, "Week 1")];
+    teamView.error = "Request failed";
+    render(<CourseTracksPage />);
+    expect(screen.getByText("Request failed")).toBeInTheDocument();
+    expect(screen.getByTestId("course-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("course-recommended")).not.toBeInTheDocument();
+  });
+
+  it("updates next steps from each team's checkpoints without carrying progress between teams", () => {
+    config.cloudMode = "real";
+    catalog.entries = [tracked("second", 20, "Week 1"), tracked("first", 10, "Week 1")];
+    teamView.view = {
+      problems: [
+        { problemId: "first", jobId: "team-a-first", scoring: { flags: [{ solved: true }] } },
+        { problemId: "second", jobId: "team-a-second", scoring: { flagSubmitted: false } },
+      ],
+    };
+    const { rerender } = render(<CourseTracksPage />);
+    expect(screen.getByTestId("course-recommended")).toHaveTextContent('"name":"second"');
+    teamView.view = {
+      problems: [
+        { problemId: "first", jobId: "team-b-first", scoring: { flags: [{ solved: false }] } },
+        { problemId: "second", jobId: "team-b-second", scoring: { flagSubmitted: false } },
+      ],
+    };
+    rerender(<CourseTracksPage />);
+    expect(screen.getByTestId("course-recommended")).toHaveTextContent('"name":"first"');
+    expect(screen.getByRole("link", { name: "first" })).toHaveAttribute(
+      "href",
+      "/problems/team-b-first",
+    );
+  });
+
+  it("honors the existing prerequisite gate without marking a locked track complete", () => {
+    config.cloudMode = "real";
+    catalog.entries = [tracked("locked", 1, "Week 1"), tracked("gate", 20, "Week 1")];
+    const progression: ParticipantProgressionView = {
+      gateProblemId: "gate",
+      gateCompleted: false,
+      policy: "required",
+      completionBonus: 0,
+      lockedProblemIds: ["locked"],
+    };
+    teamView.view = {
+      problems: [
+        { problemId: "locked", jobId: "j1" },
+        { problemId: "gate", name: "Gate exercise", jobId: "j2" },
+      ],
+      progression,
+    };
+    const { rerender } = render(<CourseTracksPage />);
+    expect(screen.getByTestId("course-problem-locked")).toHaveTextContent("quests.locked_badge");
+    expect(screen.getByTestId("course-recommended")).toHaveTextContent('"name":"gate"');
+    catalog.entries = [tracked("locked", 1, "Week 1")];
+    teamView.view = { ...teamView.view };
+    rerender(<CourseTracksPage />);
+    expect(screen.getByTestId("course-locked")).toHaveTextContent('"gateName":"Gate exercise"');
+    expect(screen.queryByTestId("course-complete")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start_recommended/ })).not.toBeInTheDocument();
+    teamView.view = {
+      ...teamView.view,
+      progression: { ...progression, gateCompleted: true, lockedProblemIds: [] },
+    };
+    rerender(<CourseTracksPage />);
+    expect(screen.getByTestId("course-recommended")).toHaveTextContent('"name":"locked"');
   });
 });

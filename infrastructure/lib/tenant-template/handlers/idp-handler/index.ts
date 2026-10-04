@@ -27,10 +27,10 @@
 
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
-import { createCognitoIdpAdapter } from "../../../control-plane/handlers/idp-handler/cognito-adapter.js";
-import { createSeamIdpStore } from "../../../control-plane/handlers/idp-handler/ddb-store.js";
-import { buildIdpApp } from "../../../control-plane/handlers/idp-handler/routes.js";
 import { createDefaultControlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
+import { createCognitoIdpAdapter } from "../../../shared/idp/cognito-adapter.js";
+import { createSeamIdpStore } from "../../../shared/idp/ddb-store.js";
+import { buildIdpApp } from "../../../shared/idp/routes.js";
 import { buildIdpSharedResources } from "./shared.js";
 import { createTenantIdpResolveScope } from "./tier-guard.js";
 

@@ -19,6 +19,8 @@ const knownErrors = new Set([
   "closed",
   "full",
   "conflict",
+  "not_ready",
+  "feature_disabled",
   "rate_limited",
   "registration_unavailable",
 ]);
@@ -108,38 +110,46 @@ function JoinSession({
 
   async function claim() {
     if (!invitation || busy) return;
+    pending.current?.abort();
+    const request = new AbortController();
+    pending.current = request;
     setBusy(true);
     setError("");
     try {
       const receipt = storage.ensureReceipt();
-      setProgress(
-        await registrationRequest(
-          config.apiBaseUrl,
-          tenantId,
-          eventId,
-          "claim",
-          invitation,
-          registrationProgressSchema,
-          receipt,
-        ),
+      const value = await registrationRequest(
+        config.apiBaseUrl,
+        tenantId,
+        eventId,
+        "claim",
+        invitation,
+        registrationProgressSchema,
+        receipt,
+        request.signal,
       );
+      if (!request.signal.aborted) setProgress(value);
     } catch (cause) {
-      fail(cause);
+      if (!request.signal.aborted) fail(cause);
     } finally {
-      setBusy(false);
+      if (!request.signal.aborted) setBusy(false);
     }
   }
 
   async function start() {
     if (!progress?.teamLoginKey || busy) return;
+    pending.current?.abort();
+    const request = new AbortController();
+    pending.current = request;
     setBusy(true);
     setError("");
     try {
       await auth.login(progress.teamLoginKey);
-      navigate("/setup", { replace: true });
+      if (!request.signal.aborted) navigate("/setup", { replace: true });
     } catch (cause) {
-      fail(cause);
-      setBusy(false);
+      if (!request.signal.aborted) {
+        fail(cause);
+        setBusy(false);
+      }
     }
   }
 

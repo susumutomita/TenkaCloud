@@ -69,6 +69,20 @@ const renderTab = (over: Partial<EventTabContentProps> = {}) =>
 afterEach(() => vi.clearAllMocks());
 
 describe("OperationsTab", () => {
+  it("does not call unsupported cloud capacity APIs or offer unsafe force archive", () => {
+    const get = vi.fn();
+    const base = props();
+    const client = base.apiClient;
+    if (!client) throw new Error("Expected fixture client");
+    renderTab({
+      config: { ...base.config, mode: "cloud-host" },
+      apiClient: Object.assign(client, { get }),
+    });
+    expect(screen.getByText("event_detail.cloud_operations_limits")).toBeInTheDocument();
+    expect(screen.queryByTestId("rescue-force-archive")).not.toBeInTheDocument();
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it("should render the rescue + deploy-progress sections with the empty hint by default", () => {
     renderTab();
     expect(screen.getByTestId("operations-tab-intro")).toBeInTheDocument();

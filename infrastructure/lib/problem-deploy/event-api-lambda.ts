@@ -7,7 +7,6 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
-import { auditLogEnabledEnv } from "./audit-log-env.js";
 import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
@@ -132,9 +131,7 @@ export interface EventApiLambdaProps {
    * Issue #950: admin 操作 audit log 用 DDB Table。 deploy-api-lambda と同じ。
    */
   readonly adminAuditLogTable?: Table;
-  /**
-   * Issue #2311: 監査ログ feature flag。false で `AUDIT_LOG_ENABLED="false"` を注入し no-op 化。
-   */
+  /** @deprecated Accepted for stack compatibility; dedicated audit collection is removed. */
   readonly auditLogEnabled?: boolean;
   /**
    * Issue #2290: control-plane data backend (dynamodb|turso)。event-handler の
@@ -318,8 +315,6 @@ export class EventApiLambda extends Construct {
         BULK_DEPLOY_VIA_DISTRIBUTED_MAP: props.useBulkDistributedMap ? "true" : "false",
         // Issue #950: audit log table 名 (未配線なら空文字)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
-        // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
-        ...auditLogEnabledEnv(props.auditLogEnabled),
         // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
         ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
         ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
@@ -353,12 +348,6 @@ export class EventApiLambda extends Construct {
     // (= disruption fire でも同 bus に publish するため)。
     // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.disruptionsTable?.grantReadWriteData(this.fn);
-    // Issue #950: admin 操作 audit log は write が中心 (mutate 系 handler の append)。
-    // Issue #1313: 追加で Tenant Admin Console 向け read endpoint
-    //   GET /admin/audit-log (`registerAuditLogRoutes`) が同 Lambda 内に register 済 (Issue #1292)
-    // のため、 read 権限も必須。 旧 `grantWriteData` だけだと AccessDenied で 5xx になり、
-    // UI が "Failed to fetch" を表示する (PR review で `[USER-REVIEW]` として残っていた配線完了)。
-    props.adminAuditLogTable?.grantReadWriteData(this.fn);
     grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
     // Issue #910 (#895 Phase 2.C.2.b): bulk payload bucket への PutObject 権限。 bucket が
     // 渡されたときのみ grant (= 未配線時の余分な IAM を避ける)。 useBulkDistributedMap が

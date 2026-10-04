@@ -95,6 +95,10 @@ export function buildExportView(args: {
     status: detail.status,
     generatedAt,
     coverNote,
+    dataAvailabilityNote:
+      detail.scoreHistoryAvailable === false
+        ? t("event_detail.score_history_unavailable")
+        : undefined,
     summary,
     scoreboard,
     breakdown,

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@tenkacloud/web-kit": ["../packages/web-kit/src/api-client.ts"]
+    }
+  },
+  "include": ["verification/**/*.ts"],
+  "exclude": ["node_modules", "cdk.out"]
+}

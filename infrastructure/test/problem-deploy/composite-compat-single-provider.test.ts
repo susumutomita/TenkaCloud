@@ -66,9 +66,10 @@ vi.mock("../../lib/problem-deploy/handlers/deploy-handler/presigned-url", () => 
 // participant SSO contract tests need to drive its two-stage AssumeRole without
 // hitting AWS, so we replace the client with a hoisted spy (mirrors the harness
 // in participant-sso.test.ts).
-const { stsSend, ssmSend } = vi.hoisted(() => ({
+const { stsSend, ssmSend, cfnSend } = vi.hoisted(() => ({
   stsSend: vi.fn(),
   ssmSend: vi.fn(),
+  cfnSend: vi.fn(),
 }));
 
 vi.mock("@aws-sdk/client-sts", async (importOriginal) => {
@@ -77,6 +78,16 @@ vi.mock("@aws-sdk/client-sts", async (importOriginal) => {
     ...actual,
     STSClient: class {
       send = stsSend;
+    },
+  };
+});
+
+vi.mock("@aws-sdk/client-cloudformation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@aws-sdk/client-cloudformation")>();
+  return {
+    ...actual,
+    CloudFormationClient: class {
+      send = cfnSend;
     },
   };
 });
@@ -347,11 +358,14 @@ describe("Composite compat: AWS participant access contracts", () => {
     ddbSend: ReturnType<typeof vi.fn>;
   } {
     const ddbSend = vi.fn();
-    ssmSend.mockResolvedValue({ Parameter: { Value: "tenant-external-id-123456" } });
+    ssmSend.mockResolvedValue({
+      Parameter: { Type: "SecureString", Value: "tenant-external-id-123456" },
+    });
     const shared: ParticipantSharedResources = {
       runtime: makeTestControlDataRuntime(),
       tableName: "TestDeployments",
       eventsTableName: "TestEvents",
+      endpointsTableName: "",
       ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],
       ssm: { send: ssmSend } as unknown as ParticipantSharedResources["ssm"],
       env: "development",
@@ -366,6 +380,8 @@ describe("Composite compat: AWS participant access contracts", () => {
     SK: "META",
     GSI2PK: `TEAMKEY#${TEAM_KEY}`,
     jobId: VALID_JOB_ID,
+    teamLoginKey: TEAM_KEY,
+    expiresAt: Math.floor(Date.now() / 1000) + 7200,
     problemId: "security-battle-royale",
     region: "ap-northeast-1",
     awsAccountId: "999999999999",
@@ -377,28 +393,38 @@ describe("Composite compat: AWS participant access contracts", () => {
         "arn:aws:iam::999999999999:role/tc-security-battle-royale-alpha-participant-viewer",
     }),
     status: "COMPLETE",
+    stackId:
+      "arn:aws:cloudformation:ap-northeast-1:999999999999:stack/tc-security-battle-royale-alpha/stack-id",
     ...over,
   });
 
-  function mockTwoStageAssumeRole(): void {
+  function mockViewerAssumeRole(): void {
     stsSend.mockReset();
-    stsSend
-      .mockResolvedValueOnce({
-        Credentials: {
-          AccessKeyId: "AKIADEPLOY",
-          SecretAccessKey: "DEPLOYSECRET",
-          SessionToken: "DEPLOYTOKEN",
-          Expiration: new Date(NOW_MS),
-        },
-      })
-      .mockResolvedValueOnce({
-        Credentials: {
-          AccessKeyId: "AKIAVIEWER",
-          SecretAccessKey: "VIEWERSECRET",
-          SessionToken: "VIEWERTOKEN",
-          Expiration: new Date(NOW_MS + 3_600_000),
-        },
-      });
+    cfnSend.mockResolvedValue({
+      StackResourceDetail: {
+        StackId: readyRow().stackId,
+        LogicalResourceId: "ParticipantViewerRole",
+        PhysicalResourceId: "tc-security-battle-royale-alpha-participant-viewer",
+        ResourceType: "AWS::IAM::Role",
+        ResourceStatus: "CREATE_COMPLETE",
+      },
+    });
+    stsSend.mockResolvedValueOnce({
+      Credentials: {
+        AccessKeyId: "AKIAPROOF",
+        SecretAccessKey: "PROOFSECRET",
+        SessionToken: "PROOFTOKEN",
+        Expiration: new Date(Date.now() + 900_000),
+      },
+    });
+    stsSend.mockResolvedValueOnce({
+      Credentials: {
+        AccessKeyId: "AKIAVIEWER",
+        SecretAccessKey: "VIEWERSECRET",
+        SessionToken: "VIEWERTOKEN",
+        Expiration: new Date(Date.now() + 3_600_000),
+      },
+    });
   }
 
   const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -419,17 +445,18 @@ describe("Composite compat: AWS participant access contracts", () => {
       kind: "invalid_jobid",
     });
 
-    // Happy path: two-stage AssumeRole → federation getSigninToken → login URL.
-    ddbSend.mockResolvedValueOnce({ Items: [readyRow()] });
-    mockTwoStageAssumeRole();
+    // Happy path: direct operator-to-viewer AssumeRole → federation getSigninToken → login URL.
+    ddbSend.mockResolvedValue({ Item: readyRow() });
+    mockViewerAssumeRole();
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify({ SigninToken: "SIGNIN_TOKEN_VALUE" }), { status: 200 }),
     );
 
     const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID);
     expect(stsSend).toHaveBeenCalledTimes(2);
+    expect(ssmSend).toHaveBeenCalledOnce();
     expect(stsSend.mock.calls[0]?.[0]).toBeInstanceOf(AssumeRoleCommand);
-    expect(stsSend.mock.calls[1]?.[0]).toBeInstanceOf(AssumeRoleCommand);
+    expect(stsSend.mock.calls[1]?.[0].input.ExternalId).toBe(VALID_JOB_ID);
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") return;
     expect(result.loginUrl).toContain("https://signin.aws.amazon.com/federation");
@@ -445,10 +472,10 @@ describe("Composite compat: AWS participant access contracts", () => {
       kind: "invalid_jobid",
     });
 
-    // Happy path: same two-stage AssumeRole, returns STS credentials directly
+    // Happy path: same direct operator-to-viewer AssumeRole, returns STS credentials directly
     // (no federation fetch).
-    ddbSend.mockResolvedValueOnce({ Items: [readyRow()] });
-    mockTwoStageAssumeRole();
+    ddbSend.mockResolvedValue({ Item: readyRow() });
+    mockViewerAssumeRole();
 
     const result = await getCliCredentials(shared, TEAM_KEY, VALID_JOB_ID);
     expect(result.kind).toBe("ok");

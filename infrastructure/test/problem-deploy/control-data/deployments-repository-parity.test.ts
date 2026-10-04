@@ -531,6 +531,73 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     );
   });
 
+  it("charges a hint once even when retries use different timestamps and penalties", async () => {
+    const { repo } = makeBackend();
+    const original = { hintId: "h1", revealedAt: AT, penaltyApplied: 4 };
+    await repo.putDeployment(deployment({ jobId: "hint-retry", score: 20 }));
+    await expectOutcome(repo.applyHintPenalty("hint-retry", original, AT), "updated");
+    await expectOutcome(
+      repo.applyHintPenalty(
+        "hint-retry",
+        { ...original, revealedAt: LATER, penaltyApplied: 9 },
+        LATER,
+      ),
+      "conflict",
+    );
+    const saved = await repo.getDeployment("hint-retry");
+    expect(saved?.score).toBe(16);
+    expect(saved?.hintsRevealed).toEqual([original]);
+  });
+
+  it("charges concurrent reveals of the same hint only once", async () => {
+    const { repo } = makeBackend();
+    await repo.putDeployment(deployment({ jobId: "hint-race", score: 20 }));
+    const outcomes = await Promise.all([
+      repo.applyHintPenalty("hint-race", { hintId: "h1", revealedAt: AT, penaltyApplied: 4 }, AT),
+      repo.applyHintPenalty(
+        "hint-race",
+        { hintId: "h1", revealedAt: LATER, penaltyApplied: 4 },
+        LATER,
+      ),
+    ]);
+    expect(outcomes.map((result) => result.outcome).sort()).toEqual(["conflict", "updated"]);
+    const saved = await repo.getDeployment("hint-race");
+    expect(saved?.score).toBe(16);
+    expect(saved?.hintsRevealed).toHaveLength(1);
+  });
+
+  it("preserves both penalties when different hints are revealed concurrently", async () => {
+    const { repo } = makeBackend();
+    await repo.putDeployment(deployment({ jobId: "different-hints", score: 20 }));
+    const outcomes = await Promise.all([
+      repo.applyHintPenalty(
+        "different-hints",
+        { hintId: "h1", revealedAt: AT, penaltyApplied: 4 },
+        AT,
+      ),
+      repo.applyHintPenalty(
+        "different-hints",
+        { hintId: "h2", revealedAt: LATER, penaltyApplied: 3 },
+        LATER,
+      ),
+    ]);
+    expect(outcomes.map((result) => result.outcome)).toEqual(["updated", "updated"]);
+    const saved = await repo.getDeployment("different-hints");
+    expect(saved?.score).toBe(13);
+    expect(saved?.hintsRevealed?.map((hint) => hint.hintId).sort()).toEqual(["h1", "h2"]);
+  });
+
+  it("does not create a partial deployment when revealing a hint on a missing row", async () => {
+    const { repo } = makeBackend();
+    const result = await repo.applyHintPenalty(
+      "missing-hint",
+      { hintId: "h1", revealedAt: AT, penaltyApplied: 4 },
+      AT,
+    );
+    expect(result.outcome).not.toBe("updated");
+    expect(await repo.getDeployment("missing-hint")).toBeUndefined();
+  });
+
   it("should keep transaction-style writes all-or-nothing", async () => {
     const { repo } = makeBackend();
     await repo.putDeployment(

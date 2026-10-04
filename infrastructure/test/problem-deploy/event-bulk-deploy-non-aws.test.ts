@@ -459,35 +459,45 @@ describe("bulkDeployEvent — engine-aware runtime dispatch gate (#2571 review-f
     expect(getGcpCredential).not.toHaveBeenCalled();
   });
 
-  it("should refuse (not fall through to the AWS path) a genuinely different runtime like docker/compose", async () => {
-    const { shared, ddbSend, eventsSend } = buildNonAwsShared({
-      resolveProblemRuntimeDescriptor: (problemId) =>
-        problemId === "hello-world"
-          ? { provider: "docker", engine: "compose", entry: "docker-compose.yml" }
-          : undefined,
-    });
-    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
-    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
-    ddbSend.mockResolvedValueOnce({ Items: [] });
-    ddbSend.mockResolvedValue({});
-    eventsSend.mockResolvedValue({});
+  it.each(["single", "composite"] as const)(
+    "refuses a %s Docker/compose runtime before cloud mutation",
+    async (kind) => {
+      const { shared, ddbSend, eventsSend } = buildNonAwsShared({
+        resolveProblemRuntimeDescriptor: (problemId) => {
+          if (problemId !== "hello-world") return undefined;
+          const runtime = {
+            provider: "docker",
+            engine: "compose",
+            entry: "docker-compose.yml",
+          } as const;
+          return kind === "single"
+            ? runtime
+            : { kind: "composite", targets: [{ id: "container", ...runtime }] };
+        },
+      });
+      ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+      ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+      ddbSend.mockResolvedValueOnce({ Items: [] });
+      ddbSend.mockResolvedValue({});
+      eventsSend.mockResolvedValue({});
 
-    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
-    expect(out.kind).toBe("ok");
-    if (out.kind !== "ok") throw new Error("expected ok");
-    expect(out.result.enqueued).toBe(1);
-    expect(out.result.unsupportedRuntime).toBe(1);
-    expect(out.result.unsupportedRuntimeProblems).toEqual(["hello-world"]);
-    expect(dispatchPreparedDeployment).not.toHaveBeenCalled();
+      const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+      expect(out.kind).toBe("ok");
+      if (out.kind !== "ok") throw new Error("expected ok");
+      expect(out.result.enqueued).toBe(1);
+      expect(out.result.unsupportedRuntime).toBe(1);
+      expect(out.result.unsupportedRuntimeProblems).toEqual(["hello-world"]);
+      expect(dispatchPreparedDeployment).not.toHaveBeenCalled();
 
-    // Pre-fix, this row rode the AWS/CFn path (it isn't in the old
-    // `NON_AWS_CLOUD_PROVIDERS` list) — confirm exactly 1 DeployCreateRequested
-    // entry (the real AWS problem only), not 2.
-    const putCmd = eventsSend.mock.calls
-      .map((c) => c[0])
-      .find((c): c is PutEventsCommand => c instanceof PutEventsCommand);
-    expect(putCmd?.input.Entries).toHaveLength(1);
-  });
+      // Pre-fix, this row rode the AWS/CFn path (it isn't in the old
+      // `NON_AWS_CLOUD_PROVIDERS` list) — confirm exactly 1 DeployCreateRequested
+      // entry (the real AWS problem only), not 2.
+      const putCmd = eventsSend.mock.calls
+        .map((c) => c[0])
+        .find((c): c is PutEventsCommand => c instanceof PutEventsCommand);
+      expect(putCmd?.input.Entries).toHaveLength(1);
+    },
+  );
 
   it("should keep the AWS/CFn path for an explicit aws/cloudformation single descriptor (byte-identical to no resolver)", async () => {
     // `classifyBulkRuntimeDispatch`'s middle branch: a resolver that returns the

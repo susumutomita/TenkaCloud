@@ -11,7 +11,7 @@ import type { SamlIdpConfig } from "@tenkacloud/saml-utils";
 /**
  * IdP CRUD の scope discriminator — Control Plane は `system`、 Application Plane は
  * 呼び出し元 tenant。 [Issue #2527 Slice 1 step 2] Source of truth; the shared CRUD
- * core (`control-plane/handlers/idp-handler/core.ts`) re-exports it for its
+ * core (`shared/idp/core.ts`) re-exports it for its
  * handler/store consumers.
  */
 export type IdpScope =
@@ -55,7 +55,7 @@ export type SamlIdpRecord = SamlIdpConfig;
 /**
  * [Issue #2442 / Phase C5] Repository for the SamlIdps aggregate — a verbatim
  * behavior-preserving relocation of `IdpStore`
- * (`control-plane/handlers/idp-handler/core.ts`) onto the `CONTROL_DATA_BACKEND`
+ * (`shared/idp/core.ts`) onto the `CONTROL_DATA_BACKEND`
  * seam. Method names/signatures (including `get`'s `| null` — not `| undefined`,
  * unlike every other point-read in this file) are unchanged so a resolved
  * instance is assignable directly to `IdpHandlerDeps.store: IdpStore` at the two

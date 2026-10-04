@@ -38,9 +38,9 @@ export interface CollectedTickTarget {
 /** per-minute pass に差し込む driver (= scan 後に active と保存済み pending を配送する)。 */
 export interface CoordinationTickPass {
   /** scan 1 ページから tick 対象を集約する (= per-page で呼ぶ)。 */
-  collect(items: readonly Partial<DeploymentItem>[], nowIso: string): void;
+  collect(items: readonly Partial<DeploymentItem>[], nowIso: string): void | Promise<void>;
   /** Saved obligations remain discoverable after all deployment rows leave COMPLETE. */
-  collectRecovery(scopes: readonly CoordinationStateScope[]): void;
+  collectRecovery(scopes: readonly CoordinationStateScope[]): void | Promise<void>;
   /** active を先に送り、終了済みは保存済み pending を見つけた場合だけ送る。 */
   run(nowMs: number, nowIso: string): Promise<void>;
 }
@@ -189,15 +189,50 @@ export function createCoordinationTickPass(
   dispatcherFunctionName: string,
   coordinationProblemIds: ReadonlySet<string>,
   repository?: DeploymentsCoordinationPort,
+  resolveProblemIds?: (scope: Partial<DeploymentItem>) => Promise<{
+    problemIds: ReadonlySet<string>;
+    window?: Pick<DeploymentItem, "eventStartsAt" | "eventEndsAt">;
+  }>,
 ): CoordinationTickPass {
   const targets = new Map<string, CollectedTickTarget>();
   const ended = new Map<string, CollectedTickTarget>();
   return {
-    collect: (items, nowIso) =>
-      collectCoordinationTickTargets(coordinationProblemIds, items, targets, nowIso, ended),
-    collectRecovery: (scopes) => {
+    collect: async (items, nowIso) => {
+      if (!resolveProblemIds) {
+        collectCoordinationTickTargets(coordinationProblemIds, items, targets, nowIso, ended);
+        return;
+      }
+      for (const item of items) {
+        try {
+          const { problemIds, window } = await resolveProblemIds(item);
+          collectCoordinationTickTargets(
+            problemIds,
+            [window ? { ...item, ...window } : item],
+            targets,
+            nowIso,
+            ended,
+          );
+        } catch (error) {
+          console.warn("[generic-scoring] saved coordination catalog unavailable", {
+            jobId: item.jobId,
+            message: String(error),
+          });
+        }
+      }
+    },
+    collectRecovery: async (scopes) => {
       for (const scope of scopes) {
-        if (!coordinationProblemIds.has(scope.problemId)) continue;
+        let ids = coordinationProblemIds;
+        try {
+          ids = resolveProblemIds ? (await resolveProblemIds(scope)).problemIds : ids;
+        } catch (error) {
+          console.warn("[generic-scoring] saved recovery catalog unavailable", {
+            eventId: scope.eventId,
+            message: String(error),
+          });
+          continue;
+        }
+        if (!ids.has(scope.problemId)) continue;
         const key = JSON.stringify([scope.tenantId, scope.eventId, scope.problemId]);
         if (!ended.has(key))
           ended.set(key, {

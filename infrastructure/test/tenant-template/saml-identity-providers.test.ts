@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   attachTenantSamlIdentityProviders,
   parseTenantSamlIdpConfig,
-} from "../../lib/tenant-template/saml-identity-providers";
+} from "../../lib/tenant-template/saml-identity-providers.js";
 
 /**
  * Issue #1340 Phase 2: per-tenant SAML IdP env parsing + CDK attach。 Phase 1 の汎用 helper を

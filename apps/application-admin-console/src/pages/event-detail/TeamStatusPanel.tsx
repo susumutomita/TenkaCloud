@@ -129,7 +129,7 @@ export function TeamStatusPanel({
               <SpaceBetween direction="horizontal" size="xs">
                 <Box variant="strong">{r.totalScore} pt</Box>
                 <Box variant="small" color="text-status-inactive">
-                  {t("disruptions.team_status_solved", { count: r.problemsSolved })}
+                  {t("disruptions.team_status_solved", { count: r.problemsSolved ?? "—" })}
                 </Box>
               </SpaceBetween>
             ),

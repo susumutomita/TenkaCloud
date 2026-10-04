@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { App, Duration, Stack } from "aws-cdk-lib";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   defineNodejsFunction,
   MAX_DEFINE_VALUE_BYTES,
@@ -20,14 +20,13 @@ const NAME = "BATTLE_PROBLEMS_TEST_BLOB";
 const cleanup: string[] = [];
 
 afterEach(() => {
-  delete process.env[NAME];
-  delete process.env.LAMBDA_TASK_ROOT;
+  vi.unstubAllEnvs();
   for (const dir of cleanup.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
 describe("readCatalogBlob", () => {
   it("prefers the env value, which is how tests and small defines inject", () => {
-    process.env[NAME] = '{"from":"env"}';
+    vi.stubEnv(NAME, '{"from":"env"}');
     expect(readCatalogBlob(NAME)).toBe('{"from":"env"}');
   });
 
@@ -36,14 +35,15 @@ describe("readCatalogBlob", () => {
     cleanup.push(root);
     mkdirSync(join(root, "catalog-data"));
     writeFileSync(join(root, "catalog-data", `${NAME}.json`), '{"from":"file"}');
-    process.env.LAMBDA_TASK_ROOT = root;
+    vi.stubEnv("LAMBDA_TASK_ROOT", root);
     expect(readCatalogBlob(NAME)).toBe('{"from":"file"}');
   });
 
   it("returns undefined when neither exists, so callers keep their own fallback", () => {
     expect(readCatalogBlob(NAME)).toBeUndefined();
-    process.env.LAMBDA_TASK_ROOT = mkdtempSync(join(tmpdir(), "tc-blob-empty-"));
-    cleanup.push(process.env.LAMBDA_TASK_ROOT);
+    const emptyRoot = mkdtempSync(join(tmpdir(), "tc-blob-empty-"));
+    cleanup.push(emptyRoot);
+    vi.stubEnv("LAMBDA_TASK_ROOT", emptyRoot);
     expect(readCatalogBlob(NAME)).toBeUndefined();
   });
 });
@@ -70,7 +70,7 @@ describe("defineNodejsFunction carrying catalog data", () => {
       timeout: Duration.seconds(30),
       memorySize: 512,
       ...props,
-    } as Parameters<typeof defineNodejsFunction>[1]);
+    });
   }
 
   it("refuses a define too large for a single argv entry, naming the key", () => {
@@ -87,13 +87,17 @@ describe("defineNodejsFunction carrying catalog data", () => {
     ).not.toThrow();
   });
 
-  it("writes bundledData where the afterBundling hook can copy it into the bundle", () => {
-    const fn = build({ bundledData: { BATTLE_PROBLEMS_TEST: '{"a":1}' } });
-    const hooks = (fn.node.tryFindChild("Code") ?? { node: { metadata: [] } }) as unknown as object;
-    // The construct does not expose bundling options, so assert on the observable
-    // effect instead: a synthesizable function was produced with data attached,
-    // and the same call without data still synthesizes.
-    expect(hooks).toBeDefined();
+  it("stages exact catalog JSON for asset bundling and allows calls without catalog data", () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-catalog-staging-test-"));
+    cleanup.push(root);
+    vi.stubEnv("TMPDIR", root);
+    build({ bundledData: { BATTLE_PROBLEMS_TEST: '{"a":1}' } });
+
+    const staged = readdirSync(root).filter((name) => name.startsWith("tc-bundled-data-"));
+    expect(staged).toHaveLength(1);
+    expect(readFileSync(join(root, staged[0], "BATTLE_PROBLEMS_TEST.json"), "utf8")).toBe(
+      '{"a":1}',
+    );
     expect(() => build({})).not.toThrow();
   });
 });

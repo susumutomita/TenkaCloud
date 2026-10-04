@@ -49,18 +49,16 @@
 <li><a href="/docs/tutorials/first-pack/index.en.html">First pack tutorial</a></li>
 </ul></section>
 <section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a></li>
+<li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
 <li><a href="/docs/operate/use-existing-pack/index.en.html" aria-current="page">Use an existing pack</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
+<li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime execution status</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
 <li><a href="/docs/reference/onboarding-analytics/index.en.html">Onboarding A/B analytics</a></li>
-<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
-<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -68,73 +66,15 @@
 <main class="doc">
 <article>
 <h1>Use an existing pack <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>This is the five-minute organizer path for using a pack that someone else already
-authored. If you need to write or publish a pack, start with the
-<a href="/docs/tutorials/first-pack/index.en.html">first pack tutorial</a>. For the full model,
-see <a href="/docs/concepts/problem-packs/index.en.html">problem packs</a>; for the normative
-command list, see the <a href="/docs/reference/cli/index.en.html">CLI reference</a>.</p>
-<h2>Prerequisites</h2>
-<p>Have one of these:</p>
-<ul>
-<li>An HTTPS Git URL for the pack and the full immutable 40-hex commit SHA to run.</li>
-<li>A local pack directory, for a local rehearsal before the pack is pinned in Git.</li>
-</ul>
-<p>The CLI commands below run from a TenkaCloud repository checkout through the
-<code>infrastructure</code> workspace. No AWS credentials are needed until the organizer
-console creates and deploys a real event.</p>
-<h2>1. Install the pinned Git revision</h2>
-<p>Prefer the Git form for event use. It records <code>sourceKind: &quot;git&quot;</code>, the repository
-URL, the resolved commit, any subdir, and the content digest in <code>packs-lock.json</code>.
-The <code>--commit</code> value must be a full 40-hex SHA; branches, tags, <code>HEAD</code>, and short
-hashes are refused by design.</p>
-<pre><code class="language-bash">make pack-install ARGS=&quot;git https://github.com/example/acme-pack.git --commit &lt;40-hex-commit-sha&gt;&quot;
+<p>Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate&#39;s event catalog. Activation is an offline catalog record, not a current hosting workflow.</p>
+<h2 id="prerequisites">Prerequisites</h2><p>Obtain a trusted local pack directory or HTTPS Git URL plus an immutable full 40-hex commit SHA. Review the declared runtime, files and provenance before installation.</p>
+<h2 id="install-the-pinned-git-revision">Install the pinned Git revision</h2><pre><code class="language-sh">make pack-install ARGS=&quot;git &lt;https-url&gt; --commit &lt;40-hex-commit-sha&gt;&quot;
+make pack-list
+bun run pack inspect &lt;id@version&gt;
 </code></pre>
-<p>Expected shape:</p>
-<pre><code class="language-text">Pack installed: com.example.event-pack@1.0.0
-  source: git
-  digest: &lt;sha256-content-digest&gt;
-  problems: 3
-</code></pre>
-<p>If you were handed a local pack directory for rehearsal, install it with the local
-form instead, then move to a pinned Git install before sharing it with organizers:</p>
-<pre><code class="language-bash">make pack-install ARGS=&quot;./path/to/pack&quot;
-</code></pre>
-<h2>2. Activate it for the tenant</h2>
-<p>Activation makes one installed immutable revision visible to one tenant. It still
-runs locally against the snapshot store and refuses duplicate problem IDs,
-unavailable runtimes, digest mismatches, and missing installs.</p>
-<pre><code class="language-bash">make pack-activate ARGS=&quot;com.example.event-pack@1.0.0 --tenant acme&quot;
-</code></pre>
-<p>Expected shape:</p>
-<pre><code class="language-text">Pack activated for tenant &#39;acme&#39;: com.example.event-pack@1.0.0
-</code></pre>
-<h2>3. Verify the installed revision</h2>
-<p><code>pack list</code> verifies the local lock entry that activation points at. It is not a
-tenant-scoped activation view, so pair this with the activation success line above.</p>
-<pre><code class="language-bash">make pack-list
-</code></pre>
-<p>Expected shape:</p>
-<pre><code class="language-text">Installed packs: 1
-  - com.example.event-pack@1.0.0 (git, 3 problems, &lt;sha256-content-digest&gt;)
-</code></pre>
-<h2>4. Create the event <span class="doc-badge doc-badge--preview">Preview</span></h2>
-<p>In the <code>application-admin-console</code>, create an event for the same tenant. The event
-picker composes the official catalog with that tenant&#39;s activated pack revisions,
-so activated pack problems appear beside the official catalog problems.</p>
-<p>At event creation time, the platform pins the effective catalog snapshot. Later
-<code>install</code>, <code>activate</code>, or <code>deactivate</code> operations do not rewrite that event. When
-the organizer deploys a selected problem, the deployment resolves against the
-event&#39;s pinned snapshot and carries the problem&#39;s pack provenance instead of a
-mutable catalog lookup.</p>
-<p>This browser event-creation path is still pending live batch verification, so it
-uses the same preview badge as the event steps in the first-pack tutorial. For the
-broader operator flow, continue with
-<a href="/docs/operate/run-an-event/index.en.html">run an event end to end</a>.</p>
-<p>Packs only reach a real deploy through Lite mode (<code>make deploy</code>), which reads
-activations for the fixed tenant id <code>local</code> — activate with <code>--tenant local</code>, not
-an arbitrary tenant name, once you are past the local rehearsal above. SaaS mode
-(<code>make deploy-saas</code>) refuses to synth outright while any pack activation exists,
-rather than silently dropping it from the pooled catalog.</p>
+<p>Run from the repository root. The default store is <code>.tenkacloud/pack-store</code>. Git install uses the network; local-directory validation and installation do not deploy anything.</p>
+<h2 id="verify-the-installed-revision">Verify the stored revision</h2><p>Check the source, resolved commit and digest. Installation is not authorization to run arbitrary code, expose endpoints or create cloud resources.</p>
+<h2 id="create-the-event">Event integration is unavailable</h2><p>Installed packs do not appear in the current event picker through activation. This is an implementation gap, not merely pending live batch verification. Use a supported core-catalog problem for an event and record the pack route as Not run. See <a href="/docs/tutorials/first-pack/index.en.html">first pack tutorial</a>.</p>
 
 </article>
 </main>

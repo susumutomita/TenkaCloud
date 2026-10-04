@@ -1,0 +1,42 @@
+/** Competition state only; installation accounts, authentication, flags and audit remain. */
+export const LITE_TURSO_COMPETITION_TABLES = [
+  "score_summary",
+  "leaderboard_snapshots",
+  "deployments",
+  "deployment_score_events",
+  "coordination_state",
+  "coordination_state_scoped",
+  "coordination_run",
+  "coordination_initialization_lease",
+  "coordination_match_secret",
+  "disruption_audit",
+  "disruption_fire_claims",
+  "disruption_recurring",
+  "disruption_exec_claims",
+  "events",
+  "notifications",
+  "problem_endpoints",
+  "teams",
+] as const;
+
+/** Published cloud-v1 competition records; its configuration is deliberately retained. */
+export const CLOUD_TURSO_COMPETITION_TABLES = [
+  "cloud_events",
+  "cloud_teams",
+  "cloud_access_keys",
+  "cloud_create_receipts",
+  "cloud_deployments",
+  "cloud_team_scores",
+  "cloud_deployment_targets",
+  "cloud_deployment_receipts",
+  "cloud_dispatch",
+  "cloud_creations",
+  "cloud_deployment_attempts",
+  "cloud_teardowns",
+  "cloud_score_events",
+  "cloud_competitor_references",
+  "cloud_coordination_runs",
+  "cloud_coordination_history",
+  "cloud_coordination_receipts",
+  "cloud_coordination_scores",
+] as const;

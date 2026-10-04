@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SourceBundleConfig } from "../../lib/config/config-interface";
+import type { SourceBundleConfig } from "../../lib/source-bundle/lifecycle-policy";
 import { buildSourceBundleLifecyclePolicy } from "../../lib/source-bundle/lifecycle-policy";
 
 /**
@@ -53,4 +53,16 @@ describe("buildSourceBundleLifecyclePolicy (Issue #1056)", () => {
       buildSourceBundleLifecyclePolicy({ keepNoncurrentVersions: "abc", expireAfterDays: 1 }),
     ).toThrow();
   });
+});
+
+it("should reject retention counts outside S3 limits without echoing raw settings", () => {
+  expect(() => buildSourceBundleLifecyclePolicy({ keepNoncurrentVersions: 101 })).toThrow(
+    "must not exceed 100",
+  );
+  expect(() => buildSourceBundleLifecyclePolicy({ expireAfterDays: "sensitive-input" })).toThrow(
+    "positive safe integer",
+  );
+  expect(() =>
+    buildSourceBundleLifecyclePolicy({ expireAfterDays: Number.MAX_SAFE_INTEGER + 1 }),
+  ).toThrow("positive safe integer");
 });

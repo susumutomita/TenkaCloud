@@ -556,8 +556,7 @@ describe("DynamoDbDeploymentsRepository writes — participant scoring", () => {
     expect(updates(commands)[0].input).toMatchObject({
       UpdateExpression:
         "SET hintsRevealed = list_append(if_not_exists(hintsRevealed, :empty), :record), updatedAt = :now ADD score :neg",
-      ConditionExpression:
-        "attribute_not_exists(hintsRevealed) OR NOT contains(hintsRevealed, :recordForContains)",
+      ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(hintsRevealed)",
       ReturnValues: "ALL_NEW",
     });
 

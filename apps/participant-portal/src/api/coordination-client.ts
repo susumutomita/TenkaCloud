@@ -1,3 +1,4 @@
+import { newOperationKey } from "@tenkacloud/web-kit/pending-operation";
 import { StatusCodes } from "http-status-codes";
 
 /**
@@ -31,8 +32,16 @@ async function mapResponse(res: Response): Promise<CoordinationOutcome> {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       return { kind: "rejected", error: body.error ?? "rejected" };
     }
-    case StatusCodes.CONFLICT:
+    case StatusCodes.CONFLICT: {
+      const body = (await res.json().catch(() => ({}))) as { error?: string } | null;
+      if (body?.error === "coordination_run_changed")
+        return { kind: "rejected", error: body.error };
       return { kind: "conflict" };
+    }
+    case StatusCodes.TOO_MANY_REQUESTS:
+    case StatusCodes.INTERNAL_SERVER_ERROR:
+    case StatusCodes.BAD_GATEWAY:
+    case StatusCodes.GATEWAY_TIMEOUT:
     case StatusCodes.SERVICE_UNAVAILABLE:
       return { kind: "unavailable" };
     case StatusCodes.UNAUTHORIZED:
@@ -43,23 +52,29 @@ async function mapResponse(res: Response): Promise<CoordinationOutcome> {
   }
 }
 
-/** team の op を提出し、 適用後の projection を返す (= write 経路)。 */
+/** Submit a team operation; runId pins retries to the cloud coordination pointer or local jobId. */
 export async function submitCoordinationOp(
   coordinationApiUrl: string,
   teamLoginKey: string,
   op: unknown,
   signal?: AbortSignal,
+  operationKey: string = newOperationKey(),
+  runId?: string,
 ): Promise<CoordinationOutcome> {
   const res = await fetch(coordinationUrl(coordinationApiUrl, "portal/me/coordination/op"), {
     method: "POST",
-    headers: { authorization: `Bearer ${teamLoginKey}`, "content-type": "application/json" },
-    body: JSON.stringify({ op }),
+    headers: {
+      authorization: `Bearer ${teamLoginKey}`,
+      "content-type": "application/json",
+      "Idempotency-Key": operationKey,
+    },
+    body: JSON.stringify({ op, ...(runId ? { runId } : {}) }),
     signal,
   });
   return mapResponse(res);
 }
 
-/** 自チームの現在 projection を読む (= 書き込みなし、 polling 用)。 */
+/** Reads the private team projection; the authoritative server tick may persist state/scoring. */
 export async function getCoordinationProjection(
   coordinationApiUrl: string,
   teamLoginKey: string,

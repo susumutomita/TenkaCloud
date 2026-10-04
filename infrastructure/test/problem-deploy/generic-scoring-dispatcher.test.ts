@@ -1,4 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ControlDataRuntime } from "../../lib/problem-deploy/control-data/runtime-repositories.js";
+import { createSavedScoringFixture } from "./saved-scoring-catalog.test-helpers.js";
+
+const savedScoring = createSavedScoringFixture();
+vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/shared", async (original) => {
+  const actual =
+    await original<
+      typeof import("../../lib/problem-deploy/handlers/generic-scoring-handler/shared")
+    >();
+  return {
+    ...actual,
+    buildSharedResources: (runtime: ControlDataRuntime) =>
+      savedScoring.attach(actual.buildSharedResources(runtime)),
+  };
+});
 
 /**
  * Generic scoring dispatcher (= `generic-scoring-handler/index.ts` の handler) の test。
@@ -15,7 +30,11 @@ vi.mock("@aws-sdk/lib-dynamodb", async () => {
     await vi.importActual<typeof import("@aws-sdk/lib-dynamodb")>("@aws-sdk/lib-dynamodb");
   return {
     ...actual,
-    DynamoDBDocumentClient: { from: () => ({ send: ddbSend }) },
+    DynamoDBDocumentClient: {
+      from: () => ({
+        send: async (command: unknown) => savedScoring.eventRead(command) ?? ddbSend(command),
+      }),
+    },
   };
 });
 
@@ -56,6 +75,7 @@ function sampleUptimeDeployment(over: Record<string, unknown> = {}) {
     tenantId: "tenant-acme",
     teamId: "team-1",
     eventId: "event-1",
+    catalogKey: savedScoring.catalogKey,
     status: "COMPLETE",
     teamLoginKey: "KEY1",
     teamName: "alpha",

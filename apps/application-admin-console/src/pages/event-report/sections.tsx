@@ -220,7 +220,7 @@ export function ScoreboardSection({
                 <td>{row.rank}</td>
                 <td>{row.teamName}</td>
                 <td>{row.totalScore} pt</td>
-                <td>{row.problemsSolved}</td>
+                <td>{row.problemsSolved ?? "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -264,8 +264,8 @@ export function ProblemBreakdownSection({
                   <code>{row.problemId}</code>
                 </td>
                 <td>{row.defaultRegion}</td>
-                <td>{row.solvedCount}</td>
-                <td>{row.avgScore}</td>
+                <td>{row.solvedCount ?? "—"}</td>
+                <td>{row.avgScore ?? "—"}</td>
                 <td>
                   {row.successfulCount} / {row.deploymentsCount}
                 </td>

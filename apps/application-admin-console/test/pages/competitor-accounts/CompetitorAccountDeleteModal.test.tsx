@@ -83,4 +83,19 @@ describe("CompetitorAccountDeleteModal", () => {
       screen.getByRole("button", { name: "competitor_accounts.delete_modal_confirm" }),
     ).toBeDisabled();
   });
+
+  it("explains local host deletion without claiming a remote trust role is removed", () => {
+    render(
+      <CompetitorAccountDeleteModal
+        target={target}
+        inFlight={false}
+        canMutateTenant={true}
+        localHost
+        onDismiss={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("competitor_accounts.host_delete_body")).toBeInTheDocument();
+    expect(screen.queryByText("competitor_accounts.delete_modal_body_2")).not.toBeInTheDocument();
+  });
 });

@@ -95,6 +95,7 @@ export async function reconcileRuntimeDeployment(
   item: Partial<DeploymentItem>,
   nowIso: string,
 ): Promise<void> {
+  if (item.runtimeProvider === "native") return;
   const runtime = runtimeFromItem(item);
   if (!runtime) return;
   if (runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE) return;

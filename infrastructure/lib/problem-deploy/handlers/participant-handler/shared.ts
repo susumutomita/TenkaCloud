@@ -10,10 +10,17 @@ import type {
   DeploymentsQueryPort,
   DeploymentsRepository,
 } from "../../control-data/deployments-repository.js";
+import type { EventRecord } from "../../control-data/events-repository.js";
 import type { FeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
 import type { NotificationsRepository } from "../../control-data/notifications-repository.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
+import { loadSavedCatalog, type ResolvedExecutionCatalog } from "../shared/execution-catalog.js";
+import {
+  resolveSavedCatalogContext,
+  type SavedCatalogLoader,
+  savedScoringMap,
+} from "../shared/saved-catalog-context.js";
 
 /**
  * Participant Lambda は DDB Query しか叩かない。Deploy Worker / API が使う
@@ -53,6 +60,11 @@ export interface ParticipantSharedResources {
    * route が default URL 算出に使う。`endpoints[]` 宣言の無い problem は key ごと不在。
    */
   readonly problemsEndpoints: Record<string, readonly ProblemEndpointSlot[]>;
+  /** Catalog-declared coordination problems; others need no run-pointer lookup. */
+  readonly coordinationProblemIds?: readonly string[];
+  readonly catalogLoader?: SavedCatalogLoader;
+  readonly executionCatalog?: ResolvedExecutionCatalog;
+  readonly liveEvent?: EventRecord;
 }
 
 export function buildParticipantSharedResources(
@@ -61,6 +73,7 @@ export function buildParticipantSharedResources(
 ): ParticipantSharedResources {
   return {
     runtime,
+    catalogLoader: loadSavedCatalog,
     // [Issue #2441 / Phase B PR-6] pure SQL backend (turso) では Deployments table 自体が
     // synth されず env も配線されないため、module-load を fail-fast にすると cold start が落ちる。
     // 空文字 default に緩和し、dynamodb backend の誤設定は runtime resolver
@@ -82,6 +95,7 @@ export function buildParticipantSharedResources(
     problemsScoring: parseScoringEnv(readCatalogBlob("BATTLE_PROBLEMS_SCORING")),
     problemsWriteups: parseWriteupsEnv(readCatalogBlob("BATTLE_PROBLEMS_WRITEUPS")),
     problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
+    coordinationProblemIds: JSON.parse(readCatalogBlob("COORDINATION_PROBLEM_IDS") ?? "[]"),
   };
 }
 
@@ -136,7 +150,24 @@ export async function queryTeamItems(
   teamLoginKey: string,
 ): Promise<Partial<DeploymentItem>[]> {
   const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
-  const rows = await repository.listByTeamLoginKey(teamLoginKey);
+  const queried = await repository.listByTeamLoginKey(teamLoginKey);
+  // GSI results can lag key rotation/deletion. Pinned production requests always
+  // authorize against the current META row before resolving immutable content.
+  const rows = shared.catalogLoader
+    ? (
+        await Promise.all(
+          queried.map((item) =>
+            repository.getDeployment(item.jobId, {
+              consistentRead: true,
+              expectedTeamLoginKey: teamLoginKey,
+            }),
+          ),
+        )
+      ).filter(
+        (item): item is NonNullable<typeof item> =>
+          !!item && item.teamLoginKey === teamLoginKey && item.expiresAt > Date.now() / 1000,
+      )
+    : queried;
   // queryTeamItems is still shared with B2/B3 write handlers. The repository
   // returns domain records (no physical keys), so keep this legacy helper's
   // return shape stable by reconstructing the META keys its write callers use.
@@ -177,4 +208,35 @@ export function resolveFeatureFlagsRepository(
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });
+}
+
+/** Never mutate the Lambda's shared maps: concurrent A/B events get distinct contexts. */
+export async function resolveParticipantCatalog(
+  shared: ParticipantSharedResources,
+  items: readonly Partial<DeploymentItem>[],
+): Promise<ParticipantSharedResources> {
+  const sample = items[0];
+  if (!shared.catalogLoader || !sample) return shared;
+  if (
+    items.some(
+      (item) =>
+        item.tenantId !== sample.tenantId ||
+        item.eventId !== sample.eventId ||
+        (item.catalogKey && sample.catalogKey && item.catalogKey !== sample.catalogKey),
+    )
+  ) {
+    throw new Error("catalog_scope_mismatch: team deployments must share one saved event catalog");
+  }
+  const context = await resolveSavedCatalogContext(shared, sample);
+  if (!context) throw new Error("catalog_pin_missing: participant catalog unavailable");
+  const { catalog, event } = context;
+  return {
+    ...shared,
+    executionCatalog: catalog,
+    liveEvent: event,
+    problemsScoring: savedScoringMap(catalog),
+    problemsWriteups: parseWriteupsEnv(JSON.stringify(catalog.writeups)),
+    problemsEndpoints: parseEndpointsEnv(JSON.stringify(catalog.endpoints)),
+    coordinationProblemIds: Object.keys(catalog.coordination),
+  };
 }

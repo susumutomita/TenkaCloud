@@ -10,7 +10,7 @@ import {
   type IdpStore,
   listIdps,
   updateIdp,
-} from "../../lib/control-plane/handlers/idp-handler/core";
+} from "../../lib/shared/idp/core";
 
 const VALID_METADATA = `<?xml version="1.0"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="http://idp.test/entity">
   <md:IDPSSODescriptor>
@@ -83,7 +83,7 @@ function makeDeps(): IdpHandlerDeps & {
   };
 }
 
-describe("createIdp (Control Plane scope)", () => {
+describe("createIdp (shared repository scope)", () => {
   const scope: IdpScope = { kind: "system" };
 
   it("should reject when the body fails schema validation", async () => {
@@ -148,7 +148,7 @@ describe("createIdp (Control Plane scope)", () => {
         groupToRole: { admins: "TenantAdmin" },
         createdAt: "2026-05-24T00:00:00.000Z",
         updatedAt: "2026-05-24T00:00:00.000Z",
-      } as SamlIdpConfig);
+      });
     }
     const res = await createIdp(deps, scope, happyBody);
     expect("error" in res).toBe(true);
@@ -258,12 +258,12 @@ describe("listIdps (tenant isolation)", () => {
 describe("emitAudit", () => {
   beforeEach(() => vi.restoreAllMocks());
   it("should structured-log the audit event so #1292 subscriber can consume it", async () => {
-    const spy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const spy = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const deps = makeDeps();
     await createIdp(deps, { kind: "system" }, happyBody);
     // createIdp itself doesn't emit; routes layer emits — but we exercise the
     // direct helper to lock the wire shape.
-    const { emitAudit } = await import("../../lib/control-plane/handlers/idp-handler/core");
+    const { emitAudit } = await import("../../lib/shared/idp/core");
     emitAudit({
       action: "idp.create",
       scope: { kind: "tenant", tenantId: "acme" },

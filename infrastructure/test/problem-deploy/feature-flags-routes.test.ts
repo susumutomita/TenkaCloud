@@ -13,7 +13,6 @@ import { buildAuthErrorHandler } from "../../lib/problem-deploy/handlers/shared/
 const mocks = vi.hoisted(() => ({
   getFeatureFlags: vi.fn(),
   putFeatureFlags: vi.fn(),
-  auditEventAction: vi.fn(),
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/event-handler/feature-flags", async (importOriginal) => {
@@ -27,9 +26,6 @@ vi.mock("../../lib/problem-deploy/handlers/event-handler/feature-flags", async (
     putFeatureFlags: mocks.putFeatureFlags,
   };
 });
-vi.mock("../../lib/problem-deploy/handlers/event-handler/audit", () => ({
-  auditEventAction: mocks.auditEventAction,
-}));
 
 const { registerFeatureFlagsRoutes } = await import(
   "../../lib/problem-deploy/handlers/event-handler/routes/feature-flags"
@@ -140,7 +136,7 @@ describe("PUT /admin/feature-flags", () => {
     expect((await res.json()).error).toBe("invalid_body");
   });
 
-  it("should save, audit, and return the new flags for a valid TenantAdmin request", async () => {
+  it("should save and return the new flags for a valid TenantAdmin request", async () => {
     mocks.putFeatureFlags.mockResolvedValueOnce({ samlSso: true, redTeam: false });
 
     const res = await buildApp().request("/admin/feature-flags", {
@@ -158,11 +154,6 @@ describe("PUT /admin/feature-flags", () => {
       "unknown",
       expect.any(Number),
     );
-    expect(mocks.auditEventAction).toHaveBeenCalledWith(
-      expect.anything(),
-      "update_feature_flags",
-      "feature-flags",
-    );
   });
 
   it("should surface a write error via handleRouteError (5xx)", async () => {
@@ -175,6 +166,5 @@ describe("PUT /admin/feature-flags", () => {
     });
 
     expect(res.status).toBeGreaterThanOrEqual(500);
-    expect(mocks.auditEventAction).not.toHaveBeenCalled();
   });
 });

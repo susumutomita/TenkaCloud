@@ -60,6 +60,7 @@ export interface EventReportExport {
   readonly status: string;
   readonly generatedAt: string;
   readonly coverNote: string;
+  readonly dataAvailabilityNote?: string;
   readonly summary: EventReportSummary;
   readonly scoreboard: readonly ScoreboardRow[];
   readonly breakdown: readonly ProblemBreakdownRow[];
@@ -208,7 +209,7 @@ function renderScoreboard(exp: EventReportExport): string {
   const rows = scoreboard
     .map(
       (r) =>
-        `        <tr><td>${r.rank}</td><td>${escapeHtml(r.teamName)}</td><td>${r.totalScore} pt</td><td>${r.problemsSolved}</td></tr>`,
+        `        <tr><td>${r.rank}</td><td>${escapeHtml(r.teamName)}</td><td>${r.totalScore} pt</td><td>${r.problemsSolved ?? "—"}</td></tr>`,
     )
     .join("\n");
   return `<section aria-label="${escapeHtml(labels.sectionScoreboard)}">
@@ -235,7 +236,7 @@ function renderBreakdown(exp: EventReportExport): string {
   const rows = breakdown
     .map(
       (r) =>
-        `        <tr><td><code>${escapeHtml(r.problemId)}</code></td><td>${escapeHtml(r.defaultRegion)}</td><td>${r.solvedCount}</td><td>${r.avgScore}</td><td>${r.successfulCount} / ${r.deploymentsCount}</td></tr>`,
+        `        <tr><td><code>${escapeHtml(r.problemId)}</code></td><td>${escapeHtml(r.defaultRegion)}</td><td>${r.solvedCount ?? "—"}</td><td>${r.avgScore ?? "—"}</td><td>${r.successfulCount} / ${r.deploymentsCount}</td></tr>`,
     )
     .join("\n");
   return `<section aria-label="${escapeHtml(labels.sectionProblems)}">
@@ -300,6 +301,7 @@ export function buildEventReportHtml(exp: EventReportExport): string {
   </section>`;
   const body = [
     header,
+    exp.dataAvailabilityNote ? `<p>${escapeHtml(exp.dataAvailabilityNote)}</p>` : "",
     renderSummary(exp),
     renderScoreboard(exp),
     renderBreakdown(exp),

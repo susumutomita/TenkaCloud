@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { resetCoordinationRun } from "../../lib/problem-deploy/handlers/event-handler/coordination-reset";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import { resolveDeploymentsRepository } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import * as executionArtifacts from "../../lib/problem-deploy/handlers/shared/execution-catalog.js";
+import * as catalogContexts from "../../lib/problem-deploy/handlers/shared/execution-catalog-context.js";
 import { makeFakeDdb } from "./control-data/control-data-write.test-helpers";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
@@ -95,7 +97,7 @@ describe("resetCoordinationRun (#3153)", () => {
     expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "ordinary")).toEqual({
       kind: "not_found",
     });
-    expect(ddbSend).not.toHaveBeenCalled();
+    expect(ddbSend.mock.calls.every(([cmd]) => cmd instanceof GetCommand)).toBe(true);
     expect(
       await getItem({ PK: "COORDRUN#tenant-acme#EV1#ordinary", SK: "CURRENT" }),
     ).toBeUndefined();
@@ -413,5 +415,84 @@ describe("resetCoordinationRun (#3153)", () => {
     // one silently discarded.
     expect(outcome).toEqual({ kind: "conflict" });
     expect((await getItem(pointerKey))?.runId).toBe("rSOMEONEELSE");
+  });
+});
+
+describe("saved catalog coordination reset", () => {
+  it("resets removed A support using A and verifies plugin bytes before mutation", async () => {
+    const { shared, getItem } = buildShared([deployment("battle-a", "team-1")], {
+      tenantId: "tenant-acme",
+      status: "READY",
+      catalogKey: "catalogs/A.json",
+    });
+    const saved = {
+      catalogKey: "catalogs/A.json",
+      catalog: { "battle-a": "battle-a" },
+      coordination: { "battle-a": { plugin: "coordination.ts" } },
+      runtimes: {},
+      visibility: {},
+      provenance: {},
+      disruptions: {},
+    };
+    const loader = vi
+      .spyOn(catalogContexts, "savedExecutionCatalog")
+      .mockResolvedValue(saved as never);
+    const plugin = vi
+      .spyOn(executionArtifacts, "loadExecutionPluginSource")
+      .mockResolvedValue("verified A plugin bytes");
+    try {
+      expect(
+        (
+          await resetCoordinationRun(
+            { ...shared, problemsCoordination: {} },
+            "tenant-acme",
+            "EV1",
+            "battle-a",
+          )
+        ).kind,
+      ).toBe("ok");
+      expect(loader).toHaveBeenCalledWith("catalogs/A.json");
+      expect(plugin).toHaveBeenCalledWith(saved, "battle-a");
+      expect(
+        await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+      ).toMatchObject({ pendingInitialization: true });
+    } finally {
+      loader.mockRestore();
+      plugin.mockRestore();
+    }
+  });
+
+  it("does not rotate the run when saved plugin bytes are missing", async () => {
+    const { shared, getItem } = buildShared([deployment("battle-a", "team-1")], {
+      tenantId: "tenant-acme",
+      status: "READY",
+      catalogKey: "catalogs/A.json",
+    });
+    const saved = {
+      catalogKey: "catalogs/A.json",
+      catalog: {},
+      coordination: { "battle-a": { plugin: "coordination.ts" } },
+      runtimes: {},
+      visibility: {},
+      provenance: {},
+      disruptions: {},
+    };
+    const loader = vi
+      .spyOn(catalogContexts, "savedExecutionCatalog")
+      .mockResolvedValue(saved as never);
+    const plugin = vi
+      .spyOn(executionArtifacts, "loadExecutionPluginSource")
+      .mockRejectedValue(new Error("Saved plugin missing"));
+    try {
+      await expect(resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).rejects.toThrow(
+        "Saved plugin missing",
+      );
+      expect(
+        await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+      ).toBeUndefined();
+    } finally {
+      loader.mockRestore();
+      plugin.mockRestore();
+    }
   });
 });

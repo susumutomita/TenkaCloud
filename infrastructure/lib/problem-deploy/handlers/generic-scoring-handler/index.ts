@@ -14,6 +14,7 @@ import {
   buildScheduledTeardownResources,
   resolveEventsRepository,
 } from "../event-handler/shared.js";
+import { liveEventRoundWindow } from "../shared/saved-catalog-context.js";
 import { applyKindResult } from "./apply-kind-result.js";
 import { dispatchCompositeReadyTargets } from "./composite-ready-dispatch.js";
 import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";
@@ -52,6 +53,8 @@ import {
   resolveDeploymentsRepository,
   resolveDisruptionsRepository,
   resolveProblemEndpointsRepository,
+  resolveScoringCatalog,
+  resolveScoringDeployment,
 } from "./shared.js";
 
 /**
@@ -156,6 +159,15 @@ export async function handler(): Promise<void> {
     process.env.COORDINATION_DISPATCHER_FUNCTION_NAME ?? "",
     parseCoordinationProblemIds(process.env.PROBLEM_COORDINATION),
     deploymentsRepository,
+    shared.catalogLoader
+      ? async (scope) => {
+          const scoped = await resolveScoringCatalog(shared, scope);
+          return {
+            problemIds: new Set(Object.keys(scoped.executionCatalog?.coordination ?? {})),
+            window: liveEventRoundWindow(scoped.liveEvent, scope),
+          };
+        }
+      : undefined,
   );
 
   // [Issue #2441 / Phase B3] `forEachCompleteDeploymentPage` absorbs the
@@ -166,7 +178,7 @@ export async function handler(): Promise<void> {
       async (page) => {
         const items = page as Partial<DeploymentItem>[];
 
-        coordinationTick.collect(items, nowIso); // [#2324] tick 対象を per-page で集約 (= 1 event 1 tick)。
+        await coordinationTick.collect(items, nowIso); // [#2324] tick 対象を per-page で集約 (= 1 event 1 tick)。
 
         // #558: deployment が属する event の `scoringLocked` を per-invocation で BatchGet 取得。
         // #2283: 同じ BatchGet で progressionGate (Gate 完了 bonus 用) も引く。
@@ -241,9 +253,13 @@ async function loadOperatorEffects(
       eventId,
       sinceIso,
     );
+    const scoped = await resolveScoringCatalog(
+      shared,
+      items.find((item) => item.eventId === eventId) ?? {},
+    );
     for (const [teamProblem, effects] of resolveOperatorEffects(
       rows,
-      shared.problemsDisruptions,
+      scoped.problemsDisruptions,
       nowMs,
     )) {
       out.set(`${eventId}#${teamProblem}`, effects);
@@ -269,25 +285,33 @@ async function processDeployment(
     // Phase 1 以前の旧 deployment は teamId / eventId を持たない → 採点 skip
     return;
   }
-  if (!isScoringActive(item, nowIso)) return;
+  const { problemId, tenantId, teamId } = item;
+  if (!shared.catalogLoader && !isScoringActive(item, nowIso)) return;
   const eventMeta = item.eventId ? eventMetaMap.get(item.eventId) : undefined;
   if (eventMeta?.scoringLocked === true) return;
 
+  // Resolve saved scoring before any score/bonus mutation or support check.
+  const resolved = await resolveScoringDeployment(shared, item, nowIso);
+  if (!resolved) return;
+  shared = resolved.shared;
+  item = resolved.item;
+  if (shared.executionCatalog)
+    phasesByProblemId = parsePhasesEnv(JSON.stringify(shared.executionCatalog.phases));
   // [#2283] Progression Gate: Gate 行の完了 latch + bonus / locked target の採点 skip。
   if (await applyProgressionGateTick(shared, item, eventMeta, nowIso, gateCaches)) return;
 
-  const scoring = shared.problemsScoring[item.problemId];
+  const scoring = shared.problemsScoring[problemId];
   if (!scoring || !isRuntimeScoringKind(scoring.kind)) return;
 
-  const slots = shared.problemsEndpoints[item.problemId] ?? [];
+  const slots = shared.problemsEndpoints[problemId] ?? [];
   // Phase 3.A: 当該 (tenant, team, problem) の override 行を query (= 1 RCU 程度)
   const overrides = await queryOverridesForDeployment(
     shared.runtime,
     shared.ddb,
     shared.endpointsTableName,
-    item.tenantId,
-    item.teamId,
-    item.problemId,
+    tenantId,
+    teamId,
+    problemId,
   );
 
   const prevState = parseScoringState(item.scoringState);
@@ -297,7 +321,7 @@ async function processDeployment(
     scoring,
     slots,
     overrides,
-    phases: phasesByProblemId[item.problemId] ?? [],
+    phases: phasesByProblemId[problemId] ?? [],
     nowMs,
     nowIso,
     prevState,

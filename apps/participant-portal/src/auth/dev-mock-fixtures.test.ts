@@ -156,13 +156,13 @@ describe("dev-mock fixtures", () => {
     )?.hints?.[0];
 
     expect(launcherHint?.content).toContain(
-      "github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml",
+      "github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/cloud-pipeline.yaml",
     );
     expect(launcherHint?.content).toContain(
       "console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template",
     );
     expect(launcherHint?.i18n?.en?.content).toContain(
-      "github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml",
+      "github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/cloud-pipeline.yaml",
     );
     expect(launcherHint?.i18n?.en?.content).toContain(
       "console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template",

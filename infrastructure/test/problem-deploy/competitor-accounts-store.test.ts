@@ -53,7 +53,7 @@ describe("createCompetitorAccount", () => {
     ssmSend
       .mockRejectedValueOnce(Object.assign(new Error("nope"), { name: "ParameterNotFound" }))
       .mockResolvedValueOnce({});
-    ddbSend.mockResolvedValueOnce({});
+    ddbSend.mockResolvedValueOnce({ Count: 0 }).mockResolvedValueOnce({});
 
     const out = await createCompetitorAccount(
       shared,
@@ -76,7 +76,7 @@ describe("createCompetitorAccount", () => {
     expect((putParamCall.input.Value as string).length).toBe(64);
 
     // DDB Put が verified=false の正しい shape を書く
-    const ddbPut = ddbSend.mock.calls[0]?.[0] as PutCommand;
+    const ddbPut = ddbSend.mock.calls[1]?.[0] as PutCommand;
     expect(ddbPut).toBeInstanceOf(PutCommand);
     expect(ddbPut.input.Item).toMatchObject({
       PK: "TENANT#tenant-acme",
@@ -94,6 +94,29 @@ describe("createCompetitorAccount", () => {
     expect(out.externalId).toBe(putParamCall.input.Value);
     expect(out.tenkaCloudAccountId).toBe("111111111111");
     expect(out.verified).toBe(false);
+  });
+
+  it("refuses to replace a missing ExternalId when competitor accounts already exist", async () => {
+    const { shared, ddbSend, ssmSend } = buildShared();
+    ssmSend.mockRejectedValueOnce(
+      Object.assign(new Error("missing"), { name: "ParameterNotFound" }),
+    );
+    ddbSend.mockResolvedValueOnce({ Count: 1 });
+    await expect(
+      createCompetitorAccount(
+        shared,
+        { tenantId: "tenant-acme", nowMs: NOW_MS, createdBy: "user-sub-1" },
+        {
+          awsAccountId: "333333333333",
+          region: "ap-northeast-1",
+          competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+        },
+      ),
+    ).rejects.toThrow("restore the existing secret");
+    expect(ssmSend).toHaveBeenCalledTimes(1);
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+    expect(ddbSend.mock.calls[0]?.[0]).toBeInstanceOf(QueryCommand);
+    expect(ddbSend.mock.calls[0]?.[0].input.ConsistentRead).toBe(true);
   });
 
   it("should return the existing value without rotating ExternalId when present in SSM (idempotent)", async () => {

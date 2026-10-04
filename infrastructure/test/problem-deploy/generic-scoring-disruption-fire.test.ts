@@ -1,4 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ControlDataRuntime } from "../../lib/problem-deploy/control-data/runtime-repositories.js";
+import { createSavedScoringFixture } from "./saved-scoring-catalog.test-helpers.js";
+
+const savedScoring = createSavedScoringFixture();
+vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/shared", async (original) => {
+  const actual =
+    await original<
+      typeof import("../../lib/problem-deploy/handlers/generic-scoring-handler/shared")
+    >();
+  return {
+    ...actual,
+    buildSharedResources: (runtime: ControlDataRuntime) =>
+      savedScoring.attach(actual.buildSharedResources(runtime)),
+  };
+});
 
 /**
  * #1422: scoring dispatcher が採点後に condition-triggered disruption を
@@ -12,7 +27,14 @@ const ebSend = vi.fn();
 vi.mock("@aws-sdk/lib-dynamodb", async () => {
   const actual =
     await vi.importActual<typeof import("@aws-sdk/lib-dynamodb")>("@aws-sdk/lib-dynamodb");
-  return { ...actual, DynamoDBDocumentClient: { from: () => ({ send: ddbSend }) } };
+  return {
+    ...actual,
+    DynamoDBDocumentClient: {
+      from: () => ({
+        send: async (command: unknown) => savedScoring.eventRead(command) ?? ddbSend(command),
+      }),
+    },
+  };
 });
 vi.mock("@aws-sdk/client-eventbridge", async () => {
   const actual = await vi.importActual<typeof import("@aws-sdk/client-eventbridge")>(
@@ -42,6 +64,7 @@ function sampleDeployment(over: Record<string, unknown> = {}) {
     tenantId: "tenant-acme",
     teamId: "team-1",
     eventId: "event-1",
+    catalogKey: savedScoring.catalogKey,
     status: "COMPLETE",
     createdAt: NOW_ISO,
     eventStartsAt: "2026-05-12T09:00:00.000Z",

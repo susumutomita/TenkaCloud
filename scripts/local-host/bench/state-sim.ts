@@ -1,10 +1,9 @@
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CompetitionEngine } from "../competition-engine";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { onInterrupt } from "./interrupt";
 import { fileBytesOrZero } from "./process-metrics";
 import {
@@ -272,14 +271,16 @@ async function runOneStateCase(
   options: StateRunOptions,
 ): Promise<StateRunResult> {
   const started = Date.now();
-  const dataDirectory = mkdtempSync(join(tmpdir(), "tenka-bench-state-"));
-  const releaseInterrupt = onInterrupt(() =>
-    rmSync(dataDirectory, { recursive: true, force: true }),
-  );
+  const dataDirectory = createTemporaryDirectory(options.repositoryRoot, "tenka-bench-state-");
+  let store: HostStore | undefined;
+  const releaseInterrupt = onInterrupt(() => {
+    store?.close();
+    removeTemporaryDirectory(options.repositoryRoot, dataDirectory);
+  });
   const databasePath = join(dataDirectory, "host.sqlite");
   let clock = Date.parse("2026-01-01T00:00:00Z");
-  const store = new HostStore(new Database(databasePath));
   try {
+    store = new HostStore(new Database(databasePath));
     const service = new HostingService(
       store,
       new CompetitionEngine(options.repositoryRoot, dataDirectory),
@@ -313,8 +314,8 @@ async function runOneStateCase(
       stoppedReason,
     };
   } finally {
-    store.close();
-    rmSync(dataDirectory, { recursive: true, force: true });
+    store?.close();
+    removeTemporaryDirectory(options.repositoryRoot, dataDirectory);
     releaseInterrupt();
   }
 }

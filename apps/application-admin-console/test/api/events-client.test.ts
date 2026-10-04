@@ -103,6 +103,18 @@ describe("getEvent", () => {
 });
 
 describe("createEvent", () => {
+  it("passes an explicit retry key separately from the event request body", async () => {
+    const { client } = fakeClient({ eventId: "EV1" });
+    const post = vi.spyOn(client, "post");
+    const body = {
+      name: "Replay",
+      teams: [{ internalSlug: "team-1" }],
+      problems: [{ problemId: "sqli-demo", defaultRegion: "ap-northeast-1" }],
+    };
+    await createEvent(client, body, "synthetic-create-operation");
+    expect(post).toHaveBeenCalledWith("events", body, "synthetic-create-operation");
+    expect(body).not.toHaveProperty("operationKey");
+  });
   it("should POST body as-is to /events", async () => {
     const { client, calls } = fakeClient({
       eventId: "EV1",
@@ -130,6 +142,14 @@ describe("createEvent", () => {
 });
 
 describe("bulkDeployEvent", () => {
+  it("preserves the encoded event scope, selection and explicit retry key", async () => {
+    const { client } = fakeClient({ eventId: "EV/1", enqueued: 1, skipped: 0 });
+    const post = vi.spyOn(client, "post");
+    const body = { teamIds: ["team-1"], problemIds: ["sqli-demo"] };
+    await bulkDeployEvent(client, "EV/1", body, "synthetic-deploy-operation");
+    expect(post).toHaveBeenCalledWith("events/EV%2F1/deploy", body, "synthetic-deploy-operation");
+    expect(body).not.toHaveProperty("operationKey");
+  });
   it("should POST /events/{id}/deploy with an empty body and return BulkResult", async () => {
     const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 6, skipped: 0 });
     const out = await bulkDeployEvent(client, "EV1");

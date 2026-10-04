@@ -122,6 +122,9 @@ export async function withBearerAuth(
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error(`[portal] ${routeName} failed`, { message });
+    if (message.startsWith("execution_catalog_unpinned:")) {
+      return c.json({ error: "execution_catalog_unpinned" }, StatusCodes.SERVICE_UNAVAILABLE);
+    }
     return respondError(c, "internal_error");
   }
 }

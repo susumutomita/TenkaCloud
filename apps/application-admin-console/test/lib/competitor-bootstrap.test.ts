@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLaunchStackUrl,
   buildShareablePayload,
+  COMPETITOR_ACCOUNT_ONBOARDING_URL,
   COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK,
 } from "../../src/lib/competitor-bootstrap";
 
@@ -75,12 +76,22 @@ describe("buildShareablePayload", () => {
     expect(payload).toContain("deploy 手順");
     expect(payload).toContain("Verify");
   });
+
+  it("offers centralized Organizations setup while retaining the individual-account link", () => {
+    const payload = buildShareablePayload(input);
+    expect(payload).toContain("service-managed StackSets");
+    expect(payload).toContain(COMPETITOR_ACCOUNT_ONBOARDING_URL);
+    expect(payload).toContain("1 リージョン");
+    expect(payload).toContain(buildLaunchStackUrl(input));
+    expect(new URL(COMPETITOR_ACCOUNT_ONBOARDING_URL).search).toBe("");
+    expect(COMPETITOR_ACCOUNT_ONBOARDING_URL).not.toContain(input.externalId);
+  });
 });
 
 describe("COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK", () => {
   it("should point to a public repo raw URL (= accessible to competitors)", () => {
     expect(COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK).toMatch(
-      /^https:\/\/raw\.githubusercontent\.com\/.+\/competitor-bootstrap\.yaml$/,
+      /^https:\/\/raw\.githubusercontent\.com\/.+\/infrastructure\/templates\/competitor-bootstrap\.yaml$/,
     );
   });
 });

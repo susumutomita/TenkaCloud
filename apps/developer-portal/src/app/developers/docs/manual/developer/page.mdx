@@ -1,89 +1,59 @@
-import { MaturityBadge } from "@/components/MaturityBadge";
-
 export const metadata = { title: "Developer manual" };
 
-# Developer manual <MaturityBadge level="stable" />
+# Developer manual
 
-Use this manual when you change the TenkaCloud platform, its infrastructure
-code, shared packages, portals, or repository tooling. Deploying an event
-without changing platform code is an organizer task.
+The current branch is a draft local/cloud integration candidate. Start with the
+`CONTRIBUTING.md`
+and `docs/host-retirement.md`.
+Original Lite updates require verified resource identity and explicit confirmation
+that all competitions have completed on the installed version. Published cloud-v1
+installations require their matching release or a separate environment/database;
+this branch does not migrate their data automatically.
 
-## Your goal
+## Prepare and run
 
-Make one focused, reviewable change that preserves the platform contracts and
-passes the relevant repository checks.
-
-## Prepare the repository
-
-Install the pinned tools using [Contributing](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md), then:
-
-```bash
-mise exec -- make install
-git submodule update --init --recursive problems
+```sh
+git submodule update --init --recursive
+bun install --frozen-lockfile --ignore-scripts
+bun run build:host
+make local LOCAL_ARGS="--no-build"
 ```
 
-For local-play development, `mise exec -- make doctor-dev` checks Bun, Docker CLI,
-Compose, and the daemon without changing them. Skip this Docker diagnosis for
-docs, API, or infrastructure changes that do not use local-play services.
-The separate `make doctor` checks the Bun-free Docker participant path. Use
-[Getting started](/developers/docs/getting-started/) only for the runtime path
-you need.
+Bun 1.3.11 is pinned. The host serves the organizer and participant applications
+and persists competition state in SQLite. Use a private dedicated data directory.
+Docker problem execution requires Docker; the built-in Battle runs in Bun.
+AWS-service problems are cloud-only. Lambda + Turso/DynamoDB hosting and the full cloud lifecycle remain under verification.
 
-## Find the owner before editing
+## Code ownership
 
-| Path | Responsibility |
+| Area | Source |
 | --- | --- |
-| `apps/` | Admin, participant, and developer web applications |
-| `infrastructure/` | AWS CDK stacks, environment configuration, deploy workflows |
-| `packages/` | Shared contracts, SDKs, runtime adapters, and CLI code |
-| `scripts/` | Repository checks, deploy helpers, and generated artifacts |
-| `problems/` | Pinned official problem catalog submodule |
+| HTTP host, durable state, authentication and runtime adapters | `scripts/local-host/` |
+| Docker verifier/scoring/Compose helpers | `scripts/local-host/container/` |
+| Shared pure helpers and ExternalId boundary | `scripts/lib/` |
+| Cloud APIs, original workflows and CDK resources | `infrastructure/lib/cloud-hosting/`, `infrastructure/lib/problem-deploy/` |
+| Organizer application | `apps/application-admin-console/` |
+| Participant application | `apps/participant-portal/` |
+| Pack authoring and immutable local store | `scripts/problem-pack/` |
+| Public contracts and author tools | `packages/` |
+| Catalog content and CloudFormation templates | pinned `problems/` submodule |
+| Competitor account initialization | `infrastructure/templates/competitor-bootstrap.yaml` |
 
-Local competition hosting (`make host`, Bun + SQLite) keeps its API and Docker
-environments in `scripts/local-host/`; its screens are the normal admin console
-and participant portal in local-host mode. See
-[Local competition hosting](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md) for the procedure, ports and checks.
+## Verify
 
-Read the nearest tests and repository instructions before changing a contract.
-The [platform architecture](/developers/docs/concepts/architecture/) explains
-the plane boundaries and cross-plane events.
+Run `bun run test:host`, `bun run test:authoring`, `bun run typecheck` and
+`make before-commit`. Keep existing lint and coverage thresholds. Test the real
+HTTP/SQLite path for state and authorization changes. Follow the
+`docs/host-build-verification.md`
+for distribution changes. Record browser and optional live AWS/IdP evidence
+separately; local tests do not prove external account access.
 
-For LLM-assisted work, use the [task guide and code map](https://tenkacloud.com/llms-full.txt)
-to locate the relevant entry point. Trace one symptom from UI input through its
-handler, stored state, and displayed result. Load only the documents that apply.
+`make down` preserves local event and Docker data. Cloud `make deploy` / `make destroy` call the existing CLI with reviewed AWS setup and ownership-checked teardown. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified. Use `CLOUD_ARGS="--help"` to inspect either command without AWS access.
 
-## Change workflow
+New installations use `tenkacloud-cloud` stack names; existing `tenkacloud-lite` stacks keep their names. The CLI discovers Lite/cloud installations; if both exist, explicitly choose `TENKACLOUD_STACK_LAYOUT=lite` or `cloud`. Original Lite updates verify ownership and persistent resource IDs. Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use `CLOUD_ARGS="--confirm-no-active-events"` for a noninteractive upgrade; generic `--yes` cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic `make deploy` behavior. Published cloud-v1 resource/database layouts cannot be updated in place, and no data is migrated automatically. `--drain-events` is unavailable; finish event Teardown before removing the platform.
 
-1. Start from the request or Issue and define an observable completion condition.
-2. Identify the narrowest owning module and its existing tests.
-3. Change the implementation and user-facing documentation together.
-4. Run focused tests while iterating.
-5. Pass `make before-commit` before committing; the pre-commit hook runs it automatically.
-6. Inspect the final diff and stage only the intended files.
+Both databases admit 99 teams; SQL coordination retains the original 4 MiB state policy. Nine current catalog templates exceed the 51,200-byte `TemplateBody` limit, and `TemplateURL` is not implemented. This is not an all-AWS-problems deployment claim.
 
-Do not commit `.env`, credentials, generated secrets, or unrelated changes.
-Green unit tests do not prove a live AWS deploy or browser flow; report those
-verification boundaries honestly.
+Cloud events and deployments save `catalogKey` for a private snapshot of catalog maps, hints, plugins and raw sources. An event created with catalog A continues using A after B is deployed or removes its problem. Lambda verifies pinned source hashes; CodeBuild uses the saved source ZIP key and exact S3 `VersionId`. Older unpinned records require recovery of their verified original snapshot through `CDK_LEGACY_CATALOG_KEY`; never assign the current catalog by guesswork. This recovery setting does not authorize upgrading an active original installation; finish its competitions on the installed version and satisfy the no-active-events preflight first.
 
-## Code change or environment setting?
-
-- If an organizer only needs a different supported value, document and use the
-  existing `.env` parameter. See the
-  [organizer manual](/developers/docs/manual/organizer/).
-- If the accepted values, validation, synthesized resources, or runtime
-  behavior must change, update the owning code, tests, `.env.example`, and
-  manuals in the same pull request.
-- A database backend change must preserve the explicit data-migration and
-  rollback boundary. Do not introduce silent dual writes.
-
-## Before requesting review
-
-- The new behavior has a focused test.
-- User-facing English and Japanese text agree.
-- Generated artifacts and indexes are up to date.
-- Links, types, formatting, and relevant builds pass.
-- Live checks that were not run are stated as **Not run**.
-- The Issue and pull request explain the user impact, not only the code diff.
-
-Problem content belongs in a pack. If that is your task, use the
-[problem author manual](/developers/docs/manual/problem-author/) instead.
+Each cloud deployment uploads a fresh `<configured-key>.executions/<uuid>.zip` and requires source-bucket versioning. Current unique keys are not removed by the noncurrent-version lifecycle. Archives consume storage until separately reviewed source-bucket cleanup after referencing events finish. Platform destroy removes its owned execution snapshots, while the separate source archive bucket survives. Source tests and synthesis do not establish a live AWS or hosted Turso rehearsal.

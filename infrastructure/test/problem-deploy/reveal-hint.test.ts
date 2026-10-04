@@ -1,4 +1,4 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
 import { revealHint } from "../../lib/problem-deploy/handlers/participant-handler/reveal-hint";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
@@ -8,19 +8,33 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers"
 const TEAM_KEY = "team-key-abc";
 const TEAM_PK = "DEPLOYMENT#01HZX0K3M3K9ZQHB3MRQHBA1B2";
 
-function buildShared(): { shared: ParticipantSharedResources; ddbSend: ReturnType<typeof vi.fn> } {
+function buildShared(): {
+  shared: ParticipantSharedResources;
+  ddbSend: ReturnType<typeof vi.fn>;
+  ddbGet: ReturnType<typeof vi.fn>;
+} {
   const ddbSend = vi.fn();
+  let current: Record<string, unknown> | undefined;
+  const ddbGet = vi.fn(async () => ({ Item: current }));
+  const send = async (command: { input: { TableName?: string } }) => {
+    if (command instanceof GetCommand && command.input.TableName === "TestDeployments") {
+      return ddbGet(command);
+    }
+    const result = await ddbSend(command);
+    if (command instanceof QueryCommand) current = result?.Items?.[0];
+    return result;
+  };
   const shared: ParticipantSharedResources = {
     runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
-    ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],
+    ddb: { send } as unknown as ParticipantSharedResources["ddb"],
     ssm: undefined,
     env: undefined,
     problemsScoring: {},
     problemsEndpoints: {},
   };
-  return { shared, ddbSend };
+  return { shared, ddbSend, ddbGet };
 }
 
 const DEFAULT_HINTS = [
@@ -128,7 +142,9 @@ describe("revealHint (#742 Phase 3)", () => {
     };
     expect(input.UpdateExpression).toContain("list_append");
     expect(input.UpdateExpression).toContain("ADD score :neg");
-    expect(input.ConditionExpression).toContain("NOT contains");
+    expect(input.ConditionExpression).toBe(
+      "attribute_exists(PK) AND attribute_not_exists(hintsRevealed)",
+    );
     expect(input.ExpressionAttributeValues?.[":neg"]).toBe(-10);
   });
 
@@ -265,15 +281,45 @@ describe("revealHint (#742 Phase 3)", () => {
     expect(ddbSend).toHaveBeenCalledTimes(1);
   });
 
-  it("DDB ConditionalCheckFailedException (= race) は already_revealed として返す", async () => {
+  it("returns the winning hint penalty and fresh score after a concurrent reveal", async () => {
+    const { shared, ddbSend, ddbGet } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 90 })] });
+    const winning = sampleRow({
+      score: 83,
+      hintsRevealed: [
+        { hintId: "hint-1", revealedAt: "2026-05-15T01:00:00.000Z", penaltyApplied: 7 },
+      ],
+    });
+    ddbGet
+      .mockResolvedValueOnce({ Item: sampleRow({ score: 90 }) })
+      .mockResolvedValue({ Item: winning });
+    ddbSend.mockRejectedValueOnce(
+      Object.assign(new Error("conditional"), {
+        name: "ConditionalCheckFailedException",
+      }),
+    );
+    const result = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+    expect(result).toEqual({
+      kind: "already_revealed",
+      content: "use AWS Console",
+      penaltyApplied: 7,
+      totalScore: 83,
+    });
+    expect(ddbGet).toHaveBeenCalled();
+    expect(ddbGet.mock.calls[0]?.[0].input.ConsistentRead).toBe(true);
+  });
+
+  it("does not disclose a hint when conflicting writes never persisted that hint", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 90 })] });
-    const conditionalError = Object.assign(new Error("conditional"), {
-      name: "ConditionalCheckFailedException",
-    });
-    ddbSend.mockRejectedValueOnce(conditionalError);
-    const result = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
-    expect(result.kind).toBe("already_revealed");
+    ddbSend.mockRejectedValue(
+      Object.assign(new Error("conditional"), {
+        name: "ConditionalCheckFailedException",
+      }),
+    );
+    await expect(
+      revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1"),
+    ).rejects.toThrow("Hint reveal did not persist");
   });
 
   it("penalty=0 hint も ok で reveal でき、 score は変わらない (= 旧 legacy v1 が変換されたパターン)", async () => {
