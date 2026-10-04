@@ -1,5 +1,5 @@
 import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../api/client";
 import { type EventDetail, getEvent } from "../api/events-client";
 
@@ -41,17 +41,19 @@ export function useEventDetail(args: {
   /**
    * Issue #3226: the local competition host finishes deploys and environment operations in
    * seconds, so its console follows them at this interval while any is in flight. Unset (the
-   * cloud console) keeps the single 30s live-event poll.
+   * cloud console) uses 30s polling while environment work or a live event is active.
    */
   readonly inFlightPollMs?: number;
 }) {
   const { apiClient, eventId, eventIdValid, withTeamLoginKeys = false, inFlightPollMs } = args;
+  const requestSequence = useRef(0);
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualRefreshInFlight, setManualRefreshInFlight] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!apiClient || !eventIdValid || !eventId) return;
+    const sequence = ++requestSequence.current;
     try {
       // Issue #1038 P1 #7: operator が「どのチームがいつ加点 / 減点したか」 を一目で
       // 把握できるよう、 Event 詳細取得で全 team の score event timeline も同時に fetch する。
@@ -59,9 +61,11 @@ export function useEventDetail(args: {
         withScoreEvents: true,
         ...(withTeamLoginKeys ? { withTeamLoginKeys: true } : {}),
       });
+      if (sequence !== requestSequence.current) return;
       setDetail(nextDetail);
       setError(null);
     } catch (err) {
+      if (sequence !== requestSequence.current) return;
       setError(toErrorMessage(err));
     }
   }, [apiClient, eventId, eventIdValid, withTeamLoginKeys]);
@@ -80,32 +84,20 @@ export function useEventDetail(args: {
     void refresh();
   }, [refresh]);
 
-  // Live events are watched with this screen left open, so a fetch-once-on-mount hook
-  // means the operator reads a frozen snapshot: a participant submits, scores move, and
-  // the console keeps showing 0 pt and "no score history yet" until someone presses
-  // refresh. That is the exact situation this screen exists for.
-  //
-  // Polling is on while the event is running and off otherwise, so a finished or
-  // not-yet-started event costs nothing. `immediate: false` because the mount effect above
-  // already did the first fetch; polling starts from the next tick. Reuses web-kit's
-  // usePolling (#1418) rather than adding another interval implementation.
-  //
-  // No on/off toggle yet: the participant portal has one, but wiring it here means
-  // threading state through EventDetailLoaded → tabs → OverviewTab → DeployProgressPanel,
-  // and the issue asks for "auto-refresh on by default while the event is running" as the
-  // minimum. The manual refresh button stays exactly as it was.
-  usePolling(refresh, EVENT_DETAIL_POLL_INTERVAL_MS, {
-    immediate: false,
-    enabled: isRunningNow(detail) && Boolean(apiClient) && eventIdValid,
-  });
-  usePolling(refresh, inFlightPollMs ?? EVENT_DETAIL_POLL_INTERVAL_MS, {
-    immediate: false,
-    enabled:
-      inFlightPollMs !== undefined &&
-      hasEnvironmentWorkInFlight(detail) &&
-      Boolean(apiClient) &&
-      eventIdValid,
-  });
+  // Follow preparation and teardown even outside the competition's scoring window.
+  // One timer avoids duplicate live-event and environment-work requests.
+  const environmentWorkInFlight = hasEnvironmentWorkInFlight(detail);
+  usePolling(
+    refresh,
+    environmentWorkInFlight
+      ? (inFlightPollMs ?? EVENT_DETAIL_POLL_INTERVAL_MS)
+      : EVENT_DETAIL_POLL_INTERVAL_MS,
+    {
+      immediate: false,
+      enabled:
+        (isRunningNow(detail) || environmentWorkInFlight) && Boolean(apiClient) && eventIdValid,
+    },
+  );
 
   return {
     detail,

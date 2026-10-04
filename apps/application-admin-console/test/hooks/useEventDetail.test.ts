@@ -45,6 +45,28 @@ describe("useEventDetail", () => {
     });
   });
 
+  it("keeps a newer manual response when an older request finishes later", async () => {
+    let resolveOld: (value: unknown) => void = vi.fn();
+    mockGetEvent.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+    );
+    const { result } = renderHook(() =>
+      useEventDetail({ apiClient: CLIENT, eventId: "e1", eventIdValid: true }),
+    );
+    const completed = { ...DETAIL, status: "READY" };
+    mockGetEvent.mockResolvedValueOnce(completed);
+    await act(async () => {
+      await result.current.manualRefresh();
+    });
+    expect(result.current.detail).toEqual(completed);
+    await act(async () => {
+      resolveOld({ ...DETAIL, status: "DEPLOYING" });
+    });
+    expect(result.current.detail).toEqual(completed);
+  });
+
   it("should no-op when the client is missing / eventId invalid / eventId undefined", async () => {
     for (const args of [
       { apiClient: null, eventId: "e1", eventIdValid: true },
