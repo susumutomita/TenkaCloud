@@ -11,8 +11,38 @@ import { CompetitionEngine } from "../competition-engine";
 import { type OrganizerProblemContent, organizerProblemContent } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { ExerciseFixture } from "./exercise-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
+
+test("browser rehearsal fixture supplies organizer details through the authenticated catalog", async () => {
+  const database = new Database(":memory:");
+  const store = new HostStore(database);
+  const engine = new ExerciseFixture((path) => new Database(path));
+  const service = new HostingService(store, engine, randomToken());
+  const call = (method: string, path: string, token = "", body: unknown = {}) =>
+    service.admin(apiRequest({ method, path, token, body }));
+  try {
+    await expect(call("GET", "/host/catalog")).rejects.toMatchObject({ status: 401 });
+    const { key } = store.ensureLocalOrganizerKey();
+    const login = await call("POST", "/host/login", "", { key });
+    const { idToken } = login.body as { idToken: string };
+    const response = await call("GET", "/host/catalog", idToken);
+    const { items } = response.body as { items: { content: OrganizerProblemContent }[] };
+    expect(items[0]?.content).toEqual(engine.catalog()[0]?.organizerContent);
+    expect(items[0]?.content.description).toContain("synthetic SQL injection");
+    expect(items[0]?.content.learningGoals.length).toBeGreaterThan(0);
+    const created = await call("POST", "/events", idToken, {
+      name: "Browser rehearsal",
+      teams: [{ internalSlug: "alpha" }],
+      problems: [{ problemId: "sqli-demo" }],
+    });
+    const { eventId } = created.body as { eventId: string };
+    expect(store.event(eventId).problems[0]?.organizerContent).toBeUndefined();
+  } finally {
+    database.close();
+  }
+});
 
 test("only organizers receive catalog descriptions and goals from the existing authenticated catalog", async () => {
   const directory = mkdtempSync(join(tmpdir(), "tenka-organizer-catalog-"));
