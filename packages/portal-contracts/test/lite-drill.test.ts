@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   findLiteDrillCheckpointCode,
@@ -58,13 +57,8 @@ describe("lite-drill checkpoints (#2696)", () => {
   });
 
   it("accepts the complete current CLI cleanup output but rejects arbitrary suffixes", () => {
-    const source = readFileSync(
-      new URL("../../../scripts/cloud-hosting/cli.ts", import.meta.url),
-      "utf8",
-    );
-    const literal = /"(Cloud platform stacks destroyed\.[^"\n]*\\n)"/u.exec(source);
-    expect(literal).not.toBeNull();
-    const line = JSON.parse(`"${literal?.[1]}"`) as string;
+    const line =
+      "Cloud platform stacks destroyed. Existing deployed Retain policies may leave chargeable resources; review the saved plan. This teardown removes external Turso rows only for explicit destroy-all when the deployed provider identity is verified.";
     expect(matchesLiteCleanupDrillCheckpoint("cleanup-complete", ` ${line}\n`)).toBe(true);
     expect(
       matchesLiteCleanupDrillCheckpoint(

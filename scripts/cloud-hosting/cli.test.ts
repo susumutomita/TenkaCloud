@@ -8,6 +8,7 @@ import {
   cloudStackNames,
   cloudStackTags,
 } from "../../infrastructure/lib/cloud-hosting/stack-names";
+import { matchesLiteCleanupDrillCheckpoint } from "../../packages/portal-contracts/src/lite-drill";
 import { assertStandardBootstrap } from "./bootstrap-check";
 import { runCloudCli } from "./cli";
 import type { DestroyAssemblyTarget } from "./destroy-assembly";
@@ -499,6 +500,15 @@ describe("cloud CLI injected subprocess contract: never invokes AWS/CDK in tests
       expect(deletes.every((call) => call.inherit)).toBe(true);
       expect(f.calls.some((call) => call.command === "bash")).toBe(false);
       expect(f.messages.join("")).toContain("Cloud platform stacks destroyed");
+      const evidence = f.messages
+        .join("")
+        .split("\n")
+        .find((line) => line.startsWith("Cloud platform stacks destroyed."));
+      expect(evidence).toBeDefined();
+      expect(matchesLiteCleanupDrillCheckpoint("cleanup-complete", evidence ?? "")).toBe(true);
+      expect(matchesLiteCleanupDrillCheckpoint("cleanup-complete", `${evidence} unexpected`)).toBe(
+        false,
+      );
     },
   );
   it("stops teardown when the dependent app stack could not be destroyed", async () => {
