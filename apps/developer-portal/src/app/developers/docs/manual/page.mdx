@@ -6,7 +6,7 @@ export const metadata = { title: "Manuals by role" };
 
 <h2 id="choose-your-role">Choose your role</h2>
 
-- [Organizer](/developers/docs/manual/organizer/): prepare teams, environments, invitations, scoring and cleanup
+- [Organizer](/developers/docs/manual/organizer/): prepare teams, environments, participant URLs and team keys, scoring and cleanup
 - [Participant](/developers/docs/manual/participant/): join your team and solve its assigned problems
 - [Problem author](/developers/docs/manual/problem-author/): write content and verify the participant route
 - [Developer](/developers/docs/manual/developer/): change the implementation and its tests
@@ -17,4 +17,4 @@ One local process serves organizer and participant applications, persists event/
 
 <h2 id="if-you-are-unsure">If you are unsure</h2>
 
-Start with [getting started](/developers/docs/getting-started/). The candidate has no SaaS/SBT provisioning path; cloud deploy/destroy use the current CLI after reviewed IAM setup. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified.
+Start with [getting started](/developers/docs/getting-started/). The candidate has no SaaS/SBT provisioning path; cloud deploy/destroy use the current CLI after reviewed IAM setup. Cloud hosting uses Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified.

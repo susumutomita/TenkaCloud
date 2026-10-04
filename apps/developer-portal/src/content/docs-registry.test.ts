@@ -189,6 +189,44 @@ describe("docs registry — current references", () => {
   });
 });
 
+describe("docs registry — organizer access and current hosting", () => {
+  it("keeps interactive key rotation and retained noninteractive access searchable in both languages", () => {
+    for (const slug of ["getting-started", "manual/organizer"]) {
+      const page = findDocBySlug(slug);
+      expect(page?.body).toContain("Each interactive make local start");
+      expect(page?.body).toContain(
+        "Noninteractive and public/container starts retain existing keys",
+      );
+      expect(page?.body).toContain("対話ターミナルで make local を起動するたびに");
+      expect(page?.body).toContain("非対話起動と public/container 起動では既存のキーを保持");
+      expect(page?.body).not.toContain("The first key is shown once on the interactive terminal");
+      expect(page?.body).not.toContain("初回キーは対話ターミナルに一度だけ表示");
+      expect(page?.body).toContain("make local-clear");
+    }
+    for (const query of ["public/container local-reset", "非対話起動 主催者キー"]) {
+      expect(
+        searchIndex(query).some((result) => result.href === "/developers/docs/getting-started/"),
+      ).toBe(true);
+    }
+  });
+
+  it("searches current database selection, teardown and participant keys", () => {
+    for (const slug of [
+      "getting-started",
+      "manual/organizer",
+      "operate/deploy-paths",
+      "operate/run-an-event",
+    ]) {
+      const page = findDocBySlug(slug);
+      expect(page?.body).toContain("Turso");
+      expect(page?.body).toContain("DynamoDB");
+      expect(page?.body).toContain("make destroy-all");
+      expect(page?.body).not.toContain("give each team its own invitation or key");
+      expect(page?.body).not.toContain("専用の参加リンクまたはキー");
+    }
+  });
+});
+
 describe("docs registry — first pack tutorial", () => {
   it("should register the first pack tutorial page", () => {
     const page = findDocBySlug(FIRST_PACK_SLUG);
@@ -285,13 +323,74 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
     expect(provenanceResults.some((r) => r.href === USE_EXISTING_PACK_HREF)).toBe(true);
   });
 
-  it("should distinguish missing pack event integration from missing live evidence", () => {
-    expect(USE_EXISTING_PACK_SOURCE).toContain("Event integration is unavailable");
-    expect(USE_EXISTING_PACK_SOURCE).toContain("implementation gap");
-    expect(USE_EXISTING_PACK_SOURCE).toContain("Installed packs do not appear");
-    expect(USE_EXISTING_PACK_SOURCE).not.toContain("make pack-activate ARGS=");
-    expect(FIRST_PACK_SOURCE).toContain("does not add");
-    expect(FIRST_PACK_SOURCE).not.toContain("--tenant acme");
+  it("should document Cloud Pack deployment separately from the unconnected Local Pack store", () => {
+    for (const slug of [
+      "concepts/problem-packs",
+      "manual/problem-author",
+      "reference/cli",
+      "reference/security-provenance",
+      FIRST_PACK_SLUG,
+      USE_EXISTING_PACK_SLUG,
+    ]) {
+      const page = findDocBySlug(slug);
+      expect(page?.body).toContain("Cloud");
+      expect(page?.body).toContain("Local");
+      expect(page?.body).not.toContain("Activation is an offline catalog record");
+      expect(page?.body).not.toContain("activate はオフラインのカタログ記録");
+      expect(page?.body).not.toContain("do not add problems to the current event catalog");
+    }
+    expect(findDocBySlug(FIRST_PACK_SLUG)?.description).toContain("Cloud hosting");
+    expect(findDocBySlug(FIRST_PACK_SLUG)?.description).not.toContain("without claiming");
+    const operation = findDocBySlug(USE_EXISTING_PACK_SLUG);
+    expect(operation?.description).toContain("Cloud deployment");
+    expect(operation?.description).not.toContain("not implemented");
+    expect(operation?.headings.find((heading) => heading.id === "create-the-event")?.text).toBe(
+      "Use in a Cloud event",
+    );
+    expect(
+      findDocBySlug(FIRST_PACK_SLUG)?.headings.find((heading) => heading.id === "runtime-boundary")
+        ?.text,
+    ).toBe("Connect to hosting");
+    for (const slug of [FIRST_PACK_SLUG, USE_EXISTING_PACK_SLUG]) {
+      expect(findDocBySlug(slug)?.body).toContain(
+        "Local does not connect the Pack store to its event catalog",
+      );
+      expect(
+        searchIndex("private source archive").some(
+          (result) => result.href === `/developers/docs/${slug}/`,
+        ),
+      ).toBe(true);
+    }
+    const japaneseSources = ["tutorials/first-pack", "operate/use-existing-pack"].map((slug) =>
+      readFileSync(`src/app/developers/docs/${slug}/page.ja.mdx`, "utf8"),
+    );
+    for (const source of [FIRST_PACK_SOURCE, USE_EXISTING_PACK_SOURCE, ...japaneseSources]) {
+      expect(source).toContain("AWS/CloudFormation");
+      expect(source).toContain("bun run pack activate <id@version> --tenant local");
+      expect(source).toContain(".tenkacloud/pack-store");
+      expect(source).toContain("make deploy");
+      expect(source).toContain("problems/");
+      expect(source).not.toContain("make pack-activate ARGS=");
+      expect(source).not.toContain("--tenant acme");
+      expect(source).not.toContain("Event integration is unavailable");
+      expect(source).not.toContain("Activation is an offline catalog record");
+    }
+    for (const source of [FIRST_PACK_SOURCE, USE_EXISTING_PACK_SOURCE]) {
+      expect(source).toContain("private source archive");
+      expect(source).toContain("select the problem in a new event");
+      expect(source).toContain("Existing events keep their saved catalog");
+      expect(source).toContain("it does not select Local hosting");
+      expect(source).toContain("Local does not connect the Pack store to its event catalog");
+      expect(source).toContain("participant solving, scoring and teardown");
+    }
+    for (const source of japaneseSources) {
+      expect(source).toContain("非公開の source archive");
+      expect(source).toContain("新しい大会で対象問題を選びます");
+      expect(source).toContain("既存大会の保存済みカタログは変わりません");
+      expect(source).toContain("Local 開催を指定する値ではありません");
+      expect(source).toContain("Local では Pack store から大会カタログへの接続は未対応");
+      expect(source).toContain("解答・採点・撤収をリハーサル");
+    }
   });
 
   it("should keep architecture search headings aligned with the actual page", () => {

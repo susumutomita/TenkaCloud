@@ -2,9 +2,9 @@
 
 This is a repository-side compatibility note for
 [自分で作るクラウド競技](https://zenn.dev/bull/books/cloud-competition).
-The external book has not been changed by this work; update it only after this
-restoration merges to main. Its published operating
-instructions include legacy local-practice and Lite paths.
+An isolated zenn-article branch prepares revisions to the 27-chapter book.
+Those edits are not published; the published book still includes legacy paths.
+Use this table with the matching checkout, rather than assuming a finished draft exists.
 
 ## Current replacement commands
 
@@ -16,10 +16,9 @@ instructions include legacy local-practice and Lite paths.
 | Local organizer username/password or SAML | Current local hosting uses one organizer key; make local-reset rotates organizer access and revokes organizer sessions while preserving event/participant/runtime state |
 | Lite launcher / CodeBuild platform setup | cloud-pipeline.yaml defaults to reviewed current sources using standard CDKToolkit (official bootstrap only if missing); review its broad CodeBuild role and CDK execution authority before launch. Restored generic CloudFormation/flag/multi-flag/endpoint and native paths; nine oversized TemplateBody templates remain unsupported |
 | ACTION=destroy-all | Current make destroy-all confirms and purges stack-owned retained data and selected Turso rows; ordinary make destroy removes platform/default-owned data and leaves external Turso rows |
-| pack activate for a tenant | Retained local record only; does not add problems to current events |
+| pack activate for a tenant | The make pack-activate target is removed. CLI activate writes the selection consumed by the next Cloud deployment (`--tenant local`, default store); Local hosting does not consume Pack activation records |
 
-Local SQLite is implemented. Cloud hosting restores the SBT-free Lite Lambda
-backend with a choice of Turso or DynamoDB, preserving its original resource
+Local SQLite is implemented. Cloud hosting uses Lambda with a choice of Turso or DynamoDB, preserving its original resource
 identities and deployment paths. Published cloud-v1 resources/schema are incompatible
 with in-place restoration; no data migration is automatic.
 AWS service problems are cloud-only. Docker/Compose exercises are local-only and
@@ -44,8 +43,7 @@ is not silently reclassified as a current cloud exercise.
 
 The endpoint-Battle lifecycle is restored, but its exact template and participant
 route still need a recorded rehearsal before the chapter claims verified playability.
-Do not present Cryptography Battle as the same AWS uptime lesson. Likewise, validating or installing an external Pack does not make its
-problems executable in a current event.
+Do not present Cryptography Battle as the same AWS uptime lesson. Installing a Pack alone does not enable it. Cloud consumes activated AWS/CloudFormation Pack catalog and assets on deployment; existing events keep saved catalogs. Local reads its `problems/` tree instead of the Pack store. Private problems and problems awaiting publication do not require a public catalog contribution.
 
 Built-in local Course tracks now shows only the team's assigned problems, uses
 their saved checkpoints/completion state and the existing event gate, and links to
@@ -81,3 +79,16 @@ an authorized book revision rather than silently changing the score engine.
 For current local steps use [local hosting](local-hosting.md) and the
 [event runbook](operations/event-runbook.md). No data migration
 or external resource cleanup is implied.
+
+## Prepared book revision scope
+
+| Chapters | Prepared changes |
+| --- | --- |
+| execution-modes, chapter13, glossary | Local/Cloud, DB selection, resource identity and current limits |
+| chapter2/3, local-problem-runtime, chapter17, checklist | Event/team startup; down preserves data; clear deletes competition data; reset rotates organizer access |
+| chapter14/15, aws-account-access | Participant URL + team key; Cloud-only AWS access; preserve ExternalId and deployment/participant role boundaries |
+| chapter16 | Teardown exercises first; distinguish destroy and destroy-all; review selected DB and remaining resources |
+
+Organizer-key startup/reset wording matches merged PR #3321 in main 3886bf16.
+Interactive local starts rotate the key; noninteractive and public/container starts
+retain it. The book revision is tracked in zenn-article PR #304.

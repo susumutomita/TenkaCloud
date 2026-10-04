@@ -16,13 +16,13 @@ For AWS exercises, agree on accounts, region, resources and cleanup. Use `infras
 
 1. Create an event with its teams and problems.
 2. Prepare and inspect each team's dormant Docker jobs; retry failed ownership-aware operations. Deploy AWS exercises separately.
-3. Start the schedule and distribute the correct team invitations.
+3. Start the schedule and distribute the participant URL and the correct team keys.
 4. Rehearse participant Start / resume and Stop (keep data), capacity rejection, correct/wrong answers, hints, leaderboard, team separation and a failed environment.
 5. For AWS Battle, register both endpoints, observe scoring, test a selected-team disruption and verify revert plus actual service health.
 
 <h2 id="finish">Finish safely</h2>
 
-End Event to stop scoring. Remove owned environments using the organizer teardown actions and verify completion. Retain results and back up the full data directory. For an ordinary local pause use `make down`; restart with `make local` and the same directory. Stop is not AWS cleanup. Cloud `make deploy` requires reviewed IAM setup; `make destroy` confirms the installation and deletes platform-owned data by default. It leaves external Turso rows; `make destroy-all` explicitly resets them. Use event Teardown before platform removal for exercise resources. Cloud hosting restores the SBT-free Lite backend with Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified.
+End Event to stop scoring. Remove owned environments using the organizer teardown actions and verify completion. Retain results and back up the full data directory. For an ordinary local pause use `make down`; restart with `make local` and the same directory. Stop is not AWS cleanup. Cloud `make deploy` requires reviewed IAM setup; `make destroy` confirms the installation and deletes platform-owned data by default. It leaves external Turso rows; `make destroy-all` explicitly resets them. Use event Teardown before platform removal for exercise resources. Cloud hosting uses Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified.
 
 See the repository's `docs/operations/event-runbook.md` for the operating checklist.
 

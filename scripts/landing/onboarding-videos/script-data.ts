@@ -78,14 +78,14 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         titleEn: "Where will you run it?",
         bulletsJa: [
           "ローカル — AWS 不要。Docker / Codespaces で動く",
-          "Lite — 自分の AWS にデプロイして主催",
-          "SaaS — マルチテナント展開(上級者向け)",
+          "Cloud — 自分の AWS で開催",
+          "保存先は Turso / DynamoDB から選択",
           "どれを選んでも正解",
         ],
         bulletsEn: [
           "Local — no AWS; runs on Docker / Codespaces",
-          "Lite — deploy to your own AWS and host",
-          "SaaS — multi-tenant, for advanced operators",
+          "Cloud — Lambda with Turso or DynamoDB",
+          "Docker exercises: Local; AWS exercises: Cloud",
           "Any choice is correct",
         ],
       },
@@ -107,11 +107,11 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         titleJa: "クリアで次の問題が開く",
         titleEn: "Clearing unlocks the next quest",
         bulletsJa: [
-          "次は「自分の TenkaCloud Lite を立てる」",
+          "次は「自分の TenkaCloud を立てる」",
           "AWS なしで遊ぶなら「ローカルモードで遊ぶ」も",
         ],
         bulletsEn: [
-          'Next: "Deploy your own TenkaCloud Lite"',
+          'Next: "Deploy your own TenkaCloud"',
           'No AWS yet? "Play local mode" awaits too',
         ],
       },
@@ -155,10 +155,13 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
       {
         badge: "STEP 3",
         durationS: 7.5,
-        titleJa: "チェックポイント 1 を提出",
-        titleEn: "Submit checkpoint 1",
-        bulletsJa: ["デモポータルにポート番号を貼る", "これだけで +100 pt"],
-        bulletsEn: ["Paste the port number in the demo portal", "That alone is +100 pt"],
+        titleJa: "大会・チームを準備する",
+        titleEn: "Prepare an event and teams",
+        bulletsJa: ["開催者が問題を選び jobs を準備", "Schedule から大会を開始"],
+        bulletsEn: [
+          "Organizer selects problems and prepares jobs",
+          "Start the event from Schedule",
+        ],
       },
       {
         badge: "STEP 4",
@@ -174,15 +177,12 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
       {
         badge: "STEP 5",
         durationS: 7,
-        titleJa: "sqli-demo は寄り道歓迎",
-        titleEn: "sqli-demo is there if you're curious",
-        bulletsJa: [
-          "問題一覧の一番上にある入門ドリル",
-          "遊んでも遊ばなくてもチェックポイントには無関係",
-        ],
+        titleJa: "チームキーで問題を開始",
+        titleEn: "Start your exercise with the team key",
+        bulletsJa: ["参加者 URL とチームキーでログイン", "Start / resume で Docker 問題を起動"],
         bulletsEn: [
-          "The intro drill sits at the top of the problem list",
-          "Playing it is optional — the checkpoints don't need it",
+          "Sign in with the participant URL and team key",
+          "Start / resume launches the Docker exercise",
         ],
       },
       {
@@ -190,28 +190,28 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         durationS: 8,
         titleJa: "デモポータルに貼って +100 pt",
         titleEn: "Paste it in the demo portal for +100 pt",
-        bulletsJa: ["仕上げは「自分の TenkaCloud Lite を立てる」", "次はいよいよ本物の AWS へ"],
-        bulletsEn: ['Finish with "Deploy your own TenkaCloud Lite"', "Next stop: real AWS"],
+        bulletsJa: ["仕上げは「自分の TenkaCloud を立てる」", "次はいよいよ本物の AWS へ"],
+        bulletsEn: ['Finish with "Deploy your own TenkaCloud"', "Next stop: real AWS"],
       },
     ],
   },
   {
     problemId: "deploy-tenkacloud-lite",
-    titleJa: "自分の TenkaCloud Lite を立てる",
-    titleEn: "Deploy your own TenkaCloud Lite",
+    titleJa: "自分の TenkaCloud を立てる",
+    titleEn: "Deploy your own TenkaCloud",
     slides: [
       {
         badge: "INTRO",
         durationS: 7,
-        titleJa: "自分の TenkaCloud Lite を立てる",
-        titleEn: "Deploy your own TenkaCloud Lite",
+        titleJa: "自分の TenkaCloud を立てる",
+        titleEn: "Deploy your own TenkaCloud",
         bulletsJa: [
           "本物の AWS に自分の競技基盤を立ち上げる",
-          "約 $7/月 — 遊び終えたら必ず片付ける",
+          "費用は構成・利用量による — 終了後に対象を確認",
         ],
         bulletsEn: [
           "Stand up your own event platform on real AWS",
-          "About $7/month — tear down when done",
+          "Costs vary by usage — review teardown targets",
         ],
       },
       {
@@ -274,8 +274,8 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
       {
         badge: "GOAL",
         durationS: 8,
-        titleJa: "TenkaCloud Lite のデプロイ完了!",
-        titleEn: "TenkaCloud Lite is deployed!",
+        titleJa: "TenkaCloud のデプロイ完了!",
+        titleEn: "TenkaCloud is deployed!",
         bulletsJa: ["あなたの競技基盤が動いている", "遊び終えたら次の片付け問題へ"],
         bulletsEn: ["Your event platform is live", "When done, continue to the cleanup problem"],
         code: { text: "TENKA CLOUD — READY", tone: "goal" },
@@ -284,16 +284,19 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
   },
   {
     problemId: "cleanup-tenkacloud-lite",
-    titleJa: "TenkaCloud Lite を片付ける",
-    titleEn: "Clean up TenkaCloud Lite",
+    titleJa: "TenkaCloud を片付ける",
+    titleEn: "Clean up TenkaCloud",
     slides: [
       {
         badge: "INTRO",
         durationS: 8,
         titleJa: "遊び終えたら、課金を止める",
         titleEn: "Done playing? Stop the charges",
-        bulletsJa: ["Lite 本体と launcher の両方を削除する", "途中で閉じず、最後まで確認する"],
-        bulletsEn: ["Remove both Lite and the launcher", "Stay through the final confirmation"],
+        bulletsJa: ["Cloud 基盤と launcher の両方を削除する", "途中で閉じず、最後まで確認する"],
+        bulletsEn: [
+          "Review the Cloud platform and launcher",
+          "Stay through the final confirmation",
+        ],
       },
       {
         badge: "STEP 1",
@@ -322,9 +325,9 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         durationS: 8,
         titleJa: "削除完了ログを確認",
         titleEn: "Confirm teardown in the logs",
-        bulletsJa: ["DynamoDB とログも完全削除される", "成功ログのチェックポイントを控える"],
+        bulletsJa: ["選択した DB と保持データの対象を確認", "成功ログのチェックポイントを控える"],
         bulletsEn: [
-          "DynamoDB data and logs are removed too",
+          "Review selected DB and retained data targets",
           "Copy the checkpoint from the success log",
         ],
       },
@@ -347,8 +350,8 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         durationS: 8,
         titleJa: "クリーンアップ完了!",
         titleEn: "Cleanup complete!",
-        bulletsJa: ["控えたコードを問題へ提出", "これで Lite の継続課金を止められる"],
-        bulletsEn: ["Submit the checkpoint you copied", "This stops ongoing Lite charges"],
+        bulletsJa: ["控えたコードを問題へ提出", "残ったリソースの費用も確認する"],
+        bulletsEn: ["Submit the checkpoint you copied", "This stops ongoing platform charges"],
         code: { text: "TENKA CLOUD — CLEAN", tone: "goal" },
       },
     ],
@@ -358,7 +361,7 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
 /**
  * #2696 P1: LP / README 用の 30 秒プロダクト動画 (問題冒頭の operation 動画とは別物)。
  * 実効尺 (crossfade 控除後) を 30 秒以内に収める (render.test.ts が機械検証)。
- * 現行ファネル (#2711: 1 問カード → チュートリアル → Lite) に合わせた構成。
+ * 現行ファネル (#2711: 1 問カード → チュートリアル → Cloud) に合わせた構成。
  */
 export const LP_VIDEO: OnboardingVideo = {
   problemId: "tenkacloud-30s",
@@ -397,16 +400,25 @@ export const LP_VIDEO: OnboardingVideo = {
       durationS: 5.5,
       titleJa: "本物の問題コンテナも、AWS なしで",
       titleEn: "Real problem containers, still no AWS",
-      bulletsJa: ["Docker か Codespaces で sqli-demo を起動", "ローカル採点で初得点まで数分"],
-      bulletsEn: ["Run sqli-demo with Docker or Codespaces", "Local scoring in minutes"],
+      bulletsJa: ["make local → 大会とチームを作成", "Start / resume で Docker 問題を開始"],
+      bulletsEn: [
+        "make local → create an event and teams",
+        "Start / resume launches Docker exercises",
+      ],
     },
     {
       badge: "HOST",
       durationS: 5.5,
-      titleJa: "イベントを開く — TenkaCloud Lite",
-      titleEn: "Host your event — TenkaCloud Lite",
-      bulletsJa: ["自分の AWS にメールアドレス 1 つで約 30 分", "片付けもワンアクション"],
-      bulletsEn: ["Your AWS, one email address, ~30 min", "Teardown is one action"],
+      titleJa: "Local / Cloud でイベントを開く",
+      titleEn: "Host with Local or Cloud",
+      bulletsJa: [
+        "Local: Bun + SQLite / Cloud: Lambda + 選べる DB",
+        "参加者 URL とチームキーを配布",
+      ],
+      bulletsEn: [
+        "Local: Bun + SQLite / Cloud: Lambda + your DB",
+        "Share the participant URL and team key",
+      ],
     },
     {
       badge: "GOAL",

@@ -8,7 +8,7 @@ pack は競技の内容を version ごとに確認・保存する単位です。
 
 ## 問題パックとは
 
-現在の CLI は雛形作成、検証、内容確認、不変 revision の保存を行えます。install や activate では現在の大会カタログへ追加されません。activation はオフラインのカタログ記録であり、現行の競技実行手順ではありません。
+Problem Pack は、公開カタログへ登録せず、企業内の問題やイベント終了後に公開する予定の問題を配布・開催するための単位です。install は不変な revision を保存し、Cloud は有効化済みの AWS/CloudFormation 問題を次の配置で読み込みます。Local は Pack store を直接読まず、手元の `problems/` にある対応問題を読みます。公開は作成者が別途判断します。
 
 ## Battle と Challenge
 

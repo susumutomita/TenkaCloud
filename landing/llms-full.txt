@@ -21,7 +21,13 @@ Use the [current quickstart](https://github.com/susumutomita/TenkaCloud#quicksta
 The checkout uses its pinned Bun and Node.js tools; Docker and Compose are needed
 for container problems. `make install` installs dependencies without lifecycle
 scripts. `make local` starts the organizer and participant consoles and SQLite.
-Open the printed URLs. `make down` stops this host's owned runtimes and preserves
+Open the printed URLs. Each interactive `make local` start shows a fresh organizer key
+once and revokes previous organizer access. Use `make local-reset` in another interactive
+terminal with the same data directory to rotate it while running. Noninteractive and
+public/container starts retain existing keys without printing them. Create an event,
+prepare its jobs and start the schedule; give participants the portal URL and their team
+key. After stopping the host, `make local-clear` confirms competition-data and owned
+Docker-exercise removal while retaining organizer access and host settings. `make down` stops this host's owned runtimes and preserves
 event data, scores, editor drafts and resumable problem state. It does not clear
 shared Docker caches or other projects.
 For a remote development workspace, [Codespaces](https://codespaces.new/susumutomita/TenkaCloud)
@@ -50,7 +56,7 @@ source settings and build execution. AWS resources and builds can incur charges.
 The launcher distinguishes ACTION=destroy from ACTION=destroy-all using the
 selected source contract's ordinary teardown and explicit retained-data purge.
 
-Cloud hosting restores the SBT-free Lite backend: Lambda, Cognito and selectable
+Cloud hosting uses: Lambda, Cognito and selectable
 Turso or DynamoDB; original Lambda/CodeBuild CloudFormation create/update/no-op/
 recreate paths; flag/multi-flag and scheduled scoring; participant Console/CLI;
 and native coordination including Cryptography Battle. Docker/Compose stays local.

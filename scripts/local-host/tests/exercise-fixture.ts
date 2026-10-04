@@ -34,6 +34,11 @@ export class ExerciseFixture implements RuntimeEngine {
       {
         problemId: "sqli-demo",
         name: "SQL injection exercise fixture",
+        organizerContent: {
+          description:
+            "A synthetic SQL injection login exercise for isolated browser rehearsals. Each team receives its own temporary database and login form.",
+          learningGoals: ["Follow the participant access URL and submit the exercise flag."],
+        },
         definition: JSON.stringify({ fixture: "private-fixture-descriptor" }),
       },
     ];

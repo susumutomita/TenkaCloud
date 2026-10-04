@@ -9,8 +9,8 @@ describe("deploy-tenkacloud-lite Zundamon voice-over", () => {
 
   it("should provide Japanese and English lines for every edit cue", () => {
     expect(script.id).toBe("deploy-tenkacloud-lite-zundamon");
-    expect(script.title.ja).toContain("TenkaCloud Lite");
-    expect(script.title.en).toContain("TenkaCloud Lite");
+    expect(script.title.ja).toContain("TenkaCloud");
+    expect(script.title.en).toContain("TenkaCloud");
     expect(script.voice.ja).toContain("VOICEVOX:ずんだもん");
     expect(script.voice.en).toContain("Samantha");
     expect(script.voice.en).not.toContain("VOICEVOX");
@@ -36,7 +36,7 @@ describe("deploy-tenkacloud-lite Zundamon voice-over", () => {
     expect(joined).not.toMatch(/TENKA\{[A-Z0-9-]+\}/);
   });
 
-  it("should define Lite from the deployed architecture before mentioning permissions", () => {
+  it("should define Cloud from the deployed architecture before mentioning permissions", () => {
     const [intro, launcher, ...rest] = script.cues;
     const introText = JSON.stringify(intro);
     const laterText = JSON.stringify([launcher, ...rest]);
@@ -45,7 +45,7 @@ describe("deploy-tenkacloud-lite Zundamon voice-over", () => {
     expect(introText).toContain("一人の主催者");
     expect(introText).toContain("自分の AWS 環境");
     expect(introText).toContain("tenkacloud-lite");
-    expect(introText).toContain("tenkacloud-lite-problem-deploy");
+    expect(introText).toContain("tenkacloud-cloud");
     expect(introText).not.toContain("AdministratorAccess");
     expect(laterText).toContain("AdministratorAccess");
   });
@@ -123,7 +123,7 @@ describe("cleanup-tenkacloud-lite Zundamon voice-over", () => {
 
     expect(intro?.layout).toBe("intro");
     expect(intro?.details?.ja).toEqual([
-      "1  CodeBuildでLite本体を削除",
+      "1  CodeBuildでCloud基盤を削除",
       "2  削除成功を確認",
       "3  launcherを最後に削除",
     ]);
@@ -134,12 +134,12 @@ describe("cleanup-tenkacloud-lite Zundamon voice-over", () => {
     expect(action?.layout).toBe("explainer");
     expect(action?.details?.ja).toEqual([
       "CodeBuild",
-      "DynamoDB",
-      "CloudWatch Logs",
-      "Lite stacks",
+      "Turso / DynamoDB",
+      "Retained data",
+      "Cloud stacks",
     ]);
-    expect(wait?.ja).toContain("Lite本体");
-    expect(wait?.ja).toContain("problem-deploy");
+    expect(wait?.ja).toContain("外部Turso");
+    expect(wait?.ja).toContain("選択したDB");
     expect(launcher?.ja).toContain("CloudFormation");
     expect(launcher?.ja).toContain("CodeBuild");
     expect(launcher?.ja).toContain("IAM Role");

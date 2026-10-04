@@ -26,7 +26,7 @@ import { LOCAL_ONBOARDING_COMMANDS } from "./local-onboarding-contract";
  * 整合性を pin する。 ドリルの sub-flag id が判定側 (`evaluateMockSubFlag`) と揃って
  * いなければ永遠に wrong を返すし、 ヒントの無いドリルは「本文は概要 → ヒントで
  * ステップバイステップ」 という構造契約を破る。問題 1 は動画の real cloud、
- * Battle / Challenge、Local / Lite / SaaS を省略せず、実際の「問題文を読む →
+ * Battle / Challenge、Local / Cloud を省略せず、実際の「問題文を読む →
  * 問題環境を起動 → 調査・修正 → flag を提出して採点」へつなぐ。6 問すべてが
  * 標準の multi-flag 入力・ヒント公開・採点を使う。
  */
@@ -65,8 +65,8 @@ describe("dev-mock fixtures", () => {
     expect(body).toContain("Battle");
     expect(body).toContain("Challenge");
     expect(body).toContain("Local");
-    expect(body).toContain("Lite");
-    expect(body).toContain("SaaS");
+    expect(body).toContain("Cloud");
+    expect(body).not.toContain("SaaS");
     expect(body).toContain("問題文");
     expect(body).toContain("問題環境");
     expect(body).toContain("flag");
@@ -129,14 +129,13 @@ describe("dev-mock fixtures", () => {
     }
   });
 
-  it("should tell the local drill player the team key is auto-filled at login (no manual key entry)", () => {
+  it("should route local players through event setup and their own team key", () => {
     const local = drills.find((p) => p.problemId === LOCAL_DRILL_PROBLEM_ID);
-    // Opening the Portal lands on a login screen; make local pre-fills the throwaway
-    // team key into runtime-config, so the step must say "just sign in", not "type a key".
-    expect(local?.description).toContain("チームキーは自動で入力済み");
-    expect(local?.description).toContain("「サインイン」を押すだけ");
-    expect(local?.i18n?.en?.description).toContain("team key is already filled in");
-    expect(local?.i18n?.en?.description).toContain("just press **Sign in**");
+    expect(local?.description).toContain("大会・チーム・問題");
+    expect(local?.description).toContain("参加者 URL とチームキー");
+    expect(local?.description).not.toContain("自動で入力済み");
+    expect(local?.i18n?.en?.description).toContain("create an event and teams");
+    expect(local?.i18n?.en?.description).toContain("with the team key");
   });
 
   it("should keep the lite drill sub-flag ids aligned with the lite-drill contract, in journey order", () => {
@@ -217,6 +216,45 @@ describe("dev-mock fixtures", () => {
     expect(launcherHint?.i18n?.en?.content).toContain("tenkacloud-lite-problem-deploy");
   });
 
+  it("accepts current CLI success evidence and rejects retired deployment/cleanup codes", () => {
+    const cases = [
+      [
+        LITE_DRILL_PROBLEM_ID,
+        LITE_DRILL_CHECKPOINTS.deployComplete.flagId,
+        "Cloud competition hosting deployed.",
+        "TC{LITE-DEPLOY-COMPLETE}",
+      ],
+      [
+        LITE_CLEANUP_DRILL_PROBLEM_ID,
+        LITE_CLEANUP_DRILL_CHECKPOINT.flagId,
+        "Cloud platform stacks destroyed.",
+        "TC{LITE-CLEANUP-COMPLETE}",
+      ],
+    ];
+    for (const [problemId, flagId, evidence, retired] of cases) {
+      expect(evaluateMockSubFlag(problemId, flagId, evidence, 100).kind).toBe("ok");
+      expect(evaluateMockSubFlag(problemId, flagId, retired, 100).kind).toBe("wrong");
+      const fixture = drills.find((p) => p.problemId === problemId);
+      const hint = fixture?.scoring?.flags?.find((f) => f.id === flagId)?.hints?.[0];
+      expect(hint?.content).toContain(evidence);
+      expect(hint?.i18n?.en?.content).toContain(evidence);
+      expect(fixture?.description).toContain(evidence);
+      expect(fixture?.i18n?.en?.description).toContain(evidence);
+    }
+  });
+
+  it("scores an uncut current CLI cleanup line without accepting unrelated output", () => {
+    const line =
+      "Cloud platform stacks destroyed. Existing deployed Retain policies may leave chargeable resources; review the saved plan. This teardown removes external Turso rows only for explicit destroy-all when the deployed provider identity is verified.";
+    expect(
+      evaluateMockSubFlag(LITE_CLEANUP_DRILL_PROBLEM_ID, "cleanup-complete", line, 100).kind,
+    ).toBe("ok");
+    expect(
+      evaluateMockSubFlag(LITE_CLEANUP_DRILL_PROBLEM_ID, "cleanup-complete", `${line} failed`, 100)
+        .kind,
+    ).toBe("wrong");
+  });
+
   it("should keep cleanup out of the deploy drill and give it a separate scored problem", () => {
     const deploy = drills.find((p) => p.problemId === LITE_DRILL_PROBLEM_ID);
     const cleanup = drills.find((p) => p.problemId === LITE_CLEANUP_DRILL_PROBLEM_ID);
@@ -291,7 +329,8 @@ describe("dev-mock fixtures", () => {
       expect(body).toContain("Codespaces");
       expect(body).toContain("Docker");
       expect(body).toContain("5175");
-      expect(body).toContain("$7");
+      expect(body).not.toContain("$7");
+      expect(body).toMatch(/構成・利用量|configuration, usage/);
       expect(body).toContain("WSL2");
       expect(body).toContain("wp-exposed-backup");
       expect(body).toContain("WordPress");
@@ -304,8 +343,8 @@ describe("dev-mock fixtures", () => {
       expect(commands?.slice(0, LOCAL_ONBOARDING_COMMANDS.length)).toEqual(
         LOCAL_ONBOARDING_COMMANDS,
       );
-      expect(body).toMatch(/automatically|自動/);
-      expect(body).toMatch(/fallback|失敗/);
+      expect(body).toMatch(/未確認|unverified/);
+      expect(body).toContain("Schedule");
     }
     expect(drill?.description).not.toContain("手元の Mac");
     expect(drill?.i18n?.en?.description).not.toContain("your Mac");
@@ -381,8 +420,8 @@ describe("dev-mock fixtures", () => {
     const bodies = DEV_MOCK_NOTIFICATIONS.items.map((n) => `${n.title} ${n.body}`).join("\n");
     expect(bodies).toContain("TenkaCloud とは?");
     expect(bodies).toContain("ローカルモードで遊ぶ");
-    expect(bodies).toContain("自分の TenkaCloud Lite を立てる");
-    expect(bodies).toContain("TenkaCloud Lite を片付ける");
+    expect(bodies).toContain("自分の TenkaCloud を立てる");
+    expect(bodies).toContain("TenkaCloud を片付ける");
     expect(bodies).toContain("AIエージェントでMac起動");
     expect(bodies).toContain("独自問題を追加する");
   });

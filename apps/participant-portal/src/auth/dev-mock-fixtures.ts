@@ -35,15 +35,15 @@ import { LOCAL_ONBOARDING_COMMANDS } from "./local-onboarding-contract";
  *
  * 出題構成 (Issue #2707 → #2711: LP ヒーローから始める自己解説型オンボーディング):
  *   1. 「TenkaCloud とは?」 — 動画の内容と実際の問題操作をつなぐ 6 ステップ。
- *      real cloud、Battle / Challenge、Local / Lite / SaaS を確認してから、
+ *      real cloud、Battle / Challenge、Local / Cloud を確認してから、
  *      問題文を読む → 起動する → 調査・修正する → flag を提出して得点する
- *   2. 「自分の TenkaCloud Lite を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
- *   3. 「TenkaCloud Lite を片付ける」 — ACTION override と launcher 削除
+ *   2. 「自分の TenkaCloud を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
+ *   3. 「TenkaCloud を片付ける」 — ACTION override と launcher 削除
  *   4. 「ローカルモードで遊ぶ」 — Docker / Codespaces。起動コマンドをそのまま提出
  *   5. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
  *   6. 「独自問題を追加する」 — Problem Pack に 2 問目を足し、 解く側から作る側へ (#2781)
  *   (旧来の「クエスト」2 問は削除済み — チュートリアル 6 問で完結させ、 余計な問題で
- *    迷わせない。 完走後の導線はローカル / Lite の実在ドリルへ直接つなぐ)
+ *    迷わせない。 完走後の導線はLocal / Cloud の実在ドリルへ直接つなぐ)
  *
  * オンボーディングドリルは「本文は概要 → 詰まったら提出欄ごとのヒントでステップバイステップ手順」の
  * 同一構造。 ヒント content は fixture に同梱する (公開前提のオンボーディング教材であり、
@@ -156,11 +156,11 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 penalty: 0,
                 revealed: false,
                 content:
-                  "LocalはDockerを使い、手元のパソコンで問題環境を動かす。Liteは自分のAWS、SaaSは運営側の環境を使う。答えは「Local」。",
+                  "Localは手元のBunとSQLiteで大会を開催し、Docker問題を動かす。Cloudは自分のAWSでLambdaとTursoまたはDynamoDBを使う。答えは「Local」。",
                 i18n: {
                   en: {
                     content:
-                      'Local uses Docker to run the problem environment on your computer. Lite uses your AWS account; SaaS uses the hosted environment. Submit "Local".',
+                      'Local hosts events with Bun and SQLite; Docker runs local exercises. Cloud uses Lambda and Turso or DynamoDB in your AWS account. Submit "Local".',
                   },
                 },
               },
@@ -246,16 +246,17 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       problemId: LITE_DRILL_PROBLEM_ID,
       // 実際の AWS 操作を使った短尺動画。 locale ごとに音声を分け、WebVTT 字幕を付ける。
       videoUrl: "https://www.youtube.com/embed/ItgRfIeQ0ac",
-      name: "自分の TenkaCloud Lite を立てる",
+      name: "自分の TenkaCloud を立てる",
       // 注: fixture 問題は catalog metadata を持たないため ProblemInfoSection (= instructions
       // の描画箇所) が skip される。 competitor に見せる本文はすべて description に置く
       // (ProblemPanel が <Markdown> で描画する唯一の確実な経路)。 instructions は将来
       // metadata 経路が通ったときのための短い要約に留める。
       description: [
-        "チュートリアルの仕上げ。デモの外に出て、自分の AWS アカウントに **TenkaCloud のクラウド開催環境** を立ち上げる。この入口はテンプレートに固定された従来版を使い、統合中の新構成へ自動で切り替わるものではない。",
-        "手順を正しく実行するたびに、実環境の画面にチェックポイントコード `TC{...}` が現れる。それを下の対応する提出欄に貼って得点しよう。",
+        "チュートリアルの仕上げ。デモの外に出て、自分の AWS アカウントに **TenkaCloud のクラウド開催環境** を立ち上げる。launcherの配置元と問題カタログはtemplateのsource pinを確認する。",
+        "各ステップで指定された画面のコードまたは完了ログの1行を、対応する提出欄へ貼って得点する。デモの採点はAWSの状態を直接検証するものではない。",
         "`cloud-pipeline.yaml` は、CloudFormationに読み込ませる**自動デプロイ環境のひな形**。名前にpipelineとあるが、AWS CodePipelineは使わない。CloudFormationがCodeBuildとIAM Roleを用意するので、`Start build` を押せば、細かいデプロイ手順を知らなくてもクラウド開催環境を自動構築できる。",
         "",
+        "既存動画は旧版の収録例。デプロイ完了欄には現行CLIの成功ログ `Cloud competition hosting deployed.` を提出する。実配置の正本は現行ドキュメント。",
         "#### AWSサービスの役割",
         "",
         "- **CloudFormation**: YAMLのひな形を読み、必要なAWSリソースをまとめて作る",
@@ -271,7 +272,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "",
         "1. CodeBuildがTenkaCloudと問題カタログを取得する",
         "2. CodeBuildがビルドとCDKによるデプロイを自動実行する",
-        "3. CloudFormationがTenkaCloud Lite本体のAWSリソースを作成する",
+        "3. CloudFormationがTenkaCloud本体のAWSリソースを作成する",
         "",
         "**AWS経験者向け:** CloudFormation stack → CodeBuild project → CDK deploy → CloudFormation stacks。CodeBuildのServiceRoleにはIAM Roleを使用する。",
         "",
@@ -279,28 +280,29 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "",
         "- この動画では手順を明確にするため `AdministratorAccess` のユーザーで操作する。実運用ではデプロイに必要な権限へ絞る",
         "- 受信できるメールアドレスが必要",
-        "- デプロイ中はデフォルト構成で **約 $7/月** の継続費用が発生する(遊び終えたら必ず片付ける)",
+        "- デプロイ中は構成・利用量・リージョンに応じた費用が発生する(遊び終えたら必ず片付ける)",
         "- 自動デプロイ環境はCodeBuild用に広い権限のIAM Roleを作成する(CloudFormationのIAM acknowledgeで明示同意する)",
         "",
         "#### 進め方",
         "",
-        "チェックポイントは4つ: 自動デプロイ環境を作成 → Liteデプロイ完了 → Competitorアカウント検証 → 初回イベント作成。",
+        "チェックポイントは4つ: 自動デプロイ環境を作成 → Cloudデプロイ完了 → Competitorアカウント検証 → 初回イベント作成。",
         "続けてイベントを Deploy し、Participant Portal に team login key で入り、問題をプレイしてスコア反映まで確認する。動画はこの一連の使い方に集中している。",
         "各ステップの詳しい手順は、提出欄ごとの **ヒント** を開くと表示される(ペナルティなし)。自力で進める人はネタバレなしで挑戦できる。",
         "",
-        "4 ステップを終えて遊び終わったら、次の問題 **「TenkaCloud Lite を片付ける」** へ進む。課金を止めるところまでがオンボーディング。",
+        "4 ステップを終えて遊び終わったら、次の問題 **「TenkaCloud を片付ける」** へ進む。課金を止めるところまでがオンボーディング。",
       ].join("\n"),
       instructions:
-        "各ステップで実環境の画面に現れる `TC{...}` コードを、下の対応する提出欄に貼って得点する。手順の詳細は提出欄ごとのヒントから。",
+        "各ステップの画面のコードまたは完了ログの1行を、下の対応する提出欄に貼って得点する。手順の詳細は提出欄ごとのヒントから。",
       i18n: {
         en: {
           videoUrl: "https://www.youtube.com/embed/7LjkPdf5zM0",
-          name: "Deploy your own TenkaCloud Lite",
+          name: "Deploy your own TenkaCloud",
           description: [
-            "The tutorial finale. Step outside the demo and stand up **TenkaCloud cloud hosting** in your own AWS account. This launcher uses its pinned previous implementation; it does not automatically switch to the new integration architecture.",
-            "Each step you complete reveals a `TC{...}` checkpoint code on the real screens — paste it into the matching submission box below to score.",
+            "The tutorial finale. Step outside the demo and stand up **TenkaCloud cloud hosting** in your own AWS account. Review the template’s platform and problem-catalog source pins.",
+            "Submit the screen code or success log line specified by each step. Demo scoring does not independently verify AWS state.",
             "`cloud-pipeline.yaml` is an **automatic deployment setup template** that you load into CloudFormation. Despite the filename, it does not use the AWS CodePipeline service. CloudFormation creates a CodeBuild project and IAM Role, so pressing `Start build` deploys the cloud hosting platform automatically without learning every underlying deployment step.",
             "",
+            "Existing footage is historical. Submit `Cloud competition hosting deployed.` from the current CLI for deployment completion and follow the current docs for actual deployment.",
             "#### What the AWS services do",
             "",
             "- **CloudFormation**: reads the YAML template and creates the required AWS resources together",
@@ -316,7 +318,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "",
             "1. CodeBuild downloads TenkaCloud and the problem catalog",
             "2. CodeBuild runs the build and CDK deployment automatically",
-            "3. CloudFormation creates the AWS resources for the TenkaCloud Lite platform",
+            "3. CloudFormation creates the AWS resources for the TenkaCloud platform",
             "",
             "**AWS shorthand:** CloudFormation stack → CodeBuild project → CDK deploy → CloudFormation stacks. An IAM Role is attached as the CodeBuild ServiceRole.",
             "",
@@ -324,19 +326,19 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "",
             "- The video uses an `AdministratorAccess` user for a clear walkthrough. In production, narrow it to the permissions required for deployment",
             "- You need an email address you can read",
-            "- The default profile costs **about $7/month** while deployed (tear it down when you are done)",
+            "- Costs depend on configuration, usage, and region (tear it down when you are done)",
             "- The automatic deployment setup creates a broad-permission IAM Role for CodeBuild internally (you acknowledge it in CloudFormation)",
             "",
             "#### How to play",
             "",
-            "There are 4 checkpoints: create the automatic deployment setup → Lite deploy completes → verify a competitor account → create your first event.",
+            "There are 4 checkpoints: create the automatic deployment setup → Cloud deploy completes → verify a competitor account → create your first event.",
             "Then deploy the event, sign in through the Participant Portal with the team key, play the problem, and confirm the score. The video focuses on this end-to-end product workflow.",
             "Open the **hint** on each submission box for the detailed instructions (penalty-free). Prefer to figure it out yourself? Go in blind.",
             "",
-            'After all 4 steps and when you are done playing, continue to the separate **"Clean up TenkaCloud Lite"** problem. Onboarding ends only after the charges are stopped.',
+            'After all 4 steps and when you are done playing, continue to the separate **"Clean up TenkaCloud"** problem. Onboarding ends only after the charges are stopped.',
           ].join("\n"),
           instructions:
-            "Each step reveals a `TC{...}` code on the real screens — paste it into the matching submission box below. Detailed steps live in each box's hint.",
+            "Submit each step’s screen code or success log line to its matching box. Detailed steps live in each box's hint.",
         },
       },
       region: "ap-northeast-1",
@@ -364,7 +366,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                   `[TenkaCloud の cloud-pipeline.yaml](${CLOUD_PIPELINE_TEMPLATE_URL}) をダウンロードする。`,
                   `[AWS CloudFormation の「スタックの作成」](${LITE_CLOUDFORMATION_CREATE_STACK_URL}) を開き、**テンプレートファイルのアップロード**で先ほどの YAML を選ぶ。`,
                   "スタック名は `tenkacloud-lite-launcher`。必須入力は `TenantAdminEmail` のみで、IAM acknowledge にチェックする。",
-                  "`tenkacloud-lite-launcher` は自動デプロイ環境のCloudFormation stack名。CloudFormationがCodeBuildとIAM Roleを作り、そのCodeBuildが必要な処理を自動化するため、利用者が `git clone`・`make deploy`・CDKを手動で操作する必要はない。次のステップで `Start build` を押すと、`tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の2スタックが作られる。",
+                  "`tenkacloud-lite-launcher` は自動デプロイ環境のCloudFormation stack名。CloudFormationがCodeBuildとIAM Roleを作り、そのCodeBuildが必要な処理を自動化するため、利用者が `git clone`・`make deploy`・CDKを手動で操作する必要はない。次のステップで `Start build` を押すと、新規は `tenkacloud-cloud` / `tenkacloud-cloud-problem-deploy`、既存は `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の2スタックが選択layoutで作られる。",
                   "作成完了後、スタックの「出力 (Outputs)」タブにある `OnboardingDrillCheckpoint` の値を提出する。",
                 ].join("\n\n"),
                 i18n: {
@@ -373,7 +375,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                       `[Download TenkaCloud's cloud-pipeline.yaml](${CLOUD_PIPELINE_TEMPLATE_URL}).`,
                       `[Open AWS CloudFormation Create stack](${LITE_CLOUDFORMATION_CREATE_STACK_URL}), choose **Upload a template file**, and select the YAML you downloaded.`,
                       "Use `tenkacloud-lite-launcher` as the stack name. The only required input is `TenantAdminEmail`; check the IAM acknowledgement.",
-                      "`tenkacloud-lite-launcher` is the CloudFormation stack name for the automatic deployment setup. CloudFormation creates the CodeBuild project and IAM Role, and CodeBuild automates the required work, so you do not operate `git clone`, `make deploy`, or CDK manually. In the next step, press `Start build` to create the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks.",
+                      "`tenkacloud-lite-launcher` is the CloudFormation stack name for the automatic deployment setup. CloudFormation creates the CodeBuild project and IAM Role, and CodeBuild automates the required work, so you do not operate `git clone`, `make deploy`, or CDK manually. In the next step, press `Start build` to create the selected stack pair: new `tenkacloud-cloud` / `tenkacloud-cloud-problem-deploy` or existing `tenkacloud-lite` / `tenkacloud-lite-problem-deploy`.",
                       "After it completes, submit the `OnboardingDrillCheckpoint` value from the stack's Outputs tab.",
                     ].join("\n\n"),
                   },
@@ -383,21 +385,21 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
           },
           {
             id: LITE_DRILL_CHECKPOINTS.deployComplete.flagId,
-            label: "2. Lite デプロイ完了",
+            label: "2. Cloud デプロイ完了",
             points: 100,
             solved: false,
-            i18n: { en: { label: "2. Lite deploy complete" } },
+            i18n: { en: { label: "2. Cloud deploy complete" } },
             hints: [
               {
                 id: "lite-h2",
                 penalty: 0,
                 revealed: false,
                 content:
-                  "Outputs の `StartBuildConsoleUrl` から CodeBuild プロジェクトを開き「ビルドを開始」。ビルドは数十分かかることがある。ログ末尾の `Lite mode deploy complete` ブロックに印字されるコードを提出する。",
+                  "Outputs の `StartBuildConsoleUrl` から CodeBuild プロジェクトを開き「ビルドを開始」。ビルドは数十分かかることがある。ビルド成功と2つのアクセスURLを確認し、ログの `Cloud competition hosting deployed.` の1行を提出する。",
                 i18n: {
                   en: {
                     content:
-                      "Open the CodeBuild project from the `StartBuildConsoleUrl` output and press Start build. The build can take tens of minutes; submit the code printed in the `Lite mode deploy complete` block at the end of the log.",
+                      "Open the CodeBuild project from the `StartBuildConsoleUrl` output and press Start build. The build can take tens of minutes; confirm build success and both access URLs, then submit the line `Cloud competition hosting deployed.` from the log.",
                   },
                 },
               },
@@ -473,30 +475,30 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "#### 必要な環境",
         "",
         "- Docker Desktopなど、Dockerを動かせるアプリ(macOS / Linux / WindowsはWSL2)",
-        "- または GitHub Codespaces — ブラウザだけで、手元には何もインストールせずに遊べる",
+        "- GitHub Codespaces は転送 URL・接続の確認が必要",
         "",
         "#### 起動方法",
         "",
         ...LOCAL_ONBOARDING_COMMANDS.map((command, index) => `${index + 1}. \`${command}\``),
         "5. ready 表示に `Participant Portal ... 5175` と出たら、ブラウザで Portal を開く",
-        "6. ログイン画面が出たら、**チームキーは自動で入力済み**なので、そのまま「サインイン」を押すだけ(自分でキーを打つ必要はない。`make local` ごとに変わる使い捨てのチームキーが Portal に自動で渡される)",
+        "6. 開催者コンソールへ主催者キーで入り、大会・チーム・問題を選択して jobs を準備し、Schedule から開始する。参加者 URL とチームキーで Portal にサインインする",
         "7. 問題一覧から **「前任者の忘れ物」** (`wp-exposed-backup`) を選び、Startを押す",
         "8. 起動したWordPressサイトを開き、まず `/robots.txt` を確認する。公開フォルダに残されたバックアップや設定ファイルの控えを探す",
         "9. 見つけた `TC{...}` の合言葉を、対応する提出欄へ送る",
         "",
-        "Codespaces で遊ぶ場合は https://codespaces.new/susumutomita/TenkaCloud から作成する。ローカルプレイとPortalは自動起動する。自動起動に失敗した場合だけ、コマンドパレットから「▷ ローカルプレイ開始」を実行する。ポートはブラウザへ自動転送される。",
+        "Codespaces の転送 URL・問題接続は現行版で未確認。まず macOS / Linux / WSL2 のローカル環境で上の手順を使う。",
         "",
         "#### クラウドで動かす場合との違い",
         "",
-        "- **ローカルモード** — AWS 不要・追加費用ゼロ・Docker ベースの入門ドリルのみ・起動は数分",
-        "- **Lite モード(実 AWS)** — 自分の AWS アカウントに TenkaCloud をデプロイし、本物のインフラで本格的なイベントを主催できる。デプロイ中はデフォルト構成で **約 $7/月** の継続費用が発生する",
+        "- **ローカルモード** — AWS 不要・追加費用ゼロ・Bun + SQLite の大会・チーム運用と Docker 問題",
+        "- **Cloud 開催(実 AWS)** — 自分の AWS アカウントに TenkaCloud をデプロイし、本物のインフラで本格的なイベントを主催できる。デプロイ中は構成・利用量・リージョンに応じた費用が発生する",
         "",
         "#### チェックポイント",
         "",
         "1. 起動した Participant Portal のポート番号を答える",
         "2. ローカルモードを起動したコマンドを提出する",
         "",
-        "手順に詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。クリアしたら、まだの人は「自分の TenkaCloud Lite を立てる」で仕上げよう。",
+        "手順に詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。クリアしたら、まだの人は「自分の TenkaCloud を立てる」で仕上げよう。",
       ].join("\n"),
       instructions:
         "手元のマシンか GitHub Codespaces でローカルモードを起動し、2 つのチェックポイントを提出する。ヒントはペナルティなしで開ける。",
@@ -516,30 +518,30 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "#### Prerequisites",
             "",
             "- Docker Desktop or another way to run Docker (macOS / Linux / Windows via WSL2)",
-            "- Or GitHub Codespaces — nothing to install locally, everything runs in the browser",
+            "- GitHub Codespaces requires forwarded URL and connection verification",
             "",
             "#### How to start",
             "",
             ...LOCAL_ONBOARDING_COMMANDS.map((command, index) => `${index + 1}. \`${command}\``),
             "5. When the ready output shows `Participant Portal ... 5175`, open the Portal in your browser",
-            "6. On the login screen the **team key is already filled in** — just press **Sign in** (no need to type a key; local mode hands the Portal a throwaway team key that changes on every `make local`)",
+            "6. Sign in to the organizer console with the organizer key, create an event and teams, prepare jobs, and start Schedule. Sign in at the participant URL with the team key",
             '7. Pick **"The Predecessor\'s Leftovers"** (`wp-exposed-backup`) from the problem list and press Start',
             "8. Open the WordPress site and check `/robots.txt` first. Look for backups or configuration copies left in a public folder",
             "9. Submit each `TC{...}` passphrase you find to its matching field",
             "",
-            'On Codespaces, create one from https://codespaces.new/susumutomita/TenkaCloud. Local play and the Portal start automatically. Only if automatic startup fails, run the "▷ ローカルプレイ開始" fallback task from the command palette. The port forwards to your browser automatically.',
+            "Codespaces forwarded URLs and exercise connections remain unverified. Use the local macOS / Linux / WSL2 flow above first.",
             "",
             "#### How this differs from running in the cloud",
             "",
-            "- **Local mode** — no AWS, no extra cost, Docker-based intro drills only, ready in minutes",
-            "- **Lite mode (real AWS)** — deploys TenkaCloud into your own AWS account to host a real event on real infrastructure; the default profile costs **about $7/month** while deployed",
+            "- **Local mode** — no AWS, Bun + SQLite event/team hosting and Docker exercises",
+            "- **Cloud hosting (real AWS)** — deploys TenkaCloud into your own AWS account to host a real event on real infrastructure; costs depend on configuration, usage, and region",
             "",
             "#### Checkpoints",
             "",
             "1. Answer the Participant Portal port shown when local mode starts",
             "2. Submit the command you used to start local mode",
             "",
-            'Stuck? Open the **hint** on each submission box (no penalty). Then finish with "Deploy your own TenkaCloud Lite" if you have not yet.',
+            'Stuck? Open the **hint** on each submission box (no penalty). Then finish with "Deploy your own TenkaCloud" if you have not yet.',
           ].join("\n"),
           instructions:
             "Start local mode on your own machine or GitHub Codespaces, then submit the 2 checkpoints. Hints are penalty-free.",
@@ -766,7 +768,7 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
     {
       notificationId: "notif-003",
       title: "オンボーディングチュートリアルを開放",
-      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud Lite を立てる」へ進み、「TenkaCloud Lite を片付ける」で課金停止まで完走できます。AWS なしで遊ぶなら「ローカルモードで遊ぶ」、AI に任せるなら「AIエージェントでMac起動」も。仕上げは「独自問題を追加する」で、解く側から作る側へ。詰まったら各提出欄のヒント(ペナルティなし)へ。",
+      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud を立てる」へ進み、「TenkaCloud を片付ける」で課金停止まで完走できます。AWS なしで遊ぶなら「ローカルモードで遊ぶ」、AI に任せるなら「AIエージェントでMac起動」も。仕上げは「独自問題を追加する」で、解く側から作る側へ。詰まったら各提出欄のヒント(ペナルティなし)へ。",
       severity: "info",
       occurredAt: iso(-2 * MIN),
     },

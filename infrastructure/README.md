@@ -1,6 +1,6 @@
 # Cloud hosting
 
-Cloud hosting restores the existing SBT-free, single-installation Lite backend:
+Cloud hosting runs a single event platform:
 Lambda, Cognito, API Gateway, CloudFront, Step Functions and CodeBuild, with either
 Turso or DynamoDB. The public hosting name is **cloud**. Local hosting remains the
 unified Bun process and persistent SQLite; `make local`, `make down`,

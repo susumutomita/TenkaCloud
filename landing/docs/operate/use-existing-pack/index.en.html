@@ -66,7 +66,7 @@
 <main class="doc">
 <article>
 <h1>Use an existing pack <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate&#39;s event catalog. Activation is an offline catalog record, not a current hosting workflow.</p>
+<p>Problem Packs let organizers distribute and host company exercises or problems intended for publication after an event without adding them to the public catalog. Installation stores an immutable revision; Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads supported problems in its local <code>problems/</code> tree rather than the Pack store. Publication remains a separate author decision.</p>
 <h2 id="prerequisites">Prerequisites</h2><p>Obtain a trusted local pack directory or HTTPS Git URL plus an immutable full 40-hex commit SHA. Review the declared runtime, files and provenance before installation.</p>
 <h2 id="install-the-pinned-git-revision">Install the pinned Git revision</h2><pre><code class="language-sh">make pack-install ARGS=&quot;git &lt;https-url&gt; --commit &lt;40-hex-commit-sha&gt;&quot;
 make pack-list
@@ -74,7 +74,11 @@ bun run pack inspect &lt;id@version&gt;
 </code></pre>
 <p>Run from the repository root. The default store is <code>.tenkacloud/pack-store</code>. Git install uses the network; local-directory validation and installation do not deploy anything.</p>
 <h2 id="verify-the-installed-revision">Verify the stored revision</h2><p>Check the source, resolved commit and digest. Installation is not authorization to run arbitrary code, expose endpoints or create cloud resources.</p>
-<h2 id="create-the-event">Event integration is unavailable</h2><p>Installed packs do not appear in the current event picker through activation. This is an implementation gap, not merely pending live batch verification. Use a supported core-catalog problem for an event and record the pack route as Not run. See <a href="/docs/tutorials/first-pack/index.en.html">first pack tutorial</a>.</p>
+<h2 id="create-the-event">Use in a Cloud event</h2><p>Run from the repository root for Cloud, replacing <code>&lt;id@version&gt;</code> with the manifest ID and version:</p>
+<pre><code class="language-sh">bun run pack activate &lt;id@version&gt; --tenant local
+</code></pre>
+<p><code>local</code> is the fixed selector consumed by the Cloud catalog loader; it does not select Local hosting. Use the default <code>.tenkacloud/pack-store</code>. There is no <code>make pack-activate</code> target. Activation itself performs no AWS operations. Normal Cloud source preparation includes this store in the private source archive and deployment reads the active problem catalog and execution assets. Update between events with <code>make deploy</code>, then select the problem in a new event. Existing events keep their saved catalog. Review runtime and scoring support and rehearse participant solving, scoring and teardown before hosting.</p>
+<p>Local does not connect the Pack store to its event catalog. Author supported private Docker/Compose problems in the local <code>problems/</code> tree, validate them and start with <code>make local</code>. AWS problems run on Cloud. For a private Git repository, obtain an authorized local checkout separately and install that directory. The Pack CLI Git fetcher does not use credentials.</p>
 
 </article>
 </main>

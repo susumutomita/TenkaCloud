@@ -9,8 +9,7 @@ catalog (that's the [`problems/`](../problems/) submodule →
 
 Use `bun run pack validate <directory>` from the repository root to validate a
 pack. [Authoring and immutable installation](../README.md#add-your-own-problems)
-are available offline; installation and activation records do not add problems
-to the current event runtime. These examples are exercised by
+are available offline. Cloud consumes activated AWS/CloudFormation packs during deployment; Local hosting reads its `problems/` tree rather than Pack activation records. These examples are exercised by
 [`scripts/problem-pack/test/`](../scripts/problem-pack/test/) and public SDK tests.
 
 ## Golden packs (`golden/`)

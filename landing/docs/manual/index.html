@@ -67,13 +67,13 @@
 <article>
 <h1>役割別マニュアル <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <h2 id="choose-your-role">役割から選ぶ</h2><ul>
-<li><a href="/docs/manual/organizer/">開催者</a>: チーム、環境、参加リンク、採点、撤収を準備する</li>
+<li><a href="/docs/manual/organizer/">開催者</a>: チーム、環境、参加者 URL・チームキー、採点、撤収を準備する</li>
 <li><a href="/docs/manual/participant/">参加者</a>: 自分のチームへ参加して問題を解く</li>
 <li><a href="/docs/manual/problem-author/">問題作成者</a>: 教材と参加者の操作経路を作る</li>
 <li><a href="/docs/manual/developer/">開発者</a>: 実装とテストを変更する</li>
 </ul>
 <h2 id="how-the-roles-fit-together">役割の関係</h2><p>一つのローカルプロセスが開催者・参加者の画面を配信し、大会・チームの状態を保存して、所有する問題環境を操作します。開催者の権限と参加チームの認証は別です。問題の内容はカタログが管理します。schema の検証成功だけでは実行対応を証明できません。</p>
-<h2 id="if-you-are-unsure">迷った場合</h2><p><a href="/docs/getting-started/">はじめに</a>から進めてください。現行 candidate に SaaS/SBT のテナント構築手順はありません。クラウドの deploy/destroy は権限設定を確認して実行します。クラウド開催は SBT を使わない旧 Lite の処理を再利用し、Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。実 AWS・hosted Turso での大会性能は未検証です。</p>
+<h2 id="if-you-are-unsure">迷った場合</h2><p><a href="/docs/getting-started/">はじめに</a>から進めてください。開催方式は Local と Cloud です。クラウドの deploy/destroy は権限設定を確認して実行します。クラウド開催は Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。実 AWS・hosted Turso での大会性能は未検証です。</p>
 
 </article>
 </main>

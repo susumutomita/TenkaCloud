@@ -122,7 +122,7 @@ After signing in:
 1. **Create event**: name the event, set the team count and choose the problem.
    Only problems this host can run are selectable; the others are listed as not
    supported locally. Local Docker and Battle events do not select an AWS account. The dialog after
-   creation shows each team's key and invitation link once; keys stay copyable in
+   creation shows the participant URL and each team's key; keys stay copyable in
    the **Teams** tab.
 2. **Prepare**: choose **Deploy now** in that dialog or the **Schedule** tab.
    New Docker jobs receive exact durable port maps but stay stopped. Native Battle
@@ -163,7 +163,7 @@ not be redirected to a new account or replacement stack. See
 ### Play Cryptography Battle
 
 1. Create an event, choose **Cryptography Battle** and two or more teams.
-2. Deploy, then distribute each team's invitation link/key. No AWS account or
+2. Deploy, then distribute the participant URL and each team's key. No AWS account or
    Docker daemon is needed for this problem.
 3. Start the event from **Schedule**. Participants open the problem and press
    **Ready**. Orders begin when every team is ready.
@@ -392,7 +392,7 @@ AWS-service problems belong to cloud hosting. `make local` refuses the old
 `--aws-region` option before initializing AWS clients. Local hosting offers the
 non-AWS Compose catalog and native Battle games; it does not create AWS resources.
 
-Cloud hosting reuses the SBT-free Lite backend with Lambda and Turso or DynamoDB:
+Cloud hosting uses Lambda and Turso or DynamoDB:
 generic CloudFormation deployment, flag/multi-flag and scheduled scoring,
 participant Console/CLI access and native coordination. Docker/Compose remains
 local-only. `make deploy` handles standard CDK bootstrap and source-bundle upload;

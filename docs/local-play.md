@@ -42,9 +42,12 @@ for confirmation. `--plan` previews and `--yes` explicitly confirms a noninterac
 run. Organizer keys and settings are retained; participant keys, scores, progress,
 Docker writable layers and volumes are removed. Failed cleanup keeps history and
 ownership for retry. See [clear local event history](local-hosting.md#clear-local-event-history).
-`make local-reset` only rotates the organizer key.
+Each interactive `make local` start displays a fresh organizer key once and revokes
+previous organizer access. While running, use `make local-reset` in another interactive
+terminal with the same data directory to rotate it without clearing competition data.
+Noninteractive and public/container starts retain existing keys without printing them.
 
-Cloud hosting reuses the SBT-free Lite backend with Lambda and Turso or DynamoDB:
+Cloud hosting uses Lambda and Turso or DynamoDB:
 generic CloudFormation deployment, flag/multi-flag and scheduled scoring,
 participant Console/CLI access and native coordination. Docker/Compose remains
 local-only. `make deploy` handles standard CDK bootstrap and source-bundle upload;

@@ -4,7 +4,7 @@ export const metadata = { title: "はじめての問題パック" };
 
 # はじめての問題パック <MaturityBadge level="preview" />
 
-pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。activate はオフラインのカタログ記録であり、現行の競技実行手順ではありません。
+Problem Pack は、公開カタログへ登録せず、企業内の問題やイベント終了後に公開する予定の問題を配布・開催するための単位です。install は不変な revision を保存し、Cloud は有効化済みの AWS/CloudFormation 問題を次の配置で読み込みます。Local は Pack store を直接読まず、手元の `problems/` にある対応問題を読みます。公開は作成者が別途判断します。
 
 既存 pack を扱う場合は[既存パックを使う](/developers/docs/operate/use-existing-pack/)へ進みます。
 
@@ -38,9 +38,17 @@ bun run pack inspect com.example.starter@0.1.0
 
 Git install は HTTPS URL と完全な 40 桁 commit SHA を使います。source provenance と content digest を保持し、変更される branch を revision にしないでください。
 
-<h2 id="runtime-boundary">実行経路との境界</h2>
+<h2 id="runtime-boundary">開催環境へ接続する</h2>
 
-現行 candidate では pack activate から大会作成、配置まで一連の経路は完成していません。大会の確認には固定された core catalog の対応問題を使います。組み込みのローカルカタログは、検証済みの runtime adapter を使います。
+Cloud ではリポジトリのルートで次を実行します。`<id@version>` は manifest の ID と version に置き換えます。
+
+```sh
+bun run pack activate <id@version> --tenant local
+```
+
+`local` は Cloud のカタログ読込処理が使う固定の選択名で、Local 開催を指定する値ではありません。保存先は `.tenkacloud/pack-store` です。`make pack-activate` はありません。activate 自体は AWS 操作を行いません。通常の Cloud 配置でこの store が非公開の source archive に含まれ、有効化した問題と実行素材が読み込まれます。開催間に `make deploy` で更新し、新しい大会で対象問題を選びます。既存大会の保存済みカタログは変わりません。問題の runtime と採点対応を確認し、開催前に解答・採点・撤収をリハーサルしてください。
+
+Local では Pack store から大会カタログへの接続は未対応です。公開せずに使う対応 Docker/Compose 問題は手元の `problems/` に作成し、検証して `make local` で起動します。AWS 問題は Cloud で使います。非公開 Git repository から取得する場合は、運営者が権限を持つ方法で手元へ checkout し、そのローカルディレクトリを install してください。Pack CLI の Git 取得は認証情報を使いません。
 
 <h2 id="common-failures">よくある検証失敗</h2>
 

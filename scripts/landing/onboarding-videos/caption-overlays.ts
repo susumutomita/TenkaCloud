@@ -8,7 +8,7 @@ function headingFontSizeFor(cleanup: boolean, japanese: boolean): number {
 }
 
 function cleanupFooter(japanese: boolean): string {
-  return japanese ? "Lite本体を先に削除 · launcherは最後" : "Delete Lite first · launcher last";
+  return japanese ? "Cloud基盤を先に削除 · launcherは最後" : "Delete Cloud first · launcher last";
 }
 
 function buildIntroOverlayHtml(cue: VoiceoverCue, locale: VoiceoverLocale): string {
@@ -39,7 +39,7 @@ h1 { margin: 30px 0 14px; max-width: ${headingMaxWidth}px; font-size: ${headingF
 .stack-note { margin-top: 22px; color: #9bc7ff; font-size: 17px; font-weight: 700; }
 .foot { position: absolute; right: 90px; bottom: 30px; color: #8dacd0; font-size: 16px; }
 </style></head><body>
-<div class="eyebrow">TENKACLOUD LITE · AWS ${cue.theme === "cleanup" ? "CLEANUP" : "DEPLOYMENT"}</div>
+<div class="eyebrow">TENKACLOUD · AWS ${cue.theme === "cleanup" ? "CLEANUP" : "DEPLOYMENT"}</div>
 <h1>${escapeHtml(cue.heading[locale])}</h1>
 <div class="lead">${escapeHtml(cue[locale])}</div>
 <div class="facts">${details.map((detail) => `<div class="fact">${escapeHtml(detail)}</div>`).join("")}</div>

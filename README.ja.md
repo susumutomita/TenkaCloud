@@ -72,6 +72,8 @@ make local
 
 **起動中に主催者キーを再発行するには:** 別の対話ターミナルで、同じデータディレクトリを指定して `make local-reset` を実行します。対話ターミナルで `make local` を起動するたびにも新しいキーを発行します。どちらも古い主催者キーとログインを失効させますが、大会・得点・参加者キー・問題のデータを保持します。非対話起動と public/container 起動では既存のキーを保持し、ログにキーを出力しません。`make local-clear` は主催者キーを保持し、大会履歴を削除します。
 
+**競技データを消すには:** `make local-clear` は確認後に大会履歴と所有する Docker 問題データを削除します。主催者アクセスと host 設定は保持します。host を停止してから実行してください。停止や主催者キー再発行とは別操作です。
+
 **いったん停止するには:** 別のターミナルで `make down` を実行します。このコントローラーと所有する Docker 環境を停止し、DB・キー・コンテナーの書き込み領域・ボリュームを保持します。次の `make local` の後、オンデマンドの問題は参加者がポータルから再開します。プロセスのメモリーは保持せず、大会の時計もリセットしません。問題環境を削除するときは、大会の **Teardown** を使います。
 
 [起動・運用・復旧](./docs/local-hosting.md) · [必要な環境と容量](./docs/local-play-requirements.md) · [開催者マニュアル](./apps/developer-portal/src/app/developers/docs/manual/organizer/page.ja.mdx)
@@ -92,9 +94,9 @@ Codespace を作成し、依存関係の準備が終わったらターミナル�
 
 ### AWS にデプロイする
 
-クラウド開催は SBT を使わない旧 Lite の処理を再利用し、Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカルで実行します。この checkout は**統合検証中の候補版**です。実 AWS での大会全体のリハーサルと、Battle の一斉アクセス性能には検証が残っています。環境ファイルの `CDK_PARAM_CONTROL_DATA_BACKEND` で `turso` または `dynamodb` を選択します。Turso には DB URL と既存の SSM トークンパラメーターが必要です。[DB 設定](./infrastructure/README.md#database-selection)を参照してください。
+クラウド開催は Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカルで実行します。この checkout は**統合検証中の候補版**です。実 AWS での大会全体のリハーサルと、Battle の一斉アクセス性能には検証が残っています。環境ファイルの `CDK_PARAM_CONTROL_DATA_BACKEND` で `turso` または `dynamodb` を選択します。Turso には DB URL と既存の SSM トークンパラメーターが必要です。[DB 設定](./infrastructure/README.md#database-selection)を参照してください。
 
-新規環境の stack 名は `tenkacloud-cloud` 系とし、既存の `tenkacloud-lite` 系 stack は名前を維持します。CLI が Lite / cloud の既存環境を検出します。両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` を明示します。公開 cloud-v1 の DB・resource 構成は自動移行しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。現行の 9 template は `TemplateBody` 上限を超えるため、全 AWS 問題の配置を保証しません。[互換性と制限](./infrastructure/README.md#existing-installations-and-resource-identity)を確認してください。
+新規環境の stack 名は `tenkacloud-cloud` 系とし、既存の `tenkacloud-lite` 系 stack は名前を維持します。CLI が Lite / cloud の既存環境を検出します。両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` を明示します。公開 cloud-v1 の DB・resource 構成は自動移行しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。現行の 9 template は `TemplateBody` 上限を超えるため、全 AWS 問題の配置を保証しません。[既存環境のstack名と制限](./infrastructure/README.md#existing-installations-and-resource-identity)を確認してください。
 
 AWS CLI のプロファイル、アカウント、リージョン、開催者のメールアドレスを用意します。`make env-init` で公開設定を入力すると、選択した `infrastructure/environments/<ENV>/.env` を所有者だけが読める権限で作成します。既存ファイルは保持するため、設定を変更する場合は編集してください。
 
@@ -150,7 +152,7 @@ bun run pack install ./my-pack
 bun run pack list
 ```
 
-pack の install や activation の記録だけでは、現在の大会の実行カタログへ追加されません。[pack チュートリアル](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.ja.mdx) · [外部 Git pack の手順](./scripts/problem-pack/README-external-git-pack.md) · [作問例とテスト fixture](./packs/README.md)
+Cloud は有効化済みの AWS/CloudFormation Pack を次の配置で読み込みます。Local は手元の `problems/` を読み、Pack store には未接続です。[pack チュートリアル](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.ja.mdx) · [外部 Git pack の手順](./scripts/problem-pack/README-external-git-pack.md) · [作問例とテスト fixture](./packs/README.md)
 
 ## ドキュメント
 
