@@ -22,8 +22,12 @@ describe("lite-drill checkpoints (#2696)", () => {
     expect(new Set(entries.map((c) => c.code)).size).toBe(entries.length);
   });
 
-  it("should keep every code in the TC{...} shape so learners recognize it on sight", () => {
-    for (const { code } of Object.values(LITE_DRILL_CHECKPOINTS)) {
+  it("should preserve screen codes and accept the current deployment success line", () => {
+    for (const { code } of [
+      LITE_DRILL_CHECKPOINTS.launcherCreated,
+      LITE_DRILL_CHECKPOINTS.competitorVerified,
+      LITE_DRILL_CHECKPOINTS.firstEventCreated,
+    ]) {
       expect(code).toMatch(/^TC\{[A-Z0-9-]+\}$/);
     }
   });
@@ -54,7 +58,7 @@ describe("lite-drill checkpoints (#2696)", () => {
 
   it("should keep cleanup as a separate one-checkpoint drill", () => {
     expect(LITE_CLEANUP_DRILL_CHECKPOINT.flagId).toBe("cleanup-complete");
-    expect(LITE_CLEANUP_DRILL_CHECKPOINT.code).toMatch(/^TC\{[A-Z0-9-]+\}$/);
+    expect(LITE_CLEANUP_DRILL_CHECKPOINT.code).toBe("Cloud platform stacks destroyed.");
     expect(
       matchesLiteCleanupDrillCheckpoint(
         LITE_CLEANUP_DRILL_CHECKPOINT.flagId,

@@ -216,6 +216,33 @@ describe("dev-mock fixtures", () => {
     expect(launcherHint?.i18n?.en?.content).toContain("tenkacloud-lite-problem-deploy");
   });
 
+  it("accepts current CLI success evidence and rejects retired deployment/cleanup codes", () => {
+    const cases = [
+      [
+        LITE_DRILL_PROBLEM_ID,
+        LITE_DRILL_CHECKPOINTS.deployComplete.flagId,
+        "Cloud competition hosting deployed.",
+        "TC{LITE-DEPLOY-COMPLETE}",
+      ],
+      [
+        LITE_CLEANUP_DRILL_PROBLEM_ID,
+        LITE_CLEANUP_DRILL_CHECKPOINT.flagId,
+        "Cloud platform stacks destroyed.",
+        "TC{LITE-CLEANUP-COMPLETE}",
+      ],
+    ];
+    for (const [problemId, flagId, evidence, retired] of cases) {
+      expect(evaluateMockSubFlag(problemId, flagId, evidence, 100).kind).toBe("ok");
+      expect(evaluateMockSubFlag(problemId, flagId, retired, 100).kind).toBe("wrong");
+      const fixture = drills.find((p) => p.problemId === problemId);
+      const hint = fixture?.scoring?.flags?.find((f) => f.id === flagId)?.hints?.[0];
+      expect(hint?.content).toContain(evidence);
+      expect(hint?.i18n?.en?.content).toContain(evidence);
+      expect(fixture?.description).toContain(evidence);
+      expect(fixture?.i18n?.en?.description).toContain(evidence);
+    }
+  });
+
   it("should keep cleanup out of the deploy drill and give it a separate scored problem", () => {
     const deploy = drills.find((p) => p.problemId === LITE_DRILL_PROBLEM_ID);
     const cleanup = drills.find((p) => p.problemId === LITE_CLEANUP_DRILL_PROBLEM_ID);

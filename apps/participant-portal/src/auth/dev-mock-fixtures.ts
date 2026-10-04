@@ -252,11 +252,11 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       // (ProblemPanel が <Markdown> で描画する唯一の確実な経路)。 instructions は将来
       // metadata 経路が通ったときのための短い要約に留める。
       description: [
-        "チュートリアルの仕上げ。デモの外に出て、自分の AWS アカウントに **TenkaCloud のクラウド開催環境** を立ち上げる。この入口はテンプレートに固定された従来版を使い、統合中の新構成へ自動で切り替わるものではない。",
-        "手順を正しく実行するたびに、実環境の画面にチェックポイントコード `TC{...}` が現れる。それを下の対応する提出欄に貼って得点しよう。",
+        "チュートリアルの仕上げ。デモの外に出て、自分の AWS アカウントに **TenkaCloud のクラウド開催環境** を立ち上げる。launcherの配置元と問題カタログはtemplateのsource pinを確認する。",
+        "各ステップで指定された画面のコードまたは完了ログの1行を、対応する提出欄へ貼って得点する。デモの採点はAWSの状態を直接検証するものではない。",
         "`cloud-pipeline.yaml` は、CloudFormationに読み込ませる**自動デプロイ環境のひな形**。名前にpipelineとあるが、AWS CodePipelineは使わない。CloudFormationがCodeBuildとIAM Roleを用意するので、`Start build` を押せば、細かいデプロイ手順を知らなくてもクラウド開催環境を自動構築できる。",
         "",
-        "既存動画とチェックポイントは旧版の収録例。現行 cloud-pipeline は deploy/teardown の完了と Outputs を確認する方式で、旧チェックポイントコードの出力は保証しない。実配置の正本は現行ドキュメント。",
+        "既存動画は旧版の収録例。デプロイ完了欄には現行CLIの成功ログ `Cloud competition hosting deployed.` を提出する。実配置の正本は現行ドキュメント。",
         "#### AWSサービスの役割",
         "",
         "- **CloudFormation**: YAMLのひな形を読み、必要なAWSリソースをまとめて作る",
@@ -292,17 +292,17 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "4 ステップを終えて遊び終わったら、次の問題 **「TenkaCloud を片付ける」** へ進む。課金を止めるところまでがオンボーディング。",
       ].join("\n"),
       instructions:
-        "各ステップで実環境の画面に現れる `TC{...}` コードを、下の対応する提出欄に貼って得点する。手順の詳細は提出欄ごとのヒントから。",
+        "各ステップの画面のコードまたは完了ログの1行を、下の対応する提出欄に貼って得点する。手順の詳細は提出欄ごとのヒントから。",
       i18n: {
         en: {
           videoUrl: "https://www.youtube.com/embed/7LjkPdf5zM0",
           name: "Deploy your own TenkaCloud",
           description: [
-            "The tutorial finale. Step outside the demo and stand up **TenkaCloud cloud hosting** in your own AWS account. This launcher uses its pinned previous implementation; it does not automatically switch to the new integration architecture.",
-            "Each step you complete reveals a `TC{...}` checkpoint code on the real screens — paste it into the matching submission box below to score.",
+            "The tutorial finale. Step outside the demo and stand up **TenkaCloud cloud hosting** in your own AWS account. Review the template’s platform and problem-catalog source pins.",
+            "Submit the screen code or success log line specified by each step. Demo scoring does not independently verify AWS state.",
             "`cloud-pipeline.yaml` is an **automatic deployment setup template** that you load into CloudFormation. Despite the filename, it does not use the AWS CodePipeline service. CloudFormation creates a CodeBuild project and IAM Role, so pressing `Start build` deploys the cloud hosting platform automatically without learning every underlying deployment step.",
             "",
-            "Existing footage and checkpoints are historical examples. The current cloud-pipeline confirms deploy/teardown completion and Outputs; it does not guarantee legacy checkpoint codes. Follow the current docs for actual deployment.",
+            "Existing footage is historical. Submit `Cloud competition hosting deployed.` from the current CLI for deployment completion and follow the current docs for actual deployment.",
             "#### What the AWS services do",
             "",
             "- **CloudFormation**: reads the YAML template and creates the required AWS resources together",
@@ -338,7 +338,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             'After all 4 steps and when you are done playing, continue to the separate **"Clean up TenkaCloud"** problem. Onboarding ends only after the charges are stopped.',
           ].join("\n"),
           instructions:
-            "Each step reveals a `TC{...}` code on the real screens — paste it into the matching submission box below. Detailed steps live in each box's hint.",
+            "Submit each step’s screen code or success log line to its matching box. Detailed steps live in each box's hint.",
         },
       },
       region: "ap-northeast-1",
@@ -366,7 +366,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                   `[TenkaCloud の cloud-pipeline.yaml](${CLOUD_PIPELINE_TEMPLATE_URL}) をダウンロードする。`,
                   `[AWS CloudFormation の「スタックの作成」](${LITE_CLOUDFORMATION_CREATE_STACK_URL}) を開き、**テンプレートファイルのアップロード**で先ほどの YAML を選ぶ。`,
                   "スタック名は `tenkacloud-lite-launcher`。必須入力は `TenantAdminEmail` のみで、IAM acknowledge にチェックする。",
-                  "`tenkacloud-lite-launcher` は自動デプロイ環境のCloudFormation stack名。CloudFormationがCodeBuildとIAM Roleを作り、そのCodeBuildが必要な処理を自動化するため、利用者が `git clone`・`make deploy`・CDKを手動で操作する必要はない。次のステップで `Start build` を押すと、`tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の2スタックが作られる。",
+                  "`tenkacloud-lite-launcher` は自動デプロイ環境のCloudFormation stack名。CloudFormationがCodeBuildとIAM Roleを作り、そのCodeBuildが必要な処理を自動化するため、利用者が `git clone`・`make deploy`・CDKを手動で操作する必要はない。次のステップで `Start build` を押すと、新規は `tenkacloud-cloud` / `tenkacloud-cloud-problem-deploy`、既存は `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の2スタックが選択layoutで作られる。",
                   "作成完了後、スタックの「出力 (Outputs)」タブにある `OnboardingDrillCheckpoint` の値を提出する。",
                 ].join("\n\n"),
                 i18n: {
@@ -375,7 +375,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                       `[Download TenkaCloud's cloud-pipeline.yaml](${CLOUD_PIPELINE_TEMPLATE_URL}).`,
                       `[Open AWS CloudFormation Create stack](${LITE_CLOUDFORMATION_CREATE_STACK_URL}), choose **Upload a template file**, and select the YAML you downloaded.`,
                       "Use `tenkacloud-lite-launcher` as the stack name. The only required input is `TenantAdminEmail`; check the IAM acknowledgement.",
-                      "`tenkacloud-lite-launcher` is the CloudFormation stack name for the automatic deployment setup. CloudFormation creates the CodeBuild project and IAM Role, and CodeBuild automates the required work, so you do not operate `git clone`, `make deploy`, or CDK manually. In the next step, press `Start build` to create the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks.",
+                      "`tenkacloud-lite-launcher` is the CloudFormation stack name for the automatic deployment setup. CloudFormation creates the CodeBuild project and IAM Role, and CodeBuild automates the required work, so you do not operate `git clone`, `make deploy`, or CDK manually. In the next step, press `Start build` to create the selected stack pair: new `tenkacloud-cloud` / `tenkacloud-cloud-problem-deploy` or existing `tenkacloud-lite` / `tenkacloud-lite-problem-deploy`.",
                       "After it completes, submit the `OnboardingDrillCheckpoint` value from the stack's Outputs tab.",
                     ].join("\n\n"),
                   },
@@ -395,11 +395,11 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 penalty: 0,
                 revealed: false,
                 content:
-                  "Outputs の `StartBuildConsoleUrl` から CodeBuild プロジェクトを開き「ビルドを開始」。ビルドは数十分かかることがある。ログ末尾の `Lite mode deploy complete` ブロックに印字されるコードを提出する。",
+                  "Outputs の `StartBuildConsoleUrl` から CodeBuild プロジェクトを開き「ビルドを開始」。ビルドは数十分かかることがある。ビルド成功と2つのアクセスURLを確認し、ログの `Cloud competition hosting deployed.` の1行を提出する。",
                 i18n: {
                   en: {
                     content:
-                      "Open the CodeBuild project from the `StartBuildConsoleUrl` output and press Start build. The build can take tens of minutes; submit the code printed in the `Lite mode deploy complete` block at the end of the log.",
+                      "Open the CodeBuild project from the `StartBuildConsoleUrl` output and press Start build. The build can take tens of minutes; confirm build success and both access URLs, then submit the line `Cloud competition hosting deployed.` from the log.",
                   },
                 },
               },
