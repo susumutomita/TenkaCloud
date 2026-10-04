@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -111,6 +112,39 @@ describe("standalone competition-data clear credentials", () => {
       ]);
       expect(readFileSync(f.path, "utf8")).toBe(file);
       expect(f.output.join("")).not.toContain("synthetic");
+    },
+  );
+  it.each([
+    { args: [], token: undefined },
+    { args: ["--credentials", "ssm"], token: undefined },
+    { args: ["--credentials", "ssm"], token: direct.TURSO_AUTH_TOKEN },
+  ])(
+    "keeps file tokens out of AWS credential-provider subprocesses: %j",
+    async ({ args, token }) => {
+      const file =
+        "TURSO_AUTH_TOKEN=synthetic-file-secret\nAWS_DEFAULT_PROFILE=synthetic-profile\n";
+      const f = fixture(file);
+      const providerEnvironment: NodeJS.ProcessEnv =
+        token === undefined ? {} : { TURSO_AUTH_TOKEN: token };
+      f.io.configureEnvironment = (env) => {
+        Object.assign(providerEnvironment, env);
+      };
+      expect(await f.run({ ...ssm, TURSO_AUTH_TOKEN: token }, [...args])).toBe(0);
+      expect(f.targets.map((target) => target.credentials)).toEqual(["ssm"]);
+      expect(providerEnvironment.AWS_PROFILE).toBe("synthetic-profile");
+      const child = spawnSync(
+        process.execPath,
+        [
+          "--no-env-file",
+          "-e",
+          'process.stdout.write(Object.hasOwn(process.env, "TURSO_AUTH_TOKEN") ? "present" : "absent")',
+        ],
+        { cwd: tmpdir(), env: providerEnvironment, encoding: "utf8" },
+      );
+      expect(child.status).toBe(0);
+      expect(child.stdout).toBe(token === undefined ? "absent" : "present");
+      expect(providerEnvironment.TURSO_AUTH_TOKEN).toBe(token);
+      expect(readFileSync(f.path, "utf8")).toBe(file);
     },
   );
   it.each([undefined, "", "  "])(

@@ -100,6 +100,8 @@ export async function runTursoClear(
   const env = loadCloudEnvironment(options.root, options.env, {
     validateAwsCredentials: source === "ssm",
   });
+  // Never export a file token to AWS credential providers or their subprocesses.
+  delete env.TURSO_AUTH_TOKEN;
   const databaseUrl = tursoDatabaseUrl(env.CDK_PARAM_TURSO_DATABASE_URL);
   let target: TursoClearTarget;
   if (source === "ssm") {
