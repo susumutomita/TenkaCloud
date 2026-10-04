@@ -18,7 +18,6 @@ import { ParticipantPortalLambda } from "./participant-portal-lambda.js";
 
 export interface BuildParticipantPortalSubsystemArgs {
   readonly executionArtifactBucket?: IBucket;
-  readonly teamsTable?: Table;
   /**
    * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
@@ -115,7 +114,6 @@ export function buildParticipantPortalSubsystem(
   args: BuildParticipantPortalSubsystemArgs,
 ): ParticipantPortalSubsystemOutputs {
   const portalLambda = new ParticipantPortalLambda(scope, "ParticipantPortalLambda", {
-    teamsTable: args.teamsTable,
     deploymentsTable: args.deploymentsTable,
     eventsTable: args.eventsTable,
     endpointsTable: args.endpointsTable,

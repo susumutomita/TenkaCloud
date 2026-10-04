@@ -56,7 +56,6 @@ import { type OrganizerPermission, requireOrganizerPermission } from "./organize
 import { ParticipantAssumeRoleError, type ParticipantAwsAccess } from "./participant-aws-access";
 import { portsFree } from "./ports";
 import { HostProgression, lockedProblem } from "./progression";
-import { HostRegistration } from "./registration";
 import { allocateRuntimePorts, validateRuntimePorts } from "./runtime-ports";
 import { SamlSignIn } from "./saml-sign-in";
 import { projectedScore, projectedTimeline } from "./score";
@@ -250,7 +249,6 @@ export class HostingService {
   readonly terminals: HostTerminals;
   readonly saml: SamlSignIn;
   private readonly queue = new SerialQueue();
-  readonly registration: HostRegistration;
   private readonly coordination = new LocalCoordination(this);
   readonly progression: HostProgression;
   readonly disruptions: LocalDisruptions;
@@ -288,7 +286,6 @@ export class HostingService {
       uptimeProbe,
       log,
     );
-    this.registration = new HostRegistration(store, now);
   }
   private currentEvent(eventId: string): HostedEvent {
     const event = this.store.event(eventId);
@@ -388,11 +385,6 @@ export class HostingService {
     const parts = request.path.split("/").filter(Boolean);
     const eventId = parts[0] === "events" ? parts[1] : undefined;
     if (!eventId || !eventPattern.test(eventId)) throw new HostError(404, "Unknown host endpoint.");
-    if (parts.length === 3 && parts[2] === "registration" && request.method === "GET")
-      return this.queue.run(eventId, async () => {
-        const current = this.store.authenticateAdmin(request.token, this.now());
-        return ok(this.registration.summary(eventId, current.role === "Admin"));
-      });
     if (parts.length === 3 && parts[2] === "progression-gate" && request.method === "GET")
       return this.queue.run(eventId, async () => {
         this.store.authenticateAdmin(request.token, this.now());
@@ -411,7 +403,6 @@ export class HostingService {
       });
     return this.queue.run(eventId, async () => {
       const current = this.store.authenticateAdmin(request.token, this.now());
-      if (parts[2] === "registration") requireAdmin(current);
       let permission: OrganizerPermission = "run-events";
       if (parts[2] === "teams") permission = "reveal-team-keys";
       else if (parts[2] === "disruptions" && request.method === "GET") permission = "read";
@@ -685,7 +676,7 @@ export class HostingService {
   private updateFeatureFlag(input: unknown): ApiResponse {
     const body = object(input);
     const key = body.key;
-    if (key !== "saml" && key !== "challengePrerequisiteGate" && key !== "registration")
+    if (key !== "saml" && key !== "challengePrerequisiteGate")
       throw new HostError(400, "Unknown feature flag.");
     if (typeof body.enabled !== "boolean")
       throw new HostError(400, "Flag enabled must be boolean.");
@@ -995,8 +986,6 @@ export class HostingService {
       "POST notifications": () => this.notify(event, body()),
     };
     const commandKey = `${request.method} ${parts.join("/")}`;
-    if (commandKey === "PUT registration")
-      return ok(this.registration.configure(event.eventId, request.body));
     if (commandKey === "POST deploy") return this.deploy(event, body(), request.token);
     if (commandKey === "DELETE ") return this.teardown(event);
     const command = commands[commandKey];
@@ -1880,7 +1869,8 @@ export class HostingService {
     };
   }
   async participant(request: ApiRequest): Promise<ApiResponse> {
-    if (request.path.startsWith("/portal/registration/")) return this.registration.request(request);
+    if (request.path.startsWith("/portal/registration/"))
+      throw new HostError(404, "Unknown participant endpoint.");
     const team = this.store.authenticateTeam(request.token);
     if (/^\/portal\/me\/problems\/[^/]+\/container\//u.test(request.path))
       return this.queue.run(team.eventId, () =>

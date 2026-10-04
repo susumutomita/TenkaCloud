@@ -6,7 +6,7 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
-import type { EventRegistration, RegistrationUpdate } from "./event-registration.js";
+import type { EventRegistration } from "./event-registration.js";
 import type { TeamRecord } from "./teams.js";
 
 /** Shared event catalog limit for API validation and organizer runtime configuration. */
@@ -111,7 +111,7 @@ export type EventRecord = {
   hostingAccountSelfTest?: HostingAccountSelfTestAcknowledgment;
   /** Immutable execution artifact catalog; never inferred from the current installation. */
   catalogKey?: string;
-  /** Never project invitation/receipt hashes into public event or leaderboard responses. */
+  /** Historical registration data; never project its hashes into public responses. */
   registration?: EventRegistration;
   eventId: string;
   tenantId: string;
@@ -325,8 +325,6 @@ export interface EventScoringMeta {
  * TransactWrite).
  */
 export interface EventsRepository {
-  /** Compare-and-swap the allocation ledger; closing registration competes with claims. */
-  updateRegistration(input: RegistrationUpdate): Promise<"updated" | "conflict">;
   /**
    * Tenant-scoped point read. Returns `undefined` when the event is absent or
    * belongs to a different tenant (404-equivalent, never leaks another tenant's

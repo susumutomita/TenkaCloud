@@ -1,4 +1,4 @@
-/** Event-scoped, bounded allocation of organizer-prepared team environments. */
+/** Historical self-registration payload, retained for stored-event compatibility. */
 export interface EventRegistration {
   readonly version: number;
   readonly enabled: boolean;
@@ -7,17 +7,9 @@ export interface EventRegistration {
   readonly teamIds: readonly string[];
   readonly claims: readonly {
     readonly receiptHash: string;
-    /** Absent on legacy receipts, which must fail closed instead of adopting a new key. */
+    /** Absent on older stored receipts. */
     readonly teamLoginKeyHash?: string;
     readonly teamId: string;
     readonly claimedAt: string;
   }[];
-}
-
-export interface RegistrationUpdate {
-  readonly tenantId: string;
-  readonly eventId: string;
-  readonly expectedVersion: number;
-  readonly registration: EventRegistration;
-  readonly now: string;
 }

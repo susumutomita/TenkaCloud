@@ -135,21 +135,10 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("binds registration GET and PUT with Cognito authorization", () => {
-    const id = Object.keys(
+  it("does not expose the retired registration resource", () => {
+    expect(
       tpl.findResources("AWS::ApiGateway::Resource", { Properties: { PathPart: "registration" } }),
-    )[0];
-    expect(id).toBeDefined();
-    for (const method of ["GET", "PUT"])
-      tpl.hasResourceProperties("AWS::ApiGateway::Method", {
-        HttpMethod: method,
-        ResourceId: { Ref: id },
-        AuthorizationType: "COGNITO_USER_POOLS",
-      });
-    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
-      HttpMethod: "OPTIONS",
-      ResourceId: { Ref: id },
-    });
+    ).toEqual({});
   });
 
   it("should bind PUT, DELETE, and OPTIONS on /events/{eventId}/progression-gate (#2283)", () => {

@@ -107,6 +107,7 @@ export class HostStore {
           fingerprint TEXT NOT NULL, status INTEGER NOT NULL, body TEXT NOT NULL,
           PRIMARY KEY(team_id,nonce)
         ) STRICT;
+        -- Retired self-registration records remain readable in existing backups.
         CREATE TABLE IF NOT EXISTS host_registrations(
           event_id TEXT PRIMARY KEY REFERENCES host_events(id),
           enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
@@ -508,13 +509,9 @@ export class HostStore {
       // Compatibility response only; the retired setting stays stored and cannot enable collection.
       audit: false,
       challengePrerequisiteGate: this.setting("flag:challengePrerequisiteGate") === "true",
-      registration: this.setting("flag:registration") === "true",
     };
   }
-  setFeatureFlag(
-    key: "saml" | "challengePrerequisiteGate" | "registration",
-    enabled: boolean,
-  ): void {
+  setFeatureFlag(key: "saml" | "challengePrerequisiteGate", enabled: boolean): void {
     this.statement(
       "INSERT INTO host_settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
     ).run(`flag:${key}`, String(enabled));

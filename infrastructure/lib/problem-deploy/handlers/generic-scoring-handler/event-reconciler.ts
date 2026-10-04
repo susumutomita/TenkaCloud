@@ -554,9 +554,8 @@ function deployBatchVisible(
 }
 
 /**
- * [Issue #3261] Strongly consistent re-read of each GSI1 candidate (the same
- * `getDeployment(..., { consistentRead: true })` guard #3259 added to the
- * registration path). READY is released only when every candidate still exists
+ * [Issue #3261] Strongly consistent re-read of each GSI1 candidate.
+ * READY is released only when every candidate still exists
  * on its base row, still belongs to this event, and is terminal. A deleted row
  * means a replacement exists that the index has not surfaced yet; that tick is
  * skipped and re-evaluated on the next one. A read failure is logged and also

@@ -144,7 +144,6 @@ test("PRs retain the critical competition flow and manual rehearsal retains all 
     "disruption-browser-e2e.ts",
     "uptime-browser-e2e.ts",
     "progression-browser-e2e.ts",
-    "registration-browser-e2e.ts",
     "course-tracks-browser-e2e.ts",
   ];
   const commands = (files: string[]) =>

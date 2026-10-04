@@ -15,7 +15,9 @@ import type {
  * 子 panel は stub、 props は fixture。
  */
 vi.mock("../../../src/components/event-detail/DeployProgressPanel", () => ({
-  DeployProgressPanel: () => <div data-testid="deploy-progress-panel" />,
+  DeployProgressPanel: ({ localDetail }: { localDetail?: EventDetail }) => (
+    <div data-testid="deploy-progress-panel" data-local-event={localDetail?.eventId} />
+  ),
 }));
 vi.mock("../../../src/components/event-detail/EventWizardPanel", () => ({
   EventRescuePanel: ({ onForceArchive }: { onForceArchive: () => void }) => (
@@ -120,4 +122,19 @@ describe("OperationsTab", () => {
       screen.queryByText("event_detail.operations_deploy_progress_empty"),
     ).not.toBeInTheDocument();
   });
+});
+
+it("passes local event readiness to the panel even before deployments exist", () => {
+  const base = props();
+  renderTab({
+    config: { ...base.config, mode: "local-host" },
+    detail: { ...base.detail, eventId: "local-event" },
+  });
+  expect(screen.getByTestId("deploy-progress-panel")).toHaveAttribute(
+    "data-local-event",
+    "local-event",
+  );
+  expect(
+    screen.queryByText("event_detail.operations_deploy_progress_empty"),
+  ).not.toBeInTheDocument();
 });

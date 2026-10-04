@@ -1,5 +1,5 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { BrowserRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -73,14 +73,6 @@ const apiResponses: Readonly<Record<string, unknown>> = {
     teams: detail.teams.map((team) => ({ ...team, teamLoginKey: `synthetic-key-${team.teamId}` })),
   },
   [`GET /prod/events/${EVENT_ID}`]: detail,
-  [`GET /prod/events/${EVENT_ID}/registration`]: {
-    tenantId: "local",
-    enabled: false,
-    capacity: 0,
-    claimed: 0,
-    claimedTeamIds: [],
-    teamIds: [],
-  },
 };
 
 interface RequestRecord {
@@ -270,10 +262,17 @@ describe("restored cloud SPA with synthetic HTTP", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Notifications/ }));
     expect(await screen.findByRole("button", { name: "Send notification" })).toBeEnabled();
     fireEvent.click(screen.getByRole("tab", { name: /^Teams$/ }));
-    await screen.findByRole("heading", { name: "Assign teams through a registration link" });
-    await waitFor(() =>
-      expect(requests.some(({ url }) => url.pathname.endsWith("/registration"))).toBe(true),
+    expect(await screen.findByRole("link", { name: runtime.participantPortalUrl })).toHaveAttribute(
+      "href",
+      runtime.participantPortalUrl,
     );
+    for (const team of detail.teams) {
+      const row = screen.getByText(team.internalSlug).closest("tr");
+      if (!row) throw new Error(`Team row missing: ${team.internalSlug}`);
+      expect(within(row).getByRole("button", { name: "Regenerate key" })).toBeEnabled();
+    }
+    expect(screen.queryByText("Assign teams through a registration link")).toBeNull();
+    expect(requests.some(({ url }) => url.pathname.includes("/registration"))).toBe(false);
     fireEvent.click(screen.getByRole("tab", { name: /Progression/ }));
     await waitFor(() =>
       expect(

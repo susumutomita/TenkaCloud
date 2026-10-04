@@ -62,7 +62,6 @@
         "scripts/local-host/tests/participant-aws-browser-e2e.ts",
         "scripts/local-host/tests/saml-browser-e2e.ts",
         "scripts/local-host/tests/audit-browser-e2e.ts",
-        "scripts/local-host/tests/registration-browser-e2e.ts",
         "scripts/cloud-hosting/main.ts",
         "scripts/cloud-hosting/launcher-check.ts"
       ],

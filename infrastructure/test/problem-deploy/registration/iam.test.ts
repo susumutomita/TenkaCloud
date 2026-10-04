@@ -1,4 +1,3 @@
-import { Match } from "aws-cdk-lib/assertions";
 import { expect, it } from "vitest";
 import {
   SYNTH_TIMEOUT_MS,
@@ -6,7 +5,7 @@ import {
 } from "../../problem-deploy-backend-stack.test-helpers";
 
 it(
-  "allows registration primary verification to GetItem only on the deployments table",
+  "keeps current deployment verification for team login and SSO",
   () => {
     const template = synthParticipantPortalLambdaOnly();
     const env = Object.values(template.findResources("AWS::Lambda::Function"))
@@ -37,56 +36,28 @@ it(
 );
 
 it(
-  "limits claims to event attributes and reads team keys without team mutation",
+  "removes self-registration permissions while preserving ordinary event reads",
   () => {
     const template = synthParticipantPortalLambdaOnly();
-    template.hasResourceProperties("AWS::IAM::Role", {
-      Policies: Match.arrayWith([
-        {
-          PolicyName: "RegistrationTeamsRead",
-          PolicyDocument: {
-            Version: "2012-10-17",
-            Statement: [
-              Match.objectLike({
-                Action: "dynamodb:GetItem",
-                Effect: "Allow",
-                Resource: Match.anyValue(),
-              }),
-            ],
-          },
-        },
-        {
-          PolicyName: "RegistrationClaims",
-          PolicyDocument: {
-            Version: "2012-10-17",
-            Statement: [
-              Match.objectLike({
-                Action: "dynamodb:UpdateItem",
-                Effect: "Allow",
-                Condition: {
-                  "ForAllValues:StringEquals": {
-                    "dynamodb:Attributes": [
-                      "PK",
-                      "SK",
-                      "tenantId",
-                      "expiresAt",
-                      "endsAt",
-                      "status",
-                      "registration",
-                      "updatedAt",
-                    ],
-                  },
-                },
-              }),
-            ],
-          },
-        },
-      ]),
-    });
-    const env = Object.values(template.findResources("AWS::Lambda::Function"))
-      .map((r) => r.Properties.Environment?.Variables)
-      .find((v) => v?.TEAMS_TABLE_NAME);
-    expect(env?.TEAMS_TABLE_NAME).toBeDefined();
+    const policies = Object.values(template.findResources("AWS::IAM::Role")).flatMap(
+      (role) => role.Properties.Policies ?? [],
+    );
+    expect(policies.map((policy) => policy.PolicyName)).not.toContain("RegistrationTeamsRead");
+    expect(policies.map((policy) => policy.PolicyName)).not.toContain("RegistrationClaims");
+    const eventsRead = policies.find((policy) => policy.PolicyName === "EventsRead");
+    expect(eventsRead?.PolicyDocument.Statement).toEqual([
+      expect.objectContaining({
+        Action: ["dynamodb:Query", "dynamodb:GetItem"],
+        Effect: "Allow",
+      }),
+    ]);
+    const environments = Object.values(template.findResources("AWS::Lambda::Function")).map(
+      (resource) => resource.Properties.Environment?.Variables,
+    );
+    expect(environments.some((env) => env?.DEPLOYMENTS_TABLE_NAME && env?.EVENTS_TABLE_NAME)).toBe(
+      true,
+    );
+    expect(environments.every((env) => !env?.TEAMS_TABLE_NAME)).toBe(true);
   },
   SYNTH_TIMEOUT_MS,
 );
