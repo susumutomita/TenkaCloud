@@ -35,6 +35,24 @@ const view = (over: Record<string, unknown> = {}): ParticipantTeamView =>
   }) as ParticipantTeamView;
 
 describe("team-view-diff (Issue #2222)", () => {
+  it("refreshes event gates without a score change", () => {
+    const gates = [
+      undefined,
+      { kind: "scoring_not_started", startsAt: "2026-10-04T12:00:00Z" },
+      { kind: "scoring_not_started", startsAt: "2026-10-04T13:00:00Z" },
+      { kind: "ok" },
+      { kind: "scoring_locked" },
+      { kind: "scoring_ended", endsAt: "2026-10-04T14:00:00Z" },
+    ];
+    for (const [index, gate] of gates.entries()) {
+      const current = view({ eventGate: gate });
+      expect(viewIsUnchanged(current, structuredClone(current))).toBe(true);
+      for (const [otherIndex, other] of gates.entries()) {
+        if (index !== otherIndex)
+          expect(viewIsUnchanged(current, view({ eventGate: other }))).toBe(false);
+      }
+    }
+  });
   it("refreshes removed or newly constrained access even when score and deployment status are unchanged", () => {
     const legacy = view({ problems: [prob()] });
     const cliOnly = view({ problems: [prob({ accessCapabilities: ["cli-credentials"] })] });

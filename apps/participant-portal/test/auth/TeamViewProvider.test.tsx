@@ -393,6 +393,28 @@ describe("TeamViewProvider polling", () => {
     expect(mockGetLeaderboard).toHaveBeenCalledTimes(2);
   });
 
+  it.each(["manual", "automatic"])(
+    "applies event start through %s refresh without score changes",
+    async (mode) => {
+      const waiting = { ...view(), eventGate: { kind: "scoring_not_started" as const } };
+      const started = { ...view(), eventGate: { kind: "ok" as const } };
+      mockGetMe.mockResolvedValueOnce(waiting).mockResolvedValue(started);
+      const { result } = renderHook(() => useTeamView(), { wrapper });
+      await flush();
+      expect(result.current.view?.eventGate?.kind).toBe("scoring_not_started");
+      if (mode === "automatic") {
+        act(() => result.current.setAutoRefreshEnabled(true));
+        await flush(30_000);
+      } else {
+        await act(async () => {
+          await result.current.refresh();
+        });
+      }
+      expect(result.current.view?.eventGate?.kind).toBe("ok");
+      expect(mockGetMe).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it("should share an in-flight status refresh instead of issuing duplicate reads", async () => {
     let resolveMe: (value: ParticipantTeamView) => void = (_value) => undefined;
     let resolveLeaderboard: (value: LeaderboardResponse) => void = (_value) => undefined;

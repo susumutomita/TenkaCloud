@@ -13,6 +13,9 @@ export function viewIsUnchanged(
 ): boolean {
   if (!prev) return false;
   if (prev.team.teamName !== next.team.teamName) return false;
+  // Starting or rescheduling an event need not change a deployment or score.
+  // Both manual refresh and polling must apply the server-authoritative gate.
+  if (JSON.stringify(prev.eventGate) !== JSON.stringify(next.eventGate)) return false;
   // Issue #2283: `progression` (lock/unlock 遷移) も比較対象。 小さな plain JSON なので
   // stackOutputs 比較と同じく JSON.stringify で全 field を漏れなく比較する (= field 追加時に
   // 黙って取りこぼさない)。 unlock 時は lockedProblemIds 縮小に加え該当 problem の stackOutputs
