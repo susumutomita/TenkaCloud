@@ -243,6 +243,18 @@ describe("dev-mock fixtures", () => {
     }
   });
 
+  it("scores an uncut current CLI cleanup line without accepting unrelated output", () => {
+    const line =
+      "Cloud platform stacks destroyed. Existing deployed Retain policies may leave chargeable resources; review the saved plan. This teardown removes external Turso rows only for explicit destroy-all when the deployed provider identity is verified.";
+    expect(
+      evaluateMockSubFlag(LITE_CLEANUP_DRILL_PROBLEM_ID, "cleanup-complete", line, 100).kind,
+    ).toBe("ok");
+    expect(
+      evaluateMockSubFlag(LITE_CLEANUP_DRILL_PROBLEM_ID, "cleanup-complete", `${line} failed`, 100)
+        .kind,
+    ).toBe("wrong");
+  });
+
   it("should keep cleanup out of the deploy drill and give it a separate scored problem", () => {
     const deploy = drills.find((p) => p.problemId === LITE_DRILL_PROBLEM_ID);
     const cleanup = drills.find((p) => p.problemId === LITE_CLEANUP_DRILL_PROBLEM_ID);

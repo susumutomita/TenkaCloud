@@ -67,6 +67,10 @@ export function matchesLiteDrillCheckpoint(flagId: string, submitted: string): b
 export function matchesLiteCleanupDrillCheckpoint(flagId: string, submitted: string): boolean {
   return (
     flagId === LITE_CLEANUP_DRILL_CHECKPOINT.flagId &&
-    matchesCheckpointCode(LITE_CLEANUP_DRILL_CHECKPOINT.code, submitted)
+    (matchesCheckpointCode(LITE_CLEANUP_DRILL_CHECKPOINT.code, submitted) ||
+      matchesCheckpointCode(
+        "Cloud platform stacks destroyed. Existing deployed Retain policies may leave chargeable resources; review the saved plan. This teardown removes external Turso rows only for explicit destroy-all when the deployed provider identity is verified.",
+        submitted,
+      ))
   );
 }

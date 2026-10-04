@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   findLiteDrillCheckpointCode,
@@ -54,6 +55,30 @@ describe("lite-drill checkpoints (#2696)", () => {
     expect(
       matchesLiteDrillCheckpoint("no-such-flag", LITE_DRILL_CHECKPOINTS.launcherCreated.code),
     ).toBe(false);
+  });
+
+  it("accepts the complete current CLI cleanup output but rejects arbitrary suffixes", () => {
+    const source = readFileSync(
+      new URL("../../../scripts/cloud-hosting/cli.ts", import.meta.url),
+      "utf8",
+    );
+    const literal = /"(Cloud platform stacks destroyed\.[^"\n]*\\n)"/u.exec(source);
+    expect(literal).not.toBeNull();
+    const line = JSON.parse(`"${literal?.[1]}"`) as string;
+    expect(matchesLiteCleanupDrillCheckpoint("cleanup-complete", ` ${line}\n`)).toBe(true);
+    expect(
+      matchesLiteCleanupDrillCheckpoint(
+        "cleanup-complete",
+        "Cloud platform stacks destroyed. ERROR: deletion failed",
+      ),
+    ).toBe(false);
+    expect(
+      matchesLiteCleanupDrillCheckpoint(
+        "cleanup-complete",
+        line.replace("destroyed", "not destroyed"),
+      ),
+    ).toBe(false);
+    expect(matchesLiteCleanupDrillCheckpoint("unknown", line)).toBe(false);
   });
 
   it("should keep cleanup as a separate one-checkpoint drill", () => {

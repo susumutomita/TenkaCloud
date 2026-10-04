@@ -35,7 +35,7 @@ export function createLiteCleanupDrillFixture({
       "",
       "1. launcher スタックの `StartBuildConsoleUrl` から CodeBuild を開く",
       "2. **Start build with overrides** を選び、環境変数 `ACTION=destroy-all` を指定して開始する",
-      "3. 選択した DB と所有する保持データの削除の成功ログで、`Cloud platform stacks destroyed.` の1行を控える",
+      "3. 選択した DB と所有する保持データの削除の成功ログで、`Cloud platform stacks destroyed.` で始まる成功ログの行全体（続く保持資源の注意文も含む）を控える",
       "4. CloudFormation で launcher スタック自体を削除する(CodeBuild project、IAM Role、launcher のログも削除される)",
       "5. launcher の削除完了を確認してから、控えた成功ログの1行を下へ提出する",
       "",
@@ -64,7 +64,7 @@ export function createLiteCleanupDrillFixture({
           "",
           "1. Open CodeBuild from the launcher stack's `StartBuildConsoleUrl`",
           "2. Choose **Start build with overrides**, set the environment override `ACTION=destroy-all`, and start",
-          "3. Copy `Cloud platform stacks destroyed.` from the successful complete-teardown log after selected DB and owned retained data are removed",
+          "3. Copy the entire success log line starting with `Cloud platform stacks destroyed.`, including the following retention notice, from the successful complete-teardown log after selected DB and owned retained data are removed",
           "4. Delete the launcher stack itself in CloudFormation (this also removes its CodeBuild project, IAM Role, and launcher log group)",
           "5. After the launcher deletion completes, submit the success log line you copied below",
           "",
@@ -95,11 +95,11 @@ export function createLiteCleanupDrillFixture({
               penalty: 0,
               revealed: false,
               content:
-                "CodeBuild の **Start build with overrides** で `ACTION=destroy-all` を指定する。選択した DB・所有する保持データの削除の成功ログの `Cloud platform stacks destroyed.` の1行を控え、CloudFormation で launcher スタックの削除完了を確認してから、その1行を提出する。失敗時は launcher を残して再実行する。",
+                "CodeBuild の **Start build with overrides** で `ACTION=destroy-all` を指定する。選択した DB・所有する保持データの削除の`Cloud platform stacks destroyed.` で始まる成功ログの行全体を、続く注意文ごと控え、CloudFormation で launcher スタックの削除完了を確認してから、その1行を提出する。失敗時は launcher を残して再実行する。",
               i18n: {
                 en: {
                   content:
-                    "Use **Start build with overrides** in CodeBuild and set `ACTION=destroy-all`. Save the line `Cloud platform stacks destroyed.` after the log confirms teardown of the selected database and owned retained data, confirm the launcher stack is deleted in CloudFormation, then submit that line. Keep the launcher and retry if teardown fails.",
+                    "Use **Start build with overrides** in CodeBuild and set `ACTION=destroy-all`. Save the entire line starting with `Cloud platform stacks destroyed.`, including its retention notice, after the log confirms teardown of the selected database and owned retained data, confirm the launcher stack is deleted in CloudFormation, then submit that line. Keep the launcher and retry if teardown fails.",
                 },
               },
             },
