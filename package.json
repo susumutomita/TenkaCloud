@@ -17,6 +17,7 @@
     "test:host": "bun test ./scripts/local-host/tests/*.test.ts ./scripts/local-host/container/*.test.ts ./scripts/lib/*.test.ts && bun run scripts/local-host/tests/run.ts",
     "test:host:docker": "bun run scripts/local-host/tests/docker-smoke.ts",
     "test:host:container": "bun run scripts/local-host/tests/container-smoke.ts",
+    "test:host:start-refresh": "bun run build:host && HOST_E2E_ENGINE=coordination bun run scripts/local-host/tests/participant-start-browser-e2e.ts",
     "test:host:e2e": "bun run build:host && bun run test:host:browser",
     "typecheck:host": "tsc --noEmit -p tsconfig.host.json",
     "tenkacloud": "bun run scripts/tenkacloud.ts",

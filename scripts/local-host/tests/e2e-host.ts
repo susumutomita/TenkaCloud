@@ -8,6 +8,8 @@ import { Database } from "bun:sqlite";
 import { existsSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stop } from "esbuild";
+import { CompetitionEngine } from "../competition-engine";
 import { DockerHostingEngine } from "../docker-engine";
 import { parseGatewayPorts } from "../gateway-ports";
 import { type RunningLocalHost, startLocalHost } from "../server";
@@ -49,7 +51,9 @@ export async function cleanOwnedDockerJobs(
 
 async function main(): Promise<void> {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
-  const engineKind = process.env.HOST_E2E_ENGINE === "docker" ? "docker" : "fixture";
+  let engineKind: "coordination" | "docker" | "fixture" = "fixture";
+  if (process.env.HOST_E2E_ENGINE === "coordination") engineKind = "coordination";
+  else if (process.env.HOST_E2E_ENGINE === "docker") engineKind = "docker";
   const data = createTemporaryDirectory(root, "tenkacloud-host-e2e-");
   const fixture = new ExerciseFixture((path) => new Database(path, { strict: true }));
   let host: RunningLocalHost | undefined;
@@ -69,7 +73,11 @@ async function main(): Promise<void> {
         participantPort: Number(process.env.HOST_E2E_PARTICIPANT_PORT ?? 5185),
         gatewayPorts: parseGatewayPorts(process.env.HOST_E2E_GATEWAY_PORTS ?? "5300-5339"),
       },
-      (directory) => (engineKind === "docker" ? new DockerHostingEngine(root, directory) : fixture),
+      (directory) => {
+        if (engineKind === "coordination") return new CompetitionEngine(root, directory, false);
+        if (engineKind === "docker") return new DockerHostingEngine(root, directory);
+        return fixture;
+      },
       (message) => console.error(message),
     );
     if (!host.organizerKey) throw new Error("The fresh browser fixture has no organizer key.");
@@ -85,6 +93,8 @@ async function main(): Promise<void> {
     );
     await stopped;
   } finally {
+    // Native catalog compilation starts esbuild's helper; release its inherited pipes too.
+    if (engineKind === "coordination") await stop();
     process.off("SIGTERM", requestStop);
     process.off("SIGINT", requestStop);
     try {
