@@ -77,7 +77,7 @@
         "jsdom": "^30.0.1",
         "typescript": "~6.0.3",
         "vite": "^8.2.2",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "apps/developer-portal": {
@@ -108,7 +108,7 @@
         "jsdom": "^30.0.1",
         "tsx": "^4.20.0",
         "typescript": "~6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "apps/participant-portal": {
@@ -138,7 +138,7 @@
         "jsdom": "^30.0.1",
         "typescript": "~6.0.3",
         "vite": "^8.2.2",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "infrastructure": {
@@ -190,7 +190,7 @@
         "esbuild": "^0.28.2",
         "tsx": "4.22.4",
         "typescript": "~6.0.3",
-        "vitest": "4.1.11",
+        "vitest": "5.0.3",
       },
     },
     "packages/ai-eval": {
@@ -198,7 +198,7 @@
       "version": "0.1.0",
       "devDependencies": {
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/auth-client": {
@@ -207,7 +207,7 @@
       "devDependencies": {
         "jsdom": "^30.0.1",
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/coordination-plugin-sdk": {
@@ -215,7 +215,7 @@
       "version": "0.2.0",
       "devDependencies": {
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/format": {
@@ -223,7 +223,7 @@
       "version": "0.1.0",
       "devDependencies": {
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/portal-contracts": {
@@ -231,7 +231,7 @@
       "version": "0.1.0",
       "devDependencies": {
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/portal-plugin-sdk": {
@@ -241,7 +241,7 @@
         "@types/react": "^19.3.0",
         "react": "^19.3.0",
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
       "peerDependencies": {
         "react": "^19.0.0",
@@ -255,7 +255,7 @@
       },
       "devDependencies": {
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/problem-runtime": {
@@ -264,7 +264,7 @@
       "devDependencies": {
         "@types/node": "^26.1.0",
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/problem-sdk": {
@@ -281,7 +281,7 @@
         "@types/node": "^26.1.0",
         "http-status-codes": "^2.3.0",
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/problem-test-harness": {
@@ -298,7 +298,7 @@
         "@types/node": "^26.1.0",
         "fast-check": "^4.9.0",
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/saml-utils": {
@@ -310,7 +310,7 @@
       "devDependencies": {
         "@types/node": "^26.1.0",
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/security-harness": {
@@ -319,7 +319,7 @@
       "devDependencies": {
         "@types/node": "^26.1.0",
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/trust-bridge": {
@@ -331,7 +331,7 @@
       "devDependencies": {
         "@types/node": "^26.1.0",
         "typescript": "^6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
     },
     "packages/web-kit": {
@@ -353,7 +353,7 @@
         "react": "^19.3.0",
         "react-dom": "^19.3.0",
         "typescript": "~6.0.3",
-        "vitest": "^5.0.0",
+        "vitest": "^5.0.3",
       },
       "peerDependencies": {
         "@cloudscape-design/components": "^3.0.1355",
