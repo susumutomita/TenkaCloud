@@ -26,9 +26,10 @@ tickets, SAML responses and AWS credentials out of screenshots and reports.
 6. Verify only this event's resources are affected by stop or explicit teardown.
    Check the difference between retained work and deletion before approving a
    destructive action. Do not prune unrelated Docker networks or containers.
-7. If using registration, progression gates or audit collection, rehearse their
-   failure, retry, revocation and restart paths as well. Audit is off by default.
-   Key-authenticated organizer actions use an explicit host-key audit actor.
+7. Distribute the participant portal URL and the correct team key. Rehearse key
+   rotation and restart, and verify that another team's key cannot access its
+   environment. If using progression gates, rehearse their failure and retry
+   paths as well.
 
 The old local AWS-region switch is rejected. A local rehearsal must not create AWS
 resources. Existing AWS resources from an earlier integration revision need that

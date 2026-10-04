@@ -117,8 +117,14 @@ test("retired audit endpoints and enablement are unavailable while host access b
     const { idToken } = (await signedIn.json()) as { idToken: string };
     expect((await f.request("/admin/audit-log", "GET", undefined, idToken)).status).toBe(404);
     expect(
-      (await f.request("/feature-flags", "PUT", { key: "registration", enabled: true }, idToken))
-        .status,
+      (
+        await f.request(
+          "/feature-flags",
+          "PUT",
+          { key: "challengePrerequisiteGate", enabled: true },
+          idToken,
+        )
+      ).status,
     ).toBe(403);
   }
   expect(

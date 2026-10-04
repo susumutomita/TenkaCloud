@@ -17,7 +17,6 @@ import {
   type ProgressionGateConfig,
   parseProgressionGate,
 } from "../handlers/shared/progression-gate.js";
-import type { RegistrationUpdate } from "./domain/event-registration.js";
 import type { HostingAccountSelfTestAcknowledgment } from "./domain/events.js";
 import { teamRecordToItem } from "./dynamodb-teams-repository.js";
 import { sweepExpiredRows } from "./dynamodb-ttl-sweep.js";
@@ -100,43 +99,6 @@ function isTransactConditionalCheckFailed(err: unknown): boolean {
 }
 
 export class DynamoDbEventsRepository implements EventsRepository {
-  async updateRegistration(input: RegistrationUpdate): Promise<"updated" | "conflict"> {
-    try {
-      await this.ddb.send(
-        new UpdateCommand({
-          TableName: this.tableName,
-          Key: { PK: `EVENT#${input.eventId}`, SK: EVENT_SK },
-          UpdateExpression: "SET #registration = :registration, updatedAt = :now",
-          ConditionExpression:
-            "tenantId = :tenant AND expiresAt > :epoch AND " +
-            "#status IN (:draft, :deploying, :ready) AND " +
-            "(attribute_not_exists(endsAt) OR endsAt > :now) AND " +
-            (input.expectedVersion === 0
-              ? "attribute_not_exists(#registration)"
-              : "#registration.#version = :version"),
-          ExpressionAttributeNames: {
-            "#registration": "registration",
-            "#status": "status",
-            ...(input.expectedVersion === 0 ? {} : { "#version": "version" }),
-          },
-          ExpressionAttributeValues: {
-            ":registration": input.registration,
-            ":now": input.now,
-            ":tenant": input.tenantId,
-            ":epoch": Math.floor(Date.parse(input.now) / 1000),
-            ":draft": "DRAFT",
-            ":deploying": "DEPLOYING",
-            ":ready": "READY",
-            ...(input.expectedVersion === 0 ? {} : { ":version": input.expectedVersion }),
-          },
-        }),
-      );
-      return "updated";
-    } catch (error) {
-      if (isConditionalCheckFailed(error)) return "conflict";
-      throw error;
-    }
-  }
   constructor(
     private readonly ddb: DynamoDBDocumentClient,
     private readonly tableName: string,

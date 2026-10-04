@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { createBrowserRouter, createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../src/App";
 import { loadSession } from "../../src/auth/storage";
@@ -15,8 +15,6 @@ import {
   eventId,
   gateId,
   hintContent,
-  invitation,
-  registrationBase,
   teamKey,
   teamRegion,
 } from "./cloud-network-fixture";
@@ -43,16 +41,17 @@ afterEach(() => {
   expect(network.unexpected).toEqual([]);
 });
 
-async function boot(path = "/login") {
+async function boot(path = "/login", browserHistory = false) {
   const config = await loadConfig();
   expect(config).toMatchObject({ ...cloudRuntime, cloudMode: "real" });
   expect(config.notificationsEnabled).toBeUndefined();
   expect(config.scoreTimelineEnabled).toBeUndefined();
   expect(config.localTeamLoginKey).toBeUndefined();
   await applyRuntimeProblemCatalog(config);
-  const router = createMemoryRouter([{ path: "*", element: <App config={config} /> }], {
-    initialEntries: [path],
-  });
+  const routes = [{ path: "*", element: <App config={config} /> }];
+  const router = browserHistory
+    ? createBrowserRouter(routes)
+    : createMemoryRouter(routes, { initialEntries: [path] });
   const mounted = render(
     <I18nProvider>
       <AppConfigProvider config={config}>
@@ -187,30 +186,28 @@ describe("restored cloud participant journey (synthetic network, real SPA)", () 
     expectTeamAuthorization();
   });
 
-  it("claims and resumes an invitation, then authenticates with the delivered team key and sets its name", async () => {
+  it("retires invitation links, then signs in with a distributed team key and sets its name", async () => {
+    network = createCloudNetwork({ teamNameSetByCompetitor: false });
+    vi.stubGlobal("fetch", network.fetcher);
     const user = userEvent.setup();
+    const invitation = "i".repeat(43);
     const path = `/join/cloud-tenant/${eventId}`;
-    window.history.replaceState({}, "", `${path}#invite=${invitation}`);
-    const first = await boot(path);
-    await user.click(await screen.findByRole("button", { name: "Get a team environment" }));
-    await screen.findByRole("button", { name: "Start with this environment" });
+    window.history.replaceState({}, "", `${path}?source=event#invite=${invitation}`);
+    const { router } = await boot(path, true);
+    await screen.findByPlaceholderText("Key distributed to your team");
+    expect(window.location.pathname).toBe("/login");
+    expect(window.location.search).toBe("");
     expect(window.location.hash).toBe("");
-    const claim = callsTo(`${registrationBase}/claim`)[0];
-    const receipt = JSON.parse(String(claim.init.body)).receipt;
-    expect(receipt).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(new Headers(claim.init.headers).get("authorization")).toBe(`Bearer ${invitation}`);
-    expect(claim.init).toMatchObject({
-      credentials: "omit",
-      cache: "no-store",
-      referrerPolicy: "no-referrer",
-    });
-    first.unmount();
-    await boot(path);
-    await user.click(await screen.findByRole("button", { name: "Start with this environment" }));
-    expect(
-      new Headers(callsTo(`${registrationBase}/status`)[0].init.headers).get("authorization"),
-    ).toBe(`Bearer ${receipt}`);
-    expect(callsTo(`${registrationBase}/claim`)).toHaveLength(1);
+    expect(router.state.location.pathname).toBe("/login");
+    expect(loadSession()).toBeNull();
+    expect(callsTo("/portal/me")).toHaveLength(0);
+    expect(network.calls.some(({ url }) => url.pathname.includes("/registration"))).toBe(false);
+    expect(storedValues(localStorage)).not.toContain(invitation);
+    expect(storedValues(sessionStorage)).not.toContain(invitation);
+    expect(screen.queryByRole("button", { name: "Get a team environment" })).toBeNull();
+
+    await user.type(screen.getByPlaceholderText("Key distributed to your team"), teamKey);
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
     await screen.findByRole("heading", { name: "Choose your team name" });
     const nameInput = screen.getByPlaceholderText("e.g. Our team");
     await user.clear(nameInput);
@@ -224,6 +221,8 @@ describe("restored cloud participant journey (synthetic network, real SPA)", () 
     });
     const patch = callsTo("/portal/me").find((call) => call.method === "PATCH");
     expect(JSON.parse(String(patch?.init.body))).toEqual({ teamName: "Restored Cloud Team" });
+    expect(network.calls.some(({ url }) => url.pathname.includes("/registration"))).toBe(false);
     expectTeamAuthorization();
+    router.dispose();
   });
 });

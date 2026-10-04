@@ -19,7 +19,7 @@ catalog pin のない旧 Lite 環境は、resource / schema の検査後、boots
 - 競技者アカウントに `infrastructure/templates/competitor-bootstrap.yaml` を使い、表示された運営アカウント、role 名、ExternalId を合わせて接続を検証する
 - Organizations の一括配布と個別設定は[導入手順](../competitor-account-onboarding.md)を使う。別の競技者アカウント、または同一の競技者アカウントの別 region をチームへ割り当てる。自分で行う自己検証では、イベント作成・キー発行前にリスクを確認すると開催用アカウントも選択できる。作成済みイベントも「スケジュール」の配置操作で確認でき、作り直す必要はない。同意はイベント単位で保存し、参加者 STS も確認する。問題用・参加者用ロールが基盤の設定やデータへ到達し得るため、第三者が参加する本格開催には別アカウントを推奨する。同一競技者アカウントの別 region は機能として対応するが、完全な IAM 分離の証明ではなく、catalog の IAM 監査には未解決事項がある。IAM role は global のため bootstrap を複数 region に重複配置しない
 - 参加者用 role と配置 role を分離し、初期設定の AdministratorAccess を参加者へ配らない
-- 大会・チームの参加キーを安全に配布する。任意の[自己登録](participant-self-registration.md)は準備済みチームの割り当てであり、環境の自動作成ではない
+- 参加者ポータルの URL と各チームのログインキーを、そのチームだけに安全に配布する。自己登録の招待リンクや受付票は使用しない
 
 ## 開催中
 

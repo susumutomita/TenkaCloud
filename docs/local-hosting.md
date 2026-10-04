@@ -750,8 +750,10 @@ automatic deploy/teardown schedules, arbitrary problem packs, Docker problems in
 the hosted container, and platforms without a persistent volume are not implemented
 yet.
 
-## Participant registration
+## Participant access
 
-The Teams tab can issue a shared link that allocates prepared team environments.
-See [host participant registration](host-participant-registration.md) for the
-feature flag, receipt recovery and key-rotation behavior.
+In the Teams tab, copy the participant portal URL and each team's login key, then
+distribute them privately to that team. Participants sign in with the key and
+choose their team name. Shared self-registration links and receipt-based key
+retrieval are retired; previously issued team keys still work. Existing teams,
+scores and historical registration records are retained.

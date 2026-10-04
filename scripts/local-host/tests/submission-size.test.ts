@@ -6,7 +6,6 @@ test("only the participant scoring envelope permits sealed workbench expansion",
   expect(apiBodyLimit("/portal/me/submit-flag", 65_536)).toBe(131_072);
   for (const path of ["/portal/me", "/events", "/portal/me/submit-flag/extra"])
     expect(apiBodyLimit(path, 65_536)).toBe(65_536);
-  expect(apiBodyLimit("/portal/registration/event", 65_536)).toBe(1024);
 });
 
 test("large canonical code references fit a sealed scoring request", () => {

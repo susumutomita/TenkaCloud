@@ -64,9 +64,6 @@ vi.mock("../../../src/components/event-detail/EventProblemSetPanel", () => ({
 vi.mock("../../../src/components/event-detail/EventParticipantsPanel", () => ({
   EventParticipantsPanel: () => <div data-testid="participants-panel" />,
 }));
-vi.mock("../../../src/components/event-detail/EventRegistrationPanel", () => ({
-  EventRegistrationPanel: () => <div data-testid="registration-panel" />,
-}));
 vi.mock("../../../src/components/event-detail/EventTeamsPanel", () => ({
   EventTeamsPanel: () => <div data-testid="teams-panel" />,
 }));
@@ -188,7 +185,6 @@ describe("tab wrappers", () => {
     expect(screen.getByTestId("problemset-panel")).toBeInTheDocument();
     render(<TeamsTab {...props()} />);
     expect(screen.getByTestId("participants-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("registration-panel")).toBeInTheDocument();
     expect(screen.getByTestId("teams-panel")).toBeInTheDocument();
   });
 
@@ -222,12 +218,6 @@ describe("tab wrappers", () => {
     fireEvent.click(screen.getByTestId("gate-refresh"));
     expect(manualRefresh).toHaveBeenCalled();
   });
-});
-
-it("keeps cloud team login controls without calling unavailable self-registration", () => {
-  render(<TeamsTab {...props({ config: { ...props().config, mode: "cloud-host" } })} />);
-  expect(screen.getByTestId("participants-panel")).toBeInTheDocument();
-  expect(screen.queryByTestId("registration-panel")).not.toBeInTheDocument();
 });
 
 it("shows authoritative totals with an explicit unavailable-history notice instead of an empty chart", () => {

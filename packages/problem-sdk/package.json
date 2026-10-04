@@ -11,8 +11,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./internal": "./src/internal.ts",
-    "./internal/event-registration": "./src/event-registration.ts"
+    "./internal": "./src/internal.ts"
   },
   "scripts": {
     "build": "tsc",

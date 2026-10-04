@@ -9,7 +9,7 @@ import type {
 } from "../../src/api/portal-client";
 
 // Synthetic HTTP responses, not an AWS rehearsal. Shapes and paths follow the restored
-// participant-portal-hosting.ts and participant-handler/{lookup,index,registration,sso}.ts.
+// participant-portal-hosting.ts and participant-handler/{lookup,index,sso}.ts.
 // The real config loader, auth, clients, router and UI consume these serialized responses.
 export const cloudRuntime = {
   apiBaseUrl: "https://participant-api.example.test",
@@ -18,9 +18,7 @@ export const cloudRuntime = {
   mode: "backend",
 };
 export const teamKey = "k".repeat(43);
-export const invitation = "i".repeat(43);
 export const eventId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
-export const registrationBase = `/portal/registration/cloud-tenant/${eventId}`;
 export const gateId = "cloud-gate-fixture";
 export const nextId = "cloud-next-fixture";
 export const teamRegion = "eu-west-1";
@@ -45,12 +43,11 @@ function problem(problemId: string, jobId: string): ParticipantProblemView {
   };
 }
 
-export function createCloudNetwork() {
+export function createCloudNetwork(options: { teamNameSetByCompetitor?: boolean } = {}) {
   let revealed = false;
   let solved = false;
   let teamName = "Cloud team";
-  let teamNameSetByCompetitor = true;
-  let receipt: string | undefined;
+  let teamNameSetByCompetitor = options.teamNameSetByCompetitor ?? true;
   const unexpected: string[] = [];
   const calls: { url: URL; method: string; init: RequestInit }[] = [];
 
@@ -176,31 +173,7 @@ export function createCloudNetwork() {
     }
   }
 
-  function registration(path: string, init: RequestInit): Response | undefined {
-    const authorization = new Headers(init.headers).get("authorization");
-    if (path === `${registrationBase}/info` && authorization === `Bearer ${invitation}`) {
-      return Response.json({ name: cloudRuntime.eventTitle, state: "open", remaining: 2 });
-    }
-    if (path === `${registrationBase}/claim` && authorization === `Bearer ${invitation}`) {
-      receipt = JSON.parse(String(init.body)).receipt;
-      teamNameSetByCompetitor = false;
-    } else if (path !== `${registrationBase}/status` || authorization !== `Bearer ${receipt}`) {
-      return undefined;
-    }
-    return Response.json({
-      eventName: cloudRuntime.eventTitle,
-      teamId: "cloud-team",
-      state: "ready",
-      ready: 2,
-      total: 2,
-      teamLoginKey: teamKey,
-    });
-  }
-
   function apiResponse(url: URL, method: string, init: RequestInit): Response | undefined {
-    if (method === "POST" && url.pathname.startsWith(registrationBase)) {
-      return registration(url.pathname, init);
-    }
     if (new Headers(init.headers).get("authorization") !== `Bearer ${teamKey}`) {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }

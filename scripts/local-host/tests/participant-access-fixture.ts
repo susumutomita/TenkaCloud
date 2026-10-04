@@ -2,7 +2,6 @@ import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { hostBuildDirectory } from "../build";
 import { CompetitionEngine } from "../competition-engine";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
@@ -10,34 +9,22 @@ import { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-export const REGISTRATION_ORGANIZER = {
-  username: "registration-admin",
+const ACCESS_ORGANIZER = {
+  username: "access-admin",
   // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Test-only account in a fresh local host data directory.
-  password: "Registration-admin-test-only-2026!",
+  password: "Access-admin-test-only-2026!",
 } as const;
-export interface RegistrationEvent {
+interface AccessEvent {
   eventId: string;
   teams: { teamId: string; teamLoginKey: string }[];
 }
-export interface RegistrationSummary {
-  tenantId: string;
-  enabled: boolean;
-  featureEnabled: boolean;
-  canConfigure: boolean;
-  teamIds: string[];
-  claimed: number;
-  invitation?: string;
-}
 /** Real Battle runtime, real HTTP listeners and a durable SQLite file; no external services. */
-export async function registrationFixture(options: { browser?: boolean } = {}) {
-  const directory = createTemporaryDirectory(root, "tenka-registration-");
+export async function participantAccessFixture() {
+  const directory = createTemporaryDirectory(root, "tenka-participant-access-");
   const database = join(directory, "host.sqlite");
-  const masterKey = "test-only-registration-signing-key";
-  let clock = Date.now();
+  const masterKey = "test-only-access-signing-key";
+  const clock = Date.now();
   let store = new HostStore(new Database(database));
-  // Browser journeys use key auth; legacy unit role cases keep account auth.
-  const organizerKey = options.browser ? store.ensureLocalOrganizerKey().key : undefined;
-  const hostKey = organizerKey ?? masterKey;
   let service = new HostingService(
     store,
     new CompetitionEngine(root, directory),
@@ -71,9 +58,7 @@ export async function registrationFixture(options: { browser?: boolean } = {}) {
       kind: "participant",
       hostname: "127.0.0.1",
       port: 0,
-      staticRoot: options.browser
-        ? (process.env.HOST_E2E_PARTICIPANT_BUILD ?? hostBuildDirectory(root, "participant-portal"))
-        : directory,
+      staticRoot: directory,
       service,
       log: (error) => errors.push(error),
     });
@@ -81,10 +66,7 @@ export async function registrationFixture(options: { browser?: boolean } = {}) {
       kind: "admin",
       hostname: "127.0.0.1",
       port: 0,
-      staticRoot: options.browser
-        ? (process.env.HOST_E2E_ADMIN_BUILD ??
-          hostBuildDirectory(root, "application-admin-console"))
-        : directory,
+      staticRoot: directory,
       service,
       log: (error) => errors.push(error),
       participantOrigin: participant.origin,
@@ -96,9 +78,7 @@ export async function registrationFixture(options: { browser?: boolean } = {}) {
       "admin",
       firstVisit ? "/host/bootstrap" : "/host/login",
       "POST",
-      organizerKey
-        ? { key: organizerKey }
-        : { ...REGISTRATION_ORGANIZER, ...(firstVisit ? { key: masterKey } : {}) },
+      { ...ACCESS_ORGANIZER, ...(firstVisit ? { key: masterKey } : {}) },
     );
     assert.equal(login.status, firstVisit ? 201 : 200);
     adminToken = login.body.idToken;
@@ -127,15 +107,11 @@ export async function registrationFixture(options: { browser?: boolean } = {}) {
     get now() {
       return clock;
     },
-    hostKey,
     errors,
     api,
-    advance(ms: number) {
-      clock += ms;
-    },
     async create(count = 2) {
-      const made = await api<RegistrationEvent>("admin", "/events", "POST", {
-        name: "Registration battle",
+      const made = await api<AccessEvent>("admin", "/events", "POST", {
+        name: "Participant access battle",
         teams: Array.from({ length: count }, (_, i) => ({ internalSlug: `team-${i + 1}` })),
         problems: [{ problemId: "ac26-crypto-battle" }],
       });
@@ -145,30 +121,6 @@ export async function registrationFixture(options: { browser?: boolean } = {}) {
       await service.drain();
       assert.equal(store.event(made.body.eventId).status, "READY");
       return made.body;
-    },
-    flag(enabled: boolean) {
-      return api("admin", "/feature-flags", "PUT", { key: "registration", enabled });
-    },
-    open(event: RegistrationEvent, teamIds = event.teams.map((t) => t.teamId)) {
-      return api<RegistrationSummary>("admin", `/events/${event.eventId}/registration`, "PUT", {
-        enabled: true,
-        teamIds,
-        closesAt: new Date(clock + 60_000).toISOString(),
-      });
-    },
-    public<T = Record<string, unknown>>(
-      eventId: string,
-      action: "info" | "claim" | "status",
-      token: string,
-      receipt?: string,
-    ) {
-      return api<T>(
-        "participant",
-        `/portal/registration/local-host/${eventId}/${action}`,
-        "POST",
-        receipt ? { receipt } : {},
-        token,
-      );
     },
     async restart() {
       await detach();

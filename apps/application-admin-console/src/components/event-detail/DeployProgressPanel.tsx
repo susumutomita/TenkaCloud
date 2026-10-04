@@ -4,6 +4,8 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import type { EventDetail } from "../../api/events-client";
+import { localDeployProgress } from "./local-deploy-progress";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -70,6 +72,7 @@ export function DeployProgressPanel({
   ended,
   failedCount,
   inFlightCount,
+  localDetail,
   manualRefreshInFlight,
   onManualRefresh,
   t,
@@ -81,17 +84,20 @@ export function DeployProgressPanel({
   readonly ended: boolean;
   readonly failedCount: number;
   readonly inFlightCount: number;
+  readonly localDetail?: EventDetail;
   readonly manualRefreshInFlight: boolean;
   readonly onManualRefresh: () => void;
   readonly t: Translate;
   readonly totalDeployCount: number;
 }) {
-  if (totalDeployCount <= 0) return null;
+  const localProgress = localDetail ? localDeployProgress(localDetail, ended, t) : undefined;
+  if (!localProgress && totalDeployCount <= 0) return null;
   const {
     type: status,
     label: statusLabel,
     description: statusDescription,
-  } = computeDeployStatus(t, {
+  } = localProgress ??
+  computeDeployStatus(t, {
     allDoneCount,
     ended,
     failedCount,
@@ -104,7 +110,8 @@ export function DeployProgressPanel({
         <Header
           variant="h2"
           description={
-            failedCount > 0
+            localProgress?.summary ??
+            (failedCount > 0
               ? t("event_detail.deploy_progress_description_with_failed", {
                   total: totalDeployCount,
                   complete: completeCount,
@@ -115,7 +122,7 @@ export function DeployProgressPanel({
                   total: totalDeployCount,
                   complete: completeCount,
                   inFlight: inFlightCount,
-                })
+                }))
           }
           actions={
             <Button
@@ -129,7 +136,7 @@ export function DeployProgressPanel({
             </Button>
           }
         >
-          {t("event_detail.deploy_progress_header")}
+          {t(localProgress ? "local_host.progress_header" : "event_detail.deploy_progress_header")}
         </Header>
       }
     >
@@ -138,7 +145,7 @@ export function DeployProgressPanel({
         <Box variant="small" color="text-body-secondary">
           {statusDescription}
         </Box>
-        {inFlightCount > 0 && (
+        {(localProgress ? localProgress.inFlight : inFlightCount > 0) && (
           <Box variant="small" color="text-status-info">
             auto polling
           </Box>

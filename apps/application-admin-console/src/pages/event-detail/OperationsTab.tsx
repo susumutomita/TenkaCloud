@@ -52,8 +52,9 @@ export function OperationsTab({
       <Container
         header={<Header variant="h3">{t("event_detail.operations_deploy_progress_header")}</Header>}
       >
-        {counts.totalDeployCount > 0 ? (
+        {isLocalHost(config) || counts.totalDeployCount > 0 ? (
           <DeployProgressPanel
+            localDetail={isLocalHost(config) ? detail : undefined}
             allDoneCount={counts.allDoneCount}
             completeCount={counts.completeCount}
             ended={isEffectivelyEnded({
