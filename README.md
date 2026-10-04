@@ -63,12 +63,12 @@ make install
 make local
 ```
 
-1. Open the printed organizer URL and sign in with the **organizer key** shown once in your terminal. No username or password is needed.
+1. Open the printed organizer URL and sign in with the new **organizer key** shown once in your terminal on each interactive `make local` start. No username or password is needed.
 2. Create an event, add teams and select problems. Prepare their environments, then start the event.
 3. Give each team its own participant URL and key. For Docker exercises, participants choose **Start / resume** when ready.
 4. Solve a problem, submit the answer it requests and check the score.
 
-**Lost the organizer key?** Run `make local-reset`. It rotates organizer access and signs out organizer sessions while keeping events, scores, participant keys and problem environments.
+**Rotate the organizer key while running?** Run `make local-reset` in another interactive terminal, using the same data directory. Each interactive `make local` start also creates a new key. Both revoke old organizer keys and sessions while keeping events, scores, participant keys and problem data. Noninteractive and public/container starts retain existing keys and never print them to logs. `make local-clear` retains the organizer key; it deletes event history.
 
 **Finished for now?** Run `make down` from another terminal. It stops this controller and its owned Docker environments while retaining the database, keys, container writable layers and volumes. Start again with `make local`; participants resume on-demand exercises from their portal. Stop does not retain process memory or reset the event clock. Use the event's **Teardown** action to remove problem environments.
 

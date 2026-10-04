@@ -33,7 +33,7 @@ function announceHost(
   } else {
     const gateways = `http://${options.hostname}:${formatGatewayPorts(options.gatewayPorts)}`;
     console.log(
-      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (active local environments only)\nOrganizer key: use make local-reset to rotate a lost key.\nState: ${host.databasePath}\n`,
+      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (active local environments only)\nOrganizer key: each interactive make local start shows a new key. Use make local-reset to rotate it while running.\nState: ${host.databasePath}\n`,
     );
   }
   if (!options.public && options.hostname !== "127.0.0.1")
@@ -45,6 +45,25 @@ function announceHost(
       ? "Create an event, prepare its environments, distribute team keys, then start the event. Participants start/resume local problems as needed.\nCtrl+C or make down stops owned local environments and retains their data. Use Teardown to delete environments."
       : "Create an event, prepare its environments, distribute team keys, then start the event. Participants start/resume local problems as needed.\nCtrl+C stops the host server but preserves results and Docker environments. Use Teardown in the host console to remove environments.",
   );
+}
+
+function displayLocalOrganizerKey(host: RunningLocalHost): void {
+  let display: ReturnType<typeof openOrganizerKeyDisplay>;
+  try {
+    // Acquire the private terminal before rotating an existing key. Headless
+    // startup retains its current key and never sends secrets to captured logs.
+    display = openOrganizerKeyDisplay();
+  } catch {
+    console.log(
+      `Organizer key ${host.organizerKey ? "initialized" : "retained"}. Run make local-reset in an interactive terminal to obtain a new key; secrets are not shown in logs.`,
+    );
+    return;
+  }
+  try {
+    display.show(host.organizerKey ?? host.rotateOrganizerKey());
+  } finally {
+    display.close();
+  }
 }
 
 export async function runLocalHost(
@@ -79,20 +98,7 @@ export async function runLocalHost(
     lifecycle.onReady?.(host);
     // A container's controlling TTY can be captured by its log driver. Public hosts
     // recover keys only through a separate private exec terminal, never startup output.
-    if (host.organizerKey && !options.public) {
-      try {
-        const display = openOrganizerKeyDisplay();
-        try {
-          display.show(host.organizerKey);
-        } finally {
-          display.close();
-        }
-      } catch {
-        console.log(
-          "Organizer key initialized. Run make local-reset in an interactive terminal to obtain a new key; secrets are not shown in logs.",
-        );
-      }
-    }
+    if (!options.public) displayLocalOrganizerKey(host);
     announceHost(options, host, lifecycle.stopLocalEnvironments === true);
     await waitForStop(lifecycle.signal);
     console.log("Closing listeners; waiting for in-flight environment operations to finish.");

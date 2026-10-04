@@ -72,7 +72,7 @@
 bun install --frozen-lockfile --ignore-scripts
 make local
 </code></pre>
-<p>The default organizer URL is <code>http://127.0.0.1:5174</code>; the participant URL is <code>http://127.0.0.1:5175</code>. Use the URLs printed by the process. Sign in with the organizer key only; no username or password is needed. The first key is shown once on the interactive terminal. If lost, run <code>make local-reset</code> with the same data directory to rotate organizer access while preserving events, scores, participant keys and problem environments.</p>
+<p>The default organizer URL is <code>http://127.0.0.1:5174</code>; the participant URL is <code>http://127.0.0.1:5175</code>. Use the URLs printed by the process. Sign in with the organizer key only; no username or password is needed. Each interactive <code>make local</code> start displays a new key once and revokes the previous organizer key and sessions. To rotate it while running, use <code>make local-reset</code> in another interactive terminal with the same data directory. Events, scores, participant keys and problem data are preserved. Noninteractive and public/container starts retain existing keys without printing them to logs.</p>
 <h2 id="first-event">Create and play an event</h2><ol>
 <li>In the organizer console, create an event, its teams and selected problems.</li>
 <li>Prepare the selected jobs and inspect every result. New Docker jobs are dormant until a participant starts them; AWS exercises keep their deployment flow.</li>
