@@ -8,7 +8,7 @@ A pack is a versioned, inspectable unit of competition content. Its manifest dec
 
 ## What is a problem pack
 
-The current pack CLI can scaffold, validate, inspect and store immutable revisions. Installing or activating a pack does not add it to the current event catalog. Activation records are offline catalog metadata, not a current hosting workflow.
+Problem Packs let organizers distribute and host company exercises or problems intended for publication after an event without adding them to the public catalog. Installation stores an immutable revision; Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads supported problems in its local `problems/` tree rather than the Pack store. Publication remains a separate author decision.
 
 ## Battle versus Challenge
 

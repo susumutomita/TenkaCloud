@@ -68,7 +68,7 @@
 <h1>問題パック <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>pack は競技の内容を version ごとに確認・保存する単位です。manifest に識別情報、必要な runtime、問題ファイルを記述します。artifact は runtime によって異なり、CloudFormation template はその一例です。</p>
 <h2>問題パックとは</h2>
-<p>現在の CLI は雛形作成、検証、内容確認、不変 revision の保存を行えます。install や activate では現在の大会カタログへ追加されません。activation はオフラインのカタログ記録であり、現行の競技実行手順ではありません。</p>
+<p>Problem Pack は、公開カタログへ登録せず、企業内の問題やイベント終了後に公開する予定の問題を配布・開催するための単位です。install は不変な revision を保存し、Cloud は有効化済みの AWS/CloudFormation 問題を次の配置で読み込みます。Local は Pack store を直接読まず、手元の <code>problems/</code> にある対応問題を読みます。公開は作成者が別途判断します。</p>
 <h2>Battle と Challenge</h2>
 <p>Challenge と Battle は操作と採点の形式であり、実行場所とは別です。旧ローカル Compose 問題はすべて Challenge 競技へ対応させる方針です。汎用カタログ・workbench の復旧と terminal・ブラウザ検証は進行中です。</p>
 <h2>採点方式</h2>

@@ -16,7 +16,7 @@ Use this table with the matching checkout, rather than assuming a finished draft
 | Local organizer username/password or SAML | Current local hosting uses one organizer key; make local-reset rotates organizer access and revokes organizer sessions while preserving event/participant/runtime state |
 | Lite launcher / CodeBuild platform setup | cloud-pipeline.yaml defaults to reviewed current sources using standard CDKToolkit (official bootstrap only if missing); review its broad CodeBuild role and CDK execution authority before launch. Restored generic CloudFormation/flag/multi-flag/endpoint and native paths; nine oversized TemplateBody templates remain unsupported |
 | ACTION=destroy-all | Current make destroy-all confirms and purges stack-owned retained data and selected Turso rows; ordinary make destroy removes platform/default-owned data and leaves external Turso rows |
-| pack activate for a tenant | The make pack-activate target is removed. CLI activate retains an offline record only; install/activate do not add problems to current events |
+| pack activate for a tenant | The make pack-activate target is removed. CLI activate writes the selection consumed by the next Cloud deployment (`--tenant local`, default store); Local hosting does not consume Pack activation records |
 
 Local SQLite is implemented. Cloud hosting uses Lambda with a choice of Turso or DynamoDB, preserving its original resource
 identities and deployment paths. Published cloud-v1 resources/schema are incompatible
@@ -43,8 +43,7 @@ is not silently reclassified as a current cloud exercise.
 
 The endpoint-Battle lifecycle is restored, but its exact template and participant
 route still need a recorded rehearsal before the chapter claims verified playability.
-Do not present Cryptography Battle as the same AWS uptime lesson. Likewise, validating or installing an external Pack does not make its
-problems executable in a current event.
+Do not present Cryptography Battle as the same AWS uptime lesson. Installing a Pack alone does not enable it. Cloud consumes activated AWS/CloudFormation Pack catalog and assets on deployment; existing events keep saved catalogs. Local reads its `problems/` tree instead of the Pack store. Private problems and problems awaiting publication do not require a public catalog contribution.
 
 Built-in local Course tracks now shows only the team's assigned problems, uses
 their saved checkpoints/completion state and the existing event gate, and links to

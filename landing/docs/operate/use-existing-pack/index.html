@@ -66,7 +66,7 @@
 <main class="doc">
 <article>
 <h1>既存パックを使う <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>pack の作成、検証、不変な revision の保存は作問用の機能です。install や activate をしても、この candidate の大会カタログへ問題は追加されません。activate はオフラインのカタログ記録であり、現行の競技実行手順ではありません。</p>
+<p>Problem Pack は、公開カタログへ登録せず、企業内の問題やイベント終了後に公開する予定の問題を配布・開催するための単位です。install は不変な revision を保存し、Cloud は有効化済みの AWS/CloudFormation 問題を次の配置で読み込みます。Local は Pack store を直接読まず、手元の <code>problems/</code> にある対応問題を読みます。公開は作成者が別途判断します。</p>
 <h2 id="prerequisites">前提条件</h2><p>信頼する pack のローカルディレクトリ、または HTTPS Git URL と完全な 40 桁 commit SHA を用意します。runtime、ファイル、provenance を確認してください。</p>
 <h2 id="install-the-pinned-git-revision">固定した revision を保存する</h2><pre><code class="language-sh">make pack-install ARGS=&quot;git &lt;https-url&gt; --commit &lt;40-hex-commit-sha&gt;&quot;
 make pack-list
@@ -74,7 +74,11 @@ bun run pack inspect &lt;id@version&gt;
 </code></pre>
 <p>リポジトリのルートで実行します。既定の保存先は <code>.tenkacloud/pack-store</code> です。Git install はネットワークを使います。ローカルディレクトリの検証や保存はリソースを配置しません。</p>
 <h2 id="verify-the-installed-revision">保存結果を確認する</h2><p>取得元、解決済み commit、digest を確認します。install 成功は、任意コードの実行、endpoint の公開、クラウド作成の承認ではありません。</p>
-<h2 id="create-the-event">大会への接続は未対応</h2><p>activate しても現在の大会選択欄へ pack の問題は追加されません。実装上の不足であり、実環境テストだけが未実施という状態ではありません。大会には対応する core catalog の問題を使い、pack の経路は Not run と記録します。<a href="/docs/tutorials/first-pack/">最初の pack</a>も参照してください。</p>
+<h2 id="create-the-event">Cloud の大会で使う</h2><p>Cloud ではリポジトリのルートで次を実行します。<code>&lt;id@version&gt;</code> は manifest の ID と version に置き換えます。</p>
+<pre><code class="language-sh">bun run pack activate &lt;id@version&gt; --tenant local
+</code></pre>
+<p><code>local</code> は Cloud のカタログ読込処理が使う固定の選択名で、Local 開催を指定する値ではありません。保存先は <code>.tenkacloud/pack-store</code> です。<code>make pack-activate</code> はありません。activate 自体は AWS 操作を行いません。通常の Cloud 配置でこの store が非公開の source archive に含まれ、有効化した問題と実行素材が読み込まれます。開催間に <code>make deploy</code> で更新し、新しい大会で対象問題を選びます。既存大会の保存済みカタログは変わりません。問題の runtime と採点対応を確認し、開催前に解答・採点・撤収をリハーサルしてください。</p>
+<p>Local では Pack store から大会カタログへの接続は未対応です。公開せずに使う対応 Docker/Compose 問題は手元の <code>problems/</code> に作成し、検証して <code>make local</code> で起動します。AWS 問題は Cloud で使います。非公開 Git repository から取得する場合は、運営者が権限を持つ方法で手元へ checkout し、そのローカルディレクトリを install してください。Pack CLI の Git 取得は認証情報を使いません。</p>
 
 </article>
 </main>

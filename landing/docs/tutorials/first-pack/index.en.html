@@ -66,7 +66,7 @@
 <main class="doc">
 <article>
 <h1>First pack tutorial <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate&#39;s event catalog. Activation is an offline catalog record, not a current hosting workflow.</p>
+<p>Problem Packs let organizers distribute and host company exercises or problems intended for publication after an event without adding them to the public catalog. Installation stores an immutable revision; Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads supported problems in its local <code>problems/</code> tree rather than the Pack store. Publication remains a separate author decision.</p>
 <p>Just want to run an existing pack? → <a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a>.</p>
 <h2>Prerequisites</h2>
 <p>Run from the TenkaCloud repository root with Bun 1.3.11 and installed dependencies. Local-directory operations need no cloud credentials. Installing from Git contacts the given HTTPS repository.</p>
@@ -81,7 +81,11 @@ make pack-list
 bun run pack inspect com.example.starter@0.1.0
 </code></pre>
 <p>For a Git install use an HTTPS URL and full immutable 40-hex commit SHA. Keep source provenance and content digest. Do not use a moving branch as the revision.</p>
-<h2 id="runtime-boundary">Runtime boundary</h2><p>There is no complete pack activate → event → deployment path in this candidate. Use its supported pinned core catalog to rehearse an event. The built-in local catalog uses its own validated runtime adapters.</p>
+<h2 id="runtime-boundary">Connect to hosting</h2><p>Run from the repository root for Cloud, replacing <code>&lt;id@version&gt;</code> with the manifest ID and version:</p>
+<pre><code class="language-sh">bun run pack activate &lt;id@version&gt; --tenant local
+</code></pre>
+<p><code>local</code> is the fixed selector consumed by the Cloud catalog loader; it does not select Local hosting. Use the default <code>.tenkacloud/pack-store</code>. There is no <code>make pack-activate</code> target. Activation itself performs no AWS operations. Normal Cloud source preparation includes this store in the private source archive and deployment reads the active problem catalog and execution assets. Update between events with <code>make deploy</code>, then select the problem in a new event. Existing events keep their saved catalog. Review runtime and scoring support and rehearse participant solving, scoring and teardown before hosting.</p>
+<p>Local does not connect the Pack store to its event catalog. Author supported private Docker/Compose problems in the local <code>problems/</code> tree, validate them and start with <code>make local</code>. AWS problems run on Cloud. For a private Git repository, obtain an authorized local checkout separately and install that directory. The Pack CLI Git fetcher does not use credentials.</p>
 <h2 id="common-failures">Common failures and diagnostic codes</h2><p><code>PACK_DIR_MISSING</code>, <code>MANIFEST_INVALID</code>, duplicate IDs and missing artifacts need corrections in the pack, not a cloud deployment. See <a href="/docs/reference/validation-errors/index.en.html">validation errors</a>.</p>
 <h2 id="teardown">Remove a stored revision</h2><pre><code class="language-sh">bun run pack remove com.example.starter@0.1.0
 </code></pre>

@@ -52,4 +52,12 @@ The [external Git acceptance test](test/external-git-pack-e2e.test.ts) exercises
 immutable fetch, validation, provenance, scoped activation records, event pins and
 removal with an injected transport. Golden and reference packs test the same
 contracts offline. The manual Git install above checks the real network transport;
-it does not establish an integrated pack-to-event deployment path.
+it is not a live AWS rehearsal. Cloud deployment consumes activated AWS/CloudFormation packs from the default store; see the hosting steps below.
+
+## Private content and Cloud hosting
+
+Keep company problems and pre-publication event content in a private local directory. Install it with `bun run pack install /path/to/my-pack`; publication is not required. For a private Git repository, obtain an authorized checkout separately: the CLI Git fetcher disables credential helpers.
+
+Activate with `bun run pack activate <id>@<version> --tenant local` from the platform root. The Cloud loader consumes this fixed selector and `.tenkacloud/pack-store`; `local` here does not mean Local hosting. Normal source packaging includes this store in the private archive. Update Cloud between events with `make deploy`, then select the supported problem in a new event. Existing events retain their saved catalog. Rehearse solving, scoring and teardown; installation alone is not a playability check.
+
+Local does not consume Pack activation records. Its supported private problems can live in the local `problems/` tree without publishing. There is no automatic publication after an event.

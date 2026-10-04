@@ -4,7 +4,7 @@ export const metadata = { title: "First pack tutorial" };
 
 # First pack tutorial <MaturityBadge level="preview" />
 
-Pack init, validation and immutable installation are authoring tools. Installing or activating a pack does not add its problems to this candidate's event catalog. Activation is an offline catalog record, not a current hosting workflow.
+Problem Packs let organizers distribute and host company exercises or problems intended for publication after an event without adding them to the public catalog. Installation stores an immutable revision; Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads supported problems in its local `problems/` tree rather than the Pack store. Publication remains a separate author decision.
 
 Just want to run an existing pack? → [Use an existing pack](/developers/docs/operate/use-existing-pack/).
 
@@ -38,9 +38,17 @@ bun run pack inspect com.example.starter@0.1.0
 
 For a Git install use an HTTPS URL and full immutable 40-hex commit SHA. Keep source provenance and content digest. Do not use a moving branch as the revision.
 
-<h2 id="runtime-boundary">Runtime boundary</h2>
+<h2 id="runtime-boundary">Connect to hosting</h2>
 
-There is no complete pack activate → event → deployment path in this candidate. Use its supported pinned core catalog to rehearse an event. The built-in local catalog uses its own validated runtime adapters.
+Run from the repository root for Cloud, replacing `<id@version>` with the manifest ID and version:
+
+```sh
+bun run pack activate <id@version> --tenant local
+```
+
+`local` is the fixed selector consumed by the Cloud catalog loader; it does not select Local hosting. Use the default `.tenkacloud/pack-store`. There is no `make pack-activate` target. Activation itself performs no AWS operations. Normal Cloud source preparation includes this store in the private source archive and deployment reads the active problem catalog and execution assets. Update between events with `make deploy`, then select the problem in a new event. Existing events keep their saved catalog. Review runtime and scoring support and rehearse participant solving, scoring and teardown before hosting.
+
+Local does not connect the Pack store to its event catalog. Author supported private Docker/Compose problems in the local `problems/` tree, validate them and start with `make local`. AWS problems run on Cloud. For a private Git repository, obtain an authorized local checkout separately and install that directory. The Pack CLI Git fetcher does not use credentials.
 
 <h2 id="common-failures">Common failures and diagnostic codes</h2>
 
