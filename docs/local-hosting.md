@@ -79,9 +79,13 @@ mode and refuses to change the permissions of an existing one, so pointing
 `--data` at a shared project or home directory fails instead of locking other
 users and services out of unrelated files.
 
-The terminal prints the two URLs and the exercise-gateway port range. A newly
-generated organizer key is shown once on the interactive terminal, never in
-redirected output or container logs. The defaults are the host console at `http://127.0.0.1:5174`, the
+The terminal prints the two URLs and the exercise-gateway port range. Each
+interactive `make local` start generates a new organizer key and shows it once on
+the private terminal. Previous organizer keys and sessions are revoked; events,
+scores, participant keys and problem data are retained. Noninteractive and
+public/container starts retain existing keys and never print them to redirected
+output or container logs; use an interactive `make local-reset` to obtain a key.
+The defaults are the host console at `http://127.0.0.1:5174`, the
 participant portal at `http://127.0.0.1:5175` and exercise gateways on ports
 `5200-5239`. Use the printed URLs exactly; arbitrary Host aliases are not
 accepted. The organizer key is not included in browser configuration and the
@@ -98,12 +102,16 @@ audit collection, settings and read/export endpoints are retired. This change do
 not migrate or purge existing audit tables or rows. Older organizer records remain historical
 state and cannot authenticate after key mode is enabled. There is no local Cognito.
 
-If the key is lost, run `make local-reset` in an interactive terminal. For a custom
+To rotate the key while the host is running, run `make local-reset` in another
+interactive terminal. If the key is lost, this command displays a replacement;
+restarting with interactive `make local` also displays a new key. For a custom
 state directory use the same `LOCAL_ARGS="--data <directory>"`. Rotation works with
 the managed host running or stopped. It invalidates the old organizer key and all
 organizer sessions, preserving events, scores, progress, participant keys and
 running/stopped problem environments. It does not stop containers or delete data.
-A redirected or noninteractive reset refuses before mutation. An unrecognized or
+A redirected or noninteractive reset refuses before mutation. `make local-clear`
+retains the organizer key and deletes event history; it is not a key-recovery command.
+An unrecognized or
 unreachable running controller is not replaced and no process is killed. Before upgrading an
 already running older host, stop it with Ctrl+C in its original terminal. New
 commands refuse controllers without directory-bound request support; copied

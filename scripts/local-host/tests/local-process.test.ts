@@ -25,20 +25,42 @@ const boardSchema = z.object({
   entries: z.array(z.object({ teamId: z.string(), rank: z.number(), score: z.number() })),
 });
 
-function launch(target: string, args: string) {
+function launch(target: string, args: string, interactive = false) {
+  // Keep private PTY output only in memory; failure diagnostics must never contain keys.
+  let terminalOutput = "";
   const child = Bun.spawn(["make", target, `LOCAL_ARGS=${args}`], {
     cwd: root,
     env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}` },
     stdout: "pipe",
     stderr: "pipe",
+    ...(interactive
+      ? {
+          terminal: {
+            data(_terminal: Bun.Terminal, bytes: Uint8Array) {
+              terminalOutput += new TextDecoder().decode(bytes);
+            },
+          },
+        }
+      : {}),
   });
-  const output = Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]).then((chunks) =>
-    chunks.join("\n").replace(/Host login key: .*/gu, "Host login key: [redacted]"),
+  const output = (
+    interactive
+      ? child.exited.then(() => terminalOutput)
+      : Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]).then(
+          (chunks) => chunks.join("\n"),
+        )
+  ).then((value) =>
+    value
+      .replace(/Host login key: .*/gu, "Host login key: [redacted]")
+      .replace(/Organizer key \(shown once\): .*/gu, "Organizer key (shown once): [redacted]"),
   );
-  return { child, output };
+  return {
+    child,
+    output,
+    organizerKey: () =>
+      /Organizer key \(shown once\): ([A-Za-z0-9_-]{43})/u.exec(terminalOutput)?.[1],
+    keyDisplays: () => [...terminalOutput.matchAll(/Organizer key \(shown once\):/gu)].length,
+  };
 }
 
 async function command(target: string, args: string) {
@@ -82,11 +104,12 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
   await one.stop(true);
   await two.stop(true);
   let running: ReturnType<typeof launch> | undefined;
-  async function start() {
-    running = launch("local", args);
+  async function start(interactive = false) {
+    running = launch("local", args, interactive);
     await waitUntil(async () => {
       if (running?.child.exitCode !== null)
         throw new Error(`Local startup exited: ${await running?.output}`);
+      if (interactive && !running.organizerKey()) return false;
       return fetch(`${admin}/api/host/bootstrap-status`).then(
         (response) => response.ok,
         () => false,
@@ -98,13 +121,16 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
     expect(result.output).toContain("Event data and stopped Docker runtime data are retained");
     expect(result.code).toBe(0);
     expect(await running?.child.exited).toBe(0);
+    running?.child.terminal?.close();
     expect(existsSync(join(data, sessionFile))).toBe(false);
     running = undefined;
   }
   try {
-    await start();
+    await start(true);
     const signingKey = readFileSync(join(data, "host-key"), "utf8").trim();
-    let key = await resetLocalOrganizerKey(data);
+    let key = running?.organizerKey();
+    if (!key) throw new Error("Interactive startup did not display an organizer key.");
+    expect(running?.keyDisplays()).toBe(1);
     const bootstrap = await api(admin, "/host/login", "", "POST", { key });
     expect(bootstrap.status).toBe(200);
     const token = z.object({ idToken: z.string() }).parse(bootstrap.body).idToken;
@@ -240,6 +266,41 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
     ).toEqual(leaderboard);
     expect(readFileSync(join(data, "host-key"), "utf8").trim() === signingKey).toBe(true);
     await down();
+    await start(true);
+    const startupKey = running?.organizerKey();
+    if (!startupKey) throw new Error("Interactive restart did not display an organizer key.");
+    expect(running?.keyDisplays()).toBe(1);
+    expect(startupKey === key).toBe(false);
+    expect((await api(admin, "/host/login", "", "POST", { key })).status).toBe(401);
+    const priorSession = z.object({ idToken: z.string() }).parse(login.body).idToken;
+    expect((await api(admin, "/host/me", priorSession)).status).toBe(401);
+    const currentLogin = await api(admin, "/host/login", "", "POST", { key: startupKey });
+    expect(currentLogin.status).toBe(200);
+    const currentSession = z.object({ idToken: z.string() }).parse(currentLogin.body).idToken;
+    const interactiveReset = launch("local-reset", args, true);
+    try {
+      expect(await interactiveReset.child.exited).toBe(0);
+      const rotatedKey = interactiveReset.organizerKey();
+      if (!rotatedKey) throw new Error("Live reset did not display an organizer key.");
+      expect(interactiveReset.keyDisplays()).toBe(1);
+      expect(rotatedKey === startupKey).toBe(false);
+      expect((await api(admin, "/host/login", "", "POST", { key: startupKey })).status).toBe(401);
+      expect((await api(admin, "/host/me", currentSession)).status).toBe(401);
+      expect((await api(admin, "/host/login", "", "POST", { key: rotatedKey })).status).toBe(200);
+      key = rotatedKey;
+    } finally {
+      interactiveReset.child.terminal?.close();
+    }
+    expect(
+      boardSchema.parse((await api(participant, "/portal/leaderboard", team.teamLoginKey)).body),
+    ).toEqual(leaderboard);
+    expect(
+      projectionSchema.parse(
+        (await api(participant, "/portal/me/coordination/projection", team.teamLoginKey)).body,
+      ).projection.vault,
+    ).toEqual(saved.vault);
+    expect(readFileSync(join(data, "host-key"), "utf8").trim() === signingKey).toBe(true);
+    await down();
     const recoveredKey = await resetLocalOrganizerKey(data);
     expect(recoveredKey === key).toBe(false);
     await start();
@@ -269,6 +330,7 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
     }
   } finally {
     if (running) await command("down", args);
+    running?.child.terminal?.close();
     rmSync(data, { recursive: true, force: true });
   }
 }, 30_000);

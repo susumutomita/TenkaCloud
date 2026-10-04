@@ -21,7 +21,9 @@ tickets, SAML responses and AWS credentials out of screenshots and reports.
    catalog, configure an explicitly reviewed non-overlapping network pool as
    described in [local hosting](local-hosting.md#docker-network-address-capacity).
 5. Use `make down`, then restart with the same private data directory. Confirm
-   scores, hints, checkpoint state and unfinished container work survive. Resume
+   interactive `make local` displays a new key and rejects the old organizer key
+   and sessions. Confirm scores, participant keys, hints, checkpoint state and
+   unfinished container work survive. Resume
    must retain the owned environment rather than silently rebuilding it.
 6. Verify only this event's resources are affected by stop or explicit teardown.
    Check the difference between retained work and deletion before approving a

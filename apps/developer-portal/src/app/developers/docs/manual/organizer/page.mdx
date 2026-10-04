@@ -8,7 +8,7 @@ This documents the unpublished integration candidate. Local event/team operation
 
 <h2 id="prepare-local-host">Prepare the local host</h2>
 
-Follow [getting started](/developers/docs/getting-started/) with `make local`. Keep one process per private data directory. Sign in with the organizer key only; no username, password or local SAML account is needed. If lost, run `make local-reset` in an interactive terminal with the same data directory. It rotates organizer access and signs out organizers while preserving events, scores, progress, participant keys and problem environments.
+Follow [getting started](/developers/docs/getting-started/) with `make local`. Keep one process per private data directory. Sign in with the organizer key only; no username, password or local SAML account is needed. Each interactive `make local` start displays a new organizer key once. To rotate it while running, use `make local-reset` in another interactive terminal with the same data directory. Both revoke previous organizer keys and sessions while preserving events, scores, progress, participant keys and problem data. Noninteractive and public/container starts retain existing keys without printing them to logs.
 
 <h2 id="run-the-event">Run the event</h2>
 
