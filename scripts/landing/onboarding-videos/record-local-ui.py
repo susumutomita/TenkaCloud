@@ -3,6 +3,7 @@ Run: python3 scripts/landing/onboarding-videos/record-local-ui.py --output .cach
 Requires installed Bun, ffmpeg, and Chrome (or HOST_E2E_CHROMIUM). Uses a fresh host DB.
 """
 from pathlib import Path
+import hashlib
 import argparse
 import json
 import os
@@ -17,6 +18,8 @@ repo=Path(__file__).resolve().parents[3]
 os.chdir(repo)
 output=Path(args.output).resolve()
 output.mkdir(parents=True,exist_ok=True)
+# A failed retry must never inherit an earlier recording's success proof.
+(output/'ui-validation.json').unlink(missing_ok=True)
 source=Path('scripts/local-host/tests/browser-e2e.ts')
 s=source.read_text()
 s=re.sub(r'from "(\.[^"]+)"',lambda m:'from '+json.dumps(str((source.parent/m.group(1)).resolve())),s)
@@ -68,7 +71,7 @@ s=s.replace('  await page.getByTestId("deploy-prompt-now").click();','  await pa
 # Persist only generated recording paths; all fixture secrets remain in memory.
 s=s.replace('    await organizer.getByRole("heading", { name: "Learning goals", exact: true }).waitFor();', '    await organizer.getByRole("heading", { name: "Learning goals", exact: true }).waitFor();\n    await organizer.waitForTimeout(2000);')
 s=s.replace('    await startEvent(organizer);', '    await startEvent(organizer);\n    await organizer.waitForTimeout(1000);\n    editPoints.openingEnd = (Date.now()-pageStarts.get(organizer)!)/1000;')
-s=s.replace('    await endAndTearDown(organizer);', '    editPoints.teardownStart = (Date.now()-pageStarts.get(organizer)!)/1000;\n    await endAndTearDown(organizer);\n    assert.equal(uiErrors,0,"Recording must contain no error alerts or uncaught page errors.");\n    writeFileSync(join(recordingDir,"ui-validation.json"),JSON.stringify({uiErrors,descriptionAndLearningGoals:true}));')
+s=s.replace('    await endAndTearDown(organizer);', '    editPoints.teardownStart = (Date.now()-pageStarts.get(organizer)!)/1000;\n    await endAndTearDown(organizer);\n    assert.equal(uiErrors,0,"Recording must contain no error alerts or uncaught page errors.");')
 s += "\nprocess.on('exit',()=>writeFileSync(join(recordingDir,'edit-points.json'),JSON.stringify(editPoints)));\n"
 
 s=s.replace('  await page.goto(`${info.participant}/login#invite=${encodeURIComponent(teamKey)}`);', '  await page.goto(`${info.participant}/login`);\n  await page.waitForTimeout(1200);\n  try { await page.locator(\'input[type=\"password\"]\').fill(teamKey); } catch { throw new Error(\"Could not enter the synthetic team key.\"); }\n  await page.waitForTimeout(1800);')
@@ -97,4 +100,9 @@ if not Path(chrome).is_file():
 env={**os.environ,'PLAYWRIGHT_BROWSERS_PATH':str(browsers),'HOST_E2E_CHROMIUM':chrome,'HOST_E2E_ENGINE':'fixture','HOST_E2E_ADMIN_PORT':'0','HOST_E2E_PARTICIPANT_PORT':'0','LOCAL_UI_RECORDING_DIR':str(output)}
 subprocess.run([bun,'run','build:host'],check=True,env=env)
 subprocess.run([bun,str(driver)],check=True,env=env)
+# Only the successful process exit certifies closed/finalized recordings.
+roles=json.loads((output/'role-paths.json').read_text())
+paths=[output/'role-paths.json',output/'edit-points.json',*[Path(p) for p in roles.values()]]
+proof={'uiErrors':0,'descriptionAndLearningGoals':True,'sha256':{str(p.resolve()):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}}
+(output/'ui-validation.json').write_text(json.dumps(proof))
 print('Recorded isolated Local UI:',output)

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { chromium } from "playwright-core";
+import { validatedLocalRecording } from "./local-ui-validation";
 
 /** Edit continuous isolated Local UI captures; keep existing published footage. */
 const [rawArgument, outputArgument] = process.argv.slice(2);
@@ -11,6 +12,7 @@ const raw = resolve(rawArgument),
   output = resolve(outputArgument),
   work = dirname(raw),
   out = join(work, "overlays");
+const roles = validatedLocalRecording(raw);
 mkdirSync(out, { recursive: true });
 const ffmpeg = process.env.FFMPEG_BIN ?? "ffmpeg";
 const ffprobe = process.env.FFPROBE_BIN ?? "ffprobe";
@@ -45,10 +47,6 @@ for (const [id, title] of [
 }
 await browser.close();
 
-const roles = JSON.parse(readFileSync(join(raw, "role-paths.json"), "utf8")) as Record<
-  string,
-  string
->;
 const organizerPath = roles["local-catalog.png"],
   participantPath = roles["participant-scoreboard.png"];
 if (!organizerPath || !participantPath)
