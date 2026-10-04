@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import Ajv from "ajv";
+import addFormats from "ajv-formats";
 import { localOpenApi } from "../openapi";
 import { apiDocsFixture } from "./api-docs-fixture";
 
@@ -27,8 +28,22 @@ test("curated request schemas match validation boundaries", () => {
   expect(validate({ ...create, teams: [{ internalSlug: "team-" }] })).toBe(false);
   expect(validate({ ...create, problems: [] })).toBe(false);
 });
+test("initial prepare and schedule examples are valid and schedule selectors are exclusive", () => {
+  const paths = localOpenApi("admin").paths;
+  const prepare = paths["/events/{eventId}/deploy"]?.post?.requestBody?.content["application/json"];
+  const schedule =
+    paths["/events/{eventId}/schedule"]?.patch?.requestBody?.content["application/json"];
+  const ajv = new Ajv();
+  addFormats(ajv);
+  const validatePrepare = ajv.compile(prepare?.schema as object);
+  const validateSchedule = ajv.compile(schedule?.schema as object);
+  expect(validatePrepare(prepare?.example)).toBe(true);
+  expect(validateSchedule(schedule?.example)).toBe(true);
+  expect(validateSchedule({ startNow: true, startsAt: "2030-01-01T00:00:00Z" })).toBe(false);
+  expect(validatePrepare({ retryFailedOnly: false })).toBe(false);
+});
 test("docs and real HTTP lifecycle preserve role, origin, expiry and replay boundaries", async () => {
-  const f = await apiDocsFixture();
+  const f = await apiDocsFixture(true);
   const call = (
     role: "admin" | "participant",
     path: string,
@@ -46,6 +61,11 @@ test("docs and real HTTP lifecycle preserve role, origin, expiry and replay boun
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+  const adminSpec = localOpenApi("admin");
+  const initial = (path: string, method: string) =>
+    adminSpec.paths[path]?.[method]?.requestBody?.content["application/json"].example;
+  expect(initial("/events/{eventId}/deploy", "post")).toEqual({});
+  expect(initial("/events/{eventId}/schedule", "patch")).toEqual({ startNow: true });
   try {
     for (const role of ["admin", "participant"] as const) {
       const spec = await (await fetch(`${f[role].origin}/openapi.json`)).json();
@@ -76,23 +96,78 @@ test("docs and real HTTP lifecycle preserve role, origin, expiry and replay boun
     expect((await call("admin", "/events", "GET", undefined, teamKey)).status).toBe(401);
     expect((await call("participant", "/events", "GET", undefined, teamKey)).status).toBe(404);
     expect((await call("admin", "/portal/me", "GET", undefined, idToken)).status).toBe(404);
-    expect((await call("admin", `/events/${eventId}/deploy`, "POST", {}, idToken)).status).toBe(
-      202,
-    );
+    expect(
+      (
+        await call(
+          "admin",
+          `/events/${eventId}/deploy`,
+          "POST",
+          initial("/events/{eventId}/deploy", "post"),
+          idToken,
+        )
+      ).status,
+    ).toBe(202);
     await f.service.drain();
     const ready = await call("admin", `/events/${eventId}`, "GET", undefined, idToken);
-    expect((await ready.json()).status).toBe("READY");
+    const prepared = await ready.json();
+    expect(prepared.status).toBe("READY");
+    expect(prepared.deploymentsByProblem["sqli-demo"][0].status).toBe("STOPPED");
     const count = f.store.jobs(eventId).length;
-    expect((await call("admin", `/events/${eventId}/deploy`, "POST", {}, idToken)).status).toBe(
-      409,
-    );
+    expect(
+      (
+        await call(
+          "admin",
+          `/events/${eventId}/deploy`,
+          "POST",
+          initial("/events/{eventId}/deploy", "post"),
+          idToken,
+        )
+      ).status,
+    ).toBe(409);
     expect(f.store.jobs(eventId)).toHaveLength(count);
     expect(
-      (await call("admin", `/events/${eventId}/schedule`, "PATCH", { startNow: true }, idToken))
-        .status,
+      (
+        await call(
+          "admin",
+          `/events/${eventId}/schedule`,
+          "PATCH",
+          initial("/events/{eventId}/schedule", "patch"),
+          idToken,
+        )
+      ).status,
     ).toBe(200);
     expect((await call("participant", "/portal/me", "GET", undefined, teamKey)).status).toBe(200);
     const submission = { problemId: "sqli-demo", flag: "synthetic-wrong-answer" };
+    expect(
+      (await call("participant", "/portal/me/submit-flag", "POST", submission, teamKey)).status,
+    ).toBe(409);
+    expect(
+      (
+        await call(
+          "participant",
+          "/portal/me/problems/sqli-demo/container/start",
+          "POST",
+          {},
+          teamKey,
+        )
+      ).status,
+    ).toBe(202);
+    await f.service.drain();
+    const playable = await (
+      await call("participant", "/portal/me", "GET", undefined, teamKey)
+    ).json();
+    expect(playable.problems[0].containerSession.status).toBe("running");
+    expect(
+      (
+        await call(
+          "participant",
+          "/portal/me/problems/sqli-demo/container/start",
+          "POST",
+          {},
+          teamKey,
+        )
+      ).status,
+    ).toBe(200);
     const first = await call(
       "participant",
       "/portal/me/submit-flag",
@@ -127,6 +202,13 @@ test("docs and real HTTP lifecycle preserve role, origin, expiry and replay boun
         )
       ).status,
     ).toBe(409);
+    const scored = await (
+      await call("admin", `/events/${eventId}?withScoreEvents=true`, "GET", undefined, idToken)
+    ).json();
+    expect(scored.scoreEventsByTeam).toHaveLength(1);
+    expect(scored.scoreEventsByTeam[0].projectedTotal).toBe(result.totalScore);
+    expect(scored.scoreEventsByTeam[0].events.length).toBeGreaterThan(0);
+    expect(scored.teams[0]).not.toHaveProperty("score");
     expect((await call("admin", `/events/${eventId}/end`, "POST", {}, idToken)).status).toBe(200);
     expect(
       (

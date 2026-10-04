@@ -6,6 +6,12 @@ const object = (properties: Record<string, unknown>, required: string[] = []) =>
   required,
 });
 const array = (items: unknown) => ({ type: "array", items });
+const problemId = {
+  name: "problemId",
+  in: "path",
+  required: true,
+  schema: { type: "string", pattern: "^[a-z0-9][a-z0-9-]{0,127}$" },
+};
 const eventId = { name: "eventId", in: "path", required: true, schema: string };
 const error = { description: "Request rejected; JSON error, kind and message." };
 function operation(
@@ -14,13 +20,21 @@ function operation(
   status = 200,
   schema?: unknown,
   parameters: unknown[] = [],
+  example?: unknown,
 ) {
   return {
     operationId: id,
     summary,
     parameters,
     ...(schema
-      ? { requestBody: { required: true, content: { "application/json": { schema } } } }
+      ? {
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": { schema, ...(example !== undefined ? { example } : {}) },
+            },
+          },
+        }
       : {}),
     responses: {
       [status]: {
@@ -103,9 +117,10 @@ export function localOpenApi(role: "admin" | "participant") {
                 in: "query",
                 schema: { type: "boolean", default: false },
               },
+              { name: "withScoreEvents", in: "query", schema: { type: "boolean", default: false } },
             ]),
             description:
-              "Poll deploymentsByProblem for job status/operation/error and teams for results. Identifiers are not capabilities; authorization and event ownership still apply. Team keys require reveal-team-keys permission.",
+              "Poll deploymentsByProblem for job status/operation/error for environment readiness. teams contains identifiers and names; withScoreEvents=true adds scoreEventsByTeam with projected totals and history. Identifiers are not capabilities; authorization and event ownership still apply. Team keys require reveal-team-keys permission.",
           },
         },
         "/events/{eventId}/deploy": {
@@ -119,9 +134,10 @@ export function localOpenApi(role: "admin" | "participant") {
                 additionalProperties: false,
               },
               [eventId],
+              {},
             ),
             description:
-              "Asynchronous acceptance, not completion. Poll GET /events/{eventId} until READY or inspect failed jobs. While DEPLOYING, repeated preparation reuses existing jobs. A READY event rejects preparation; use retryFailedOnly for failed jobs before readiness. No new deployment engine is introduced.",
+              "Asynchronous acceptance, not completion. Poll GET /events/{eventId} until READY or inspect failed jobs. READY means the event is prepared; on-demand Docker jobs stay STOPPED until the participant starts them. While DEPLOYING, repeated preparation reuses existing jobs. A READY event rejects preparation; use retryFailedOnly for failed jobs before readiness. No new deployment engine is introduced.",
           },
         },
         "/events/{eventId}/schedule": {
@@ -132,6 +148,7 @@ export function localOpenApi(role: "admin" | "participant") {
               200,
               {
                 additionalProperties: false,
+                not: { required: ["startNow", "startsAt"] },
                 ...object({
                   startNow: { type: "boolean", enum: [true] },
                   startsAt: { type: "string", format: "date-time" },
@@ -140,6 +157,7 @@ export function localOpenApi(role: "admin" | "participant") {
                 }),
               },
               [eventId],
+              { startNow: true },
             ),
             description:
               "Requires READY. Use startNow:true or startsAt, never both. endsAt must follow startsAt. Participation is controlled by this schedule.",
@@ -156,7 +174,25 @@ export function localOpenApi(role: "admin" | "participant") {
           get: {
             ...operation("joinEvent", "Authenticate team and read competition state"),
             description:
-              "Authorize with the team's teamLoginKey. There is no separate participant login or join mutation. Host session tokens are not team credentials.",
+              "Authorize with the team's teamLoginKey. There is no separate participant login or join mutation. Poll problems[].containerSession.status for on-demand Docker readiness: stopped, starting, running, stopping or error. Start a stopped environment through container/start and wait for running before submitting. Host session tokens are not team credentials.",
+          },
+        },
+        "/portal/me/problems/{problemId}/container/start": {
+          post: {
+            ...operation(
+              "startContainer",
+              "Start or resume this team's on-demand environment",
+              202,
+              { type: "object", additionalProperties: false },
+              [problemId],
+              {},
+            ),
+            description:
+              "During an active event, start the authenticated team's prepared Docker environment. No target selectors or options are accepted. 202 is acceptance: poll GET /portal/me until this problem's containerSession.status is running, or inspect error. An already running environment returns 200 without another start. Other runtime kinds return 404; their preparation already starts environments.",
+            responses: {
+              ...operation("startContainer", "", 202).responses,
+              200: { description: "Already running; jobId and containerSession returned." },
+            },
           },
         },
         "/portal/me/score-events": {
@@ -181,7 +217,7 @@ export function localOpenApi(role: "admin" | "participant") {
               ],
             ),
             description:
-              "Team/event identity comes from the bearer credential. Do not include teamId or eventId. Reuse the same Idempotency-Key only for the identical submission; a changed body conflicts. Event schedule and scoring gates apply.",
+              "The problem environment must be running; READY event state alone does not start on-demand Docker. Team/event identity comes from the bearer credential. Do not include teamId or eventId. Reuse the same Idempotency-Key only for the identical submission; a changed body conflicts. Event schedule and scoring gates apply.",
           },
         },
       };

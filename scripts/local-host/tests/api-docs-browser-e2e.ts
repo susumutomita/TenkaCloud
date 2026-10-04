@@ -4,17 +4,31 @@ import { existsSync } from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { apiDocsFixture } from "./api-docs-fixture";
 
-async function execute(page: Page, id: string, body?: unknown, eventId?: string) {
+async function execute(
+  page: Page,
+  id: string,
+  body?: unknown,
+  parameters: Record<string, string> = {},
+  initialBody?: unknown,
+) {
   const operation = page.locator(`#operations-default-${id}`);
-  await operation.locator(".opblock-summary").click();
-  await operation.getByRole("button", { name: "Try it out" }).click();
+  if (!(await operation.evaluate((element) => element.classList.contains("is-open"))))
+    await operation.locator(".opblock-summary").click();
+  const toggle = operation.getByRole("button", { name: /^(Try it out|Cancel)$/u });
+  await toggle.waitFor({ state: "visible" });
+  if ((await toggle.innerText()).trim() === "Try it out") await toggle.click();
+  if (initialBody !== undefined)
+    assert.deepEqual(JSON.parse(await operation.locator("textarea").inputValue()), initialBody);
   if (body) await operation.locator("textarea").fill(JSON.stringify(body));
-  if (eventId) await operation.locator('input[placeholder="eventId"]').fill(eventId);
+  for (const [name, value] of Object.entries(parameters))
+    await operation.locator(`input[placeholder="${name}"]`).fill(value);
   const response = page.waitForResponse(
     (r) => r.url().includes("/api/") && r.request().method() !== "OPTIONS",
   );
   await operation.getByRole("button", { name: "Execute", exact: true }).click();
-  return response;
+  const received = await response;
+  if (initialBody !== undefined) assert.deepEqual(received.request().postDataJSON(), initialBody);
+  return received;
 }
 async function authorize(page: Page, token: string) {
   await page.locator(".auth-wrapper").getByRole("button", { name: "Authorize" }).click();
@@ -23,7 +37,7 @@ async function authorize(page: Page, token: string) {
   await dialog.locator("button.authorize").click();
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
 }
-const f = await apiDocsFixture();
+const f = await apiDocsFixture(true);
 const executablePath =
   process.env.HOST_E2E_CHROMIUM ??
   [
@@ -56,22 +70,54 @@ try {
   });
   assert.equal(created.status(), 201);
   const { eventId, teams } = await created.json();
-  assert.equal((await execute(host, "prepareEvent", {}, eventId)).status(), 202);
-  await f.service.drain();
-  assert.equal((await execute(host, "eventStatus", undefined, eventId)).status(), 200);
-  assert.equal((await execute(host, "startEvent", { startNow: true }, eventId)).status(), 200);
+  assert.equal((await execute(host, "prepareEvent", undefined, { eventId }, {})).status(), 202);
+  let prepared:
+    | { status: string; deploymentsByProblem: Record<string, { status: string }[]> }
+    | undefined;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const status = await execute(host, "eventStatus", undefined, { eventId });
+    assert.equal(status.status(), 200);
+    prepared = await status.json();
+    if (prepared?.status === "READY") break;
+  }
+  assert.ok(prepared);
+  assert.equal(prepared.status, "READY");
+  assert.equal(prepared.deploymentsByProblem["sqli-demo"]?.[0]?.status, "STOPPED");
+  assert.equal(
+    (await execute(host, "startEvent", undefined, { eventId }, { startNow: true })).status(),
+    200,
+  );
   const participant = await context.newPage();
   await participant.goto(`${f.participant.origin}/api-docs`);
   await participant.locator("#operations-default-joinEvent").waitFor();
   await authorize(participant, teams[0].teamLoginKey);
   assert.equal((await execute(participant, "joinEvent")).status(), 200);
+  const answer = { problemId: "sqli-demo", flag: "synthetic-answer" };
+  assert.equal((await execute(participant, "submitFlag", answer)).status(), 409);
+  assert.equal(
+    (
+      await execute(participant, "startContainer", undefined, { problemId: "sqli-demo" }, {})
+    ).status(),
+    202,
+  );
+  let container: { status: string } | undefined;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const state = await execute(participant, "joinEvent");
+    assert.equal(state.status(), 200);
+    container = (await state.json()).problems.find(
+      (problem: { problemId: string }) => problem.problemId === "sqli-demo",
+    ).containerSession;
+    if (container?.status === "running" || container?.status === "error") break;
+  }
+  assert.ok(container);
+  assert.equal(container.status, "running");
   assert.equal(
     (
       await execute(participant, "submitFlag", { problemId: "sqli-demo", flag: "synthetic-answer" })
     ).status(),
     200,
   );
-  assert.equal((await execute(host, "endEvent", undefined, eventId)).status(), 200);
+  assert.equal((await execute(host, "endEvent", undefined, { eventId })).status(), 200);
   assert.equal((await execute(participant, "teamResults")).status(), 200);
   for (const page of [host, participant]) {
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
