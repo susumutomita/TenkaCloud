@@ -450,15 +450,27 @@ make turso-clear ENV=development CLOUD_ARGS="--credentials ssm --yes"
 SSM mode requires the configured `ACCOUNT_ID`, region (`REGION`, `AWS_REGION` or
 `AWS_DEFAULT_REGION`) and `CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME`. It reads only
 that exact parameter, qualified by the configured account and region, using your
-selected AWS credentials. The parameter must still exist and be readable. It does
-not call STS, discover CloudFormation stacks or bootstrap AWS resources.
+selected AWS credentials. SSM is needed only to retrieve the existing Turso token;
+the parameter must still exist. Allow `ssm:GetParameter` on that exact parameter ARN.
+If it uses a customer-managed KMS key, also authorize `kms:Decrypt` on that key
+through the applicable IAM and key policy or grant. See
+[AWS SecureString decryption permissions](https://docs.aws.amazon.com/systems-manager/latest/userguide/secure-string-parameter-kms-encryption.html).
+No SSM write/list permissions are needed. Clear does not call STS, discover
+CloudFormation stacks or bootstrap AWS resources.
 
-`make turso-reset ENV=development` keeps its legacy SSM-authenticated data-reset
-behavior, including its broader known control-data table scope,
-`CDK_PARAM_CONTROL_DATA_BACKEND=turso` and the existing AWS configuration checks.
-It is not an alias for clear or a command to delete connection configuration. The old
-`tenkacloud turso-live reset` command retains that compatibility path. For direct Bun
-execution, use `bun run --no-env-file scripts/tenkacloud.ts turso-live reset`.
+`make turso-reset ENV=development` deletes all known control-data rows, including
+competition data and account, IdP, connection, feature-flag and admin-audit data
+where present. Table definitions, migration/schema markers, unrelated tables and
+configuration files remain. The SSM parameter and Turso database itself are also
+preserved. It requires `CDK_PARAM_CONTROL_DATA_BACKEND=turso`, the
+selected database URL and SSM parameter, and the same SSM/KMS read permissions above.
+Reset also checks the AWS account using STS `GetCallerIdentity`: valid AWS credentials
+are required, but [no explicit IAM permission grant is needed](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetCallerIdentity.html).
+If the AWS credentials have expired, reauthenticate the intended AWS profile using its
+configured AWS login or SSO method, then retry. For an SSO profile, use
+`aws sso login --profile <profile>`.
+`tenkacloud turso-live reset` performs the same all-control-data deletion. For direct
+Bun execution, use `bun run --no-env-file scripts/tenkacloud.ts turso-live reset`.
 `make local-reset` continues to rotate only the local organizer key.
 
 ## Update the problem catalog

@@ -99,6 +99,53 @@ describe("standalone competition-data clear credentials", () => {
       expect(f.output.join("")).not.toContain("synthetic");
     },
   );
+  it.each([
+    {
+      name: "ExpiredTokenException",
+      message: "The security token included in the request is expired",
+    },
+    {
+      name: "TokenProviderError",
+      message: "The SSO session associated with this profile has expired",
+    },
+  ])(
+    "explains AWS session renewal after an SSM credential failure: %j",
+    async ({ name, message }) => {
+      const f = fixture();
+      f.io.clearSelectedTursoData = async () => {
+        throw Object.assign(new Error(message), { name });
+      };
+      expect(await f.run(ssm, ["--credentials", "ssm", "--plan"])).toBe(1);
+      expect(f.output.join("")).toContain(message);
+      expect(f.output.join("")).toContain(
+        "Reauthenticate the intended AWS profile using its configured AWS login or SSO method, then retry",
+      );
+      expect(f.output.join("")).toContain(
+        "For an SSO profile, use aws sso login --profile <profile>",
+      );
+    },
+  );
+  it.each([
+    { name: "Error", message: "Turso token has expired", args: ["--plan"] },
+    { name: "Error", message: "ExpiredToken: database token expired", args: ["--plan"] },
+    { name: "ExpiredTokenException", message: "The security token has expired", args: ["--plan"] },
+    {
+      name: "ExpiredTokenException",
+      message: "The security token has expired",
+      args: ["--credentials", "direct", "--plan"],
+    },
+  ])(
+    "does not suggest AWS login for direct Turso errors, regardless of provider name: %j",
+    async ({ name, message, args }) => {
+      const f = fixture();
+      f.io.clearSelectedTursoData = async () => {
+        throw Object.assign(new Error(message), { name });
+      };
+      expect(await f.run(direct, [...args])).toBe(1);
+      expect(f.output.join("")).toContain(message);
+      expect(f.output.join("")).not.toContain("AWS profile");
+    },
+  );
   it("qualifies an explicitly selected SSM path by account and region without STS", async () => {
     const f = fixture();
     expect(

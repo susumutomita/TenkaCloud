@@ -190,7 +190,7 @@ destroy-all: ## Purge exact stack-owned retained data, then delete platform stac
 	bun run --no-env-file scripts/cloud-hosting/main.ts down --purge-retained-data $(CLOUD_ARGS)
 turso-clear: ## Clear Turso competition data; preserve settings and schema | Tursoの大会データを消去し設定とスキーマを保持
 	bun run --no-env-file scripts/cloud-hosting/main.ts turso-clear $(CLOUD_ARGS)
-turso-reset: ## Legacy SSM-authenticated Turso data reset, preserving schema | 従来のSSM認証でTursoデータを初期化(スキーマ維持)
+turso-reset: ## Delete all Turso control data, including account and IdP settings; preserve schema | Tursoの大会・アカウント・IdP設定を含む管理データを消去(スキーマ維持)
 	bun run --no-env-file scripts/cloud-hosting/main.ts turso-reset $(CLOUD_ARGS)
 # Existing first-run and credential commands, backed by the current cloud configuration.
 .PHONY: env-init turso-live turso-live-guide turso-live-preflight turso-deploy-preflight turso-live-verify-cfn turso-token-rotate

@@ -150,7 +150,9 @@ export function renderTursoLiveGuide(environment: string): string {
     "   Direct libSQL uses the selected CDK_PARAM_TURSO_DATABASE_URL and process-only TURSO_AUTH_TOKEN. No AWS account, region, profile or calls are needed. Never put the token in .env, command arguments or logs; clear does not generate or save tokens.",
     '   Opt into SSM with CLOUD_ARGS="--credentials ssm --plan" (or --yes): reads the exact parameter qualified by ACCOUNT_ID and REGION/AWS_REGION/AWS_DEFAULT_REGION, without STS, CloudFormation or bootstrap.',
     "   Clear preserves competitor accounts, SAML settings, feature flags, admin audit logs, schema, migrations and unrelated tables. It does not reset connection settings or remove AWS/Docker resources.",
-    "   make turso-reset and tenkacloud turso-live reset retain the broader legacy SSM data-reset behavior; they do not delete connection configuration.",
+    "   SSM only retrieves the existing Turso token: allow ssm:GetParameter on the exact parameter ARN and kms:Decrypt for its KMS key when a customer-managed key is used. No SSM write/list permissions are needed.",
+    "   make turso-reset and tenkacloud turso-live reset delete all known control-data rows, including account, IdP, connection, feature-flag and admin-audit data where present; schema, migration markers, unrelated tables and configuration files remain; the SSM parameter and Turso database itself are also preserved.",
+    "   Reset retrieves the existing token from SSM and checks the AWS account with STS GetCallerIdentity, which needs valid AWS credentials but no explicit IAM permission grant. If the AWS session has expired, reauthenticate the intended profile using its configured AWS login or SSO method, then retry.",
     "   Complete competitions before changing their installation. Existing providers/URLs are not migrated automatically.",
     "   See infrastructure/README.md for AWS permissions, setup, invitation sign-in and cleanup.",
   ].join("\n");

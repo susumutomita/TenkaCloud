@@ -1753,6 +1753,36 @@ describe("standalone selected Turso reset routing", () => {
       expect(f.errors.join("")).not.toContain("synthetic-secret");
     },
   );
+  it.each([
+    "ExpiredToken: The security token included in the request is expired",
+    "Your session has expired. To reauthenticate, run aws login.",
+  ])("explains AWS session renewal when the reset account check expires: %s", async (message) => {
+    const f = fixture({
+      fail: (request) =>
+        request.args.includes("get-caller-identity")
+          ? {
+              code: 1,
+              stdout: "",
+              stderr: message,
+            }
+          : undefined,
+    });
+    f.io.resetSelectedTursoData = async () => {
+      throw new Error("Must not connect after the AWS account check fails");
+    };
+    expect(
+      await runCloudCli(["turso-reset", "--plan"], f.io, {
+        root: ROOT,
+        env: { ...f.env, ...tursoEnvironment },
+      }),
+    ).toBe(1);
+    expect(f.calls).toHaveLength(1);
+    expect(f.errors.join("")).toContain(message);
+    expect(f.errors.join("")).toContain(
+      "Reauthenticate the intended AWS profile using its configured AWS login or SSO method, then retry",
+    );
+    expect(f.confirmations).toEqual([]);
+  });
   it("keeps reset help offline and rejects retired/unknown arguments", async () => {
     for (const args of [["--help"], ["--purge-retained-data"], ["--rotate-token"]]) {
       const f = fixture();

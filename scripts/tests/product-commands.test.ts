@@ -49,6 +49,12 @@ test("default bilingual help includes hosting, catalog updates and development c
     expect(result.stdout).not.toContain("SaaS");
     expect(result.stdout).not.toContain("Phase 1");
     expect(result.stdout).not.toContain("test-root");
+    expect(result.stdout).toContain(
+      language === "ja"
+        ? "アカウント・IdP設定を含む管理データ"
+        : "including account and IdP settings",
+    );
+    expect(result.stdout).not.toMatch(/legacy|従来|旧方式/iu);
   }
 });
 test("local-reset reaches only key rotation, not shutdown or cloud teardown", () => {
@@ -429,7 +435,7 @@ test("cloud product commands reach the existing scoped CLI without replacing loc
   expect(local.stdout).not.toContain("cloud-hosting");
 });
 
-test("Turso clear and legacy reset use distinct entrypoints and forward environment and consent", () => {
+test("Turso clear and all-control-data reset use distinct entrypoints and forward environment and consent", () => {
   const directory = mkdtempSync(join(tmpdir(), "tenkacloud-turso-entrypoints-"));
   const capture = join(directory, "capture");
   const inheritedToken = "synthetic-process-only-turso-token";
@@ -508,10 +514,21 @@ test("Turso clear help and the offline guide explain direct credentials and pres
   expect(guide.stdout).toContain("process-only TURSO_AUTH_TOKEN");
   expect(guide.stdout).toContain("No AWS account, region, profile or calls are needed");
   expect(guide.stdout).toContain("admin audit logs");
-  expect(guide.stdout).toContain("broader legacy SSM data-reset behavior");
+  expect(guide.stdout).toContain("delete all known control-data rows");
+  expect(guide.stdout).toContain("SSM only retrieves the existing Turso token");
+  for (const output of [clear.stdout, guide.stdout]) {
+    expect(output).toContain("ssm:GetParameter");
+    expect(output).toMatch(/exact (?:account\/region-qualified )?parameter ARN/u);
+    expect(output).toContain("kms:Decrypt");
+    expect(output).toContain("customer-managed key");
+    expect(output).toContain("IdP, connection, feature-flag and admin-audit data");
+    expect(output).toContain("configuration files remain");
+    expect(output).toContain("SSM parameter and Turso database itself are also preserved");
+    expect(output).not.toMatch(/legacy (?:SSM|all-control-data|data-reset)|alias/iu);
+  }
 });
 
-test("the Turso reset and credential aliases expose offline help", () => {
+test("the Turso reset and credential commands expose offline help", () => {
   const result = spawnSync(
     process.execPath,
     ["run", "--no-env-file", "scripts/tenkacloud.ts", "turso-live", "reset", "--help"],
@@ -519,6 +536,16 @@ test("the Turso reset and credential aliases expose offline help", () => {
   );
   expect(result.status).toBe(0);
   expect(result.stdout).toContain("Standalone make turso-reset");
+  expect(result.stdout).toContain("deletes all known control-data rows");
+  expect(result.stdout).toContain("SSM is used only to retrieve the existing Turso token");
+  expect(result.stdout).toContain("ssm:GetParameter on the exact parameter ARN");
+  expect(result.stdout).toContain("kms:Decrypt");
+  expect(result.stdout).toContain("STS GetCallerIdentity");
+  expect(result.stdout).toContain("no explicit IAM permission grant");
+  expect(result.stdout).toContain(
+    "Configuration files, the SSM parameter and the Turso database itself remain",
+  );
+  expect(result.stdout).not.toMatch(/legacy (?:SSM|all-control-data|data-reset)|alias/iu);
   expect(result.stdout).toContain("make turso-clear");
   const rotation = spawnSync(
     process.execPath,
