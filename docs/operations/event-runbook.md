@@ -1,8 +1,8 @@
 # イベント運用 Runbook
 
 リリース前の統合 candidate 用です。`make local` で同じ大会・チームのシステムを起動し、
-`make down` でデータを保持して停止します。SaaS/SBT のテナント構築は行いません。
-`make deploy` は権限設定を確認して現行 CLI を実行します。`make destroy` は所有対象を確認して基盤とデフォルトの所有データを削除します。外部 Turso の行は残し、`make destroy-all` で明示的にリセットします。基盤の削除前に大会の Teardown で問題環境を撤収します。`--drain-events` は旧 cloud-v1 専用で、この版は拒否します。クラウドは旧 Lite の汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者 Console / CLI と組み込み coordination を再利用します。Docker / Compose 問題はローカル開催専用で、クラウドの候補には表示しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。実 AWS・hosted Turso の大会性能は未検証です。
+`make down` でデータを保持して停止します。開催方式は Local と Cloud です。
+`make deploy` は権限設定を確認して現行 CLI を実行します。`make destroy` は所有対象を確認して基盤とデフォルトの所有データを削除します。外部 Turso の行は残し、`make destroy-all` で明示的にリセットします。基盤の削除前に大会の Teardown で問題環境を撤収します。`--drain-events` は旧 cloud-v1 専用で、この版は拒否します。Cloud は汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者 Console / CLI と組み込み coordination を実行します。Docker / Compose 問題はローカル開催専用で、クラウドの候補には表示しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。実 AWS・hosted Turso の大会性能は未検証です。
 クラウドは Lambda と選択した Turso / DynamoDB を使います。AWS サービスの問題はクラウド開催専用です。
 
 catalog pin のない旧 Lite 環境は、resource / schema の検査後、bootstrap・source upload・配置の前に、進行中の大会がないことを初回だけ明示確認します。開催中の大会は完了まで配置済みの版で継続してください。大会が残っていないことを運用者が確認してから対話で承認し、非対話の更新には `CLOUD_ARGS="--confirm-no-active-events"` を使います。通常の `--yes` ではこの確認を省略できません。legacy catalog key だけでは安全な更新を証明できず、過去のデータも自動移行しません。新規環境と復旧済み環境は通常の `make deploy` で自動配置します。

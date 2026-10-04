@@ -17,13 +17,15 @@ export function createLiteCleanupDrillFixture({
     jobId: "01HZX0M0CLEANUPTENKA0001",
     problemId: LITE_CLEANUP_DRILL_PROBLEM_ID,
     videoUrl: "https://www.youtube.com/embed/sRUn3Tzu4UM",
-    name: "TenkaCloud Lite を片付ける",
+    name: "TenkaCloud を片付ける",
     description: [
-      "デプロイした TenkaCloud Lite には継続費用が発生する。遊び終わったら、**Lite 本体と launcher の両方**を削除して課金を止める。",
+      "デプロイした TenkaCloud には継続費用が発生する。遊び終わったら、**Cloud 基盤と launcher の両方**を削除して課金を止める。",
       "この問題はデプロイ問題とは別の片付け編。CodeBuild の削除成功ログに現れるチェックポイントを控え、launcher 削除後に提出する。",
-      "チェックポイントが確認できるのは Lite 本体の削除成功まで。launcher の削除はシステムから観測できないため、CloudFormation の削除完了を自分で確認してから提出する。",
+      "チェックポイントが確認できるのは Cloud 基盤の削除成功まで。launcher の削除はシステムから観測できないため、CloudFormation の削除完了を自分で確認してから提出する。",
       "",
+      "既存動画と採点コードは旧版の例。現行 cloud-pipeline では完了ログと残存リソースを確認し、旧 Cleanup checkpoint の出力は保証しない。",
       "#### 片付ける前に",
+      "問題環境は大会の Teardown で先に撤収する。make destroy は外部 Turso の行を保持し、make destroy-all は確認後に保持データも削除する。source bucket などの残存リソースは別途確認する。",
       "",
       "- イベントや問題で必要な結果を保存したことを確認する",
       "- 削除する AWS アカウントと Environment が、デプロイ時と同じことを確認する",
@@ -33,7 +35,7 @@ export function createLiteCleanupDrillFixture({
       "",
       "1. launcher スタックの `StartBuildConsoleUrl` から CodeBuild を開く",
       "2. **Start build with overrides** を選び、環境変数 `ACTION=destroy-all` を指定して開始する",
-      "3. DynamoDB テーブルと CodeBuild ログを含む完全削除の成功ログで、チェックポイントコードを控える",
+      "3. 選択した DB と所有する保持データの削除の成功ログで、チェックポイントコードを控える",
       "4. CloudFormation で launcher スタック自体を削除する(CodeBuild project、IAM Role、launcher のログも削除される)",
       "5. launcher の削除完了を確認してから、控えたコードを下へ提出する",
       "",
@@ -44,13 +46,15 @@ export function createLiteCleanupDrillFixture({
     i18n: {
       en: {
         videoUrl: "https://www.youtube.com/embed/BOrIywCb_KU",
-        name: "Clean up TenkaCloud Lite",
+        name: "Clean up TenkaCloud",
         description: [
-          "A deployed TenkaCloud Lite keeps incurring cost. When you are done, remove **both Lite itself and the launcher** to stop the charges.",
+          "A deployed TenkaCloud keeps incurring cost. When you are done, remove **both the Cloud platform and launcher** to stop the charges.",
           "This is a separate cleanup problem. Save the checkpoint from the successful CodeBuild teardown log, delete the launcher, then submit the code.",
-          "The checkpoint proves only that Lite teardown succeeded. Launcher deletion is not observable by the demo, so self-confirm the CloudFormation deletion before submitting.",
+          "The checkpoint proves only that Cloud teardown succeeded. Launcher deletion is not observable by the demo, so self-confirm the CloudFormation deletion before submitting.",
           "",
+          "Existing footage and scored codes are legacy examples. The current cloud-pipeline confirms completion and remaining resources; it does not guarantee the old Cleanup checkpoint output.",
           "#### Before cleanup",
+          "Teardown event exercises first. make destroy preserves external Turso rows; make destroy-all confirms removal of retained data too. Review remaining resources such as the source bucket separately.",
           "",
           "- Confirm that you saved any event or problem results you need",
           "- Confirm the AWS account and Environment match the original deployment",
@@ -60,7 +64,7 @@ export function createLiteCleanupDrillFixture({
           "",
           "1. Open CodeBuild from the launcher stack's `StartBuildConsoleUrl`",
           "2. Choose **Start build with overrides**, set the environment override `ACTION=destroy-all`, and start",
-          "3. Copy the checkpoint from the successful complete-teardown log after DynamoDB tables and CodeBuild logs are removed",
+          "3. Copy the checkpoint from the successful complete-teardown log after selected DB and owned retained data are removed",
           "4. Delete the launcher stack itself in CloudFormation (this also removes its CodeBuild project, IAM Role, and launcher log group)",
           "5. After the launcher deletion completes, submit the code you copied below",
           "",
@@ -81,21 +85,21 @@ export function createLiteCleanupDrillFixture({
       flags: [
         {
           id: LITE_CLEANUP_DRILL_CHECKPOINT.flagId,
-          label: "Lite 削除成功コード（launcher 削除後に提出）",
+          label: "Cloud 基盤削除成功コード（launcher 削除後に提出）",
           points: 100,
           solved: false,
-          i18n: { en: { label: "Lite teardown code (submit after launcher deletion)" } },
+          i18n: { en: { label: "Cloud teardown code (submit after launcher deletion)" } },
           hints: [
             {
               id: "lite-cleanup-h1",
               penalty: 0,
               revealed: false,
               content:
-                "CodeBuild の **Start build with overrides** で `ACTION=destroy-all` を指定する。DynamoDB と CodeBuild ログを含む完全削除の成功ログで `Cleanup checkpoint` を控え、CloudFormation で launcher スタックの削除完了を確認してから、そのコードを提出する。失敗時は launcher を残して再実行する。",
+                "CodeBuild の **Start build with overrides** で `ACTION=destroy-all` を指定する。選択した DB・所有する保持データの削除の成功ログで `Cleanup checkpoint` を控え、CloudFormation で launcher スタックの削除完了を確認してから、そのコードを提出する。失敗時は launcher を残して再実行する。",
               i18n: {
                 en: {
                   content:
-                    "Use **Start build with overrides** in CodeBuild and set `ACTION=destroy-all`. Save the `Cleanup checkpoint` after the log confirms complete teardown of DynamoDB data and CodeBuild logs, confirm the launcher stack is deleted in CloudFormation, then submit that code. Keep the launcher and retry if teardown fails.",
+                    "Use **Start build with overrides** in CodeBuild and set `ACTION=destroy-all`. Save the `Cleanup checkpoint` after the log confirms teardown of the selected database and owned retained data, confirm the launcher stack is deleted in CloudFormation, then submit that code. Keep the launcher and retry if teardown fails.",
                 },
               },
             },

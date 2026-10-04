@@ -10,13 +10,18 @@ make install
 make local
 ```
 
-Sign in with the organizer key shown in the terminal. Use `make local-reset` to
-rotate a lost organizer key while keeping events, scores and participant access.
+Each interactive `make local` start shows a fresh organizer key once and revokes
+the previous organizer key and sessions. To rotate it while the host runs, use
+`make local-reset` in another interactive terminal with the same data directory.
+Events, scores and participant data remain. Noninteractive and public/container
+starts keep existing keys without printing them to logs.
 `make down` stops owned runtimes and preserves their data. The event's Teardown
 action removes its problem environments. Read [local hosting](./docs/local-hosting.md)
 for public origins, TLS, data directories and recovery.
 
-## AWS hosting
+`make local-clear` confirms deletion of competition history and owned Docker exercise data; it is separate from stop and organizer-key rotation.
+
+## Cloud hosting
 
 Install the tools in [mise.toml](./mise.toml), AWS CLI v2 and Make. Configure your
 AWS CLI profile, then verify the intended account with `aws sts get-caller-identity`.
@@ -43,8 +48,8 @@ Saved events/deployments keep their catalog snapshot across later updates; see
 The source bucket, CDKToolkit and competitor bootstrap roles survive platform destroy.
 
 The CLI discovers Lite/cloud physical stack pairs and requires explicit
-`TENKACLOUD_STACK_LAYOUT=lite` or `cloud` if both exist. New installations preserve
-Lite physical names. Original Lite adoption checks tags and persistent resource IDs;
+`TENKACLOUD_STACK_LAYOUT=lite` or `cloud` if both exist. New installations use `tenkacloud-cloud` names; existing
+`tenkacloud-lite` installations retain their physical names. Original Lite adoption checks tags and persistent resource IDs;
 published cloud-v1 resource/database layouts cannot be updated in place. No automatic
 migration is performed. Use a separate environment/database or the matching release.
 
@@ -58,8 +63,11 @@ or starting a build. Creating the launcher alone does not deploy the application
 
 The competition's AWS accounts use a separate [competitor bootstrap](./docs/competitor-account-onboarding.md).
 Keep their deployment role, participant viewer role and mandatory ExternalId boundaries.
-AWS resource exercises reject the platform hosting account before resource mutation;
-register and verify a separate competitor account. Different regions in one competitor
+AWS resource exercises require a registered, verified competitor account. Use a
+separate competitor account for third-party events. A self-test can explicitly
+acknowledge the hosting-account risk when creating the event or from Schedule →
+Deploy now; this does not provide account isolation. Standalone deployments
+without event membership still reject hosting-account targets. Different regions in one competitor
 account do not establish complete IAM isolation. Native Cryptography Battle needs no
 competitor account when score stealing is disabled; enabling it keeps the AWS variant.
 

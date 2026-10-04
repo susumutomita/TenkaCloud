@@ -189,6 +189,44 @@ describe("docs registry — current references", () => {
   });
 });
 
+describe("docs registry — organizer access and current hosting", () => {
+  it("keeps interactive key rotation and retained noninteractive access searchable in both languages", () => {
+    for (const slug of ["getting-started", "manual/organizer"]) {
+      const page = findDocBySlug(slug);
+      expect(page?.body).toContain("Each interactive make local start");
+      expect(page?.body).toContain(
+        "Noninteractive and public/container starts retain existing keys",
+      );
+      expect(page?.body).toContain("対話ターミナルで make local を起動するたびに");
+      expect(page?.body).toContain("非対話起動と public/container 起動では既存のキーを保持");
+      expect(page?.body).not.toContain("The first key is shown once on the interactive terminal");
+      expect(page?.body).not.toContain("初回キーは対話ターミナルに一度だけ表示");
+      expect(page?.body).toContain("make local-clear");
+    }
+    for (const query of ["public/container local-reset", "非対話起動 主催者キー"]) {
+      expect(
+        searchIndex(query).some((result) => result.href === "/developers/docs/getting-started/"),
+      ).toBe(true);
+    }
+  });
+
+  it("searches current database selection, teardown and participant keys", () => {
+    for (const slug of [
+      "getting-started",
+      "manual/organizer",
+      "operate/deploy-paths",
+      "operate/run-an-event",
+    ]) {
+      const page = findDocBySlug(slug);
+      expect(page?.body).toContain("Turso");
+      expect(page?.body).toContain("DynamoDB");
+      expect(page?.body).toContain("make destroy-all");
+      expect(page?.body).not.toContain("give each team its own invitation or key");
+      expect(page?.body).not.toContain("専用の参加リンクまたはキー");
+    }
+  });
+});
+
 describe("docs registry — first pack tutorial", () => {
   it("should register the first pack tutorial page", () => {
     const page = findDocBySlug(FIRST_PACK_SLUG);

@@ -1,5 +1,5 @@
 /**
- * Zundamon voice-over scripts for recorded TenkaCloud Lite deploy and cleanup footage.
+ * Zundamon voice-over scripts for recorded TenkaCloud deploy and cleanup footage.
  *
  * These lines are intentionally separate from script-data.ts because the LP/problem videos can be
  * edited from real screen recordings while the slide scripts remain the generated fallback.
@@ -41,8 +41,8 @@ export interface VoiceoverScript {
 export const DEPLOY_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
   id: "deploy-tenkacloud-lite-zundamon",
   title: {
-    ja: "TenkaCloud Lite をデプロイするのだ",
-    en: "Deploy TenkaCloud Lite",
+    ja: "TenkaCloud をデプロイするのだ",
+    en: "Deploy TenkaCloud",
   },
   voice: {
     ja: "VOICEVOX:ずんだもん（ノーマル）",
@@ -56,29 +56,29 @@ export const DEPLOY_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
   ],
   cues: [
     {
-      section: "1. What TenkaCloud Lite is",
+      section: "1. What TenkaCloud is",
       heading: { ja: "自分のAWS環境へデプロイ", en: "Deploy to your AWS account" },
       targetS: 10,
-      ja: "TenkaCloud Lite は、一人の主催者が自分の AWS 環境で大会を開く構成なのだ。まず全体の流れを見るのだ。",
-      en: "TenkaCloud Lite lets one organizer run an event in their AWS account. Here is the whole flow.",
+      ja: "TenkaCloud は、一人の主催者が自分の AWS 環境で大会を開く構成なのだ。まず全体の流れを見るのだ。",
+      en: "TenkaCloud lets one organizer run an event in their AWS account. Here is the whole flow.",
       layout: "intro",
       details: {
         ja: [
-          "1  LiteをAWSへ導入",
+          "1  CloudをAWSへ導入",
           "2  競技用AWSを登録",
           "3  イベントを作成・Deploy",
           "4  Participant Portal・スコア",
         ],
         en: [
-          "1  Deploy Lite to AWS",
+          "1  Deploy Cloud to AWS",
           "2  Register competitor AWS",
           "3  Create and deploy an event",
           "4  Participant Portal and score",
         ],
       },
       note: {
-        ja: "AWS上の本体: tenkacloud-lite + tenkacloud-lite-problem-deploy",
-        en: "AWS stacks: tenkacloud-lite + tenkacloud-lite-problem-deploy",
+        ja: "新規: tenkacloud-cloud 系 / 既存: tenkacloud-lite 系を維持",
+        en: "New: tenkacloud-cloud stacks / existing tenkacloud-lite identities stay",
       },
     },
     {
@@ -126,8 +126,8 @@ export const DEPLOY_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
       section: "4. CodeBuild deploy",
       heading: { ja: "自動デプロイを開始", en: "Start automatic deployment" },
       targetS: 5,
-      ja: "Start build を押し、Lite の自動デプロイ成功と URL を確認するのだ。",
-      en: "Press Start build, then confirm the automatic Lite deployment and its URLs.",
+      ja: "Start build を押し、Cloud の自動デプロイ成功と URL を確認するのだ。",
+      en: "Press Start build, then confirm the automatic Cloud deployment and its URLs.",
     },
     {
       section: "5. Admin sign-in",
@@ -144,8 +144,8 @@ export const DEPLOY_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
       en: "Keep operations and competitor AWS separate, then connect them with an external I D.",
       layout: "explainer",
       details: {
-        ja: ["TenkaCloud Lite", "Assume Role + ExternalId", "競技用AWS"],
-        en: ["TenkaCloud Lite", "Assume Role + ExternalId", "Competitor AWS"],
+        ja: ["TenkaCloud", "Assume Role + ExternalId", "競技用AWS"],
+        en: ["TenkaCloud", "Assume Role + ExternalId", "Competitor AWS"],
       },
       note: {
         ja: "問題リソースだけを競技用AWSへ作り、信頼関係をVerifyする",
@@ -224,8 +224,8 @@ export const DEPLOY_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
 export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
   id: "cleanup-tenkacloud-lite-zundamon",
   title: {
-    ja: "TenkaCloud Lite を片付けるのだ",
-    en: "Clean up TenkaCloud Lite",
+    ja: "TenkaCloud を片付けるのだ",
+    en: "Clean up TenkaCloud",
   },
   voice: {
     ja: "VOICEVOX:ずんだもん（ノーマル）",
@@ -242,18 +242,18 @@ export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
     {
       section: "1. Cleanup overview",
       heading: {
-        ja: "TenkaCloud Liteを安全に片付ける",
-        en: "Clean up TenkaCloud Lite safely",
+        ja: "TenkaCloudを安全に片付ける",
+        en: "Clean up TenkaCloud safely",
       },
       targetS: 7,
-      ja: "遊び終わったら、Lite本体と自動デプロイ環境を順番に削除して、AWSの継続費用を止めるのだ。",
-      en: "When the event is over, remove the Lite platform and its deployment setup in this order to stop ongoing AWS costs.",
+      ja: "遊び終わったら、Cloud基盤と自動デプロイ環境を順番に削除して、AWSの継続費用を止めるのだ。",
+      en: "When the event is over, remove the Cloud platform and its deployment setup in this order to stop ongoing AWS costs.",
       layout: "intro",
       theme: "cleanup",
       details: {
-        ja: ["1  CodeBuildでLite本体を削除", "2  削除成功を確認", "3  launcherを最後に削除"],
+        ja: ["1  CodeBuildでCloud基盤を削除", "2  削除成功を確認", "3  launcherを最後に削除"],
         en: [
-          "1  Remove Lite with CodeBuild",
+          "1  Remove Cloud with CodeBuild",
           "2  Confirm successful deletion",
           "3  Delete the launcher last",
         ],
@@ -270,17 +270,17 @@ export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
         en: "Why delete the launcher last?",
       },
       targetS: 8,
-      ja: "launcherのCodeBuildがLiteを完全削除する復旧経路なのだ。先にACTION=destroy-allを実行し、launcherは最後に消すのだ。",
-      en: "The launcher CodeBuild project is the recovery path that completely removes Lite. Run ACTION equals destroy all first, and delete the launcher last.",
+      ja: "launcherのCodeBuildがCloud基盤を削除する復旧経路なのだ。先にACTION=destroy-allを実行し、launcherは最後に消すのだ。",
+      en: "The launcher CodeBuild project is the recovery path that completely removes the Cloud platform. Run ACTION equals destroy all first, and delete the launcher last.",
       layout: "explainer",
       theme: "cleanup",
       details: {
-        ja: ["launcher CodeBuild", "ACTION=destroy-all", "Lite resources", "launcher stack"],
-        en: ["Launcher CodeBuild", "ACTION=destroy-all", "Lite resources", "Launcher stack"],
+        ja: ["launcher CodeBuild", "ACTION=destroy-all", "Cloud resources", "launcher stack"],
+        en: ["Launcher CodeBuild", "ACTION=destroy-all", "Cloud resources", "Launcher stack"],
       },
       note: {
-        ja: "launcherを先に消すと、同じパイプラインからLite本体を削除できない",
-        en: "Deleting the launcher first removes the pipeline used to clean up Lite",
+        ja: "launcherを先に消すと、同じパイプラインからCloud基盤を削除できない",
+        en: "Deleting the launcher first removes the pipeline used to clean up Cloud",
       },
     },
     {
@@ -292,8 +292,8 @@ export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
       layout: "explainer",
       theme: "cleanup",
       details: {
-        ja: ["CodeBuild", "DynamoDB", "CloudWatch Logs", "Lite stacks"],
-        en: ["CodeBuild", "DynamoDB", "CloudWatch Logs", "Lite stacks"],
+        ja: ["CodeBuild", "Turso / DynamoDB", "Retained data", "Cloud stacks"],
+        en: ["CodeBuild", "Turso / DynamoDB", "Retained data", "Cloud stacks"],
       },
       note: {
         ja: "古いlauncherは、先に最新テンプレートへ更新する",
@@ -302,10 +302,10 @@ export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
     },
     {
       section: "4. Teardown progress",
-      heading: { ja: "Liteの削除を確認", en: "Confirm Lite teardown" },
+      heading: { ja: "Cloud基盤の削除を確認", en: "Confirm Cloud teardown" },
       targetS: 8,
-      ja: "destroy-allはDynamoDBとログ、Lite本体とproblem-deployのstackを削除するのだ。CloudFormationで進行を確認するのだ。",
-      en: "Destroy all removes DynamoDB data and logs, then the TenkaCloud Lite and problem deploy stacks. Follow the progress in CloudFormation.",
+      ja: "問題環境を先に撤収するのだ。destroyは外部Tursoの行を保持し、destroy-allは選択したDBと保持データを確認して削除するのだ。",
+      en: "Teardown exercises first. Destroy preserves external Turso rows; destroy all confirms removal of selected DB and retained data.",
     },
     {
       section: "5. Delete launcher",
@@ -318,13 +318,21 @@ export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
       section: "6. Confirm cleanup complete",
       heading: { ja: "削除完了を確認", en: "Confirm cleanup is complete" },
       targetS: 6,
-      ja: "Liteとlauncherのstack、それにDynamoDBとCodeBuildの残存がないことを確認して完了なのだ。",
-      en: "Confirm that the Lite and launcher stacks are gone with no remaining DynamoDB tables or CodeBuild logs.",
+      ja: "Cloud基盤とlauncher、選択したDBの削除対象を確認するのだ。source bucketなど残るリソースと料金も別途確認するのだ。",
+      en: "Check Cloud, launcher and selected DB teardown. Review remaining resources and costs, including the source bucket.",
       layout: "complete",
       theme: "cleanup",
       details: {
-        ja: ["Lite stacks: deleted", "DynamoDB / logs: deleted", "launcher stack: deleted"],
-        en: ["Lite stacks: deleted", "DynamoDB / logs: deleted", "Launcher stack: deleted"],
+        ja: [
+          "Cloud stacks: deleted",
+          "Selected DB / retained data: reviewed",
+          "launcher stack: deleted",
+        ],
+        en: [
+          "Cloud stacks: deleted",
+          "Selected DB / retained data: reviewed",
+          "Launcher stack: deleted",
+        ],
       },
       note: {
         ja: "AWSの請求を確認し、共有アカウントの既存リソースは削除しない",

@@ -22,7 +22,7 @@ make local
 
 1. 開催者コンソールで大会、チーム、出題する問題を選びます。
 2. jobs を準備し、チームごとの結果を確認します。新しい Docker jobs は参加者が起動するまで停止状態です。AWS 問題は配置手順を使います。
-3. Schedule から大会を開始し、各チームへ専用の参加リンクまたはキーを渡します。
+3. Schedule から大会を開始し、各チームへ参加者 URL とチームキーを渡します。
 4. 参加者ポータルへそのキーで入ります。Docker は **Start / resume** で起動し、問題文、操作、得点まで確認します。使い終えた環境は **Stop (keep data)** で停止します。
 
 開催者と参加者が使う一つの競技システムです。個人練習専用のログインはありません。Docker カタログと workbench の復旧は進行中です。106 問が一覧に出ることと、terminal や実 Docker のブラウザ操作まで全問確認済みであることは別です。
@@ -40,6 +40,8 @@ make local
 
 起動オプションは `LOCAL_ARGS` へ渡します。例は `make local LOCAL_ARGS="--no-build"` です。`--data` を指定した場合、`make down` にも同じディレクトリを指定します。
 
+`make local-clear` は host を停止してから、確認後に競技データと所有する Docker 問題データを消去します。主催者キーと host 設定は保持します。`make down` はデータを保持して停止し、`make local-reset` は主催者アクセスを再発行します。
+
 <h2 id="cloud-setup">クラウド開催を設定する</h2>
 
 使う AWS CLI のプロファイルを選び、`aws sts get-caller-identity` で確認します。`make env-init ENV=development` を実行して、開催者のメールアドレス・配置先アカウント ID・リージョンを入力します。選択した `.env` がなければ作成します。既存ファイルの設定を変える場合は編集してください。
@@ -48,7 +50,7 @@ Turso は `make turso-live ENV=development` で CLI の導入・ログイン・D
 
 <h2 id="cloud-status">クラウド配置の状態</h2>
 
-`make deploy` と `make destroy` は権限設定を確認したうえで、この版の Lambda + Turso/DynamoDB CLI を実行します。クラウド開催は SBT を使わない旧 Lite の処理を再利用し、Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。撤収時に対象を確認し、基盤の所有データはデフォルトで削除します。通常の destroy は外部 Turso の行を残し、destroy-all で明示的にリセットします。問題環境の撤収は別操作です。Lambda + Turso/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。実 AWS・hosted Turso での大会性能は未検証です。cloud pipeline は現行 CLI を既定で使います。build を始める前にソース設定と配置 role を確認してください。
+`make deploy` と `make destroy` は権限設定を確認したうえで、この版の Lambda + Turso/DynamoDB CLI を実行します。クラウド開催は Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。撤収時に対象を確認し、基盤の所有データはデフォルトで削除します。通常の `make destroy` は外部 Turso の行を残し、`make destroy-all` で明示的にリセットします。問題環境の撤収は別操作です。Lambda + Turso/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。実 AWS・hosted Turso での大会性能は未検証です。cloud pipeline は現行 CLI を既定で使います。build を始める前にソース設定と配置 role を確認してください。
 
 Codespaces の転送 URL と問題接続は、この candidate では未確認です。確認記録ができるまでは上のローカル手順を使ってください。
 

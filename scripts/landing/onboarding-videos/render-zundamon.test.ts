@@ -127,13 +127,13 @@ describe("recorded Lite Zundamon renderer", () => {
   it("should open with a full-screen localized product-definition card", () => {
     const cue = DEPLOY_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER.cues[0];
     const html = buildCaptionOverlayHtml(cue, "ja", 0, 10);
-    expect(html).toContain("TENKACLOUD LITE · AWS DEPLOYMENT");
+    expect(html).toContain("TENKACLOUD · AWS DEPLOYMENT");
     expect(html).toContain("自分のAWS環境へデプロイ");
-    expect(html).toContain("LiteをAWSへ導入");
+    expect(html).toContain("CloudをAWSへ導入");
     expect(html).toContain("競技用AWSを登録");
     expect(html).toContain("イベントを作成・Deploy");
     expect(html).toContain("Participant Portal・スコア");
-    expect(html).toContain("tenkacloud-lite-problem-deploy");
+    expect(html).toContain("tenkacloud-cloud");
     expect(html).not.toContain("AdministratorAccess");
     expect(html).not.toContain("STEP 1 / 10");
   });
@@ -176,8 +176,8 @@ describe("recorded Lite Zundamon renderer", () => {
     if (!intro || !order || !complete) throw new Error("expected complete cleanup story");
 
     const introHtml = buildCaptionOverlayHtml(intro, "ja", 0, 6);
-    expect(introHtml).toContain("TENKACLOUD LITE · AWS CLEANUP");
-    expect(introHtml).toContain("CodeBuildでLite本体を削除");
+    expect(introHtml).toContain("TENKACLOUD · AWS CLEANUP");
+    expect(introHtml).toContain("CodeBuildでCloud基盤を削除");
     expect(introHtml).toContain("launcherを最後に削除");
 
     const orderHtml = buildCaptionOverlayHtml(order, "ja", 1, 6);
@@ -215,7 +215,7 @@ describe("recorded Lite Zundamon renderer", () => {
     expect(html).toContain("WHY THIS ORDER · THEN THE REAL AWS CONSOLE");
     expect(html).toContain("ACTION=destroy-all");
     expect(html).toContain("DynamoDB");
-    expect(html).toContain("CloudWatch Logs");
+    expect(html).toContain("Retained data");
   });
 
   it("should delay, mix, normalize, and trim synthesized cue audio", () => {

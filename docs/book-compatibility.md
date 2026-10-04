@@ -2,9 +2,9 @@
 
 This is a repository-side compatibility note for
 [自分で作るクラウド競技](https://zenn.dev/bull/books/cloud-competition).
-The external book has not been changed by this work; update it only after this
-restoration merges to main. Its published operating
-instructions include legacy local-practice and Lite paths.
+An isolated zenn-article branch prepares revisions to the 27-chapter book.
+Those edits are not published; the published book still includes legacy paths.
+Use this table with the matching checkout, rather than assuming a finished draft exists.
 
 ## Current replacement commands
 
@@ -18,8 +18,7 @@ instructions include legacy local-practice and Lite paths.
 | ACTION=destroy-all | Current make destroy-all confirms and purges stack-owned retained data and selected Turso rows; ordinary make destroy removes platform/default-owned data and leaves external Turso rows |
 | pack activate for a tenant | Retained local record only; does not add problems to current events |
 
-Local SQLite is implemented. Cloud hosting restores the SBT-free Lite Lambda
-backend with a choice of Turso or DynamoDB, preserving its original resource
+Local SQLite is implemented. Cloud hosting uses Lambda with a choice of Turso or DynamoDB, preserving its original resource
 identities and deployment paths. Published cloud-v1 resources/schema are incompatible
 with in-place restoration; no data migration is automatic.
 AWS service problems are cloud-only. Docker/Compose exercises are local-only and
@@ -81,3 +80,16 @@ an authorized book revision rather than silently changing the score engine.
 For current local steps use [local hosting](local-hosting.md) and the
 [event runbook](operations/event-runbook.md). No data migration
 or external resource cleanup is implied.
+
+## Prepared book revision scope
+
+| Chapters | Prepared changes |
+| --- | --- |
+| execution-modes, chapter13, glossary | Local/Cloud, DB selection, resource identity and current limits |
+| chapter2/3, local-problem-runtime, chapter17, checklist | Event/team startup; down preserves data; clear deletes competition data; reset rotates organizer access |
+| chapter14/15, aws-account-access | Participant URL + team key; Cloud-only AWS access; preserve ExternalId and deployment/participant role boundaries |
+| chapter16 | Teardown exercises first; distinguish destroy and destroy-all; review selected DB and remaining resources |
+
+This unpublished documentation candidate includes the reviewed organizer-key wording
+from PR #3321 (df0ab777). That PR is not merged into the main baseline; align the
+matching implementation before publishing these instructions.
