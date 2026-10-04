@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@tenkacloud/problem-runtime": "workspace:*",
-    "zod": "^3.25.76"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",

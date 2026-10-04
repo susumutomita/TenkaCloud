@@ -79,7 +79,7 @@
     "js-yaml": "5.4.1",
     "ws": "^8.21.1",
     "yaml": "^2.9.0",
-    "zod": "^3.25.76"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
