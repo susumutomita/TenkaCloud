@@ -1,5 +1,6 @@
 /** Browser rehearsal uses only fresh in-memory SQLite and synthetic fixture resources. */
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { apiDocsFixture } from "./api-docs-fixture";
 
@@ -23,10 +24,13 @@ async function authorize(page: Page, token: string) {
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
 }
 const f = await apiDocsFixture();
-const browser = await chromium.launch({
-  executablePath:
-    process.env.HOST_E2E_CHROMIUM ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-});
+const executablePath =
+  process.env.HOST_E2E_CHROMIUM ??
+  [
+    "/opt/pw-browsers/chromium",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  ].find((path) => existsSync(path));
+const browser = await chromium.launch(executablePath ? { executablePath } : {});
 try {
   const context = await browser.newContext();
   const errors: string[] = [];
