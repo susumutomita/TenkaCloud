@@ -1,6 +1,6 @@
 // GENERATED FILE — DO NOT EDIT.
-// Source: docs/api/machine-api.openapi.json (itself generated from MACHINE_ROUTE_SCOPES
-// and the handler zod schemas by scripts/openapi/generate.ts).
+// Source: docs/api/machine-api.openapi.json (historical SaaS archive; retired routes).
+// Current local contract: scripts/local-host/openapi.ts and each listener /openapi.json.
 // Regenerate with: bun run --filter @TenkaCloud/developer-portal generate:machine-api
 //
 // The spec is embedded, not fetched at runtime: the portal is a static export and
@@ -42,7 +42,7 @@ export const MACHINE_API_SPEC: MachineApiSpec = {
     title: "TenkaCloud Machine API",
     version: "1.1.0",
     description:
-      "Machine-to-machine surface of the TenkaCloud Tenant API. A machine principal holds the role `TenantMachine`, which no destructive route accepts, so the operations below are the complete surface reachable with a machine credential. This reference is generated from the platform's own route table and validation schemas.",
+      "Historical SaaS machine API archive. These routes are absent from the current host. The retired scripts/openapi/generate.ts is no longer available. For the current minimal local event lifecycle, run make local and open host :5174/api-docs or participant :5175/api-docs; each listener serves /openapi.json. Cloud Try It requires separate configuration. Machine-to-machine surface of the TenkaCloud Tenant API. A machine principal holds the role `TenantMachine`, which no destructive route accepts, so the operations below are the complete surface reachable with a machine credential. This reference is generated from the platform's own route table and validation schemas.",
     license: {
       name: "Apache-2.0",
       identifier: "Apache-2.0",

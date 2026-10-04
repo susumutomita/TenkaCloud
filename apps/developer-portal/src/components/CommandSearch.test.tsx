@@ -50,8 +50,8 @@ describe("CommandSearch", () => {
     await user.click(screen.getByRole("button", { name: "Open search" }));
 
     const input = screen.getByRole("searchbox", { name: "Search docs and API operations" });
-    await user.type(input, "listPacks");
+    await user.type(input, "hostCatalog");
 
-    expect(screen.getByText("GET /packs")).toBeInTheDocument();
+    expect(screen.getByText("GET /host/catalog")).toBeInTheDocument();
   });
 });

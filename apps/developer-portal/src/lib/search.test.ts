@@ -13,8 +13,10 @@ describe("search index", () => {
   });
 
   it("should index API operation names alongside docs", () => {
-    const results = searchIndex("createDeployment");
-    expect(results.some((r) => r.kind === "api" && r.title.includes("/deployments"))).toBe(true);
+    const results = searchIndex("prepareEvent");
+    expect(
+      results.some((r) => r.kind === "api" && r.title.includes("/events/{eventId}/deploy")),
+    ).toBe(true);
   });
 
   it("should return nothing for an empty query", () => {

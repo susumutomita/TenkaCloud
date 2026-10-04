@@ -2,9 +2,9 @@
 /**
  * Issue #2950: portal が描画する machine API spec を **リポジトリの生成物から取り込む**。
  *
- * 上流の正本は `docs/api/machine-api.openapi.json` で、そこ自体が
- * `MACHINE_ROUTE_SCOPES` + handler の zod schema から `scripts/openapi/generate.ts` が生成
- * している (#2949)。portal 側はそれを TypeScript module に写すだけで、内容を編集しない。
+ * 旧 SaaS の保存資料 `docs/api/machine-api.openapi.json` を portal に写す。
+ * 旧 scripts/openapi/generate.ts と対応ルートは撤去済み。現行ローカル仕様は
+ * scripts/local-host/openapi.ts と各 listener の /openapi.json を参照する。
  *
  *   tsx scripts/generate-machine-api.ts          生成
  *   tsx scripts/generate-machine-api.ts --check  drift があれば非ゼロ終了 (prebuild / CI)
@@ -111,8 +111,8 @@ function formatWithBiome(source: string): string {
 
 function renderModule(spec: Spec): string {
   return formatWithBiome(`// GENERATED FILE — DO NOT EDIT.
-// Source: docs/api/machine-api.openapi.json (itself generated from MACHINE_ROUTE_SCOPES
-// and the handler zod schemas by scripts/openapi/generate.ts).
+// Source: docs/api/machine-api.openapi.json (historical SaaS archive; retired routes).
+// Current local contract: scripts/local-host/openapi.ts and each listener /openapi.json.
 // Regenerate with: bun run --filter @TenkaCloud/developer-portal generate:machine-api
 //
 // The spec is embedded, not fetched at runtime: the portal is a static export and

@@ -1,6 +1,7 @@
 import { readFile, realpath } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
+import { serveApiDocs } from "./api-docs";
 import { HostError } from "./model";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
 import { apiBodyLimit } from "./submission-size";
@@ -264,6 +265,22 @@ export async function startHttpHost(options: {
       ...(runtimeAwsRegion ? { awsRegion: runtimeAwsRegion } : {}),
     };
   }
+  function serveConfiguration(
+    method: string | undefined,
+    path: string,
+    response: ServerResponse,
+  ): boolean {
+    if (method !== "GET") return false;
+    if (path === "/healthz") {
+      json(response, 200, { status: "ok", mode: "local-host", role: options.kind });
+      return true;
+    }
+    if (path === "/runtime-config.json") {
+      json(response, 200, runtimeConfiguration());
+      return true;
+    }
+    return false;
+  }
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     // Platform health checks reach the container directly, with its own Host header.
     if (options.advertised && request.method === "GET" && request.url === "/healthz") {
@@ -276,14 +293,8 @@ export async function startHttpHost(options: {
       request.method === "POST" &&
       url.pathname === "/api/host/saml/acs";
     validOrigin(request, origin, samlPost);
-    if (url.pathname === "/healthz" && request.method === "GET") {
-      json(response, 200, { status: "ok", mode: "local-host", role: options.kind });
-      return;
-    }
-    if (url.pathname === "/runtime-config.json" && request.method === "GET") {
-      json(response, 200, runtimeConfiguration());
-      return;
-    }
+    if (await serveApiDocs(request.method, url.pathname, options.kind, response)) return;
+    if (serveConfiguration(request.method, url.pathname, response)) return;
     if (!url.pathname.startsWith("/api/")) {
       if (request.method !== "GET")
         throw new HostError(405, "Only GET is allowed for the application.");
