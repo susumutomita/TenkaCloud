@@ -55,6 +55,7 @@ export function OperationsTab({
         {isLocalHost(config) || counts.totalDeployCount > 0 ? (
           <DeployProgressPanel
             localDetail={isLocalHost(config) ? detail : undefined}
+            cloudDetail={isCloudHost(config) ? detail : undefined}
             allDoneCount={counts.allDoneCount}
             completeCount={counts.completeCount}
             ended={isEffectivelyEnded({
