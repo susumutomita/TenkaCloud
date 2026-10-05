@@ -16,6 +16,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { ProblemCostSummary } from "../components/ProblemCostSummary";
+import { localizeProblemText } from "../data/problem-locale";
 import {
   listProblemSummaries,
   PROVIDER_LABEL,
@@ -23,7 +24,7 @@ import {
   type ProblemSummary,
   runtimeProviders,
 } from "../data/problems";
-import { interpolate, useT } from "../i18n";
+import { interpolate, useI18n, useT } from "../i18n";
 import {
   collectTagFacets,
   DIFFICULTY_LEVELS,
@@ -133,6 +134,8 @@ function ProblemPackGuidanceModal({
   );
 }
 
+import { problemThemeLabel, problemThemeTags } from "../lib/problem-themes";
+
 /**
  * 問題一覧ページ。Cloudscape Cards で 1 件ずつカード表示する。
  * クリックすると /problems/:id へ遷移して詳細 + Deploy ボタン。
@@ -140,9 +143,7 @@ function ProblemPackGuidanceModal({
  * Issue #834 / #835: 検索 box / category / status / 難易度 / タグ filter を提供。
  * tag badge は click で 「そのタグだけで絞り込み」 (= toggle、 同タグ 2 回 click で解除)。
  *
- * i18n: 全 UI strings は \`t()\` 経由で locale に追従する。 problem metadata (name /
- * shortDescription / tag literal) は author が書いた JP 文字列なので i18n 対象外
- * (= 別 issue で metadata に \`description_en\` 等を加える必要がある)。
+ * Problem narrative uses authored locale overrides with per-field Japanese fallbacks.
  */
 export function ProblemsPage({
   localHost = false,
@@ -153,9 +154,10 @@ export function ProblemsPage({
 }) {
   const navigate = useNavigate();
   const t = useT();
-  const problems = listProblemSummaries().filter(
-    (problem) => supportedProblemIds === undefined || supportedProblemIds.has(problem.id),
-  );
+  const { locale } = useI18n();
+  const problems = listProblemSummaries()
+    .map((problem) => localizeProblemText(problem, locale))
+    .filter((problem) => supportedProblemIds === undefined || supportedProblemIds.has(problem.id));
   const [criteria, setCriteria] = useState<ProblemFilterCriteria>(EMPTY_FILTER_CRITERIA);
   const [packGuidanceOpen, setPackGuidanceOpen] = useState(false);
 
@@ -177,14 +179,14 @@ export function ProblemsPage({
     () =>
       tagFacets.map((f) => ({
         value: f.tag,
-        label: f.tag,
+        label: problemThemeLabel(f.tag, t),
         description: interpolate(t("problems.tag_facet_count"), { count: String(f.count) }),
       })),
     [tagFacets, t],
   );
   const tagSelected: MultiselectProps.Option[] = useMemo(
-    () => criteria.tags.map((tag) => ({ value: tag, label: tag })),
-    [criteria.tags],
+    () => criteria.tags.map((tag) => ({ value: tag, label: problemThemeLabel(tag, t) })),
+    [criteria.tags, t],
   );
   // difficulty options は DIFFICULTY_LEVELS (= 5 件 固定) を locale ごとに label 化する。
   // useMemo にせず render ごとに作り直しても cost 無視できる範囲、 locale 切替時に追従させる。
@@ -382,7 +384,7 @@ export function ProblemsPage({
               header: t("problems.tags_header"),
               content: (item) => (
                 <SpaceBetween direction="horizontal" size="xxs">
-                  {item.tags.map((tag) => {
+                  {problemThemeTags(item.tags).map((tag) => {
                     const isActive = criteria.tags.includes(tag);
                     return (
                       <Button
@@ -393,10 +395,10 @@ export function ProblemsPage({
                           isActive
                             ? t("problems.tag_active_aria")
                             : t("problems.tag_inactive_aria"),
-                          { tag },
+                          { tag: problemThemeLabel(tag, t) },
                         )}
                       >
-                        {tag}
+                        {problemThemeLabel(tag, t)}
                       </Button>
                     );
                   })}

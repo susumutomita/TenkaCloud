@@ -112,7 +112,7 @@ async function createEvent(
   assert.equal(await count.inputValue(), "40", "The team input is bounded before submission.");
   await count.fill("2");
   await page.getByTestId("problem-select").click();
-  await page.getByRole("option", { name: /sqli-demo/u }).click();
+  await page.getByRole("option", { name: /Staff-Only Login|スタッフ専用ログイン/u }).click();
   await page.keyboard.press("Escape");
   assert.equal(await page.getByText("Local competition mode", { exact: true }).count(), 0);
   assert.equal(await page.getByText("Local competition event", { exact: true }).count(), 0);

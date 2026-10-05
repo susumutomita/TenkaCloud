@@ -1,6 +1,8 @@
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
@@ -26,6 +28,7 @@ import {
   isFilterActive,
   type ProblemFilterCriteria,
 } from "../../lib/problem-filter";
+import { problemThemeLabel } from "../../lib/problem-themes";
 import {
   buildProblemOptions,
   type ProblemRow,
@@ -110,6 +113,17 @@ export function EventCreateProblemsetSection({
       disabled: option.disabled || !selected.has(option.value),
     }));
   }, [filtered, t, enabledProviders, hostSupportedProblemIds, maxProblems, selectedProblems]);
+  // Refresh selected text from the whole catalog, even when filters hide the selection.
+  const displayedSelection = useMemo(() => {
+    const options = buildProblemOptions(problems, "", enabledProviders, hostSupportedProblemIds);
+    return selectedProblems.map((selected) => {
+      const option = options.find((candidate) => candidate.value === selected.value);
+      const problem = problems.find((candidate) => candidate.id === selected.value);
+      return option && problem
+        ? { ...selected, label: option.label, description: problem.shortDescription }
+        : selected;
+    });
+  }, [problems, selectedProblems, enabledProviders, hostSupportedProblemIds]);
   const tagFacets = useMemo(() => collectTagFacets(problems), [problems]);
   const scoringKindFacets = useMemo(() => collectScoringKindFacets(problems), [problems]);
 
@@ -144,12 +158,12 @@ export function EventCreateProblemsetSection({
   }));
   const tagOptions: MultiselectProps.Option[] = tagFacets.map((f) => ({
     value: f.tag,
-    label: f.tag,
+    label: problemThemeLabel(f.tag, t),
     description: facetCount(f.count),
   }));
   const tagSelected: MultiselectProps.Option[] = criteria.tags.map((tag) => ({
     value: tag,
-    label: tag,
+    label: problemThemeLabel(tag, t),
   }));
 
   const clearFilters = () => setCriteria(EMPTY_FILTER_CRITERIA);
@@ -165,65 +179,78 @@ export function EventCreateProblemsetSection({
           <SpaceBetween size="xs">
             <Input
               type="search"
+              ariaLabel={t("problems.search_label")}
               data-testid="problem-filter-search"
               value={criteria.search}
               placeholder={t("problem_search.search_placeholder")}
               onChange={({ detail }) => setCriteria((prev) => ({ ...prev, search: detail.value }))}
             />
-            <SpaceBetween direction="horizontal" size="xs">
-              <Select
-                data-testid="problem-filter-category"
-                selectedOption={selectedCategoryOption}
-                options={categoryOptions}
-                onChange={({ detail }) =>
-                  setCriteria((prev) => ({
-                    ...prev,
-                    categories:
-                      detail.selectedOption.value === CATEGORY_ALL
-                        ? []
-                        : [detail.selectedOption.value as ProblemCategory],
-                  }))
-                }
-              />
-              <Multiselect
-                data-testid="problem-filter-difficulty"
-                placeholder={t("problem_search.difficulty_placeholder")}
-                options={difficultyOptions}
-                selectedOptions={difficultySelected}
-                onChange={({ detail }) =>
-                  setCriteria((prev) => ({
-                    ...prev,
-                    difficulties: detail.selectedOptions
-                      .map((o) => Number(o.value))
-                      .filter((n): n is DifficultyLevel =>
-                        DIFFICULTY_LEVELS.includes(n as DifficultyLevel),
-                      ),
-                  }))
-                }
-              />
-              <Multiselect
-                data-testid="problem-filter-scoring-kind"
-                placeholder={t("problem_search.scoring_kind_placeholder")}
-                options={scoringKindOptions}
-                selectedOptions={scoringKindSelected}
-                onChange={({ detail }) =>
-                  setCriteria((prev) => ({
-                    ...prev,
-                    scoringKinds: optionValues(detail.selectedOptions),
-                  }))
-                }
-              />
-              <Multiselect
-                data-testid="problem-filter-tags"
-                placeholder={t("problem_search.tag_placeholder")}
-                options={tagOptions}
-                selectedOptions={tagSelected}
-                filteringType="auto"
-                onChange={({ detail }) =>
-                  setCriteria((prev) => ({ ...prev, tags: optionValues(detail.selectedOptions) }))
-                }
-              />
-            </SpaceBetween>
+            <ColumnLayout columns={2}>
+              <FormField label={t("problems.theme_label")}>
+                <Multiselect
+                  data-testid="problem-filter-tags"
+                  placeholder={t("problem_search.tag_placeholder")}
+                  options={tagOptions}
+                  selectedOptions={tagSelected}
+                  filteringType="auto"
+                  onChange={({ detail }) =>
+                    setCriteria((prev) => ({ ...prev, tags: optionValues(detail.selectedOptions) }))
+                  }
+                />
+              </FormField>
+              <FormField label={t("problems.difficulty_label")}>
+                <Multiselect
+                  data-testid="problem-filter-difficulty"
+                  placeholder={t("problem_search.difficulty_placeholder")}
+                  options={difficultyOptions}
+                  selectedOptions={difficultySelected}
+                  onChange={({ detail }) =>
+                    setCriteria((prev) => ({
+                      ...prev,
+                      difficulties: detail.selectedOptions
+                        .map((o) => Number(o.value))
+                        .filter((n): n is DifficultyLevel =>
+                          DIFFICULTY_LEVELS.includes(n as DifficultyLevel),
+                        ),
+                    }))
+                  }
+                />
+              </FormField>
+            </ColumnLayout>
+            <ExpandableSection headerText={t("problem_search.more_filters")}>
+              <ColumnLayout columns={2}>
+                <FormField label={t("problem_search.all_categories")}>
+                  <Select
+                    data-testid="problem-filter-category"
+                    selectedOption={selectedCategoryOption}
+                    options={categoryOptions}
+                    onChange={({ detail }) =>
+                      setCriteria((prev) => ({
+                        ...prev,
+                        categories:
+                          detail.selectedOption.value === CATEGORY_ALL
+                            ? []
+                            : [detail.selectedOption.value as ProblemCategory],
+                      }))
+                    }
+                  />
+                </FormField>
+                <FormField label={t("problem_search.scoring_kind_placeholder")}>
+                  <Multiselect
+                    data-testid="problem-filter-scoring-kind"
+                    placeholder={t("problem_search.scoring_kind_placeholder")}
+                    options={scoringKindOptions}
+                    selectedOptions={scoringKindSelected}
+                    onChange={({ detail }) =>
+                      setCriteria((prev) => ({
+                        ...prev,
+                        scoringKinds: optionValues(detail.selectedOptions),
+                      }))
+                    }
+                  />
+                </FormField>
+              </ColumnLayout>
+            </ExpandableSection>
             {filterActive && (
               <SpaceBetween direction="horizontal" size="xs" alignItems="center">
                 <Box variant="small">
@@ -246,6 +273,7 @@ export function EventCreateProblemsetSection({
 
         <FormField
           label={t("event_create.use_problems_label")}
+          constraintText={t("problem_search.selection_preserved")}
           description={
             maxProblems === undefined
               ? t("event_create.use_problems_description")
@@ -257,7 +285,7 @@ export function EventCreateProblemsetSection({
         >
           <Multiselect
             data-testid="problem-select"
-            selectedOptions={[...selectedProblems]}
+            selectedOptions={displayedSelection}
             options={[...problemOptions]}
             placeholder={t("event_create.problemset_placeholder")}
             empty={t("problem_search.empty_filtered")}

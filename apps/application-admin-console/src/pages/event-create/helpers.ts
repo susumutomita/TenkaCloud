@@ -108,6 +108,7 @@ export function buildProblemOptions(
   problems: readonly {
     readonly id: string;
     readonly name: string;
+    readonly shortDescription?: string;
     readonly runtime: ProblemRuntimeSummary;
   }[],
   reservedTag: string,
@@ -119,7 +120,11 @@ export function buildProblemOptions(
   hostSupported?: ReadonlySet<string>,
 ): ProblemOption[] {
   return problems.map((p) => {
-    const base = { value: p.id, label: `${p.name} (${p.id})` };
+    const base = {
+      value: p.id,
+      label: p.name,
+      ...(p.shortDescription ? { description: p.shortDescription } : {}),
+    };
     const selectable = hostSupported
       ? hostSupported.has(p.id)
       : isProviderSelectable(p.runtime, enabledProviders);

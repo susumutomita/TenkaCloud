@@ -52,7 +52,7 @@ vi.mock("../../src/pages/event-create/useCompetitorAccountsLoader", () => ({
 }));
 vi.mock("../../src/i18n", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/i18n")>();
-  return { ...actual, useT: () => (k: string) => k };
+  return { ...actual, useT: () => (k: string) => k, useI18n: () => ({ locale: "ja" }) };
 });
 
 const { EventCreatePage } = await import("../../src/pages/EventCreate");

@@ -12,7 +12,8 @@ import type { ProblemDetail } from "../../src/data/problems";
  * react-router / useT / findProblem / useApiClient / listDeployments を mock、
  * DEPLOYMENT_STATUS_INDICATOR と deploymentsChanged は実物。
  */
-const { mockParams, mockNav, mockFind, mockApiClient, mockList } = vi.hoisted(() => ({
+const { mockParams, mockNav, mockFind, mockApiClient, mockList, mockLocale } = vi.hoisted(() => ({
+  mockLocale: vi.fn(),
   mockParams: vi.fn(),
   mockNav: vi.fn(),
   mockFind: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock("react-router", () => ({
   Navigate: ({ to }: { to: string }) => <div data-testid="navigate" data-to={to} />,
 }));
 vi.mock("../../src/i18n", () => ({
+  useI18n: mockLocale,
   useT: () => (k: string, p?: Readonly<Record<string, string | number>>) =>
     p ? `${k}|${JSON.stringify(p)}` : k,
 }));
@@ -81,6 +83,7 @@ const dep = (over: Partial<DeploymentSummary> = {}): DeploymentSummary =>
 const renderPage = () => render(<ProblemDetailPage config={config} />);
 
 beforeEach(() => {
+  mockLocale.mockReturnValue({ locale: "ja" });
   mockParams.mockReturnValue({ problemId: "p1" });
   mockNav.mockClear();
   mockFind.mockReturnValue(problem());
@@ -90,6 +93,25 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("ProblemDetailPage", () => {
+  it("switches existing English detail text and preserves missing-field Japanese fallbacks", () => {
+    mockFind.mockReturnValue(
+      problem({
+        name: "日本語",
+        description: "日本語の本文",
+        i18n: { en: { name: "English detail", description: "English body" } },
+      }),
+    );
+    const { rerender } = render(<ProblemDetailPage config={config} />);
+    expect(screen.getByText("日本語の本文")).toBeInTheDocument();
+    mockLocale.mockReturnValue({ locale: "en" });
+    rerender(<ProblemDetailPage config={config} />);
+    expect(screen.getByText("English detail")).toBeInTheDocument();
+    expect(screen.getByText("English body")).toBeInTheDocument();
+    expect(screen.getByText("short summary")).toBeInTheDocument();
+    mockLocale.mockReturnValue({ locale: "ja" });
+    rerender(<ProblemDetailPage config={config} />);
+    expect(screen.getByText("日本語の本文")).toBeInTheDocument();
+  });
   it("should redirect to the problem list when no problemId is in the URL", () => {
     mockParams.mockReturnValue({});
     renderPage();
