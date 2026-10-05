@@ -74,13 +74,42 @@ describe("useEventDetail in-flight polling", () => {
     expect(extra).toBe(0);
   });
 
-  it("leaves the cloud console's polling unchanged (no in-flight poll without the option)", async () => {
+  it("refreshes Cloud preparation before event start and stops after completion", async () => {
+    const pending = {
+      ...detail("IN_PROGRESS"),
+      startsAt: "2099-01-01T00:00:00Z",
+      endsAt: "2099-01-02T00:00:00Z",
+    };
+    const ready = {
+      ...pending,
+      deploymentsByProblem: { p: [{ jobId: "J", teamId: "A", status: "COMPLETE" }] },
+    };
+    mockGetEvent.mockResolvedValueOnce(pending).mockResolvedValue(ready);
+    const { result } = renderHook(() =>
+      useEventDetail({ apiClient: CLIENT, eventId: "e1", eventIdValid: true }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.detail).toEqual(pending);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(result.current.detail).toEqual(ready);
+    const calls = mockGetEvent.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(mockGetEvent.mock.calls.length).toBe(calls);
+  });
+
+  it("follows Cloud environment work every 30s outside the scoring window", async () => {
     mockGetEvent.mockResolvedValue(detail("IN_PROGRESS"));
     const extra = await fetchesAfter(60_000, {
       apiClient: CLIENT,
       eventId: "e1",
       eventIdValid: true,
     });
-    expect(extra).toBe(0);
+    expect(extra).toBe(2);
   });
 });

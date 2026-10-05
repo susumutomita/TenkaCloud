@@ -39,6 +39,28 @@ const TEMPLATE_WITH_ALWAYS_ON_COST = `Resources:
 `;
 
 describe("metadataToDetail", () => {
+  it("projects authored English display fields without instructions or hints", () => {
+    const english = {
+      name: "English",
+      shortDescription: "English summary",
+      description: "English author body",
+      estimatedDuration: "30 minutes",
+      learningGoals: ["English goal"],
+      instructions: "private instructions",
+      scoring: { hints: ["secret hint"] },
+    };
+    const detail = metadataToDetail({ ...BASE_METADATA, i18n: { en: english } });
+    expect(detail.i18n?.en).toEqual({
+      name: english.name,
+      shortDescription: english.shortDescription,
+      description: english.description,
+      estimatedDuration: english.estimatedDuration,
+      learningGoals: english.learningGoals,
+    });
+    expect(JSON.stringify(detail)).not.toContain("private instructions");
+    expect(JSON.stringify(detail)).not.toContain("secret hint");
+  });
+
   it("should include defaultRegion + non-empty supportedRegions and drop deploy internals", () => {
     const detail = metadataToDetail({
       ...BASE_METADATA,

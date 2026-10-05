@@ -52,12 +52,50 @@ describe("DeployProgressPanel", () => {
     expect(screen.getByText("Deploying… (1 / 2)")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Deploy is run asynchronously by the State Machine. It takes several minutes.",
+        "Problem environments are being prepared or removed. Check each team and problem below.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("auto polling")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Status refreshes automatically|status is fetched every 30 seconds/),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("deploy-status-reload"));
     expect(onManualRefresh).toHaveBeenCalled();
+  });
+
+  it("shows actual Cloud team/problem states and updates them after refetch", () => {
+    const cloudDetail = {
+      teams: [{ teamId: "A", internalSlug: "team-1", displayName: "Team One" }],
+      deploymentsByProblem: { "hello-world": [{ jobId: "J", teamId: "A", status: "IN_PROGRESS" }] },
+    } as unknown as EventDetail;
+    const { rerender } = render(
+      <DeployProgressPanel
+        {...props({ cloudDetail, allDoneCount: 0, inFlightCount: 1, totalDeployCount: 1 })}
+      />,
+    );
+    expect(
+      screen.getByRole("table", { name: "Deployment status by team and problem" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Team One")).toBeInTheDocument();
+    expect(screen.getByText("hello-world")).toBeInTheDocument();
+    expect(screen.getByText("Preparing")).toBeInTheDocument();
+    rerender(
+      <DeployProgressPanel
+        {...props({
+          cloudDetail: {
+            ...cloudDetail,
+            deploymentsByProblem: {
+              "hello-world": [{ jobId: "J", teamId: "A", status: "COMPLETE" }],
+            },
+          },
+          totalDeployCount: 1,
+          allDoneCount: 1,
+          completeCount: 1,
+        })}
+      />,
+    );
+    expect(screen.getByText("Ready")).toBeInTheDocument();
+    expect(screen.queryByText("Preparing")).not.toBeInTheDocument();
+    expect(screen.queryByText(/status is fetched every 30 seconds/)).not.toBeInTheDocument();
   });
 
   it("should keep the error indicator while a failure coexists with in-flight deploys", () => {
@@ -156,7 +194,9 @@ describe("DeployProgressPanel local preparation", () => {
     expect(screen.getByText("Prepared 3 / 3 · Running 0 · Stopped 3")).toBeInTheDocument();
     expect(screen.getByText(en.local_host.progress_ready_hint)).toBeInTheDocument();
     expect(screen.queryByText(/State Machine/)).not.toBeInTheDocument();
-    expect(screen.queryByText("auto polling")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Status refreshes automatically|status is fetched every 30 seconds/),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("deploy-status-reload"));
     expect(onManualRefresh).toHaveBeenCalledOnce();
   });
@@ -193,7 +233,9 @@ describe("DeployProgressPanel local preparation", () => {
     (operation) => {
       render(<DeployProgressPanel {...props({ localDetail: withLocalJob({ operation }) })} />);
       expect(screen.getByText("Preparation in progress")).toBeInTheDocument();
-      expect(screen.getByText("auto polling")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Status refreshes automatically|status is fetched every 30 seconds/),
+      ).toBeInTheDocument();
       expect(screen.queryByText("Preparation complete")).not.toBeInTheDocument();
     },
   );
@@ -203,7 +245,9 @@ describe("DeployProgressPanel local preparation", () => {
     const { rerender } = render(<DeployProgressPanel {...props({ localDetail: retrying })} />);
     expect(screen.getByText("Preparation in progress")).toBeInTheDocument();
     expect(screen.queryByText(/Preparation needs attention/)).not.toBeInTheDocument();
-    expect(screen.getByText("auto polling")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Status refreshes automatically|status is fetched every 30 seconds/),
+    ).toBeInTheDocument();
 
     const anotherFailure = {
       ...retrying,
@@ -214,7 +258,9 @@ describe("DeployProgressPanel local preparation", () => {
     };
     rerender(<DeployProgressPanel {...props({ localDetail: anotherFailure })} />);
     expect(screen.getByText("Preparation needs attention (1 failed)")).toBeInTheDocument();
-    expect(screen.getByText("auto polling")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Status refreshes automatically|status is fetched every 30 seconds/),
+    ).toBeInTheDocument();
   });
 
   it("requires every expected team/problem environment, including missing rows", () => {
@@ -275,5 +321,55 @@ describe("DeployProgressPanel local preparation", () => {
     render(<DeployProgressPanel {...props({ localDetail: localDetail(), t: realT(ja) })} />);
     expect(screen.getByText("準備完了")).toBeInTheDocument();
     expect(screen.getByText("準備済み 3 / 3 件・稼働中 0・停止中 3")).toBeInTheDocument();
+  });
+});
+
+describe("Cloud deployment rows", () => {
+  it("paginates actual states, falls back to team identifiers, and clamps a shrinking list", () => {
+    const statuses = [
+      "STOPPED",
+      "PENDING",
+      "DELETING",
+      "FAILED",
+      "EXPIRED",
+      "DELETED",
+      "AUTO_DELETED",
+      "COMPLETE",
+      "IN_PROGRESS",
+    ] as const;
+    const cloudDetail = {
+      teams: [{ teamId: "known", internalSlug: "team-slug" }],
+      deploymentsByProblem: {
+        p: Array.from({ length: 11 }, (_, i) => ({
+          jobId: `job-${i}`,
+          teamId: i === 0 ? "known" : `team-${i}`,
+          status: statuses[i % statuses.length],
+        })),
+      },
+    } as unknown as EventDetail;
+    const { container, rerender } = render(
+      <DeployProgressPanel {...props({ cloudDetail, totalDeployCount: 11 })} />,
+    );
+    expect(screen.getByText("team-slug")).toBeInTheDocument();
+    expect(screen.getByText("team-1")).toBeInTheDocument();
+    expect(screen.queryByText("team-10")).not.toBeInTheDocument();
+    const pagination = createWrapper(container).findPagination();
+    expect(pagination).not.toBeNull();
+    pagination?.findNextPageButton().click();
+    expect(screen.getByText("team-10")).toBeInTheDocument();
+    expect(screen.queryByText("team-slug")).not.toBeInTheDocument();
+    rerender(
+      <DeployProgressPanel
+        {...props({
+          cloudDetail: {
+            ...cloudDetail,
+            deploymentsByProblem: { p: cloudDetail.deploymentsByProblem.p.slice(0, 1) },
+          },
+          totalDeployCount: 1,
+        })}
+      />,
+    );
+    expect(screen.getByText("team-slug")).toBeInTheDocument();
+    expect(createWrapper(container).findPagination()).toBeNull();
   });
 });

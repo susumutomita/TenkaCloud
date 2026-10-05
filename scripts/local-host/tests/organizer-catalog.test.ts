@@ -62,7 +62,17 @@ test("only organizers receive catalog descriptions and goals from the existing a
       items: { problemId: string; content: OrganizerProblemContent; definition?: unknown }[];
     };
     for (const item of items) {
-      expect(Object.keys(item.content).sort()).toEqual(["description", "learningGoals"]);
+      expect(Object.keys(item.content).sort()).toEqual(
+        item.content.i18n
+          ? ["description", "i18n", "learningGoals"]
+          : ["description", "learningGoals"],
+      );
+      if (item.content.i18n?.en)
+        expect(
+          Object.keys(item.content.i18n.en).every((key) =>
+            ["description", "learningGoals"].includes(key),
+          ),
+        ).toBe(true);
       expect(item.content.description.length).toBeGreaterThan(0);
       expect(item.definition).toBeUndefined();
     }
@@ -72,6 +82,9 @@ test("only organizers receive catalog descriptions and goals from the existing a
     expect(items.find((item) => item.problemId === raw.id)?.content).toEqual({
       description: raw.description,
       learningGoals: raw.learningGoals,
+      i18n: {
+        en: { description: raw.i18n.en.description, learningGoals: raw.i18n.en.learningGoals },
+      },
     });
     const created = await call("POST", "/events", idToken, {
       name: "Catalog visibility",
@@ -93,11 +106,46 @@ test("only organizers receive catalog descriptions and goals from the existing a
 
 test("reviewed cloud catalog keeps the same organizer text without including solutions", () => {
   for (const problem of cloudFormationCatalog(root)) {
-    expect(Object.keys(problem.organizerContent ?? {}).sort()).toEqual([
-      "description",
-      "learningGoals",
-    ]);
+    expect(Object.keys(problem.organizerContent ?? {}).sort()).toEqual(
+      problem.organizerContent?.i18n
+        ? ["description", "i18n", "learningGoals"]
+        : ["description", "learningGoals"],
+    );
+    if (problem.organizerContent?.i18n?.en)
+      expect(
+        Object.keys(problem.organizerContent.i18n.en).every((key) =>
+          ["description", "learningGoals"].includes(key),
+        ),
+      ).toBe(true);
     expect(problem.organizerContent?.description.length).toBeGreaterThan(0);
   }
   expect(organizerProblemContent({ description: "text", learningGoals: [42] })).toBeUndefined();
+});
+
+test("English organizer text remains optional and excludes participant solutions", () => {
+  expect(organizerProblemContent({ description: "日本語", learningGoals: ["目標"] })).toEqual({
+    description: "日本語",
+    learningGoals: ["目標"],
+  });
+  expect(
+    organizerProblemContent({
+      description: "日本語",
+      i18n: {
+        en: {
+          description: "English",
+          learningGoals: ["Goal"],
+          instructions: "private",
+          writeup: "answer",
+        },
+      },
+    }),
+  ).toEqual({
+    description: "日本語",
+    learningGoals: [],
+    i18n: { en: { description: "English", learningGoals: ["Goal"] } },
+  });
+  expect(organizerProblemContent({ description: "日本語", i18n: { en: null } })).toEqual({
+    description: "日本語",
+    learningGoals: [],
+  });
 });

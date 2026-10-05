@@ -2,7 +2,7 @@ import { DeployProgressPanel } from "../../components/event-detail/DeployProgres
 import { EventPhaseBanner } from "../../components/event-detail/EventPhaseBanner";
 import { EventWizardPanel } from "../../components/event-detail/EventWizardPanel";
 import { ScoringLockPanel } from "../../components/event-detail/ScoringLockPanel";
-import { isLocalHost } from "../../config";
+import { isCloudHost, isLocalHost } from "../../config";
 import { isEffectivelyEnded } from "../../lib/effective-event-status";
 import type { EventTabContentProps } from "./tab-content-props";
 
@@ -31,6 +31,7 @@ export function OverviewTab({
       <EventWizardPanel t={t} wizard={wizard} />
       <DeployProgressPanel
         localDetail={isLocalHost(config) ? detail : undefined}
+        cloudDetail={isCloudHost(config) ? detail : undefined}
         allDoneCount={counts.allDoneCount}
         completeCount={counts.completeCount}
         ended={isEffectivelyEnded({
