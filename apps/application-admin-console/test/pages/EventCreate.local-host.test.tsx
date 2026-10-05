@@ -10,6 +10,7 @@ import type { ProblemSummary } from "../../src/data/problems";
  * requested, teams carry only their slug, and preparation leaves Docker environments stopped.
  */
 const mocks = vi.hoisted(() => ({
+  locale: "ja" as "ja" | "en",
   useApiClient: vi.fn(),
   navigate: vi.fn(),
   createEvent: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock("../../src/data/problems", async (importOriginal) => {
 });
 vi.mock("../../src/i18n", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/i18n")>();
-  return { ...actual, useT: () => (key: string) => key };
+  return { ...actual, useT: () => (key: string) => key, useI18n: () => ({ locale: mocks.locale }) };
 });
 
 const { EventCreatePage } = await import("../../src/pages/EventCreate");
@@ -70,6 +71,7 @@ function problem(id: string, provider: string, engine: string): ProblemSummary {
 
 const get = vi.fn();
 beforeEach(() => {
+  mocks.locale = "ja";
   get.mockReset().mockResolvedValue({ items: [{ problemId: "sqli-demo" }] });
   mocks.useApiClient.mockReturnValue({ get, post: vi.fn(), tenantAccess: undefined });
   mocks.createEvent.mockResolvedValue({
@@ -88,6 +90,54 @@ const multiselect = (container: HTMLElement) =>
   createWrapper(container).findMultiselect('[data-testid="problem-select"]');
 
 describe("EventCreatePage on the local competition host", () => {
+  it.each(["local-host", "cloud-host"] as const)(
+    "updates selected text in %s while retaining filtered selections and regions",
+    async (mode) => {
+      const translated = {
+        ...problem("cloud-only", "aws", "cloudformation"),
+        name: "日本語の問題",
+        shortDescription: "日本語の説明",
+        i18n: { en: { name: "English problem", shortDescription: "English description" } },
+      };
+      mocks.listProblemSummaries.mockReturnValue([translated]);
+      get.mockResolvedValue({ items: [{ problemId: "cloud-only" }] });
+      const pageConfig = { ...config, mode, supportedProblemIds: ["cloud-only"] };
+      const { container, rerender } = render(<EventCreatePage config={pageConfig} />);
+      if (mode === "local-host")
+        await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
+      const picker = multiselect(container);
+      picker?.openDropdown();
+      picker?.selectOptionByValue("cloud-only");
+      picker?.closeDropdown();
+      const selection = () => picker?.findTokens()[0]?.getElement().textContent;
+      expect(selection()).toContain("日本語の問題");
+      const region = createWrapper(container).findAllSelects().at(-1);
+      if (mode === "cloud-host") {
+        region?.openDropdown();
+        region?.selectOptionByValue("us-east-1", { expandToViewport: true });
+        expect(region?.findTrigger().getElement().textContent).toContain("us-east-1");
+      }
+      createWrapper(container)
+        .findInput('[data-testid="problem-filter-search"]')
+        ?.setInputValue("no match");
+      mocks.locale = "en";
+      rerender(<EventCreatePage config={pageConfig} />);
+      expect(selection()).toContain("English problem");
+      expect(selection()).toContain("English description");
+      expect(selection()).not.toContain("日本語の問題");
+      if (mode === "cloud-host") {
+        expect(region?.findTrigger().getElement().textContent).toContain("us-east-1");
+        expect(createWrapper(container).findAllTables().at(-1)?.getElement().textContent).toContain(
+          "English problem",
+        );
+      }
+      mocks.locale = "ja";
+      rerender(<EventCreatePage config={pageConfig} />);
+      expect(selection()).toContain("日本語の問題");
+      expect(picker?.findTokens()).toHaveLength(1);
+    },
+  );
+
   it("creates a slug-only event from a host-supported problem and deploys it", async () => {
     const { container } = render(<EventCreatePage config={config} />);
     expect(screen.queryByText("local_host.create_header")).toBeNull();

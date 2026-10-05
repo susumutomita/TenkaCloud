@@ -110,6 +110,17 @@ export function EventCreateProblemsetSection({
       disabled: option.disabled || !selected.has(option.value),
     }));
   }, [filtered, t, enabledProviders, hostSupportedProblemIds, maxProblems, selectedProblems]);
+  // Refresh selected text from the whole catalog, even when filters hide the selection.
+  const displayedSelection = useMemo(() => {
+    const options = buildProblemOptions(problems, "", enabledProviders, hostSupportedProblemIds);
+    return selectedProblems.map((selected) => {
+      const option = options.find((candidate) => candidate.value === selected.value);
+      const problem = problems.find((candidate) => candidate.id === selected.value);
+      return option && problem
+        ? { ...selected, label: option.label, description: problem.shortDescription }
+        : selected;
+    });
+  }, [problems, selectedProblems, enabledProviders, hostSupportedProblemIds]);
   const tagFacets = useMemo(() => collectTagFacets(problems), [problems]);
   const scoringKindFacets = useMemo(() => collectScoringKindFacets(problems), [problems]);
 
@@ -257,7 +268,7 @@ export function EventCreateProblemsetSection({
         >
           <Multiselect
             data-testid="problem-select"
-            selectedOptions={[...selectedProblems]}
+            selectedOptions={displayedSelection}
             options={[...problemOptions]}
             placeholder={t("event_create.problemset_placeholder")}
             empty={t("problem_search.empty_filtered")}
