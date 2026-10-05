@@ -186,7 +186,11 @@ describe("EventCreatePage flow", () => {
       expect(select?.findDropdown()?.findOptionByValue("p1")).not.toBeNull();
       expect(select?.findDropdown()?.findOptionByValue("p2")).toBeNull();
       select?.selectOptionByValue("p1");
-      expect(screen.getByText("Problem 1")).toBeInTheDocument();
+      expect(
+        problemSelect(container)
+          ?.findTokens()
+          .some((token) => token.getElement().textContent?.includes("Problem 1")),
+      ).toBe(true);
     },
   );
   it.each([{ supportedProblemIds: undefined }, { supportedProblemIds: [] }])(
@@ -401,8 +405,16 @@ describe("EventCreatePage flow", () => {
     ms?.openDropdown();
     ms?.selectOptionByValue("p1"); // [p1]
     ms?.selectOptionByValue("p2"); // [p1, p2] → onProblemsChange の prev に p1 → existing 再利用経路
-    expect(screen.getByText("Problem 1")).toBeInTheDocument();
-    expect(screen.getByText("Problem 2")).toBeInTheDocument();
+    expect(
+      problemSelect(container)
+        ?.findTokens()
+        .some((token) => token.getElement().textContent?.includes("Problem 1")),
+    ).toBe(true);
+    expect(
+      problemSelect(container)
+        ?.findTokens()
+        .some((token) => token.getElement().textContent?.includes("Problem 2")),
+    ).toBe(true);
     // p1 の region Select だけ変更 → updateProblemRow の map で p1=match / p2=非match 両分岐。
     // [Issue #3173] Teams 表が account と region の 2 Select を持つようになったので、
     // 問題側の Select は「Teams 表のぶんを飛ばした先頭」= 全 team 分の後ろから数える。
@@ -410,7 +422,11 @@ describe("EventCreatePage flow", () => {
     const regionP1 = w(container).findAllSelects()[teamSelectCount];
     regionP1?.openDropdown();
     regionP1?.selectOptionByValue("ap-northeast-1", { expandToViewport: true });
-    expect(screen.getByText("Problem 1")).toBeInTheDocument();
+    expect(
+      problemSelect(container)
+        ?.findTokens()
+        .some((token) => token.getElement().textContent?.includes("Problem 1")),
+    ).toBe(true);
   });
 
   it("should fall back to the default region for a problem without metadata region", () => {
@@ -418,7 +434,11 @@ describe("EventCreatePage flow", () => {
     const ms = problemSelect(container);
     ms?.openDropdown();
     ms?.selectOptionByValue("p2"); // defaultRegion / supportedRegions 未宣言 → fallback 分岐
-    expect(screen.getByText("Problem 2")).toBeInTheDocument();
+    expect(
+      problemSelect(container)
+        ?.findTokens()
+        .some((token) => token.getElement().textContent?.includes("Problem 2")),
+    ).toBe(true);
   });
 
   it("should show the loading hint while accounts are still loading", () => {
