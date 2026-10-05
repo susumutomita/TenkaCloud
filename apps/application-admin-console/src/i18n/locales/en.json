@@ -167,7 +167,8 @@
     "pack_guidance_step_create_event": "Create an event in this console.",
     "pack_guidance_create_event_note": "After activation, the pack's problems appear in the catalog while creating an event.",
     "pack_guidance_docs_link": "Open the first-pack tutorial",
-    "pack_guidance_empty_hint": "You can contribute problems to the official catalog or add private Problem Packs for this tenant."
+    "pack_guidance_empty_hint": "You can contribute problems to the official catalog or add private Problem Packs for this tenant.",
+    "theme_cryptography": "Cryptography"
   },
   "problem_search": {
     "filter_label": "Filter the problem catalog",
@@ -180,7 +181,9 @@
     "facet_count": "{count} problems",
     "match_count": "{filtered} of {total} problems match",
     "clear_filters": "Clear filters",
-    "empty_filtered": "No problems match the filters."
+    "empty_filtered": "No problems match the filters.",
+    "more_filters": "More filters",
+    "selection_preserved": "Selected problems stay selected when you change filters."
   },
   "problem_cost": {
     "header": "Cost risk",

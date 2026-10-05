@@ -32,6 +32,8 @@ import {
 
 type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
+import { problemThemeLabel, problemThemeTags } from "../lib/problem-themes";
+
 export function ProblemDetailPage({
   config,
   supportedProblemIds,
@@ -152,8 +154,8 @@ export function ProblemDetailPage({
 
       <Container header={<Header variant="h2">{t("problem_detail.section_tags")}</Header>}>
         <SpaceBetween direction="horizontal" size="xs">
-          {problem.tags.map((tag) => (
-            <Badge key={tag}>{tag}</Badge>
+          {problemThemeTags(problem.tags).map((tag) => (
+            <Badge key={tag}>{problemThemeLabel(tag, t)}</Badge>
           ))}
         </SpaceBetween>
       </Container>
