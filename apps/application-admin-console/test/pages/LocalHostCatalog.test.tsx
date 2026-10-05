@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../src/config";
+import { localizeProblemText } from "../../src/data/problem-locale";
 import { metadataToDetail } from "../../src/data/problem-mapping";
 import type { ProblemMetadata } from "../../src/data/problem-types";
 import { I18nProvider } from "../../src/i18n";
@@ -34,6 +35,7 @@ const catalogProblems = JSON.parse(
       `
   import { readFileSync } from "node:fs";
   import { publicMetadata } from "./scripts/local-host/browser-metadata";
+  import { organizerProblemContent } from "./scripts/local-host/model";
   const paths = ["challenges/ac26-bridge-clock", "battles/ac26-crypto-battle", "challenges/hello-world", "battles/hello-world-battle"];
   console.log(JSON.stringify(paths.map((path) => {
     const filename = process.cwd() + "/problems/" + path + "/metadata.json";
@@ -41,15 +43,20 @@ const catalogProblems = JSON.parse(
     const raw = JSON.parse(source);
     const safe = publicMetadata(source, filename);
     if (!safe) throw new Error("Missing host public projection");
-    return { public: JSON.parse(safe), content: { description: raw.description, learningGoals: raw.learningGoals } };
+    return { public: JSON.parse(safe), content: organizerProblemContent(raw) };
   })));
 `,
     ],
     { cwd: resolve(process.cwd(), "../.."), encoding: "utf8" },
   ),
-) as { public: ProblemMetadata; content: Pick<ProblemMetadata, "description" | "learningGoals"> }[];
+) as {
+  public: ProblemMetadata;
+  content: Pick<ProblemMetadata, "description" | "learningGoals" | "i18n">;
+}[];
 const projected = catalogProblems.map((entry) => metadataToDetail(entry.public));
-const challengeMetadata = projected[0];
+const englishProjected = projected.map((problem) => localizeProblemText(problem, "en"));
+const englishContent = catalogProblems.map((entry) => localizeProblemText(entry.content, "en"));
+const challengeMetadata = englishProjected[0];
 const sampleMetadata = projected[2];
 const config: AppConfig = {
   mode: "local-host",
@@ -91,7 +98,10 @@ beforeEach(() => {
 
 describe("local catalog with production public metadata", () => {
   it("browses only runnable problems and opens safe projected details", async () => {
-    const challenge = projected[0];
+    const challenge = englishProjected[0];
+    expect(challenge.name).toBe(catalogProblems[0].public.i18n?.en?.name);
+    expect(challenge.name).not.toBe(projected[0].name);
+    expect(englishContent[0].description).toBe(catalogProblems[0].content.i18n?.en?.description);
     expect(challenge.description).toBeUndefined();
     expect(challenge.exposedPorts).toBeUndefined();
     expect(challenge.learningGoals).toEqual([]);
@@ -101,16 +111,26 @@ describe("local catalog with production public metadata", () => {
     expect(screen.getByRole("heading", { name: challenge.name, level: 1 })).toBeInTheDocument();
     expect(screen.getByText(challenge.shortDescription)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Description" })).toBeInTheDocument();
-    expect(screen.getByText(catalogProblems[0].content.learningGoals[0])).toBeInTheDocument();
-    expect(screen.getByText(catalogProblems[0].content.description)).toBeInTheDocument();
+    expect(screen.getByText(englishContent[0].learningGoals[0])).toBeInTheDocument();
+    expect(screen.getByText(englishContent[0].description)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Endpoints issued to participants" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Cost estimate" })).toBeNull();
     expect(get.mock.calls.every(([path]) => path === "host/catalog")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Back to list" }));
     expect(await screen.findByRole("link", { name: challenge.name })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: projected[1].name })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: englishProjected[1].name })).toBeInTheDocument();
     for (const sample of projected.slice(2))
       expect(screen.queryByRole("link", { name: sample.name })).toBeNull();
+  });
+
+  it("keeps the authored Japanese catalog and organizer content when Japanese is selected", async () => {
+    window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
+    renderCatalog();
+    fireEvent.click(await screen.findByRole("link", { name: projected[0].name }));
+    expect(screen.getByRole("heading", { name: projected[0].name, level: 1 })).toBeInTheDocument();
+    expect(screen.getByText(catalogProblems[0].content.description)).toBeInTheDocument();
+    expect(screen.getByText(catalogProblems[0].content.learningGoals[0])).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: englishProjected[0].name, level: 1 })).toBeNull();
   });
 
   it("reports missing organizer content instead of silently rendering an empty detail", async () => {
