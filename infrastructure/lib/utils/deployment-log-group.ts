@@ -20,14 +20,8 @@ import { LAMBDA_LOG_RETENTION } from "./lambda-runtime.js";
  * deprecated で、 doc が `logGroup` への移行を勧めている)。 だから明示 LogGroup を渡す。 渡した
  * LogGroup は synth 出力に現れるので、 Aspect の視界に入り、 retention が当たる。
  *
- * ## 塞げない経路
- *
- * 同じ手当てが効かない provider がある。 `Bucket({ autoDeleteObjects: true })` の
- * `Custom::S3AutoDeleteObjects` と `iam.OpenIdConnectProvider` の
- * `Custom::AWSCDKOpenIdConnectProvider` は、 いずれも provider Lambda を construct 内部で singleton
- * として作り、 log 設定の prop を公開していない (2.262.1 の型定義で確認)。 この 2 経路は構築側からは
- * 塞げないので、 `scripts/enforce-log-retention.sh` の backstop sweep が deploy 後に回収する。
- * 「全部塞いだ」とは言えない。
+ * cloud hosting は OwnedRuntimeLogs Aspect で、log 設定を公開しない S3 auto-delete 等の
+ * CDK provider にも CloudFormation 管理の LogGroup を追加する。 他の composition の保証ではない。
  */
 /**
  * ## 同じ stack の `BucketDeployment` は provider Lambda を共有する

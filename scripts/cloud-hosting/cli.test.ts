@@ -1645,9 +1645,10 @@ describe("explicit Turso destruction sequence", () => {
   it("ordinary destroy warns and never invokes Turso reset", async () => {
     const f = tursoFixture();
     expect(await f.run(["down", "--yes"])).toBe(0);
-    expect(f.order).toEqual(["destroy", "destroy"]);
+    expect(f.order).toEqual(["destroy", "destroy", "purge-logs"]);
     expect(f.messages.join("")).toContain("Turso control-data rows remain");
     expect(f.targets).toEqual([]);
+    expect([...f.liveLogs]).toEqual(["/unrelated/logs"]);
   });
   it("read-only plan neither confirms nor mutates", async () => {
     const f = tursoFixture();

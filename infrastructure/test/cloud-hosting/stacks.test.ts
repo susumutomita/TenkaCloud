@@ -83,6 +83,26 @@ describe("restored single-installation cloud composition", () => {
         "tenkacloud-lite-test",
       ]);
   });
+  it("owns every runtime's log destination and keeps Cognito Delete in all main profiles", () => {
+    for (const template of fixtures.flatMap((current) => [current.backend, current.application])) {
+      const logs = template.findResources("AWS::Logs::LogGroup");
+      for (const runtime of Object.values(template.findResources("AWS::Lambda::Function"))) {
+        const ref = runtime.Properties.LoggingConfig?.LogGroup?.Ref;
+        expect(ref, "including the generic S3 auto-delete provider").toBeDefined();
+        expect(logs[ref]).toMatchObject({
+          Properties: { RetentionInDays: expect.any(Number) },
+          DeletionPolicy: "Delete",
+        });
+      }
+      for (const [id, resource] of Object.entries(logs).filter(([id]) =>
+        id.includes("OwnedRuntimeLogs"),
+      ))
+        expect(resource.Properties.RetentionInDays, id).toBe(1);
+      for (const pool of Object.values(template.findResources("AWS::Cognito::UserPool")))
+        expect(pool.DeletionPolicy).toBe("Delete");
+    }
+  });
+
   it("uses the verified account and region ahead of ambient CDK defaults", () => {
     expect(
       cloudDeploymentTarget({
