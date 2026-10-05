@@ -3,6 +3,7 @@ import { type UserPool, UserPoolOperation } from "aws-cdk-lib/aws-cognito";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
+import { LAMBDA_LOG_RETENTION } from "../utils/lambda-runtime.js";
 
 /**
  * Issue #1335 Phase 1: System Admin (Control Plane) 側 federated 管理者 allowlist。
@@ -147,6 +148,7 @@ export function attachFederatedAdminAllowlist(
 ): void {
   const guard = new LambdaFunction(scope, "FederatedAdminAllowlistGuard", {
     logGroup: new LogGroup(scope, "FederatedAdminAllowlistGuardLogGroup", {
+      retention: LAMBDA_LOG_RETENTION,
       removalPolicy: RemovalPolicy.DESTROY,
     }),
     runtime: Runtime.NODEJS_20_X,
