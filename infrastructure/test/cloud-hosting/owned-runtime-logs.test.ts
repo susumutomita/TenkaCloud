@@ -93,6 +93,55 @@ describe("CFN owned runtime logs", () => {
       LoggingConfig: { LogGroup: "/external/provider", LogFormat: "JSON" },
     });
   });
+  it("does not adopt generic Lambda resources outside a CDK provider", () => {
+    const scope = stack();
+    new CfnResource(scope, "ExternalAdapter", {
+      type: "AWS::Lambda::Function",
+      properties: { FunctionName: "external-adapter" },
+    });
+    const template = Template.fromStack(scope);
+    expect(Object.keys(template.findResources("AWS::Logs::LogGroup"))).toHaveLength(0);
+    template.hasResourceProperties("AWS::Lambda::Function", {
+      FunctionName: "external-adapter",
+      LoggingConfig: Match.absent(),
+    });
+  });
+  it("preserves conditional logging destinations without adopting either branch", () => {
+    const scope = stack();
+    const configuration = {
+      "Fn::If": ["UseExternal", { LogGroup: "/external/conditional" }, { Ref: "AWS::NoValue" }],
+    };
+    lambda(scope, "Conditional").addPropertyOverride("LoggingConfig", configuration);
+    const template = Template.fromStack(scope);
+    expect(Object.keys(template.findResources("AWS::Logs::LogGroup"))).toHaveLength(0);
+    template.hasResourceProperties("AWS::Lambda::Function", { LoggingConfig: configuration });
+  });
+  it.each([null, [], "unresolved"])(
+    "does not overwrite an opaque low-level logging configuration: %j",
+    (configuration) => {
+      const scope = stack();
+      const runtime = lambda(scope, "Opaque");
+      runtime.addPropertyOverride("LoggingConfig", configuration);
+      new OwnedRuntimeLogs().visit(runtime);
+      // The aspect must not reinterpret or silently repair caller-owned overrides.
+      expect(runtime.node.tryFindChild("OwnedRuntimeLogs")).toBeUndefined();
+      const rendered = scope.resolve(runtime._toCloudFormation());
+      expect(rendered.Resources.Opaque.Properties.LoggingConfig).toEqual(configuration);
+    },
+  );
+  it("owns an implicit destination only once when the aspect runs repeatedly", () => {
+    const scope = stack();
+    const runtime = lambda(scope, "Repeated");
+    const aspect = new OwnedRuntimeLogs();
+    aspect.visit(runtime);
+    aspect.visit(runtime);
+    const template = Template.fromStack(scope);
+    const logs = template.findResources("AWS::Logs::LogGroup");
+    expect(Object.keys(logs)).toHaveLength(1);
+    template.hasResourceProperties("AWS::Lambda::Function", {
+      LoggingConfig: { LogGroup: { Ref: Object.keys(logs)[0] } },
+    });
+  });
   it("preserves explicit destinations, disabled CodeBuild logging and explicit retention", () => {
     const scope = stack();
     lambda(scope, "Explicit", { logGroup: "/external/logs", logFormat: "JSON" });
