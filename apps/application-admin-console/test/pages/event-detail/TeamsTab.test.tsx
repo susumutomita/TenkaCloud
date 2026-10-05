@@ -53,7 +53,7 @@ function Harness({ mode }: { mode: AppConfig["mode"] }) {
     participantPortalUrl: portalUrl,
   };
   const props = {
-    apiClient: createApiClient(apiBaseUrl, "header.e30.signature"),
+    apiClient: createApiClient(apiBaseUrl, "test-token"),
     canMutateTenant: true,
     config,
     detail,
