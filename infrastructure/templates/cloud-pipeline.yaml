@@ -172,7 +172,7 @@ Mappings:
   SourceDefaults:
     current-cloud-v1:
       # Offline-verified current CLI source; live AWS deployment is not validated.
-      CurrentPlatformCommit: d582525e103225feda57c350a6772fc2fb22dceb
+      CurrentPlatformCommit: db92e9024cc867aa8eea9c58dbb095dfb15ff189
       CatalogCommit: aeacd121a732b9b81db459ad5eb39568d25b877c
       Classification: candidate/unreleased
 
