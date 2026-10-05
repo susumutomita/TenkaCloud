@@ -11,7 +11,11 @@ import type { ProblemSummary } from "../../src/data/problems";
  * useNavigate / listProblemSummaries / useT を mock、 problem-filter ロジックと interpolate
  * は実物。
  */
-const { mockNav, mockList } = vi.hoisted(() => ({ mockNav: vi.fn(), mockList: vi.fn() }));
+const { mockNav, mockList, mockLocale } = vi.hoisted(() => ({
+  mockNav: vi.fn(),
+  mockList: vi.fn(),
+  mockLocale: vi.fn(),
+}));
 
 vi.mock("react-router", () => ({ useNavigate: () => mockNav }));
 vi.mock("../../src/data/problems", async (importOriginal) => {
@@ -21,7 +25,7 @@ vi.mock("../../src/data/problems", async (importOriginal) => {
 });
 vi.mock("../../src/i18n", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/i18n")>();
-  return { ...actual, useT: () => (key: string) => key };
+  return { ...actual, useI18n: mockLocale, useT: () => (key: string) => key };
 });
 
 const { ProblemsPage } = await import("../../src/pages/Problems");
@@ -74,6 +78,7 @@ const renderPage = () => render(<ProblemsPage />);
 const searchBox = () => screen.getByRole("searchbox", { name: "problems.search_label" });
 
 beforeEach(() => {
+  mockLocale.mockReturnValue({ locale: "ja" });
   mockNav.mockClear();
   mockList.mockReturnValue(CATALOG);
   vi.stubGlobal(
@@ -91,6 +96,30 @@ afterEach(() => {
 });
 
 describe("ProblemsPage", () => {
+  it("updates authored card text on language changes and searches translated descriptions", () => {
+    mockList.mockReturnValue([
+      summary({
+        name: "日本語の問題",
+        shortDescription: "日本語の説明",
+        i18n: {
+          en: { name: "English problem", shortDescription: "Translated cryptography exercise" },
+        },
+      }),
+    ]);
+    const { rerender } = renderPage();
+    expect(screen.getByText("日本語の説明")).toBeInTheDocument();
+    mockLocale.mockReturnValue({ locale: "en" });
+    rerender(<ProblemsPage />);
+    expect(screen.getByText("English problem")).toBeInTheDocument();
+    expect(screen.getByText("Translated cryptography exercise")).toBeInTheDocument();
+    fireEvent.change(searchBox(), { target: { value: "cryptography" } });
+    expect(screen.getByText("English problem")).toBeInTheDocument();
+    fireEvent.change(searchBox(), { target: { value: "" } });
+    mockLocale.mockReturnValue({ locale: "ja" });
+    rerender(<ProblemsPage />);
+    expect(screen.getByText("日本語の説明")).toBeInTheDocument();
+    expect(screen.queryByText("Translated cryptography exercise")).not.toBeInTheDocument();
+  });
   it("should render every problem card and a plain total counter when no filter is active", () => {
     renderPage();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
