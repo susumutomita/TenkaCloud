@@ -19,7 +19,7 @@ const requestSchema = z.object({
   firedBy: z.string(),
   firedAt: z.string(),
   targetTeamIds: z.array(z.string()),
-  parameters: z.record(z.unknown()),
+  parameters: z.record(z.string(), z.unknown()),
   dueAt: z.number(),
   endsAt: z.number(),
   cancelled: z.boolean(),

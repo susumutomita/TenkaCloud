@@ -57,13 +57,14 @@ const maxBucketPages = 10_000;
 const maxDeletePayloadBytes = 64 * 1024;
 const templateSchema = z.object({
   Resources: z.record(
+    z.string(),
     z.object({
       Type: z.string(),
       DeletionPolicy: z.string().optional(),
-      Properties: z.record(z.unknown()).optional(),
+      Properties: z.record(z.string(), z.unknown()).optional(),
     }),
   ),
-  Outputs: z.record(z.object({ Value: z.unknown() })).optional(),
+  Outputs: z.record(z.string(), z.object({ Value: z.unknown() })).optional(),
 });
 const inventorySchema = z.object({
   StackResourceSummaries: z.array(

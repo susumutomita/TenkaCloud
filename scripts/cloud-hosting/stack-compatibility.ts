@@ -6,11 +6,12 @@ import type { PlatformStack } from "./failed-creation";
 export const RESTORED_COMPOSITION = "lite-baseline-v1";
 const templateSchema = z.object({
   TemplateBody: z.object({
-    Metadata: z.record(z.unknown()).optional(),
+    Metadata: z.record(z.string(), z.unknown()).optional(),
     Resources: z.record(
-      z.object({ Type: z.string(), Properties: z.record(z.unknown()).optional() }),
+      z.string(),
+      z.object({ Type: z.string(), Properties: z.record(z.string(), z.unknown()).optional() }),
     ),
-    Outputs: z.record(z.object({ Value: z.unknown() })).optional(),
+    Outputs: z.record(z.string(), z.object({ Value: z.unknown() })).optional(),
   }),
 });
 const publishedOutputs = [

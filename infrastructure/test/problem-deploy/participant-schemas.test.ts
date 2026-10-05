@@ -181,6 +181,12 @@ describe("NotificationsQuerySchema", () => {
 });
 
 describe("EventInboxQuerySchema", () => {
+  it("should accept omitted sinceMs for the handler default", () => {
+    const r = EventInboxQuerySchema.safeParse({ jobId: VALID_JOB_ID });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.sinceMs).toBeUndefined();
+  });
+
   it("should accept ?jobId=<ULID>&sinceMs=<digits>", () => {
     const r = EventInboxQuerySchema.safeParse({ jobId: VALID_JOB_ID, sinceMs: "1700000000000" });
     expect(r.success).toBe(true);
@@ -199,6 +205,12 @@ describe("EventInboxQuerySchema", () => {
 });
 
 describe("BattleAttacksQuerySchema", () => {
+  it("should accept omitted sinceMin for the handler default", () => {
+    const r = BattleAttacksQuerySchema.safeParse({ jobId: VALID_JOB_ID });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.sinceMin).toBeUndefined();
+  });
+
   it("should accept ?jobId=<ULID>&sinceMin=<digits>", () => {
     const r = BattleAttacksQuerySchema.safeParse({ jobId: VALID_JOB_ID, sinceMin: "30" });
     expect(r.success).toBe(true);

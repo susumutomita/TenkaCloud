@@ -401,7 +401,7 @@ export const DisruptionFireRequestSchema = z
   .object({
     disruptionId: z.string().min(1).max(64),
     problemId: z.string().min(1).max(128),
-    parameters: z.record(z.unknown()).optional(),
+    parameters: z.record(z.string(), z.unknown()).optional(),
     scope: z.enum(["all", "team", "random-n"]),
     targetTeamIds: z.array(z.string().min(1).max(128)).max(200).optional(),
     randomCount: z.number().int().finite().min(1).max(200).optional(),
