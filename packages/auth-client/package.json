@@ -15,7 +15,7 @@
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts'"
   },
   "devDependencies": {
-    "jsdom": "^30.0.1",
+    "jsdom": "^30.1.1",
     "typescript": "^6.0.3",
     "vitest": "^5.0.3"
   }
