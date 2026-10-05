@@ -124,7 +124,7 @@ describe("current cloud launcher; no AWS execution", () => {
       "candidate/unreleased",
     );
     expect(parsed.Mappings.SourceDefaults["current-cloud-v1"].CatalogCommit).toBe(
-      "4bb3a116c545fc46ed6a39ffcc5117fb914947f4",
+      "aeacd121a732b9b81db459ad5eb39568d25b877c",
     );
     const role = parsed.Resources.CodeBuildRole.Properties;
     expect(role.ManagedPolicyArns).toBeUndefined();
