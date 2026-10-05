@@ -41,6 +41,7 @@ export interface TeardownPlan {
   readonly tables: readonly OwnedTable[];
   readonly logGroups: readonly string[];
   readonly retainedResources: readonly RetainedResource[];
+  readonly unverifiedDefaultLogGroups: readonly string[];
   readonly storageOutputs: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 type BucketContext = Pick<TeardownContext, "account" | "environment" | "region" | "run">;
@@ -55,7 +56,13 @@ const bucketPageSchema = z.object({
 const maxBucketPages = 10_000;
 const maxDeletePayloadBytes = 64 * 1024;
 const templateSchema = z.object({
-  Resources: z.record(z.object({ Type: z.string(), DeletionPolicy: z.string().optional() })),
+  Resources: z.record(
+    z.object({
+      Type: z.string(),
+      DeletionPolicy: z.string().optional(),
+      Properties: z.record(z.unknown()).optional(),
+    }),
+  ),
   Outputs: z.record(z.object({ Value: z.unknown() })).optional(),
 });
 const inventorySchema = z.object({
@@ -174,13 +181,26 @@ function collectCleanupResources(
   for (const resource of resources) {
     const name = resource.PhysicalResourceId;
     if (!name && isMissingCleanupIdentity(resource)) return undefined;
-    if (!name) continue;
+    if (!name || resource.ResourceStatus === "DELETE_COMPLETE") continue;
+    assertRuntimeIdentity(resource, name);
     if (resource.ResourceType === "AWS::DynamoDB::Table") tables.add(name);
     if (resource.ResourceType === "AWS::Logs::LogGroup") logs.add(name);
     if (resource.ResourceType === "AWS::Lambda::Function") logs.add(`/aws/lambda/${name}`);
     if (resource.ResourceType === "AWS::CodeBuild::Project") logs.add(`/aws/codebuild/${name}`);
   }
   return { tableNames: [...tables], logGroupNames: [...logs] };
+}
+function assertRuntimeIdentity(
+  resource: z.infer<typeof inventorySchema>["StackResourceSummaries"][number],
+  name: string,
+): void {
+  if (resource.ResourceType === "AWS::Lambda::Function" && !/^[A-Za-z0-9_-]{1,64}$/u.test(name))
+    throw new Error("Invalid stack-owned Lambda physical identity.");
+  if (
+    resource.ResourceType === "AWS::CodeBuild::Project" &&
+    !/^[A-Za-z0-9][A-Za-z0-9_-]{1,254}$/u.test(name)
+  )
+    throw new Error("Invalid stack-owned CodeBuild physical identity.");
 }
 function isMissingCleanupIdentity(
   resource: z.infer<typeof inventorySchema>["StackResourceSummaries"][number],
@@ -408,9 +428,25 @@ async function discoverStack(context: TeardownContext, stack: PlatformStack) {
     );
     if (table) tables.push(table);
   }
-  const resources = context.bucketsOnly
-    ? { logGroupNames: [] }
-    : collectCleanupResources(inventory.StackResourceSummaries);
+  const unverifiedDefaultLogGroups: string[] = [];
+  const runtimeResources = inventory.StackResourceSummaries.filter((resource) => {
+    const properties = template.Resources[resource.LogicalResourceId]?.Properties;
+    const explicit =
+      (resource.ResourceType === "AWS::Lambda::Function" &&
+        properties?.LoggingConfig !== undefined) ||
+      (resource.ResourceType === "AWS::CodeBuild::Project" && properties?.LogsConfig !== undefined);
+    if (!explicit) return true;
+    // A configured destination does not prove ownership of its previous default path.
+    // CFN log groups are independently captured by their actual physical identities.
+    const name = resource.PhysicalResourceId;
+    if (name && resource.ResourceStatus !== "DELETE_COMPLETE") {
+      assertRuntimeIdentity(resource, name);
+      const service = resource.ResourceType === "AWS::Lambda::Function" ? "lambda" : "codebuild";
+      unverifiedDefaultLogGroups.push(`/aws/${service}/${name}`);
+    }
+    return false;
+  });
+  const resources = collectCleanupResources(runtimeResources);
   if (!resources)
     throw new Error("Incomplete CloudFormation physical inventory; no resources were removed.");
   return {
@@ -418,8 +454,22 @@ async function discoverStack(context: TeardownContext, stack: PlatformStack) {
     tables,
     logGroups: resources.logGroupNames,
     retainedResources,
+    unverifiedDefaultLogGroups: unverifiedDefaultLogGroups.filter(
+      (name) => !resources.logGroupNames.includes(name),
+    ),
     outputs: recoverStorageOutputs(stack, template, rawTemplate),
   };
+}
+function retainedLogNames(resources: readonly RetainedResource[]): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const resource of resources) {
+    if (resource.resourceType === "AWS::Logs::LogGroup") names.add(resource.physicalId);
+    if (resource.resourceType === "AWS::Lambda::Function")
+      names.add(`/aws/lambda/${resource.physicalId}`);
+    if (resource.resourceType === "AWS::CodeBuild::Project")
+      names.add(`/aws/codebuild/${resource.physicalId}`);
+  }
+  return names;
 }
 /** Read-only physical ownership/protection proof. No data scans, prefix adoption or protection changes. */
 export async function discoverTeardownPlan(context: TeardownContext): Promise<TeardownPlan> {
@@ -428,6 +478,7 @@ export async function discoverTeardownPlan(context: TeardownContext): Promise<Te
   const logGroups = new Set<string>();
   const retainedResources: RetainedResource[] = [];
   const storageOutputs: Record<string, Readonly<Record<string, string>>> = {};
+  const unverifiedDefaultLogGroups = new Set<string>();
   for (const stack of context.stacks) {
     // An in-flight deletion is only waited by the caller; never race its resource cleanup.
     if (stack.status === "DELETE_IN_PROGRESS") continue;
@@ -435,6 +486,7 @@ export async function discoverTeardownPlan(context: TeardownContext): Promise<Te
     buckets.push(...discovered.buckets);
     tables.push(...discovered.tables);
     retainedResources.push(...discovered.retainedResources);
+    for (const name of discovered.unverifiedDefaultLogGroups) unverifiedDefaultLogGroups.add(name);
     for (const name of discovered.logGroups) logGroups.add(name);
     storageOutputs[stack.arn] = discovered.outputs;
   }
@@ -442,14 +494,22 @@ export async function discoverTeardownPlan(context: TeardownContext): Promise<Te
     throw new Error("A table appears in multiple stack inventories; ownership is ambiguous.");
   if (new Set(buckets.map((bucket) => bucket.name)).size !== buckets.length)
     throw new Error("A bucket appears in multiple stack inventories; ownership is ambiguous.");
+  // A default path derived in one stack must not bypass another selected stack's
+  // exact CFN Retain policy. Apply the boundary after all inventories are merged.
+  const retainedLogs = retainedLogNames(retainedResources);
   return {
     account: context.account,
     environment: context.environment,
     region: context.region,
     buckets,
     tables,
-    logGroups: [...logGroups],
+    logGroups: [...logGroups].filter(
+      (name) => context.purgeRetainedBuckets || !retainedLogs.has(name),
+    ),
     retainedResources,
+    unverifiedDefaultLogGroups: [...unverifiedDefaultLogGroups].filter(
+      (name) => !logGroups.has(name),
+    ),
     storageOutputs,
   };
 }
@@ -545,6 +605,17 @@ export function assertPurgeAllowed(plan: TeardownPlan): void {
 export function showTeardownPlan(plan: TeardownPlan, stdout: (text: string) => void): void {
   stdout(
     `[cloud] Read-only ownership plan. Save this inventory before deleting stacks:\n${JSON.stringify(plan, null, 2)}\n`,
+  );
+  if (plan.unverifiedDefaultLogGroups.length > 0)
+    stdout(
+      "[cloud] Listed unverifiedDefaultLogGroups are possible legacy default paths for runtimes with explicit logging configuration. They are not automatically deleted, including by destroy-all; verify actual existence, ownership, retention and references separately.\n",
+    );
+  if (plan.retainedResources.some((resource) => resource.resourceType === "AWS::Cognito::UserPool"))
+    stdout(
+      "[cloud] Listed retained Cognito pools remain under their deployed policy, including on destroy-all. Review each exact pool ID and its users before separately authorizing removal. External pools are outside this inventory; inspect CloudFormation failure events if a Delete-policy pool fails removal.\n",
+    );
+  stdout(
+    "[cloud] Source archives in external buckets and shared CDKToolkit assets remain. Complete exercise teardown and verify archive ownership and references from all active events before separately authorizing cleanup. No bucket or prefix-wide archive deletion is performed.\n",
   );
   if (plan.tables.some((table) => table.protected))
     stdout(
