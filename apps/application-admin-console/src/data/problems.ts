@@ -184,6 +184,7 @@ export function packProvenanceFields(
 
 export function listProblemSummaries(): readonly ProblemSummary[] {
   return PROBLEM_CATALOG.map((p) => ({
+    ...(p.i18n ? { i18n: p.i18n } : {}),
     id: p.id,
     name: p.name,
     category: p.category,

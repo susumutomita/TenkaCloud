@@ -772,8 +772,8 @@ export const CATALOG_DATA: CatalogData = {
       difficulty: 3,
       tags: ["advanced-cryptography-2026", "week2", "mpc", "secret-sharing"],
       name: {
-        ja: "分けても、まだ何も分からない",
-        en: "Split it, and still nobody knows",
+        ja: "秘密分散：分けた情報から何が分かる？",
+        en: "Secret Sharing: What Do Shares Reveal?",
       },
     },
     {
@@ -794,8 +794,8 @@ export const CATALOG_DATA: CatalogData = {
       difficulty: 3,
       tags: ["advanced-cryptography-2026", "week3", "finite-field", "modular-inverse"],
       name: {
-        ja: "曲線の前に、体を作る",
-        en: "Build the field before the curve",
+        ja: "有限体：逆元を求める",
+        en: "Finite Fields: Find the Inverse",
       },
     },
     {
@@ -838,8 +838,8 @@ export const CATALOG_DATA: CatalogData = {
       difficulty: 3,
       tags: ["advanced-cryptography-2026", "week4", "drill", "fri"],
       name: {
-        ja: "折り畳んだ式のすり替えを見つける",
-        en: "Catch an altered polynomial fold",
+        ja: "FRI：多項式の改ざんを見つける",
+        en: "FRI: Detect Polynomial Tampering",
       },
     },
     {
@@ -1322,8 +1322,8 @@ export const CATALOG_DATA: CatalogData = {
       difficulty: 5,
       tags: ["advanced-cryptography-2026", "week3", "schnorr", "fiat-shamir"],
       name: {
-        ja: "何をハッシュに入れ忘れたか",
-        en: "What did you leave out of the hash",
+        ja: "Schnorr：ハッシュ対象の欠落を見つける",
+        en: "Schnorr: Find the Missing Hash Input",
       },
     },
     {

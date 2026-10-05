@@ -239,6 +239,12 @@ test("public mode offers only problems that need no per-team gateway", async () 
       content: {
         description: expect.any(String),
         learningGoals: expect.arrayContaining([expect.any(String)]),
+        i18n: {
+          en: {
+            description: expect.any(String),
+            learningGoals: expect.arrayContaining([expect.any(String)]),
+          },
+        },
       },
     },
   ]);

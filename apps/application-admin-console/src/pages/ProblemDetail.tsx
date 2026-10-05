@@ -19,9 +19,10 @@ import {
 } from "../components/deployment-columns";
 import { ProblemCostSummary } from "../components/ProblemCostSummary";
 import { type AppConfig, isLocalHost } from "../config";
+import { localizeOptionalProblem } from "../data/problem-locale";
 import { findProblem, type ProblemDetail } from "../data/problems";
 import { usePollingList } from "../hooks/usePollingList";
-import { useT } from "../i18n";
+import { useI18n, useT } from "../i18n";
 import {
   DEPLOYMENT_LIST_PAGE_SIZE,
   DEPLOYMENT_LIST_POLL_INTERVAL_MS,
@@ -31,6 +32,8 @@ import {
 
 type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
+import { problemThemeLabel, problemThemeTags } from "../lib/problem-themes";
+
 export function ProblemDetailPage({
   config,
   supportedProblemIds,
@@ -38,14 +41,15 @@ export function ProblemDetailPage({
 }: {
   config: AppConfig;
   supportedProblemIds?: ReadonlySet<string>;
-  organizerContent?: Pick<ProblemDetail, "description" | "learningGoals">;
+  organizerContent?: Pick<ProblemDetail, "description" | "learningGoals" | "i18n">;
 }) {
   const { problemId } = useParams<{ problemId: string }>();
   const navigate = useNavigate();
   const t = useT();
+  const { locale } = useI18n();
 
   if (!problemId) return <Navigate to="/problems" replace />;
-  const problem = findProblem(problemId);
+  const problem = localizeOptionalProblem(findProblem(problemId), locale);
   if (!problem || (supportedProblemIds && !supportedProblemIds.has(problemId))) {
     return (
       <SpaceBetween size="l">
@@ -56,7 +60,7 @@ export function ProblemDetailPage({
     );
   }
 
-  const content = isLocalHost(config) ? organizerContent : problem;
+  const content = isLocalHost(config) ? localizeOptionalProblem(organizerContent, locale) : problem;
   return (
     <SpaceBetween size="l">
       <Header
@@ -150,8 +154,8 @@ export function ProblemDetailPage({
 
       <Container header={<Header variant="h2">{t("problem_detail.section_tags")}</Header>}>
         <SpaceBetween direction="horizontal" size="xs">
-          {problem.tags.map((tag) => (
-            <Badge key={tag}>{tag}</Badge>
+          {problemThemeTags(problem.tags).map((tag) => (
+            <Badge key={tag}>{problemThemeLabel(tag, t)}</Badge>
           ))}
         </SpaceBetween>
       </Container>

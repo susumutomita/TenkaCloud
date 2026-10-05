@@ -47,6 +47,19 @@ export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: strin
     ? summarizeProblemCost(analyzeProblemCost(templateYaml))
     : undefined;
   return {
+    ...(metadata.i18n?.en
+      ? {
+          i18n: {
+            en: {
+              name: metadata.i18n.en.name,
+              shortDescription: metadata.i18n.en.shortDescription,
+              description: metadata.i18n.en.description,
+              estimatedDuration: metadata.i18n.en.estimatedDuration,
+              learningGoals: metadata.i18n.en.learningGoals,
+            },
+          },
+        }
+      : {}),
     id: metadata.id,
     name: metadata.name,
     category: metadata.category,
