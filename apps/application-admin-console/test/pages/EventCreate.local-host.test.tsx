@@ -135,6 +135,19 @@ describe("EventCreatePage on the local competition host", () => {
       rerender(<EventCreatePage config={pageConfig} />);
       expect(selection()).toContain("日本語の問題");
       expect(picker?.findTokens()).toHaveLength(1);
+      // A refreshed catalog may no longer include an earlier selection. Keep its
+      // last authored label and the operator's region instead of dropping state.
+      mocks.listProblemSummaries.mockReturnValue([]);
+      mocks.locale = "en";
+      rerender(<EventCreatePage config={pageConfig} />);
+      expect(selection()).toContain("日本語の問題");
+      expect(picker?.findTokens()).toHaveLength(1);
+      if (mode === "cloud-host") {
+        expect(region?.findTrigger().getElement().textContent).toContain("us-east-1");
+        expect(createWrapper(container).findAllTables().at(-1)?.getElement().textContent).toContain(
+          "日本語の問題",
+        );
+      }
     },
   );
 
