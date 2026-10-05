@@ -57,6 +57,7 @@ function fixture(
     protected?: boolean;
     inventory?: unknown;
     deletionPolicy?: (logicalId: string) => string | undefined;
+    properties?: (logicalId: string) => Record<string, unknown>;
     bucketsOnly?: boolean;
     purgeRetainedBuckets?: boolean;
     status?: string;
@@ -79,6 +80,7 @@ function fixture(
               item.LogicalResourceId,
               {
                 Type: item.ResourceType,
+                Properties: overrides.properties?.(item.LogicalResourceId),
                 DeletionPolicy: overrides.deletionPolicy
                   ? overrides.deletionPolicy(item.LogicalResourceId)
                   : "Retain",
@@ -161,6 +163,97 @@ describe("baseline exact stack-owned purge", () => {
       logGroupNames: ["/aws/lambda/owned-worker", "/aws/codebuild/owned-build", "/owned/explicit"],
     });
   });
+  it("honors retained log/runtime policies on ordinary destroy", async () => {
+    const f = fixture({ bucketsOnly: true });
+    const plan = await f.discover();
+    expect(plan.logGroups).toEqual([]);
+    expect(
+      plan.retainedResources.some((item) => item.resourceType === "AWS::Cognito::UserPool"),
+    ).toBe(true);
+  });
+  it.each([false, true])(
+    "respects cross-stack exact Retain before merging log candidates (purge: %s)",
+    async (purge) => {
+      const backendName = "tenkacloud-cloud-problem-deploy-test";
+      const backendArn = `arn:aws:cloudformation:${region}:${account}:stack/${backendName}/backend-id`;
+      const run = async (args: readonly string[]): Promise<ProcessResult> => {
+        const app = args.includes(stackArn);
+        const resource = app
+          ? { type: "AWS::Logs::LogGroup", name: "/aws/lambda/owned-worker", policy: "Retain" }
+          : { type: "AWS::Lambda::Function", name: "owned-worker", policy: "Delete" };
+        if (args.includes("get-template"))
+          return ok({
+            TemplateBody: {
+              Resources: {
+                Owned: { Type: resource.type, DeletionPolicy: resource.policy },
+              },
+            },
+          });
+        if (args.includes("list-stack-resources"))
+          return ok({
+            StackResourceSummaries: [
+              {
+                LogicalResourceId: "Owned",
+                PhysicalResourceId: resource.name,
+                ResourceType: resource.type,
+                ResourceStatus: "CREATE_COMPLETE",
+              },
+            ],
+          });
+        throw new Error("Unexpected ownership request");
+      };
+      const plan = await discoverTeardownPlan({
+        account,
+        region,
+        environment: "test",
+        bucketsOnly: true,
+        purgeRetainedBuckets: purge,
+        run,
+        stacks: [
+          { name: "tenkacloud-cloud-test", arn: stackArn, status: "CREATE_COMPLETE", outputs: {} },
+          { name: backendName, arn: backendArn, status: "CREATE_COMPLETE", outputs: {} },
+        ],
+      });
+      expect(plan.logGroups).toEqual(purge ? ["/aws/lambda/owned-worker"] : []);
+      expect(plan.retainedResources).toHaveLength(1);
+    },
+  );
+
+  it("does not adopt custom Lambda or CodeBuild log destinations", async () => {
+    const f = fixture({
+      bucketsOnly: true,
+      deletionPolicy: () => "Delete",
+      properties: (id) => {
+        if (id === "Lambda") return { LoggingConfig: { LogGroup: "/external/logs" } };
+        if (id === "Build")
+          return {
+            LogsConfig: { CloudWatchLogs: { GroupName: "/external/build", Status: "ENABLED" } },
+          };
+        return {};
+      },
+    });
+    const plan = await f.discover();
+    expect(plan.logGroups).toEqual(["/owned/explicit"]);
+    expect(plan.unverifiedDefaultLogGroups).toEqual([
+      "/aws/lambda/owned-worker",
+      "/aws/codebuild/owned-build",
+    ]);
+  });
+  it.each(["AWS::Lambda::Function", "AWS::CodeBuild::Project"])(
+    "rejects malformed %s physical identity",
+    async (type) => {
+      const f = fixture({
+        bucketsOnly: true,
+        deletionPolicy: () => "Delete",
+        inventory: resources.map((item) =>
+          item.ResourceType === type ? { ...item, PhysicalResourceId: "foreign/prefix" } : item,
+        ),
+      });
+      await expect(f.discover()).rejects.toThrow("physical identity");
+      expect(f.calls.some((args) => args.includes("delete-log-group"))).toBe(false);
+    },
+  );
+
   it("builds a read-only ARN/tag/protection/retention plan without outputs or table scans", async () => {
     const f = fixture({ protected: true });
     const plan = await f.discover();
@@ -228,7 +321,7 @@ describe("baseline exact stack-owned purge", () => {
     ]);
   });
   it("purges tables and waits before deleting exact logs, without scanning accounts", async () => {
-    const f = fixture();
+    const f = fixture({ purgeRetainedBuckets: true });
     const plan = await f.discover();
     const before = f.calls.length;
     await purgeStackOwnedResources(plan, f.run);
@@ -250,6 +343,7 @@ describe("baseline exact stack-owned purge", () => {
   });
   it("idempotently repeats only captured logs when deleted log groups are already absent", async () => {
     const f = fixture({
+      purgeRetainedBuckets: true,
       fail: (args) =>
         args.includes("delete-log-group")
           ? { code: 1, stdout: "", stderr: "(ResourceNotFoundException) Log group is absent" }
@@ -340,6 +434,7 @@ describe("baseline exact stack-owned purge", () => {
     "stops on %s failure",
     async (operation) => {
       const f = fixture({
+        purgeRetainedBuckets: true,
         fail: (args) =>
           args.includes(operation) ? { code: 2, stdout: "", stderr: "Denied" } : undefined,
       });
@@ -731,7 +826,7 @@ describe("S3 recovery command boundaries", () => {
     await emptyStackOwnedBuckets(await f.discover(), f.run);
     expect(f.calls.filter((args) => args.includes("list-object-versions"))).toHaveLength(2);
   });
-  it("does not read tables or delete logs in ordinary bucket-only discovery", async () => {
+  it("captures logs without reading tables in ordinary destroy discovery", async () => {
     const f = fixture({
       bucketsOnly: true,
       deletionPolicy: () => "Delete",
@@ -743,7 +838,11 @@ describe("S3 recovery command boundaries", () => {
     const plan = await f.discover();
     expect(plan.buckets).toHaveLength(1);
     expect(plan.tables).toEqual([]);
-    expect(plan.logGroups).toEqual([]);
+    expect(plan.logGroups).toEqual([
+      "/aws/lambda/owned-worker",
+      "/aws/codebuild/owned-build",
+      "/owned/explicit",
+    ]);
     expect(
       f.calls.every((args) => args[0] === "cloudformation" || args[1] === "get-bucket-tagging"),
     ).toBe(true);
