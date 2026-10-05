@@ -24,7 +24,7 @@ export const HostCandidateSchema = z
   .superRefine((value, context) => {
     if ((value.image === null) !== (value.sources.platformCommit === null)) {
       context.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: "custom",
         message: "Image and source commit must be recorded together",
       });
     }
@@ -35,7 +35,7 @@ const InspectionSchema = z
       Id: digest,
       RepoTags: z.array(z.string()).nullable(),
       RepoDigests: z.array(z.string()).nullable(),
-      Config: z.object({ Labels: z.record(z.string()).nullable() }),
+      Config: z.object({ Labels: z.record(z.string(), z.string()).nullable() }),
     }),
   )
   .length(1);

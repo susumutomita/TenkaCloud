@@ -21,7 +21,7 @@ const unitSchema = z.object({
   roleArn: z.string(),
   region: z.string().regex(/^(?:af|ap|ca|eu|il|me|mx|sa|us)-[a-z]+-\d{1,2}$/u),
   stackId: z.string().min(1),
-  outputs: z.record(z.string()),
+  outputs: z.record(z.string(), z.string()),
 });
 
 export function declaredDisruptions(problem: Problem) {

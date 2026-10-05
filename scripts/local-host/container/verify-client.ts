@@ -28,7 +28,7 @@ export interface VerifyResult {
 
 const VerifyResponseSchema = z.object({
   correct: z.boolean(),
-  points: z.number().finite().nonnegative().optional(),
+  points: z.number().nonnegative().optional(),
   message: z.string().max(2_000).optional(),
   /** [#2252] echo of the judged checkpoint (required when the request sent one). */
   checkpointId: z.string().max(200).optional(),

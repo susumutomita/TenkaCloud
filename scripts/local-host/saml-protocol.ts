@@ -15,7 +15,7 @@ const CLOCK_SKEW = 30_000;
 export const SamlProviderSchema = z
   .object({
     issuer: z.string().min(1).max(1024),
-    entryPoint: z.string().url().max(2048),
+    entryPoint: z.url().max(2048),
     certificate: z.string().min(1).max(32768),
   })
   .strict();
@@ -102,7 +102,7 @@ function attr(element: Element, name: string): string {
 }
 
 function instant(value: string): number {
-  if (!z.string().datetime({ offset: true }).safeParse(value).success) invalid();
+  if (!z.iso.datetime({ offset: true }).safeParse(value).success) invalid();
   return Date.parse(value);
 }
 

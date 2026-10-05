@@ -16,7 +16,7 @@
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts'"
   },
   "dependencies": {
-    "zod": "^3.25.76"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",

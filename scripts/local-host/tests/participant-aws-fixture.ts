@@ -136,7 +136,7 @@ export async function createParticipantAwsFixture(
     return {
       status: response.status,
       headers: response.headers,
-      body: z.record(z.unknown()).parse(await response.json()),
+      body: z.record(z.string(), z.unknown()).parse(await response.json()),
     };
   }
   const login = await request(
