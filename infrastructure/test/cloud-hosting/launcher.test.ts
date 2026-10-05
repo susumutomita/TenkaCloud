@@ -23,7 +23,7 @@ const buildSpec = source.Properties.Source.BuildSpec;
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 const phases = z
-  .object({ phases: z.record(z.object({ commands: z.array(z.string()) })) })
+  .object({ phases: z.record(z.string(), z.object({ commands: z.array(z.string()) })) })
   .parse(parse(buildSpec)).phases;
 
 /** Execute the real buildspec shell with deployment commands replaced by local fixtures. */
@@ -175,7 +175,7 @@ describe("current cloud launcher; no AWS execution", () => {
   });
   it("offers only supported current configuration with DynamoDB default and optional Turso", () => {
     const parsed = z
-      .object({ Parameters: z.record(z.record(z.unknown())) })
+      .object({ Parameters: z.record(z.string(), z.record(z.string(), z.unknown())) })
       .parse(template.toJSON());
     expect(Object.keys(parsed.Parameters).sort()).toEqual(
       [

@@ -166,7 +166,7 @@ test("malformed, cross-account and deploy-role viewer targets fail before STS", 
     "https://evil.example",
   ]) {
     const f = await fixture();
-    const unit = z.record(z.unknown()).parse(JSON.parse(f.alpha.job.unit ?? "null"));
+    const unit = z.record(z.string(), z.unknown()).parse(JSON.parse(f.alpha.job.unit ?? "null"));
     f.store.putJob({
       ...f.alpha.job,
       unit: JSON.stringify({ ...unit, outputs: { ParticipantViewerRoleArn: output } }),

@@ -106,7 +106,7 @@ export const PackManifestSchema = z
     manifest.dependencies.forEach((dependency, index) => {
       if (seen.has(dependency.id)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: `duplicate dependency id ${dependency.id}`,
           path: ["dependencies", index, "id"],
         });
@@ -129,10 +129,11 @@ export type PackManifestParseResult =
   | { readonly ok: true; readonly manifest: PackManifest }
   | { readonly ok: false; readonly issues: readonly PackManifestIssue[] };
 
-function formatPath(path: ReadonlyArray<string | number>): string {
+function formatPath(path: ReadonlyArray<PropertyKey>): string {
   return path.reduce<string>((acc, segment) => {
     if (typeof segment === "number") return `${acc}[${segment}]`;
-    return acc.length === 0 ? segment : `${acc}.${segment}`;
+    const key = String(segment);
+    return acc.length === 0 ? key : `${acc}.${key}`;
   }, "");
 }
 

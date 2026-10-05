@@ -5,7 +5,7 @@ const dispatchSchema = z.object({
   kind: z.enum(["ssm-run-command", "lambda-invoke", "cfn-stack-update"]),
   target: z.string(),
   documentName: z.string().optional(),
-  params: z.record(z.unknown()),
+  params: z.record(z.string(), z.unknown()),
 });
 export const disruptionTargetSchema = z.object({
   jobId: z.string(),

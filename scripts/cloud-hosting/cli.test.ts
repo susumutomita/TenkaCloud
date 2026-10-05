@@ -2223,7 +2223,7 @@ describe("cloud naming with automatic installation discovery", () => {
 
 describe("original physical installation continuity", () => {
   const baseline = z
-    .object({ templates: z.record(z.record(z.unknown())) })
+    .object({ templates: z.record(z.string(), z.record(z.string(), z.unknown())) })
     .parse(
       JSON.parse(
         readFileSync(
