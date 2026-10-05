@@ -10,6 +10,7 @@ import { LogGroup } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
 import {
   LAMBDA_EXTERNAL_MODULES,
+  LAMBDA_LOG_RETENTION,
   LAMBDA_NODEJS_BUNDLING_TARGET,
   LAMBDA_NODEJS_RUNTIME,
   LAMBDA_SOURCE_MAP_ENABLED,
@@ -90,6 +91,7 @@ export function defineNodejsFunction(
     ...(props.functionName ? { functionName: props.functionName } : {}),
     ...(props.role ? { role: props.role } : {}),
     logGroup: new LogGroup(scope, "FunctionLogGroup", {
+      retention: LAMBDA_LOG_RETENTION,
       removalPolicy: RemovalPolicy.DESTROY,
     }),
     runtime: LAMBDA_NODEJS_RUNTIME,
