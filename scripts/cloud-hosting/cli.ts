@@ -468,7 +468,7 @@ async function down(context: Context, options: DownOptions): Promise<void> {
   if (options.purge) await purgeStackOwnedResources(cleanup, (args) => run(resolved, "aws", args));
   if (turso.kind === "purge") await resetTursoBeforeStackRemoval(resolved, turso.target);
   await deletePlatformStacks(resolved, stacks);
-  if (options.purge) await finishTeardownLogs(resolved, cleanup);
+  await finishTeardownLogs(resolved, cleanup);
   context.io.stdout(
     "Cloud platform stacks destroyed. Existing deployed Retain policies may leave chargeable resources; review the saved plan. This teardown removes external Turso rows only for explicit destroy-all when the deployed provider identity is verified.\n",
   );

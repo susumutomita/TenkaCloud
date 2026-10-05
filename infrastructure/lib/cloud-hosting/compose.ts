@@ -13,6 +13,7 @@ import { parseTenantSamlIdpConfig } from "../tenant-template/saml-identity-provi
 import { TenkaCloudLiteStack } from "../tenkacloud-lite/index.js";
 import { cloudControlDataConfiguration, retainCloudDataTables } from "./config.js";
 import { scopeInvalidationPermissions } from "./invalidation-permissions.js";
+import { OwnedRuntimeLogs } from "./owned-runtime-logs.js";
 import { applyOwnershipTags } from "./ownership-tags.js";
 import { cloudDeploymentTarget } from "./regions.js";
 import { cloudStackLayout, cloudStackNames, cloudStackTags } from "./stack-names.js";
@@ -115,6 +116,7 @@ export function composeCloudHosting(app: App, env: NodeJS.ProcessEnv, inputs: Ba
     );
     Aspects.of(stack).add(new DynamoDbLowCapacity(1, 1));
     Aspects.of(stack).add(new LogGroupRetention());
+    Aspects.of(stack).add(new OwnedRuntimeLogs());
   }
   // The CLI resolves the pool directly; do not infer pool identity from a name prefix.
   new CfnOutput(application, "OrganizerUserPoolId", { value: application.tenantUserPoolId });
