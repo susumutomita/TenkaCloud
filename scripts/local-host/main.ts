@@ -28,12 +28,12 @@ function announceHost(
 ): void {
   if (options.public) {
     console.log(
-      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nOrganizer key: use make local-reset to rotate a lost key.\nState: ${host.databasePath}\nDocker Compose problems are not offered in public mode.\n`,
+      `\nHost console: ${host.admin.origin}\nHost API: ${host.admin.origin}/api-docs\nParticipant API: ${host.participant.origin}/api-docs\nParticipant portal: ${host.participant.origin}\nOrganizer key: use make local-reset to rotate a lost key.\nState: ${host.databasePath}\nDocker Compose problems are not offered in public mode.\n`,
     );
   } else {
     const gateways = `http://${options.hostname}:${formatGatewayPorts(options.gatewayPorts)}`;
     console.log(
-      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (active local environments only)\nOrganizer key: each interactive make local start shows a new key. Use make local-reset to rotate it while running.\nState: ${host.databasePath}\n`,
+      `\nHost console: ${host.admin.origin}\nHost API: ${host.admin.origin}/api-docs\nParticipant API: ${host.participant.origin}/api-docs\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (active local environments only)\nOrganizer key: each interactive make local start shows a new key. Use make local-reset to rotate it while running.\nState: ${host.databasePath}\n`,
     );
   }
   if (!options.public && options.hostname !== "127.0.0.1")
