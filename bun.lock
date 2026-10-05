@@ -151,7 +151,7 @@
         "@aws-sdk/client-cloudwatch": "^3.1140.0",
         "@aws-sdk/client-cloudwatch-logs": "^3.1140.0",
         "@aws-sdk/client-codebuild": "^3.1140.0",
-        "@aws-sdk/client-cognito-identity-provider": "3.1140.0",
+        "@aws-sdk/client-cognito-identity-provider": "3.1145.0",
         "@aws-sdk/client-dynamodb": "3.1140.0",
         "@aws-sdk/client-eventbridge": "^3.1140.0",
         "@aws-sdk/client-lambda": "^3.1140.0",
@@ -427,7 +427,7 @@
 
     "@aws-sdk/client-codebuild": ["@aws-sdk/client-codebuild@3.1146.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.1", "@aws-sdk/credential-provider-node": "^3.972.84", "@aws-sdk/types": "^3.974.6", "@smithy/core": "^3.35.0", "@smithy/fetch-http-handler": "^5.8.0", "@smithy/node-http-handler": "^4.12.1", "@smithy/types": "^4.19.0", "tslib": "^2.6.2" } }, "sha512-Yx5ld7WJVCTWTpH3kpVKWe4OT/z4bNwUHdnjBgSBwNCu6vU21ktsC+MCeI6POeT8R7xyY3UUQGaOKBaa1AcDqw=="],
 
-    "@aws-sdk/client-cognito-identity-provider": ["@aws-sdk/client-cognito-identity-provider@3.1140.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.1", "@aws-sdk/credential-provider-node": "^3.972.84", "@aws-sdk/types": "^3.974.6", "@smithy/core": "^3.35.0", "@smithy/fetch-http-handler": "^5.8.0", "@smithy/node-http-handler": "^4.12.1", "@smithy/types": "^4.19.0", "tslib": "^2.6.2" } }, "sha512-J0TDxgHbhqahk5Ag9BW7oDH20Y+iozEbDaZKaawCWWCBsuRuvFmeyjhZ6Hr5oEWhe89O4N4ZaAmNNHbToFh2zQ=="],
+    "@aws-sdk/client-cognito-identity-provider": ["@aws-sdk/client-cognito-identity-provider@3.1145.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.1", "@aws-sdk/credential-provider-node": "^3.972.84", "@aws-sdk/types": "^3.974.6", "@smithy/core": "^3.35.0", "@smithy/fetch-http-handler": "^5.8.0", "@smithy/node-http-handler": "^4.12.1", "@smithy/types": "^4.19.0", "tslib": "^2.6.2" } }, "sha512-vGNoZXsJqPwXkzfnP7C0W/L95501uZG2MYt5Oa6UClv6w12V7lBRTqRqdOgwJFBOgQYL2xIadAO0wLs4jYyigg=="],
 
     "@aws-sdk/client-dynamodb": ["@aws-sdk/client-dynamodb@3.1140.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.1", "@aws-sdk/credential-provider-node": "^3.972.84", "@aws-sdk/dynamodb-codec": "^3.973.46", "@aws-sdk/middleware-endpoint-discovery": "^3.972.31", "@aws-sdk/types": "^3.974.6", "@smithy/core": "^3.35.0", "@smithy/fetch-http-handler": "^5.8.0", "@smithy/node-http-handler": "^4.12.1", "@smithy/types": "^4.19.0", "tslib": "^2.6.2" } }, "sha512-MNGF0wUMcxtyhkqxfmS1HiSjmRCDX51S2bnAKmO7dBPKTvAO3ybRSQT/eOTndGpY/mLSLTZH/4j2Y4+eEH/DhQ=="],
 
