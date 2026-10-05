@@ -59,7 +59,8 @@ const HintIdSchema = z.string().min(1).max(HINT_ID_MAX);
 const OptionalIntFromQuery = z
   .union([z.string(), z.undefined()])
   .transform((v) => (v === undefined ? undefined : Number(v)))
-  .refine((v) => v === undefined || Number.isFinite(v), { message: "not_a_number" });
+  .refine((v) => v === undefined || Number.isFinite(v), { message: "not_a_number" })
+  .optional();
 
 /* ────────── body schemas ────────── */
 

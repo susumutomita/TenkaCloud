@@ -4,7 +4,7 @@ import { z } from "zod";
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const catalogKeySchema = z.string().regex(/^catalogs\/[a-f0-9]{64}\.json$/u);
-const projectionSchema = z.record(z.unknown());
+const projectionSchema = z.record(z.string(), z.unknown());
 const sourceSchema = z
   .object({ key: z.string().regex(/^sources\/[a-f0-9]{64}$/u), digest: digestSchema })
   .strict();
@@ -46,7 +46,7 @@ export const executionCatalogSchema = z
   .object({
     version: z.literal(1),
     nativeProblems: z.array(nativeArtifactSchema).max(1).optional(),
-    catalog: z.record(z.string().min(1)),
+    catalog: z.record(z.string(), z.string().min(1)),
     scoring: projectionSchema,
     hints: projectionSchema,
     endpoints: projectionSchema,
@@ -57,8 +57,8 @@ export const executionCatalogSchema = z
     writeups: projectionSchema,
     provenance: projectionSchema,
     coordination: projectionSchema,
-    plugins: z.record(pluginSchema),
-    sources: z.record(z.record(sourceSchema)),
+    plugins: z.record(z.string(), pluginSchema),
+    sources: z.record(z.string(), z.record(z.string(), sourceSchema)),
     sourceArchive: z
       .object({
         bucket: z.string().min(1),

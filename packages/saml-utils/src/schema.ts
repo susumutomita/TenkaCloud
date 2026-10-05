@@ -36,7 +36,7 @@ export const SamlAttributeMappingSchema = z
   })
   .strict();
 
-export const GroupToRoleSchema = z.record(PlatformRoleSchema);
+export const GroupToRoleSchema = z.record(z.string(), PlatformRoleSchema);
 
 export const CreateIdpInputSchema = z
   .object({

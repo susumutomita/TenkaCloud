@@ -24,7 +24,7 @@ const ownerSchema = z.object({
   root: z.string(),
   name: z.string(),
   pid: z.number().int().positive(),
-  session: z.string().uuid(),
+  session: z.uuid(),
   createdAt: z.number().int().nonnegative(),
 });
 
