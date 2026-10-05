@@ -18,8 +18,9 @@ import {
 } from "../api/events-client";
 import { type AppConfig, isCloudHost, isLocalHost } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
+import { localizeProblemText } from "../data/problem-locale";
 import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
-import { useT } from "../i18n";
+import { useI18n, useT } from "../i18n";
 import { filterVerifiedAccounts } from "../lib/competitor-accounts-filter";
 import { liteDrillCheckpointCode, markLiteDrillCheckpointShown } from "../lib/lite-drill";
 import { EventCreateAccountsAlerts } from "./event-create/EventCreateAccountsAlerts";
@@ -97,6 +98,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const canMutate = canMutateTenant(apiClient);
   const navigate = useNavigate();
   const t = useT();
+  const { locale } = useI18n();
   const creation = useRef(new PendingOperation());
   const deployment = useRef(new PendingOperation());
   const submissionInFlight = useRef(false);
@@ -116,11 +118,11 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   // EventCreateProblemsetSection 側の責務。 ここは catalog 全件を渡すだけ。
   const cloudHost = isCloudHost(config);
   const allProblems = useMemo(() => {
-    const catalog = listProblemSummaries();
+    const catalog = listProblemSummaries().map((problem) => localizeProblemText(problem, locale));
     return cloudHost || config.supportedProblemIds !== undefined
       ? catalog.filter((problem) => config.supportedProblemIds?.includes(problem.id))
       : catalog;
-  }, [cloudHost, config.supportedProblemIds]);
+  }, [cloudHost, config.supportedProblemIds, locale]);
 
   // Phase 2.2 (Issue #459): verified=true な CompetitorAccounts のみを Select の選択肢にする。
   // fetch + window focus 再取得は hook に切り出し済 (Issue #1241)。
@@ -154,6 +156,16 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   );
   const [selectedProblems, setSelectedProblems] = useState<readonly MultiselectProps.Option[]>([]);
   const [problemRows, setProblemRows] = useState<ProblemRow[]>([]);
+  // Names are presentation only: changing locale must retain IDs and chosen regions.
+  const displayedProblemRows = useMemo(
+    () =>
+      problemRows.map((row) => ({
+        ...row,
+        problemName:
+          allProblems.find((problem) => problem.id === row.problemId)?.name ?? row.problemName,
+      })),
+    [problemRows, allProblems],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -440,7 +452,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           <EventCreateProblemsetSection
             problems={allProblems}
             selectedProblems={selectedProblems}
-            problemRows={problemRows}
+            problemRows={displayedProblemRows}
             nonAwsRuntimeEnabled={config.features?.nonAwsRuntime ?? false}
             hostSupportedProblemIds={localHost ? hostCatalog.supported : undefined}
             maxProblems={localHost ? capacity.maxProblems : undefined}

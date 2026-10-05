@@ -1,5 +1,6 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProblemSummary } from "../../../src/data/problems";
 import {
@@ -150,7 +151,7 @@ describe("EventCreateProblemsetSection", () => {
 
   it("should list every catalog problem when no filter is active", () => {
     const s = renderSection();
-    expect(visibleProblemLabels(s)).toEqual(["Redis Spike (p1)", "Hello World (p2)"]);
+    expect(visibleProblemLabels(s)).toEqual(["Redis Spike", "Hello World"]);
     // filter 非 active のときは match counter / clear button を出さない。
     expect(screen.queryByText("problem_search.match_count")).not.toBeInTheDocument();
     expect(screen.queryByTestId("problem-filter-clear")).not.toBeInTheDocument();
@@ -159,7 +160,7 @@ describe("EventCreateProblemsetSection", () => {
   it("should narrow the options via free-text search on the problem id", () => {
     const s = renderSection();
     s.searchInput()?.setInputValue("p2");
-    expect(visibleProblemLabels(s)).toEqual(["Hello World (p2)"]);
+    expect(visibleProblemLabels(s)).toEqual(["Hello World"]);
     // filter active: match counter (interpolate 済) + clear button が出る。
     expect(screen.getByText("problem_search.match_count")).toBeInTheDocument();
     expect(screen.getByTestId("problem-filter-clear")).toBeInTheDocument();
@@ -170,10 +171,10 @@ describe("EventCreateProblemsetSection", () => {
     const select = s.categorySelect();
     select?.openDropdown();
     select?.selectOptionByValue("Battle");
-    expect(visibleProblemLabels(s)).toEqual(["Redis Spike (p1)"]);
+    expect(visibleProblemLabels(s)).toEqual(["Redis Spike"]);
     select?.openDropdown();
     select?.selectOptionByValue("all");
-    expect(visibleProblemLabels(s)).toEqual(["Redis Spike (p1)", "Hello World (p2)"]);
+    expect(visibleProblemLabels(s)).toEqual(["Redis Spike", "Hello World"]);
   });
 
   it("should narrow the options via the difficulty multiselect", () => {
@@ -181,7 +182,7 @@ describe("EventCreateProblemsetSection", () => {
     const ms = s.difficultyFilter();
     ms?.openDropdown();
     ms?.selectOptionByValue("4");
-    expect(visibleProblemLabels(s)).toEqual(["Redis Spike (p1)"]);
+    expect(visibleProblemLabels(s)).toEqual(["Redis Spike"]);
   });
 
   it("should narrow the options via the scoring kind multiselect", () => {
@@ -189,7 +190,7 @@ describe("EventCreateProblemsetSection", () => {
     const ms = s.scoringKindFilter();
     ms?.openDropdown();
     ms?.selectOptionByValue("flag");
-    expect(visibleProblemLabels(s)).toEqual(["Hello World (p2)"]);
+    expect(visibleProblemLabels(s)).toEqual(["Hello World"]);
   });
 
   it("should narrow the options via the tag multiselect", () => {
@@ -197,14 +198,14 @@ describe("EventCreateProblemsetSection", () => {
     const ms = s.tagFilter();
     ms?.openDropdown();
     ms?.selectOptionByValue("redis");
-    expect(visibleProblemLabels(s)).toEqual(["Redis Spike (p1)"]);
+    expect(visibleProblemLabels(s)).toEqual(["Redis Spike"]);
   });
 
   it("should clear every filter via the inline clear button", () => {
     const s = renderSection();
     s.searchInput()?.setInputValue("p2");
     fireEvent.click(screen.getByTestId("problem-filter-clear"));
-    expect(visibleProblemLabels(s)).toEqual(["Redis Spike (p1)", "Hello World (p2)"]);
+    expect(visibleProblemLabels(s)).toEqual(["Redis Spike", "Hello World"]);
   });
 
   it("should show the empty state with a clear-filters action when nothing matches", () => {
@@ -213,7 +214,7 @@ describe("EventCreateProblemsetSection", () => {
     expect(screen.getByText("problem_search.empty_filtered")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("problem-filter-empty-clear"));
     expect(screen.queryByTestId("problem-filter-empty-clear")).not.toBeInTheDocument();
-    expect(visibleProblemLabels(s)).toEqual(["Redis Spike (p1)", "Hello World (p2)"]);
+    expect(visibleProblemLabels(s)).toEqual(["Redis Spike", "Hello World"]);
   });
 
   it("should not render the region table when no problems are selected", () => {
@@ -247,5 +248,46 @@ describe("EventCreateProblemsetSection", () => {
     // resolveRegionOptions の非空 intersection 分岐を踏む。
     renderSection(props({ problemRows: [row({ supportedRegions: [r0] })] }));
     expect(screen.getByText("Problem 1")).toBeInTheDocument();
+  });
+});
+
+describe("selection across filters", () => {
+  it("keeps selected IDs when filtering, adding another problem, clearing and removing", () => {
+    const changed = vi.fn();
+    function ControlledSelection() {
+      const [selected, setSelected] = useState<
+        EventCreateProblemsetSectionProps["selectedProblems"]
+      >([]);
+      return (
+        <EventCreateProblemsetSection
+          {...props({
+            selectedProblems: selected,
+            onProblemsChange: (next) => {
+              changed(next.map((option) => option.value));
+              setSelected(next);
+            },
+          })}
+        />
+      );
+    }
+    const { container } = render(<ControlledSelection />);
+    const wrapper = createWrapper(container);
+    const picker = () => wrapper.findMultiselect('[data-testid="problem-select"]');
+    const search = wrapper.findInput('[data-testid="problem-filter-search"]');
+    picker()?.openDropdown();
+    picker()?.selectOptionByValue("p1");
+    picker()?.closeDropdown();
+    search?.setInputValue("p2");
+    expect(picker()?.findTokens()).toHaveLength(1);
+    picker()?.openDropdown();
+    picker()?.selectOptionByValue("p2");
+    picker()?.closeDropdown();
+    expect(changed.mock.calls.at(-1)?.[0]).toEqual(["p1", "p2"]);
+    search?.setInputValue("no matching problem");
+    expect(picker()?.findTokens()).toHaveLength(2);
+    fireEvent.click(screen.getByTestId("problem-filter-clear"));
+    expect(picker()?.findTokens()).toHaveLength(2);
+    picker()?.findTokens()[0]?.findDismiss()?.click();
+    expect(changed.mock.calls.at(-1)?.[0]).toEqual(["p2"]);
   });
 });

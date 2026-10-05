@@ -104,7 +104,7 @@ async function createEvent(
   assert.equal(await count.inputValue(), "40", "The team input is bounded before submission.");
   await count.fill("2");
   await page.getByTestId("problem-select").click();
-  await page.getByRole("option", { name: /ac26-crypto-battle/u }).click();
+  await page.getByRole("option", { name: /Cryptography Battle|暗号バトル/u }).click();
   await page.keyboard.press("Escape");
   assert.equal(await page.getByText("Local competition mode", { exact: true }).count(), 0);
   assert.equal(await page.getByText("Local competition event", { exact: true }).count(), 0);
