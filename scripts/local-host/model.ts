@@ -26,12 +26,24 @@ export interface Problem {
 }
 
 export interface OrganizerProblemContent {
+  readonly i18n?: {
+    readonly en?: { readonly description?: string; readonly learningGoals?: readonly string[] };
+  };
   readonly description: string;
   readonly learningGoals: readonly string[];
 }
 
+function optionalEnglish(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const english = (value as Record<string, unknown>).en;
+  return english && typeof english === "object" && !Array.isArray(english)
+    ? (english as Record<string, unknown>)
+    : {};
+}
+
 /** Optional display text must not add runtime requirements to an existing problem. */
 export function organizerProblemContent(metadata: {
+  i18n?: unknown;
   description?: unknown;
   learningGoals?: unknown;
 }): OrganizerProblemContent | undefined {
@@ -43,7 +55,21 @@ export function organizerProblemContent(metadata: {
     !learningGoals.every((goal) => typeof goal === "string")
   )
     return undefined;
-  return { description: metadata.description, learningGoals };
+  const english = optionalEnglish(metadata.i18n);
+  const translated = {
+    ...(typeof english.description === "string" && english.description.trim()
+      ? { description: english.description }
+      : {}),
+    ...(Array.isArray(english.learningGoals) &&
+    english.learningGoals.every((goal) => typeof goal === "string")
+      ? { learningGoals: english.learningGoals as string[] }
+      : {}),
+  };
+  return {
+    description: metadata.description,
+    learningGoals,
+    ...(Object.keys(translated).length ? { i18n: { en: translated } } : {}),
+  };
 }
 
 /** Which runtime owns a pinned problem definition. */
