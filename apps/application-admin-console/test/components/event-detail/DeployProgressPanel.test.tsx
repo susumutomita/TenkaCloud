@@ -323,3 +323,53 @@ describe("DeployProgressPanel local preparation", () => {
     expect(screen.getByText("準備済み 3 / 3 件・稼働中 0・停止中 3")).toBeInTheDocument();
   });
 });
+
+describe("Cloud deployment rows", () => {
+  it("paginates actual states, falls back to team identifiers, and clamps a shrinking list", () => {
+    const statuses = [
+      "STOPPED",
+      "PENDING",
+      "DELETING",
+      "FAILED",
+      "EXPIRED",
+      "DELETED",
+      "AUTO_DELETED",
+      "COMPLETE",
+      "IN_PROGRESS",
+    ] as const;
+    const cloudDetail = {
+      teams: [{ teamId: "known", internalSlug: "team-slug" }],
+      deploymentsByProblem: {
+        p: Array.from({ length: 11 }, (_, i) => ({
+          jobId: `job-${i}`,
+          teamId: i === 0 ? "known" : `team-${i}`,
+          status: statuses[i % statuses.length],
+        })),
+      },
+    } as unknown as EventDetail;
+    const { container, rerender } = render(
+      <DeployProgressPanel {...props({ cloudDetail, totalDeployCount: 11 })} />,
+    );
+    expect(screen.getByText("team-slug")).toBeInTheDocument();
+    expect(screen.getByText("team-1")).toBeInTheDocument();
+    expect(screen.queryByText("team-10")).not.toBeInTheDocument();
+    const pagination = createWrapper(container).findPagination();
+    expect(pagination).not.toBeNull();
+    pagination?.findNextPageButton().click();
+    expect(screen.getByText("team-10")).toBeInTheDocument();
+    expect(screen.queryByText("team-slug")).not.toBeInTheDocument();
+    rerender(
+      <DeployProgressPanel
+        {...props({
+          cloudDetail: {
+            ...cloudDetail,
+            deploymentsByProblem: { p: cloudDetail.deploymentsByProblem.p.slice(0, 1) },
+          },
+          totalDeployCount: 1,
+        })}
+      />,
+    );
+    expect(screen.getByText("team-slug")).toBeInTheDocument();
+    expect(createWrapper(container).findPagination()).toBeNull();
+  });
+});

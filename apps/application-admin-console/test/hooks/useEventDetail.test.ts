@@ -219,3 +219,106 @@ describe("useEventDetail auto-refresh (Issue 2987)", () => {
     expect(mockGetEvent.mock.calls.length).toBe(afterMount + 1);
   });
 });
+
+describe("useEventDetail request lifecycle", () => {
+  it("invalidates both successful and failed responses when the event becomes unavailable", async () => {
+    for (const fails of [false, true]) {
+      let settle: () => void = () => {
+        /* Assigned when the pending request is created. */
+      };
+      mockGetEvent.mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          settle = () => (fails ? reject(new Error("old event failure")) : resolve(DETAIL));
+        }),
+      );
+      const { result, rerender, unmount } = renderHook(
+        ({ valid }) => useEventDetail({ apiClient: CLIENT, eventId: "e1", eventIdValid: valid }),
+        { initialProps: { valid: true } },
+      );
+      rerender({ valid: false });
+      await act(async () => settle());
+      expect(result.current.detail).toBeNull();
+      expect(result.current.error).toBeNull();
+      unmount();
+    }
+  });
+
+  it("ignores an older failure after a newer manual refresh succeeds", async () => {
+    let rejectOld: (reason: Error) => void = () => {
+      /* Assigned when the pending request is created. */
+    };
+    mockGetEvent.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectOld = reject;
+      }),
+    );
+    const { result } = renderHook(() =>
+      useEventDetail({ apiClient: CLIENT, eventId: "e1", eventIdValid: true }),
+    );
+    mockGetEvent.mockResolvedValueOnce(DETAIL);
+    await act(async () => {
+      await result.current.manualRefresh();
+    });
+    await act(async () => rejectOld(new Error("stale")));
+    expect(result.current.detail).toEqual(DETAIL);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("debounces simultaneous manual refresh clicks before React rerenders", async () => {
+    mockGetEvent.mockResolvedValueOnce(DETAIL);
+    const { result } = renderHook(() =>
+      useEventDetail({ apiClient: CLIENT, eventId: "e1", eventIdValid: true }),
+    );
+    await waitFor(() => expect(result.current.detail).toEqual(DETAIL));
+    let resolveManual: (detail: unknown) => void = () => {
+      /* Assigned when the pending request is created. */
+    };
+    mockGetEvent.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveManual = resolve;
+      }),
+    );
+    act(() => {
+      void result.current.manualRefresh();
+      void result.current.manualRefresh();
+    });
+    expect(mockGetEvent).toHaveBeenCalledTimes(2);
+    await act(async () => resolveManual(DETAIL));
+    expect(result.current.manualRefreshInFlight).toBe(false);
+  });
+
+  it("lets a slow polling response finish instead of superseding it every tick", async () => {
+    vi.useFakeTimers();
+    try {
+      mockGetEvent.mockResolvedValueOnce(DETAIL);
+      const { result } = renderHook(() =>
+        useEventDetail({ apiClient: CLIENT, eventId: "e1", eventIdValid: true }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      let resolvePoll: (detail: unknown) => void = () => {
+        /* Assigned when the pending request is created. */
+      };
+      mockGetEvent.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolvePoll = resolve;
+        }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(90_000);
+      });
+      expect(mockGetEvent).toHaveBeenCalledTimes(2);
+      const updated = { ...DETAIL, name: "Updated after slow response" };
+      await act(async () => resolvePoll(updated));
+      expect(result.current.detail).toEqual(updated);
+      mockGetEvent.mockResolvedValueOnce(updated);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(mockGetEvent).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

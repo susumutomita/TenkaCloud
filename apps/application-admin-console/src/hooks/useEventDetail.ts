@@ -47,6 +47,8 @@ export function useEventDetail(args: {
 }) {
   const { apiClient, eventId, eventIdValid, withTeamLoginKeys = false, inFlightPollMs } = args;
   const requestSequence = useRef(0);
+  const activeRequest = useRef<number | null>(null);
+  const manualRefreshPending = useRef(false);
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualRefreshInFlight, setManualRefreshInFlight] = useState(false);
@@ -54,6 +56,7 @@ export function useEventDetail(args: {
   const refresh = useCallback(async () => {
     if (!apiClient || !eventIdValid || !eventId) return;
     const sequence = ++requestSequence.current;
+    activeRequest.current = sequence;
     try {
       // Issue #1038 P1 #7: operator が「どのチームがいつ加点 / 減点したか」 を一目で
       // 把握できるよう、 Event 詳細取得で全 team の score event timeline も同時に fetch する。
@@ -67,28 +70,45 @@ export function useEventDetail(args: {
     } catch (err) {
       if (sequence !== requestSequence.current) return;
       setError(toErrorMessage(err));
+    } finally {
+      if (activeRequest.current === sequence) activeRequest.current = null;
     }
   }, [apiClient, eventId, eventIdValid, withTeamLoginKeys]);
 
   const manualRefresh = useCallback(async () => {
-    if (manualRefreshInFlight) return;
+    if (manualRefreshPending.current) return;
+    manualRefreshPending.current = true;
     setManualRefreshInFlight(true);
     try {
       await refresh();
     } finally {
+      manualRefreshPending.current = false;
       setManualRefreshInFlight(false);
     }
-  }, [manualRefreshInFlight, refresh]);
+  }, [refresh]);
 
   useEffect(() => {
+    setDetail(null);
+    setError(null);
     void refresh();
+    // Invalidate work for the previous event/client, including when the new input is invalid.
+    return () => {
+      ++requestSequence.current;
+      activeRequest.current = null;
+    };
+  }, [refresh]);
+
+  const poll = useCallback(() => {
+    // A slow response must finish before the next tick; otherwise every tick discards it.
+    // Manual refresh may still supersede an older request deliberately.
+    if (activeRequest.current === null) void refresh();
   }, [refresh]);
 
   // Follow preparation and teardown even outside the competition's scoring window.
   // One timer avoids duplicate live-event and environment-work requests.
   const environmentWorkInFlight = hasEnvironmentWorkInFlight(detail);
   usePolling(
-    refresh,
+    poll,
     environmentWorkInFlight
       ? (inFlightPollMs ?? EVENT_DETAIL_POLL_INTERVAL_MS)
       : EVENT_DETAIL_POLL_INTERVAL_MS,
