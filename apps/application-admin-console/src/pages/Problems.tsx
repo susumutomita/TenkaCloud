@@ -133,6 +133,8 @@ function ProblemPackGuidanceModal({
   );
 }
 
+import { problemThemeLabel, problemThemeTags } from "../lib/problem-themes";
+
 /**
  * 問題一覧ページ。Cloudscape Cards で 1 件ずつカード表示する。
  * クリックすると /problems/:id へ遷移して詳細 + Deploy ボタン。
@@ -177,14 +179,14 @@ export function ProblemsPage({
     () =>
       tagFacets.map((f) => ({
         value: f.tag,
-        label: f.tag,
+        label: problemThemeLabel(f.tag, t),
         description: interpolate(t("problems.tag_facet_count"), { count: String(f.count) }),
       })),
     [tagFacets, t],
   );
   const tagSelected: MultiselectProps.Option[] = useMemo(
-    () => criteria.tags.map((tag) => ({ value: tag, label: tag })),
-    [criteria.tags],
+    () => criteria.tags.map((tag) => ({ value: tag, label: problemThemeLabel(tag, t) })),
+    [criteria.tags, t],
   );
   // difficulty options は DIFFICULTY_LEVELS (= 5 件 固定) を locale ごとに label 化する。
   // useMemo にせず render ごとに作り直しても cost 無視できる範囲、 locale 切替時に追従させる。
@@ -382,7 +384,7 @@ export function ProblemsPage({
               header: t("problems.tags_header"),
               content: (item) => (
                 <SpaceBetween direction="horizontal" size="xxs">
-                  {item.tags.map((tag) => {
+                  {problemThemeTags(item.tags).map((tag) => {
                     const isActive = criteria.tags.includes(tag);
                     return (
                       <Button
@@ -393,10 +395,10 @@ export function ProblemsPage({
                           isActive
                             ? t("problems.tag_active_aria")
                             : t("problems.tag_inactive_aria"),
-                          { tag },
+                          { tag: problemThemeLabel(tag, t) },
                         )}
                       >
-                        {tag}
+                        {problemThemeLabel(tag, t)}
                       </Button>
                     );
                   })}

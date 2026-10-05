@@ -13,6 +13,8 @@ import type { ProblemCategory, ProblemStatus, ProblemSummary } from "../data/pro
  *    **substring** で case-insensitive に走査。 カタログ規模では正規表現は使わない (= 過剰)。
  */
 
+import { problemThemeTags } from "./problem-themes";
+
 export type DifficultyLevel = 1 | 2 | 3 | 4 | 5;
 /** カタログの難易度段階 (1=入門 / 5=エキスパート)。 multi-select の選択肢生成に使う。 */
 export const DIFFICULTY_LEVELS: readonly DifficultyLevel[] = [1, 2, 3, 4, 5];
@@ -61,7 +63,14 @@ export function isFilterActive(c: ProblemFilterCriteria): boolean {
 
 function matchesSearch(problem: ProblemSummary, needle: string): boolean {
   if (needle.length === 0) return true;
-  const haystack = [problem.id, problem.name, problem.shortDescription, ...problem.tags]
+  const haystack = [
+    problem.id,
+    problem.name,
+    problem.shortDescription,
+    ...problem.tags,
+    ...problemThemeTags(problem.tags),
+    ...(problemThemeTags(problem.tags).includes("cryptography") ? ["暗号"] : []),
+  ]
     .join(" ")
     .toLowerCase();
   return haystack.includes(needle);
@@ -73,8 +82,10 @@ function matchesTags(
   mode: TagMatchMode,
 ): boolean {
   if (selectedTags.length === 0) return true;
-  if (mode === "and") return selectedTags.every((t) => problemTags.includes(t));
-  return selectedTags.some((t) => problemTags.includes(t));
+  const themes = problemThemeTags(problemTags);
+  const selected = problemThemeTags(selectedTags);
+  if (mode === "and") return selected.every((tag) => themes.includes(tag));
+  return selected.some((tag) => themes.includes(tag));
 }
 
 function matchesScoringKind(
@@ -118,7 +129,7 @@ export function collectTagFacets(
 ): readonly { tag: string; count: number }[] {
   const counts = new Map<string, number>();
   for (const p of problems) {
-    for (const tag of p.tags) {
+    for (const tag of problemThemeTags(p.tags)) {
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
   }

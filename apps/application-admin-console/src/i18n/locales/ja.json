@@ -167,7 +167,8 @@
     "pack_guidance_step_create_event": "このコンソールでイベントを作成します。",
     "pack_guidance_create_event_note": "有効化後、イベント作成時のカタログにパック内の問題が表示されます。",
     "pack_guidance_docs_link": "first-pack チュートリアルを開く",
-    "pack_guidance_empty_hint": "公式カタログへの貢献またはこのテナント向けのプライベート Problem Pack で問題を追加できます。"
+    "pack_guidance_empty_hint": "公式カタログへの貢献またはこのテナント向けのプライベート Problem Pack で問題を追加できます。",
+    "theme_cryptography": "暗号"
   },
   "problem_search": {
     "filter_label": "問題カタログを絞り込む",
@@ -180,7 +181,9 @@
     "facet_count": "{count} 問",
     "match_count": "{filtered} / {total} 問が一致",
     "clear_filters": "絞り込み解除",
-    "empty_filtered": "条件に一致する問題はありません。"
+    "empty_filtered": "条件に一致する問題はありません。",
+    "more_filters": "その他の絞り込み",
+    "selection_preserved": "絞り込みを変更しても、選んだ問題は残ります。"
   },
   "problem_cost": {
     "header": "課金リスク",

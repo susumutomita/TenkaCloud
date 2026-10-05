@@ -26,7 +26,7 @@ describe("buildProblemOptions", () => {
       "近日対応",
       FLAG_OFF,
     );
-    expect(opt).toEqual({ value: "p1", label: "Problem p1 (p1)" });
+    expect(opt).toEqual({ value: "p1", label: "Problem p1" });
     expect(opt.disabled).toBeUndefined();
   });
 
@@ -34,7 +34,7 @@ describe("buildProblemOptions", () => {
     const [opt] = buildProblemOptions([problem("a1", "azure", "bicep")], "近日対応", FLAG_OFF);
     expect(opt).toMatchObject({
       value: "a1",
-      label: "Problem a1 (a1)",
+      label: "Problem a1",
       disabled: true,
       labelTag: "近日対応",
     });

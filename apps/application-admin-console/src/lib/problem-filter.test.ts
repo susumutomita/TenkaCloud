@@ -250,3 +250,37 @@ describe("toggleTagFilter (Issue #835)", () => {
     expect(next.tags).toEqual(["flag"]);
   });
 });
+
+describe("cryptography theme", () => {
+  const authored = sample({
+    id: "ac26-example",
+    name: "Field arithmetic",
+    tags: ["advanced-cryptography-2026", "advanced-cryptography", "schnorr"],
+  });
+  it("counts a problem once per theme while retaining the authored metadata", () => {
+    const before = JSON.stringify(authored);
+    expect(collectTagFacets([authored])).toContainEqual({ tag: "cryptography", count: 1 });
+    expect(collectTagFacets([authored]).some((f) => f.tag.includes("2026"))).toBe(false);
+    expect(JSON.stringify(authored)).toBe(before);
+  });
+  it("matches the general theme and existing tag queries in both languages", () => {
+    for (const tags of [
+      ["cryptography"],
+      ["advanced-cryptography-2026"],
+      ["advanced-cryptography"],
+      ["ac26"],
+    ]) {
+      expect(filterProblems([authored], { ...EMPTY_FILTER_CRITERIA, tags })).toEqual([authored]);
+    }
+    for (const search of ["cryptography", "暗号", "advanced-cryptography-2026", "ac26-example"]) {
+      expect(filterProblems([authored], { ...EMPTY_FILTER_CRITERIA, search })).toEqual([authored]);
+    }
+    expect(
+      filterProblems([authored], {
+        ...EMPTY_FILTER_CRITERIA,
+        tags: ["cryptography", "missing"],
+        tagMatchMode: "and",
+      }),
+    ).toEqual([]);
+  });
+});
