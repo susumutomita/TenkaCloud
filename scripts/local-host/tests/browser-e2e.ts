@@ -111,9 +111,10 @@ async function createEvent(
   await count.fill("999");
   assert.equal(await count.inputValue(), "40", "The team input is bounded before submission.");
   await count.fill("2");
-  await page.getByTestId("problem-select").click();
-  await page.getByRole("option", { name: /Staff-Only Login|スタッフ専用ログイン/u }).click();
-  await page.keyboard.press("Escape");
+  await page
+    .getByTestId("problem-select")
+    .getByRole("checkbox", { name: /Staff-Only Login|スタッフ専用ログイン/u })
+    .check();
   assert.equal(await page.getByText("Local competition mode", { exact: true }).count(), 0);
   assert.equal(await page.getByText("Local competition event", { exact: true }).count(), 0);
   await captureVerifiedUi(page, "local-event-create.png", [organizerKey]);

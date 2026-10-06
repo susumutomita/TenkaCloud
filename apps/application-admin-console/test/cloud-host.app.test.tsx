@@ -14,6 +14,7 @@ import type {
 import type { EventDetail } from "../src/api/events-client";
 import type { AppConfig } from "../src/config";
 import { I18nProvider } from "../src/i18n";
+import { problemPicker } from "./utils/problem-picker";
 
 const config: AppConfig = {
   mode: "cloud-host",
@@ -159,15 +160,14 @@ describe("cloud organizer SPA journey", () => {
   it("offers AWS and native cloud exercises without local Docker problems", async () => {
     const f = cloudSession("Admin", "/events/new");
     await screen.findByTestId("problem-select");
-    const picker = createWrapper(document.body).findMultiselect('[data-testid="problem-select"]');
+    const picker = problemPicker(document.body);
     if (!picker) throw new Error("Missing cloud problem picker");
-    picker.openDropdown();
-    expect(picker.findDropdown().findOptions()).toHaveLength(2);
-    expect(picker.findDropdown().findOptionByValue("hello-world")).not.toBeNull();
-    expect(picker.findDropdown().findOptionByValue("ac26-crypto-battle")).not.toBeNull();
+    expect(picker.findOptions()).toHaveLength(2);
+    expect(picker.findOptionByValue("hello-world")).not.toBeNull();
+    expect(picker.findOptionByValue("ac26-crypto-battle")).not.toBeNull();
     for (const id of ["sqli-demo", "db-a1-table-primary-key"])
-      expect(picker.findDropdown().findOptionByValue(id)).toBeNull();
-    picker.selectOptionByValue("ac26-crypto-battle");
+      expect(picker.findOptionByValue(id)).toBeNull();
+    picker.toggleProblem("ac26-crypto-battle");
     expect(screen.getByText("Runs inside TenkaCloud")).toBeInTheDocument();
     expect(screen.queryByText("AWS Account ID")).not.toBeInTheDocument();
     expect(f.unexpected).toEqual([]);

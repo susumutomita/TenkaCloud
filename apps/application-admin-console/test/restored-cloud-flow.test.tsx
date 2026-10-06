@@ -7,6 +7,7 @@ import type { EventDetail } from "../src/api/events-client";
 import { rememberLoginReturnPath } from "../src/auth/login-return-path";
 import { loadConfig } from "../src/config";
 import { I18nProvider } from "../src/i18n";
+import { problemPicker } from "./utils/problem-picker";
 
 /**
  * Synthetic-network jsdom integration, not an AWS or browser rehearsal. Only fetch is
@@ -214,12 +215,11 @@ describe("restored cloud SPA with synthetic HTTP", () => {
     const wrapper = createWrapper(container);
     wrapper.findAllInputs()[1]?.setInputValue("2");
     wrapper.findAllInputs()[0]?.setInputValue("Restored cloud event");
-    const problems = wrapper.findMultiselect('[data-testid="problem-select"]');
-    problems?.openDropdown();
-    expect(problems?.findDropdown()?.findOptionByValue("hello-world-battle")).not.toBeNull();
-    expect(problems?.findDropdown()?.findOptionByValue("ac26-crypto-battle")).not.toBeNull();
-    expect(problems?.findDropdown()?.findOptionByValue("db-battle-slow-apparently")).toBeNull();
-    problems?.selectOptionByValue("hello-world-battle");
+    const problems = problemPicker(container);
+    expect(problems?.findOptionByValue("hello-world-battle")).not.toBeNull();
+    expect(problems?.findOptionByValue("ac26-crypto-battle")).not.toBeNull();
+    expect(problems?.findOptionByValue("db-battle-slow-apparently")).toBeNull();
+    problems?.toggleProblem("hello-world-battle");
     for (const [index, region] of ["ap-northeast-1", "us-east-1"].entries()) {
       const selects = createWrapper(container).findAllSelects();
       selects[index * 2]?.openDropdown();

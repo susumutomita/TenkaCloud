@@ -1,5 +1,6 @@
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import Checkbox from "@cloudscape-design/components/checkbox";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
@@ -10,6 +11,7 @@ import Multiselect, { type MultiselectProps } from "@cloudscape-design/component
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
+import TokenGroup from "@cloudscape-design/components/token-group";
 import { useMemo, useState } from "react";
 import { ProblemCostSummary } from "../../components/ProblemCostSummary";
 import {
@@ -45,10 +47,10 @@ function optionValues(options: readonly MultiselectProps.Option[]): string[] {
 }
 
 /**
- * 「使う問題」 section: 検索 + filter (Issue #1776) + 問題 multiselect + 選択された問題ごとの
+ * 「使う問題」 section: 検索 + filter + 常時表示のチェック一覧 + 選択された問題ごとの
  * region picker。
  *
- * Issue #1776: カタログ増加 (Battle + Challenge 100+) に備え、 multiselect の選択肢を
+ * カタログ増加 (Battle + Challenge 100+) に備え、常時表示の問題一覧を
  * 検索 (id / name / 説明 / タグ) と category / 難易度 / scoring kind / タグ filter で
  * 絞り込めるようにする。 filter logic は問題カタログ page と同じ `lib/problem-filter` を共用。
  *
@@ -188,6 +190,7 @@ export function EventCreateProblemsetSection({
             <ColumnLayout columns={2}>
               <FormField label={t("problems.theme_label")}>
                 <Multiselect
+                  expandToViewport
                   data-testid="problem-filter-tags"
                   placeholder={t("problem_search.tag_placeholder")}
                   options={tagOptions}
@@ -200,6 +203,7 @@ export function EventCreateProblemsetSection({
               </FormField>
               <FormField label={t("problems.difficulty_label")}>
                 <Multiselect
+                  expandToViewport
                   data-testid="problem-filter-difficulty"
                   placeholder={t("problem_search.difficulty_placeholder")}
                   options={difficultyOptions}
@@ -221,6 +225,7 @@ export function EventCreateProblemsetSection({
               <ColumnLayout columns={2}>
                 <FormField label={t("problem_search.all_categories")}>
                   <Select
+                    expandToViewport
                     data-testid="problem-filter-category"
                     selectedOption={selectedCategoryOption}
                     options={categoryOptions}
@@ -237,6 +242,7 @@ export function EventCreateProblemsetSection({
                 </FormField>
                 <FormField label={t("problem_search.scoring_kind_placeholder")}>
                   <Multiselect
+                    expandToViewport
                     data-testid="problem-filter-scoring-kind"
                     placeholder={t("problem_search.scoring_kind_placeholder")}
                     options={scoringKindOptions}
@@ -283,17 +289,83 @@ export function EventCreateProblemsetSection({
                 })
           }
         >
-          <Multiselect
-            data-testid="problem-select"
-            selectedOptions={displayedSelection}
-            options={[...problemOptions]}
-            placeholder={t("event_create.problemset_placeholder")}
-            empty={t("problem_search.empty_filtered")}
-            onChange={({ detail }) => {
-              if (maxProblems === undefined || detail.selectedOptions.length <= maxProblems)
-                onProblemsChange(detail.selectedOptions);
-            }}
-          />
+          <SpaceBetween size="s">
+            <fieldset
+              aria-label={t("event_create.use_problems_label")}
+              data-testid="problem-select"
+              style={{
+                border: 0,
+                margin: 0,
+                padding: 0,
+                minInlineSize: 0,
+                maxHeight: "24rem",
+                overflowY: "auto",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {problemOptions.map((option) => {
+                const checked = displayedSelection.some((item) => item.value === option.value);
+                return (
+                  <Box key={option.value} padding={{ vertical: "xs" }}>
+                    <Checkbox
+                      data-testid={`problem-checkbox-${option.value}`}
+                      checked={checked}
+                      disabled={Boolean(option.disabled && !checked)}
+                      description={
+                        <span
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {option.description}
+                        </span>
+                      }
+                      onChange={({ detail }) => {
+                        if (!detail.checked)
+                          onProblemsChange(
+                            displayedSelection.filter((item) => item.value !== option.value),
+                          );
+                        else onProblemsChange([...displayedSelection, option]);
+                      }}
+                    >
+                      <Box
+                        variant="span"
+                        fontWeight="bold"
+                        data-testid={`problem-title-${option.value}`}
+                      >
+                        {option.label}
+                      </Box>
+                      {option.labelTag && (
+                        <Box variant="span" color="text-body-secondary">
+                          {" "}
+                          — {option.labelTag}
+                        </Box>
+                      )}
+                    </Checkbox>
+                  </Box>
+                );
+              })}
+            </fieldset>
+            {displayedSelection.length > 0 && (
+              <TokenGroup
+                data-testid="problem-selection"
+                disableOuterPadding
+                items={displayedSelection.map((option) => ({
+                  label: option.label,
+                  description: option.description,
+                  dismissLabel: option.label,
+                }))}
+                onDismiss={({ detail }) =>
+                  onProblemsChange(
+                    displayedSelection.filter((_, index) => index !== detail.itemIndex),
+                  )
+                }
+              />
+            )}
+          </SpaceBetween>
         </FormField>
 
         {filterActive && filtered.length === 0 && (

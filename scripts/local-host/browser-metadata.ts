@@ -62,6 +62,8 @@ export function publicMetadata(code: string, id: string): string | null {
   const raw = JSON.parse(code) as Record<string, unknown>;
   const runtime =
     raw.runtime && typeof raw.runtime === "object" ? (raw.runtime as Record<string, unknown>) : {};
+  const scoring =
+    raw.scoring && typeof raw.scoring === "object" ? (raw.scoring as Record<string, unknown>) : {};
   const i18n =
     raw.i18n && typeof raw.i18n === "object" ? (raw.i18n as Record<string, unknown>) : {};
   const english =
@@ -83,6 +85,8 @@ export function publicMetadata(code: string, id: string): string | null {
       raw.courseAlignment as ProblemCourseMetadataInput["courseAlignment"],
     ),
     tags: Array.isArray(raw.tags) ? raw.tags : [],
+    // The catalog facet needs only the public classification, never scoring parameters.
+    ...(typeof scoring.kind === "string" ? { scoring: { kind: scoring.kind } } : {}),
     runtime:
       raw.id === "ac26-crypto-battle"
         ? { provider: "local", engine: "bun" }

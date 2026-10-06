@@ -7,6 +7,7 @@ import type { CompetitorAccountSummary } from "../../src/api/competitor-accounts
 import type { AppConfig } from "../../src/config";
 import type { ProblemSummary } from "../../src/data/problems";
 import { hasLiteDrillCheckpointBeenShown } from "../../src/lib/lite-drill";
+import { problemPicker } from "../utils/problem-picker";
 
 /**
  * Issue #1241: EventCreatePage は section に分割済の orchestrator。 ここでは page の
@@ -102,9 +103,9 @@ const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
 let config: AppConfig = { eventLimits: { maxTeams: 99, maxProblems: 50 } } as AppConfig;
 const renderPage = () => render(<EventCreatePage config={config} />);
 const w = (c: HTMLElement) => createWrapper(c);
-// #1776: 問題選択 Multiselect の前に filter 用 Multiselect (difficulty / scoring kind / tags)
+// #1776: 問題チェック一覧の前に filter 用 Multiselect (difficulty / scoring kind / tags)
 // が並ぶため、 data-testid で特定する。
-const problemSelect = (c: HTMLElement) => w(c).findMultiselect('[data-testid="problem-select"]');
+const problemSelect = (c: HTMLElement) => problemPicker(c);
 
 /** name 入力 + teamCount=1 + 問題 p1 選択 + account 選択 を行い、 submit 可能状態にする。 */
 function fillValidForm(container: HTMLElement) {
@@ -112,8 +113,8 @@ function fillValidForm(container: HTMLElement) {
   w(container).findAllInputs()[1]?.setInputValue("1");
   w(container).findAllInputs()[0]?.setInputValue("My Event");
   const ms = problemSelect(container);
-  ms?.openDropdown();
-  ms?.selectOptionByValue("p1");
+
+  ms?.toggleProblem("p1");
   const accountSelect = w(container).findAllSelects()[0]; // TeamsSection の account Select
   accountSelect?.openDropdown();
   accountSelect?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
@@ -157,8 +158,8 @@ describe("EventCreatePage flow", () => {
       w(container).findAllInputs()[1]?.setInputValue("2");
       w(container).findAllInputs()[0]?.setInputValue("Shared account event");
       const selector = problemSelect(container);
-      selector?.openDropdown();
-      selector?.selectOptionByValue("p1");
+
+      selector?.toggleProblem("p1");
       expect(screen.getByText("event_create.col_team_region")).toBeInTheDocument();
       for (const [index, region] of ["ap-northeast-1", "us-east-1"].entries()) {
         const selects = w(container).findAllSelects();
@@ -182,10 +183,10 @@ describe("EventCreatePage flow", () => {
       config = { ...config, mode, supportedProblemIds: ["p1"] };
       const { container } = renderPage();
       const select = problemSelect(container);
-      select?.openDropdown();
-      expect(select?.findDropdown()?.findOptionByValue("p1")).not.toBeNull();
-      expect(select?.findDropdown()?.findOptionByValue("p2")).toBeNull();
-      select?.selectOptionByValue("p1");
+
+      expect(select?.findOptionByValue("p1")).not.toBeNull();
+      expect(select?.findOptionByValue("p2")).toBeNull();
+      select?.toggleProblem("p1");
       expect(
         problemSelect(container)
           ?.findTokens()
@@ -199,9 +200,9 @@ describe("EventCreatePage flow", () => {
       config = { ...config, mode: "cloud-host", supportedProblemIds };
       const { container } = renderPage();
       const select = problemSelect(container);
-      select?.openDropdown();
-      expect(select?.findDropdown()?.findOptionByValue("p1")).toBeNull();
-      expect(select?.findDropdown()?.findOptionByValue("p2")).toBeNull();
+
+      expect(select?.findOptionByValue("p1")).toBeNull();
+      expect(select?.findOptionByValue("p2")).toBeNull();
       expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
       expect(mockCreate).not.toHaveBeenCalled();
     },
@@ -225,8 +226,8 @@ describe("EventCreatePage flow", () => {
       w(container).findAllInputs()[1]?.setInputValue("1");
       w(container).findAllInputs()[0]?.setInputValue("Native event");
       const selector = problemSelect(container);
-      selector?.openDropdown();
-      selector?.selectOptionByValue("p1");
+
+      selector?.toggleProblem("p1");
       expect(screen.getByText("event_create.teams_description_native")).toBeInTheDocument();
       expect(screen.queryByText("event_create.col_aws_account")).not.toBeInTheDocument();
       expect(screen.getByText("event_create.native_execution")).toBeInTheDocument();
@@ -251,9 +252,9 @@ describe("EventCreatePage flow", () => {
       w(container).findAllInputs()[1]?.setInputValue("1");
       w(container).findAllInputs()[0]?.setInputValue("Mixed event");
       const selector = problemSelect(container);
-      selector?.openDropdown();
-      selector?.selectOptionByValue("p1");
-      selector?.selectOptionByValue("p2");
+
+      selector?.toggleProblem("p1");
+      selector?.toggleProblem("p2");
       expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
       const accountSelect = w(container).findAllSelects()[0];
@@ -278,8 +279,8 @@ describe("EventCreatePage flow", () => {
     const { container } = renderPage();
     w(container).findAllInputs()[0]?.setInputValue("Native event");
     const selector = problemSelect(container);
-    selector?.openDropdown();
-    selector?.selectOptionByValue("p1");
+
+    selector?.toggleProblem("p1");
     expect(screen.queryByText("accounts unavailable")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
   });
@@ -402,9 +403,9 @@ describe("EventCreatePage flow", () => {
     // 1 team → selects: [account, category-filter, region-p1, region-p2]
     w(container).findAllInputs()[1]?.setInputValue("1");
     const ms = problemSelect(container);
-    ms?.openDropdown();
-    ms?.selectOptionByValue("p1"); // [p1]
-    ms?.selectOptionByValue("p2"); // [p1, p2] → onProblemsChange の prev に p1 → existing 再利用経路
+
+    ms?.toggleProblem("p1"); // [p1]
+    ms?.toggleProblem("p2"); // [p1, p2] → onProblemsChange の prev に p1 → existing 再利用経路
     expect(
       problemSelect(container)
         ?.findTokens()
@@ -432,8 +433,8 @@ describe("EventCreatePage flow", () => {
   it("should fall back to the default region for a problem without metadata region", () => {
     const { container } = renderPage();
     const ms = problemSelect(container);
-    ms?.openDropdown();
-    ms?.selectOptionByValue("p2"); // defaultRegion / supportedRegions 未宣言 → fallback 分岐
+
+    ms?.toggleProblem("p2"); // defaultRegion / supportedRegions 未宣言 → fallback 分岐
     expect(
       problemSelect(container)
         ?.findTokens()
@@ -511,8 +512,8 @@ describe("EventCreatePage flow", () => {
     w(container).findAllInputs()[1]?.setInputValue("1");
     w(container).findAllInputs()[0]?.setInputValue("My Event");
     const ms = problemSelect(container);
-    ms?.openDropdown();
-    ms?.selectOptionByValue("p1");
+
+    ms?.toggleProblem("p1");
     // account 未選択 → awsAccountId "" → allAccountsValid false → disabled
     expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
   });
@@ -530,8 +531,8 @@ describe("EventCreatePage flow", () => {
     w(container).findAllInputs()[1]?.setInputValue("2"); // 2 teams
     w(container).findAllInputs()[0]?.setInputValue("My Event");
     const ms = problemSelect(container);
-    ms?.openDropdown();
-    ms?.selectOptionByValue("p1");
+
+    ms?.toggleProblem("p1");
     // 両 team に valid account を割り当て (allAccountsValid true にして hasDuplicateSlug まで到達)。
     // [Issue #3173] Each team row now renders account then region, so the
     // account selects are the even indices rather than the first two.
