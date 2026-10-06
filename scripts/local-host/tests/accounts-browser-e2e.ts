@@ -64,10 +64,14 @@ async function createMixedEvent(page: Page): Promise<string> {
   await page.getByRole("button", { name: "Create event" }).first().click();
   await page.getByLabel("Event name").fill("Accounts browser rehearsal");
   await page.getByLabel("Team count").fill("1");
-  await page.getByTestId("problem-select").click();
-  await page.getByRole("option", { name: /Hello World \(Sample\)/u }).click();
-  await page.getByRole("option", { name: /Cryptography Battle|暗号バトル/u }).click();
-  await page.keyboard.press("Escape");
+  await page
+    .getByTestId("problem-select")
+    .getByRole("checkbox", { name: /Hello World \(Sample\)/u })
+    .check();
+  await page
+    .getByTestId("problem-select")
+    .getByRole("checkbox", { name: /Cryptography Battle|暗号バトル/u })
+    .check();
   await page.getByText("Select a verified account").click();
   await page.getByRole("option", { name: new RegExp(accountId, "u") }).click();
   await page.getByRole("button", { name: "Create Event" }).click();
