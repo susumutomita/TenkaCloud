@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { metadataToDetail } from "../../../apps/application-admin-console/src/data/problem-mapping";
 import { metadataToEntry } from "../../../packages/portal-contracts/src/problem-catalog";
 import {
   assertHostingModule,
@@ -37,12 +38,13 @@ test("hosting exposes all 106 Docker verify exercises as public Challenge metada
     expect(value.id).toBe(raw.id);
     expect(value.category).toBe("Challenge");
     expect(value.runtime).toEqual({ provider: "docker", engine: "compose" });
+    expect(value.scoring).toEqual({ kind: raw.scoring.kind });
+    expect(metadataToDetail(value).scoringKind).toBe(raw.scoring.kind);
     expect(value.i18n.en.name).toBe(raw.i18n.en.name);
     for (const hidden of [
       "instructions",
       "description",
       "writeup",
-      "scoring",
       "endpoints",
       "dashboard",
       "exposedPorts",
@@ -132,4 +134,28 @@ test("course metadata survives both browser projections without exposing author-
   if (!embargoed) throw new Error("Missing embargo projection.");
   expect(JSON.parse(embargoed).courseAlignment).toBeUndefined();
   expect(JSON.parse(embargoed).track).toEqual(entry.track);
+});
+
+test("the scoring facet keeps only its kind and never author scoring values", () => {
+  const path = "/repo/problems/challenges/example/metadata.json";
+  const project = (scoring?: unknown) => {
+    const value = publicMetadata(JSON.stringify({ scoring }), path);
+    if (!value) throw new Error("Missing public projection");
+    return JSON.parse(value);
+  };
+  expect(
+    project({
+      kind: "verify",
+      points: 999,
+      answer: "private-scoring-answer",
+      config: { token: "private-scoring-config" },
+    }).scoring,
+  ).toEqual({ kind: "verify" });
+  for (const scoring of [
+    undefined,
+    null,
+    "private-scoring-answer",
+    { kind: { answer: "private-scoring-answer" } },
+  ])
+    expect(project(scoring).scoring).toBeUndefined();
 });

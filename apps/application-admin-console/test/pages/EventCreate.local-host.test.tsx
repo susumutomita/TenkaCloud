@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../src/config";
 import type { ProblemSummary } from "../../src/data/problems";
+import { problemPicker } from "../utils/problem-picker";
 
 /**
  * Issue #3226: the normal event-creation page on the local competition host. The host's own
@@ -86,8 +87,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.clearAllMocks());
 
-const multiselect = (container: HTMLElement) =>
-  createWrapper(container).findMultiselect('[data-testid="problem-select"]');
+const multiselect = (container: HTMLElement) => problemPicker(container);
 
 describe("EventCreatePage on the local competition host", () => {
   it.each(["local-host", "cloud-host"] as const)(
@@ -106,9 +106,9 @@ describe("EventCreatePage on the local competition host", () => {
       if (mode === "local-host")
         await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
       const picker = multiselect(container);
-      picker?.openDropdown();
-      picker?.selectOptionByValue("cloud-only");
-      picker?.closeDropdown();
+
+      picker?.toggleProblem("cloud-only");
+
       const selection = () => picker?.findTokens()[0]?.getElement().textContent;
       expect(selection()).toContain("日本語の問題");
       const region = createWrapper(container).findAllSelects().at(-1);
@@ -163,15 +163,15 @@ describe("EventCreatePage on the local competition host", () => {
     wrapper.findAllInputs()[1]?.setInputValue("1");
     wrapper.findAllInputs()[0]?.setInputValue("Local Cup");
     const picker = multiselect(container);
-    picker?.openDropdown();
+
     await waitFor(() => {
-      const options = picker?.findDropdown().findOptions() ?? [];
+      const options = picker?.findOptions() ?? [];
       const unsupported = options.find((option) =>
         option.getElement().textContent?.includes("cloud-only"),
       );
       expect(unsupported?.getElement().textContent).toContain("local_host.problem_unsupported_tag");
     });
-    picker?.selectOptionByValue("sqli-demo");
+    picker?.toggleProblem("sqli-demo");
     // No region or cloud cost columns for a local environment.
     expect(screen.queryByText("event_create.col_region")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
@@ -209,8 +209,8 @@ describe("EventCreatePage on the local competition host", () => {
     wrapper.findAllInputs()[1]?.setInputValue("1");
     wrapper.findAllInputs()[0]?.setInputValue("Cloud Cup");
     const picker = multiselect(container);
-    picker?.openDropdown();
-    picker?.selectOptionByValue("cloud-only");
+
+    picker?.toggleProblem("cloud-only");
     await waitFor(() =>
       expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument(),
     );
@@ -256,9 +256,9 @@ describe("EventCreatePage on the local competition host", () => {
       wrapper.findAllInputs()[0]?.setInputValue("100 entries");
       wrapper.findAllInputs()[1]?.setInputValue("5");
       const picker = multiselect(container);
-      picker?.openDropdown();
-      await waitFor(() => expect(picker?.findDropdown().findOptions()).toHaveLength(20));
-      for (const item of problems) picker?.selectOptionByValue(item.id);
+
+      await waitFor(() => expect(picker?.findOptions()).toHaveLength(20));
+      for (const item of problems) picker?.toggleProblem(item.id);
       const submit = screen.getByRole("button", { name: "event_create.submit" });
       expect(submit).toBeEnabled();
       expect(wrapper.findAllInputs()[1]?.findNativeInput().getElement()).toHaveValue(limits.teams);
@@ -290,20 +290,17 @@ describe("EventCreatePage on the local competition host", () => {
     await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
     const wrapper = createWrapper(container);
     const picker = multiselect(container);
-    picker?.openDropdown();
-    picker?.selectOptionByValue("first");
-    picker?.selectOptionByValue("second");
+
+    picker?.toggleProblem("first");
+    picker?.toggleProblem("second");
     const third = () =>
-      picker
-        ?.findDropdown()
-        .findOptions()
-        .find((option) => option.getElement().textContent?.includes("third"));
+      picker?.findOptions().find((option) => option.getElement().textContent?.includes("third"));
     expect(third()?.isDisabled()).toBe(true);
     wrapper.findAllInputs()[1]?.setInputValue("40");
     expect(wrapper.findAllInputs()[1]?.findNativeInput().getElement()).toHaveValue(3);
-    picker?.selectOptionByValue("second");
+    picker?.toggleProblem("second");
     expect(third()?.isDisabled()).toBe(false);
-    picker?.selectOptionByValue("third");
+    picker?.toggleProblem("third");
     wrapper.findAllInputs()[0]?.setInputValue("Bounded selection");
     fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
     await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));

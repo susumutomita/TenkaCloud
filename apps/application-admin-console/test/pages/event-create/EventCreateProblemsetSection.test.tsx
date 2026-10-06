@@ -8,11 +8,12 @@ import {
   type EventCreateProblemsetSectionProps,
 } from "../../../src/pages/event-create/EventCreateProblemsetSection";
 import { type ProblemRow, REGION_OPTIONS } from "../../../src/pages/event-create/helpers";
+import { problemPicker } from "../../utils/problem-picker";
 
 /**
- * 「使う問題」 section: 検索 + filter (Issue #1776) + 問題 Multiselect + 選択問題ごとの
+ * 「使う問題」 section: 検索 + filter (Issue #1776) + 常時表示の問題チェック一覧 + 選択問題ごとの
  * region Select。 検索 (id / name / タグ) / category / 難易度 / scoring kind / タグの
- * 各 filter が multiselect の選択肢を絞ること、 0 件時の empty state + 「絞り込み解除」、
+ * 各 filter がチェック一覧を絞ること、 0 件時の empty state + 「絞り込み解除」、
  * 問題選択の onProblemsChange、 region 変更の onUpdateProblemRow、 problemRows 有無の
  * table 表示、 defaultRegion fallback、 supportedRegions の絞り込みを pin。
  * useT は echo mock (interpolate は実物)、 problem-filter / helpers は実物。
@@ -65,6 +66,7 @@ const CATALOG: readonly ProblemSummary[] = [
     category: "Challenge",
     difficulty: 1,
     scoringKind: "flag",
+    shortDescription: "A greeting exercise",
     tags: ["ssm"],
   }),
 ];
@@ -100,7 +102,7 @@ const renderSection = (p = props()) => {
   return {
     ...utils,
     p,
-    problemSelect: () => w.findMultiselect('[data-testid="problem-select"]'),
+    problemSelect: () => problemPicker(utils.container),
     searchInput: () => w.findInput('[data-testid="problem-filter-search"]'),
     categorySelect: () => w.findSelect('[data-testid="problem-filter-category"]'),
     difficultyFilter: () => w.findMultiselect('[data-testid="problem-filter-difficulty"]'),
@@ -109,21 +111,18 @@ const renderSection = (p = props()) => {
   };
 };
 
-/** 開いた problem multiselect dropdown の option label 一覧。 */
+/** 常時表示されている問題チェック項目のタイトル。 */
 const visibleProblemLabels = (s: ReturnType<typeof renderSection>): string[] => {
   const ms = s.problemSelect();
-  ms?.openDropdown();
-  return (ms?.findDropdown().findOptions() ?? []).map(
-    (o) => o.findLabel()?.getElement().textContent ?? "",
-  );
+  return (ms?.findOptions() ?? []).map((o) => o.findLabel()?.getElement().textContent ?? "");
 };
 
 describe("EventCreateProblemsetSection", () => {
-  it("should emit selected problems from the multiselect", () => {
+  it("should emit selected problems from the visible checkboxes", () => {
     const s = renderSection();
     const ms = s.problemSelect();
-    ms?.openDropdown();
-    ms?.selectOptionByValue("p1");
+
+    ms?.toggleProblem("p1");
     expect(s.p.onProblemsChange).toHaveBeenCalled();
   });
 
@@ -133,8 +132,8 @@ describe("EventCreateProblemsetSection", () => {
       props({ problems: RESERVED_CATALOG, nonAwsRuntimeEnabled: false, onProblemsChange }),
     );
     const ms = s.problemSelect();
-    ms?.openDropdown();
-    ms?.selectOptionByValue("sk");
+
+    ms?.toggleProblem("sk");
     expect(onProblemsChange).not.toHaveBeenCalled();
   });
 
@@ -144,8 +143,8 @@ describe("EventCreateProblemsetSection", () => {
       props({ problems: RESERVED_CATALOG, nonAwsRuntimeEnabled: true, onProblemsChange }),
     );
     const ms = s.problemSelect();
-    ms?.openDropdown();
-    ms?.selectOptionByValue("sk");
+
+    ms?.toggleProblem("sk");
     expect(onProblemsChange).toHaveBeenCalled();
   });
 
@@ -166,14 +165,26 @@ describe("EventCreateProblemsetSection", () => {
     expect(screen.getByTestId("problem-filter-clear")).toBeInTheDocument();
   });
 
+  it.each(["World", "greeting", "ssm"])("filters visible checkboxes by text %s", (search) => {
+    const section = renderSection();
+    expect(screen.getByRole("checkbox", { name: /Hello World/ })).toBeInTheDocument();
+    section.searchInput()?.setInputValue(search);
+    expect(visibleProblemLabels(section)).toEqual(["Hello World"]);
+    section.problemSelect().toggleProblem("p2");
+    expect(section.p.onProblemsChange).toHaveBeenCalledWith([
+      expect.objectContaining({ value: "p2" }),
+    ]);
+    expect(section.searchInput()?.findNativeInput().getElement()).toHaveValue(search);
+  });
+
   it("should narrow the options via the category select and restore on 'all'", () => {
     const s = renderSection();
     const select = s.categorySelect();
     select?.openDropdown();
-    select?.selectOptionByValue("Battle");
+    select?.selectOptionByValue("Battle", { expandToViewport: true });
     expect(visibleProblemLabels(s)).toEqual(["Redis Spike"]);
     select?.openDropdown();
-    select?.selectOptionByValue("all");
+    select?.selectOptionByValue("all", { expandToViewport: true });
     expect(visibleProblemLabels(s)).toEqual(["Redis Spike", "Hello World"]);
   });
 
@@ -181,7 +192,7 @@ describe("EventCreateProblemsetSection", () => {
     const s = renderSection();
     const ms = s.difficultyFilter();
     ms?.openDropdown();
-    ms?.selectOptionByValue("4");
+    ms?.selectOptionByValue("4", { expandToViewport: true });
     expect(visibleProblemLabels(s)).toEqual(["Redis Spike"]);
   });
 
@@ -189,7 +200,7 @@ describe("EventCreateProblemsetSection", () => {
     const s = renderSection();
     const ms = s.scoringKindFilter();
     ms?.openDropdown();
-    ms?.selectOptionByValue("flag");
+    ms?.selectOptionByValue("flag", { expandToViewport: true });
     expect(visibleProblemLabels(s)).toEqual(["Hello World"]);
   });
 
@@ -197,7 +208,7 @@ describe("EventCreateProblemsetSection", () => {
     const s = renderSection();
     const ms = s.tagFilter();
     ms?.openDropdown();
-    ms?.selectOptionByValue("redis");
+    ms?.selectOptionByValue("redis", { expandToViewport: true });
     expect(visibleProblemLabels(s)).toEqual(["Redis Spike"]);
   });
 
@@ -272,16 +283,16 @@ describe("selection across filters", () => {
     }
     const { container } = render(<ControlledSelection />);
     const wrapper = createWrapper(container);
-    const picker = () => wrapper.findMultiselect('[data-testid="problem-select"]');
+    const picker = () => problemPicker(container);
     const search = wrapper.findInput('[data-testid="problem-filter-search"]');
-    picker()?.openDropdown();
-    picker()?.selectOptionByValue("p1");
-    picker()?.closeDropdown();
+
+    picker()?.toggleProblem("p1");
+
     search?.setInputValue("p2");
     expect(picker()?.findTokens()).toHaveLength(1);
-    picker()?.openDropdown();
-    picker()?.selectOptionByValue("p2");
-    picker()?.closeDropdown();
+
+    picker()?.toggleProblem("p2");
+
     expect(changed.mock.calls.at(-1)?.[0]).toEqual(["p1", "p2"]);
     search?.setInputValue("no matching problem");
     expect(picker()?.findTokens()).toHaveLength(2);

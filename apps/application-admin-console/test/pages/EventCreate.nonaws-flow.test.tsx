@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompetitorAccountSummary } from "../../src/api/competitor-accounts-client";
 import type { AppConfig } from "../../src/config";
 import type { ProblemSummary } from "../../src/data/problems";
+import { problemPicker } from "../utils/problem-picker";
 
 /**
  * #2563 v1, tightened by #2757: 非 AWS single-provider event の EventCreate flow。
@@ -90,15 +91,15 @@ const config = {
 } as AppConfig;
 const renderPage = () => render(<EventCreatePage config={config} />);
 const w = (c: HTMLElement) => createWrapper(c);
-const problemSelect = (c: HTMLElement) => w(c).findMultiselect('[data-testid="problem-select"]');
+const problemSelect = (c: HTMLElement) => problemPicker(c);
 
 /** name 入力 + teamCount=1 + sakura 問題 ps1 選択 (credential slug は default team-1 のまま)。 */
 function fillNonAwsForm(container: HTMLElement) {
   w(container).findAllInputs()[1]?.setInputValue("1");
   w(container).findAllInputs()[0]?.setInputValue("Sakura Event");
   const ms = problemSelect(container);
-  ms?.openDropdown();
-  ms?.selectOptionByValue("ps1");
+
+  ms?.toggleProblem("ps1");
 }
 
 beforeEach(() => {
@@ -167,9 +168,9 @@ describe("EventCreatePage non-AWS flow (#2563)", () => {
   it("should block submit and show the mixed error when AWS and non-AWS problems are combined", () => {
     const { container } = renderPage();
     fillNonAwsForm(container);
-    // Multiselect は選択後も dropdown が開いたまま (fillNonAwsForm の続き) なので再 open しない。
+    // チェック一覧から、既存の選択を保持したまま追加する。
     const ms = problemSelect(container);
-    ms?.selectOptionByValue("pa1");
+    ms?.toggleProblem("pa1");
     expect(screen.getByText("event_create.mixed_provider_error")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
   });
@@ -179,8 +180,8 @@ describe("EventCreatePage non-AWS flow (#2563)", () => {
     w(container).findAllInputs()[1]?.setInputValue("1");
     w(container).findAllInputs()[0]?.setInputValue("Composite Event");
     const ms = problemSelect(container);
-    ms?.openDropdown();
-    ms?.selectOptionByValue("pcm1");
+
+    ms?.toggleProblem("pcm1");
 
     expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
     // Composite targets are aws + sakura only (#2757: gcp/azure stay non-selectable
