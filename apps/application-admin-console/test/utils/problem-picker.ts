@@ -1,14 +1,14 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
-import { fireEvent } from "@testing-library/react";
+import { fireEvent, within } from "@testing-library/react";
 
 export function problemPicker(container: HTMLElement) {
   const wrapper = createWrapper(container);
   const options = () => wrapper.findAllCheckboxes('[data-testid^="problem-checkbox-"]');
   return {
     toggleProblem(value: string) {
-      const option = wrapper.findCheckbox(`[data-testid="problem-checkbox-${value}"]`);
-      if (!option) throw new Error(`Problem checkbox not found: ${value}`);
-      const input = option.findNativeInput().getElement();
+      const input = within(
+        within(container).getByTestId(`problem-checkbox-${value}`),
+      ).getByRole<HTMLInputElement>("checkbox");
       if (!input.disabled) fireEvent.click(input);
     },
     findOptions: () =>

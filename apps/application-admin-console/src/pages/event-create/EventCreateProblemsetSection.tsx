@@ -328,8 +328,7 @@ export function EventCreateProblemsetSection({
                           onProblemsChange(
                             displayedSelection.filter((item) => item.value !== option.value),
                           );
-                        else if (!option.disabled)
-                          onProblemsChange([...displayedSelection, option]);
+                        else onProblemsChange([...displayedSelection, option]);
                       }}
                     >
                       <Box
