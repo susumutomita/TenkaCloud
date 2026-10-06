@@ -286,7 +286,8 @@ describe("selection across filters", () => {
     const picker = () => problemPicker(container);
     const search = wrapper.findInput('[data-testid="problem-filter-search"]');
 
-    picker()?.toggleProblem("p1");
+    expect(picker().findTokens()).toHaveLength(0);
+    picker().toggleProblem("p1");
 
     search?.setInputValue("p2");
     expect(picker()?.findTokens()).toHaveLength(1);
@@ -298,6 +299,11 @@ describe("selection across filters", () => {
     expect(picker()?.findTokens()).toHaveLength(2);
     fireEvent.click(screen.getByTestId("problem-filter-clear"));
     expect(picker()?.findTokens()).toHaveLength(2);
+    picker().toggleProblem("p2");
+    expect(changed.mock.calls.at(-1)?.[0]).toEqual(["p1"]);
+    expect(picker().findTokens()).toHaveLength(1);
+    picker().toggleProblem("p2");
+    expect(changed.mock.calls.at(-1)?.[0]).toEqual(["p1", "p2"]);
     picker()?.findTokens()[0]?.findDismiss()?.click();
     expect(changed.mock.calls.at(-1)?.[0]).toEqual(["p2"]);
   });
