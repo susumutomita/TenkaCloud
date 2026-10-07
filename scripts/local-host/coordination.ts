@@ -1,9 +1,11 @@
+import { LOCAL_COORDINATION_STATE_LIMIT } from "./coordination-catalog";
 import {
   createMatch,
   type LocalMatch,
   type MatchTransition,
   transitionMatch,
 } from "./coordination-core";
+import { assertCoordinationRoster } from "./coordination-runtime";
 import { type Gate, gate, HostError, type HostedEvent, object, type Problem } from "./model";
 import { projectedScore } from "./score";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
@@ -67,6 +69,7 @@ export class LocalCoordination {
       };
     } else {
       const teams = this.host.store.teams(event.eventId);
+      assertCoordinationRoster([problem], teams.length);
       const match = createMatch(this.plugin(problem), {
         eventId: event.eventId,
         teamIds: teams.map((team) => team.teamId).sort((a, b) => a.localeCompare(b)),
@@ -89,7 +92,7 @@ export class LocalCoordination {
     receipt?: () => void,
   ): void {
     const body = JSON.stringify(result.match);
-    if (Buffer.byteLength(body) > 2 * 1024 * 1024)
+    if (Buffer.byteLength(body) > LOCAL_COORDINATION_STATE_LIMIT)
       throw new HostError(503, "Coordination state exceeds the local runtime limit.");
     const row = this.row(event, problem);
     const scored = Object.values(result.deltas).some((delta) => delta !== 0);

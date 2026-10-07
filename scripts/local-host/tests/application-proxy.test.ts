@@ -189,7 +189,10 @@ test("generic challenge gateway caps requests and responses and discards revoked
     async ({ origin }) => {
       const oversizedRequest = await fetch(origin, {
         method: "POST",
-        headers: { origin },
+        // Do not leave Bun's rejected, still-uploading body in its keep-alive
+        // pool before the independent response-size check. All server limits
+        // and forwarding/authorization assertions below remain unchanged.
+        headers: { origin, connection: "close" },
         body: "x".repeat(2 * 1024 * 1024 + 1),
       });
       expect(oversizedRequest.status).toBe(413);

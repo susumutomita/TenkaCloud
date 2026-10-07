@@ -9,6 +9,7 @@ import {
 } from "./auth";
 import { type ContainerLimits, DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { LocalCoordination } from "./coordination";
+import { assertCoordinationRoster } from "./coordination-runtime";
 import { LocalDisruptions } from "./disruptions";
 import type { DockerDefinition } from "./docker-catalog";
 import {
@@ -873,6 +874,7 @@ export class HostingService {
     });
     if (problems.filter((problem) => problem.runtime === "coordination").length > 1)
       throw new HostError(422, "Choose at most one coordination Battle per event.");
+    assertCoordinationRoster(problems, body.teams.length);
     if (new Set(problems.map((problem) => problem.problemId)).size !== problems.length)
       throw new HostError(400, "Duplicate problem.");
     const demand = this.engine.supportsOnDemand === true;
@@ -1189,6 +1191,7 @@ export class HostingService {
         throw new HostError(400, "An ISO timestamp with a timezone is required.");
       return new Date(milliseconds).toISOString();
     };
+    assertCoordinationRoster(event.problems, this.store.teams(event.eventId).length);
     this.coordination.assertSchedule(event, body);
     if (body.startNow) event.startsAt = new Date(this.now()).toISOString();
     if (body.startsAt !== undefined) event.startsAt = parseTime(body.startsAt);
@@ -1510,6 +1513,7 @@ export class HostingService {
         "Only full deployment or failed-environment retry is supported locally.",
       );
     const teams = this.store.teams(event.eventId);
+    assertCoordinationRoster(event.problems, teams.length);
     const existing = this.store.jobs(event.eventId);
     const failedOnly = body.retryFailedOnly === true;
     this.assertGatewayCapacity(

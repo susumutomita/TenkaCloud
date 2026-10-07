@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { id, randomToken } from "../auth";
 import { assertHostingModule, narrowCatalog, publicMetadata } from "../browser-metadata";
+import { reviewedCoordinationPaths } from "../coordination-catalog";
 import { DAEMON_UNAVAILABLE_MESSAGE, DockerHostingEngine } from "../docker-engine";
 import { persistentKey, prepareDatabase, privateDirectory } from "../files";
 import { type GatewayPortRange, parseGatewayPorts } from "../gateway-ports";
@@ -983,7 +984,10 @@ const c = import.meta.glob("../../../../.tenkacloud/pack-store/snapshots/**/meta
       "/repo/apps/participant-portal/src/plugins/loader.ts",
     ),
   );
-  assert.ok(plugins.includes("problems/battles/ac26-crypto-battle/portal/"));
+  assert.equal(
+    plugins,
+    `import.meta.glob("../../../../problems/{${reviewedCoordinationPaths.join(",")}}/portal/*.tsx")`,
+  );
   assert.doesNotThrow(() =>
     assertHostingModule("/repo/problems/challenges/sqli-demo/metadata.json"),
   );

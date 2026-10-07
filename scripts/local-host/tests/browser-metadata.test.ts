@@ -10,6 +10,7 @@ import {
   narrowCatalog,
   publicMetadata,
 } from "../browser-metadata";
+import { reviewedCoordinationPaths } from "../coordination-catalog";
 import { loadDockerCatalog } from "../docker-catalog";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -26,7 +27,7 @@ test("frontend Docker identities exactly match the host's executable catalog", (
 
 test("hosting exposes all 106 Docker verify exercises as public Challenge metadata", () => {
   expect(localProblems).toHaveLength(106);
-  expect(hostBrowserProblemPaths()).toHaveLength(109);
+  expect(hostBrowserProblemPaths()).toHaveLength(108 + reviewedCoordinationPaths.length);
   let legacyBattles = 0;
   for (const path of localProblems) {
     const source = readFileSync(join(root, "problems", path, "metadata.json"), "utf8");
@@ -81,7 +82,7 @@ test("metadata expansion does not expand executable portal plugins or templates"
     "/repo/apps/participant-portal/src/plugins/loader.ts",
   );
   expect(plugins).toBe(
-    'import.meta.glob("../../../../problems/battles/ac26-crypto-battle/portal/*.tsx");',
+    `import.meta.glob("../../../../problems/{${reviewedCoordinationPaths.join(",")}}/portal/*.tsx");`,
   );
   expect(() =>
     narrowCatalog(
@@ -103,6 +104,68 @@ test("native crypto remains a Battle and server-only game code stays excluded", 
   expect(() =>
     assertHostingModule("/repo/problems/battles/ac26-crypto-battle/portal/StatusPanel.tsx"),
   ).not.toThrow();
+});
+
+test("reviewed Pi Siege exposes its public Portal without importing grader or development code", () => {
+  const path = join(root, "problems/battles/pi-siege/metadata.json");
+  const projected = publicMetadata(readFileSync(path, "utf8"), path);
+  if (!projected) throw new Error("Missing Pi Siege metadata.");
+  const value = JSON.parse(projected);
+  expect(value.category).toBe("Battle");
+  expect(value.runtime).toEqual({ provider: "local", engine: "bun" });
+  expect(value.i18n.en.name).toBe("Pi Siege");
+  for (const file of ["StatusPanel.tsx", "content.ts", "content.en.ts", "localize.ts", "style.css"])
+    expect(() =>
+      assertHostingModule(`/repo/problems/battles/pi-siege/portal/${file}`),
+    ).not.toThrow();
+  for (const file of [
+    "game/reducer.ts",
+    "game/math.ts",
+    "coordination/pi-siege.ts",
+    "dev/server.ts",
+    "docs/answers.ts",
+    "portal/private.ts",
+  ])
+    expect(() => assertHostingModule(`/repo/problems/battles/pi-siege/${file}`)).toThrow(
+      "Unreviewed problem content",
+    );
+  const unknown = publicMetadata(
+    JSON.stringify({
+      id: "unreviewed-battle",
+      category: "Battle",
+      runtime: { provider: "local", engine: "bun" },
+      dashboard: { private: "not-reviewed" },
+      interTeamCoordination: { plugin: "private.ts" },
+    }),
+    "/repo/problems/battles/unreviewed-battle/metadata.json",
+  );
+  expect(unknown).not.toContain("not-reviewed");
+  expect(unknown).not.toContain("private.ts");
+  expect(() =>
+    assertHostingModule("/repo/problems/battles/unreviewed-battle/portal/StatusPanel.tsx"),
+  ).toThrow("Unreviewed problem content");
+});
+
+test("reviewed Session Defense exposes only its component and styles", () => {
+  const path = join(root, "problems/battles/session-defense/metadata.json");
+  const projected = publicMetadata(readFileSync(path, "utf8"), path);
+  if (!projected) throw new Error("Missing Session Defense metadata.");
+  expect(JSON.parse(projected).runtime).toEqual({ provider: "local", engine: "bun" });
+  for (const file of ["portal/StatusPanel.tsx", "portal/style.css"])
+    expect(() =>
+      assertHostingModule(`/repo/problems/battles/session-defense/${file}`),
+    ).not.toThrow();
+  for (const file of [
+    "game/reducer.ts",
+    "game/types.ts",
+    "coordination/session-defense.ts",
+    "dev/app.tsx",
+    "docs/SECURITY.md",
+    "portal/extra.ts",
+  ])
+    expect(() => assertHostingModule(`/repo/problems/battles/session-defense/${file}`)).toThrow(
+      "Unreviewed problem content",
+    );
 });
 
 test("course metadata survives both browser projections without exposing author-only fields", () => {
