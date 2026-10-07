@@ -17,12 +17,17 @@ const nonce = "bound-run-operation";
 function readyOperation(problemId: string, p: { revision: number; round: number }) {
   if (problemId === "pi-siege")
     return { kind: "ready", requestId: "run_ready", revision: p.revision, round: p.round };
-  if (problemId === "session-defense")
+  if (["session-defense", "tenant-boundary-duel"].includes(problemId))
     return { kind: "ready", id: "run_ready", revision: p.revision };
   return { kind: "ready" };
 }
 
-for (const problemId of ["ac26-crypto-battle", "pi-siege", "session-defense"]) {
+for (const problemId of [
+  "ac26-crypto-battle",
+  "pi-siege",
+  "session-defense",
+  "tenant-boundary-duel",
+]) {
   test(`${problemId}: HTTP rejects foreign and stale runs before ticks or saved retries`, async () => {
     const data = mkdtempSync(join(tmpdir(), "tenka-coordination-run-"));
     const database = join(data, "host.sqlite");

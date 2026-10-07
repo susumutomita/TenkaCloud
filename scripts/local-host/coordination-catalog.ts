@@ -6,6 +6,7 @@ export const reviewedCoordinationBattles = [
   { problemId: "ac26-crypto-battle" },
   { problemId: "pi-siege", requiredTeams: 2 },
   { problemId: "session-defense", requiredTeams: 2 },
+  { problemId: "tenant-boundary-duel", requiredTeams: 2 },
 ] as const;
 export const reviewedCoordinationPaths = reviewedCoordinationBattles.map(
   ({ problemId }) => `battles/${problemId}`,

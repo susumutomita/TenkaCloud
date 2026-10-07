@@ -75,6 +75,8 @@ jobs:
         run: bunx playwright-core install --with-deps chromium
       - name: Native Pi Siege, authenticated seats, official ranking and SQLite process restart
         run: bun run scripts/local-host/tests/pi-siege-browser-e2e.ts
+      - name: Tenant Boundary Duel, code repair, authenticated seats and persisted score history
+        run: bun run scripts/local-host/tests/tenant-boundary-browser-e2e.ts
       - name: Critical browser flow (organizer + two participants, real Docker)
         if: github.event_name == 'pull_request'
         env:
@@ -99,6 +101,10 @@ jobs:
             .tenkacloud/host-ui-review/pi-siege/native-debrief-ja-mobile.png
             .tenkacloud/host-ui-review/pi-siege/native-official-ranking.png
             .tenkacloud/host-ui-review/pi-siege/native-official-history.png
+            .tenkacloud/host-ui-review/tenant-boundary-duel/replay-en.png
+            .tenkacloud/host-ui-review/tenant-boundary-duel/replay-ja-mobile.png
+            .tenkacloud/host-ui-review/tenant-boundary-duel/official-ranking.png
+            .tenkacloud/host-ui-review/tenant-boundary-duel/official-history.png
           retention-days: 3
           # The parent directory is hidden; only the reviewed PNGs above are eligible.
           include-hidden-files: true

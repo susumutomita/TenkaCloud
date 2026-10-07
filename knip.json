@@ -65,7 +65,8 @@
         "scripts/cloud-hosting/main.ts",
         "scripts/cloud-hosting/launcher-check.ts",
         "scripts/local-host/tests/native-browser-host.ts",
-        "scripts/local-host/tests/pi-siege-browser-e2e.ts"
+        "scripts/local-host/tests/pi-siege-browser-e2e.ts",
+        "scripts/local-host/tests/tenant-boundary-browser-e2e.ts"
       ],
       "project": ["scripts/**/*.ts"]
     },
