@@ -14,8 +14,12 @@ PR #3313's GitGuardian check is neutral with the reason "Pull request too large 
 | Problem catalog diff | `363a7c9b83969e20d63b74fd0410a354da5e202b..4bb3a116c545fc46ed6a39ffcc5117fb914947f4` | 0 | Scan completed |
 | Problem catalog tracked tree | commit `4bb3a116c545fc46ed6a39ffcc5117fb914947f4` | 9 | All nine are static non-admin demo tokens in API IDOR training examples |
 | Additional current platform tree | commit `05ffed84971178c14f502a728802524af247c2d8` | 1 | Fetch-mocked admin-console test fixture; replaced with an explicit test token |
-| Prepared platform tree after fixture replacement | `5f4421ec3a3d6c8bb0947ee2863aa968fd5bf6f6` | 0 | Scan completed; this tree precedes this documentation file |
+| Final platform tree including this evidence document | `03f53f2bba4772631243386ad619d19a9d2f6a79` (PR head `fd7a8297be7e336a7dbbc6a335c038339470ef7a`) | 0 | Scan completed after the fixture replacement and documentation were included |
 | Generated positive control, kept outside Git | No real credential | 1 | `generic-api-key` detected; expected exit code 1 |
+
+The final tree is reachable from [PR #3337 head `fd7a8297`](https://github.com/susumutomita/TenkaCloud/commit/fd7a8297be7e336a7dbbc6a335c038339470ef7a). The retained scan script exports that exact tree; its log and empty report record exit code 0 and zero findings. The later squash merge `76d51f76` has a different tree (`5b0e1a32fd3fb75918895ca7618ef1f97faa95c5`); it is not the subject of this recorded scan.
+
+In a fresh checkout, `git fetch origin refs/pull/3337/head` retrieves the PR head; `git rev-parse fd7a8297be7e336a7dbbc6a335c038339470ef7a^{tree}` resolves to the recorded final tree before exporting it with `git archive`.
 
 No finding was classified as an operational credential. No credential validity checks, external uploads, rotation or AWS calls were performed. Detection counts remain visible; no repository checks, scanner rules or service limits were weakened.
 
