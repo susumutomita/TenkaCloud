@@ -203,6 +203,14 @@ export class LocalCoordination {
     );
     this.save(event, problem, result, settle);
   }
+  private assertOperationScope(body: Record<string, unknown>, runId: string): void {
+    if ("teamId" in body || "eventId" in body)
+      throw new HostError(400, "Identity comes from the authenticated team key.");
+    // A local run is this authenticated team's deployment. Reject old Portal requests
+    // before receipt lookup or any tick; the supplied ID never selects another match.
+    if ("runId" in body && body.runId !== runId)
+      throw new HostError(409, "coordination_run_changed", "coordination_run_changed");
+  }
   private authorize(request: ApiRequest) {
     const projection =
       request.method === "GET" && request.path === "/portal/me/coordination/projection";
@@ -227,8 +235,7 @@ export class LocalCoordination {
     } else if (gate(event, this.host.now()).kind === "scoring_not_started")
       throw new HostError(409, "The event has not started.");
     const body = move ? object(request.body) : {};
-    if ("teamId" in body || "eventId" in body)
-      throw new HostError(400, "Identity comes from the authenticated team key.");
+    this.assertOperationScope(body, job.jobId);
     if (move) object(body.op);
     return { team, event, problem, move, body };
   }
