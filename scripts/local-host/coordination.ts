@@ -209,7 +209,7 @@ export class LocalCoordination {
     // A local run is this authenticated team's deployment. Reject old Portal requests
     // before receipt lookup or any tick; the supplied ID never selects another match.
     if ("runId" in body && body.runId !== runId)
-      throw new HostError(409, "coordination_run_changed", "coordination_run_changed");
+      throw new HostError(409, "This Battle run is no longer current.", "stale_run");
   }
   private authorize(request: ApiRequest) {
     const projection =
@@ -236,8 +236,19 @@ export class LocalCoordination {
       throw new HostError(409, "The event has not started.");
     const body = move ? object(request.body) : {};
     this.assertOperationScope(body, job.jobId);
+    this.assertCurrentRun(request, move, body, job.jobId);
     if (move) object(body.op);
     return { team, event, problem, move, body };
+  }
+  private assertCurrentRun(
+    request: ApiRequest,
+    move: boolean,
+    body: Record<string, unknown>,
+    jobId: string,
+  ): void {
+    const runId = move ? body.runId : (request.query.get("runId") ?? undefined);
+    if (runId !== undefined && runId !== jobId)
+      throw new HostError(409, "This Battle run is no longer current.", "stale_run");
   }
   request(request: ApiRequest): ApiResponse {
     const { team, event, problem, move, body } = this.authorize(request);

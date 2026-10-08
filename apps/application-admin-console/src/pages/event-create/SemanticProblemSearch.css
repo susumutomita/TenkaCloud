@@ -1,0 +1,7 @@
+.semantic-assistant button { padding: 6px 14px; margin: 0 8px 8px 0; border: 1px solid #0972d3; border-radius: 16px; background: white; color: #0972d3; font: inherit; cursor: pointer; }
+.semantic-assistant button[aria-pressed="true"] { background: #0972d3; color: white; }
+.semantic-assistant button:disabled { opacity: .5; cursor: default; }
+.semantic-assistant button:focus-visible, .semantic-assistant textarea:focus-visible { outline: 3px solid #0972d3; outline-offset: 2px; }
+.semantic-assistant textarea { display: block; width: 100%; box-sizing: border-box; min-height: 80px; margin: 8px 0; padding: 8px; border: 1px solid #7d8998; border-radius: 8px; font: inherit; }
+.semantic-assistant li { padding: 8px 0; }
+.semantic-assistant [role="alert"] { color: #b12705; }

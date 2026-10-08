@@ -196,6 +196,7 @@ test("generic challenge gateway caps requests and responses and discards revoked
         body: "x".repeat(2 * 1024 * 1024 + 1),
       });
       expect(oversizedRequest.status).toBe(413);
+      expect(oversizedRequest.headers.get("connection")).toBe("close");
       await oversizedRequest.text();
       expect(calls).toBe(0);
       const oversizedResponse = await fetch(origin);

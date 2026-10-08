@@ -164,6 +164,12 @@ export function assertHostingModule(id: string): void {
     )
   )
     return;
+  if (
+    /\/problems\/battles\/forensic-casebook\/portal\/(?:StatusPanel\.tsx|styles\.ts)(?:\?.*)?$/u.test(
+      normalized,
+    )
+  )
+    return;
   const publicFile =
     /\/problems\/((?:challenges|battles)\/[^/]+)\/(?:metadata\.json|diagram(?:\.en)?\.svg)(?:\?.*)?$/u.exec(
       normalized,

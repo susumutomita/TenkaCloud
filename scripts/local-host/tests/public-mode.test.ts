@@ -232,23 +232,27 @@ test("public mode offers only problems that need no per-team gateway", async () 
     headers: { authorization: `Bearer ${adminToken}` },
   });
   expect(catalog.body.items).toEqual(
-    ["ac26-crypto-battle", "pi-siege", "session-defense", "tenant-boundary-duel"].map(
-      (problemId) => ({
-        problemId,
-        name: expect.any(String),
-        runtime: "coordination",
-        content: {
-          description: expect.any(String),
-          learningGoals: expect.arrayContaining([expect.any(String)]),
-          i18n: {
-            en: {
-              description: expect.any(String),
-              learningGoals: expect.arrayContaining([expect.any(String)]),
-            },
+    [
+      "ac26-crypto-battle",
+      "forensic-casebook",
+      "pi-siege",
+      "session-defense",
+      "tenant-boundary-duel",
+    ].map((problemId) => ({
+      problemId,
+      name: expect.any(String),
+      runtime: "coordination",
+      content: {
+        description: expect.any(String),
+        learningGoals: expect.arrayContaining([expect.any(String)]),
+        i18n: {
+          en: {
+            description: expect.any(String),
+            learningGoals: expect.arrayContaining([expect.any(String)]),
           },
         },
-      }),
-    ),
+      },
+    })),
   );
 });
 

@@ -1610,7 +1610,7 @@ test("A scheduled (not yet started) event with a lost environment also stays rea
     await f.restart();
     assert.equal(f.store.event(event.eventId).status, "READY");
   }));
-test("The local hosting build alone defines the private local-host constant", async () => {
+test("Only the local hosting build enables the private local-host constant", async () => {
   const app = "../../../apps/application-admin-console/";
   const host = (await import(`${app}vite.host.config.ts`)) as { default: { define?: object } };
   const cloud = (await import(`${app}vite.config.ts`)) as { default: { define?: object } };
@@ -1618,7 +1618,10 @@ test("The local hosting build alone defines the private local-host constant", as
     (host.default.define as Record<string, unknown> | undefined)?.__TENKACLOUD_LOCAL_HOST_BUILD__,
     "true",
   );
-  assert.ok(!("__TENKACLOUD_LOCAL_HOST_BUILD__" in (cloud.default.define ?? {})));
+  assert.equal(
+    (cloud.default.define as Record<string, unknown> | undefined)?.__TENKACLOUD_LOCAL_HOST_BUILD__,
+    "false",
+  );
 });
 
 async function main(): Promise<void> {

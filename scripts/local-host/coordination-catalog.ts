@@ -4,6 +4,7 @@
 export const LOCAL_COORDINATION_STATE_LIMIT = 2 * 1024 * 1024;
 export const reviewedCoordinationBattles = [
   { problemId: "ac26-crypto-battle" },
+  { problemId: "forensic-casebook" },
   { problemId: "pi-siege", requiredTeams: 2 },
   { problemId: "session-defense", requiredTeams: 2 },
   { problemId: "tenant-boundary-duel", requiredTeams: 2 },
