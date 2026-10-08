@@ -73,14 +73,13 @@ describe("ShellLayout demo banner (#1954)", () => {
 
   it("shows the competitor account navigation only when the local host has AWS enabled", () => {
     const withoutAws = renderShell(false, undefined, true, false);
-    expect(
-      screen.queryByRole("link", { name: /Competitor Accounts|競技者アカウント/u }),
-    ).toBeNull();
+    expect(screen.queryByRole("link", { name: /Cloud connections|クラウド連携/u })).toBeNull();
     withoutAws.unmount();
     renderShell(false, undefined, true, true);
-    expect(
-      screen.getByRole("link", { name: /Competitor Accounts|競技者アカウント/u }),
-    ).toHaveAttribute("href", "/competitor-accounts");
+    expect(screen.getByRole("link", { name: /Cloud connections|クラウド連携/u })).toHaveAttribute(
+      "href",
+      "/competitor-accounts",
+    );
   });
 
   it("offers the local catalog without audit, settings, or organizer accounts", () => {

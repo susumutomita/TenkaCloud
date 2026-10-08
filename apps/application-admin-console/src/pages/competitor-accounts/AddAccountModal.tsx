@@ -23,10 +23,17 @@ interface AddAccountModalProps {
   config: AppConfig;
   visible: boolean;
   onDismiss: () => void;
+  onBack?: () => void;
   onSuccess: (res: CreateCompetitorAccountResponse) => void;
 }
 
-export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountModalProps) {
+export function AddAccountModal({
+  config,
+  visible,
+  onDismiss,
+  onSuccess,
+  onBack,
+}: AddAccountModalProps) {
   const apiClient = useApiClient(config);
   const canMutate = canManageConnections(config, apiClient);
   const t = useT();
@@ -97,6 +104,17 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
+            {onBack && (
+              <Button
+                disabled={inFlight}
+                onClick={() => {
+                  reset();
+                  onBack();
+                }}
+              >
+                {t("cloud_connections.back")}
+              </Button>
+            )}
             <Button onClick={handleDismiss} disabled={inFlight}>
               {t("competitor_accounts.add_modal_cancel")}
             </Button>

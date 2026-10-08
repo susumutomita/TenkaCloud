@@ -59,6 +59,7 @@ const GcpCredentialSchema = z
     serviceAccountEmail: z.string().min(1),
     projectId: z.string().min(1),
     location: z.string().min(1),
+    artifactBucket: z.string().min(1).optional(),
   })
   .strict();
 

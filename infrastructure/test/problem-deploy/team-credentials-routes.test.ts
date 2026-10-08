@@ -107,6 +107,35 @@ describe("team-credentials-routes (#1413)", () => {
     );
   });
 
+  it("accepts an optional GCP artifact bucket without echoing it and retains strict validation", async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const result = await handleRegisterTeamCredential(deps(send), "gcp", "t1", "team-a", {
+      ...GCP,
+      artifactBucket: "fixture-team-blueprints",
+    });
+    expect(result.status).toBe(201);
+    expect(JSON.parse(String(putCommands(send)[0].input.Value))).toEqual({
+      ...GCP,
+      artifactBucket: "fixture-team-blueprints",
+    });
+    expect(JSON.stringify(result.body)).not.toContain("fixture-team-blueprints");
+    const invalid = vi.fn();
+    for (const artifactBucket of ["", 42, null]) {
+      const response = await handleRegisterTeamCredential(deps(invalid), "gcp", "t1", "team-a", {
+        ...GCP,
+        artifactBucket,
+      });
+      expect(response.status).toBe(400);
+    }
+    const extra = await handleRegisterTeamCredential(deps(invalid), "gcp", "t1", "team-a", {
+      ...GCP,
+      artifactBucket: "fixture",
+      injected: true,
+    });
+    expect(extra.status).toBe(400);
+    expect(invalid).not.toHaveBeenCalled();
+  });
+
   it("should reject an invalid / incomplete body with 400 and never Put", async () => {
     const send = vi.fn().mockResolvedValue({});
     const res = await handleRegisterTeamCredential(

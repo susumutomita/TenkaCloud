@@ -175,8 +175,11 @@ describe("cloud organizer SPA journey", () => {
   // Full Cloudscape journey crosses several routes/dialogs; parallel workspace runs exceed the 5s unit-test default.
   it("registers and verifies an account, retries cloud deployment, and reports partial teardown", async () => {
     const { fetchMock, token, unexpected } = cloudSession("Admin");
-    fireEvent.click(await screen.findByRole("button", { name: "Add account" }));
-    const add = screen.getByRole("dialog", { name: "Add Competitor Account" });
+    fireEvent.click(await screen.findByRole("button", { name: "Add connection" }));
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
+    fireEvent.click(screen.getByRole("radio", { name: /^AWS/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue to setup" }));
+    const add = screen.getByRole("dialog", { name: "Add AWS connection" });
     expect(within(add).getByLabelText("IAM Role name")).toHaveValue(config.competitorRoleName);
     expect(within(add).getByLabelText("IAM Role name")).toBeDisabled();
     fireEvent.change(within(add).getByLabelText("AWS Account ID"), {
@@ -284,7 +287,7 @@ describe("cloud organizer SPA journey", () => {
   it("opens the authenticated root on Events and exposes only connected cloud navigation", async () => {
     const f = cloudSession("Admin", "/");
     expect(await screen.findByRole("link", { name: "Cloud acceptance event" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Competitor Accounts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cloud connections" })).toBeInTheDocument();
     for (const label of ["Users", "Settings", "Audit log", "Deployments", "Problems"])
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     expect(f.fetchMock.mock.calls.some(([input]) => String(input).endsWith("/feature-flags"))).toBe(
@@ -324,8 +327,8 @@ describe("cloud organizer SPA journey", () => {
       const row = screen.getByText("Beta account").closest("tr");
       if (!row) throw new Error("Missing competitor account row");
       const buttons = [
-        screen.getByRole("button", { name: "Add account" }),
-        screen.getByRole("button", { name: "Bulk import (JSON)" }),
+        screen.getByRole("button", { name: "Add connection" }),
+        screen.getByRole("button", { name: "Bulk register AWS accounts" }),
         within(row).getByRole("button", { name: "Re-verify" }),
         within(row).getByRole("button", { name: "Delete" }),
       ];

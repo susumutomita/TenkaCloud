@@ -172,8 +172,8 @@ describe("organizer journey in local-host mode", () => {
       </I18nProvider>,
     );
     await signIn();
-    fireEvent.click(await screen.findByRole("link", { name: "Competitor Accounts" }));
-    expect(await screen.findByRole("heading", { name: "Competitor Accounts" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("link", { name: "Cloud connections" }));
+    expect(await screen.findByRole("heading", { name: "Cloud connections" })).toBeInTheDocument();
     await waitFor(() => {
       const request = fetchMock.mock.calls.find(
         ([input]) => String(input) === `${origin}/api/admin/competitor-accounts`,

@@ -127,7 +127,7 @@ export function CompetitorAccountsTable({
               </Button>
             }
           >
-            {t("competitor_accounts.title")}
+            {t("cloud_connections.aws_accounts")}
           </Header>
         ) : undefined
       }

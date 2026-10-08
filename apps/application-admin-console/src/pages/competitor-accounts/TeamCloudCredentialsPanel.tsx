@@ -9,6 +9,8 @@ import Input from "@cloudscape-design/components/input";
 import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
+import { useEffect } from "react";
+import type { TeamCredentialProvider } from "../../api/team-credentials-client";
 import { FriendlyErrorAlert } from "../../components/FriendlyErrorAlert";
 import type { AppConfig } from "../../config";
 import { useT } from "../../i18n";
@@ -25,9 +27,20 @@ import { PROVIDER_OPTIONS, useTeamCloudCredentials } from "./useTeamCloudCredent
  * 持たず 2 重メンテを避ける)。 secret は送るだけで status では返らない。
  */
 
-export function TeamCloudCredentialsPanel({ config }: { config: AppConfig }) {
+export function TeamCloudCredentialsPanel({
+  config,
+  provider,
+  onBusyChange,
+}: {
+  config: AppConfig;
+  provider?: TeamCredentialProvider;
+  onBusyChange?: (busy: boolean) => void;
+}) {
   const t = useT();
-  const vm = useTeamCloudCredentials(config);
+  const vm = useTeamCloudCredentials(config, provider);
+  useEffect(() => {
+    onBusyChange?.(vm.inFlight);
+  }, [onBusyChange, vm.inFlight]);
 
   return (
     <Container header={<Header variant="h2">{t("team_cloud_credentials.title")}</Header>}>
@@ -39,10 +52,7 @@ export function TeamCloudCredentialsPanel({ config }: { config: AppConfig }) {
           headerText={t("team_cloud_credentials.setup_help_title")}
         >
           <SpaceBetween size="xxs">
-            <Box variant="small">{t("team_cloud_credentials.setup_help_enable")}</Box>
-            <Box variant="small">{t("team_cloud_credentials.setup_help_sakura")}</Box>
-            <Box variant="small">{t("team_cloud_credentials.setup_help_azure")}</Box>
-            <Box variant="small">{t("team_cloud_credentials.setup_help_gcp")}</Box>
+            <Box variant="small">{t(`team_cloud_credentials.setup_help_${vm.provider}`)}</Box>
             <Box variant="small">{t("team_cloud_credentials.setup_help_ssm_note")}</Box>
           </SpaceBetween>
         </ExpandableSection>
@@ -52,14 +62,16 @@ export function TeamCloudCredentialsPanel({ config }: { config: AppConfig }) {
             {vm.notice}
           </Alert>
         )}
-        <FormField label={t("team_cloud_credentials.provider_label")}>
-          <Select
-            selectedOption={vm.providerOption}
-            options={PROVIDER_OPTIONS}
-            disabled={vm.inFlight}
-            onChange={(e) => vm.setProvider(e.detail.selectedOption.value as string)}
-          />
-        </FormField>
+        {!provider && (
+          <FormField label={t("team_cloud_credentials.provider_label")}>
+            <Select
+              selectedOption={vm.providerOption}
+              options={PROVIDER_OPTIONS}
+              disabled={vm.inFlight}
+              onChange={(e) => vm.setProvider(e.detail.selectedOption.value as string)}
+            />
+          </FormField>
+        )}
         <FormField
           label={t("team_cloud_credentials.team_label")}
           description={t("team_cloud_credentials.team_description")}
@@ -75,12 +87,12 @@ export function TeamCloudCredentialsPanel({ config }: { config: AppConfig }) {
         </FormField>
         <FormField
           label={t("team_cloud_credentials.credential_label")}
-          description={t("team_cloud_credentials.credential_description")}
+          description={t(`team_cloud_credentials.setup_help_${vm.provider}`)}
         >
           <Textarea
             value={vm.credentialJson}
             onChange={(e) => vm.setCredentialJson(e.detail.value)}
-            placeholder='{"accessToken":"...","accessTokenSecret":"..."}'
+            placeholder="{ }"
             disabled={vm.inFlight}
             rows={5}
           />

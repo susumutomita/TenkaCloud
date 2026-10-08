@@ -42,19 +42,18 @@ vi.mock("../../src/pages/competitor-accounts/CompetitorAccountsTable", () => ({
     </div>
   ),
 }));
-vi.mock("../../src/pages/competitor-accounts/AddAccountModal", () => ({
+vi.mock("../../src/pages/competitor-accounts/CloudConnectionModal", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
-  AddAccountModal: ({ visible, onSuccess, onDismiss }: any) =>
-    visible ? (
-      <div data-testid="add-modal">
-        <button type="button" onClick={() => onSuccess({ tenkaCloudAccountId: "x" })}>
-          stub-add-success
-        </button>
-        <button type="button" onClick={onDismiss}>
-          stub-add-dismiss
-        </button>
-      </div>
-    ) : null,
+  CloudConnectionModal: ({ onSuccess, onDismiss }: any) => (
+    <div data-testid="add-modal">
+      <button type="button" onClick={() => onSuccess({ tenkaCloudAccountId: "x" })}>
+        stub-add-success
+      </button>
+      <button type="button" onClick={onDismiss}>
+        stub-add-dismiss
+      </button>
+    </div>
+  ),
 }));
 /**
  * Typed rather than `any`: the repo's eslint ceiling caps this file's
@@ -219,7 +218,7 @@ describe("CompetitorAccountsPage", () => {
     expect(screen.getByRole("button", { name: "competitor_accounts.add_button" })).toBeDisabled();
   });
 
-  it("should show the non-AWS team cloud credentials panel when featureNonAwsRuntime is on", () => {
+  it("keeps credential setup behind the common add-connection entry when enabled", () => {
     renderPage(
       config({
         features: {
@@ -230,7 +229,7 @@ describe("CompetitorAccountsPage", () => {
         },
       }),
     );
-    expect(screen.getByTestId("team-cloud-credentials")).toBeInTheDocument();
+    expect(screen.queryByTestId("team-cloud-credentials")).not.toBeInTheDocument();
   });
 
   it("should show a friendly error alert (items undefined → table gets [])", () => {

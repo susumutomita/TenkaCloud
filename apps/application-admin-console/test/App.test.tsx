@@ -172,7 +172,7 @@ describe("App", () => {
         for (const label of [
           "Events",
           "Deployments",
-          "Competitor Accounts",
+          "クラウド連携",
           "Problems",
           "ユーザー",
           "設定",
