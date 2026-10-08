@@ -37,6 +37,9 @@ import {
   REGION_OPTIONS,
   resolveRegionOptions,
 } from "./helpers";
+import type { HostCatalog } from "./LocalHostEventCreate";
+import { ScrollableProblemList } from "./ScrollableProblemList";
+import { SemanticProblemSearch } from "./SemanticProblemSearch";
 
 /** Select の "全カテゴリ" sentinel。 catalog の category 値 (Battle/Challenge) と衝突しない。 */
 const CATEGORY_ALL = "all";
@@ -73,6 +76,7 @@ export interface EventCreateProblemsetSectionProps {
    */
   hostSupportedProblemIds?: ReadonlySet<string>;
   maxProblems?: number;
+  hostCatalog?: HostCatalog;
   onProblemsChange: (next: readonly MultiselectProps.Option[]) => void;
   onUpdateProblemRow: (problemId: string, patch: Partial<ProblemRow>) => void;
 }
@@ -84,12 +88,25 @@ export function EventCreateProblemsetSection({
   nonAwsRuntimeEnabled,
   hostSupportedProblemIds,
   maxProblems,
+  hostCatalog,
   onProblemsChange,
   onUpdateProblemRow,
 }: EventCreateProblemsetSectionProps) {
   const t = useT();
+  const [purposeHelpOpen, setPurposeHelpOpen] = useState(false);
+  const [semanticIds, setSemanticIds] = useState<readonly string[] | null>(null);
   const [criteria, setCriteria] = useState<ProblemFilterCriteria>(EMPTY_FILTER_CRITERIA);
   const filtered = useMemo(() => filterProblems(problems, criteria), [problems, criteria]);
+  const visibleProblems = useMemo(
+    () =>
+      semanticIds === null
+        ? filtered
+        : semanticIds.flatMap((id) => filtered.filter((p) => p.id === id)),
+    [filtered, semanticIds],
+  );
+  const coordinationSelected = selectedProblems.some((option) =>
+    hostCatalog?.coordination?.has(option.value ?? ""),
+  );
   const filterActive = isFilterActive(criteria);
   // #2167: flag が ON の間だけ非 AWS provider を選択可能集合に入れる。
   const enabledProviders = useMemo(
@@ -99,7 +116,7 @@ export function EventCreateProblemsetSection({
   // #1414 / #2167: 選択不可 runtime の問題は disabled + 「近日対応」 tag。
   const problemOptions = useMemo(() => {
     const options = buildProblemOptions(
-      filtered,
+      visibleProblems,
       t(
         hostSupportedProblemIds
           ? "local_host.problem_unsupported_tag"
@@ -108,13 +125,30 @@ export function EventCreateProblemsetSection({
       enabledProviders,
       hostSupportedProblemIds,
     );
-    if (maxProblems === undefined || selectedProblems.length < maxProblems) return options;
+    const constrained = options.map((option) => ({
+      ...option,
+      disabled:
+        option.disabled ||
+        (coordinationSelected &&
+          Boolean(hostCatalog?.coordination?.has(option.value ?? "")) &&
+          !selectedProblems.some((selected) => selected.value === option.value)),
+    }));
+    if (maxProblems === undefined || selectedProblems.length < maxProblems) return constrained;
     const selected = new Set(selectedProblems.map((option) => option.value));
-    return options.map((option) => ({
+    return constrained.map((option) => ({
       ...option,
       disabled: option.disabled || !selected.has(option.value),
     }));
-  }, [filtered, t, enabledProviders, hostSupportedProblemIds, maxProblems, selectedProblems]);
+  }, [
+    visibleProblems,
+    t,
+    enabledProviders,
+    hostSupportedProblemIds,
+    maxProblems,
+    selectedProblems,
+    hostCatalog?.coordination,
+    coordinationSelected,
+  ]);
   // Refresh selected text from the whole catalog, even when filters hide the selection.
   const displayedSelection = useMemo(() => {
     const options = buildProblemOptions(problems, "", enabledProviders, hostSupportedProblemIds);
@@ -173,6 +207,24 @@ export function EventCreateProblemsetSection({
   return (
     <Container header={<Header variant="h2">{t("event_create.problemset_header")}</Header>}>
       <SpaceBetween size="m">
+        {hostCatalog && (
+          <ExpandableSection
+            headerText="目的から問題を探す"
+            expanded={purposeHelpOpen}
+            onChange={({ detail }) => {
+              setPurposeHelpOpen(detail.expanded);
+              if (!detail.expanded) setSemanticIds(null);
+            }}
+          >
+            {purposeHelpOpen && (
+              <SemanticProblemSearch
+                problems={filtered}
+                catalog={hostCatalog}
+                onCandidates={setSemanticIds}
+              />
+            )}
+          </ExpandableSection>
+        )}
         <FormField
           label={t("problem_search.filter_label")}
           description={t("problem_search.filter_description")}
@@ -261,7 +313,7 @@ export function EventCreateProblemsetSection({
               <SpaceBetween direction="horizontal" size="xs" alignItems="center">
                 <Box variant="small">
                   {interpolate(t("problem_search.match_count"), {
-                    filtered: String(filtered.length),
+                    filtered: String(visibleProblems.length),
                     total: String(problems.length),
                   })}
                 </Box>
@@ -290,65 +342,71 @@ export function EventCreateProblemsetSection({
           }
         >
           <SpaceBetween size="s">
-            <fieldset
-              aria-label={t("event_create.use_problems_label")}
-              data-testid="problem-select"
-              style={{
-                border: 0,
-                margin: 0,
-                padding: 0,
-                minInlineSize: 0,
-                maxHeight: "24rem",
-                overflowY: "auto",
-                overflowWrap: "anywhere",
-              }}
-            >
-              {problemOptions.map((option) => {
-                const checked = displayedSelection.some((item) => item.value === option.value);
-                return (
-                  <Box key={option.value} padding={{ vertical: "xs" }}>
-                    <Checkbox
-                      data-testid={`problem-checkbox-${option.value}`}
-                      checked={checked}
-                      disabled={Boolean(option.disabled && !checked)}
-                      description={
-                        <span
-                          style={{
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                          }}
-                        >
-                          {option.description}
-                        </span>
-                      }
-                      onChange={({ detail }) => {
-                        if (!detail.checked)
-                          onProblemsChange(
-                            displayedSelection.filter((item) => item.value !== option.value),
-                          );
-                        else onProblemsChange([...displayedSelection, option]);
-                      }}
-                    >
-                      <Box
-                        variant="span"
-                        fontWeight="bold"
-                        data-testid={`problem-title-${option.value}`}
+            {hostCatalog?.coordination && hostCatalog.coordination.size > 0 && (
+              <Box variant="p" data-testid="coordination-selection-help">
+                {t("problem_search.coordination_limit")}
+                {coordinationSelected && <> {t("problem_search.coordination_change")}</>}
+              </Box>
+            )}
+            <ScrollableProblemList label={t("event_create.use_problems_label")}>
+              <fieldset
+                aria-label={t("event_create.use_problems_label")}
+                data-testid="problem-select"
+                style={{
+                  border: 0,
+                  margin: 0,
+                  padding: 0,
+                  minInlineSize: 0,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {problemOptions.map((option) => {
+                  const checked = displayedSelection.some((item) => item.value === option.value);
+                  return (
+                    <Box key={option.value} padding={{ vertical: "xs" }}>
+                      <Checkbox
+                        data-testid={`problem-checkbox-${option.value}`}
+                        checked={checked}
+                        disabled={Boolean(option.disabled && !checked)}
+                        description={
+                          <span
+                            style={{
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }}
+                          >
+                            {option.description}
+                          </span>
+                        }
+                        onChange={({ detail }) => {
+                          if (!detail.checked)
+                            onProblemsChange(
+                              displayedSelection.filter((item) => item.value !== option.value),
+                            );
+                          else onProblemsChange([...displayedSelection, option]);
+                        }}
                       >
-                        {option.label}
-                      </Box>
-                      {option.labelTag && (
-                        <Box variant="span" color="text-body-secondary">
-                          {" "}
-                          — {option.labelTag}
+                        <Box
+                          variant="span"
+                          fontWeight="bold"
+                          data-testid={`problem-title-${option.value}`}
+                        >
+                          {option.label}
                         </Box>
-                      )}
-                    </Checkbox>
-                  </Box>
-                );
-              })}
-            </fieldset>
+                        {option.labelTag && (
+                          <Box variant="span" color="text-body-secondary">
+                            {" "}
+                            — {option.labelTag}
+                          </Box>
+                        )}
+                      </Checkbox>
+                    </Box>
+                  );
+                })}
+              </fieldset>
+            </ScrollableProblemList>
             {displayedSelection.length > 0 && (
               <TokenGroup
                 data-testid="problem-selection"
@@ -356,7 +414,9 @@ export function EventCreateProblemsetSection({
                 items={displayedSelection.map((option) => ({
                   label: option.label,
                   description: option.description,
-                  dismissLabel: option.label,
+                  dismissLabel: t("problem_search.remove_selected", {
+                    name: option.label ?? option.value ?? "",
+                  }),
                 }))}
                 onDismiss={({ detail }) =>
                   onProblemsChange(

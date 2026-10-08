@@ -24,3 +24,18 @@ if (
     value: createMemoryStorage(),
   });
 }
+
+// jsdom does not implement layout observers; browser tests verify actual scroll edges.
+if (typeof ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {
+      /* no layout in jsdom */
+    }
+    unobserve() {
+      /* no layout in jsdom */
+    }
+    disconnect() {
+      /* no observers allocated */
+    }
+  };
+}

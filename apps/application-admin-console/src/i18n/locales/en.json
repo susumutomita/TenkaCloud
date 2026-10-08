@@ -183,7 +183,13 @@
     "clear_filters": "Clear filters",
     "empty_filtered": "No problems match the filters.",
     "more_filters": "More filters",
-    "selection_preserved": "Selected problems stay selected when you change filters."
+    "selection_preserved": "Selected problems stay selected when you change filters.",
+    "more_above": "More problems above",
+    "more_below": "More below. Scroll to view (focus this list and press Down on a keyboard).",
+    "coordination_limit": "Select at most one coordination Battle per event. This limit does not apply to Challenges or other Battle formats.",
+    "coordination_change": "Uncheck the selected Battle or remove its selected token below to choose a different Battle.",
+    "remove_selected": "Remove {name} from selection",
+    "coordination_limit_error": "Select only one coordination Battle. Remove the selected coordination Battle before choosing another."
   },
   "problem_cost": {
     "header": "Cost risk",

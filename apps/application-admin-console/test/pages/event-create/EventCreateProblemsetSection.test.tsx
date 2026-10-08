@@ -1,7 +1,7 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProblemSummary } from "../../../src/data/problems";
 import {
   EventCreateProblemsetSection,
@@ -307,4 +307,62 @@ describe("selection across filters", () => {
     picker()?.findTokens()[0]?.findDismiss()?.click();
     expect(changed.mock.calls.at(-1)?.[0]).toEqual(["p2"]);
   });
+});
+
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {
+        /* jsdom has no layout; scroll evidence is covered by the real browser harness. */
+      }
+      disconnect() {
+        /* no observers allocated by this test stub. */
+      }
+    },
+  );
+});
+
+it("limits only host-classified coordination Battles and allows changing the selection", () => {
+  const onChange = vi.fn();
+  const catalog = {
+    supported: new Set(["p1", "p2", "p3"]),
+    cloud: new Set<string>(),
+    coordination: new Set(["p1", "p2"]),
+    limits: { maxTeams: 40, maxEventJobs: 400 },
+    loading: false,
+    error: null,
+  };
+  const all = [
+    problem({ id: "p1", category: "Battle" }),
+    problem({ id: "p2", category: "Battle" }),
+    problem({ id: "p3", category: "Battle" }),
+  ];
+  const base = props({
+    problems: all,
+    hostCatalog: catalog,
+    hostSupportedProblemIds: catalog.supported,
+    onProblemsChange: onChange,
+  });
+  const { rerender } = render(
+    <EventCreateProblemsetSection
+      {...base}
+      selectedProblems={[{ value: "p1", label: "Problem p1" }]}
+    />,
+  );
+  expect(screen.getByTestId("coordination-selection-help").textContent).toContain(
+    "problem_search.coordination_limit",
+  );
+  expect(screen.getByTestId("problem-checkbox-p2").querySelector("input")?.disabled).toBe(true);
+  expect(screen.getByTestId("problem-checkbox-p3").querySelector("input")?.disabled).toBe(false);
+  fireEvent.click(
+    screen.getByTestId("problem-checkbox-p1").querySelector("input") as HTMLInputElement,
+  );
+  expect(onChange).toHaveBeenLastCalledWith([]);
+  rerender(<EventCreateProblemsetSection {...base} selectedProblems={[]} />);
+  expect(screen.getByTestId("problem-checkbox-p2").querySelector("input")?.disabled).toBe(false);
+  fireEvent.click(
+    screen.getByTestId("problem-checkbox-p2").querySelector("input") as HTMLInputElement,
+  );
+  expect(onChange.mock.lastCall?.[0][0].value).toBe("p2");
 });
