@@ -21,6 +21,13 @@ export function json(response: ServerResponse, status: number, body: unknown): v
 export function errorResponse(response: ServerResponse, error: unknown): void {
   if (response.headersSent || response.destroyed) return;
   const known = error instanceof HostError;
+  if (known && error.status === 413) {
+    // A rejected request still has unread bytes. Finish the error before closing
+    // its socket; otherwise Bun can reuse the connection but never parse the next request.
+    response.setHeader("connection", "close");
+    const socket = response.socket;
+    response.once("finish", () => socket?.destroy());
+  }
   json(response, known ? error.status : 500, {
     error: known ? error.kind : "internal_error",
     kind: known ? error.kind : "internal_error",
@@ -89,6 +96,8 @@ export async function closeServer(server: Server): Promise<void> {
 }
 const contentTypes: Readonly<Record<string, string>> = {
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".wasm": "application/wasm",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
@@ -134,13 +143,16 @@ async function serveStatic(
   response: ServerResponse,
   pathname: string,
   root: string,
+  kind: "admin" | "participant",
 ): Promise<void> {
   const { file, contentType } = await resolveStatic(await realpath(root), pathname);
+  const scriptPolicy = kind === "admin" ? "'self' 'wasm-unsafe-eval'" : "'self'";
+  const connectPolicy =
+    kind === "admin" ? "'self' https://huggingface.co https://*.hf.co" : "'self'";
   response.writeHead(200, {
     "content-type": contentType,
     "cache-control": "no-store",
-    "content-security-policy":
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+    "content-security-policy": `default-src 'self'; script-src ${scriptPolicy}; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src ${connectPolicy}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`,
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
   });
@@ -298,7 +310,7 @@ export async function startHttpHost(options: {
     if (!url.pathname.startsWith("/api/")) {
       if (request.method !== "GET")
         throw new HostError(405, "Only GET is allowed for the application.");
-      await serveStatic(response, url.pathname, options.staticRoot);
+      await serveStatic(response, url.pathname, options.staticRoot, options.kind);
       return;
     }
     await handleApi(request, response, url.pathname.slice(4), url.searchParams);

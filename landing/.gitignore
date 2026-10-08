@@ -2,3 +2,4 @@
 # repo には built artifact を commit しない (= biome lint が built bundle を拾うのを防ぐ
 # + 2.6 MB のバイナリ blob で repo history を汚さない)。
 portal-demo/
+admin-demo/

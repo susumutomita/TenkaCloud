@@ -1,3 +1,4 @@
+import "./ProblemTagChips.css";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -383,15 +384,17 @@ export function ProblemsPage({
               id: "tags",
               header: t("problems.tags_header"),
               content: (item) => (
-                <SpaceBetween direction="horizontal" size="xxs">
+                <div className="problem-tag-chips">
                   {problemThemeTags(item.tags).map((tag) => {
                     const isActive = criteria.tags.includes(tag);
                     return (
-                      <Button
+                      <button
+                        type="button"
+                        className="problem-tag-chip"
                         key={tag}
-                        variant={isActive ? "primary" : "inline-link"}
+                        aria-pressed={isActive}
                         onClick={() => setCriteria((prev) => toggleTagFilter(prev, tag))}
-                        ariaLabel={interpolate(
+                        aria-label={interpolate(
                           isActive
                             ? t("problems.tag_active_aria")
                             : t("problems.tag_inactive_aria"),
@@ -399,10 +402,10 @@ export function ProblemsPage({
                         )}
                       >
                         {problemThemeLabel(tag, t)}
-                      </Button>
+                      </button>
                     );
                   })}
-                </SpaceBetween>
+                </div>
               ),
             },
           ],
