@@ -102,6 +102,7 @@ export function coordinationProblemView(
   problem: Problem,
   score: number,
   createdAt: string,
+  lastScoredAt?: string,
 ): Record<string, unknown> {
   const { metadata } = JSON.parse(problem.definition) as CoordinationDefinition;
   const english = (metadata.i18n as { en?: Record<string, unknown> } | undefined)?.en;
@@ -115,6 +116,7 @@ export function coordinationProblemView(
     status: "COMPLETE",
     score,
     createdAt,
+    ...(lastScoredAt ? { lastScoredAt } : {}),
     i18n: {
       en: {
         name: english?.name,

@@ -202,6 +202,7 @@ async function solveVisibleIdentity(page: Page): Promise<{ points: number; histo
   assert.equal(correct.score, 20);
   await page.getByTestId("explanation-account").waitFor();
   assert.match(await page.getByTestId("explanation-account").innerText(), /session|account/iu);
+  await page.getByText("Not scored yet", { exact: true }).waitFor({ state: "hidden" });
   return { points: correct.score, history: 1 };
 }
 

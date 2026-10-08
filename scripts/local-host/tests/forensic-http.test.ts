@@ -8,6 +8,7 @@ interface ProjectionResponse {
   error?: string;
 }
 interface ScoreEvent {
+  occurredAt: string;
   problemId: string;
   jobId: string;
   points: number;
@@ -226,7 +227,11 @@ test("Forensic Casebook over real HTTP/SQLite: cited answers, isolated runs, ide
     }>("participant", "/portal/me", { token: alpha.teamLoginKey });
     expect(
       own.body.problems.find((problem) => problem.problemId === FORENSIC_PROBLEM),
-    ).toMatchObject({ score: 20, stackOutputs: {} });
+    ).toMatchObject({
+      score: 20,
+      stackOutputs: {},
+      lastScoredAt: history.body.entries[0]?.occurredAt,
+    });
 
     await fixture.restart();
     expect(await projection(alpha.teamLoginKey, runId)).toEqual(alphaView);
