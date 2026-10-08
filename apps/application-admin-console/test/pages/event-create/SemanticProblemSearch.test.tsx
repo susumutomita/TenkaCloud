@@ -12,6 +12,7 @@ const vector = Array.from({ length: 768 }, (_, i) => (i === 0 ? 1 : 0));
 const posted = vi.fn();
 const terminated = vi.fn();
 let holdIndex = false;
+let holdAction = "";
 let failureAction = "";
 let malformedAction = "";
 let crash = false;
@@ -39,6 +40,7 @@ beforeEach(() => {
   posted.mockClear();
   terminated.mockClear();
   holdIndex = false;
+  holdAction = "";
   failureAction = "";
   malformedAction = "";
   crash = false;
@@ -91,7 +93,7 @@ beforeEach(() => {
             data: { status: "done", file: "model", loaded: 1, total: 1 },
           },
         });
-        if (holdIndex && request.action === "index") return;
+        if ((holdIndex && request.action === "index") || holdAction === request.action) return;
         const indexData = { elapsedMs: 1, vectors: problems.map((p) => ({ id: p.id, vector })) };
         const queryData = request.action === "query" ? { elapsedMs: 1, vector } : { elapsedMs: 1 };
         const data = request.action === "index" ? indexData : queryData;
@@ -193,6 +195,38 @@ beforeEach(() => {
 });
 
 describe("search recovery and privacy boundaries with mock workers", () => {
+  it("ignores a resolved load when cancellation happens before its continuation", async () => {
+    holdAction = "load";
+    render(<SemanticProblemSearch problems={problems} catalog={catalog} onCandidates={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "検索を準備する" }));
+    await act(async () => {
+      deliverLate?.({
+        request: posted.mock.lastCall?.[0].request,
+        kind: "result",
+        data: { elapsedMs: 1 },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "検索を終了する" }));
+    });
+    expect(screen.getByRole("button", { name: "検索を準備する" })).toBeEnabled();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+  it("ignores a resolved query when cancellation happens before its continuation", async () => {
+    const { onCandidates } = await start();
+    holdAction = "query";
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "SQL" } });
+    fireEvent.click(screen.getByRole("button", { name: "候補を探す" }));
+    await waitFor(() => expect(posted.mock.lastCall?.[0].action).toBe("query"));
+    await act(async () => {
+      deliverLate?.({
+        request: posted.mock.lastCall?.[0].request,
+        kind: "result",
+        data: { elapsedMs: 1, vector },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "検索を終了する" }));
+    });
+    expect(onCandidates).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByRole("list", { name: "問題の候補" })).not.toBeInTheDocument();
+  });
   it("does not download without preparation and keeps manual fallback on unsupported browsers", () => {
     Reflect.deleteProperty(navigator, "gpu");
     render(<SemanticProblemSearch problems={problems} catalog={catalog} onCandidates={vi.fn()} />);
