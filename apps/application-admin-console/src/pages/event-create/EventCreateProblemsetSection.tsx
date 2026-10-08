@@ -12,7 +12,7 @@ import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import TokenGroup from "@cloudscape-design/components/token-group";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { ProblemCostSummary } from "../../components/ProblemCostSummary";
 import {
   enabledNonAwsProviders,
@@ -31,6 +31,7 @@ import {
   type ProblemFilterCriteria,
 } from "../../lib/problem-filter";
 import { problemThemeLabel } from "../../lib/problem-themes";
+import { LOCAL_HOST_BUILD } from "../../local-host-build";
 import {
   buildProblemOptions,
   type ProblemRow,
@@ -39,7 +40,10 @@ import {
 } from "./helpers";
 import type { HostCatalog } from "./LocalHostEventCreate";
 import { ScrollableProblemList } from "./ScrollableProblemList";
-import { SemanticProblemSearch } from "./SemanticProblemSearch";
+
+const LocalSemanticSearch = LOCAL_HOST_BUILD
+  ? lazy(async () => ({ default: (await import("./SemanticProblemSearch")).SemanticProblemSearch }))
+  : null;
 
 /** Select の "全カテゴリ" sentinel。 catalog の category 値 (Battle/Challenge) と衝突しない。 */
 const CATEGORY_ALL = "all";
@@ -207,7 +211,7 @@ export function EventCreateProblemsetSection({
   return (
     <Container header={<Header variant="h2">{t("event_create.problemset_header")}</Header>}>
       <SpaceBetween size="m">
-        {hostCatalog && (
+        {hostCatalog && LocalSemanticSearch && (
           <ExpandableSection
             headerText="目的から問題を探す"
             expanded={purposeHelpOpen}
@@ -217,11 +221,13 @@ export function EventCreateProblemsetSection({
             }}
           >
             {purposeHelpOpen && (
-              <SemanticProblemSearch
-                problems={filtered}
-                catalog={hostCatalog}
-                onCandidates={setSemanticIds}
-              />
+              <Suspense fallback={<Box variant="p">検索の画面を読み込んでいます…</Box>}>
+                <LocalSemanticSearch
+                  problems={filtered}
+                  catalog={hostCatalog}
+                  onCandidates={setSemanticIds}
+                />
+              </Suspense>
             )}
           </ExpandableSection>
         )}

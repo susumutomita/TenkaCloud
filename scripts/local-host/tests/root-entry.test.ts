@@ -79,7 +79,7 @@ test("host root, login and history routes serve the same SPA before and after or
     for (const [file, mime] of [
       ["runtime.mjs", "text/javascript; charset=utf-8"],
       ["runtime.wasm", "application/wasm"],
-    ]) {
+    ] as const) {
       const response = await fetch(`${host.origin}/assets/${file}`);
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe(mime);

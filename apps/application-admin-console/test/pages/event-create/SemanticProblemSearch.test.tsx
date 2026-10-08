@@ -12,6 +12,11 @@ const vector = Array.from({ length: 768 }, (_, i) => (i === 0 ? 1 : 0));
 const posted = vi.fn();
 const terminated = vi.fn();
 let holdIndex = false;
+let failureAction = "";
+let malformedAction = "";
+let crash = false;
+let deliverLate: ((data: object) => void) | undefined;
+
 const problems = ["one", "two"].map((id) => ({
   id,
   name: id,
@@ -34,21 +39,70 @@ beforeEach(() => {
   posted.mockClear();
   terminated.mockClear();
   holdIndex = false;
+  failureAction = "";
+  malformedAction = "";
+  crash = false;
+  deliverLate = undefined;
   Object.defineProperty(navigator, "gpu", { value: {}, configurable: true });
   vi.stubGlobal(
     "Worker",
     class {
       onmessage: ((event: { data: object }) => void) | null = null;
-      onerror = null;
+      onerror: (() => void) | null = null;
+      constructor() {
+        deliverLate = (data) => this.onmessage?.({ data });
+      }
       terminate = terminated;
       postMessage(request: { action: string; request: number }) {
         posted(request);
+        if (crash) {
+          queueMicrotask(() => this.onerror?.());
+          return;
+        }
+        if (failureAction === request.action) {
+          queueMicrotask(() =>
+            this.onmessage?.({
+              data: { request: request.request, kind: "error", data: "WebGPU execution failed" },
+            }),
+          );
+          return;
+        }
+        this.onmessage?.({
+          data: { request: request.request - 1, kind: "error", data: "stale error" },
+        });
+        this.onmessage?.({
+          data: {
+            request: request.request,
+            kind: "progress",
+            data: { status: "progress", progress: 42 },
+          },
+        });
+        this.onmessage?.({
+          data: {
+            request: request.request,
+            kind: "progress",
+            data: { status: "index", completed: 1, total: 2 },
+          },
+        });
+        this.onmessage?.({
+          data: {
+            request: request.request,
+            kind: "progress",
+            data: { status: "done", file: "model", loaded: 1, total: 1 },
+          },
+        });
         if (holdIndex && request.action === "index") return;
         const indexData = { elapsedMs: 1, vectors: problems.map((p) => ({ id: p.id, vector })) };
         const queryData = request.action === "query" ? { elapsedMs: 1, vector } : { elapsedMs: 1 };
         const data = request.action === "index" ? indexData : queryData;
         queueMicrotask(() =>
-          this.onmessage?.({ data: { request: request.request, kind: "result", data } }),
+          this.onmessage?.({
+            data: {
+              request: request.request,
+              kind: "result",
+              data: malformedAction === request.action ? {} : data,
+            },
+          }),
         );
       }
     },
@@ -136,4 +190,92 @@ beforeEach(() => {
       }
     },
   );
+});
+
+describe("search recovery and privacy boundaries with mock workers", () => {
+  it("does not download without preparation and keeps manual fallback on unsupported browsers", () => {
+    Reflect.deleteProperty(navigator, "gpu");
+    render(<SemanticProblemSearch problems={problems} catalog={catalog} onCandidates={vi.fn()} />);
+    expect(screen.getByText(/このブラウザでは目的からの検索を使えません/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "検索を準備する" })).not.toBeInTheDocument();
+    expect(posted).not.toHaveBeenCalled();
+  });
+  it("does not prepare while the authenticated catalog is unavailable", () => {
+    render(
+      <SemanticProblemSearch
+        problems={problems}
+        catalog={{ ...catalog, loading: true, error: "offline" }}
+        onCandidates={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "検索を準備する" })).toBeDisabled();
+    expect(posted).not.toHaveBeenCalled();
+  });
+  it.each(["message", "crash"])("recovers from load %s without false readiness", async (mode) => {
+    failureAction = mode === "message" ? "load" : "";
+    crash = mode === "crash";
+    render(<SemanticProblemSearch problems={problems} catalog={catalog} onCandidates={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "検索を準備する" }));
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(terminated).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "検索を準備する" })).toBeEnabled();
+  });
+  it.each(["index", "query"])(
+    "rejects malformed %s results instead of recommending",
+    async (action) => {
+      const { onCandidates } = await start();
+      malformedAction = action;
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "SQL" } });
+      fireEvent.click(screen.getByRole("button", { name: "候補を探す" }));
+      await screen.findByRole("alert");
+      expect(onCandidates).not.toHaveBeenCalledWith(["one", "two"]);
+      expect(screen.queryByRole("list", { name: "問題の候補" })).not.toBeInTheDocument();
+    },
+  );
+  it("reports query execution failure and reuses its existing index on a later successful search", async () => {
+    const { onCandidates } = await start();
+    failureAction = "query";
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "SQL" } });
+    fireEvent.click(screen.getByRole("button", { name: "候補を探す" }));
+    await screen.findByRole("alert");
+    failureAction = "";
+    fireEvent.click(screen.getByRole("button", { name: "候補を探す" }));
+    await waitFor(() => expect(onCandidates).toHaveBeenLastCalledWith(["one", "two"]));
+    expect(posted.mock.calls.filter((call) => call[0].action === "index")).toHaveLength(1);
+    await act(async () =>
+      deliverLate?.({ request: posted.mock.lastCall?.[0].request, kind: "error", data: "late" }),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+  it("refuses a search when the host catalog becomes unavailable", async () => {
+    const { rerender, onCandidates } = await start();
+    rerender(
+      <SemanticProblemSearch
+        problems={problems}
+        catalog={{ ...catalog, error: "offline" }}
+        onCandidates={onCandidates}
+      />,
+    );
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "SQL" } });
+    fireEvent.click(screen.getByRole("button", { name: "候補を探す" }));
+    await screen.findByRole("alert");
+    expect(posted.mock.calls.filter((call) => call[0].action === "index")).toHaveLength(0);
+  });
+  it("deletes only this model's saved files and preserves other browser data", async () => {
+    const remove = vi.fn().mockResolvedValue(true);
+    const modelRequest = {
+      url: "https://huggingface.co/onnx-community/embeddinggemma-2-ONNX/resolve/revision/model",
+    };
+    const otherRequest = { url: "https://example.com/another-model" };
+    const open = vi
+      .fn()
+      .mockResolvedValue({ keys: async () => [otherRequest, modelRequest], delete: remove });
+    vi.stubGlobal("caches", { keys: async () => ["other-cache", "transformers-cache"], open });
+    render(<SemanticProblemSearch problems={problems} catalog={catalog} onCandidates={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "検索用の保存データを削除" }));
+    await screen.findByText("検索用の保存データを削除しました。");
+    expect(open).toHaveBeenCalledExactlyOnceWith("transformers-cache");
+    expect(remove).toHaveBeenCalledExactlyOnceWith(modelRequest);
+  });
 });

@@ -1,5 +1,7 @@
 import "@testing-library/jest-dom/vitest";
-import "../../../packages/web-kit/test/jsdom-computed-style";
+
+if (typeof window !== "undefined")
+  await import("../../../packages/web-kit/test/jsdom-computed-style");
 
 function createMemoryStorage(): Storage {
   const entries = new Map<string, string>();
