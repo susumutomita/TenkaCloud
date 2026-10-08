@@ -22,3 +22,5 @@ Object.defineProperty(window, "getComputedStyle", {
     return style;
   },
 });
+
+export {};

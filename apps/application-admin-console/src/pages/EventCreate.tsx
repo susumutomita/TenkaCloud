@@ -45,6 +45,7 @@ import {
 import {
   EventCreateCapacityNotice,
   eventCapacity,
+  eventCreationErrorMessage,
   useHostCatalog,
 } from "./event-create/LocalHostEventCreate";
 import { useCompetitorAccountsLoader } from "./event-create/useCompetitorAccountsLoader";
@@ -93,6 +94,10 @@ function newProblemRow(meta: ProblemSummary, problemId: string): ProblemRow {
  * Issue #1241: section components (`event-create/*`) に分割。 このファイルは
  * state / handler / 子 section への配線だけを担う orchestrator。
  */
+function advisorHostCatalog(local: boolean, catalog: ReturnType<typeof useHostCatalog>) {
+  return local ? catalog : undefined;
+}
+
 export function EventCreatePage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const canMutate = canMutateTenant(apiClient);
@@ -235,6 +240,8 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     config.eventLimits,
   );
   const { maxTeams, teamCountInvalid, jobCountInvalid, problemCountInvalid } = capacity;
+  const coordinationInvalid =
+    problemRows.filter((row) => hostCatalog.coordination?.has(row.problemId)).length > 1;
   const nameInvalid = name.length === 0 || name.length > NAME_MAX;
   const canSubmit =
     !!apiClient &&
@@ -244,6 +251,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     !teamCountInvalid &&
     !jobCountInvalid &&
     !problemCountInvalid &&
+    !coordinationInvalid &&
     problemRows.length > 0 &&
     teamValidation.allSlugsValid &&
     teamValidation.allAccountsValid &&
@@ -338,7 +346,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
       if (account && !body.hostingAccountSelfTest) {
         setSelfTestPrompt({ body, awsAccountId: account });
       } else {
-        setError(toErrorMessage(err));
+        setError(eventCreationErrorMessage(err, t("problem_search.coordination_limit_error")));
       }
     } finally {
       submissionInFlight.current = false;
@@ -456,6 +464,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             nonAwsRuntimeEnabled={config.features?.nonAwsRuntime ?? false}
             hostSupportedProblemIds={localHost ? hostCatalog.supported : undefined}
             maxProblems={localHost ? capacity.maxProblems : undefined}
+            hostCatalog={advisorHostCatalog(localHost, hostCatalog)}
             onProblemsChange={onProblemsChange}
             onUpdateProblemRow={updateProblemRow}
           />
