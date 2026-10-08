@@ -8,8 +8,6 @@ import { advisorCatalog } from "./problem-advisor";
 import { EMBEDDING_MODEL, rankSemantic } from "./semantic-search";
 
 function searchErrorLabel(error: string) {
-  if (error.includes("開催容量"))
-    return "選んだ問題が開催容量を超えています。問題数を減らしてください。";
   if (error.includes("3分"))
     return "検索が3分を超えたため停止しました。もう一度準備するか、下の一覧から問題を選べます。";
   return "検索を続けられません。もう一度準備するか、下の一覧から問題を選べます。";
