@@ -1,57 +1,45 @@
-# Hosting compatibility and retirement review
+# Hosting responsibilities and compatibility boundaries
 
-This draft integration keeps local and cloud competition hosting while removing
-SaaS/SBT tenant provisioning and the separate individual-practice backend. Cloud
-hosting reuses the original Lite backend with Lambda and selectable Turso/DynamoDB.
-Offline checks establish implementation/resource compatibility, not live AWS
-authorization, hosted performance or complete catalog playability.
-No AWS deployment, automatic migration, data purge or release publication is part of
-these verification results.
+Local hosting and cloud hosting share competition behavior while retaining different
+runtime and storage responsibilities. The former SaaS/SBT provisioning application
+and separate individual-practice backend are retired. Historical data is not
+converted or deleted automatically.
 
-## Retained, retired and incomplete behavior
+## Responsibilities and owning code
 
-| Behavior | Current boundary | Owning path |
-| --- | --- | --- |
-| Local organizer and participant hosting | One Bun process and persistent SQLite; `make local` / `make down` preserve event data and stopped exercise work | `scripts/local-host`, existing console and portal |
-| 106 local Compose exercises | Generic per-team Challenge runner with on-demand start/stop, original verifiers, hints and scoring; not all 106 have completed real Docker rehearsals | `scripts/local-host/docker-catalog.ts`, `problems/` |
-| 15 declared participant terminals | Authenticated, team/job-owned terminal transport; PostgreSQL terminal play and restart were exercised with real Docker | `scripts/local-host/terminal-http.ts`, `scripts/local-host/container/terminal-shell.ts` |
-| Native Cryptography Battle | Shared reducer: local SQLite and cloud Turso/DynamoDB, private team projections and atomic scoring. Both cloud providers admit 99 teams; SQL coordination retains its 4 MiB state policy. Hosted capacity is unverified | `scripts/local-host/coordination.ts`, [cloud status](../infrastructure/README.md) |
-| Cloud platform | Lambda, Cognito and selectable Turso/DynamoDB with the original CloudFormation workflows, flag/multi-flag and scheduled scoring, participant Console/CLI and native Battle; standard CDK setup and platform teardown require reviewed AWS permissions. End-to-end live AWS rehearsal remains unverified | `infrastructure/lib/cloud-hosting`, `infrastructure/lib/problem-deploy` |
-| AWS-service problems | Cloud hosting only; generic create/update/no-op/recreate and endpoint scoring restored. Nine canonical templates exceed TemplateBody's 51,200-byte limit; TemplateURL is not implemented. Not every catalog problem has a live rehearsal | [Cloud status](../infrastructure/README.md) |
-| Docker/Compose exercises in cloud hosting | Local-only; not listed in the cloud catalog. Native Cryptography Battle is supported separately | [Cloud status](../infrastructure/README.md) |
-| Organizer key login, participant team keys and progression | Local organizer login uses only a key; retained historical organizer records cannot authenticate. Participants use the portal URL and their assigned team key; shared self-registration links are retired and historical records are retained. Do not infer cloud parity from local tests | `scripts/local-host` |
-| Competitor bootstrap and trust | Template retained; ExternalId and viewer-role boundaries remain required. Participant STS denies the platform account; same competitor account across problem regions remains available subject to global-resource constraints | `infrastructure/templates/competitor-bootstrap.yaml` |
-| Pack creation, validation, immutable install/list/inspect/remove and activation records | Authoring tooling retained. Cloud reads activated AWS/CloudFormation pack catalogs and assets on deployment; Local does not consume Pack activation records. Structured drill/progression integration remains incomplete | `scripts/problem-pack`, public SDKs, `packs/` |
-| Generic multi-provider pack authoring | Authoring/validation retained; no promise of execution for every AWS/GCP/Azure/Sakura pack | public SDKs and golden-pack tests |
-| Deployment pipeline | `cloud-pipeline.yaml` defaults to current deployment with standard CDK bootstrap and a reviewed privileged CodeBuild role. Review source settings and deployment authority before starting a build | [Pipeline contract](../infrastructure/README.md#cloud-deployment-pipeline) |
-| Storage | Local SQLite; cloud Turso/DynamoDB. No automatic conversion from historical SQLite/DynamoDB/Turso installations | [Storage boundary](host-storage-decision.md) |
-| Separate practice login, simulator and snapshot backend | Retired as an independent application. Shared problem definitions, editor, verifier and terminal behavior are reused by local competition | [Local hosting](local-hosting.md) |
-| tcloud client | Not part of the current hosting workflow | use the organizer and participant interfaces |
-| Standalone `POST /problems/{id}/deploy` | Not provided by this candidate. Event APIs are not a drop-in replacement; external callers and book/tutorial instructions require explicit compatibility review | integration review |
-| Existing AWS sessions | Ending an event or blocking new access does not instantly revoke previously issued STS or federation sessions | credential expiry and role policy |
-| Container distribution | No image/tag published by this change. The optional image is a native-Battle rehearsal target, not Lambda cloud hosting | `release/host-candidate.json` |
+- [Local host](../scripts/local-host/competition-engine.ts): one Bun process,
+  event/team ownership, authentication, scoring and persisted SQLite state.
+  [HTTP routing](../scripts/local-host/http.ts) enforces the organizer and participant
+  boundary; a submitted team identity is not trusted.
+- [Compose adapter](../scripts/local-host/docker-catalog.ts) and
+  [reviewed native catalog](../scripts/local-host/coordination-catalog.ts): map
+  authored problems to executable local runtimes. Catalog visibility is not proof
+  of a complete play-through.
+- Cloud composition flows through [cloud-hosting](../infrastructure/lib/cloud-hosting/compose.ts),
+  [Lite](../infrastructure/lib/tenkacloud-lite/index.ts) and
+  [application resources](../infrastructure/lib/app-plane-core/app-plane-core.ts).
+  [API Gateway](../infrastructure/lib/tenant-template/api-gateway.ts) owns the
+  deployed cloud route wiring; [problem deployment](../infrastructure/lib/problem-deploy)
+  owns execution. Use those sources and their contract tests to determine API
+  availability for a given revision. Local and cloud routes are separate contracts.
+- [Storage decision](host-storage-decision.md): local SQLite and cloud Turso/DynamoDB
+  keep their respective persistence and recovery responsibilities.
+- [Competitor bootstrap](../infrastructure/templates/competitor-bootstrap.yaml):
+  account-owner setup and required ExternalId trust remain separate from the host
+  application. Ending an event does not instantly revoke already issued sessions.
+- [Pack tooling](../scripts/problem-pack): authoring and immutable installation are
+  separate from a hosting adapter accepting an activated pack. Authoring support
+  does not establish runtime execution support.
 
-## Catalog and verification boundary
+## How to verify a checkout
 
-The pinned catalog has 106 local Compose definitions, including 98 multi-verify
-and 8 verify definitions, with 15 terminal declarations. They are all exposed as
-local Challenges by the generic catalog adapter. Four former local Battle-shaped
-exercises follow that Challenge contract; native Cryptography Battle keeps its
-shared-match rules.
+Read the owning code, schemas and adjacent tests for routes, limits and catalog
+membership. Avoid a second handwritten API inventory or per-problem support table
+here: those drift independently of implementation.
 
-Catalog identity, service/port planning, owned runtime state and verifier contracts
-are tested across the definitions. Representative real Docker and browser checks
-cover SQL, PostgreSQL terminal checkpoints, team separation and stop/restart with
-preserved work. These checks are not a claim of complete play-throughs for every
-problem variant. The canonical catalog and its tests replace a duplicated manual
-list of 106 per-problem availability flags.
-
-Retained local feature tests stay beside their implementations. New cloud tests
-cover restored SQL/DynamoDB repositories, frontend/API contracts, original resource
-identities and deployment/teardown behavior without restoring SaaS
-provisioning. Coverage thresholds and security checks remain active.
-
-[Clean checkout verification](host-build-verification.md) and the container
-restart test describe image verification. A real AWS or external IdP rehearsal is
-[optional and separately recorded](host-rehearsal.md); missing cloud implementation
-or failed offline checks are not excused by that distinction.
+Keep startup, recovery and destructive-operation guidance in
+[local hosting](local-hosting.md) and [cloud hosting](../infrastructure/README.md).
+[Clean checkout verification](host-build-verification.md) describes build checks;
+[rehearsal records](host-rehearsal.md) distinguish actual runtime evidence from
+source-level validation. An offline check does not establish live AWS authorization,
+hosted performance or complete catalog playability.

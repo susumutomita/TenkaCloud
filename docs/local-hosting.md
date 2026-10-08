@@ -13,19 +13,14 @@ external database, or application container to provision. The local entrypoint d
 not use AWS credentials; [AWS problems require cloud hosting](#aws-problems-use-cloud-hosting). The browser interfaces are built
 using the repository's existing Vite pipelines.
 
-| Problem | Runtime | Requirements |
-| --- | --- | --- |
-| 106 local Compose exercises, including `sqli-demo` | One isolated, on-demand Compose project per team/problem; workbenches and 15 opted-in terminals | Docker |
-| Cryptography Battle (`battles/ac26-crypto-battle`) | Shared match on the host; private view per team | Bun + SQLite, no Docker or AWS |
-| Pi Siege (`battles/pi-siege`) | Two-team, four-round fraction/guarantee battle | Bun + SQLite, no Docker or AWS |
-| `Session Defense Arena` (`battles/session-defense`) | Two-team synthetic token/defense battle | Bun + SQLite, no Docker or AWS |
-| Forensic Casebook (`battles/forensic-casebook`) | Three synthetic incident investigations; evidence-cited answers and private progress per team | Bun + SQLite, no Docker or AWS |
+The executable local catalog is owned by the [Compose adapter](../scripts/local-host/docker-catalog.ts)
+and the [reviewed native catalog](../scripts/local-host/coordination-catalog.ts).
+Read their implementation and adjacent tests for membership and runtime requirements;
+use the organizer's catalog for the checked-out version. Compose problems need Docker;
+native problems run on the Bun/SQLite host.
 
-The local exercises reuse their catalog statements, verifiers, hints and scoring.
-The four former local Battle-shaped exercises are offered as Challenges; native
-Cryptography Battle retains its shared-match rules. Catalog/workbench/terminal
-boundary tests do not establish real Docker playability of every exercise.
-Installed pack activation records are not yet part of the host runtime catalog.
+Problem statements, verifiers, hints and scoring belong to the pinned `problems/`
+catalog. Adapter tests do not establish real Docker playability of every exercise.
 
 ### Forensic Casebook
 
@@ -643,11 +638,10 @@ The normal portal's existing submission interface is retained.
 
 The build has a separate allowlist for catalog metadata. Author descriptions,
 writeups, hint content and problem implementation files must not be distributed
-through browser metadata. The safe catalog projection covers all 106 local Compose
-IDs and the supported AWS entries. Executable Portal plugins are restricted to
-Cryptography Battle, Pi Siege and `Session Defense Arena`. Each new Battle permits only
-its reviewed component and public content/styles; server reducers, graders, fixtures,
-practice harnesses and organizer documents are excluded. Participant instructions are returned by the
+through browser metadata. [Browser metadata](../scripts/local-host/browser-metadata.ts) owns the safe projection,
+and the participant build owns the reviewed public plugin boundary. Server reducers,
+graders, fixtures, practice harnesses and organizer documents stay outside that boundary.
+Participant instructions are returned by the
 authenticated backend after the event starts.
 
 The organizer's own account, local operating-system processes and the checked-out
@@ -656,83 +650,33 @@ organizer or an attacker already running code as that operating-system user.
 
 ## Capacity
 
-New-event limits and defaults:
+Admission limits protect owned runtime resources; they do not establish hardware
+capacity. The authoritative defaults and checks live in
+[container budgets](../scripts/local-host/container-budget.ts),
+[on-demand jobs](../scripts/local-host/on-demand-containers.ts),
+[runtime ports](../scripts/local-host/runtime-ports.ts) and
+[native coordination](../scripts/local-host/coordination-runtime.ts).
+[Entrypoint help](../scripts/local-host/main.ts) owns the supported tuning options.
 
-- 1–40 teams and at most 512 team/problem entries per event
-- Three active Docker environments per team and twelve across the host
-- 4096 MiB for the sum of configured container memory caps, across active and uncertain jobs
-- New Compose plans preserve authored resource limits; missing limits become 512 MiB, one CPU and 256 PIDs per service
-- At most 40 active gateway slots with the default range; stopped jobs keep runtime ports but release gateways
-- A Battle's saved match state must stay under 2 MiB
-- Pi Siege and `Session Defense Arena` require exactly two teams; their declared total state budgets are 64 KiB and 32 KiB
-- At most one coordination Battle is allowed per event; use separate events for these two games
+Reserve memory for Docker, images and the host, and measure the selected problem mix
+on the event machine. Stopped containers and volumes still consume storage; removal
+requires explicit owned-environment teardown. Increasing an admission limit does not
+prove the machine can sustain it. See [system requirements](local-play-requirements.md)
+for workload planning and the measurements to record.
 
-Tune admission with `LOCAL_ARGS="--max-active-per-team 3 --max-active-environments 12 --container-memory-mib 4096"`.
-These are conservative admission controls, not measured capacity or a guarantee
-that a Docker VM has enough memory. Reserve capacity for Docker, images and the
-host itself. Some multi-service problems consume more than one environment's worth
-of RAM. Start with representative exercises and measure your machine.
-
-A synthetic plan using 20 real catalog definitions and five teams allocated 100
-dormant jobs in 105 distinct runtime ports, without launching 100 containers.
-Synthetic lifecycle tests cover admission, state-preserving stop/resume and
-failure recovery. This is not a 100-container performance benchmark. Storage usage
-still grows with created images, stopped containers and volumes; only an explicit
-owned-environment teardown removes that state. No automatic data eviction runs.
-
-Existing eager events retain their prior 40-job contract.
-
-One host process serves every request on one thread, so the number of open
-participant browser tabs sets the load. Measured in a browser, a tab on the
-Cryptography Battle page reads the match every 5 seconds, its team view and the
-leaderboard every 30 seconds, and notifications every 60 seconds.
-
-Measured on an Apple M5 (10 cores, 32 GB), Bun 1.3.11, over loopback, with the
-load generator on the same computer. One event with 40 teams, one organizer
-tab, and the participant tabs spread evenly across the teams, 60 seconds per
-step:
-
-"Latency p95" means 95 out of 100 requests were answered within that time.
-
-| Participant tabs | Tabs per team | Latency p95 | Errors | Host CPU (avg) |
-| --- | --- | --- | --- | --- |
-| 40 | 1 | 16 ms | 0 | 13% |
-| 160 | 4 | 17 ms | 0 | 27% |
-| 320 | 8 | 17 ms | 0 | 40% |
-| 640 | 16 | 23 ms | 0 | 61% |
-| 960 | 24 | 34 ms | 0 | 84% |
-
-These numbers are from the start of a match. In a simulated 90-minute match
-where every team published every Order it could, the 40-team match state
-stayed under 100 KB, and one match read took 3.3 ms at the start and 5.5 ms at
-the end (p95). That suggests, but does not measure, less headroom late in a
-match, possibly about half. The table does not cover Wi-Fi or other LAN
-transport, SQL exercises in Docker, or slower computers. The load generator
-waits for a tab's previous request before sending its next one, while real
-browsers do not, so the point where the host falls behind comes earlier than
-the tool shows.
-
-The host keeps each Battle's match state in memory (about 50–95 KB with 40
-teams, growing during the match) and writes it to SQLite when a team acts, when
-a score changes, when the organizer ends, locks or tears down the event, and
-otherwise at most once every 5 seconds, however many tabs are open. Measured
-in one run of the state simulation below (40 teams, one match read per team
-every 5 seconds, every Order leaked, 30 simulated minutes): 801 match state
-writes totalling 55 MB, about 27 writes and 1.8 MB per minute. SQLite writes
-whole pages and later copies its write-ahead log into the database file, so the
-actual disk writes are higher. Ctrl+C writes the state held in memory before
-the host exits. If the host process is killed instead, up to 5 seconds of match
-progress that changed no score is lost and the match continues from the last
-write, which can change the Orders issued afterwards. Closing the terminal
-window counts as a kill.
-
-Measure your own computer with the same tool. It starts a separate host on
-ports 6274, 6275 and 6300-6339 with a temporary data directory:
+The [HTTP load tool](../scripts/local-host/bench/http-load.ts) and
+[capacity simulation](../scripts/local-host/bench/capacity.ts) provide repeatable
+measurement entrypoints. They use a separate host and temporary data directory:
 
 ```sh
 BUN_CONFIG_MAX_HTTP_REQUESTS=4096 bun run bench:host -- --mode http --teams 40 --tabs 40,160,320,640,960
 bun run bench:host -- --mode state --teams 2,10,20,40
 ```
+
+Record source/catalog revisions, hardware, network and workload with each result.
+A loopback HTTP benchmark or synthetic allocation is not a Docker/LAN capacity
+recommendation. Historical observations remain available in Git history rather than
+being presented as current guarantees here.
 
 ## Validation commands
 
