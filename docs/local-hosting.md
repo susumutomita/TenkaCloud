@@ -17,12 +17,39 @@ using the repository's existing Vite pipelines.
 | --- | --- | --- |
 | 106 local Compose exercises, including `sqli-demo` | One isolated, on-demand Compose project per team/problem; workbenches and 15 opted-in terminals | Docker |
 | Cryptography Battle (`battles/ac26-crypto-battle`) | Shared match on the host; private view per team | Bun + SQLite, no Docker or AWS |
+| Forensic Casebook (`battles/forensic-casebook`) | Three synthetic incident investigations; evidence-cited answers and private progress per team | Bun + SQLite, no Docker or AWS |
 
 The local exercises reuse their catalog statements, verifiers, hints and scoring.
 The four former local Battle-shaped exercises are offered as Challenges; native
 Cryptography Battle retains its shared-match rules. Catalog/workbench/terminal
 boundary tests do not establish real Docker playability of every exercise.
 Installed pack activation records are not yet part of the host runtime catalog.
+
+### Forensic Casebook
+
+Select **Forensic Casebook** when creating an event, issue the team keys, deploy, and
+start the event. One team can study alone; multiple teams compete on the same
+300-point ceiling. The participant panel contains three cases: identity and
+authorization, log correlation and exfiltration scope, and backup administrative
+trust. Each answer includes evidence-file citations. Wrong answers can be retried;
+three free hints and explanations after correct answers support learning. No
+cloud account, paid API, Docker, malware, or ESXi installation is required.
+
+Evidence is synthetic and team-specific. A supplied SHA-256 digest checks download
+consistency, not the truth or provenance of an incident. The pack does not recreate
+a named real incident or claim comprehensive security coverage.
+
+Competition state and scores use the host's SQLite persistence. Participants cannot
+reset a competition. For a fresh competition, create another event. A separate
+loopback-only practice harness in the catalog offers an explicit reset that creates
+new evidence and clears practice progress. See the catalog's
+[practice and instructor instructions](../problems/battles/forensic-casebook/README.md).
+
+The open-source host is authoritative only when run by a trusted organizer. A
+participant controlling the host, database, or source can inspect or change grading;
+local practice is not a tamper-resistant competition. Keep organizer keys and the
+host filesystem outside participant access. Browser answers and grading inputs stay
+on the server until the relevant question has been solved.
 
 ### Structured local practice
 

@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { buildSync } from "esbuild";
 import type { HostPlugin } from "./coordination-core";
+import { reviewedCoordinationIds } from "./coordination-registry";
 import { privateDirectory } from "./files";
 import { HostError, organizerProblemContent, type Problem } from "./model";
 
@@ -17,7 +18,10 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 
 /** Reviewed local compatibility list. Game rules remain in the catalog's SDK plugin. */
 export function coordinationCatalog(root: string): Problem[] {
-  const problemId = "ac26-crypto-battle";
+  return reviewedCoordinationIds.map((problemId) => coordinationProblem(root, problemId));
+}
+
+function coordinationProblem(root: string, problemId: string): Problem {
   const directory = join(root, "problems/battles", problemId);
   const metadata = JSON.parse(readFileSync(join(directory, "metadata.json"), "utf8")) as Record<
     string,
@@ -45,20 +49,18 @@ export function coordinationCatalog(root: string): Problem[] {
   }
   const bundle = built.outputFiles[0]?.text;
   if (!bundle) throw new Error("Coordination bundle is empty.");
-  return [
-    {
-      problemId,
-      name: String(metadata.name),
-      organizerContent: organizerProblemContent(metadata),
-      runtime: "coordination",
-      definition: JSON.stringify({
-        kind: "coordination",
-        metadata,
-        bundle,
-        digest: hash(bundle),
-      } satisfies CoordinationDefinition),
-    },
-  ];
+  return {
+    problemId,
+    name: String(metadata.name),
+    organizerContent: organizerProblemContent(metadata),
+    runtime: "coordination",
+    definition: JSON.stringify({
+      kind: "coordination",
+      metadata,
+      bundle,
+      digest: hash(bundle),
+    } satisfies CoordinationDefinition),
+  };
 }
 
 export class LocalPluginLoader {

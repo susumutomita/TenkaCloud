@@ -7,11 +7,12 @@ import {
   toTrackPosition,
 } from "../../packages/portal-contracts/src/problem-course-projection";
 import { parseEndpointSlot } from "../../packages/problem-sdk/src/endpoints-metadata";
+import { reviewedCoordinationIds } from "./coordination-registry";
 
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const reviewedNonDockerPaths = [
   "challenges/hello-world",
-  "battles/ac26-crypto-battle",
+  ...reviewedCoordinationIds.map((id) => `battles/${id}`),
   "battles/hello-world-battle",
 ] as const;
 let cachedBrowserPaths: readonly string[] | undefined;
@@ -87,11 +88,10 @@ export function publicMetadata(code: string, id: string): string | null {
     tags: Array.isArray(raw.tags) ? raw.tags : [],
     // The catalog facet needs only the public classification, never scoring parameters.
     ...(typeof scoring.kind === "string" ? { scoring: { kind: scoring.kind } } : {}),
-    runtime:
-      raw.id === "ac26-crypto-battle"
-        ? { provider: "local", engine: "bun" }
-        : { provider: runtime.provider, engine: runtime.engine },
-    ...(raw.id === "ac26-crypto-battle"
+    runtime: reviewedCoordinationIds.includes(String(raw.id))
+      ? { provider: "local", engine: "bun" }
+      : { provider: runtime.provider, engine: runtime.engine },
+    ...(reviewedCoordinationIds.includes(String(raw.id))
       ? { dashboard: raw.dashboard, interTeamCoordination: raw.interTeamCoordination }
       : {}),
     ...(raw.id === "hello-world-battle" ? { endpoints: publicEndpointSlots(raw.endpoints) } : {}),
@@ -123,7 +123,8 @@ export function narrowCatalog(code: string, id: string): string | null {
   // separate explicit review boundary, even when their problem is supported.
   const publicPaths = hostBrowserProblemPaths().join(",");
   const narrowed = code.replace(glob, (_match, suffix: string) => {
-    if (suffix === "portal/*.tsx") return "problems/battles/ac26-crypto-battle/portal/*.tsx";
+    if (suffix === "portal/*.tsx")
+      return `problems/battles/{${reviewedCoordinationIds.join(",")}}/portal/*.tsx`;
     if (suffix === "*.yaml") return "problems/challenges/sqli-demo/__local_host_empty__/*.yaml";
     return `problems/{${publicPaths}}/${suffix}`;
   });
@@ -150,6 +151,12 @@ export function assertHostingModule(id: string): void {
       throw new Error(`Server-only game code entered the browser: ${id}`);
     return;
   }
+  if (
+    /\/problems\/battles\/forensic-casebook\/portal\/(?:StatusPanel\.tsx|styles\.ts)(?:\?.*)?$/u.test(
+      normalized,
+    )
+  )
+    return;
   const publicFile =
     /\/problems\/((?:challenges|battles)\/[^/]+)\/(?:metadata\.json|diagram(?:\.en)?\.svg)(?:\?.*)?$/u.exec(
       normalized,
