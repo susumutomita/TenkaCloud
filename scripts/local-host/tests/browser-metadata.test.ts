@@ -26,7 +26,7 @@ test("frontend Docker identities exactly match the host's executable catalog", (
 
 test("hosting exposes all 106 Docker verify exercises as public Challenge metadata", () => {
   expect(localProblems).toHaveLength(106);
-  expect(hostBrowserProblemPaths()).toHaveLength(109);
+  expect(hostBrowserProblemPaths()).toHaveLength(110);
   let legacyBattles = 0;
   for (const path of localProblems) {
     const source = readFileSync(join(root, "problems", path, "metadata.json"), "utf8");
@@ -81,7 +81,7 @@ test("metadata expansion does not expand executable portal plugins or templates"
     "/repo/apps/participant-portal/src/plugins/loader.ts",
   );
   expect(plugins).toBe(
-    'import.meta.glob("../../../../problems/battles/ac26-crypto-battle/portal/*.tsx");',
+    'import.meta.glob("../../../../problems/battles/{ac26-crypto-battle,forensic-casebook}/portal/*.tsx");',
   );
   expect(() =>
     narrowCatalog(
@@ -158,4 +158,30 @@ test("the scoring facet keeps only its kind and never author scoring values", ()
     { kind: { answer: "private-scoring-answer" } },
   ])
     expect(project(scoring).scoring).toBeUndefined();
+});
+
+test("forensic browser allowlist exposes evidence UI, never server answers or fixture generation", () => {
+  const path = join(root, "problems/battles/forensic-casebook/metadata.json");
+  const projected = publicMetadata(readFileSync(path, "utf8"), path);
+  if (!projected) throw new Error("Missing forensic metadata.");
+  expect(JSON.parse(projected).runtime).toEqual({ provider: "local", engine: "bun" });
+  expect(JSON.parse(projected).dashboard).toEqual({
+    slots: { StatusPanel: "portal/StatusPanel.tsx" },
+  });
+  for (const file of ["portal/StatusPanel.tsx", "portal/styles.ts"])
+    expect(() =>
+      assertHostingModule(`/repo/problems/battles/forensic-casebook/${file}`),
+    ).not.toThrow();
+  for (const file of [
+    "game/index.ts",
+    "game/cases.ts",
+    "coordination/plugin.ts",
+    "dev/server.ts",
+    "tests/game.test.ts",
+    "README.md",
+    "portal/private.ts",
+  ])
+    expect(() => assertHostingModule(`/repo/problems/battles/forensic-casebook/${file}`)).toThrow(
+      "Unreviewed problem content",
+    );
 });

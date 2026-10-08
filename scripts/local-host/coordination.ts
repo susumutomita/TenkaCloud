@@ -226,8 +226,19 @@ export class LocalCoordination {
     const body = move ? object(request.body) : {};
     if ("teamId" in body || "eventId" in body)
       throw new HostError(400, "Identity comes from the authenticated team key.");
+    this.assertCurrentRun(request, move, body, job.jobId);
     if (move) object(body.op);
     return { team, event, problem, move, body };
+  }
+  private assertCurrentRun(
+    request: ApiRequest,
+    move: boolean,
+    body: Record<string, unknown>,
+    jobId: string,
+  ): void {
+    const runId = move ? body.runId : (request.query.get("runId") ?? undefined);
+    if (runId !== undefined && runId !== jobId)
+      throw new HostError(409, "This Battle run is no longer current.", "stale_run");
   }
   request(request: ApiRequest): ApiResponse {
     const { team, event, problem, move, body } = this.authorize(request);

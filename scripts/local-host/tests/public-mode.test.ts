@@ -231,9 +231,9 @@ test("public mode offers only problems that need no per-team gateway", async () 
     host: "admin.example.test",
     headers: { authorization: `Bearer ${adminToken}` },
   });
-  expect(catalog.body.items).toEqual([
-    {
-      problemId: "ac26-crypto-battle",
+  expect(catalog.body.items).toEqual(
+    ["ac26-crypto-battle", "forensic-casebook"].map((problemId) => ({
+      problemId,
       name: expect.any(String),
       runtime: "coordination",
       content: {
@@ -246,8 +246,8 @@ test("public mode offers only problems that need no per-team gateway", async () 
           },
         },
       },
-    },
-  ]);
+    })),
+  );
 });
 
 test("the host console refuses a non-loopback bind unless a proxy publishes it", async () => {

@@ -73,6 +73,8 @@ jobs:
       # Playwright's pinned Chromium for the browser rehearsal (the runner has none preinstalled).
       - name: Install Chromium for the browser rehearsal
         run: bunx playwright-core install --with-deps chromium
+      - name: Forensic evidence, citations, scoring and SQLite restart
+        run: bun run scripts/local-host/tests/forensic-browser-e2e.ts
       - name: Critical browser flow (organizer + two participants, real Docker)
         if: github.event_name == 'pull_request'
         env:
@@ -93,7 +95,13 @@ jobs:
             .tenkacloud/host-ui-review/local-event-create.png
             .tenkacloud/host-ui-review/participant-competition.png
             .tenkacloud/host-ui-review/participant-scoreboard.png
+            .tenkacloud/host-ui-review/forensic-organizer-started.png
+            .tenkacloud/host-ui-review/forensic-evidence-explanation.png
+            .tenkacloud/host-ui-review/forensic-official-history.png
+            .tenkacloud/host-ui-review/forensic-official-ranking.png
+            .tenkacloud/host-ui-review/forensic-timeline-hints.png
+            .tenkacloud/host-ui-review/forensic-recovery-hints.png
           retention-days: 3
-          # The parent directory is hidden; only the four reviewed PNGs above are eligible.
+          # The parent directory is hidden; only the reviewed PNGs above are eligible.
           include-hidden-files: true
           if-no-files-found: ignore

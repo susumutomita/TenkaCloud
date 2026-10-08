@@ -63,7 +63,9 @@
         "scripts/local-host/tests/saml-browser-e2e.ts",
         "scripts/local-host/tests/audit-browser-e2e.ts",
         "scripts/cloud-hosting/main.ts",
-        "scripts/cloud-hosting/launcher-check.ts"
+        "scripts/cloud-hosting/launcher-check.ts",
+        "scripts/local-host/tests/forensic-browser-e2e.ts",
+        "scripts/local-host/tests/forensic-process-fixture.ts"
       ],
       "project": ["scripts/**/*.ts"]
     },

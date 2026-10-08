@@ -150,17 +150,20 @@ export class CompetitionEngine extends DockerHostingEngine {
     const base = docker.event.problems.length ? await super.view(docker) : { problems: [] };
     const battles = context.event.problems
       .filter((problem) => kinds.get(problem.problemId) === "coordination")
-      .map((problem) =>
-        coordinationProblemView(
+      .map((problem) => {
+        const scores = context.team.scoreEvents.filter(
+          (event) => event.problemId === problem.problemId && event.source === "coordination",
+        );
+        return coordinationProblemView(
           problem,
-          context.team.scoreEvents
-            .filter(
-              (event) => event.problemId === problem.problemId && event.source === "coordination",
-            )
-            .reduce((sum, event) => sum + event.points, 0),
+          scores.reduce((sum, event) => sum + event.points, 0),
           context.event.createdAt,
-        ),
-      );
+          scores
+            .map((event) => event.occurredAt)
+            .sort((left, right) => left.localeCompare(right))
+            .at(-1),
+        );
+      });
     const cloud = this.only(context, kinds, "cloudformation");
     const stacks = cloud.event.problems.length ? await this.aws().view(cloud) : { problems: [] };
     return {

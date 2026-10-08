@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     const catalog = await api(admin, "GET", "/host/catalog", token);
     assert.deepEqual(
       (catalog.body.items as { problemId: string }[]).map((item) => item.problemId),
-      ["ac26-crypto-battle"],
+      ["ac26-crypto-battle", "forensic-casebook"],
     );
 
     const created = await api(admin, "POST", "/events", token, {
