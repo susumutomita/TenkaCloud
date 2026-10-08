@@ -168,6 +168,31 @@ test("reviewed Session Defense exposes only its component and styles", () => {
     );
 });
 
+test("reviewed Tenant Boundary Duel exposes only its component and styles", () => {
+  const path = join(root, "problems/battles/tenant-boundary-duel/metadata.json");
+  const projected = publicMetadata(readFileSync(path, "utf8"), path);
+  if (!projected) throw new Error("Missing Tenant Boundary Duel metadata.");
+  expect(JSON.parse(projected).runtime).toEqual({ provider: "local", engine: "bun" });
+  for (const file of ["portal/StatusPanel.tsx", "portal/style.css"])
+    expect(() =>
+      assertHostingModule(`/repo/problems/battles/tenant-boundary-duel/${file}`),
+    ).not.toThrow();
+  for (const file of [
+    "game/reducer.ts",
+    "game/types.ts",
+    "game/policy.ts",
+    "tests/game.test.ts",
+    "docs/INSTRUCTOR.ja.md",
+    "coordination/tenant-boundary-duel.ts",
+    "dev/app.tsx",
+    "docs/SECURITY.md",
+    "portal/extra.ts",
+  ])
+    expect(() =>
+      assertHostingModule(`/repo/problems/battles/tenant-boundary-duel/${file}`),
+    ).toThrow("Unreviewed problem content");
+});
+
 test("course metadata survives both browser projections without exposing author-only fields", () => {
   const path = join(root, "problems/challenges/ac26-w5-lwe-rlwe/metadata.json");
   const raw = JSON.parse(readFileSync(path, "utf8"));

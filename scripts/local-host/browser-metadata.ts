@@ -159,7 +159,7 @@ export function assertHostingModule(id: string): void {
   )
     return;
   if (
-    /\/problems\/battles\/session-defense\/portal\/(?:StatusPanel\.tsx|style\.css)(?:\?.*)?$/u.test(
+    /\/problems\/battles\/(?:session-defense|tenant-boundary-duel)\/portal\/(?:StatusPanel\.tsx|style\.css)(?:\?.*)?$/u.test(
       normalized,
     )
   )

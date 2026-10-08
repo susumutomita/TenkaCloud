@@ -32,11 +32,13 @@ interface Body {
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
 test("two-seat Battle admission rejects incompatible rosters and state budgets before credentials", () => {
-  for (const id of ["pi-siege", "session-defense"]) {
+  for (const id of ["pi-siege", "session-defense", "tenant-boundary-duel"]) {
     const problem = coordinationCatalog(root).find((p) => p.problemId === id);
     if (!problem) throw new Error("Two-seat Battle absent from reviewed native catalog");
     for (const n of [1, 3, 40])
-      expect(() => assertCoordinationRoster([problem], n)).toThrow("exactly 2 teams");
+      expect(() => assertCoordinationRoster([problem], n)).toThrow(
+        id === "tenant-boundary-duel" && n === 40 ? "state budget" : "exactly 2 teams",
+      );
     expect(() => assertCoordinationRoster([problem], 2)).not.toThrow();
     const definition = JSON.parse(problem.definition);
     definition.metadata.interTeamCoordination.stateBudget.bytesPerTeam = 2 * 1024 * 1024;
