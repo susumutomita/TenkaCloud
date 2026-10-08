@@ -132,7 +132,7 @@ for (const problemId of ["ac26-crypto-battle", "pi-siege", "session-defense"]) {
         clock += 10_000;
         const rejected = await request(teamKey, { ...body, runId }, key);
         expect(rejected.status).toBe(409);
-        expect(rejected.body.error).toBe("coordination_run_changed");
+        expect(rejected.body.error).toBe("stale_run");
         expect(plugin.mock.calls.length).toBe(pluginCalls);
         expect(receipt.mock.calls.length).toBe(receiptCalls);
         service.flush();
@@ -170,7 +170,7 @@ for (const problemId of ["ac26-crypto-battle", "pi-siege", "session-defense"]) {
         pluginCalls = plugin.mock.calls.length;
       const stale = await request(a.teamLoginKey, body, nonce);
       expect(stale.status).toBe(409);
-      expect(stale.body.error).toBe("coordination_run_changed");
+      expect(stale.body.error).toBe("stale_run");
       expect(plugin.mock.calls.length).toBe(pluginCalls);
       service.flush();
       expect(snapshot()).toEqual(before);

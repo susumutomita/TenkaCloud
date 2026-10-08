@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   EventCreateCapacityNotice,
   eventCapacity,
+  eventCreationErrorMessage,
   type HostCatalog,
 } from "../../../src/pages/event-create/LocalHostEventCreate";
 
@@ -49,4 +50,17 @@ describe("cloud creation capacity", () => {
     );
     expect(screen.getByText('event_create.problem_count_invalid:{"max":50}')).toBeInTheDocument();
   });
+});
+
+it("explains the legacy coordination rejection and preserves unrelated failures", () => {
+  const label = "別の対戦問題を選ぶには選択中の問題を解除してください";
+  expect(
+    eventCreationErrorMessage(
+      new Error("API 422: Choose at most one coordination Battle per event."),
+      label,
+    ),
+  ).toBe(label);
+  expect(eventCreationErrorMessage(new Error("API 422: Unrelated failure"), label)).toBe(
+    "API 422: Unrelated failure",
+  );
 });

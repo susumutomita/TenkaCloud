@@ -32,6 +32,7 @@ export interface HostCatalog {
   /** Problem IDs the host can run; empty until loaded (nothing is selectable meanwhile). */
   readonly supported: ReadonlySet<string>;
   readonly cloud: ReadonlySet<string>;
+  readonly coordination?: ReadonlySet<string>;
   readonly error: string | null;
   readonly loading: boolean;
   readonly limits: HostLimits;
@@ -46,6 +47,7 @@ const EMPTY: ReadonlySet<string> = new Set();
 export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
   const [supported, setSupported] = useState<ReadonlySet<string>>(EMPTY);
   const [cloud, setCloud] = useState<ReadonlySet<string>>(EMPTY);
+  const [coordination, setCoordination] = useState<ReadonlySet<string>>(EMPTY);
   const [limits, setLimits] = useState<HostLimits>(LEGACY_LIMITS);
   const [content, setContent] = useState<HostCatalog["content"]>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +69,13 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
           ),
         );
         setSupported(new Set(response.items.map((item) => item.problemId)));
+        setCoordination(
+          new Set(
+            response.items
+              .filter((item) => item.runtime === "coordination")
+              .map((item) => item.problemId),
+          ),
+        );
         setCloud(
           new Set(
             response.items
@@ -87,7 +96,7 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
       active = false;
     };
   }, [apiClient]);
-  return { supported, cloud, content, error, limits, loading };
+  return { supported, cloud, coordination, content, error, limits, loading };
 }
 
 function LocalHostEventCreateNotice({
@@ -164,4 +173,12 @@ export function EventCreateCapacityNotice({
       )}
     </>
   );
+}
+
+/** Translate the legacy host rejection without hiding unrelated server errors. */
+export function eventCreationErrorMessage(error: unknown, coordinationLabel: string): string {
+  const message = toErrorMessage(error);
+  return message === "API 422: Choose at most one coordination Battle per event."
+    ? coordinationLabel
+    : message;
 }

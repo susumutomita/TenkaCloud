@@ -1,5 +1,6 @@
 import react from "@vitejs/plugin-react-swc";
-import { createLogger, defineConfig } from "vite";
+import { createLogger, type Plugin } from "vite";
+import { defineConfig } from "vitest/config";
 import { catalogProjection } from "./catalog-projection";
 
 // admin-console と同じく Vite 7 の "vite:react-swc" 由来 deprecation warning を抑制する。
@@ -11,8 +12,28 @@ logger.warn = (msg, opts) => {
   originalWarn(msg, opts);
 };
 
+const cloudPurposeSearchBoundary: Plugin = {
+  name: "cloud-purpose-search-boundary",
+  enforce: "pre",
+  apply: "build",
+  resolveId(source, importer) {
+    if (
+      source === "./SemanticProblemSearch" &&
+      importer?.endsWith("/event-create/EventCreateProblemsetSection.tsx")
+    )
+      return "\0tenkacloud-purpose-search-not-local";
+    return null;
+  },
+  load(id) {
+    if (id === "\0tenkacloud-purpose-search-not-local")
+      return "export function SemanticProblemSearch(){throw new Error('Purpose search requires the local host build.');}";
+    return null;
+  },
+};
+
 export default defineConfig({
-  plugins: [react(), catalogProjection()],
+  plugins: [react(), catalogProjection(), cloudPurposeSearchBoundary],
+  define: { __TENKACLOUD_LOCAL_HOST_BUILD__: "false" },
   customLogger: logger,
   // admin-console (5173) と並走できるよう別ポート。
   server: { port: 5174 },

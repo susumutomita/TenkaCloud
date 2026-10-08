@@ -640,7 +640,7 @@ test("local hosting offers no AWS problem and preserves an old stack with a clea
       .catalog()
       .filter((each) => each.runtime === "coordination")
       .map((each) => each.problemId),
-  ).toEqual(["ac26-crypto-battle", "pi-siege", "session-defense"]);
+  ).toEqual(["ac26-crypto-battle", "forensic-casebook", "pi-siege", "session-defense"]);
   expect(withoutAws.catalog().filter((each) => each.runtime === "cloudformation")).toEqual([]);
   await new HostingService(fixture.store, withoutAws, HOST_KEY, () => START).recover();
   const [job] = fixture.store.jobs(event.eventId);

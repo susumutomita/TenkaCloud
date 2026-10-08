@@ -183,7 +183,13 @@
     "clear_filters": "絞り込み解除",
     "empty_filtered": "条件に一致する問題はありません。",
     "more_filters": "その他の絞り込み",
-    "selection_preserved": "絞り込みを変更しても、選んだ問題は残ります。"
+    "selection_preserved": "絞り込みを変更しても、選んだ問題は残ります。",
+    "more_above": "上にも問題があります",
+    "more_below": "下に続きがあります。スクロールして見る（キーボードでは一覧にフォーカスして↓キー）",
+    "coordination_limit": "対戦型（coordination）のBattleは、1イベントにつき最大1つ選べます。Challengeや他の形式のBattleにはこの制約はありません。",
+    "coordination_change": "変更するには選択中のチェックを外すか、下の選択済み問題から解除してください。",
+    "remove_selected": "{name}を選択から解除",
+    "coordination_limit_error": "対戦型（coordination）のBattleは1つだけ選べます。別の問題を選ぶには、選択中のBattleを解除してください。"
   },
   "problem_cost": {
     "header": "課金リスク",

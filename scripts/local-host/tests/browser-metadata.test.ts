@@ -222,3 +222,29 @@ test("the scoring facet keeps only its kind and never author scoring values", ()
   ])
     expect(project(scoring).scoring).toBeUndefined();
 });
+
+test("forensic browser allowlist exposes evidence UI, never server answers or fixture generation", () => {
+  const path = join(root, "problems/battles/forensic-casebook/metadata.json");
+  const projected = publicMetadata(readFileSync(path, "utf8"), path);
+  if (!projected) throw new Error("Missing forensic metadata.");
+  expect(JSON.parse(projected).runtime).toEqual({ provider: "local", engine: "bun" });
+  expect(JSON.parse(projected).dashboard).toEqual({
+    slots: { StatusPanel: "portal/StatusPanel.tsx" },
+  });
+  for (const file of ["portal/StatusPanel.tsx", "portal/styles.ts"])
+    expect(() =>
+      assertHostingModule(`/repo/problems/battles/forensic-casebook/${file}`),
+    ).not.toThrow();
+  for (const file of [
+    "game/index.ts",
+    "game/cases.ts",
+    "coordination/plugin.ts",
+    "dev/server.ts",
+    "tests/game.test.ts",
+    "README.md",
+    "portal/private.ts",
+  ])
+    expect(() => assertHostingModule(`/repo/problems/battles/forensic-casebook/${file}`)).toThrow(
+      "Unreviewed problem content",
+    );
+});
