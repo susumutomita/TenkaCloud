@@ -1,7 +1,8 @@
 # Competition hosting architecture
 
-This describes the unreleased integration candidate. It does not describe a
-released cloud service or claim that every restored catalog entry is playable.
+This document explains responsibilities, code structure and trust boundaries.
+Routes, schemas, limits and catalog membership belong to their implementation and
+contract tests; runtime verification records describe what was actually exercised.
 
 ## Current responsibilities
 
@@ -9,13 +10,12 @@ released cloud service or claim that every restored catalog entry is playable.
 - The local organizer key is separate from event-owned participant team keys
 - Event/team state, operation ownership, scores, receipts and authentication live
   in local SQLite with private original key files
-- New Docker events prepare up to 512 dormant jobs; participants Start / resume
-  and Stop (keep data), with no automatic eviction or reset
-- Defaults admit 3 active environments per team, 12 per host and 4096 MiB of
-  summed configured memory caps. The 40 gateway slots are active-only; dense
-  runtime-port assignments are retained when stopped
-- New Compose plans preserve authored caps and fill missing memory/CPU/PID limits
-  with 512 MiB, 1 CPU and 256 PIDs per service; old events keep their legacy lifecycle
+- [On-demand jobs](../../scripts/local-host/on-demand-containers.ts) retain owned
+  environments while participants start, resume and stop them; no automatic eviction
+  or reset occurs
+- [Container budgets](../../scripts/local-host/container-budget.ts) and
+  [runtime ports](../../scripts/local-host/runtime-ports.ts) enforce resource admission;
+  authored Compose limits and historical event lifecycles remain distinct
 - Runtime adapters manage owned Docker environments, the in-process Battle and
   coordination exercises; HTTP boundaries do not trust a submitted team identity
 - Accepted operation/ownership state is retained before external work; uncertain
@@ -104,16 +104,18 @@ do not establish complete IAM isolation. The catalog IAM audit has unresolved
 findings, so restoration is not a least-privilege certification. Previously issued
 credentials can outlive event end; current event/team state governs applicable new access.
 
-## Runtime coverage
+## Runtime responsibility and evidence
 
-The target is all 106 former local Compose problems as Challenge competitions.
-Generic catalog/workbench integration is implemented. Real Docker/browser checks
-covered SQL access and a PostgreSQL terminal, three checkpoints, team isolation,
-and stop/restart with the same container and seven inserted rows intact.
-Other problem and terminal variants remain unverified. A synthetic 100-job / 105-port event proves allocation and lifecycle,
-not Docker performance or machine capacity. Preserve capability
-failures, per-team verifier separation, safe endpoint routing and native hardware
-requirements. Catalog visibility alone is not execution evidence.
+The [Compose catalog adapter](../../scripts/local-host/docker-catalog.ts) and
+[reviewed native catalog](../../scripts/local-host/coordination-catalog.ts) connect
+problem definitions to local execution. The [cloud catalog](../../infrastructure/lib/cloud-hosting/catalog.ts)
+owns cloud membership. Preserve capability failures, per-team verifier separation,
+safe endpoint routing and native hardware requirements. Catalog visibility alone
+is not execution evidence.
+
+Use [build verification](../host-build-verification.md) and
+[rehearsal records](../host-rehearsal.md) for validation evidence. Synthetic allocation
+and lifecycle tests do not establish Docker performance or machine capacity.
 
 ## Diagram sources
 

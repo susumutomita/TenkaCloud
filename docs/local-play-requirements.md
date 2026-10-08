@@ -1,52 +1,30 @@
 # Local competition system requirements
 
-This is an unreleased integration candidate. Use macOS or Linux (including
+Use macOS or Linux (including
 WSL2), the repository-pinned Bun version, and Docker Engine with Compose for
 Docker exercises. Native Windows is not a supported entrypoint. See
 [local hosting](local-hosting.md) for startup and trusted-network restrictions.
 
 ## Capacity is workload-dependent
 
-The pinned catalog declares 106 Compose problems: 34 use one service, 67 use two,
-3 use four and 2 use six. These are definitions, not measured concurrent process
-counts; one-shot initialization services may exit. There are 154 published-port
-entries across the complete catalog. Fifteen problems additionally need a terminal.
+Plan from the selected problem definitions and runtime requirements, not a fixed
+machine-size table. The [Compose adapter](../scripts/local-host/docker-catalog.ts)
+reads the authored services, ports and capabilities. Dormant job allocation does not
+prove those environments can run concurrently.
 
-Twenty problems across four or five teams means 80 or 100 environments if every
-problem is prepared for every team. The selected mix can define 80–216 services
-for four teams or 100–270 for five. This does not establish a RAM requirement or
-prove those environments can run concurrently on a given machine.
+## Allocation and admission responsibilities
 
-## Current allocation and admission limits
+[On-demand jobs](../scripts/local-host/on-demand-containers.ts) own job admission;
+[container budgets](../scripts/local-host/container-budget.ts) own active environment
+and configured-memory checks; [runtime ports](../scripts/local-host/runtime-ports.ts)
+own port allocation. Defaults and supported overrides are in
+[entrypoint help](../scripts/local-host/main.ts). These checks sum declared caps;
+they do not sample RAM or reserve operating-system resources.
 
-New Docker events prepare up to 512 dormant team/problem jobs per event. Participants
-start or resume only the environments they need. Existing events retain their
-legacy lifecycle. The defaults are:
-
-- 3 active environments per team
-- 12 active environments across the host
-- 4096 MiB for the sum of configured container-memory caps of active environments
-- 40 gateway slots for active environments, independent of the dormant job count
-
-The memory check sums configured caps; it does not sample RAM or reserve host
-memory. It can reject a start before either environment-count limit is reached.
-New Compose plans preserve authored limits and fill missing values with 512 MiB
-memory, 1 CPU and 256 PIDs per service. Old plans are left unchanged.
-
-Override admission limits through the managed entrypoint after reviewing the workload:
-
-```sh
-make local LOCAL_ARGS="--max-active-per-team 3 --max-active-environments 12 --container-memory-mib 4096"
-```
-
-There is no automatic eviction or reset. Stop retains the existing writable layer,
-volumes and dense runtime-port assignments, not RAM. After make down / make local,
-new on-demand Docker jobs remain stopped until participants resume them.
-
-A synthetic 20-problem × 5-team plan allocated 100 jobs and 105 runtime ports.
-This proves allocation and lifecycle behavior only. It is not a 100-container
-performance result, a real Docker benchmark or a recommended machine size.
-Increasing admission limits does not establish capacity.
+There is no automatic eviction or reset. Stop retains writable layers, volumes and
+runtime-port assignments, not RAM. After shutdown and restart, participants resume
+on-demand environments explicitly. Increasing admission limits does not establish
+capacity. See [local hosting](local-hosting.md#capacity) for benchmark commands.
 
 ## What to measure before a larger event
 
@@ -63,7 +41,7 @@ terminal HTTP/WebSocket checks, a real PostgreSQL terminal was used to create da
 and complete three scored checkpoints. Its container and seven rows survived
 make down, restart and resume; a second team could not access it. This verifies
 that representative terminal, not every terminal implementation. Use the selected problem set's
-recorded evidence rather than claiming all 106 are tested playable.
+recorded evidence rather than claiming the complete catalog is tested playable.
 
 ## Native compatibility
 
@@ -75,4 +53,4 @@ A valid runtime requirement is not permission to alter machine security settings
 
 The [legacy measurements and profiles](https://github.com/susumutomita/TenkaCloud/blob/825415fcda5075ad723daf9e4514eac47d7b8bb9/docs/local-play-requirements.md)
 refer to the old individual-practice runtime. They are historical observations,
-not benchmarks of this candidate or evidence for a 20-problem competition.
+not benchmarks of the current host or evidence for a 20-problem competition.
