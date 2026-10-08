@@ -73,6 +73,8 @@ jobs:
       # Playwright's pinned Chromium for the browser rehearsal (the runner has none preinstalled).
       - name: Install Chromium for the browser rehearsal
         run: bunx playwright-core install --with-deps chromium
+      - name: Native Pi Siege, authenticated seats, official ranking and SQLite process restart
+        run: bun run scripts/local-host/tests/pi-siege-browser-e2e.ts
       - name: Forensic evidence, citations, scoring and SQLite restart
         run: bun run scripts/local-host/tests/forensic-browser-e2e.ts
       - name: Critical browser flow (organizer + two participants, real Docker)
@@ -95,6 +97,10 @@ jobs:
             .tenkacloud/host-ui-review/local-event-create.png
             .tenkacloud/host-ui-review/participant-competition.png
             .tenkacloud/host-ui-review/participant-scoreboard.png
+            .tenkacloud/host-ui-review/pi-siege/native-debrief-en.png
+            .tenkacloud/host-ui-review/pi-siege/native-debrief-ja-mobile.png
+            .tenkacloud/host-ui-review/pi-siege/native-official-ranking.png
+            .tenkacloud/host-ui-review/pi-siege/native-official-history.png
             .tenkacloud/host-ui-review/forensic-organizer-started.png
             .tenkacloud/host-ui-review/forensic-evidence-explanation.png
             .tenkacloud/host-ui-review/forensic-official-history.png

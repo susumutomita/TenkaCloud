@@ -17,6 +17,8 @@ using the repository's existing Vite pipelines.
 | --- | --- | --- |
 | 106 local Compose exercises, including `sqli-demo` | One isolated, on-demand Compose project per team/problem; workbenches and 15 opted-in terminals | Docker |
 | Cryptography Battle (`battles/ac26-crypto-battle`) | Shared match on the host; private view per team | Bun + SQLite, no Docker or AWS |
+| Pi Siege (`battles/pi-siege`) | Two-team, four-round fraction/guarantee battle | Bun + SQLite, no Docker or AWS |
+| `Session Defense Arena` (`battles/session-defense`) | Two-team synthetic token/defense battle | Bun + SQLite, no Docker or AWS |
 | Forensic Casebook (`battles/forensic-casebook`) | Three synthetic incident investigations; evidence-cited answers and private progress per team | Bun + SQLite, no Docker or AWS |
 
 The local exercises reuse their catalog statements, verifiers, hints and scoring.
@@ -186,6 +188,18 @@ For an event created by an earlier AWS-enabled host revision, retain that exact
 revision and its private state for reviewed cleanup. Pending SSM revert work must
 not be redirected to a new account or replacement stack. See
 [AWS problems use cloud hosting](#aws-problems-use-cloud-hosting).
+
+### Play Pi Siege or `Session Defense Arena`
+
+1. Create an event and select **Pi Siege** or **`Session Defense Arena`**, with exactly two teams. Each game uses a separate event.
+2. Prepare jobs, then start Schedule. Each participant signs in with their own team key and opens the chosen problem. Both press **Ready**; waiting awards no points.
+3. Pi Siege starts with p=3, q=1 and **Try a fraction**. Four rounds compare finite records, small nonzero differences, mixed row arrangements and compatible allocations. Free examples/hints explain the formulas. Published claims and counterexamples determine signed points.
+4. `Session Defense Arena` supplies synthetic lab evidence to its attacker. Try a dummy management operation, observe damage, hand over, choose defenses within six, then retest and check legitimate work. The lab tokens are not host login credentials.
+5. Use the competition's score/verdict history for reasons and the Portal Scoreboard for official ranking. Restart the host with the same data directory to continue; the standalone practice URLs do not provide native authentication or durable state.
+
+The host rejects incompatible rosters before issuing credentials, preparing jobs,
+starting Schedule or initializing a match. There is no team-add API: unsupported
+requests cannot append a third seat. Battle-only events require neither Docker nor AWS.
 
 ### Play Cryptography Battle
 
@@ -630,8 +644,10 @@ The normal portal's existing submission interface is retained.
 The build has a separate allowlist for catalog metadata. Author descriptions,
 writeups, hint content and problem implementation files must not be distributed
 through browser metadata. The safe catalog projection covers all 106 local Compose
-IDs and the supported AWS entries. Cryptography Battle remains the only executable
-portal plugin; server reducers, fixtures and private seeds are excluded. Participant instructions are returned by the
+IDs and the supported AWS entries. Executable Portal plugins are restricted to
+Cryptography Battle, Pi Siege and `Session Defense Arena`. Each new Battle permits only
+its reviewed component and public content/styles; server reducers, graders, fixtures,
+practice harnesses and organizer documents are excluded. Participant instructions are returned by the
 authenticated backend after the event starts.
 
 The organizer's own account, local operating-system processes and the checked-out
@@ -648,6 +664,8 @@ New-event limits and defaults:
 - New Compose plans preserve authored resource limits; missing limits become 512 MiB, one CPU and 256 PIDs per service
 - At most 40 active gateway slots with the default range; stopped jobs keep runtime ports but release gateways
 - A Battle's saved match state must stay under 2 MiB
+- Pi Siege and `Session Defense Arena` require exactly two teams; their declared total state budgets are 64 KiB and 32 KiB
+- At most one coordination Battle is allowed per event; use separate events for these two games
 
 Tune admission with `LOCAL_ARGS="--max-active-per-team 3 --max-active-environments 12 --container-memory-mib 4096"`.
 These are conservative admission controls, not measured capacity or a guarantee
@@ -719,7 +737,7 @@ bun run bench:host -- --mode state --teams 2,10,20,40
 ## Validation commands
 
 The hosting suite uses real HTTP listeners and SQLite. It tests the actual
-Battle plugin through Ready, LEAK, HUNT, score/rank updates, event isolation and
+Cryptography Battle plugin through Ready, LEAK, HUNT, score/rank updates, event isolation and
 restart recovery. SQL boundary tests use an explicitly test-only exercise adapter. It does not stand in for a
 production Docker or browser-interface test:
 
@@ -792,3 +810,15 @@ distribute them privately to that team. Participants sign in with the key and
 choose their team name. Shared self-registration links and receipt-based key
 retrieval are retired; previously issued team keys still work. Existing teams,
 scores and historical registration records are retained.
+
+Native Pi Siege browser verification uses the real organizer and participant interfaces,
+including two independent logins, signed official points, exact retry, a new host
+process restoring SQLite, four rounds, JA/EN history and mobile layout:
+
+```sh
+bun run test:host:pi-siege
+```
+
+Set `HOST_E2E_CHROMIUM` to an already installed matching Chromium executable when
+needed. The browser test does not require Docker or AWS. It records only reviewed
+credential-free screenshots under `.tenkacloud/host-ui-review/pi-siege/`.

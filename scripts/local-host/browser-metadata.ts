@@ -7,12 +7,12 @@ import {
   toTrackPosition,
 } from "../../packages/portal-contracts/src/problem-course-projection";
 import { parseEndpointSlot } from "../../packages/problem-sdk/src/endpoints-metadata";
-import { reviewedCoordinationIds } from "./coordination-registry";
+import { isReviewedCoordination, reviewedCoordinationPaths } from "./coordination-catalog";
 
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const reviewedNonDockerPaths = [
   "challenges/hello-world",
-  ...reviewedCoordinationIds.map((id) => `battles/${id}`),
+  ...reviewedCoordinationPaths,
   "battles/hello-world-battle",
 ] as const;
 let cachedBrowserPaths: readonly string[] | undefined;
@@ -69,6 +69,7 @@ export function publicMetadata(code: string, id: string): string | null {
     raw.i18n && typeof raw.i18n === "object" ? (raw.i18n as Record<string, unknown>) : {};
   const english =
     i18n.en && typeof i18n.en === "object" ? (i18n.en as Record<string, unknown>) : {};
+  const native = isReviewedCoordination(raw.id);
   return JSON.stringify({
     id: raw.id,
     name: raw.name,
@@ -88,10 +89,10 @@ export function publicMetadata(code: string, id: string): string | null {
     tags: Array.isArray(raw.tags) ? raw.tags : [],
     // The catalog facet needs only the public classification, never scoring parameters.
     ...(typeof scoring.kind === "string" ? { scoring: { kind: scoring.kind } } : {}),
-    runtime: reviewedCoordinationIds.includes(String(raw.id))
+    runtime: native
       ? { provider: "local", engine: "bun" }
       : { provider: runtime.provider, engine: runtime.engine },
-    ...(reviewedCoordinationIds.includes(String(raw.id))
+    ...(native
       ? { dashboard: raw.dashboard, interTeamCoordination: raw.interTeamCoordination }
       : {}),
     ...(raw.id === "hello-world-battle" ? { endpoints: publicEndpointSlots(raw.endpoints) } : {}),
@@ -124,7 +125,7 @@ export function narrowCatalog(code: string, id: string): string | null {
   const publicPaths = hostBrowserProblemPaths().join(",");
   const narrowed = code.replace(glob, (_match, suffix: string) => {
     if (suffix === "portal/*.tsx")
-      return `problems/battles/{${reviewedCoordinationIds.join(",")}}/portal/*.tsx`;
+      return `problems/{${reviewedCoordinationPaths.join(",")}}/portal/*.tsx`;
     if (suffix === "*.yaml") return "problems/challenges/sqli-demo/__local_host_empty__/*.yaml";
     return `problems/{${publicPaths}}/${suffix}`;
   });
@@ -151,6 +152,18 @@ export function assertHostingModule(id: string): void {
       throw new Error(`Server-only game code entered the browser: ${id}`);
     return;
   }
+  if (
+    /\/problems\/battles\/pi-siege\/portal\/(?:StatusPanel\.tsx|content(?:\.en)?\.ts|localize\.ts|style\.css)(?:\?.*)?$/u.test(
+      normalized,
+    )
+  )
+    return;
+  if (
+    /\/problems\/battles\/session-defense\/portal\/(?:StatusPanel\.tsx|style\.css)(?:\?.*)?$/u.test(
+      normalized,
+    )
+  )
+    return;
   if (
     /\/problems\/battles\/forensic-casebook\/portal\/(?:StatusPanel\.tsx|styles\.ts)(?:\?.*)?$/u.test(
       normalized,

@@ -3,8 +3,12 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { buildSync } from "esbuild";
+import {
+  LOCAL_COORDINATION_STATE_LIMIT,
+  requiredCoordinationTeams,
+  reviewedCoordinationBattles,
+} from "./coordination-catalog";
 import type { HostPlugin } from "./coordination-core";
-import { reviewedCoordinationIds } from "./coordination-registry";
 import { privateDirectory } from "./files";
 import { HostError, organizerProblemContent, type Problem } from "./model";
 
@@ -18,15 +22,16 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 
 /** Reviewed local compatibility list. Game rules remain in the catalog's SDK plugin. */
 export function coordinationCatalog(root: string): Problem[] {
-  return reviewedCoordinationIds.map((problemId) => coordinationProblem(root, problemId));
+  return reviewedCoordinationBattles.map(({ problemId }) => coordinationProblem(root, problemId));
 }
-
 function coordinationProblem(root: string, problemId: string): Problem {
   const directory = join(root, "problems/battles", problemId);
   const metadata = JSON.parse(readFileSync(join(directory, "metadata.json"), "utf8")) as Record<
     string,
     unknown
   >;
+  if (metadata.id !== problemId || metadata.category !== "Battle")
+    throw new Error(`Invalid reviewed coordination identity: ${problemId}`);
   const coordination = metadata.interTeamCoordination as { plugin: string };
   const built = buildSync({
     entryPoints: [join(directory, coordination.plugin)],
@@ -61,6 +66,34 @@ function coordinationProblem(root: string, problemId: string): Problem {
       digest: hash(bundle),
     } satisfies CoordinationDefinition),
   };
+}
+
+/** Reject an incompatible roster before issuing keys or preparing a match. */
+export function assertCoordinationRoster(problems: readonly Problem[], teams: number): void {
+  for (const problem of problems) {
+    if (problem.runtime !== "coordination") continue;
+    const required = requiredCoordinationTeams(problem.problemId);
+    const { metadata } = JSON.parse(problem.definition) as CoordinationDefinition;
+    const budget = (
+      metadata?.interTeamCoordination as
+        | { stateBudget?: { baseBytes: number; bytesPerTeam: number } }
+        | undefined
+    )?.stateBudget;
+    if (
+      budget &&
+      (!Number.isSafeInteger(budget.baseBytes) ||
+        budget.baseBytes < 0 ||
+        !Number.isSafeInteger(budget.bytesPerTeam) ||
+        budget.bytesPerTeam < 1 ||
+        budget.baseBytes + budget.bytesPerTeam * teams > LOCAL_COORDINATION_STATE_LIMIT)
+    )
+      throw new HostError(
+        422,
+        `${problem.name} exceeds the local coordination state budget for ${teams} teams.`,
+      );
+    if (required !== undefined && teams !== required)
+      throw new HostError(422, `${problem.name} requires exactly ${required} teams.`);
+  }
 }
 
 export class LocalPluginLoader {

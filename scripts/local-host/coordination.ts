@@ -1,9 +1,11 @@
+import { LOCAL_COORDINATION_STATE_LIMIT } from "./coordination-catalog";
 import {
   createMatch,
   type LocalMatch,
   type MatchTransition,
   transitionMatch,
 } from "./coordination-core";
+import { assertCoordinationRoster } from "./coordination-runtime";
 import { type Gate, gate, HostError, type HostedEvent, object, type Problem } from "./model";
 import { projectedScore } from "./score";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";
@@ -67,6 +69,7 @@ export class LocalCoordination {
       };
     } else {
       const teams = this.host.store.teams(event.eventId);
+      assertCoordinationRoster([problem], teams.length);
       const match = createMatch(this.plugin(problem), {
         eventId: event.eventId,
         teamIds: teams.map((team) => team.teamId).sort((a, b) => a.localeCompare(b)),
@@ -89,7 +92,7 @@ export class LocalCoordination {
     receipt?: () => void,
   ): void {
     const body = JSON.stringify(result.match);
-    if (Buffer.byteLength(body) > 2 * 1024 * 1024)
+    if (Buffer.byteLength(body) > LOCAL_COORDINATION_STATE_LIMIT)
       throw new HostError(503, "Coordination state exceeds the local runtime limit.");
     const row = this.row(event, problem);
     const scored = Object.values(result.deltas).some((delta) => delta !== 0);
@@ -200,6 +203,14 @@ export class LocalCoordination {
     );
     this.save(event, problem, result, settle);
   }
+  private assertOperationScope(body: Record<string, unknown>, runId: string): void {
+    if ("teamId" in body || "eventId" in body)
+      throw new HostError(400, "Identity comes from the authenticated team key.");
+    // A local run is this authenticated team's deployment. Reject old Portal requests
+    // before receipt lookup or any tick; the supplied ID never selects another match.
+    if ("runId" in body && body.runId !== runId)
+      throw new HostError(409, "This Battle run is no longer current.", "stale_run");
+  }
   private authorize(request: ApiRequest) {
     const projection =
       request.method === "GET" && request.path === "/portal/me/coordination/projection";
@@ -224,8 +235,7 @@ export class LocalCoordination {
     } else if (gate(event, this.host.now()).kind === "scoring_not_started")
       throw new HostError(409, "The event has not started.");
     const body = move ? object(request.body) : {};
-    if ("teamId" in body || "eventId" in body)
-      throw new HostError(400, "Identity comes from the authenticated team key.");
+    this.assertOperationScope(body, job.jobId);
     this.assertCurrentRun(request, move, body, job.jobId);
     if (move) object(body.op);
     return { team, event, problem, move, body };
