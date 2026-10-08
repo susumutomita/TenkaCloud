@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { canMutateTenant, useApiClient } from "../../api/client";
+import { canManageConnections, useApiClient } from "../../api/client";
 import {
   getTeamCredentialStatus,
   registerTeamCredential,
@@ -54,11 +54,15 @@ export interface UseTeamCloudCredentialsResult {
   readonly checkStatus: () => Promise<void>;
 }
 
-export function useTeamCloudCredentials(config: AppConfig): UseTeamCloudCredentialsResult {
+export function useTeamCloudCredentials(
+  config: AppConfig,
+  initialProvider: TeamCredentialProvider = "sakura",
+): UseTeamCloudCredentialsResult {
   const apiClient = useApiClient(config);
-  const canMutate = canMutateTenant(apiClient);
+  const canMutate =
+    canManageConnections(config, apiClient) && config.features?.nonAwsRuntime === true;
   const t = useT();
-  const [provider, setProviderState] = useState<TeamCredentialProvider>("sakura");
+  const [provider, setProviderState] = useState<TeamCredentialProvider>(initialProvider);
   const [teamSlug, setTeamSlug] = useState("");
   const [credentialJson, setCredentialJson] = useState("");
   const [inFlight, setInFlight] = useState(false);
@@ -73,8 +77,15 @@ export function useTeamCloudCredentials(config: AppConfig): UseTeamCloudCredenti
 
   // Select の選択値は常に PROVIDER_OPTIONS 由来なので narrowing cast で受ける。
   const setProvider = useCallback(
-    (value: string) => setProviderState(value as TeamCredentialProvider),
-    [],
+    (value: string) => {
+      if (inFlight || !PROVIDER_OPTIONS.some((option) => option.value === value)) return;
+      setProviderState(value as TeamCredentialProvider);
+      setCredentialJson("");
+      setTeamSlug("");
+      setNotice(null);
+      setError(null);
+    },
+    [inFlight],
   );
 
   const run = useCallback(async (fn: () => Promise<void>): Promise<void> => {
@@ -103,6 +114,7 @@ export function useTeamCloudCredentials(config: AppConfig): UseTeamCloudCredenti
     }
     await run(async () => {
       await registerTeamCredential(apiClient, provider, teamSlug, parsed);
+      setCredentialJson("");
       setNotice(t("team_cloud_credentials.registered"));
     });
   }, [apiClient, canMutate, credentialJson, provider, teamSlug, run, t]);

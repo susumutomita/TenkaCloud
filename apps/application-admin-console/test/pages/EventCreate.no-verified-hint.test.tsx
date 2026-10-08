@@ -46,7 +46,7 @@ function renderPage() {
       <MemoryRouter initialEntries={["/events/new"]}>
         <Routes>
           <Route path="/events/new" element={<EventCreatePage config={config} />} />
-          <Route path="/competitor-accounts" element={<div>Competitor Accounts page</div>} />
+          <Route path="/competitor-accounts" element={<div>クラウド連携 page</div>} />
         </Routes>
       </MemoryRouter>
     </I18nProvider>,
@@ -63,7 +63,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventCreatePage #719 verified account 0 件の救済 UX", () => {
-  it("should show Alert and Competitor Accounts link when there are zero verified accounts", async () => {
+  it("should show Alert and クラウド連携 link when there are zero verified accounts", async () => {
     mocks.listCompetitorAccounts.mockResolvedValueOnce({ items: [] });
     renderPage();
 
@@ -71,7 +71,7 @@ describe("EventCreatePage #719 verified account 0 件の救済 UX", () => {
       await screen.findByText(/接続確認が完了した Competitor Account がありません/),
     ).toBeInTheDocument();
 
-    const link = screen.getByRole("link", { name: "Competitor Accounts へ移動" });
+    const link = screen.getByRole("link", { name: "クラウド連携 へ移動" });
     expect(link).toHaveAttribute("href", "/competitor-accounts");
 
     const disabledSelect = screen

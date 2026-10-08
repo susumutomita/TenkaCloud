@@ -34,8 +34,12 @@ const { TeamCloudCredentialsPanel } = await import(
   "../../../src/pages/competitor-accounts/TeamCloudCredentialsPanel"
 );
 
-const config = { apiBaseUrl: "https://api.test", tenantId: "t1" } as AppConfig;
-const FAKE_CLIENT = { put: vi.fn(), del: vi.fn(), get: vi.fn() };
+const config = {
+  apiBaseUrl: "https://api.test",
+  tenantId: "t1",
+  features: { nonAwsRuntime: true },
+} as AppConfig;
+const FAKE_CLIENT = { cloudOrganizerRole: "TenantAdmin", put: vi.fn(), del: vi.fn(), get: vi.fn() };
 const READ_ONLY_CLIENT = {
   put: vi.fn(),
   del: vi.fn(),
@@ -149,6 +153,30 @@ describe("TeamCloudCredentialsPanel (#1413)", () => {
     await waitFor(() =>
       expect(mocks.registerTeamCredential).toHaveBeenCalledWith(FAKE_CLIENT, "gcp", "team-a", {}),
     );
+  });
+
+  it("clears credential input and notices when switching provider", async () => {
+    const w = renderPanel();
+    setTeamSlug(w, "team-a");
+    btn("team_cloud_credentials.status_button").click();
+    await screen.findByText("team_cloud_credentials.status_registered");
+    setCredential(w, '{"accessToken":"dummy","accessTokenSecret":"dummy"}');
+    w.findSelect()?.openDropdown();
+    w.findSelect()?.selectOptionByValue("azure");
+    expect(w.findTextarea()?.getTextareaValue()).toBe("");
+    expect(w.findInput()?.getInputValue()).toBe("");
+    expect(screen.queryByText("team_cloud_credentials.status_registered")).not.toBeInTheDocument();
+  });
+
+  it("does not permit credential actions when the environment feature is unavailable", () => {
+    const { container } = render(
+      <TeamCloudCredentialsPanel config={{ ...config, features: undefined }} />,
+    );
+    const w = createWrapper(container);
+    setTeamSlug(w, "team-a");
+    setCredential(w, "{}");
+    expect(btn("team_cloud_credentials.register_button")).toBeDisabled();
+    expect(btn("team_cloud_credentials.status_button")).toBeDisabled();
   });
 
   it("should mark an invalid team slug and disable register", () => {

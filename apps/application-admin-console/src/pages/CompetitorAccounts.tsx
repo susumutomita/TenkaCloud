@@ -1,6 +1,7 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
@@ -19,12 +20,11 @@ import {
   isBootstrapUrlMissing,
 } from "../lib/competitor-bootstrap";
 import { liteDrillCheckpointCode, markLiteDrillCheckpointShown } from "../lib/lite-drill";
-import { AddAccountModal } from "./competitor-accounts/AddAccountModal";
 import { BulkImportModal } from "./competitor-accounts/BulkImportModal";
+import { CloudConnectionModal } from "./competitor-accounts/CloudConnectionModal";
 import { CompetitorAccountDeleteModal } from "./competitor-accounts/CompetitorAccountDeleteModal";
 import { CompetitorAccountsTable } from "./competitor-accounts/CompetitorAccountsTable";
 import { SecretRevealModal } from "./competitor-accounts/SecretRevealModal";
-import { TeamCloudCredentialsPanel } from "./competitor-accounts/TeamCloudCredentialsPanel";
 import { useCompetitorAccounts } from "./competitor-accounts/useCompetitorAccounts";
 
 export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
@@ -95,9 +95,6 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         )}
         actions={
           <SpaceBetween direction="horizontal" size="xs">
-            <Button disabled={!canMutateTenant} onClick={() => setBulkModalVisible(true)}>
-              {t("competitor_accounts.bulk_button")}
-            </Button>
             <Button
               variant="primary"
               disabled={!canMutateTenant}
@@ -111,21 +108,6 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         {t("competitor_accounts.title")}
       </Header>
 
-      {!isLocalHost(config) && isBootstrapUrlMissing(config.competitorBootstrapTemplateUrl) && (
-        <Alert type="warning" header={t("competitor_accounts.bootstrap_url_missing_header")}>
-          {t("competitor_accounts.bootstrap_url_missing_body")}
-        </Alert>
-      )}
-
-      <Alert type="info" header={t("competitor_accounts.host_bootstrap_header")}>
-        <SpaceBetween size="xs">
-          {t("competitor_accounts.host_bootstrap_info")}
-          <a href={COMPETITOR_ACCOUNT_ONBOARDING_URL} target="_blank" rel="noreferrer noopener">
-            {t("competitor_accounts.bootstrap_guide_link")}
-          </a>
-        </SpaceBetween>
-      </Alert>
-
       {error && <FriendlyErrorAlert error={error} />}
 
       {revealedDrillCode && (
@@ -138,31 +120,50 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         />
       )}
 
-      <CompetitorAccountsTable
-        items={items ?? []}
-        verifyInFlight={verifyInFlight}
-        verifyAllProgress={verifyAllProgress}
-        canMutateTenant={canMutateTenant}
-        onVerify={(awsAccountId) => void verify(awsAccountId)}
-        onVerifyAll={() => void verifyAll()}
-        onRequestDelete={setDeleteTarget}
-        onAdd={() => setAddModalVisible(true)}
-      />
+      <ExpandableSection defaultExpanded headerText={t("cloud_connections.aws_accounts")}>
+        <SpaceBetween size="m">
+          <Button disabled={!canMutateTenant} onClick={() => setBulkModalVisible(true)}>
+            {t("competitor_accounts.bulk_button")}
+          </Button>
+          {!isLocalHost(config) && isBootstrapUrlMissing(config.competitorBootstrapTemplateUrl) && (
+            <Alert type="warning" header={t("competitor_accounts.bootstrap_url_missing_header")}>
+              {t("competitor_accounts.bootstrap_url_missing_body")}
+            </Alert>
+          )}
 
-      {/* Issue #1413: non-AWS (sakura/azure/gcp) per-team credential onboarding.
-          Feature-flagged off until the non-AWS runtimes are verified end-to-end. */}
-      {config.features?.nonAwsRuntime ? <TeamCloudCredentialsPanel config={config} /> : null}
+          <Alert type="info" header={t("competitor_accounts.host_bootstrap_header")}>
+            <SpaceBetween size="xs">
+              {t("competitor_accounts.host_bootstrap_info")}
+              <a href={COMPETITOR_ACCOUNT_ONBOARDING_URL} target="_blank" rel="noreferrer noopener">
+                {t("competitor_accounts.bootstrap_guide_link")}
+              </a>
+            </SpaceBetween>
+          </Alert>
 
-      <AddAccountModal
-        config={config}
-        visible={addModalVisible}
-        onDismiss={() => setAddModalVisible(false)}
-        onSuccess={(res) => {
-          setAddModalVisible(false);
-          setShowSecret(res);
-          void reload();
-        }}
-      />
+          <CompetitorAccountsTable
+            items={items ?? []}
+            verifyInFlight={verifyInFlight}
+            verifyAllProgress={verifyAllProgress}
+            canMutateTenant={canMutateTenant}
+            onVerify={(awsAccountId) => void verify(awsAccountId)}
+            onVerifyAll={() => void verifyAll()}
+            onRequestDelete={setDeleteTarget}
+            onAdd={() => setAddModalVisible(true)}
+          />
+        </SpaceBetween>
+      </ExpandableSection>
+
+      {addModalVisible && (
+        <CloudConnectionModal
+          config={config}
+          onDismiss={() => setAddModalVisible(false)}
+          onSuccess={(res) => {
+            setAddModalVisible(false);
+            setShowSecret(res);
+            void reload();
+          }}
+        />
+      )}
 
       <BulkImportModal
         config={config}

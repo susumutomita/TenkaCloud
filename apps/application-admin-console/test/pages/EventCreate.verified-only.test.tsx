@@ -8,7 +8,7 @@ import { I18nProvider } from "../../src/i18n";
  *
  * - verified=true な CompetitorAccount のみが Select の選択肢に出る
  * - verified=false / 未登録は drop-down に出ない (UI 上で deploy 不可)
- * - 0 件のときは「Competitor Accounts へ移動」の導線を出す
+ * - 0 件のときは「クラウド連携 へ移動」の導線を出す
  *
  * 1 ファイルで完結させるため、`useApiClient` / `listCompetitorAccounts` を vi.mock し、
  * `createEvent` は touch しない (= submit 経路は別 test の責務)。
@@ -96,7 +96,7 @@ describe("EventCreatePage (Phase 2.2 verified-only)", () => {
     expect(formatVerifiedAccountSummary({ ...account, alias: undefined })).toBe("111111111111");
   });
 
-  it("should show Alert with link to Competitor Accounts when there are zero accounts", async () => {
+  it("should show Alert with link to クラウド連携 when there are zero accounts", async () => {
     mocks.listCompetitorAccounts.mockResolvedValueOnce({ items: [] });
     renderPage();
     // listCompetitorAccounts が呼ばれた後、warning Alert が出る
@@ -105,8 +105,8 @@ describe("EventCreatePage (Phase 2.2 verified-only)", () => {
         screen.getByText(/接続確認が完了した Competitor Account がありません/),
       ).toBeInTheDocument();
     });
-    // 導線として Competitor Accounts への link を出す
-    expect(screen.getByText(/Competitor Accounts へ移動/)).toBeInTheDocument();
+    // 導線として クラウド連携 への link を出す
+    expect(screen.getByText(/クラウド連携 へ移動/)).toBeInTheDocument();
   });
 
   it("should NOT include verified=false accounts in dropdown options", async () => {
@@ -154,7 +154,7 @@ describe("EventCreatePage (Phase 2.2 verified-only)", () => {
     mocks.listCompetitorAccounts.mockRejectedValueOnce(new Error("network down"));
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText(/Competitor Accounts の取得に失敗しました/)).toBeInTheDocument();
+      expect(screen.getByText(/クラウド連携 の取得に失敗しました/)).toBeInTheDocument();
     });
     expect(screen.getByText(/network down/)).toBeInTheDocument();
   });

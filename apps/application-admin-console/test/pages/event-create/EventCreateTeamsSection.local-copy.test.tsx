@@ -42,7 +42,7 @@ const props = (over: Partial<EventCreateTeamsSectionProps> = {}): EventCreateTea
 });
 
 describe("EventCreateTeamsSection local-hosting copy", () => {
-  it("should not mention deploy destinations or Competitor Accounts when providerMode is local", () => {
+  it("should not mention deploy destinations or Cloud connections when providerMode is local", () => {
     render(
       <EventCreateTeamsSection
         {...props({
@@ -55,15 +55,15 @@ describe("EventCreateTeamsSection local-hosting copy", () => {
         "Every team plays this event on this computer. Give each team a short internal ID; it cannot be changed after deploy.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Competitor Accounts/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Cloud connections/)).not.toBeInTheDocument();
     expect(screen.queryByText(/deploy destination/i)).not.toBeInTheDocument();
   });
 
-  it("should keep the cloud description (deploy destination / Competitor Accounts) outside local hosting", () => {
+  it("should keep the cloud description (deploy destination / Cloud connections) outside local hosting", () => {
     render(<EventCreateTeamsSection {...props()} />);
     expect(
       screen.getByText(
-        "Choose each team's deploy destination for every selected problem target. AWS uses a verified account; non-AWS targets use a team credential slug registered under Competitor Accounts. A team's internal ID cannot be changed after deploy.",
+        "Choose each team's deploy destination for every selected problem target. AWS uses a verified account; non-AWS targets use a team credential slug registered under Cloud connections. A team's internal ID cannot be changed after deploy.",
       ),
     ).toBeInTheDocument();
   });
