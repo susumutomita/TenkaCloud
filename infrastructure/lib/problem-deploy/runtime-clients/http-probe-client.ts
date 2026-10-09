@@ -36,13 +36,7 @@ export async function probeUrl(url: string, options: ProbeOptions = {}): Promise
     return { ok: false, status: undefined, responseTimeMs: Date.now() - startedAt };
   }
   try {
-    const response = await fetch(url, {
-      method: options.method ?? "GET",
-      signal: controller.signal,
-      ...(options.method === "POST" && options.body !== undefined
-        ? { headers: { "content-type": "application/json" }, body: options.body }
-        : {}),
-    });
+    const response = await fetchWithSafeRedirects(url, options, controller.signal);
     const responseTimeMs = Date.now() - startedAt;
     const finalUrl = response.url;
     const safeFinal = !finalUrl || isSsrfSafeUrl(finalUrl);
@@ -64,6 +58,49 @@ export async function probeUrl(url: string, options: ProbeOptions = {}): Promise
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Match fetch's redirect limit and POST-to-GET behavior, but validate every Location before I/O.
+// Hostname checks do not resolve DNS; address pinning remains a separate defense.
+async function fetchWithSafeRedirects(
+  initialUrl: string,
+  options: ProbeOptions,
+  signal: AbortSignal,
+): Promise<Response> {
+  let url = initialUrl;
+  let method = options.method ?? "GET";
+  for (let redirects = 0; ; redirects++) {
+    if (!isSsrfSafeUrl(url)) throw new Error("Unsafe probe URL");
+    const response = await fetch(url, probeRequest(method, options, signal));
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers.get("location");
+    if (location === null) return response;
+    // Release the intermediate response even when the next URL is rejected or malformed.
+    await response.body?.cancel();
+    if (redirects >= 20) throw new Error("Too many probe redirects");
+    url = new URL(location, url).href;
+    if (
+      response.status === 303 ||
+      ((response.status === 301 || response.status === 302) && method === "POST")
+    ) {
+      method = "GET";
+    }
+  }
+}
+
+function probeRequest(
+  method: "GET" | "POST",
+  options: ProbeOptions,
+  signal: AbortSignal,
+): RequestInit {
+  return {
+    method,
+    signal,
+    redirect: "manual",
+    ...(method === "POST" && options.body !== undefined
+      ? { headers: { "content-type": "application/json" }, body: options.body }
+      : {}),
+  };
 }
 
 async function readCappedBody(response: Response, maxBytes: number): Promise<string | undefined> {

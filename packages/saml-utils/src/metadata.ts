@@ -65,6 +65,12 @@ export function validateSamlMetadata(xml: unknown): SamlMetadataValidationResult
   if (!trimmed.startsWith("<")) {
     return { ok: false, reason: "not_xml" };
   }
+  // Metadata must not declare DTDs or entities. Cognito still owns XML/signature validation;
+  // rejecting these declarations here is defense in depth, not proof of downstream XXE.
+  const declarations = trimmed.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, "");
+  if (/<!DOCTYPE\b|<!ENTITY\b/i.test(declarations)) {
+    return { ok: false, reason: "not_xml" };
+  }
   if (!/<(?:[A-Za-z0-9_-]+:)?EntityDescriptor\b/.test(trimmed)) {
     return { ok: false, reason: "missing_entity_descriptor" };
   }

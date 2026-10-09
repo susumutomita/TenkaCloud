@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSsrfSafeUrl } from "../shared/ssrf-guard.js";
 
 /**
  * Issue #839 follow-up Phase B: Tenant 管理者が画面/API から自社 SAML IdP を設定するための
@@ -22,7 +23,17 @@ export const TenantSamlConfigInputSchema = z.object({
     })
     .refine((u) => u.length <= 2048, {
       message: "metadataUrl が長すぎます (max 2048 文字)",
-    }),
+    })
+    .refine(
+      (u) => {
+        if (!isSsrfSafeUrl(u)) return false;
+        const url = new URL(u);
+        return url.username === "" && url.password === "";
+      },
+      {
+        message: "metadataUrl に loopback / metadata service / userinfo は指定できません",
+      },
+    ),
   providerName: z
     .string()
     .regex(PROVIDER_NAME_RE, {

@@ -86,6 +86,27 @@ describe("TenantSamlConfigInputSchema (Zod)", () => {
   });
 });
 
+describe("metadataUrl の入力制約", () => {
+  it.each([
+    "https://localhost./metadata.xml",
+    "https://127.0.0.1/metadata.xml",
+    "https://metadata.google.internal./",
+    "https://169.254.169.254/",
+    "https://[::ffff:169.254.169.254]/",
+    "https://[fd00:ec2::23]/",
+    "https://user:password@idp.example.com/metadata.xml",
+  ])("禁止先またはuserinfo %s を拒否するべき", (metadataUrl) => {
+    expect(TenantSamlConfigInputSchema.safeParse({ metadataUrl }).success).toBe(false);
+  });
+  it.each([
+    "https://idp.example.com/metadata.xml",
+    "https://idp.example.com./metadata.xml",
+    "https://10.0.1.5/metadata.xml",
+  ])("許可していたHTTPS %s を維持するべき", (metadataUrl) => {
+    expect(TenantSamlConfigInputSchema.safeParse({ metadataUrl }).success).toBe(true);
+  });
+});
+
 describe("normalizeAttributeMapping", () => {
   it("should return only the default email mapping when undefined", () => {
     expect(normalizeAttributeMapping(undefined)).toEqual({

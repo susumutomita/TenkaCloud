@@ -278,3 +278,81 @@ describe("emitAudit", () => {
     expect(call.tenantId).toBe("acme");
   });
 });
+
+describe("IdP writeのscopeとXML境界", () => {
+  const tenant: IdpScope = { kind: "tenant", tenantId: "tenant-example" };
+  it("tenantのSystemAdmin createを副作用なしで拒否するべき", async () => {
+    const deps = makeDeps();
+    const res = await createIdp(deps, tenant, {
+      ...happyBody,
+      groupToRole: { admins: "SystemAdmin" },
+    });
+    expect("error" in res && res.error.kind).toBe("validation");
+    expect(deps.cognito.created).toHaveLength(0);
+    expect(deps.store._items.size).toBe(0);
+  });
+  it("system scopeのSystemAdmin create/updateを維持するべき", async () => {
+    const deps = makeDeps();
+    const scope: IdpScope = { kind: "system" };
+    expect(
+      "error" in
+        (await createIdp(deps, scope, { ...happyBody, groupToRole: { admins: "SystemAdmin" } })),
+    ).toBe(false);
+    expect(
+      "error" in
+        (await updateIdp(deps, scope, happyBody.idpId, { groupToRole: { other: "SystemAdmin" } })),
+    ).toBe(false);
+    expect(deps.cognito.updated).toHaveLength(1);
+  });
+  it("tenantのSystemAdmin patchを拒否し保存済みmapを保つべき", async () => {
+    const deps = makeDeps();
+    await createIdp(deps, tenant, happyBody);
+    const res = await updateIdp(deps, tenant, happyBody.idpId, {
+      groupToRole: { admins: "SystemAdmin" },
+    });
+    expect("error" in res && res.error.kind).toBe("validation");
+    expect(deps.cognito.updated).toHaveLength(0);
+    expect((await deps.store.get(tenant, happyBody.idpId))?.groupToRole).toEqual(
+      happyBody.groupToRole,
+    );
+  });
+  it("旧不正mapを無関係なpatchで再送せず有効mapへの修復は許可するべき", async () => {
+    const deps = makeDeps();
+    await createIdp(deps, tenant, happyBody);
+    const current = await deps.store.get(tenant, happyBody.idpId);
+    if (!current) throw new Error("missing fixture");
+    await deps.store.put(tenant, { ...current, groupToRole: { admins: "SystemAdmin" } });
+    const res = await updateIdp(deps, tenant, happyBody.idpId, { displayName: "renamed" });
+    expect("error" in res && res.error.kind).toBe("validation");
+    expect(deps.cognito.updated).toHaveLength(0);
+    expect(
+      "error" in
+        (await updateIdp(deps, tenant, happyBody.idpId, {
+          groupToRole: { admins: "TenantAdmin" },
+        })),
+    ).toBe(false);
+  });
+  it("DTDを含むcreate/updateをCognitoとstoreの前で拒否するべき", async () => {
+    const deps = makeDeps();
+    const metadataXml = VALID_METADATA.replace(
+      "<md:EntityDescriptor",
+      '<!DOCTYPE md:EntityDescriptor [<!ENTITY example "value">]><md:EntityDescriptor',
+    );
+    const create = await createIdp(deps, tenant, { ...happyBody, metadataXml });
+    expect("error" in create && create.error.kind).toBe("invalid_metadata");
+    expect(deps.cognito.created).toHaveLength(0);
+    await createIdp(deps, tenant, happyBody);
+    const update = await updateIdp(deps, tenant, happyBody.idpId, { metadataXml });
+    expect("error" in update && update.error.kind).toBe("invalid_metadata");
+    expect(deps.cognito.updated).toHaveLength(0);
+    const current = await deps.store.get(tenant, happyBody.idpId);
+    if (!current) throw new Error("missing fixture");
+    await deps.store.put(tenant, { ...current, metadataXml });
+    const partial = await updateIdp(deps, tenant, happyBody.idpId, { displayName: "renamed" });
+    expect("error" in partial && partial.error.kind).toBe("invalid_metadata");
+    expect(deps.cognito.updated).toHaveLength(0);
+    expect(
+      "error" in (await updateIdp(deps, tenant, happyBody.idpId, { metadataXml: VALID_METADATA })),
+    ).toBe(false);
+  });
+});
