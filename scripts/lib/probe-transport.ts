@@ -3,7 +3,7 @@ import type { IncomingMessage } from "node:http";
 import * as http from "node:http";
 import * as https from "node:https";
 import { isIP, type LookupFunction } from "node:net";
-import { Readable } from "node:stream";
+import { pipeline, Readable, type Transform } from "node:stream";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { isSsrfSafeHost, isSsrfSafeUrl } from "./ssrf-guard.js";
 
@@ -28,14 +28,34 @@ export const pinnedProbeLookup: LookupFunction = (hostname, options, callback) =
 };
 
 function responseBody(response: IncomingMessage): ReadableStream<Uint8Array> {
-  const encoding = response.headers["content-encoding"];
-  const decoder = createResponseDecoder(encoding);
-  // Node and Bun expose the same web stream at runtime but their DOM/BYOB declarations differ.
-  if (!decoder) return Readable.toWeb(response) as unknown as ReadableStream<Uint8Array>;
-  // Cancelling a capped web body must also close the original HTTP socket.
-  response.on("error", (error) => decoder.destroy(error));
-  decoder.on("close", () => response.destroy());
-  return Readable.toWeb(response.pipe(decoder)) as unknown as ReadableStream<Uint8Array>;
+  const header = response.headers["content-encoding"];
+  const codings = (Array.isArray(header) ? header.join(",") : (header ?? ""))
+    .split(",")
+    .map((coding) => coding.trim().toLowerCase());
+  // Like fetch, leave a response with an unsupported coding untouched; never decode only part.
+  if (!codings.every(isSupportedCoding)) return toWebBody(response);
+  // Bound native decoder allocations before reading an untrusted response body.
+  if (codings.length > 16) throw new Error("Too many probe content encodings");
+  const decoders = codings.toReversed().map(createResponseDecoder);
+  const last = decoders[decoders.length - 1];
+  if (!last) return toWebBody(response);
+  // Attach web error/cancellation handling before starting the native pipeline. pipeline propagates
+  // failures and cancellation through every decoder and destroys the original HTTP socket.
+  const body = toWebBody(last);
+  pipeline([response, ...decoders], (error) => {
+    if (error) last.destroy(error);
+  });
+  return body;
+}
+
+function toWebBody(stream: Readable): ReadableStream<Uint8Array> {
+  // Node and Bun expose the same web stream but their DOM/BYOB declarations differ.
+  return Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>;
+}
+
+type SupportedCoding = "gzip" | "x-gzip" | "deflate" | "br";
+function isSupportedCoding(coding: string): coding is SupportedCoding {
+  return ["gzip", "x-gzip", "deflate", "br"].includes(coding);
 }
 
 /** One HTTP hop, with the original hostname retained for Host, TLS SNI and certificate checks. */
@@ -87,15 +107,14 @@ function toProbeResponse(res: IncomingMessage): Response {
   return new Response(responseBody(res), { status, headers: responseHeaders });
 }
 
-function createResponseDecoder(encoding: string | string[] | undefined) {
+function createResponseDecoder(encoding: SupportedCoding): Transform {
   switch (encoding) {
     case "gzip":
+    case "x-gzip":
       return createGunzip();
     case "deflate":
       return createInflate();
     case "br":
       return createBrotliDecompress();
-    default:
-      return undefined;
   }
 }

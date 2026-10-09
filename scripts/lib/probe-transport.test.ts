@@ -6,6 +6,7 @@ import * as http from "node:http";
 import * as https from "node:https";
 import { Readable } from "node:stream";
 import { brotliCompressSync, deflateSync, gzipSync } from "node:zlib";
+import { probeUrl } from "./http-probe-client";
 import { pinnedProbeLookup, probeTransport } from "./probe-transport";
 
 function answerDns(answers: dns.LookupAddress[], error: NodeJS.ErrnoException | null = null) {
@@ -164,6 +165,72 @@ describe("pinned HTTP transport", () => {
     vi.spyOn(http, "request").mockImplementation(fixture.impl);
     const response = await probeTransport.fetch("http://team.example.com/", {});
     expect(await response.text()).toBe("compressed");
+    expect(fixture.response.destroyed).toBe(true);
+  });
+  it.each([
+    ["GZip", gzipSync('{"attackCount":7}')],
+    ["  GZIP  ", gzipSync('{"attackCount":7}')],
+    ["gzip, br", brotliCompressSync(gzipSync('{"attackCount":7}'))],
+    ["Br , DeFlAtE", deflateSync(brotliCompressSync('{"attackCount":7}'))],
+  ])("decodes case and stacked encoding %s in reverse order", async (encoding, body) => {
+    const fixture = fakeHttp(body, 200, { "content-encoding": encoding });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    const response = await probeTransport.fetch("http://team.example.com/", {});
+    expect(await response.text()).toBe('{"attackCount":7}');
+    expect(fixture.response.destroyed).toBe(true);
+  });
+  it("decodes the maximum sixteen coding stages", async () => {
+    let bytes = Buffer.from("decoded");
+    for (let stage = 0; stage < 16; stage++) bytes = gzipSync(bytes);
+    const fixture = fakeHttp(bytes, 200, { "content-encoding": Array(16).fill("gzip").join(",") });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    const response = await probeTransport.fetch("http://team.example.com/", {});
+    expect(await response.text()).toBe("decoded");
+    expect(fixture.response.destroyed).toBe(true);
+  });
+  it("rejects excessive coding stages and closes the HTTP stream", async () => {
+    const fixture = fakeHttp("unused", 200, {
+      "content-encoding": Array(17).fill("gzip").join(","),
+    });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    await expect(probeTransport.fetch("http://team.example.com/", {})).rejects.toThrow(
+      "Too many probe content encodings",
+    );
+    expect(fixture.response.destroyed).toBe(true);
+  });
+  it("combines header lines and accepts the x-gzip alias", async () => {
+    const fixture = fakeHttp(brotliCompressSync(gzipSync("decoded")));
+    Object.assign(fixture.response, { headers: { "content-encoding": ["X-GZip", "BR"] } });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    const response = await probeTransport.fetch("http://team.example.com/", {});
+    expect(await response.text()).toBe("decoded");
+  });
+  it("does not partially decode an unsupported coding chain", async () => {
+    const bytes = gzipSync("keep encoded");
+    const fixture = fakeHttp(bytes, 200, { "content-encoding": "gzip, example" });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    const response = await probeTransport.fetch("http://team.example.com/", {});
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+  });
+  it("rejects an inner decoder failure and closes the whole chain", async () => {
+    const fixture = fakeHttp(brotliCompressSync("not gzip"), 200, {
+      "content-encoding": "gzip, br",
+    });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    const response = await probeTransport.fetch("http://team.example.com/", {});
+    await expect(response.text()).rejects.toThrow();
+    expect(fixture.response.destroyed).toBe(true);
+  });
+  it("keeps scoring JSON and the decoded body cap for stacked codings", async () => {
+    const payload = JSON.stringify({ attackCount: 7, padding: "a".repeat(9000) });
+    const fixture = fakeHttp(brotliCompressSync(gzipSync(payload)), 200, {
+      "content-encoding": "GZip, BR",
+    });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    const result = await probeUrl("http://team.example.com/", { readBody: true });
+    expect(result.ok).toBe(true);
+    expect(result.body?.startsWith('{"attackCount":7,')).toBe(true);
+    expect(result.body?.length).toBe(4096);
     expect(fixture.response.destroyed).toBe(true);
   });
   it("rejects corrupt compressed data and closes the HTTP stream", async () => {
