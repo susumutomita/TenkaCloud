@@ -48,6 +48,36 @@ export interface SamlMetadataValidationResult {
   readonly entityId?: string;
 }
 
+/** Scan markup without rewriting XML. Each non-declaration span is visited only once. */
+function containsForbiddenDeclaration(xml: string): boolean {
+  let offset = 0;
+  while (offset < xml.length) {
+    const opening = xml.indexOf("<", offset);
+    if (opening === -1) return false;
+    const span = ignoredXmlSpan(xml, opening);
+    if (span !== undefined) {
+      const end = xml.indexOf(span.closing, span.start);
+      if (end === -1) return true; // Unterminated spans are invalid, not a safe hiding place.
+      offset = end + span.closing.length;
+    } else {
+      // Only a fixed-size token is tested; never match an unbounded input with backtracking.
+      if (/^<!(?:DOCTYPE|ENTITY)\b/i.test(xml.slice(opening, opening + 10))) return true;
+      offset = opening + 1;
+    }
+  }
+  return false;
+}
+
+function ignoredXmlSpan(
+  xml: string,
+  opening: number,
+): { readonly closing: string; readonly start: number } | undefined {
+  if (xml.startsWith("<!--", opening)) return { closing: "-->", start: opening + 4 };
+  if (xml.startsWith("<![CDATA[", opening)) return { closing: "]]>", start: opening + 9 };
+  if (xml.startsWith("<?", opening)) return { closing: "?>", start: opening + 2 };
+  return undefined;
+}
+
 /**
  * Validate a SAML metadata XML blob. Pure function, side-effect-free.
  */
@@ -67,8 +97,7 @@ export function validateSamlMetadata(xml: unknown): SamlMetadataValidationResult
   }
   // Metadata must not declare DTDs or entities. Cognito still owns XML/signature validation;
   // rejecting these declarations here is defense in depth, not proof of downstream XXE.
-  const declarations = trimmed.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, "");
-  if (/<!DOCTYPE\b|<!ENTITY\b/i.test(declarations)) {
+  if (containsForbiddenDeclaration(trimmed)) {
     return { ok: false, reason: "not_xml" };
   }
   if (!/<(?:[A-Za-z0-9_-]+:)?EntityDescriptor\b/.test(trimmed)) {
