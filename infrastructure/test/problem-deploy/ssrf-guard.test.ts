@@ -73,3 +73,25 @@ describe("isSsrfSafeUrl", () => {
     expect(SSRF_BLOCKED_HOSTS.has("fd00:ec2::23")).toBe(true);
   });
 });
+
+describe("DNS absolute hostname の正規化", () => {
+  it.each([
+    "https://localhost./",
+    "https://LOCALHOST...:9001/",
+    "https://metadata./",
+    "https://metadata.google.internal./",
+    "https://169.254.169.254./",
+    "https://[::ffff:127.0.0.1]/",
+    "https://0x7f000001/",
+  ])("禁止先 %s を拒否するべき", (url) => {
+    expect(isSsrfSafeUrl(url)).toBe(false);
+  });
+  it.each([
+    "https://team.example.com./",
+    "https://10.0.1.5/",
+    "https://172.16.0.10/",
+    "https://192.168.1.2/",
+  ])("教材で許可した %s は維持するべき", (url) => {
+    expect(isSsrfSafeUrl(url)).toBe(true);
+  });
+});

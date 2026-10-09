@@ -91,6 +91,8 @@ export async function createIdp(
   if (!parsed.success) {
     return { error: { kind: "validation", message: parsed.error.message } };
   }
+  const roleError = validateScopedRoles(scope, parsed.data);
+  if (roleError) return { error: roleError };
   const validated = validateSamlMetadata(parsed.data.metadataXml);
   if (!validated.ok) {
     return { error: { kind: "invalid_metadata", reason: validated.reason ?? "unknown" } };
@@ -155,6 +157,13 @@ export async function updateIdp(
     }
   }
   const merged = mergeUpdate(current, parsed.data, nowIso(deps));
+  const roleError = validateScopedRoles(scope, merged);
+  if (roleError) return { error: roleError };
+  // Revalidate persisted metadata too: a partial patch must not forward legacy DTDs to Cognito.
+  const metadata = validateSamlMetadata(merged.metadataXml);
+  if (!metadata.ok) {
+    return { error: { kind: "invalid_metadata", reason: metadata.reason ?? "unknown" } };
+  }
   try {
     await deps.cognito.updateIdp(merged);
   } catch (err) {
@@ -180,6 +189,16 @@ export async function deleteIdp(
   }
   await deps.store.delete(scope, idpId);
   return true;
+}
+
+function validateScopedRoles(
+  scope: IdpScope,
+  config: Pick<SamlIdpConfig, "groupToRole">,
+): IdpHandlerError | undefined {
+  if (scope.kind === "tenant" && Object.values(config.groupToRole).includes("SystemAdmin")) {
+    return { kind: "validation", message: "Tenant IdPs cannot map groups to SystemAdmin" };
+  }
+  return undefined;
 }
 
 function mergeUpdate(

@@ -3,7 +3,7 @@
  *
  * Call sites validate participant-registered override URLs at write time and revalidate scoring probe
  * URLs immediately before outbound HTTP. Metadata-supplied paths can be absolute, and redirect targets
- * are checked again after the response.
+ * are checked before each redirect hop is fetched.
  *
  * Phase 3.B fetcher で DNS-rebinding-safe な resolve-then-connect を実装するまでの暫定。host は
  * IPv6 bracket を剥がし lowercase 化した bare form に正規化してから lookup する。
@@ -57,7 +57,9 @@ export function unwrapIPv6MappedIPv4(host: string): string {
 /** URL.hostname を blocklist 照合用に正規化する (IPv6 bracket 除去 + lowercase + mapped unwrap)。 */
 function normalizeHost(hostname: string): string {
   const rawHost = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  return unwrapIPv6MappedIPv4(rawHost);
+  let end = rawHost.length;
+  while (end > 0 && rawHost[end - 1] === ".") end--;
+  return unwrapIPv6MappedIPv4(rawHost.slice(0, end));
 }
 
 /**

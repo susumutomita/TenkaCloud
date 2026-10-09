@@ -78,3 +78,91 @@ describe("validateSamlMetadata", () => {
     expect(validateSamlMetadata(xml).reason).toBe("missing_name_id_format");
   });
 });
+
+describe("SAML metadata のDTD/entity境界", () => {
+  it.each([
+    '<!DOCTYPE md:EntityDescriptor SYSTEM "https://example.com/metadata.dtd">',
+    '<!DOCTYPE md:EntityDescriptor [<!ENTITY example "value">]>',
+    '<!DOCTYPE md:EntityDescriptor [<!ENTITY % example SYSTEM "https://example.com/entity.dtd">%example;]>',
+    '<!ENTITY example SYSTEM "file:///example">',
+    "<!doctype md:EntityDescriptor>",
+  ])("宣言 %s をCognitoへ渡す前に拒否するべき", (declaration) => {
+    const xml = OKTA_LIKE.replace(/<\?xml[^?]*\?>/, `$&\n${declaration}`);
+    expect(validateSamlMetadata(xml)).toEqual({ ok: false, reason: "not_xml" });
+  });
+  it("DTDなしのXML宣言と組込みentityは維持するべき", () => {
+    expect(
+      validateSamlMetadata(
+        OKTA_LIKE.replace(
+          'WantAuthnRequestsSigned="false"',
+          'WantAuthnRequestsSigned="false" note="A &amp; B"',
+        ),
+      ).ok,
+    ).toBe(true);
+  });
+});
+
+describe("宣言とXMLの文字列内容を区別する", () => {
+  it("コメントやCDATA内のDTD/entityの説明文字列は許可するべき", () => {
+    const xml = OKTA_LIKE.replace(
+      "<md:KeyDescriptor",
+      '<!-- Example: <!DOCTYPE metadata> <!ENTITY example "text"> --><md:KeyDescriptor',
+    ).replace(
+      "</md:IDPSSODescriptor>",
+      '<md:Extensions><![CDATA[<!DOCTYPE metadata> <!ENTITY example "text">]]></md:Extensions></md:IDPSSODescriptor>',
+    );
+    expect(validateSamlMetadata(xml).ok).toBe(true);
+  });
+  it("コメントの外や未終端コメント内の宣言は拒否するべき", () => {
+    expect(validateSamlMetadata(`<!-- description --> <!DOCTYPE metadata>${OKTA_LIKE}`).ok).toBe(
+      false,
+    );
+    expect(validateSamlMetadata(`<!-- unclosed <!DOCTYPE metadata>${OKTA_LIKE}`).ok).toBe(false);
+  });
+});
+
+describe("XML宣言scannerの境界", () => {
+  it.each(["<!--", "<![CDATA["])("多数の未終端 %s を再探索せず拒否するべき", (opening) => {
+    expect(validateSamlMetadata(`${opening.repeat(1000)}${OKTA_LIKE}`)).toEqual({
+      ok: false,
+      reason: "not_xml",
+    });
+  });
+  it("多数の終端済みコメントとCDATAを維持し最後の外側宣言を拒否するべき", () => {
+    const spans = '<!-- <!DOCTYPE metadata> --><![CDATA[<!ENTITY example "text">]]>'.repeat(200);
+    expect(validateSamlMetadata(`${spans}${OKTA_LIKE}`).ok).toBe(true);
+    expect(validateSamlMetadata(`${spans}<!DOCTYPE metadata>${OKTA_LIKE}`)).toEqual({
+      ok: false,
+      reason: "not_xml",
+    });
+  });
+  it("コメントとCDATAを交互に含んでも外側のentity宣言を拒否するべき", () => {
+    const spans = '<!-- <![CDATA[ --><![CDATA[<!-- ]]><!-- <!ENTITY example "text"> -->';
+    expect(validateSamlMetadata(`${spans}${OKTA_LIKE}`).ok).toBe(true);
+    expect(validateSamlMetadata(`${spans}<!ENTITY example "text">${OKTA_LIKE}`).ok).toBe(false);
+  });
+});
+
+describe("processing instructionの内部を別のspanとして解釈しない", () => {
+  it("PI内のcomment開始文字列で外のDTDを隠せないべき", () => {
+    const xml = `<?example <!--?><!DOCTYPE md:EntityDescriptor><!-- closed -->${OKTA_LIKE.replace(/<\?xml[^?]*\?>/, "")}`;
+    expect(validateSamlMetadata(xml)).toEqual({ ok: false, reason: "not_xml" });
+  });
+  it("PI内のCDATA開始文字列で外のDTDを隠せないべき", () => {
+    const xml = `<?example <![CDATA[?><!DOCTYPE md:EntityDescriptor>${OKTA_LIKE.replace(/<\?xml[^?]*\?>/, "").replace("<md:KeyDescriptor", "<![CDATA[text]]><md:KeyDescriptor")}`;
+    expect(validateSamlMetadata(xml)).toEqual({ ok: false, reason: "not_xml" });
+  });
+  it("通常PIとPI内の宣言に似た文字列は維持するべき", () => {
+    const xml = OKTA_LIKE.replace(
+      "<md:KeyDescriptor",
+      "<?example <!DOCTYPE metadata> <!-- <![CDATA[ ?><md:KeyDescriptor",
+    );
+    expect(validateSamlMetadata(xml).ok).toBe(true);
+  });
+  it("コメントだけの入力は宣言ではなく構造不足として拒否するべき", () => {
+    expect(validateSamlMetadata("<!-- <!DOCTYPE metadata> -->")).toEqual({
+      ok: false,
+      reason: "missing_entity_descriptor",
+    });
+  });
+});
