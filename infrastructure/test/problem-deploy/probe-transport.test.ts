@@ -100,6 +100,83 @@ function fakeHttp(
 }
 
 describe("pinned HTTP transport", () => {
+  it.each(["http", "https"])(
+    "rejects all Fetch forbidden ports before DNS/request for %s",
+    async (scheme) => {
+      // Independent expected table: https://fetch.spec.whatwg.org/#port-blocking
+      const forbiddenPorts = [
+        0, 1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101,
+        102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389,
+        427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636,
+        989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665,
+        6666, 6667, 6668, 6669, 6679, 6697, 10080,
+      ];
+      const dnsSpy = answerDns([{ address: "10.1.2.3", family: 4 }]);
+      const fixture = fakeHttp();
+      const request = vi.spyOn(http, "request").mockImplementation(fixture.impl);
+      const secure = vi
+        .spyOn(https, "request")
+        .mockImplementation(fixture.impl as typeof https.request);
+      for (const port of forbiddenPorts) {
+        await expect(
+          probeTransport.fetch(`${scheme}://team.example.com:${port}/`, {}),
+        ).rejects.toThrow("Forbidden probe port");
+      }
+      await expect(probeTransport.fetch(`${scheme}://10.0.0.5:06000/`, {})).rejects.toThrow(
+        "Forbidden probe port",
+      );
+      expect(dnsSpy).not.toHaveBeenCalled();
+      expect(request).not.toHaveBeenCalled();
+      expect(secure).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    "http://10.0.0.5/",
+    "http://10.0.0.5:80/",
+    "https://10.0.0.5/",
+    "https://10.0.0.5:443/",
+    "http://10.0.0.5:5174/",
+    "https://10.0.0.5:8080/",
+    "http://10.0.0.5:65535/",
+  ])("retains allowed private port %s", async (url) => {
+    const fixture = fakeHttp();
+    const module = url.startsWith("https:") ? https : http;
+    const request = vi.spyOn(module, "request").mockImplementation(fixture.impl);
+    const response = await probeTransport.fetch(url, {});
+    expect(await response.text()).toBe("ok");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+  it.each(["http://10.0.0.5:6000/", "https://10.0.0.5:22/", "//team.example.com:10080/"])(
+    "rejects redirect forbidden port before another DNS/request %s",
+    async (location) => {
+      const fixture = fakeHttp("redirect", 302, { location });
+      const request = vi.spyOn(http, "request").mockImplementation(fixture.impl);
+      const secure = vi
+        .spyOn(https, "request")
+        .mockImplementation(fixture.impl as typeof https.request);
+      const dnsSpy = answerDns([{ address: "10.1.2.3", family: 4 }]);
+      const result = await probeUrl("http://team.example.com:8080/", { readBody: true });
+      expect(result.ok).toBe(false);
+      expect(result.status).toBeUndefined();
+      expect(result.body).toBeUndefined();
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(secure).not.toHaveBeenCalled();
+      expect(dnsSpy).not.toHaveBeenCalled();
+      expect(fixture.response.destroyed).toBe(true);
+    },
+  );
+  it("follows a redirect to an allowed private HTTPS port", async () => {
+    const first = fakeHttp("redirect", 307, { location: "https://10.0.0.5:8080/" });
+    const last = fakeHttp("scoring");
+    const request = vi.spyOn(http, "request").mockImplementation(first.impl);
+    const secure = vi.spyOn(https, "request").mockImplementation(last.impl as typeof https.request);
+    const result = await probeUrl("http://team.example.com/", { readBody: true });
+    expect(result.ok).toBe(true);
+    expect(result.body).toBe("scoring");
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(secure).toHaveBeenCalledTimes(1);
+    expect(first.response.destroyed).toBe(true);
+  });
   it("native HTTP request rejects a forbidden DNS answer before connect", async () => {
     const native = await vi.importActual<typeof import("node:http")>("node:http");
     vi.spyOn(http, "request").mockImplementation(native.request);
