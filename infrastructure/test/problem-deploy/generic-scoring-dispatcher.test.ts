@@ -44,8 +44,10 @@ process.env.PROBLEM_ENDPOINTS_TABLE_NAME = "TestEndpoints";
 
 const fetchMock = vi.fn();
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubGlobal("fetch", fetchMock);
+  // Load modules before fake timers; compilation/import scheduling is not the clock under test.
+  await import("../../lib/problem-deploy/handlers/generic-scoring-handler/index");
   fetchMock.mockReset();
   ddbSend.mockReset();
 });
@@ -369,3 +371,7 @@ describe("generic scoring dispatcher: hello-world-battle (= legacy uptime) æŒ™å‹
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+vi.mock("../../lib/problem-deploy/runtime-clients/probe-transport", () => ({
+  probeTransport: { fetch: (url: string, init: RequestInit) => globalThis.fetch(url, init) },
+}));

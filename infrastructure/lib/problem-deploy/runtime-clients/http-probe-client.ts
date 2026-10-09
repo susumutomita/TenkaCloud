@@ -1,4 +1,5 @@
 import { StatusCodes } from "http-status-codes";
+import { probeTransport } from "./probe-transport.js";
 import { isSsrfSafeUrl } from "./ssrf-guard.js";
 
 export interface ProbeResult {
@@ -47,6 +48,7 @@ export async function probeUrl(url: string, options: ProbeOptions = {}): Promise
         : response.status >= StatusCodes.OK && response.status < StatusCodes.MULTIPLE_CHOICES);
     const body =
       options.readBody && ok ? await readCappedBody(response, MAX_BODY_BYTES) : undefined;
+    if (!options.readBody || !ok) await response.body?.cancel().catch(() => undefined);
     return {
       ok,
       status: response.status,
@@ -61,7 +63,7 @@ export async function probeUrl(url: string, options: ProbeOptions = {}): Promise
 }
 
 // Match fetch's redirect limit and POST-to-GET behavior, but validate every Location before I/O.
-// Hostname checks do not resolve DNS; address pinning remains a separate defense.
+// Each hop resolves and validates DNS in the socket lookup, retaining only those checked answers.
 async function fetchWithSafeRedirects(
   initialUrl: string,
   options: ProbeOptions,
@@ -71,7 +73,7 @@ async function fetchWithSafeRedirects(
   let method = options.method ?? "GET";
   for (let redirects = 0; ; redirects++) {
     if (!isSsrfSafeUrl(url)) throw new Error("Unsafe probe URL");
-    const response = await fetch(url, probeRequest(method, options, signal));
+    const response = await probeTransport.fetch(url, probeRequest(method, options, signal));
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     const location = response.headers.get("location");
     if (location === null) return response;

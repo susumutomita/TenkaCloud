@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import type { UptimeFlatScoringMetadata } from "@tenkacloud/problem-sdk/internal";
+import { probeTransport } from "./probe-transport";
 import type { KindHandlerInput, PhaseEntry } from "./scoring-common";
 import { runUptimeFlatKind } from "./uptime-flat";
 
@@ -44,7 +45,7 @@ function buildInput(
 describe("uptime-flat kind legacy uptime probe compatibility", () => {
   const fetchMock = vi.fn();
   beforeEach(() => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(
+    vi.spyOn(probeTransport, "fetch").mockImplementation(
       Object.assign(fetchMock, { preconnect: () => undefined }),
     );
     fetchMock.mockReset();

@@ -90,6 +90,8 @@ describe("metadataUrl の入力制約", () => {
   it.each([
     "https://localhost./metadata.xml",
     "https://127.0.0.1/metadata.xml",
+    "https://127.2.3.4/metadata.xml",
+    "https://[::ffff:127.2.3.4]/metadata.xml",
     "https://metadata.google.internal./",
     "https://169.254.169.254/",
     "https://[::ffff:169.254.169.254]/",

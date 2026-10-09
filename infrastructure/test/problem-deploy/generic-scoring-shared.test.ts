@@ -11,6 +11,7 @@ import {
   type EndpointHealth,
   parseEndpointsHealth,
 } from "../../lib/problem-deploy/handlers/shared/endpoints-health";
+import { probeTransport } from "../../lib/problem-deploy/runtime-clients/probe-transport";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
@@ -255,7 +256,7 @@ describe("probeUrl (SSRF revalidation + bounded body read)", () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
-    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(probeTransport, "fetch").mockImplementation(fetchMock);
     fetchMock.mockReset();
   });
   afterEach(() => {
