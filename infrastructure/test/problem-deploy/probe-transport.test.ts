@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import * as http from "node:http";
 import * as https from "node:https";
 import { Readable } from "node:stream";
-import { gzipSync } from "node:zlib";
+import { brotliCompressSync, deflateSync, gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   pinnedProbeLookup,
@@ -36,6 +36,7 @@ describe("socket DNS answers", () => {
     "169.254.169.254",
     "169.254.170.2",
     "fd00:ec2::254",
+    "fe80::1%eth0",
   ])("rejects %s", async (address) => {
     answerDns([{ address, family: address.includes(":") ? 6 : 4 }]);
     await expect(resolvePinned()).rejects.toThrow("Unsafe probe DNS answer");
@@ -159,11 +160,44 @@ describe("pinned HTTP transport", () => {
     expect(response.body).toBeNull();
     expect(fixture.response.destroyed).toBe(true);
   });
-  it("decompresses forced gzip and cancels the underlying HTTP response", async () => {
-    const fixture = fakeHttp(gzipSync("compressed"), 200, { "content-encoding": "gzip" });
+  it.each([
+    ["gzip", gzipSync],
+    ["deflate", deflateSync],
+    ["br", brotliCompressSync],
+  ])("decodes forced %s and closes HTTP response", async (encoding, compress) => {
+    const fixture = fakeHttp(compress("compressed"), 200, { "content-encoding": encoding });
     vi.spyOn(http, "request").mockImplementation(fixture.impl);
     const response = await probeTransport.fetch("http://team.example.com/", {});
     expect(await response.text()).toBe("compressed");
+    expect(fixture.response.destroyed).toBe(true);
+  });
+  it("rejects corrupt compressed data and closes the HTTP stream", async () => {
+    const fixture = fakeHttp("not a gzip stream", 200, { "content-encoding": "gzip" });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    const response = await probeTransport.fetch("http://team.example.com/", {});
+    await expect(response.text()).rejects.toThrow();
+    expect(fixture.response.destroyed).toBe(true);
+  });
+  it("propagates HTTP stream errors through a decompressor", async () => {
+    const fixture = fakeHttp(gzipSync("data"), 200, { "content-encoding": "gzip" });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    const response = await probeTransport.fetch("http://team.example.com/", {});
+    fixture.response.emit("error", new Error("stream failed"));
+    await expect(response.text()).rejects.toThrow("stream failed");
+    expect(fixture.response.destroyed).toBe(true);
+  });
+  it("handles missing status and multi-value response headers", async () => {
+    const fixture = fakeHttp();
+    Object.assign(fixture.response, {
+      statusCode: undefined,
+      headers: { "x-values": ["first", "second"], "x-absent": undefined },
+    });
+    vi.spyOn(http, "request").mockImplementation(fixture.impl);
+    const response = await probeTransport.fetch("http://team.example.com/", {});
+    expect(response.status).toBe(500);
+    expect(response.headers.get("x-values")).toBe("first, second");
+    expect(response.headers.has("x-absent")).toBe(false);
+    await response.body?.cancel();
     expect(fixture.response.destroyed).toBe(true);
   });
   it.each([600, 999])(
