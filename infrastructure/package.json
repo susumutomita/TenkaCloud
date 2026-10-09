@@ -39,7 +39,7 @@
     "@tenkacloud/saml-utils": "workspace:*",
     "ajv": "8.20.0",
     "ajv-formats": "^3.0.1",
-    "aws-cdk-lib": "2.262.1",
+    "aws-cdk-lib": "2.267.0",
     "constructs": "10.8.1",
     "fflate": "^0.8.1",
     "hono": "4.13.9",
