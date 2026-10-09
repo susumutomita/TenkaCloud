@@ -36,7 +36,8 @@ function responseBody(response: IncomingMessage): ReadableStream<Uint8Array> {
   if (!codings.every(isSupportedCoding)) return toWebBody(response);
   // Bound native decoder allocations before reading an untrusted response body.
   if (codings.length > 16) throw new Error("Too many probe content encodings");
-  const decoders = codings.toReversed().map(createResponseDecoder);
+  codings.reverse();
+  const decoders = codings.map(createResponseDecoder);
   const last = decoders[decoders.length - 1];
   if (!last) return toWebBody(response);
   // Attach web error/cancellation handling before starting the native pipeline. pipeline propagates
