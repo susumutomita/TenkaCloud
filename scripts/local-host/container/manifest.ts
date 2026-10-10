@@ -1,6 +1,10 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, join } from "node:path";
 import {
+  type ProblemAuthor,
+  problemAuthorFields,
+} from "../../../packages/portal-contracts/src/problem-authors";
+import {
   type ContainerScoring,
   type LocalizedProblemText,
   parseEnglishOverlay,
@@ -35,6 +39,7 @@ export interface ContainerTerminal {
 }
 
 export interface ContainerProblem {
+  readonly authors?: readonly ProblemAuthor[];
   readonly problemId: string;
   readonly name: string;
   readonly description: string;
@@ -335,6 +340,7 @@ export function loadContainerProblem(
       : parseMultiVerifyScoring(scoring, overlay.checkById);
 
   return {
+    ...problemAuthorFields(metadata.authors),
     problemId,
     name:
       typeof metadata.name === "string" && metadata.name.trim().length > 0

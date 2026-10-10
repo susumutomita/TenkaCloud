@@ -13,6 +13,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import TextFilter from "@cloudscape-design/components/text-filter";
 import Toggle from "@cloudscape-design/components/toggle";
+import { ProblemAuthors } from "@tenkacloud/web-kit";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import type { ParticipantProblemView } from "../api/portal-client";
@@ -25,6 +26,7 @@ import {
   recommendedNextAcrossTracks,
   toProblemProgress,
 } from "../data/course-track";
+import { resolveProblemAuthors } from "../data/problem-authors";
 import { listProblemCatalog } from "../data/problems";
 import { useI18n, useT } from "../i18n";
 import { categoryOf } from "../lib/category";
@@ -267,6 +269,14 @@ export function QuestsPage() {
               {locked && <Badge color="grey">{t("quests.locked_badge")}</Badge>}
               <StatusIndicator type={s.type}>{s.label}</StatusIndicator>
             </SpaceBetween>
+            <ProblemAuthors
+              authors={resolveProblemAuthors(
+                problem,
+                catalog.find((entry) => entry.id === problem.problemId),
+                config,
+              )}
+              label={locale === "ja" ? "作者" : "Authors"}
+            />
             {locked && (
               <Box variant="small" color="text-status-inactive">
                 {t("quests.locked_unlock_condition", { gateName })}
@@ -277,7 +287,7 @@ export function QuestsPage() {
       },
       sections: [],
     }),
-    [navigate, t, progression, gateName, metadataByProblemId, locale],
+    [navigate, t, progression, gateName, metadataByProblemId, locale, catalog, config],
   );
 
   const emptyUnsolved = (

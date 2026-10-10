@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogData } from "../src/content/catalog-data";
-import { renderCatalogModule } from "./generate-catalog";
+import { renderCatalogModule, toCatalogProblem } from "./generate-catalog";
 
 // The catalog module renderer is pure: equal input yields byte-identical output, so
 // `bun run check:catalog` never flaps on serialization. (The submodule-reading half,
@@ -28,5 +28,30 @@ describe("renderCatalogModule", () => {
     expect(a).toContain('id: "sample-battle"');
     // Biome formats object keys unquoted.
     expect(a).toContain('category: "Battle"');
+  });
+});
+
+describe("public catalog credits", () => {
+  it("retains explicit co-authors while excluding private problems and answers", () => {
+    const raw = {
+      id: "sample",
+      name: "問題",
+      category: "Challenge",
+      visibility: "public",
+      authors: [
+        { name: "作者", profileUrl: "https://example.com/", email: "SECRET_EMAIL" },
+        { name: "共同作者", profileUrl: ["javascript", "alert(1)"].join(":") },
+      ],
+      description: "SECRET_ANSWER",
+      scoring: { flag: "SECRET_FLAG" },
+    };
+    const problem = toCatalogProblem(raw);
+    expect(problem?.authors).toEqual([
+      { name: "作者", profileUrl: "https://example.com/" },
+      { name: "共同作者" },
+    ]);
+    expect(JSON.stringify(problem)).not.toContain("SECRET");
+    expect(toCatalogProblem({ ...raw, visibility: "private" })).toBeUndefined();
+    expect(toCatalogProblem({ ...raw, authors: undefined })).not.toHaveProperty("authors");
   });
 });

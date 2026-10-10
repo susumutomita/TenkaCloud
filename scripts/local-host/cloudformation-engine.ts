@@ -19,6 +19,10 @@ import {
   projectScore,
   type UptimeFlatScoringMetadata,
 } from "@tenkacloud/problem-sdk/internal";
+import {
+  type ProblemAuthor,
+  problemAuthorFields,
+} from "../../packages/portal-contracts/src/problem-authors";
 import { assumeRoleWithExternalId } from "../lib/assume-role";
 import { buildParameterOverrides, generateRandomAlphanumeric } from "../lib/cfn-parameters";
 import { flagMatches } from "../lib/flag-matches";
@@ -59,6 +63,7 @@ export type CredentialsProvider = () => Promise<{
 
 /** A problem deployed as one CloudFormation stack in each team's own AWS account. */
 interface StackDefinitionBase {
+  readonly authors?: readonly ProblemAuthor[];
   kind: "cloudformation";
   problemId: string;
   templateBody: string;
@@ -129,6 +134,7 @@ const REVIEWED_STACK_PROBLEMS = [
 ] as const;
 
 interface StackMetadata {
+  authors?: unknown;
   name: string;
   description?: string;
   learningGoals?: string[];
@@ -215,6 +221,7 @@ function stackProblem(
     templateBody: readFileSync(join(directory, metadata.cfnTemplate), "utf8"),
     cfnParameters: metadata.cfnParameters ?? {},
     name: metadata.name,
+    ...problemAuthorFields(metadata.authors),
     instructions: metadata.instructions,
     ...(Object.keys(english).length > 0 ? { english } : {}),
     disruptions: metadata.disruptions ?? [],
@@ -397,6 +404,7 @@ export class CloudFormationEngine implements RuntimeEngine {
     return {
       problemId: problem.problemId,
       name: definition.name,
+      ...problemAuthorFields(definition.authors),
       instructions: definition.instructions,
       ...(definition.english ? { i18n: { en: definition.english } } : {}),
       region: unit?.region ?? this.options.region,

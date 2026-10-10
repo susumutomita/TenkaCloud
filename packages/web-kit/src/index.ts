@@ -42,6 +42,7 @@ export {
 } from "./i18n";
 export { LoadingState, type LoadingStateProps } from "./LoadingState";
 export { Markdown, type MarkdownProps, renderMarkdownToSafeHtml } from "./markdown";
+export { ProblemAuthors } from "./ProblemAuthors.js";
 export { newOperationKey, PendingOperation } from "./pending-operation";
 export {
   ShellLayout,

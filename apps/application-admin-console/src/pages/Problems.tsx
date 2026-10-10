@@ -1,3 +1,4 @@
+import { ProblemAuthors } from "@tenkacloud/web-kit";
 import "./ProblemTagChips.css";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
@@ -149,9 +150,11 @@ import { problemThemeLabel, problemThemeTags } from "../lib/problem-themes";
 export function ProblemsPage({
   localHost = false,
   supportedProblemIds,
+  organizerContent,
 }: {
   localHost?: boolean;
   supportedProblemIds?: ReadonlySet<string>;
+  organizerContent?: ReadonlyMap<string, Pick<ProblemSummary, "authors">>;
 }) {
   const navigate = useNavigate();
   const t = useT();
@@ -367,7 +370,15 @@ export function ProblemsPage({
             },
             {
               id: "description",
-              content: (item) => <Box variant="p">{item.shortDescription}</Box>,
+              content: (item) => (
+                <>
+                  <Box variant="p">{item.shortDescription}</Box>
+                  <ProblemAuthors
+                    authors={localHost ? organizerContent?.get(item.id)?.authors : item.authors}
+                    label={t("problem_authors.label")}
+                  />
+                </>
+              ),
             },
             ...(!localHost
               ? [

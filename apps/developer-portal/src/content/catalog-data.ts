@@ -5,6 +5,8 @@
 // this file. 'bun run check:catalog' fails when it is stale vs the submodule
 // (a maintainer check; it needs the submodule checked out).
 
+import type { ProblemAuthor } from "../../../../packages/portal-contracts/src/problem-authors";
+
 export type CatalogCategory = "Battle" | "Challenge";
 export type CatalogStatus = "ready" | "draft" | "deprecated";
 
@@ -14,6 +16,7 @@ export interface CatalogLocalizedText {
 }
 
 export interface CatalogProblem {
+  readonly authors?: readonly ProblemAuthor[];
   readonly id: string;
   readonly category: CatalogCategory;
   readonly status: CatalogStatus;
@@ -92,6 +95,50 @@ export const CATALOG_DATA: CatalogData = {
       name: {
         ja: "Enter を押す前に",
         en: "Before You Press Enter",
+      },
+    },
+    {
+      id: "forensic-casebook",
+      category: "Battle",
+      status: "draft",
+      difficulty: 3,
+      tags: ["forensics", "incident-response", "beginner", "evidence"],
+      name: {
+        ja: "フォレンジック調査室 — 証拠で結論を支える",
+        en: "Forensic Casebook — Support Every Conclusion",
+      },
+    },
+    {
+      id: "pi-siege",
+      category: "Battle",
+      status: "draft",
+      difficulty: 3,
+      tags: ["rational-approximation", "fractions", "determinants", "proof-strategies"],
+      name: {
+        ja: "π包囲戦",
+        en: "Pi Siege",
+      },
+    },
+    {
+      id: "session-defense",
+      category: "Battle",
+      status: "draft",
+      difficulty: 3,
+      tags: ["session-security", "revocation", "step-up", "authorization"],
+      name: {
+        ja: "セッション防衛戦",
+        en: "Session Defense Arena",
+      },
+    },
+    {
+      id: "tenant-boundary-duel",
+      category: "Battle",
+      status: "draft",
+      difficulty: 3,
+      tags: ["authorization", "tenant-isolation", "detection", "code-repair"],
+      name: {
+        ja: "テナント境界防衛戦",
+        en: "Tenant Boundary Duel",
       },
     },
     {

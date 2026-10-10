@@ -115,5 +115,10 @@ export function mapStrings<T>(value: T, mapString: (text: string) => string): T 
  * identical, so the identity map (offset 0) is a true no-op.
  */
 export function remapContainerProblem<T>(problem: T, portMap: ReadonlyMap<number, number>): T {
-  return mapStrings(problem, (text) => offsetLoopbackUrl(text, portMap));
+  const remapped = mapStrings(problem, (text) => offsetLoopbackUrl(text, portMap));
+  // Credits point to the author, not to this exercise's remapped service.
+  if (problem !== null && typeof problem === "object" && "authors" in problem) {
+    Object.assign(remapped as object, { authors: problem.authors });
+  }
+  return remapped;
 }

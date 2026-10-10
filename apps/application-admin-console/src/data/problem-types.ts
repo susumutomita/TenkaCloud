@@ -1,3 +1,4 @@
+import type { ProblemAuthor } from "@tenkacloud/portal-contracts";
 import type { CostRiskLevel } from "@tenkacloud/problem-cost";
 
 export type ProblemCategory = "Battle" | "Challenge";
@@ -41,6 +42,7 @@ export interface ProblemTranslation {
 }
 
 export interface ProblemSummary {
+  readonly authors?: readonly ProblemAuthor[];
   readonly i18n?: { readonly en?: ProblemTranslation };
   id: string;
   name: string;
@@ -106,6 +108,7 @@ export interface ProblemDetail extends ProblemSummary {
  * `ProblemDetail` には map しない。
  */
 export interface ProblemMetadata {
+  readonly authors?: readonly ProblemAuthor[];
   readonly i18n?: { readonly en?: ProblemTranslation };
   $schema?: string;
   id: string;

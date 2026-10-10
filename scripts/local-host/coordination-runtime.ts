@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { buildSync } from "esbuild";
+import { projectProblemAuthors } from "../../packages/portal-contracts/src/problem-authors";
 import {
   LOCAL_COORDINATION_STATE_LIMIT,
   requiredCoordinationTeams,
@@ -138,10 +139,12 @@ export function coordinationProblemView(
   lastScoredAt?: string,
 ): Record<string, unknown> {
   const { metadata } = JSON.parse(problem.definition) as CoordinationDefinition;
+  const authors = projectProblemAuthors(metadata.authors);
   const english = (metadata.i18n as { en?: Record<string, unknown> } | undefined)?.en;
   return {
     problemId: problem.problemId,
     name: problem.name,
+    ...(authors ? { authors } : {}),
     coordination: true,
     instructions: metadata.instructions,
     region: "local",

@@ -978,3 +978,29 @@ describe("ProblemDetailPage", () => {
     expect(screen.getByText("fly")).toBeInTheDocument();
   });
 });
+
+it("shows runtime authors on participant details ahead of bundled authors", () => {
+  mockTeamView.mockReturnValue(
+    teamView({
+      view: viewWith({
+        problems: [
+          problem({ authors: [{ name: "実行時作者", profileUrl: "https://example.com/profile" }] }),
+        ],
+      }),
+    }),
+  );
+  mockFindMeta.mockReturnValue(meta({ authors: [{ name: "古い作者" }] }));
+  renderPage();
+  expect(screen.getByRole("link", { name: "実行時作者" })).toHaveAttribute(
+    "href",
+    "https://example.com/profile",
+  );
+  expect(screen.queryByText("古い作者")).not.toBeInTheDocument();
+});
+
+it("does not inherit newer catalog credits for an uncredited hosted detail", () => {
+  mockTeamView.mockReturnValue(teamView({ view: viewWith({ problems: [problem({})] }) }));
+  mockFindMeta.mockReturnValue(meta({ authors: [{ name: "後から追加された作者" }] }));
+  render(<ProblemDetailPage config={{ ...config, problemAuthorsSource: "runtime" }} />);
+  expect(screen.queryByText("後から追加された作者")).not.toBeInTheDocument();
+});

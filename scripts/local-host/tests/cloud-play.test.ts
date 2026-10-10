@@ -29,7 +29,7 @@ const helloWorld = JSON.parse(
 ) as {
   name: string;
   instructions: string;
-  scoring: { hints: { id: string; content: string }[] };
+  scoring: { flagOutputKey: string; hints: { id: string; content: string }[] };
   i18n: { en: { name: string; instructions: string; hints: { id: string; content: string }[] } };
 };
 
@@ -43,7 +43,10 @@ function required<T>(value: T | undefined): T {
   return value;
 }
 
-async function host(withAws = true) {
+async function host(
+  withAws = true,
+  authors?: readonly import("../../../packages/portal-contracts/src/problem-authors").ProblemAuthor[],
+) {
   const data = mkdtempSync(join(tmpdir(), "tenka-cloud-play-"));
   directories.push(data);
   const store = new HostStore(new Database(join(data, "host.sqlite")));
@@ -62,6 +65,14 @@ async function host(withAws = true) {
     timeoutMs: 60_000,
   });
   const engine = new CompetitionEngine(root, data, true, withAws ? cloud : undefined);
+  if (authors) {
+    for (const problem of engine.catalog()) {
+      const definition = JSON.parse(problem.definition);
+      if (definition.kind === "cloudformation") definition.authors = authors;
+      if (definition.kind === "coordination") definition.metadata.authors = authors;
+      problem.definition = JSON.stringify(definition);
+    }
+  }
   const service = new HostingService(store, engine, HOST_KEY, () => clock);
   if (withAws)
     service.accountConnection = {
@@ -658,4 +669,26 @@ test("local hosting offers no AWS problem and preserves an old stack with a clea
 
   await new HostingService(fixture.store, fixture.engine, HOST_KEY, () => START).recover();
   expect(fixture.store.jobs(event.eventId)[0]?.status).toBe("COMPLETE");
+});
+
+test("cloud and coordination credits survive event pinning without revealing answers", async () => {
+  const authors = [
+    { name: "問題作者", profileUrl: "https://example.com/profile" },
+    { name: "共同作者" },
+  ];
+  const fixture = await host(true, authors);
+  const event = await startedEvent(fixture);
+  const { alpha } = teams(event);
+  const me = await fixture.as(alpha).get("/portal/me");
+  expect(problem(me, "hello-world").authors).toEqual(authors);
+  expect(problem(me, "ac26-crypto-battle").authors).toEqual(authors);
+  const cloudView = problem(me, "hello-world");
+  expect(cloudView).not.toHaveProperty("description");
+  expect(cloudView).not.toHaveProperty("flagOutputKey");
+  expect(cloudView.stackOutputs).not.toHaveProperty(helloWorld.scoring.flagOutputKey);
+  const pinned = fixture.store.event(event.eventId);
+  const definition = JSON.parse(
+    required(pinned.problems.find((item) => item.problemId === "hello-world")).definition,
+  );
+  expect(definition.authors).toEqual(authors);
 });

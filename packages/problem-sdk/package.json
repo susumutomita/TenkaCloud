@@ -22,7 +22,8 @@
   },
   "dependencies": {
     "@tenkacloud/problem-runtime": "workspace:*",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@tenkacloud/portal-contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",

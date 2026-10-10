@@ -1,4 +1,8 @@
 import type { ProgressionGateConfig } from "@tenkacloud/problem-sdk/internal";
+import {
+  type ProblemAuthor,
+  problemAuthorFields,
+} from "../../packages/portal-contracts/src/problem-authors";
 
 /** Local hosting's durable records. Private runtime descriptors never enter browser responses. */
 type SqlBinding = string | number | null;
@@ -26,6 +30,7 @@ export interface Problem {
 }
 
 export interface OrganizerProblemContent {
+  readonly authors?: readonly ProblemAuthor[];
   readonly i18n?: {
     readonly en?: { readonly description?: string; readonly learningGoals?: readonly string[] };
   };
@@ -43,6 +48,7 @@ function optionalEnglish(value: unknown): Record<string, unknown> {
 
 /** Optional display text must not add runtime requirements to an existing problem. */
 export function organizerProblemContent(metadata: {
+  authors?: unknown;
   i18n?: unknown;
   description?: unknown;
   learningGoals?: unknown;
@@ -66,6 +72,7 @@ export function organizerProblemContent(metadata: {
       : {}),
   };
   return {
+    ...problemAuthorFields(metadata.authors),
     description: metadata.description,
     learningGoals,
     ...(Object.keys(translated).length ? { i18n: { en: translated } } : {}),

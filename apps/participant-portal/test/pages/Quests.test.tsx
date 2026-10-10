@@ -1012,3 +1012,35 @@ describe("QuestsPage draft visibility toggle", () => {
     },
   );
 });
+
+it("shows runtime authors on participant cards with no bundled metadata", () => {
+  mockTeamView.mockReturnValue({
+    view: {
+      problems: [
+        problem({
+          authors: [
+            { name: "実行時作者", profileUrl: "https://example.com/profile" },
+            { name: "共同作者" },
+          ],
+        }),
+      ],
+    },
+    error: null,
+  });
+  render(<QuestsPage />);
+  expect(screen.getByRole("link", { name: "実行時作者" })).toHaveAttribute(
+    "href",
+    "https://example.com/profile",
+  );
+  expect(screen.getByText(/共同作者/)).toBeInTheDocument();
+});
+
+it("keeps an uncredited runtime snapshot uncredited even with newer bundled authors", () => {
+  mockAppConfig.mockReturnValue({ cloudMode: "real", problemAuthorsSource: "runtime" });
+  mockListCatalog.mockReturnValue([
+    { ...alignedCatalogEntry("hello-world", "Hello"), authors: [{ name: "後から追加された作者" }] },
+  ]);
+  mockTeamView.mockReturnValue({ view: { problems: [problem({})] }, error: null });
+  render(<QuestsPage />);
+  expect(screen.queryByText("後から追加された作者")).not.toBeInTheDocument();
+});

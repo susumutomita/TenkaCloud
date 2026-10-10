@@ -15,6 +15,7 @@
  * 定義はここ 1 か所に置く。
  */
 
+import { type ProblemAuthor, projectProblemAuthors } from "./problem-authors.js";
 import type {
   ProblemCourseAlignment,
   ProblemCourseMetadataInput,
@@ -114,6 +115,7 @@ export interface ProblemI18nOverride {
  *   control plane が投影後の entry だけを wire に載せる (= 落とした field は送信されない)。
  */
 export interface ProblemCatalogEntry {
+  readonly authors?: readonly ProblemAuthor[];
   readonly id: string;
   readonly name: string;
   readonly category: ProblemCategory;
@@ -189,6 +191,7 @@ export interface ProblemCatalogEntry {
  * 出してよいのは `metadataToEntry` を通した後だけ。
  */
 export interface ProblemMetadata extends ProblemCourseMetadataInput {
+  readonly authors?: readonly ProblemAuthor[];
   $schema?: string;
   id: string;
   name: string;
@@ -301,9 +304,11 @@ function sanitizeI18n(raw: ProblemMetadata["i18n"]): ProblemCatalogEntry["i18n"]
  * build-time (portal の glob) と runtime (local-play control plane) の両経路が同じ関数を通る。
  */
 export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
+  const authors = projectProblemAuthors(metadata.authors);
   const dashboardSlots = metadata.dashboard?.slots;
   const publicI18n = sanitizeI18n(metadata.i18n);
   return {
+    ...(authors ? { authors } : {}),
     id: metadata.id,
     name: metadata.name,
     category: metadata.category,

@@ -21,7 +21,7 @@
 // ポイントコード。 上の回答秘匿の不変条件の例外ではなく、 競技 flag ではない教材用契約)。
 export * from "./lite-drill.js";
 export * from "./local-drill.js";
-
+export * from "./problem-authors.js";
 // #2925 / #2926: 問題カタログの fairness projection。 participant-portal の build-time glob と
 // local-play control plane の runtime catalog endpoint が同じ投影を通るよう、 ここが唯一の定義。
 export * from "./problem-catalog.js";
@@ -241,6 +241,7 @@ export type ProblemRuntimeKind = "docker" | "simulated-cloud";
  * Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
  */
 export interface ParticipantProblemView {
+  readonly authors?: readonly import("./problem-authors.js").ProblemAuthor[];
   /** Native runs use their persisted run ID here for the existing Portal route. */
   readonly jobId: string;
   /** Native in-platform execution; it has no AWS account, region or external console. */
