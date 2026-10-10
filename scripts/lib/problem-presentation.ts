@@ -79,6 +79,7 @@ function isContainerCheckInput(value: unknown): value is ContainerCheck["input"]
 }
 
 export interface RawMetadata {
+  authors?: unknown;
   readonly name?: unknown;
   readonly description?: unknown;
   readonly instructions?: unknown;

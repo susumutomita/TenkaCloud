@@ -7,7 +7,7 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { Markdown } from "@tenkacloud/web-kit";
+import { Markdown, ProblemAuthors } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import type { ParticipantProblemView, ParticipantTeamView } from "../api/portal-client";
@@ -19,6 +19,7 @@ import { ProblemPanel } from "../components/ProblemPanel";
 import { localizeProblem } from "../components/ProblemPanel.helpers";
 import { ProblemVideoSection } from "../components/ProblemVideoSection";
 import type { AppConfig } from "../config";
+import { resolveProblemAuthors } from "../data/problem-authors";
 import {
   findProblemDiagramUrl,
   findProblemMetadata,
@@ -150,6 +151,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   // backend を経由せず Portal が metadata.json を bundle に持つ (admin-console と同じ source)。
   // catalog 不在 (= 旧 problem 等) は undefined。
   const metadata = problem ? findProblemMetadata(problem.problemId) : undefined;
+  const authors = resolveProblemAuthors(problem, metadata, config);
   // ja / metadata.i18n 不在 / 該当 field 不在は元の ja narrative にフォールバック (helper 側で処理)。
   // ローカル大会 (#3226) では catalog 投影に instructions が無く、認証済み team view の
   // gate 済み本文で補う (withGatedInstructions)。
@@ -289,6 +291,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       >
         {narrative?.name ?? localizedProblem?.name ?? problem?.problemId ?? jobId}
       </Header>
+      <ProblemAuthors authors={authors} label={t("problem_authors.label")} />
 
       {/* Issue #1038 P0 #2: 競技開始前は問題詳細 / hints へのアクセスを **完全に lock**。
        *   backend (= participant-handler) から eventGate が scoring_not_started で返ってきた

@@ -8,6 +8,7 @@ import {
 } from "@/lib/catalog";
 import { htmlLang, type Locale, otherLocale } from "@/lib/i18n";
 import { CATALOG_REPO, catalogPath, homePath } from "@/lib/links";
+import { ProblemAuthors } from "../../../../packages/web-kit/src/ProblemAuthors";
 import { LanguageSwitch } from "./LanguageSwitch";
 
 // The public problem catalog (/catalog, /en/catalog). The problem DATA is generated
@@ -66,6 +67,10 @@ export function CatalogView({ locale }: { locale: Locale }) {
                     </span>
                   </div>
                   <h3>{problem.name[locale]}</h3>
+                  <ProblemAuthors
+                    authors={problem.authors}
+                    label={locale === "ja" ? "作者" : "Authors"}
+                  />
                   <code className="catalog-card__id">{problem.id}</code>
                   {problem.tags.length > 0 ? (
                     <ul className="catalog-tags" aria-label={copy.tagsLabel}>

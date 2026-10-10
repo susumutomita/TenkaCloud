@@ -278,3 +278,20 @@ describe("ProblemDetailPage", () => {
     expect(await screen.findByText("string deploy fail")).toBeInTheDocument();
   });
 });
+
+it("shows explicit author credits on the admin detail", () => {
+  mockFind.mockReturnValue(
+    problem({
+      authors: [
+        { name: "問題作者", profileUrl: "https://example.com/profile" },
+        { name: "共同作者" },
+      ],
+    }),
+  );
+  renderPage();
+  expect(screen.getByRole("link", { name: "問題作者" })).toHaveAttribute(
+    "href",
+    "https://example.com/profile",
+  );
+  expect(screen.getByText(/共同作者/)).toBeInTheDocument();
+});

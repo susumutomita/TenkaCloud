@@ -188,3 +188,13 @@ describe("port-remap: remapContainerProblem (#2392)", () => {
     });
   });
 });
+
+it("keeps declared author identities and profile links unchanged during port remapping", () => {
+  const authors = [
+    { name: "作者 http://127.0.0.1:18080/", profileUrl: "http://127.0.0.1:18080/profile" },
+  ];
+  const metadata = { authors, instructions: "Visit http://127.0.0.1:18080/" };
+  const remapped = remapContainerProblem(metadata, new Map([[18080, 19080]]));
+  expect(remapped.authors).toEqual(authors);
+  expect(remapped.instructions).toBe("Visit http://127.0.0.1:19080/");
+});

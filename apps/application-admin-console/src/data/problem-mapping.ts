@@ -13,6 +13,8 @@
  * so the cycle is broken. `problems.ts` re-exports these for its existing consumers.
  */
 
+import { projectProblemAuthors } from "../../../../packages/portal-contracts/src/problem-authors";
+
 // Source imports let Vite bundle this shared mapper into its build-time plugin too.
 import {
   analyzeProblemCost,
@@ -43,6 +45,7 @@ export function metadataRuntimeToSummary(metadata: ProblemMetadata): ProblemDeta
 }
 
 export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: string): ProblemDetail {
+  const authors = projectProblemAuthors(metadata.authors);
   const costEstimate = templateYaml
     ? summarizeProblemCost(analyzeProblemCost(templateYaml))
     : undefined;
@@ -60,6 +63,7 @@ export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: strin
           },
         }
       : {}),
+    ...(authors ? { authors } : {}),
     id: metadata.id,
     name: metadata.name,
     category: metadata.category,

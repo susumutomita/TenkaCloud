@@ -273,3 +273,30 @@ test("forensic browser allowlist exposes evidence UI, never server answers or fi
       "Unreviewed problem content",
     );
 });
+
+test("local browser credits agree with admin and participant projections without exposing answers", () => {
+  const raw = {
+    id: "sample",
+    name: "問題",
+    authors: [
+      { name: "作者", profileUrl: "https://example.com/", email: "SECRET_EMAIL" },
+      { name: "共同作者" },
+    ],
+    description: "SECRET_ANSWER",
+    writeup: "SECRET_WRITEUP",
+    scoring: { kind: "verify", flag: "SECRET_FLAG" },
+  };
+  const projected = publicMetadata(
+    JSON.stringify(raw),
+    "/repo/problems/challenges/sample/metadata.json",
+  );
+  if (!projected) throw new Error("Missing projection");
+  const publicValue = JSON.parse(projected);
+  expect(publicValue.authors).toEqual([
+    { name: "作者", profileUrl: "https://example.com/" },
+    { name: "共同作者" },
+  ]);
+  expect(metadataToEntry(publicValue).authors).toEqual(publicValue.authors);
+  expect(metadataToDetail(publicValue).authors).toEqual(publicValue.authors);
+  expect(projected).not.toContain("SECRET");
+});

@@ -19,6 +19,13 @@ const { detectBrowserLocale, loadStoredLocale, persistLocale, resolveKey, interp
   _testInternals;
 const STORAGE_KEY = "tenkacloud.portal.locale";
 
+it("resolves author labels from both real participant dictionaries", () => {
+  expect(resolveKey(_testInternals.LOCALE_DICTIONARIES.ja, "problem_authors.label")).toBe("作者");
+  expect(resolveKey(_testInternals.LOCALE_DICTIONARIES.en, "problem_authors.label")).toBe(
+    "Authors",
+  );
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

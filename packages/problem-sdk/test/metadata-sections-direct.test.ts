@@ -47,3 +47,23 @@ describe("validateProblemMetadata: optional section validation", () => {
     expect(validateProblemMetadata(metadata)).toEqual([]);
   });
 });
+
+describe("public authoring credits", () => {
+  it("accepts explicit credits and rejects malformed or unsafe data", () => {
+    expect(
+      validateProblemMetadata({
+        id: "p",
+        authors: [{ name: "作者", profileUrl: "https://example.com/" }, { name: "共同作者" }],
+      }),
+    ).toEqual([]);
+    for (const authors of [
+      null,
+      [{}],
+      [{ name: " " }],
+      [{ name: "作者", profileUrl: ["javascript", "alert(1)"].join(":") }],
+      [{ name: "作者", email: "private" }],
+    ]) {
+      expect(metadataCodes({ id: "p", authors })).toContain("PROBLEM_METADATA_INVALID");
+    }
+  });
+});

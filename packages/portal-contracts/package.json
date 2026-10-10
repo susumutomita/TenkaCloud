@@ -1,13 +1,14 @@
 {
   "name": "@tenkacloud/portal-contracts",
   "version": "0.1.0",
-  "description": "Shared participant portal API wire contract — one definition consumed by both the participant-handler backend and the participant-portal SPA (Issue #2203)",
+  "description": "Shared participant portal API wire contract \u2014 one definition consumed by both the participant-handler backend and the participant-portal SPA (Issue #2203)",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./problem-authors": "./src/problem-authors.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

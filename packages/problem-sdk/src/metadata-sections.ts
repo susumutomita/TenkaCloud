@@ -6,6 +6,7 @@
  * disable scoring / endpoints at runtime). Owns no I/O.
  */
 
+import { isProblemAuthors } from "@tenkacloud/portal-contracts/problem-authors";
 import type { PackDiagnostic } from "./diagnostics.js";
 import { parseEndpointSlot } from "./endpoints-metadata.js";
 import { parseDisruptionEntry, parsePhaseEntry } from "./metadata-parser.js";
@@ -23,6 +24,15 @@ export function validateMetadataSections(
   diagnostics: PackDiagnostic[],
 ): void {
   const meta = problem.metadata;
+  if (meta.authors !== undefined && !isProblemAuthors(meta.authors)) {
+    diagnostics.push({
+      code: "METADATA_INVALID",
+      file: problem.metadataFile,
+      path: "authors",
+      message:
+        "authors must contain public names and optional absolute HTTP(S) profile URLs without credentials.",
+    });
+  }
   if (meta.scoring !== undefined && !parseScoringMetadata(meta.scoring)) {
     diagnostics.push({
       code: "METADATA_INVALID",

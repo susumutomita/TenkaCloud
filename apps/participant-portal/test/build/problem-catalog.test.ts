@@ -64,3 +64,11 @@ describe("problem catalog build projection", () => {
     expect(projectProblemCatalog("{}", "/problems/challenges/a/metadata.json")).toBeNull();
   });
 });
+
+ it("AWS catalog build includes safe author credits without answers", () => {
+   const source = JSON.stringify({ id: "credited", name: "問題", authors: [{ name: "作者", profileUrl: "https://example.com/", email: "SECRET_EMAIL" }, { name: "共同作者", profileUrl: ["javascript", "alert(1)"].join(":") }], description: "SECRET_ANSWER", writeup: "SECRET_WRITEUP", scoring: { flag: "SECRET_FLAG" } });
+   const output = projectProblemCatalog(source, "/repo/problems/challenges/credited/metadata.json?portal-catalog");
+   if (!output) throw new Error("Missing build projection");
+   expect(JSON.parse(output).authors).toEqual([{ name: "作者", profileUrl: "https://example.com/" }, { name: "共同作者" }]);
+   expect(output).not.toContain("SECRET");
+ });

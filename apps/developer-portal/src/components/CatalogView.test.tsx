@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CATALOG_DATA } from "@/content/catalog-data";
+import * as catalog from "@/lib/catalog";
 import { CatalogView } from "./CatalogView";
 
 afterEach(cleanup);
@@ -48,4 +49,42 @@ describe("CatalogView", () => {
     render(<CatalogView locale="en" />);
     expect(screen.getByText(bilingual.name.en)).toBeInTheDocument();
   });
+});
+
+it("renders explicit co-author credits on public cards in either locale", () => {
+  vi.spyOn(catalog, "groupedCatalog").mockReturnValue([
+    {
+      category: "Challenge",
+      problems: [
+        {
+          id: "credited",
+          category: "Challenge",
+          status: "ready",
+          difficulty: 1,
+          tags: [],
+          name: { ja: "問題", en: "Problem" },
+          authors: [
+            { name: "問題作者", profileUrl: "https://example.com/profile" },
+            { name: "共同作者" },
+          ],
+        },
+      ],
+    },
+  ]);
+  try {
+    const { rerender } = render(<CatalogView locale="ja" />);
+    expect(screen.getByRole("link", { name: "問題作者" })).toHaveAttribute(
+      "href",
+      "https://example.com/profile",
+    );
+    expect(screen.getByText(/共同作者/)).toBeInTheDocument();
+    rerender(<CatalogView locale="en" />);
+    expect(screen.getByText("Authors:")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "問題作者" })).toHaveAttribute(
+      "rel",
+      "noopener noreferrer",
+    );
+  } finally {
+    vi.restoreAllMocks();
+  }
 });

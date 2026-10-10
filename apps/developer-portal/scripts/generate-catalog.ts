@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+
 /**
  * [Issue #2408] Public problem-catalog data generator + drift check.
  *
@@ -29,6 +30,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { projectProblemAuthors } from "../../../packages/portal-contracts/src/problem-authors";
 import type {
   CatalogCategory,
   CatalogData,
@@ -51,6 +53,7 @@ const VALID_STATUSES: readonly CatalogStatus[] = ["ready", "draft", "deprecated"
 // (scoring, disruptions, template refs, etc.) is intentionally ignored — the
 // public catalog surface is display-only.
 interface RawMetadata {
+  readonly authors?: unknown;
   readonly id?: unknown;
   readonly name?: unknown;
   readonly category?: unknown;
@@ -87,9 +90,7 @@ function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function toProblem(path: string): CatalogProblem | undefined {
-  const raw = JSON.parse(readFileSync(path, "utf8")) as RawMetadata;
-
+export function toCatalogProblem(raw: RawMetadata): CatalogProblem | undefined {
   // Only publicly visible problems appear on the outward-facing catalog.
   if (raw.visibility !== "public") {
     return undefined;
@@ -121,7 +122,9 @@ function toProblem(path: string): CatalogProblem | undefined {
   // override — the catalog stays bilingual-complete rather than dropping a card.
   const nameEn = asString(raw.i18n?.en?.name) ?? nameJa;
 
+  const authors = projectProblemAuthors(raw.authors);
   return {
+    ...(authors ? { authors } : {}),
     id,
     category: category as CatalogCategory,
     status: normalizedStatus,
@@ -155,7 +158,7 @@ export function buildCatalogData(): CatalogData {
   }
   const problems: CatalogProblem[] = [];
   for (const file of files) {
-    const problem = toProblem(file);
+    const problem = toCatalogProblem(JSON.parse(readFileSync(file, "utf8")) as RawMetadata);
     if (problem !== undefined) {
       problems.push(problem);
     }
@@ -171,7 +174,9 @@ const GENERATED_HEADER = `// GENERATED FILE — do not edit by hand.
 // (a maintainer check; it needs the submodule checked out).
 `;
 
-const TYPE_DECLARATIONS = `export type CatalogCategory = "Battle" | "Challenge";
+const TYPE_DECLARATIONS = `import type { ProblemAuthor } from "../../../../packages/portal-contracts/src/problem-authors";
+
+export type CatalogCategory = "Battle" | "Challenge";
 export type CatalogStatus = "ready" | "draft" | "deprecated";
 
 export interface CatalogLocalizedText {
@@ -180,6 +185,7 @@ export interface CatalogLocalizedText {
 }
 
 export interface CatalogProblem {
+  readonly authors?: readonly ProblemAuthor[];
   readonly id: string;
   readonly category: CatalogCategory;
   readonly status: CatalogStatus;

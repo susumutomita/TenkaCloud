@@ -370,3 +370,20 @@ describe("metadataToEntry (optional-field branches)", () => {
     expect(entry.disruptions[0]).toEqual({ id: "d", name: "d name", publicHint: true });
   });
 });
+
+describe("author projection preserves fairness", () => {
+  it("keeps legacy entry shape and public credits only", () => {
+    expect(metadataToEntry(FAIRNESS_FIXTURE)).not.toHaveProperty("authors");
+    const authored = {
+      ...FAIRNESS_FIXTURE,
+      authors: [{ name: "作者", profileUrl: "https://example.com/", email: "secret" }],
+      visibility: "private" as const,
+    };
+    const entry = metadataToEntry(authored);
+    expect(entry.authors).toEqual([{ name: "作者", profileUrl: "https://example.com/" }]);
+    expect(entry.visibility).toBe("private");
+    expect(entry).not.toHaveProperty("description");
+    expect(entry).not.toHaveProperty("scoring");
+    expect(JSON.stringify(entry)).not.toContain("secret");
+  });
+});

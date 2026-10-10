@@ -22,6 +22,7 @@ const iso = "2026-09-30T00:00:00.000Z";
 const problem: ContainerProblem = {
   problemId: "sqli-demo",
   name: "SQL",
+  authors: [{ name: "作者", profileUrl: "https://example.com/profile" }, { name: "共同作者" }],
   description: "private answer",
   instructions: "Find the flag",
   writeup: "private writeup",
@@ -93,7 +94,9 @@ test("real verifier requests preserve penalties, gated prose, checkpoint awards 
     await submitFlag(request({ problemId: problem.problemId, flag: "correct" }), session, iso),
   ).toEqual({ status: 409, body: { error: "not_running" } });
   await session.lifecycle.ensureRunning(problem.problemId);
-  const before = JSON.stringify(teamView(session, Date.parse(iso)));
+  const beforeView = teamView(session, Date.parse(iso));
+  expect(beforeView.body).toMatchObject({ problems: [{ authors: problem.authors }] });
+  const before = JSON.stringify(beforeView);
   for (const secret of [
     "private answer",
     "private English answer",

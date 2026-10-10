@@ -1,4 +1,5 @@
 import { StatusCodes } from "http-status-codes";
+import { problemAuthorFields } from "../../../packages/portal-contracts/src/problem-authors";
 import { LOCAL_INTRO_DRILL_PROBLEM_ID } from "../../lib/intro-drill";
 import type { ContainerCheck, ContainerHintRevealMode } from "../../lib/problem-presentation";
 import { hintViews } from "../../lib/problem-presentation";
@@ -90,6 +91,7 @@ export function problemView(
   return {
     jobId: jobIdOf(problem.problemId),
     problemId: problem.problemId,
+    ...problemAuthorFields(runtime.problem.authors),
     name: problem.name,
     instructions: problem.instructions,
     // [#2696 PR5] The platform's one fixed intro drill — the portal pins this

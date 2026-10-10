@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { problemAuthorFields } from "../../packages/portal-contracts/src/problem-authors";
 import {
   type ProblemCourseMetadataInput,
   toCourseAlignment,
@@ -56,7 +57,7 @@ export function hostBrowserProblemPaths(root = repositoryRoot): readonly string[
   return result;
 }
 
-/** Build-time allowlist, not runtime tree-shaking: never ship author metadata,
+/** Build-time allowlist, not runtime tree-shaking: never ship organizer-only metadata,
  * hint content, answers, writeups or pre-start instructions to a hosting browser. */
 export function publicMetadata(code: string, id: string): string | null {
   if (!/[/\\]problems[/\\][^/\\]+[/\\][^/\\]+[/\\]metadata\.json(?:\?.*)?$/u.test(id)) return null;
@@ -71,6 +72,7 @@ export function publicMetadata(code: string, id: string): string | null {
     i18n.en && typeof i18n.en === "object" ? (i18n.en as Record<string, unknown>) : {};
   const native = isReviewedCoordination(raw.id);
   return JSON.stringify({
+    ...problemAuthorFields(raw.authors),
     id: raw.id,
     name: raw.name,
     // Four legacy local exercises are authored under battles/, but their verifier

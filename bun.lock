@@ -91,6 +91,7 @@
         "@mdx-js/react": "^3.1.0",
         "@next/mdx": "16.3.6",
         "@scalar/api-reference-react": "0.9.49",
+        "@tenkacloud/portal-contracts": "workspace:*",
         "@tenkacloud/problem-runtime": "workspace:*",
         "@tenkacloud/problem-sdk": "workspace:*",
         "@types/mdx": "^2.0.13",
@@ -277,6 +278,7 @@
         "tenkacloud-pack-report": "bin/pack-report.ts",
       },
       "dependencies": {
+        "@tenkacloud/portal-contracts": "workspace:*",
         "@tenkacloud/problem-runtime": "workspace:*",
         "zod": "^4.6.5",
       },
@@ -342,6 +344,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@tenkacloud/auth-client": "workspace:*",
+        "@tenkacloud/portal-contracts": "workspace:*",
         "dompurify": "^3.4.4",
         "marked": "^18.0.12",
       },

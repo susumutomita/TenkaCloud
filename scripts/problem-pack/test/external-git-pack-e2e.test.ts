@@ -39,6 +39,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { validatePackDirectory } from "@tenkacloud/problem-sdk";
+import { metadataToDetail } from "../../../apps/application-admin-console/src/data/problem-mapping";
+import { metadataToEntry } from "../../../packages/portal-contracts/src/problem-catalog";
 import type { CoreProblemInput, PlatformContext } from "../effective-catalog";
 import { createEventSnapshot, EventSnapshotStore, resolveDeploymentProvenance } from "../event-pin";
 import type { GitArchiveFetcher } from "../git-source";
@@ -114,6 +116,10 @@ function authorPack(dir: string, options: { version: string; problemId: string }
   const metaPath = path.join(problemsRoot, options.problemId, "metadata.json");
   const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
   meta.id = options.problemId;
+  meta.authors = [
+    { name: "問題作者", profileUrl: "https://example.com/profile" },
+    { name: "共同作者" },
+  ];
   fs.writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
 }
 
@@ -197,6 +203,21 @@ describe("external Git pack e2e: authoring -> install -> activate -> event -> de
     expect(result.entry.git).toEqual({ repositoryUrl: REPO_URL, commit: COMMIT_V1, subdir: "" });
     expect(result.entry.contentDigest).toMatch(/^[0-9a-f]{64}$/);
     expect(result.problemCount).toBe(1);
+    const authorMetadataPath = path.join(
+      storeDir,
+      result.entry.snapshotPath,
+      "problems/challenges/regional-network/metadata.json",
+    );
+    const installedMetadata = JSON.parse(fs.readFileSync(authorMetadataPath, "utf8"));
+    const authoredMetadata = JSON.parse(
+      fs.readFileSync(
+        path.join(authorDir, "problems/challenges/regional-network/metadata.json"),
+        "utf8",
+      ),
+    );
+    expect(installedMetadata.authors).toEqual(authoredMetadata.authors);
+    expect(metadataToEntry(installedMetadata).authors).toEqual(authoredMetadata.authors);
+    expect(metadataToDetail(installedMetadata).authors).toEqual(authoredMetadata.authors);
     // The fetcher was handed the exact pinned commit (no floating ref).
     expect(fetcher.requests).toEqual([{ commit: COMMIT_V1, repositoryUrl: REPO_URL, subdir: "" }]);
 

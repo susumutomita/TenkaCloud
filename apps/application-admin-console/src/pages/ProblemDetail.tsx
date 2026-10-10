@@ -7,7 +7,7 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
-import { Markdown } from "@tenkacloud/web-kit";
+import { Markdown, ProblemAuthors } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { Navigate, type NavigateFunction, useNavigate, useParams } from "react-router";
 import { useApiClient } from "../api/client";
@@ -41,7 +41,7 @@ export function ProblemDetailPage({
 }: {
   config: AppConfig;
   supportedProblemIds?: ReadonlySet<string>;
-  organizerContent?: Pick<ProblemDetail, "description" | "learningGoals" | "i18n">;
+  organizerContent?: Pick<ProblemDetail, "description" | "learningGoals" | "i18n" | "authors">;
 }) {
   const { problemId } = useParams<{ problemId: string }>();
   const navigate = useNavigate();
@@ -72,6 +72,7 @@ export function ProblemDetailPage({
       >
         {problem.name}
       </Header>
+      <ProblemAuthors authors={content?.authors} label={t("problem_authors.label")} />
 
       <Container header={<Header variant="h2">{t("problem_detail.section_overview")}</Header>}>
         <ColumnLayout columns={4} variant="text-grid">

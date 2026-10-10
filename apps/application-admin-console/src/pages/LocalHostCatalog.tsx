@@ -33,6 +33,10 @@ export function LocalHostCatalogPage({
       organizerContent={problemId ? catalog.content?.get(problemId) : undefined}
     />
   ) : (
-    <ProblemsPage localHost supportedProblemIds={catalog.supported} />
+    <ProblemsPage
+      localHost
+      supportedProblemIds={catalog.supported}
+      organizerContent={catalog.content}
+    />
   );
 }
