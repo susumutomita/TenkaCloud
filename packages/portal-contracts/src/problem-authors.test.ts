@@ -1,11 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { isProblemAuthors, projectProblemAuthors, safeAuthorProfileUrl } from "./problem-authors";
+import {
+  isProblemAuthors,
+  problemAuthorFields,
+  projectProblemAuthors,
+  safeAuthorProfileUrl,
+} from "./problem-authors";
 
 describe("explicit public author credits", () => {
   it("keeps absent and empty authors absent", () => {
     for (const value of [undefined, null, [], {}, "author"])
       expect(projectProblemAuthors(value)).toBeUndefined();
     expect(isProblemAuthors([])).toBe(true);
+  });
+  it("omits legacy fields and projects explicit credits for runtime views", () => {
+    for (const value of [undefined, [], [{ name: " " }]])
+      expect(problemAuthorFields(value)).toEqual({});
+    expect(problemAuthorFields([{ name: "作者", profileUrl: "https://example.com/bio" }])).toEqual({
+      authors: [{ name: "作者", profileUrl: "https://example.com/bio" }],
+    });
+    for (const value of [null, {}, [null], [[]], [{}], [{ name: 1 }], [{ name: " " }]])
+      expect(isProblemAuthors(value)).toBe(false);
   });
   it("supports Japanese, long names, multiple authors and names without links", () => {
     const authors = [
@@ -36,6 +50,10 @@ describe("explicit public author credits", () => {
     "https:///example.com",
     "https://",
     "https://example.com:99999",
+    "https://example.com:000000",
+    "https://example.com:",
+    "https://@example.com",
+    "https://example.com:abc",
     "https://example.com/\n",
   ])("rejects unsafe URL %s at authoring and renders the credit as text", (profileUrl) => {
     expect(safeAuthorProfileUrl(profileUrl)).toBeUndefined();

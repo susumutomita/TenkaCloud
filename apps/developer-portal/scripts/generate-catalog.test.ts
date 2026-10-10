@@ -32,6 +32,17 @@ describe("renderCatalogModule", () => {
 });
 
 describe("public catalog credits", () => {
+  it("drops malformed public entries even when they have credits", () => {
+    const raw = {
+      id: "sample",
+      name: "問題",
+      category: "Challenge",
+      visibility: "public",
+      authors: [{ name: "作者" }],
+    };
+    for (const invalid of [{ id: "" }, { name: "" }, { category: "" }, { category: "unknown" }])
+      expect(toCatalogProblem({ ...raw, ...invalid })).toBeUndefined();
+  });
   it("retains explicit co-authors while excluding private problems and answers", () => {
     const raw = {
       id: "sample",

@@ -275,7 +275,7 @@ export function QuestsPage() {
                 catalog.find((entry) => entry.id === problem.problemId),
                 config,
               )}
-              label={locale === "ja" ? "作者" : "Authors"}
+              label={t("problem_authors.label")}
             />
             {locked && (
               <Box variant="small" color="text-status-inactive">

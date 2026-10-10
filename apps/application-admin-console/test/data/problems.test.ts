@@ -39,6 +39,15 @@ const TEMPLATE_WITH_ALWAYS_ON_COST = `Resources:
 `;
 
 describe("metadataToDetail", () => {
+  it("preserves public co-authors and omits empty credits from admin details", () => {
+    const authors = [
+      { name: "作者", profileUrl: "https://example.com/profile" },
+      { name: "共同作者" },
+    ];
+    expect(metadataToDetail({ ...BASE_METADATA, authors }).authors).toEqual(authors);
+    expect(metadataToDetail(BASE_METADATA)).not.toHaveProperty("authors");
+    expect(metadataToDetail({ ...BASE_METADATA, authors: [] })).not.toHaveProperty("authors");
+  });
   it("projects authored English display fields without instructions or hints", () => {
     const english = {
       name: "English",

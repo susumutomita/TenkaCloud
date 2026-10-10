@@ -686,5 +686,5 @@
     "role_transfer": "別設定への転用",
     "role_synthesis": "複数週の統合"
   },
-  "problem_authors.label": "作者"
+  "problem_authors": { "label": "作者" }
 }

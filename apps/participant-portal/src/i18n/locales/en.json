@@ -686,5 +686,5 @@
     "role_transfer": "Transfer",
     "role_synthesis": "Synthesis"
   },
-  "problem_authors.label": "Authors"
+  "problem_authors": { "label": "Authors" }
 }

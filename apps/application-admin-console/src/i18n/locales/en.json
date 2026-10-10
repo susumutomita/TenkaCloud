@@ -1222,5 +1222,5 @@
     "feature_unavailable": "Credential registration for this provider is not enabled here. Ask the environment administrator about availability.",
     "sakura": "Sakura Cloud"
   },
-  "problem_authors.label": "Authors"
+  "problem_authors": { "label": "Authors" }
 }

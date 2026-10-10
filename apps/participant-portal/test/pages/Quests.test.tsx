@@ -1044,3 +1044,15 @@ it("keeps an uncredited runtime snapshot uncredited even with newer bundled auth
   render(<QuestsPage />);
   expect(screen.queryByText("後から追加された作者")).not.toBeInTheDocument();
 });
+
+it("uses the matching catalog credit for legacy AWS cards and ignores other authors", () => {
+  mockAppConfig.mockReturnValue({ cloudMode: "real" });
+  mockListCatalog.mockReturnValue([
+    { ...alignedCatalogEntry("another", "Other"), authors: [{ name: "別問題の作者" }] },
+    { ...alignedCatalogEntry("hello-world", "Hello"), authors: [{ name: "AWS問題の作者" }] },
+  ]);
+  mockTeamView.mockReturnValue({ view: { problems: [problem({})] }, error: null });
+  render(<QuestsPage />);
+  expect(screen.getByText(/AWS問題の作者/)).toBeInTheDocument();
+  expect(screen.queryByText(/別問題の作者/)).not.toBeInTheDocument();
+});
