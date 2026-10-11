@@ -15,6 +15,7 @@ import {
 import { warnOnCoordinationCapacity } from "./coordination-capacity-warning.js";
 import { validateSelfTestAcknowledgment } from "./self-test-consent.js";
 import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
+import { cloudSkillCatalog } from "./skill-catalog.js";
 import type { CreateEventRequest, CreateEventResponse } from "./types.js";
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 日
@@ -104,7 +105,14 @@ export async function createEvent(
     tenantId: ctx.tenantId,
     name: req.name,
     status: "DRAFT",
-    problems: req.problems,
+    problems: req.problems.map((problem) => ({
+      problemId: problem.problemId,
+      defaultRegion: problem.defaultRegion,
+      ...(problem.defaultAwsAccountId ? { defaultAwsAccountId: problem.defaultAwsAccountId } : {}),
+      ...(cloudSkillCatalog(shared.executionCatalog, problem.problemId)
+        ? { skillCatalog: cloudSkillCatalog(shared.executionCatalog, problem.problemId) }
+        : {}),
+    })),
     teamCount: teams.length,
     createdAt,
     updatedAt: createdAt,

@@ -4,6 +4,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { SkillEvidenceInput } from "../../../apps/application-admin-console/src/lib/skill-evidence";
+import { buildSkillEvidence } from "../../../apps/application-admin-console/src/lib/skill-evidence";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
 import { CloudFormationEngine, cloudFormationCatalog } from "../cloudformation-engine";
 import { CompetitionEngine } from "../competition-engine";
@@ -691,4 +693,41 @@ test("cloud and coordination credits survive event pinning without revealing ans
     required(pinned.problems.find((item) => item.problemId === "hello-world")).definition,
   );
   expect(definition.authors).toEqual(authors);
+});
+
+test("event report carries pinned Challenge evidence without runtime secrets or participant flags", async () => {
+  const fixture = await host();
+  const event = await startedEvent(fixture);
+  const { alpha } = teams(event);
+  await submit(fixture, alpha, fakeFlag(stackName(fixture, "alpha")));
+  const pinned = fixture.store
+    .event(event.eventId)
+    .problems.find((problem) => problem.problemId === "hello-world")?.skillCatalog;
+  expect(pinned?.declarations[0]?.skillId).toBe("aws.parameter.read");
+  const response = await fixture.service.admin(
+    apiRequest({
+      method: "GET",
+      path: `/events/${event.eventId}`,
+      token: fixture.adminToken,
+      query: new URLSearchParams({ withScoreEvents: "true" }),
+    }),
+  );
+  const detail = response.body as SkillEvidenceInput;
+  expect(
+    detail.problems.find((problem) => problem.problemId === "hello-world")?.skillCatalog,
+  ).toEqual(pinned);
+  expect(
+    buildSkillEvidence(detail).find(
+      (row) => row.teamId === alpha.teamId && row.problemId === "hello-world",
+    )?.status,
+  ).toBe("demonstrated");
+  const exported = JSON.stringify(detail);
+  for (const secret of [
+    fakeFlag(stackName(fixture, "alpha")),
+    alpha.teamLoginKey,
+    "flagOutputKey",
+    "hintId",
+    "templateBody",
+  ])
+    expect(exported).not.toContain(secret);
 });

@@ -630,3 +630,39 @@ describe("hosting-account self-test consent precedes event creation", () => {
     expect(result.teams).toHaveLength(1);
   });
 });
+
+it("pins public skill metadata at event creation and ignores caller-supplied evidence", async () => {
+  const declaration = {
+    skillId: "endpoint.probe",
+    label: "成功",
+    i18n: { en: { label: "Successful probe" } },
+    rule: { source: "uptime", result: "ok" },
+  };
+  const executionCatalog = {
+    catalogKey: `catalogs/${"a".repeat(64)}.json`,
+    skills: { "hello-world-battle": [declaration] },
+    scoring: { "hello-world-battle": { kind: "uptime-flat" } },
+    catalog: { "hello-world-battle": "problems/battles/hello-world-battle" },
+  } as unknown as NonNullable<EventSharedResources["executionCatalog"]>;
+  const { shared, ddbSend } = buildShared({ executionCatalog });
+  ddbSend.mockResolvedValue({});
+  const req = CreateEventRequestSchema.parse({
+    name: "Evidence",
+    teams: teamsOf(1),
+    problems: [
+      {
+        problemId: "hello-world-battle",
+        defaultRegion: "ap-northeast-1",
+        skillCatalog: { revision: "forged" },
+      },
+    ],
+  });
+  await createEvent(shared, { tenantId: "local", nowMs: NOW_MS }, req);
+  const item = firstTransactWriteCommand(ddbSend).input.TransactItems?.[0]?.Put?.Item;
+  expect(item?.problems[0].skillCatalog).toEqual({
+    revision: `sha256:${"a".repeat(64)}`,
+    scoringKind: "uptime-flat",
+    declarations: [declaration],
+  });
+  expect(JSON.stringify(item?.problems)).not.toContain("forged");
+});

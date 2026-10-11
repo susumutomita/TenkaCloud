@@ -6,6 +6,7 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
+import { skillDeclarations } from "../../../packages/portal-contracts/src/skill-evidence.js";
 import type {
   PackAsset,
   ProblemsCatalogBundle,
@@ -82,6 +83,7 @@ function captureProblemSource(
 ) {
   const files: ExecutionCatalog["sources"][string] = {};
   let hints: unknown;
+  let declarations: ReturnType<typeof skillDeclarations>;
   for (const relativePath of sourceFiles(selected)) {
     const file = repositoryArtifactFile(selected.root, `${selected.directory}/${relativePath}`);
     if (lstatSync(file).size > MAX_EXECUTION_SOURCE_BYTES)
@@ -92,12 +94,16 @@ function captureProblemSource(
     objects.set(key, bytes);
     files[relativePath] = { key, digest };
     if (relativePath === "metadata.json") {
-      const metadata = JSON.parse(bytes.toString("utf8")) as { hints?: unknown };
+      const metadata = JSON.parse(bytes.toString("utf8")) as {
+        hints?: unknown;
+        skillEvidence?: unknown;
+      };
       hints = metadata.hints;
+      declarations = skillDeclarations(metadata.skillEvidence);
     }
   }
   if (!files["metadata.json"]) throw new Error("Execution source metadata missing.");
-  return { files, hints };
+  return { files, hints, declarations };
 }
 
 function captureNativeProfile(
@@ -131,6 +137,7 @@ export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput)
   const catalog: Record<string, string> = {};
   const sources: ExecutionCatalog["sources"] = {};
   const hints: Record<string, unknown> = {};
+  const skills: Record<string, unknown> = {};
   const objects = new Map<string, Uint8Array>();
   for (const [problemId, directory] of Object.entries(rawCatalog)) {
     if (typeof directory !== "string")
@@ -138,6 +145,7 @@ export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput)
     catalog[problemId] = directory;
     const captured = captureProblemSource(sourceRoot(input, directory), objects);
     sources[problemId] = captured.files;
+    if (captured.declarations) skills[problemId] = captured.declarations;
     if (captured.hints !== undefined) hints[problemId] = captured.hints;
   }
   const plugins: ExecutionCatalog["plugins"] = {};
@@ -162,6 +170,7 @@ export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput)
       sources,
       plugins,
       hints,
+      skills,
       ...Object.fromEntries(
         [
           "scoring",

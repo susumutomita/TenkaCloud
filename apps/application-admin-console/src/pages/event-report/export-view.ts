@@ -18,6 +18,7 @@ import {
 } from "../../lib/event-report-stats";
 import type { EventReportExport, EventReportLabels } from "./exporters/html";
 import { formatScheduleRange } from "./formatters";
+import { buildSkillView } from "./skill-view";
 
 export type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -104,5 +105,6 @@ export function buildExportView(args: {
     breakdown,
     disruptions,
     labels,
+    skills: buildSkillView(detail, locale, t),
   };
 }

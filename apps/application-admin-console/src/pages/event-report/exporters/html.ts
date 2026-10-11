@@ -51,6 +51,7 @@ import type {
  * (= 同じ data から ja / en どちらの export も再現可能)。
  */
 export interface EventReportExport {
+  readonly skills?: import("../skill-view").SkillEvidenceView;
   readonly locale: "ja" | "en";
   readonly title: string;
   readonly eventName: string;
@@ -305,6 +306,7 @@ export function buildEventReportHtml(exp: EventReportExport): string {
     renderSummary(exp),
     renderScoreboard(exp),
     renderBreakdown(exp),
+    renderSkills(exp),
     renderDisruptions(exp),
     renderFooter(exp),
   ]
@@ -325,4 +327,19 @@ export function buildEventReportHtml(exp: EventReportExport): string {
 </body>
 </html>
 `;
+}
+
+function renderSkills(exp: EventReportExport): string {
+  const view = exp.skills;
+  if (!view) return "";
+  const headers = view.headers.map((head) => `<th scope="col">${escapeHtml(head)}</th>`).join("");
+  const rows = view.rows
+    .map((row) => {
+      const cells = row
+        .map((cell) => `<td style="overflow-wrap:anywhere">${escapeHtml(cell)}</td>`)
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+  return `<section aria-label="${escapeHtml(view.title)}"><h2>${escapeHtml(view.title)}</h2><p>${escapeHtml(view.note)}</p><table style="table-layout:fixed"><colgroup><col style="width:12%"><col style="width:23%"><col style="width:20%"><col style="width:45%"></colgroup><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></section>`;
 }

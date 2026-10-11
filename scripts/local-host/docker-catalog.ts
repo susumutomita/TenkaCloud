@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { assertComposePolicy } from "./container/compose-policy";
 import { type ContainerProblem, loadContainerProblem } from "./container/manifest";
 import { type Job, organizerProblemContent, type Problem } from "./model";
+import { skillCatalog } from "./skill-catalog";
 
 export interface DockerDefinition {
   readonly problem: ContainerProblem;
@@ -72,6 +73,7 @@ function catalogProblem(directory: string): Problem | undefined {
     organizerContent: organizerProblemContent(metadata),
     runtime: "docker",
     definition: JSON.stringify(definition),
+    skillCatalog: skillCatalog(metadata, JSON.stringify(definition)),
   };
 }
 

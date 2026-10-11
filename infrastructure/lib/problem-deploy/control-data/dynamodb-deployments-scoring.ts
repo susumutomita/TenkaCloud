@@ -32,7 +32,11 @@ export class DynamoDbDeploymentsScoring implements DeploymentsScoringPort {
 
   async listScoreEvents(
     jobId: string,
-    opts: { readonly pageSize: number; readonly maxPages?: number },
+    opts: {
+      readonly pageSize: number;
+      readonly maxPages?: number;
+      readonly onHistoryAvailability?: (complete: boolean) => void;
+    },
   ): Promise<readonly ScoreEventRecord[]> {
     const items = await this.core.queryAllPages(
       {
@@ -42,6 +46,7 @@ export class DynamoDbDeploymentsScoring implements DeploymentsScoringPort {
         Limit: opts.pageSize,
       },
       opts.maxPages,
+      opts.onHistoryAvailability,
     );
     return items.map(itemToScoreEvent);
   }

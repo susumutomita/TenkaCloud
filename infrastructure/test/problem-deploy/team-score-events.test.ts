@@ -252,3 +252,28 @@ describe("collectTeamScoreEvents", () => {
     expect(json).not.toContain("1700000000001");
   });
 });
+
+it("marks incomplete DynamoDB history even when 1MB pages contain fewer than 200 items", async () => {
+  const { shared, ddbSend } = buildShared();
+  for (let page = 0; page < 3; page += 1)
+    ddbSend.mockResolvedValueOnce({
+      Items: [ev()],
+      LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: `EVENT#page${page}` },
+    });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.historyAvailable).toBe(false);
+  expect(rows[0]?.events).toHaveLength(3);
+});
+it("marks invalid raw history rows incomplete before public DTO filtering", async () => {
+  const { shared, ddbSend } = buildShared();
+  ddbSend.mockResolvedValueOnce({ Items: [ev(), ev({ source: "unknown" })] });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.historyAvailable).toBe(false);
+  expect(rows[0]?.events).toHaveLength(1);
+});

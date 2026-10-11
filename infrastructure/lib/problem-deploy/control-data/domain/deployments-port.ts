@@ -475,7 +475,11 @@ export interface DeploymentsScoringPort {
    */
   listScoreEvents(
     jobId: string,
-    opts: { readonly pageSize: number; readonly maxPages?: number },
+    opts: {
+      readonly pageSize: number;
+      readonly maxPages?: number;
+      readonly onHistoryAvailability?: (complete: boolean) => void;
+    },
   ): Promise<readonly ScoreEventRecord[]>;
 
   /**

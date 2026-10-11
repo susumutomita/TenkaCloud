@@ -382,3 +382,20 @@ describe("immutable cloud execution artifacts", () => {
     });
   });
 });
+
+it("captures allowlisted skill declarations in the same immutable cloud execution catalog", () => {
+  const input = fixture();
+  const declaration = {
+    skillId: "parameter.read",
+    label: "取得",
+    i18n: { en: { label: "Retrieve" } },
+    rule: { source: "flag", result: "ok" },
+  };
+  writeFileSync(
+    join(input.repositoryRoot, input.directory, "metadata.json"),
+    JSON.stringify({ skillEvidence: [declaration], hiddenChecks: ["secret"] }),
+  );
+  const built = buildCloudExecutionArtifacts(input);
+  expect(built.catalog.skills?.fixture).toEqual([declaration]);
+  expect(JSON.stringify(built.catalog.skills)).not.toContain("secret");
+});
