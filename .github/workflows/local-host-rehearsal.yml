@@ -79,6 +79,13 @@ jobs:
         run: bun run scripts/local-host/tests/tenant-boundary-browser-e2e.ts
       - name: Forensic evidence, citations, scoring and SQLite restart
         run: bun run scripts/local-host/tests/forensic-browser-e2e.ts
+      - name: Purpose selection without GPU or model downloads
+        env:
+          HOST_E2E_ENGINE: coordination
+          HOST_E2E_CATALOG_ALL: '1'
+          HOST_E2E_ADMIN_PORT: '0'
+          HOST_E2E_PARTICIPANT_PORT: '0'
+        run: bun run scripts/local-host/tests/purpose-selection-rehearsal.ts
       - name: Critical browser flow (organizer + two participants, real Docker)
         if: github.event_name == 'pull_request'
         env:
@@ -97,6 +104,7 @@ jobs:
           path: |
             .tenkacloud/host-ui-review/local-catalog.png
             .tenkacloud/host-ui-review/local-event-create.png
+            .tenkacloud/host-ui-review/purpose-selection-mobile.png
             .tenkacloud/host-ui-review/participant-competition.png
             .tenkacloud/host-ui-review/participant-scoreboard.png
             .tenkacloud/host-ui-review/pi-siege/native-debrief-en.png

@@ -70,19 +70,19 @@ function Harness() {
 it("loads optional help only after opening, narrows without selecting, and restores manual selection", async () => {
   render(<Harness />);
   expect(screen.queryByRole("button", { name: "Test results" })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "目的から問題を探す" }));
+  fireEvent.click(screen.getByRole("button", { name: "問題選択のヘルプ" }));
   fireEvent.click(await screen.findByRole("button", { name: "Test results" }));
   expect(screen.queryByTestId("problem-checkbox-one")).not.toBeInTheDocument();
   expect(screen.getByTestId("problem-checkbox-two").querySelector("input")).not.toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "Clear results" }));
   expect(screen.getByTestId("problem-checkbox-one").querySelector("input")).toBeChecked();
   fireEvent.click(screen.getByRole("button", { name: "Test results" }));
-  fireEvent.click(screen.getByRole("button", { name: "目的から問題を探す" }));
+  fireEvent.click(screen.getByRole("button", { name: "問題選択のヘルプ" }));
   expect(screen.getByTestId("problem-checkbox-one").querySelector("input")).toBeChecked();
 });
 it("passes the current filter scope and restores selection when search clears stale results", async () => {
   render(<Harness />);
-  fireEvent.click(screen.getByRole("button", { name: "目的から問題を探す" }));
+  fireEvent.click(screen.getByRole("button", { name: "問題選択のヘルプ" }));
   fireEvent.click(await screen.findByRole("button", { name: "Test results" }));
   fireEvent.change(screen.getByRole("searchbox", { name: "problems.search_label" }), {
     target: { value: "one" },

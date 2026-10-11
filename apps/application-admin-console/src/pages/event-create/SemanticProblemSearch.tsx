@@ -5,6 +5,7 @@ import type { ProblemSummary } from "../../data/problems";
 import { useI18n } from "../../i18n";
 import type { HostCatalog } from "./LocalHostEventCreate";
 import { advisorCatalog } from "./problem-advisor";
+import { rankPurpose } from "./purpose-search";
 import { EMBEDDING_MODEL, rankSemantic } from "./semantic-search";
 
 function searchErrorLabel(error: string) {
@@ -57,6 +58,8 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [vectors, setVectors] = useState<{ id: string; vector: number[] }[]>([]);
+  const [searched, setSearched] = useState(false);
+  const [resultMode, setResultMode] = useState("catalog");
   const [results, setResults] = useState<{ id: string; score: number }[]>([]);
   const composing = useRef(false);
   const cancel = () => {
@@ -69,6 +72,7 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
     setBusy(false);
     setVectors([]);
     setResults([]);
+    setSearched(false);
     onCandidates(null);
     setStatus("検索を終了しました。下の一覧からも問題を選べます。");
   };
@@ -93,6 +97,7 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
       setBusy(false);
     }
     setResults([]);
+    setSearched(false);
     onCandidates(null);
     setVectors([]);
   }, [scope, onCandidates]);
@@ -183,27 +188,46 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
     setVectors(data.vectors);
     return data.vectors;
   };
+  const searchPublicCatalog = () => {
+    const ranked = rankPurpose(query, candidates);
+    setResultMode("catalog");
+    setResults(ranked);
+    setSearched(true);
+    onCandidates(ranked.map((p) => p.id));
+    setStatus(
+      ranked.length
+        ? "公開情報に合う候補に絞りました。下の一覧のチェック欄から選んでください。"
+        : "目的に合う候補が見つかりませんでした。別の言葉で探すか、絞り込みを解除してください。",
+    );
+  };
+  const searchSemantic = async (run: number) => {
+    const indexed = await ensureIndex();
+    setStatus("目的に近い候補を検索しています…");
+    const data = await call("query", { query });
+    if (run !== serial.current) return;
+    metrics("query", { elapsedMs: data.elapsedMs, candidateCount: candidates.length });
+    if (!data.vector) throw new Error("検索ベクトルを受け取れませんでした。");
+    const ranked = rankSemantic(data.vector, indexed, new Set(candidates.map((p) => p.id)));
+    setResultMode("semantic");
+    setResults(ranked);
+    setSearched(true);
+    onCandidates(ranked.map((p) => p.id));
+    setStatus(
+      "下の問題一覧を候補に絞りました。内容を確認して、一覧のチェック欄から選んでください。",
+    );
+  };
   const search = async () => {
-    if (!query.trim() || busy || !ready) return;
+    if (!query.trim() || busy) return;
     const run = serial.current;
     setBusy(true);
     setError("");
     setResults([]);
+    setSearched(false);
     onCandidates(null);
     try {
       requireCatalog(catalog);
-      const indexed = await ensureIndex();
-      setStatus("目的に近い候補を検索しています…");
-      const data = await call("query", { query });
-      if (run !== serial.current) return;
-      metrics("query", { elapsedMs: data.elapsedMs, candidateCount: candidates.length });
-      if (!data.vector) throw new Error("検索ベクトルを受け取れませんでした。");
-      const ranked = rankSemantic(data.vector, indexed, new Set(candidates.map((p) => p.id)));
-      setResults(ranked);
-      onCandidates(ranked.map((p) => p.id));
-      setStatus(
-        "下の問題一覧を候補に絞りました。内容を確認して、一覧のチェック欄から選んでください。",
-      );
+      if (ready) await searchSemantic(run);
+      else searchPublicCatalog();
     } catch (e) {
       if (run === serial.current) setError(String(e));
     } finally {
@@ -215,18 +239,57 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
       <h3>目的から問題を探す</h3>
       <p>
         学びたいことや練習したい場面を文章で入力すると、既存の問題から候補を見つけます。
-        現在のフィルターと開催対応に合う{candidates.length}件が対象です。
+        準備なしで公開情報の言葉から検索できます。現在のフィルターと開催対応に合う
+        {candidates.length}件が対象です。
       </p>
-      {!ready && (
-        <p>
-          初回の準備では約207MBの検索データを取得します。実行に必要なファイルを含め合計約235MBです。
-          データはこのブラウザに保存され、端末のメモリや処理能力を使います。
-          入力した目的や教材を外部に送らず、この端末内で検索します。準備せず下の一覧から選ぶこともできます。
-        </p>
-      )}
+
+      <label>
+        学びたいこと
+        <textarea
+          aria-label="学びたいこと"
+          placeholder="例: 暗号を学びたい / データベースの脆弱性を練習したい"
+          value={query}
+          disabled={busy}
+          maxLength={2000}
+          onChange={(e) => setQuery(e.target.value)}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+          }}
+          onKeyDown={(e) => {
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing &&
+              !composing.current &&
+              e.keyCode !== 229
+            ) {
+              e.preventDefault();
+              void search();
+            }
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        disabled={busy || !query.trim() || !candidates.length || catalog.loading}
+        onClick={search}
+      >
+        候補を探す
+      </button>
+
       <p>候補の内容と難易度・所要時間・実行環境を確認して選んでください。</p>
       <details>
-        <summary>検索の仕組みと保存データ</summary>
+        <summary>検索の精度を上げる（任意）・保存データ</summary>
+        {!ready && (
+          <p>
+            任意の精度向上の準備では約207MBの検索データを取得します。実行に必要なファイルを含め合計約235MBです。
+            データはこのブラウザに保存され、端末のメモリや処理能力を使います。
+            入力した目的や教材を外部に送らず、この端末内で検索します。公開情報の言葉からの検索は、準備せずに使えます。
+          </p>
+        )}
         <p>
           EmbeddingGemma 2のテキスト専用q4モデル（約175MB）をTransformers.jsとWebGPUで実行します。
           Hugging Faceからモデルとtokenizerを取得し、ブラウザに保存します。
@@ -254,7 +317,7 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
         </button>
       </details>
       {!("gpu" in navigator) ? (
-        <p>このブラウザでは目的からの検索を使えません。下の一覧から問題を選べます。</p>
+        <p>このブラウザでは精度向上の機能を使えません。公開情報の言葉から検索できます。</p>
       ) : (
         !ready && (
           <button
@@ -262,7 +325,7 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
             disabled={busy || catalog.loading || !!catalog.error}
             onClick={load}
           >
-            検索を準備する
+            精度向上を準備する（任意）
           </button>
         )
       )}
@@ -270,45 +333,6 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
         <button type="button" onClick={cancel}>
           検索を終了する
         </button>
-      )}
-      {ready && (
-        <>
-          <label>
-            学びたいこと
-            <textarea
-              aria-label="学びたいこと"
-              value={query}
-              disabled={busy}
-              maxLength={2000}
-              onChange={(e) => setQuery(e.target.value)}
-              onCompositionStart={() => {
-                composing.current = true;
-              }}
-              onCompositionEnd={() => {
-                composing.current = false;
-              }}
-              onKeyDown={(e) => {
-                if (
-                  e.key === "Enter" &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing &&
-                  !composing.current &&
-                  e.keyCode !== 229
-                ) {
-                  e.preventDefault();
-                  void search();
-                }
-              }}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={busy || !query.trim() || !candidates.length}
-            onClick={search}
-          >
-            候補を探す
-          </button>
-        </>
       )}
       <p role="status">{status}</p>
       {error && (
@@ -337,7 +361,9 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
                     <details>
                       <summary>検索の詳細</summary>
                       <p>
-                        内容の近さ: {r.score.toFixed(3)}。正解の確率や条件への適合率ではありません。
+                        {resultMode === "semantic"
+                          ? `内容の近さ: ${r.score.toFixed(3)}。正解の確率や条件への適合率ではありません。`
+                          : "タイトル・公開概要・学習目標・テーマの言葉に一致しました。条件の完全な適合を保証するものではありません。"}
                       </p>
                     </details>
                   </li>
@@ -347,12 +373,13 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
           </ol>
         </ScrollableProblemList>
       )}
-      {results.length > 0 && (
+      {searched && (
         <button
           type="button"
           disabled={busy}
           onClick={() => {
             setResults([]);
+            setSearched(false);
             onCandidates(null);
             setStatus("目的による絞り込みを解除しました。");
           }}

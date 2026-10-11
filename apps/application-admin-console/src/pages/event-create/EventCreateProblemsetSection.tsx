@@ -213,7 +213,7 @@ export function EventCreateProblemsetSection({
       <SpaceBetween size="m">
         {hostCatalog && LocalSemanticSearch && (
           <ExpandableSection
-            headerText="目的から問題を探す"
+            headerText="問題選択のヘルプ"
             expanded={purposeHelpOpen}
             onChange={({ detail }) => {
               setPurposeHelpOpen(detail.expanded);
