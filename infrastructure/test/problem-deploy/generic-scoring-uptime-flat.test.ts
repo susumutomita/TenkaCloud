@@ -4,6 +4,7 @@ import type {
   KindHandlerInput,
   PhaseEntry,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
+import { probeTransport } from "../../lib/problem-deploy/runtime-clients/probe-transport";
 import type { UptimeFlatScoringMetadata } from "../../lib/utils/scoring-metadata";
 
 /**
@@ -53,7 +54,7 @@ function buildInput(
 describe("uptime-flat kind legacy uptime probe compatibility", () => {
   const fetchMock = vi.fn();
   beforeEach(() => {
-    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(probeTransport, "fetch").mockImplementation(fetchMock);
     fetchMock.mockReset();
   });
   afterEach(() => {

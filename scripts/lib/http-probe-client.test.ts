@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import { probeUrl } from "./http-probe-client";
+import { probeTransport } from "./probe-transport";
 
 describe("probeUrl (SSRF revalidation + bounded body read)", () => {
   const fetchMock = vi.fn();
 
   beforeEach(() => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(
+    vi.spyOn(probeTransport, "fetch").mockImplementation(
       Object.assign(fetchMock, { preconnect: () => undefined }),
     );
     fetchMock.mockReset();

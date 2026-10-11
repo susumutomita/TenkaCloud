@@ -129,8 +129,10 @@ function updateCommands() {
     .filter((c) => c.constructor.name === "UpdateCommand");
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubGlobal("fetch", fetchMock);
+  // Load modules before fake timers; compilation/import scheduling is not the clock under test.
+  await import("../../lib/problem-deploy/handlers/generic-scoring-handler/index");
   fetchMock.mockReset();
   fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
   ddbSend.mockReset();
@@ -416,3 +418,7 @@ describe("operator-fired disruption effect (#1665)", () => {
     expect(values[":pts"]).toBe(100); // window elapsed → full score
   });
 });
+
+vi.mock("../../lib/problem-deploy/runtime-clients/probe-transport", () => ({
+  probeTransport: { fetch: (url: string, init: RequestInit) => globalThis.fetch(url, init) },
+}));

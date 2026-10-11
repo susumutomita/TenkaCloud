@@ -5,7 +5,7 @@
  * URLs immediately before outbound HTTP. Metadata-supplied paths can be absolute, and redirect targets
  * are checked before each redirect hop is fetched.
  *
- * Phase 3.B fetcher で DNS-rebinding-safe な resolve-then-connect を実装するまでの暫定。host は
+ * 接続時のDNS検査・address pinningはprobe transportが担当する。host は
  * IPv6 bracket を剥がし lowercase 化した bare form に正規化してから lookup する。
  *
  * Issue #863: IPv6-mapped IPv4 (`::ffff:169.254.169.254`) や IPv4 short form
@@ -59,7 +59,20 @@ function normalizeHost(hostname: string): string {
   const rawHost = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   let end = rawHost.length;
   while (end > 0 && rawHost[end - 1] === ".") end--;
-  return unwrapIPv6MappedIPv4(rawHost.slice(0, end));
+  const host = rawHost.slice(0, end);
+  if (!host.includes(":")) return host;
+  // DNS answers can contain expanded IPv6 rather than URL.hostname's canonical form.
+  try {
+    return unwrapIPv6MappedIPv4(new URL(`http://[${host}]/`).hostname.slice(1, -1));
+  } catch {
+    return "";
+  }
+}
+
+/** Apply the same policy to URL hosts and DNS answers; RFC1918 remains allowed. */
+export function isSsrfSafeHost(hostname: string): boolean {
+  const host = normalizeHost(hostname);
+  return host.length > 0 && !SSRF_BLOCKED_HOSTS.has(host) && !/^127\.\d+\.\d+\.\d+$/.test(host);
 }
 
 /**
@@ -70,7 +83,7 @@ export function isSsrfSafeUrl(value: string): boolean {
   try {
     const url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-    return !SSRF_BLOCKED_HOSTS.has(normalizeHost(url.hostname));
+    return isSsrfSafeHost(url.hostname);
   } catch {
     return false;
   }

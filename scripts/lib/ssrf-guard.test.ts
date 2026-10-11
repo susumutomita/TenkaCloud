@@ -91,3 +91,20 @@ describe("DNS absolute hostname の正規化", () => {
     expect(isSsrfSafeUrl(url)).toBe(true);
   });
 });
+
+/* eslint-disable sonarjs/no-hardcoded-ip -- Static IP fixtures for pure URL validation; no network requests. */
+describe("loopback CIDR coverage", () => {
+  it.each([
+    "127.0.0.2",
+    "127.1.2.3",
+    "127.255.255.255",
+    "2130706434",
+    "0x7f000002",
+    "[::ffff:127.2.3.4]",
+  ])("rejects %s", (host) => {
+    expect(isSsrfSafeUrl(`http://${host}/`)).toBe(false);
+  });
+  it.each(["10.0.0.1", "172.16.0.1", "192.168.0.1", "128.0.0.1"])("preserves %s", (host) => {
+    expect(isSsrfSafeUrl(`http://${host}/`)).toBe(true);
+  });
+});

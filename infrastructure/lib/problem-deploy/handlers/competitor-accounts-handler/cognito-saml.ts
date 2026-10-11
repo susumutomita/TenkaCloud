@@ -37,7 +37,11 @@ export interface SamlProviderInput {
 
 /**
  * SAML IdP を idempotent に upsert する。 既存なら Update、 無ければ Create。
- * ProviderDetails の MetadataURL が変わったら Cognito 側で metadata XML を re-fetch する。
+ * MetadataURL は Cognito 自身が取得し、定期的に refresh する。Lambda側でDNSを事前検査しても
+ * その後のCognito接続のアドレスをpinできない。redirect/DNS制御の保証はAWS資料にないため、
+ * アプリのURL blocklistをCognito取得全体のSSRF防止と扱わない。
+ * MetadataFileへ切替えると自動refreshを失うため、別途認証・更新仕様の承認が必要。
+ * https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-managing-saml-idp.html
  */
 export async function upsertSamlProvider(
   deps: CognitoSamlDeps,

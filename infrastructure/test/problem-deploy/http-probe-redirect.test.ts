@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { probeUrl } from "../../lib/problem-deploy/runtime-clients/http-probe-client";
+import { probeTransport } from "../../lib/problem-deploy/runtime-clients/probe-transport";
 
 describe("probe redirect を通信前に検査する", () => {
   const fetchMock = vi.fn();
   beforeEach(() => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(
+    vi.spyOn(probeTransport, "fetch").mockImplementation(
       Object.assign(fetchMock, { preconnect: () => undefined }),
     );
     fetchMock.mockReset();
@@ -88,6 +89,18 @@ describe("probe redirect を通信前に検査する", () => {
     fetchMock.mockResolvedValueOnce(new Response("no location", { status: 302 }));
     expect((await probeUrl("https://team.example.com/", { expectStatus: [302] })).ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    [200, false],
+    [500, false],
+    [500, true],
+  ])("unused response status %s/readBody %s is cancelled", async (status, readBody) => {
+    const response = new Response("unused", { status: status as number });
+    if (!response.body) throw new Error("missing body");
+    const cancel = vi.spyOn(response.body, "cancel");
+    fetchMock.mockResolvedValueOnce(response);
+    await probeUrl("https://team.example.com/", { readBody: readBody as boolean });
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
   it("途中の通信失敗で成功を返さないべき", async () => {
     fetchMock.mockResolvedValueOnce(redirect("/next"));
