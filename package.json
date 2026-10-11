@@ -86,7 +86,7 @@
     "esbuild": "^0.28.2",
     "http-status-codes": "^2.3.0",
     "js-yaml": "5.4.1",
-    "swagger-ui-dist": "5.32.3",
+    "swagger-ui-dist": "5.33.1",
     "ws": "^8.21.1",
     "yaml": "^2.9.0",
     "zod": "^4.6.5"

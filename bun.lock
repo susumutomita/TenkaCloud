@@ -16,7 +16,7 @@
         "esbuild": "^0.28.2",
         "http-status-codes": "^2.3.0",
         "js-yaml": "5.4.1",
-        "swagger-ui-dist": "5.32.3",
+        "swagger-ui-dist": "5.33.1",
         "ws": "^8.21.1",
         "yaml": "^2.9.0",
         "zod": "^4.6.5",
@@ -2573,7 +2573,7 @@
 
     "supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw=="],
 
-    "swagger-ui-dist": ["swagger-ui-dist@5.32.3", "", { "dependencies": { "@scarf/scarf": "=1.4.0" } }, "sha512-ouo/DVF5xoBqxUiu1nB9ykDIlXmRs5sesdwHBN6wEKCBfS/e0IrzXBgMBQqsQ1iykjYUhQFprZCw1lOHuSxCyg=="],
+    "swagger-ui-dist": ["swagger-ui-dist@5.33.1", "", { "dependencies": { "@scarf/scarf": "=1.4.0" } }, "sha512-H872wWkA53bFIsGgi7OWgmq+CRWw3nFQGdJWRqOB9wNwTm6e5ol34+qPDkV4AJlK+gglM2EsJiOOzsGsEGbluA=="],
 
     "swrv": ["swrv@1.2.0", "", { "peerDependencies": { "vue": ">=3.2.26 < 4" } }, "sha512-lH/g4UcNyj+7lzK4eRGT4C68Q4EhQ6JtM9otPRIASfhhzfLWtbZPHcMuhuba7S9YVYuxkMUGImwMyGpfbkH07A=="],
 
