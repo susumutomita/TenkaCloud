@@ -13,6 +13,7 @@ export interface EventProblemTarget {
 }
 
 export interface EventSummary {
+  scoringAuthority?: "ctfd";
   progressionGateError?: "invalid_progression_gate";
   eventId: string;
   name: string;
@@ -177,6 +178,7 @@ export interface CreateEventTeamInput {
 }
 
 export interface CreateEventRequest {
+  scoringAuthority?: "ctfd";
   hostingAccountSelfTest?: {
     readonly awsAccountId: string;
     readonly riskVersion: "hosting-account-self-test-v1";

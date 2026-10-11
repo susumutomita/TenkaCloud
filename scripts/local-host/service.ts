@@ -852,8 +852,23 @@ export class HostingService {
       });
     });
   }
+  private validateScoringAuthority(authority: unknown, problems: Problem[]): void {
+    if (authority === undefined) return;
+    if (authority !== "ctfd") throw new HostError(400, "Invalid scoring authority.");
+    if (
+      !this.engine.supportsOnDemand ||
+      !this.engine.evaluate ||
+      problems.some(
+        (problem) =>
+          definitionKind(problem.definition) !== "compose" ||
+          (JSON.parse(problem.definition) as DockerDefinition).problem.scoring.kind !== "verify",
+      )
+    )
+      throw new HostError(422, "CTFd scoring requires single-verdict Docker exercises.");
+  }
   private createEvent(body: Record<string, unknown>): ApiResponse {
     const name = text(body.name, "name");
+
     if (!Array.isArray(body.teams) || body.teams.length < 1 || body.teams.length > MAX_JOBS)
       throw new HostError(400, "Choose 1–40 teams.");
     if (
@@ -878,6 +893,7 @@ export class HostingService {
     if (new Set(problems.map((problem) => problem.problemId)).size !== problems.length)
       throw new HostError(400, "Duplicate problem.");
     const demand = this.engine.supportsOnDemand === true;
+    this.validateScoringAuthority(body.scoringAuthority, problems);
     if (body.teams.length * problems.length > (demand ? MAX_EVENT_JOBS : MAX_JOBS))
       throw new HostError(
         422,
@@ -923,6 +939,7 @@ export class HostingService {
       scoreboardFreezeMinutes: 0,
       problems,
       ...(demand ? { containerMode: "on-demand" as const } : {}),
+      ...(body.scoringAuthority === "ctfd" ? { scoringAuthority: "ctfd" as const } : {}),
     };
     this.store.transaction(() => {
       this.store.putEvent(event);
@@ -1876,6 +1893,8 @@ export class HostingService {
     if (request.path.startsWith("/portal/registration/"))
       throw new HostError(404, "Unknown participant endpoint.");
     const team = this.store.authenticateTeam(request.token);
+    if (/^\/portal\/me\/problems\/[^/]+\/evaluate$/u.test(request.path))
+      return this.queue.run(team.eventId, () => this.evaluateParticipant(request));
     if (/^\/portal\/me\/problems\/[^/]+\/container\//u.test(request.path))
       return this.queue.run(team.eventId, () =>
         this.queue.run(SLOT_QUEUE, () => this.participantContainer(request)),
@@ -1900,6 +1919,46 @@ export class HostingService {
       return this.queue.run(team.eventId, () => this.renameParticipant(request));
     if (request.method !== "POST") throw new HostError(404, "Unknown participant endpoint.");
     return this.submitParticipant(request, team);
+  }
+  private async evaluateParticipant(request: ApiRequest): Promise<ApiResponse> {
+    const match = /^\/portal\/me\/problems\/([a-z0-9][a-z0-9-]{0,127})\/evaluate$/u.exec(
+      request.path,
+    );
+    const body = object(request.body);
+    if (
+      !match ||
+      request.method !== "POST" ||
+      request.query.size ||
+      Object.keys(body).length !== 1 ||
+      typeof body.submission !== "string" ||
+      Buffer.byteLength(body.submission, "utf8") > 64 * 1024
+    )
+      throw new HostError(400, "Supply only a bounded submission for this problem.");
+    const problemId = match[1] ?? "";
+    const resolve = () => {
+      const team = this.store.authenticateTeam(request.token);
+      const event = this.currentEvent(team.eventId);
+      if (event.scoringAuthority !== "ctfd")
+        throw new HostError(409, "External evaluation requires a CTFd-scored event.");
+      assertPlaying(event, this.now());
+      this.progression.assertAccess(team, problemId);
+      const job = this.store
+        .jobs(team.eventId, team.teamId)
+        .find((entry) => entry.problemId === problemId);
+      if (!job || definitionKind(job.definition) !== "compose" || !linkable(job))
+        throw new HostError(409, "This team has no running Docker environment for this problem.");
+      return job;
+    };
+    const job = resolve();
+    if (!this.engine.evaluate)
+      throw new HostError(409, "This runtime does not support external scoring.");
+    const correct = await this.engine.evaluate(job, body.submission);
+    const current = resolve();
+    if (current.jobId !== job.jobId || current.unit !== job.unit)
+      throw new HostError(409, "The environment changed during evaluation.");
+    if (typeof correct !== "boolean")
+      throw new HostError(502, "The runtime returned an invalid verdict.");
+    return ok({ correct });
   }
   private participantEndpoint(request: ApiRequest): ApiResponse {
     const team = this.store.authenticateTeam(request.token);
@@ -2048,6 +2107,8 @@ export class HostingService {
   ): Promise<ApiResponse> {
     const fresh = this.store.authenticateTeam(request.token);
     const current = this.context(fresh);
+    if (current.event.scoringAuthority === "ctfd")
+      throw new HostError(409, "Submit answers and request hints in CTFd.");
     this.progression.assertAccess(fresh, action.problemId);
     const fingerprint = digest(JSON.stringify({ path: request.path, body }));
     if (request.nonce) {
@@ -2066,6 +2127,8 @@ export class HostingService {
         ? await this.engine.submit(current, body)
         : await this.engine.hint(current, action.problemId, action.hintId);
     const latest = this.store.authenticateTeam(request.token);
+    if (this.currentEvent(latest.eventId).scoringAuthority === "ctfd")
+      throw new HostError(409, "Submit answers and request hints in CTFd.");
     this.progression.assertAccess(latest, action.problemId);
     if (
       latest.snapshot !== fresh.snapshot ||

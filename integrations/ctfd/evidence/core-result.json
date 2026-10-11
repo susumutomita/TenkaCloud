@@ -1,0 +1,20 @@
+{
+  "ctfdVersion": "3.8.2",
+  "theme": "core",
+  "problemId": "sqli-demo",
+  "scoring": "container verdict; CTFd owns scores",
+  "engine": "real Docker",
+  "challengeDisplayed": true,
+  "started": true,
+  "wrongFlagRejected": true,
+  "ctfdScore": 100,
+  "standardRegressionScore": 5,
+  "scoreboardTotal": 105,
+  "unavailableVerdictConsumesAttempt": false,
+  "tenkaCloudScores": [0, 0],
+  "stopped": true,
+  "keyClearedOnClose": true,
+  "distinctTeamEnvironments": true,
+  "organizerTeardown": "DELETED",
+  "pageErrors": []
+}

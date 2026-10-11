@@ -1206,7 +1206,10 @@
     "env_status_FAILED": "Failed",
     "env_status_STOPPED": "Stopped",
     "env_status_DELETING": "Tearing down",
-    "env_status_DELETED": "Removed"
+    "env_status_DELETED": "Removed",
+    "ctfd_scoring_detail": "Scoring: CTFd. Submit answers, request hints and view rankings in CTFd.",
+    "ctfd_scoring": "Score this event in CTFd",
+    "ctfd_scoring_description": "Single-verdict Docker exercises only. Submit answers and configure prerequisites in CTFd. This choice is fixed when the event is created."
   },
   "cloud_connections": {
     "add": "Add connection",
@@ -1222,5 +1225,7 @@
     "feature_unavailable": "Credential registration for this provider is not enabled here. Ask the environment administrator about availability.",
     "sakura": "Sakura Cloud"
   },
-  "problem_authors": { "label": "Authors" }
+  "problem_authors": {
+    "label": "Authors"
+  }
 }

@@ -1,0 +1,16 @@
+{% extends "challenge.html" %}
+{% block connection_info %}
+<section id="tenkacloud-runtime" data-challenge-id="{{ challenge.id }}" aria-label="TenkaCloud environment">
+  <label for="tenkacloud-key">TenkaCloud team login key</label>
+  <input id="tenkacloud-key" type="password" class="form-control" autocomplete="off" maxlength="43">
+  <small>Use the key supplied by your organizer. It stays in this dialog and is cleared when closed.</small>
+  <div class="my-2">
+    <button type="button" class="btn btn-primary" data-tenka-action="start">Start environment</button>
+    <button type="button" class="btn btn-secondary" data-tenka-action="read">Refresh environment</button>
+    <button type="button" class="btn btn-outline-danger" data-tenka-action="stop">Stop environment</button>
+  </div>
+  <p id="tenkacloud-status" role="status" aria-live="polite">Enter your team key and refresh to see the environment.</p>
+  <ul id="tenkacloud-links"></ul>
+  <small>Submit flags below. CTFd records your score. Stop preserves environment data; the organizer removes it after the event.</small>
+</section>
+{% endblock %}

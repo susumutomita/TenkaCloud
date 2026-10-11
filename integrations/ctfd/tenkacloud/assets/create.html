@@ -1,0 +1,9 @@
+{% extends "admin/challenges/create.html" %}
+{% block type %}<input type="hidden" name="type" value="tenkacloud">{% endblock %}
+{% block attribution %}
+<div class="form-group">
+  <label for="tenka-problem-id">TenkaCloud problem ID</label>
+  <input id="tenka-problem-id" class="form-control" name="connection_info" required pattern="[a-z0-9][a-z0-9-]{0,127}">
+  <small>Assign this problem to the team's on-demand TenkaCloud event. Configure flags here in CTFd.</small>
+</div>
+{% endblock %}

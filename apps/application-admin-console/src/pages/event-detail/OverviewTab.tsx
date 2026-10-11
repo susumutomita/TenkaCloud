@@ -1,3 +1,4 @@
+import Alert from "@cloudscape-design/components/alert";
 import { DeployProgressPanel } from "../../components/event-detail/DeployProgressPanel";
 import { EventPhaseBanner } from "../../components/event-detail/EventPhaseBanner";
 import { EventWizardPanel } from "../../components/event-detail/EventWizardPanel";
@@ -27,6 +28,9 @@ export function OverviewTab({
     <>
       {/* Issue #1350: Setup / Live / Teardown の phase 帯を冒頭に表示 (色 cue) */}
       <EventPhaseBanner detail={detail} t={t} />
+      {detail.scoringAuthority === "ctfd" && (
+        <Alert type="info">{t("local_host.ctfd_scoring_detail")}</Alert>
+      )}
       <ScoringLockPanel detail={detail} t={t} />
       <EventWizardPanel t={t} wizard={wizard} />
       <DeployProgressPanel

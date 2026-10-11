@@ -106,6 +106,8 @@ export interface HostedEvent {
   problems: Problem[];
   progressionGate?: ProgressionGateConfig;
   containerMode?: "on-demand";
+  /** Omission preserves native host scoring for existing events. Fixed at creation. */
+  scoringAuthority?: "ctfd";
 }
 
 export interface ScoreEvent {
@@ -258,6 +260,8 @@ export interface RuntimeEngine {
   resume(job: Job): Promise<void>;
   view(context: Context): Promise<Record<string, unknown>>;
   submit(context: Context, body: Record<string, unknown>): Promise<EngineResult>;
+  /** Read the running exercise's verdict without recording scores or participant progress. */
+  evaluate?(job: Job, submission: string): Promise<boolean>;
   hint(context: Context, problemId: string, hintId: string): Promise<EngineResult>;
   surface(job: Job): string;
   surfaces?(job: Job): Readonly<Record<string, string>>;

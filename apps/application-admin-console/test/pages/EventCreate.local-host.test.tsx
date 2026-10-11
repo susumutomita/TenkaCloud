@@ -176,10 +176,24 @@ describe("EventCreatePage on the local competition host", () => {
     expect(screen.queryByText("event_create.col_region")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
     await waitFor(() => expect(mocks.createEvent).toHaveBeenCalled());
+    expect(mocks.createEvent.mock.calls[0]?.[1].scoringAuthority).toBeUndefined();
     expect(mocks.createEvent.mock.calls[0]?.[1].teams).toEqual([{ internalSlug: "team-1" }]);
     fireEvent.click(await screen.findByTestId("deploy-prompt-now"));
     await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
     expect(mocks.navigate).toHaveBeenCalledWith("/events/01HZX0K3M3K9ZQHB3MRQHBA1B2");
+  });
+
+  it("explicitly creates a CTFd-scored event while the default remains native", async () => {
+    const { container } = render(<EventCreatePage config={config} />);
+    await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
+    const wrapper = createWrapper(container);
+    wrapper.findAllInputs()[1]?.setInputValue("1");
+    wrapper.findAllInputs()[0]?.setInputValue("CTFd Cup");
+    multiselect(container)?.toggleProblem("sqli-demo");
+    fireEvent.click(screen.getByRole("checkbox", { name: "local_host.ctfd_scoring" }));
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mocks.createEvent).toHaveBeenCalled());
+    expect(mocks.createEvent.mock.calls[0]?.[1].scoringAuthority).toBe("ctfd");
   });
 
   it("keeps the explicit legacy adapter fixture separate from production local startup", async () => {

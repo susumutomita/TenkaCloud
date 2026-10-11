@@ -60,6 +60,8 @@ export class HostProgression {
       throw new HostError(409, "Progression gate is disabled.", "feature_disabled");
     if (event.status === "ARCHIVED")
       throw new HostError(409, "An archived event cannot be edited.");
+    if (!remove && event.scoringAuthority === "ctfd")
+      throw new HostError(409, "Configure prerequisites in CTFd for CTFd-scored events.");
     const parsed = remove ? undefined : ProgressionGateConfigSchema.safeParse(raw);
     if (parsed && !parsed.success)
       throw new HostError(400, "Invalid progression gate.", "invalid_progression_gate");

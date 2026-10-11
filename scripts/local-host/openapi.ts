@@ -80,6 +80,12 @@ export function localOpenApi(role: "admin" | "participant") {
               object(
                 {
                   name: string,
+                  scoringAuthority: {
+                    type: "string",
+                    enum: ["ctfd"],
+                    description:
+                      "Optional, fixed at creation. Omission uses native host scoring. CTFd requires single-verdict Docker exercises.",
+                  },
                   teams: {
                     ...array(
                       object(
@@ -197,6 +203,24 @@ export function localOpenApi(role: "admin" | "participant") {
         },
         "/portal/me/score-events": {
           get: operation("teamResults", "Read this team's score events"),
+        },
+        "/portal/me/problems/{problemId}/evaluate": {
+          post: {
+            ...operation(
+              "evaluateFlag",
+              "Evaluate for an external scoreboard without saving host scores",
+              200,
+              {
+                ...object({ submission: { ...string, format: "password", writeOnly: true } }, [
+                  "submission",
+                ]),
+                additionalProperties: false,
+              },
+              [problemId],
+            ),
+            description:
+              "Only explicitly CTFd-scored events permit this endpoint. Native-scored events reject it before verifier calls. Only the authenticated team's running single-flag Docker verifier is available. Event and progression gates apply. Returns {correct:boolean}; points, hints, score events and snapshots are not written. No target selectors or query parameters are accepted.",
+          },
         },
         "/portal/me/submit-flag": {
           post: {

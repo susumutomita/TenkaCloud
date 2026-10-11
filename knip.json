@@ -68,6 +68,7 @@
         "scripts/local-host/tests/pi-siege-browser-e2e.ts",
         "scripts/local-host/tests/tenant-boundary-browser-e2e.ts",
         "scripts/local-host/tests/forensic-browser-e2e.ts",
+        "scripts/local-host/tests/ctfd-browser-e2e.ts",
         "scripts/local-host/tests/forensic-process-fixture.ts"
       ],
       "project": ["scripts/**/*.ts"]

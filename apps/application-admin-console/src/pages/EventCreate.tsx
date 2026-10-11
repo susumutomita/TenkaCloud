@@ -2,6 +2,7 @@ import type { MultiselectProps, SelectProps } from "@cloudscape-design/component
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import Checkbox from "@cloudscape-design/components/checkbox";
 import Form from "@cloudscape-design/components/form";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -98,6 +99,35 @@ function advisorHostCatalog(local: boolean, catalog: ReturnType<typeof useHostCa
   return local ? catalog : undefined;
 }
 
+function ctfdScoringSelection(
+  local: boolean,
+  selected: boolean,
+): Pick<CreateEventRequest, "scoringAuthority"> {
+  return local && selected ? { scoringAuthority: "ctfd" } : {};
+}
+
+function CtfdScoringChoice({
+  local,
+  checked,
+  onChange,
+}: {
+  local: boolean;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const t = useT();
+  if (!local) return null;
+  return (
+    <Checkbox
+      checked={checked}
+      onChange={({ detail }) => onChange(detail.checked)}
+      description={t("local_host.ctfd_scoring_description")}
+    >
+      {t("local_host.ctfd_scoring")}
+    </Checkbox>
+  );
+}
+
 export function EventCreatePage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const canMutate = canMutateTenant(apiClient);
@@ -159,6 +189,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
       region: "",
     })),
   );
+  const [ctfdScoring, setCtfdScoring] = useState(false);
   const [selectedProblems, setSelectedProblems] = useState<readonly MultiselectProps.Option[]>([]);
   const [problemRows, setProblemRows] = useState<ProblemRow[]>([]);
   // Names are presentation only: changing locale must retain IDs and chosen regions.
@@ -297,6 +328,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     if (!canSubmit || !apiClient) return;
     const body: CreateEventRequest = {
       name,
+      ...ctfdScoringSelection(localHost, ctfdScoring),
       teams: teamRows.map((tr) => ({
         internalSlug: tr.internalSlug,
         ...(providerMode.kind === "aws" ||
@@ -432,6 +464,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             maxTeams={maxTeams}
           />
 
+          <CtfdScoringChoice local={localHost} checked={ctfdScoring} onChange={setCtfdScoring} />
           <EventCreateCapacityNotice local={localHost} catalog={hostCatalog} capacity={capacity} />
 
           {/* #528 / Phase 2.2 (Issue #459): Teams 入力の上に置く 3 種 Alert。

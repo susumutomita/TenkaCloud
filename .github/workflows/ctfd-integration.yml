@@ -1,0 +1,49 @@
+name: CTFd integration
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'integrations/ctfd/**'
+      - 'scripts/local-host/**'
+      - '.github/workflows/ctfd-integration.yml'
+      - 'package.json'
+      - 'bun.lock'
+
+permissions:
+  contents: read
+
+jobs:
+  ctfd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: true
+      - uses: ./.github/actions/bun-install
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.11'
+      - name: Prepare isolated official CTFd runtime and plugin
+        run: |
+          mkdir -p .cache/ctfd/run
+          git clone --depth 1 --branch 3.8.2 https://github.com/CTFd/CTFd.git .cache/ctfd/source
+          test "$(git -C .cache/ctfd/source rev-parse HEAD)" = d6fc367187fc49134cfffe89fd1523162d29836a
+          git -C .cache/ctfd/source archive HEAD | tar -x -C .cache/ctfd/run
+          cp -R integrations/ctfd/tenkacloud .cache/ctfd/run/CTFd/plugins/tenkacloud
+          python -m venv .cache/ctfd/venv
+          .cache/ctfd/venv/bin/pip install -r .cache/ctfd/run/requirements.txt
+      - name: Real CTFd normal and error boundary tests
+        run: |
+          SECRET_KEY=ephemeral-test-key PYTHONPATH="$PWD/.cache/ctfd/run" \
+            .cache/ctfd/venv/bin/python -m unittest discover -s integrations/ctfd/tests -v
+      - name: Install pinned browser
+        run: bunx playwright-core install --with-deps chromium
+      - name: Real CTFd and Docker browser rehearsal
+        env:
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: |
+          bun run build:host
+          CTFD_E2E_PROBLEM_ID=sqli-demo bun run scripts/local-host/tests/ctfd-browser-e2e.ts
+          CTFD_E2E_THEME=core-deprecated bun run scripts/local-host/tests/ctfd-browser-e2e.ts
