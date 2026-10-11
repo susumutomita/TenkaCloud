@@ -124,8 +124,9 @@ async function start(props = {}) {
       {...props}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "検索を準備する" }));
-  await screen.findByRole("textbox");
+  fireEvent.click(screen.getByRole("button", { name: "精度向上を準備する（任意）" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "検索を終了する" })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole("textbox")).toBeEnabled());
   return { ...view, onCandidates };
 }
 describe("semantic UI with a mock worker (not inference evidence)", () => {
@@ -152,10 +153,13 @@ describe("semantic UI with a mock worker (not inference evidence)", () => {
     fireEvent.click(screen.getByRole("button", { name: "候補を探す" }));
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "検索を終了する" })));
     expect(terminated).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "検索を準備する" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "精度向上を準備する（任意）" })).toBeEnabled();
     holdIndex = false;
-    fireEvent.click(screen.getByRole("button", { name: "検索を準備する" }));
-    await screen.findByRole("textbox");
+    fireEvent.click(screen.getByRole("button", { name: "精度向上を準備する（任意）" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "検索を終了する" })).toBeEnabled(),
+    );
+    await waitFor(() => expect(screen.getByRole("textbox")).toBeEnabled());
   });
   it("clears results when hard filters change during a pending request", async () => {
     const { rerender, onCandidates } = await start();
@@ -165,7 +169,7 @@ describe("semantic UI with a mock worker (not inference evidence)", () => {
     rerender(<SemanticProblemSearch problems={[]} catalog={catalog} onCandidates={onCandidates} />);
     await waitFor(() => expect(terminated).toHaveBeenCalled());
     expect(onCandidates).toHaveBeenLastCalledWith(null);
-    expect(screen.getByRole("button", { name: "検索を準備する" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "精度向上を準備する（任意）" })).toBeEnabled();
   });
   it("terminates and enables reload after the deadline (mock clock, not measured latency)", async () => {
     await start();
@@ -176,7 +180,7 @@ describe("semantic UI with a mock worker (not inference evidence)", () => {
     await act(async () => vi.advanceTimersByTimeAsync(180001));
     expect(terminated).toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("3分");
-    expect(screen.getByRole("button", { name: "検索を準備する" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "精度向上を準備する（任意）" })).toBeEnabled();
   });
 });
 
@@ -198,7 +202,7 @@ describe("search recovery and privacy boundaries with mock workers", () => {
   it("ignores a resolved load when cancellation happens before its continuation", async () => {
     holdAction = "load";
     render(<SemanticProblemSearch problems={problems} catalog={catalog} onCandidates={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "検索を準備する" }));
+    fireEvent.click(screen.getByRole("button", { name: "精度向上を準備する（任意）" }));
     await act(async () => {
       deliverLate?.({
         request: posted.mock.lastCall?.[0].request,
@@ -207,8 +211,8 @@ describe("search recovery and privacy boundaries with mock workers", () => {
       });
       fireEvent.click(screen.getByRole("button", { name: "検索を終了する" }));
     });
-    expect(screen.getByRole("button", { name: "検索を準備する" })).toBeEnabled();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "精度向上を準備する（任意）" })).toBeEnabled();
+    expect(screen.getByRole("textbox")).toBeEnabled();
   });
   it("ignores a resolved query when cancellation happens before its continuation", async () => {
     const { onCandidates } = await start();
@@ -230,8 +234,10 @@ describe("search recovery and privacy boundaries with mock workers", () => {
   it("does not download without preparation and keeps manual fallback on unsupported browsers", () => {
     Reflect.deleteProperty(navigator, "gpu");
     render(<SemanticProblemSearch problems={problems} catalog={catalog} onCandidates={vi.fn()} />);
-    expect(screen.getByText(/このブラウザでは目的からの検索を使えません/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "検索を準備する" })).not.toBeInTheDocument();
+    expect(screen.getByText(/このブラウザでは精度向上の機能を使えません/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "精度向上を準備する（任意）" }),
+    ).not.toBeInTheDocument();
     expect(posted).not.toHaveBeenCalled();
   });
   it("does not prepare while the authenticated catalog is unavailable", () => {
@@ -242,18 +248,18 @@ describe("search recovery and privacy boundaries with mock workers", () => {
         onCandidates={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: "検索を準備する" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "精度向上を準備する（任意）" })).toBeDisabled();
     expect(posted).not.toHaveBeenCalled();
   });
   it.each(["message", "crash"])("recovers from load %s without false readiness", async (mode) => {
     failureAction = mode === "message" ? "load" : "";
     crash = mode === "crash";
     render(<SemanticProblemSearch problems={problems} catalog={catalog} onCandidates={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "検索を準備する" }));
+    fireEvent.click(screen.getByRole("button", { name: "精度向上を準備する（任意）" }));
     await screen.findByRole("alert");
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeEnabled();
     expect(terminated).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "検索を準備する" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "精度向上を準備する（任意）" })).toBeEnabled();
   });
   it.each(["index", "query"])(
     "rejects malformed %s results instead of recommending",
@@ -311,5 +317,25 @@ describe("search recovery and privacy boundaries with mock workers", () => {
     await screen.findByText("検索用の保存データを削除しました。");
     expect(open).toHaveBeenCalledExactlyOnceWith("transformers-cache");
     expect(remove).toHaveBeenCalledExactlyOnceWith(modelRequest);
+  });
+});
+
+describe("public catalog search without model preparation", () => {
+  it("searches without WebGPU or any worker request and clears an empty result", async () => {
+    Reflect.deleteProperty(navigator, "gpu");
+    const onCandidates = vi.fn();
+    render(
+      <SemanticProblemSearch problems={problems} catalog={catalog} onCandidates={onCandidates} />,
+    );
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "公開概要を学びたい" } });
+    fireEvent.click(screen.getByRole("button", { name: "候補を探す" }));
+    await waitFor(() => expect(onCandidates).toHaveBeenLastCalledWith(["one", "two"]));
+    expect(posted).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "存在しないZZZテーマ" } });
+    fireEvent.click(screen.getByRole("button", { name: "候補を探す" }));
+    await waitFor(() => expect(onCandidates).toHaveBeenLastCalledWith([]));
+    expect(screen.getByRole("status")).toHaveTextContent("見つかりませんでした");
+    fireEvent.click(screen.getByRole("button", { name: "目的による絞り込みを解除" }));
+    expect(onCandidates).toHaveBeenLastCalledWith(null);
   });
 });
