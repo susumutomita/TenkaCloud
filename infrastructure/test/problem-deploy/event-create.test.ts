@@ -653,6 +653,7 @@ it("pins public skill metadata at event creation and ignores caller-supplied evi
       {
         problemId: "hello-world-battle",
         defaultRegion: "ap-northeast-1",
+        defaultAwsAccountId: "333333333333",
         skillCatalog: { revision: "forged" },
       },
     ],
@@ -665,4 +666,5 @@ it("pins public skill metadata at event creation and ignores caller-supplied evi
     declarations: [declaration],
   });
   expect(JSON.stringify(item?.problems)).not.toContain("forged");
+  expect(item?.problems[0].defaultAwsAccountId).toBe("333333333333");
 });

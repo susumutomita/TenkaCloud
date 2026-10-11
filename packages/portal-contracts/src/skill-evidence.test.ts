@@ -38,3 +38,20 @@ test("unsupported kinds never infer evidence", () => {
     expect(assessableSource(kind, "flag")).toBe(false);
   expect(assessableSource("flag", "uptime")).toBe(false);
 });
+
+test("rejects malformed nested declarations and bounded labels instead of leaking fields", () => {
+  for (const raw of [
+    [],
+    null,
+    { ...entry, label: 42 },
+    { ...entry, label: "x".repeat(121) },
+    { ...entry, i18n: [] },
+    { ...entry, i18n: { en: [] } },
+    { ...entry, rule: [] },
+    { ...entry, i18n: { en: { label: " " } } },
+  ])
+    expect(skillDeclarations([raw])).toBeUndefined();
+  expect(skillDeclarations(Array.from({ length: 17 }, () => entry))).toBeUndefined();
+  const probe = { ...entry, rule: { source: "uptime", result: "ok" } };
+  expect(skillDeclarations([probe])?.[0]?.rule.source).toBe("uptime");
+});

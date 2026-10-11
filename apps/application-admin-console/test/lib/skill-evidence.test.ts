@@ -76,3 +76,37 @@ describe("source-backed team evidence", () => {
     expect(buildSkillEvidence(detail)[0]?.observations).toEqual([]);
   });
 });
+
+it("orders retained observations and preserves a success after a failed attempt", () => {
+  const detail = evidenceFixture();
+  const team = detail.scoreEventsByTeam?.[0];
+  const accepted = team?.events[0];
+  if (!team || !accepted) throw new Error("fixture missing");
+  team.events = [accepted, { ...accepted, result: "wrong", occurredAt: "2026-10-01T00:00:30Z" }];
+  detail.teams = detail.teams.map((row) => ({ ...row, displayName: `Team ${row.teamId}` }));
+  const evidence = buildSkillEvidence(detail)[0];
+  expect(evidence?.status).toBe("demonstrated");
+  expect(evidence?.teamName).toBe("Team alpha");
+  expect(evidence?.observations.map((row) => row.result)).toEqual(["wrong", "ok"]);
+});
+
+it("requires complete team history and a retained job even when an accepted result exists", () => {
+  const detail = evidenceFixture();
+  const team = detail.scoreEventsByTeam?.[0];
+  if (!team) throw new Error("fixture missing");
+  team.historyAvailable = false;
+  expect(buildSkillEvidence(detail)[0]?.reason).toBe("history_missing");
+  delete team.historyAvailable;
+  detail.deploymentsByProblem = {};
+  expect(buildSkillEvidence(detail)[0]?.reason).toBe("observation_missing");
+});
+
+it("fails closed for historical snapshots missing revision or scoring classification", () => {
+  const detail = evidenceFixture();
+  const snapshot = detail.problems[0]?.skillCatalog;
+  if (!snapshot) throw new Error("fixture missing");
+  Reflect.deleteProperty(snapshot, "revision");
+  expect(buildSkillEvidence(detail)[0]?.reason).toBe("revision_missing");
+  Reflect.deleteProperty(snapshot, "scoringKind");
+  expect(buildSkillEvidence(detail)[0]?.reason).toBe("scoring_unsupported");
+});

@@ -277,3 +277,32 @@ it("marks invalid raw history rows incomplete before public DTO filtering", asyn
   expect(rows[0]?.historyAvailable).toBe(false);
   expect(rows[0]?.events).toHaveLength(1);
 });
+
+it("does not claim complete history from an adapter that cannot report availability", async () => {
+  const { shared } = buildShared();
+  const legacyAdapter = { listScoreEvents: vi.fn().mockResolvedValue([ev()]) };
+  vi.spyOn(shared.runtime, "resolveDeploymentsRepository").mockResolvedValue(
+    legacyAdapter as never,
+  );
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events).toHaveLength(1);
+  expect(rows[0]?.historyAvailable).toBe(false);
+});
+
+it("marks the bounded public history incomplete even when all three full pages were drained", async () => {
+  const { shared, ddbSend } = buildShared();
+  for (let page = 0; page < 3; page += 1)
+    ddbSend.mockResolvedValueOnce({
+      Items: Array.from({ length: 200 }, () => ev()),
+      ...(page < 2 ? { LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: `EVENT#page${page}` } } : {}),
+    });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events).toHaveLength(200);
+  expect(rows[0]?.historyAvailable).toBe(false);
+});

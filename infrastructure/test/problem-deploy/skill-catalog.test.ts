@@ -17,3 +17,13 @@ it("projects only the current source-backed metadata from the saved cloud catalo
   expect(cloudSkillCatalog({ ...catalog, catalogKey: "unknown" }, challenge.id)).toBeUndefined();
   expect(cloudSkillCatalog({ ...catalog, skills: {} }, challenge.id)).toBeUndefined();
 });
+
+it("preserves unknown scoring classification without inferring a supported skill", () => {
+  const catalog = {
+    catalogKey: `catalogs/${"b".repeat(64)}.json`,
+    skills: { [challenge.id]: challenge.skillEvidence },
+    scoring: { [challenge.id]: { kind: 42 } },
+  } as unknown as ResolvedExecutionCatalog;
+  expect(cloudSkillCatalog(catalog, challenge.id)?.scoringKind).toBe("unknown");
+  expect(cloudSkillCatalog({ ...catalog, scoring: {} }, challenge.id)?.scoringKind).toBe("unknown");
+});

@@ -1,4 +1,4 @@
-import { skillDeclarations } from "../../../../packages/portal-contracts/src/skill-evidence";
+import type { SkillDeclaration } from "../../../../packages/portal-contracts/src/skill-evidence";
 import battle from "../../../../problems/battles/hello-world-battle/metadata.json";
 import challenge from "../../../../problems/challenges/hello-world/metadata.json";
 import type { EventDetail, TeamScoreEventView } from "../../src/api/events-client";
@@ -30,7 +30,8 @@ export function evidenceFixture(): EventDetail {
       skillCatalog: {
         revision: `sha256:${"a".repeat(64)}`,
         scoringKind: metadata.scoring.kind,
-        declarations: skillDeclarations(metadata.skillEvidence) ?? [],
+        // Canonical fixtures are checked by the catalog validator; do not hide a broken fixture with an empty declaration.
+        declarations: metadata.skillEvidence as readonly SkillDeclaration[],
       },
     })),
     deploymentsByProblem: Object.fromEntries(
