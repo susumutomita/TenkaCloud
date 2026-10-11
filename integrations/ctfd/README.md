@@ -13,14 +13,25 @@ Validated with CTFd 3.8.2. Copy the `tenkacloud` directory beside CTFd's existin
 plugins and restart CTFd. CTFd already provides Flask, SQLAlchemy and requests.
 Set the non-secret `TENKACLOUD_PARTICIPANT_URL` environment variable on the CTFd
 process to the participant API base, for example `http://127.0.0.1:5198/api`.
-The local host listener requires the `/api` suffix. Remote endpoints require
-HTTPS. Only the operator controls this URL; participants cannot select an
+The local host listener requires the `/api` suffix. Run CTFd on the same machine
+and use the private loopback listener. Remote endpoints are rejected.
+Only the operator controls this URL; participants cannot select an
 upstream, team ID, event ID, job ID or arbitrary API route.
 Set the non-secret `TENKACLOUD_EVENT_ID` to the intended event's ID. A valid key
 from another event is rejected even when that event assigns the same problem.
 
 Create a new local event with `scoringAuthority: "ctfd"` (the event creation
 checkbox). This fixed choice accepts only single-verdict Docker exercises.
+Do not publish the TenkaCloud participant listener through a proxy or tunnel.
+Evaluation requires a private loopback bind, an actual loopback socket peer,
+no advertised/proxy listener configuration and no forwarding headers.
+The CTFd process must share the host loopback network namespace; bridged
+CTFd containers and remote CTFd processes are not supported by this mode.
+This mode does not configure public hosting for CTFd or exercise gateways.
+Keeping the control API private prevents contestants calling the verifier directly
+to bypass CTFd attempt limits. The host operator is trusted; do not run contestant
+shells on the host. Remote CTFd requires a separately approved server identity.
+
 Existing events and omitted settings retain native scoring and cannot use
 `evaluate`; CTFd-scored events reject native submissions and hint purchases
 before runtime calls or receipt reuse. Configure prerequisites in CTFd; host

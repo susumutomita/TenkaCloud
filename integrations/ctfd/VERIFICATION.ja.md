@@ -42,7 +42,7 @@ prerequisites を確認した。未確認メールと team mode の未所属、�
 pause も確認した。異なる大会と入力 selector を拒否する。redirect と応答サイズ、
 timeout と secret 非投影を確認した。標準 flags と container verdict、
 採点の重複と障害時の非採点も確認している。
-host 隣接テスト 11 件と大会作成 UI テスト 10 件も成功した。
+host 隣接テスト 15 件と大会作成 UI テスト 10 件も成功した。
 host 隣接テストでは、起動停止、資源制限、得点・snapshot 非変更、キー失効、
 判定中の大会終了と runtime 変更を確認する。
 
@@ -78,12 +78,20 @@ AWS の設定ファイルを空のテスト用ファイルに指定し、実認�
 は削除していない。失敗した本検証の fixture 1 個だけを所有ラベルで特定して
 回収し、以後は失敗時も所有環境の teardown を確認してから一時データを除去する。
 
+CTFd 自体の試行制限を直接 evaluate で迂回できる追加 P1 も修正した。
+評価は private loopback bind、実 socket peer、proxy 設定なし、forwarded header
+なしに限定する。公開 listener・proxy・偽装 header・接続情報なしを拒否し、
+実 HTTP で CTFd からの直接接続だけ成功することを確認する。CTFd と host は
+同じマシンで稼働させ、participant listener を proxy / tunnel で公開しない。
+別マシンの CTFd を許可するには新しい server identity の承認を要する。
+この private 接続の範囲で、追加の独立レビューにも未解決 P1 / P2 はなかった。
+
 ## 必須ゲート結果
 
 `make before-commit` は lint / dead-code / root・authoring・host・全 18 workspace
 テストを完了し、exit code 0 だった。root 607 件、authoring 370 件、host
-809 件と runner 39 件、infrastructure 5,536 件（既存 3 件 skip）、管理 UI
-1,751 件が成功した。host と管理 UI の型チェックも成功した。
+813 件と runner 39 件、infrastructure 5,536 件（既存 3 件 skip）、管理 UI
+1,752 件が成功した。host と管理 UI の型チェックも成功した。
 
 ## 現行の配線確認
 

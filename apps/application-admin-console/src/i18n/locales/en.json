@@ -1209,7 +1209,7 @@
     "env_status_DELETED": "Removed",
     "ctfd_scoring_detail": "Scoring: CTFd. Submit answers, request hints and view rankings in CTFd.",
     "ctfd_scoring": "Score this event in CTFd",
-    "ctfd_scoring_description": "Single-verdict Docker exercises only. Submit answers and configure prerequisites in CTFd. This choice is fixed when the event is created."
+    "ctfd_scoring_description": "Single-verdict Docker exercises only. Submit answers and configure prerequisites in CTFd. This choice is fixed when the event is created. CTFd must run on the same machine with a private direct API connection."
   },
   "cloud_connections": {
     "add": "Add connection",

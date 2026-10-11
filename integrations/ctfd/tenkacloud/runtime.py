@@ -30,7 +30,7 @@ def host_url():
         or parsed.query
         or parsed.fragment
         or parsed.path not in ("", "/api")
-        or (parsed.scheme == "http" and parsed.hostname not in ("127.0.0.1", "localhost", "::1"))
+        or parsed.hostname not in ("127.0.0.1", "localhost", "::1")
     ):
         raise RuntimeErrorResponse(503, "The organizer must configure the participant API URL.")
     return value

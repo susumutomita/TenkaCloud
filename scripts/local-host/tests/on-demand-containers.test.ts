@@ -1,12 +1,14 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { boundedCompose } from "../container-budget";
 import { type DockerDefinition, loadDockerCatalog } from "../docker-catalog";
 import { DockerHostingEngine } from "../docker-engine";
+import { listen, startHttpHost } from "../http";
 import type { Context, Job } from "../model";
 import { type ApiRequest, HostingService } from "../service";
 import { HostStore } from "../store";
@@ -68,7 +70,14 @@ class SyntheticContainers extends DockerHostingEngine {
   }
 }
 function request(method: string, path: string, token: string, body: unknown = {}): ApiRequest {
-  return { method, path, token, body, query: new URLSearchParams() };
+  return {
+    method,
+    path,
+    token,
+    body,
+    query: new URLSearchParams(),
+    externalEvaluationTrusted: true,
+  };
 }
 async function fixture(
   run: (f: {
@@ -417,6 +426,16 @@ test("CTFd authority persists and rejects native answers and hints without write
       f.service.admin(request("PUT", `/events/${f.eventId}/progression-gate`, f.admin, {})),
     ).rejects.toMatchObject({ status: 409 });
     expect(f.store.event(f.eventId).progressionGate).toBeUndefined();
+    for (const trusted of [undefined, false]) {
+      await expect(
+        f.service.participant({
+          ...request("POST", `/portal/me/problems/${job.problemId}/evaluate`, team.teamLoginKey, {
+            submission: team.teamId,
+          }),
+          externalEvaluationTrusted: trusted,
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+    }
     const before = JSON.stringify(f.store.team(team.teamId));
     for (const [path, body] of [
       ["/portal/me/submit-flag", { problemId: job.problemId, flag: "wrong" }],
@@ -462,3 +481,75 @@ test("creation rejects invalid authority and unsupported multi-checkpoint CTFd e
     expect(f.store.events()).toHaveLength(before);
   });
 });
+
+async function privateTestPort(): Promise<number> {
+  const probe = createServer();
+  const origin = await listen(probe, "127.0.0.1", 0);
+  await new Promise<void>((resolve, reject) =>
+    probe.close((error) => (error ? reject(error) : resolve())),
+  );
+  return Number(new URL(origin).port);
+}
+
+test.each([
+  { config: {}, allowed: true },
+  { config: { behindProxy: true }, allowed: false },
+  { config: { advertised: "https://public.example.test" }, allowed: false },
+  { config: { hostname: "0.0.0.0" }, allowed: false },
+])(
+  "CTFd evaluation rejects public/proxy/forwarded HTTP access: %j",
+  async ({ config, allowed }) => {
+    await fixture(async (f) => {
+      const team = f.teams[0];
+      if (!team) throw new Error("Missing fixture team");
+      const job = f.store.jobs(f.eventId, team.teamId)[0];
+      if (!job) throw new Error("Missing fixture job");
+      const path = `/portal/me/problems/${job.problemId}/evaluate`;
+      await f.service.participant(
+        request("POST", `/portal/me/problems/${job.problemId}/container/start`, team.teamLoginKey),
+      );
+      await f.service.drain();
+      const port = await privateTestPort();
+      const host = await startHttpHost({
+        kind: "participant",
+        hostname: "127.0.0.1",
+        port,
+        staticRoot: root,
+        service: f.service,
+        ...config,
+      });
+      try {
+        const cases: {
+          headers: Record<string, string>;
+          body: Record<string, unknown>;
+          privateStatus: number;
+        }[] = [
+          { headers: {}, body: {}, privateStatus: 200 },
+          ...["forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto"].map(
+            (header) => ({ headers: { [header]: "127.0.0.1" }, body: {}, privateStatus: 403 }),
+          ),
+          {
+            headers: { externalEvaluationTrusted: "true" },
+            body: { externalEvaluationTrusted: true },
+            privateStatus: 400,
+          },
+        ];
+        for (const entry of cases) {
+          const response = await fetch(`http://127.0.0.1:${port}/api${path}`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${team.teamLoginKey}`,
+              ...entry.headers,
+            },
+            body: JSON.stringify({ submission: team.teamId, ...entry.body }),
+          });
+          expect(response.status).toBe(allowed ? entry.privateStatus : 403);
+        }
+      } finally {
+        await host.close();
+      }
+      expect(f.engine.evaluations).toHaveLength(Number(allowed));
+    }, true);
+  },
+);

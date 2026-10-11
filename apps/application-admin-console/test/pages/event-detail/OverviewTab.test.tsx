@@ -105,3 +105,14 @@ describe("OverviewTab local preparation wiring", () => {
     expect(screen.queryByText("event_detail.deploy_progress_complete")).not.toBeInTheDocument();
   });
 });
+
+describe("CTFd scoring authority", () => {
+  it("shows the persisted authority and clears it for native events", () => {
+    const { rerender } = render(
+      <OverviewTab {...props({ detail: detail({ scoringAuthority: "ctfd" }) })} />,
+    );
+    expect(screen.getByText("local_host.ctfd_scoring_detail")).toBeInTheDocument();
+    rerender(<OverviewTab {...props({ detail: detail() })} />);
+    expect(screen.queryByText("local_host.ctfd_scoring_detail")).not.toBeInTheDocument();
+  });
+});

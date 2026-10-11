@@ -79,6 +79,8 @@ export interface ApiRequest {
   body: unknown;
   token: string;
   nonce?: string;
+  /** Trusted HTTP adapter metadata; never populated from request payload or headers. */
+  externalEvaluationTrusted?: boolean;
 }
 
 export interface ApiResponse {
@@ -1921,6 +1923,8 @@ export class HostingService {
     return this.submitParticipant(request, team);
   }
   private async evaluateParticipant(request: ApiRequest): Promise<ApiResponse> {
+    if (request.externalEvaluationTrusted !== true)
+      throw new HostError(403, "CTFd evaluation requires a direct private loopback connection.");
     const match = /^\/portal\/me\/problems\/([a-z0-9][a-z0-9-]{0,127})\/evaluate$/u.exec(
       request.path,
     );

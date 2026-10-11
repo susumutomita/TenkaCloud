@@ -219,7 +219,7 @@ export function localOpenApi(role: "admin" | "participant") {
               [problemId],
             ),
             description:
-              "Only explicitly CTFd-scored events permit this endpoint. Native-scored events reject it before verifier calls. Only the authenticated team's running single-flag Docker verifier is available. Event and progression gates apply. Returns {correct:boolean}; points, hints, score events and snapshots are not written. No target selectors or query parameters are accepted.",
+              "Only private direct loopback connections to explicitly CTFd-scored events permit this endpoint. Public/proxy listeners and forwarded requests are rejected. Native-scored events reject it before verifier calls. Only the authenticated team's running single-flag Docker verifier is available. Event and progression gates apply. Returns {correct:boolean}; points, hints, score events and snapshots are not written. No target selectors or query parameters are accepted.",
           },
         },
         "/portal/me/submit-flag": {

@@ -36,7 +36,7 @@ class ClientTests(unittest.TestCase):
 
     def test_fixed_origin_and_no_credential_url(self):
         self.assertEqual(host_url(), "http://127.0.0.1:5185/api")
-        for value in ("", "http://example.com", "https://x/other", "https://u:p@x", "https://x?target=y"):
+        for value in ("", "http://example.com", "https://example.com/api", "https://x/other", "https://u:p@x", "https://x?target=y"):
             with self.subTest(value=value), patch.dict(os.environ, {"TENKACLOUD_PARTICIPANT_URL": value}):
                 with self.assertRaises(RuntimeErrorResponse):
                     host_url()
