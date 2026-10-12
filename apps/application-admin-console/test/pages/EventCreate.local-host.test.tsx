@@ -90,6 +90,33 @@ afterEach(() => vi.clearAllMocks());
 const multiselect = (container: HTMLElement) => problemPicker(container);
 
 describe("EventCreatePage on the local competition host", () => {
+  it.each([
+    { mode: "local-host" as const, expected: 1 },
+    { mode: "cloud-host" as const, expected: 3 },
+    { mode: undefined, expected: 3 },
+  ])(
+    "starts $mode with $expected teams and retains an explicit count",
+    async ({ mode, expected }) => {
+      const pageConfig = { ...config, mode };
+      const { container, rerender } = render(<EventCreatePage config={pageConfig} />);
+      const count = createWrapper(container).findAllInputs()[1]?.findNativeInput().getElement();
+      expect(count).toHaveValue(expected);
+      expect(
+        createWrapper(container)
+          .findAllInputs()
+          .filter((input) => /^team-\d+$/u.test(input.findNativeInput().getElement().value)),
+      ).toHaveLength(expected);
+      createWrapper(container).findAllInputs()[1]?.setInputValue("2");
+      rerender(<EventCreatePage config={{ ...pageConfig }} />);
+      expect(count).toHaveValue(2);
+      expect(
+        createWrapper(container)
+          .findAllInputs()
+          .filter((input) => /^team-\d+$/u.test(input.findNativeInput().getElement().value)),
+      ).toHaveLength(2);
+    },
+  );
+
   it.each(["local-host", "cloud-host"] as const)(
     "updates selected text in %s while retaining filtered selections and regions",
     async (mode) => {
@@ -304,6 +331,7 @@ describe("EventCreatePage on the local competition host", () => {
     await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
     const wrapper = createWrapper(container);
     const picker = multiselect(container);
+    wrapper.findAllInputs()[1]?.setInputValue("3");
 
     picker?.toggleProblem("first");
     picker?.toggleProblem("second");

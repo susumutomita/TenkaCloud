@@ -125,6 +125,13 @@ access. Local **Users**, password and SAML management are not offered. Dedicated
 audit collection, settings and read/export endpoints are retired. This change does
 not migrate or purge existing audit tables or rows. Older organizer records remain historical
 state and cannot authenticate after key mode is enabled. There is no local Cognito.
+These local retirements do not define the separate cloud API contract; cloud
+organizers use Cognito. Use [hosting responsibilities](host-retirement.md) to find
+the owning code and [historical SAML instructions](https://github.com/susumutomita/TenkaCloud/blob/2b2530c091d339d5f023042495e7f5d941b930c3/docs/host-saml.md)
+only when inspecting that former revision. Retained audit data belongs in the
+whole-directory backup described under [persistence](#persistence-and-trust-boundaries).
+Missing audit records do not prove that no operation occurred. Check accepted
+operations through their persisted job state.
 
 To rotate the key while the host is running, run `make local-reset` in another
 interactive terminal. If the key is lost, this command displays a replacement;

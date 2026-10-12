@@ -73,11 +73,15 @@ jobs:
       # Playwright's pinned Chromium for the browser rehearsal (the runner has none preinstalled).
       - name: Install Chromium for the browser rehearsal
         run: bunx playwright-core install --with-deps chromium
+      # Each exercises one problem for about 30 seconds; only the full rehearsal runs them.
       - name: Native Pi Siege, authenticated seats, official ranking and SQLite process restart
+        if: github.event_name == 'workflow_dispatch'
         run: bun run scripts/local-host/tests/pi-siege-browser-e2e.ts
       - name: Tenant Boundary Duel, code repair, authenticated seats and persisted score history
+        if: github.event_name == 'workflow_dispatch'
         run: bun run scripts/local-host/tests/tenant-boundary-browser-e2e.ts
       - name: Forensic evidence, citations, scoring and SQLite restart
+        if: github.event_name == 'workflow_dispatch'
         run: bun run scripts/local-host/tests/forensic-browser-e2e.ts
       - name: Purpose selection without GPU or model downloads
         env:

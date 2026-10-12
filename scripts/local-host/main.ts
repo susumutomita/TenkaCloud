@@ -86,8 +86,9 @@ export async function runLocalHost(
     throw new Error("Native Windows is not supported; use WSL2 or a macOS/Linux host.");
   process.umask(0o077);
   if (lifecycle.signal?.aborted) return;
-  if (options.build) await buildHosting(root);
+  if (options.build) await buildHosting(root, "summary");
   if (lifecycle.signal?.aborted) return;
+  console.log("Starting the host server...");
   const host = await startLocalHost(
     root,
     options,
