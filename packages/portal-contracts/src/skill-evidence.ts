@@ -65,6 +65,18 @@ export function skillDeclarations(value: unknown): readonly SkillDeclaration[] |
   return declarations;
 }
 
+/**
+ * The scoring classification an event retains for evaluation. uptime-multi attack scoring
+ * (`attackBlocked` bonuses and `attackProbes` penalties) writes positive or negative `uptime`
+ * rows that are not health probe outcomes, so those problems keep a kind no rule can assess.
+ */
+export function skillScoringKind(scoring: unknown): string {
+  const value = record(scoring);
+  const kind = typeof value?.kind === "string" ? value.kind : "unknown";
+  const attackScoring = value?.attackBlocked !== undefined || value?.attackProbes !== undefined;
+  return kind === "uptime-multi" && attackScoring ? "uptime-multi+attack-scoring" : kind;
+}
+
 export function assessableSource(kind: string, source: string): boolean {
   return source === "flag"
     ? kind === "flag" || kind === "verify"

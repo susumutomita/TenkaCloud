@@ -647,7 +647,8 @@
     "skill_reason_revision_missing": "Catalog revision 不明",
     "skill_reason_observation_missing": "観測日時／対応 job 不明",
     "skill_reason_matched": "宣言の source / ok を確認",
-    "skill_reason_no_success": "宣言に合う成功なし"
+    "skill_reason_no_success": "宣言に合う成功なし",
+    "skill_render_limit": "この画面と印刷には先頭 {shown} 行だけを表示しています (全 {total} 行)。全行は HTML と Markdown のダウンロードに含まれます。"
   },
   "deployment_detail": {
     "invalid_job_id": "不正な Job ID です。",

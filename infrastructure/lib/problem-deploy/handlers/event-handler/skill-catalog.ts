@@ -1,6 +1,7 @@
 import {
   type SkillCatalogSnapshot,
   skillDeclarations,
+  skillScoringKind,
 } from "../../../../../packages/portal-contracts/src/skill-evidence.js";
 import type { ResolvedExecutionCatalog } from "../shared/execution-catalog.js";
 
@@ -12,10 +13,9 @@ export function cloudSkillCatalog(
   const declarations = skillDeclarations(catalog?.skills?.[problemId]);
   const digest = /^catalogs\/([a-f0-9]{64})\.json$/u.exec(catalog?.catalogKey ?? "")?.[1];
   if (!declarations || !digest) return undefined;
-  const scoring = catalog?.scoring[problemId] as { kind?: unknown } | undefined;
   return {
     revision: `sha256:${digest}`,
-    scoringKind: typeof scoring?.kind === "string" ? scoring.kind : "unknown",
+    scoringKind: skillScoringKind(catalog?.scoring[problemId]),
     declarations,
   };
 }

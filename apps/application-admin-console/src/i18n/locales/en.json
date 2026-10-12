@@ -647,7 +647,8 @@
     "skill_reason_revision_missing": "Catalog revision unknown",
     "skill_reason_observation_missing": "Observation time / matching job unavailable",
     "skill_reason_matched": "Declared source / ok observed",
-    "skill_reason_no_success": "No matching successful observation"
+    "skill_reason_no_success": "No matching successful observation",
+    "skill_render_limit": "This page and its printout show the first {shown} of {total} rows. The HTML and Markdown downloads include every row."
   },
   "deployment_detail": {
     "invalid_job_id": "Invalid Job ID.",

@@ -12,7 +12,10 @@ import {
 import { buildExportView } from "../../src/pages/event-report/export-view";
 import { buildEventReportHtml } from "../../src/pages/event-report/exporters/html";
 import { buildEventReportMarkdown } from "../../src/pages/event-report/exporters/markdown";
-import { SkillEvidenceSection } from "../../src/pages/event-report/skill-section";
+import {
+  SKILL_EVIDENCE_RENDER_LIMIT,
+  SkillEvidenceSection,
+} from "../../src/pages/event-report/skill-section";
 import { evidenceFixture } from "../fixtures/skill-evidence";
 
 const config: AppConfig = {
@@ -49,7 +52,7 @@ describe("skill evidence output parity", () => {
       if (!view) throw new Error("skill view missing");
       const rendered = render(
         <div data-tenkacloud-print-root="true">
-          <SkillEvidenceSection view={view} />
+          <SkillEvidenceSection t={t} view={view} />
         </div>,
       );
       const html = buildEventReportHtml(exp);
@@ -103,5 +106,42 @@ describe("skill evidence output parity", () => {
     const serialized = JSON.stringify(full.skills);
     for (const field of ["teamLoginKey", "flagOutputKey", "hintId", "answer", "hiddenChecks"])
       expect(serialized).not.toContain(field);
+  });
+  it("bounds the rendered table and keeps every row in the HTML and Markdown downloads", () => {
+    const detail = evidenceFixture();
+    const t = (key: string, params?: Readonly<Record<string, string | number>>) =>
+      `${key} ${JSON.stringify(params ?? {})}`;
+    const full = buildExportView({
+      detail,
+      locale: "en",
+      t,
+      config,
+      coverNote: "",
+      generatedAt: "",
+      summary: summarizeEvent(detail),
+      scoreboard: [],
+      breakdown: [],
+      disruptions: [],
+    });
+    const total = SKILL_EVIDENCE_RENDER_LIMIT + 1;
+    const rows = Array.from({ length: total }, (_, index) => [`team-${index}`, "s", "st", "b"]);
+    Object.assign(full, {
+      skills: { title: "Evidence", note: "", headers: ["a", "b", "c", "d"], rows },
+    });
+    const view = full.skills;
+    if (!view) throw new Error("skill view missing");
+    const rendered = render(<SkillEvidenceSection t={t} view={view} />);
+    expect(rendered.container.querySelectorAll("tbody tr")).toHaveLength(
+      SKILL_EVIDENCE_RENDER_LIMIT,
+    );
+    expect(rendered.container.textContent).toContain(
+      `event_report.skill_render_limit {"shown":${SKILL_EVIDENCE_RENDER_LIMIT},"total":${total}}`,
+    );
+    expect(rendered.container.textContent).not.toContain(`team-${SKILL_EVIDENCE_RENDER_LIMIT}`);
+    expect(buildEventReportHtml(full)).toContain(`team-${SKILL_EVIDENCE_RENDER_LIMIT}`);
+    expect(buildEventReportMarkdown(full)).toContain(`team-${SKILL_EVIDENCE_RENDER_LIMIT}`);
+    rendered.unmount();
+    const small = render(<SkillEvidenceSection t={t} view={{ ...view, rows: rows.slice(0, 2) }} />);
+    expect(small.container.textContent).not.toContain("event_report.skill_render_limit");
   });
 });

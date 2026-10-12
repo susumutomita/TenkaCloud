@@ -27,3 +27,18 @@ it("preserves unknown scoring classification without inferring a supported skill
   expect(cloudSkillCatalog(catalog, challenge.id)?.scoringKind).toBe("unknown");
   expect(cloudSkillCatalog({ ...catalog, scoring: {} }, challenge.id)?.scoringKind).toBe("unknown");
 });
+
+it("retains uptime-multi attack scoring as a kind that uptime evidence cannot assess", () => {
+  const catalog = {
+    catalogKey: `catalogs/${"c".repeat(64)}.json`,
+    skills: { [battle.id]: battle.skillEvidence },
+    scoring: {
+      [battle.id]: {
+        kind: "uptime-multi",
+        pointsAllOk: 5,
+        attackBlocked: { slot: "web", path: "/blocked", pointsPerBlock: 5 },
+      },
+    },
+  } as unknown as ResolvedExecutionCatalog;
+  expect(cloudSkillCatalog(catalog, battle.id)?.scoringKind).toBe("uptime-multi+attack-scoring");
+});

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   type SkillCatalogSnapshot,
   skillDeclarations,
+  skillScoringKind,
 } from "../../packages/portal-contracts/src/skill-evidence";
 
 /** Exact metadata + runtime definition snapshot identity, retained on the event, not a guessed Git SHA. */
@@ -11,10 +12,9 @@ export function skillCatalog(
 ): SkillCatalogSnapshot | undefined {
   const declarations = skillDeclarations(metadata.skillEvidence);
   if (!declarations) return undefined;
-  const scoring = metadata.scoring as { kind?: unknown } | undefined;
   return {
     revision: `sha256:${createHash("sha256").update(JSON.stringify(metadata)).update("\n").update(definition).digest("hex")}`,
-    scoringKind: typeof scoring?.kind === "string" ? scoring.kind : "unknown",
+    scoringKind: skillScoringKind(metadata.scoring),
     declarations,
   };
 }

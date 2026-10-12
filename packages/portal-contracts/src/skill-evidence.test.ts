@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { assessableSource, skillDeclarations } from "./skill-evidence";
+import { assessableSource, skillDeclarations, skillScoringKind } from "./skill-evidence";
 
 const entry = {
   skillId: "parameter.read",
@@ -37,6 +37,21 @@ test("unsupported kinds never infer evidence", () => {
   for (const kind of ["multi-verify", "multi-flag", "coordination", "unknown"])
     expect(assessableSource(kind, "flag")).toBe(false);
   expect(assessableSource("flag", "uptime")).toBe(false);
+});
+test("uptime-multi attack scoring keeps a kind no uptime rule can assess", () => {
+  expect(skillScoringKind({ kind: "uptime-flat", pointsPerSuccess: 1 })).toBe("uptime-flat");
+  expect(skillScoringKind({ kind: "uptime-multi", pointsAllOk: 5 })).toBe("uptime-multi");
+  // Attack bonuses and penalties are written as `uptime` rows that are not probe outcomes.
+  for (const attack of [
+    { attackBlocked: { slot: "web", path: "/blocked", pointsPerBlock: 5 } },
+    { attackProbes: [{ slot: "web", path: "/attack", penalty: 10 }] },
+  ]) {
+    const kind = skillScoringKind({ kind: "uptime-multi", pointsAllOk: 5, ...attack });
+    expect(kind).toBe("uptime-multi+attack-scoring");
+    expect(assessableSource(kind, "uptime")).toBe(false);
+  }
+  for (const scoring of [undefined, {}, { kind: 3 }])
+    expect(skillScoringKind(scoring)).toBe("unknown");
 });
 
 test("rejects malformed nested declarations and bounded labels instead of leaking fields", () => {

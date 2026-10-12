@@ -177,7 +177,7 @@ function EventReportLoaded({
         <SummarySection summary={summary} t={t} />
         <ScoreboardSection rows={scoreboard} t={t} />
         <ProblemBreakdownSection rows={breakdown} t={t} />
-        {exportView.skills && <SkillEvidenceSection view={exportView.skills} />}
+        {exportView.skills && <SkillEvidenceSection t={t} view={exportView.skills} />}
         {disruptions.length > 0 && <DisruptionSection entries={disruptions} t={t} />}
         <FooterSection generatedAt={generatedAt} t={t} />
       </div>
