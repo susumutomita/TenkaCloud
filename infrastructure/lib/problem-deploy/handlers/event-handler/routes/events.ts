@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
 import {
@@ -14,6 +14,7 @@ import {
   createEvent,
   DuplicateInternalSlugError,
   DuplicateProblemIdError,
+  EventRecordTooLargeError,
   EventTeamCredentialRequiredError,
   UnknownEventProblemError,
 } from "../create.js";
@@ -24,6 +25,33 @@ import type { EventSharedResources } from "../shared.js";
 import { CreateEventRequestSchema } from "../types.js";
 
 const TeamIdPathSchema = z.string().regex(ULID_RE);
+
+/** Organizer-correctable `createEvent` refusals; anything else is a server error. */
+function createEventRefusal(c: Context, err: unknown): Response | undefined {
+  if (err instanceof UnknownEventProblemError)
+    return c.json(
+      { error: "unknown_problem", problemId: err.problemId, message: err.message },
+      StatusCodes.UNPROCESSABLE_ENTITY,
+    );
+  if (err instanceof EventTeamCredentialRequiredError)
+    return c.json(
+      { error: "team_credential_required", message: err.message },
+      StatusCodes.BAD_REQUEST,
+    );
+  if (err instanceof EventRecordTooLargeError)
+    return c.json(
+      { error: "event_record_too_large", message: err.message },
+      StatusCodes.BAD_REQUEST,
+    );
+  if (err instanceof DuplicateInternalSlugError)
+    return c.json({ error: "duplicate_internal_slug", slug: err.slug }, StatusCodes.BAD_REQUEST);
+  if (err instanceof DuplicateProblemIdError)
+    return c.json(
+      { error: "duplicate_problem_id", problemId: err.problemId },
+      StatusCodes.BAD_REQUEST,
+    );
+  return undefined;
+}
 
 /**
  * Event CRUD + bulk-teardown routes.
@@ -47,29 +75,10 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
           );
           return c.json(response, StatusCodes.CREATED);
         } catch (err) {
-          if (err instanceof UnknownEventProblemError)
-            return c.json(
-              { error: "unknown_problem", problemId: err.problemId, message: err.message },
-              StatusCodes.UNPROCESSABLE_ENTITY,
-            );
-          if (err instanceof EventTeamCredentialRequiredError)
-            return c.json(
-              { error: "team_credential_required", message: err.message },
-              StatusCodes.BAD_REQUEST,
-            );
-          if (err instanceof DuplicateInternalSlugError) {
-            return c.json(
-              { error: "duplicate_internal_slug", slug: err.slug },
-              StatusCodes.BAD_REQUEST,
-            );
-          }
-          if (err instanceof DuplicateProblemIdError) {
-            return c.json(
-              { error: "duplicate_problem_id", problemId: err.problemId },
-              StatusCodes.BAD_REQUEST,
-            );
-          }
-          return handleRouteError(c, "[events] createEvent failed", {}, err);
+          return (
+            createEventRefusal(c, err) ??
+            handleRouteError(c, "[events] createEvent failed", {}, err)
+          );
         }
       },
       { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE], rejectSuspendedTenant: true },

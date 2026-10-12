@@ -6,6 +6,7 @@ import {
   createEvent,
   DuplicateInternalSlugError,
   DuplicateProblemIdError,
+  EventRecordTooLargeError,
   EventTeamCredentialRequiredError,
 } from "../../lib/problem-deploy/handlers/event-handler/create";
 import { registerEventRoutes } from "../../lib/problem-deploy/handlers/event-handler/routes/events";
@@ -667,4 +668,71 @@ it("pins public skill metadata at event creation and ignores caller-supplied evi
   });
   expect(JSON.stringify(item?.problems)).not.toContain("forged");
   expect(item?.problems[0].defaultAwsAccountId).toBe("333333333333");
+});
+
+it("refuses, before writing, an event whose retained skill declarations outgrow one item", async () => {
+  vi.stubEnv("CONTROL_PLANE_ACCOUNT", "999999999999");
+  vi.spyOn(Date, "now").mockReturnValue(NOW_MS);
+  // The contract maximum: 16 declarations per problem, both labels 120 multibyte characters.
+  const label = "検".repeat(120);
+  const declarations = Array.from({ length: 16 }, (_, index) => ({
+    skillId: `endpoint.probe-${index}`,
+    label,
+    i18n: { en: { label } },
+    rule: { source: "uptime", result: "ok" },
+  }));
+  const ids = Array.from({ length: 50 }, (_, index) => `battle-${index}`);
+  const executionCatalog = {
+    catalogKey: `catalogs/${"a".repeat(64)}.json`,
+    skills: Object.fromEntries(ids.map((id) => [id, declarations])),
+    scoring: Object.fromEntries(ids.map((id) => [id, { kind: "uptime-flat" }])),
+    catalog: Object.fromEntries(ids.map((id) => [id, `problems/battles/${id}`])),
+  } as unknown as NonNullable<EventSharedResources["executionCatalog"]>;
+  const { shared, ddbSend } = buildShared({ executionCatalog });
+  ddbSend.mockResolvedValue({});
+  const request = (count: number) =>
+    CreateEventRequestSchema.parse({
+      name: "Evidence",
+      teams: teamsOf(1),
+      problems: ids.slice(0, count).map((problemId) => ({
+        problemId,
+        defaultRegion: "ap-northeast-1",
+        defaultAwsAccountId: "333333333333",
+      })),
+    });
+
+  await expect(
+    createEvent(shared, { tenantId: "tenant-a", nowMs: NOW_MS }, request(50)),
+  ).rejects.toBeInstanceOf(EventRecordTooLargeError);
+  const app = new Hono();
+  registerEventRoutes(app, shared);
+  const refused = await app.request(
+    "/events",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request(50)),
+    },
+    {
+      event: {
+        requestContext: {
+          authorizer: {
+            claims: {
+              sub: "operator",
+              "custom:tenantId": "tenant-a",
+              "custom:userRole": "TenantAdmin",
+            },
+          },
+        },
+      },
+    },
+  );
+  expect(refused.status).toBe(400);
+  expect(await refused.json()).toMatchObject({ error: "event_record_too_large" });
+  expect(ddbSend).not.toHaveBeenCalled();
+
+  await createEvent(shared, { tenantId: "tenant-a", nowMs: NOW_MS }, request(20));
+  const item = firstTransactWriteCommand(ddbSend).input.TransactItems?.[0]?.Put?.Item;
+  expect(item?.problems).toHaveLength(20);
+  expect(item?.problems[19].skillCatalog.declarations).toHaveLength(16);
 });

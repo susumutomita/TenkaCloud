@@ -1,5 +1,9 @@
 import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
-import { type ScoreEventItem, toPublicScoreEventView } from "../shared/score-event.js";
+import {
+  isPrivateScoreEventMarker,
+  type ScoreEventItem,
+  toPublicScoreEventView,
+} from "../shared/score-event.js";
 import { type EventSharedResources, resolveDeploymentsRepository } from "./shared.js";
 import type { TeamScoreEvents, TeamScoreEventView } from "./types.js";
 
@@ -61,7 +65,7 @@ export async function collectTeamScoreEvents(
         teamId,
         teamName: meta.teamName,
         events: collected.events.slice(0, PER_TEAM_LIMIT),
-        ...(!collected.historyAvailable || collected.events.length >= PER_TEAM_LIMIT
+        ...(!collected.historyAvailable || collected.events.length > PER_TEAM_LIMIT
           ? { historyAvailable: false }
           : {}),
       };
@@ -100,7 +104,7 @@ async function collectEventsForDeployments(
       for (const it of rows as Partial<ScoreEventItem>[]) {
         const v = toPublicScoreEventView(it);
         if (v) collected.push(v);
-        else historyAvailable = false;
+        else if (!isPrivateScoreEventMarker(it)) historyAvailable = false;
       }
     }),
   );

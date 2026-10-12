@@ -306,3 +306,27 @@ it("marks the bounded public history incomplete even when all three full pages w
   expect(rows[0]?.events).toHaveLength(200);
   expect(rows[0]?.historyAvailable).toBe(false);
 });
+
+it("keeps history complete when a valid attack-detected marker is left out of the public timeline", async () => {
+  const { shared, ddbSend } = buildShared();
+  ddbSend.mockResolvedValueOnce({
+    Items: [ev(), ev({ source: "attack-detected", points: 0, result: "down" })],
+  });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events.map((row) => row.source)).toEqual(["uptime"]);
+  expect(rows[0]?.historyAvailable).toBeUndefined();
+});
+
+it("treats exactly 200 fully drained events as complete history", async () => {
+  const { shared, ddbSend } = buildShared();
+  ddbSend.mockResolvedValueOnce({ Items: Array.from({ length: 200 }, () => ev()) });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events).toHaveLength(200);
+  expect(rows[0]?.historyAvailable).toBeUndefined();
+});

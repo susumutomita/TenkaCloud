@@ -59,7 +59,7 @@ export interface CoordinationStateBudget {
  * DynamoDB's documented maximum item size (400 KB), the number this budget has
  * to stay under rather than the number it can hand out.
  */
-const DYNAMODB_ITEM_LIMIT_BYTES = 400 * 1024;
+export const DYNAMODB_ITEM_LIMIT_BYTES = 400 * 1024;
 
 /**
  * Room reserved inside {@link DYNAMODB_ITEM_LIMIT_BYTES} for everything in the
@@ -84,7 +84,7 @@ const DYNAMODB_ITEM_LIMIT_BYTES = 400 * 1024;
  * by the platform is recoverable and legible, being refused by DynamoDB
  * mid-match is neither.
  */
-const DYNAMODB_ROW_OVERHEAD_BYTES = 16 * 1024;
+export const DYNAMODB_ROW_OVERHEAD_BYTES = 16 * 1024;
 
 /**
  * The policy ceiling for the SQL backends (Turso / libSQL).

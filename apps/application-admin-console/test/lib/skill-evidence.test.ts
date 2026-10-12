@@ -90,6 +90,27 @@ it("orders retained observations and preserves a success after a failed attempt"
   expect(evidence?.observations.map((row) => row.result)).toEqual(["wrong", "ok"]);
 });
 
+it("counts a cloud uptime row as a successful probe only when it awarded points", () => {
+  const detail = evidenceFixture();
+  const team = detail.scoreEventsByTeam?.[0];
+  const [flag, probe] = team?.events ?? [];
+  if (!team || !flag || !probe) throw new Error("fixture missing");
+  // Cloud uptime-flat / uptime-multi store a failed probe as `ok` with the configured penalty.
+  team.events = [
+    { ...flag, points: 0 },
+    { ...probe, points: -10 },
+    { ...probe, points: 0, occurredAt: "2026-10-01T00:02:00Z" },
+  ];
+  const [answered, failed] = buildSkillEvidence(detail);
+  expect(answered?.status).toBe("demonstrated");
+  expect(failed?.status).toBe("not_observed");
+  expect(failed?.observations.map((row) => row.result)).toEqual(["wrong", "wrong"]);
+  team.events = [...team.events, { ...probe, points: 5, occurredAt: "2026-10-01T00:03:00Z" }];
+  const recovered = buildSkillEvidence(detail)[1];
+  expect(recovered?.status).toBe("demonstrated");
+  expect(recovered?.observations.map((row) => row.result)).toEqual(["wrong", "wrong", "ok"]);
+});
+
 it("requires complete team history and a retained job even when an accepted result exists", () => {
   const detail = evidenceFixture();
   const team = detail.scoreEventsByTeam?.[0];

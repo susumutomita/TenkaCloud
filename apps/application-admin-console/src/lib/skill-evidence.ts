@@ -28,6 +28,7 @@ interface SkillObservation {
   readonly problemId: string;
   readonly jobId: string;
   readonly source: string;
+  readonly points: number;
   readonly result: string;
   readonly occurredAt: string;
 }
@@ -97,15 +98,18 @@ export function buildSkillEvidence(detail: SkillEvidenceInput): readonly SkillEv
             jobs.some((job) => job.jobId === entry.jobId && job.teamId === team.teamId);
           const observations = [
             ...new Map(
-              events.filter(valid).map((entry) => [
-                JSON.stringify([entry.jobId, entry.occurredAt, entry.source, entry.result]),
-                {
-                  jobId: entry.jobId,
-                  occurredAt: entry.occurredAt,
-                  source: entry.source,
-                  result: entry.result,
-                },
-              ]),
+              events.filter(valid).map((entry) => {
+                const result = observedResult(entry);
+                return [
+                  JSON.stringify([entry.jobId, entry.occurredAt, entry.source, result]),
+                  {
+                    jobId: entry.jobId,
+                    occurredAt: entry.occurredAt,
+                    source: entry.source,
+                    result,
+                  },
+                ];
+              }),
             ).values(),
           ].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
           const [status, reason] = evidenceState({
@@ -134,6 +138,16 @@ export function buildSkillEvidence(detail: SkillEvidenceInput): readonly SkillEv
     }
   }
   return rows;
+}
+
+/**
+ * Cloud uptime rows keep `result: "ok"` even for a failed probe; the failure is the zero or
+ * negative score delta (success points are at least 1 in the catalog schema). Only a positive
+ * uptime row is a successful probe; local rows already record a failed probe as `wrong`.
+ */
+function observedResult(entry: SkillObservation): string {
+  if (entry.result !== "ok" || entry.source !== "uptime") return entry.result;
+  return entry.points > 0 ? "ok" : "wrong";
 }
 
 function evidenceState(input: {
