@@ -347,3 +347,25 @@ it("keeps a fully drained three-page history complete when private markers fill 
   expect(rows[0]?.events).toHaveLength(1);
   expect(rows[0]?.historyAvailable).toBeUndefined();
 });
+
+it("treats a stored non-numeric score as corrupt history instead of coercing it", async () => {
+  for (const points of ["1", true, Number.NaN]) {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [ev({ points: 5 }), ev({ points })] });
+    const rows = await collectTeamScoreEvents(shared as never, {
+      deployments: [{ jobId: "J1", teamId: "T1" }],
+      displayNameByTeamId: new Map(),
+    });
+    expect(rows[0]?.events.map((row) => row.points)).toEqual([5]);
+    expect(rows[0]?.historyAvailable).toBe(false);
+  }
+  const { shared, ddbSend } = buildShared();
+  ddbSend.mockResolvedValueOnce({ Items: [ev({ points: undefined })] });
+  const legacy = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  // Rows from before points were stored still read as zero.
+  expect(legacy[0]?.events.map((row) => row.points)).toEqual([0]);
+  expect(legacy[0]?.historyAvailable).toBeUndefined();
+});

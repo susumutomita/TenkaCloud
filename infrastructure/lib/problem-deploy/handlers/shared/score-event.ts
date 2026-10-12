@@ -132,6 +132,8 @@ export function toPublicScoreEventView(
   if (typeof item.result !== "string") return undefined;
   if (!PUBLIC_RESULT_SET.has(item.result)) return undefined;
   if (typeof item.occurredAt !== "string") return undefined;
+  // A missing value is a legacy zero; a stored non-number is corrupt, not a score to coerce.
+  if (item.points !== undefined && !Number.isFinite(item.points)) return undefined;
   return {
     jobId: item.jobId,
     problemId: item.problemId,
