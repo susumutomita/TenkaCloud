@@ -108,6 +108,8 @@ async function createEvent(
   await page.getByRole("button", { name: "Create event" }).first().click();
   await page.getByLabel("Event name").fill(name);
   const count = page.getByLabel("Team count");
+  assert.equal(await count.inputValue(), "1", "A new local event starts with one team.");
+  await captureVerifiedUi(page, "local-event-create-default.png", [organizerKey]);
   await count.fill("999");
   assert.equal(await count.inputValue(), "40", "The team input is bounded before submission.");
   await count.fill("2");
