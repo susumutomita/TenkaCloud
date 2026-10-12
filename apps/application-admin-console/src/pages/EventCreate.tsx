@@ -150,9 +150,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   );
 
   const [name, setName] = useState("");
-  // チーム数を変えると teamRows が動的に伸縮 (= 初期 INITIAL_TEAM_COUNT 行)。
+  // ローカル開催は1チームから始め、クラウド開催の初期値は維持する。
   const [teamRows, setTeamRows] = useState<TeamRow[]>(() =>
-    Array.from({ length: INITIAL_TEAM_COUNT }, (_, i) => ({
+    Array.from({ length: isLocalHost(config) ? 1 : INITIAL_TEAM_COUNT }, (_, i) => ({
       internalSlug: `team-${i + 1}`,
       awsAccountId: "",
       nonAwsCredentialTeamSlug: `team-${i + 1}`,
