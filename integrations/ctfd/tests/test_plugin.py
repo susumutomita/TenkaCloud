@@ -3,7 +3,7 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from CTFd.config import TestingConfig
 from CTFd.models import Challenges, Flags, Solves, db
@@ -51,8 +51,13 @@ class ClientTests(unittest.TestCase):
     @patch("CTFd.plugins.tenkacloud.runtime.request_host", return_value=HOST_DATA)
     def test_start_stop_use_only_owned_problem(self, request):
         for action in ("start", "stop"):
+            request.reset_mock()
             self.assertEqual(runtime("ctfd-demo", KEY, action), {"status": "accepted"})
-            request.assert_called_with("POST", f"/portal/me/problems/ctfd-demo/container/{action}", KEY)
+            # The ownership preflight reads state only, so it issues no exercise link.
+            self.assertEqual(request.call_args_list, [
+                call("GET", "/portal/me/problems/ctfd-demo/state", KEY),
+                call("POST", f"/portal/me/problems/ctfd-demo/container/{action}", KEY),
+            ])
 
     @patch("CTFd.plugins.tenkacloud.runtime.request_host", return_value=HOST_DATA)
     def test_wrong_team_and_selectors_cannot_mutate(self, request):
@@ -104,7 +109,11 @@ class ClientTests(unittest.TestCase):
         failed = {**HOST_DATA["problems"][0], "stackOutputs": {}, "accessError": "link_unavailable"}
         request.side_effect = [{**HOST_DATA, "problems": [failed]}, {"correct": True}]
         self.assertTrue(evaluate("ctfd-demo", KEY, " answer "))
-        request.assert_called_with("POST", "/portal/me/problems/ctfd-demo/evaluate", KEY, {"submission": "answer"})
+        # Every verdict checks readiness without issuing a link, then asks the verifier.
+        self.assertEqual(request.call_args_list, [
+            call("GET", "/portal/me/problems/ctfd-demo/state", KEY),
+            call("POST", "/portal/me/problems/ctfd-demo/evaluate", KEY, {"submission": "answer"}),
+        ])
 
     @patch("CTFd.plugins.tenkacloud.runtime.request_host")
     def test_other_event_key_cannot_start_or_score_the_same_problem(self, request):
@@ -114,7 +123,7 @@ class ClientTests(unittest.TestCase):
             with self.assertRaises(RuntimeErrorResponse) as caught:
                 action()
             self.assertEqual(caught.exception.status, 403)
-            request.assert_called_once_with("GET", "/portal/me/problems/ctfd-demo", KEY)
+            request.assert_called_once_with("GET", "/portal/me/problems/ctfd-demo/state", KEY)
 
     @patch("CTFd.plugins.tenkacloud.runtime.requests.Session")
     def test_transport_refuses_redirects_and_sanitizes_upstream_errors(self, session):

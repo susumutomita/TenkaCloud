@@ -12,7 +12,9 @@ principal or stored credential.
 Validated with CTFd 3.8.2. Copy the `tenkacloud` directory beside CTFd's existing
 plugins and restart CTFd. CTFd already provides Flask, SQLAlchemy and requests.
 Set the non-secret `TENKACLOUD_PARTICIPANT_URL` environment variable on the CTFd
-process to the participant API base, for example `http://127.0.0.1:5198/api`.
+process to the participant API base: the `Participant portal` origin that the host
+prints at startup plus `/api`, which is `http://127.0.0.1:5175/api` with the default
+`make local` ports.
 The local host listener requires the `/api` suffix. Run CTFd on the same machine
 and use the private loopback listener. Remote endpoints are rejected.
 Only the operator controls this URL; participants cannot select an
@@ -53,7 +55,8 @@ both systems are ready. Participants enter their team key in the challenge
 dialog, start the environment, open its Web link, submit their flag in CTFd and
 stop the environment. Polling exposes asynchronous completion and failure.
 Each dialog reads only its own problem (`GET /portal/me/problems/{problemId}`),
-so it issues an exercise link for that environment alone. If the environment
+so it issues an exercise link for that environment alone. Start, stop and flag
+checks read `GET /portal/me/problems/{problemId}/state`, which issues no link. If the environment
 runs but TenkaCloud cannot issue its link, the dialog says so and retries every
 5 seconds instead of showing it as ready; flag submission still works.
 Closing the dialog clears the key and stops polling. Keys are not saved in

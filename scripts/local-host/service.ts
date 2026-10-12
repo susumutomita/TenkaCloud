@@ -2180,9 +2180,10 @@ export class HostingService {
     return ok(responseBody, result.status);
   }
   private async participantRead(context: Context, path: string): Promise<ApiResponse> {
-    const problem = /^\/portal\/me\/problems\/([a-z0-9][a-z0-9-]{0,127})$/u.exec(path);
-    // One problem's view mints only that problem's exercise handoff, not every running one's.
-    if (problem) return ok(await this.teamView(context, problem[1]));
+    const problem = /^\/portal\/me\/problems\/([a-z0-9][a-z0-9-]{0,127})(\/state)?$/u.exec(path);
+    // One problem's view mints only that problem's exercise handoff, not every running one's;
+    // its `/state` variant mints none, for checks that only need readiness.
+    if (problem) return ok(await this.teamView(context, problem[1], !problem[2]));
     switch (path) {
       case "/portal/me":
         return ok(await this.teamView(context));
@@ -2271,6 +2272,7 @@ export class HostingService {
   private async teamView(
     context: Context,
     onlyProblemId?: string,
+    withLinks = true,
   ): Promise<Record<string, unknown>> {
     this.progression.view(context.team);
     const result = await this.engine.view(context);
@@ -2291,7 +2293,15 @@ export class HostingService {
     );
     const safeProblems = await Promise.all(
       problems.map((raw) =>
-        this.teamProblemView(raw, context, runtimes, eventGate.kind, ended, projected.byProblem),
+        this.teamProblemView(
+          raw,
+          context,
+          runtimes,
+          eventGate.kind,
+          ended,
+          projected.byProblem,
+          withLinks,
+        ),
       ),
     );
     const latest = this.context(this.store.team(context.team.teamId));
@@ -2325,6 +2335,7 @@ export class HostingService {
     gateKind: Gate["kind"],
     ended: boolean,
     projectedByProblem: Readonly<Record<string, number>>,
+    withLinks: boolean,
   ): Promise<Record<string, unknown>> {
     const entry = object(raw);
     const runtime = runtimes.get(String(entry.problemId));
@@ -2358,7 +2369,8 @@ export class HostingService {
     if (job && onDemandContainer(context.event, job.definition) && gateKind === "ok")
       problem.containerSession = containerSession(job);
     showUptimeStatus(this.store, context, problem, job);
-    await this.grantAccess(problem, runtime, job, context, gateKind);
+    if (withLinks) await this.grantAccess(problem, runtime, job, context, gateKind);
+    else problem.stackOutputs = {};
     return problem;
   }
   /**

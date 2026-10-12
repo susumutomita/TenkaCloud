@@ -365,6 +365,46 @@ test("one problem's view issues only that environment's link and reports link fa
   });
 });
 
+test("one problem's state read reports readiness without issuing any link", async () => {
+  await fixture(async (f) => {
+    const team = f.teams[0];
+    if (!team) throw new Error("Expected team");
+    const [first] = f.store.jobs(f.eventId, team.teamId);
+    if (!first) throw new Error("Expected a job");
+    await f.service.participant(
+      request("POST", `/portal/me/problems/${first.problemId}/container/start`, team.teamLoginKey),
+    );
+    await f.service.drain();
+    f.engine.surfaces = (job: Job) => ({ Web: `http://127.0.0.1:5300/${job.jobId}/` });
+    const issued: string[] = [];
+    f.service.surfaceLink = async (job) => {
+      issued.push(job.jobId);
+      return `http://127.0.0.1:5200/handoff/${job.jobId}`;
+    };
+    const read = (path: string) =>
+      f.service.participant(request("GET", path, team.teamLoginKey)) as Promise<{
+        body: {
+          problems: {
+            problemId: string;
+            stackOutputs: object;
+            containerSession?: { status: string };
+          }[];
+        };
+      }>;
+    const state = await read(`/portal/me/problems/${first.problemId}/state`);
+    expect(state.body.problems).toHaveLength(1);
+    expect(state.body.problems[0]).toMatchObject({
+      problemId: first.problemId,
+      stackOutputs: {},
+      containerSession: { status: "running" },
+    });
+    expect(issued).toEqual([]);
+    await expect(read("/portal/me/problems/not-in-event/state")).rejects.toMatchObject({
+      status: 404,
+    });
+  });
+});
+
 test("external verdict is discarded when the team key is revoked during the verifier call", async () => {
   await fixture(async (f) => {
     const team = f.teams[0];

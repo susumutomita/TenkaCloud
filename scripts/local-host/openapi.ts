@@ -192,6 +192,19 @@ export function localOpenApi(role: "admin" | "participant") {
               "The GET /portal/me shape with problems[] limited to this problem. Only this problem's exercise links are issued, so polling one environment does not issue handoffs for the team's other running environments. Unknown problems return 404.",
           },
         },
+        "/portal/me/problems/{problemId}/state": {
+          get: {
+            ...operation(
+              "readProblemState",
+              "Read one problem's state without links",
+              200,
+              undefined,
+              [problemId],
+            ),
+            description:
+              "The GET /portal/me/problems/{problemId} shape with stackOutputs always empty: no exercise link or handoff is issued. Use it for readiness checks before container actions or flag evaluation. Unknown problems return 404.",
+          },
+        },
         "/portal/me/problems/{problemId}/container/start": {
           post: {
             ...operation(

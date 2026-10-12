@@ -70,18 +70,18 @@ def request_host(method, path, key, body=None):
         raise RuntimeErrorResponse(502, "TenkaCloud is unreachable or returned an invalid response.") from None
 
 
-def runtime(problem_id, key, action):
+def owned_problem(problem_id, key, links):
     if not isinstance(key, str) or not TEAM_KEY.fullmatch(key):
         raise RuntimeErrorResponse(400, "Enter the existing TenkaCloud team login key.")
     if not isinstance(problem_id, str) or not PROBLEM_ID.fullmatch(problem_id):
         raise RuntimeErrorResponse(503, "The organizer must set a valid TenkaCloud problem ID.")
-    if action not in ("read", "start", "stop"):
-        raise RuntimeErrorResponse(404, "Unknown environment action.")
     event_id = os.environ.get("TENKACLOUD_EVENT_ID", "")
     if not re.fullmatch(r"[0-9A-Z]{26}", event_id):
         raise RuntimeErrorResponse(503, "The organizer must configure the TenkaCloud event ID.")
     # Problem-scoped: the whole-team view would issue a link for every running environment.
-    data = request_host("GET", f"/portal/me/problems/{problem_id}", key)
+    # Readiness checks use `/state`, which issues none.
+    path = f"/portal/me/problems/{problem_id}" + ("" if links else "/state")
+    data = request_host("GET", path, key)
     if not isinstance(data, dict) or not isinstance(data.get("problems"), list):
         raise RuntimeErrorResponse(502, "TenkaCloud returned an invalid problem list.")
     team = data.get("team")
@@ -101,6 +101,13 @@ def runtime(problem_id, key, action):
         "stopped", "starting", "running", "stopping", "error"
     ):
         raise RuntimeErrorResponse(409, "This challenge requires an on-demand Docker environment.")
+    return problem, state
+
+
+def runtime(problem_id, key, action):
+    if action not in ("read", "start", "stop"):
+        raise RuntimeErrorResponse(404, "Unknown environment action.")
+    problem, state = owned_problem(problem_id, key, links=action == "read")
     if action != "read":
         request_host("POST", f"/portal/me/problems/{problem_id}/container/{action}", key)
         return {"status": "accepted"}
@@ -127,7 +134,7 @@ def evaluate(problem_id, key, submission):
     if not isinstance(submission, str) or len(submission.encode("utf-8")) > 60 * 1024:
         raise RuntimeErrorResponse(400, "The flag submission is invalid or too large.")
     submission = submission.strip()
-    state = runtime(problem_id, key, "read")
+    _, state = owned_problem(problem_id, key, links=False)
     if state["status"] != "running":
         raise RuntimeErrorResponse(409, "Start your environment before submitting a flag.")
     verdict = request_host("POST", f"/portal/me/problems/{problem_id}/evaluate", key, {"submission": submission})
