@@ -1,14 +1,17 @@
-# Book compatibility for the integration candidate
+# Book compatibility with current hosting
 
 This is a repository-side compatibility note for
 [自分で作るクラウド競技](https://zenn.dev/bull/books/cloud-competition).
-An isolated zenn-article branch prepares revisions to the 27-chapter book.
-Those edits are not published; the published book still includes legacy paths.
-Use this table with the matching checkout, rather than assuming a finished draft exists.
+The source revision in [zenn-article PR #304](https://github.com/susumutomita/zenn-article/pull/304)
+was merged on 2026-10-05 at `b526e12b655c484605d5a63447a6b0d1234ee509`.
+That merge establishes the book source revision, not a verified publication date
+or complete runtime rehearsal. Use this note with the matching TenkaCloud checkout;
+current operating procedures live in [local hosting](local-hosting.md) and
+[cloud hosting](../infrastructure/README.md).
 
 ## Current replacement commands
 
-| Published or former instruction | Integration candidate |
+| Former instruction | Current hosting |
 | --- | --- |
 | make local for individual practice | make local starts one event/team competition system; prepare dormant Docker jobs, start the event, then use participant Start / resume |
 | make local-down clears progress | make down preserves DB, scores, keys, writable layers and volumes; new Docker jobs remain stopped until participant resume, with no RAM retention |
@@ -62,33 +65,23 @@ not concurrent Docker capacity. Stop preserves writable layers and volumes witho
 automatic eviction or reset; existing events retain their legacy lifecycle.
 Do not treat schema acceptance or catalog visibility as a passed participant route.
 
-The book's [Battle rules chapter](https://zenn.dev/bull/books/cloud-competition/viewer/battle-experience)
-describes points per endpoint. The pinned problem and retained engine instead
-award +100 for a cycle with both required endpoints healthy, or -100 when either
-fails. This discrepancy predates the platform retirement. Correct the prose in
-an authorized book revision rather than silently changing the score engine.
+The [Battle rules chapter](https://zenn.dev/bull/books/cloud-competition/viewer/battle-experience)
+and glossary were corrected in PR #304 to match the retained engine: +100 for a
+cycle with both required endpoints healthy, or -100 when either fails. Earlier
+book revisions described points per endpoint. Use the merged source revision
+when comparing scoring; no score-engine change or automatic data migration is implied.
 
-## Chapters needing an authorized book revision
+## Merged book source revision scope
 
-- Execution modes and local chapters: event/team flow, Bun setup, actual exercise links and state-preserving shutdown
-- AWS access: cloud-only execution, configured deployment-role ExternalId in SSM, separate participant role and exact bootstrap region; no local AWS startup option
-- Cloud setup and cleanup: review explicit first-account IAM setup, current source pins and the deployment-role permissions; distinguish retained-data teardown from old destroy-all
-- Authoring/private packs: distinguish validation/install from executable catalog integration
-- Codespaces and appendix: require new forwarded-origin, gateway and terminal evidence; update the shutdown checklist
-
-For current local steps use [local hosting](local-hosting.md) and the
-[event runbook](operations/event-runbook.md). No data migration
-or external resource cleanup is implied.
-
-## Prepared book revision scope
-
-| Chapters | Prepared changes |
+| Chapters | Source revision changes |
 | --- | --- |
 | execution-modes, chapter13, glossary | Local/Cloud, DB selection, resource identity and current limits |
 | chapter2/3, local-problem-runtime, chapter17, checklist | Event/team startup; down preserves data; clear deletes competition data; reset rotates organizer access |
 | chapter14/15, aws-account-access | Participant URL + team key; Cloud-only AWS access; preserve ExternalId and deployment/participant role boundaries |
 | chapter16 | Teardown exercises first; distinguish destroy and destroy-all; review selected DB and remaining resources |
+| battle-experience, chapter17, glossary | Both-endpoints scoring rule: +100 for a healthy cycle, -100 if either fails |
 
 Organizer-key startup/reset wording matches merged PR #3321 in main 3886bf16.
 Interactive local starts rotate the key; noninteractive and public/container starts
-retain it. The book revision is tracked in zenn-article PR #304.
+retain it. The book source revision was merged in zenn-article PR #304; later hosting changes
+still require comparison with the matching checkout.

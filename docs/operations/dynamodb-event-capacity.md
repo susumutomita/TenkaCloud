@@ -20,6 +20,19 @@ region and measured workload. Local hosting uses SQLite and has a separate
 ## After an event
 
 Check that scoring and problem work have stopped and inspect retained resources.
-`make destroy` coordinates cloud teardown while preserving event data. Storage can
-continue to incur charges. See [cloud operations](../../infrastructure/README.md)
+Before teardown, back up required event data and save the physical-resource inventory:
+
+```sh
+make -s destroy ENV=development CLOUD_ARGS="--plan" > teardown-plan.txt
+```
+
+`make destroy` confirms the selected account, region and environment and applies
+the deployed removal policies. By default it deletes stack-owned DynamoDB tables
+and their rows; only tables deployed with `CDK_PARAM_RETAIN_DATA_TABLES=true` are
+retained. Editing local configuration alone does not change a deployed policy.
+External Turso rows remain. Retained resources can continue to incur charges.
+Exercise teardown is separate, and competitor bootstrap and shared CDKToolkit
+resources remain outside platform destruction. `make destroy-all` explicitly
+purges verified stack-owned retained data and the selected Turso control-data rows;
+it is not a backup operation. See [cloud operations](../../infrastructure/README.md)
 and [cost boundaries](../running-costs.md).

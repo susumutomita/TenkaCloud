@@ -43,7 +43,6 @@ const DOC_ASSETS = [
   "assets/architecture/logical.svg",
   "assets/architecture/participant-scoring.svg",
   "assets/architecture/problem-deployment.svg",
-  "assets/architecture/tenant-onboarding.svg",
 ] as const;
 
 /**
