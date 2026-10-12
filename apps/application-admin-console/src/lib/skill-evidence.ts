@@ -93,7 +93,7 @@ export function buildSkillEvidence(detail: SkillEvidenceInput): readonly SkillEv
             ) ?? [];
           const jobs = detail.deploymentsByProblem[problem.problemId] ?? [];
           const valid = (entry: SkillObservation) =>
-            Number.isFinite(Date.parse(entry.occurredAt)) &&
+            canonicalInstant(entry.occurredAt) &&
             !!entry.jobId &&
             jobs.some((job) => job.jobId === entry.jobId && job.teamId === team.teamId);
           const observations = [
@@ -138,6 +138,15 @@ export function buildSkillEvidence(detail: SkillEvidenceInput): readonly SkillEv
     }
   }
   return rows;
+}
+
+/** UTC instants as `toISOString` writes them; `Date.parse` also takes "0" and rolls 02-30 over. */
+const ISO_INSTANT = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d{1,3})?Z$/u;
+
+function canonicalInstant(value: string): boolean {
+  const seconds = ISO_INSTANT.exec(value)?.[1];
+  const parsed = new Date(value);
+  return !!seconds && !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(seconds);
 }
 
 /**

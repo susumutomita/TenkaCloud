@@ -99,8 +99,9 @@ async function collectEventsForDeployments(
           if (!complete) historyAvailable = false;
         },
       });
-      if (!availabilityReported || rows.length >= PER_TEAM_LIMIT * MAX_PAGES_PER_DEPLOYMENT)
-        historyAvailable = false;
+      // Trust the adapter's own drain report; a row count cannot tell a full final page from a
+      // truncated one. Only an adapter that reports nothing is assumed incomplete.
+      if (!availabilityReported) historyAvailable = false;
       for (const it of rows as Partial<ScoreEventItem>[]) {
         const v = toPublicScoreEventView(it);
         if (v) collected.push(v);

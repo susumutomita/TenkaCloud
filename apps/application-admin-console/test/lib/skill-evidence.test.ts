@@ -111,6 +111,25 @@ it("counts a cloud uptime row as a successful probe only when it awarded points"
   expect(recovered?.observations.map((row) => row.result)).toEqual(["wrong", "wrong", "ok"]);
 });
 
+it("accepts only canonical UTC observation instants", () => {
+  const detail = evidenceFixture();
+  const team = detail.scoreEventsByTeam?.[0];
+  const accepted = team?.events[0];
+  if (!team || !accepted) throw new Error("fixture missing");
+  // Date.parse accepts both: "0" as 2000-01-01 and February 30 rolled into March.
+  for (const occurredAt of [
+    "0",
+    "2026-02-30T00:00:00Z",
+    "2026-10-01 00:01:00Z",
+    "2026-10-01T00:01:00+09:00",
+  ]) {
+    team.events = [{ ...accepted, occurredAt }];
+    expect(buildSkillEvidence(detail)[0]?.reason).toBe("observation_missing");
+  }
+  team.events = [{ ...accepted, occurredAt: "2026-10-01T00:01:00.000Z" }];
+  expect(buildSkillEvidence(detail)[0]?.status).toBe("demonstrated");
+});
+
 it("requires complete team history and a retained job even when an accepted result exists", () => {
   const detail = evidenceFixture();
   const team = detail.scoreEventsByTeam?.[0];

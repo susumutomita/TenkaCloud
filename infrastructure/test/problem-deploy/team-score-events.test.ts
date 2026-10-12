@@ -330,3 +330,20 @@ it("treats exactly 200 fully drained events as complete history", async () => {
   expect(rows[0]?.events).toHaveLength(200);
   expect(rows[0]?.historyAvailable).toBeUndefined();
 });
+
+it("keeps a fully drained three-page history complete when private markers fill it", async () => {
+  const { shared, ddbSend } = buildShared();
+  const marker = ev({ source: "attack-detected", points: 0, result: "down" });
+  for (let page = 0; page < 3; page += 1)
+    ddbSend.mockResolvedValueOnce({
+      Items:
+        page === 0 ? [ev(), ...Array.from({ length: 199 }, () => marker)] : Array(200).fill(marker),
+      ...(page < 2 ? { LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: `EVENT#page${page}` } } : {}),
+    });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events).toHaveLength(1);
+  expect(rows[0]?.historyAvailable).toBeUndefined();
+});
