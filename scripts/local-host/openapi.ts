@@ -183,6 +183,15 @@ export function localOpenApi(role: "admin" | "participant") {
               "Authorize with the team's teamLoginKey. There is no separate participant login or join mutation. Poll problems[].containerSession.status for on-demand Docker readiness: stopped, starting, running, stopping or error. Start a stopped environment through container/start and wait for running before submitting. Host session tokens are not team credentials.",
           },
         },
+        "/portal/me/problems/{problemId}": {
+          get: {
+            ...operation("readProblem", "Read one problem's competition state", 200, undefined, [
+              problemId,
+            ]),
+            description:
+              "The GET /portal/me shape with problems[] limited to this problem. Only this problem's exercise links are issued, so polling one environment does not issue handoffs for the team's other running environments. Unknown problems return 404.",
+          },
+        },
         "/portal/me/problems/{problemId}/container/start": {
           post: {
             ...operation(

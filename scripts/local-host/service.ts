@@ -2180,6 +2180,9 @@ export class HostingService {
     return ok(responseBody, result.status);
   }
   private async participantRead(context: Context, path: string): Promise<ApiResponse> {
+    const problem = /^\/portal\/me\/problems\/([a-z0-9][a-z0-9-]{0,127})$/u.exec(path);
+    // One problem's view mints only that problem's exercise handoff, not every running one's.
+    if (problem) return ok(await this.teamView(context, problem[1]));
     switch (path) {
       case "/portal/me":
         return ok(await this.teamView(context));
@@ -2265,7 +2268,10 @@ export class HostingService {
       }),
     };
   }
-  private async teamView(context: Context): Promise<Record<string, unknown>> {
+  private async teamView(
+    context: Context,
+    onlyProblemId?: string,
+  ): Promise<Record<string, unknown>> {
     this.progression.view(context.team);
     const result = await this.engine.view(context);
     context = this.context(this.store.team(context.team.teamId));
@@ -2273,7 +2279,13 @@ export class HostingService {
     const eventGate = gate(context.event, context.now);
     // A canceled or never-started event has nothing to reveal: writeups need a real start.
     const ended = eventGate.kind === "scoring_ended" && hasStarted(context.event, context.now);
-    const problems = Array.isArray(result.problems) ? result.problems : [];
+    const listed = Array.isArray(result.problems) ? result.problems : [];
+    const problems =
+      onlyProblemId === undefined
+        ? listed
+        : listed.filter((raw) => object(raw).problemId === onlyProblemId);
+    if (onlyProblemId !== undefined && problems.length !== 1)
+      throw new HostError(404, "Unknown problem.");
     const runtimes = new Map(
       context.event.problems.map((each) => [each.problemId, each.runtime ?? "docker"]),
     );

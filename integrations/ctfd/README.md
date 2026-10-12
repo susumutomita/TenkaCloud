@@ -52,6 +52,10 @@ Publish it after
 both systems are ready. Participants enter their team key in the challenge
 dialog, start the environment, open its Web link, submit their flag in CTFd and
 stop the environment. Polling exposes asynchronous completion and failure.
+Each dialog reads only its own problem (`GET /portal/me/problems/{problemId}`),
+so it issues an exercise link for that environment alone. If the environment
+runs but TenkaCloud cannot issue its link, the dialog says so and retries every
+5 seconds instead of showing it as ready; flag submission still works.
 Closing the dialog clears the key and stops polling. Keys are not saved in
 cookies, browser storage, CTFd configuration or a credential table.
 

@@ -80,7 +80,8 @@ def runtime(problem_id, key, action):
     event_id = os.environ.get("TENKACLOUD_EVENT_ID", "")
     if not re.fullmatch(r"[0-9A-Z]{26}", event_id):
         raise RuntimeErrorResponse(503, "The organizer must configure the TenkaCloud event ID.")
-    data = request_host("GET", "/portal/me", key)
+    # Problem-scoped: the whole-team view would issue a link for every running environment.
+    data = request_host("GET", f"/portal/me/problems/{problem_id}", key)
     if not isinstance(data, dict) or not isinstance(data.get("problems"), list):
         raise RuntimeErrorResponse(502, "TenkaCloud returned an invalid problem list.")
     team = data.get("team")
@@ -116,6 +117,9 @@ def runtime(problem_id, key, action):
                     links.append({"name": str(name), "url": value})
             except ValueError:
                 continue
+    if state["status"] == "running" and problem.get("accessError"):
+        # The environment runs but the host could not issue its link; never report that as ready.
+        return {"status": "running", "links": [], "accessError": "link_unavailable"}
     return {"status": state["status"], "links": links}
 
 

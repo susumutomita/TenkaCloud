@@ -62,8 +62,17 @@ function bindTenkaCloudRuntime() {
     return result.data;
   }
   function showState(data) {
-    status.textContent = `Environment: ${data.status}`;
     showLinks(data.links || []);
+    if (data.accessError) {
+      // Running without a usable link is not ready; keep retrying at a slower pace.
+      status.textContent =
+        "Environment: running, but its link is unavailable. Retrying; ask the organizer if this persists.";
+      timer = setTimeout(() => {
+        void perform("read");
+      }, 5000);
+      return;
+    }
+    status.textContent = `Environment: ${data.status}`;
     if (["accepted", "starting", "stopping"].includes(data.status)) {
       timer = setTimeout(() => {
         void perform("read");

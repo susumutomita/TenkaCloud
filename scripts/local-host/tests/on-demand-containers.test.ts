@@ -322,6 +322,49 @@ test("external evaluation uses only the owned running job and never writes score
   }, true);
 });
 
+test("one problem's view issues only that environment's link and reports link failures", async () => {
+  await fixture(async (f) => {
+    const team = f.teams[0];
+    if (!team) throw new Error("Expected team");
+    const [first, second] = f.store.jobs(f.eventId, team.teamId);
+    if (!first || !second) throw new Error("Expected two jobs");
+    for (const job of [first, second]) {
+      await f.service.participant(
+        request("POST", `/portal/me/problems/${job.problemId}/container/start`, team.teamLoginKey),
+      );
+      await f.service.drain();
+    }
+    f.engine.surfaces = (job: Job) => ({ Web: `http://127.0.0.1:5300/${job.jobId}/` });
+    const issued: string[] = [];
+    f.service.surfaceLink = async (job) => {
+      issued.push(job.jobId);
+      return `http://127.0.0.1:5200/handoff/${job.jobId}`;
+    };
+    const read = (path: string) =>
+      f.service.participant(request("GET", path, team.teamLoginKey)) as Promise<{
+        body: { problems: { problemId: string; stackOutputs: object; accessError?: string }[] };
+      }>;
+    const scoped = await read(`/portal/me/problems/${first.problemId}`);
+    expect(scoped.body.problems.map((problem) => problem.problemId)).toEqual([first.problemId]);
+    expect(scoped.body.problems[0]?.stackOutputs).toEqual({
+      Web: `http://127.0.0.1:5200/handoff/${first.jobId}`,
+    });
+    expect(issued).toEqual([first.jobId]);
+    issued.length = 0;
+    await read("/portal/me");
+    expect(issued.sort()).toEqual([first.jobId, second.jobId].sort());
+    for (const path of ["/portal/me/problems/not-in-event", "/portal/me/problems/Upper"])
+      await expect(read(path)).rejects.toMatchObject({ status: 404 });
+    f.service.surfaceLink = () => Promise.reject(new Error("Gateway pending-ticket limit"));
+    const failed = await read(`/portal/me/problems/${first.problemId}`);
+    expect(failed.body.problems[0]).toMatchObject({
+      problemId: first.problemId,
+      stackOutputs: {},
+      accessError: "link_unavailable",
+    });
+  });
+});
+
 test("external verdict is discarded when the team key is revoked during the verifier call", async () => {
   await fixture(async (f) => {
     const team = f.teams[0];

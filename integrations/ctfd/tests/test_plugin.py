@@ -46,7 +46,7 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(runtime("ctfd-demo", KEY, "read"), {
             "status": "running", "links": [{"name": "Web", "url": "http://127.0.0.1:5300/"}]
         })
-        request.assert_called_once_with("GET", "/portal/me", KEY)
+        request.assert_called_once_with("GET", "/portal/me/problems/ctfd-demo", KEY)
 
     @patch("CTFd.plugins.tenkacloud.runtime.request_host", return_value=HOST_DATA)
     def test_start_stop_use_only_owned_problem(self, request):
@@ -84,6 +84,29 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(runtime("ctfd-demo", KEY, "read"), {"status": "stopped", "links": []})
 
     @patch("CTFd.plugins.tenkacloud.runtime.request_host")
+    def test_unavailable_link_is_reported_not_ready(self, request):
+        failed = {**HOST_DATA["problems"][0], "stackOutputs": {}, "accessError": "link_unavailable"}
+        request.return_value = {**HOST_DATA, "problems": [failed]}
+        self.assertEqual(runtime("ctfd-demo", KEY, "read"), {
+            "status": "running", "links": [], "accessError": "link_unavailable"
+        })
+        # Stale outputs never accompany a failed link, and host wording is not forwarded.
+        request.return_value = {**HOST_DATA, "problems": [{**failed, "accessError": "port 5200 in use", "stackOutputs": HOST_DATA["problems"][0]["stackOutputs"]}]}
+        self.assertEqual(runtime("ctfd-demo", KEY, "read"), {
+            "status": "running", "links": [], "accessError": "link_unavailable"
+        })
+        # A stopped environment has no link to fail.
+        request.return_value = {**HOST_DATA, "problems": [{**failed, "containerSession": {"status": "stopped"}}]}
+        self.assertEqual(runtime("ctfd-demo", KEY, "read"), {"status": "stopped", "links": []})
+
+    @patch("CTFd.plugins.tenkacloud.runtime.request_host")
+    def test_flag_verification_does_not_need_the_exercise_link(self, request):
+        failed = {**HOST_DATA["problems"][0], "stackOutputs": {}, "accessError": "link_unavailable"}
+        request.side_effect = [{**HOST_DATA, "problems": [failed]}, {"correct": True}]
+        self.assertTrue(evaluate("ctfd-demo", KEY, " answer "))
+        request.assert_called_with("POST", "/portal/me/problems/ctfd-demo/evaluate", KEY, {"submission": "answer"})
+
+    @patch("CTFd.plugins.tenkacloud.runtime.request_host")
     def test_other_event_key_cannot_start_or_score_the_same_problem(self, request):
         request.return_value = {**HOST_DATA, "team": {"eventId": "1" * 26}}
         for action in (lambda: runtime("ctfd-demo", KEY, "start"), lambda: evaluate("ctfd-demo", KEY, "answer")):
@@ -91,7 +114,7 @@ class ClientTests(unittest.TestCase):
             with self.assertRaises(RuntimeErrorResponse) as caught:
                 action()
             self.assertEqual(caught.exception.status, 403)
-            request.assert_called_once_with("GET", "/portal/me", KEY)
+            request.assert_called_once_with("GET", "/portal/me/problems/ctfd-demo", KEY)
 
     @patch("CTFd.plugins.tenkacloud.runtime.requests.Session")
     def test_transport_refuses_redirects_and_sanitizes_upstream_errors(self, session):
@@ -183,6 +206,16 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["Cache-Control"], "no-store")
         run.assert_called_once_with("ctfd-demo", KEY, "read")
+
+    def test_admin_forms_render_one_required_problem_id_control(self):
+        # CTFd serializes same-named fields ambiguously; each form must carry exactly one.
+        create = self.admin.get("/api/v1/challenges/types").json["data"]["tenkacloud"]["create"]
+        update = self.admin.get(f"/admin/challenges/{self.challenge_id}").get_data(as_text=True)
+        for name, html in (("create", create), ("update", update)):
+            with self.subTest(form=name):
+                self.assertEqual(html.count('name="connection_info"'), 1)
+                self.assertIn('id="tenka-problem-id"', html)
+        self.assertIn('value="ctfd-demo"', update)
 
     @patch("CTFd.plugins.tenkacloud.runtime")
     def test_no_anonymous_or_missing_csrf_access(self, run):
