@@ -70,6 +70,12 @@ def request_host(method, path, key, body=None):
         raise RuntimeErrorResponse(502, "TenkaCloud is unreachable or returned an invalid response.") from None
 
 
+ENVIRONMENT_FAILED = (
+    "The last start or stop failed and the environment's data was kept. "
+    "Start it again, or ask the organizer to inspect it if it keeps failing."
+)
+
+
 def owned_problem(problem_id, key, links):
     if not isinstance(key, str) or not TEAM_KEY.fullmatch(key):
         raise RuntimeErrorResponse(400, "Enter the existing TenkaCloud team login key.")
@@ -124,6 +130,9 @@ def runtime(problem_id, key, action):
                     links.append({"name": str(name), "url": value})
             except ValueError:
                 continue
+    if state["status"] == "error":
+        # The host keeps the failure detail; give the participant the recovery step, not its wording.
+        return {"status": "error", "links": [], "message": ENVIRONMENT_FAILED}
     if state["status"] == "running" and problem.get("accessError"):
         # The environment runs but the host could not issue its link; never report that as ready.
         return {"status": "running", "links": [], "accessError": "link_unavailable"}

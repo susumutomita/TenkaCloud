@@ -58,7 +58,9 @@ Each dialog reads only its own problem (`GET /portal/me/problems/{problemId}`),
 so it issues an exercise link for that environment alone. Start, stop and flag
 checks read `GET /portal/me/problems/{problemId}/state`, which issues no link. If the environment
 runs but TenkaCloud cannot issue its link, the dialog says so and retries every
-5 seconds instead of showing it as ready; flag submission still works.
+5 seconds instead of showing it as ready; flag submission still works. If a start
+or stop fails, the dialog says the data was kept and asks the participant to start
+again or contact the organizer; the host's failure detail stays on the host.
 Closing the dialog clears the key and stops polling. Keys are not saved in
 cookies, browser storage, CTFd configuration or a credential table.
 

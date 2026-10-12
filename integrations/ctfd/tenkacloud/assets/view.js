@@ -72,7 +72,9 @@ function bindTenkaCloudRuntime() {
       }, 5000);
       return;
     }
-    status.textContent = `Environment: ${data.status}`;
+    status.textContent = data.message
+      ? `Environment: ${data.status}. ${data.message}`
+      : `Environment: ${data.status}`;
     if (["accepted", "starting", "stopping"].includes(data.status)) {
       timer = setTimeout(() => {
         void perform("read");

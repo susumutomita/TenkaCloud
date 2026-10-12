@@ -89,6 +89,19 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(runtime("ctfd-demo", KEY, "read"), {"status": "stopped", "links": []})
 
     @patch("CTFd.plugins.tenkacloud.runtime.request_host")
+    def test_failed_environment_explains_recovery_without_host_wording(self, request):
+        failed = {
+            **HOST_DATA["problems"][0],
+            "containerSession": {"status": "error", "error": "docker: port 5300 already allocated"},
+        }
+        request.return_value = {**HOST_DATA, "problems": [failed]}
+        state = runtime("ctfd-demo", KEY, "read")
+        self.assertEqual(state["status"], "error")
+        self.assertEqual(state["links"], [])
+        self.assertIn("Start it again", state["message"])
+        self.assertNotIn("5300", str(state))
+
+    @patch("CTFd.plugins.tenkacloud.runtime.request_host")
     def test_unavailable_link_is_reported_not_ready(self, request):
         failed = {**HOST_DATA["problems"][0], "stackOutputs": {}, "accessError": "link_unavailable"}
         request.return_value = {**HOST_DATA, "problems": [failed]}
