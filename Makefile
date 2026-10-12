@@ -172,7 +172,7 @@ pack-list: ## List installed problem packs | install済み問題packを一覧表
 # ===== Host candidate | host candidate =====
 .PHONY: local down local-reset local-clear deploy destroy destroy-all turso-clear turso-reset release-check release-candidate
 local: ## Start the unified local competition console | ローカル競技コンソールを起動
-	bun run scripts/local-host/local.ts start $(LOCAL_ARGS)
+	@bun run scripts/local-host/local.ts start $(LOCAL_ARGS)
 down: ## Stop owned local runtimes and preserve event data | 所有するローカル環境を停止し大会データを保持
 	bun run scripts/local-host/local.ts down $(LOCAL_ARGS)
 local-reset: ## Rotate the organizer key; preserve event and participant data | 主催者キーを再発行し大会・参加者データを保持
