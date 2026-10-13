@@ -1,3 +1,4 @@
+import type { EventQueryPort } from "../../packages/portal-contracts/src/event-queries";
 import type { ApiRequest, ApiResponse } from "../lib/hosting-api";
 import type { ProbeFn } from "../lib/http-probe-client";
 import {
@@ -238,6 +239,12 @@ function showUptimeStatus(
 export class HostingDomain {
   readonly terminals: HostTerminals;
   readonly saml: SamlSignIn;
+  private readonly eventQueries: EventQueryPort<
+    void,
+    { items: ReturnType<HostingDomain["summary"]>[] },
+    { eventId: string; query: URLSearchParams },
+    ReturnType<HostingDomain["detail"]>
+  >;
   private readonly queue = new SerialQueue();
   private readonly coordination: LocalCoordination = new LocalCoordination(this);
   readonly progression: HostProgression;
@@ -265,6 +272,18 @@ export class HostingDomain {
     uptimeProbe: ProbeFn | undefined,
     private readonly passwords: OrganizerPasswords,
   ) {
+    // Materialize each SQLite view before returning its Promise. Keep the existing
+    // Local read-time lifecycle/coordination updates and snapshot order intact.
+    this.eventQueries = {
+      list: async () => ({
+        items: this.store.events().map((event) => this.summary(this.currentEvent(event.eventId))),
+      }),
+      detail: async ({ eventId, query }) => {
+        const event = this.currentEvent(eventId);
+        this.coordination.advance(event);
+        return this.detail(event, query);
+      },
+    };
     this.terminals = new HostTerminals(this);
     this.progression = new HostProgression(store, now);
     this.saml = new SamlSignIn(store, masterKey, now);
@@ -394,9 +413,7 @@ export class HostingDomain {
           current,
           request.query.get("withTeamLoginKeys") === "true" ? "reveal-team-keys" : "read",
         );
-        const event = this.currentEvent(eventId);
-        this.coordination.advance(event);
-        return ok(this.detail(event, request.query));
+        return ok(await this.eventQueries.detail({ eventId, query: request.query }));
       });
     return this.queue.run(eventId, async () => {
       const current = this.store.authenticateAdmin(request.token, this.now());
@@ -586,9 +603,7 @@ export class HostingDomain {
       });
     }
     if (request.path === "/events" && request.method === "GET") {
-      return ok({
-        items: this.store.events().map((event) => this.summary(this.currentEvent(event.eventId))),
-      });
+      return ok(await this.eventQueries.list());
     }
     if (request.path === "/events" && request.method === "POST") {
       requireRole(principal, "run-events");

@@ -453,7 +453,7 @@ cleanup, or a verified cloud migration procedure. The new local entrypoint does 
 adopt, delete or reset those AWS resources. It reports unsupported legacy jobs
 without losing their resource references or tournament results.
 
-## Portable application boundary (stages 1–2)
+## Portable application boundary (stages 1–3)
 
 The shared [Node HTTP transport](../scripts/lib/node-http.ts) owns listener startup,
 timeouts and shutdown. The [API contract](../scripts/lib/hosting-api.ts) and
@@ -477,6 +477,17 @@ flowchart TD
   Cloud -. Planned .-> External[Existing Turso or DynamoDB repositories]
   Cloud -. Planned .-> Workers[Durable jobs and on-demand exercise runtime]
 ```
+
+Event list/detail reads now share the asynchronous
+[query port](../packages/portal-contracts/src/event-queries.ts). Local materializes
+its existing SQLite view before returning a Promise, including the existing
+read-time event expiry and coordination updates. Its authentication and per-event
+queue stay at the route boundary. Cloud delegates through its selected
+`ControlDataRuntime` repositories with the existing tenant scope, cursors, detail
+options and projections. Each adapter keeps its own request and response types;
+this does not convert records, migrate data or connect Local to an external DB.
+Neither adapter caches query responses or substitutes an empty result for a
+provider failure.
 
 The dotted connections are future work. Cloud hosting continues to use the existing
 Lambda Event Function handlers and API Gateway authentication. The local API contract
