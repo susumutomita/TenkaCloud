@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@tenkacloud/auth-client": "workspace:*",
-    "dompurify": "^3.4.4",
+    "dompurify": "^3.4.16",
     "marked": "^18.0.12",
     "@tenkacloud/portal-contracts": "workspace:*"
   },

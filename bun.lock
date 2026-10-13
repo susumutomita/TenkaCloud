@@ -345,7 +345,7 @@
       "dependencies": {
         "@tenkacloud/auth-client": "workspace:*",
         "@tenkacloud/portal-contracts": "workspace:*",
-        "dompurify": "^3.4.4",
+        "dompurify": "^3.4.16",
         "marked": "^18.0.12",
       },
       "devDependencies": {
