@@ -63,6 +63,17 @@ const SEGMENT_RUN = /(?:["'][\w@.-]+["']\s*,\s*)+["'][\w@-]+\.\w{1,6}["']/gu;
 const QUOTED = /["']([^"']+)["']/gu;
 /** Nothing imports a test file, so the files it references do not propagate further. */
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/u;
+/** Whole-line comments, so that a path named in documentation is not a reference. */
+const LINE_COMMENT = /^[ \t]*(?:\/\/.*|\/\*[\s\S]*?\*\/)/gmu;
+
+/**
+ * Workspace files that a root suite reads without naming them: tests scan every manifest by
+ * directory, and the landing generator builds docs paths from variables.
+ */
+const ALSO_READ_BY: readonly (readonly [RegExp, RootSuite])[] = [
+  [/^(?:infrastructure|(?:apps|packages)\/[^/]+)\/package\.json$/u, "scripts"],
+  [/^apps\/developer-portal\/(?:src\/app\/developers\/docs|public\/docs)\//u, "scripts"],
+];
 
 export interface WorkspaceNode {
   readonly dir: string;
@@ -152,7 +163,8 @@ function packageKey(specifier: string, workspaces: readonly WorkspaceNode[]): st
   return workspace ? `workspace:${workspace.dir}` : undefined;
 }
 
-function* referencesIn(text: string): Generator<string> {
+function* referencesIn(source: string): Generator<string> {
+  const text = source.replace(LINE_COMMENT, "");
   for (const match of text.matchAll(IMPORT_SPECIFIER)) yield match[1];
   for (const match of text.matchAll(PATH_LITERAL)) yield match[1];
   for (const match of text.matchAll(SEGMENT_RUN)) {
@@ -249,6 +261,9 @@ export function planChangedTests(
     const owner = ownerOf(path, workspaces);
     if (owner) select(selection, owner, path);
     else if (routeOf(path).kind === "all") return { kind: "all", reason: path };
+    for (const [pattern, suite] of ALSO_READ_BY) {
+      if (pattern.test(path)) select(selection, { suite }, `${path} (read by directory)`);
+    }
   }
   for (const [dir, reason] of dependentClosure(selection.workspaces, workspaces)) {
     select(selection, { workspace: dir }, reason);
@@ -309,12 +324,17 @@ export function repositoryFiles(rootDir: string): string[] {
   return git(rootDir, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
 }
 
+/**
+ * `changed` joins the known paths so that a staged rename or deletion still resolves the imports
+ * of the old path, and the files that imported it are selected.
+ */
 export function readReferenceIndex(
   rootDir: string,
   workspaces: readonly WorkspaceNode[],
   files: readonly string[],
+  changed: readonly string[],
 ): ReferenceIndex {
-  const tracked = new Set(files);
+  const tracked = new Set([...files, ...changed]);
   const sources = files
     .filter((file) => SOURCE_FILE.test(file) && existsSync(join(rootDir, file)))
     .map((file): [string, string] => [file, readFileSync(join(rootDir, file), "utf8")]);
@@ -357,7 +377,7 @@ function main(): void {
       : planChangedTests(
           paths,
           workspaces,
-          readReferenceIndex(rootDir, workspaces, repositoryFiles(rootDir)),
+          readReferenceIndex(rootDir, workspaces, repositoryFiles(rootDir), paths),
         );
 
   if (plan.kind === "all") {

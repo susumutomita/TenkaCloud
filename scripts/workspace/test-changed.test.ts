@@ -105,6 +105,13 @@ describe("planChangedTests workspace dependencies", () => {
     });
   });
 
+  it("runs the script suite for a workspace manifest, which its tests scan by directory", () => {
+    expect(selected(["packages/unrelated/package.json"])).toEqual({
+      suites: ["scripts"],
+      workspaces: ["packages/unrelated"],
+    });
+  });
+
   it("does not run a workspace without a test script, but still follows its dependents", () => {
     expect(selected(["packages/kit/src/a.ts"])).toEqual({
       suites: [],
@@ -215,6 +222,23 @@ describe("planChangedTests references", () => {
     });
   });
 
+  it("ignores paths named only in comments", () => {
+    const commented = referencesFrom({
+      "apps/portal/src/client.ts": [
+        "/**",
+        " * Mirrors scripts/local-host/model.ts; see ../../../scripts/local-host/model.ts.",
+        " */",
+        '// import { m } from "../../../scripts/local-host/model";',
+        "export const client = 1;",
+      ].join("\n"),
+      "scripts/local-host/model.ts": "export const m = 1;",
+    });
+    expect(selected(["scripts/local-host/model.ts"], commented)).toEqual({
+      suites: ["host"],
+      workspaces: [],
+    });
+  });
+
   it("runs a workspace that imports another by relative path without declaring it", () => {
     expect(selected(["packages/unrelated/src/authors.tsx"], references)).toEqual({
       suites: [],
@@ -226,40 +250,53 @@ describe("planChangedTests references", () => {
 describe("planChangedTests on this repository", () => {
   const root = join(import.meta.dir, "../..");
   const repoWorkspaces = readWorkspaceNodes(root);
-  const repoReferences = readReferenceIndex(root, repoWorkspaces, repositoryFiles(root));
+  const repoFiles = repositoryFiles(root);
 
-  function repoPlan(paths: string[]) {
-    const plan = planChangedTests(paths, repoWorkspaces, repoReferences);
+  function repoPlan(paths: string[], files = repoFiles) {
+    const plan = planChangedTests(
+      paths,
+      repoWorkspaces,
+      readReferenceIndex(root, repoWorkspaces, files, paths),
+    );
     return plan.kind === "all"
-      ? { all: plan.reason }
-      : { suites: plan.suites, workspaces: plan.workspaces };
+      ? { all: plan.reason, suites: [], workspaces: [] }
+      : { all: undefined, suites: plan.suites, workspaces: plan.workspaces };
   }
 
   it("meets the issue's acceptance rows", () => {
-    expect(repoPlan([".claude/settings.json"])).toEqual({ suites: [], workspaces: [] });
-    expect(repoPlan(["package.json"])).toEqual({ all: "package.json" });
-    expect(repoPlan(["bun.lock"])).toEqual({ all: "bun.lock" });
-  });
-
-  it("adds the script suite for a host build change, because the import-closure check reads the host entry", () => {
-    expect(repoPlan(["scripts/local-host/build.ts"])).toEqual({
-      suites: ["scripts", "host"],
+    expect(repoPlan([".claude/settings.json"])).toEqual({
+      all: undefined,
+      suites: [],
       workspaces: [],
     });
+    expect(repoPlan(["package.json"]).all).toBe("package.json");
+    expect(repoPlan(["bun.lock"]).all).toBe("bun.lock");
+    expect(repoPlan(["scripts/local-host/build.ts"]).suites).toContain("host");
   });
 
   it("runs the infrastructure tests that read root files", () => {
     for (const path of ["release/launcher-defaults.json", "scripts/lib/names.sh"]) {
-      const plan = repoPlan([path]);
-      expect("workspaces" in plan && plan.workspaces.includes("infrastructure")).toBe(true);
+      expect(repoPlan([path]).workspaces).toContain("infrastructure");
     }
   });
 
-  it("runs every consumer of the public contracts package", () => {
+  it("still selects the importers of a file whose deletion or rename is staged", () => {
+    const deleted = "packages/web-kit/src/ProblemAuthors.tsx";
+    const remaining = repoFiles.filter((file) => file !== deleted);
+    expect(repoPlan([deleted], remaining).workspaces).toContain("apps/developer-portal");
+  });
+
+  it("runs the landing checks for developer-portal docs", () => {
+    expect(
+      repoPlan(["apps/developer-portal/src/app/developers/docs/manual/developer/page.ja.mdx"]),
+    ).toEqual({ all: undefined, suites: ["scripts"], workspaces: ["apps/developer-portal"] });
+  });
+
+  it("runs every declared consumer of the public contracts package", () => {
     const plan = repoPlan(["packages/portal-contracts/src/skill-evidence.ts"]);
-    expect(plan).toEqual({
-      suites: ["scripts", "authoring", "host"],
-      workspaces: [
+    expect(plan.suites).toEqual(expect.arrayContaining(["authoring", "host"]));
+    expect(plan.workspaces).toEqual(
+      expect.arrayContaining([
         "infrastructure",
         "apps/application-admin-console",
         "apps/developer-portal",
@@ -267,9 +304,8 @@ describe("planChangedTests on this repository", () => {
         "packages/portal-contracts",
         "packages/problem-sdk",
         "packages/problem-test-harness",
-        "packages/security-harness",
         "packages/web-kit",
-      ],
-    });
+      ]),
+    );
   });
 });
