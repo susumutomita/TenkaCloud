@@ -88,6 +88,61 @@ requires no paid service or card signup and makes no hosting, VPN, billing or AW
 configuration changes. It does not deploy Lambda Web Functions or connect this new
 scorer to Cloud Turso/DynamoDB handlers.
 
+The Node-compatible, filesystem-free catalog parser, judge and participant-safe
+projection live in `scripts/lib/submission-grader.ts`. The local adapter retains
+ownership of authentication, event gates, transactions and receipts. Extracting
+the judge does not enable Cloud submissions or change the existing Cloud flag
+scorer.
+
+#### Cloud connection boundary
+
+The planned Cloud connection reuses the existing private, content-addressed S3
+execution catalog, participant authentication and deployments repositories. It
+needs no new database table or migration: pinned grading definitions belong in
+the private execution catalog, while submission state and bounded retry receipts
+can use existing deployment JSON/attributes. Logical preparation must create
+native submission slots without provisioning exercise resources.
+
+```mermaid
+flowchart LR
+  Private[Private pinned execution catalog] --> Judge[Shared submission judge]
+  Route[Authenticated participant API] --> Gate[Current event and team checks]
+  Gate --> Judge
+  Judge --> Commit[Atomic score, history and receipt commit]
+  Commit --> SQL[Existing Turso transaction]
+  Commit --> DDB[Existing DynamoDB transaction]
+  SQL --> Board[Safe participant view and canonical leaderboard]
+  DDB --> Board
+```
+
+Before enabling that route, the commit must atomically verify the event's tenant,
+status, start, exclusive deadline and scoring lock, together with the deployment's
+current credential, status, pinned catalog and submission version. Reading the
+event first and conditionally updating only the deployment cannot protect a
+concurrent organizer lock or deadline change. A failed history write must roll
+back points and receipts too. Identical acknowledged retries remain readable
+after the deadline; a reused key with changed content returns a conflict. Receipts
+must not be silently evicted; a bounded store rejects new keys when full. CAS
+retries must reload authentication and gates, while provider failures remain errors.
+
+The current participant Lambda role grants Events `GetItem` and `Query` only.
+DynamoDB's transactional Event condition requires an additional
+`dynamodb:ConditionCheckItem` permission on that existing Events table, as specified
+in the [AWS transaction IAM documentation](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis-iam.html).
+This permission and deployment are outside the current authorization and have
+not been changed. An independent review found no equivalent atomic guard using
+the current role. Cloud enablement therefore remains blocked on that narrow
+permission decision as well as the unimplemented producer, logical preparation,
+atomic repository methods, participant projections and route wiring. A Turso-only
+implementation would not establish DynamoDB parity.
+
+Cloud validation must cover both backends: exact deadline, competing submissions,
+lock/credential changes during commit, history-write failure, restart/replay,
+fixed-edition mismatch, private-data redaction and blanket-denial reports. A
+self-report completion must never become `flagSubmitted` or Skill Evidence, even
+if an unrelated skill catalog declares the same problem ID. Code tests and mocks
+do not establish actual Cloud operation; no AWS deployment has been performed.
+
 ### Forensic Casebook
 
 Select **Forensic Casebook** when creating an event, issue the team keys, deploy, and

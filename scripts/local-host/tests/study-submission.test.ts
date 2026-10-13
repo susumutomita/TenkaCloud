@@ -207,7 +207,12 @@ test("Node24 organizer / separate participant process: fixed edition, gates, six
         nonce,
       );
     expect((await submit("unknown")).status).toBe(401);
-    expect((await submit(token, { ...envelope, edition: "other" })).status).toBe(409);
+    const editionMismatch = await submit(token, { ...envelope, edition: "other" });
+    expect(editionMismatch.status).toBe(409);
+    expect(editionMismatch.body.kind).toBe("edition_mismatch");
+    const malformedAnswer = await submit(token, { ...envelope, answer: 42 });
+    expect(malformedAnswer.status).toBe(400);
+    expect(malformedAnswer.body.kind).toBe("request_failed");
     // eslint-disable-next-line sonarjs/no-clear-text-protocols -- Negative SSRF input is never fetched.
     expect((await submit(token, { ...envelope, url: "http://169.254.169.254/" })).status).toBe(400);
     expect((await submit(token, { ...envelope, points: 9999 })).status).toBe(400);
