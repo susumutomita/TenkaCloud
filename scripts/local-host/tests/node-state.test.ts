@@ -48,6 +48,9 @@ test("Node and Bun preserve the same SQLite event/session/key state and opaque l
     try {
       expect(store.organizerByUsername("preserved-admin")?.passwordHash).toBe(hash);
       expect(store.events().map((event) => event.name)).toContain("Node persistent event");
+      expect(store.events().find((event) => event.name === "Node persistent event")?.status).toBe(
+        "ARCHIVED",
+      );
       expect(store.verifyLocalOrganizerKey(key ?? "")).toBeGreaterThan(0);
     } finally {
       store.close();

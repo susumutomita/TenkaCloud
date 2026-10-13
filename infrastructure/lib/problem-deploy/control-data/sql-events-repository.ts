@@ -1,3 +1,4 @@
+import { ARCHIVABLE_EVENT_STATUSES } from "../../../../packages/portal-contracts/src/event-archive-command.js";
 import {
   type ProgressionGateConfig,
   parseProgressionGate,
@@ -370,7 +371,7 @@ export class SqlEventsRepository implements EventsRepository {
       set: "status = ?, payload = json_set(payload, '$.status', ?, '$.archivedAt', ?, '$.updatedAt', ?)",
       setParams: ["ARCHIVED", "ARCHIVED", at, at],
       where: "status IN (?, ?, ?)",
-      whereParams: ["DRAFT", "ENDED", "TEARDOWN"],
+      whereParams: [...ARCHIVABLE_EVENT_STATUSES],
       onMiss: "probe",
       withPostImage: false,
     });

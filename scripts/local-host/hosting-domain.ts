@@ -1,3 +1,7 @@
+import {
+  archivableEventStatus,
+  type EventArchiveCommandPort,
+} from "../../packages/portal-contracts/src/event-archive-command";
 import type { EventQueryPort } from "../../packages/portal-contracts/src/event-queries";
 import {
   type ScoringLockCommandPort,
@@ -253,6 +257,7 @@ export class HostingDomain {
     { event: HostedEvent; locked: boolean },
     ApiResponse
   >;
+  private readonly archiveCommands: EventArchiveCommandPort<{ event: HostedEvent }, ApiResponse>;
   private readonly queue = new SerialQueue();
   private readonly coordination: LocalCoordination = new LocalCoordination(this);
   readonly progression: HostProgression;
@@ -296,6 +301,9 @@ export class HostingDomain {
       // The Promise is returned only after the synchronous SQLite transaction ends.
       setLock: async ({ event, locked }) =>
         this.store.transaction(() => this.lockScoring(event, locked)),
+    };
+    this.archiveCommands = {
+      archive: async ({ event }) => this.store.transaction((): ApiResponse => this.archive(event)),
     };
     this.terminals = new HostTerminals(this);
     this.progression = new HostProgression(store, now);
@@ -1024,12 +1032,12 @@ export class HostingDomain {
       "DELETE progression-gate": () => ok(this.progression.configure(event, undefined, true)),
       "PATCH schedule": () => this.schedule(event, body()),
       "POST end": () => this.end(event),
-      "POST archive": () => this.archive(event),
       "POST notifications": () => this.notify(event, body()),
     };
     const commandKey = `${request.method} ${parts.join("/")}`;
     if (commandKey === "POST lock-scoring" || commandKey === "DELETE lock-scoring")
       return this.scoringCommands.setLock({ event, locked: request.method === "POST" });
+    if (commandKey === "POST archive") return this.archiveCommands.archive({ event });
     if (commandKey === "POST deploy") return this.deploy(event, body(), request.token);
     if (commandKey === "DELETE ") return this.teardown(event);
     const command = commands[commandKey];
@@ -1166,8 +1174,7 @@ export class HostingDomain {
     return ok({ scoringLocked: event.scoringLocked, scoringLockedAt: event.scoringLockedAt });
   }
   private archive(event: HostedEvent): ApiResponse {
-    if (!["DRAFT", "ENDED", "TEARDOWN"].includes(event.status))
-      throw new HostError(409, "Event is not archivable.");
+    if (!archivableEventStatus(event.status)) throw new HostError(409, "Event is not archivable.");
     // Native Battle units identify stored match state; they do not own external resources.
     if (
       this.store

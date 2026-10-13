@@ -1,3 +1,4 @@
+import type { EventArchiveCommandPort } from "../../../../../packages/portal-contracts/src/event-archive-command.js";
 import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 
 /**
@@ -10,6 +11,27 @@ export type ArchiveEventOutcome =
   | { kind: "not_found" }
   | { kind: "not_archivable"; status: string }
   | { kind: "ok"; archivedAt: string };
+
+export function createCloudArchiveCommands(
+  shared: EventSharedResources,
+): EventArchiveCommandPort<
+  { readonly tenantId: string; readonly eventId: string; readonly nowMs: number },
+  ArchiveEventOutcome
+> {
+  return {
+    archive: ({ tenantId, eventId, nowMs }) => applyArchive(shared, tenantId, eventId, nowMs),
+  };
+}
+
+/** Existing HTTP/caller contract remains unchanged. */
+export function archiveEvent(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  nowMs: number,
+): Promise<ArchiveEventOutcome> {
+  return createCloudArchiveCommands(shared).archive({ tenantId, eventId, nowMs });
+}
 
 /**
  * Event を `ARCHIVED` 状態に遷移させ、EventList のデフォルト view から外す soft delete。
@@ -24,7 +46,7 @@ export type ArchiveEventOutcome =
  * `archiveEvent(tenantId, eventId, at)` が担う。 [#2437 Phase A2] CCF catch + probe Get
  * の分岐は `EventMutationOutcome` union の分岐に置き換え (HTTP ステータス対応は不変)。
  */
-export async function archiveEvent(
+async function applyArchive(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
