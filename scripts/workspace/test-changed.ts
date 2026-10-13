@@ -4,20 +4,20 @@
  * through `make before-commit`; the required CI check `ci` still runs every test.
  *
  * A changed path first routes to the unit that owns it (`PATH_ROUTES`): every test, no test, a
- * root suite, or a workspace. Workspace changes reach the workspaces that declare them as
- * `workspace:*` dependencies. Root-suite files are followed through their imports, so a change
- * to `scripts/quality/host-imports.ts` also runs the host suite whose test imports it, and a
- * package change runs the root suites that import the package.
+ * root suite, or a workspace. The selection then grows through references: every tracked source
+ * file is scanned for imports and for string paths to repository files (`"../release/x.json"`,
+ * `resolve(dir, "scripts", "lib", "names.sh")`), and the owner of each file that references a
+ * changed file, directly or through other files, runs too. Changed workspaces also reach the
+ * workspaces that declare them as `workspace:*` dependencies.
  *
- * Root-suite imports of `apps/*` and `infrastructure` are not followed: the host imports a few
- * application modules, and following them would run the host suite for every application change.
- * CI covers those paths.
+ * The scan is textual. Paths built from template literals or variables are not seen; CI covers
+ * them.
  *
  * Usage: bun run scripts/workspace/test-changed.ts
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
 import { discoverWorkspaces, planTask } from "./run-workspaces";
 
@@ -53,10 +53,16 @@ const PATH_ROUTES: readonly (readonly [RegExp, Route])[] = [
   ],
 ];
 
-/** Root-suite source trees whose imports are followed. */
-const ROOT_SOURCE_DIRS = ["scripts", "integrations", "docs"] as const;
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/u;
+const SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".mjs", ".cjs", ".jsx", ".mts", ".cts"];
 const IMPORT_SPECIFIER = /\b(?:from|import|require)\b[\s(]*["']([^"'\n]+)["']/gu;
+/** A quoted string that looks like a relative or repository path to a file. */
+const PATH_LITERAL = /["'`]((?:\.{1,2}\/)*[\w@.-]+(?:\/[\w@.[\]-]+)+\.\w{1,6})["'`]/gu;
+/** Comma-separated quoted path segments ending in a file name, as passed to `join`/`resolve`. */
+const SEGMENT_RUN = /(?:["'][\w@.-]+["']\s*,\s*)+["'][\w@-]+\.\w{1,6}["']/gu;
+const QUOTED = /["']([^"']+)["']/gu;
+/** Nothing imports a test file, so the files it references do not propagate further. */
+const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/u;
 
 export interface WorkspaceNode {
   readonly dir: string;
@@ -66,8 +72,11 @@ export interface WorkspaceNode {
   readonly workspaceDeps: readonly string[];
 }
 
-/** Import target key (extensionless repo path or `workspace:<dir>`) to the files importing it. */
-export type ImportIndex = ReadonlyMap<string, ReadonlySet<string>>;
+/**
+ * Reference target key to the files that reference it. A key is a repository path (source files
+ * without their extension) or `workspace:<dir>` for a package imported by name.
+ */
+export type ReferenceIndex = ReadonlyMap<string, ReadonlySet<string>>;
 
 export type TestPlan =
   | { readonly kind: "all"; readonly reason: string }
@@ -77,6 +86,8 @@ export type TestPlan =
       readonly workspaces: readonly string[];
       readonly reasons: readonly string[];
     };
+
+type Owner = { readonly suite: RootSuite } | { readonly workspace: string };
 
 function withoutExtension(path: string): string {
   return path.replace(SOURCE_FILE, "");
@@ -95,27 +106,45 @@ function routeOf(path: string): Route {
   return PATH_ROUTES.find(([pattern]) => pattern.test(path))?.[1] ?? { kind: "all" };
 }
 
-function suiteOf(path: string): RootSuite | undefined {
+/** The workspace or root suite whose tests cover `path`, if any. */
+function ownerOf(path: string, workspaces: readonly WorkspaceNode[]): Owner | undefined {
+  const workspace = workspaceOf(path, workspaces);
+  if (workspace) return { workspace: workspace.dir };
   const route = routeOf(path);
-  return route.kind === "suite" ? route.suite : undefined;
+  return route.kind === "suite" ? { suite: route.suite } : undefined;
 }
 
-/** Keys under which other files may import `path`. */
-function importKeys(path: string): string[] {
+/** Keys under which other files reference `path`. */
+function referenceKeys(path: string): string[] {
   const base = withoutExtension(path);
   return base.endsWith("/index") ? [base, dirname(base)] : [base];
 }
 
-function importTarget(
-  file: string,
-  specifier: string,
-  workspaces: readonly WorkspaceNode[],
-): string | undefined {
-  if (specifier.startsWith(".")) {
-    const target = normalize(join(dirname(file), specifier));
-    const workspace = workspaceOf(target, workspaces);
-    return workspace ? `workspace:${workspace.dir}` : withoutExtension(target);
+/** The reference key of `path` when it names a tracked file, with or without its extension. */
+function trackedKey(path: string, tracked: ReadonlySet<string>): string | undefined {
+  if (path.startsWith("..") || path.startsWith("/")) return undefined;
+  if (tracked.has(path)) return withoutExtension(path);
+  const base = withoutExtension(path);
+  for (const extension of SOURCE_EXTENSIONS) {
+    if (tracked.has(`${base}${extension}`)) return base;
+    if (tracked.has(`${base}/index${extension}`)) return base;
   }
+  return undefined;
+}
+
+/** Resolves a reference from `file`, first beside it and then from the repository root. */
+function resolveReference(
+  file: string,
+  reference: string,
+  tracked: ReadonlySet<string>,
+): string | undefined {
+  return (
+    trackedKey(normalize(join(dirname(file), reference)), tracked) ??
+    trackedKey(normalize(reference), tracked)
+  );
+}
+
+function packageKey(specifier: string, workspaces: readonly WorkspaceNode[]): string | undefined {
   const name = specifier.startsWith("@")
     ? specifier.split("/").slice(0, 2).join("/")
     : specifier.split("/")[0];
@@ -123,19 +152,33 @@ function importTarget(
   return workspace ? `workspace:${workspace.dir}` : undefined;
 }
 
-/** Builds the import index from root-suite sources given as `[repo path, contents]`. */
-export function indexImports(
+function* referencesIn(text: string): Generator<string> {
+  for (const match of text.matchAll(IMPORT_SPECIFIER)) yield match[1];
+  for (const match of text.matchAll(PATH_LITERAL)) yield match[1];
+  for (const match of text.matchAll(SEGMENT_RUN)) {
+    yield [...match[0].matchAll(QUOTED)].map((segment) => segment[1]).join("/");
+  }
+}
+
+/**
+ * Builds the reference index from `[repository path, contents]` pairs. `tracked` lists every
+ * repository file, so that only references to real files count.
+ */
+export function indexReferences(
   sources: Iterable<readonly [string, string]>,
   workspaces: readonly WorkspaceNode[],
-): ImportIndex {
+  tracked: ReadonlySet<string>,
+): ReferenceIndex {
   const index = new Map<string, Set<string>>();
   for (const [file, text] of sources) {
-    for (const match of text.matchAll(IMPORT_SPECIFIER)) {
-      const target = importTarget(file, match[1], workspaces);
-      if (!target) continue;
-      const importers = index.get(target) ?? new Set<string>();
-      importers.add(file);
-      index.set(target, importers);
+    for (const reference of referencesIn(text)) {
+      const key = reference.startsWith(".")
+        ? resolveReference(file, reference, tracked)
+        : (packageKey(reference, workspaces) ?? resolveReference(file, reference, tracked));
+      if (!key || referenceKeys(file).includes(key)) continue;
+      const referrers = index.get(key) ?? new Set<string>();
+      referrers.add(file);
+      index.set(key, referrers);
     }
   }
   return index;
@@ -160,81 +203,77 @@ function dependentClosure(
   return reached;
 }
 
-/** Root suites that import any of `keys`, directly or through other root-suite files. */
-function importingSuites(keys: Iterable<string>, imports: ImportIndex): Map<RootSuite, string> {
-  const suites = new Map<RootSuite, string>();
-  const seen = new Set<string>();
-  const queue = [...keys];
-  for (let key = queue.shift(); key !== undefined; key = queue.shift()) {
-    for (const file of imports.get(key) ?? []) {
-      if (seen.has(file)) continue;
-      seen.add(file);
-      const suite = suiteOf(file);
-      if (suite && !suites.has(suite)) suites.set(suite, file);
-      queue.push(...importKeys(file));
-    }
-  }
-  return suites;
-}
-
-interface Owners {
+interface Selection {
   /** The first path that needs every test. */
   all?: string;
   readonly suites: Map<RootSuite, string>;
   readonly workspaces: Map<string, string>;
-  readonly sources: string[];
 }
 
-/** The unit that owns each path. */
-function ownersOf(paths: readonly string[], workspaces: readonly WorkspaceNode[]): Owners {
-  const owners: Owners = { suites: new Map(), workspaces: new Map(), sources: [] };
-  for (const path of paths) {
-    const workspace = workspaceOf(path, workspaces);
-    if (workspace) {
-      if (!owners.workspaces.has(workspace.dir)) owners.workspaces.set(workspace.dir, path);
-      continue;
-    }
-    const route = routeOf(path);
-    if (route.kind === "all") return { ...owners, all: path };
-    if (route.kind === "suite") {
-      if (!owners.suites.has(route.suite)) owners.suites.set(route.suite, path);
-      owners.sources.push(path);
+function select(selection: Selection, owner: Owner, reason: string): void {
+  if ("suite" in owner) {
+    if (!selection.suites.has(owner.suite)) selection.suites.set(owner.suite, reason);
+  } else if (!selection.workspaces.has(owner.workspace)) {
+    selection.workspaces.set(owner.workspace, reason);
+  }
+}
+
+/** Selects the owner of every file that references `keys`, directly or through other files. */
+function selectReferrers(
+  selection: Selection,
+  keys: readonly string[],
+  references: ReferenceIndex,
+  workspaces: readonly WorkspaceNode[],
+): void {
+  const seen = new Set<string>();
+  const queue = [...keys];
+  for (let key = queue.shift(); key !== undefined; key = queue.shift()) {
+    for (const file of references.get(key) ?? []) {
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const owner = ownerOf(file, workspaces);
+      if (owner) select(selection, owner, `references ${key} (${file})`);
+      if (!TEST_FILE.test(file)) queue.push(...referenceKeys(file));
     }
   }
-  return owners;
 }
 
 /** Pure planning step: which suites and workspaces cover `paths`. */
 export function planChangedTests(
   paths: readonly string[],
   workspaces: readonly WorkspaceNode[],
-  imports: ImportIndex,
+  references: ReferenceIndex,
 ): TestPlan {
-  const owners = ownersOf(paths, workspaces);
-  if (owners.all !== undefined) return { kind: "all", reason: owners.all };
-  const { suites, sources: changedSources } = owners;
+  const selection: Selection = { suites: new Map(), workspaces: new Map() };
+  for (const path of paths) {
+    const owner = ownerOf(path, workspaces);
+    if (owner) select(selection, owner, path);
+    else if (routeOf(path).kind === "all") return { kind: "all", reason: path };
+  }
+  for (const [dir, reason] of dependentClosure(selection.workspaces, workspaces)) {
+    select(selection, { workspace: dir }, reason);
+  }
+  selectReferrers(
+    selection,
+    [
+      ...paths.flatMap(referenceKeys),
+      ...[...selection.workspaces.keys()].map((dir) => `workspace:${dir}`),
+    ],
+    references,
+    workspaces,
+  );
 
   const reasons: string[] = [];
-  const selectedWorkspaces = dependentClosure(owners.workspaces, workspaces);
-  const packageKeys = [...selectedWorkspaces.keys()]
-    .filter((dir) => dir.startsWith("packages/"))
-    .map((dir) => `workspace:${dir}`);
-  for (const [suite, file] of importingSuites(
-    [...changedSources.flatMap(importKeys), ...packageKeys],
-    imports,
-  )) {
-    if (!suites.has(suite)) suites.set(suite, `imported by ${file}`);
-  }
-
-  const orderedSuites = (Object.keys(ROOT_SUITES) as RootSuite[]).filter((suite) =>
-    suites.has(suite),
+  const suites = (Object.keys(ROOT_SUITES) as RootSuite[]).filter((suite) =>
+    selection.suites.has(suite),
   );
-  for (const suite of orderedSuites) reasons.push(`${ROOT_SUITES[suite]} <- ${suites.get(suite)}`);
-  const orderedWorkspaces = workspaces
-    .filter((workspace) => workspace.hasTest && selectedWorkspaces.has(workspace.dir))
+  for (const suite of suites)
+    reasons.push(`${ROOT_SUITES[suite]} <- ${selection.suites.get(suite)}`);
+  const selected = workspaces
+    .filter((workspace) => workspace.hasTest && selection.workspaces.has(workspace.dir))
     .map((workspace) => workspace.dir);
-  for (const dir of orderedWorkspaces) reasons.push(`${dir} <- ${selectedWorkspaces.get(dir)}`);
-  return { kind: "selected", suites: orderedSuites, workspaces: orderedWorkspaces, reasons };
+  for (const dir of selected) reasons.push(`${dir} <- ${selection.workspaces.get(dir)}`);
+  return { kind: "selected", suites, workspaces: selected, reasons };
 }
 
 /** Workspaces in `run-workspaces` test order, with their `workspace:*` dependency names. */
@@ -258,32 +297,28 @@ export function readWorkspaceNodes(rootDir: string): WorkspaceNode[] {
   });
 }
 
-function* rootSources(rootDir: string, dir: string): Generator<readonly [string, string]> {
-  const absolute = join(rootDir, dir);
-  if (!existsSync(absolute)) return;
-  for (const entry of readdirSync(absolute, { withFileTypes: true })) {
-    if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
-    const path = `${dir}/${entry.name}`;
-    if (entry.isDirectory()) yield* rootSources(rootDir, path);
-    else if (SOURCE_FILE.test(entry.name)) yield [path, readFileSync(join(rootDir, path), "utf8")];
-  }
-}
-
-export function readImportIndex(
-  rootDir: string,
-  workspaces: readonly WorkspaceNode[],
-): ImportIndex {
-  return indexImports(
-    ROOT_SOURCE_DIRS.flatMap((dir) => [...rootSources(rootDir, dir)]),
-    workspaces,
-  );
-}
-
 function git(rootDir: string, args: readonly string[]): string[] {
   // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer and CI shells own PATH
   const result = spawnSync("git", args, { cwd: rootDir, encoding: "utf8" });
   if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
   return result.stdout.split("\0").filter(Boolean);
+}
+
+/** Tracked and untracked (not ignored) files. */
+export function repositoryFiles(rootDir: string): string[] {
+  return git(rootDir, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
+}
+
+export function readReferenceIndex(
+  rootDir: string,
+  workspaces: readonly WorkspaceNode[],
+  files: readonly string[],
+): ReferenceIndex {
+  const tracked = new Set(files);
+  const sources = files
+    .filter((file) => SOURCE_FILE.test(file) && existsSync(join(rootDir, file)))
+    .map((file): [string, string] => [file, readFileSync(join(rootDir, file), "utf8")]);
+  return indexReferences(sources, workspaces, tracked);
 }
 
 /** Staged, unstaged and untracked paths; `undefined` before the first commit. */
@@ -319,7 +354,11 @@ function main(): void {
   const plan: TestPlan =
     paths === undefined
       ? { kind: "all", reason: "no commit yet" }
-      : planChangedTests(paths, workspaces, readImportIndex(rootDir, workspaces));
+      : planChangedTests(
+          paths,
+          workspaces,
+          readReferenceIndex(rootDir, workspaces, repositoryFiles(rootDir)),
+        );
 
   if (plan.kind === "all") {
     console.log(`[test-changed] every test — ${plan.reason}`);
