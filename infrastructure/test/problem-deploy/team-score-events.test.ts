@@ -252,3 +252,120 @@ describe("collectTeamScoreEvents", () => {
     expect(json).not.toContain("1700000000001");
   });
 });
+
+it("marks incomplete DynamoDB history even when 1MB pages contain fewer than 200 items", async () => {
+  const { shared, ddbSend } = buildShared();
+  for (let page = 0; page < 3; page += 1)
+    ddbSend.mockResolvedValueOnce({
+      Items: [ev()],
+      LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: `EVENT#page${page}` },
+    });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.historyAvailable).toBe(false);
+  expect(rows[0]?.events).toHaveLength(3);
+});
+it("marks invalid raw history rows incomplete before public DTO filtering", async () => {
+  const { shared, ddbSend } = buildShared();
+  ddbSend.mockResolvedValueOnce({ Items: [ev(), ev({ source: "unknown" })] });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.historyAvailable).toBe(false);
+  expect(rows[0]?.events).toHaveLength(1);
+});
+
+it("does not claim complete history from an adapter that cannot report availability", async () => {
+  const { shared } = buildShared();
+  const legacyAdapter = { listScoreEvents: vi.fn().mockResolvedValue([ev()]) };
+  vi.spyOn(shared.runtime, "resolveDeploymentsRepository").mockResolvedValue(
+    legacyAdapter as never,
+  );
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events).toHaveLength(1);
+  expect(rows[0]?.historyAvailable).toBe(false);
+});
+
+it("marks the bounded public history incomplete even when all three full pages were drained", async () => {
+  const { shared, ddbSend } = buildShared();
+  for (let page = 0; page < 3; page += 1)
+    ddbSend.mockResolvedValueOnce({
+      Items: Array.from({ length: 200 }, () => ev()),
+      ...(page < 2 ? { LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: `EVENT#page${page}` } } : {}),
+    });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events).toHaveLength(200);
+  expect(rows[0]?.historyAvailable).toBe(false);
+});
+
+it("keeps history complete when a valid attack-detected marker is left out of the public timeline", async () => {
+  const { shared, ddbSend } = buildShared();
+  ddbSend.mockResolvedValueOnce({
+    Items: [ev(), ev({ source: "attack-detected", points: 0, result: "down" })],
+  });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events.map((row) => row.source)).toEqual(["uptime"]);
+  expect(rows[0]?.historyAvailable).toBeUndefined();
+});
+
+it("treats exactly 200 fully drained events as complete history", async () => {
+  const { shared, ddbSend } = buildShared();
+  ddbSend.mockResolvedValueOnce({ Items: Array.from({ length: 200 }, () => ev()) });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events).toHaveLength(200);
+  expect(rows[0]?.historyAvailable).toBeUndefined();
+});
+
+it("keeps a fully drained three-page history complete when private markers fill it", async () => {
+  const { shared, ddbSend } = buildShared();
+  const marker = ev({ source: "attack-detected", points: 0, result: "down" });
+  for (let page = 0; page < 3; page += 1)
+    ddbSend.mockResolvedValueOnce({
+      Items:
+        page === 0 ? [ev(), ...Array.from({ length: 199 }, () => marker)] : Array(200).fill(marker),
+      ...(page < 2 ? { LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: `EVENT#page${page}` } } : {}),
+    });
+  const rows = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  expect(rows[0]?.events).toHaveLength(1);
+  expect(rows[0]?.historyAvailable).toBeUndefined();
+});
+
+it("treats a stored non-numeric score as corrupt history instead of coercing it", async () => {
+  for (const points of ["1", true, Number.NaN]) {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [ev({ points: 5 }), ev({ points })] });
+    const rows = await collectTeamScoreEvents(shared as never, {
+      deployments: [{ jobId: "J1", teamId: "T1" }],
+      displayNameByTeamId: new Map(),
+    });
+    expect(rows[0]?.events.map((row) => row.points)).toEqual([5]);
+    expect(rows[0]?.historyAvailable).toBe(false);
+  }
+  const { shared, ddbSend } = buildShared();
+  ddbSend.mockResolvedValueOnce({ Items: [ev({ points: undefined })] });
+  const legacy = await collectTeamScoreEvents(shared as never, {
+    deployments: [{ jobId: "J1", teamId: "T1" }],
+    displayNameByTeamId: new Map(),
+  });
+  // Rows from before points were stored still read as zero.
+  expect(legacy[0]?.events.map((row) => row.points)).toEqual([0]);
+  expect(legacy[0]?.historyAvailable).toBeUndefined();
+});

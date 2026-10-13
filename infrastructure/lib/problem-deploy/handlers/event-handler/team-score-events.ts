@@ -1,5 +1,9 @@
 import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
-import { type ScoreEventItem, toPublicScoreEventView } from "../shared/score-event.js";
+import {
+  isPrivateScoreEventMarker,
+  type ScoreEventItem,
+  toPublicScoreEventView,
+} from "../shared/score-event.js";
 import { type EventSharedResources, resolveDeploymentsRepository } from "./shared.js";
 import type { TeamScoreEvents, TeamScoreEventView } from "./types.js";
 
@@ -54,13 +58,16 @@ export async function collectTeamScoreEvents(
   const teams: TeamScoreEvents[] = await Promise.all(
     [...byTeam.entries()].map(async ([teamId, meta]) => {
       const collected = await collectEventsForDeployments(shared, meta.deploymentJobIds);
-      collected.sort((a, b) =>
+      collected.events.sort((a, b) =>
         a.occurredAt < b.occurredAt ? -1 : a.occurredAt > b.occurredAt ? 1 : 0,
       );
       return {
         teamId,
         teamName: meta.teamName,
-        events: collected.slice(0, PER_TEAM_LIMIT),
+        events: collected.events.slice(0, PER_TEAM_LIMIT),
+        ...(!collected.historyAvailable || collected.events.length > PER_TEAM_LIMIT
+          ? { historyAvailable: false }
+          : {}),
       };
     }),
   );
@@ -75,22 +82,32 @@ export async function collectTeamScoreEvents(
 async function collectEventsForDeployments(
   shared: Pick<EventSharedResources, "runtime" | "ddb" | "deploymentsTableName">,
   deploymentJobIds: readonly string[],
-): Promise<TeamScoreEventView[]> {
+): Promise<{ events: TeamScoreEventView[]; historyAvailable: boolean }> {
   const collected: TeamScoreEventView[] = [];
+  let historyAvailable = true;
   const deployments: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   await Promise.all(
     deploymentJobIds.map(async (jobId) => {
       // 1 deployment partition あたり最大 MAX_PAGES_PER_DEPLOYMENT ページまで drain (= 1 request
       // あたりの query 回数を bound)。全 team 合算後に caller が PER_TEAM_LIMIT で truncate する。
+      let availabilityReported = false;
       const rows = await deployments.listScoreEvents(jobId, {
         pageSize: PER_TEAM_LIMIT,
         maxPages: MAX_PAGES_PER_DEPLOYMENT,
+        onHistoryAvailability: (complete) => {
+          availabilityReported = true;
+          if (!complete) historyAvailable = false;
+        },
       });
+      // Trust the adapter's own drain report; a row count cannot tell a full final page from a
+      // truncated one. Only an adapter that reports nothing is assumed incomplete.
+      if (!availabilityReported) historyAvailable = false;
       for (const it of rows as Partial<ScoreEventItem>[]) {
         const v = toPublicScoreEventView(it);
         if (v) collected.push(v);
+        else if (!isPrivateScoreEventMarker(it)) historyAvailable = false;
       }
     }),
   );
-  return collected;
+  return { events: collected, historyAvailable };
 }

@@ -34,6 +34,8 @@ export type EventStatus = "DRAFT" | "DEPLOYING" | "READY" | "ENDED" | "TEARDOWN"
  * problemId / account / region regexes) is compile-time locked to this shape.
  */
 export type EventProblemTarget = {
+  /** Safe declaration pinned at creation; absent on historical events. */
+  skillCatalog?: import("../../../../../packages/portal-contracts/src/skill-evidence.js").SkillCatalogSnapshot;
   problemId: string;
   /** @deprecated #528 で team 単位 (team.awsAccountId) に移行。旧 Event の fallback としてのみ残す */
   defaultAwsAccountId?: string;

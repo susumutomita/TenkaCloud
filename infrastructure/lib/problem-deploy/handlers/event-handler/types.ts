@@ -331,11 +331,20 @@ export const TeamScoreEventsSchema = z.object({
   teamName: z.string(),
   /** occurredAt 昇順 (= chart の cumulative 計算に向く順序)。 */
   events: z.array(TeamScoreEventViewSchema),
+  historyAvailable: z.boolean().optional(),
 });
 export type TeamScoreEvents = z.infer<typeof TeamScoreEventsSchema>;
 
 export const EventDetailSchema = EventSummarySchema.extend({
-  problems: z.array(EventProblemTargetSchema),
+  problems: z.array(
+    EventProblemTargetSchema.extend({
+      skillCatalog: z
+        .custom<
+          import("../../../../../packages/portal-contracts/src/skill-evidence.js").SkillCatalogSnapshot
+        >()
+        .optional(),
+    }),
+  ),
   teams: z.array(TeamSummarySchema),
   /**
    * `problemId` ごとの deploy job 一覧 (= 全 team 分)。Bulk Deploy 前は空 record。

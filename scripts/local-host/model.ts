@@ -27,6 +27,7 @@ export interface Problem {
   runtime?: "docker" | "coordination" | "cloudformation";
   /** Organizer-only catalog text; never copied into a participant response. */
   organizerContent?: OrganizerProblemContent;
+  skillCatalog?: import("../../packages/portal-contracts/src/skill-evidence").SkillCatalogSnapshot;
 }
 
 export interface OrganizerProblemContent {

@@ -324,6 +324,7 @@ export class HostingService {
       problems: event.problems.map((problem) => ({
         problemId: problem.problemId,
         defaultRegion: "local",
+        ...(problem.skillCatalog ? { skillCatalog: problem.skillCatalog } : {}),
       })),
       deploymentsByProblem: Object.fromEntries(
         event.problems.map((problem) => [
@@ -353,7 +354,12 @@ export class HostingService {
                 projectedTotal: projected.total,
                 projectedByProblem: projected.byProblem,
                 events: events.map((entry, index) => ({
-                  ...entry,
+                  jobId: entry.jobId,
+                  problemId: entry.problemId,
+                  source: entry.source,
+                  points: entry.points,
+                  result: entry.result,
+                  occurredAt: entry.occurredAt,
                   projectedTotal: timeline[index],
                 })),
               };
@@ -953,6 +959,7 @@ export class HostingService {
         problems: problems.map((problem) => ({
           problemId: problem.problemId,
           defaultRegion: "local",
+          ...(problem.skillCatalog ? { skillCatalog: problem.skillCatalog } : {}),
         })),
         teams: teams.map((team) => ({
           teamId: team.teamId,

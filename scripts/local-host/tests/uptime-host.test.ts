@@ -4,6 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { SkillEvidenceInput } from "../../../apps/application-admin-console/src/lib/skill-evidence";
+import { buildSkillEvidence } from "../../../apps/application-admin-console/src/lib/skill-evidence";
 import type { ProbeFn } from "../../lib/http-probe-client";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
 import { CloudFormationEngine } from "../cloudformation-engine";
@@ -214,6 +216,21 @@ test("Battle endpoint registration scores the current minute once after EC2 read
     await restarted.uptime.tick();
     expect(store.team(team.teamId).score).toBe(100);
     expect(store.team(team.teamId).scoreEvents).toHaveLength(3);
+    const report = await restarted.admin(
+      apiRequest({
+        method: "GET",
+        path: `/events/${event.eventId}`,
+        token: admin,
+        query: new URLSearchParams({ withScoreEvents: "true" }),
+      }),
+    );
+    const evidence = buildSkillEvidence(report.body as SkillEvidenceInput).find(
+      (row) => row.problemId === "hello-world-battle",
+    );
+    expect(evidence?.status).toBe("demonstrated");
+    expect(evidence?.englishLabel).toBe("Successful probe of a registered service endpoint");
+    expect(evidence?.observations).toHaveLength(3);
+
     const configure = (path: string, body: unknown) =>
       restarted.admin(apiRequest({ method: "PUT", path, token: admin, body }));
     expect(

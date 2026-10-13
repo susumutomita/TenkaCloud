@@ -10,6 +10,8 @@ export interface EventProblemTarget {
    *  旧 Event の fallback としてのみ残す。Phase 2 で削除予定。 */
   defaultAwsAccountId?: string;
   defaultRegion: string;
+  /** Event-pinned public declaration and exact catalog snapshot identity. */
+  skillCatalog?: import("../../../../packages/portal-contracts/src/skill-evidence").SkillCatalogSnapshot;
 }
 
 export interface EventSummary {
@@ -105,6 +107,8 @@ export interface TeamScoreEventView {
 }
 
 export interface TeamScoreEvents {
+  /** False when bounded cloud queries may have truncated this team history. */
+  historyAvailable?: boolean;
   teamId: string;
   teamName: string;
   /** occurredAt 昇順 (= chart の cumulative 計算に向く)。 */

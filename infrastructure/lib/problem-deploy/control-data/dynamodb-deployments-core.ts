@@ -342,6 +342,7 @@ export class DynamoDbDeploymentsCore {
   async queryAllPages(
     input: Omit<QueryCommandInput, "TableName" | "ExclusiveStartKey">,
     maxPages = Number.POSITIVE_INFINITY,
+    onHistoryAvailability?: (complete: boolean) => void,
   ): Promise<Record<string, unknown>[]> {
     const items: Record<string, unknown>[] = [];
     let exclusiveStartKey: Record<string, unknown> | undefined;
@@ -359,6 +360,7 @@ export class DynamoDbDeploymentsCore {
       pages += 1;
       if (!exclusiveStartKey) break;
     }
+    onHistoryAvailability?.(!exclusiveStartKey);
     return items;
   }
 

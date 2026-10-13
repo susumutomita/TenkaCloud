@@ -49,6 +49,7 @@ export const executionCatalogSchema = z
     catalog: z.record(z.string(), z.string().min(1)),
     scoring: projectionSchema,
     hints: projectionSchema,
+    skills: projectionSchema.optional(),
     endpoints: projectionSchema,
     phases: projectionSchema,
     visibility: projectionSchema,

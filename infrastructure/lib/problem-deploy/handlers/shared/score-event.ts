@@ -105,6 +105,15 @@ export interface PublicScoreEventView {
   readonly reason?: string;
 }
 
+/**
+ * Stored sources that are valid but deliberately not public: the `attack-detected` marker
+ * feeds the Battle Portal attack history, not the score timeline. A history that omits these
+ * rows is still complete; any other row {@link toPublicScoreEventView} rejects is malformed.
+ */
+export function isPrivateScoreEventMarker(item: Partial<ScoreEventItem>): boolean {
+  return item.source === "attack-detected";
+}
+
 const PUBLIC_SOURCE_SET = new Set<string>(PUBLIC_SCORE_EVENT_SOURCES);
 const PUBLIC_RESULT_SET = new Set<string>(PUBLIC_SCORE_EVENT_RESULTS);
 
@@ -123,6 +132,8 @@ export function toPublicScoreEventView(
   if (typeof item.result !== "string") return undefined;
   if (!PUBLIC_RESULT_SET.has(item.result)) return undefined;
   if (typeof item.occurredAt !== "string") return undefined;
+  // A missing value is a legacy zero; a stored non-number is corrupt, not a score to coerce.
+  if (item.points !== undefined && !Number.isFinite(item.points)) return undefined;
   return {
     jobId: item.jobId,
     problemId: item.problemId,

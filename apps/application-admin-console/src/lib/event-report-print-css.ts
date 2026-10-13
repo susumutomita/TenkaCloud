@@ -41,6 +41,7 @@ export const EVENT_REPORT_PRINT_CSS = `
     top: 0;
     left: 0;
     width: 100%;
+    box-sizing: border-box;
     margin: 0 !important;
     padding: 12mm 14mm !important;
     color: #000 !important;

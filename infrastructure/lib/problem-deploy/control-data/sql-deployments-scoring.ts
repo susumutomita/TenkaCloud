@@ -37,9 +37,16 @@ export class SqlDeploymentsScoring implements DeploymentsScoringPort {
 
   async listScoreEvents(
     jobId: string,
-    opts: { readonly pageSize: number; readonly maxPages?: number },
+    opts: {
+      readonly pageSize: number;
+      readonly maxPages?: number;
+      readonly onHistoryAvailability?: (complete: boolean) => void;
+    },
   ): Promise<readonly ScoreEventRecord[]> {
-    if (opts.maxPages !== undefined && opts.maxPages <= 0) return [];
+    if (opts.maxPages !== undefined && opts.maxPages <= 0) {
+      opts.onHistoryAvailability?.(false);
+      return [];
+    }
     const limit = opts.maxPages === undefined ? undefined : opts.pageSize * opts.maxPages;
     const rows =
       limit === undefined
@@ -53,6 +60,7 @@ export class SqlDeploymentsScoring implements DeploymentsScoringPort {
               "ORDER BY sk DESC LIMIT ?",
             [jobId, "score", limit],
           );
+    opts.onHistoryAvailability?.(limit === undefined || rows.length < limit);
     return rows.map((row) => scoreEventFromPayload(row.payload));
   }
 

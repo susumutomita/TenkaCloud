@@ -52,6 +52,7 @@ import {
   participantAwsAccess,
 } from "./participant-aws-access";
 import { projectedScore } from "./score";
+import { skillCatalog } from "./skill-catalog";
 
 /** Short-lived credentials for the team's competitor role; the SDK refreshes them near expiry. */
 export type CredentialsProvider = () => Promise<{
@@ -134,6 +135,7 @@ const REVIEWED_STACK_PROBLEMS = [
 ] as const;
 
 interface StackMetadata {
+  skillEvidence?: unknown;
   authors?: unknown;
   name: string;
   description?: string;
@@ -236,6 +238,7 @@ function stackProblem(
     problemId,
     name: metadata.name,
     definition: JSON.stringify(definition),
+    skillCatalog: skillCatalog(metadata, JSON.stringify(definition)),
     organizerContent: organizerProblemContent(metadata),
     runtime: "cloudformation",
   };

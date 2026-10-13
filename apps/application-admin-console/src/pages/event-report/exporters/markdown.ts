@@ -169,10 +169,37 @@ export function buildEventReportMarkdown(exp: EventReportExport): string {
     renderSummary(exp),
     renderScoreboard(exp),
     renderBreakdown(exp),
+    renderSkills(exp),
     renderDisruptions(exp),
     renderFooter(exp),
   ]
     .filter((s) => s.length > 0)
     .join("\n\n");
   return `${body}\n`;
+}
+
+function renderSkills(exp: EventReportExport): string {
+  const view = exp.skills;
+  if (!view) return "";
+  // Escape HTML and link/code syntax as well as table delimiters in catalog-controlled text.
+  const safe = (text: string) =>
+    text
+      .replace(/&/gu, "&amp;")
+      .replace(/</gu, "&lt;")
+      .replace(/>/gu, "&gt;")
+      .replace(/\[/gu, "&#91;")
+      .replace(/\]/gu, "&#93;")
+      .replace(/`/gu, "&#96;")
+      .replace(/_/gu, "&#95;")
+      .replace(/\*/gu, "&#42;");
+  return [
+    `## ${view.title}`,
+    "",
+    view.note,
+    "",
+    renderTable(
+      view.headers,
+      view.rows.map((row) => row.map(safe)),
+    ),
+  ].join("\n");
 }

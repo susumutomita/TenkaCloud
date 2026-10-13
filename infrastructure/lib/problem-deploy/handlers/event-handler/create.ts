@@ -3,6 +3,10 @@ import {
   computeCatalogSnapshotId,
   type PinnedProblemProvenance,
 } from "../../../problem-pack/event-pin.js";
+import {
+  DYNAMODB_ITEM_LIMIT_BYTES,
+  DYNAMODB_ROW_OVERHEAD_BYTES,
+} from "../../control-data/domain/coordination-budget.js";
 import type { EventRecord } from "../../control-data/events-repository.js";
 import type { TeamRecord } from "../../control-data/teams-repository.js";
 import { generateTeamLoginKey } from "../deploy-handler/team-key.js";
@@ -15,6 +19,7 @@ import {
 import { warnOnCoordinationCapacity } from "./coordination-capacity-warning.js";
 import { validateSelfTestAcknowledgment } from "./self-test-consent.js";
 import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
+import { cloudSkillCatalog } from "./skill-catalog.js";
 import type { CreateEventRequest, CreateEventResponse } from "./types.js";
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 日
@@ -104,7 +109,14 @@ export async function createEvent(
     tenantId: ctx.tenantId,
     name: req.name,
     status: "DRAFT",
-    problems: req.problems,
+    problems: req.problems.map((problem) => ({
+      problemId: problem.problemId,
+      defaultRegion: problem.defaultRegion,
+      ...(problem.defaultAwsAccountId ? { defaultAwsAccountId: problem.defaultAwsAccountId } : {}),
+      ...(cloudSkillCatalog(shared.executionCatalog, problem.problemId)
+        ? { skillCatalog: cloudSkillCatalog(shared.executionCatalog, problem.problemId) }
+        : {}),
+    })),
     teamCount: teams.length,
     createdAt,
     updatedAt: createdAt,
@@ -113,6 +125,9 @@ export async function createEvent(
     ...buildEventCatalogPin(shared, ctx.tenantId),
     ...(shared.executionCatalog ? { catalogKey: shared.executionCatalog.catalogKey } : {}),
   };
+
+  // Before the write and the advisory below: a refused event persists nothing and loses no keys.
+  validateEventRecordSize(eventRecord);
 
   // [Issue #3169] Computed BEFORE the write, not after.
   //
@@ -213,6 +228,30 @@ function validateNoDuplicateProblems(req: CreateEventRequest): void {
       throw new DuplicateProblemIdError(p.problemId);
     }
     seen.add(p.problemId);
+  }
+}
+
+/**
+ * The Event row is one DynamoDB item, and the record carries each selected problem's retained
+ * skill declarations, so a large selection can outgrow the 400 KB item limit even though every
+ * declaration is valid. Keep the same reserve as the coordination budget for key and encoding
+ * overhead. Applied on every backend, so whether an event can be created does not depend on the
+ * store behind it.
+ */
+const EVENT_RECORD_MAX_BYTES = DYNAMODB_ITEM_LIMIT_BYTES - DYNAMODB_ROW_OVERHEAD_BYTES;
+
+function validateEventRecordSize(record: EventRecord): void {
+  const bytes = Buffer.byteLength(JSON.stringify(record), "utf8");
+  if (bytes > EVENT_RECORD_MAX_BYTES) throw new EventRecordTooLargeError(bytes);
+}
+
+export class EventRecordTooLargeError extends Error {
+  constructor(readonly bytes: number) {
+    super(
+      `The skill evidence declared by the selected problems makes this event ${bytes} bytes, ` +
+        `over the ${EVENT_RECORD_MAX_BYTES}-byte limit. Select fewer problems that declare skill evidence.`,
+    );
+    this.name = "EventRecordTooLargeError";
   }
 }
 
