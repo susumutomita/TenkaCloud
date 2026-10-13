@@ -14,7 +14,7 @@ test("Swagger dependency is pinned and install analytics remain disabled and unt
   const rootPackage = JSON.parse(
     readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
   );
-  expect(rootPackage.dependencies["swagger-ui-dist"]).toBe("5.32.3");
+  expect(rootPackage.dependencies["swagger-ui-dist"]).toBe("5.33.1");
   expect(rootPackage.scarfSettings.enabled).toBe(false);
   expect(rootPackage.trustedDependencies).not.toContain("@scarf/scarf");
 });
