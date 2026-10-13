@@ -453,6 +453,52 @@ cleanup, or a verified cloud migration procedure. The new local entrypoint does 
 adopt, delete or reset those AWS resources. It reports unsupported legacy jobs
 without losing their resource references or tournament results.
 
+## Portable HTTP boundary (stage 1)
+
+The shared [Node HTTP transport](../scripts/lib/node-http.ts) owns listener startup,
+timeouts and shutdown. The [API contract](../scripts/lib/hosting-api.ts) and
+[local application port](../scripts/local-host/http-application.ts) separate that
+transport from the concrete hosting service. Local hosting still uses its existing
+Bun authentication, SQLite, two origins, job recovery, timers and terminal transport.
+This extraction does not migrate events or change API paths or stored data.
+
+```mermaid
+flowchart TD
+  Entry[HTTP entry] --> Transport[Shared Node HTTP transport]
+  Transport --> API[Hosting API port]
+  API --> Local[Current Local HostingService]
+  Local --> SQLite[Persistent SQLite]
+  Local --> LocalRuntime[Local jobs, timers and exercise runtime]
+  Local --> Terminal[Separate participant WebSocket transport]
+  API -. Planned .-> Cloud[Cloud API application]
+  Cloud -. Planned .-> External[Existing Turso or DynamoDB repositories]
+  Cloud -. Planned .-> Workers[Durable jobs and on-demand exercise runtime]
+```
+
+The dotted connections are future work. Cloud hosting continues to use the existing
+Lambda Event Function handlers and API Gateway authentication. The local API contract
+is not yet shared with those handlers. A future Web Functions entry must verify identity
+before dispatching; bearer headers are not verified authorizer claims. Storage and job
+adapters must retain event/team isolation, idempotency and recovery independently of
+execution-environment lifetime. Existing events stay with their original data and runtime
+until an explicit compatible migration is available.
+
+[AWS Lambda Web Functions](https://docs.aws.amazon.com/lambda/latest/dg/web-functions.html)
+currently require a Node HTTP server listening on `AWS_LAMBDA_HTTP_ENDPOINT`, Node 24
+on arm64, a zip package and startup within 10 seconds. The transport includes an explicit
+endpoint parser, tested under Node 24; the local host keeps its two listener settings
+and does not read that variable. Full host startup still imports `bun:sqlite`, and legacy
+organizer password operations still use `Bun.password`. The transport test is not a
+Node-compatible host release or an AWS deployment rehearsal.
+
+Web Functions can scale to zero and serve concurrent requests. Their process memory,
+local files and timers cannot be the authoritative cloud state. The initial cloud design
+uses one region; routing code to multiple regions does not establish database or scoring
+consistency. Web Functions remove Upgrade/Connection headers, so the existing terminal
+WebSocket transport and exercise containers need separate runtime adapters. Exercise
+cost and lifecycle remain separate from HTTP hosting cost. No Web Functions deployment,
+resource, permission or authentication configuration is added by this stage.
+
 ## Hosting behind a TLS proxy
 
 This optional local-runtime rehearsal image is separate from Lambda-based cloud

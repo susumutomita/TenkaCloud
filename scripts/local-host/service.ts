@@ -1,3 +1,4 @@
+import type { ApiRequest, ApiResponse } from "../lib/hosting-api";
 import type { ProbeFn } from "../lib/http-probe-client";
 import {
   id,
@@ -72,21 +73,8 @@ import {
 import { MAX_SUBMISSION_BODY } from "./submission-size";
 import { LocalUptime, uptimeGeneration } from "./uptime";
 
-export interface ApiRequest {
-  method: string;
-  path: string;
-  query: URLSearchParams;
-  body: unknown;
-  token: string;
-  nonce?: string;
-  /** Trusted HTTP adapter metadata; never populated from request payload or headers. */
-  externalEvaluationTrusted?: boolean;
-}
+export type { ApiRequest, ApiResponse } from "../lib/hosting-api";
 
-export interface ApiResponse {
-  status: number;
-  body: unknown;
-}
 const ok = (body: unknown, status = 200): ApiResponse => ({ status, body });
 const eventPattern = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
 const slugPattern = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/u;

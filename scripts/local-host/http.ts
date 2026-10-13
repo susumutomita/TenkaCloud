@@ -1,11 +1,16 @@
 import { readFile, realpath } from "node:fs/promises";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
+import type { ApiRequest, ApiResponse } from "../lib/hosting-api";
+import { closeServer, createHttpServer, listen } from "../lib/node-http";
 import { serveApiDocs } from "./api-docs";
+import type { HostingHttpApplication } from "./http-application";
 import { HostError } from "./model";
-import type { ApiRequest, ApiResponse, HostingService } from "./service";
 import { apiBodyLimit } from "./submission-size";
 import { installTerminalTransport } from "./terminal-http";
+
+export { closeServer, listen } from "../lib/node-http";
+
 export const MAX_BODY = 64 * 1024;
 
 export function json(response: ServerResponse, status: number, body: unknown): void {
@@ -71,29 +76,6 @@ function validOrigin(request: IncomingMessage, origin: string, samlPost = false)
     throw new HostError(403, "Cross-site requests are not allowed.");
 }
 
-export async function listen(server: Server, hostname: string, port: number): Promise<string> {
-  await new Promise<void>((accept, reject) => {
-    const failed = (error: Error) => reject(error);
-    server.once("error", failed);
-    server.listen(port, hostname, () => {
-      server.off("error", failed);
-      accept();
-    });
-  });
-  const address = server.address();
-  if (!address || typeof address === "string")
-    throw new Error("The HTTP server has no TCP address.");
-  return `http://${hostname}:${address.port}`;
-}
-
-export async function closeServer(server: Server): Promise<void> {
-  // Bun closeAllConnections also stops an upgraded listener; do not close it twice.
-  if (!server.listening) return;
-  server.closeIdleConnections();
-  await new Promise<void>((accept, reject) =>
-    server.close((error) => (error ? reject(error) : accept())),
-  );
-}
 const contentTypes: Readonly<Record<string, string>> = {
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
@@ -247,7 +229,7 @@ export async function startHttpHost(options: {
   advertised?: string;
   behindProxy?: boolean;
   staticRoot: string;
-  service: HostingService;
+  service: HostingHttpApplication;
   participantOrigin?: string;
   log?: (error: unknown) => void;
 }): Promise<HttpHost> {
@@ -255,16 +237,10 @@ export async function startHttpHost(options: {
     throw new Error("The host console must bind to IPv4 loopback.");
   let origin = "";
   const limiter = new InvalidCredentialLimiter(options.service.now);
-  const server = createServer((request, response) => {
-    void handle(request, response).catch((error) => {
-      if (!(error instanceof HostError)) (options.log ?? console.error)(error);
-      errorResponse(response, error);
-    });
+  const server = createHttpServer(handle, (response, error) => {
+    if (!(error instanceof HostError)) (options.log ?? console.error)(error);
+    errorResponse(response, error);
   });
-  server.headersTimeout = 10_000;
-  server.requestTimeout = 15_000;
-  server.maxHeadersCount = 40;
-  server.setTimeout(15_000, (socket) => socket.destroy());
   const runtimeAwsRegion =
     options.kind === "admin" ? options.service.accountConnection?.region : undefined;
   function runtimeConfiguration() {
