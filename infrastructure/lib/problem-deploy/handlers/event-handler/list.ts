@@ -1,3 +1,4 @@
+import type { EventQueryPort } from "../../../../../packages/portal-contracts/src/event-queries.js";
 import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import { parseProgressionGate } from "../shared/progression-gate.js";
 import {
@@ -44,6 +45,46 @@ export interface ListEventsResponse {
   readonly nextCursor?: string;
 }
 
+export interface EventDetailQuery {
+  readonly tenantId: string;
+  readonly eventId: string;
+  readonly withScoreEvents?: boolean;
+  readonly withTeamLoginKeys?: boolean;
+}
+
+/** Cloud adapter keeps the selected external repositories and legacy projections. */
+export function createCloudEventQueries(
+  shared: EventSharedResources,
+): EventQueryPort<
+  ListEventsRequest,
+  ListEventsResponse,
+  EventDetailQuery,
+  EventDetail | undefined
+> {
+  return {
+    list: (request) => readEventList(shared, request),
+    detail: ({ tenantId, eventId, ...options }) =>
+      readEventDetail(shared, tenantId, eventId, options),
+  };
+}
+
+/** Existing route/caller contract remains unchanged. */
+export function listEvents(
+  shared: EventSharedResources,
+  request: ListEventsRequest,
+): Promise<ListEventsResponse> {
+  return createCloudEventQueries(shared).list(request);
+}
+
+export function getEventDetail(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  options: Omit<EventDetailQuery, "tenantId" | "eventId"> = {},
+): Promise<EventDetail | undefined> {
+  return createCloudEventQueries(shared).detail({ ...options, tenantId, eventId });
+}
+
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
@@ -77,7 +118,7 @@ function toSummary(item: Partial<EventItem>): EventSummary {
  * default backend (dynamodb) では同じ Query + cursor codec (allowlist PK/SK/GSI1PK/GSI1SK)
  * を発火するので、 流通中の cursor 互換 / CFn 差分は無い (byte 互換)。
  */
-export async function listEvents(
+async function readEventList(
   shared: EventSharedResources,
   req: ListEventsRequest,
 ): Promise<ListEventsResponse> {
@@ -102,7 +143,7 @@ export async function listEvents(
  * `scoreEventsByTeam` に含める。 default (= false) は従来挙動を維持 (= 余分な DDB query を
  * 発生させない、 既存 caller への影響なし)。
  */
-export async function getEventDetail(
+async function readEventDetail(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
