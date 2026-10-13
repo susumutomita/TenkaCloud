@@ -469,6 +469,19 @@ export class DockerHostingEngine implements RuntimeEngine {
     );
     return this.result(state, response, context);
   }
+  async evaluate(job: Job, submission: string): Promise<boolean> {
+    const started = this.running.get(job.jobId);
+    if (started?.problem.scoring.kind !== "verify")
+      throw new HostError(409, "This environment has no running single-flag verifier.");
+    this.ownedUnit(job, true);
+    const verdict = await verifySubmission(
+      started.problem.verifyUrl,
+      submission,
+      { teamId: job.teamId, problemId: job.problemId },
+      { fetchImpl: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(5000) }) },
+    );
+    return verdict.correct;
+  }
   async hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
     const state = await this.state(context);
     const response = revealContainerHint(

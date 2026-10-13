@@ -425,6 +425,16 @@ export async function startHttpHost(options: {
         body: await jsonBody(request, apiBodyLimit(path, MAX_BODY)),
         token: bearerToken(request),
         nonce: idempotencyKey(request),
+        externalEvaluationTrusted:
+          ["127.0.0.1", "::1"].includes(options.hostname) &&
+          ["127.0.0.1", "::1"].includes(
+            (request.socket.remoteAddress ?? "").replace(/^::ffff:/u, ""),
+          ) &&
+          !options.behindProxy &&
+          !options.advertised &&
+          !["forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto"].some(
+            (header) => request.headers[header] !== undefined,
+          ),
       };
       const result = await dispatch(apiRequest);
       sendApiResponse(response, result);

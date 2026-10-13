@@ -79,6 +79,8 @@ export interface ApiRequest {
   body: unknown;
   token: string;
   nonce?: string;
+  /** Trusted HTTP adapter metadata; never populated from request payload or headers. */
+  externalEvaluationTrusted?: boolean;
 }
 
 export interface ApiResponse {
@@ -852,8 +854,23 @@ export class HostingService {
       });
     });
   }
+  private validateScoringAuthority(authority: unknown, problems: Problem[]): void {
+    if (authority === undefined) return;
+    if (authority !== "ctfd") throw new HostError(400, "Invalid scoring authority.");
+    if (
+      !this.engine.supportsOnDemand ||
+      !this.engine.evaluate ||
+      problems.some(
+        (problem) =>
+          definitionKind(problem.definition) !== "compose" ||
+          (JSON.parse(problem.definition) as DockerDefinition).problem.scoring.kind !== "verify",
+      )
+    )
+      throw new HostError(422, "CTFd scoring requires single-verdict Docker exercises.");
+  }
   private createEvent(body: Record<string, unknown>): ApiResponse {
     const name = text(body.name, "name");
+
     if (!Array.isArray(body.teams) || body.teams.length < 1 || body.teams.length > MAX_JOBS)
       throw new HostError(400, "Choose 1–40 teams.");
     if (
@@ -878,6 +895,7 @@ export class HostingService {
     if (new Set(problems.map((problem) => problem.problemId)).size !== problems.length)
       throw new HostError(400, "Duplicate problem.");
     const demand = this.engine.supportsOnDemand === true;
+    this.validateScoringAuthority(body.scoringAuthority, problems);
     if (body.teams.length * problems.length > (demand ? MAX_EVENT_JOBS : MAX_JOBS))
       throw new HostError(
         422,
@@ -923,6 +941,7 @@ export class HostingService {
       scoreboardFreezeMinutes: 0,
       problems,
       ...(demand ? { containerMode: "on-demand" as const } : {}),
+      ...(body.scoringAuthority === "ctfd" ? { scoringAuthority: "ctfd" as const } : {}),
     };
     this.store.transaction(() => {
       this.store.putEvent(event);
@@ -1876,6 +1895,8 @@ export class HostingService {
     if (request.path.startsWith("/portal/registration/"))
       throw new HostError(404, "Unknown participant endpoint.");
     const team = this.store.authenticateTeam(request.token);
+    if (/^\/portal\/me\/problems\/[^/]+\/evaluate$/u.test(request.path))
+      return this.queue.run(team.eventId, () => this.evaluateParticipant(request));
     if (/^\/portal\/me\/problems\/[^/]+\/container\//u.test(request.path))
       return this.queue.run(team.eventId, () =>
         this.queue.run(SLOT_QUEUE, () => this.participantContainer(request)),
@@ -1900,6 +1921,48 @@ export class HostingService {
       return this.queue.run(team.eventId, () => this.renameParticipant(request));
     if (request.method !== "POST") throw new HostError(404, "Unknown participant endpoint.");
     return this.submitParticipant(request, team);
+  }
+  private async evaluateParticipant(request: ApiRequest): Promise<ApiResponse> {
+    if (request.externalEvaluationTrusted !== true)
+      throw new HostError(403, "CTFd evaluation requires a direct private loopback connection.");
+    const match = /^\/portal\/me\/problems\/([a-z0-9][a-z0-9-]{0,127})\/evaluate$/u.exec(
+      request.path,
+    );
+    const body = object(request.body);
+    if (
+      !match ||
+      request.method !== "POST" ||
+      request.query.size ||
+      Object.keys(body).length !== 1 ||
+      typeof body.submission !== "string" ||
+      Buffer.byteLength(body.submission, "utf8") > 64 * 1024
+    )
+      throw new HostError(400, "Supply only a bounded submission for this problem.");
+    const problemId = match[1] ?? "";
+    const resolve = () => {
+      const team = this.store.authenticateTeam(request.token);
+      const event = this.currentEvent(team.eventId);
+      if (event.scoringAuthority !== "ctfd")
+        throw new HostError(409, "External evaluation requires a CTFd-scored event.");
+      assertPlaying(event, this.now());
+      this.progression.assertAccess(team, problemId);
+      const job = this.store
+        .jobs(team.eventId, team.teamId)
+        .find((entry) => entry.problemId === problemId);
+      if (!job || definitionKind(job.definition) !== "compose" || !linkable(job))
+        throw new HostError(409, "This team has no running Docker environment for this problem.");
+      return job;
+    };
+    const job = resolve();
+    if (!this.engine.evaluate)
+      throw new HostError(409, "This runtime does not support external scoring.");
+    const correct = await this.engine.evaluate(job, body.submission);
+    const current = resolve();
+    if (current.jobId !== job.jobId || current.unit !== job.unit)
+      throw new HostError(409, "The environment changed during evaluation.");
+    if (typeof correct !== "boolean")
+      throw new HostError(502, "The runtime returned an invalid verdict.");
+    return ok({ correct });
   }
   private participantEndpoint(request: ApiRequest): ApiResponse {
     const team = this.store.authenticateTeam(request.token);
@@ -2048,6 +2111,8 @@ export class HostingService {
   ): Promise<ApiResponse> {
     const fresh = this.store.authenticateTeam(request.token);
     const current = this.context(fresh);
+    if (current.event.scoringAuthority === "ctfd")
+      throw new HostError(409, "Submit answers and request hints in CTFd.");
     this.progression.assertAccess(fresh, action.problemId);
     const fingerprint = digest(JSON.stringify({ path: request.path, body }));
     if (request.nonce) {
@@ -2066,6 +2131,8 @@ export class HostingService {
         ? await this.engine.submit(current, body)
         : await this.engine.hint(current, action.problemId, action.hintId);
     const latest = this.store.authenticateTeam(request.token);
+    if (this.currentEvent(latest.eventId).scoringAuthority === "ctfd")
+      throw new HostError(409, "Submit answers and request hints in CTFd.");
     this.progression.assertAccess(latest, action.problemId);
     if (
       latest.snapshot !== fresh.snapshot ||
@@ -2113,6 +2180,10 @@ export class HostingService {
     return ok(responseBody, result.status);
   }
   private async participantRead(context: Context, path: string): Promise<ApiResponse> {
+    const problem = /^\/portal\/me\/problems\/([a-z0-9][a-z0-9-]{0,127})(\/state)?$/u.exec(path);
+    // One problem's view mints only that problem's exercise handoff, not every running one's;
+    // its `/state` variant mints none, for checks that only need readiness.
+    if (problem) return ok(await this.teamView(context, problem[1], !problem[2]));
     switch (path) {
       case "/portal/me":
         return ok(await this.teamView(context));
@@ -2198,7 +2269,11 @@ export class HostingService {
       }),
     };
   }
-  private async teamView(context: Context): Promise<Record<string, unknown>> {
+  private async teamView(
+    context: Context,
+    onlyProblemId?: string,
+    withLinks = true,
+  ): Promise<Record<string, unknown>> {
     this.progression.view(context.team);
     const result = await this.engine.view(context);
     context = this.context(this.store.team(context.team.teamId));
@@ -2206,13 +2281,27 @@ export class HostingService {
     const eventGate = gate(context.event, context.now);
     // A canceled or never-started event has nothing to reveal: writeups need a real start.
     const ended = eventGate.kind === "scoring_ended" && hasStarted(context.event, context.now);
-    const problems = Array.isArray(result.problems) ? result.problems : [];
+    const listed = Array.isArray(result.problems) ? result.problems : [];
+    const problems =
+      onlyProblemId === undefined
+        ? listed
+        : listed.filter((raw) => object(raw).problemId === onlyProblemId);
+    if (onlyProblemId !== undefined && problems.length !== 1)
+      throw new HostError(404, "Unknown problem.");
     const runtimes = new Map(
       context.event.problems.map((each) => [each.problemId, each.runtime ?? "docker"]),
     );
     const safeProblems = await Promise.all(
       problems.map((raw) =>
-        this.teamProblemView(raw, context, runtimes, eventGate.kind, ended, projected.byProblem),
+        this.teamProblemView(
+          raw,
+          context,
+          runtimes,
+          eventGate.kind,
+          ended,
+          projected.byProblem,
+          withLinks,
+        ),
       ),
     );
     const latest = this.context(this.store.team(context.team.teamId));
@@ -2246,6 +2335,7 @@ export class HostingService {
     gateKind: Gate["kind"],
     ended: boolean,
     projectedByProblem: Readonly<Record<string, number>>,
+    withLinks: boolean,
   ): Promise<Record<string, unknown>> {
     const entry = object(raw);
     const runtime = runtimes.get(String(entry.problemId));
@@ -2279,7 +2369,8 @@ export class HostingService {
     if (job && onDemandContainer(context.event, job.definition) && gateKind === "ok")
       problem.containerSession = containerSession(job);
     showUptimeStatus(this.store, context, problem, job);
-    await this.grantAccess(problem, runtime, job, context, gateKind);
+    if (withLinks) await this.grantAccess(problem, runtime, job, context, gateKind);
+    else problem.stackOutputs = {};
     return problem;
   }
   /**

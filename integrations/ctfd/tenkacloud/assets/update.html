@@ -1,0 +1,7 @@
+{% extends "admin/challenges/update.html" %}
+{% block connection_info %}
+<div class="form-group">
+  <label for="tenka-problem-id">TenkaCloud problem ID</label>
+  <input id="tenka-problem-id" class="form-control" name="connection_info" value="{{ challenge.connection_info | default('', true) }}" required pattern="[a-z0-9][a-z0-9-]{0,127}">
+</div>
+{% endblock %}

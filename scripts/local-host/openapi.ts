@@ -80,6 +80,12 @@ export function localOpenApi(role: "admin" | "participant") {
               object(
                 {
                   name: string,
+                  scoringAuthority: {
+                    type: "string",
+                    enum: ["ctfd"],
+                    description:
+                      "Optional, fixed at creation. Omission uses native host scoring. CTFd requires single-verdict Docker exercises.",
+                  },
                   teams: {
                     ...array(
                       object(
@@ -177,6 +183,28 @@ export function localOpenApi(role: "admin" | "participant") {
               "Authorize with the team's teamLoginKey. There is no separate participant login or join mutation. Poll problems[].containerSession.status for on-demand Docker readiness: stopped, starting, running, stopping or error. Start a stopped environment through container/start and wait for running before submitting. Host session tokens are not team credentials.",
           },
         },
+        "/portal/me/problems/{problemId}": {
+          get: {
+            ...operation("readProblem", "Read one problem's competition state", 200, undefined, [
+              problemId,
+            ]),
+            description:
+              "The GET /portal/me shape with problems[] limited to this problem. Only this problem's exercise links are issued, so polling one environment does not issue handoffs for the team's other running environments. Unknown problems return 404.",
+          },
+        },
+        "/portal/me/problems/{problemId}/state": {
+          get: {
+            ...operation(
+              "readProblemState",
+              "Read one problem's state without links",
+              200,
+              undefined,
+              [problemId],
+            ),
+            description:
+              "The GET /portal/me/problems/{problemId} shape with stackOutputs always empty: no exercise link or handoff is issued. Use it for readiness checks before container actions or flag evaluation. Unknown problems return 404.",
+          },
+        },
         "/portal/me/problems/{problemId}/container/start": {
           post: {
             ...operation(
@@ -197,6 +225,24 @@ export function localOpenApi(role: "admin" | "participant") {
         },
         "/portal/me/score-events": {
           get: operation("teamResults", "Read this team's score events"),
+        },
+        "/portal/me/problems/{problemId}/evaluate": {
+          post: {
+            ...operation(
+              "evaluateFlag",
+              "Evaluate for an external scoreboard without saving host scores",
+              200,
+              {
+                ...object({ submission: { ...string, format: "password", writeOnly: true } }, [
+                  "submission",
+                ]),
+                additionalProperties: false,
+              },
+              [problemId],
+            ),
+            description:
+              "Only private direct loopback connections to explicitly CTFd-scored events permit this endpoint. Public/proxy listeners and forwarded requests are rejected. Native-scored events reject it before verifier calls. Only the authenticated team's running single-flag Docker verifier is available. Event and progression gates apply. Returns {correct:boolean}; points, hints, score events and snapshots are not written. No target selectors or query parameters are accepted.",
+          },
         },
         "/portal/me/submit-flag": {
           post: {

@@ -1206,7 +1206,10 @@
     "env_status_FAILED": "失敗",
     "env_status_STOPPED": "停止中",
     "env_status_DELETING": "撤収中",
-    "env_status_DELETED": "撤収済み"
+    "env_status_DELETED": "撤収済み",
+    "ctfd_scoring_detail": "採点：CTFd。解答・ヒント・順位は CTFd で確認してください。",
+    "ctfd_scoring": "この大会を CTFd で採点する",
+    "ctfd_scoring_description": "単一判定の Docker 問題のみ。解答と前提問題は CTFd で設定します。採点主体は大会作成後に変更できません。 CTFd は同じマシンで稼働し、非公開 API に直接接続する必要があります。"
   },
   "cloud_connections": {
     "add": "連携を追加",
@@ -1222,5 +1225,7 @@
     "feature_unavailable": "この環境では、このクラウドの認証情報登録が有効になっていません。提供状況は環境の管理者に確認してください。",
     "sakura": "さくらのクラウド"
   },
-  "problem_authors": { "label": "作者" }
+  "problem_authors": {
+    "label": "作者"
+  }
 }
