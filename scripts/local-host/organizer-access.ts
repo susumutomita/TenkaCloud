@@ -1,4 +1,5 @@
 import { HostError } from "./model";
+import type { OrganizerPrincipal } from "./organizer-principal";
 
 /** Server-owned role on an issued host session; browser JWT claims are never authority. */
 export type OrganizerRole = "Admin" | "Operator" | "Viewer";
@@ -11,9 +12,9 @@ const permissions: Record<OrganizerRole, readonly OrganizerPermission[]> = {
 };
 
 export function requireOrganizerPermission(
-  role: OrganizerRole,
+  principal: OrganizerPrincipal,
   permission: OrganizerPermission,
 ): void {
-  if (!permissions[role].includes(permission))
+  if (!permissions[principal.role]?.includes(permission))
     throw new HostError(403, "Organizer role does not permit this operation.");
 }

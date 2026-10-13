@@ -453,21 +453,24 @@ cleanup, or a verified cloud migration procedure. The new local entrypoint does 
 adopt, delete or reset those AWS resources. It reports unsupported legacy jobs
 without losing their resource references or tournament results.
 
-## Portable HTTP boundary (stage 1)
+## Portable application boundary (stages 1–2)
 
 The shared [Node HTTP transport](../scripts/lib/node-http.ts) owns listener startup,
 timeouts and shutdown. The [API contract](../scripts/lib/hosting-api.ts) and
 [local application port](../scripts/local-host/http-application.ts) separate that
-transport from the concrete hosting service. Local hosting still uses its existing
-Bun authentication, SQLite, two origins, job recovery, timers and terminal transport.
+transport from the concrete hosting service. Local hosting retains its existing
+key authentication, SQLite, two origins, job recovery, timers and terminal transport.
+The legacy organizer password provider retains Bun Argon2id and its encoded hashes.
 This extraction does not migrate events or change API paths or stored data.
 
 ```mermaid
 flowchart TD
   Entry[HTTP entry] --> Transport[Shared Node HTTP transport]
   Transport --> API[Hosting API port]
-  API --> Local[Current Local HostingService]
-  Local --> SQLite[Persistent SQLite]
+  API --> Local[Shared hosting domain]
+  Local --> SQLitePort[Local database port]
+  SQLitePort --> SQLite[Bun or Node SQLite adapter]
+  Local --> Passwords[Password port: existing Bun adapter]
   Local --> LocalRuntime[Local jobs, timers and exercise runtime]
   Local --> Terminal[Separate participant WebSocket transport]
   API -. Planned .-> Cloud[Cloud API application]
@@ -487,9 +490,45 @@ until an explicit compatible migration is available.
 currently require a Node HTTP server listening on `AWS_LAMBDA_HTTP_ENDPOINT`, Node 24
 on arm64, a zip package and startup within 10 seconds. The transport includes an explicit
 endpoint parser, tested under Node 24; the local host keeps its two listener settings
-and does not read that variable. Full host startup still imports `bun:sqlite`, and legacy
-organizer password operations still use `Bun.password`. The transport test is not a
-Node-compatible host release or an AWS deployment rehearsal.
+and does not read that variable. Node uses the built-in `node:sqlite` adapter; legacy
+organizer password operations still use the unchanged Bun password adapter. Neither
+the Node rehearsal nor the transport test establishes AWS execution.
+
+### Run the same local application under Node 24
+
+Build the existing UI and the development Node entry, then run from the repository root:
+
+```sh
+bun run build:host
+bun run scripts/local-host/build-node.ts
+node .tenkacloud/node-host/index.mjs --data /path/to/private-host-data
+```
+
+The Node entry uses the same application bootstrap, HTTP/API/domain code and exercise
+engine. It requires the installed repository dependencies and checked-out catalog;
+it is not a standalone binary or a Web Functions deployment package. The entry uses the
+built UI (`--no-build`); Bun remains the build tool. Node's SQLite API currently emits an
+experimental warning. The ordinary `make local` controller still uses Bun.
+
+Current startup uses the existing organizer-key policy on both runtimes. Historical
+password rows remain opaque and unchanged. Legacy password/SAML account-mode callers
+must retain the reviewed Bun provider; no Node password verifier or hash conversion is
+introduced. Providers are passed from the local composition facade, not selected from
+request data. The domain's password dependency is required rather than a hidden runtime
+fallback. Existing keys, sessions and event state is tested through Bun → Node → Bun, including
+invalid tokens, role-separated routes and restart.
+
+The portable-domain gate follows runtime imports from the domain and shared API ports.
+It rejects direct or helper imports of Bun/AWS SDKs, Bun globals, computed module loads,
+and casts that manufacture an organizer principal outside the durable authentication
+adapter. The original host gate still checks all type edges against retired backends.
+Authorization accepts the opaque principal produced after the existing authentication checks;
+raw role/identity fields and revocation metadata do not carry that type capability.
+This is a compile-time boundary backed by the existing runtime authentication checks,
+not a replacement for signature verification in a future Cloud authentication adapter.
+Negative fixture edits prove these restrictions fail, rather than relying on instructions
+in an agent prompt. The remaining Local SQL/timer dependencies are not an external-store
+or durable-worker implementation; Cloud API/storage/jobs/runtime adapters remain future work.
 
 Web Functions can scale to zero and serve concurrent requests. Their process memory,
 local files and timers cannot be the authoritative cloud state. The initial cloud design

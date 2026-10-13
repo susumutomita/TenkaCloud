@@ -1,7 +1,7 @@
 import type { ProbeFn } from "../lib/http-probe-client";
 import { resolveEndpoints } from "../lib/resolve-endpoints";
 import { runUptimeFlatKind } from "../lib/uptime-flat";
-import { type StackUnit, type UptimeStackDefinition, unitOf } from "./cloudformation-engine";
+import { type StackUnit, type UptimeStackDefinition, unitOf } from "./cloud-runtime-contract";
 import {
   gate,
   HostError,

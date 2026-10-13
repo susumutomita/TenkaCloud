@@ -12,6 +12,11 @@ import {
   type UptimeState,
 } from "./model";
 import type { OrganizerRole } from "./organizer-access";
+import type {
+  OrganizerAuthMethod,
+  OrganizerIdentityRecord,
+  OrganizerPrincipal,
+} from "./organizer-principal";
 export const digest = (value: string): string => createHash("sha256").update(value).digest("hex");
 
 interface BodyRow {
@@ -25,7 +30,6 @@ interface LocalOrganizerKey {
 
 export type { OrganizerRole } from "./organizer-access";
 export type OrganizerStatus = "active" | "disabled";
-export type OrganizerAuthMethod = "host-key" | "local-password" | "saml";
 export interface OrganizerUser {
   id: string;
   username: string;
@@ -43,12 +47,13 @@ export interface OrganizerIdentity {
   subject: string;
   userId: string;
 }
-export interface OrganizerPrincipal {
-  userId: string | null;
-  identityId: string | null;
-  role: OrganizerRole;
-  authMethod: OrganizerAuthMethod;
+export type { OrganizerPrincipal } from "./organizer-principal";
+
+/** Type capability is minted here only after authenticateAdmin's existing durable checks. */
+function authenticatedPrincipal(record: OrganizerIdentityRecord): OrganizerPrincipal {
+  return record as OrganizerPrincipal;
 }
+
 /** Exclusive connection: two host processes must not independently award one submission. */
 export class HostStore {
   private readonly statements = new Map<string, SqlStatement>();
@@ -690,7 +695,12 @@ export class HostStore {
         now,
         digest(token),
       );
-      return { userId: null, identityId: null, role: "Admin", authMethod: "host-key" };
+      return authenticatedPrincipal({
+        userId: null,
+        identityId: null,
+        role: "Admin",
+        authMethod: "host-key",
+      });
     }
     const user = row.userId ? this.organizer(row.userId) : undefined;
     const identity = row.identityId ? this.identityById(row.identityId) : undefined;
@@ -706,20 +716,20 @@ export class HostStore {
       now,
       digest(token),
     );
-    return {
+    return authenticatedPrincipal({
       userId: user.id,
       identityId: identity.id,
       role: user.role,
       authMethod: row.authMethod,
-    };
+    });
   }
-  revokeSession(refresh: string): OrganizerPrincipal | undefined {
+  revokeSession(refresh: string): OrganizerIdentityRecord | undefined {
     return this.transaction(() => {
       const hash = digest(refresh);
       const principal = this.statement(`SELECT s.user_id AS userId,s.identity_id AS identityId,
         s.auth_method AS authMethod,CASE WHEN s.auth_method='host-key' THEN 'Admin' ELSE u.role END AS role
         FROM host_sessions s LEFT JOIN host_organizer_users u ON u.id=s.user_id
-        WHERE s.refresh_hash=?`).get(hash) as OrganizerPrincipal | null;
+        WHERE s.refresh_hash=?`).get(hash) as OrganizerIdentityRecord | null;
       this.statement("DELETE FROM host_sessions WHERE refresh_hash=?").run(hash);
       return principal ?? undefined;
     });

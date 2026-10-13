@@ -95,6 +95,13 @@ jobs:
         env:
           HOST_E2E_ENGINE: docker
         run: bun run test:host:browser:smoke
+      - name: Same local application under Node 24 with real Docker
+        env:
+          HOST_E2E_ENGINE: docker
+          HOST_E2E_HTTP_RUNTIME: node
+        run: |
+          bun run scripts/local-host/build-node.ts
+          bun run scripts/local-host/tests/browser-e2e.ts
       - name: Full browser rehearsal (all hosting features, real Docker)
         if: github.event_name == 'workflow_dispatch'
         env:

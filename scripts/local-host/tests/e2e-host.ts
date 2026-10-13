@@ -4,7 +4,6 @@
  * Docker engine; the default is the explicitly test-only exercise adapter, and the harness
  * reports which one ran. Prints public URLs only; the organizer key uses a private parent pipe.
  */
-import { Database } from "bun:sqlite";
 import { existsSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,6 +11,7 @@ import { stop } from "esbuild";
 import { CompetitionEngine } from "../competition-engine";
 import { DockerHostingEngine } from "../docker-engine";
 import { parseGatewayPorts } from "../gateway-ports";
+import { localDatabaseOpener, openLocalDatabase } from "../local-database";
 import { type RunningLocalHost, startLocalHost } from "../server";
 import { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
@@ -24,7 +24,7 @@ export async function cleanOwnedDockerJobs(
 ): Promise<boolean> {
   const databasePath = join(data, "hosting.sqlite");
   if (!existsSync(databasePath)) throw new Error(`Fixture database is missing: ${databasePath}`);
-  const database = new Database(databasePath, { strict: true });
+  const database = await openLocalDatabase(databasePath);
   let store: HostStore | undefined;
   let clean = true;
   try {
@@ -49,13 +49,19 @@ export async function cleanOwnedDockerJobs(
   return clean;
 }
 
+function fixtureRepositoryRoot(): string {
+  return typeof Bun === "undefined"
+    ? process.cwd()
+    : fileURLToPath(new URL("../../../", import.meta.url));
+}
+
 async function main(): Promise<void> {
-  const root = fileURLToPath(new URL("../../../", import.meta.url));
+  const root = fixtureRepositoryRoot();
   let engineKind: "coordination" | "docker" | "fixture" = "fixture";
   if (process.env.HOST_E2E_ENGINE === "coordination") engineKind = "coordination";
   else if (process.env.HOST_E2E_ENGINE === "docker") engineKind = "docker";
   const data = createTemporaryDirectory(root, "tenkacloud-host-e2e-");
-  const fixture = new ExerciseFixture((path) => new Database(path, { strict: true }));
+  const fixture = new ExerciseFixture(await localDatabaseOpener());
   let host: RunningLocalHost | undefined;
   let requestStop: () => void = () => undefined;
   const stopped = new Promise<void>((accept) => {

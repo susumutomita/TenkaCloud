@@ -47,6 +47,8 @@
         "scripts/local-host/main.ts",
         "scripts/local-host/bench/host-entry.ts",
         "scripts/local-host/build-main.ts",
+        "scripts/local-host/build-node.ts",
+        "scripts/local-host/node-main.ts",
         "scripts/local-host/tests/run.ts",
         "scripts/local-host/tests/docker-smoke.ts",
         "scripts/local-host/tests/e2e-host.ts",

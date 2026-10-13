@@ -42,7 +42,9 @@ function chromiumPath(): string | undefined {
 
 async function startHost(): Promise<{ info: HostInfo; child: PrivateKeyProcess }> {
   const processHandle = spawnPrivateKeyProcess(
-    [process.execPath, "run", "scripts/local-host/tests/e2e-host.ts"],
+    process.env.HOST_E2E_HTTP_RUNTIME === "node"
+      ? ["node", join(root, ".tenkacloud/node-host/browser.mjs")]
+      : [process.execPath, "run", "scripts/local-host/tests/e2e-host.ts"],
     {
       cwd: root,
       env: { ...process.env, HOST_E2E_KEY_FD: "3" },
