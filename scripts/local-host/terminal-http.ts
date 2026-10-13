@@ -68,10 +68,12 @@ function upgradeRequest(
   return { problemId: match[1] ?? "", ticket: tickets[0] ?? "" };
 }
 
+export type TerminalTransportService = Pick<HostTerminals, "redeem" | "attach" | "closeAll">;
+
 /** Install only on the participant listener. Exact Origin, Host and one-use ticket are mandatory. */
 export function installTerminalTransport(
   server: Server,
-  terminals: HostTerminals,
+  terminals: TerminalTransportService,
   origin: () => string,
 ): { close(): void } {
   const wss = new WebSocketServer({

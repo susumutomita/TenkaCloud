@@ -12,6 +12,12 @@ description: >-
 runs:
   using: composite
   steps:
+    - name: Setup Node
+      # actions/setup-node v4; matches the portable HTTP runtime and mise.toml.
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: "24"
+
     - name: Setup Bun
       # oven-sh/setup-bun v2.0.2
       uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
