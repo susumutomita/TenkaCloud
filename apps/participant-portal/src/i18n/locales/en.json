@@ -686,5 +686,20 @@
     "role_transfer": "Transfer",
     "role_synthesis": "Synthesis"
   },
-  "problem_authors": { "label": "Authors" }
+  "problem_authors": {
+    "label": "Authors"
+  },
+  "study": {
+    "self_report": "Self-report",
+    "assurance": "Local checks are modifiable self-reports. They are not organizer-verified execution or demonstrated skills.",
+    "answer_assurance": "The organizer checks the answer against the pinned edition.",
+    "edition": "Problem edition",
+    "artifact": "Download problem data",
+    "answer": "Answer",
+    "submit": "Submit",
+    "accepted": "Accepted",
+    "wrong": "The answer or check report did not meet the conditions.",
+    "check": "Check result: {name}",
+    "error": "Submission failed. Retry retains the same operation key."
+  }
 }

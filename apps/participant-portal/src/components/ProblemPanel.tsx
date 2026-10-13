@@ -42,6 +42,7 @@ import {
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 import { ProblemLifecyclePanel } from "./ProblemPanelLifecycle";
 import { ProblemTerminalPanel } from "./ProblemTerminalPanel";
+import { StudySubmissionPanel } from "./StudySubmissionPanel";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   PENDING: "pending",
@@ -493,6 +494,14 @@ export function ProblemPanel({
                 />
               </ExpandableSection>
             )}
+            <StudySubmissionPanel
+              problemId={problem.problemId}
+              submission={problem.submission}
+              instructions={problem.instructions}
+              apiBaseUrl={apiBaseUrl}
+              sessionToken={sessionToken}
+              onScored={onScored}
+            />
             {flagScoring && (
               <FlagSubmissionPanel
                 apiBaseUrl={apiBaseUrl}

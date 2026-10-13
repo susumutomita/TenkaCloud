@@ -28,7 +28,12 @@ interface RuntimeProviderView {
 }
 
 export function problemProvider(problem: RuntimeProviderView): string {
-  if (problem.runtimeKind === "coordination" || problem.coordination === true) return "native";
+  if (
+    problem.runtimeKind === "coordination" ||
+    problem.runtimeKind === "submission" ||
+    problem.coordination === true
+  )
+    return "native";
   return typeof problem.provider === "string" && problem.provider !== "" ? problem.provider : "aws";
 }
 

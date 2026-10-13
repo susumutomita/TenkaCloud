@@ -16,6 +16,7 @@ export function parseOptions(
     allowPositionals: false,
     options: {
       data: { type: "string" },
+      "submission-catalog": { type: "string" },
       lan: { type: "string" },
       "unsafe-lan": { type: "boolean", default: false },
       "admin-port": { type: "string", default: "5174" },
@@ -76,6 +77,9 @@ export function parseOptions(
     );
   return {
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
+    ...(values["submission-catalog"]
+      ? { submissionCatalogPath: resolve(values["submission-catalog"]) }
+      : {}),
     containerLimits: {
       perTeam: positiveLimit(values["max-active-per-team"], 40),
       global: positiveLimit(values["max-active-environments"], 40),

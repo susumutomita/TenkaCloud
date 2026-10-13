@@ -22,6 +22,127 @@ native problems run on the Bun/SQLite host.
 Problem statements, verifiers, hints and scoring belong to the pinned `problems/`
 catalog. Adapter tests do not establish real Docker playability of every exercise.
 
+### Fixed-edition study submissions
+
+An organizer can add an explicit, private JSON catalog with
+`--submission-catalog <file>` on the Bun or Node 24 entry. It is loaded once at
+startup and its definitions are copied into each event. These problems prepare
+logical submission slots rather than deploy exercise containers. Existing events,
+team keys, schedules, scoring locks, SQLite transactions, retry receipts and
+leaderboards remain authoritative. CTFd's existing single-verdict Docker bridge
+stays separate; submission-only events use the native host scorer and cannot
+enable progression gates.
+
+```mermaid
+flowchart LR
+  Catalog[Private organizer catalog] --> Host[Node HTTP API and pinned event]
+  Host -->|Authenticated fixed problem data| PC[Participant's own environment]
+  PC -->|Outbound answer or self-report| Host
+  Host --> State[SQLite receipts, score history and leaderboard]
+```
+
+The catalog is an array of entries with `problemId`, explicit `version`, `name`,
+`instructions`, `artifact` (a JSON document containing the participant files),
+fixed integer `points` (1–10000), and `judge`. For an answer use
+`{"kind":"answer","answer":"the expected answer"}`. For a repair report use
+`{"kind":"self-report","checks":["normal-functionality","security"]}`; additional
+named boolean checks are allowed. Keep this organizer file and host filesystem
+outside participant access. Never put answers, organizer keys, personal files or
+credentials in `artifact`. Bump `version` when changing the private grading rule.
+The public edition hashes the public problem content, version and scoring policy;
+it deliberately excludes the answer digest so it cannot serve as an offline
+answer oracle. Each event retains its original private grading definition across
+catalog changes and process restarts.
+
+Create an event, issue its separate team keys, prepare it with the existing Deploy
+action, and set a start and deadline. The participant panel releases the problem
+data after the start, displays the fixed edition, and submits through the existing
+`POST /portal/me/submit-flag` route. Its `flag` string contains either
+`{"edition":"<displayed digest>","answer":"<answer>"}` or
+`{"edition":"<displayed digest>","checks":{"normal-functionality":true,"security":true}}`.
+Authentication determines the event and team; do not send those identities in the
+body. Reuse an `Idempotency-Key` for the identical retry. Previously acknowledged
+receipts remain readable after the cutoff, without a new award. New submissions
+must pass the host's current window, lock and eligibility checks. Wrong answers
+cost zero points; each problem awards its fixed points at most once. Ties share a
+rank rather than using PC speed or request milliseconds.
+
+Answers are checked by the organizer. Repair results are **modifiable self-reports**,
+not organizer-verified execution or demonstrated skill evidence. The panel, API
+response and score history label this distinction; these catalogs do not generate
+skill catalogs. Honest checks must preserve normal functionality as well as reject
+the attack. The synthetic offline fixture tests that blocking everything fails
+the normal-functionality check. A participant can falsify the report or its checks;
+this mode assumes a trusted learning community and does not prevent that cheating.
+The organizer never fetches a submitted URL, runs submitted code, or contacts a
+participant machine. Use the existing exercise isolation rules on each participant
+machine: no privileged containers, Docker socket exposure, personal home or
+credential mounts, or shared LAN routes.
+
+The native Node/SQLite test covers a separate organizer and participant process,
+six logical teams, fixed editions, concurrent awards, replay, disconnect/restart,
+wrong inputs and cutoff handling. It is not a six-device or real hosting rehearsal.
+The initial SS schedule is every other Thursday, 19:00–20:00 JST; the first date
+and actual organizer hosting/public route still need a decision. This implementation
+requires no paid service or card signup and makes no hosting, VPN, billing or AWS
+configuration changes. It does not deploy Lambda Web Functions or connect this new
+scorer to Cloud Turso/DynamoDB handlers.
+
+The Node-compatible, filesystem-free catalog parser, judge and participant-safe
+projection live in `scripts/lib/submission-grader.ts`. The local adapter retains
+ownership of authentication, event gates, transactions and receipts. Extracting
+the judge does not enable Cloud submissions or change the existing Cloud flag
+scorer.
+
+#### Cloud connection boundary
+
+The planned Cloud connection reuses the existing private, content-addressed S3
+execution catalog, participant authentication and deployments repositories. It
+needs no new database table or migration: pinned grading definitions belong in
+the private execution catalog, while submission state and bounded retry receipts
+can use existing deployment JSON/attributes. Logical preparation must create
+native submission slots without provisioning exercise resources.
+
+```mermaid
+flowchart LR
+  Private[Private pinned execution catalog] --> Judge[Shared submission judge]
+  Route[Authenticated participant API] --> Gate[Current event and team checks]
+  Gate --> Judge
+  Judge --> Commit[Atomic score, history and receipt commit]
+  Commit --> SQL[Existing Turso transaction]
+  Commit --> DDB[Existing DynamoDB transaction]
+  SQL --> Board[Safe participant view and canonical leaderboard]
+  DDB --> Board
+```
+
+Before enabling that route, the commit must atomically verify the event's tenant,
+status, start, exclusive deadline and scoring lock, together with the deployment's
+current credential, status, pinned catalog and submission version. Reading the
+event first and conditionally updating only the deployment cannot protect a
+concurrent organizer lock or deadline change. A failed history write must roll
+back points and receipts too. Identical acknowledged retries remain readable
+after the deadline; a reused key with changed content returns a conflict. Receipts
+must not be silently evicted; a bounded store rejects new keys when full. CAS
+retries must reload authentication and gates, while provider failures remain errors.
+
+The current participant Lambda role grants Events `GetItem` and `Query` only.
+DynamoDB's transactional Event condition requires an additional
+`dynamodb:ConditionCheckItem` permission on that existing Events table, as specified
+in the [AWS transaction IAM documentation](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis-iam.html).
+This permission and deployment are outside the current authorization and have
+not been changed. An independent review found no equivalent atomic guard using
+the current role. Cloud enablement therefore remains blocked on that narrow
+permission decision as well as the unimplemented producer, logical preparation,
+atomic repository methods, participant projections and route wiring. A Turso-only
+implementation would not establish DynamoDB parity.
+
+Cloud validation must cover both backends: exact deadline, competing submissions,
+lock/credential changes during commit, history-write failure, restart/replay,
+fixed-edition mismatch, private-data redaction and blanket-denial reports. A
+self-report completion must never become `flagSubmitted` or Skill Evidence, even
+if an unrelated skill catalog declares the same problem ID. Code tests and mocks
+do not establish actual Cloud operation; no AWS deployment has been performed.
+
 ### Forensic Casebook
 
 Select **Forensic Casebook** when creating an event, issue the team keys, deploy, and

@@ -19,6 +19,12 @@ import {
 } from "./model";
 import type { ParticipantAwsAccess } from "./participant-aws-access";
 import { projectedScore } from "./score";
+import {
+  submissionCatalog,
+  submissionDefinition,
+  submissionProblemView,
+  submitStudy,
+} from "./submission-runtime";
 
 function problemKinds(event: HostedEvent): ReadonlyMap<string, DefinitionKind> {
   return new Map(
@@ -43,6 +49,7 @@ export class CompetitionEngine extends DockerHostingEngine {
   }
 
   private readonly battles: Problem[];
+  private readonly submissions: readonly Problem[];
   private readonly loader: LocalPluginLoader;
   constructor(
     root: string,
@@ -52,9 +59,18 @@ export class CompetitionEngine extends DockerHostingEngine {
     /** Explicit adapter seam for cloud contracts and legacy-state rehearsals; never enabled by make local. */
     private readonly cloud?: CloudFormationEngine,
     networkPool?: string,
+    submissionCatalogPath?: string,
   ) {
     super(root, dataDirectory, networkPool);
     this.battles = coordinationCatalog(root);
+    this.submissions = submissionCatalog(submissionCatalogPath);
+    const ids = [
+      ...(dockerProblems ? super.catalog() : []),
+      ...this.battles,
+      ...(cloud?.catalog() ?? []),
+      ...this.submissions,
+    ].map((problem) => problem.problemId);
+    if (new Set(ids).size !== ids.length) throw new Error("Duplicate problem catalog identity.");
     this.loader = new LocalPluginLoader(dataDirectory);
   }
   disruptionAdapter() {
@@ -64,6 +80,7 @@ export class CompetitionEngine extends DockerHostingEngine {
     return [
       ...(this.dockerProblems ? super.catalog() : []),
       ...this.battles,
+      ...this.submissions,
       ...(this.cloud?.catalog() ?? []),
     ];
   }
@@ -87,6 +104,11 @@ export class CompetitionEngine extends DockerHostingEngine {
     const kind = definitionKind(job.definition);
     if (kind === "compose") return super.start(job, retain);
     if (kind === "cloudformation") return this.aws().start(job, retain);
+    if (kind === "submission") {
+      submissionDefinition(job);
+      retain(JSON.stringify({ kind, eventId: job.eventId, problemId: job.problemId }));
+      return;
+    }
     this.loader.load(job.definition);
     retain(
       JSON.stringify({ kind: "coordination", eventId: job.eventId, problemId: job.problemId }),
@@ -96,6 +118,10 @@ export class CompetitionEngine extends DockerHostingEngine {
     const kind = definitionKind(job.definition);
     if (kind === "compose") return super.recover(job);
     if (kind === "cloudformation") return this.aws().recover(job);
+    if (kind === "submission") {
+      submissionDefinition(job);
+      return;
+    }
     this.loader.load(job.definition);
   }
   override async pause(job: Job): Promise<void> {
@@ -107,6 +133,10 @@ export class CompetitionEngine extends DockerHostingEngine {
     const kind = definitionKind(job.definition);
     if (kind === "compose") return super.resume(job);
     if (kind === "cloudformation") return this.aws().resume(job);
+    if (kind === "submission") {
+      submissionDefinition(job);
+      return;
+    }
     this.loader.load(job.definition);
   }
   override async stop(job: Job): Promise<void> {
@@ -164,11 +194,19 @@ export class CompetitionEngine extends DockerHostingEngine {
             .at(-1),
         );
       });
+    const submissions = context.event.problems
+      .filter((problem) => kinds.get(problem.problemId) === "submission")
+      .map((problem) => submissionProblemView(problem, context));
     const cloud = this.only(context, kinds, "cloudformation");
     const stacks = cloud.event.problems.length ? await this.aws().view(cloud) : { problems: [] };
     return {
       ...base,
-      problems: [...(base.problems as unknown[]), ...battles, ...(stacks.problems as unknown[])],
+      problems: [
+        ...(base.problems as unknown[]),
+        ...battles,
+        ...submissions,
+        ...(stacks.problems as unknown[]),
+      ],
     };
   }
   /**
@@ -182,11 +220,20 @@ export class CompetitionEngine extends DockerHostingEngine {
   ): EngineResult {
     const kept = context.team.scoreEvents.filter((event) => {
       const kind = kinds.get(event.problemId);
-      return event.source === "gate_bonus" || kind === "coordination" || kind === "cloudformation";
+      return (
+        event.source === "gate_bonus" ||
+        kind === "coordination" ||
+        kind === "cloudformation" ||
+        kind === "submission"
+      );
     });
     const cloudSolves = new Set(
       kept
-        .filter((event) => kinds.get(event.problemId) === "cloudformation" && isSolve(event))
+        .filter(
+          (event) =>
+            ["cloudformation", "submission"].includes(kinds.get(event.problemId) ?? "") &&
+            isSolve(event),
+        )
         .map((event) => event.problemId),
     );
     const scoreEvents = [...result.scoreEvents, ...kept].sort((a, b) =>
@@ -201,6 +248,7 @@ export class CompetitionEngine extends DockerHostingEngine {
   }
   override async submit(context: Context, body: Record<string, unknown>): Promise<EngineResult> {
     const kinds = problemKinds(context.event);
+    if (kinds.get(String(body.problemId)) === "submission") return submitStudy(context, body);
     if (kinds.get(String(body.problemId)) === "cloudformation")
       return this.aws().submit(context, body);
     return this.combined(
@@ -211,6 +259,8 @@ export class CompetitionEngine extends DockerHostingEngine {
   }
   override async hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
     const kinds = problemKinds(context.event);
+    if (kinds.get(problemId) === "submission")
+      throw new HostError(404, "Submission problems have no platform hints.");
     if (kinds.get(problemId) === "cloudformation")
       return this.aws().hint(context, problemId, hintId);
     return this.combined(

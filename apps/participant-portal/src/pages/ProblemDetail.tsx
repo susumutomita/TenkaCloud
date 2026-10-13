@@ -150,7 +150,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   // #550: problem.problemId から build-time catalog で metadata を引いて narrative を表示。
   // backend を経由せず Portal が metadata.json を bundle に持つ (admin-console と同じ source)。
   // catalog 不在 (= 旧 problem 等) は undefined。
-  const metadata = problem ? findProblemMetadata(problem.problemId) : undefined;
+  const metadata = problem
+    ? findProblemMetadata(problem.problemId, problem.runtimeKind)
+    : undefined;
   const authors = resolveProblemAuthors(problem, metadata, config);
   // ja / metadata.i18n 不在 / 該当 field 不在は元の ja narrative にフォールバック (helper 側で処理)。
   // ローカル大会 (#3226) では catalog 投影に instructions が無く、認証済み team view の

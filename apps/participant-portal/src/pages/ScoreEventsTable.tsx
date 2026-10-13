@@ -18,6 +18,7 @@ const SOURCE_KEY: Record<ScoreEventView["source"], string> = {
   // Issue #2283: Progression Gate 完了時の 1 回限り bonus。
   "gate-bonus": "score_events.source_gate_bonus",
   coordination: "score_events.source_coordination",
+  "self-report": "study.self_report",
 };
 
 const SOURCE_COLOR: Record<ScoreEventView["source"], "blue" | "green" | "grey" | "red"> = {
@@ -28,6 +29,7 @@ const SOURCE_COLOR: Record<ScoreEventView["source"], "blue" | "green" | "grey" |
   // Issue #2283: 加点系なので uptime と同じ green (= 正の得点は緑で揃える)。
   "gate-bonus": "green",
   coordination: "blue",
+  "self-report": "grey",
 };
 
 /**
@@ -40,6 +42,7 @@ const NON_UPTIME_REASON_KEY: Record<Exclude<ScoreEventView["source"], "uptime">,
   hint: "score_events.reason_hint",
   "gate-bonus": "score_events.reason_gate_bonus",
   coordination: "score_events.reason_coordination",
+  "self-report": "study.assurance",
 };
 
 function reasonKey(event: ScoreEventView): string {

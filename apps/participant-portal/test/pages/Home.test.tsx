@@ -42,7 +42,10 @@ vi.mock("../../src/components/NextActionHero", () => ({
 // 講座トラックの中身は course-track / problems 側の test が pin する。 ここで見たいのは
 // 「HomePage がどのトラックの推薦を hero に渡すか」 だけなので、 実カタログ (= import.meta.glob
 // 経由の 71 問) は挟まず、 トラック構築を stub して分岐だけを test する。
-vi.mock("../../src/data/problems", () => ({ listProblemCatalog: () => [] }));
+vi.mock("../../src/data/problems", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/data/problems")>()),
+  listProblemCatalog: () => [],
+}));
 // [Issue #2965] トラック構築だけを stub し、「どのトラックの推薦を採るか」の判定は **実物**を
 // 使う。ここを stub すると、辞書順で暗号トラックが勝つ以前のバグが test 上は再現しなくなる。
 vi.mock("../../src/data/course-track", async (importOriginal) => ({

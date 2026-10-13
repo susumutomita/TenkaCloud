@@ -32,7 +32,7 @@ import {
   recommendNext,
   toProblemProgress,
 } from "../data/course-track";
-import { listProblemCatalog } from "../data/problems";
+import { catalogForProblemViews, listProblemCatalog } from "../data/problems";
 import { useT } from "../i18n";
 import { visibleCourseCatalog } from "../lib/draft-visibility";
 import { gateProblemDisplayName } from "../lib/progression";
@@ -232,10 +232,11 @@ export function CourseTracksPage() {
     // Local hosting reuses the event/team projection, never the whole bundled catalog.
     // Assigned drafts remain visible, just as they do in the competition problem list.
     const assignedIds = new Set(problems.map((problem) => problem.problemId));
+    const compatible = catalogForProblemViews(listProblemCatalog(), problems);
     const catalog =
       config.cloudMode === "local"
-        ? visibleCourseCatalog(listProblemCatalog(), problems)
-        : listProblemCatalog().filter((entry) => assignedIds.has(entry.id));
+        ? visibleCourseCatalog(compatible, problems)
+        : compatible.filter((entry) => assignedIds.has(entry.id));
     return buildCourseTracks(catalog, toProblemProgress(problems));
   }, [config.cloudMode, view]);
 

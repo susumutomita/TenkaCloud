@@ -23,7 +23,7 @@ export type {
   ProblemDashboardSlots,
 } from "@tenkacloud/portal-contracts";
 
-import type { ProblemCatalogEntry } from "@tenkacloud/portal-contracts";
+import type { ParticipantProblemView, ProblemCatalogEntry } from "@tenkacloud/portal-contracts";
 
 const metadataModules = import.meta.glob<{ default: ProblemCatalogEntry }>(
   "../../../../problems/*/*/metadata.json",
@@ -102,8 +102,12 @@ export function listProblemCatalog(): readonly ProblemCatalogEntry[] {
   return activeCatalog;
 }
 
-/** `problemId` (= metadata.json の `id` field) で問題を引く。無ければ undefined。 */
-export function findProblemMetadata(problemId: string): ProblemCatalogEntry | undefined {
+/** Submission editions use their authenticated projection, never a stale bundled narrative. */
+export function findProblemMetadata(
+  problemId: string,
+  runtimeKind?: ParticipantProblemView["runtimeKind"],
+): ProblemCatalogEntry | undefined {
+  if (runtimeKind === "submission") return undefined;
   return activeCatalogById.get(problemId);
 }
 
@@ -194,4 +198,17 @@ export function resolveLocalizedNarrative(
     instructions: override.instructions ?? entry.instructions,
     learningGoals: override.learningGoals ?? entry.learningGoals,
   };
+}
+
+/** Keep pinned submission IDs out of unrelated bundled course/draft metadata. */
+export function catalogForProblemViews(
+  entries: readonly ProblemCatalogEntry[],
+  problems: readonly Pick<ParticipantProblemView, "problemId" | "runtimeKind">[],
+): readonly ProblemCatalogEntry[] {
+  const pinned = new Set(
+    problems
+      .filter((problem) => problem.runtimeKind === "submission")
+      .map((problem) => problem.problemId),
+  );
+  return entries.filter((entry) => !pinned.has(entry.id));
 }

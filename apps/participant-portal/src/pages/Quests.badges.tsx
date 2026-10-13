@@ -1,6 +1,6 @@
 import Badge from "@cloudscape-design/components/badge";
 import type * as React from "react";
-import type { ParticipantScoringInfo } from "../api/portal-client";
+import type { ParticipantProblemView, ParticipantScoringInfo } from "../api/portal-client";
 import { findProblemMetadata, resolveLocalizedNarrative } from "../data/problems";
 import type { LocaleCode } from "../i18n";
 import { categoryOf } from "../lib/category";
@@ -15,8 +15,12 @@ export function categoryBadge(
   problemId: string,
   scoring: ParticipantScoringInfo | undefined,
   uncategorizedLabel: string,
+  runtimeKind?: ParticipantProblemView["runtimeKind"],
 ) {
-  const cat = categoryOf(scoring, findProblemMetadata(problemId)?.category);
+  const cat = categoryOf(
+    scoring,
+    runtimeKind === "submission" ? "Challenge" : findProblemMetadata(problemId)?.category,
+  );
   if (cat === "battle") return <Badge color="red">Battle</Badge>;
   if (cat === "challenge") return <Badge color="blue">Challenge</Badge>;
   return <Badge color="grey">{uncategorizedLabel}</Badge>;
@@ -37,14 +41,23 @@ export function categoryBadge(
  * screens agree on the English name instead of the card showing the raw ja `name` while
  * the detail header shows the `i18n.en` override.
  */
-export function questCardTitle(problemId: string, locale: LocaleCode): string {
-  const metadata = findProblemMetadata(problemId);
-  if (!metadata) return problemId;
+export function questCardTitle(
+  problemId: string,
+  locale: LocaleCode,
+  serverName?: string,
+  runtimeKind?: ParticipantProblemView["runtimeKind"],
+): string {
+  const metadata = findProblemMetadata(problemId, runtimeKind);
+  if (!metadata) return serverName?.trim() || problemId;
   return resolveLocalizedNarrative(metadata, locale).name;
 }
 
-export function difficultyBadge(problemId: string, t: TFn): React.ReactElement | null {
-  const meta = findProblemMetadata(problemId);
+export function difficultyBadge(
+  problemId: string,
+  t: TFn,
+  runtimeKind?: ParticipantProblemView["runtimeKind"],
+): React.ReactElement | null {
+  const meta = findProblemMetadata(problemId, runtimeKind);
   if (!meta) return null;
   return (
     <Badge color="grey">
@@ -62,7 +75,17 @@ export function difficultyBadge(problemId: string, t: TFn): React.ReactElement |
  * `localPlayable !== false` で判定する。`undefined` は「判定していない」(AWS mode の投影は
  * `local/` を見られない) であって「起動できない」ではないので、AWS mode で全問に印が付かない。
  */
-export function awsOnlyBadge(problemId: string, t: TFn): React.ReactElement | null {
-  if (findProblemMetadata(problemId)?.localPlayable !== false) return null;
+export function awsOnlyBadge(
+  problemId: string,
+  t: TFn,
+  runtimeKind?: ParticipantProblemView["runtimeKind"],
+): React.ReactElement | null {
+  if (findProblemMetadata(problemId, runtimeKind)?.localPlayable !== false) return null;
   return <Badge color="severity-medium">{t("quests.aws_only_badge")}</Badge>;
+}
+
+export function studyReportBadge(problem: ParticipantProblemView, t: TFn) {
+  return problem.submission?.kind === "self-report" ? (
+    <Badge color="grey">{t("study.self_report")}</Badge>
+  ) : null;
 }
