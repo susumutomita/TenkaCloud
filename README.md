@@ -177,7 +177,7 @@ make lint
 make before-commit
 ```
 
-Run focused checks while developing and the complete `make before-commit` gate before committing. Real AWS and external IdP checks have a separate [event rehearsal guide](./docs/host-rehearsal.md).
+Run focused checks while developing and `make before-commit` before committing. It runs lint and the tests for the files you changed; CI runs every test. Real AWS and external IdP checks have a separate [event rehearsal guide](./docs/host-rehearsal.md).
 
 ## Vision
 
