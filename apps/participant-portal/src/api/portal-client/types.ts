@@ -68,7 +68,16 @@ export type AwsAccessOperation =
 export interface ScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus" | "coordination";
+  readonly source:
+    | "uptime"
+    | "flag"
+    | "flag-wrong"
+    | "hint"
+    | "gate-bonus"
+    | "coordination"
+    | "self-report";
+  readonly assurance?: "server-checked-answer" | "self-reported";
+  readonly edition?: string;
   readonly reason?: string;
   readonly points: number;
   readonly result: "ok" | "wrong";
@@ -90,7 +99,16 @@ export interface ScoreEventsResponse {
 export interface TeamScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus" | "coordination";
+  readonly source:
+    | "uptime"
+    | "flag"
+    | "flag-wrong"
+    | "hint"
+    | "gate-bonus"
+    | "coordination"
+    | "self-report";
+  readonly assurance?: "server-checked-answer" | "self-reported";
+  readonly edition?: string;
   readonly reason?: string;
   readonly points: number;
   readonly result: "ok" | "wrong";

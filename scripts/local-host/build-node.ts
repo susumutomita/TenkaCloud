@@ -9,6 +9,7 @@ await build({
     index: "scripts/local-host/node-main.ts",
     browser: "scripts/local-host/tests/e2e-host.ts",
     state: "scripts/local-host/tests/node-state.test-helpers.ts",
+    study: "scripts/local-host/tests/study-node.test-helpers.ts",
   },
   outdir: directory,
   outExtension: { ".js": ".mjs" },

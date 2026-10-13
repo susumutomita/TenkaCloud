@@ -24,7 +24,7 @@ export interface Problem {
   problemId: string;
   name: string;
   definition: string;
-  runtime?: "docker" | "coordination" | "cloudformation";
+  runtime?: "docker" | "coordination" | "cloudformation" | "submission";
   /** Organizer-only catalog text; never copied into a participant response. */
   organizerContent?: OrganizerProblemContent;
   skillCatalog?: import("../../packages/portal-contracts/src/skill-evidence").SkillCatalogSnapshot;
@@ -81,12 +81,12 @@ export function organizerProblemContent(metadata: {
 }
 
 /** Which runtime owns a pinned problem definition. */
-export type DefinitionKind = "compose" | "coordination" | "cloudformation";
+export type DefinitionKind = "compose" | "coordination" | "cloudformation" | "submission";
 
 export function definitionKind(definition: string): DefinitionKind {
   const { kind } = JSON.parse(definition) as { kind?: unknown };
   if (kind === undefined) return "compose";
-  if (kind === "coordination" || kind === "cloudformation") return kind;
+  if (kind === "coordination" || kind === "cloudformation" || kind === "submission") return kind;
   throw new Error(`Unknown problem definition kind: ${JSON.stringify(kind)}`);
 }
 
@@ -120,11 +120,13 @@ export interface ScoreEvent {
   occurredAt: string;
   /** The revealed hint of a `hint` event whose runtime keeps no other record of reveals. */
   hintId?: string;
+  assurance?: "server-checked-answer" | "self-reported";
+  edition?: string;
 }
 
 /** An accepted answer. A problem counts as completed once it has one. */
 export function isSolve(event: ScoreEvent): boolean {
-  return event.source === "flag" && event.result === "ok";
+  return (event.source === "flag" || event.source === "self-report") && event.result === "ok";
 }
 
 export interface Team {

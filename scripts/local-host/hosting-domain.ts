@@ -158,6 +158,7 @@ const PROVIDERS: Record<Runtime, string> = {
   docker: "docker",
   coordination: "local",
   cloudformation: "aws",
+  submission: "native",
 };
 
 function withEnglish(
@@ -202,6 +203,7 @@ function participantProblem(
   }
   if (gateKind === "scoring_not_started") {
     problem.instructions = "";
+    delete problem.submission;
     delete problem.i18n;
   }
   return problem;
@@ -388,6 +390,8 @@ export class HostingDomain {
                   points: entry.points,
                   result: entry.result,
                   occurredAt: entry.occurredAt,
+                  ...(entry.assurance ? { assurance: entry.assurance } : {}),
+                  ...(entry.edition ? { edition: entry.edition } : {}),
                   projectedTotal: timeline[index],
                 })),
               };
@@ -884,7 +888,16 @@ export class HostingDomain {
       });
     });
   }
-  private validateScoringAuthority(authority: unknown, problems: Problem[]): void {
+  private validateScoringAuthority(
+    authority: unknown,
+    problems: Problem[],
+    progressionGate?: unknown,
+  ): void {
+    if (
+      progressionGate !== undefined &&
+      problems.some((problem) => problem.runtime === "submission")
+    )
+      throw new HostError(400, "Submission-only competitions do not support progression gates.");
     if (authority === undefined) return;
     if (authority !== "ctfd") throw new HostError(400, "Invalid scoring authority.");
     if (
@@ -925,7 +938,7 @@ export class HostingDomain {
     if (new Set(problems.map((problem) => problem.problemId)).size !== problems.length)
       throw new HostError(400, "Duplicate problem.");
     const demand = this.engine.supportsOnDemand === true;
-    this.validateScoringAuthority(body.scoringAuthority, problems);
+    this.validateScoringAuthority(body.scoringAuthority, problems, body.progressionGate);
     if (body.teams.length * problems.length > (demand ? MAX_EVENT_JOBS : MAX_JOBS))
       throw new HostError(
         422,
@@ -1179,7 +1192,11 @@ export class HostingDomain {
     if (
       this.store
         .jobs(event.eventId)
-        .some((job) => job.unit !== null && definitionKind(job.definition) !== "coordination")
+        .some(
+          (job) =>
+            job.unit !== null &&
+            !["coordination", "submission"].includes(definitionKind(job.definition)),
+        )
     )
       throw new HostError(
         409,

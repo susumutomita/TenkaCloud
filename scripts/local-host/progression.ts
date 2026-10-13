@@ -56,6 +56,8 @@ export class HostProgression {
 
   /** PUT and DELETE preserve the completion ledger, including when replacing the gate problem. */
   configure(event: HostedEvent, raw: unknown, remove = false): unknown {
+    if (!remove && event.problems.some((problem) => problem.runtime === "submission"))
+      throw new HostError(400, "Submission-only competitions do not support progression gates.");
     if (!this.enabled())
       throw new HostError(409, "Progression gate is disabled.", "feature_disabled");
     if (event.status === "ARCHIVED")

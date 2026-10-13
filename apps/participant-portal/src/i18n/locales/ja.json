@@ -686,5 +686,20 @@
     "role_transfer": "別設定への転用",
     "role_synthesis": "複数週の統合"
   },
-  "problem_authors": { "label": "作者" }
+  "problem_authors": {
+    "label": "作者"
+  },
+  "study": {
+    "self_report": "自己申告",
+    "assurance": "ローカル検証結果は改ざん可能な自己申告です。主催側での実行検証や実証済みスキルではありません。",
+    "answer_assurance": "主催側が固定版の正解と照合します。",
+    "edition": "問題の固定版",
+    "artifact": "問題データをダウンロード",
+    "answer": "解答",
+    "submit": "提出",
+    "accepted": "受付済み",
+    "wrong": "解答または検証結果が条件を満たしていません。",
+    "check": "検証結果: {name}",
+    "error": "提出に失敗しました。再送には同じ操作キーを使います。"
+  }
 }

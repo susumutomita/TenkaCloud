@@ -245,7 +245,17 @@ export interface ParticipantProblemView {
   /** Native runs use their persisted run ID here for the existing Portal route. */
   readonly jobId: string;
   /** Native in-platform execution; it has no AWS account, region or external console. */
-  readonly runtimeKind?: "coordination";
+  readonly runtimeKind?: "coordination" | "submission";
+  /** Fixed organizer edition; answers and verifier configuration are never exposed. */
+  readonly submission?: {
+    readonly edition: string;
+    readonly artifact: string;
+    readonly points: number;
+    readonly solved: boolean;
+    readonly kind: "answer" | "self-report";
+    readonly assurance: "server-checked-answer" | "self-reported";
+    readonly checks?: readonly string[];
+  };
   readonly coordination?: true;
   /** Cloud coordination pointer: "default" initially, then the reset run ID. Local runs use jobId. */
   readonly coordinationRunId?: string;
@@ -441,7 +451,7 @@ export interface ParticipantTeamView {
  * backend 内部の outcome (unauthorized / no_outputs 等の非 200 系) は本契約には含めない —
  * それらは HTTP status へ map され、 body 契約はエラー応答契約 (`invalid_body` 等) に従う。
  */
-export type SubmitFlagOutcome =
+type FlagVerdict =
   /** Issue #1796: multi-flag のとき、 どの sub-flag が解けたかを示す `flagId` を含む。 */
   | { kind: "ok"; scoreDelta: number; totalScore: number; flagId?: string }
   | { kind: "already_scored"; totalScore: number }
@@ -458,6 +468,11 @@ export type SubmitFlagOutcome =
       wrongCount: number;
       message?: string;
     };
+
+export type SubmitFlagOutcome = FlagVerdict & {
+  readonly assurance?: "server-checked-answer" | "self-reported";
+  readonly edition?: string;
+};
 
 /**
  * Phase 3: Event scope の team ランキング (= Scoreboard) の 1 行 (1 team の集計)。

@@ -22,6 +22,72 @@ native problems run on the Bun/SQLite host.
 Problem statements, verifiers, hints and scoring belong to the pinned `problems/`
 catalog. Adapter tests do not establish real Docker playability of every exercise.
 
+### Fixed-edition study submissions
+
+An organizer can add an explicit, private JSON catalog with
+`--submission-catalog <file>` on the Bun or Node 24 entry. It is loaded once at
+startup and its definitions are copied into each event. These problems prepare
+logical submission slots rather than deploy exercise containers. Existing events,
+team keys, schedules, scoring locks, SQLite transactions, retry receipts and
+leaderboards remain authoritative. CTFd's existing single-verdict Docker bridge
+stays separate; submission-only events use the native host scorer and cannot
+enable progression gates.
+
+```mermaid
+flowchart LR
+  Catalog[Private organizer catalog] --> Host[Node HTTP API and pinned event]
+  Host -->|Authenticated fixed problem data| PC[Participant's own environment]
+  PC -->|Outbound answer or self-report| Host
+  Host --> State[SQLite receipts, score history and leaderboard]
+```
+
+The catalog is an array of entries with `problemId`, explicit `version`, `name`,
+`instructions`, `artifact` (a JSON document containing the participant files),
+fixed integer `points` (1–10000), and `judge`. For an answer use
+`{"kind":"answer","answer":"the expected answer"}`. For a repair report use
+`{"kind":"self-report","checks":["normal-functionality","security"]}`; additional
+named boolean checks are allowed. Keep this organizer file and host filesystem
+outside participant access. Never put answers, organizer keys, personal files or
+credentials in `artifact`. Bump `version` when changing the private grading rule.
+The public edition hashes the public problem content, version and scoring policy;
+it deliberately excludes the answer digest so it cannot serve as an offline
+answer oracle. Each event retains its original private grading definition across
+catalog changes and process restarts.
+
+Create an event, issue its separate team keys, prepare it with the existing Deploy
+action, and set a start and deadline. The participant panel releases the problem
+data after the start, displays the fixed edition, and submits through the existing
+`POST /portal/me/submit-flag` route. Its `flag` string contains either
+`{"edition":"<displayed digest>","answer":"<answer>"}` or
+`{"edition":"<displayed digest>","checks":{"normal-functionality":true,"security":true}}`.
+Authentication determines the event and team; do not send those identities in the
+body. Reuse an `Idempotency-Key` for the identical retry. Previously acknowledged
+receipts remain readable after the cutoff, without a new award. New submissions
+must pass the host's current window, lock and eligibility checks. Wrong answers
+cost zero points; each problem awards its fixed points at most once. Ties share a
+rank rather than using PC speed or request milliseconds.
+
+Answers are checked by the organizer. Repair results are **modifiable self-reports**,
+not organizer-verified execution or demonstrated skill evidence. The panel, API
+response and score history label this distinction; these catalogs do not generate
+skill catalogs. Honest checks must preserve normal functionality as well as reject
+the attack. The synthetic offline fixture tests that blocking everything fails
+the normal-functionality check. A participant can falsify the report or its checks;
+this mode assumes a trusted learning community and does not prevent that cheating.
+The organizer never fetches a submitted URL, runs submitted code, or contacts a
+participant machine. Use the existing exercise isolation rules on each participant
+machine: no privileged containers, Docker socket exposure, personal home or
+credential mounts, or shared LAN routes.
+
+The native Node/SQLite test covers a separate organizer and participant process,
+six logical teams, fixed editions, concurrent awards, replay, disconnect/restart,
+wrong inputs and cutoff handling. It is not a six-device or real hosting rehearsal.
+The initial SS schedule is every other Thursday, 19:00–20:00 JST; the first date
+and actual organizer hosting/public route still need a decision. This implementation
+requires no paid service or card signup and makes no hosting, VPN, billing or AWS
+configuration changes. It does not deploy Lambda Web Functions or connect this new
+scorer to Cloud Turso/DynamoDB handlers.
+
 ### Forensic Casebook
 
 Select **Forensic Casebook** when creating an event, issue the team keys, deploy, and
