@@ -129,7 +129,7 @@
     "@vitest/coverage-v8": "5.0.3",
     "body-parser": "2.3.0",
     "brace-expansion": "^1.1.12",
-    "dompurify": "3.4.12",
+    "dompurify": "3.4.16",
     "esbuild": "0.28.2",
     "fast-uri": "4.1.1",
     "hono": "4.13.9",
