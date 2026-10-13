@@ -179,7 +179,7 @@ make lint
 make before-commit
 ```
 
-開発中は変更に対応する検証を実施し、commit 前に `make before-commit` を通します。実 AWS・外部 IdP の確認は[大会リハーサル](./docs/host-rehearsal.md)に分けて記録します。
+開発中は変更に対応する検証を実施し、commit 前に `make before-commit` を通します。lint と、変更したファイルに関係するテストを流します。全テストは CI が流します。実 AWS・外部 IdP の確認は[大会リハーサル](./docs/host-rehearsal.md)に分けて記録します。
 
 ## ビジョン
 

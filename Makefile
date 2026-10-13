@@ -41,13 +41,15 @@ typecheck: ## Type-check every TypeScript workspace (WORKSPACE_JOBS=n for parall
 	bun run scripts/workspace/run-workspaces.ts typecheck --jobs $(WORKSPACE_JOBS)
 
 # ===== Test | テスト =====
-.PHONY: test test-coverage test-scripts
+.PHONY: test test-changed test-coverage test-scripts
 
 test: ## Run tests in every workspace | 全workspaceのテストを実行
 	bun run test
+test-changed: ## Run only the tests affected by uncommitted changes | 未commitの変更に関係するテストだけを実行
+	bun run test:changed
 test-coverage: ## Run all coverage shards sequentially | 全coverage shardを直列実行
 	bun run test:coverage
-# Fast script checks only; before-commit still runs authoring, host and workspace tests.
+# Fast script checks only; `make test` runs every suite.
 test-scripts: ## Run fast script and generated-file checks | scriptと生成物を高速検証
 	bun run test:scripts
 
@@ -77,12 +79,14 @@ dead-code: ## Fail on unused files/exports found by knip | knipで未使用コ�
 submodule-not-behind: ## Fail when the problems submodule pin moves backwards | problems pinの後退をfail
 	bun run scripts/quality/check-submodule-not-behind.ts
 
-# Pre-PR gate for the product BODY, run by the pre-commit hook.
-GATE_CHECKS := lint dead-code test
+# Pre-PR gate for the product BODY, run by the pre-commit hook. Tests cover only the changed
+# files (#3367); the required CI check `ci` runs every test.
+GATE_CHECKS := lint dead-code test-changed
 
-before-commit: $(GATE_CHECKS) ## Run lint and all tests before committing | commit前のlintと全テストを実行
+before-commit: $(GATE_CHECKS) ## Run lint, dead-code and the tests for changed files | commit前のlint・dead-code・変更範囲のテストを実行
 
-# `before-commit` は lint・dead-code・test を実行する。CI 全体の再現には ci-local を使う。
+# `before-commit` は lint・dead-code と、変更したファイルに関係するテストを実行する。全テストは
+# `make test`、CI 全体の再現には ci-local を使う。
 # (CI は audit-deps / submodule pin guard / build も走らせる)。`ci-local` は CI が走らせるものを
 # CI と同じ順で全部走らせる (Codecov upload だけ除く)。
 # Issue #2513: CI は同じ workspace 集合を 3 shard の matrix で並列に走らせる。ここでは 3 shard を

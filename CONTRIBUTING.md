@@ -36,7 +36,7 @@ The default `make help` separates hosting commands from these development comman
 - `make install`: install dependencies without lifecycle scripts
 - `make test`: run root, authoring, host and workspace tests
 - `make lint`: check Markdown, prose, formatting and typed TypeScript lint
-- `make before-commit`: run lint, dead-code checks and the complete test suite
+- `make before-commit`: run lint, dead-code checks and the tests for the changed files
 
 The catalog section also lists `make submodule-latest` (fetch and stage source),
 `make validate-problems` (validate the staged catalog pin) and `make build` (build
@@ -51,8 +51,9 @@ to apply reviewed changes between events.
 2. Create a branch, inspect the owning code and nearby tests, and implement the change.
 3. Run relevant tests, type checks, and builds. Update English and Japanese docs together.
 4. Inspect the diff and stage only intended files. A normal commit runs
-   `make before-commit`: lint, dead-code checks, and tests. Use `make ci-local`
-   when you also need the full local CI sequence, including coverage and dependency audit.
+   `make before-commit`: lint, dead-code checks, and the tests that cover the changed files.
+   The required CI check runs every test. Run `make test` for every test locally, or
+   `make ci-local` for the full local CI sequence, including coverage and dependency audit.
 5. Open a PR describing the problem, resulting behavior, verification, and material risks.
    Use a [Conventional Commit](https://www.conventionalcommits.org/) title under 70 characters.
 

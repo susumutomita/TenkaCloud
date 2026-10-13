@@ -212,7 +212,7 @@ test("the four development targets retain safe installation and the complete ver
       expect(result.stdout).toContain(`bun run ${check}`);
     if (target === "before-commit") {
       expect(result.stdout).toContain("bun run dead-code");
-      expect(result.stdout).toContain("bun run test");
+      expect(result.stdout).toContain("bun run test:changed");
     }
   }
 });
