@@ -453,7 +453,7 @@ cleanup, or a verified cloud migration procedure. The new local entrypoint does 
 adopt, delete or reset those AWS resources. It reports unsupported legacy jobs
 without losing their resource references or tournament results.
 
-## Portable application boundary (stages 1–3)
+## Portable application boundary (stages 1–4)
 
 The shared [Node HTTP transport](../scripts/lib/node-http.ts) owns listener startup,
 timeouts and shutdown. The [API contract](../scripts/lib/hosting-api.ts) and
@@ -488,6 +488,16 @@ options and projections. Each adapter keeps its own request and response types;
 this does not convert records, migrate data or connect Local to an external DB.
 Neither adapter caches query responses or substitutes an empty result for a
 provider failure.
+
+Scoring lock/unlock now consume a shared asynchronous
+[command port and status decision](../packages/portal-contracts/src/scoring-lock-command.ts).
+Local completes its existing synchronous transaction (settlement, pause accounting
+and event save) before returning the command Promise. Cloud keeps its existing
+conditional repository mutation and only classifies a conflict afterward. Route
+permissions, response DTOs, timestamps and backend-specific idempotency remain
+unchanged. This command does not add retries, migrate data or make a synchronous
+SQLite transaction accept an asynchronous callback. Other writes and durable job
+adapters are still separate.
 
 The dotted connections are future work. Cloud hosting continues to use the existing
 Lambda Event Function handlers and API Gateway authentication. The local API contract

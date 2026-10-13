@@ -1,3 +1,7 @@
+import {
+  type ScoringLockCommandPort,
+  scoringLockDecision,
+} from "../../../../../packages/portal-contracts/src/scoring-lock-command.js";
 import type { EventRecord } from "../../control-data/events-repository.js";
 import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 
@@ -14,7 +18,56 @@ export type LockScoringOutcome =
   | { kind: "already"; scoringLocked: boolean }
   | { kind: "ok"; scoringLocked: boolean; scoringLockedAt?: string };
 
-const LOCKABLE_STATUSES = new Set(["READY", "ENDED"]);
+type ScoringCommandRequest =
+  | {
+      readonly tenantId: string;
+      readonly eventId: string;
+      readonly locked: true;
+      readonly lockedBy: string;
+      readonly nowMs: number;
+    }
+  | {
+      readonly tenantId: string;
+      readonly eventId: string;
+      readonly locked: false;
+      readonly nowMs: number;
+    };
+
+export function createCloudScoringCommands(
+  shared: EventSharedResources,
+): ScoringLockCommandPort<ScoringCommandRequest, LockScoringOutcome> {
+  return {
+    setLock: (request) =>
+      request.locked
+        ? applyLock(shared, request.tenantId, request.eventId, request.lockedBy, request.nowMs)
+        : applyUnlock(shared, request.tenantId, request.eventId, request.nowMs),
+  };
+}
+
+export function lockScoring(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  lockedBy: string,
+  nowMs: number,
+): Promise<LockScoringOutcome> {
+  return createCloudScoringCommands(shared).setLock({
+    tenantId,
+    eventId,
+    locked: true,
+    lockedBy,
+    nowMs,
+  });
+}
+
+export function unlockScoring(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  nowMs: number,
+): Promise<LockScoringOutcome> {
+  return createCloudScoringCommands(shared).setLock({ tenantId, eventId, locked: false, nowMs });
+}
 
 /**
  * #558: Event の採点 lock を true に切り替える。
@@ -34,7 +87,7 @@ const LOCKABLE_STATUSES = new Set(["READY", "ENDED"]);
  * `lockScoring(tenantId, eventId, by, at)` に移設。 CCF catch + probe Get の分岐は
  * `EventMutationOutcome` union の分岐に置き換え (HTTP ステータス対応は不変)。
  */
-export async function lockScoring(
+async function applyLock(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
@@ -60,7 +113,7 @@ export async function lockScoring(
  * idempotent: 既に unlocked なら `already` outcome を返す (= 200 OK で副作用無し)。
  * status check は lockScoring と同じ (READY / ENDED のみ)。
  */
-export async function unlockScoring(
+async function applyUnlock(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
@@ -89,8 +142,8 @@ function classifyLockConflict(
 ): LockScoringOutcome {
   if (!event) return { kind: "not_found" };
   const status = typeof event.status === "string" ? event.status : "?";
-  if (!LOCKABLE_STATUSES.has(status)) return { kind: "not_lockable", status };
   const current = event.scoringLocked === true;
-  if (current === targetLock) return { kind: "already", scoringLocked: current };
+  const decision = scoringLockDecision(status, current, targetLock);
+  if (decision === "already") return { kind: "already", scoringLocked: current };
   return { kind: "not_lockable", status };
 }
