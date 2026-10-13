@@ -453,7 +453,7 @@ cleanup, or a verified cloud migration procedure. The new local entrypoint does 
 adopt, delete or reset those AWS resources. It reports unsupported legacy jobs
 without losing their resource references or tournament results.
 
-## Portable application boundary (stages 1–4)
+## Portable application boundary (stages 1–5)
 
 The shared [Node HTTP transport](../scripts/lib/node-http.ts) owns listener startup,
 timeouts and shutdown. The [API contract](../scripts/lib/hosting-api.ts) and
@@ -498,6 +498,15 @@ permissions, response DTOs, timestamps and backend-specific idempotency remain
 unchanged. This command does not add retries, migrate data or make a synchronous
 SQLite transaction accept an asynchronous callback. Other writes and durable job
 adapters are still separate.
+
+Archive also uses a shared
+[command and allowed states](../packages/portal-contracts/src/event-archive-command.ts).
+Local retains its synchronous transaction and resource-retention checks, including
+the Native Battle exception. Cloud retains its existing conditional update with
+the same tenant and state predicates; no Local resource guard is added to Cloud.
+Duplicate archive remains a conflict. Archive changes
+only event status and existing timestamps; teams, jobs and resource references
+are retained. No retry or data migration is introduced.
 
 The dotted connections are future work. Cloud hosting continues to use the existing
 Lambda Event Function handlers and API Gateway authentication. The local API contract

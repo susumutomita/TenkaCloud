@@ -11,6 +11,7 @@ import {
   UpdateCommand,
   type UpdateCommandInput,
 } from "@aws-sdk/lib-dynamodb";
+import { ARCHIVABLE_EVENT_STATUSES } from "../../../../packages/portal-contracts/src/event-archive-command.js";
 import type { EventItem } from "../handlers/event-handler/types.js";
 import { createCursorCodec } from "../handlers/shared/cursor-codec.js";
 import {
@@ -490,9 +491,9 @@ export class DynamoDbEventsRepository implements EventsRepository {
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
           ":archived": "ARCHIVED",
-          ":draft": "DRAFT",
-          ":ended": "ENDED",
-          ":teardown": "TEARDOWN",
+          ":draft": ARCHIVABLE_EVENT_STATUSES[0],
+          ":ended": ARCHIVABLE_EVENT_STATUSES[1],
+          ":teardown": ARCHIVABLE_EVENT_STATUSES[2],
           ":now": at,
           ":tenantId": tenantId,
         },

@@ -76,6 +76,13 @@ try {
     "Existing session and event must survive the same Node host restart.",
   );
   assert.equal(result.body.name, "Node persistent event");
+  const archived = await api(`/events/${eventId}/archive`, "POST", token);
+  assert.equal(archived.status, 200);
+  assert.equal(typeof archived.body.archivedAt, "string");
+  assert.equal((await api(`/events/${eventId}/archive`, "POST", token)).status, 409);
+  const retained = await api(`/events/${eventId}`, "GET", token);
+  assert.equal(retained.body.status, "ARCHIVED");
+  assert.equal(Array.isArray(retained.body.teams) ? retained.body.teams.length : -1, 2);
 } finally {
   await host.stop();
   await fixture.close();
@@ -83,6 +90,7 @@ try {
 const state = new HostStore(openDatabase(join(directory, "hosting.sqlite")));
 try {
   assert.equal(state.teams(eventId).length, 2);
+  assert.equal(state.event(eventId).status, "ARCHIVED");
   assert.ok(state.organizerByUsername("preserved-admin")?.passwordHash.startsWith("$argon2id$"));
 } finally {
   state.close();
