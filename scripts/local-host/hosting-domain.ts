@@ -1,4 +1,8 @@
 import type { EventQueryPort } from "../../packages/portal-contracts/src/event-queries";
+import {
+  type ScoringLockCommandPort,
+  scoringLockDecision,
+} from "../../packages/portal-contracts/src/scoring-lock-command";
 import type { ApiRequest, ApiResponse } from "../lib/hosting-api";
 import type { ProbeFn } from "../lib/http-probe-client";
 import {
@@ -245,6 +249,10 @@ export class HostingDomain {
     { eventId: string; query: URLSearchParams },
     ReturnType<HostingDomain["detail"]>
   >;
+  private readonly scoringCommands: ScoringLockCommandPort<
+    { event: HostedEvent; locked: boolean },
+    ApiResponse
+  >;
   private readonly queue = new SerialQueue();
   private readonly coordination: LocalCoordination = new LocalCoordination(this);
   readonly progression: HostProgression;
@@ -283,6 +291,11 @@ export class HostingDomain {
         this.coordination.advance(event);
         return this.detail(event, query);
       },
+    };
+    this.scoringCommands = {
+      // The Promise is returned only after the synchronous SQLite transaction ends.
+      setLock: async ({ event, locked }) =>
+        this.store.transaction(() => this.lockScoring(event, locked)),
     };
     this.terminals = new HostTerminals(this);
     this.progression = new HostProgression(store, now);
@@ -1011,12 +1024,12 @@ export class HostingDomain {
       "DELETE progression-gate": () => ok(this.progression.configure(event, undefined, true)),
       "PATCH schedule": () => this.schedule(event, body()),
       "POST end": () => this.end(event),
-      "POST lock-scoring": () => this.lockScoring(event, true),
-      "DELETE lock-scoring": () => this.lockScoring(event, false),
       "POST archive": () => this.archive(event),
       "POST notifications": () => this.notify(event, body()),
     };
     const commandKey = `${request.method} ${parts.join("/")}`;
+    if (commandKey === "POST lock-scoring" || commandKey === "DELETE lock-scoring")
+      return this.scoringCommands.setLock({ event, locked: request.method === "POST" });
     if (commandKey === "POST deploy") return this.deploy(event, body(), request.token);
     if (commandKey === "DELETE ") return this.teardown(event);
     const command = commands[commandKey];
@@ -1141,9 +1154,9 @@ export class HostingDomain {
     });
   }
   private lockScoring(event: HostedEvent, locked: boolean): ApiResponse {
-    if (!["READY", "ENDED"].includes(event.status))
-      throw new HostError(409, "Event is not lockable.");
-    if (event.scoringLocked === locked)
+    const decision = scoringLockDecision(event.status, event.scoringLocked, locked);
+    if (decision === "not_lockable") throw new HostError(409, "Event is not lockable.");
+    if (decision === "already")
       return ok({ scoringLocked: event.scoringLocked, scoringLockedAt: event.scoringLockedAt });
     this.coordination.settle(event);
     this.coordination.accountUnlock(event, locked);

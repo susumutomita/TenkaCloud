@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { createClient } from "@libsql/client";
 import { describe, expect, it, vi } from "vitest";
 import type { EventRecord } from "../../lib/problem-deploy/control-data/domain/events";
 import {
@@ -7,37 +5,13 @@ import {
   getEventDetail,
 } from "../../lib/problem-deploy/handlers/event-handler/list";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
-import { makeFakeDdb } from "./control-data/control-data-write.test-helpers";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
+import { eventRuntimeFixture } from "./event-runtime.test-helpers";
 
 // Real libSQL file-mode driver and schema; network SSM/DynamoDB are disposable test adapters.
 describe.each(["dynamodb", "turso"] as const)("Cloud event query port: %s", (backend) => {
   it("keeps paging, tenant ownership, detail projection and stored records through the selected runtime", async () => {
-    const client = createClient({ url: "file::memory:" });
-    const runtime = makeTestControlDataRuntime(
-      backend === "turso"
-        ? {
-            CONTROL_DATA_BACKEND: "turso",
-            TURSO_DATABASE_URL: "libsql://fixture.invalid",
-            TURSO_AUTH_TOKEN_PARAMETER_NAME: "/fixture/token",
-          }
-        : {},
-      {
-        ssm: {
-          send: vi
-            .fn()
-            .mockResolvedValue({ Parameter: { Type: "SecureString", Value: randomUUID() } }),
-        },
-        createClient: () => client,
-      },
-    );
-    const shared = {
-      runtime,
-      ddb: makeFakeDdb(),
-      eventsTableName: "Events",
-      teamsTableName: "Teams",
-      deploymentsTableName: "Deployments",
-    } as unknown as EventSharedResources;
+    const { shared, runtime, close } = eventRuntimeFixture(backend);
     try {
       const events = await runtime.resolveEventsRepository(shared);
       const record: EventRecord = {
@@ -84,7 +58,7 @@ describe.each(["dynamodb", "turso"] as const)("Cloud event query port: %s", (bac
       expect(detail).not.toHaveProperty("scoreEventsByTeam");
       expect(await events.getEvent("tenant-a", "old")).toEqual(record);
     } finally {
-      client.close();
+      close();
     }
   });
 });
