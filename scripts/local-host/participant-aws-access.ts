@@ -1,7 +1,7 @@
 import { AssumeRoleCommand, type AssumeRoleCommandOutput } from "@aws-sdk/client-sts";
-import type { CliCredentialsView } from "@tenkacloud/portal-contracts";
 import { z } from "zod";
 import { HostError, type Job, type Team } from "./model";
+import { ParticipantAssumeRoleError, type ParticipantAwsAccess } from "./participant-aws-contract";
 
 const FEDERATION_ENDPOINT = "https://signin.aws.amazon.com/federation";
 const SESSION_SECONDS = 3600;
@@ -49,19 +49,7 @@ export interface ParticipantAwsClients {
   readonly federationFetch?: (url: string, init: RequestInit) => Promise<Response>;
 }
 
-export type ParticipantAwsAccess =
-  | { readonly kind: "console"; readonly loginUrl: string }
-  | { readonly kind: "cli"; readonly credentials: CliCredentialsView };
-
-export class ParticipantAssumeRoleError extends HostError {
-  constructor(readonly stage: "competitor" | "participant_viewer") {
-    super(
-      500,
-      "AWS access could not be issued. Ask the organizer to check the role trust.",
-      "assume_role_failed",
-    );
-  }
-}
+export type { ParticipantAwsAccess } from "./participant-aws-contract";
 
 function consoleTarget(job: Job, team: Team): ConsoleTarget {
   let raw: unknown;

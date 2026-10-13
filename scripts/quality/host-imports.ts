@@ -24,7 +24,29 @@ function moduleLiteral(node: ts.Node): ts.Node | undefined {
   if (ts.isCallExpression(node) && isModuleCall(node)) return node.arguments[0];
   return undefined;
 }
-function moduleNames(file: string): string[] {
+function typeOnlyEdge(node: ts.Node): boolean {
+  if (ts.isImportTypeNode(node)) return true;
+  if (ts.isImportDeclaration(node)) {
+    const clause = node.importClause;
+    return (
+      clause?.phaseModifier === ts.SyntaxKind.TypeKeyword ||
+      (!clause?.name &&
+        clause?.namedBindings !== undefined &&
+        ts.isNamedImports(clause.namedBindings) &&
+        clause.namedBindings.elements.every((element) => element.isTypeOnly))
+    );
+  }
+  if (ts.isExportDeclaration(node))
+    return (
+      node.isTypeOnly ||
+      (node.exportClause !== undefined &&
+        ts.isNamedExports(node.exportClause) &&
+        node.exportClause.elements.every((element) => element.isTypeOnly))
+    );
+  return false;
+}
+
+function moduleNames(file: string, runtimeOnly = false): string[] {
   const source = ts.createSourceFile(
     file,
     readFileSync(file, "utf8"),
@@ -33,6 +55,7 @@ function moduleNames(file: string): string[] {
   );
   const names = new Set<string>();
   function visit(node: ts.Node): void {
+    if (runtimeOnly && typeOnlyEdge(node)) return;
     const literal = moduleLiteral(node);
     if (literal && ts.isStringLiteral(literal)) names.add(literal.text);
     ts.forEachChild(node, visit);
@@ -40,9 +63,9 @@ function moduleNames(file: string): string[] {
   visit(source);
   return [...names];
 }
-function dependencies(file: string): string[] {
+function dependencies(file: string, runtimeOnly = false): string[] {
   const files: string[] = [];
-  for (const specifier of moduleNames(file)) {
+  for (const specifier of moduleNames(file, runtimeOnly)) {
     const imported = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule;
     if (imported) files.push(imported.resolvedFileName);
     else if (specifier.startsWith(".") || specifier.startsWith("@tenkacloud/"))
@@ -52,9 +75,10 @@ function dependencies(file: string): string[] {
 }
 
 /** Include type-only imports: moving an adapter must not leave its DTO coupled to the old backend. */
-export function hostImportClosure(
+function importClosure(
   repositoryRoot: string,
-  entries = ["scripts/local-host/main.ts"],
+  entries: string[],
+  runtimeOnly: boolean,
 ): readonly string[] {
   const root = realpathSync(repositoryRoot);
   const seen = new Set<string>();
@@ -69,9 +93,24 @@ export function hostImportClosure(
       throw new Error(`Host dependency reaches ${name}`);
     if (seen.has(name)) continue;
     seen.add(name);
-    if (/\.[cm]?tsx?$/.test(file)) pending.push(...dependencies(file));
+    if (/\.[cm]?tsx?$/.test(file)) pending.push(...dependencies(file, runtimeOnly));
   }
   return [...seen].sort(compareCodePoints);
+}
+
+export function hostImportClosure(
+  repositoryRoot: string,
+  entries = ["scripts/local-host/main.ts"],
+): readonly string[] {
+  return importClosure(repositoryRoot, entries, false);
+}
+
+/** Runtime graph only; the original host gate still follows every type edge. */
+export function hostRuntimeImportClosure(
+  repositoryRoot: string,
+  entries: string[],
+): readonly string[] {
+  return importClosure(repositoryRoot, entries, true);
 }
 
 if (import.meta.main) {

@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { hostBuildDirectory } from "./build";
 import { type ContainerLimits, DEFAULT_CONTAINER_LIMITS } from "./container-budget";
@@ -6,9 +5,11 @@ import { hasDatabaseState, persistentKey, prepareDatabase, privateDirectory } fr
 import type { GatewayPortRange } from "./gateway-ports";
 import { SurfaceGateways } from "./gateways";
 import { type HttpHost, startHttpHost } from "./http";
+import { openLocalDatabase } from "./local-database";
 import { localJobDescription, localRuntimeFailure } from "./local-runtime-report";
-import type { AccountConnection, RuntimeEngine } from "./model";
+import type { AccountConnection, RuntimeEngine, SqlDatabase } from "./model";
 import type { PublicExposure } from "./options";
+import type { OrganizerPasswords } from "./organizer-passwords";
 import { HostingService } from "./service";
 import { HostStore } from "./store";
 
@@ -47,13 +48,24 @@ export async function startLocalHost(
   settings: LocalHostSettings,
   createEngine: (dataDirectory: string, store: HostStore) => RuntimeEngine,
   announce: (message: string) => void = console.log,
+  providers: {
+    openDatabase?: (path: string) => Promise<SqlDatabase>;
+    passwords?: OrganizerPasswords;
+  } = {},
 ): Promise<RunningLocalHost> {
   const directory = privateDirectory(settings.dataDirectory);
   const databasePath = join(directory, "hosting.sqlite");
   const masterKeyPath = join(directory, "host-key");
   const masterKey = persistentKey(masterKeyPath, !hasDatabaseState(databasePath));
   prepareDatabase(databasePath);
-  const store = new HostStore(new Database(databasePath, { create: true, strict: true }));
+  const database = await (providers.openDatabase ?? openLocalDatabase)(databasePath);
+  let store: HostStore;
+  try {
+    store = new HostStore(database);
+  } catch (error) {
+    database.close();
+    throw error;
+  }
   let admin: HttpHost | undefined;
   let participant: HttpHost | undefined;
   let gateways: SurfaceGateways | undefined;
@@ -101,7 +113,15 @@ export async function startLocalHost(
   try {
     const { key: organizerKey } = store.ensureLocalOrganizerKey();
     const engine = createEngine(directory, store);
-    service = new HostingService(store, engine, masterKey);
+    service = new HostingService(
+      store,
+      engine,
+      masterKey,
+      undefined,
+      undefined,
+      undefined,
+      providers.passwords,
+    );
     service.accountConnection = settings.accountConnection;
     service.gatewayPorts = settings.gatewayPorts;
     service.containerLimits = settings.containerLimits ?? DEFAULT_CONTAINER_LIMITS;
