@@ -35,6 +35,7 @@ export interface QuestSearchMetadata {
 }
 
 export function isQuestCleared(problem: ParticipantProblemView): boolean {
+  if (problem.submission) return problem.submission.solved;
   const scoring = problem.scoring;
   if (scoring?.kind === "flag") return scoring.flagSubmitted === true;
   if (scoring?.kind === "multi-flag") {
@@ -46,7 +47,7 @@ export function isQuestCleared(problem: ParticipantProblemView): boolean {
 
 function answerStatusOf(problem: ParticipantProblemView): Exclude<QuestAnswerStatusFilter, "all"> {
   if (isQuestCleared(problem)) return "cleared";
-  if (problem.scoring?.kind === "flag") return "unsolved";
+  if (problem.runtimeKind === "submission" || problem.scoring?.kind === "flag") return "unsolved";
   if (problem.scoring?.kind === "multi-flag") {
     return problem.scoring.flags?.some((flag) => flag.solved) ? "in-progress" : "unsolved";
   }
@@ -56,6 +57,7 @@ function answerStatusOf(problem: ParticipantProblemView): Exclude<QuestAnswerSta
 function searchableText(problem: ParticipantProblemView, metadata?: QuestSearchMetadata): string {
   return [
     problem.problemId,
+    problem.name,
     metadata?.name,
     metadata?.shortDescription,
     ...(metadata?.tags ?? []),
@@ -78,10 +80,14 @@ export function filterQuestProblems(
 ): ParticipantProblemView[] {
   const normalizedQuery = filters.query.trim().toLocaleLowerCase();
   return problems.filter((problem) => {
-    const metadata = metadataByProblemId.get(problem.problemId);
+    const metadata =
+      problem.runtimeKind === "submission" ? undefined : metadataByProblemId.get(problem.problemId);
     if (
       filters.category !== "all" &&
-      categoryOf(problem.scoring, metadata?.category) !== filters.category
+      categoryOf(
+        problem.scoring,
+        problem.runtimeKind === "submission" ? "Challenge" : metadata?.category,
+      ) !== filters.category
     ) {
       return false;
     }

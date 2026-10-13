@@ -68,6 +68,12 @@ function renderMultiFlagState(scoring: ParticipantScoringInfo, t: TFn): Submissi
 export function renderSubmissionState(problem: ParticipantProblemView, t: TFn): SubmissionState {
   const deploymentState = renderDeploymentState(problem, t);
   if (deploymentState) return deploymentState;
+  if (problem.runtimeKind === "submission") {
+    if (!problem.submission?.solved)
+      return { type: "pending", label: t("quests.submission_unsolved") };
+    const report = problem.submission.kind === "self-report" ? ` (${t("study.self_report")})` : "";
+    return { type: "success", label: `${t("study.accepted")}${report}` };
+  }
   if (problem.scoring?.kind === "flag") {
     if (problem.scoring.flagSubmitted) return renderClearedState(problem.scoring.points, t);
     return { type: "pending", label: t("quests.submission_unsolved") };

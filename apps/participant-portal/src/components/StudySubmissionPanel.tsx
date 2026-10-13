@@ -4,7 +4,7 @@ import Checkbox from "@cloudscape-design/components/checkbox";
 import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { PendingOperation } from "@tenkacloud/web-kit";
+import { Markdown, PendingOperation } from "@tenkacloud/web-kit";
 import { useRef, useState } from "react";
 import {
   type ParticipantProblemView,
@@ -16,6 +16,7 @@ import { useT } from "../i18n";
 /** Uses the host's existing authenticated receipt/scoring route; retries retain their nonce. */
 interface Props {
   problemId: string;
+  instructions?: string;
   submission: ParticipantProblemView["submission"];
   apiBaseUrl: string;
   sessionToken: string;
@@ -26,6 +27,7 @@ export function StudySubmissionPanel(props: Props) {
 }
 function SubmissionForm({
   problemId,
+  instructions,
   submission,
   apiBaseUrl,
   sessionToken,
@@ -81,6 +83,7 @@ function SubmissionForm({
       <Alert type="info">
         {t(submission.kind === "self-report" ? "study.assurance" : "study.answer_assurance")}
       </Alert>
+      {instructions && <Markdown source={instructions} />}
       <FormField label={t("study.edition")}>
         <code>{submission.edition}</code>
       </FormField>

@@ -27,7 +27,7 @@ import {
   toProblemProgress,
 } from "../data/course-track";
 import { resolveProblemAuthors } from "../data/problem-authors";
-import { listProblemCatalog } from "../data/problems";
+import { catalogForProblemViews, listProblemCatalog } from "../data/problems";
 import { useI18n, useT } from "../i18n";
 import { categoryOf } from "../lib/category";
 import {
@@ -43,7 +43,13 @@ import {
   isGateAwaitingCompletion,
   isPrerequisiteLocked,
 } from "../lib/progression";
-import { awsOnlyBadge, categoryBadge, difficultyBadge, questCardTitle } from "./Quests.badges";
+import {
+  awsOnlyBadge,
+  categoryBadge,
+  difficultyBadge,
+  questCardTitle,
+  studyReportBadge,
+} from "./Quests.badges";
 import {
   filterQuestProblems,
   isQuestCleared,
@@ -86,7 +92,10 @@ export function QuestsPage() {
 
   const allProblems = useMemo(() => view?.problems ?? [], [view]);
   const showCourseGuidance = showsCourseTracks(config.cloudMode);
-  const catalog = useMemo(() => listProblemCatalog(), []);
+  const catalog = useMemo(
+    () => catalogForProblemViews(listProblemCatalog(), allProblems),
+    [allProblems],
+  );
   const metadataByProblemId = useMemo<ReadonlyMap<string, QuestSearchMetadata>>(
     () => new Map(catalog.map((metadata) => [metadata.id, metadata])),
     [catalog],
@@ -162,7 +171,12 @@ export function QuestsPage() {
 
   const counts = useMemo(() => {
     const category = (p: ParticipantProblemView) =>
-      categoryOf(p.scoring, metadataByProblemId.get(p.problemId)?.category);
+      categoryOf(
+        p.scoring,
+        p.runtimeKind === "submission"
+          ? "Challenge"
+          : metadataByProblemId.get(p.problemId)?.category,
+      );
     return {
       all: catalogProblems.length,
       battle: catalogProblems.filter((p) => category(p) === "battle").length,
@@ -242,7 +256,7 @@ export function QuestsPage() {
                   navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
                 }}
               >
-                {questCardTitle(problem.problemId, locale)}
+                {questCardTitle(problem.problemId, locale, problem.name, problem.runtimeKind)}
               </Link>
               {/* [#2696 PR5] local play's one fixed container intro drill:
                * the backend pins it first in the catalog and flags it `recommended`. */}
@@ -253,9 +267,11 @@ export function QuestsPage() {
                 problem.problemId,
                 problem.scoring,
                 t("quests.category_uncategorized"),
+                problem.runtimeKind,
               )}
-              {difficultyBadge(problem.problemId, t)}
-              {awsOnlyBadge(problem.problemId, t)}
+              {studyReportBadge(problem, t)}
+              {difficultyBadge(problem.problemId, t, problem.runtimeKind)}
+              {awsOnlyBadge(problem.problemId, t, problem.runtimeKind)}
               {/* 開発者が toggle で表示した draft を見分ける印。exempt (進行中等) の draft にも付く。 */}
               {metadataByProblemId.get(problem.problemId)?.status === "draft" && (
                 <Badge color="grey">{t("quests.draft_badge")}</Badge>

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ParticipantProgressionView } from "../api/portal-client";
+import type { ParticipantProblemView, ParticipantProgressionView } from "../api/portal-client";
 import type { AppConfig } from "../config";
 import type { ProblemCatalogEntry } from "../data/problems";
 import { CourseTracksPage } from "./CourseTracks";
@@ -22,7 +22,13 @@ vi.mock("../i18n", () => ({
 
 const teamView: {
   view: {
-    problems: { problemId: string; jobId: string; name?: string; scoring?: unknown }[];
+    problems: {
+      problemId: string;
+      jobId: string;
+      name?: string;
+      scoring?: unknown;
+      runtimeKind?: ParticipantProblemView["runtimeKind"];
+    }[];
     progression?: ParticipantProgressionView;
   } | null;
   error: string | null;
@@ -36,7 +42,10 @@ const navigate = vi.fn();
 vi.mock("react-router", () => ({ useNavigate: () => navigate }));
 
 const catalog: { entries: ProblemCatalogEntry[] } = { entries: [] };
-vi.mock("../data/problems", () => ({ listProblemCatalog: () => catalog.entries }));
+vi.mock("../data/problems", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../data/problems")>()),
+  listProblemCatalog: () => catalog.entries,
+}));
 
 function entry(overrides: Partial<ProblemCatalogEntry>): ProblemCatalogEntry {
   return {
@@ -88,6 +97,20 @@ describe("CourseTracksPage (#2786)", () => {
     config.cloudMode = "local";
     navigate.mockReset();
   });
+
+  it.each(["local", "real"] as const)(
+    "keeps a pinned submission out of an unrelated bundled course in %s mode",
+    (mode) => {
+      config.cloudMode = mode;
+      catalog.entries = [tracked("pinned", 1, "Old course")];
+      teamView.view = {
+        problems: [{ problemId: "pinned", jobId: "submission-job", runtimeKind: "submission" }],
+      };
+      render(<CourseTracksPage />);
+      expect(screen.getByTestId("course-empty")).toBeInTheDocument();
+      expect(screen.queryByTestId("course-problem-pinned")).not.toBeInTheDocument();
+    },
+  );
 
   it("should explain the empty state instead of rendering a blank page", () => {
     catalog.entries = [entry({ id: "legacy" })];

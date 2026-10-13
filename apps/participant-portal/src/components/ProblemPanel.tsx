@@ -497,6 +497,7 @@ export function ProblemPanel({
             <StudySubmissionPanel
               problemId={problem.problemId}
               submission={problem.submission}
+              instructions={problem.instructions}
               apiBaseUrl={apiBaseUrl}
               sessionToken={sessionToken}
               onScored={onScored}
