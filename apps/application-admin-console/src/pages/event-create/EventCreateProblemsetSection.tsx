@@ -236,7 +236,10 @@ export function EventCreateProblemsetSection({
             expanded={purposeHelpOpen}
             onChange={({ detail }) => {
               setPurposeHelpOpen(detail.expanded);
-              if (!detail.expanded) setSemanticIds(null);
+              if (!detail.expanded) {
+                setSemanticIds(null);
+                setPage(1);
+              }
             }}
           >
             {purposeHelpOpen && (
@@ -244,7 +247,10 @@ export function EventCreateProblemsetSection({
                 <LocalSemanticSearch
                   problems={filtered}
                   catalog={hostCatalog}
-                  onCandidates={setSemanticIds}
+                  onCandidates={(ids) => {
+                    setPage(1);
+                    setSemanticIds(ids);
+                  }}
                 />
               </Suspense>
             )}

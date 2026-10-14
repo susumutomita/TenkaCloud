@@ -115,10 +115,17 @@ const sampleRequest = (over: Partial<CreateEventRequest> = {}): CreateEventReque
 describe("cloud new-event availability", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it.each(["ac26-crypto-battle", "ac26-w1-constraint-lab", "sha256-bytes-padding"])(
-    "rejects direct POST of withdrawn %s before keys or persistence, including a captured catalog",
-    async (problemId) => {
-      for (const captured of [false, true]) {
+  it.each([
+    { problemId: "ac26-crypto-battle" },
+    { problemId: "ac26-w1-constraint-lab" },
+    { problemId: "sha256-bytes-padding" },
+    { problemId: "pack-cipher", tags: ["cryptography"] },
+    { problemId: "pack-cipher", tags: ["advanced-cryptography"] },
+    { problemId: "pack-cipher", tags: ["advanced-cryptography-week-1"] },
+  ])(
+    "rejects direct POST of withdrawn $problemId ($tags) before keys or persistence",
+    async ({ problemId, tags }) => {
+      for (const captured of tags ? [true] : [false, true]) {
         const generate = vi.spyOn(teamKeys, "generateTeamLoginKey");
         const catalog = {
           "hello-world-battle": "problems/battles/hello-world-battle",
@@ -132,6 +139,7 @@ describe("cloud new-event availability", () => {
                   catalogKey: `catalogs/${"a".repeat(64)}.json`,
                   catalog,
                   nativeProblems: [],
+                  publicMetadata: { [problemId]: { tags } },
                 } as unknown as NonNullable<EventSharedResources["executionCatalog"]>,
               }
             : {},
