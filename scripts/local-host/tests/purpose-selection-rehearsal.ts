@@ -148,7 +148,7 @@ async function main(): Promise<void> {
     await page.getByLabel("Team count").fill("1");
     await page.getByRole("button", { name: "問題選択のヘルプ", exact: true }).click();
     const query = page.getByRole("textbox", { name: "学びたいこと", exact: true });
-    await query.fill("暗号を学びたい");
+    await query.fill("データベースについて練習したい");
     const started = performance.now();
     await page.getByRole("button", { name: "候補を探す", exact: true }).click();
     await page.getByRole("status").filter({ hasText: "公開情報に合う候補" }).waitFor();
@@ -175,7 +175,9 @@ async function main(): Promise<void> {
     assert.equal(await list.getByRole("checkbox").count(), 0);
     assert.ok(await selection.innerText());
     await page.getByRole("button", { name: "目的による絞り込みを解除" }).click();
-    assert.ok((await list.getByRole("checkbox").count()) > 10);
+    assert.equal(await list.getByRole("checkbox").count(), 6);
+    const textFilter = page.getByTestId("problem-filter-search").getByRole("searchbox");
+    await textFilter.fill(selectedId);
     assert.equal(
       await page.getByTestId(`problem-checkbox-${selectedId}`).getByRole("checkbox").isChecked(),
       true,
@@ -195,15 +197,21 @@ async function main(): Promise<void> {
     const secondBattle = page
       .getByTestId(`problem-checkbox-${second.problemId}`)
       .getByRole("checkbox");
+    await textFilter.fill(first.problemId);
     await firstBattle.check();
+    await textFilter.fill(second.problemId);
     assert.equal(await secondBattle.isDisabled(), true);
     assert.ok(await page.getByTestId("coordination-selection-help").innerText());
+    await textFilter.fill(first.problemId);
     await firstBattle.uncheck();
+    await textFilter.fill(second.problemId);
     assert.equal(await secondBattle.isEnabled(), true);
+    await textFilter.fill(selectedId);
     assert.equal(
       await page.getByTestId(`problem-checkbox-${selectedId}`).getByRole("checkbox").isChecked(),
       true,
     );
+    await textFilter.fill("");
     await page.setViewportSize({ width: 390, height: 844 });
     await captureVerifiedUi(page, "purpose-selection-mobile.png", [info.key, token]);
     assert.ok(
