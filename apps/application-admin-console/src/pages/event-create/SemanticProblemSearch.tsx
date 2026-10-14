@@ -247,7 +247,7 @@ export function SemanticProblemSearch({ problems, catalog, onCandidates }: Props
         学びたいこと
         <textarea
           aria-label="学びたいこと"
-          placeholder="例: 暗号を学びたい / データベースの脆弱性を練習したい"
+          placeholder="例: アクセス制御を学びたい / データベースの脆弱性を練習したい"
           value={query}
           disabled={busy}
           maxLength={2000}

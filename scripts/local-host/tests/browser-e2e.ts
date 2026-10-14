@@ -115,6 +115,7 @@ async function createEvent(
   await count.fill("999");
   assert.equal(await count.inputValue(), "40", "The team input is bounded before submission.");
   await count.fill("2");
+  await page.getByTestId("problem-filter-search").getByRole("searchbox").fill("sqli-demo");
   await page
     .getByTestId("problem-select")
     .getByRole("checkbox", { name: /Staff-Only Login|スタッフ専用ログイン/u })

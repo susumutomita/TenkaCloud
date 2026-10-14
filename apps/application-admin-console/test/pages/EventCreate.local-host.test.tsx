@@ -138,7 +138,9 @@ describe("EventCreatePage on the local competition host", () => {
 
       const selection = () => picker?.findTokens()[0]?.getElement().textContent;
       expect(selection()).toContain("日本語の問題");
-      const region = createWrapper(container).findAllSelects().at(-1);
+      const region = createWrapper(container).findSelect(
+        '[data-testid="problem-region-cloud-only"]',
+      );
       if (mode === "cloud-host") {
         region?.openDropdown();
         region?.selectOptionByValue("us-east-1", { expandToViewport: true });
@@ -154,9 +156,11 @@ describe("EventCreatePage on the local competition host", () => {
       expect(selection()).not.toContain("日本語の問題");
       if (mode === "cloud-host") {
         expect(region?.findTrigger().getElement().textContent).toContain("us-east-1");
-        expect(createWrapper(container).findAllTables().at(-1)?.getElement().textContent).toContain(
-          "English problem",
-        );
+        expect(
+          createWrapper(container)
+            .findTable('[data-testid="selected-problem-settings"]')
+            ?.getElement().textContent,
+        ).toContain("English problem");
       }
       mocks.locale = "ja";
       rerender(<EventCreatePage config={pageConfig} />);
@@ -171,9 +175,11 @@ describe("EventCreatePage on the local competition host", () => {
       expect(picker?.findTokens()).toHaveLength(1);
       if (mode === "cloud-host") {
         expect(region?.findTrigger().getElement().textContent).toContain("us-east-1");
-        expect(createWrapper(container).findAllTables().at(-1)?.getElement().textContent).toContain(
-          "日本語の問題",
-        );
+        expect(
+          createWrapper(container)
+            .findTable('[data-testid="selected-problem-settings"]')
+            ?.getElement().textContent,
+        ).toContain("日本語の問題");
       }
     },
   );
@@ -217,6 +223,12 @@ describe("EventCreatePage on the local competition host", () => {
     wrapper.findAllInputs()[1]?.setInputValue("1");
     wrapper.findAllInputs()[0]?.setInputValue("CTFd Cup");
     multiselect(container)?.toggleProblem("sqli-demo");
+    expect(
+      createWrapper(container)
+        .findExpandableSection('[data-testid="advanced-scoring"]')
+        ?.findExpandedContent(),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "event_create.advanced_scoring" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "local_host.ctfd_scoring" }));
     fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
     await waitFor(() => expect(mocks.createEvent).toHaveBeenCalled());
@@ -256,7 +268,7 @@ describe("EventCreatePage on the local competition host", () => {
       expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument(),
     );
     expect(screen.getByText("event_create.col_team_region")).toBeInTheDocument();
-    const accountSelect = wrapper.findAllSelects()[0];
+    const accountSelect = wrapper.findSelect('[data-testid="team-account-0"]');
     accountSelect?.openDropdown();
     await waitFor(() =>
       expect(
@@ -298,7 +310,7 @@ describe("EventCreatePage on the local competition host", () => {
       wrapper.findAllInputs()[1]?.setInputValue("5");
       const picker = multiselect(container);
 
-      await waitFor(() => expect(picker?.findOptions()).toHaveLength(20));
+      await waitFor(() => expect(picker?.findOptions()).toHaveLength(6));
       for (const item of problems) picker?.toggleProblem(item.id);
       const submit = screen.getByRole("button", { name: "event_create.submit" });
       expect(submit).toBeEnabled();
@@ -315,6 +327,44 @@ describe("EventCreatePage on the local competition host", () => {
     },
     20_000,
   );
+
+  it("keeps invalid team ID guidance visible after collapsing and restores submission after correction", async () => {
+    const { container } = render(<EventCreatePage config={config} />);
+    await waitFor(() => expect(get).toHaveBeenCalledWith("host/catalog"));
+    const wrapper = createWrapper(container);
+    wrapper.findAllInputs()[0]?.setInputValue("Team settings recovery");
+    multiselect(container)?.toggleProblem("sqli-demo");
+    const section = wrapper.findExpandableSection('[data-testid="team-settings"]');
+    expect(section?.findExpandedContent()).toBeNull();
+    section?.findExpandButton().click();
+    wrapper.findInput('[data-testid="team-slug-0"]')?.setInputValue("Invalid ID!");
+    section?.findExpandButton().click();
+    expect(section?.findExpandedContent()).toBeNull();
+    expect(screen.getByText("event_create.team_id_invalid")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+    section?.findExpandButton().click();
+    wrapper.findInput('[data-testid="team-slug-0"]')?.setInputValue("team-recovered");
+    expect(screen.queryByText("event_create.team_id_invalid")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
+  });
+
+  it("retries catalog failure without losing entered event data", async () => {
+    get.mockRejectedValueOnce(new Error("catalog temporarily unavailable"));
+    const { container } = render(<EventCreatePage config={config} />);
+    createWrapper(container).findAllInputs()[0]?.setInputValue("Keep this event");
+    expect(await screen.findByText("catalog temporarily unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+    get.mockResolvedValue({ items: [{ problemId: "sqli-demo", runtime: "docker" }] });
+    fireEvent.click(screen.getByRole("button", { name: "event_create.accounts_reload" }));
+    await waitFor(() =>
+      expect(screen.queryByText("catalog temporarily unavailable")).not.toBeInTheDocument(),
+    );
+    expect(createWrapper(container).findAllInputs()[0]?.findNativeInput().getElement()).toHaveValue(
+      "Keep this event",
+    );
+    multiselect(container)?.toggleProblem("sqli-demo");
+    expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
+  });
 
   it("reopens capacity after deselection and limits team increases without dropping selected problems", async () => {
     const problems = [

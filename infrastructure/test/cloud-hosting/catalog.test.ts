@@ -59,7 +59,13 @@ describe("cloud catalog boundary", () => {
 });
 
 it("retired cryptography is excluded across projections without dropping ordinary AWS entries", () => {
-  const entries = { "ac26-crypto-battle": "retired", current: "current" };
+  const entries = {
+    "ac26-crypto-battle": "retired",
+    "sha256-bytes-padding": "retired",
+    "sha256-compress-digest": "retired",
+    "sha256-schedule-logic": "retired",
+    current: "current",
+  };
   const filtered = cloudCatalog({
     catalog: entries,
     scoring: entries,

@@ -339,7 +339,7 @@ function nativeCatalog(): ResolvedExecutionCatalog {
 }
 
 describe("reviewed native Battle profile", () => {
-  it("creates and deploys account-free teams with ready native rows and no provider work", async () => {
+  it("refuses new crypto selections but deploys saved account-free teams without provider work", async () => {
     const native = nativeCatalog();
     readers.current.mockResolvedValue(native);
     readers.saved.mockResolvedValue(native);
@@ -348,16 +348,21 @@ describe("reviewed native Battle profile", () => {
       problemsProvenance: {},
     });
     ddbSend.mockResolvedValue({});
-    await createEvent(
-      shared,
-      { tenantId: TENANT, nowMs: NOW_MS },
-      {
-        name: "Native",
-        teams: [{ internalSlug: "alpha" }],
-        problems: [{ problemId: NATIVE_ID, defaultRegion: "ap-northeast-1" }],
-      },
-    );
+    await expect(
+      createEvent(
+        shared,
+        { tenantId: TENANT, nowMs: NOW_MS },
+        {
+          name: "Native",
+          teams: [{ internalSlug: "alpha" }],
+          problems: [{ problemId: NATIVE_ID, defaultRegion: "ap-northeast-1" }],
+        },
+      ),
+    ).rejects.toMatchObject({ name: "UnknownEventProblemError", problemId: NATIVE_ID });
+    expect(ddbSend).not.toHaveBeenCalled();
+    expect(eventsSend).not.toHaveBeenCalled();
     ddbSend.mockClear();
+    // This pre-withdrawal event retains its catalog pin and authored definition.
     ddbSend.mockResolvedValueOnce({
       Item: sampleEvent({
         catalogKey: KEY_A,

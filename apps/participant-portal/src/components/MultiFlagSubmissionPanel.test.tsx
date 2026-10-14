@@ -1,3 +1,4 @@
+import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/portal-contracts";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -418,16 +419,16 @@ describe("MultiFlagSubmissionPanel", () => {
     );
   });
 
-  it("should provide the real hint confirmation and reveal experience", async () => {
+  it("should reveal a real free hint with one click without confirmation", async () => {
     const user = userEvent.setup();
     renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS }, "dev-mock");
 
     await user.click(screen.getAllByRole("button", { name: "Reveal hint" })[3]);
-    expect(screen.getAllByText("Reveal hint 1?").length).toBeGreaterThan(0);
     expect(
-      screen.getByText("No penalty for this hint. Revealing will display the content."),
-    ).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "Reveal" })[3]);
+      createWrapper()
+        .findAllModals()
+        .every((modal) => !modal.isVisible()),
+    ).toBe(true);
 
     expect(
       await screen.findByText(/Read the problem statement before starting/),
@@ -949,19 +950,32 @@ describe("multi-verify extensions (issue #2252)", () => {
     expect(await screen.findAllByRole("button", { name: "Reveal hint" })).toHaveLength(12);
 
     for (let remaining = 12; remaining > 0; remaining -= 1) {
+      const nextHint = serverFlags
+        .flatMap((flag) => flag.hints ?? [])
+        .find((hint) => !hint.revealed);
+      if (!nextHint) throw new Error("Expected an unrevealed checkpoint hint");
       await user.click(screen.getAllByRole("button", { name: "Reveal hint" })[0]);
-      const confirmation = screen
-        .getAllByRole("dialog", { name: /Reveal hint/, hidden: true })
-        .find((dialog) => !dialog.className.includes("awsui_hidden"));
-      expect(confirmation).toBeDefined();
-      await user.click(
-        within(confirmation as HTMLElement).getByRole("button", { name: /^Reveal$/ }),
-      );
+      if (nextHint.penalty === 0) {
+        expect(
+          createWrapper()
+            .findAllModals()
+            .every((modal) => !modal.isVisible()),
+        ).toBe(true);
+      } else {
+        const confirmation = screen
+          .getAllByRole("dialog", { name: /Reveal hint/, hidden: true })
+          .find((dialog) => !dialog.className.includes("awsui_hidden"));
+        expect(confirmation).toBeDefined();
+        await user.click(
+          within(confirmation as HTMLElement).getByRole("button", { name: /^Reveal$/ }),
+        );
+      }
       await waitFor(() =>
         expect(screen.queryAllByRole("button", { name: "Reveal hint" })).toHaveLength(
           remaining - 1,
         ),
       );
+      expect(apiMocks.revealHint).toHaveBeenCalledTimes(13 - remaining);
     }
 
     for (const check of wpExposedBackup.i18n.en.checks) {

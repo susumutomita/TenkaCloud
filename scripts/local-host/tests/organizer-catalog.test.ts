@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { randomToken } from "../auth";
 import { apiRequest } from "../bench/state-setup";
 import { cloudFormationCatalog } from "../cloudformation-engine";
+import { CompetitionEngine as SelectedCompetitionEngine } from "../competition-engine";
 import { type OrganizerProblemContent, organizerProblemContent } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
@@ -14,6 +15,59 @@ import { ExerciseFixture } from "./exercise-fixture";
 import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
+
+test("legacy SHA-256 lessons stay retained but cannot enter a new local event", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "tenka-retired-sha-"));
+  const database = new Database(":memory:");
+  const store = new HostStore(database);
+  const service = new HostingService(
+    store,
+    new SelectedCompetitionEngine(root, directory),
+    randomToken(),
+  );
+  try {
+    const { key } = store.ensureLocalOrganizerKey();
+    const login = await service.admin(
+      apiRequest({ method: "POST", path: "/host/login", token: "", body: { key } }),
+    );
+    const { idToken } = login.body as { idToken: string };
+    const response = await service.admin(
+      apiRequest({ method: "GET", path: "/host/catalog", token: idToken }),
+    );
+    const ids = (response.body as { items: { problemId: string }[] }).items.map(
+      (item) => item.problemId,
+    );
+    const historical = new CompetitionEngine(root, directory).catalog();
+    for (const problemId of [
+      "sha256-bytes-padding",
+      "sha256-compress-digest",
+      "sha256-schedule-logic",
+    ]) {
+      expect(ids).not.toContain(problemId);
+      expect(
+        historical.find((problem) => problem.problemId === problemId)?.definition,
+      ).toBeTruthy();
+      await expect(
+        service.admin(
+          apiRequest({
+            method: "POST",
+            path: "/events",
+            token: idToken,
+            body: {
+              name: "Withdrawn lesson",
+              teams: [{ internalSlug: "alpha" }],
+              problems: [{ problemId }],
+            },
+          }),
+        ),
+      ).rejects.toMatchObject({ status: 422 });
+    }
+    expect(store.events()).toHaveLength(0);
+  } finally {
+    database.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test("browser rehearsal fixture supplies organizer details through the authenticated catalog", async () => {
   const database = new Database(":memory:");

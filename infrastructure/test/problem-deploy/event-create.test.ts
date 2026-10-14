@@ -112,6 +112,78 @@ const sampleRequest = (over: Partial<CreateEventRequest> = {}): CreateEventReque
   ...over,
 });
 
+describe("cloud new-event availability", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    { problemId: "ac26-crypto-battle" },
+    { problemId: "ac26-w1-constraint-lab" },
+    { problemId: "sha256-bytes-padding" },
+    { problemId: "pack-cipher", tags: ["cryptography"] },
+    { problemId: "pack-cipher", tags: ["advanced-cryptography"] },
+    { problemId: "pack-cipher", tags: ["advanced-cryptography-week-1"] },
+  ])(
+    "rejects direct POST of withdrawn $problemId ($tags) before keys or persistence",
+    async ({ problemId, tags }) => {
+      for (const captured of tags ? [true] : [false, true]) {
+        const generate = vi.spyOn(teamKeys, "generateTeamLoginKey");
+        const catalog = {
+          "hello-world-battle": "problems/battles/hello-world-battle",
+          [problemId]: `problems/challenges/${problemId}`,
+        };
+        const { shared, ddbSend } = buildShared(
+          captured
+            ? {
+                executionCatalog: {
+                  version: 1,
+                  catalogKey: `catalogs/${"a".repeat(64)}.json`,
+                  catalog,
+                  nativeProblems: [],
+                  publicMetadata: { [problemId]: { tags } },
+                } as unknown as NonNullable<EventSharedResources["executionCatalog"]>,
+              }
+            : {},
+        );
+        const app = new Hono();
+        registerEventRoutes(app, shared);
+        const response = await app.request(
+          "/events",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(
+              sampleRequest({
+                problems: [
+                  { problemId: "hello-world-battle", defaultRegion: "ap-northeast-1" },
+                  { problemId, defaultRegion: "ap-northeast-1" },
+                ],
+              }),
+            ),
+          },
+          {
+            event: {
+              requestContext: {
+                authorizer: {
+                  claims: {
+                    sub: "operator-a",
+                    "custom:tenantId": "tenant-a",
+                    "custom:userRole": "TenantAdmin",
+                  },
+                },
+              },
+            },
+          },
+        );
+        expect(response.status).toBe(422);
+        expect(await response.json()).toMatchObject({ error: "unknown_problem", problemId });
+        expect(generate).not.toHaveBeenCalled();
+        expect(ddbSend).not.toHaveBeenCalled();
+        if (captured) expect(shared.executionCatalog?.catalog).toEqual(catalog);
+      }
+    },
+  );
+});
+
 describe("createEvent", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -590,16 +662,16 @@ describe("hosting-account self-test consent precedes event creation", () => {
     const executionCatalog: NonNullable<EventSharedResources["executionCatalog"]> = {
       version: 1,
       catalogKey: `catalogs/${"a".repeat(64)}.json`,
-      catalog: { "ac26-crypto-battle": "problems/battles/ac26-crypto-battle" },
+      catalog: { "forensic-casebook": "problems/battles/forensic-casebook" },
       nativeProblems: [
         {
-          problemId: "ac26-crypto-battle",
+          problemId: "forensic-casebook",
           kind: "coordination",
-          problemDir: "problems/battles/ac26-crypto-battle",
+          problemDir: "problems/battles/forensic-casebook",
           artifactDigest: "a".repeat(64),
           pluginKey: `plugins/${"a".repeat(64)}.mjs`,
           stateBudget: { bytesPerTeam: 100, baseBytes: 0 },
-          name: "Crypto",
+          name: "Forensic",
           description: "Native battle",
           instructions: "Play",
         },
@@ -625,7 +697,7 @@ describe("hosting-account self-test consent precedes event creation", () => {
       { tenantId: "tenant-a", nowMs: NOW_MS },
       sampleRequest({
         teams: [{ internalSlug: "self" }],
-        problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "ap-northeast-1" }],
+        problems: [{ problemId: "forensic-casebook", defaultRegion: "ap-northeast-1" }],
       }),
     );
     expect(result.teams).toHaveLength(1);

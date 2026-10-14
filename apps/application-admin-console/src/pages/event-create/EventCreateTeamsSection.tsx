@@ -1,6 +1,7 @@
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
@@ -41,6 +42,23 @@ export interface EventCreateTeamsSectionProps {
   noVerifiedAccounts: boolean;
   apiClient?: ApiClient | null;
   onUpdateTeamRow: (idx: number, patch: Partial<TeamRow>) => void;
+}
+
+function teamSettingsState(validation: TeamValidation, rows: readonly TeamTableItem[]) {
+  const simple =
+    validation.providerMode?.kind === "local" || validation.providerMode?.kind === "native";
+  const invalid = rows.some((row) => !SLUG_RE.test(row.internalSlug));
+  return { simple, invalid, initiallyExpanded: !simple || validation.hasDuplicateSlug || invalid };
+}
+
+function TeamIdError({ invalid }: { invalid: boolean }) {
+  const t = useT();
+  if (!invalid) return null;
+  return (
+    <Box variant="small" color="text-status-error" padding={{ top: "xs" }}>
+      {t("event_create.team_id_invalid")}
+    </Box>
+  );
 }
 
 export function EventCreateTeamsSection({
@@ -106,6 +124,7 @@ export function EventCreateTeamsSection({
       header: t("event_create.col_internal_slug"),
       cell: (tr) => (
         <Input
+          data-testid={`team-slug-${tr.idx}`}
           value={tr.internalSlug}
           placeholder="team-1"
           // Every row shares the placeholder, which would otherwise become each row's accessible name.
@@ -126,6 +145,7 @@ export function EventCreateTeamsSection({
         return (
           <SpaceBetween size="xxs">
             <Select
+              data-testid={`team-account-${tr.idx}`}
               selectedOption={selected}
               options={[...accountOptions]}
               placeholder={
@@ -171,6 +191,7 @@ export function EventCreateTeamsSection({
       header: t("event_create.col_team_region"),
       cell: (tr) => (
         <Select
+          data-testid={`team-region-${tr.idx}`}
           selectedOption={tr.region ? { value: tr.region, label: regionLabel(tr.region) } : null}
           options={[
             { value: "", label: t("event_create.team_region_inherit") },
@@ -248,6 +269,7 @@ export function EventCreateTeamsSection({
   let descriptionKey = "event_create.teams_description";
   if (providerMode?.kind === "local") descriptionKey = "event_create.teams_description_local";
   if (providerMode?.kind === "native") descriptionKey = "event_create.teams_description_native";
+  const teamSettings = teamSettingsState(teamValidation, teamTableItems);
   return (
     <Container
       header={
@@ -256,18 +278,29 @@ export function EventCreateTeamsSection({
         </Header>
       }
     >
-      {teamCount === 0 ? (
-        <Box variant="small" color="text-status-inactive">
-          {t("event_create.teams_empty")}
-        </Box>
-      ) : (
-        <Table variant="embedded" items={[...teamTableItems]} columnDefinitions={columns} />
+      {teamSettings.simple && (
+        <Box variant="p">{t("event_create.team_ids_automatic", { count: teamCount })}</Box>
       )}
+      <ExpandableSection
+        key={teamSettings.simple ? "automatic" : "execution"}
+        data-testid="team-settings"
+        headerText={t("event_create.team_settings")}
+        defaultExpanded={teamSettings.initiallyExpanded}
+      >
+        {teamCount === 0 ? (
+          <Box variant="small" color="text-status-inactive">
+            {t("event_create.teams_empty")}
+          </Box>
+        ) : (
+          <Table variant="embedded" items={[...teamTableItems]} columnDefinitions={columns} />
+        )}
+      </ExpandableSection>
       {providerMode?.kind === "mixed" && (
         <Box variant="small" color="text-status-error" padding={{ top: "xs" }}>
           {t("event_create.mixed_provider_error")}
         </Box>
       )}
+      <TeamIdError invalid={teamSettings.invalid} />
       {teamValidation.hasDuplicateSlug && (
         <Box variant="small" color="text-status-error" padding={{ top: "xs" }}>
           {t("event_create.duplicate_slug_error")}

@@ -333,8 +333,10 @@ export const HintsPanel = memo(function HintsPanel({
   // fixture がドリルの hint content を同梱し (公開前提のオンボーディング教材)、 開封状態
   // だけをこの Set で持つ。 backend mode では従来どおり server truth。
   const isMock = useIsMock();
-  const [mockRevealed, setMockRevealed] = useState<ReadonlySet<string>>(new Set());
+  const mockRevealedIds = useRef<ReadonlySet<string>>(new Set());
+  const [mockRevealed, setMockRevealed] = useState(mockRevealedIds.current);
   const [revealing, setRevealing] = useState<string | null>(null);
+  const revealPending = useRef(false);
   const [revealError, setRevealError] = useState<string | null>(null);
   const [pendingReveal, setPendingReveal] = useState<ParticipantHintView | null>(null);
   const [pendingIndex, setPendingIndex] = useState<number>(0);
@@ -344,16 +346,17 @@ export const HintsPanel = memo(function HintsPanel({
     : hints;
 
   const handleReveal = async (hintId: string) => {
-    // 再入防止ガード。 唯一の呼び出し元 (confirm modal の submit button) は reveal 実行中
-    // `loading` で無効化されるので UI からは再入できない (= 防御的に残す不到達分岐)。
-    /* v8 ignore next */
-    if (revealing) return;
+    // State renders asynchronously; reserve the request synchronously for repeated clicks.
+    if (revealPending.current) return;
     if (isMock) {
-      setMockRevealed((prev) => new Set([...prev, hintId]));
+      if (mockRevealedIds.current.has(hintId)) return;
+      mockRevealedIds.current = new Set([...mockRevealedIds.current, hintId]);
+      setMockRevealed(mockRevealedIds.current);
       onRevealTracked?.(hintId);
       setPendingReveal(null);
       return;
     }
+    revealPending.current = true;
     setRevealing(hintId);
     setRevealError(null);
     try {
@@ -363,6 +366,7 @@ export const HintsPanel = memo(function HintsPanel({
     } catch (err) {
       setRevealError(formatRevealError(t, err, hints));
     } finally {
+      revealPending.current = false;
       setRevealing(null);
       setPendingReveal(null);
     }
@@ -420,6 +424,10 @@ export const HintsPanel = memo(function HintsPanel({
                       disabled={lockedByOrder || (revealing !== null && revealing !== h.id)}
                       ariaLabel={ariaLabel}
                       onClick={() => {
+                        if (h.penalty === 0) {
+                          void handleReveal(h.id);
+                          return;
+                        }
                         setPendingReveal(h);
                         setPendingIndex(i);
                       }}

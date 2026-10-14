@@ -1,6 +1,5 @@
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
-import Checkbox from "@cloudscape-design/components/checkbox";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
@@ -8,6 +7,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Multiselect, { type MultiselectProps } from "@cloudscape-design/components/multiselect";
+import Pagination from "@cloudscape-design/components/pagination";
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
@@ -39,7 +39,7 @@ import {
   resolveRegionOptions,
 } from "./helpers";
 import type { HostCatalog } from "./LocalHostEventCreate";
-import { ScrollableProblemList } from "./ScrollableProblemList";
+import { ProblemChoiceCard, type ProblemChoiceContent } from "./ProblemChoiceCard";
 
 const LocalSemanticSearch = LOCAL_HOST_BUILD
   ? lazy(async () => ({ default: (await import("./SemanticProblemSearch")).SemanticProblemSearch }))
@@ -54,10 +54,10 @@ function optionValues(options: readonly MultiselectProps.Option[]): string[] {
 }
 
 /**
- * 「使う問題」 section: 検索 + filter + 常時表示のチェック一覧 + 選択された問題ごとの
+ * 「使う問題」 section: 検索 + filter + 比較カード + 選択された問題ごとの
  * region picker。
  *
- * カタログ増加 (Battle + Challenge 100+) に備え、常時表示の問題一覧を
+ * カタログ増加 (Battle + Challenge 100+) に備え、問題カードを
  * 検索 (id / name / 説明 / タグ) と category / 難易度 / scoring kind / タグ filter で
  * 絞り込めるようにする。 filter logic は問題カタログ page と同じ `lib/problem-filter` を共用。
  *
@@ -66,6 +66,7 @@ function optionValues(options: readonly MultiselectProps.Option[]): string[] {
 export interface EventCreateProblemsetSectionProps {
   /** カタログ全件 (= filter 前)。 option 化 (#1414 の disabled 出し分け含む) は section 内で行う。 */
   problems: readonly ProblemSummary[];
+  problemContent?: (id: string) => ProblemChoiceContent | undefined;
   selectedProblems: readonly MultiselectProps.Option[];
   problemRows: readonly ProblemRow[];
   /**
@@ -87,6 +88,7 @@ export interface EventCreateProblemsetSectionProps {
 
 export function EventCreateProblemsetSection({
   problems,
+  problemContent,
   selectedProblems,
   problemRows,
   nonAwsRuntimeEnabled,
@@ -97,9 +99,14 @@ export function EventCreateProblemsetSection({
   onUpdateProblemRow,
 }: EventCreateProblemsetSectionProps) {
   const t = useT();
+  const [page, setPage] = useState(1);
   const [purposeHelpOpen, setPurposeHelpOpen] = useState(false);
   const [semanticIds, setSemanticIds] = useState<readonly string[] | null>(null);
   const [criteria, setCriteria] = useState<ProblemFilterCriteria>(EMPTY_FILTER_CRITERIA);
+  const updateCriteria = (update: (previous: ProblemFilterCriteria) => ProblemFilterCriteria) => {
+    setPage(1);
+    setCriteria(update);
+  };
   const filtered = useMemo(() => filterProblems(problems, criteria), [problems, criteria]);
   const visibleProblems = useMemo(
     () =>
@@ -128,7 +135,7 @@ export function EventCreateProblemsetSection({
       ),
       enabledProviders,
       hostSupportedProblemIds,
-    );
+    ).sort((a, b) => Number(Boolean(a.disabled)) - Number(Boolean(b.disabled)));
     const constrained = options.map((option) => ({
       ...option,
       disabled:
@@ -206,10 +213,22 @@ export function EventCreateProblemsetSection({
     label: problemThemeLabel(tag, t),
   }));
 
-  const clearFilters = () => setCriteria(EMPTY_FILTER_CRITERIA);
+  const clearFilters = () => {
+    setCriteria(EMPTY_FILTER_CRITERIA);
+    setPage(1);
+  };
+  const pages = Math.max(1, Math.ceil(problemOptions.length / 6));
+  const currentPage = Math.min(page, pages);
+  const pageOptions = problemOptions.slice((currentPage - 1) * 6, currentPage * 6);
 
   return (
-    <Container header={<Header variant="h2">{t("event_create.problemset_header")}</Header>}>
+    <Container
+      header={
+        <Header variant="h2" counter={`(${selectedProblems.length})`}>
+          {t("event_create.problemset_header")}
+        </Header>
+      }
+    >
       <SpaceBetween size="m">
         {hostCatalog && LocalSemanticSearch && (
           <ExpandableSection
@@ -217,7 +236,10 @@ export function EventCreateProblemsetSection({
             expanded={purposeHelpOpen}
             onChange={({ detail }) => {
               setPurposeHelpOpen(detail.expanded);
-              if (!detail.expanded) setSemanticIds(null);
+              if (!detail.expanded) {
+                setSemanticIds(null);
+                setPage(1);
+              }
             }}
           >
             {purposeHelpOpen && (
@@ -225,7 +247,10 @@ export function EventCreateProblemsetSection({
                 <LocalSemanticSearch
                   problems={filtered}
                   catalog={hostCatalog}
-                  onCandidates={setSemanticIds}
+                  onCandidates={(ids) => {
+                    setPage(1);
+                    setSemanticIds(ids);
+                  }}
                 />
               </Suspense>
             )}
@@ -243,7 +268,9 @@ export function EventCreateProblemsetSection({
               data-testid="problem-filter-search"
               value={criteria.search}
               placeholder={t("problem_search.search_placeholder")}
-              onChange={({ detail }) => setCriteria((prev) => ({ ...prev, search: detail.value }))}
+              onChange={({ detail }) =>
+                updateCriteria((prev) => ({ ...prev, search: detail.value }))
+              }
             />
             <ColumnLayout columns={2}>
               <FormField label={t("problems.theme_label")}>
@@ -255,7 +282,10 @@ export function EventCreateProblemsetSection({
                   selectedOptions={tagSelected}
                   filteringType="auto"
                   onChange={({ detail }) =>
-                    setCriteria((prev) => ({ ...prev, tags: optionValues(detail.selectedOptions) }))
+                    updateCriteria((prev) => ({
+                      ...prev,
+                      tags: optionValues(detail.selectedOptions),
+                    }))
                   }
                 />
               </FormField>
@@ -267,7 +297,7 @@ export function EventCreateProblemsetSection({
                   options={difficultyOptions}
                   selectedOptions={difficultySelected}
                   onChange={({ detail }) =>
-                    setCriteria((prev) => ({
+                    updateCriteria((prev) => ({
                       ...prev,
                       difficulties: detail.selectedOptions
                         .map((o) => Number(o.value))
@@ -288,7 +318,7 @@ export function EventCreateProblemsetSection({
                     selectedOption={selectedCategoryOption}
                     options={categoryOptions}
                     onChange={({ detail }) =>
-                      setCriteria((prev) => ({
+                      updateCriteria((prev) => ({
                         ...prev,
                         categories:
                           detail.selectedOption.value === CATEGORY_ALL
@@ -306,7 +336,7 @@ export function EventCreateProblemsetSection({
                     options={scoringKindOptions}
                     selectedOptions={scoringKindSelected}
                     onChange={({ detail }) =>
-                      setCriteria((prev) => ({
+                      updateCriteria((prev) => ({
                         ...prev,
                         scoringKinds: optionValues(detail.selectedOptions),
                       }))
@@ -337,6 +367,7 @@ export function EventCreateProblemsetSection({
 
         <FormField
           label={t("event_create.use_problems_label")}
+          stretch
           constraintText={t("problem_search.selection_preserved")}
           description={
             maxProblems === undefined
@@ -354,65 +385,6 @@ export function EventCreateProblemsetSection({
                 {coordinationSelected && <> {t("problem_search.coordination_change")}</>}
               </Box>
             )}
-            <ScrollableProblemList label={t("event_create.use_problems_label")}>
-              <fieldset
-                aria-label={t("event_create.use_problems_label")}
-                data-testid="problem-select"
-                style={{
-                  border: 0,
-                  margin: 0,
-                  padding: 0,
-                  minInlineSize: 0,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {problemOptions.map((option) => {
-                  const checked = displayedSelection.some((item) => item.value === option.value);
-                  return (
-                    <Box key={option.value} padding={{ vertical: "xs" }}>
-                      <Checkbox
-                        data-testid={`problem-checkbox-${option.value}`}
-                        checked={checked}
-                        disabled={Boolean(option.disabled && !checked)}
-                        description={
-                          <span
-                            style={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                            }}
-                          >
-                            {option.description}
-                          </span>
-                        }
-                        onChange={({ detail }) => {
-                          if (!detail.checked)
-                            onProblemsChange(
-                              displayedSelection.filter((item) => item.value !== option.value),
-                            );
-                          else onProblemsChange([...displayedSelection, option]);
-                        }}
-                      >
-                        <Box
-                          variant="span"
-                          fontWeight="bold"
-                          data-testid={`problem-title-${option.value}`}
-                        >
-                          {option.label}
-                        </Box>
-                        {option.labelTag && (
-                          <Box variant="span" color="text-body-secondary">
-                            {" "}
-                            — {option.labelTag}
-                          </Box>
-                        )}
-                      </Checkbox>
-                    </Box>
-                  );
-                })}
-              </fieldset>
-            </ScrollableProblemList>
             {displayedSelection.length > 0 && (
               <TokenGroup
                 data-testid="problem-selection"
@@ -431,6 +403,52 @@ export function EventCreateProblemsetSection({
                 }
               />
             )}
+            <fieldset
+              aria-label={t("event_create.use_problems_label")}
+              data-testid="problem-select"
+              style={{ border: 0, margin: 0, padding: 0, minInlineSize: 0 }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 22rem), 1fr))",
+                  gap: 16,
+                }}
+              >
+                {pageOptions.map((option) => {
+                  const problem = visibleProblems.find((item) => item.id === option.value);
+                  if (!problem) return null;
+                  return (
+                    <ProblemChoiceCard
+                      key={option.value}
+                      problem={problem}
+                      option={option}
+                      checked={displayedSelection.some((item) => item.value === option.value)}
+                      content={problemContent?.(problem.id)}
+                      onChange={(checked) =>
+                        onProblemsChange(
+                          checked
+                            ? [...displayedSelection, option]
+                            : displayedSelection.filter((item) => item.value !== option.value),
+                        )
+                      }
+                    />
+                  );
+                })}
+              </div>
+            </fieldset>
+            {pages > 1 && (
+              <Pagination
+                currentPageIndex={currentPage}
+                pagesCount={pages}
+                onChange={({ detail }) => setPage(detail.currentPageIndex)}
+                ariaLabels={{
+                  nextPageLabel: t("event_create.next_problems"),
+                  previousPageLabel: t("event_create.previous_problems"),
+                  pageLabel: (pageNumber) => String(pageNumber),
+                }}
+              />
+            )}
           </SpaceBetween>
         </FormField>
 
@@ -447,6 +465,7 @@ export function EventCreateProblemsetSection({
 
         {problemRows.length > 0 && !hostSupportedProblemIds && (
           <Table
+            data-testid="selected-problem-settings"
             variant="embedded"
             items={[...problemRows]}
             columnDefinitions={[
@@ -463,6 +482,7 @@ export function EventCreateProblemsetSection({
                   const options = resolveRegionOptions(r.supportedRegions, REGION_OPTIONS);
                   return (
                     <Select
+                      data-testid={`problem-region-${r.problemId}`}
                       selectedOption={
                         options.find((o) => o.value === r.defaultRegion) ?? options[0]
                       }

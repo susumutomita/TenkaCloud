@@ -115,7 +115,7 @@ function fillValidForm(container: HTMLElement) {
   const ms = problemSelect(container);
 
   ms?.toggleProblem("p1");
-  const accountSelect = w(container).findAllSelects()[0]; // TeamsSection の account Select
+  const accountSelect = w(container).findSelect('[data-testid="team-account-0"]'); // TeamsSection の account Select
   accountSelect?.openDropdown();
   accountSelect?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
 }
@@ -162,7 +162,7 @@ describe("EventCreatePage flow", () => {
       selector?.toggleProblem("p1");
       expect(screen.getByText("event_create.col_team_region")).toBeInTheDocument();
       for (const [index, region] of ["ap-northeast-1", "us-east-1"].entries()) {
-        const selects = w(container).findAllSelects();
+        const selects = w(container).findAllSelects('[data-testid^="team-"]');
         selects[index * 2]?.openDropdown();
         selects[index * 2]?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
         selects[index * 2 + 1]?.openDropdown();
@@ -257,7 +257,7 @@ describe("EventCreatePage flow", () => {
       selector?.toggleProblem("p2");
       expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
-      const accountSelect = w(container).findAllSelects()[0];
+      const accountSelect = w(container).findSelect('[data-testid="team-account-0"]');
       accountSelect?.openDropdown();
       accountSelect?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
       expect(screen.getByRole("button", { name: "event_create.submit" })).toBeEnabled();
@@ -419,8 +419,7 @@ describe("EventCreatePage flow", () => {
     // p1 の region Select だけ変更 → updateProblemRow の map で p1=match / p2=非match 両分岐。
     // [Issue #3173] Teams 表が account と region の 2 Select を持つようになったので、
     // 問題側の Select は「Teams 表のぶんを飛ばした先頭」= 全 team 分の後ろから数える。
-    const teamSelectCount = w(container).findAllSelects().length - 2; // p1 / p2 の 2 件
-    const regionP1 = w(container).findAllSelects()[teamSelectCount];
+    const regionP1 = w(container).findSelect('[data-testid="problem-region-p1"]');
     regionP1?.openDropdown();
     regionP1?.selectOptionByValue("ap-northeast-1", { expandToViewport: true });
     expect(
@@ -500,7 +499,7 @@ describe("EventCreatePage flow", () => {
     const { container } = renderPage();
     w(container).findAllInputs()[1]?.setInputValue("1");
     w(container).findAllInputs()[0]?.setInputValue("My Event");
-    const accountSelect = w(container).findAllSelects()[0];
+    const accountSelect = w(container).findSelect('[data-testid="team-account-0"]');
     accountSelect?.openDropdown();
     accountSelect?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
     // 問題未選択 → problemRows 空 → disabled
@@ -522,7 +521,7 @@ describe("EventCreatePage flow", () => {
     const { container } = renderPage();
     fillValidForm(container);
     // slug を不正値に上書き (findAllInputs: [name, teamCount, slug])。
-    w(container).findAllInputs()[2]?.setInputValue("Invalid Slug!");
+    w(container).findInput('[data-testid="team-slug-0"]')?.setInputValue("Invalid Slug!");
     expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
   });
 
@@ -536,13 +535,13 @@ describe("EventCreatePage flow", () => {
     // 両 team に valid account を割り当て (allAccountsValid true にして hasDuplicateSlug まで到達)。
     // [Issue #3173] Each team row now renders account then region, so the
     // account selects are the even indices rather than the first two.
-    const selects = w(container).findAllSelects();
+    const selects = w(container).findAllSelects('[data-testid^="team-"]');
     for (const s of [selects[0], selects[2]]) {
       s?.openDropdown();
       s?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
     }
     // team-2 の slug を team-1 に揃えて重複させる (slug input は [2], [3])。
-    w(container).findAllInputs()[3]?.setInputValue("team-1");
+    w(container).findInput('[data-testid="team-slug-1"]')?.setInputValue("team-1");
     expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
   });
 });

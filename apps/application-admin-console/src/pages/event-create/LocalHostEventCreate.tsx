@@ -5,9 +5,11 @@
  * computer. The page keeps its normal catalog, search and team table; only these problems
  * are selectable, and the organizer is told why others are not.
  */
+
 import Alert from "@cloudscape-design/components/alert";
+import Button from "@cloudscape-design/components/button";
 import { toErrorMessage } from "@tenkacloud/web-kit";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ApiClient } from "../../api/client";
 import type { EventLimits } from "../../config";
 import type { ProblemDetail } from "../../data/problems";
@@ -33,6 +35,7 @@ export interface HostCatalog {
   readonly supported: ReadonlySet<string>;
   readonly cloud: ReadonlySet<string>;
   readonly coordination?: ReadonlySet<string>;
+  readonly retry?: () => void;
   readonly error: string | null;
   readonly loading: boolean;
   readonly limits: HostLimits;
@@ -52,11 +55,15 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
   const [content, setContent] = useState<HostCatalog["content"]>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retryRequest, setRetryRequest] = useState<{ client: ApiClient | null } | null>(null);
+  const retry = useCallback(() => setRetryRequest({ client: apiClient }), [apiClient]);
   useEffect(() => {
-    if (!apiClient) return;
+    // A fresh descriptor retries this client; an auth change always uses the latest client.
+    const client = retryRequest?.client === apiClient ? retryRequest.client : apiClient;
+    if (!client) return;
     let active = true;
     setLoading(true);
-    apiClient
+    client
       .get<HostCatalogResponse>("host/catalog")
       .then((response) => {
         if (!active) return;
@@ -95,8 +102,8 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
     return () => {
       active = false;
     };
-  }, [apiClient]);
-  return { supported, cloud, coordination, content, error, limits, loading };
+  }, [apiClient, retryRequest]);
+  return { supported, cloud, coordination, content, error, limits, loading, retry };
 }
 
 function LocalHostEventCreateNotice({
@@ -115,7 +122,15 @@ function LocalHostEventCreateNotice({
         </Alert>
       )}
       {catalog.error && (
-        <Alert type="error" header={t("local_host.catalog_error_header")}>
+        <Alert
+          type="error"
+          header={t("local_host.catalog_error_header")}
+          action={
+            catalog.retry && (
+              <Button onClick={catalog.retry}>{t("event_create.accounts_reload")}</Button>
+            )
+          }
+        >
           {catalog.error}
         </Alert>
       )}
