@@ -12,11 +12,11 @@ import {
   PROBLEM_ID,
   setupMatch,
 } from "../bench/state-setup";
-import { CompetitionEngine } from "../competition-engine";
 import { DEFAULT_GATEWAY_PORTS, parseGatewayPorts } from "../gateway-ports";
 import { startLocalHost } from "../server";
 import { type ApiResponse, HostingService } from "../service";
 import { HostStore } from "../store";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const directories: string[] = [];

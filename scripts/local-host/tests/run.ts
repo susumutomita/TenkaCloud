@@ -984,10 +984,10 @@ const c = import.meta.glob("../../../../.tenkacloud/pack-store/snapshots/**/meta
       "/repo/apps/participant-portal/src/plugins/loader.ts",
     ),
   );
-  assert.equal(
-    plugins,
-    `import.meta.glob("../../../../problems/{${reviewedCoordinationPaths.join(",")}}/portal/*.tsx")`,
-  );
+  assert.match(plugins, /catalog-store\/snapshots\/[a-f0-9]{64}\//u);
+  assert.ok(plugins.includes(`{${reviewedCoordinationPaths.join(",")}}/portal/*.tsx`));
+  assert.ok(plugins.includes("exhaustive: true"));
+  assert.ok(!plugins.includes("problems/*/*/portal"));
   assert.doesNotThrow(() =>
     assertHostingModule("/repo/problems/challenges/sqli-demo/metadata.json"),
   );

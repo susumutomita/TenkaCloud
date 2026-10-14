@@ -16,7 +16,8 @@ on:
       - 'package.json'
       - 'bun.lock'
       - 'infrastructure/templates/**'
-      - 'problems'
+      - 'catalog-sources.json'
+      - 'catalog-lock.json'
       - 'apps/**/local-host/**'
       - 'apps/application-admin-console/src/**'
       - 'apps/participant-portal/src/**'
@@ -37,8 +38,6 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          submodules: true
       - uses: ./.github/actions/bun-install
       - name: Type-check hosting and both existing applications
         if: github.event_name == 'workflow_dispatch'
@@ -61,12 +60,12 @@ jobs:
           # Isolated runner fixture; only this test's owned Compose projects use compact IPAM.
           HOST_DOCKER_NETWORK_POOL: 10.240.0.0/16
         run: bun run test:host:docker
-      - name: Hosted image plays a Cryptography Battle at its advertised origins
+      - name: Hosted image plays a Forensic Casebook at its advertised origins
         if: github.event_name == 'workflow_dispatch'
         run: |
           docker build -f docker/host/Dockerfile \
             --build-arg TENKACLOUD_SOURCE_COMMIT="$(git rev-parse HEAD)" \
-            --build-arg TENKACLOUD_CATALOG_COMMIT="$(git rev-parse HEAD:problems)" \
+            --build-arg TENKACLOUD_CATALOG_DIGEST="$(bun run scripts/release/host-candidate.ts --catalog-digest)" \
             -t tenkacloud-host:review .
           TENKACLOUD_HOST_IMAGE=tenkacloud-host:review bun run test:host:container
           bun run release:candidate --image tenkacloud-host:review --out .tenkacloud/host-candidate-built.json

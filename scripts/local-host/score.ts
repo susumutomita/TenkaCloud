@@ -2,7 +2,7 @@ import {
   type PinnedScorePolicy,
   projectScore,
   projectScoreTimeline,
-} from "@tenkacloud/problem-sdk/internal";
+} from "../../packages/problem-sdk/src/score-projection.js";
 import type { HostedEvent, ScoreEvent } from "./model";
 
 /** Read only the event's pinned definitions; never re-open the current catalog. */

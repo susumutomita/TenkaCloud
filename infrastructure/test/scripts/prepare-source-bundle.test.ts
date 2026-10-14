@@ -294,6 +294,14 @@ function preparationFixture(): { root: string; bin: string; log: string } {
   write("infrastructure/lib/index.ts", "export {};");
   write("packages/runtime/index.ts", "export {};");
   write("problems/demo/metadata.json", "{}");
+  write(
+    ".tenkacloud/catalog-store/selected.json",
+    JSON.stringify({
+      schemaVersion: 1,
+      sources: [{ commit: "b".repeat(40), digest: "a".repeat(64) }],
+    }),
+  );
+  write(`.tenkacloud/catalog-store/snapshots/${"a".repeat(64)}/.runtime`, "immutable runtime");
   for (const app of ["application-admin-console", "participant-portal"]) {
     write(`apps/${app}/dist/index.html`, "built application");
   }
@@ -377,7 +385,7 @@ describe("scripts/prepare-source-bundle.sh offline orchestration", { timeout: 30
     expect(result.status, result.stderr).toBe(0);
     const log = readFileSync(fixture.log, "utf8");
     const calls = log.trim().split("\n");
-    expect(log).toContain("git|submodule update --init --recursive problems");
+    expect(log).toContain("--no-env-file run catalog prepare");
     expect(log).not.toContain("--force");
     expect(log).not.toContain("install");
     for (const call of calls.filter((call) => call.startsWith("bun|"))) {

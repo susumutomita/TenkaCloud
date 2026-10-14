@@ -7,8 +7,10 @@ import { fileURLToPath } from "node:url";
 import { spawnHostProcess } from "../bench/host-process";
 import { adminLogin, apiCall } from "../bench/http-client";
 import { spawnPrivateKeyProcess } from "../private-key-process";
+import { ensureHostBuild } from "./host-build-fixture";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
+await ensureHostBuild(repository);
 
 async function availablePorts() {
   const admin = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });

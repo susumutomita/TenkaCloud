@@ -547,11 +547,11 @@ function discoverCatalogComposeEntries(): readonly CatalogComposeEntry[] {
   return entries;
 }
 
-describe("compose-policy: the real catalog (problems/ submodule)", () => {
+describe("compose-policy: the real catalog (selected problem catalog)", () => {
   const entries = discoverCatalogComposeEntries();
 
   if (entries.length === 0) {
-    it.skip("problems/ submodule is not checked out — run `git submodule update --init problems`", () => {
+    it.skip("selected problem catalog is not prepared — run `make catalog-download catalog-prepare`", () => {
       expect(entries.length).toBe(0);
     });
   } else {

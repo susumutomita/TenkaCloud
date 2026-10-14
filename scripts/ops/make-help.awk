@@ -51,7 +51,7 @@ END {
   if (scope == "user" && (lang == "en" || lang == "ja")) {
     show_commands("local down local-reset local-clear deploy destroy turso-clear turso-reset", lang == "ja" ? "開催・停止" : "Hosting")
     show_commands("env-init turso-live turso-live-guide turso-live-preflight turso-deploy-preflight turso-live-verify-cfn turso-token-rotate", lang == "ja" ? "クラウド設定・認証更新" : "Cloud setup and credentials")
-    show_commands("submodule-latest validate-problems build", lang == "ja" ? "問題ソース・カタログ更新" : "Problem sources and catalog updates")
+    show_commands("catalog-download catalog-prepare validate-problems build", lang == "ja" ? "問題ソース・カタログ更新" : "Problem sources and catalog updates")
     show_commands("install test lint before-commit", lang == "ja" ? "開発用" : "Development")
     print (lang == "ja" ? "\n開発用の全コマンド: make help HELP_SCOPE=developer" : "\nAll development commands: make help HELP_SCOPE=developer")
   }

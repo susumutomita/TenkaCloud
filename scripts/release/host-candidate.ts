@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
+import { CatalogLockSchema } from "../problem-pack/catalog-read";
 
 const commit = z.string().regex(/^[a-f0-9]{40}$/);
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
@@ -14,9 +16,9 @@ const image = z
   .strict();
 export const HostCandidateSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     status: z.literal("unpublished"),
-    sources: z.object({ platformCommit: commit.nullable(), catalogCommit: commit }).strict(),
+    sources: z.object({ platformCommit: commit.nullable(), catalog: CatalogLockSchema }).strict(),
     image: image.nullable(),
     limitations: z.array(z.string().min(1)).min(1),
   })
@@ -43,7 +45,7 @@ const InspectionSchema = z
 export function captureCandidate(input: {
   tag: string;
   platformCommit: string;
-  catalogCommit: string;
+  catalog: z.infer<typeof CatalogLockSchema>;
   inspection: unknown;
 }) {
   const inspected = InspectionSchema.parse(input.inspection)[0];
@@ -52,14 +54,14 @@ export function captureCandidate(input: {
   const labels = inspected.Config.Labels;
   if (
     labels?.["org.opencontainers.image.revision"] !== input.platformCommit ||
-    labels["io.tenkacloud.catalog.revision"] !== input.catalogCommit
+    labels["io.tenkacloud.catalog.digest"] !== catalogIdentity(input.catalog)
   ) {
     throw new Error("Image source/catalog labels do not match the clean checkout");
   }
   return HostCandidateSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     status: "unpublished",
-    sources: { platformCommit: input.platformCommit, catalogCommit: input.catalogCommit },
+    sources: { platformCommit: input.platformCommit, catalog: input.catalog },
     image: { tag: input.tag, imageId: inspected.Id, registryDigests: inspected.RepoDigests ?? [] },
     limitations: [
       "This record does not publish an image or certify a release.",
@@ -71,22 +73,33 @@ export function captureCandidate(input: {
 function git(root: string, args: string[]): string {
   return execFileSync("/usr/bin/git", args, { cwd: root, encoding: "utf8" }).trim();
 }
-function catalogPin(root: string): string {
-  const value = /^160000 ([a-f0-9]{40}) /.exec(
-    git(root, ["ls-files", "-s", "--", "problems"]),
-  )?.[1];
-  return commit.parse(value);
+export function catalogIdentity(catalog: z.infer<typeof CatalogLockSchema>): string {
+  return createHash("sha256")
+    .update(JSON.stringify(CatalogLockSchema.parse(catalog)))
+    .digest("hex");
+}
+function catalogPin(root: string) {
+  return CatalogLockSchema.parse(
+    JSON.parse(readFileSync(resolve(root, "catalog-lock.json"), "utf8")),
+  );
 }
 function main(): void {
   const root = resolve(import.meta.dir, "../..");
   const args = process.argv.slice(2);
+  if (args.length === 1 && args[0] === "--catalog-digest") {
+    const selected = JSON.parse(
+      readFileSync(resolve(root, ".tenkacloud/catalog-store/selected.json"), "utf8"),
+    );
+    console.log(catalogIdentity(CatalogLockSchema.parse(selected)));
+    return;
+  }
   if (args.length === 1 && args[0] === "--sync-catalog") {
     const path = resolve(root, "release/host-candidate.json");
     const pending = HostCandidateSchema.parse(JSON.parse(readFileSync(path, "utf8")));
     if (pending.image !== null) throw new Error("Cannot change the catalog of a built image");
     writeFileSync(
       path,
-      `${JSON.stringify({ ...pending, sources: { ...pending.sources, catalogCommit: catalogPin(root) } }, null, 2)}\n`,
+      `${JSON.stringify({ ...pending, sources: { ...pending.sources, catalog: catalogPin(root) } }, null, 2)}\n`,
     );
     return;
   }
@@ -94,8 +107,8 @@ function main(): void {
     const pending = HostCandidateSchema.parse(
       JSON.parse(readFileSync(resolve(root, "release/host-candidate.json"), "utf8")),
     );
-    if (pending.sources.catalogCommit !== catalogPin(root))
-      throw new Error("Host candidate catalog pin does not match the gitlink");
+    if (catalogIdentity(pending.sources.catalog) !== catalogIdentity(catalogPin(root)))
+      throw new Error("Host candidate catalog does not match the default catalog lock");
     console.log("Unpublished host candidate contract is valid; no release or image was published.");
     return;
   }
@@ -112,7 +125,9 @@ function main(): void {
   const candidate = captureCandidate({
     tag: args[1],
     platformCommit: git(root, ["rev-parse", "HEAD"]),
-    catalogCommit: catalogPin(root),
+    catalog: CatalogLockSchema.parse(
+      JSON.parse(readFileSync(resolve(root, ".tenkacloud/catalog-store/selected.json"), "utf8")),
+    ),
     inspection,
   });
   writeFileSync(args[3], `${JSON.stringify(candidate, null, 2)}\n`, { flag: "wx" });

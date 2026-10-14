@@ -1,3 +1,4 @@
+import { selectableProblem } from "../../../../packages/portal-contracts/src/problem-selection";
 /**
  * 問題カタログ。`problems/` ディレクトリの metadata.json を Vite の `import.meta.glob`
  * で build 時に取り込む。問題を追加するときは `problems/<category>/<id>/{template.yaml,
@@ -57,23 +58,10 @@ function findTemplateYaml(
   return modules[templatePath];
 }
 
-/**
- * Issue #2093: installed pack snapshots live under the local pack-store
- * (`.tenkacloud/pack-store/snapshots/<pack>/<rev>/<problemsRoot>/<category>/<id>/`).
- * They are globbed at BUILD time exactly like core — never fetched client-side —
- * so a core-only checkout (no installed snapshots) matches NOTHING and the catalog
- * stays byte-identical to the legacy core-only projection. Each snapshot also
- * carries a `tenkacloud-pack.json` manifest from which the pack identity / license
- * provenance is read.
- */
-const packMetadataModules = import.meta.glob<{ default: ProblemDetail }>(
-  "../../../../.tenkacloud/pack-store/snapshots/**/metadata.json",
-  { eager: true, query: "?catalog-detail" },
-);
-const packManifestModules = import.meta.glob<{ default: PackManifestShape }>(
-  "../../../../.tenkacloud/pack-store/snapshots/**/tenkacloud-pack.json",
-  { eager: true },
-);
+// Catalog files are supplied by the explicit selection's generated view. Merely
+// installing an authoring pack must not add it to an organizer's browser catalog.
+const packMetadataModules: Record<string, { default: ProblemDetail }> = {};
+const packManifestModules: Record<string, { default: PackManifestShape }> = {};
 
 /** The subset of `tenkacloud-pack.json` the console reads for display provenance. */
 export interface PackManifestShape {
@@ -163,7 +151,7 @@ export const PROBLEM_CATALOG: readonly ProblemDetail[] = composeCatalogDetails({
   packs: buildPackDetails(packMetadataModules, packManifestModules),
   // Issue #3226: set only by vite.host.config.ts (the local competition host build).
   includeLocalOnly: LOCAL_HOST_BUILD,
-});
+}).filter(selectableProblem);
 
 export function findProblem(id: string): ProblemDetail | undefined {
   return PROBLEM_CATALOG.find((p) => p.id === id);

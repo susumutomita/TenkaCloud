@@ -7,8 +7,13 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { randomToken } from "../auth";
 import { resetLocalOrganizerKey, stopManagedLocal } from "../local";
+import { HostingService } from "../service";
+import { HostStore } from "../store";
+import { HistoricalCompetitionEngine } from "./historical-competition-fixture";
+import { ensureHostBuild } from "./host-build-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
+await ensureHostBuild(root);
 const sessionFile = "local-session.json";
 const eventSchema = z.object({
   eventId: z.string(),
@@ -177,11 +182,37 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
     ).toBe(403);
     expect((await api(admin, "/host/bootstrap-status")).status).toBe(200);
 
-    const created = await api(admin, "/events", token, "POST", {
-      name: "Native process retention rehearsal",
-      teams: [{ internalSlug: "alpha" }, { internalSlug: "beta" }],
-      problems: [{ problemId: "ac26-crypto-battle" }],
+    // Seed a genuine historical event while the owner is stopped. The production
+    // process must reject a new crypto choice yet resume this saved definition.
+    expect(
+      (
+        await api(admin, "/events", token, "POST", {
+          name: "Retired material",
+          teams: [{ internalSlug: "retired" }],
+          problems: [{ problemId: "ac26-crypto-battle" }],
+        })
+      ).status,
+    ).toBe(422);
+    await down();
+    const legacyStore = new HostStore(new Database(join(data, "hosting.sqlite"), { strict: true }));
+    const legacyService = new HostingService(
+      legacyStore,
+      new HistoricalCompetitionEngine(root, data),
+      signingKey,
+    );
+    const created = await legacyService.admin({
+      method: "POST",
+      path: "/events",
+      token,
+      query: new URLSearchParams(),
+      body: {
+        name: "Native process retention rehearsal",
+        teams: [{ internalSlug: "alpha" }, { internalSlug: "beta" }],
+        problems: [{ problemId: "ac26-crypto-battle" }],
+      },
     });
+    legacyStore.close();
+    await start();
     expect(created.status).toBe(201);
     const event = eventSchema.parse(created.body);
     expect((await api(admin, `/events/${event.eventId}/deploy`, token, "POST", {})).status).toBe(

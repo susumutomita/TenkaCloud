@@ -5,20 +5,7 @@
 # reviewed public metadata and diagrams; CloudFormation templates stay on the host.
 .git
 .gitmodules
-problems/*
-!problems/battles/
-problems/battles/*
-!problems/battles/ac26-crypto-battle/
-!problems/battles/hello-world-battle/
-problems/battles/hello-world-battle/*
-!problems/battles/hello-world-battle/metadata.json
-!problems/battles/hello-world-battle/template.yaml
-!problems/battles/hello-world-battle/diagram.svg
-!problems/challenges/
-problems/challenges/*
-!problems/challenges/sqli-demo/
-!problems/challenges/hello-world/
-problems/**/.git
+problems
 
 node_modules
 **/node_modules
@@ -41,3 +28,12 @@ apps/participant-portal/public/runtime-config.backup.json
 **/.env
 **/.env.*
 !**/.env.example
+
+# Only validated downloaded source bytes re-enter the context, never host state or credentials.
+!.tenkacloud/
+.tenkacloud/*
+!.tenkacloud/catalog-store/
+.tenkacloud/catalog-store/*
+!.tenkacloud/catalog-store/selected.json
+!.tenkacloud/catalog-store/snapshots/
+!.tenkacloud/catalog-store/snapshots/**

@@ -8,11 +8,11 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
 import { assertHostingModule, narrowCatalog, publicMetadata } from "../browser-metadata";
 import { connectCloudHosting } from "../cloud-hosting";
-import { CompetitionEngine } from "../competition-engine";
 import { parseOptions } from "../options";
 import { HostingService } from "../service";
 import { digest, HostStore } from "../store";
 import { FakeAws, OPERATOR_ACCOUNT } from "./fake-aws";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -179,11 +179,9 @@ import.meta.glob("../../../../problems/*/*/*.yaml");`;
   expect(participant).toBe(hostConsole);
   expect(participant).toContain("challenges/hello-world");
   expect(participant).toContain("challenges/sqli-demo");
-  expect(participant).toContain("battles/ac26-crypto-battle");
+  expect(participant).not.toContain("battles/ac26-crypto-battle");
   expect(participant).toContain("battles/hello-world-battle");
-  expect(participant).toContain(
-    'import.meta.glob("../../../../problems/challenges/sqli-demo/__local_host_empty__/*.yaml");',
-  );
+  expect(participant).toContain("challenges/sqli-demo/__local_host_empty__/*.yaml");
   expect(participant).not.toContain("problems/*/*/");
   expect(() =>
     assertHostingModule("/repo/problems/challenges/hello-world/metadata.json"),

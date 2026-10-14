@@ -1,4 +1,0 @@
-[submodule "problems"]
-	path = problems
-	url = https://github.com/susumutomita/TenkaCloudChallenge.git
-	branch = main

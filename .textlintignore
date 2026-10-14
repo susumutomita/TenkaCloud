@@ -32,11 +32,9 @@ references/**
 README.md
 CONTRIBUTING.md
 apps/*/README.md
-# `problems/` 自体は TenkaCloudChallenge repo の git submodule で、 本体 lint policy を
-# 適用する責務は無いため全配下を除外する (= submodule 側の catalog CI で validate を担当)。
-# 問題ディレクトリ直下の README が JA narrative + EN AWS 製品名 (Session Manager /
-# Parameter Store / Auto Scaling 等) を多用する件もここで合わせて除外される。
+# ダウンロードした問題パックは外部リポジトリの lint policy で検証する。
 problems/**
+.tenkacloud/catalog-store/**
 
 # 外部 spec の vendor 翻訳。 textlint の社内 style rule (= 句点 / 接続詞 / 曖昧表現)
 # を当てると原典の意図がずれる。
@@ -46,3 +44,5 @@ CODE_OF_CONDUCT.md
 # (である/ですます・句点) を当てると法務的な言い回しがずれるため、 README /
 # CONTRIBUTING / CODE_OF_CONDUCT と同じ扱いで除外する (markdownlint は通常どおり適用)。
 TRADEMARK_POLICY.md
+
+.tenkacloud/catalog-build/**

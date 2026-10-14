@@ -57,3 +57,54 @@ describe("cloud catalog boundary", () => {
     expect(entries).toHaveProperty("arbitraryLocal");
   });
 });
+
+it("retired cryptography is excluded across projections without dropping ordinary AWS entries", () => {
+  const entries = { "ac26-crypto-battle": "retired", current: "current" };
+  const filtered = cloudCatalog({
+    catalog: entries,
+    scoring: entries,
+    runtimes: {},
+    endpoints: {},
+    phases: {},
+    visibility: {},
+    disruptions: {},
+    coordination: {},
+    coordinationBundles: {},
+  });
+  expect(filtered.catalog).toEqual({ current: "current" });
+  expect(filtered.scoring).toEqual({ current: "current" });
+});
+
+it("handles legacy bundles with absent projections and excludes compose engines regardless of provider", () => {
+  const legacy = { catalog: { current: "current" }, scoring: null } as unknown as Parameters<
+    typeof cloudCatalog
+  >[0];
+  expect(cloudCatalog(legacy)).toEqual({ catalog: { current: "current" }, scoring: {} });
+  const runtimesOnly = {
+    runtimes: { local: { provider: "other", engine: "compose" } },
+  } as unknown as Parameters<typeof cloudCatalog>[0];
+  expect(cloudCatalog(runtimesOnly)).toEqual({ runtimes: {} });
+});
+
+it("excludes non-ac26 cryptography by source metadata tags from every projection", () => {
+  const entries = { "ordinary-name": "retired", current: "current" };
+  const filtered = cloudCatalog(
+    {
+      catalog: entries,
+      scoring: entries,
+      runtimes: {},
+      endpoints: entries,
+      phases: entries,
+      visibility: entries,
+      disruptions: entries,
+      coordination: entries,
+      coordinationBundles: entries,
+    },
+    {
+      "ordinary-name": { tags: ["advanced-cryptography-course"] },
+      current: { tags: ["security"] },
+    },
+  );
+  for (const [name, projection] of Object.entries(filtered))
+    expect(projection).toEqual(name === "runtimes" ? {} : { current: "current" });
+});

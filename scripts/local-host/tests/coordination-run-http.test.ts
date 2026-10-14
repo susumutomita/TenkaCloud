@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { apiRequest, BENCH_ORGANIZER, type CreatedEvent, HOST_KEY } from "../bench/state-setup";
-import { CompetitionEngine } from "../competition-engine";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const endpoint = "/portal/me/coordination/op";

@@ -484,21 +484,11 @@ Bun execution, use `bun run --no-env-file scripts/tenkacloud.ts turso-live reset
 
 ## Update the problem catalog
 
-`make submodule-latest` fetches and stages the problem-source pin in this checkout;
-it does not update a running installation. Review it between events:
-
-```sh
-git -C problems rev-parse HEAD
-make submodule-latest
-git diff --cached --submodule=log -- problems
-make validate-problems
-make deploy ENV=development
-```
-
-The submodule command accepts equal or fast-forward history and refuses dirty,
-older or divergent selections. Skip it when deliberately using another reviewed
-pin; stage that pin before validation. Preserve the original checkout for local
-events that must resume; see [local updates](../docs/local-hosting.md#update-the-problem-catalog).
+Select and acquire catalogs with `make catalog-download CATALOG_SOURCES=my-catalogs.json`,
+then run `make validate-problems`. This does not update a running installation.
+See [downloaded catalog contracts](../docs/problem-catalogs.md). Existing source
+ZIP versions and event catalog pins remain retained. Review the selection before
+running `make deploy ENV=development` with the existing installation settings.
 
 `make deploy` rebuilds both applications, prepares/uploads the source bundle and
 updates the selected compatible stacks. Use the existing account, region,

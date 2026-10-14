@@ -8,6 +8,11 @@ import {
   PortalAuthError,
 } from "../../src/api/portal-client";
 import type { AppConfig } from "../../src/config";
+import {
+  findProblemMetadata,
+  hydrateProblemCatalog,
+  listProblemCatalog,
+} from "../../src/data/problems";
 
 /**
  * TeamViewProvider: no-op 検出器 (viewIsUnchanged / leaderboardIsUnchanged /
@@ -317,6 +322,52 @@ afterEach(() => {
 });
 
 describe("TeamViewProvider polling", () => {
+  it("hydrates the saved event catalog before consumers see the view and clears a stale catalog", async () => {
+    const original = listProblemCatalog();
+    const entry = {
+      id: "p-0",
+      name: "Pinned event edition",
+      category: "Challenge",
+      status: "published",
+      visibility: "public",
+      difficulty: 1,
+      estimatedDuration: "5 minutes",
+      shortDescription: "Saved metadata",
+      learningGoals: [],
+      tags: [],
+      endpoints: [],
+      phases: [],
+      disruptions: [],
+      runtime: { provider: "docker", engine: "compose" },
+    } as const;
+    mockGetMe.mockResolvedValue(view({ problemCatalog: [entry] }));
+    const { result, unmount } = renderHook(() => useTeamView(), { wrapper });
+    try {
+      await flush();
+      expect(result.current.view?.problemCatalog).toEqual([entry]);
+      expect(findProblemMetadata("p-0")?.name).toBe("Pinned event edition");
+      mockGetMe.mockResolvedValue(view({ problemCatalog: [] }));
+      await act(async () => {
+        await result.current.refresh();
+      });
+      expect(result.current.view?.problemCatalog).toEqual([]);
+      expect(findProblemMetadata("p-0")).toBeUndefined();
+      mockGetMe.mockResolvedValue(view({ problemCatalog: [entry] }));
+      await act(async () => {
+        await result.current.refresh();
+      });
+      expect(findProblemMetadata("p-0")?.name).toBe("Pinned event edition");
+      mockGetMe.mockResolvedValue(view());
+      await act(async () => {
+        await result.current.refresh();
+      });
+      expect(findProblemMetadata("p-0")).toBeUndefined();
+    } finally {
+      unmount();
+      hydrateProblemCatalog(original);
+    }
+  });
+
   it("does not call an unavailable notification endpoint on mount or later polls", async () => {
     const disabled = ({ children }: { children: ReactNode }) => (
       <TeamViewProvider config={{ ...config, notificationsEnabled: false }}>

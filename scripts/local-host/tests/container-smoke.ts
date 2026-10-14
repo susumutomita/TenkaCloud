@@ -1,11 +1,12 @@
 /**
- * Runs the hosted image the way a platform would and plays one Cryptography Battle through its
+ * Runs the hosted image the way a platform would and plays one Forensic Casebook through its
  * advertised origins: `docker build -f docker/host/Dockerfile -t tenkacloud-host .` first, then
  * `bun run test:host:container`. HTTP origins stand in for the TLS proxy (`--unsafe-http`).
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
+import { type ForensicProjection, publicIdentityAnswer } from "./forensic-public-evidence";
 import { organizerToken } from "./organizer-login";
 
 const IMAGE = process.env.TENKACLOUD_HOST_IMAGE ?? "tenkacloud-host";
@@ -148,15 +149,14 @@ async function main(): Promise<void> {
     assert.ok(firstToken !== token, "each organizer-key login must receive an independent session");
 
     const catalog = await api(admin, "GET", "/host/catalog", token);
-    assert.deepEqual(
-      (catalog.body.items as { problemId: string }[]).map((item) => item.problemId),
-      ["ac26-crypto-battle", "forensic-casebook"],
-    );
+    const choices = (catalog.body.items as { problemId: string }[]).map((item) => item.problemId);
+    assert.ok(choices.includes("forensic-casebook"));
+    assert.ok(!choices.includes("ac26-crypto-battle"));
 
     const created = await api(admin, "POST", "/events", token, {
       name: "container smoke",
       teams: [{ internalSlug: "team-a" }, { internalSlug: "team-b" }],
-      problems: [{ problemId: "ac26-crypto-battle" }],
+      problems: [{ problemId: "forensic-casebook" }],
     });
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const eventId = String(created.body.eventId);
@@ -175,14 +175,6 @@ async function main(): Promise<void> {
     for (const team of teams) {
       const me = await api(participant, "GET", "/portal/me", team.teamLoginKey);
       assert.equal(me.status, 200, JSON.stringify(me.body));
-      const ready = await api(
-        participant,
-        "POST",
-        "/portal/me/coordination/op",
-        team.teamLoginKey,
-        { op: { kind: "ready" } },
-      );
-      assert.equal(ready.status, 200, JSON.stringify(ready.body));
     }
     const projection = await api(
       participant,
@@ -191,9 +183,33 @@ async function main(): Promise<void> {
       teams[0]?.teamLoginKey ?? "",
     );
     assert.equal(projection.status, 200, JSON.stringify(projection.body));
-    const before = projection.body.projection as { ready: unknown; vault: unknown };
-    assert.deepEqual(before.ready, { count: 2, total: 2, me: true });
-    assert.ok(before.vault, "the original match must contain the team vault");
+    const initial = projection.body.projection as ForensicProjection;
+    const identityCase = initial.cases.find((item) => item.id === "identity");
+    const identity = identityCase?.evidence.find((item) => item.id === "I-IDP");
+    const action = identityCase?.evidence.find((item) => item.id === "I-CLOUD");
+    assert.ok(identity && action, "participant evidence must be available");
+    const answer = publicIdentityAnswer(identity.content, action.content);
+    const accepted = await api(
+      participant,
+      "POST",
+      "/portal/me/coordination/op",
+      teams[0]?.teamLoginKey,
+      {
+        op: {
+          kind: "answer",
+          id: "container-answer",
+          revision: initial.revision,
+          generation: initial.generation,
+          caseId: "identity",
+          questionId: "account",
+          answer,
+          evidenceIds: ["I-IDP", "I-CLOUD"],
+        },
+      },
+    );
+    assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+    const before = accepted.body.projection as ForensicProjection;
+    assert.equal(before.score, 20);
     docker(["restart", NAME]);
     await waitFor("participant recovery after container restart", async () =>
       (await fetch(`${participant}/healthz`)).ok ? true : undefined,
@@ -210,11 +226,15 @@ async function main(): Promise<void> {
       teams[0]?.teamLoginKey ?? "",
     );
     assert.equal(recoveredProjection.status, 200, JSON.stringify(recoveredProjection.body));
-    const after = recoveredProjection.body.projection as { ready: unknown; vault: unknown };
-    assert.deepEqual(after.ready, before.ready, "both ready players must survive restart");
-    assert.deepEqual(after.vault, before.vault, "the same team vault must survive restart");
+    const after = recoveredProjection.body.projection as ForensicProjection;
+    assert.equal(after.score, before.score, "the same official award must survive restart");
+    assert.deepEqual(
+      after.cases,
+      before.cases,
+      "evidence and solved questions must survive restart",
+    );
     console.log(
-      `PASS container smoke: ${IMAGE} served a started Cryptography Battle to 2 teams; same-volume restart preserved keys, readiness and vault.`,
+      `PASS container smoke: ${IMAGE} served Forensic Casebook to 2 teams; answered public evidence and preserved keys, evidence and score across same-volume restart.`,
     );
   } finally {
     docker(["rm", "--force", NAME], false);

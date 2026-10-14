@@ -121,6 +121,8 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * no `BucketDeployment` = CFn テンプレ byte 互換。
    */
   readonly packAssets?: readonly PackAsset[];
+  /** Downloaded catalogs use immutable prefixes; preserve historical core objects. */
+  readonly skipCoreArtifacts?: boolean;
   /** @deprecated Accepted for legacy stack inputs; audit collection cannot be re-enabled. */
   readonly auditLogEnabled?: boolean;
   /**
@@ -441,6 +443,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       // Issue #2462: active pack の実体を core problems/ の隣に materialize する (Lambda 経路のみ)。
       // undefined / 空 → BucketDeployment 追加ゼロ = CFn byte 互換。
       packAssets: props.packAssets,
+      skipCoreArtifacts: props.skipCoreArtifacts,
     });
     this.deployCodeBuildProjectName = deployPipeline.deployCodeBuildProjectName;
     // Issue #2291: undefined on the default CodeBuild path (flag OFF) → ObservabilityStack skips the CfnDeploy Lambda widget (= default-safe, dashboard body byte-identical).

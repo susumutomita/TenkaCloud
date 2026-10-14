@@ -2,12 +2,16 @@ import { randomInt } from "node:crypto";
 import {
   type DisruptionFireRequest,
   DisruptionFireRequestSchema,
+} from "../../packages/problem-sdk/src/disruption-request.js";
+import {
   evaluateDisruptionTriggers,
   type FiredDisruption,
-  type ProblemDisruptionEntry,
-  type ProblemPhaseEntry,
   triggerMatches,
-} from "@tenkacloud/problem-sdk/internal";
+} from "../../packages/problem-sdk/src/disruption-triggers.js";
+import type {
+  ProblemDisruptionEntry,
+  ProblemPhaseEntry,
+} from "../../packages/problem-sdk/src/metadata-parser.js";
 import {
   declaredDisruptions,
   disruptionParameters,

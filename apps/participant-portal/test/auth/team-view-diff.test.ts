@@ -35,6 +35,14 @@ const view = (over: Record<string, unknown> = {}): ParticipantTeamView =>
   }) as ParticipantTeamView;
 
 describe("team-view-diff (Issue #2222)", () => {
+  it("refreshes when the pinned catalog changes even when deployments and scores stay the same", () => {
+    const original = view({ problemCatalog: [] });
+    const changed = view({ problemCatalog: [{ id: "saved", name: "Pinned edition" }] });
+    expect(viewIsUnchanged(original, changed)).toBe(false);
+    expect(viewIsUnchanged(changed, original)).toBe(false);
+    expect(viewIsUnchanged(changed, structuredClone(changed))).toBe(true);
+  });
+
   it("refreshes event gates without a score change", () => {
     const gates = [
       undefined,

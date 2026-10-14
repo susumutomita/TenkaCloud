@@ -59,9 +59,10 @@ TenkaCloud は、ハンズオン形式のクラウド競技会を開くための
 macOS、Linux または WSL2 に Git、Make、**Bun 1.3.11** を用意します。Docker 問題には Docker Engine と Compose v2 が必要です。組み込みの Cryptography Battle は Docker も AWS も使いません。開発ツールのバージョンは [mise.toml](./mise.toml) にあります。
 
 ```bash
-git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
+make catalog-download catalog-prepare
 make local
 ```
 
@@ -139,7 +140,7 @@ AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` 
 
 問題の正本は [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) です。カタログへの追加には、そのリポジトリの作問・検証手順を使います。作問のためにプラットフォームを fork する必要はありません。
 
-`make submodule-latest` で問題ソースを最新版へ更新して stage し、`make validate-problems` で選択した pin を検証します。どちらも稼働中のカタログへは反映しません。大会の合間に差分を確認し、ローカルは `make local` で[再ビルド・再起動](./docs/local-hosting.md#update-the-problem-catalog)、クラウドは `make deploy` で[既存環境を更新](./infrastructure/README.md#update-the-problem-catalog)します。`make build` は手元の成果物を作るだけです。再開予定のローカル大会には元の checkout を残してください。既存大会の問題定義やクラウドの実行内容は自動移行しません。
+`make catalog-download CATALOG_SOURCES=my-catalogs.json` で問題 repo を選択して取得し、検証・再ビルドします。既存大会の snapshot は保持します。[問題カタログの取得](./docs/problem-catalogs.md)を参照してください。取得だけで稼働中の host は更新されません。
 
 更新コマンドは追跡する branch を取得し、古い commit または分岐した commit であれば checkout や stage の前に停止します。問題ソースに未完了の編集がある場合も停止し、本体側の無関係な作業は保持します。検証用の pin は、その commit を失わずに追跡先へ前進できるまで維持してください。
 

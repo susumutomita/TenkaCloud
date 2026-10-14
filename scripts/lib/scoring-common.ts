@@ -1,4 +1,5 @@
-import type { ProblemEndpointSlot, ProblemScoringMetadata } from "@tenkacloud/problem-sdk/internal";
+import type { ProblemEndpointSlot } from "../../packages/problem-sdk/src/endpoints-metadata.js";
+import type { ProblemScoringMetadata } from "../../packages/problem-sdk/src/scoring-metadata.js";
 import type { DeploymentScoringState } from "./deployment-scoring-state.js";
 import type { ProbeFn, ProbeResult } from "./http-probe-client.js";
 

@@ -1,5 +1,8 @@
 import { isPrivateCoordinationOutputKey } from "@tenkacloud/coordination-plugin-sdk";
-import { type ProblemEndpointSlot, resolveDefaultUrl } from "@tenkacloud/problem-sdk/internal";
+import {
+  type ProblemEndpointSlot,
+  resolveDefaultUrl,
+} from "../../packages/problem-sdk/src/endpoints-metadata.js";
 import { parseStackOutputs } from "./cfn-outputs.js";
 
 export interface EndpointOverride {

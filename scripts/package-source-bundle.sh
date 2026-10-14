@@ -11,6 +11,7 @@ python3 - <<'PY'
 import fnmatch
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import stat
@@ -91,20 +92,20 @@ def require_regular(source):
         fail('source must be a regular file, not a symlink: ' + str(source.relative_to(root)))
 
 
-def copy_tree(relative, target):
+def copy_tree(relative, target, immutable_catalog=False):
     source = root / relative
     checked_path(str(source), 'source directory')
     if not source.is_dir():
         fail('required directory missing: ' + relative)
     for directory, dirs, files in os.walk(source, followlinks=False):
-        dirs[:] = sorted(name for name in dirs if not is_excluded(name))
+        dirs[:] = sorted(name for name in dirs if immutable_catalog or not is_excluded(name))
         for name in dirs:
             if (Path(directory) / name).is_symlink():
                 fail('source directory must not contain a symlink: ' + str(Path(directory) / name))
         destination = staging / target / Path(directory).relative_to(source)
         destination.mkdir(parents=True, exist_ok=True)
         for name in sorted(files):
-            if not is_excluded(name):
+            if immutable_catalog or not is_excluded(name):
                 item = Path(directory) / name
                 require_regular(item)
                 shutil.copy2(item, destination / name)
@@ -123,7 +124,40 @@ try:
                            ('problems', 'problems'), ('packages', 'packages')]:
         copy_tree(source, target)
     if not any((staging / 'problems').rglob('metadata.json')):
-        fail('problem catalog submodule is not checked out; run git submodule update --init --recursive')
+        fail('selected problem catalog is absent; run make catalog-download catalog-prepare')
+    selection_file = root / '.tenkacloud/catalog-store/selected.json'
+    checked_path(str(selection_file), 'catalog selection')
+    require_regular(selection_file)
+    selection = json.loads(selection_file.read_text())
+    if not isinstance(selection, dict) or selection.get('schemaVersion') != 1:
+        fail('invalid immutable catalog selection')
+    sources, retained = selection.get('sources'), selection.get('retained', [])
+    if not isinstance(sources, list) or not sources or not isinstance(retained, list):
+        fail('invalid immutable catalog selection')
+    revisions = retained + sources
+    selected_target = staging / '.tenkacloud/catalog-store/selected.json'
+    selected_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(selection_file, selected_target)
+    copied = set()
+    for revision in revisions:
+        if not isinstance(revision, dict):
+            fail('invalid immutable catalog identity')
+        commit, digest = revision.get('commit'), revision.get('digest')
+        if not isinstance(commit, str) or not isinstance(digest, str):
+            fail('invalid immutable catalog identity')
+        if not re.fullmatch(r'[a-f0-9]{40}', commit) or not re.fullmatch(r'[a-f0-9]{64}', digest):
+            fail('invalid immutable catalog identity')
+        if (commit, digest) in copied:
+            continue
+        copied.add((commit, digest))
+        snapshot_path = '.tenkacloud/catalog-store/snapshots/' + digest
+        if not (staging / snapshot_path).exists():
+            copy_tree(snapshot_path, snapshot_path, immutable_catalog=True)
+        # CodeBuild receives the same directory as the pinned dispatch and S3 assets.
+        # Preserve the complete root, including hidden/shared files and raw metadata.
+        copy_tree(snapshot_path,
+                  'pack-problems/catalog.' + digest + '/' + commit, immutable_catalog=True)
+
     pack_store = root / '.tenkacloud' / 'pack-store'
     if pack_store.exists() or pack_store.is_symlink():
         copy_tree('.tenkacloud/pack-store', '.tenkacloud/pack-store')

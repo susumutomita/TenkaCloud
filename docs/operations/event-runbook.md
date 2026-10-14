@@ -9,7 +9,7 @@ catalog pin のない旧 Lite 環境は、resource / schema の検査後、boots
 
 ## 開催前
 
-- 問題ソースの取得は `make submodule-latest`、検証は `make validate-problems` を使う。稼働環境への反映は別で、ローカルは[再ビルド・再起動](../local-hosting.md#update-the-problem-catalog)、クラウドは[既存環境の更新](../../infrastructure/README.md#update-the-problem-catalog)を行う。開催中の問題差し替えは避け、再開予定の大会には元の問題ソースと実行 revision を保持する
+- 問題ソースの取得は `make catalog-download`、検証は `make validate-problems` を使う。稼働環境への反映は別で、ローカルは[再ビルド・再起動](../local-hosting.md#update-the-problem-catalog)、クラウドは[既存環境の更新](../../infrastructure/README.md#update-the-problem-catalog)を行う。開催中の問題差し替えは避け、再開予定の大会には元の問題ソースと実行 revision を保持する
 - ソースと問題カタログの revision、担当者、開催時間、連絡経路、撤収担当を記録する
 - ローカルは[起動手順](../local-hosting.md)の主催者キーでログインする。クラウドは Cognito の開催者を準備し、役割を確認する
 - private なデータディレクトリと整合したバックアップを用意し、1 つのプロセスだけが所有する

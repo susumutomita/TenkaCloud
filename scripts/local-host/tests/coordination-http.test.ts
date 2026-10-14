@@ -4,10 +4,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CompetitionEngine } from "../competition-engine";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 import { REHEARSAL_ORGANIZER } from "./organizer-login";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));

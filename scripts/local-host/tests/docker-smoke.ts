@@ -1,5 +1,5 @@
 /** Runs the production adapter and the catalog's unmodified Docker problem.
- * Requires Bun, the checked-out problems submodule and a working Docker daemon.
+ * Requires Bun, explicitly downloaded problem snapshots and a working Docker daemon.
  * There is deliberately no fake runtime or skip-on-failure path in this check. */
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";

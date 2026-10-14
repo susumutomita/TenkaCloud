@@ -283,7 +283,7 @@ async function runOneStateCase(
     store = new HostStore(new Database(databasePath));
     const service = new HostingService(
       store,
-      new CompetitionEngine(options.repositoryRoot, dataDirectory),
+      new HistoricalBenchmarkEngine(options.repositoryRoot, dataDirectory),
       HOST_KEY,
       () => clock,
     );
@@ -327,4 +327,11 @@ export async function runStateMode(options: StateRunOptions): Promise<StateRunRe
     results.push(await runOneStateCase(teamCount, options));
   }
   return results;
+}
+
+/** This simulator exercises historical crypto scoring; it is not a new-event host catalog. */
+class HistoricalBenchmarkEngine extends CompetitionEngine {
+  override catalog() {
+    return this.catalogEntries();
+  }
 }

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const APPS = {
@@ -39,6 +39,10 @@ export async function buildHosting(
   repositoryRoot: string,
   output: BuildOutput = "full",
 ): Promise<void> {
+  const { materializeCatalog } = await import("../problem-pack/downloaded-catalog");
+  materializeCatalog(repositoryRoot);
+  const catalogLock = join(repositoryRoot, ".tenkacloud/catalog-store/selected.json");
+  const catalogIdentity = readFileSync(catalogLock, "utf8");
   const apps = Object.keys(APPS) as App[];
   for (const [index, app] of apps.entries()) {
     const started = performance.now();
@@ -64,4 +68,10 @@ export async function buildHosting(
         `Built the ${APPS[app]} in ${((performance.now() - started) / 1000).toFixed(1)}s.`,
       );
   }
+  if (readFileSync(catalogLock, "utf8") !== catalogIdentity)
+    throw new Error("Catalog selection changed during the build; rebuild before starting");
+  writeFileSync(
+    join(repositoryRoot, ".tenkacloud/host-build/catalog-selection.json"),
+    catalogIdentity,
+  );
 }

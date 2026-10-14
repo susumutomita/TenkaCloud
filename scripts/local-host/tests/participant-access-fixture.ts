@@ -2,11 +2,11 @@ import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CompetitionEngine } from "../competition-engine";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const ACCESS_ORGANIZER = {

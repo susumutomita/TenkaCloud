@@ -5,7 +5,7 @@ import {
   type ProgressionGateConfig,
   ProgressionGateConfigSchema,
   resolveTeamGatePolicy,
-} from "@tenkacloud/problem-sdk/internal";
+} from "../../packages/problem-sdk/src/progression-gate.js";
 import { HostError, type HostedEvent, type Team } from "./model";
 import { projectedScore } from "./score";
 import type { HostStore } from "./store";

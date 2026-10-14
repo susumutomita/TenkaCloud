@@ -5,11 +5,11 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CompetitionEngine } from "../competition-engine";
 import { parseGatewayPorts } from "../gateway-ports";
 import { startHttpHost } from "../http";
 import { parseOptions } from "../options";
 import { type RunningLocalHost, startLocalHost } from "../server";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const ADMIN = "https://admin.example.test";

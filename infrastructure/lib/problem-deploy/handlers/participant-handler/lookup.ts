@@ -18,6 +18,7 @@ import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { parseEndpointsHealth } from "../shared/endpoints-health.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
+import { savedProblemCatalog } from "./catalog-view.js";
 import { decorateTeamView } from "./challenge-access.js";
 import { warnLoginUnauthorized } from "./login-diagnostics.js";
 import {
@@ -384,11 +385,10 @@ export async function lookupTeamByLoginKey(
       {},
     );
     return history
-      ? decorateTeamView(
-          { ...shared, problemsWriteups: {}, coordinationProblemIds: [] },
-          items,
-          history,
-        )
+      ? decorateTeamView({ ...shared, problemsWriteups: {}, coordinationProblemIds: [] }, items, {
+          ...history,
+          problemCatalog: [],
+        })
       : undefined;
   }
   const view = buildTeamView(items, shared.problemsScoring);
@@ -403,7 +403,13 @@ export async function lookupTeamByLoginKey(
   // eventGate + progression (Issue #2283) の注入と locked 問題の stackOutputs 空化は
   // decorateTeamView に集約 (= PATCH /portal/me 応答と同じ経路)。 eventId 不在は
   // gate 不明 → fail-closed (scoring_not_started)。
-  return decorateTeamView(shared, items, view);
+  if (!shared.executionCatalog)
+    return decorateTeamView(shared, items, { ...view, problemCatalog: [] });
+  const problemCatalog = await savedProblemCatalog(
+    shared.executionCatalog,
+    view.problems.map((problem) => problem.problemId),
+  );
+  return decorateTeamView(shared, items, { ...view, problemCatalog });
 }
 
 /**

@@ -1,5 +1,5 @@
-import { DisruptionFireRequestSchema } from "@tenkacloud/problem-sdk/internal";
 import { z } from "zod";
+import { DisruptionFireRequestSchema } from "../../packages/problem-sdk/src/disruption-request.js";
 import {
   type DisruptionExecution,
   type DisruptionRequest,

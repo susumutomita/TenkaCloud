@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright-core";
+import { loadDockerCatalog } from "../docker-catalog";
 import { DockerHostingEngine } from "../docker-engine";
 import { startLocalHost } from "../server";
 import { organizerToken } from "./organizer-login";
@@ -15,6 +16,12 @@ const problemId = process.env.CTFD_E2E_PROBLEM_ID ?? "ctfd-demo";
 const artifacts = join(root, ".tenkacloud/ctfd-e2e", `${theme}-${problemId}`);
 const data = mkdtempSync(join(tmpdir(), "tenka-ctfd-host-"));
 mkdirSync(artifacts, { recursive: true });
+/** The authored CTFd test fixture is explicit; production always uses the selected catalog. */
+class CTFdFixtureEngine extends DockerHostingEngine {
+  override catalog() {
+    return loadDockerCatalog(root, [join(root, "integrations/ctfd/tests/fixture-root/problems")]);
+  }
+}
 const host = await startLocalHost(
   root,
   {
@@ -25,8 +32,8 @@ const host = await startLocalHost(
     gatewayPorts: { start: 5200, end: 5239 },
   },
   (directory) =>
-    new DockerHostingEngine(
-      problemId === "ctfd-demo" ? join(root, "integrations/ctfd/tests/fixture-root") : root,
+    new (problemId === "ctfd-demo" ? CTFdFixtureEngine : DockerHostingEngine)(
+      root,
       directory,
       // eslint-disable-next-line sonarjs/no-hardcoded-ip -- Disposable fixture pool; the allocator checks occupied subnets.
       process.env.HOST_DOCKER_NETWORK_POOL ?? "10.240.0.0/16",

@@ -428,6 +428,8 @@ export interface ParticipantProgressionView {
  * 出さない。 Battle のゲーム性 = 「なぜ壊れているかを防御側自身が調査して回復する」。
  */
 export interface ParticipantTeamView {
+  /** Public metadata pinned with the authenticated host event; never current-source instructions. */
+  readonly problemCatalog?: readonly import("./problem-catalog.js").ProblemCatalogEntry[];
   readonly team: {
     readonly teamName: string;
     readonly teamNameSetByCompetitor: boolean;

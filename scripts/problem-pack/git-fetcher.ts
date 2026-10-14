@@ -76,9 +76,8 @@ export const realGitArchiveFetcher: GitArchiveFetcher = (request) => {
     git(["fetch", "--depth", "1", "--no-tags", "origin", request.commit]);
     git(["checkout", "--quiet", "FETCH_HEAD"]);
 
-    const packRoot =
-      request.subdir.length > 0 ? path.join(work, ...request.subdir.split("/")) : work;
-    copyPackRoot(packRoot, request.destinationDir);
+    const packRoot = checkedGitPackRoot(work, request.subdir);
+    copyPackRoot(packRoot, request.destinationDir, request.rejectLinks);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
@@ -89,14 +88,36 @@ export const realGitArchiveFetcher: GitArchiveFetcher = (request) => {
  * VCS/build noise. Only regular files and directories are copied; symlinks are
  * skipped (they are excluded from snapshots and the digest anyway).
  */
-function copyPackRoot(packRoot: string, destinationDir: string): void {
+function copyPackRoot(packRoot: string, destinationDir: string, rejectLinks = false): void {
   if (!fs.existsSync(packRoot) || !fs.statSync(packRoot).isDirectory()) {
     throw new Error(`Pack root '${packRoot}' was not found in the fetched repository.`);
   }
   for (const entry of fs.readdirSync(packRoot, { withFileTypes: true })) {
-    if (entry.name === ".git" || entry.isSymbolicLink()) continue;
+    if (entry.name === ".git") continue;
+    if (entry.isSymbolicLink()) {
+      if (rejectLinks) throw new Error("Catalog contains a symbolic link");
+      continue;
+    }
     const from = path.join(packRoot, entry.name);
     const to = path.join(destinationDir, entry.name);
     fs.cpSync(from, to, { recursive: true });
   }
+}
+
+/** Validate before copying: both root and every requested parent must stay in the checkout. */
+export function checkedGitPackRoot(work: string, subdir: string): string {
+  const root = fs.realpathSync(work);
+  let current = root;
+  for (const component of subdir.split("/").filter(Boolean)) {
+    if (component === "." || component === ".." || path.isAbsolute(component))
+      throw new Error("Invalid Git pack subdirectory");
+    current = path.join(current, component);
+    if (fs.lstatSync(current).isSymbolicLink())
+      throw new Error("Git pack subdirectory is a symbolic link");
+  }
+  const actual = fs.realpathSync(current);
+  const relative = path.relative(root, actual);
+  if (relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative))
+    throw new Error("Git pack subdirectory escapes checkout");
+  return actual;
 }

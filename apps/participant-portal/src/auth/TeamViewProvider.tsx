@@ -22,6 +22,7 @@ import {
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { NOTIFICATIONS_POLL_INTERVAL_MS, POLL_INTERVAL_MS } from "../constants/polling";
+import { hydrateProblemCatalog } from "../data/problems";
 import { countUnread, loadLastSeenAt, saveLastSeenAt } from "../lib/notifications-storage";
 import { useAuth } from "./AuthProvider";
 import {
@@ -161,6 +162,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
         setError(decision.message);
         return true;
       }
+      hydrateProblemCatalog(decision.view.problemCatalog ?? []);
       setView((prev) => (viewIsUnchanged(prev, decision.view) ? prev : decision.view));
       setError(null);
       if (decision.stopPolling) stopPollingRef.current = true;

@@ -47,24 +47,30 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 FROM oven/bun:1.3.11-alpine AS runtime
 WORKDIR /app
 ARG TENKACLOUD_SOURCE_COMMIT
-ARG TENKACLOUD_CATALOG_COMMIT
+ARG TENKACLOUD_CATALOG_DIGEST
 LABEL org.opencontainers.image.source="https://github.com/susumutomita/TenkaCloud" \
       org.opencontainers.image.revision=$TENKACLOUD_SOURCE_COMMIT \
-      io.tenkacloud.catalog.revision=$TENKACLOUD_CATALOG_COMMIT
+      io.tenkacloud.catalog.digest=$TENKACLOUD_CATALOG_DIGEST
 COPY --from=runtime-deps /app/node_modules /app/node_modules
 COPY --from=runtime-deps /app/package.json /app/package.json
 COPY --from=runtime-deps /app/infrastructure/package.json /app/infrastructure/package.json
 COPY packages /app/packages
 COPY scripts/lib /app/scripts/lib
+COPY scripts/problem-pack/catalog-read.ts /app/scripts/problem-pack/catalog-read.ts
+COPY scripts/problem-pack/source-permissions.ts /app/scripts/problem-pack/source-permissions.ts
 COPY scripts/local-host /app/scripts/local-host
 COPY infrastructure/templates/competitor-bootstrap.yaml /app/infrastructure/templates/competitor-bootstrap.yaml
-COPY problems /app/problems
-COPY --from=build /app/.tenkacloud/host-build /app/.tenkacloud/host-build
+COPY --from=build --chown=bun:bun /app/problems /app/problems
+COPY --from=build --chown=bun:bun /app/.tenkacloud/catalog-store /app/.tenkacloud/catalog-store
+COPY --from=build --chown=bun:bun /app/.tenkacloud/host-build /app/.tenkacloud/host-build
 
 ENV HOME=/tmp/tenkacloud-home
 ENV TENKACLOUD_HOST_REQUIRE_PUBLIC=1
 # Host mode refuses a data directory other users can read (scripts/local-host/files.ts).
-RUN test "$(id -u bun)" = "1000" \
+# A private checkout umask must not make platform code unreadable to USER bun.
+# Keep code root-owned; only public input readability changes, never /data permissions.
+RUN chmod -R a+rX /app \
+    && test "$(id -u bun)" = "1000" \
     && mkdir -p /data \
     && chown bun:bun /data \
     && chmod 700 /data

@@ -1,3 +1,5 @@
+import { selectableProblem } from "../../../../packages/portal-contracts/src/problem-selection";
+
 /**
  * 競技者向け問題カタログ (#550)。カタログには 2 つの供給源がある。
  *
@@ -70,6 +72,7 @@ const englishDiagramModules = import.meta.glob<string>("../../../../problems/*/*
 
 const BUILD_TIME_CATALOG: readonly ProblemCatalogEntry[] = Object.values(metadataModules)
   .map((mod) => mod.default)
+  .filter(selectableProblem)
   .sort((a, b) => a.id.localeCompare(b.id));
 
 /**

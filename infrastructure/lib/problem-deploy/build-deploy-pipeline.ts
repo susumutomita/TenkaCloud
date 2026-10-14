@@ -61,6 +61,8 @@ export interface BuildDeployPipelineArgs {
    * SaaS — pooled activation wiring is #2459) adds no resource = CFn byte-identical.
    */
   readonly packAssets?: readonly PackAsset[];
+  /** Downloaded catalogs use immutable prefixes; preserve historical core objects. */
+  readonly skipCoreArtifacts?: boolean;
 }
 
 export interface DeployPipelineOutputs {
@@ -166,21 +168,22 @@ export function buildDeployPipeline(
     // bundle, uploaded by install.sh) and other objects. BucketDeployment's default prune:true
     // deletes every object in the destination that is not part of this asset — that would wipe
     // source.zip and break the CodeBuild deploy/delete path. Never remove prune:false here.
-    new BucketDeployment(scope, "ProblemArtifacts", {
-      logGroup: deploymentLogGroup(scope, "ProblemArtifactsLogs"),
-      sources: [
-        Source.asset(path.resolve(import.meta.dirname, "../../../problems"), {
-          // Exclude the catalog's dev dependencies: large and irrelevant to the deploy body.
-          // (A positive directory exclude has no glob re-include pitfall.)
-          exclude: ["node_modules"],
-        }),
-      ],
-      destinationBucket: sourceBucket,
-      destinationKeyPrefix: "problems",
-      prune: false,
-      // The copy handler unzips + `aws s3 sync`s the tree; 256MB comfortably covers the small tree.
-      memoryLimit: 256,
-    });
+    if (!args.skipCoreArtifacts)
+      new BucketDeployment(scope, "ProblemArtifacts", {
+        logGroup: deploymentLogGroup(scope, "ProblemArtifactsLogs"),
+        sources: [
+          Source.asset(path.resolve(import.meta.dirname, "../../../problems"), {
+            // Exclude the catalog's dev dependencies: large and irrelevant to the deploy body.
+            // (A positive directory exclude has no glob re-include pitfall.)
+            exclude: ["node_modules"],
+          }),
+        ],
+        destinationBucket: sourceBucket,
+        destinationKeyPrefix: "problems",
+        prune: false,
+        // The copy handler unzips + `aws s3 sync`s the tree; 256MB comfortably covers the small tree.
+        memoryLimit: 256,
+      });
 
     // Issue #2462: materialize each active pack's immutable snapshot problems root NEXT TO the core
     // tree, under `pack-problems/<packId>/<version>/`. `packAssets[].problemsRootAbs` is the pack's

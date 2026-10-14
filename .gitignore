@@ -190,3 +190,7 @@ packages/standalone-cli/runtime/
 # `packages/`, which fs.cp() cannot copy into itself) and renamed away on success —
 # only lingers after an interrupted run.
 /.tenkacloud-runtime-staging-*/
+
+# Explicitly downloaded catalog view; immutable sources live in .tenkacloud.
+/problems/
+/.catalog-view-*/

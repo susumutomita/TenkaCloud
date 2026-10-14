@@ -9,7 +9,7 @@ import {
 
 export type { StackUnit } from "./cloud-runtime-contract";
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   Capability,
@@ -34,7 +34,13 @@ import { assumeRoleWithExternalId } from "../lib/assume-role";
 import { buildParameterOverrides, generateRandomAlphanumeric } from "../lib/cfn-parameters";
 import { flagMatches } from "../lib/flag-matches";
 import { hintViews, parseEnglishOverlay, parseVerifyScoring } from "../lib/problem-presentation";
+import {
+  catalogMetadata,
+  type Revision,
+  selectedCatalogSnapshots,
+} from "../problem-pack/catalog-read";
 import { AwsDisruptionAdapter } from "./aws-disruption-adapter";
+import { publicCatalogEntry } from "./catalog-projection";
 import {
   type AwsTarget,
   type Context,
@@ -165,12 +171,13 @@ function uptimeStackDefinition(
 function stackProblem(
   repositoryRoot: string,
   entry: (typeof REVIEWED_STACK_PROBLEMS)[number],
+  source: Revision,
 ): Problem {
   const { problemId, folder, scoring } = entry;
-  const directory = join(repositoryRoot, "problems", folder, problemId);
-  const metadata = JSON.parse(
-    readFileSync(join(directory, "metadata.json"), "utf8"),
-  ) as StackMetadata;
+  const directory = join(repositoryRoot, folder, problemId);
+  const metadata = catalogMetadata(
+    JSON.parse(readFileSync(join(directory, "metadata.json"), "utf8")),
+  ) as unknown as StackMetadata;
   const overlay = parseEnglishOverlay(metadata.i18n);
   // Picked, not filtered: the author-only description never reaches participants.
   const english = {
@@ -179,6 +186,7 @@ function stackProblem(
   };
   const base: StackDefinitionBase = {
     kind: "cloudformation",
+    source,
     problemId,
     templateBody: readFileSync(join(directory, metadata.cfnTemplate), "utf8"),
     cfnParameters: metadata.cfnParameters ?? {},
@@ -198,6 +206,7 @@ function stackProblem(
     problemId,
     name: metadata.name,
     definition: JSON.stringify(definition),
+    publicCatalog: publicCatalogEntry(metadata as unknown as Record<string, unknown>, directory),
     skillCatalog: skillCatalog(metadata, JSON.stringify(definition)),
     organizerContent: organizerProblemContent(metadata),
     runtime: "cloudformation",
@@ -205,7 +214,11 @@ function stackProblem(
 }
 
 export function cloudFormationCatalog(repositoryRoot: string): Problem[] {
-  return REVIEWED_STACK_PROBLEMS.map((entry) => stackProblem(repositoryRoot, entry));
+  return selectedCatalogSnapshots(repositoryRoot).flatMap(({ problemRoot: catalog, revision }) =>
+    REVIEWED_STACK_PROBLEMS.filter(({ folder, problemId }) =>
+      existsSync(join(catalog, folder, problemId, "metadata.json")),
+    ).map((entry) => stackProblem(catalog, entry, revision)),
+  );
 }
 
 export class CloudFormationEngine implements RuntimeEngine {

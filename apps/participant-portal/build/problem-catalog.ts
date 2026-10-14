@@ -2,10 +2,11 @@ import { metadataToEntry, type ProblemMetadata } from "../../../packages/portal-
 import type { Plugin } from "vite";
 
 const METADATA_ID = /[/\\]problems[/\\][^/\\]+[/\\][^/\\]+[/\\]metadata\.json\?(portal-catalog|portal-instructions)$/u;
+const SNAPSHOT_METADATA_ID = /[/\\]\.tenkacloud[/\\]catalog-store[/\\]snapshots[/\\][a-f0-9]{64}[/\\](?:[^?]*?[/\\])?(?:challenges|battles)[/\\][^/\\]+[/\\]metadata\.json\?(portal-catalog|portal-instructions)$/u;
 
 /** Project before JSON becomes JavaScript; runtime mapping cannot tree-shake author fields. */
 export function projectProblemCatalog(code: string, id: string): string | null {
-  const match = METADATA_ID.exec(id);
+  const match = METADATA_ID.exec(id) ?? SNAPSHOT_METADATA_ID.exec(id);
   if (!match) return null;
   const metadata = JSON.parse(code) as ProblemMetadata;
   if (match[1] === "portal-instructions") {

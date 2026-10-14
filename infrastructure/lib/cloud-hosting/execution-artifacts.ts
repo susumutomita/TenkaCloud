@@ -7,6 +7,7 @@ import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3"
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
 import { skillDeclarations } from "../../../packages/portal-contracts/src/skill-evidence.js";
+import { publicMetadata as projectPublicMetadata } from "../../../scripts/local-host/browser-public-metadata.js";
 import type {
   PackAsset,
   ProblemsCatalogBundle,
@@ -82,8 +83,10 @@ function captureProblemSource(
   objects: Map<string, Uint8Array>,
 ) {
   const files: ExecutionCatalog["sources"][string] = {};
+  let metadataCode: string | undefined;
   let hints: unknown;
   let declarations: ReturnType<typeof skillDeclarations>;
+  let narrative: NonNullable<ExecutionCatalog["instructions"]>[string] | undefined;
   for (const relativePath of sourceFiles(selected)) {
     const file = repositoryArtifactFile(selected.root, `${selected.directory}/${relativePath}`);
     if (lstatSync(file).size > MAX_EXECUTION_SOURCE_BYTES)
@@ -94,16 +97,28 @@ function captureProblemSource(
     objects.set(key, bytes);
     files[relativePath] = { key, digest };
     if (relativePath === "metadata.json") {
-      const metadata = JSON.parse(bytes.toString("utf8")) as {
+      metadataCode = bytes.toString("utf8");
+      const metadata = JSON.parse(metadataCode) as {
         hints?: unknown;
         skillEvidence?: unknown;
+        instructions?: unknown;
+        i18n?: { en?: { instructions?: unknown } };
       };
       hints = metadata.hints;
       declarations = skillDeclarations(metadata.skillEvidence);
+      const text = {
+        ...(typeof metadata.instructions === "string"
+          ? { instructions: metadata.instructions }
+          : {}),
+        ...(typeof metadata.i18n?.en?.instructions === "string"
+          ? { englishInstructions: metadata.i18n.en.instructions }
+          : {}),
+      };
+      if (Object.keys(text).length) narrative = text;
     }
   }
   if (!files["metadata.json"]) throw new Error("Execution source metadata missing.");
-  return { files, hints, declarations };
+  return { files, hints, declarations, metadataCode, narrative };
 }
 
 function captureNativeProfile(
@@ -131,11 +146,42 @@ function captureNativeProfile(
   return [native.descriptor];
 }
 
+/** Embed only the browser allowlist in the already event-pinned catalog object. */
+function capturePublicMetadata(
+  input: CloudExecutionArtifactInput,
+  problemId: string,
+  directory: string,
+  code: string | undefined,
+): unknown {
+  if (!code) return undefined;
+  const metadata = JSON.parse(code) as { id?: string; name?: string; title?: string };
+  // Historical minimal fixtures/catalogs do not have a public projection contract.
+  if (!metadata.id || (!metadata.name && !metadata.title)) return undefined;
+  if (metadata.id !== problemId) throw new Error("Saved problem metadata identity mismatch");
+  const suffix = /(?:challenges|battles)\/[^/]+$/u.exec(directory)?.[0];
+  if (!suffix) return undefined;
+  const provenance = asMap(input.bundle.provenance)[problemId] as
+    | { contentDigest?: string }
+    | undefined;
+  const digest = provenance?.contentDigest;
+  const source = digest
+    ? `/.tenkacloud/catalog-store/snapshots/${digest}/${suffix}/metadata.json`
+    : `/problems/${suffix}/metadata.json`;
+  const projected = projectPublicMetadata(code, source);
+  return projected ? JSON.parse(projected) : undefined;
+}
+
+function recordProjection<T>(target: Record<string, T>, id: string, value: T | undefined) {
+  if (value) target[id] = value;
+}
+
 /** Snapshot every runtime source file and bundle projection together, before publication. */
 export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput) {
   const rawCatalog = asMap(input.bundle.catalog);
   const catalog: Record<string, string> = {};
   const sources: ExecutionCatalog["sources"] = {};
+  const publicMetadata: Record<string, unknown> = {};
+  const instructions: NonNullable<ExecutionCatalog["instructions"]> = {};
   const hints: Record<string, unknown> = {};
   const skills: Record<string, unknown> = {};
   const objects = new Map<string, Uint8Array>();
@@ -145,6 +191,9 @@ export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput)
     catalog[problemId] = directory;
     const captured = captureProblemSource(sourceRoot(input, directory), objects);
     sources[problemId] = captured.files;
+    const projected = capturePublicMetadata(input, problemId, directory, captured.metadataCode);
+    recordProjection(publicMetadata, problemId, projected);
+    recordProjection(instructions, problemId, captured.narrative);
     if (captured.declarations) skills[problemId] = captured.declarations;
     if (captured.hints !== undefined) hints[problemId] = captured.hints;
   }
@@ -171,6 +220,7 @@ export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput)
       plugins,
       hints,
       skills,
+      instructions,
       ...Object.fromEntries(
         [
           "scoring",
@@ -186,6 +236,7 @@ export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput)
       ),
       sourceArchive: input.sourceArchive,
       ...(nativeProblems.length ? { nativeProblems } : {}),
+      ...(Object.keys(publicMetadata).length ? { publicMetadata } : {}),
     }),
   );
   const serialized = JSON.stringify(artifact);

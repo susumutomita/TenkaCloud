@@ -71,7 +71,7 @@
 <code>docs/host-retirement.md</code>を確認してください。
 データの自動移行は行いません。</p>
 <h2>準備と起動</h2>
-<pre><code class="language-sh">git submodule update --init --recursive
+<pre><code class="language-sh">make catalog-download catalog-prepare
 bun install --frozen-lockfile --ignore-scripts
 bun run build:host
 make local LOCAL_ARGS=&quot;--no-build&quot;

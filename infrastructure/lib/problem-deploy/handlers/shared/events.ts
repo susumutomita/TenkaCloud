@@ -87,8 +87,16 @@ const PACK_PROBLEM_DIR = new RegExp(
   `^pack-problems/${PACK_ID_SEGMENT}/${PACK_VERSION_SEGMENT}/[a-z0-9-]+/[a-z0-9-]+$`,
 );
 
+// Downloaded catalogs retain the repository's safe nested problemsRoot for shared imports.
+const DOWNLOADED_CATALOG_DIR =
+  /^pack-problems\/catalog\.[a-f0-9]{64}\/[a-f0-9]{40}\/(?:[A-Za-z0-9._-]+\/)*(?:challenges|battles)\/[a-z0-9-]+$/u;
 function isProblemDir(value: string): boolean {
-  return CORE_PROBLEM_DIR.test(value) || PACK_PROBLEM_DIR.test(value);
+  if (value.split("/").some((segment) => segment === "." || segment === "..")) return false;
+  return (
+    CORE_PROBLEM_DIR.test(value) ||
+    PACK_PROBLEM_DIR.test(value) ||
+    DOWNLOADED_CATALOG_DIR.test(value)
+  );
 }
 
 /**
@@ -116,7 +124,7 @@ export const DeployCreateRequestedDetailSchema = z.object({
   problemId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
   problemDir: z.string().refine(isProblemDir, {
     message:
-      "problemDir must be problems/<category>/<problem> or pack-problems/<reverse-dns-pack-id>/<version>/<category>/<problem>",
+      "problemDir must be an owned core, pack, or commit/digest-pinned downloaded catalog path",
   }),
   teamSlug: z.string().min(1).max(40),
   namePrefix: z.string().regex(/^tc-[a-z0-9]+(?:-[a-z0-9]+)+$/),
