@@ -393,3 +393,45 @@ test("retained owner quarantine refuses proof and recovery admission", () => {
   for (const family of ["iptables", "ip6tables"])
     expect(f.tables.get(family)?.get("FORWARD")?.[0]).toContain("tc-quarantine-v1:");
 });
+
+test("undeclared prototype service cannot resolve native endpoints", () => {
+  const f = fixture();
+  expect(() => f.guard.endpoints(f.plan, "constructor", 8080)).toThrow("exactly one");
+  expect(f.calls).toHaveLength(0);
+});
+
+test("prototype-only service label refuses shutdown before any stop command", () => {
+  const f = fixture();
+  const calls: string[][] = [];
+  const guard = new LinuxNetworkGuard({
+    platform: "linux",
+    read: () => {
+      throw new Error("Unexpected read");
+    },
+    exists: () => false,
+    link: () => {
+      throw new Error("Unexpected link");
+    },
+    run: ({ command, args }) => {
+      calls.push([...args]);
+      if (command !== "docker") throw new Error("Unexpected native command");
+      if (args[0] === "ps") return "abcdef123456";
+      if (args[0] === "inspect")
+        return JSON.stringify([
+          {
+            Config: {
+              Labels: {
+                "com.docker.compose.project": f.plan.project,
+                "tenkacloud.isolation.owner": f.plan.owner,
+                "tenkacloud.isolation.generation": f.plan.generation,
+                "com.docker.compose.service": "constructor",
+              },
+            },
+          },
+        ]);
+      throw new Error("Unexpected shutdown");
+    },
+  });
+  expect(() => guard.stopOwnedSync(f.plan)).toThrow("identity");
+  expect(calls.some((args) => args[0] === "stop")).toBe(false);
+});

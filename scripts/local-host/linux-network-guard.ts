@@ -588,7 +588,10 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   ): string {
     const labels = container.Config?.Labels;
     const service = labels?.["com.docker.compose.service"];
-    const expected = typeof service === "string" ? plan.services[service] : undefined;
+    const expected =
+      typeof service === "string" && Object.hasOwn(plan.services, service)
+        ? plan.services[service]
+        : undefined;
     const networks = container.NetworkSettings?.Networks;
     if (
       !expected ||
@@ -687,7 +690,10 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   endpoints(plan: LocalNetworkPlan, service: string, port: number): readonly LocalPublicEndpoint[] {
     if (!(service in plan.services) || !Number.isInteger(port) || port < 1 || port > 65535)
       throw new Error("Invalid declared public service.");
-    if (requiredNetworkValue(plan.services[service]).length !== 1)
+    if (
+      !Object.hasOwn(plan.services, service) ||
+      requiredNetworkValue(plan.services[service]).length !== 1
+    )
       throw new Error("A public service must attach to exactly one private network.");
     const ids = lines(
       this.command("docker", [
@@ -906,7 +912,8 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
           container.Config?.Labels?.["com.docker.compose.project"] !== plan.project ||
           container.Config?.Labels?.["tenkacloud.isolation.owner"] !== plan.owner ||
           container.Config?.Labels?.["tenkacloud.isolation.generation"] !== plan.generation ||
-          !(container.Config?.Labels?.["com.docker.compose.service"] in plan.services),
+          typeof container.Config?.Labels?.["com.docker.compose.service"] !== "string" ||
+          !Object.hasOwn(plan.services, container.Config?.Labels?.["com.docker.compose.service"]),
       )
     )
       throw new Error("Owned shutdown identity could not be confirmed.");

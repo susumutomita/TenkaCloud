@@ -1,43 +1,53 @@
 import { Worker } from "node:worker_threads";
 import type { LocalNetworkPlan } from "./local-network";
 
-let active = 0;
-const waiting: (() => void)[] = [];
-async function acquire(): Promise<void> {
-  if (active < 2) {
-    active++;
+interface WorkerQueue {
+  active: number;
+  readonly waiting: (() => void)[];
+}
+type WorkerMode = "verify" | "stop" | "quarantine" | "reset";
+type WorkerRunner = (plan: LocalNetworkPlan, mode: WorkerMode) => Promise<void>;
+const auditQueue: WorkerQueue = { active: 0, waiting: [] };
+const emergencyQueue: WorkerQueue = { active: 0, waiting: [] };
+async function acquire(queue: WorkerQueue): Promise<void> {
+  if (queue.active < 2) {
+    queue.active++;
     return;
   }
-  await new Promise<void>((resolve) => waiting.push(resolve));
+  await new Promise<void>((resolve) => queue.waiting.push(resolve));
 }
-function release(): void {
-  const next = waiting.shift();
+function release(queue: WorkerQueue): void {
+  const next = queue.waiting.shift();
   if (next) next();
-  else active--;
+  else queue.active--;
 }
-/** Read-only native subprocess audits run off the controller event loop, at most two at a time. */
-export async function auditNetwork(plan: LocalNetworkPlan): Promise<void> {
-  await acquire();
+async function queuedOperation(
+  queue: WorkerQueue,
+  plan: LocalNetworkPlan,
+  mode: WorkerMode,
+  run: WorkerRunner,
+): Promise<void> {
+  await acquire(queue);
   try {
-    await runAudit(plan, "verify");
+    await run(plan, mode);
   } finally {
-    release();
+    release(queue);
   }
 }
-export async function stopNetwork(plan: LocalNetworkPlan): Promise<void> {
-  await acquire();
-  try {
-    await runAudit(plan, "stop");
-  } finally {
-    release();
-  }
+/** Native subprocess audits and stops run off the controller loop, at most two at a time. */
+export function auditNetwork(plan: LocalNetworkPlan, run: WorkerRunner = runAudit): Promise<void> {
+  return queuedOperation(auditQueue, plan, "verify", run);
+}
+export function stopNetwork(plan: LocalNetworkPlan, run: WorkerRunner = runAudit): Promise<void> {
+  return queuedOperation(auditQueue, plan, "stop", run);
 }
 export function emergencyNetwork(
   plan: LocalNetworkPlan,
   mode: "quarantine" | "reset",
+  run: WorkerRunner = runAudit,
 ): Promise<void> {
-  // Emergency drops must never queue behind wedged Docker inspection workers.
-  return runAudit(plan, mode);
+  // Only firewall-only drops use the emergency queue; reset inspects Docker and must not block drops.
+  return queuedOperation(mode === "quarantine" ? emergencyQueue : auditQueue, plan, mode, run);
 }
 function runAudit(
   plan: LocalNetworkPlan,

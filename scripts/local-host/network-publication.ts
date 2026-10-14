@@ -60,7 +60,8 @@ export function assertPublicServiceSeparation(
 ): void {
   if (!problem.publicServices?.length) return;
   const document = parse(composeText, { merge: true });
-  const verifierPort = Number(new URL(problem.verifyUrl).port);
+  const verifier = new URL(problem.verifyUrl);
+  const verifierPort = Number(verifier.port || (verifier.protocol === "https:" ? 443 : 80));
   const verifierServices = new Set<string>();
   for (const [name, service] of Object.entries(document.services) as [
     string,
@@ -74,7 +75,7 @@ export function assertPublicServiceSeparation(
   for (const publication of problem.publicServices) {
     assertSinglePublicationNetwork(document.services[publication.service]?.networks);
     if (
-      !(publication.service in document.services) ||
+      !Object.hasOwn(document.services, publication.service) ||
       publication.service === problem.terminal?.service ||
       verifierServices.has(publication.service)
     )

@@ -2,9 +2,9 @@
   "scope": "Kernel component canaries inside authorized ephemeral privileged network:none lab; not bounded production engine or six authenticated sessions",
   "date": "2026-10-14",
   "sourceSha256": {
-    "scripts/local-host/linux-network-guard.ts": "2d5ce8fdce5735d1ee8d6a4ac5054a9447d67804448b4072d97dbc09d70544e9",
+    "scripts/local-host/linux-network-guard.ts": "0b45b0d921e81a254a6cae5a6dbfaf3fd4aad7b61fad2c4d337ca787837d0d2e",
     "scripts/local-host/local-network.ts": "9e3c3c0ee3675fcf345a57a9b24b9329e60ab26d56f5475207823535121bbb01",
-    "scripts/local-host/network-audit.ts": "d213fe6ae3e69e03bbebc8bffd72bac4713279410a72438f88ffa3a887383909",
+    "scripts/local-host/network-audit.ts": "7fbbcdbd7a903f1a58ec3a665debee2121fc8162ad4135c80c675434aca7ef1f",
     "scripts/local-host/network-audit-worker.ts": "091d529b5c2f30ee04682b851f837bcb6be7df2a6df08f40b33a60cf694f5e0e"
   },
   "fixtures": {
@@ -297,7 +297,7 @@
   "passedCanaries": 53,
   "additionalChecks": [
     "Not-yet-created owned bridge quarantine and final teardown verified",
-    "Broken IPv4 FORWARD\u2192DOCKER-USER admission hook rejected",
+    "Broken IPv4 FORWARD→DOCKER-USER admission hook rejected",
     "Direct IPv4/IPv6 FORWARD quarantine denied live own DB traffic despite preceding ACCEPT",
     "Ordinary guard install retained live quarantine in both families",
     "Running workload recovery rejected and quarantine retained",

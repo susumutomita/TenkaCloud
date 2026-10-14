@@ -109,3 +109,43 @@ test("real participant auth scopes publication to the current team's fixed probl
     await f.close();
   }
 });
+
+for (const [protocol, port] of [
+  ["http", 80],
+  ["https", 443],
+] as const)
+  test(`${protocol} default verifier port cannot expose the scorer as a public service`, () => {
+    const original = loadContainerProblem(
+      fileURLToPath(new URL("../../../problems/challenges/sqli-demo", import.meta.url)),
+    );
+    const problem = {
+      ...original,
+      verifyUrl: `${protocol}://127.0.0.1/verify`,
+      publicServices: normalizePublicServices([
+        { id: "public", service: "verifier", port: 9090, purpose: "Synthetic capability" },
+      ]),
+    };
+    expect(() =>
+      assertPublicServiceSeparation(
+        problem,
+        `services:\n  verifier:\n    ports: ["127.0.0.1:${port}:8080"]\n`,
+      ),
+    ).toThrow("separate");
+  });
+
+test("prototype properties never count as declared Compose services", () => {
+  const original = loadContainerProblem(
+    fileURLToPath(new URL("../../../problems/challenges/sqli-demo", import.meta.url)),
+  );
+  for (const service of ["constructor", "toString", "valueOf"]) {
+    const problem = {
+      ...original,
+      publicServices: normalizePublicServices([
+        { id: "public", service, port: 8080, purpose: "Synthetic capability" },
+      ]),
+    };
+    expect(() => assertPublicServiceSeparation(problem, "services:\n  web: {}\n")).toThrow(
+      "separate",
+    );
+  }
+});
