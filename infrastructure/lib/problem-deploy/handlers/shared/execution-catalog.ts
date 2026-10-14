@@ -61,6 +61,17 @@ export const executionCatalogSchema = z
     plugins: z.record(z.string(), pluginSchema),
     sources: z.record(z.string(), z.record(z.string(), sourceSchema)),
     publicMetadata: projectionSchema.optional(),
+    instructions: z
+      .record(
+        z.string(),
+        z
+          .object({
+            instructions: z.string().optional(),
+            englishInstructions: z.string().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
     sourceArchive: z
       .object({
         bucket: z.string().min(1),

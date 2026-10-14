@@ -16,7 +16,7 @@ import { join, resolve } from "node:path";
 import { hostBrowserProblemPaths } from "../../local-host/browser-metadata.js";
 import { dockerDefinitionOf, loadDockerCatalog } from "../../local-host/docker-catalog.js";
 import type { Job } from "../../local-host/model.js";
-import { retainedCatalogRoots, selectedCatalogRoots } from "../catalog-read.js";
+import { CatalogLockSchema, retainedCatalogRoots, selectedCatalogRoots } from "../catalog-read.js";
 import { downloadCatalog, materializeCatalog } from "../downloaded-catalog.js";
 import type { GitArchiveFetcher } from "../git-source.js";
 
@@ -240,4 +240,58 @@ test("a standard pack requiring another core version preserves the accepted sele
       }),
     ).toThrow("requires core");
     expect(selectedCatalogRoots(root)).toEqual(previous);
+  }));
+
+test("catalog lock roots match the dispatch-safe path grammar and normalize leading relative segments", () => {
+  const lock = (problemsRoot: string) => ({
+    schemaVersion: 1,
+    sources: [
+      {
+        url: "https://example.invalid/pack.git",
+        ref: revision,
+        commit: revision,
+        digest: "a".repeat(64),
+        problemsRoot,
+      },
+    ],
+  });
+  for (const root of [".", "./problems", "././problem.catalog/nested-root", ".catalog/problems"])
+    expect(CatalogLockSchema.safeParse(lock(root)).success).toBe(true);
+  expect(CatalogLockSchema.parse(lock("./problems")).sources[0]?.problemsRoot).toBe("problems");
+  for (const root of [
+    "problem catalog",
+    "catalog;v1",
+    "catalog\\v1",
+    "a/../b",
+    "a/./b",
+    "/problems",
+    "a//b",
+    "",
+  ])
+    expect(CatalogLockSchema.safeParse(lock(root)).success).toBe(false);
+});
+
+test("unsafe standard pack roots cannot replace an accepted catalog selection", () =>
+  fixture((root, fetcher) => {
+    downloadCatalog(root, config(["accepted"]), { fetcher });
+    const previous = readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8");
+    for (const problemsRoot of ["problem catalog", "catalog;v1"]) {
+      expect(() =>
+        downloadCatalog(root, config(["unsafe"]), {
+          fetcher: ({ destinationDir }) => {
+            cpSync(join(repository, "packs/sample-aws-flag"), destinationDir, { recursive: true });
+            cpSync(join(destinationDir, "problems"), join(destinationDir, problemsRoot), {
+              recursive: true,
+            });
+            rmSync(join(destinationDir, "problems"), { recursive: true });
+            const path = join(destinationDir, "tenkacloud-pack.json");
+            const manifest = JSON.parse(readFileSync(path, "utf8"));
+            writeFileSync(path, JSON.stringify({ ...manifest, problemsRoot }));
+          },
+        }),
+      ).toThrow("Invalid problems root");
+      expect(readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8")).toBe(
+        previous,
+      );
+    }
   }));

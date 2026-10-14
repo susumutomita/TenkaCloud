@@ -26,6 +26,11 @@ its previous immutable revision. It is an explicit default selection, not a core
 catalog added to other selections. A custom file selects only its listed packs.
 The InterviewCatalog used by Passport remains a separate contract.
 
+`bun run build:pages` explicitly acquires `CATALOG_SOURCES` (defaulting to the
+committed `catalog-sources.json`) and prepares it before building the website demos.
+This also works in a clean Pages checkout without submodules or a preexisting
+snapshot store. A failed acquisition stops the build; it does not select another catalog.
+
 Acquisition resolves branches or tags once, downloads the resulting full commit
 with the existing HTTPS Git transport, validates metadata and bilingual README
 files, and records each repository, ref, resolved commit, subdirectory and content
@@ -82,7 +87,10 @@ Cloud synthesis preserves each source repository layout, including shared build
 inputs, and uses commit/digest-specific artifact prefixes. Accepted older editions
 remain addressable; updating the selection does not overwrite historical core
 artifact keys. Participant views project metadata from the saved execution catalog,
-and ordinary Cloud portal builds include retained native UI editions. A legacy
+which separately retains bilingual task instructions. The authenticated backend
+releases that fixed text only after the event starts and the problem is unlocked;
+the public catalog remains free of instructions and author-only answers.
+Ordinary Cloud portal builds also include retained native UI editions. A legacy
 catalog without a saved public projection supplies an empty public catalog and retains its
 history; it does not borrow the current selection.
 

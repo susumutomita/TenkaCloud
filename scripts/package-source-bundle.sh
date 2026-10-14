@@ -125,14 +125,19 @@ try:
         copy_tree(source, target)
     if not any((staging / 'problems').rglob('metadata.json')):
         fail('selected problem catalog is absent; run make catalog-download catalog-prepare')
-    copy_tree('.tenkacloud/catalog-store', '.tenkacloud/catalog-store', immutable_catalog=True)
-    selection = json.loads((root / '.tenkacloud/catalog-store/selected.json').read_text())
+    selection_file = root / '.tenkacloud/catalog-store/selected.json'
+    checked_path(str(selection_file), 'catalog selection')
+    require_regular(selection_file)
+    selection = json.loads(selection_file.read_text())
     if not isinstance(selection, dict) or selection.get('schemaVersion') != 1:
         fail('invalid immutable catalog selection')
     sources, retained = selection.get('sources'), selection.get('retained', [])
     if not isinstance(sources, list) or not sources or not isinstance(retained, list):
         fail('invalid immutable catalog selection')
     revisions = retained + sources
+    selected_target = staging / '.tenkacloud/catalog-store/selected.json'
+    selected_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(selection_file, selected_target)
     copied = set()
     for revision in revisions:
         if not isinstance(revision, dict):
@@ -145,9 +150,12 @@ try:
         if (commit, digest) in copied:
             continue
         copied.add((commit, digest))
+        snapshot_path = '.tenkacloud/catalog-store/snapshots/' + digest
+        if not (staging / snapshot_path).exists():
+            copy_tree(snapshot_path, snapshot_path, immutable_catalog=True)
         # CodeBuild receives the same directory as the pinned dispatch and S3 assets.
         # Preserve the complete root, including hidden/shared files and raw metadata.
-        copy_tree('.tenkacloud/catalog-store/snapshots/' + digest,
+        copy_tree(snapshot_path,
                   'pack-problems/catalog.' + digest + '/' + commit, immutable_catalog=True)
 
     pack_store = root / '.tenkacloud' / 'pack-store'

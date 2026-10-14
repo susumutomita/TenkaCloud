@@ -115,6 +115,28 @@ describe("scripts/package-source-bundle.sh (#1552)", { timeout: 30_000 }, () => 
   it("should package allowlisted source roots without AWS credentials", { timeout: 30_000 }, () => {
     const { root, workDir } = makeFixture();
 
+    write(
+      root,
+      ".tenkacloud/catalog-store/selected.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        sources: [{ commit: "b".repeat(40), digest: "a".repeat(64) }],
+        retained: [{ commit: "e".repeat(40), digest: "d".repeat(64) }],
+      }),
+    );
+    write(
+      root,
+      `.tenkacloud/catalog-store/snapshots/${"d".repeat(64)}/.retained-input`,
+      "old event runtime bytes",
+    );
+
+    write(
+      root,
+      `.tenkacloud/catalog-store/snapshots/${"c".repeat(64)}/abandoned.txt`,
+      "unselected partial acquisition",
+    );
+    write(root, ".tenkacloud/catalog-store/mutation.lock/owner", "not portable state");
+
     const result = packageFixture(root, workDir, {
       AWS_ACCESS_KEY_ID: "",
       AWS_SECRET_ACCESS_KEY: "",
@@ -135,6 +157,15 @@ describe("scripts/package-source-bundle.sh (#1552)", { timeout: 30_000 }, () => 
     expect(files.some((file) => file.includes("coverage"))).toBe(false);
     expect(files.some((file) => file.includes("unknown-generated-root"))).toBe(false);
     expect(files).toContain(".tenkacloud/catalog-store/selected.json");
+    expect(files).toContain(
+      `.tenkacloud/catalog-store/snapshots/${"d".repeat(64)}/.retained-input`,
+    );
+    expect(files).toContain(
+      `pack-problems/catalog.${"d".repeat(64)}/${"e".repeat(40)}/.retained-input`,
+    );
+    expect(
+      files.some((file) => file.includes("abandoned.txt") || file.includes("mutation.lock")),
+    ).toBe(false);
     expect(files).toContain(`.tenkacloud/catalog-store/snapshots/${"a".repeat(64)}/.runtime-input`);
     expect(files).toContain(
       `pack-problems/catalog.${"a".repeat(64)}/${"b".repeat(40)}/.runtime-input`,
@@ -180,7 +211,7 @@ describe("scripts/package-source-bundle.sh (#1552)", { timeout: 30_000 }, () => 
     rmSync(join(root, ".tenkacloud/catalog-store"), { recursive: true });
     const result = packageFixture(root, workDir);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("required directory missing: .tenkacloud/catalog-store");
+    expect(result.stderr).toContain(".tenkacloud/catalog-store/selected.json");
     expect(existsSync(join(workDir, "source.zip"))).toBe(false);
   });
 

@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { z } from "zod";
 import { computeContentDigest } from "../../packages/problem-sdk/src/content-digest.js";
 import { resolveInside } from "../../packages/problem-sdk/src/safe-path.js";
@@ -16,13 +16,15 @@ const RevisionSchema = SourceSchema.extend({
   digest: z.string().regex(/^[a-f0-9]{64}$/u),
   problemsRoot: z
     .string()
+    .transform((value) => value.replace(/^(?:\.\/)+/u, ""))
     .refine(
       (value) =>
-        value.length > 0 &&
-        !isAbsolute(value) &&
-        !value.startsWith("\\") &&
-        !/^[a-zA-Z]:/u.test(value) &&
-        !value.split(/[\\/]/u).includes(".."),
+        value === "." ||
+        value
+          .split("/")
+          .every(
+            (segment) => segment !== "." && segment !== ".." && /^[A-Za-z0-9._-]+$/u.test(segment),
+          ),
       "Invalid problems root",
     ),
 }).strict();

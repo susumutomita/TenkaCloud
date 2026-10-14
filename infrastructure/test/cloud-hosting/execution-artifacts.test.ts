@@ -77,6 +77,44 @@ function memoryClient(objects: Map<string, Uint8Array>) {
 }
 
 describe("immutable cloud execution artifacts", () => {
+  it("pins authorized bilingual instructions separately from the public browser projection", () => {
+    const input = fixture();
+    const path = join(input.repositoryRoot, input.directory, "metadata.json");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        id: "fixture",
+        name: "Pinned",
+        instructions: "Original JA",
+        i18n: { en: { instructions: "Original EN" } },
+        writeup: "PRIVATE ANSWER",
+      }),
+    );
+    const original = buildCloudExecutionArtifacts(input);
+    expect(original.catalog.instructions?.fixture).toEqual({
+      instructions: "Original JA",
+      englishInstructions: "Original EN",
+    });
+    expect(JSON.stringify(original.catalog.publicMetadata)).not.toContain("Original JA");
+    expect(JSON.stringify(original.catalog.publicMetadata)).not.toContain("Original EN");
+    expect(JSON.stringify(original.catalog.instructions)).not.toContain("PRIVATE ANSWER");
+    writeFileSync(
+      path,
+      JSON.stringify({ id: "fixture", name: "Updated", instructions: "Updated JA" }),
+    );
+    const updated = buildCloudExecutionArtifacts(input);
+    expect(updated.catalog.instructions?.fixture).toEqual({ instructions: "Updated JA" });
+    expect(original.catalog.instructions?.fixture?.instructions).toBe("Original JA");
+    expect(original.catalogKey).not.toBe(updated.catalogKey);
+    writeFileSync(
+      path,
+      JSON.stringify({ id: "fixture", name: "English", i18n: { en: { instructions: "Only EN" } } }),
+    );
+    expect(buildCloudExecutionArtifacts(input).catalog.instructions?.fixture).toEqual({
+      englishInstructions: "Only EN",
+    });
+  });
+
   it("keeps A metadata, private template/runtime bytes, and plugin after B or catalog removal", async () => {
     const input = fixture();
     const a = buildCloudExecutionArtifacts(input);
@@ -280,6 +318,7 @@ describe("immutable cloud execution artifacts", () => {
           problemsScoring: {},
           problemsEndpoints: {},
           deployViaLambda: true,
+          skipCoreArtifacts: provider === "turso",
         },
       );
       const appTemplate = Template.fromStack(application).toJSON();
@@ -300,6 +339,9 @@ describe("immutable cloud execution artifacts", () => {
       });
       expect(runtimeConfig).not.toHaveProperty("mode");
       const template = Template.fromStack(backend);
+      expect(
+        Object.keys(template.toJSON().Resources).some((key) => key.startsWith("ProblemArtifacts")),
+      ).toBe(provider !== "turso");
       template.resourceCountIs("AWS::DynamoDB::Table", provider === "turso" ? 0 : 7);
       const readers = Object.entries(template.findResources("AWS::Lambda::Function"));
       for (const prefix of [
@@ -398,4 +440,53 @@ it("captures allowlisted skill declarations in the same immutable cloud executio
   const built = buildCloudExecutionArtifacts(input);
   expect(built.catalog.skills?.fixture).toEqual([declaration]);
   expect(JSON.stringify(built.catalog.skills)).not.toContain("secret");
+});
+
+it("captures legacy public metadata without provenance and refuses conflicting saved identities", () => {
+  const input = fixture();
+  writeFileSync(
+    join(input.repositoryRoot, input.directory, "metadata.json"),
+    JSON.stringify({
+      id: "fixture",
+      title: "Legacy title",
+      category: "challenges",
+      instructions: "PRIVATE",
+    }),
+  );
+  const withoutProvenance = { ...input, bundle: { ...input.bundle, provenance: {} } };
+  const captured = buildCloudExecutionArtifacts(withoutProvenance);
+  expect(captured.catalog.publicMetadata?.fixture).toMatchObject({
+    id: "fixture",
+    name: "Legacy title",
+  });
+  expect(JSON.stringify(captured.catalog.publicMetadata)).not.toContain("PRIVATE");
+  writeFileSync(
+    join(input.repositoryRoot, input.directory, "metadata.json"),
+    JSON.stringify({ id: "other", name: "Conflicting identity" }),
+  );
+  expect(() => buildCloudExecutionArtifacts(input)).toThrow("metadata identity mismatch");
+});
+
+it("legacy unnamed or nonstandard problem directories keep pinned bytes without publishing an invented card", () => {
+  const input = fixture();
+  const metadata = join(input.repositoryRoot, input.directory, "metadata.json");
+  writeFileSync(metadata, JSON.stringify({ id: "fixture" }));
+  expect(buildCloudExecutionArtifacts(input).catalog.publicMetadata).toBeUndefined();
+  const custom = "problems/legacy/fixture";
+  mkdirSync(join(input.repositoryRoot, custom), { recursive: true });
+  writeFileSync(
+    join(input.repositoryRoot, custom, "metadata.json"),
+    JSON.stringify({ id: "fixture", name: "Legacy" }),
+  );
+  const artifact = buildCloudExecutionArtifacts({
+    ...input,
+    bundle: {
+      ...input.bundle,
+      catalog: { fixture: custom },
+      coordination: {},
+      coordinationBundles: {},
+    },
+  });
+  expect(artifact.catalog.publicMetadata).toBeUndefined();
+  expect(artifact.catalog.sources.fixture?.["metadata.json"]?.digest).toMatch(/^[a-f0-9]{64}$/);
 });

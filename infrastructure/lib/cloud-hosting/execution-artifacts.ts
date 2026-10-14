@@ -86,6 +86,7 @@ function captureProblemSource(
   let metadataCode: string | undefined;
   let hints: unknown;
   let declarations: ReturnType<typeof skillDeclarations>;
+  let narrative: NonNullable<ExecutionCatalog["instructions"]>[string] | undefined;
   for (const relativePath of sourceFiles(selected)) {
     const file = repositoryArtifactFile(selected.root, `${selected.directory}/${relativePath}`);
     if (lstatSync(file).size > MAX_EXECUTION_SOURCE_BYTES)
@@ -100,13 +101,24 @@ function captureProblemSource(
       const metadata = JSON.parse(metadataCode) as {
         hints?: unknown;
         skillEvidence?: unknown;
+        instructions?: unknown;
+        i18n?: { en?: { instructions?: unknown } };
       };
       hints = metadata.hints;
       declarations = skillDeclarations(metadata.skillEvidence);
+      const text = {
+        ...(typeof metadata.instructions === "string"
+          ? { instructions: metadata.instructions }
+          : {}),
+        ...(typeof metadata.i18n?.en?.instructions === "string"
+          ? { englishInstructions: metadata.i18n.en.instructions }
+          : {}),
+      };
+      if (Object.keys(text).length) narrative = text;
     }
   }
   if (!files["metadata.json"]) throw new Error("Execution source metadata missing.");
-  return { files, hints, declarations, metadataCode };
+  return { files, hints, declarations, metadataCode, narrative };
 }
 
 function captureNativeProfile(
@@ -159,7 +171,7 @@ function capturePublicMetadata(
   return projected ? JSON.parse(projected) : undefined;
 }
 
-function recordPublicMetadata(target: Record<string, unknown>, id: string, value: unknown) {
+function recordProjection<T>(target: Record<string, T>, id: string, value: T | undefined) {
   if (value) target[id] = value;
 }
 
@@ -169,6 +181,7 @@ export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput)
   const catalog: Record<string, string> = {};
   const sources: ExecutionCatalog["sources"] = {};
   const publicMetadata: Record<string, unknown> = {};
+  const instructions: NonNullable<ExecutionCatalog["instructions"]> = {};
   const hints: Record<string, unknown> = {};
   const skills: Record<string, unknown> = {};
   const objects = new Map<string, Uint8Array>();
@@ -179,7 +192,8 @@ export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput)
     const captured = captureProblemSource(sourceRoot(input, directory), objects);
     sources[problemId] = captured.files;
     const projected = capturePublicMetadata(input, problemId, directory, captured.metadataCode);
-    recordPublicMetadata(publicMetadata, problemId, projected);
+    recordProjection(publicMetadata, problemId, projected);
+    recordProjection(instructions, problemId, captured.narrative);
     if (captured.declarations) skills[problemId] = captured.declarations;
     if (captured.hints !== undefined) hints[problemId] = captured.hints;
   }
@@ -206,6 +220,7 @@ export function buildCloudExecutionArtifacts(input: CloudExecutionArtifactInput)
       plugins,
       hints,
       skills,
+      instructions,
       ...Object.fromEntries(
         [
           "scoring",

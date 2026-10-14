@@ -162,7 +162,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
         setError(decision.message);
         return true;
       }
-      if (decision.view.problemCatalog) hydrateProblemCatalog(decision.view.problemCatalog);
+      hydrateProblemCatalog(decision.view.problemCatalog ?? []);
       setView((prev) => (viewIsUnchanged(prev, decision.view) ? prev : decision.view));
       setError(null);
       if (decision.stopPolling) stopPollingRef.current = true;

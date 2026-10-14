@@ -403,7 +403,8 @@ export async function lookupTeamByLoginKey(
   // eventGate + progression (Issue #2283) の注入と locked 問題の stackOutputs 空化は
   // decorateTeamView に集約 (= PATCH /portal/me 応答と同じ経路)。 eventId 不在は
   // gate 不明 → fail-closed (scoring_not_started)。
-  if (!shared.executionCatalog) return decorateTeamView(shared, items, view);
+  if (!shared.executionCatalog)
+    return decorateTeamView(shared, items, { ...view, problemCatalog: [] });
   const problemCatalog = await savedProblemCatalog(
     shared.executionCatalog,
     view.problems.map((problem) => problem.problemId),

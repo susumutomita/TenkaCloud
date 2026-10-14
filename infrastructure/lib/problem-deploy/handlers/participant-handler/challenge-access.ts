@@ -12,6 +12,7 @@ import {
   selectGateCompletionRow,
 } from "../shared/progression-gate.js";
 import { isTenantFeatureEnabled } from "../shared/tenant-feature-flags.js";
+import { releaseCatalogInstructions } from "./catalog-view.js";
 import { type EventGate, evaluateGate, type GateBlock, getEventGate } from "./event-gate.js";
 import {
   type ParticipantSharedResources,
@@ -237,7 +238,8 @@ export async function decorateTeamView(
 
   // tenantId は team の deployment 行 (= 自 tenant) から導出して seam の tenant scope に渡す。
   const gate = await getEventGate(shared, findIdentitySample(items)?.tenantId, eventId);
-  const block = evaluateGate(gate, Date.now());
+  const now = Date.now();
+  const block = evaluateGate(gate, now);
   // locked 問題は stackOutputs を空にして返す (= lock 中に接続情報を見て先行着手できない
   // 防御層。 unlock 後の再取得で埋まる)。
   const progression = await buildProgressionView(shared, items, gate);
@@ -249,10 +251,16 @@ export async function decorateTeamView(
   // Cloud competition policy: writeups are released only after the event gate reports ended
   // and only for problems this team solved. Before that, the field is absent from the wire
   // response (the text lives only in the backend Lambda bundle, never in browser assets).
-  const problems = releaseSolvedWriteups(
-    accessFilteredProblems,
-    shared.problemsWriteups ?? {},
-    block?.kind === "scoring_ended",
+  const problems = releaseCatalogInstructions(
+    releaseSolvedWriteups(
+      accessFilteredProblems,
+      shared.problemsWriteups ?? {},
+      block?.kind === "scoring_ended",
+    ),
+    shared.executionCatalog,
+    gate,
+    progression?.lockedProblemIds ?? [],
+    now,
   );
   return {
     ...view,

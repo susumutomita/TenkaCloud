@@ -99,6 +99,20 @@ test("metadata expansion does not expand executable portal plugins or templates"
   ).toThrow("unreviewed catalog discovery");
 });
 
+test("empty, single and multiple selected entries generate usable bounded catalog globs", () => {
+  const code = 'import.meta.glob("../../../../problems/*/*/metadata.json", { eager: true });';
+  const id = "/repo/apps/participant-portal/src/data/problems.ts";
+  const empty = narrowCatalog(code, id, []);
+  expect(empty).toContain("/__local_host_empty__/metadata.json");
+  expect(empty).not.toContain("/{}");
+  const single = narrowCatalog(code, id, ["battles/forensic-casebook"]);
+  expect(single).toContain("/battles/forensic-casebook/metadata.json");
+  expect(single).not.toContain("{battles/forensic-casebook}");
+  const multiple = narrowCatalog(code, id, ["battles/forensic-casebook", "challenges/sqli-demo"]);
+  expect(multiple).toContain("/{battles/forensic-casebook,challenges/sqli-demo}/metadata.json");
+  for (const output of [empty, single, multiple]) expect(output).not.toContain("problems/*/*/");
+});
+
 test("native crypto remains a Battle and server-only game code stays excluded", () => {
   const path = join(root, "problems/battles/ac26-crypto-battle/metadata.json");
   const projected = publicMetadata(readFileSync(path, "utf8"), path);

@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { computeContentDigest } from "../../packages/problem-sdk/src/content-digest";
-import { selectedCatalogSnapshots } from "../problem-pack/catalog-read";
+import { catalogMetadata, selectedCatalogSnapshots } from "../problem-pack/catalog-read";
 import { restoreSourcePermissions } from "../problem-pack/source-permissions.js";
 import { publicCatalogEntry } from "./catalog-projection";
 import { assertComposePolicy } from "./container/compose-policy";
@@ -52,7 +52,7 @@ function eligible(metadata: Record<string, unknown>): boolean {
 
 function problemDirectories(catalog: string): string[] {
   return readdirSync(catalog, { withFileTypes: true })
-    .filter((group) => group.isDirectory() && !group.name.startsWith("."))
+    .filter((group) => group.isDirectory() && ["challenges", "battles"].includes(group.name))
     .flatMap((group) =>
       readdirSync(join(catalog, group.name), { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
@@ -66,9 +66,14 @@ function catalogProblem(
 ): Problem | undefined {
   const metadataPath = join(directory, "metadata.json");
   if (!existsSync(metadataPath)) return undefined;
-  const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
+  const metadata = catalogMetadata(JSON.parse(readFileSync(metadataPath, "utf8")));
   if (!eligible(metadata)) return undefined;
-  const problem = loadContainerProblem(directory);
+  const problem = loadContainerProblem(directory, {
+    existsSync,
+    realpathSync,
+    readFileSync: (path) =>
+      path === metadataPath ? JSON.stringify(metadata) : readFileSync(path, "utf8"),
+  });
   const composeText = readFileSync(problem.composePath, "utf8");
   assertComposePolicy(composeText, { problemDir: directory, composePath: problem.composePath });
   const origins = new Set(

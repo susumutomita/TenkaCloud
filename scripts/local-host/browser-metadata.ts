@@ -82,7 +82,11 @@ export function hostBrowserProblemPaths(root = repositoryRoot): readonly string[
   return result;
 }
 
-export function narrowCatalog(code: string, id: string): string | null {
+export function narrowCatalog(
+  code: string,
+  id: string,
+  publicProblemPaths?: readonly string[],
+): string | null {
   const normalized = id.replaceAll("\\", "/");
   if (
     !normalized.endsWith("/src/data/problems.ts") &&
@@ -95,12 +99,14 @@ export function narrowCatalog(code: string, id: string): string | null {
     throw new Error("The catalog glob changed. Review the hosting bundle before building.");
   // Metadata and diagrams are public projections. Executable plugins remain a
   // separate explicit review boundary, even when their problem is supported.
-  const publicPaths = hostBrowserProblemPaths().join(",");
+  const paths = publicProblemPaths ?? hostBrowserProblemPaths();
+  const publicPaths =
+    paths.length > 1 ? `{${paths.join(",")}}` : (paths[0] ?? "__local_host_empty__");
   const narrowed = code.replace(glob, (_match, suffix: string) => {
     if (suffix === "portal/*.tsx")
       return `problems/{${reviewedCoordinationPaths.join(",")}}/portal/*.tsx`;
     if (suffix === "*.yaml") return "problems/challenges/sqli-demo/__local_host_empty__/*.yaml";
-    return `problems/{${publicPaths}}/${suffix}`;
+    return `problems/${publicPaths}/${suffix}`;
   });
   if (narrowed.includes("problems/*/*/"))
     throw new Error("An unreviewed catalog discovery pattern remains in the hosting build.");

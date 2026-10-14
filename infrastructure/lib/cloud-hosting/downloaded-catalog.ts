@@ -1,10 +1,12 @@
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -43,15 +45,33 @@ function prepareSource(buildRoot: string, source: Snapshot): string {
       throw new Error("Cloud catalog copy digest mismatch");
     const problems = join(prepared, relative(source.directory, source.problemRoot));
     for (const category of ["challenges", "battles"]) normalizeGroup(join(problems, category));
-    return prepared;
-  } catch (error) {
+    const digest = computeContentDigest(prepared, true);
+    const reusable = join(buildRoot, `snapshot-${source.revision.digest}-${digest}`);
+    if (existsSync(reusable)) {
+      if (
+        !lstatSync(reusable).isDirectory() ||
+        lstatSync(reusable).isSymbolicLink() ||
+        computeContentDigest(reusable, true) !== digest
+      )
+        throw new Error("Cloud prepared catalog digest mismatch");
+    } else renameSync(prepared, reusable);
+    return reusable;
+  } finally {
     rmSync(prepared, { recursive: true, force: true });
-    throw error;
   }
 }
 function sourceBundle(source: Snapshot, asset: PackAsset): ProblemsCatalogBundle {
   const root = join(asset.problemsRootAbs, relative(source.directory, source.problemRoot));
-  const bundle = cloudCatalog(new LocalCatalogSource().loadBundle(root));
+  const loaded = new LocalCatalogSource().loadBundle(root);
+  const metadata = Object.fromEntries(
+    Object.entries(loaded.catalog as Record<string, string>).map(([id, directory]) => [
+      id,
+      JSON.parse(
+        readFileSync(join(root, directory.slice("problems/".length), "metadata.json"), "utf8"),
+      ) as { tags?: readonly string[] },
+    ]),
+  );
+  const bundle = cloudCatalog(loaded, metadata);
   const catalog = bundle.catalog as Record<string, string>;
   const prefix = `pack-problems/${asset.packId}/${asset.version}`;
   return {

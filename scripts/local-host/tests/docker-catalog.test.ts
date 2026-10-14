@@ -59,11 +59,38 @@ test("catalog rejects symbolic links and duplicate IDs instead of adopting ambig
     expect(() => loadDockerCatalog(copied, [join(copied, "problems")])).toThrow("symbolic link");
   });
   fixture((copied, directory) => {
-    mkdirSync(join(copied, "problems", "another"));
-    cpSync(directory, join(copied, "problems", "another", "sqli-demo"), { recursive: true });
+    mkdirSync(join(copied, "problems", "battles"));
+    cpSync(directory, join(copied, "problems", "battles", "sqli-demo"), { recursive: true });
     expect(() => loadDockerCatalog(copied, [join(copied, "problems")])).toThrow(
       "Duplicate local problem ID",
     );
+  });
+});
+
+test("runtime discovery ignores unvalidated shared directories", () => {
+  fixture((copied, directory) => {
+    mkdirSync(join(copied, "problems", "shared"));
+    cpSync(directory, join(copied, "problems", "shared", "extra"), { recursive: true });
+    expect(
+      loadDockerCatalog(copied, [join(copied, "problems")]).map((problem) => problem.problemId),
+    ).toEqual(["sqli-demo"]);
+  });
+});
+
+test("SDK titles are normalized consistently without changing immutable source metadata", () => {
+  fixture((copied, directory) => {
+    const path = join(directory, "metadata.json");
+    const metadata = JSON.parse(readFileSync(path, "utf8"));
+    delete metadata.name;
+    metadata.title = "Authored SQL title";
+    metadata.category = "challenge";
+    const raw = JSON.stringify(metadata);
+    writeFileSync(path, raw);
+    const problem = loadDockerCatalog(copied, [join(copied, "problems")])[0];
+    expect(problem?.name).toBe("Authored SQL title");
+    expect(problem?.publicCatalog?.name).toBe("Authored SQL title");
+    expect(JSON.parse(problem?.definition ?? "{}").problem.name).toBe("Authored SQL title");
+    expect(readFileSync(path, "utf8")).toBe(raw);
   });
 });
 
