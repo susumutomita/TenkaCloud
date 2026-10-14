@@ -212,7 +212,13 @@ function endpointRoutes(
   participants: readonly LocalNetworkPlan[],
 ): LocalPublicRoute[] {
   if (
-    !publisher.segments.includes(endpoint.segment) ||
+    !publisher.segments.some(
+      (segment) =>
+        segment.name === endpoint.segment.name &&
+        segment.bridge === endpoint.segment.bridge &&
+        segment.ipv4 === endpoint.segment.ipv4 &&
+        segment.ipv6 === endpoint.segment.ipv6,
+    ) ||
     !/^[A-Za-z0-9_.-]{1,128}$/u.test(endpoint.service) ||
     !Number.isInteger(endpoint.port) ||
     endpoint.port < 1 ||

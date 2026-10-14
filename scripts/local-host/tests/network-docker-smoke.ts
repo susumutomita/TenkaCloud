@@ -222,7 +222,11 @@ async function verifyDmz(
     );
     assert.equal(result.output.includes("public-network-fixture"), expected);
   };
+  let lastPublication = 0;
   const publish = async (published: boolean) => {
+    // Exercise the real one-request-per-second contract without relaxing admission limits.
+    const remaining = 1000 - (Date.now() - lastPublication);
+    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
     const response = await fetch(
       `${portal.origin}/api/portal/me/problems/network-fixture/network`,
       {
@@ -235,6 +239,7 @@ async function verifyDmz(
       },
     );
     assert.equal(response.status, 200, await response.text());
+    lastPublication = Date.now();
   };
   for (const address of [peer.db4, peer.db6]) probe(address, 8080, false);
   await publish(true);
@@ -253,12 +258,15 @@ async function cleanupJobs(
   old: Job,
   engine: DockerHostingEngine,
   oldEngine: DockerHostingEngine,
+  store: HostStore,
 ): Promise<void> {
   for (const job of [...jobs, old])
     if (job.unit) {
       try {
         await (job === old ? oldEngine : engine).stop(job);
         job.unit = null;
+        if (job !== old && store.jobs(job.eventId).some((entry) => entry.jobId === job.jobId))
+          store.putJob({ ...store.job(job.jobId), unit: null, status: "DELETED" });
       } catch (error) {
         console.error("Lab ownership cleanup failed", error);
         process.exitCode = 1;
@@ -301,6 +309,7 @@ async function main(): Promise<void> {
   });
   const store = new HostStore(new Database(":memory:"));
   let portal: HttpHost | undefined;
+  let service: HostingService | undefined;
   const sockets: WebSocket[] = [];
   const checks: string[] = [];
   let passed = false;
@@ -361,7 +370,7 @@ async function main(): Promise<void> {
       store.putTeam(team);
       store.putJob(requiredNetworkValue(jobs[index]));
     }
-    const service = new HostingService(store, engine, "transient-lab-host-key");
+    service = new HostingService(store, engine, "transient-lab-host-key");
     portal = await startHttpHost({
       kind: "participant",
       hostname: "127.0.0.1",
@@ -402,6 +411,7 @@ async function main(): Promise<void> {
     await engine.pause(requiredNetworkValue(jobs[0]));
     await engine.resume(requiredNetworkValue(jobs[0]));
     assert.equal(requiredNetworkValue(jobs[0]).unit, before);
+    await engine.closeTransports();
     engine = new DockerHostingEngine(root, directory); // persisted isolation cannot be disabled by dropping the CLI option
     for (const job of jobs) await engine.recover(job);
     assert.equal(
@@ -451,7 +461,9 @@ async function main(): Promise<void> {
   } finally {
     for (const socket of sockets) socket.terminate();
     await portal?.close();
-    await cleanupJobs(jobs, old, engine, oldEngine);
+    await service?.drain();
+    await Promise.all([engine.closeTransports(), oldEngine.closeTransports()]);
+    await cleanupJobs(jobs, old, engine, oldEngine, store);
     store.close();
     host.close();
     if (passed && [...jobs, old].every((job) => job.unit === null))

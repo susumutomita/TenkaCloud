@@ -262,6 +262,7 @@ export interface RuntimeEngine {
   ): Promise<import("./network-publication").NetworkPublicationView>;
   networkSupported?(job: Job): boolean;
   drainNetworkChecks?(): Promise<void>;
+  closeTransports?(): Promise<void>;
   auditNetworks?(): Promise<void>;
   networkRequirement?(definition: string): 1 | undefined;
   publishNetworkService?(

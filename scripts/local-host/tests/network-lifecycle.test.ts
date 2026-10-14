@@ -34,6 +34,8 @@ test("a new resume error replaces stale STOPPED state when the guard did not per
 test("publication mutation awaits the asynchronous guard instead of synchronous native transports", async () => {
   const f = networkEngineFixture();
   const { job } = f.add("async-publication");
+  const foreign = { ...f.add("unrelated-event").job, eventId: "other-event" };
+  f.store.putJob(foreign);
   let release: () => void = () => undefined;
   let entered: () => void = () => undefined;
   const barrier = new Promise<void>((resolve) => {
@@ -58,6 +60,7 @@ test("publication mutation awaits the asynchronous guard instead of synchronous 
   try {
     await started;
     expect(f.engine.terminalSupported(job)).toBe(false);
+    expect(f.engine.terminalSupported(foreign)).toBe(true);
     expect(() => f.engine.surfaces(job)).toThrow("policy is changing");
     await Bun.sleep(1);
     expect(f.calls).not.toContain("route");

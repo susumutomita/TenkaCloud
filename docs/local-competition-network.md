@@ -209,8 +209,9 @@ changed.
   authenticated shell sessions, verifier submissions and controller recovery.
   The earlier cloud attempt failed during Compose creation because nested cgroup v2
   is in threaded mode: `cannot enter cgroupv2 ... with domain controllers`.
-  Those end-to-end checks are **unmet**, not passed. Resource limits were not
-  removed, and shared cgroups were not reconfigured to force a pass.
+  A subsequent owned cloud run passed these checks with the controller transports
+  described below. Resource limits were not removed, and shared cgroups were not
+  reconfigured to force a pass.
 - DNS packet/proxy canaries, raw source/MAC spoofing, fragmentation, external
   exceptions, real LAN/Internet, browser rendering and VM/container escape have
   not been fully validated by this rehearsal. A failed lookup with no external
@@ -234,7 +235,7 @@ Additional regression fixtures cover six authenticated HTTP/SQLite/WebSocket
 sessions with fake shell transports during a delayed audit, peer-only
 revocation, expired proofs, corrupted/missing Compose files, publication budget
 preflight, and concurrent recovery versus revocation. These do not establish
-six bounded production Docker sessions. The earlier isolated lab rejected even
+six bounded production Docker sessions on their own. The earlier isolated lab rejected even
 a minimal memory/CPU/pids-limited container with cgroup invalid state. The existing
 manual rehearsal now offers an explicit, default-off `network_lab_cgroup_init`
 input. It creates only `/init` inside the lab's private cgroup namespace, moves
@@ -242,17 +243,33 @@ validated lab PIDs there, and enables cpu/memory/pids only at that lab root.
 Invalid domains and missing delegation refuse startup; no ancestor/type repair,
 mount or sysctl operation is attempted. No resource limit is removed.
 
-An owned cloud recovery attempt using this initializer passed the capped
-preflight. Its temporary image used the installed cloud `ip` binary and libraries
-from the official Bun image because the normal Alpine package download returned
-HTTP 403. This is not a successful GitHub Actions build or six-team acceptance.
-The attempt then stopped at the old-adapter comparison fixture: both services
-were running, the requested loopback binding existed in `HostConfig.PortBindings`,
-but `NetworkSettings.Ports` was empty and verifier readiness timed out after
-sixty seconds. The six-team isolated fixture was not reached. The owned outer lab
-was removed and its absence confirmed. Controller access to internal-network
-verifiers and participant surfaces still needs a verified implementation; do not
-remove internal networking or loosen the guard simply to pass the rehearsal.
+The owned cloud recovery passed capped preflight and the complete six-team
+production-adapter rehearsal after adding controller-owned loopback TCP transports.
+The temporary image used the installed cloud `ip` binary and libraries from the
+official Bun image because the normal Alpine package download returned HTTP 403.
+This proves the isolated cloud fixture, not a successful normal GitHub Actions image
+build. [The bounded rehearsal evidence](assets/local-network-bounded-rehearsal.json)
+records the scope and limitations.
+
+Docker 28.4 does not program published ports for internal-only endpoints. The
+controller therefore removes those Docker port declarations and binds the same
+assigned ports on `127.0.0.1`. A bounded worker verifies the local native daemon,
+exact running Compose service, internal network IDs, labels, owned IPAM address
+and route through its bridge before each connection. Initial container/network IDs
+are pinned; a recreated service cannot inherit an old listener. Isolated workloads
+also pass the full generation-bound guard audit. Raw TCP preserves verifier,
+problem HTTP, TLS and WebSocket protocols. Publication stays a separate capability;
+private verifier listeners are never exposed as DMZ services.
+
+The relay bounds pending and active connections, audits ownership every ten seconds,
+and closes listeners and active sockets when revoked or when its sixty-second proof
+expires. Publication updates use the current unit and event policy epoch. Lifecycle
+stop, pause, failed admission and controller shutdown close owned transports; recovery
+reconstructs them from the validated definition and retained unit. Old generated
+Compose files containing Docker port declarations are refused on recovery rather
+than silently migrated. This transport currently requires native rootful Linux
+Docker 28.4.x in the controller network namespace, including for older internal-only
+problems; it does not add Docker Desktop support.
 
 Revoked workloads whose quarantine or shutdown remains unconfirmed stay in a
 retry set, including after in-memory admission is removed. Background sweeps
@@ -270,4 +287,4 @@ authenticated terminals and verifier scores, controller recovery, dual-stack
 DMZ publication/withdrawal, private peer DB denial and owner cleanup. No host
 sysctl/firewall/cgroup setting is changed. The opt-in cgroup initializer is confined
 to the owned lab subtree. The normal-VM result remains unverified for this change;
-the recovery attempt is not counted as a successful six-team test.
+the successful cloud fixture is not counted as a normal-VM or real-LAN test.

@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import type { RelayRequest, RelayTarget } from "./container/relay-target";
 import type { LocalNetworkPlan, LocalPublicEndpoint } from "./local-network";
 
 interface WorkerQueue {
@@ -58,6 +59,17 @@ export async function networkEndpoints(
     release(auditQueue);
   }
 }
+export async function relayTarget(
+  request: RelayRequest,
+  expected?: RelayTarget,
+): Promise<RelayTarget> {
+  await acquire(auditQueue);
+  try {
+    return await runWorker<RelayTarget>(request.plan, "relay-target", { request, expected });
+  } finally {
+    release(auditQueue);
+  }
+}
 export function emergencyNetwork(
   plan: LocalNetworkPlan,
   mode: "quarantine" | "reset",
@@ -74,9 +86,15 @@ function runAudit(
   return runWorker<undefined>(plan, mode, details);
 }
 function runWorker<T>(
-  plan: LocalNetworkPlan,
-  mode: WorkerMode | "endpoints",
-  details: { previous?: LocalNetworkPlan; service?: string; port?: number },
+  plan: LocalNetworkPlan | undefined,
+  mode: WorkerMode | "endpoints" | "relay-target",
+  details: {
+    previous?: LocalNetworkPlan;
+    service?: string;
+    port?: number;
+    request?: RelayRequest;
+    expected?: RelayTarget;
+  },
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const entry = import.meta.url.endsWith(".ts")

@@ -69,6 +69,12 @@ test("shared DMZ permissions bind both team attachments and exact published TCP 
   ];
   const from = sharedNetworkPlan(a, publishers, [a, b]);
   const to = sharedNetworkPlan(b, publishers, [a, b]);
+  // Native endpoint inspection crosses a Worker structured-clone boundary.
+  expect(sharedNetworkPlan(a, structuredClone(publishers), [a, b])).toEqual(from);
+  const forged = structuredClone(publishers);
+  const forgedEndpoint = requiredNetworkValue(requiredNetworkValue(forged[0]).endpoints[0]);
+  forgedEndpoint.segment = { ...forgedEndpoint.segment, bridge: "unowned" };
+  expect(() => sharedNetworkPlan(a, forged, [a, b])).toThrow("Invalid owned DMZ endpoint");
   expect(from.publicRoutes).toHaveLength(2);
   expect(to.publicRoutes).toEqual(from.publicRoutes);
   expect(

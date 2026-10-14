@@ -70,6 +70,7 @@ export async function startLocalHost(
   let participant: HttpHost | undefined;
   let gateways: SurfaceGateways | undefined;
   let service: HostingService | undefined;
+  let transportEngine: RuntimeEngine | undefined;
   let uptimeTimer: ReturnType<typeof setInterval> | undefined;
   let uptimeTick: Promise<void> | undefined;
   let disruptionTimer: ReturnType<typeof setInterval> | undefined;
@@ -108,6 +109,7 @@ export async function startLocalHost(
         );
     }
     await gateways?.close();
+    await transportEngine?.closeTransports?.();
     service?.flush();
     store.close();
     if (unstoppedLocal.length > 0)
@@ -118,6 +120,7 @@ export async function startLocalHost(
   try {
     const { key: organizerKey } = store.ensureLocalOrganizerKey();
     const engine = createEngine(directory, store);
+    transportEngine = engine;
     service = new HostingService(
       store,
       engine,

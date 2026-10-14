@@ -15,7 +15,21 @@ import { HostStore } from "../store";
 import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
+// These fixtures replace the native lifecycle; fingerprint the immutable test catalog once.
+const fixtureCatalog = loadDockerCatalog(root);
 class SyntheticContainers extends DockerHostingEngine {
+  constructor(repository: string, directory: string) {
+    super(
+      repository,
+      directory,
+      undefined,
+      false,
+      undefined,
+      undefined,
+      undefined,
+      () => fixtureCatalog,
+    );
+  }
   readonly retained = new Map<string, { progress: number; running: boolean }>();
   readonly calls = {
     start: [] as string[],
@@ -98,8 +112,8 @@ async function fixture(
   const service = new HostingService(store, engine, "synthetic-host-key");
   service.containerLimits = { perTeam: 3, global: 5, memoryMiB: 65_536 };
   service.gatewayPorts = { start: 5200, end: 5239 };
-  const admin = await bootstrapOrganizer(service, "synthetic-host-key");
   try {
+    const admin = await bootstrapOrganizer(service, "synthetic-host-key");
     const created = await service.admin(
       request("POST", "/events", admin, {
         name: "20 exercises × 5 teams",

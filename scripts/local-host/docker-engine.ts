@@ -10,7 +10,9 @@ import {
 } from "./container/compose-cli";
 import { assertComposePolicy } from "./container/compose-policy";
 import type { LocalComposeUnit, StartedContainer } from "./container/container-runner";
+import { LoopbackRelays, relayCompose } from "./container/loopback-relay";
 import { remapContainerProblem } from "./container/port-remap";
+import type { RelayBinding } from "./container/relay-target";
 import { revealContainerHint, submitFlag } from "./container/scoring";
 import { createContainerState } from "./container/session";
 import { sessionScore } from "./container/state";
@@ -60,6 +62,7 @@ import {
   type Problem,
   type RuntimeEngine,
 } from "./model";
+import { relayTarget } from "./network-audit";
 import { assertPublicServiceSeparation, type NetworkPublicationView } from "./network-publication";
 import { prepareRuntimeDirectory, removeRuntimeFiles } from "./runtime-directory";
 import { type RuntimePorts, remapRuntimeComposePorts } from "./runtime-ports";
@@ -173,10 +176,13 @@ export class DockerHostingEngine implements RuntimeEngine {
     return boundedCompose((JSON.parse(definition) as Definition).composeText).cost;
   }
   private readonly problems: Problem[];
+  private readonly relays = new Map<string, LoopbackRelays>();
+  private readonly relayClosures = new Map<string, Promise<void>>();
   private readonly running = new Map<string, StartedContainer>();
   private readonly networkReservations = new Map<string, readonly string[]>();
   private networkState?: Parameters<NonNullable<RuntimeEngine["bindNetworkState"]>>[0];
   private publicMutation: Promise<void> = Promise.resolve();
+  private readonly publicationBarriers = new Map<string, Promise<void>>();
   private readonly publicViews = new Map<
     string,
     { unit: string; value: Promise<NetworkPublicationView["shared"]> }
@@ -189,8 +195,11 @@ export class DockerHostingEngine implements RuntimeEngine {
   private readonly guardRevocations = new Set<Promise<void>>();
   private readonly pendingHalts = new Map<string, Promise<never>>();
   private readonly unconfirmedHalts = new Map<string, { job: Job; unit: LocalComposeUnit }>();
-  private policyEpoch = 0;
-  private applyingPublications = false;
+  private readonly policyEpochs = new Map<string, number>();
+  private applyingPublicationEvent?: string;
+  private policyEpoch(eventId: string): number {
+    return this.policyEpochs.get(eventId) ?? 0;
+  }
   bindNetworkState(state: NonNullable<DockerHostingEngine["networkState"]>): void {
     this.networkState = state;
   }
@@ -212,8 +221,9 @@ export class DockerHostingEngine implements RuntimeEngine {
     private readonly networkGuard: LocalNetworkGuard = new LinuxNetworkGuard(),
     private readonly runCompose: typeof compose = compose,
     private readonly guardNow: () => number = Date.now,
+    catalogLoader: typeof loadDockerCatalog = loadDockerCatalog,
   ) {
-    this.problems = loadDockerCatalog(repositoryRoot);
+    this.problems = catalogLoader(repositoryRoot);
   }
   catalog(): readonly Problem[] {
     return this.problems;
@@ -231,6 +241,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     started: StartedContainer;
     composeText: string;
     directory: string;
+    relayBindings: readonly RelayBinding[];
   } {
     const { problem: original, composeText: source } = definitionOf(job, verifySources);
     const problem = { ...original, composeProjectName: `tch-${job.jobId.toLowerCase()}` };
@@ -252,6 +263,8 @@ export class DockerHostingEngine implements RuntimeEngine {
       : undefined;
     if (networkPlan) plannedCompose = isolatedCompose(plannedCompose, networkPlan);
     else if (networkSubnets) plannedCompose = applyNetworkSubnets(plannedCompose, networkSubnets);
+    const transport = relayCompose(plannedCompose);
+    plannedCompose = transport.text;
     const directory = prepareRuntimeDirectory(this.dataDirectory, job.jobId, claimNewDirectory);
     const composePath = join(directory, `${problem.composeProjectName}.compose.yml`);
     const unit: LocalComposeUnit = {
@@ -273,6 +286,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     };
     return {
       started: { unit, problem: remapContainerProblem(problem, remapped.portMap) },
+      relayBindings: transport.bindings,
       composeText: plannedCompose,
       directory,
     };
@@ -327,6 +341,7 @@ export class DockerHostingEngine implements RuntimeEngine {
       if (guarded) this.networkGuard.install(guarded);
       await this.runCompose(unit, "up", { ...process.env, ...generated });
       if (guarded) this.networkGuard.verifyNetworks(guarded);
+      await this.openRelays(job, plan.started.unit, plan.relayBindings);
       await ready(plan.started.problem.verifyUrl);
       await this.readySurfaces(plan.started);
       if (guarded) this.networkGuard.verifyNetworks(guarded);
@@ -404,6 +419,7 @@ export class DockerHostingEngine implements RuntimeEngine {
         throw new Error(
           "The recorded problem environment is not running. Retry deployment from the host console.",
         );
+      await this.openRelays(job, plan.started.unit, plan.relayBindings);
       await ready(plan.started.problem.verifyUrl);
       await this.readySurfaces(plan.started);
       const guarded = this.guardPlan(job, unit);
@@ -520,6 +536,7 @@ export class DockerHostingEngine implements RuntimeEngine {
       await this.runCompose(unit, "restart", { ...process.env, ...generated });
       const guarded = this.guardPlan(job, unit);
       if (guarded) this.networkGuard.verifyNetworks(guarded);
+      await this.openRelays(job, plan.started.unit, plan.relayBindings);
       await ready(plan.started.problem.verifyUrl);
       await this.readySurfaces(plan.started);
       this.admitRunning(job, plan.started);
@@ -581,11 +598,11 @@ export class DockerHostingEngine implements RuntimeEngine {
   async networkView(context: Context, problemId: string): Promise<NetworkPublicationView> {
     const own = this.publicationJob(context, problemId);
     const started = this.running.get(own.jobId);
-    const epoch = this.policyEpoch;
+    const epoch = this.policyEpoch(own.eventId);
     const ownUnit = JSON.parse(requiredNetworkValue(own.unit)) as LocalComposeUnit;
     const published = this.publicServiceIds(own, ownUnit);
     const shared = await this.sharedPublicServices(context);
-    if (epoch !== this.policyEpoch || this.running.get(own.jobId) !== started)
+    if (epoch !== this.policyEpoch(own.eventId) || this.running.get(own.jobId) !== started)
       throw new HostError(409, "Competition network generation changed.");
     this.assertRunningGuard(own);
     return {
@@ -599,9 +616,9 @@ export class DockerHostingEngine implements RuntimeEngine {
     };
   }
   private async sharedPublicServices(context: Context): Promise<NetworkPublicationView["shared"]> {
-    if (this.applyingPublications)
+    if (this.applyingPublicationEvent === context.event.eventId)
       throw new HostError(409, "Competition network policy is changing.");
-    const epoch = this.policyEpoch;
+    const epoch = this.policyEpoch(context.event.eventId);
     const shared: NetworkPublicationView["shared"][number][] = [];
     for (const job of this.networkState?.jobs() ?? []) {
       if (job.eventId !== context.event.eventId || job.status !== "COMPLETE" || !job.unit) continue;
@@ -633,11 +650,12 @@ export class DockerHostingEngine implements RuntimeEngine {
       }
       const views = await cached.value;
       this.assertRunningGuard(job);
-      if (epoch !== this.policyEpoch || this.running.get(job.jobId) !== started)
+      if (epoch !== this.policyEpoch(job.eventId) || this.running.get(job.jobId) !== started)
         throw new HostError(409, "Competition network policy is changing.");
       return views;
     } catch (error) {
-      if (epoch !== this.policyEpoch || this.running.get(job.jobId) !== started) throw error;
+      if (epoch !== this.policyEpoch(job.eventId) || this.running.get(job.jobId) !== started)
+        throw error;
       return this.haltGuardedUnit(job, unit, error);
     }
   }
@@ -712,7 +730,14 @@ export class DockerHostingEngine implements RuntimeEngine {
     disabled = new Set<string>(),
   ): Promise<void> {
     const task = this.publicMutation.then(() => this.applyPublications(eventId, changes, disabled));
-    this.publicMutation = task.catch(() => undefined);
+    const barrier = task
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.publicationBarriers.get(eventId) === barrier)
+          this.publicationBarriers.delete(eventId);
+      });
+    this.publicMutation = barrier;
+    this.publicationBarriers.set(eventId, barrier);
     return task;
   }
   private async applyPublications(
@@ -788,8 +813,8 @@ export class DockerHostingEngine implements RuntimeEngine {
       });
       return { jobId: job.jobId, unit, plan };
     });
-    this.policyEpoch++;
-    this.applyingPublications = true;
+    this.policyEpochs.set(eventId, this.policyEpoch(eventId) + 1);
+    this.applyingPublicationEvent = eventId;
     try {
       for (const { jobId, plan } of planned) {
         await this.applyPublicationPlan(plan, requiredNetworkValue(previous.get(jobId)));
@@ -806,7 +831,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     } catch (error) {
       await this.stopFailedPublications(snapshots, previous, error);
     } finally {
-      this.applyingPublications = false;
+      this.applyingPublicationEvent = undefined;
     }
   }
 
@@ -1010,9 +1035,87 @@ export class DockerHostingEngine implements RuntimeEngine {
     }
   }
   private revokeRunning(jobId: string): void {
+    const relay = this.relays.get(jobId);
+    this.relays.delete(jobId);
+    if (relay) {
+      const closing = relay.close().finally(() => {
+        if (this.relayClosures.get(jobId) === closing) this.relayClosures.delete(jobId);
+      });
+      this.relayClosures.set(jobId, closing);
+    }
     this.publicViews.delete(jobId);
     this.running.delete(jobId);
     this.guardProofs.delete(jobId);
+  }
+  async closeTransports(): Promise<void> {
+    for (const jobId of this.relays.keys()) this.revokeRunning(jobId);
+    await Promise.all(this.relayClosures.values());
+  }
+  private relayUnit(job: Job, candidate: LocalComposeUnit): LocalComposeUnit {
+    return this.running.get(job.jobId)?.unit ?? candidate;
+  }
+  private async openRelays(
+    job: Job,
+    unit: LocalComposeUnit,
+    bindings: readonly RelayBinding[],
+  ): Promise<void> {
+    await this.relayClosures.get(job.jobId);
+    if (!bindings.length) return;
+    const relay = new LoopbackRelays(
+      bindings,
+      async (binding, expected) => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await this.publicationBarriers.get(job.eventId);
+          if (this.relays.get(job.jobId) !== relay)
+            throw new Error("Internal transport admission revoked.");
+          const epoch = this.policyEpoch(job.eventId);
+          const currentUnit = this.relayUnit(job, unit);
+          try {
+            const target = await relayTarget(
+              { project: unit.composeProjectName, binding, plan: this.guardPlan(job, currentUnit) },
+              expected,
+            );
+            if (epoch === this.policyEpoch(job.eventId)) return target;
+          } catch (error) {
+            if (epoch === this.policyEpoch(job.eventId)) throw error;
+          }
+        }
+        throw new Error("Internal transport policy did not stabilize.");
+      },
+      () => {
+        if (this.relays.get(job.jobId) !== relay) return false;
+        if (!this.running.has(job.jobId)) return true; // Owned candidate, before readiness admission.
+        try {
+          this.assertRunningGuard(job);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      (error) => {
+        if (this.relays.get(job.jobId) !== relay) return;
+        if (unit.isolationVersion === 1)
+          this.trackGuardRevocation(
+            this.haltGuardedUnit(job, this.running.get(job.jobId)?.unit ?? unit, error),
+          );
+        else {
+          this.revokeRunning(job.jobId);
+          job.status = "FAILED";
+          job.error =
+            error instanceof Error ? error.message : "Internal transport ownership failed.";
+          this.networkState?.retain([
+            { jobId: job.jobId, unit: JSON.stringify(unit), status: "FAILED", error: job.error },
+          ]);
+        }
+      },
+    );
+    this.relays.set(job.jobId, relay);
+    try {
+      await relay.listen();
+    } catch (error) {
+      this.revokeRunning(job.jobId);
+      throw error;
+    }
   }
   private admitRunning(job: Job, started: StartedContainer): void {
     this.publicViews.delete(job.jobId);
@@ -1051,14 +1154,14 @@ export class DockerHostingEngine implements RuntimeEngine {
     }
   }
   private scheduleGuardAudit(job: Job, started: StartedContainer): void {
-    if (this.guardAudits.has(job.jobId) || this.applyingPublications) return;
+    if (this.guardAudits.has(job.jobId) || this.applyingPublicationEvent === job.eventId) return;
     const proof = this.guardProofs.get(job.jobId);
     if (proof) proof.attemptedAt = this.guardNow();
-    const epoch = this.policyEpoch;
+    const epoch = this.policyEpoch(job.eventId);
     const task = Promise.resolve()
       .then(() => this.verifyPlan(requiredNetworkValue(this.guardPlan(job, started.unit))))
       .then(() => {
-        if (epoch === this.policyEpoch && this.running.get(job.jobId) === started)
+        if (epoch === this.policyEpoch(job.eventId) && this.running.get(job.jobId) === started)
           this.guardProofs.set(job.jobId, {
             unit: started.unit,
             verifiedAt: this.guardNow(),
@@ -1066,7 +1169,7 @@ export class DockerHostingEngine implements RuntimeEngine {
           });
       })
       .catch(async (error) => {
-        if (epoch === this.policyEpoch && this.running.get(job.jobId) === started) {
+        if (epoch === this.policyEpoch(job.eventId) && this.running.get(job.jobId) === started) {
           try {
             await this.haltGuardedUnit(job, started.unit, error);
           } catch {
@@ -1123,7 +1226,7 @@ export class DockerHostingEngine implements RuntimeEngine {
         "Competition network verification expired; runtime access was revoked.",
       );
     }
-    if (this.applyingPublications)
+    if (this.applyingPublicationEvent === job.eventId)
       throw new HostError(
         409,
         "Competition network policy is changing; reconnect after publication.",
