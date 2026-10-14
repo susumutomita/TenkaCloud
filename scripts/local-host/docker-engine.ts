@@ -177,6 +177,10 @@ export class DockerHostingEngine implements RuntimeEngine {
   private readonly networkReservations = new Map<string, readonly string[]>();
   private networkState?: Parameters<NonNullable<RuntimeEngine["bindNetworkState"]>>[0];
   private publicMutation: Promise<void> = Promise.resolve();
+  private readonly publicViews = new Map<
+    string,
+    { unit: string; value: Promise<NetworkPublicationView["shared"]> }
+  >();
   private readonly guardProofs = new Map<
     string,
     { unit: LocalComposeUnit; verifiedAt: number; attemptedAt: number }
@@ -576,9 +580,14 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   async networkView(context: Context, problemId: string): Promise<NetworkPublicationView> {
     const own = this.publicationJob(context, problemId);
+    const started = this.running.get(own.jobId);
+    const epoch = this.policyEpoch;
     const ownUnit = JSON.parse(requiredNetworkValue(own.unit)) as LocalComposeUnit;
     const published = this.publicServiceIds(own, ownUnit);
     const shared = await this.sharedPublicServices(context);
+    if (epoch !== this.policyEpoch || this.running.get(own.jobId) !== started)
+      throw new HostError(409, "Competition network generation changed.");
+    this.assertRunningGuard(own);
     return {
       supported: true,
       declared: (definitionOf(own, false).problem.publicServices ?? []).map((service) => ({
@@ -590,32 +599,58 @@ export class DockerHostingEngine implements RuntimeEngine {
     };
   }
   private async sharedPublicServices(context: Context): Promise<NetworkPublicationView["shared"]> {
+    if (this.applyingPublications)
+      throw new HostError(409, "Competition network policy is changing.");
+    const epoch = this.policyEpoch;
     const shared: NetworkPublicationView["shared"][number][] = [];
     for (const job of this.networkState?.jobs() ?? []) {
       if (job.eventId !== context.event.eventId || job.status !== "COMPLETE" || !job.unit) continue;
       const unit = JSON.parse(job.unit) as LocalComposeUnit;
-      try {
-        const plan = this.guardPlan(job, unit);
-        if (!plan) continue;
-        await this.verifyPlan(plan);
-        shared.push(...this.publicServiceViews(job, unit, plan));
-      } catch (error) {
-        await this.haltGuardedUnit(job, unit, error);
-      }
+      const started = this.running.get(job.jobId);
+      if (!started) continue;
+      shared.push(...(await this.observedPublicViews(job, unit, started, epoch)));
     }
     return shared;
   }
-  private publicServiceViews(
+  private async observedPublicViews(
+    job: Job,
+    unit: LocalComposeUnit,
+    started: StartedContainer,
+    epoch: number,
+  ): Promise<NetworkPublicationView["shared"]> {
+    try {
+      const plan = this.guardPlan(job, unit);
+      if (!plan) return [];
+      this.assertRunningGuard(job);
+      const fingerprint = requiredNetworkValue(job.unit);
+      let cached = this.publicViews.get(job.jobId);
+      if (!cached || cached.unit !== fingerprint) {
+        cached = {
+          unit: fingerprint,
+          value: this.verifyPlan(plan).then(() => this.publicServiceViews(job, unit, plan)),
+        };
+        this.publicViews.set(job.jobId, cached);
+      }
+      const views = await cached.value;
+      this.assertRunningGuard(job);
+      if (epoch !== this.policyEpoch || this.running.get(job.jobId) !== started)
+        throw new HostError(409, "Competition network policy is changing.");
+      return views;
+    } catch (error) {
+      if (epoch !== this.policyEpoch || this.running.get(job.jobId) !== started) throw error;
+      return this.haltGuardedUnit(job, unit, error);
+    }
+  }
+  private async publicServiceViews(
     job: Job,
     unit: LocalComposeUnit,
     plan: LocalNetworkPlan,
-  ): NetworkPublicationView["shared"] {
+  ): Promise<NetworkPublicationView["shared"]> {
     const shared: NetworkPublicationView["shared"][number][] = [];
     for (const service of definitionOf(job, false).problem.publicServices ?? []) {
       if (!this.publicServiceIds(job, unit).includes(service.id)) continue;
-      const addresses = this.networkGuard
-        .endpoints(plan, service.service, service.port)
-        .flatMap((endpoint) => endpoint.addresses);
+      const endpoints = await this.publicEndpoints(plan, service.service, service.port);
+      const addresses = endpoints.flatMap((endpoint) => endpoint.addresses);
       if (addresses.length)
         shared.push({
           teamId: job.teamId,
@@ -628,6 +663,11 @@ export class DockerHostingEngine implements RuntimeEngine {
         });
     }
     return shared;
+  }
+  private publicEndpoints(plan: LocalNetworkPlan, service: string, port: number) {
+    return this.networkGuard.endpointsAsync
+      ? this.networkGuard.endpointsAsync(plan, service, port)
+      : Promise.resolve(this.networkGuard.endpoints(plan, service, port));
   }
   async publishNetworkService(
     context: Context,
@@ -716,9 +756,7 @@ export class DockerHostingEngine implements RuntimeEngine {
       const plan = requiredNetworkValue(previous.get(job.jobId));
       await this.verifyObservedJob(snapshot, JSON.parse(requiredNetworkValue(snapshot.unit)), plan);
       try {
-        const endpoints = (definitionOf(job, false).problem.publicServices ?? [])
-          .filter((service) => this.publicServiceIds(job, unit).includes(service.id))
-          .flatMap((service) => this.networkGuard.endpoints(plan, service.service, service.port));
+        const endpoints = await this.jobPublicEndpoints(job, unit, plan);
         publishers.push({ plan, endpoints });
       } catch (error) {
         return this.haltGuardedUnit(
@@ -754,9 +792,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     this.applyingPublications = true;
     try {
       for (const { jobId, plan } of planned) {
-        this.networkGuard.update(plan, requiredNetworkValue(previous.get(jobId)));
-        this.networkGuard.routePublications(plan);
-        this.networkGuard.verifyNetworks(plan);
+        await this.applyPublicationPlan(plan, requiredNetworkValue(previous.get(jobId)));
       }
       this.networkState.retain(planned.map(({ jobId, unit }) => ({ jobId, unit })));
       for (const { jobId, unit } of planned) {
@@ -772,6 +808,23 @@ export class DockerHostingEngine implements RuntimeEngine {
     } finally {
       this.applyingPublications = false;
     }
+  }
+
+  private async jobPublicEndpoints(job: Job, unit: LocalComposeUnit, plan: LocalNetworkPlan) {
+    const endpoints = [];
+    for (const service of definitionOf(job, false).problem.publicServices ?? [])
+      if (this.publicServiceIds(job, unit).includes(service.id))
+        endpoints.push(...(await this.publicEndpoints(plan, service.service, service.port)));
+    return endpoints;
+  }
+  private async applyPublicationPlan(
+    plan: LocalNetworkPlan,
+    previous: LocalNetworkPlan,
+  ): Promise<void> {
+    if (this.networkGuard.publishAsync) return this.networkGuard.publishAsync(plan, previous);
+    this.networkGuard.update(plan, previous);
+    this.networkGuard.routePublications(plan);
+    this.networkGuard.verifyNetworks(plan);
   }
 
   private assertPublicationChange(snapshot: Job, changed?: Job): void {
@@ -957,10 +1010,12 @@ export class DockerHostingEngine implements RuntimeEngine {
     }
   }
   private revokeRunning(jobId: string): void {
+    this.publicViews.delete(jobId);
     this.running.delete(jobId);
     this.guardProofs.delete(jobId);
   }
   private admitRunning(job: Job, started: StartedContainer): void {
+    this.publicViews.delete(job.jobId);
     this.running.set(job.jobId, started);
     if (started.unit.isolationVersion === 1)
       this.guardProofs.set(job.jobId, {
@@ -1068,6 +1123,11 @@ export class DockerHostingEngine implements RuntimeEngine {
         "Competition network verification expired; runtime access was revoked.",
       );
     }
+    if (this.applyingPublications)
+      throw new HostError(
+        409,
+        "Competition network policy is changing; reconnect after publication.",
+      );
   }
   private surfaceFrom(started: StartedContainer): string {
     const url = Object.values(started.problem.challengeEndpoints)[0];

@@ -8,6 +8,47 @@ including dormant jobs without a `Job.unit`,
 even when a later controller omits the option. An existing unguarded environment
 cannot be adopted as isolated.
 
+This adapter does **not** yet provide the requested VPN competition appliance.
+Ordinary `make local` binds inbound listeners to loopback; it does not block
+container egress to the organizer's LAN. The native adapter below covers owned
+container bridges on Linux, not VPN peer ingress or a macOS host boundary.
+Do not use its packet-canary results as acceptance of VPN or Mac hosting.
+
+## VPN appliance trust boundary still required
+
+The cross-platform hosting boundary must be a dedicated Linux VM running the
+controller, native Docker, the team guards and the VPN endpoint. Desktop Docker
+and an ordinary host bridge are not substitutes. The VM must have no shared host
+directory or host Docker socket. VPN traffic must terminate in an event-owned
+ingress boundary, with a fixed public-key-to-team mapping and disjoint IPv4 /32
+and IPv6 /128 peer identities enforced by the server. Client route preferences
+alone are insufficient authorization.
+
+That ingress needs default-deny INPUT and FORWARD rules before peer admission.
+Only the owning team's internal destinations and the current event's explicitly
+published TCP services may be admitted. Reply admission must retain the original
+destination, ingress identity and generation; port changes, host/gateway DNAT,
+other teams' private addresses, other peers and management/LAN destinations must
+remain denied in both families. A dedicated competition DNS resolver must not
+forward arbitrary names to the host or Internet. Participant portal ingress must
+be separate from the organizer management listener. The portal terminal must
+continue to use the owned team workload rather than a VM or host shell.
+
+VPN peer admission, endpoint advertisements and container lifecycle must share
+the durable event/runtime generation. Startup and recovery must begin closed;
+proof failure, withdrawal, pause and shutdown must revoke admission before any
+resource is released. A VM restart must not restore previously open peer access
+before ownership and both firewall families have been verified. Mac integration
+must refuse an unsupported VM profile rather than falling back to an ordinary
+bridge. VM/network provisioning and credential application require separate
+approval; none is performed by the current adapter.
+
+Acceptance therefore still requires real VPN peers in the owned test environment,
+dual-stack/DNS/LAN/host/admin/gateway/changed-port denial, cross-team public-service
+success, private-team ownership, real terminal/scoring, controller and VM restart,
+publication withdrawal and confirmed teardown. The current six-container-network
+fixture does not replace those checks.
+
 ## Entry and prerequisites
 
 The entry remains `make local`. On an organizer-controlled dedicated Linux VM,
@@ -166,7 +207,7 @@ changed.
   Its explicit entry is `bun run test:host:network` inside the approved lab.
   It keeps memory, CPU and PID limits and exercises six Compose runtimes,
   authenticated shell sessions, verifier submissions and controller recovery.
-  In this cloud lab it failed during Compose creation because nested cgroup v2
+  The earlier cloud attempt failed during Compose creation because nested cgroup v2
   is in threaded mode: `cannot enter cgroupv2 ... with domain controllers`.
   Those end-to-end checks are **unmet**, not passed. Resource limits were not
   removed, and shared cgroups were not reconfigured to force a pass.
@@ -193,11 +234,25 @@ Additional regression fixtures cover six authenticated HTTP/SQLite/WebSocket
 sessions with fake shell transports during a delayed audit, peer-only
 revocation, expired proofs, corrupted/missing Compose files, publication budget
 preflight, and concurrent recovery versus revocation. These do not establish
-six bounded production Docker sessions. The current isolated lab also rejects
-a minimal memory/CPU/pids-limited container with cgroup invalid state. A provider
-would need to supply an independently delegated cgroup v2 domain supporting
-cpu, memory and pids; changing the shared hierarchy is outside this task's
-approval. No resource limit was removed.
+six bounded production Docker sessions. The earlier isolated lab rejected even
+a minimal memory/CPU/pids-limited container with cgroup invalid state. The existing
+manual rehearsal now offers an explicit, default-off `network_lab_cgroup_init`
+input. It creates only `/init` inside the lab's private cgroup namespace, moves
+validated lab PIDs there, and enables cpu/memory/pids only at that lab root.
+Invalid domains and missing delegation refuse startup; no ancestor/type repair,
+mount or sysctl operation is attempted. No resource limit is removed.
+
+An owned cloud recovery attempt using this initializer passed the capped
+preflight. Its temporary image used the installed cloud `ip` binary and libraries
+from the official Bun image because the normal Alpine package download returned
+HTTP 403. This is not a successful GitHub Actions build or six-team acceptance.
+The attempt then stopped at the old-adapter comparison fixture: both services
+were running, the requested loopback binding existed in `HostConfig.PortBindings`,
+but `NetworkSettings.Ports` was empty and verifier readiness timed out after
+sixty seconds. The six-team isolated fixture was not reached. The owned outer lab
+was removed and its absence confirmed. Controller access to internal-network
+verifiers and participant surfaces still needs a verified implementation; do not
+remove internal networking or loosen the guard simply to pass the rehearsal.
 
 Revoked workloads whose quarantine or shutdown remains unconfirmed stay in a
 retry set, including after in-memory admission is removed. Background sweeps
@@ -208,10 +263,11 @@ release it. Domain callers preserve the engine-confirmed STOPPED unit and reason
 
 The cgroup failure above is specific to this workspace's nested Docker, not a
 cloud-wide limit. The existing GitHub Actions Local hosting rehearsal now adds a
-normal Ubuntu VM test in an owned, disposable network:none Docker namespace,
+manual-only normal Ubuntu VM test in an owned, disposable network:none Docker namespace,
 with no host mounts or published ports. All twelve guest containers keep and
 inspect 128 MiB memory, 0.5 CPU and 128 pids limits. The fixture tests six real
 authenticated terminals and verifier scores, controller recovery, dual-stack
 DMZ publication/withdrawal, private peer DB denial and owner cleanup. No host
-sysctl/firewall/cgroup setting is changed. This CI extension is pending execution;
-the blocked workspace attempt is not counted as a successful six-team test.
+sysctl/firewall/cgroup setting is changed. The opt-in cgroup initializer is confined
+to the owned lab subtree. The normal-VM result remains unverified for this change;
+the recovery attempt is not counted as a successful six-team test.

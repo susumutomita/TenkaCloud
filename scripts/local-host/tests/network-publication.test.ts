@@ -149,3 +149,39 @@ test("prototype properties never count as declared Compose services", () => {
     );
   }
 });
+
+test("a pending network observation cannot occupy the event queue, and duplicate reads are bounded", async () => {
+  const f = await terminalFixture();
+  let release: () => void = () => undefined;
+  let entered: () => void = () => undefined;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  f.engine.networkSupported = () => true;
+  f.engine.networkView = async () => {
+    entered();
+    await barrier;
+    return { supported: true, declared: [], shared: [] };
+  };
+  const url = `${f.participant.origin}/api/portal/me/problems/terminal-lab/network`;
+  const headers = { authorization: `Bearer ${f.a.team.loginKey}` };
+  const pending = fetch(url, { headers });
+  try {
+    await started;
+    expect((await fetch(url, { headers })).status).toBe(429);
+    const unrelated = await fetch(`${f.participant.origin}/api/portal/me`, {
+      headers,
+      signal: AbortSignal.timeout(1000),
+    });
+    expect(unrelated.status).toBe(200);
+    release();
+    expect((await pending).status).toBe(200);
+  } finally {
+    release();
+    await pending;
+    await f.close();
+  }
+});

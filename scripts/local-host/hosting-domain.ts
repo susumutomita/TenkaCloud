@@ -262,6 +262,8 @@ export class HostingDomain {
   >;
   private readonly archiveCommands: EventArchiveCommandPort<{ event: HostedEvent }, ApiResponse>;
   private readonly queue = new SerialQueue();
+  private readonly networkRequests = new Map<string, { at: number; pending: boolean }>();
+  private readonly networkRetentions = new Map<string, number>();
   private readonly coordination: LocalCoordination = new LocalCoordination(this);
   readonly progression: HostProgression;
   readonly disruptions: LocalDisruptions;
@@ -290,7 +292,7 @@ export class HostingDomain {
   ) {
     this.engine.bindNetworkState?.({
       jobs: () => this.store.jobs(),
-      retain: (updates) =>
+      retain: (updates) => {
         this.store.transaction(() => {
           for (const update of updates)
             this.store.putJob({
@@ -299,7 +301,14 @@ export class HostingDomain {
               ...(update.status ? { status: update.status } : {}),
               ...(update.error !== undefined ? { error: update.error } : {}),
             });
-        }),
+        });
+        for (const update of updates)
+          if (update.status === "STOPPED")
+            this.networkRetentions.set(
+              update.jobId,
+              (this.networkRetentions.get(update.jobId) ?? 0) + 1,
+            );
+      },
     });
     // Materialize each SQLite view before returning its Promise. Keep the existing
     // Local read-time lifecycle/coordination updates and snapshot order intact.
@@ -1126,12 +1135,18 @@ export class HostingDomain {
       if (operation === "restart") job.status = "IN_PROGRESS";
       if (operation === "teardown") job.status = "DELETING";
       this.store.putJob(job);
+      const retentionBefore = this.networkRetention(job.jobId);
       try {
         await this.closeSurface?.(job.jobId);
         await this.changeEnvironment(job, operation);
         job.error = undefined;
       } catch (error) {
-        this.recordRuntimeFailure(job, error, "Environment operation failed; ownership retained.");
+        this.recordRuntimeFailure(
+          job,
+          error,
+          "Environment operation failed; ownership retained.",
+          retentionBefore,
+        );
       }
       job.operation = undefined;
       this.store.putJob(job);
@@ -1506,9 +1521,17 @@ export class HostingDomain {
     });
     job.deployedAt = this.now();
   }
-  private recordRuntimeFailure(job: Job, error: unknown, fallback: string): void {
+  private networkRetention(jobId: string): number {
+    return this.networkRetentions.get(jobId) ?? 0;
+  }
+  private recordRuntimeFailure(job: Job, error: unknown, fallback: string, before: number): void {
     const retained = this.store.job(job.jobId);
-    if (job.networkIsolationVersion === 1 && retained.status === "STOPPED" && retained.unit) {
+    if (
+      job.networkIsolationVersion === 1 &&
+      retained.status === "STOPPED" &&
+      retained.unit &&
+      this.networkRetention(job.jobId) !== before
+    ) {
       job.status = "STOPPED";
       job.unit = retained.unit;
       job.error = retained.error;
@@ -1520,6 +1543,7 @@ export class HostingDomain {
   }
   private async runDemandOperation(jobId: string, action: "start" | "stop"): Promise<void> {
     const job = this.store.job(jobId);
+    const retentionBefore = this.networkRetention(job.jobId);
     try {
       await this.closeSurface?.(jobId);
       if (action === "stop") {
@@ -1532,7 +1556,12 @@ export class HostingDomain {
       }
       job.error = undefined;
     } catch (error) {
-      this.recordRuntimeFailure(job, error, "Local environment operation failed; data retained.");
+      this.recordRuntimeFailure(
+        job,
+        error,
+        "Local environment operation failed; data retained.",
+        retentionBefore,
+      );
       if (!job.unit) job.gatewaySlot = undefined;
     }
     job.operation = undefined;
@@ -1667,6 +1696,7 @@ export class HostingDomain {
   }
   private async startJob(jobId: string): Promise<void> {
     const job = this.store.job(jobId);
+    const retentionBefore = this.networkRetention(job.jobId);
     try {
       // Always: a gateway opened for this job's previous runtime must not outlive it, even when
       // the runtime itself is already gone.
@@ -1699,7 +1729,7 @@ export class HostingDomain {
       job.status = "COMPLETE";
       job.deployedAt = this.now();
     } catch (error) {
-      this.recordRuntimeFailure(job, error, "Runtime failed.");
+      this.recordRuntimeFailure(job, error, "Runtime failed.", retentionBefore);
     }
     this.store.putJob(job);
   }
@@ -1731,6 +1761,7 @@ export class HostingDomain {
         if (job.status === "DELETED") continue;
         job.status = "DELETING";
         this.store.putJob(job);
+        const retentionBefore = this.networkRetention(job.jobId);
         try {
           await this.closeSurface?.(job.jobId);
           if (job.unit) await this.engine.stop(job);
@@ -1738,7 +1769,12 @@ export class HostingDomain {
           job.error = undefined;
           job.status = "DELETED";
         } catch (error) {
-          this.recordRuntimeFailure(job, error, "Cleanup failed; ownership retained.");
+          this.recordRuntimeFailure(
+            job,
+            error,
+            "Cleanup failed; ownership retained.",
+            retentionBefore,
+          );
         }
         this.store.putJob(job);
       }
@@ -1882,13 +1918,19 @@ export class HostingDomain {
     job.operation = "restart";
     job.status = "IN_PROGRESS";
     this.store.putJob(job);
+    const retentionBefore = this.networkRetention(job.jobId);
     try {
       await this.engine.resume(job);
       job.status = "COMPLETE";
       job.error = undefined;
       job.resumeAfterLocalDown = undefined;
     } catch (error) {
-      this.recordRuntimeFailure(job, error, "Local environment could not resume; data retained.");
+      this.recordRuntimeFailure(
+        job,
+        error,
+        "Local environment could not resume; data retained.",
+        retentionBefore,
+      );
     }
     job.operation = undefined;
     this.store.putJob(job);
@@ -1932,6 +1974,7 @@ export class HostingDomain {
       this.recoverUnownedJob(job);
       return;
     }
+    const retentionBefore = this.networkRetention(job.jobId);
     try {
       if (job.status === "DELETING") {
         await this.engine.stop(job);
@@ -1943,19 +1986,20 @@ export class HostingDomain {
         job.error = undefined;
       }
     } catch (error) {
-      this.recordRuntimeFailure(job, error, "Runtime recovery failed.");
+      this.recordRuntimeFailure(job, error, "Runtime recovery failed.", retentionBefore);
     }
     this.store.putJob(job);
   }
   private async recoverUnsupportedStop(job: Job): Promise<void> {
     // Older hosts accepted this operation before discovering that the runtime cannot
     // pause. Re-adopt the retained environment and fail only the accepted intent.
+    const retentionBefore = this.networkRetention(job.jobId);
     try {
       await this.engine.recover(job);
       job.status = "COMPLETE";
       job.error = undefined;
     } catch (error) {
-      this.recordRuntimeFailure(job, error, "Runtime recovery failed.");
+      this.recordRuntimeFailure(job, error, "Runtime recovery failed.", retentionBefore);
     }
     job.operation = undefined;
     this.store.putJob(job);
@@ -1973,7 +2017,7 @@ export class HostingDomain {
       throw new HostError(404, "Unknown participant endpoint.");
     const team = this.store.authenticateTeam(request.token);
     if (/^\/portal\/me\/problems\/[a-z0-9][a-z0-9-]{0,127}\/network$/u.test(request.path))
-      return this.queue.run(team.eventId, () => this.participantNetwork(request));
+      return this.participantNetwork(request);
     return this.dispatchParticipant(request, team);
   }
   private async dispatchParticipant(request: ApiRequest, team: Team): Promise<ApiResponse> {
@@ -2012,24 +2056,58 @@ export class HostingDomain {
       throw new HostError(400, "DMZ requests accept only a fixed problem endpoint.");
     const resolve = () => this.networkContext(request, problemId);
     const context = resolve();
-    if (request.method === "POST") {
-      const body = object(request.body);
-      if (
-        Object.keys(body)
-          .sort((a, b) => a.localeCompare(b))
-          .join(",") !== "published,serviceId" ||
+    const body = request.method === "POST" ? object(request.body) : undefined;
+    if (
+      body &&
+      (Object.keys(body)
+        .sort((a, b) => a.localeCompare(b))
+        .join(",") !== "published,serviceId" ||
         typeof body.serviceId !== "string" ||
         !/^[a-z0-9][a-z0-9-]{0,63}$/u.test(body.serviceId) ||
         typeof body.published !== "boolean" ||
-        !this.engine.publishNetworkService
-      )
-        throw new HostError(400, "Select only a declared serviceId and publication state.");
-      await this.engine.publishNetworkService(context, problemId, body.serviceId, body.published);
-    } else if (request.body !== undefined && request.body !== null)
+        !this.engine.publishNetworkService)
+    )
+      throw new HostError(400, "Select only a declared serviceId and publication state.");
+    if (
+      !body &&
+      request.body !== undefined &&
+      request.body !== null &&
+      Object.keys(object(request.body)).length
+    )
       throw new HostError(400, "DMZ reads accept no target selectors.");
-    return ok(
-      await requiredNetworkValue(this.engine.networkView).call(this.engine, resolve(), problemId),
-    );
+    const slot = this.reserveNetworkRequest(context);
+    try {
+      if (body)
+        await this.queue.run(context.event.eventId, async () => {
+          await requiredNetworkValue(this.engine.publishNetworkService).call(
+            this.engine,
+            resolve(),
+            problemId,
+            body.serviceId as string,
+            body.published as boolean,
+          );
+        });
+      const view = await requiredNetworkValue(this.engine.networkView).call(
+        this.engine,
+        resolve(),
+        problemId,
+      );
+      resolve(); // Revalidate authentication and playing state after asynchronous observation.
+      return ok(view);
+    } finally {
+      slot.pending = false;
+    }
+  }
+
+  private reserveNetworkRequest(context: Context) {
+    for (const [key, value] of this.networkRequests)
+      if (!value.pending && this.now() - value.at >= 1000) this.networkRequests.delete(key);
+    const key = `${context.event.eventId}:${context.team.teamId}`;
+    if (this.networkRequests.has(key))
+      throw new HostError(429, "Wait before another network request.");
+    const slot = { at: this.now(), pending: true };
+    this.networkRequests.set(key, slot);
+    return slot;
   }
   private networkContext(request: ApiRequest, problemId: string): Context {
     const team = this.store.authenticateTeam(request.token);

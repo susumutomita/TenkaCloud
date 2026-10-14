@@ -6,6 +6,127 @@ import type { Job } from "../model";
 import { HostingService } from "../service";
 import { networkEngineFixture } from "./network-engine-fixture";
 
+test("a new resume error replaces stale STOPPED state when the guard did not persist a new stop", async () => {
+  const f = networkEngineFixture();
+  const { job } = f.add("stale-stopped");
+  job.status = "STOPPED";
+  job.deployedAt = 1;
+  job.error = "Previous stop";
+  f.store.putJob(job);
+  f.engine.resume = async () => {
+    throw new Error("Retained secret cannot be rewritten");
+  };
+  const service = new HostingService(f.store, f.engine, "synthetic-host-key");
+  try {
+    const run = Reflect.get(service, "runDemandOperation") as (
+      id: string,
+      action: "start",
+    ) => Promise<void>;
+    await run.call(service, job.jobId, "start");
+    expect(f.store.job(job.jobId).status).toBe("FAILED");
+    expect(f.store.job(job.jobId).error).toContain("Retained secret cannot be rewritten");
+  } finally {
+    await service.drain();
+    await f.close();
+  }
+});
+
+test("publication mutation awaits the asynchronous guard instead of synchronous native transports", async () => {
+  const f = networkEngineFixture();
+  const { job } = f.add("async-publication");
+  let release: () => void = () => undefined;
+  let entered: () => void = () => undefined;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  f.guard.update = () => {
+    throw new Error("Synchronous mutation is forbidden");
+  };
+  f.guard.publishAsync = async () => {
+    entered();
+    await barrier;
+  };
+  const apply = Reflect.get(f.engine, "applyPublications") as (
+    event: string,
+    changes: Map<string, Job>,
+    disabled: Set<string>,
+  ) => Promise<void>;
+  const pending = apply.call(f.engine, "event", new Map(), new Set());
+  try {
+    await started;
+    expect(f.engine.terminalSupported(job)).toBe(false);
+    expect(() => f.engine.surfaces(job)).toThrow("policy is changing");
+    await Bun.sleep(1);
+    expect(f.calls).not.toContain("route");
+    release();
+    await pending;
+    expect(f.calls).toContain("retain");
+    expect(f.engine.terminalSupported(job)).toBe(true);
+  } finally {
+    release();
+    await pending;
+    await f.close();
+  }
+});
+
+test("a replaced requester cannot receive the previous generation network view", async () => {
+  const f = networkEngineFixture();
+  const { job } = f.add("replaced-requester");
+  let release: () => void = () => undefined;
+  let entered: () => void = () => undefined;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  f.guard.audit = async () => {
+    entered();
+    await barrier;
+  };
+  const pending = f.engine.networkView(
+    {
+      event: f.store.event("event"),
+      team: f.store.team(job.teamId),
+      jobs: [job],
+      now: 1000,
+    },
+    job.problemId,
+  );
+  try {
+    await started;
+    f.add("replaced-requester");
+    release();
+    await expect(pending).rejects.toThrow("policy is changing");
+    expect(f.engine.terminalSupported(f.store.job(job.jobId))).toBe(true);
+  } finally {
+    release();
+    await pending.catch(() => undefined);
+    await f.close();
+  }
+});
+
+test("repeated shared views reuse generation-scoped audits", async () => {
+  const f = networkEngineFixture();
+  f.add("cached-view");
+  const view = Reflect.get(f.engine, "sharedPublicServices") as (context: {
+    event: { eventId: string };
+  }) => Promise<unknown>;
+  try {
+    await Promise.all(
+      Array.from({ length: 20 }, () => view.call(f.engine, { event: { eventId: "event" } })),
+    );
+    expect(f.calls.filter((call) => call === "audit")).toHaveLength(1);
+    await view.call(f.engine, { event: { eventId: "event" } });
+    expect(f.calls.filter((call) => call === "audit")).toHaveLength(1);
+  } finally {
+    await f.close();
+  }
+});
+
 for (const action of ["pause", "recover", "resume", "stop"] as const)
   for (const missing of [false, true])
     test(`${action} revokes and safely stops retained ownership when Compose is ${missing ? "missing" : "modified"}`, async () => {
@@ -91,6 +212,47 @@ test("expired proofs revoke immediately while quarantine is pending", async () =
     expect(f.store.job(job.jobId).status).toBe("STOPPED");
   } finally {
     release();
+    await f.close();
+  }
+});
+
+test("publication admission closure cannot defer proof expiry revocation", async () => {
+  const f = networkEngineFixture();
+  const { job } = f.add("publication-proof-expiry");
+  let release: () => void = () => undefined;
+  let entered: () => void = () => undefined;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  f.guard.publishAsync = async () => {
+    entered();
+    await barrier;
+  };
+  f.guard.quarantineAsync = async () => {
+    await barrier;
+  };
+  const apply = Reflect.get(f.engine, "applyPublications") as (
+    event: string,
+    changes: Map<string, Job>,
+    disabled: Set<string>,
+  ) => Promise<void>;
+  const pending = apply.call(f.engine, "event", new Map(), new Set());
+  try {
+    await started;
+    f.setNow(61_002);
+    expect(f.engine.terminalSupported(job)).toBe(false);
+    expect(f.store.job(job.jobId).status).toBe("FAILED");
+    release();
+    await pending;
+    await f.engine.drainNetworkChecks();
+    expect(f.engine.terminalSupported(job)).toBe(false);
+    expect(f.store.job(job.jobId).status).toBe("STOPPED");
+  } finally {
+    release();
+    await pending;
     await f.close();
   }
 });

@@ -7,6 +7,11 @@ name: Local hosting rehearsal
 # Docker/image/browser rehearsal; required ci already runs all host HTTP/SQLite tests and types.
 on:
   workflow_dispatch:
+    inputs:
+      network_lab_cgroup_init:
+        description: 'One-off approved private lab CPU/memory/pids delegation'
+        type: boolean
+        default: false
   pull_request:
     paths:
       - 'scripts/local-host/**'
@@ -56,6 +61,9 @@ jobs:
           docker info
           docker compose version
       - name: Six bounded teams, isolated DMZ, authenticated terminals and scoring
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TENKACLOUD_LAB_CGROUP_INIT: ${{ github.event_name == 'workflow_dispatch' && inputs.network_lab_cgroup_init && '1' || '0' }}
         run: |
           set -euo pipefail
           lab="tc-network-lab-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -67,6 +75,7 @@ jobs:
           cleanup() {
             outcome=$?
             trap - EXIT
+            docker logs "$lab" > .tenkacloud/network-lab/daemon.log 2>&1 || outcome=1
             if ! docker rm -f "$lab" > .tenkacloud/network-lab/cleanup.log 2>&1; then outcome=1; fi
             if ! remaining="$(docker ps -aq --filter "name=^/${lab}$")"; then
               outcome=1
@@ -78,9 +87,32 @@ jobs:
             exit "$outcome"
           }
           trap cleanup EXIT
-          docker run -d --name "$lab" --privileged --network none \
-            --tmpfs /var/lib/docker:rw,exec,nosuid,nodev --entrypoint dockerd \
-            tc-network-lab:ci --host=unix:///var/run/docker.sock --storage-driver=vfs --ip6tables=false
+          docker run -d --name "$lab" --privileged --network none --cgroupns private \
+            -e TENKACLOUD_LAB_CGROUP_INIT \
+            --tmpfs /var/lib/docker:rw,exec,nosuid,nodev --entrypoint /bin/sh \
+            tc-network-lab:ci -ec '
+              if [ "$TENKACLOUD_LAB_CGROUP_INIT" = 1 ]; then
+                bun /usr/local/lib/network-lab-cgroup.mjs
+              fi
+              exec dockerd --host=unix:///var/run/docker.sock --storage-driver=vfs --ip6tables=false
+            '
+          # docker exec would add a process while the initializer empties the root.
+          # Observe completion from outside the lab before running any exec probes.
+          if [ "$TENKACLOUD_LAB_CGROUP_INIT" = 1 ]; then
+            initialized=0
+            for attempt in $(seq 1 30); do
+              if docker logs "$lab" 2>&1 | grep -qx LAB_CGROUP_CPU_MEMORY_PIDS_DELEGATED; then
+                initialized=1
+                break
+              fi
+              if [ "$(docker inspect -f '{{.State.Running}}' "$lab")" != true ]; then break; fi
+              sleep 1
+            done
+            if [ "$initialized" != 1 ]; then
+              echo 'Lab cgroup initialization failed; no ancestor repair is allowed.' >&2
+              exit 1
+            fi
+          fi
           for attempt in $(seq 1 30); do
             if docker exec "$lab" docker info >/dev/null 2>&1; then break; fi
             sleep 1

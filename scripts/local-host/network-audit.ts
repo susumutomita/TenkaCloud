@@ -1,11 +1,11 @@
 import { Worker } from "node:worker_threads";
-import type { LocalNetworkPlan } from "./local-network";
+import type { LocalNetworkPlan, LocalPublicEndpoint } from "./local-network";
 
 interface WorkerQueue {
   active: number;
   readonly waiting: (() => void)[];
 }
-type WorkerMode = "verify" | "stop" | "quarantine" | "reset";
+type WorkerMode = "verify" | "stop" | "quarantine" | "reset" | "publish";
 type WorkerRunner = (plan: LocalNetworkPlan, mode: WorkerMode) => Promise<void>;
 const auditQueue: WorkerQueue = { active: 0, waiting: [] };
 const emergencyQueue: WorkerQueue = { active: 0, waiting: [] };
@@ -41,6 +41,23 @@ export function auditNetwork(plan: LocalNetworkPlan, run: WorkerRunner = runAudi
 export function stopNetwork(plan: LocalNetworkPlan, run: WorkerRunner = runAudit): Promise<void> {
   return queuedOperation(auditQueue, plan, "stop", run);
 }
+export function publishNetwork(plan: LocalNetworkPlan, previous: LocalNetworkPlan): Promise<void> {
+  return queuedOperation(auditQueue, plan, "publish", () =>
+    runAudit(plan, "publish", { previous }),
+  );
+}
+export async function networkEndpoints(
+  plan: LocalNetworkPlan,
+  service: string,
+  port: number,
+): Promise<readonly LocalPublicEndpoint[]> {
+  await acquire(auditQueue);
+  try {
+    return await runWorker<readonly LocalPublicEndpoint[]>(plan, "endpoints", { service, port });
+  } finally {
+    release(auditQueue);
+  }
+}
 export function emergencyNetwork(
   plan: LocalNetworkPlan,
   mode: "quarantine" | "reset",
@@ -51,33 +68,42 @@ export function emergencyNetwork(
 }
 function runAudit(
   plan: LocalNetworkPlan,
-  mode: "verify" | "stop" | "quarantine" | "reset",
+  mode: WorkerMode,
+  details: { previous?: LocalNetworkPlan } = {},
 ): Promise<void> {
+  return runWorker<undefined>(plan, mode, details);
+}
+function runWorker<T>(
+  plan: LocalNetworkPlan,
+  mode: WorkerMode | "endpoints",
+  details: { previous?: LocalNetworkPlan; service?: string; port?: number },
+): Promise<T> {
   return new Promise((resolve, reject) => {
     const entry = import.meta.url.endsWith(".ts")
       ? new URL("./network-audit-worker.ts", import.meta.url)
       : new URL("./network-audit-worker.mjs", import.meta.url);
     const worker = new Worker(entry, {
-      workerData: { plan, mode },
+      workerData: { plan, mode, ...details },
       resourceLimits: { maxOldGenerationSizeMb: 64 },
     });
     let settled = false;
-    const finish = (error?: Error) => {
+    const finish = (error?: Error, value?: T) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      void worker.terminate().then(() => (error ? reject(error) : resolve()), reject);
+      void worker.terminate().then(() => (error ? reject(error) : resolve(value as T)), reject);
     };
     const timeout = setTimeout(
       () => finish(new Error("Competition network audit timed out.")),
       20_000,
     );
     timeout.unref();
-    worker.once("message", (result: { ok?: boolean; error?: string }) =>
+    worker.once("message", (result: { ok?: boolean; error?: string; value?: T }) =>
       finish(
         result.ok === true
           ? undefined
           : new Error(result.error ?? "Competition network audit failed."),
+        result.value,
       ),
     );
     worker.once("error", finish);

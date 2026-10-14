@@ -8,7 +8,13 @@ import {
   requiredNetworkValue,
   segmentGateway,
 } from "./local-network";
-import { auditNetwork, emergencyNetwork, stopNetwork } from "./network-audit";
+import {
+  auditNetwork,
+  emergencyNetwork,
+  networkEndpoints,
+  publishNetwork,
+  stopNetwork,
+} from "./network-audit";
 
 export interface LocalNetworkGuard {
   preflight(): void;
@@ -26,6 +32,12 @@ export interface LocalNetworkGuard {
   audit?(plan: LocalNetworkPlan): Promise<void>;
   quarantineAsync?(plan: LocalNetworkPlan): Promise<void>;
   resetStoppedAsync?(plan: LocalNetworkPlan): Promise<void>;
+  publishAsync?(plan: LocalNetworkPlan, previous: LocalNetworkPlan): Promise<void>;
+  endpointsAsync?(
+    plan: LocalNetworkPlan,
+    service: string,
+    port: number,
+  ): Promise<readonly LocalPublicEndpoint[]>;
 }
 interface GuardCommand {
   readonly command: string;
@@ -886,6 +898,16 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   }
   audit(plan: LocalNetworkPlan): Promise<void> {
     return auditNetwork(plan);
+  }
+  publishAsync(plan: LocalNetworkPlan, previous: LocalNetworkPlan): Promise<void> {
+    return publishNetwork(plan, previous);
+  }
+  endpointsAsync(
+    plan: LocalNetworkPlan,
+    service: string,
+    port: number,
+  ): Promise<readonly LocalPublicEndpoint[]> {
+    return networkEndpoints(plan, service, port);
   }
   stopOwned(plan: LocalNetworkPlan): Promise<void> {
     return stopNetwork(plan);
