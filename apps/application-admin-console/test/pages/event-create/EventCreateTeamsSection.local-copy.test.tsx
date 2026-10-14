@@ -52,8 +52,11 @@ describe("EventCreateTeamsSection local-hosting copy", () => {
     );
     expect(
       screen.getByText(
-        "Every team plays this event on this computer. Give each team a short internal ID; it cannot be changed after deploy.",
+        "Every team plays on this computer; no competitor cloud account is required.",
       ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("2 team IDs are generated automatically. You can customize them below."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Cloud connections/)).not.toBeInTheDocument();
     expect(screen.queryByText(/deploy destination/i)).not.toBeInTheDocument();

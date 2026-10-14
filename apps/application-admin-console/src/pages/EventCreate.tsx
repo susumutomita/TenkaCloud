@@ -3,6 +3,7 @@ import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Checkbox from "@cloudscape-design/components/checkbox";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Form from "@cloudscape-design/components/form";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -19,8 +20,13 @@ import {
 } from "../api/events-client";
 import { type AppConfig, isCloudHost, isLocalHost } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
-import { localizeProblemText } from "../data/problem-locale";
-import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
+import { localizeOptionalProblem, localizeProblemText } from "../data/problem-locale";
+import {
+  findProblem,
+  listProblemSummaries,
+  type ProblemSummary,
+  runtimeProviders,
+} from "../data/problems";
 import { useI18n, useT } from "../i18n";
 import { filterVerifiedAccounts } from "../lib/competitor-accounts-filter";
 import { liteDrillCheckpointCode, markLiteDrillCheckpointShown } from "../lib/lite-drill";
@@ -118,13 +124,19 @@ function CtfdScoringChoice({
   const t = useT();
   if (!local) return null;
   return (
-    <Checkbox
-      checked={checked}
-      onChange={({ detail }) => onChange(detail.checked)}
-      description={t("local_host.ctfd_scoring_description")}
+    <ExpandableSection
+      data-testid="advanced-scoring"
+      headerText={t("event_create.advanced_scoring")}
+      variant="container"
     >
-      {t("local_host.ctfd_scoring")}
-    </Checkbox>
+      <Checkbox
+        checked={checked}
+        onChange={({ detail }) => onChange(detail.checked)}
+        description={t("local_host.ctfd_scoring_description")}
+      >
+        {t("local_host.ctfd_scoring")}
+      </Checkbox>
+    </ExpandableSection>
   );
 }
 
@@ -464,7 +476,23 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             maxTeams={maxTeams}
           />
 
-          <CtfdScoringChoice local={localHost} checked={ctfdScoring} onChange={setCtfdScoring} />
+          <EventCreateProblemsetSection
+            problems={allProblems}
+            problemContent={(id) => {
+              if (localHost) return localizeOptionalProblem(hostCatalog.content?.get(id), locale);
+              const detail = findProblem(id);
+              return detail ? localizeProblemText(detail, locale) : undefined;
+            }}
+            selectedProblems={selectedProblems}
+            problemRows={displayedProblemRows}
+            nonAwsRuntimeEnabled={config.features?.nonAwsRuntime ?? false}
+            hostSupportedProblemIds={localHost ? hostCatalog.supported : undefined}
+            maxProblems={localHost ? capacity.maxProblems : undefined}
+            hostCatalog={advisorHostCatalog(localHost, hostCatalog)}
+            onProblemsChange={onProblemsChange}
+            onUpdateProblemRow={updateProblemRow}
+          />
+
           <EventCreateCapacityNotice local={localHost} catalog={hostCatalog} capacity={capacity} />
 
           {/* #528 / Phase 2.2 (Issue #459): Teams 入力の上に置く 3 種 Alert。
@@ -490,32 +518,41 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             onUpdateTeamRow={updateTeamRow}
           />
 
-          <EventCreateProblemsetSection
-            problems={allProblems}
-            selectedProblems={selectedProblems}
-            problemRows={displayedProblemRows}
-            nonAwsRuntimeEnabled={config.features?.nonAwsRuntime ?? false}
-            hostSupportedProblemIds={localHost ? hostCatalog.supported : undefined}
-            maxProblems={localHost ? capacity.maxProblems : undefined}
-            hostCatalog={advisorHostCatalog(localHost, hostCatalog)}
-            onProblemsChange={onProblemsChange}
-            onUpdateProblemRow={updateProblemRow}
-          />
-
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={() => navigate("/events")}>{t("event_create.cancel")}</Button>
-              <Button
-                variant="primary"
-                loading={submitting}
-                disabled={!canSubmit}
-                onClick={handleSubmit}
-              >
-                {t("event_create.submit")}
-              </Button>
-            </SpaceBetween>
-          </Box>
+          <CtfdScoringChoice local={localHost} checked={ctfdScoring} onChange={setCtfdScoring} />
         </SpaceBetween>
+        <div
+          style={{
+            position: "sticky",
+            bottom: 0,
+            zIndex: 10,
+            background: "#fff",
+            borderTop: "1px solid #b6bec9",
+            padding: "12px 0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <Box variant="small">
+            {t("event_create.selection_summary", {
+              problems: selectedProblems.length,
+              teams: teamRows.length,
+            })}
+          </Box>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={() => navigate("/events")}>{t("event_create.cancel")}</Button>
+            <Button
+              variant="primary"
+              loading={submitting}
+              disabled={!canSubmit}
+              onClick={handleSubmit}
+            >
+              {t("event_create.submit")}
+            </Button>
+          </SpaceBetween>
+        </div>
       </Form>
 
       {selfTestPrompt && (

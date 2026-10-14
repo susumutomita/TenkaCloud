@@ -210,7 +210,9 @@ describe("restored cloud SPA with synthetic HTTP", () => {
     const { container } = await openAuthenticated("/events/new");
     await screen.findByRole("heading", { name: "Create new Event" });
     await waitFor(() =>
-      expect(createWrapper(container).findAllSelects()[0]?.isDisabled()).toBe(false),
+      expect(
+        createWrapper(container).findSelect('[data-testid="team-account-0"]')?.isDisabled(),
+      ).toBe(false),
     );
     const wrapper = createWrapper(container);
     wrapper.findAllInputs()[1]?.setInputValue("2");
@@ -221,7 +223,7 @@ describe("restored cloud SPA with synthetic HTTP", () => {
     expect(problems?.findOptionByValue("db-battle-slow-apparently")).toBeNull();
     problems?.toggleProblem("hello-world-battle");
     for (const [index, region] of ["ap-northeast-1", "us-east-1"].entries()) {
-      const selects = createWrapper(container).findAllSelects();
+      const selects = createWrapper(container).findAllSelects('[data-testid^="team-"]');
       selects[index * 2]?.openDropdown();
       selects[index * 2]?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
       selects[index * 2 + 1]?.openDropdown();

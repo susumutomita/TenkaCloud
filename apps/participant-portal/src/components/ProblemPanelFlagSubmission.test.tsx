@@ -1,11 +1,12 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import createWrapper from "@cloudscape-design/components/test-utils/dom";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PortalValidationError } from "../api/portal-client";
 import { AppConfigProvider } from "../config-context";
 import { I18nProvider } from "../i18n";
-import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
+import { FlagSubmissionPanel, HintsPanel } from "./ProblemPanelFlagSubmission";
 
 /**
  * FlagSubmissionPanel + HintsPanel を実 provider (AppConfigProvider + I18nProvider) で
@@ -276,6 +277,33 @@ describe("HintsPanel reveal flow", () => {
     return screen.findByRole("button", { name: /^Reveal$/ });
   }
 
+  it("should reopen a cancelled hint and send only one reveal during repeated confirmation", async () => {
+    const user = userEvent.setup();
+    let release: () => void = () => undefined;
+    apiMocks.revealHint.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    renderPanel({ hints: oneHint, onScored });
+    await openConfirm(user);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(apiMocks.revealHint).not.toHaveBeenCalled();
+    const confirm = await openConfirm(user);
+    act(() => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(apiMocks.revealHint).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      release();
+    });
+    await waitFor(() => expect(onScored).toHaveBeenCalledTimes(1));
+    expect(createWrapper().findModal()?.isVisible()).toBe(false);
+  });
+
   it("should reveal a hint after confirmation and refresh", async () => {
     const user = userEvent.setup();
     apiMocks.revealHint.mockResolvedValue(undefined);
@@ -291,6 +319,30 @@ describe("HintsPanel reveal flow", () => {
       ),
     );
     expect(onScored).toHaveBeenCalled();
+  });
+
+  it("should track a mock hint once under repeated confirmation", async () => {
+    const user = userEvent.setup();
+    const tracked = vi.fn();
+    render(
+      withProviders(
+        <HintsPanel
+          {...baseProps}
+          hints={[{ id: "hint-1", penalty: 10, revealed: false, content: "local guidance" }]}
+          onRevealed={baseProps.onScored}
+          onRevealTracked={tracked}
+        />,
+        "dev-mock",
+      ),
+    );
+    const confirm = await openConfirm(user);
+    act(() => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(await screen.findByText("local guidance")).toBeInTheDocument();
+    expect(tracked).toHaveBeenCalledTimes(1);
+    expect(apiMocks.revealHint).not.toHaveBeenCalled();
   });
 
   it("should display a friendly error when backend returns 409 hint_out_of_order", async () => {
@@ -338,15 +390,28 @@ describe("HintsPanel reveal flow", () => {
     expect(apiMocks.revealHint).not.toHaveBeenCalled();
   });
 
-  it("should show the no-penalty confirmation copy for a free hint", async () => {
-    const user = userEvent.setup();
-    renderPanel({ hints: [{ id: "hint-1", penalty: 0, revealed: false }] });
+  it("should reveal a free hint with one click and reserve repeated clicks synchronously", async () => {
+    let release: () => void = () => undefined;
+    apiMocks.revealHint.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    renderPanel({ hints: [{ id: "hint-1", penalty: 0, revealed: false }], onScored });
     expect(screen.getByText("(penalty-free)")).toBeInTheDocument();
-    expect(screen.queryByText("(-0 pt to reveal)")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reveal hint" }));
-    expect(
-      await screen.findByText("No penalty for this hint. Revealing will display the content."),
-    ).toBeInTheDocument();
+    const reveal = screen.getByRole("button", { name: "Reveal hint" });
+    act(() => {
+      fireEvent.click(reveal);
+      fireEvent.click(reveal);
+    });
+    expect(apiMocks.revealHint).toHaveBeenCalledTimes(1);
+    expect(createWrapper().findModal()?.isVisible()).toBe(false);
+    await act(async () => {
+      release();
+    });
+    await waitFor(() => expect(onScored).toHaveBeenCalledTimes(1));
   });
 
   it("should reveal locally in dev-mock mode without calling the backend (#2707)", async () => {
@@ -357,8 +422,7 @@ describe("HintsPanel reveal flow", () => {
       "dev-mock",
     );
     expect(screen.queryByText("step-by-step here")).not.toBeInTheDocument();
-    const confirm = await openConfirm(user);
-    await user.click(confirm);
+    await user.click(screen.getByRole("button", { name: "Reveal hint" }));
     expect(await screen.findByText("step-by-step here")).toBeInTheDocument();
     expect(apiMocks.revealHint).not.toHaveBeenCalled();
   });

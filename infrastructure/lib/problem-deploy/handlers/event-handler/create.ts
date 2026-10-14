@@ -1,4 +1,5 @@
 import { ulid } from "ulid";
+import { selectableProblem } from "../../../../../packages/portal-contracts/src/problem-selection.js";
 import {
   computeCatalogSnapshotId,
   type PinnedProblemProvenance,
@@ -268,6 +269,8 @@ function validateCurrentCatalogProblems(
   shared: EventSharedResources,
   req: CreateEventRequest,
 ): void {
+  const withdrawn = req.problems.find((problem) => !selectableProblem({ id: problem.problemId }));
+  if (withdrawn) throw new UnknownEventProblemError(withdrawn.problemId);
   if (!shared.executionCatalog) return;
   const unknown = req.problems.find(
     (problem) => !shared.executionCatalog?.catalog[problem.problemId],

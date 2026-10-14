@@ -187,7 +187,7 @@ describe("EventCreatePage non-AWS flow (#2563)", () => {
     // Composite targets are aws + sakura only (#2757: gcp/azure stay non-selectable
     // adapter-wired previews), so exactly one non-AWS credential column renders.
     expect(screen.getAllByText("event_create.col_non_aws_credential")).toHaveLength(1);
-    const accountSelect = w(container).findAllSelects()[0];
+    const accountSelect = w(container).findSelect('[data-testid="team-account-0"]');
     accountSelect?.openDropdown();
     accountSelect?.selectOptionByValue(account.awsAccountId, { expandToViewport: true });
 

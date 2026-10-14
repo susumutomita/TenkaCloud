@@ -32,9 +32,9 @@ test("frontend Docker identities exactly match the host's executable catalog", (
   );
 });
 
-test("hosting exposes 61 selectable Docker verify exercises as public Challenge metadata", () => {
-  expect(localProblems).toHaveLength(61);
-  expect(hostBrowserProblemPaths()).toHaveLength(67);
+test("hosting exposes 58 selectable Docker verify exercises as public Challenge metadata", () => {
+  expect(localProblems).toHaveLength(58);
+  expect(hostBrowserProblemPaths()).toHaveLength(64);
   let legacyBattles = 0;
   for (const path of localProblems) {
     const source = readFileSync(join(root, "problems", path, "metadata.json"), "utf8");
