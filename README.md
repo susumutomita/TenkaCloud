@@ -57,9 +57,10 @@ Invited to an event? Use the **Participant Portal URL and team key from your org
 Install Git, Make and **Bun 1.3.11** on macOS, Linux or WSL2. Docker Engine with Compose v2 is needed for Docker exercises; the built-in Cryptography Battle needs neither Docker nor AWS. [mise.toml](./mise.toml) pins the development tools.
 
 ```bash
-git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
+make catalog-download catalog-prepare
 make local
 ```
 
@@ -137,7 +138,7 @@ No hosting option promises a zero bill. [Cost boundaries and retained resources]
 
 Problem content lives in [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge). Use its authoring and validation workflow to contribute to the competition catalog. You do not need to fork the platform to author a problem.
 
-`make submodule-latest` fetches and stages the latest problem sources; `make validate-problems` checks the selected pin. Neither updates a running host. After reviewing changes between events, [rebuild and restart locally](./docs/local-hosting.md#update-the-problem-catalog) with `make local`, or [update the cloud installation](./infrastructure/README.md#update-the-problem-catalog) with `make deploy`. `make build` only builds local artifacts. Keep the original checkout for local events you still need to resume; existing event definitions and cloud runs are not automatically upgraded.
+Select and download problem repositories with `make catalog-download CATALOG_SOURCES=my-catalogs.json`, then validate and rebuild. Existing event snapshots are retained. See [downloaded catalogs](./docs/problem-catalogs.md). No running host is updated by downloading.
 
 The update command fetches the tracked branch, then refuses older or divergent commits before checkout or staging. It also refuses unfinished source changes; unrelated platform work is preserved. Keep a reviewed trial pin until the tracked branch can advance it without dropping commits.
 

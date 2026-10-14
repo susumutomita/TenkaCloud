@@ -32,9 +32,8 @@ concurrency:
 # Coverage parts are defined in scripts/workspace/run-coverage.ts. Independent jobs run
 # concurrently; the final ci job requires every surviving gate to succeed.
 jobs:
-  # Cheap contract gates: dependency lifecycle audit, dead code, submodule pin, catalog schema,
+  # Cheap contract gates: dependency lifecycle audit, dead code, catalog schema,
   # prose, formatting, and the repo-root script tests. Together ~25s, so they share one leg.
-  # Full history is required by the submodule ancestry guard.
   gates:
     runs-on: ubuntu-latest
     steps:
@@ -43,7 +42,6 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
-          submodules: true
 
       - uses: ./.github/actions/bun-install
 
@@ -62,17 +60,6 @@ jobs:
       # from knip.json's workspace entry globs — fix the glob, don't relax the gate.
       - name: Dead-code gate (knip)
         run: make dead-code
-
-      # Submodule pin guard: reject PRs that roll the problems/ gitlink backward or
-      # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).
-      # Pull-request checkout does not guarantee origin/main or full submodule history, so fetch
-      # both first (the superproject is full-depth for the release-manifest tag/gitlink gate).
-      - name: Submodule pin guard (problems must not roll back)
-        run: |
-          git fetch --no-tags origin main:refs/remotes/origin/main
-          # Deepen the catalog checkout so the ancestry guard can compare the pinned commits.
-          git -C problems fetch --tags --unshallow origin 2>/dev/null || git -C problems fetch --tags origin || true
-          make submodule-not-behind
 
       # #2254: enforce the catalog authoring contract (schema + bilingual-README invariant) against
       # the platform's problems/ mirror, so a README-less / schema-invalid problem fails platform CI
@@ -125,10 +112,6 @@ jobs:
       - name: Check out the code
         # actions/checkout v4.3.1
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          # participant-portal type-checks test files that import a problem's metadata.json
-          # straight out of the catalog, so the submodule has to be on disk.
-          submodules: true
 
       - uses: ./.github/actions/bun-install
 
@@ -143,8 +126,6 @@ jobs:
       - name: Check out the code
         # actions/checkout v4.3.1
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          submodules: true
 
       - uses: ./.github/actions/bun-install
 
@@ -181,8 +162,6 @@ jobs:
       - name: Check out the code
         # actions/checkout v4.3.1
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          submodules: true
 
       - uses: ./.github/actions/bun-install
 
@@ -242,8 +221,6 @@ jobs:
     steps:
       - name: Check out the code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          submodules: true
       - uses: ./.github/actions/bun-install
       - name: Verify source preparation with the system Bash
         working-directory: infrastructure

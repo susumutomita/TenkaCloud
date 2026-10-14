@@ -43,6 +43,19 @@ function makeFixture(): { root: string; workDir: string } {
   write(root, "infrastructure/coverage/lcov.info");
   write(root, "scripts/runtime.sh");
   write(root, "problems/challenges/demo/metadata.json", "{}");
+  write(
+    root,
+    ".tenkacloud/catalog-store/selected.json",
+    JSON.stringify({
+      schemaVersion: 1,
+      sources: [{ commit: "b".repeat(40), digest: "a".repeat(64) }],
+    }),
+  );
+  write(
+    root,
+    `.tenkacloud/catalog-store/snapshots/${"a".repeat(64)}/.runtime-input`,
+    "pinned hidden runtime bytes",
+  );
   write(root, "packages/runtime/src/index.ts");
   write(root, "apps/admin-console/dist/index.html");
   write(root, "apps/application-admin-console/dist/index.html");
@@ -121,8 +134,12 @@ describe("scripts/package-source-bundle.sh (#1552)", { timeout: 30_000 }, () => 
     expect(files.some((file) => file.includes("cdk.out"))).toBe(false);
     expect(files.some((file) => file.includes("coverage"))).toBe(false);
     expect(files.some((file) => file.includes("unknown-generated-root"))).toBe(false);
-    // No `.tenkacloud/pack-store` on disk (packs are optional) → bundle unchanged.
-    expect(files.some((file) => file.includes(".tenkacloud"))).toBe(false);
+    expect(files).toContain(".tenkacloud/catalog-store/selected.json");
+    expect(files).toContain(`.tenkacloud/catalog-store/snapshots/${"a".repeat(64)}/.runtime-input`);
+    expect(files).toContain(
+      `pack-problems/catalog.${"a".repeat(64)}/${"b".repeat(40)}/.runtime-input`,
+    );
+    expect(files.some((file) => file.startsWith(".tenkacloud/pack-store/"))).toBe(false);
 
     const packageJson = spawnSync("/usr/bin/unzip", ["-p", archive, "package.json"], {
       encoding: "utf8",
@@ -158,26 +175,31 @@ describe("scripts/package-source-bundle.sh (#1552)", { timeout: 30_000 }, () => 
     expect(files.some((file) => file.startsWith(".tenkacloud/local"))).toBe(false);
   });
 
-  it("should build the bundle without .tenkacloud when no pack store is installed", () => {
+  it("should refuse a bundle without its selected immutable catalog", () => {
     const { root, workDir } = makeFixture();
-    // No .tenkacloud/ directory at all — the common case for a fresh checkout
-    // that never ran `pack-cli install` / `activate`.
-    expect(existsSync(join(root, ".tenkacloud"))).toBe(false);
-
-    const result = packageFixture(root, workDir, {
-      AWS_ACCESS_KEY_ID: "",
-      AWS_SECRET_ACCESS_KEY: "",
-    });
-
-    expect(result.status, result.stderr).toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toContain(
-      "no .tenkacloud/pack-store found, skipping",
-    );
-    const files = listArchive(join(workDir, "source.zip"));
-    expect(files.some((file) => file.includes(".tenkacloud"))).toBe(false);
+    rmSync(join(root, ".tenkacloud/catalog-store"), { recursive: true });
+    const result = packageFixture(root, workDir);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("required directory missing: .tenkacloud/catalog-store");
+    expect(existsSync(join(workDir, "source.zip"))).toBe(false);
   });
 
-  it("should fail loudly when the problems catalog submodule is not checked out", () => {
+  it("rejects malformed and traversing immutable edition identities without an archive", () => {
+    for (const sources of [[], [{ commit: "b".repeat(40), digest: "../private" }]]) {
+      const { root, workDir } = makeFixture();
+      write(
+        root,
+        ".tenkacloud/catalog-store/selected.json",
+        JSON.stringify({ schemaVersion: 1, sources }),
+      );
+      const result = packageFixture(root, workDir);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("invalid immutable catalog");
+      expect(existsSync(join(workDir, "source.zip"))).toBe(false);
+    }
+  });
+
+  it("should fail loudly when the selected catalog view is not prepared", () => {
     const { root, workDir } = makeFixture();
     // Simulate an uninitialised `problems` submodule: the mount point exists but
     // is empty. Without a guard this ships an empty catalog and every per-team
@@ -189,9 +211,7 @@ describe("scripts/package-source-bundle.sh (#1552)", { timeout: 30_000 }, () => 
     const result = packageFixture(root, workDir);
 
     expect(result.status).not.toBe(0);
-    expect(`${result.stdout}\n${result.stderr}`).toContain(
-      "problem catalog submodule is not checked out",
-    );
+    expect(`${result.stdout}\n${result.stderr}`).toContain("selected problem catalog is absent");
     expect(existsSync(join(workDir, "source.zip"))).toBe(false);
   });
 

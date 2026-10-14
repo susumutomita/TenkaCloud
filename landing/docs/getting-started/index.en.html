@@ -67,9 +67,9 @@
 <article>
 <h1>Getting started <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>This documents the unpublished integration candidate. Local event/team operation is implemented; cloud platform deployment and complete catalog playability are not verified release claims.</p>
-<h2 id="local-start">Start a local competition</h2><p>Use the reviewed checkout, Bun 1.3.11 and its pinned problem submodule on macOS or Linux (including WSL2). Docker Engine with Compose is needed for Docker exercises. Run from the repository root:</p>
-<pre><code class="language-sh">git submodule update --init --recursive
-bun install --frozen-lockfile --ignore-scripts
+<h2 id="local-start">Start a local competition</h2><p>Use the reviewed checkout, Bun 1.3.11 and its explicitly selected downloaded problem catalog on macOS or Linux (including WSL2). Docker Engine with Compose is needed for Docker exercises. Run from the repository root:</p>
+<pre><code class="language-sh">bun install --frozen-lockfile --ignore-scripts
+make catalog-download catalog-prepare
 make local
 </code></pre>
 <p>The default organizer URL is <code>http://127.0.0.1:5174</code>; the participant URL is <code>http://127.0.0.1:5175</code>. Use the URLs printed by the process. Sign in with the organizer key only; no username or password is needed. Each interactive <code>make local</code> start displays a new key once and revokes the previous organizer key and sessions. To rotate it while running, use <code>make local-reset</code> in another interactive terminal with the same data directory. Events, scores, participant keys and problem data are preserved. Noninteractive and public/container starts retain existing keys without printing them to logs.</p>

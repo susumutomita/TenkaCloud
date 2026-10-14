@@ -1,3 +1,4 @@
+import { selectableProblem } from "../../../packages/portal-contracts/src/problem-selection.js";
 import type { ProblemsCatalogBundle } from "../../../scripts/problem-pack/catalog-types.js";
 
 /** Docker/Compose exercises belong to the local process and never enter a cloud catalog. */
@@ -21,6 +22,8 @@ export function cloudCatalog(bundle: ProblemsCatalogBundle): ProblemsCatalogBund
       )
       .map(([id]) => id),
   );
+  for (const id of Object.keys((bundle.catalog ?? {}) as Record<string, unknown>))
+    if (!selectableProblem({ id })) excluded.add(id);
   const filtered = Object.fromEntries(
     Object.entries(bundle).map(([key, projection]) => [
       key,

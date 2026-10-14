@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BENCH_ORGANIZER, HOST_KEY, PROBLEM_ID, setupMatch } from "../bench/state-setup";
-import { CompetitionEngine } from "../competition-engine";
 import { startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const cleanups: (() => Promise<void>)[] = [];

@@ -157,19 +157,18 @@ afterEach(() => {
 });
 
 describe("cloud organizer SPA journey", () => {
-  it("offers AWS and native cloud exercises without local Docker problems", async () => {
+  it("offers AWS exercises without retired crypto or local Docker problems", async () => {
     const f = cloudSession("Admin", "/events/new");
     await screen.findByTestId("problem-select");
     const picker = problemPicker(document.body);
     if (!picker) throw new Error("Missing cloud problem picker");
-    expect(picker.findOptions()).toHaveLength(2);
+    expect(picker.findOptions()).toHaveLength(1);
     expect(picker.findOptionByValue("hello-world")).not.toBeNull();
-    expect(picker.findOptionByValue("ac26-crypto-battle")).not.toBeNull();
+    expect(picker.findOptionByValue("ac26-crypto-battle")).toBeNull();
     for (const id of ["sqli-demo", "db-a1-table-primary-key"])
       expect(picker.findOptionByValue(id)).toBeNull();
-    picker.toggleProblem("ac26-crypto-battle");
-    expect(screen.getByText("Runs inside TenkaCloud")).toBeInTheDocument();
-    expect(screen.queryByText("AWS Account ID")).not.toBeInTheDocument();
+    picker.toggleProblem("hello-world");
+    expect(screen.queryByText("Runs inside TenkaCloud")).not.toBeInTheDocument();
     expect(f.unexpected).toEqual([]);
   });
   // Full Cloudscape journey crosses several routes/dialogs; parallel workspace runs exceed the 5s unit-test default.

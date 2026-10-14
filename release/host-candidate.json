@@ -1,9 +1,20 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "unpublished",
   "sources": {
     "platformCommit": null,
-    "catalogCommit": "bf63f60a383804c5424ece995fd8e24e8e72a4e2"
+    "catalog": {
+      "schemaVersion": 1,
+      "sources": [
+        {
+          "url": "https://github.com/susumutomita/TenkaCloudChallenge.git",
+          "ref": "bf63f60a383804c5424ece995fd8e24e8e72a4e2",
+          "commit": "bf63f60a383804c5424ece995fd8e24e8e72a4e2",
+          "digest": "d58442d74096d533acbc44a5b07dc73716498bd539e5f151c7c47500f5e4ec27",
+          "problemsRoot": "."
+        }
+      ]
+    }
   },
   "image": null,
   "limitations": [

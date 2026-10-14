@@ -1,6 +1,6 @@
 # TenkaCloud の作業ルール
 
-本体はこのリポジトリ、問題は `problems/` (TenkaCloudChallenge) が正本です。
+本体はこのリポジトリ、問題は主催者が明示選択して取得した不変 snapshot が正本です。`problems/` は生成された build 用ビューです。[取得契約](./docs/problem-catalogs.md)を参照してください。
 構成と担当コードは[開発者マニュアル](./apps/developer-portal/src/app/developers/docs/manual/developer/page.ja.mdx)を、必要な範囲だけ参照してください。
 
 ## 進め方

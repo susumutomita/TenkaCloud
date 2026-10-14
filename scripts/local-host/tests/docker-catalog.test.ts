@@ -30,7 +30,7 @@ function fixture(run: (root: string, directory: string) => void) {
 test("catalog pins the full source tree and refuses edits, additions and deletions before start or resume", () => {
   for (const action of ["edit", "add", "delete"] as const)
     fixture((copied, directory) => {
-      const problem = loadDockerCatalog(copied)[0];
+      const problem = loadDockerCatalog(copied, [join(copied, "problems")])[0];
       expect(problem?.problemId).toBe("sqli-demo");
       if (!problem) throw new Error("Expected sqli-demo fixture");
       const job: Job = {
@@ -56,12 +56,14 @@ test("catalog pins the full source tree and refuses edits, additions and deletio
 test("catalog rejects symbolic links and duplicate IDs instead of adopting ambiguous runtime ownership", () => {
   fixture((copied, directory) => {
     symlinkSync("metadata.json", join(directory, "unexpected-link"));
-    expect(() => loadDockerCatalog(copied)).toThrow("symbolic link");
+    expect(() => loadDockerCatalog(copied, [join(copied, "problems")])).toThrow("symbolic link");
   });
   fixture((copied, directory) => {
     mkdirSync(join(copied, "problems", "another"));
     cpSync(directory, join(copied, "problems", "another", "sqli-demo"), { recursive: true });
-    expect(() => loadDockerCatalog(copied)).toThrow("Duplicate local problem ID");
+    expect(() => loadDockerCatalog(copied, [join(copied, "problems")])).toThrow(
+      "Duplicate local problem ID",
+    );
   });
 });
 
@@ -73,7 +75,7 @@ test("optional organizer text does not make an existing runtime problem unsuppor
       delete metadata.learningGoals;
       if (omitDescription) delete metadata.description;
       writeFileSync(path, JSON.stringify(metadata));
-      const problem = loadDockerCatalog(copied)[0];
+      const problem = loadDockerCatalog(copied, [join(copied, "problems")])[0];
       expect(problem?.problemId).toBe("sqli-demo");
       expect(problem?.organizerContent).toEqual(
         omitDescription

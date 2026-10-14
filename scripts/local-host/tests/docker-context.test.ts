@@ -46,15 +46,11 @@ test("the host build context excludes environment files recursively but keeps ex
   ]);
 });
 
-test("the host context includes only reviewed hello-world-battle inputs", () => {
-  expect(entries).toContain("problems/battles/*");
-  expect(entries).toContain("!problems/battles/hello-world-battle/");
-  expect(entries).toContain("problems/battles/hello-world-battle/*");
-  for (const file of ["metadata.json", "template.yaml", "diagram.svg"]) {
-    expect(
-      existsSync(new URL(`../../../problems/battles/hello-world-battle/${file}`, import.meta.url)),
-    ).toBe(true);
-    expect(entries).toContain(`!problems/battles/hello-world-battle/${file}`);
-  }
-  expect(entries).not.toContain("!problems/battles/*");
+test("the host context preserves immutable snapshots and excludes mutable local state", () => {
+  expect(entries).toContain("problems");
+  expect(entries).toContain(".tenkacloud/*");
+  expect(entries).toContain("!.tenkacloud/catalog-store/selected.json");
+  expect(entries).toContain("!.tenkacloud/catalog-store/snapshots/**");
+  expect(entries).not.toContain("!.tenkacloud/local/**");
+  expect(entries).not.toContain("!problems/battles/hello-world-battle/");
 });

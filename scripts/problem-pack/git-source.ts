@@ -217,6 +217,8 @@ export interface GitArchiveRequest {
   readonly subdir: string;
   /** Empty temporary directory the fetcher must materialize the pack root into. */
   readonly destinationDir: string;
+  /** Full catalog snapshots reject links rather than silently excluding them. */
+  readonly rejectLinks?: boolean;
 }
 
 /** Options for {@link installGitPack}. */

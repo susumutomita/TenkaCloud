@@ -1,15 +1,16 @@
+import type { ProblemAuthor } from "../../packages/portal-contracts/src/problem-authors";
+import type { ProblemEndpointSlot } from "../../packages/problem-sdk/src/endpoints-metadata.js";
 import type {
   ProblemDisruptionEntry,
-  ProblemEndpointSlot,
   ProblemPhaseEntry,
-  UptimeFlatScoringMetadata,
-} from "@tenkacloud/problem-sdk/internal";
-import type { ProblemAuthor } from "../../packages/portal-contracts/src/problem-authors";
+} from "../../packages/problem-sdk/src/metadata-parser.js";
+import type { UptimeFlatScoringMetadata } from "../../packages/problem-sdk/src/scoring-metadata.js";
 import type { ContainerVerifyScoring } from "../lib/problem-presentation";
 import type { Job } from "./model";
 
 /** A problem deployed as one CloudFormation stack in each team's own AWS account. */
 export interface StackDefinitionBase {
+  readonly source?: import("../problem-pack/catalog-read").Revision;
   readonly authors?: readonly ProblemAuthor[];
   kind: "cloudformation";
   problemId: string;

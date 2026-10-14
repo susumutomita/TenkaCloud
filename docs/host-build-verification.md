@@ -5,8 +5,8 @@ create disposable local exercise resources. They do not access AWS or publish an
 image. Use an empty checkout and keep existing competition data separate.
 
 ```sh
-git submodule update --init --recursive
 bun install --frozen-lockfile --ignore-scripts
+make catalog-download catalog-prepare
 bun run typecheck
 bun run test:host
 bun run test:authoring
@@ -20,7 +20,7 @@ Build a locally tagged candidate with source and catalog labels:
 ```sh
 docker build -f docker/host/Dockerfile \
   --build-arg TENKACLOUD_SOURCE_COMMIT="$(git rev-parse HEAD)" \
-  --build-arg TENKACLOUD_CATALOG_COMMIT="$(git rev-parse HEAD:problems)" \
+  --build-arg TENKACLOUD_CATALOG_DIGEST="$(bun -e 'import {catalogIdentity} from "./scripts/release/host-candidate"; console.log(catalogIdentity(await Bun.file(".tenkacloud/catalog-store/selected.json").json()))')" \
   -t tenkacloud-host:review .
 TENKACLOUD_HOST_IMAGE=tenkacloud-host:review bun run test:host:container
 bun run release:candidate --image tenkacloud-host:review --out .tenkacloud/host-candidate-built.json

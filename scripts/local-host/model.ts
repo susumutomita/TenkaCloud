@@ -1,8 +1,8 @@
-import type { ProgressionGateConfig } from "@tenkacloud/problem-sdk/internal";
 import {
   type ProblemAuthor,
   problemAuthorFields,
 } from "../../packages/portal-contracts/src/problem-authors";
+import type { ProgressionGateConfig } from "../../packages/problem-sdk/src/progression-gate.js";
 
 /** Local hosting's durable records. Private runtime descriptors never enter browser responses. */
 type SqlBinding = string | number | null;
@@ -27,6 +27,7 @@ export interface Problem {
   runtime?: "docker" | "coordination" | "cloudformation" | "submission";
   /** Organizer-only catalog text; never copied into a participant response. */
   organizerContent?: OrganizerProblemContent;
+  publicCatalog?: import("../../packages/portal-contracts/src/problem-catalog").ProblemCatalogEntry;
   skillCatalog?: import("../../packages/portal-contracts/src/skill-evidence").SkillCatalogSnapshot;
 }
 

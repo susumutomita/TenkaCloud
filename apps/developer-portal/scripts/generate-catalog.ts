@@ -15,7 +15,7 @@
  *     build must not depend on the `problems/` submodule being checked out. By
  *     committing the generated module, the page builds with zero submodule
  *     dependency (matching how the docs reference is generated + committed).
- *   - The submodule pin is bumped by a manually-opened PR (`make submodule-latest`;
+ *   - The catalog source selection is updated by a manually-opened PR (`make catalog-download`;
  *     there is no automated bump workflow). A hard byte-equality CI gate coupled
  *     to the pin would therefore surprise unrelated PRs after a bump, so
  *     the drift check here is a MAINTAINER tool (`--check`), not a CI gate. Run
@@ -23,7 +23,7 @@
  *
  * `--check` mode regenerates in memory and exits non-zero when the committed
  * module is stale vs the current submodule metadata. It requires the submodule to
- * be checked out (`git submodule update --init problems`).
+ * be checked out (`make catalog-download catalog-prepare`).
  */
 
 import { execFileSync } from "node:child_process";
@@ -153,7 +153,7 @@ export function buildCatalogData(): CatalogData {
   if (files.length === 0) {
     throw new Error(
       `No problem metadata found under ${PROBLEMS_DIR}. ` +
-        "Run 'git submodule update --init problems' before regenerating the catalog.",
+        "Run 'make catalog-download catalog-prepare' before regenerating the catalog.",
     );
   }
   const problems: CatalogProblem[] = [];

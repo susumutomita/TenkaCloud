@@ -17,7 +17,7 @@ vi.mock("../src/data/problems", async (importOriginal) => {
   return {
     ...actual,
     listProblemSummaries: () =>
-      actual.listProblemSummaries().filter((problem) => problem.id === "ac26-crypto-battle"),
+      actual.listProblemSummaries().filter((problem) => problem.id === "forensic-casebook"),
   };
 });
 
@@ -71,7 +71,7 @@ function stubHost(
         expiresAt: Date.now() + lifetime,
       }),
     "/api/events": () => json({ items: [] }),
-    "/api/host/catalog": () => json({ items: [{ problemId: "ac26-crypto-battle" }] }),
+    "/api/host/catalog": () => json({ items: [{ problemId: "forensic-casebook" }] }),
     "/api/feature-flags": () => json({ flags: {} }),
     "/api/host/oauth2/revoke": () => json({ revoked: true }),
     ...overrides,

@@ -19,8 +19,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          submodules: true
       - uses: ./.github/actions/bun-install
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:

@@ -27,9 +27,11 @@
  * wall clock, or the host. That is what lets a caller assert a stable report.
  */
 
-import { createHash } from "node:crypto";
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { computeContentDigest } from "./content-digest.js";
+
+export type { CollectedPackFile } from "./content-digest.js";
+export { collectPackFiles, computeContentDigest } from "./content-digest.js";
+
 import { toValidationDiagnostic, type ValidationDiagnostic } from "./diagnostics.js";
 import { validatePackDirectory } from "./validate-pack.js";
 
@@ -68,7 +70,6 @@ export interface BuildPackReportOptions {
 }
 
 /** Directory / file names excluded from the content digest (build / VCS noise). */
-const EXCLUDED_DIR_NAMES = new Set([".git", "node_modules", "dist"]);
 
 /**
  * Build a deterministic validation report for a problem-pack directory.
@@ -102,80 +103,4 @@ export function buildPackReport(dir: string, options: BuildPackReportOptions = {
  */
 export function serializePackReport(report: PackReport): string {
   return `${JSON.stringify(report, null, 2)}\n`;
-}
-
-/**
- * Compute a deterministic content digest of a pack directory: a hex SHA-256 over
- * a canonical encoding where every included file, in sorted POSIX-relative-path
- * order, contributes its length-prefixed path and its length-prefixed bytes. The
- * walk excludes `.git`, `node_modules`, `dist`, hidden (dot-prefixed) entries, and
- * symlinks (never followed or counted). Identical content always yields an
- * identical digest, independent of iteration order or timestamps.
- */
-export function computeContentDigest(dir: string): string {
-  const root = path.resolve(dir);
-  if (!isExistingDirectory(root)) {
-    // A missing pack directory has no bytes — hash the empty input so the result
-    // is still deterministic rather than throwing.
-    return createHash("sha256").digest("hex");
-  }
-  const files = collectFiles(root, root).sort((a, b) => (a.relPath < b.relPath ? -1 : 1));
-  const hash = createHash("sha256");
-  for (const file of files) {
-    const pathBytes = Buffer.from(file.relPath, "utf-8");
-    hash.update(`${pathBytes.length}:`);
-    hash.update(pathBytes);
-    const content = fs.readFileSync(file.absPath);
-    hash.update(`${content.length}:`);
-    hash.update(content);
-  }
-  return hash.digest("hex");
-}
-
-/** One included pack file: its pack-relative POSIX path and its absolute path. */
-export interface CollectedPackFile {
-  readonly relPath: string;
-  readonly absPath: string;
-}
-
-/**
- * Walk a pack directory with the digest's exclusion rules (`.git` /
- * `node_modules` / `dist` / hidden entries / symlinks), unsorted. Exported (via
- * `/internal` only) for the Core snapshot installer, so the copied file set is
- * EXACTLY the digested file set — one walk implementation, no drift (#2866).
- */
-export function collectPackFiles(dir: string): CollectedPackFile[] {
-  const root = path.resolve(dir);
-  return collectFiles(root, root);
-}
-
-function collectFiles(root: string, dir: string): CollectedPackFile[] {
-  const out: CollectedPackFile[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (isExcludedName(entry.name)) continue;
-    if (entry.isSymbolicLink()) continue;
-    const abs = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      out.push(...collectFiles(root, abs));
-    } else if (entry.isFile()) {
-      out.push({ relPath: toPosixRelative(root, abs), absPath: abs });
-    }
-  }
-  return out;
-}
-
-function isExcludedName(name: string): boolean {
-  return name.startsWith(".") || EXCLUDED_DIR_NAMES.has(name);
-}
-
-function toPosixRelative(root: string, abs: string): string {
-  return path.relative(root, abs).split(path.sep).join("/");
-}
-
-function isExistingDirectory(target: string): boolean {
-  try {
-    return fs.statSync(target).isDirectory();
-  } catch {
-    return false;
-  }
 }

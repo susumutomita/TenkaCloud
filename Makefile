@@ -10,7 +10,7 @@ help: ## Show command help (HELP_LANG=ja for Japanese) | コマンド一覧を�
 	@awk -v lang="$(HELP_LANG)" -v scope="$(HELP_SCOPE)" -f $(HELP_RENDERER) Makefile
 
 # ===== Setup / Build | セットアップ / ビルド =====
-.PHONY: install install_ci submodule-latest build typecheck
+.PHONY: install install_ci build typecheck
 
 install: ## Install development dependencies safely | 開発依存関係を安全設定でインストール
 	# --ignore-scripts: defuse mini-shai-hulud 2nd wave (Flatt Tech, 2026-05-12).
@@ -21,19 +21,18 @@ install: ## Install development dependencies safely | 開発依存関係を安�
 	bun x husky
 install_ci: ## Install locked CI dependencies without lifecycle scripts | lockfile固定・script無効でCI依存関係をインストール
 	bun install --frozen-lockfile --ignore-scripts
-# Bumps the problems/ pin to its tracked branch tip and leaves it STAGED for review. Run this to
-# open the bump as its own PR (there is no scheduled workflow that does this automatically);
-# pre-commit only checks that the checkout matches the staged pin; it never updates it.
-submodule-latest: ## Fast-forward and stage problem sources (apply to hosts separately) | 問題ソースを前進更新してstage (開催環境への反映は別途)
-	@echo "Update between events: retained local events still need their original problem files. See docs/local-hosting.md."
-	bun run scripts/ops/update-problems.ts
-	@echo "Source checkout only; running hosts are not refreshed. Local: rebuild/restart with make local. Cloud: update with make deploy."
+CATALOG_SOURCES ?= catalog-sources.json
+.PHONY: catalog-download catalog-prepare
+catalog-download: ## Download selected catalog repositories without executing them | 選択した問題repoをコード実行なしで取得
+	bun run catalog download $(CATALOG_SOURCES)
+catalog-prepare: ## Prepare the selected catalog for builds | 選択した問題catalogのbuild用ビューを作成
+	bun run catalog prepare
 # How many workspaces `build` / `typecheck` run at once. 1 (serial, fail-fast, output in order)
 # is the default a developer wants in a terminal; CI passes WORKSPACE_JOBS=4 because one
 # `tsc --noEmit` uses a single core and the serial chain left three of the runner's four idle.
 WORKSPACE_JOBS ?= 1
 
-build: ## Build all retained applications and host (WORKSPACE_JOBS=n for parallel) | 継続する全アプリとhostをbuild
+build: catalog-prepare ## Build all retained applications and host (WORKSPACE_JOBS=n for parallel) | 継続する全アプリとhostをbuild
 	bun run scripts/workspace/run-workspaces.ts build --jobs $(WORKSPACE_JOBS)
 	bun run build:host
 typecheck: ## Type-check every TypeScript workspace (WORKSPACE_JOBS=n for parallel) | 全workspaceのTypeScript型検査
@@ -55,7 +54,7 @@ test-scripts: ## Run fast script and generated-file checks | scriptと生成物�
 
 # ===== Quality gates | 品質ゲート =====
 .PHONY: audit-deps dup-check dup-baseline dead-code \
-        submodule-not-behind before-commit ci-local
+        before-commit ci-local
 
 # 依存 package の lifecycle script 監査 (mini Shai-Hulud 2nd 対策)。
 audit-deps: ## Audit dependency lifecycle-script changes | 依存packageのlifecycle script差分を監査
@@ -75,10 +74,6 @@ dup-baseline: ## Re-freeze the duplication baseline (justify increases in the PR
 dead-code: ## Fail on unused files/exports found by knip | knipで未使用コード検出(ゲート)
 	bun run dead-code
 
-# problems/ の pin が後退した PR を落とす (gitlink ping-pong 対策)。CI も同じ実装を呼ぶ。
-submodule-not-behind: ## Fail when the problems submodule pin moves backwards | problems pinの後退をfail
-	bun run scripts/quality/check-submodule-not-behind.ts
-
 # Pre-PR gate for the product BODY, run by the pre-commit hook. Tests cover only the changed
 # files (#3367); the required CI check `ci` runs every test.
 GATE_CHECKS := lint dead-code test-changed
@@ -87,16 +82,14 @@ before-commit: $(GATE_CHECKS) ## Run lint, dead-code and the tests for changed f
 
 # `before-commit` は lint・dead-code と、変更したファイルに関係するテストを実行する。全テストは
 # `make test`、CI 全体の再現には ci-local を使う。
-# (CI は audit-deps / submodule pin guard / build も走らせる)。`ci-local` は CI が走らせるものを
+# (CI は audit-deps / catalog validation / build も走らせる)。`ci-local` は CI が走らせるものを
 # CI と同じ順で全部走らせる (Codecov upload だけ除く)。
 # Issue #2513: CI は同じ workspace 集合を 3 shard の matrix で並列に走らせる。ここでは 3 shard を
 # 1 プロセスで直列に走らせる — 同じ検査・同じ workspace・意図的に違う並列度。
 ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の全gateをローカル実行
 	git fetch --no-tags origin main:refs/remotes/origin/main
-	git -C problems fetch --tags --unshallow origin 2>/dev/null || git -C problems fetch --tags origin || true
 	$(MAKE) audit-deps
 	$(MAKE) dead-code
-	$(MAKE) submodule-not-behind
 	$(MAKE) validate-problems
 	$(MAKE) lint-text
 	$(MAKE) lint-format
@@ -150,13 +143,9 @@ fix-format: ## Automatically format code with Biome | Biomeでcode formatを自�
 # ===== Problem catalog validation | 問題カタログ検証 =====
 .PHONY: validate-problems
 
-# Runs the catalog authoring-contract validator (schema + the bilingual-README invariant) against the
-# platform's problems/ mirror, so a README-less / schema-invalid problem fails platform CI too, not
-# only the catalog repo's own CI (#2254). problems/ is a submodule, not a workspace member, so its
-# own deps install here.
-validate-problems: ## Validate problem schemas and bilingual READMEs | 問題catalogのschemaと日英READMEを検証
-	git submodule update --init problems
-	cd problems && bun install --frozen-lockfile --ignore-scripts && bun run scripts/validate-problems.ts
+# Acquisition uses the platform-owned schema and validates bilingual README files without executing pack scripts.
+validate-problems: ## Verify selected immutable catalog snapshots | 選択した問題snapshotの固定版とdigestを検証
+	bun run catalog validate
 
 # ===== Problem Packs (author-side CLI) | 問題パック（作成者向けCLI） =====
 .PHONY: pack-init pack-validate pack-install pack-list

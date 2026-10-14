@@ -1,14 +1,11 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+export { publicMetadata } from "./browser-public-metadata";
+
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { problemAuthorFields } from "../../packages/portal-contracts/src/problem-authors";
-import {
-  type ProblemCourseMetadataInput,
-  toCourseAlignment,
-  toTrackPosition,
-} from "../../packages/portal-contracts/src/problem-course-projection";
-import { parseEndpointSlot } from "../../packages/problem-sdk/src/endpoints-metadata";
-import { isReviewedCoordination, reviewedCoordinationPaths } from "./coordination-catalog";
+import { selectableProblem } from "../../packages/portal-contracts/src/problem-selection";
+import { retainedCatalogRoots, selectedCatalogRoots } from "../problem-pack/catalog-read";
+import { reviewedCoordinationPaths } from "./coordination-catalog";
 
 const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const reviewedNonDockerPaths = [
@@ -16,6 +13,24 @@ const reviewedNonDockerPaths = [
   ...reviewedCoordinationPaths,
   "battles/hello-world-battle",
 ] as const;
+let selectedBuildRoots: readonly string[] | undefined;
+let retainedBuildRoots: readonly string[] | undefined;
+function buildRoots(retained: boolean): readonly string[] {
+  if (retained) {
+    retainedBuildRoots ??= retainedCatalogRoots(repositoryRoot);
+    return retainedBuildRoots;
+  }
+  selectedBuildRoots ??= selectedCatalogRoots(repositoryRoot);
+  return selectedBuildRoots;
+}
+function catalogModuleId(id: string): string {
+  return id
+    .replace(/\\/gu, "/")
+    .replace(
+      /\/.tenkacloud\/catalog-store\/snapshots\/[a-f0-9]{64}\/(?:[^?]*?\/)?(challenges|battles)\//u,
+      "/problems/$1/",
+    );
+}
 let cachedBrowserPaths: readonly string[] | undefined;
 
 /** Public metadata compatibility, not proof that Docker can execute the problem. */
@@ -31,6 +46,7 @@ function dockerChallenge(raw: Record<string, unknown>): boolean {
 
 function dockerBrowserPaths(root: string, category: string): string[] {
   const paths: string[] = [];
+  if (!existsSync(join(root, "problems", category))) return paths;
   for (const entry of readdirSync(join(root, "problems", category), { withFileTypes: true })) {
     if (!entry.isDirectory() || !/^[a-z0-9][a-z0-9-]*$/u.test(entry.name)) continue;
     const raw = JSON.parse(
@@ -48,67 +64,22 @@ function dockerBrowserPaths(root: string, category: string): string[] {
 export function hostBrowserProblemPaths(root = repositoryRoot): readonly string[] {
   if (root === repositoryRoot && cachedBrowserPaths) return cachedBrowserPaths;
   const paths = [
-    ...reviewedNonDockerPaths,
+    ...reviewedNonDockerPaths.filter((path) =>
+      existsSync(join(root, "problems", path, "metadata.json")),
+    ),
     ...dockerBrowserPaths(root, "challenges"),
     ...dockerBrowserPaths(root, "battles"),
   ];
-  const result = [...new Set(paths)].sort((left, right) => left.localeCompare(right));
+  const result = [...new Set(paths)]
+    .filter((path) => {
+      const metadata = JSON.parse(
+        readFileSync(join(root, "problems", path, "metadata.json"), "utf8"),
+      ) as { id: string; tags?: string[] };
+      return selectableProblem(metadata);
+    })
+    .sort((left, right) => left.localeCompare(right));
   if (root === repositoryRoot) cachedBrowserPaths = result;
   return result;
-}
-
-/** Build-time allowlist, not runtime tree-shaking: never ship organizer-only metadata,
- * hint content, answers, writeups or pre-start instructions to a hosting browser. */
-export function publicMetadata(code: string, id: string): string | null {
-  if (!/[/\\]problems[/\\][^/\\]+[/\\][^/\\]+[/\\]metadata\.json(?:\?.*)?$/u.test(id)) return null;
-  const raw = JSON.parse(code) as Record<string, unknown>;
-  const runtime =
-    raw.runtime && typeof raw.runtime === "object" ? (raw.runtime as Record<string, unknown>) : {};
-  const scoring =
-    raw.scoring && typeof raw.scoring === "object" ? (raw.scoring as Record<string, unknown>) : {};
-  const i18n =
-    raw.i18n && typeof raw.i18n === "object" ? (raw.i18n as Record<string, unknown>) : {};
-  const english =
-    i18n.en && typeof i18n.en === "object" ? (i18n.en as Record<string, unknown>) : {};
-  const native = isReviewedCoordination(raw.id);
-  return JSON.stringify({
-    ...problemAuthorFields(raw.authors),
-    id: raw.id,
-    name: raw.name,
-    // Four legacy local exercises are authored under battles/, but their verifier
-    // contract is an independent per-team Challenge, not inter-team coordination.
-    category: dockerChallenge(raw) ? "Challenge" : raw.category,
-    status: raw.status,
-    visibility: raw.visibility,
-    difficulty: raw.difficulty,
-    estimatedDuration: raw.estimatedDuration,
-    shortDescription: raw.shortDescription,
-    learningGoals: [],
-    track: toTrackPosition(raw.track as ProblemCourseMetadataInput["track"]),
-    courseAlignment: toCourseAlignment(
-      raw.courseAlignment as ProblemCourseMetadataInput["courseAlignment"],
-    ),
-    tags: Array.isArray(raw.tags) ? raw.tags : [],
-    // The catalog facet needs only the public classification, never scoring parameters.
-    ...(typeof scoring.kind === "string" ? { scoring: { kind: scoring.kind } } : {}),
-    runtime: native
-      ? { provider: "local", engine: "bun" }
-      : { provider: runtime.provider, engine: runtime.engine },
-    ...(native
-      ? { dashboard: raw.dashboard, interTeamCoordination: raw.interTeamCoordination }
-      : {}),
-    ...(raw.id === "hello-world-battle" ? { endpoints: publicEndpointSlots(raw.endpoints) } : {}),
-    i18n: { en: { name: english.name, shortDescription: english.shortDescription } },
-  });
-}
-
-function publicEndpointSlots(value: unknown) {
-  if (!Array.isArray(value)) throw new Error("Reviewed Battle endpoints are missing.");
-  return value.map((entry) => {
-    const endpoint = parseEndpointSlot(entry);
-    if (!endpoint) throw new Error("Reviewed Battle endpoint is invalid.");
-    return { slot: endpoint.slot, default: endpoint.default, overridable: endpoint.overridable };
-  });
 }
 
 export function narrowCatalog(code: string, id: string): string | null {
@@ -133,7 +104,17 @@ export function narrowCatalog(code: string, id: string): string | null {
   });
   if (narrowed.includes("problems/*/*/"))
     throw new Error("An unreviewed catalog discovery pattern remains in the hosting build.");
-  return narrowed.replace(
+  const sourced = narrowed.replace(/"(?:\.\.\/)+problems\/([^"\n]+)"/gu, (_match, path: string) => {
+    const plugins = path.endsWith("portal/*.tsx");
+    const roots = JSON.stringify(
+      buildRoots(plugins).map(
+        (root) => `${relative(dirname(normalized), root).replaceAll("\\", "/")}/${path}`,
+      ),
+    );
+    return plugins ? `${roots}, { exhaustive: true }` : roots;
+  });
+  const exhaustive = sourced.replace(/\{\s*(eager|query):/gu, "{ exhaustive: true, $1:");
+  return exhaustive.replace(
     /"(?:\.\.\/)+\.tenkacloud\/pack-store\/snapshots\/[^"\n]+"/gu,
     '"../../../../problems/challenges/sqli-demo/__local_host_empty__/**/*"',
   );
@@ -141,10 +122,14 @@ export function narrowCatalog(code: string, id: string): string | null {
 /** Defense in depth against changed globs: inspect the actual bundled module
  * graph as well as transforming the known catalog discovery expressions. */
 export function assertHostingModule(id: string): void {
-  const normalized = id.replaceAll("\\", "/");
+  const normalized = catalogModuleId(id);
   if (normalized.includes("/.tenkacloud/pack-store/"))
     throw new Error("Installed pack content cannot enter a local-host browser bundle.");
-  if (!normalized.includes("/problems/")) return;
+  if (!normalized.includes("/problems/")) {
+    if (normalized.includes("/.tenkacloud/catalog-store/"))
+      throw new Error(`Unreviewed shared catalog content entered the browser: ${id}`);
+    return;
+  }
   if (
     /\/problems\/battles\/ac26-crypto-battle\/(?:metadata\.json|diagram(?:\.en)?\.svg|portal\/[^/]+\.(?:tsx?|css)|game\/src\/[^/]+\.ts)(?:\?.*)?$/u.test(
       normalized,

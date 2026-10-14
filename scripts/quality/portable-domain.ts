@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import ts from "typescript";
-import { hostRuntimeImportClosure } from "./host-imports";
+import { hostRuntimeImportClosure } from "./host-imports.js";
 
 const entries = [
   "scripts/local-host/hosting-domain.ts",
@@ -34,29 +34,34 @@ function concreteProvider(reference: ts.Node): boolean {
     throw new Error("Portable domain has computed module reference.");
   return /^(?:bun:|@aws-sdk\/|@smithy\/)/u.test(reference.text);
 }
-function principalType(type: ts.Type | undefined): boolean {
-  return (
-    type
-      ?.getProperties()
-      .some((property) => property.name.startsWith("__@authenticatedOrganizer")) === true
-  );
+function principalType(type: ts.Type | undefined, cache: WeakMap<ts.Type, boolean>): boolean {
+  if (!type) return false;
+  const cached = cache.get(type);
+  if (cached !== undefined) return cached;
+  const branded = type
+    .getProperties()
+    .some((property) => property.name.startsWith("__@authenticatedOrganizer"));
+  cache.set(type, branded);
+  return branded;
 }
+
 function principalConversion(
   node: ts.Node,
   source: ts.SourceFile,
   checker: ts.TypeChecker,
+  cache: WeakMap<ts.Type, boolean>,
 ): boolean {
   if (ts.isAsExpression(node) || ts.isTypeAssertionExpression(node))
     return (
       node.type.getText(source).endsWith("OrganizerPrincipal") ||
-      principalType(checker.getTypeFromTypeNode(node.type))
+      principalType(checker.getTypeFromTypeNode(node.type), cache)
     );
-  if (ts.isObjectLiteralExpression(node) && principalType(checker.getTypeAtLocation(node)))
+  if (ts.isObjectLiteralExpression(node) && principalType(checker.getTypeAtLocation(node), cache))
     return true;
   return (
     ts.isExpression(node) &&
-    (checker.getTypeAtLocation(node).flags & ts.TypeFlags.Any) !== 0 &&
-    principalType(checker.getContextualType(node))
+    principalType(checker.getContextualType(node), cache) &&
+    (checker.getTypeAtLocation(node).flags & ts.TypeFlags.Any) !== 0
   );
 }
 
@@ -75,6 +80,7 @@ export function assertPortableDomain(root: string, roots = entries): readonly st
     },
   );
   const checker = program.getTypeChecker();
+  const principalTypes = new WeakMap<ts.Type, boolean>();
   for (const file of files) {
     const found = program.getSourceFile(resolve(root, file));
     if (!found) throw new Error(`Portable domain source is unavailable: ${file}`);
@@ -88,7 +94,10 @@ export function assertPortableDomain(root: string, roots = entries): readonly st
       if (ts.isIdentifier(node) && node.text === "Bun")
         throw new Error(`Portable domain uses Bun global: ${file}`);
       if (computedBunAccess(node)) throw new Error(`Portable domain uses Bun global: ${file}`);
-      if (principalConversion(node, source, checker) && file !== "scripts/local-host/store.ts")
+      if (
+        principalConversion(node, source, checker, principalTypes) &&
+        file !== "scripts/local-host/store.ts"
+      )
         throw new Error(`Portable domain manufactures organizer principal: ${file}`);
       ts.forEachChild(node, visit);
     }

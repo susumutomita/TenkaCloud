@@ -157,17 +157,16 @@ export class DockerHostingEngine implements RuntimeEngine {
   containerCost(definition: string) {
     return boundedCompose((JSON.parse(definition) as Definition).composeText).cost;
   }
-  private readonly problems: Problem[];
+  private problems: Problem[] | undefined;
   private readonly running = new Map<string, StartedContainer>();
   private readonly networkReservations = new Map<string, readonly string[]>();
   constructor(
-    repositoryRoot: string,
+    private readonly repositoryRoot: string,
     private readonly dataDirectory: string,
     private readonly networkPool?: string,
-  ) {
-    this.problems = loadDockerCatalog(repositoryRoot);
-  }
+  ) {}
   catalog(): readonly Problem[] {
+    this.problems ??= loadDockerCatalog(this.repositoryRoot);
     return this.problems;
   }
   hostPorts(definition: string, offset: number, runtimePorts?: RuntimePorts): readonly number[] {

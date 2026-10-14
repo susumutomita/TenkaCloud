@@ -2,12 +2,12 @@ import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CloudFormationEngine } from "../cloudformation-engine";
-import { CompetitionEngine } from "../competition-engine";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary-directory";
 import { FakeAws } from "./fake-aws";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 import { organizerToken, REHEARSAL_ORGANIZER } from "./organizer-login";
 
 export const GATE = "challengePrerequisiteGate";

@@ -8,11 +8,11 @@ This documents the unpublished integration candidate. Local event/team operation
 
 <h2 id="local-start">Start a local competition</h2>
 
-Use the reviewed checkout, Bun 1.3.11 and its pinned problem submodule on macOS or Linux (including WSL2). Docker Engine with Compose is needed for Docker exercises. Run from the repository root:
+Use the reviewed checkout, Bun 1.3.11 and its explicitly selected downloaded problem catalog on macOS or Linux (including WSL2). Docker Engine with Compose is needed for Docker exercises. Run from the repository root:
 
 ```sh
-git submodule update --init --recursive
 bun install --frozen-lockfile --ignore-scripts
+make catalog-download catalog-prepare
 make local
 ```
 

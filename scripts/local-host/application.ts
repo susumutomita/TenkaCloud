@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildHosting } from "./build";
 import { CompetitionEngine } from "./competition-engine";
@@ -88,6 +90,13 @@ export async function runLocalHost(
   process.umask(0o077);
   if (lifecycle.signal?.aborted) return;
   if (options.build) await buildHosting(root, "summary");
+  else if (
+    readFileSync(join(root, ".tenkacloud/host-build/catalog-selection.json"), "utf8") !==
+    readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8")
+  )
+    throw new Error(
+      "The selected catalog differs from the built interfaces; rebuild before starting",
+    );
   if (lifecycle.signal?.aborted) return;
   console.log("Starting the host server...");
   const host = await startLocalHost(

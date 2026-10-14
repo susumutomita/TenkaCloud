@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { metadataToDetail } from "../../../apps/application-admin-console/src/data/problem-mapping";
 import { metadataToEntry } from "../../../packages/portal-contracts/src/problem-catalog";
+import { selectableProblem } from "../../../packages/portal-contracts/src/problem-selection";
 import {
   assertHostingModule,
   hostBrowserProblemPaths,
@@ -21,13 +22,19 @@ const localProblems = hostBrowserProblemPaths().filter((path) => {
 
 test("frontend Docker identities exactly match the host's executable catalog", () => {
   expect(new Set(localProblems.map((path) => path.split("/").at(-1)))).toEqual(
-    new Set(loadDockerCatalog(root).map((problem) => problem.problemId)),
+    new Set(
+      loadDockerCatalog(root)
+        .filter((problem) =>
+          selectableProblem({ id: problem.problemId, tags: problem.publicCatalog?.tags }),
+        )
+        .map((problem) => problem.problemId),
+    ),
   );
 });
 
-test("hosting exposes all 106 Docker verify exercises as public Challenge metadata", () => {
-  expect(localProblems).toHaveLength(106);
-  expect(hostBrowserProblemPaths()).toHaveLength(108 + reviewedCoordinationPaths.length);
+test("hosting exposes 61 selectable Docker verify exercises as public Challenge metadata", () => {
+  expect(localProblems).toHaveLength(61);
+  expect(hostBrowserProblemPaths()).toHaveLength(67);
   let legacyBattles = 0;
   for (const path of localProblems) {
     const source = readFileSync(join(root, "problems", path, "metadata.json"), "utf8");
@@ -81,9 +88,9 @@ test("metadata expansion does not expand executable portal plugins or templates"
     'import.meta.glob("../../../../problems/*/*/portal/*.tsx");',
     "/repo/apps/participant-portal/src/plugins/loader.ts",
   );
-  expect(plugins).toBe(
-    `import.meta.glob("../../../../problems/{${reviewedCoordinationPaths.join(",")}}/portal/*.tsx");`,
-  );
+  expect(plugins).toContain(`/{${reviewedCoordinationPaths.join(",")}}/portal/*.tsx`);
+  expect(plugins).toContain("/.tenkacloud/catalog-store/snapshots/");
+  expect(plugins).not.toContain("problems/*/*/");
   expect(() =>
     narrowCatalog(
       'import.meta.glob("../../../../problems/*/*/metadata.json"); import.meta.glob("../../../../problems/*/*/answers.json");',
@@ -299,4 +306,21 @@ test("local browser credits agree with admin and participant projections without
   expect(metadataToEntry(publicValue).authors).toEqual(publicValue.authors);
   expect(metadataToDetail(publicValue).authors).toEqual(publicValue.authors);
   expect(projected).not.toContain("SECRET");
+});
+
+test("native public JSON excludes private coordination configuration and extra dashboard fields", () => {
+  const path = join(root, "problems/battles/ac26-crypto-battle/metadata.json");
+  const metadata = JSON.parse(readFileSync(path, "utf8"));
+  metadata.interTeamCoordination = {
+    ...metadata.interTeamCoordination,
+    publicHint: false,
+    description: "private-coordination-text",
+    plugin: "private-plugin-name",
+    stateBudget: { baseBytes: 12345 },
+  };
+  metadata.dashboard = { ...metadata.dashboard, privateField: "private-dashboard-value" };
+  const projected = publicMetadata(JSON.stringify(metadata), path);
+  expect(projected).not.toContain("private-coordination-text");
+  expect(projected).not.toContain("private-plugin-name");
+  expect(projected).not.toContain("private-dashboard-value");
 });

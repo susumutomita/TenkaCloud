@@ -13,7 +13,7 @@ this branch does not migrate their data automatically.
 ## Prepare and run
 
 ```sh
-git submodule update --init --recursive
+make catalog-download catalog-prepare
 bun install --frozen-lockfile --ignore-scripts
 bun run build:host
 make local LOCAL_ARGS="--no-build"

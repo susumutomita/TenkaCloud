@@ -10,7 +10,7 @@ This guide is for changes to the platform. Problem content belongs in
 Install Git and [mise](https://mise.jdx.dev/), then use the repository's pinned tools:
 
 ```bash
-git clone --recurse-submodules https://github.com/<your-username>/TenkaCloud.git
+git clone https://github.com/<your-username>/TenkaCloud.git
 cd TenkaCloud
 mise trust
 mise install
@@ -38,7 +38,7 @@ The default `make help` separates hosting commands from these development comman
 - `make lint`: check Markdown, prose, formatting and typed TypeScript lint
 - `make before-commit`: run lint, dead-code checks and the tests for the changed files
 
-The catalog section also lists `make submodule-latest` (fetch and stage source),
+The catalog section also lists `make catalog-download` (download explicitly selected sources),
 `make validate-problems` (validate the staged catalog pin) and `make build` (build
 artifacts without publishing). Follow the [local catalog update procedure](docs/local-hosting.md#update-the-problem-catalog)
 or [cloud catalog update procedure](infrastructure/README.md#update-the-problem-catalog)
@@ -58,7 +58,7 @@ to apply reviewed changes between events.
    Use a [Conventional Commit](https://www.conventionalcommits.org/) title under 70 characters.
 
 The hook checks that `problems/` matches its staged commit and never switches its
-checkout. Initialize a fresh clone with `git submodule update --init --recursive problems`.
+checkout. Initialize a fresh clone with `make catalog-download catalog-prepare`.
 Preserve catalog work before aligning a checkout or staging a deliberate pin update.
 Report any live AWS or browser checks that were not run.
 

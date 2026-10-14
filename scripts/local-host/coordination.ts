@@ -5,7 +5,7 @@ import {
   type MatchTransition,
   transitionMatch,
 } from "./coordination-core";
-import { assertCoordinationRoster } from "./coordination-runtime";
+import { assertCoordinationRoster } from "./coordination-roster";
 import { type Gate, gate, HostError, type HostedEvent, object, type Problem } from "./model";
 import { projectedScore } from "./score";
 import type { ApiRequest, ApiResponse, HostingService } from "./service";

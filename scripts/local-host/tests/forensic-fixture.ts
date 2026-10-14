@@ -21,7 +21,7 @@ export interface ForensicRequest {
   nonce?: string;
 }
 
-export async function forensicFixture() {
+export async function forensicFixture(catalogRoot = forensicRoot) {
   const directory = createTemporaryDirectory(forensicRoot, "tenka-forensic-host-");
   let store: HostStore | undefined;
   let host: RunningLocalHost | undefined;
@@ -30,7 +30,7 @@ export async function forensicFixture() {
   const announcements: string[] = [];
   async function start() {
     host = await startLocalHost(
-      forensicRoot,
+      catalogRoot,
       {
         dataDirectory: directory,
         hostname: "127.0.0.1",
@@ -40,7 +40,7 @@ export async function forensicFixture() {
       },
       (data, database) => {
         store = database;
-        return new CompetitionEngine(forensicRoot, data, false);
+        return new CompetitionEngine(catalogRoot, data, false);
       },
       (message) => announcements.push(message),
     );

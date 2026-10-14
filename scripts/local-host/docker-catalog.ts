@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { computeContentDigest } from "../../packages/problem-sdk/src/content-digest";
+import { selectedCatalogSnapshots } from "../problem-pack/catalog-read";
+import { restoreSourcePermissions } from "../problem-pack/source-permissions.js";
+import { publicCatalogEntry } from "./catalog-projection";
 import { assertComposePolicy } from "./container/compose-policy";
 import { type ContainerProblem, loadContainerProblem } from "./container/manifest";
 import { type Job, organizerProblemContent, type Problem } from "./model";
@@ -10,6 +14,11 @@ export interface DockerDefinition {
   readonly problem: ContainerProblem;
   readonly hashes: Readonly<Record<string, string>>;
   readonly composeText: string;
+  readonly catalogSnapshot?: {
+    readonly root: string;
+    readonly digest: string;
+    readonly source?: unknown;
+  };
 }
 
 const excludedDirectories = new Set([".git", "node_modules", ".tenkacloud", "coverage"]);
@@ -51,7 +60,10 @@ function problemDirectories(catalog: string): string[] {
     );
 }
 
-function catalogProblem(directory: string): Problem | undefined {
+function catalogProblem(
+  directory: string,
+  catalogSnapshot?: DockerDefinition["catalogSnapshot"],
+): Problem | undefined {
   const metadataPath = join(directory, "metadata.json");
   if (!existsSync(metadataPath)) return undefined;
   const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
@@ -66,10 +78,16 @@ function catalogProblem(directory: string): Problem | undefined {
     throw new Error(
       `${problem.problemId} needs multiple isolated gateway origins; it cannot be offered yet.`,
     );
-  const definition: DockerDefinition = { problem, composeText, hashes: sourceHashes(directory) };
+  const definition: DockerDefinition = {
+    problem,
+    composeText,
+    hashes: sourceHashes(directory),
+    ...(catalogSnapshot ? { catalogSnapshot } : {}),
+  };
   return {
     problemId: problem.problemId,
     name: problem.name,
+    publicCatalog: publicCatalogEntry(metadata, directory),
     organizerContent: organizerProblemContent(metadata),
     runtime: "docker",
     definition: JSON.stringify(definition),
@@ -78,11 +96,25 @@ function catalogProblem(directory: string): Problem | undefined {
 }
 
 /** Reuse the same manifest and Compose policy as individual local practice. */
-export function loadDockerCatalog(repositoryRoot: string): Problem[] {
+export function loadDockerCatalog(
+  repositoryRoot: string,
+  catalogRoots?: readonly string[],
+): Problem[] {
   const result: Problem[] = [];
   const ids = new Set<string>();
-  for (const directory of problemDirectories(join(repositoryRoot, "problems"))) {
-    const problem = catalogProblem(directory);
+  const entries = catalogRoots
+    ? catalogRoots.flatMap((catalog) =>
+        problemDirectories(catalog).map((directory) => ({ directory, catalogSnapshot: undefined })),
+      )
+    : selectedCatalogSnapshots(repositoryRoot).flatMap(
+        ({ problemRoot, directory: root, revision }) =>
+          problemDirectories(problemRoot).map((directory) => ({
+            directory,
+            catalogSnapshot: { root, digest: revision.digest, source: revision },
+          })),
+      );
+  for (const { directory, catalogSnapshot } of entries) {
+    const problem = catalogProblem(directory, catalogSnapshot);
     if (!problem) continue;
     if (ids.has(problem.problemId))
       throw new Error(`Duplicate local problem ID: ${problem.problemId}`);
@@ -99,6 +131,13 @@ export function loadDockerCatalog(repositoryRoot: string): Problem[] {
 export function dockerDefinitionOf(job: Job, verifySources: boolean): DockerDefinition {
   const definition = JSON.parse(job.definition) as DockerDefinition;
   if (verifySources) {
+    if (
+      definition.catalogSnapshot &&
+      computeContentDigest(definition.catalogSnapshot.root, true) !==
+        definition.catalogSnapshot.digest
+    )
+      throw new Error("The event’s pinned catalog snapshot changed.");
+    if (definition.catalogSnapshot) restoreSourcePermissions(definition.catalogSnapshot.root);
     const actual = sourceHashes(definition.problem.problemDir);
     const changed =
       Object.keys(actual).length !== Object.keys(definition.hashes).length ||

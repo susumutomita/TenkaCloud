@@ -7,11 +7,11 @@ import { fileURLToPath } from "node:url";
 import { randomToken } from "../auth";
 import { apiRequest } from "../bench/state-setup";
 import { cloudFormationCatalog } from "../cloudformation-engine";
-import { CompetitionEngine } from "../competition-engine";
 import { type OrganizerProblemContent, organizerProblemContent } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { ExerciseFixture } from "./exercise-fixture";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 

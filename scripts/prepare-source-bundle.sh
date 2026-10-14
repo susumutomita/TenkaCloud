@@ -84,8 +84,8 @@ trap 'exit 143' TERM
 
 # Complete validation and local work before changing any remote resources.
 LIFECYCLE_JSON="$(bun --no-env-file run "${SCRIPT_DIR}/ops/print-source-bundle-lifecycle.ts" "${ENV}")"
-echo "[prepare-source-bundle] ensuring problems/ submodule is initialized..."
-(cd "${TENKACLOUD_ROOT}" && git submodule update --init --recursive problems)
+echo "[prepare-source-bundle] preparing the explicitly selected downloaded catalog..."
+(cd "${TENKACLOUD_ROOT}" && bun --no-env-file run catalog prepare)
 for app in application-admin-console participant-portal; do
   echo "[prepare-source-bundle] building apps/${app}..."
   (cd "${TENKACLOUD_ROOT}/apps/${app}" && bun --no-env-file run build)

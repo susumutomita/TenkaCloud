@@ -8,12 +8,12 @@ import type { SkillEvidenceInput } from "../../../apps/application-admin-console
 import { buildSkillEvidence } from "../../../apps/application-admin-console/src/lib/skill-evidence";
 import { apiRequest, HOST_KEY } from "../bench/state-setup";
 import { CloudFormationEngine, cloudFormationCatalog } from "../cloudformation-engine";
-import { CompetitionEngine } from "../competition-engine";
 import { DockerHostingEngine } from "../docker-engine";
 import type { Context, ScoreEvent } from "../model";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { FakeAws, fakeFlag } from "./fake-aws";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));

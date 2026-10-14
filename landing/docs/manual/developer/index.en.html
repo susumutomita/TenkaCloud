@@ -74,7 +74,7 @@ that all competitions have completed on the installed version. Published cloud-v
 installations require their matching release or a separate environment/database;
 this branch does not migrate their data automatically.</p>
 <h2>Prepare and run</h2>
-<pre><code class="language-sh">git submodule update --init --recursive
+<pre><code class="language-sh">make catalog-download catalog-prepare
 bun install --frozen-lockfile --ignore-scripts
 bun run build:host
 make local LOCAL_ARGS=&quot;--no-build&quot;

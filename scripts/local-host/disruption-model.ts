@@ -1,5 +1,6 @@
-import type { DisruptionDispatch, DisruptionFireRequest } from "@tenkacloud/problem-sdk/internal";
 import { z } from "zod";
+import type { DisruptionDispatch } from "../../packages/problem-sdk/src/disruption-dispatch.js";
+import type { DisruptionFireRequest } from "../../packages/problem-sdk/src/disruption-request.js";
 
 const dispatchSchema = z.object({
   kind: z.enum(["ssm-run-command", "lambda-invoke", "cfn-stack-update"]),

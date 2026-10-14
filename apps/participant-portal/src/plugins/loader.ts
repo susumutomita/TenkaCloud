@@ -53,7 +53,9 @@ const PLUGIN_ENTRY_BY_NEEDLE: ReadonlyMap<string, () => Promise<{ default: Porta
       const problemId = segments[segments.length - 3];
       /* v8 ignore next */
       if (!fileName || !problemId || portalSegment !== "portal") continue;
-      map.set(`${problemId}/portal/${fileName}`, loader);
+      const edition = /\/catalog-store\/snapshots\/([a-f0-9]{64})\//u.exec(key)?.[1];
+      const editionPath = edition ? `${edition}/` : "";
+      map.set(`${problemId}/portal/${editionPath}${fileName}`, loader);
     }
     return map;
   })();
@@ -98,7 +100,7 @@ export function loadPluginSlot(
   const slotPath = slots?.[slotName];
   if (!slotPath) return undefined;
 
-  const cacheKey = `${problemId}::${slotName}`;
+  const cacheKey = `${problemId}::${slotName}::${slotPath}`;
   const cached = slotComponentCache.get(cacheKey);
   if (cached) return cached;
 

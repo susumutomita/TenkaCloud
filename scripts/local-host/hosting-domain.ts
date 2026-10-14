@@ -19,7 +19,7 @@ import {
 } from "./auth";
 import { type ContainerLimits, DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { LocalCoordination } from "./coordination";
-import { assertCoordinationRoster } from "./coordination-runtime";
+import { assertCoordinationRoster } from "./coordination-roster";
 import { LocalDisruptions } from "./disruptions";
 import type { DockerDefinition } from "./docker-catalog";
 import {

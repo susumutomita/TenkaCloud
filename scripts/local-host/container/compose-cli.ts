@@ -52,7 +52,9 @@ function requestedComposeCli(value: string | undefined): ComposeCli | undefined 
 }
 
 export function resolveComposeCli(
-  env: Pick<NodeJS.ProcessEnv, "TENKACLOUD_COMPOSE_CLI"> = process.env,
+  env: Partial<Pick<NodeJS.ProcessEnv, "TENKACLOUD_COMPOSE_CLI">> = {
+    TENKACLOUD_COMPOSE_CLI: process.env.TENKACLOUD_COMPOSE_CLI,
+  },
   succeeds: CommandSucceeds = commandSucceeds,
 ): ComposeCli {
   const requested = requestedComposeCli(env.TENKACLOUD_COMPOSE_CLI);

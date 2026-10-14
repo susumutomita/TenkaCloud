@@ -2,6 +2,7 @@ import react from "@vitejs/plugin-react-swc";
 import { createLogger, defineConfig } from "vite";
 import { pluginVersionsPlugin } from "./build/plugin-versions";
 import { problemCatalogPlugin } from "./build/problem-catalog";
+import { retainedCatalogPlugins } from "./build/retained-catalog-plugins";
 import { stripProblemWriteupsPlugin } from "./build/strip-problem-writeups";
 
 // 他 app と同じく Vite 7 の vite:react-swc deprecation warning を抑制する。
@@ -13,7 +14,13 @@ logger.warn = (msg, opts) => {
 };
 
 export default defineConfig({
-  plugins: [stripProblemWriteupsPlugin(), problemCatalogPlugin(), react(), pluginVersionsPlugin()],
+  plugins: [
+    stripProblemWriteupsPlugin(),
+    problemCatalogPlugin(),
+    retainedCatalogPlugins(),
+    react(),
+    pluginVersionsPlugin(),
+  ],
   customLogger: logger,
   // admin-console (5173) / application-admin-console (5174) と並走できるよう別ポート。
   server: {

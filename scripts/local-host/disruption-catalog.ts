@@ -1,11 +1,13 @@
+import { z } from "zod";
 import {
   buildDisruptionDispatch,
   buildRevertDispatch,
+} from "../../packages/problem-sdk/src/disruption-dispatch.js";
+import {
   type ProblemDisruptionEntry,
   parseDisruptionEntry,
   parsePhaseEntry,
-} from "@tenkacloud/problem-sdk/internal";
-import { z } from "zod";
+} from "../../packages/problem-sdk/src/metadata-parser.js";
 import { compareCodePoints } from "../lib/code-point-order";
 import type { DisruptionTarget } from "./disruption-model";
 import { HostError, type Job, type Problem, type Team } from "./model";

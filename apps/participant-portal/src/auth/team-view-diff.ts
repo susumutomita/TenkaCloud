@@ -12,6 +12,7 @@ export function viewIsUnchanged(
   next: ParticipantTeamView,
 ): boolean {
   if (!prev) return false;
+  if (JSON.stringify(prev.problemCatalog) !== JSON.stringify(next.problemCatalog)) return false;
   if (prev.team.teamName !== next.team.teamName) return false;
   // Starting or rescheduling an event need not change a deployment or score.
   // Both manual refresh and polling must apply the server-authoritative gate.

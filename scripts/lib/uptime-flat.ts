@@ -1,8 +1,11 @@
+import {
+  type ProblemEndpointSlot,
+  resolveDefaultUrl,
+} from "../../packages/problem-sdk/src/endpoints-metadata.js";
 import type {
   UptimeFlatEndpoint,
   UptimeFlatScoringMetadata,
-} from "@tenkacloud/problem-sdk/internal";
-import { type ProblemEndpointSlot, resolveDefaultUrl } from "@tenkacloud/problem-sdk/internal";
+} from "../../packages/problem-sdk/src/scoring-metadata.js";
 import { parseStackOutputs } from "./cfn-outputs.js";
 import { computeSince, type EndpointHealth, parseEndpointsHealth } from "./endpoints-health.js";
 import { probeUrl } from "./http-probe-client.js";

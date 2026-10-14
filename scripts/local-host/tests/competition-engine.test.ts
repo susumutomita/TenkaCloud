@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CompetitionEngine } from "../competition-engine";
 import { DockerHostingEngine } from "../docker-engine";
 import type { Context, EngineResult, ScoreEvent } from "../model";
+import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
 // The HTTP suite uses the real Battle plugin; this isolates the existing SQL
 // scorer boundary, without claiming a live Docker deployment.

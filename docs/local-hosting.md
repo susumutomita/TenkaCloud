@@ -202,7 +202,7 @@ Use macOS or Linux, including WSL2. Native Windows is not supported by this entr
 point. From the repository root:
 
 ```sh
-git submodule update --init --recursive
+make catalog-download catalog-prepare
 bun install --frozen-lockfile --ignore-scripts
 make local      # foreground console; keep this terminal open
 # In a second terminal, with the same --data option if one was used:
@@ -422,61 +422,19 @@ bun run build:host
 
 ## Update the problem catalog
 
-Source updates and running-host updates are separate. `make submodule-latest`
-fetches the tracked branch of `problems/` and stages a fast-forward Git pin for review.
-It does not rebuild the browser interfaces, reload a running process, or change
-saved event definitions. Use it between events, before creating the next event.
-
-`submodule-latest` follows the configured `main` branch, unless overridden in
-the submodule settings. Its tip can be older than an ahead-of-main trial pin.
-Keep that reviewed pin until the tracked branch contains its commits. The updater rejects
-older or divergent targets before checkout or staging, including squash-equivalent
-history. A deliberate switch to divergent history requires a separately reviewed
-pin selection; this command has no force option.
-
-The updater requires an initialized catalog and refuses staged, unstaged or
-untracked problem-source changes, or a checkout that differs from the staged pin.
-It does not stash or discard work. Unrelated platform files and staged changes
-are preserved. Fetch failure or unknown ancestry also stops the update; a failed
-guard leaves source files and the index unchanged, although fetched Git objects
-and remote refs may have advanced.
-
-Local events copy their selected problem definitions when they are created.
-Docker definitions also pin the original source directory and every source-file
-hash. Replacing those files can block an existing job's start, recovery or resume,
-even after a normal stop/restart. Stopping retains data; it does not make a catalog
-replacement safe for an event you still need to resume. Keep its original checkout
-and data directory intact and use a separate clone for the next catalog revision
-when old and new events must coexist. A different `--data` directory alone does
-not preserve the old problem source files.
-
-For an installation whose previous events no longer need their original sources:
+Select repositories explicitly and acquire their fixed commits before rebuilding:
 
 ```sh
-# Use the same LOCAL_ARGS (especially --data) as the running host.
 make down
-git -C problems rev-parse HEAD # record the old catalog commit
-make submodule-latest
-git diff --cached --submodule=log -- problems
+make catalog-download CATALOG_SOURCES=my-catalogs.json
 make validate-problems
-make local                    # rebuild both interfaces and load the catalog
+make local
 ```
 
-If you deliberately checked out another problem commit, stage it with
-`git add problems` before validation and skip `make submodule-latest`.
-`make validate-problems` initializes/aligns the submodule to its staged pin;
-it must not be used to select a newer commit. Review local content edits with
-`git -C problems diff` as well. The validator installs the catalog's locked
-dependencies with lifecycle scripts disabled and checks schemas and both READMEs.
-
-Do not pass `--no-build` after replacing catalog content unless you have already
-run `bun run build:host` against that exact content. `make build` also includes
-the host build, but builds the other workspaces too. Building alone does not
-reload the server's in-memory catalog; restart with `make local`, then reload the
-browser and create a new test event. Check the problem statement, verifier and
-score before admitting participants. Existing events retain their saved definitions;
-they are not upgraded to the new catalog by these commands. No AWS deployment is
-needed for this local workflow.
+See [downloaded catalog contracts](./problem-catalogs.md) for multiple packs,
+immutable event editions and migration of an old submodule checkout. Downloading
+does not execute problem code or update a running host. Retain the snapshot store
+and event data when updating; `--no-build` requires matching built interfaces.
 
 ## Participants on another computer
 
