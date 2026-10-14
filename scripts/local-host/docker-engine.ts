@@ -1288,8 +1288,17 @@ export class DockerHostingEngine implements RuntimeEngine {
     if (!started) throw new HostError(409, "Problem environment has not been recovered.");
     return this.surfaceFrom(started);
   }
-  private async state(context: Context) {
-    for (const job of context.jobs) this.assertRunningGuard(job);
+  private async state(context: Context, targetProblemId?: string) {
+    const admitted = new Set<string>();
+    for (const job of context.jobs) {
+      try {
+        this.assertRunningGuard(job);
+        admitted.add(job.jobId);
+      } catch (error) {
+        // Keep the full progress snapshot while withholding only the revoked runtime.
+        if (job.problemId === targetProblemId || !(error instanceof HostError)) throw error;
+      }
+    }
     const problems = context.event.problems.map(
       (problem) => (JSON.parse(problem.definition) as Definition).problem,
     );
@@ -1319,7 +1328,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     if (context.team.snapshot)
       restoreLocalPlayState(state, parseLocalPlaySnapshot(context.team.snapshot));
     for (const job of context.jobs) {
-      if (job.status === "COMPLETE" && this.running.has(job.jobId))
+      if (admitted.has(job.jobId) && job.status === "COMPLETE" && this.running.has(job.jobId))
         await state.lifecycle.ensureRunning(job.problemId);
     }
     return state;
@@ -1356,7 +1365,10 @@ export class DockerHostingEngine implements RuntimeEngine {
     };
   }
   async submit(context: Context, body: Record<string, unknown>): Promise<EngineResult> {
-    const state = await this.state(context);
+    const state = await this.state(
+      context,
+      typeof body.problemId === "string" ? body.problemId : undefined,
+    );
     const response = await submitFlag(
       {
         method: "POST",
@@ -1384,7 +1396,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     return verdict.correct;
   }
   async hint(context: Context, problemId: string, hintId: string): Promise<EngineResult> {
-    const state = await this.state(context);
+    const state = await this.state(context, problemId);
     const response = revealContainerHint(
       problemId,
       hintId,

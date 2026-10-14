@@ -70,7 +70,11 @@ export function networkEngineFixture() {
     problems: [problem],
   });
   const reservations: string[] = [];
-  const add = (name: string, publications = 0) => {
+  const add = (name: string, publications = 0, catalogIndex = 0) => {
+    const problem = requiredNetworkValue(engine.catalog()[catalogIndex]);
+    const event = store.event("event");
+    if (!event.problems.some((entry) => entry.problemId === problem.problemId))
+      store.putEvent({ ...event, problems: [...event.problems, problem] });
     store.putTeam({
       teamId: name,
       eventId: "event",
