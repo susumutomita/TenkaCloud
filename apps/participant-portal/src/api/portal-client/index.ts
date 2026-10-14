@@ -26,6 +26,7 @@ export * from "./errors";
 export * from "./host-container";
 export * from "./leaderboard";
 export * from "./lifecycle";
+export * from "./network";
 export * from "./notifications";
 export * from "./problems";
 export * from "./scoring";

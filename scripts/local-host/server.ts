@@ -74,8 +74,12 @@ export async function startLocalHost(
   let uptimeTick: Promise<void> | undefined;
   let disruptionTimer: ReturnType<typeof setInterval> | undefined;
   let disruptionTick: Promise<void> | undefined;
+  let networkTimer: ReturnType<typeof setInterval> | undefined;
+  let networkTick: Promise<void> | undefined;
   async function stop(options: { stopLocalEnvironments?: boolean } = {}): Promise<void> {
     const unstoppedLocal: string[] = [];
+    if (networkTimer) clearInterval(networkTimer);
+    networkTimer = undefined;
     if (uptimeTimer) clearInterval(uptimeTimer);
     uptimeTimer = undefined;
     if (disruptionTimer) clearInterval(disruptionTimer);
@@ -84,6 +88,7 @@ export async function startLocalHost(
     // snapshot would otherwise keep writing SQLite/Docker state past store.close().
     await Promise.all([admin?.close(), participant?.close()]);
     await disruptionTick;
+    await networkTick;
     admin = undefined;
     participant = undefined;
     await uptimeTick;
@@ -132,6 +137,18 @@ export async function startLocalHost(
     service.assertGatewayRange(settings.gatewayPorts);
     await service.recover();
     const runningService = service;
+    if (engine.auditNetworks)
+      networkTimer = setInterval(() => {
+        if (networkTick) return;
+        networkTick = engine
+          .auditNetworks?.()
+          .catch(() =>
+            announce("Competition network auditing failed; verify retained workload shutdown."),
+          )
+          .finally(() => {
+            networkTick = undefined;
+          });
+      }, 10_000);
     disruptionTimer = setInterval(() => {
       if (disruptionTick) return;
       disruptionTick = runningService.disruptions

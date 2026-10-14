@@ -1,0 +1,312 @@
+{
+  "scope": "Kernel component canaries inside authorized ephemeral privileged network:none lab; not bounded production engine or six authenticated sessions",
+  "date": "2026-10-14",
+  "sourceSha256": {
+    "scripts/local-host/linux-network-guard.ts": "2d5ce8fdce5735d1ee8d6a4ac5054a9447d67804448b4072d97dbc09d70544e9",
+    "scripts/local-host/local-network.ts": "9e3c3c0ee3675fcf345a57a9b24b9329e60ab26d56f5475207823535121bbb01",
+    "scripts/local-host/network-audit.ts": "d213fe6ae3e69e03bbebc8bffd72bac4713279410a72438f88ffa3a887383909",
+    "scripts/local-host/network-audit-worker.ts": "091d529b5c2f30ee04682b851f837bcb6be7df2a6df08f40b33a60cf694f5e0e"
+  },
+  "fixtures": {
+    "ownedPlans": 6,
+    "servicesPerPlan": ["web", "db", "terminal"],
+    "image": "alpine:3.22",
+    "productionResourceLimitsRemoved": false,
+    "note": "Unbounded nc/sleep kernel fixtures only; bounded production smoke still failed in nested cgroup v2"
+  },
+  "probes": [
+    {
+      "probe": "live-host-listener-control",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "own-db-0-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-0-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-0-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-0-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-1-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-1-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-1-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-1-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-2-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-2-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-2-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-2-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-3-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-3-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-3-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-3-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-4-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-4-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-4-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-4-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-5-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-5-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-db-5-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-peer-5-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "host-origin-valid-reply-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "host-origin-valid-reply-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "published-peer-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-db-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "host-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "published-peer-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "private-db-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "host-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "protected-gateway-dnat-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-web-control-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "protected-gateway-dnat-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "own-web-control-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "root-route-private-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "root-route-private-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "withdrawn-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "withdrawn-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "before-quarantine-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "before-quarantine-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "quarantined-own-db-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "quarantined-own-db-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "install-retains-quarantine-false",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "install-retains-quarantine-true",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "recovered-own-db-false",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "recovered-own-db-true",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "daemon-outage-before-0",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "daemon-outage-before-1",
+      "reachable": true,
+      "expected": true
+    },
+    {
+      "probe": "daemon-outage-quarantined-0",
+      "reachable": false,
+      "expected": false
+    },
+    {
+      "probe": "daemon-outage-quarantined-1",
+      "reachable": false,
+      "expected": false
+    }
+  ],
+  "result": "passed",
+  "cleanup": "OWNED_KERNEL_FIXTURES_CLEANED",
+  "notCovered": [
+    "embedded DNS proxy canary",
+    "raw packet or MAC spoofing",
+    "fragmentation",
+    "external egress exception",
+    "bounded production lifecycle",
+    "six authenticated terminal sessions",
+    "physical scoring regression",
+    "real LAN or Internet",
+    "container escape"
+  ],
+  "passedCanaries": 53,
+  "additionalChecks": [
+    "Not-yet-created owned bridge quarantine and final teardown verified",
+    "Broken IPv4 FORWARD\u2192DOCKER-USER admission hook rejected",
+    "Direct IPv4/IPv6 FORWARD quarantine denied live own DB traffic despite preceding ACCEPT",
+    "Ordinary guard install retained live quarantine in both families",
+    "Running workload recovery rejected and quarantine retained",
+    "Stopped workload recovery verified and live own DB traffic restored in both families",
+    "Final removal read back both families and found no owned quarantine hooks",
+    "Owned kernel fixtures cleaned before outer lab removal",
+    "Six native worker audits completed while controller event loop remained responsive",
+    "Owned inner Docker daemon SIGSTOP did not prevent asynchronous IPv4/IPv6 quarantine",
+    "Native worker stopOwned and resetStopped completed after daemon recovery",
+    "Retained quarantine refused synchronous recovery admission and native asynchronous audit proof; only confirmed stopped reset released it"
+  ]
+}

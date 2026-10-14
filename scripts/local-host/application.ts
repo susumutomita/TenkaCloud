@@ -79,7 +79,7 @@ export async function runLocalHost(
   const options = parseOptions(args, root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. AWS service problems are available only with cloud hosting.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
+      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. AWS service problems are available only with cloud hosting.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
     );
     return;
   }
@@ -101,6 +101,7 @@ export async function runLocalHost(
         undefined,
         options.dockerNetworkPool,
         options.submissionCatalogPath,
+        options.competitionNetwork,
       ),
   );
   try {

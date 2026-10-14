@@ -19,6 +19,7 @@ import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
 import { type LocaleCode, useLang, useT } from "../i18n";
 import { describeAgo, type SupportedLang } from "../lib/format";
 import { AttackProbesPanel } from "./AttackProbesPanel";
+import { CompetitionNetworkPanel } from "./CompetitionNetworkPanel";
 import { ContainerWorkbenchPanel } from "./ContainerWorkbenchPanel";
 import { HostContainerControls } from "./HostContainerControls";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
@@ -452,6 +453,12 @@ export function ProblemPanel({
             (stale な) endpoint と提出 UI を隠し、 上の start control に差し替える。 */}
         {playable && (
           <>
+            <CompetitionNetworkPanel
+              enabled={problem.competitionNetwork === true}
+              problemId={problem.problemId}
+              apiBaseUrl={apiBaseUrl}
+              sessionToken={sessionToken}
+            />
             <ContainerTerminal
               problem={problem}
               apiBaseUrl={apiBaseUrl}

@@ -208,6 +208,10 @@ export function isComposeUnitRunning(unit: LocalComposeUnit, deps: ComposePsDeps
     unit.projectDirectory,
   );
   const env = composeInterpolationEnv(unit.secretEnv);
+  if (unit.isolationVersion === 1) {
+    env.DOCKER_HOST = "unix:///var/run/docker.sock";
+    env.DOCKER_CONTEXT = "";
+  }
   const result = deps.run
     ? deps.run(cli.command, args, env)
     : spawnSync(cli.command, args, {

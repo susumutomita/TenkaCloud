@@ -40,8 +40,19 @@ import {
   type NetworkSubnets,
   occupiedDockerSubnets,
 } from "./docker-networks";
+import { LinuxNetworkGuard, type LocalNetworkGuard } from "./linux-network-guard";
+import {
+  assertNoNetworkOverlap,
+  isolatedCompose,
+  type LocalNetworkPlan,
+  localNetworkPlan,
+  requiredNetworkValue,
+  retainedPublicPlan,
+  sharedNetworkPlan,
+} from "./local-network";
 import {
   type Context,
+  definitionKind,
   type EngineResult,
   HostError,
   type Job,
@@ -49,6 +60,7 @@ import {
   type Problem,
   type RuntimeEngine,
 } from "./model";
+import { assertPublicServiceSeparation, type NetworkPublicationView } from "./network-publication";
 import { prepareRuntimeDirectory, removeRuntimeFiles } from "./runtime-directory";
 import { type RuntimePorts, remapRuntimeComposePorts } from "./runtime-ports";
 
@@ -103,7 +115,10 @@ async function compose(
   const args = composeCommandArgs(cli, unit, action);
   await new Promise<void>((accept, reject) => {
     const child = spawn(cli.command, args, {
-      env: environment,
+      env:
+        unit.isolationVersion === 1
+          ? { ...environment, DOCKER_HOST: "unix:///var/run/docker.sock", DOCKER_CONTEXT: "" }
+          : environment,
       stdio: ["ignore", "ignore", "pipe"],
     });
     let tail = "";
@@ -160,10 +175,39 @@ export class DockerHostingEngine implements RuntimeEngine {
   private readonly problems: Problem[];
   private readonly running = new Map<string, StartedContainer>();
   private readonly networkReservations = new Map<string, readonly string[]>();
+  private networkState?: Parameters<NonNullable<RuntimeEngine["bindNetworkState"]>>[0];
+  private publicMutation: Promise<void> = Promise.resolve();
+  private readonly guardProofs = new Map<
+    string,
+    { unit: LocalComposeUnit; verifiedAt: number; attemptedAt: number }
+  >();
+  private readonly guardAudits = new Map<string, Promise<void>>();
+  private readonly guardRevocations = new Set<Promise<void>>();
+  private readonly pendingHalts = new Map<string, Promise<never>>();
+  private readonly unconfirmedHalts = new Map<string, { job: Job; unit: LocalComposeUnit }>();
+  private policyEpoch = 0;
+  private applyingPublications = false;
+  bindNetworkState(state: NonNullable<DockerHostingEngine["networkState"]>): void {
+    this.networkState = state;
+  }
+  private isolationRequired(job: Job): boolean {
+    assertNetworkRequirement(job);
+    return this.competitionNetwork || job.networkIsolationVersion === 1;
+  }
+  networkRequirement(definition: string): 1 | undefined {
+    return this.competitionNetwork && definitionKind(definition) === "compose" ? 1 : undefined;
+  }
+  networkSupported(job: Job): boolean {
+    return Boolean(this.running.get(job.jobId)?.unit.isolationVersion === 1);
+  }
   constructor(
     repositoryRoot: string,
     private readonly dataDirectory: string,
     private readonly networkPool?: string,
+    private readonly competitionNetwork = false,
+    private readonly networkGuard: LocalNetworkGuard = new LinuxNetworkGuard(),
+    private readonly runCompose: typeof compose = compose,
+    private readonly guardNow: () => number = Date.now,
   ) {
     this.problems = loadDockerCatalog(repositoryRoot);
   }
@@ -190,12 +234,20 @@ export class DockerHostingEngine implements RuntimeEngine {
       problemDir: problem.problemDir,
       composePath: problem.composePath,
     });
+    assertPublicServiceSeparation(original, source);
     const remapped = remapRuntimeComposePorts(source, job.offset, job.runtimePorts);
     let plannedCompose = job.runtimePorts ? boundedCompose(remapped.text).text : remapped.text;
     const networkSubnets =
       newSubnets ??
       (job.unit ? (JSON.parse(job.unit) as LocalComposeUnit).networkSubnets : undefined);
-    if (networkSubnets) plannedCompose = applyNetworkSubnets(plannedCompose, networkSubnets);
+    const recorded = job.unit ? (JSON.parse(job.unit) as LocalComposeUnit) : undefined;
+    assertNetworkRequirement(job);
+    const isolated = recorded?.isolationVersion === 1 || (!recorded && this.isolationRequired(job));
+    const networkPlan = isolated
+      ? this.networkPlan(job, problem.composeProjectName, networkSubnets)
+      : undefined;
+    if (networkPlan) plannedCompose = isolatedCompose(plannedCompose, networkPlan);
+    else if (networkSubnets) plannedCompose = applyNetworkSubnets(plannedCompose, networkSubnets);
     const directory = prepareRuntimeDirectory(this.dataDirectory, job.jobId, claimNewDirectory);
     const composePath = join(directory, `${problem.composeProjectName}.compose.yml`);
     const unit: LocalComposeUnit = {
@@ -207,6 +259,13 @@ export class DockerHostingEngine implements RuntimeEngine {
       projectDirectory: dirname(problem.composePath),
       remappedComposePath: composePath,
       ...(networkSubnets ? { networkSubnets } : {}),
+      ...(networkPlan ? { isolationVersion: 1, isolationGeneration: networkPlan.generation } : {}),
+      ...(recorded?.publishedServiceIds
+        ? { publishedServiceIds: this.publicServiceIds(job, recorded) }
+        : {}),
+      ...(recorded?.publicNetworkRoutes
+        ? { publicNetworkRoutes: requiredNetworkValue(this.guardPlan(job, recorded)).publicRoutes }
+        : {}),
     };
     return {
       started: { unit, problem: remapContainerProblem(problem, remapped.portMap) },
@@ -214,11 +273,22 @@ export class DockerHostingEngine implements RuntimeEngine {
       directory,
     };
   }
+  private assertAllocationRequirements(job: Job): void {
+    if (this.isolationRequired(job)) job.networkIsolationVersion = 1;
+    if (this.isolationRequired(job) && (!this.networkPool || !job.runtimePorts))
+      throw new Error(
+        "Competition networking requires an explicit non-overlapping --docker-network-pool and durable runtime ports.",
+      );
+  }
   private allocateNetworks(job: Job): NetworkSubnets | undefined {
+    this.assertAllocationRequirements(job);
     if (!this.networkPool || !job.runtimePorts) return undefined;
     try {
       return allocateNetworkSubnets(definitionOf(job, true).composeText, this.networkPool, [
         ...occupiedDockerSubnets(),
+        ...(this.isolationRequired(job)
+          ? this.networkGuard.occupiedRoutes().filter((cidr) => !cidr.includes(":"))
+          : []),
         ...[...this.networkReservations.values()].flat(),
       ]);
     } catch (cause) {
@@ -228,47 +298,117 @@ export class DockerHostingEngine implements RuntimeEngine {
     }
   }
   async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
+    await this.awaitGuardHalt(job);
+    this.revokeRunning(job.jobId);
+    this.assertAllocationRequirements(job);
     // Readiness of the CLI is checked on deploy, never on host startup.
     resolveComposeCli();
     if (job.unit) throw new Error("A retained environment must be resumed, never recreated.");
+    if (this.isolationRequired(job)) this.networkGuard.preflight();
     const networkSubnets = this.allocateNetworks(job);
     const plan = this.plan(job, true, networkSubnets, true);
-    if (networkSubnets) this.networkReservations.set(job.jobId, Object.values(networkSubnets));
     const unit = plan.started.unit;
+    const guarded = this.guardPlan(job, unit);
+    try {
+      if (guarded) assertNoNetworkOverlap(guarded, this.networkGuard.occupiedRoutes());
+    } catch (error) {
+      removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
+      throw error;
+    }
+    if (networkSubnets) this.networkReservations.set(job.jobId, Object.values(networkSubnets));
     writeFileSync(unit.composePath, plan.composeText, { mode: 0o600 });
     retain(JSON.stringify(unit));
     const generated = generateSecretEnv(plan.directory, job.problemId, unit.secretEnv);
     try {
-      await compose(unit, "up", { ...process.env, ...generated });
+      if (guarded) this.networkGuard.install(guarded);
+      await this.runCompose(unit, "up", { ...process.env, ...generated });
+      if (guarded) this.networkGuard.verifyNetworks(guarded);
       await ready(plan.started.problem.verifyUrl);
       await this.readySurfaces(plan.started);
-      this.running.set(job.jobId, plan.started);
-    } catch (error) {
-      try {
-        await compose(unit, "down", { ...process.env, ...generated });
-        removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
-        retain(null);
-        this.networkReservations.delete(job.jobId);
-      } catch (cleanup) {
-        throw startupCleanupFailure(error, cleanup);
+      if (guarded) this.networkGuard.verifyNetworks(guarded);
+      this.admitRunning(job, plan.started);
+      if (guarded && this.networkState) {
+        await this.reconcilePublications(job.eventId);
+        retain(JSON.stringify(requiredNetworkValue(this.running.get(job.jobId)).unit));
       }
-      throw error;
+    } catch (error) {
+      return this.cleanupFailedStart(
+        job,
+        { unit, guarded, environment: { ...process.env, ...generated }, retain },
+        error,
+      );
     }
   }
-  async recover(job: Job): Promise<void> {
-    const plan = this.plan(job);
-    const unit = this.validatedUnit(job, plan.started.unit);
-    if (unit.networkSubnets)
-      this.networkReservations.set(job.jobId, Object.values(unit.networkSubnets));
-    if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
-      throw new Error("Recorded runtime composition changed; refusing to adopt it.");
-    if (!isComposeUnitRunning(unit))
-      throw new Error(
-        "The recorded problem environment is not running. Retry deployment from the host console.",
+  private async cleanupFailedStart(
+    job: Job,
+    owned: {
+      unit: LocalComposeUnit;
+      guarded: LocalNetworkPlan | undefined;
+      environment: NodeJS.ProcessEnv;
+      retain: (unit: string | null) => void;
+    },
+    error: unknown,
+  ): Promise<never> {
+    this.revokeRunning(job.jobId);
+    const failures: unknown[] = [error];
+    if (owned.guarded) {
+      try {
+        await this.quarantinePlan(owned.guarded);
+      } catch (quarantineError) {
+        failures.push(quarantineError);
+      }
+    }
+    try {
+      await this.runCompose(owned.unit, "down", owned.environment);
+      if (owned.guarded) this.networkGuard.remove(owned.guarded);
+      removeRuntimeFiles(this.dataDirectory, job.jobId, owned.unit.composePath);
+      owned.retain(null);
+      this.networkReservations.delete(job.jobId);
+    } catch (cleanup) {
+      throw startupCleanupFailure(
+        error,
+        failures.length > 1
+          ? new AggregateError(
+              [...failures.slice(1), cleanup],
+              "Quarantine or teardown could not be confirmed.",
+            )
+          : cleanup,
       );
-    await ready(plan.started.problem.verifyUrl);
-    await this.readySurfaces(plan.started);
-    this.running.set(job.jobId, plan.started);
+    }
+    if (failures.length > 1)
+      throw new AggregateError(
+        failures,
+        "Startup failed; cleanup completed after a quarantine error.",
+      );
+    throw error;
+  }
+
+  async recover(job: Job): Promise<void> {
+    await this.awaitGuardHalt(job);
+    this.revokeRunning(job.jobId);
+    const recorded = this.recordedUnit(job);
+    this.revokeRunning(job.jobId);
+    try {
+      const plan = this.plan(job);
+      const unit = this.validatedUnit(job, plan.started.unit);
+      if (unit.networkSubnets)
+        this.networkReservations.set(job.jobId, Object.values(unit.networkSubnets));
+      if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
+        throw new Error("Recorded runtime composition changed; refusing to adopt it.");
+      await this.assertGuardedAdmission(job, unit);
+      if (!isComposeUnitRunning(unit))
+        throw new Error(
+          "The recorded problem environment is not running. Retry deployment from the host console.",
+        );
+      await ready(plan.started.problem.verifyUrl);
+      await this.readySurfaces(plan.started);
+      const guarded = this.guardPlan(job, unit);
+      if (guarded) this.networkGuard.verifyNetworks(guarded);
+      this.admitRunning(job, plan.started);
+    } catch (error) {
+      if (recorded.isolationVersion === 1) return this.haltGuardedUnit(job, recorded, error);
+      throw error;
+    }
   }
   private validatedUnit(job: Job, expected: LocalComposeUnit): LocalComposeUnit {
     if (!job.unit) throw new Error("Missing durable runtime ownership.");
@@ -280,6 +420,8 @@ export class DockerHostingEngine implements RuntimeEngine {
       "composeProjectName",
       "projectDirectory",
       "remappedComposePath",
+      "isolationVersion",
+      "isolationGeneration",
     ] as const) {
       if (unit[key] !== expected[key])
         throw new Error("Runtime ownership does not match this team/problem.");
@@ -289,59 +431,643 @@ export class DockerHostingEngine implements RuntimeEngine {
     return unit;
   }
   async stop(job: Job): Promise<void> {
-    // Cleanup must remain possible after a catalog update. The private persisted
-    // compose text is the original creation plan, not the new checkout's file.
-    const plan = this.plan(job, false, undefined, true);
-    const unit = this.validatedUnit(job, plan.started.unit);
-    // Reconstruct only a missing file from the private pinned plan. A different
-    // existing file is a conflict, never something we execute or overwrite.
-    if (!existsSync(unit.composePath))
-      writeFileSync(unit.composePath, plan.composeText, { flag: "wx", mode: 0o600 });
-    if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
-      throw new Error("Recorded runtime composition changed; refusing unsafe cleanup.");
-    // Compose down still interpolates variables, but does not need the original
-    // secret. Cleanup must work even if a deployment's private seed file is lost.
-    const cleanupEnvironment = Object.fromEntries(
-      unit.secretEnv.map((name) => [name, "tenkacloud-host-cleanup"]),
-    );
-    await compose(unit, "down", { ...process.env, ...cleanupEnvironment });
-    this.running.delete(job.jobId);
-    this.networkReservations.delete(job.jobId);
-    removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
+    await this.awaitGuardHalt(job);
+    this.revokeRunning(job.jobId);
+    const recorded = this.recordedUnit(job);
+    this.revokeRunning(job.jobId);
+    try {
+      // Cleanup must remain possible after a catalog update. The private persisted
+      // compose text is the original creation plan, not the new checkout's file.
+      const plan = this.plan(job, false, undefined, true);
+      const unit = this.validatedUnit(job, plan.started.unit);
+      if (unit.isolationVersion === 1) await this.withdrawRuntimePublications(job);
+      // Reconstruct only a missing file from the private pinned plan. A different
+      // existing file is a conflict, never something we execute or overwrite.
+      if (!existsSync(unit.composePath))
+        writeFileSync(unit.composePath, plan.composeText, { flag: "wx", mode: 0o600 });
+      if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
+        throw new Error("Recorded runtime composition changed; refusing unsafe cleanup.");
+      // Compose down still interpolates variables, but does not need the original
+      // secret. Cleanup must work even if a deployment's private seed file is lost.
+      const cleanupEnvironment = Object.fromEntries(
+        unit.secretEnv.map((name) => [name, "tenkacloud-host-cleanup"]),
+      );
+      await this.runCompose(unit, "down", { ...process.env, ...cleanupEnvironment });
+      const guarded = this.guardPlan(job, unit);
+      if (guarded) this.networkGuard.remove(guarded);
+      this.revokeRunning(job.jobId);
+      this.networkReservations.delete(job.jobId);
+      removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
+    } catch (error) {
+      if (recorded.isolationVersion === 1) return this.haltGuardedUnit(job, recorded, error);
+      throw error;
+    }
   }
   /** Validated, unchanged private plan of an owned environment. */
-  private ownedUnit(
+  private async ownedUnit(
     job: Job,
     verifySources: boolean,
-  ): { unit: LocalComposeUnit; directory: string } {
-    const plan = this.plan(job, verifySources);
-    const unit = this.validatedUnit(job, plan.started.unit);
-    if (
-      !existsSync(unit.composePath) ||
-      readFileSync(unit.composePath, "utf8") !== plan.composeText
-    )
-      throw new Error(
-        "Recorded runtime composition changed or is missing; refusing to operate it.",
-      );
-    return { unit, directory: plan.directory };
+  ): Promise<{ unit: LocalComposeUnit; directory: string }> {
+    const recorded = this.recordedUnit(job);
+    try {
+      const plan = this.plan(job, verifySources);
+      const unit = this.validatedUnit(job, plan.started.unit);
+      if (
+        !existsSync(unit.composePath) ||
+        readFileSync(unit.composePath, "utf8") !== plan.composeText
+      )
+        throw new Error(
+          "Recorded runtime composition changed or is missing; refusing to operate it.",
+        );
+      return { unit, directory: plan.directory };
+    } catch (error) {
+      if (recorded.isolationVersion === 1) return this.haltGuardedUnit(job, recorded, error);
+      throw error;
+    }
+  }
+  private recordedUnit(job: Job): LocalComposeUnit {
+    const unit =
+      this.running.get(job.jobId)?.unit ??
+      (JSON.parse(requiredNetworkValue(job.unit)) as LocalComposeUnit);
+    if (unit.composeProjectName !== `tch-${job.jobId.toLowerCase()}`)
+      throw new Error("Retained runtime project does not match the job.");
+    return unit;
   }
   async pause(job: Job): Promise<void> {
-    const { unit } = this.ownedUnit(job, false);
+    await this.awaitGuardHalt(job);
+    this.revokeRunning(job.jobId);
+    const { unit } = await this.ownedUnit(job, false);
+    if (unit.isolationVersion === 1) await this.withdrawRuntimePublications(job);
     // `compose stop` never recreates containers; interpolation needs names, not the secrets.
     const placeholders = Object.fromEntries(
       unit.secretEnv.map((name) => [name, "tenkacloud-host-stop"]),
     );
-    this.running.delete(job.jobId);
-    await compose(unit, "stop", { ...process.env, ...placeholders });
+    this.revokeRunning(job.jobId);
+    await this.runCompose(unit, "stop", { ...process.env, ...placeholders });
   }
   async resume(job: Job): Promise<void> {
+    await this.awaitGuardHalt(job);
+    this.revokeRunning(job.jobId);
+    const { unit, directory } = await this.ownedUnit(job, true);
     const plan = this.plan(job);
-    const { unit, directory } = this.ownedUnit(job, true);
+    await this.assertGuardedAdmission(job, unit);
     const generated = generateSecretEnv(directory, job.problemId, unit.secretEnv);
-    await compose(unit, "restart", { ...process.env, ...generated });
-    await ready(plan.started.problem.verifyUrl);
-    await this.readySurfaces(plan.started);
-    this.running.set(job.jobId, plan.started);
+    try {
+      await this.runCompose(unit, "restart", { ...process.env, ...generated });
+      const guarded = this.guardPlan(job, unit);
+      if (guarded) this.networkGuard.verifyNetworks(guarded);
+      await ready(plan.started.problem.verifyUrl);
+      await this.readySurfaces(plan.started);
+      this.admitRunning(job, plan.started);
+      if (guarded && this.networkState) {
+        await this.reconcilePublications(job.eventId);
+        job.unit = JSON.stringify(requiredNetworkValue(this.running.get(job.jobId)).unit);
+      }
+    } catch (error) {
+      this.revokeRunning(job.jobId);
+      if (unit.isolationVersion === 1) await this.haltGuardedUnit(job, unit, error);
+      throw error;
+    }
+  }
+  private networkPlan(
+    job: Job,
+    project: string,
+    subnets: NetworkSubnets | undefined,
+  ): LocalNetworkPlan {
+    if (!subnets) throw new Error("An isolated runtime must retain its exact network allocation.");
+    return localNetworkPlan(project, subnets, {
+      composeText: definitionOf(job, false).composeText,
+      definition: job.definition,
+      eventId: job.eventId,
+    });
+  }
+  private guardPlan(job: Job, unit: LocalComposeUnit): LocalNetworkPlan | undefined {
+    if (unit.isolationVersion === undefined) return undefined;
+    if (unit.isolationVersion !== 1) throw new Error("Unsupported local competition network plan.");
+    const plan = this.networkPlan(job, unit.composeProjectName, unit.networkSubnets);
+    if (plan.generation !== unit.isolationGeneration)
+      throw new Error("Competition network generation changed.");
+    return retainedPublicPlan(plan, unit.publicNetworkRoutes);
+  }
+  private publicServiceIds(job: Job, unit: LocalComposeUnit): readonly string[] {
+    const ids = unit.publishedServiceIds ?? [];
+    const declared = definitionOf(job, false).problem.publicServices ?? [];
+    if (
+      !Array.isArray(ids) ||
+      ids.length > 8 ||
+      new Set(ids).size !== ids.length ||
+      ids.some((id) => !declared.some((service) => service.id === id))
+    )
+      throw new Error("Retained public service IDs are not declared by this pinned catalog.");
+    return ids;
+  }
+  private publicationJob(context: Context, problemId: string): Job {
+    const job = context.jobs.find(
+      (entry) => entry.problemId === problemId && entry.status === "COMPLETE",
+    );
+    if (!job?.unit || !this.running.has(job.jobId) || JSON.parse(job.unit).isolationVersion !== 1)
+      throw new HostError(
+        409,
+        "DMZ publication requires a running, isolated local environment.",
+        "not_running",
+      );
+    this.assertRunningGuard(job);
+    return job;
+  }
+  async networkView(context: Context, problemId: string): Promise<NetworkPublicationView> {
+    const own = this.publicationJob(context, problemId);
+    const ownUnit = JSON.parse(requiredNetworkValue(own.unit)) as LocalComposeUnit;
+    const published = this.publicServiceIds(own, ownUnit);
+    const shared = await this.sharedPublicServices(context);
+    return {
+      supported: true,
+      declared: (definitionOf(own, false).problem.publicServices ?? []).map((service) => ({
+        id: service.id,
+        purpose: service.purpose,
+        published: published.includes(service.id),
+      })),
+      shared,
+    };
+  }
+  private async sharedPublicServices(context: Context): Promise<NetworkPublicationView["shared"]> {
+    const shared: NetworkPublicationView["shared"][number][] = [];
+    for (const job of this.networkState?.jobs() ?? []) {
+      if (job.eventId !== context.event.eventId || job.status !== "COMPLETE" || !job.unit) continue;
+      const unit = JSON.parse(job.unit) as LocalComposeUnit;
+      try {
+        const plan = this.guardPlan(job, unit);
+        if (!plan) continue;
+        await this.verifyPlan(plan);
+        shared.push(...this.publicServiceViews(job, unit, plan));
+      } catch (error) {
+        await this.haltGuardedUnit(job, unit, error);
+      }
+    }
+    return shared;
+  }
+  private publicServiceViews(
+    job: Job,
+    unit: LocalComposeUnit,
+    plan: LocalNetworkPlan,
+  ): NetworkPublicationView["shared"] {
+    const shared: NetworkPublicationView["shared"][number][] = [];
+    for (const service of definitionOf(job, false).problem.publicServices ?? []) {
+      if (!this.publicServiceIds(job, unit).includes(service.id)) continue;
+      const addresses = this.networkGuard
+        .endpoints(plan, service.service, service.port)
+        .flatMap((endpoint) => endpoint.addresses);
+      if (addresses.length)
+        shared.push({
+          teamId: job.teamId,
+          problemId: job.problemId,
+          serviceId: service.id,
+          purpose: service.purpose,
+          addresses,
+          port: service.port,
+          protocol: "tcp",
+        });
+    }
+    return shared;
+  }
+  async publishNetworkService(
+    context: Context,
+    problemId: string,
+    serviceId: string,
+    published: boolean,
+  ): Promise<void> {
+    const job = this.publicationJob(context, problemId);
+    await this.awaitGuardHalt(job);
+    const declared = definitionOf(job, false).problem.publicServices ?? [];
+    if (!declared.some((service) => service.id === serviceId))
+      throw new HostError(400, "Select a declared public service ID.");
+    const unit = JSON.parse(requiredNetworkValue(job.unit)) as LocalComposeUnit;
+    const ids = new Set(this.publicServiceIds(job, unit));
+    if (published) ids.add(serviceId);
+    else ids.delete(serviceId);
+    const changed = {
+      ...job,
+      unit: JSON.stringify({
+        ...unit,
+        publishedServiceIds: [...ids].sort((a, b) => a.localeCompare(b)),
+      }),
+    };
+    await this.reconcilePublications(job.eventId, new Map([[job.jobId, changed]]));
+  }
+  private async withdrawRuntimePublications(job: Job): Promise<void> {
+    const unit = JSON.parse(requiredNetworkValue(job.unit)) as LocalComposeUnit;
+    if (!this.networkState) {
+      if (unit.publishedServiceIds?.length || unit.publicNetworkRoutes?.length)
+        throw new Error(
+          "DMZ cleanup requires the existing host ledger; ownership and reservations were retained.",
+        );
+      return;
+    }
+    await this.reconcilePublications(job.eventId, new Map(), new Set([job.jobId]));
+    job.unit =
+      this.networkState.jobs().find((entry) => entry.jobId === job.jobId)?.unit ?? job.unit;
+  }
+  private reconcilePublications(
+    eventId: string,
+    changes = new Map<string, Job>(),
+    disabled = new Set<string>(),
+  ): Promise<void> {
+    const task = this.publicMutation.then(() => this.applyPublications(eventId, changes, disabled));
+    this.publicMutation = task.catch(() => undefined);
+    return task;
+  }
+  private async applyPublications(
+    eventId: string,
+    changes: ReadonlyMap<string, Job>,
+    disabled: ReadonlySet<string>,
+  ): Promise<void> {
+    if (!this.networkState)
+      throw new Error("DMZ publication requires the existing private host ledger.");
+    for (const candidate of this.networkState.jobs()) await this.awaitGuardHalt(candidate);
+    const snapshots = this.networkState
+      .jobs()
+      .filter(
+        (job) =>
+          job.eventId === eventId &&
+          job.unit &&
+          JSON.parse(job.unit).isolationVersion === 1 &&
+          (job.status === "COMPLETE" ||
+            job.status === "STOPPED" ||
+            this.running.has(job.jobId) ||
+            disabled.has(job.jobId)),
+      )
+      .sort((a, b) => a.jobId.localeCompare(b.jobId));
+    const previous = new Map(
+      snapshots.map((job) => [
+        job.jobId,
+        requiredNetworkValue(this.guardPlan(job, JSON.parse(requiredNetworkValue(job.unit)))),
+      ]),
+    );
+    for (const snapshot of snapshots)
+      this.assertPublicationChange(snapshot, changes.get(snapshot.jobId));
+    const active = snapshots.filter(
+      (job) =>
+        !disabled.has(job.jobId) && (job.status === "COMPLETE" || this.running.has(job.jobId)),
+    );
+    const participants = active.map((job) => requiredNetworkValue(previous.get(job.jobId)));
+    const publishers: Parameters<typeof sharedNetworkPlan>[1][number][] = [];
+    for (const snapshot of active) {
+      const job = changes.get(snapshot.jobId) ?? snapshot;
+      const unit = JSON.parse(requiredNetworkValue(job.unit)) as LocalComposeUnit;
+      const plan = requiredNetworkValue(previous.get(job.jobId));
+      await this.verifyObservedJob(snapshot, JSON.parse(requiredNetworkValue(snapshot.unit)), plan);
+      try {
+        const endpoints = (definitionOf(job, false).problem.publicServices ?? [])
+          .filter((service) => this.publicServiceIds(job, unit).includes(service.id))
+          .flatMap((service) => this.networkGuard.endpoints(plan, service.service, service.port));
+        publishers.push({ plan, endpoints });
+      } catch (error) {
+        return this.haltGuardedUnit(
+          snapshot,
+          JSON.parse(requiredNetworkValue(snapshot.unit)),
+          error,
+        );
+      }
+    }
+    // Validate every bounded plan before the first rule, route or durable-unit mutation.
+    const planned = snapshots.map((snapshot) => {
+      const job = changes.get(snapshot.jobId) ?? snapshot;
+      const plan = sharedNetworkPlan(
+        requiredNetworkValue(previous.get(job.jobId)),
+        publishers,
+        participants,
+      );
+      const unit = JSON.stringify({
+        ...JSON.parse(requiredNetworkValue(snapshot.unit)),
+        ...(changes.has(job.jobId)
+          ? {
+              publishedServiceIds: this.publicServiceIds(
+                job,
+                JSON.parse(requiredNetworkValue(job.unit)),
+              ),
+            }
+          : {}),
+        publicNetworkRoutes: plan.publicRoutes,
+      });
+      return { jobId: job.jobId, unit, plan };
+    });
+    this.policyEpoch++;
+    this.applyingPublications = true;
+    try {
+      for (const { jobId, plan } of planned) {
+        this.networkGuard.update(plan, requiredNetworkValue(previous.get(jobId)));
+        this.networkGuard.routePublications(plan);
+        this.networkGuard.verifyNetworks(plan);
+      }
+      this.networkState.retain(planned.map(({ jobId, unit }) => ({ jobId, unit })));
+      for (const { jobId, unit } of planned) {
+        const started = this.running.get(jobId);
+        if (started)
+          this.admitRunning(requiredNetworkValue(snapshots.find((job) => job.jobId === jobId)), {
+            ...started,
+            unit: JSON.parse(unit),
+          });
+      }
+    } catch (error) {
+      await this.stopFailedPublications(snapshots, previous, error);
+    } finally {
+      this.applyingPublications = false;
+    }
+  }
+
+  private assertPublicationChange(snapshot: Job, changed?: Job): void {
+    if (
+      changed &&
+      (changed.definition !== snapshot.definition ||
+        changed.deployedAt !== snapshot.deployedAt ||
+        changed.eventId !== snapshot.eventId ||
+        changed.teamId !== snapshot.teamId)
+    )
+      throw new HostError(409, "DMZ environment changed before publication.");
+  }
+  private stopFailedPublications(
+    snapshots: readonly Job[],
+    previous: ReadonlyMap<string, LocalNetworkPlan>,
+    error: unknown,
+  ): Promise<never> {
+    const existing = snapshots.flatMap((job) => {
+      this.revokeRunning(job.jobId);
+      const pending = this.pendingHalts.get(job.jobId);
+      return pending ? [pending.catch(() => undefined)] : [];
+    });
+    const task = Promise.all(existing)
+      .then(() => this.performFailedPublications(snapshots, previous, error))
+      .finally(() => {
+        for (const job of snapshots)
+          if (this.pendingHalts.get(job.jobId) === task) this.pendingHalts.delete(job.jobId);
+      });
+    for (const job of snapshots) this.pendingHalts.set(job.jobId, task);
+    return task;
+  }
+  private async performFailedPublications(
+    snapshots: readonly Job[],
+    previous: ReadonlyMap<string, LocalNetworkPlan>,
+    error: unknown,
+  ): Promise<never> {
+    const failures: unknown[] = [error];
+    for (const snapshot of snapshots) {
+      this.revokeRunning(snapshot.jobId);
+      this.unconfirmedHalts.set(snapshot.jobId, {
+        job: snapshot,
+        unit: JSON.parse(requiredNetworkValue(snapshot.unit)),
+      });
+    }
+    // Protect every affected bridge before a ledger write or daemon shutdown can fail.
+    await Promise.all(
+      snapshots.map(async (snapshot) => {
+        try {
+          await this.quarantinePlan(requiredNetworkValue(previous.get(snapshot.jobId)));
+        } catch (quarantineError) {
+          failures.push(quarantineError);
+        }
+      }),
+    );
+    await Promise.all(
+      snapshots.map(async (snapshot) => {
+        try {
+          await this.performGuardHalt(
+            snapshot,
+            JSON.parse(requiredNetworkValue(snapshot.unit)),
+            error,
+          );
+        } catch (failure) {
+          failures.push(failure);
+        }
+      }),
+    );
+    throw new AggregateError(
+      failures,
+      "DMZ publication failed. Quarantine and shutdown were attempted; ownership was retained for verified recovery.",
+    );
+  }
+  private async assertGuardedAdmission(job: Job, unit: LocalComposeUnit): Promise<void> {
+    try {
+      const guarded = this.guardPlan(job, unit);
+      if (!guarded && this.isolationRequired(job))
+        throw new Error(
+          "An existing unguarded environment cannot be adopted as isolated. Stop and retire it before a new isolated deployment.",
+        );
+      if (guarded) {
+        this.networkGuard.install(guarded);
+        this.networkGuard.verifyNetworks(guarded);
+      }
+    } catch (error) {
+      return this.haltGuardedUnit(job, unit, error);
+    }
+  }
+  private async awaitGuardHalt(job: Job): Promise<void> {
+    let waited = false;
+    let retried = false;
+    for (;;) {
+      const pending = this.pendingHalts.get(job.jobId);
+      if (pending) {
+        waited = true;
+        await pending.catch(() => undefined);
+        continue; // A publication batch may have replaced the halt we just awaited.
+      }
+      const unconfirmed = this.unconfirmedHalts.get(job.jobId);
+      if (!unconfirmed) break;
+      if (retried)
+        throw new HostError(409, "Competition shutdown is unconfirmed; admission remains revoked.");
+      retried = true;
+      waited = true;
+      await this.haltGuardedUnit(
+        unconfirmed.job,
+        unconfirmed.unit,
+        new Error("Retrying shutdown before a runtime operation."),
+      ).catch(() => undefined);
+    }
+    if (waited) {
+      const retained = this.networkState?.jobs().find((candidate) => candidate.jobId === job.jobId);
+      if (retained) Object.assign(job, retained);
+    }
+  }
+  private haltGuardedUnit(job: Job, unit: LocalComposeUnit, error: unknown): Promise<never> {
+    const pending = this.pendingHalts.get(job.jobId);
+    if (pending) return pending;
+    this.revokeRunning(job.jobId);
+    this.unconfirmedHalts.set(job.jobId, { job, unit });
+    const task = this.performGuardHalt(job, unit, error).finally(() => {
+      if (this.pendingHalts.get(job.jobId) === task) this.pendingHalts.delete(job.jobId);
+    });
+    this.pendingHalts.set(job.jobId, task);
+    return task;
+  }
+  private async performGuardHalt(job: Job, unit: LocalComposeUnit, error: unknown): Promise<never> {
+    this.revokeRunning(job.jobId);
+    const failures: unknown[] = [error];
+    job.status = "FAILED";
+    job.error =
+      "Competition verification failed; quarantine and shutdown are pending confirmation.";
+    let guarded: LocalNetworkPlan | undefined;
+    let quarantine: Promise<void> | undefined;
+    try {
+      guarded = this.guardPlan(job, unit);
+      if (guarded) quarantine = this.quarantinePlan(guarded);
+    } catch (failure) {
+      failures.push(failure);
+    }
+    this.retainGuardFailure(job, unit, failures);
+    try {
+      await quarantine;
+    } catch (failure) {
+      failures.push(failure);
+    }
+    const placeholders = Object.fromEntries(
+      unit.secretEnv.map((name) => [name, "tenkacloud-guard-stop"]),
+    );
+    try {
+      if (guarded) await this.networkGuard.stopOwned(guarded);
+      else if (unit.isolationVersion === 1)
+        throw new Error("Retained isolated shutdown scope could not be validated.");
+      else await this.runCompose(unit, "stop", { ...process.env, ...placeholders });
+      if (guarded) {
+        await this.resetStoppedPlan(retainedPublicPlan(guarded, []));
+        unit = { ...unit, publicNetworkRoutes: [] };
+      }
+      job.unit = JSON.stringify(unit);
+      job.status = "STOPPED";
+      job.error = "Competition guard failed; runtime was stopped and requires verified recovery.";
+      this.unconfirmedHalts.delete(job.jobId);
+    } catch (stopError) {
+      failures.push(stopError);
+      job.status = "FAILED";
+      job.error =
+        "Competition guard failed; quarantine or workload shutdown could not be confirmed.";
+    }
+    this.retainGuardFailure(job, unit, failures);
+    throw new AggregateError(failures, job.error);
+  }
+  private retainGuardFailure(job: Job, unit: LocalComposeUnit, failures: unknown[]): void {
+    try {
+      this.networkState?.retain([
+        {
+          jobId: job.jobId,
+          unit: JSON.stringify(unit),
+          status: job.status as "STOPPED" | "FAILED",
+          error: job.error,
+        },
+      ]);
+    } catch (failure) {
+      failures.push(failure);
+    }
+  }
+  private revokeRunning(jobId: string): void {
+    this.running.delete(jobId);
+    this.guardProofs.delete(jobId);
+  }
+  private admitRunning(job: Job, started: StartedContainer): void {
+    this.running.set(job.jobId, started);
+    if (started.unit.isolationVersion === 1)
+      this.guardProofs.set(job.jobId, {
+        unit: started.unit,
+        verifiedAt: this.guardNow(),
+        attemptedAt: this.guardNow(),
+      });
+  }
+  private quarantinePlan(plan: LocalNetworkPlan): Promise<void> {
+    return this.networkGuard.quarantineAsync
+      ? this.networkGuard.quarantineAsync(plan)
+      : Promise.resolve().then(() => this.networkGuard.quarantine(plan));
+  }
+  private resetStoppedPlan(plan: LocalNetworkPlan): Promise<void> {
+    return this.networkGuard.resetStoppedAsync
+      ? this.networkGuard.resetStoppedAsync(plan)
+      : Promise.resolve().then(() => this.networkGuard.resetStopped(plan));
+  }
+  private verifyPlan(plan: LocalNetworkPlan): Promise<void> {
+    return this.networkGuard.audit
+      ? this.networkGuard.audit(plan)
+      : Promise.resolve().then(() => this.networkGuard.verifyNetworks(plan));
+  }
+  private async verifyObservedJob(
+    job: Job,
+    unit: LocalComposeUnit,
+    plan: LocalNetworkPlan,
+  ): Promise<void> {
+    try {
+      await this.verifyPlan(plan);
+    } catch (error) {
+      return this.haltGuardedUnit(job, unit, error);
+    }
+  }
+  private scheduleGuardAudit(job: Job, started: StartedContainer): void {
+    if (this.guardAudits.has(job.jobId) || this.applyingPublications) return;
+    const proof = this.guardProofs.get(job.jobId);
+    if (proof) proof.attemptedAt = this.guardNow();
+    const epoch = this.policyEpoch;
+    const task = Promise.resolve()
+      .then(() => this.verifyPlan(requiredNetworkValue(this.guardPlan(job, started.unit))))
+      .then(() => {
+        if (epoch === this.policyEpoch && this.running.get(job.jobId) === started)
+          this.guardProofs.set(job.jobId, {
+            unit: started.unit,
+            verifiedAt: this.guardNow(),
+            attemptedAt: this.guardNow(),
+          });
+      })
+      .catch(async (error) => {
+        if (epoch === this.policyEpoch && this.running.get(job.jobId) === started) {
+          try {
+            await this.haltGuardedUnit(job, started.unit, error);
+          } catch {
+            /* Durable revocation and its reason were retained. */
+          }
+        }
+      })
+      .finally(() => this.guardAudits.delete(job.jobId));
+    this.guardAudits.set(job.jobId, task);
+  }
+  private trackGuardRevocation(work: Promise<never>): void {
+    const task = work.catch(() => undefined).finally(() => this.guardRevocations.delete(task));
+    this.guardRevocations.add(task);
+  }
+  async drainNetworkChecks(): Promise<void> {
+    while (this.guardAudits.size || this.guardRevocations.size || this.pendingHalts.size)
+      await Promise.all([
+        ...this.guardAudits.values(),
+        ...this.guardRevocations,
+        ...[...this.pendingHalts.values()].map((pending) => pending.catch(() => undefined)),
+      ]);
+  }
+  async auditNetworks(): Promise<void> {
+    for (const { job, unit } of this.unconfirmedHalts.values())
+      if (!this.pendingHalts.has(job.jobId))
+        this.trackGuardRevocation(
+          this.haltGuardedUnit(job, unit, new Error("Retrying unconfirmed competition shutdown.")),
+        );
+    for (const job of this.networkState?.jobs() ?? []) {
+      try {
+        this.assertRunningGuard(job);
+      } catch {
+        /* Revocation is retained and drained. */
+      }
+    }
+  }
+  private assertRunningGuard(job: Job): void {
+    const started = this.running.get(job.jobId);
+    if (started?.unit.isolationVersion !== 1) return;
+    const proof = this.guardProofs.get(job.jobId);
+    if (!proof || this.guardNow() - proof.attemptedAt >= 10_000)
+      this.scheduleGuardAudit(job, started);
+    if (!proof || proof.unit !== started.unit || this.guardNow() - proof.verifiedAt > 60_000) {
+      this.revokeRunning(job.jobId);
+      this.trackGuardRevocation(
+        this.haltGuardedUnit(
+          job,
+          started.unit,
+          new Error("Competition network verification expired."),
+        ),
+      );
+      throw new HostError(
+        409,
+        "Competition network verification expired; runtime access was revoked.",
+      );
+    }
   }
   private surfaceFrom(started: StartedContainer): string {
     const url = Object.values(started.problem.challengeEndpoints)[0];
@@ -352,11 +1078,13 @@ export class DockerHostingEngine implements RuntimeEngine {
     for (const url of new Set(Object.values(started.problem.challengeEndpoints))) await ready(url);
   }
   surfaces(job: Job): Readonly<Record<string, string>> {
+    this.assertRunningGuard(job);
     const started = this.running.get(job.jobId);
     if (!started) throw new HostError(409, "Problem environment has not been recovered.");
     return started.problem.challengeEndpoints;
   }
   gatewayPolicy(job: Job): { applicationRoutes: boolean; deniedPaths: readonly string[] } {
+    this.assertRunningGuard(job);
     const started = this.running.get(job.jobId);
     if (!started) throw new HostError(409, "Problem environment has not been recovered.");
     const verify = new URL(started.problem.verifyUrl);
@@ -366,6 +1094,11 @@ export class DockerHostingEngine implements RuntimeEngine {
     };
   }
   terminalSupported(job: Job): boolean {
+    try {
+      this.assertRunningGuard(job);
+    } catch {
+      return false;
+    }
     return Boolean(this.running.get(job.jobId)?.problem.terminal);
   }
   async openTerminal(
@@ -373,23 +1106,27 @@ export class DockerHostingEngine implements RuntimeEngine {
     handlers: TerminalHandlers,
     assertCurrent: () => void,
   ): Promise<TerminalProcess> {
-    const { unit } = this.ownedUnit(job, true);
+    this.assertRunningGuard(job);
+    const { unit } = await this.ownedUnit(job, true);
     const terminal = this.running.get(job.jobId)?.problem.terminal;
     if (!terminal) throw new HostError(409, "This problem has no running participant terminal.");
     return spawnDeclaredTerminal(unit, terminal.service, handlers, assertCurrent);
   }
   async workbench(job: Job, action: WorkbenchAction, body?: unknown): Promise<unknown> {
-    this.ownedUnit(job, true);
+    this.assertRunningGuard(job);
+    await this.ownedUnit(job, true);
     const started = this.running.get(job.jobId);
     if (!started) throw new HostError(409, "Problem environment has not been recovered.");
     return requestWorkbench(started.problem.verifyUrl, action, body);
   }
   surface(job: Job): string {
+    this.assertRunningGuard(job);
     const started = this.running.get(job.jobId);
     if (!started) throw new HostError(409, "Problem environment has not been recovered.");
     return this.surfaceFrom(started);
   }
   private async state(context: Context) {
+    for (const job of context.jobs) this.assertRunningGuard(job);
     const problems = context.event.problems.map(
       (problem) => (JSON.parse(problem.definition) as Definition).problem,
     );
@@ -470,10 +1207,11 @@ export class DockerHostingEngine implements RuntimeEngine {
     return this.result(state, response, context);
   }
   async evaluate(job: Job, submission: string): Promise<boolean> {
+    this.assertRunningGuard(job);
     const started = this.running.get(job.jobId);
     if (started?.problem.scoring.kind !== "verify")
       throw new HostError(409, "This environment has no running single-flag verifier.");
-    this.ownedUnit(job, true);
+    await this.ownedUnit(job, true);
     const verdict = await verifySubmission(
       started.problem.verifyUrl,
       submission,
@@ -507,4 +1245,9 @@ function startupCleanupFailure(startup: unknown, cleanup: unknown): Error {
     `${reason} Removing the partial environment also failed (${cleanupReason}); ownership is retained and retrying the deployment removes it first.`,
     { cause: startup },
   );
+}
+
+function assertNetworkRequirement(job: Job): void {
+  if (job.networkIsolationVersion !== undefined && job.networkIsolationVersion !== 1)
+    throw new Error("Unsupported retained network isolation requirement.");
 }

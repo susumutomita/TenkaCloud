@@ -32,6 +32,7 @@ export function parseOptions(
         default: String(DEFAULT_CONTAINER_LIMITS.memoryMiB),
       },
       "docker-network-pool": { type: "string" },
+      "competition-network": { type: "boolean", default: false },
       "no-build": { type: "boolean", default: false },
       "public-admin-origin": { type: "string" },
       "public-participant-origin": { type: "string" },
@@ -58,6 +59,11 @@ export function parseOptions(
     );
   if (exposure && values.lan)
     throw new Error("Choose either --lan or the public origins, not both.");
+  assertCompetitionOptions(
+    values["competition-network"],
+    values["docker-network-pool"],
+    Boolean(exposure),
+  );
   const hostname = exposure ? "0.0.0.0" : listenAddress(values.lan, values["unsafe-lan"]);
   const adminPort = port(values["admin-port"]);
   const participantPort = port(values["participant-port"]);
@@ -77,6 +83,7 @@ export function parseOptions(
     );
   return {
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
+    competitionNetwork: values["competition-network"],
     ...(values["submission-catalog"]
       ? { submissionCatalogPath: resolve(values["submission-catalog"]) }
       : {}),
@@ -175,4 +182,15 @@ function positiveLimit(raw: string, maximum: number): number {
   if (!/^\d+$/u.test(raw) || Number(raw) < 1 || Number(raw) > maximum)
     throw new Error(`Resource limit must be an integer from 1 to ${maximum}.`);
   return Number(raw);
+}
+
+function assertCompetitionOptions(
+  enabled: boolean,
+  pool: string | undefined,
+  exposed: boolean,
+): void {
+  if (enabled && (!pool || exposed))
+    throw new Error(
+      "--competition-network requires --docker-network-pool and local native hosting, not public origins.",
+    );
 }

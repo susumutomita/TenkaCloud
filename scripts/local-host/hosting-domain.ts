@@ -34,6 +34,7 @@ import {
 import { gatewayText } from "./gateway-text";
 import { HostTerminals } from "./host-terminal";
 import { hostWorkbench } from "./host-workbench";
+import { requiredNetworkValue } from "./local-network";
 import {
   type AccountConnection,
   type AwsTarget,
@@ -287,6 +288,19 @@ export class HostingDomain {
     uptimeProbe: ProbeFn | undefined,
     private readonly passwords: OrganizerPasswords,
   ) {
+    this.engine.bindNetworkState?.({
+      jobs: () => this.store.jobs(),
+      retain: (updates) =>
+        this.store.transaction(() => {
+          for (const update of updates)
+            this.store.putJob({
+              ...this.store.job(update.jobId),
+              unit: update.unit,
+              ...(update.status ? { status: update.status } : {}),
+              ...(update.error !== undefined ? { error: update.error } : {}),
+            });
+        }),
+    });
     // Materialize each SQLite view before returning its Promise. Keep the existing
     // Local read-time lifecycle/coordination updates and snapshot order intact.
     this.eventQueries = {
@@ -1117,8 +1131,7 @@ export class HostingDomain {
         await this.changeEnvironment(job, operation);
         job.error = undefined;
       } catch (error) {
-        job.status = "FAILED";
-        job.error = failureMessage(error, "Environment operation failed; ownership retained.");
+        this.recordRuntimeFailure(job, error, "Environment operation failed; ownership retained.");
       }
       job.operation = undefined;
       this.store.putJob(job);
@@ -1493,6 +1506,18 @@ export class HostingDomain {
     });
     job.deployedAt = this.now();
   }
+  private recordRuntimeFailure(job: Job, error: unknown, fallback: string): void {
+    const retained = this.store.job(job.jobId);
+    if (job.networkIsolationVersion === 1 && retained.status === "STOPPED" && retained.unit) {
+      job.status = "STOPPED";
+      job.unit = retained.unit;
+      job.error = retained.error;
+      job.gatewaySlot = undefined;
+      return;
+    }
+    job.status = "FAILED";
+    job.error = failureMessage(error, fallback);
+  }
   private async runDemandOperation(jobId: string, action: "start" | "stop"): Promise<void> {
     const job = this.store.job(jobId);
     try {
@@ -1507,8 +1532,7 @@ export class HostingDomain {
       }
       job.error = undefined;
     } catch (error) {
-      job.status = "FAILED";
-      job.error = failureMessage(error, "Local environment operation failed; data retained.");
+      this.recordRuntimeFailure(job, error, "Local environment operation failed; data retained.");
       if (!job.unit) job.gatewaySlot = undefined;
     }
     job.operation = undefined;
@@ -1520,6 +1544,10 @@ export class HostingDomain {
     existing: Job[],
     failedOnly: boolean,
   ): Promise<Job[]> {
+    if (
+      event.problems.some((problem) => this.engine.networkRequirement?.(problem.definition) === 1)
+    )
+      event.networkIsolationVersion = 1;
     const occupied = this.recordedOffsets();
     const planned: Job[] = [];
     for (const team of teams)
@@ -1528,7 +1556,10 @@ export class HostingDomain {
           (job) => job.teamId === team.teamId && job.problemId === problem.problemId,
         );
         if (deploymentPlan(previous, failedOnly) === "skip") continue;
-        planned.push(previous ?? (await this.newDeploymentJob(event, team, problem, occupied)));
+        const job = previous ?? (await this.newDeploymentJob(event, team, problem, occupied));
+        if (event.networkIsolationVersion === 1 && definitionKind(problem.definition) === "compose")
+          job.networkIsolationVersion = 1;
+        planned.push(job);
       }
     await this.allocateDemandPorts(
       planned.filter((job) => onDemandContainer(event, job.definition) && !job.unit),
@@ -1548,6 +1579,9 @@ export class HostingDomain {
       teamId: team.teamId,
       problemId: problem.problemId,
       definition: problem.definition,
+      ...(event.networkIsolationVersion === 1 && definitionKind(problem.definition) === "compose"
+        ? { networkIsolationVersion: 1 as const }
+        : {}),
       offset: demand ? 0 : await this.freeSlot(problem.definition, occupied),
       status: demand ? "STOPPED" : "PENDING",
       unit: null,
@@ -1665,8 +1699,7 @@ export class HostingDomain {
       job.status = "COMPLETE";
       job.deployedAt = this.now();
     } catch (error) {
-      job.status = "FAILED";
-      job.error = failureMessage(error, "Runtime failed.");
+      this.recordRuntimeFailure(job, error, "Runtime failed.");
     }
     this.store.putJob(job);
   }
@@ -1705,8 +1738,7 @@ export class HostingDomain {
           job.error = undefined;
           job.status = "DELETED";
         } catch (error) {
-          job.status = "FAILED";
-          job.error = failureMessage(error, "Cleanup failed; ownership retained.");
+          this.recordRuntimeFailure(job, error, "Cleanup failed; ownership retained.");
         }
         this.store.putJob(job);
       }
@@ -1743,6 +1775,7 @@ export class HostingDomain {
   async drain(): Promise<void> {
     await Promise.all([...this.tasks]);
     await this.disruptions.drain();
+    await this.engine.drainNetworkChecks?.();
   }
   /** Only the private local launcher calls this, after listeners and accepted work drain. */
   async stopLocalEnvironments(
@@ -1855,8 +1888,7 @@ export class HostingDomain {
       job.error = undefined;
       job.resumeAfterLocalDown = undefined;
     } catch (error) {
-      job.status = "FAILED";
-      job.error = failureMessage(error, "Local environment could not resume; data retained.");
+      this.recordRuntimeFailure(job, error, "Local environment could not resume; data retained.");
     }
     job.operation = undefined;
     this.store.putJob(job);
@@ -1911,8 +1943,7 @@ export class HostingDomain {
         job.error = undefined;
       }
     } catch (error) {
-      job.status = "FAILED";
-      job.error = failureMessage(error, "Runtime recovery failed.");
+      this.recordRuntimeFailure(job, error, "Runtime recovery failed.");
     }
     this.store.putJob(job);
   }
@@ -1924,8 +1955,7 @@ export class HostingDomain {
       job.status = "COMPLETE";
       job.error = undefined;
     } catch (error) {
-      job.status = "FAILED";
-      job.error = failureMessage(error, "Runtime recovery failed.");
+      this.recordRuntimeFailure(job, error, "Runtime recovery failed.");
     }
     job.operation = undefined;
     this.store.putJob(job);
@@ -1942,6 +1972,11 @@ export class HostingDomain {
     if (request.path.startsWith("/portal/registration/"))
       throw new HostError(404, "Unknown participant endpoint.");
     const team = this.store.authenticateTeam(request.token);
+    if (/^\/portal\/me\/problems\/[a-z0-9][a-z0-9-]{0,127}\/network$/u.test(request.path))
+      return this.queue.run(team.eventId, () => this.participantNetwork(request));
+    return this.dispatchParticipant(request, team);
+  }
+  private async dispatchParticipant(request: ApiRequest, team: Team): Promise<ApiResponse> {
     if (/^\/portal\/me\/problems\/[^/]+\/evaluate$/u.test(request.path))
       return this.queue.run(team.eventId, () => this.evaluateParticipant(request));
     if (/^\/portal\/me\/problems\/[^/]+\/container\//u.test(request.path))
@@ -1968,6 +2003,57 @@ export class HostingDomain {
       return this.queue.run(team.eventId, () => this.renameParticipant(request));
     if (request.method !== "POST") throw new HostError(404, "Unknown participant endpoint.");
     return this.submitParticipant(request, team);
+  }
+  private async participantNetwork(request: ApiRequest): Promise<ApiResponse> {
+    const problemId = /^\/portal\/me\/problems\/([a-z0-9][a-z0-9-]{0,127})\/network$/u.exec(
+      request.path,
+    )?.[1];
+    if (!problemId || request.query.size || (request.method !== "GET" && request.method !== "POST"))
+      throw new HostError(400, "DMZ requests accept only a fixed problem endpoint.");
+    const resolve = () => this.networkContext(request, problemId);
+    const context = resolve();
+    if (request.method === "POST") {
+      const body = object(request.body);
+      if (
+        Object.keys(body)
+          .sort((a, b) => a.localeCompare(b))
+          .join(",") !== "published,serviceId" ||
+        typeof body.serviceId !== "string" ||
+        !/^[a-z0-9][a-z0-9-]{0,63}$/u.test(body.serviceId) ||
+        typeof body.published !== "boolean" ||
+        !this.engine.publishNetworkService
+      )
+        throw new HostError(400, "Select only a declared serviceId and publication state.");
+      await this.engine.publishNetworkService(context, problemId, body.serviceId, body.published);
+    } else if (request.body !== undefined && request.body !== null)
+      throw new HostError(400, "DMZ reads accept no target selectors.");
+    return ok(
+      await requiredNetworkValue(this.engine.networkView).call(this.engine, resolve(), problemId),
+    );
+  }
+  private networkContext(request: ApiRequest, problemId: string): Context {
+    const team = this.store.authenticateTeam(request.token);
+    const event = this.currentEvent(team.eventId);
+    assertPlaying(event, this.now());
+    if (event.expiresAt * 1000 <= this.now()) throw new HostError(409, "This event has expired.");
+    this.progression.assertAccess(team, problemId);
+    const context = this.context(team);
+    const job = context.jobs.find((entry) => entry.problemId === problemId);
+    if (
+      !job ||
+      !linkable(job) ||
+      !event.problems.some(
+        (entry) => entry.problemId === problemId && entry.definition === job.definition,
+      ) ||
+      !this.engine.networkSupported?.(job) ||
+      !this.engine.networkView
+    )
+      throw new HostError(
+        409,
+        "This team has no running isolated competition network.",
+        "not_running",
+      );
+    return context;
   }
   private async evaluateParticipant(request: ApiRequest): Promise<ApiResponse> {
     if (request.externalEvaluationTrusted !== true)
@@ -2404,6 +2490,15 @@ export class HostingDomain {
     // The participant contract has no organizer-stop state; "DELETED" renders as stopped.
     problem.status = job?.status === "STOPPED" ? "DELETED" : (job?.status ?? "PENDING");
     delete problem.terminal;
+    delete problem.competitionNetwork;
+    if (
+      job &&
+      linkable(job) &&
+      gateKind === "ok" &&
+      this.progression.allowed(context.team, job.problemId) &&
+      this.engine.networkSupported?.(job)
+    )
+      problem.competitionNetwork = true;
     if (
       runtime === "docker" &&
       job &&
