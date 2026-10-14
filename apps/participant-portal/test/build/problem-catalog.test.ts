@@ -37,8 +37,10 @@ describe("problem catalog build projection", () => {
     }
   });
 
-  it("keeps host pre-start instructions out of both eager and lazy projections", () => {
-    const id = "/repo/problems/challenges/hello-world/metadata.json";
+  it.each([
+    "/repo/problems/challenges/hello-world/metadata.json",
+    `/repo/.tenkacloud/catalog-store/snapshots/${"d".repeat(64)}/nested/problems/challenges/hello-world/metadata.json`,
+  ])("keeps host pre-start instructions out of eager and lazy projections: %s", (id) => {
     const source = JSON.stringify({
       id: "hello-world",
       name: "Hello",
@@ -62,6 +64,27 @@ describe("problem catalog build projection", () => {
   it("leaves unrelated JSON and ordinary metadata imports alone", () => {
     expect(projectProblemCatalog("{}", "/src/config.json?portal-catalog")).toBeNull();
     expect(projectProblemCatalog("{}", "/problems/challenges/a/metadata.json")).toBeNull();
+  });
+
+  it.each([
+    `/.tenkacloud/catalog-store/snapshots/${"a".repeat(64)}/challenges/sql`,
+    `/.tenkacloud/catalog-store/snapshots/${"b".repeat(64)}/nested/problems/battles/sql`,
+    `C:\\.tenkacloud\\catalog-store\\snapshots\\${"c".repeat(64)}\\problems\\challenges\\sql`,
+  ])("projects immutable snapshot metadata into the same browser contract: %s", (directory) => {
+    const separator = directory.includes("\\") ? "\\" : "/";
+    const code = JSON.stringify({ id: "sql", name: "SQL", instructions: "GATED", learningGoals: [] });
+    for (const query of ["portal-catalog", "portal-instructions"]) {
+      const expected = projectProblemCatalog(code, `/repo/problems/challenges/sql/metadata.json?${query}`);
+      const actual = projectProblemCatalog(code, `${directory}${separator}metadata.json?${query}`);
+      expect(actual).toBe(expected);
+      if (query === "portal-catalog") {
+        const entry = JSON.parse(actual!);
+        expect(entry.endpoints).toEqual([]);
+        expect(entry.phases).toEqual([]);
+        expect(entry.disruptions).toEqual([]);
+        expect(entry.instructions).toBeUndefined();
+      }
+    }
   });
 });
 

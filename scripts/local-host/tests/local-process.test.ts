@@ -10,8 +10,10 @@ import { resetLocalOrganizerKey, stopManagedLocal } from "../local";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { HistoricalCompetitionEngine } from "./historical-competition-fixture";
+import { ensureHostBuild } from "./host-build-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
+await ensureHostBuild(root);
 const sessionFile = "local-session.json";
 const eventSchema = z.object({
   eventId: z.string(),
