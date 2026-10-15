@@ -9,6 +9,7 @@ export interface NetworkPublicService {
   readonly service: string;
   readonly port: number;
   readonly purpose: string;
+  readonly applicationProtocol?: "http";
 }
 export type NetworkPublicationView = CompetitionNetworkView;
 export function normalizePublicServices(
@@ -23,9 +24,12 @@ export function normalizePublicServices(
       throw new Error("Invalid public service declaration.");
     const entry = raw as Record<string, unknown>;
     if (
-      Object.keys(entry)
-        .sort((a, b) => a.localeCompare(b))
-        .join(",") !== "id,port,purpose,service" ||
+      !["id,port,purpose,service", "applicationProtocol,id,port,purpose,service"].includes(
+        Object.keys(entry)
+          .sort((a, b) => a.localeCompare(b))
+          .join(","),
+      ) ||
+      (entry.applicationProtocol !== undefined && entry.applicationProtocol !== "http") ||
       typeof entry.id !== "string" ||
       !/^[a-z0-9][a-z0-9-]{0,63}$/u.test(entry.id) ||
       ids.has(entry.id) ||
@@ -45,6 +49,7 @@ export function normalizePublicServices(
       );
     ids.add(entry.id);
     return Object.freeze({
+      ...(entry.applicationProtocol === "http" ? { applicationProtocol: "http" as const } : {}),
       id: entry.id,
       service: entry.service,
       port: entry.port,

@@ -4,6 +4,7 @@ import { createServer, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { readCatalogSelection } from "../problem-pack/catalog-read";
 import { randomToken, sameSecret } from "./auth";
 import { hasDatabaseState, prepareDatabase, privateDirectory } from "./files";
 import { clearLocalHistory, parseLocalClearOptions } from "./local-clear";
@@ -234,9 +235,10 @@ function replyWithRotatedKey(
 export async function runManagedLocal(root: string, args: string[]): Promise<number> {
   const options = parseOptions(args, root);
   if (options.help) {
-    await runLocalHost(args);
+    await runLocalHost(args, { repositoryRoot: root });
     return 0;
   }
+  readCatalogSelection(root);
   process.umask(0o077);
   const directory = realpathSync(privateDirectory(options.dataDirectory));
   const path = join(directory, SESSION_FILE);
@@ -285,6 +287,7 @@ export async function runManagedLocal(root: string, args: string[]): Promise<num
     lock = acquireLocalLock(directory);
     claimSession(path, { protocol: 2, pid: process.pid, port: address.port, token, sessionId });
     exited = runLocalHost(args, {
+      repositoryRoot: root,
       signal: shutdown.signal,
       stopLocalEnvironments: true,
       onReady: (host) => {

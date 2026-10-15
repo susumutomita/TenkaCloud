@@ -1,6 +1,7 @@
 import { isIPv4 } from "node:net";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { consoleAppliance } from "./console-appliance";
 import { DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { parseDockerNetworkPool } from "./docker-networks";
 import { DEFAULT_GATEWAY_PORTS, gatewayPortsOverlap, parseGatewayPorts } from "./gateway-ports";
@@ -35,6 +36,10 @@ export function parseOptions(
       "competition-network": { type: "boolean", default: false },
       "vpn-peers": { type: "string" },
       "no-build": { type: "boolean", default: false },
+      "console-origin": { type: "string" },
+      "web-origin-template": { type: "string" },
+      "web-port": { type: "string", default: "5176" },
+      "web-services": { type: "string", default: "web" },
       "public-admin-origin": { type: "string" },
       "public-participant-origin": { type: "string" },
       "behind-proxy": { type: "boolean", default: false },
@@ -52,14 +57,9 @@ export function parseOptions(
       throw new Error("Ports must be integers from 1024 to 65535.");
     return Number(raw);
   };
-  const exposure = publicExposure(values);
-  // Inside the hosted image loopback is unreachable and the log would carry the host key.
-  if (!exposure && environment.TENKACLOUD_HOST_REQUIRE_PUBLIC === "1")
-    throw new Error(
-      "This image runs behind a TLS proxy. Pass --public-admin-origin and --public-participant-origin.",
-    );
-  if (exposure && values.lan)
-    throw new Error("Choose either --lan or the public origins, not both.");
+  const appliance = consoleAppliance(values);
+  const exposure = appliance ? undefined : publicExposure(values);
+  assertExposureEnvironment(Boolean(appliance), exposure, values.lan, environment);
   assertCompetitionOptions(
     values["competition-network"],
     values["docker-network-pool"],
@@ -72,6 +72,7 @@ export function parseOptions(
   if (adminPort === participantPort)
     throw new Error("Use different ports for the host console and participant portal.");
   const gatewayPorts = parseGatewayPorts(values["gateway-ports"]);
+  assertWebPort(appliance?.webPort, adminPort, participantPort, gatewayPorts);
   if (
     gatewayPortsOverlap(gatewayPorts, adminPort) ||
     gatewayPortsOverlap(gatewayPorts, participantPort)
@@ -99,6 +100,7 @@ export function parseOptions(
       ? { dockerNetworkPool: parseDockerNetworkPool(values["docker-network-pool"]) }
       : {}),
     hostname,
+    ...(appliance ? { consoleAppliance: appliance } : {}),
     adminPort,
     participantPort,
     gatewayPorts,
@@ -206,4 +208,33 @@ function assertCompetitionOptions(
     throw new Error(
       "--competition-network requires --docker-network-pool and local native hosting, not public origins.",
     );
+}
+
+function assertExposureEnvironment(
+  appliance: boolean,
+  exposure: PublicExposure | undefined,
+  lan: string | undefined,
+  environment: Readonly<Record<string, string | undefined>>,
+): void {
+  // Inside the hosted image loopback is unreachable and the log would carry the host key.
+  if (appliance && environment.TENKACLOUD_HOST_REQUIRE_PUBLIC === "1")
+    throw new Error("Console appliance requires native Linux hosting, not the hosted image.");
+  if (!exposure && environment.TENKACLOUD_HOST_REQUIRE_PUBLIC === "1")
+    throw new Error(
+      "This image runs behind a TLS proxy. Pass --public-admin-origin and --public-participant-origin.",
+    );
+  if (exposure && lan) throw new Error("Choose either --lan or the public origins, not both.");
+}
+
+function assertWebPort(
+  webPort: number | undefined,
+  adminPort: number,
+  participantPort: number,
+  gatewayPorts: ReturnType<typeof parseGatewayPorts>,
+): void {
+  if (
+    webPort !== undefined &&
+    ([adminPort, participantPort].includes(webPort) || gatewayPortsOverlap(gatewayPorts, webPort))
+  )
+    throw new Error("Web broker port must not overlap host listeners or gateway slots.");
 }

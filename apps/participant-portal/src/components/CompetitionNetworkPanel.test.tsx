@@ -27,8 +27,56 @@ function panel(enabled = true, problemId = "fixed-problem") {
 }
 beforeEach(() => window.localStorage.setItem("tenkacloud.portal.locale", "en"));
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.localStorage.clear();
+});
+
+it("opens an authenticated ID-only Web handoff in a separate tab without retaining an opener", async () => {
+  const shared: CompetitionNetworkView = {
+    ...initial,
+    shared: [
+      {
+        teamId: "peer-team",
+        problemId: "peer-lab",
+        serviceId: "web",
+        purpose: "Peer Web",
+        addresses: [],
+        port: 8080,
+        protocol: "tcp",
+        browserAvailable: true,
+      },
+    ],
+  };
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(response(shared))
+    .mockResolvedValueOnce(
+      Response.json({
+        url: "https://target.labs.example.test/__join?ticket=opaque",
+        expiresInMs: 30000,
+      }),
+    );
+  vi.stubGlobal("fetch", fetcher);
+  const tab = { opener: window, location: { replace: vi.fn() }, close: vi.fn() };
+  vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+  render(panel());
+  await userEvent.setup().click(await screen.findByRole("button", { name: "Open published Web" }));
+  await waitFor(() =>
+    expect(tab.location.replace).toHaveBeenCalledWith(
+      "https://target.labs.example.test/__join?ticket=opaque",
+    ),
+  );
+  expect(tab.opener).toBeNull();
+  expect(fetcher).toHaveBeenNthCalledWith(
+    2,
+    new URL("https://host.example.test/api/portal/me/problems/fixed-problem/public-web-handoff"),
+    expect.objectContaining({
+      method: "POST",
+      headers: { authorization: "Bearer team-key", "content-type": "application/json" },
+      body: JSON.stringify({ teamId: "peer-team", problemId: "peer-lab", serviceId: "web" }),
+    }),
+  );
 });
 it("publishes only declared IDs with team auth, shows internal tuples as text, and withdraws", async () => {
   const published: CompetitionNetworkView = {

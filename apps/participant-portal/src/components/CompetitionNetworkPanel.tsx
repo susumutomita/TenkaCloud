@@ -5,8 +5,12 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import type { CompetitionNetworkView } from "@tenkacloud/portal-contracts";
-import { useCallback, useEffect, useState } from "react";
-import { getCompetitionNetwork, publishCompetitionService } from "../api/portal-client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getCompetitionNetwork,
+  openPublishedWeb,
+  publishCompetitionService,
+} from "../api/portal-client";
 import { useT } from "../i18n";
 
 /** Service IDs come from the authenticated host catalog; no address, command or route input. */
@@ -24,6 +28,8 @@ function ActiveCompetitionNetworkPanel({
   const [view, setView] = useState<CompetitionNetworkView>();
   const [error, setError] = useState(false);
   const [pending, setPending] = useState<string>();
+  const alive = useRef(true);
+  const openedTabs = useRef(new Set<Window>());
   const refresh = useCallback(
     async (signal?: AbortSignal) => {
       try {
@@ -36,9 +42,15 @@ function ActiveCompetitionNetworkPanel({
     [apiBaseUrl, sessionToken, problemId],
   );
   useEffect(() => {
+    alive.current = true;
     const controller = new AbortController();
     void refresh(controller.signal);
-    return () => controller.abort();
+    return () => {
+      alive.current = false;
+      controller.abort();
+      for (const tab of openedTabs.current) tab.close();
+      openedTabs.current.clear();
+    };
   }, [refresh]);
   const change = async (serviceId: string, published: boolean) => {
     setPending(serviceId);
@@ -51,6 +63,40 @@ function ActiveCompetitionNetworkPanel({
       setError(true);
     } finally {
       setPending(undefined);
+    }
+  };
+  const openWeb = async (target: CompetitionNetworkView["shared"][number]) => {
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) {
+      setError(true);
+      return;
+    }
+    tab.opener = null;
+    openedTabs.current.add(tab);
+    try {
+      const result = await openPublishedWeb(apiBaseUrl, sessionToken, problemId, {
+        teamId: target.teamId,
+        problemId: target.problemId,
+        serviceId: target.serviceId,
+      });
+      if (!alive.current || !result) {
+        tab.close();
+        return;
+      }
+      const url = new URL(result.url);
+      if (
+        url.protocol !== "https:" ||
+        url.username ||
+        url.password ||
+        url.origin === window.location.origin
+      )
+        throw new Error("Invalid public Web origin");
+      tab.location.replace(url.href);
+    } catch {
+      tab?.close();
+      if (alive.current) setError(true);
+    } finally {
+      openedTabs.current.delete(tab);
     }
   };
   return (
@@ -94,6 +140,11 @@ function ActiveCompetitionNetworkPanel({
             <Box>
               {service.teamId}: {service.purpose}
             </Box>
+            {service.browserAvailable && (
+              <Button onClick={() => void openWeb(service)}>
+                {t("problem_panel.network_open_web")}
+              </Button>
+            )}
             {service.addresses.map((address) => (
               <div key={address}>
                 <code>

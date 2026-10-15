@@ -45,6 +45,21 @@ function principalType(type: ts.Type | undefined, cache: WeakMap<ts.Type, boolea
   return branded;
 }
 
+/** A unique-symbol property must be written with a computed name or copied by spread. */
+function canCarryPrincipalBrand(node: ts.ObjectLiteralExpression): boolean {
+  return node.properties.some((property) => {
+    if (ts.isSpreadAssignment(property)) return true;
+    const name = property.name;
+    return (
+      ts.isComputedPropertyName(name) ||
+      ((ts.isIdentifier(name) ||
+        ts.isStringLiteral(name) ||
+        ts.isNoSubstitutionTemplateLiteral(name)) &&
+        name.text.startsWith("__@authenticatedOrganizer"))
+    );
+  });
+}
+
 function principalConversion(
   node: ts.Node,
   source: ts.SourceFile,
@@ -56,7 +71,11 @@ function principalConversion(
       node.type.getText(source).endsWith("OrganizerPrincipal") ||
       principalType(checker.getTypeFromTypeNode(node.type), cache)
     );
-  if (ts.isObjectLiteralExpression(node) && principalType(checker.getTypeAtLocation(node), cache))
+  if (
+    ts.isObjectLiteralExpression(node) &&
+    canCarryPrincipalBrand(node) &&
+    principalType(checker.getTypeAtLocation(node), cache)
+  )
     return true;
   return (
     ts.isExpression(node) &&
@@ -95,8 +114,8 @@ export function assertPortableDomain(root: string, roots = entries): readonly st
         throw new Error(`Portable domain uses Bun global: ${file}`);
       if (computedBunAccess(node)) throw new Error(`Portable domain uses Bun global: ${file}`);
       if (
-        principalConversion(node, source, checker, principalTypes) &&
-        file !== "scripts/local-host/store.ts"
+        file !== "scripts/local-host/store.ts" &&
+        principalConversion(node, source, checker, principalTypes)
       )
         throw new Error(`Portable domain manufactures organizer principal: ${file}`);
       ts.forEachChild(node, visit);
@@ -106,7 +125,9 @@ export function assertPortableDomain(root: string, roots = entries): readonly st
   return files;
 }
 
-if (import.meta.main)
-  console.log(
-    `Portable domain: ${assertPortableDomain(process.cwd()).length} runtime source files checked.`,
-  );
+if (import.meta.main) {
+  const files = assertPortableDomain(process.cwd());
+  if (!files.includes("scripts/local-host/participant-aws-contract.ts"))
+    throw new Error("Portable domain runtime graph is missing participant AWS contracts.");
+  console.log(`Portable domain: ${files.length} runtime source files checked.`);
+}

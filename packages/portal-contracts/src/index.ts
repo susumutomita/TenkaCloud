@@ -530,5 +530,7 @@ export interface CompetitionNetworkView {
     addresses: readonly string[];
     port: number;
     protocol: "tcp";
+    browserAvailable?: boolean;
+    http?: boolean;
   }[];
 }

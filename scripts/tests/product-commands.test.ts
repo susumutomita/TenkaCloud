@@ -132,8 +132,9 @@ test("fast script checks preserve every root group while required CI retains all
   expect(fast).not.toContain("test:host");
   expect(fast).not.toContain("test:authoring");
   expect(pkg.scripts["test:host"]).toBe(
-    "bun test ./scripts/local-host/tests/*.test.ts ./scripts/local-host/container/*.test.ts ./scripts/lib/*.test.ts && bun run scripts/local-host/tests/run.ts",
+    "bun run check:portable-domain && bun test ./scripts/local-host/tests/*.test.ts ./scripts/local-host/container/*.test.ts ./scripts/lib/*.test.ts && bun run scripts/local-host/tests/run.ts",
   );
+  expect(pkg.scripts["check:portable-domain"]).toBe("bun run scripts/quality/portable-domain.ts");
   const result = make("-n", "test-scripts");
   expect(result.status).toBe(0);
   expect(result.stdout.trim()).toBe("bun run test:scripts");

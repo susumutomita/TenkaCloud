@@ -1,7 +1,5 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildHosting } from "./build";
+import { assertHostCatalogBuild, buildHosting } from "./build";
 import { CompetitionEngine } from "./competition-engine";
 import { DEFAULT_GATEWAY_PORTS, formatGatewayPorts } from "./gateway-ports";
 import { parseOptions } from "./options";
@@ -30,7 +28,11 @@ function announceHost(
   host: Awaited<ReturnType<typeof startLocalHost>>,
   stopLocalEnvironments: boolean,
 ): void {
-  if (options.public) {
+  if (options.consoleAppliance) {
+    console.log(
+      `\nHost console: ${host.admin.origin}\nParticipant portal: ${host.participant.origin}\nWeb broker upstream: http://127.0.0.1:${options.consoleAppliance.webPort}\nState: ${host.databasePath}\n`,
+    );
+  } else if (options.public) {
     console.log(
       `\nHost console: ${host.admin.origin}\nHost API: ${host.admin.origin}/api-docs\nParticipant API: ${host.participant.origin}/api-docs\nParticipant portal: ${host.participant.origin}\nOrganizer key: use make local-reset to rotate a lost key.\nState: ${host.databasePath}\nDocker Compose problems are not offered in public mode.\n`,
     );
@@ -40,7 +42,12 @@ function announceHost(
       `\nHost console: ${host.admin.origin}\nHost API: ${host.admin.origin}/api-docs\nParticipant API: ${host.participant.origin}/api-docs\nParticipant portal: ${host.participant.origin}\nExercise gateways: ${gateways} (active local environments only)\nOrganizer key: each interactive make local start shows a new key. Use make local-reset to rotate it while running.\nState: ${host.databasePath}\n`,
     );
   }
-  if (!options.public && !options.vpnPeerPath && options.hostname !== "127.0.0.1")
+  if (
+    !options.public &&
+    !options.consoleAppliance &&
+    !options.vpnPeerPath &&
+    options.hostname !== "127.0.0.1"
+  )
     console.warn(
       `WARNING: LAN HTTP is unencrypted. Use a trusted isolated network only. Never port-forward these listeners to the Internet.\nAllow TCP ${String(options.participantPort)} and ${formatGatewayPorts(options.gatewayPorts)} on ${options.hostname} in the firewall; keep ${String(options.adminPort)} closed.`,
     );
@@ -83,7 +90,7 @@ export async function runLocalHost(
   const options = parseOptions(args, root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. AWS service problems are available only with cloud hosting.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
+      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --console-origin https://play.example --web-origin-template https://{target}.labs.example  Native console-only appliance behind an operator-managed TLS proxy\n  --web-port 5176 --web-services web  Loopback Web broker and declared HTTP service IDs\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted LAN hosting\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. AWS service problems are available only with cloud hosting.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
     );
     return;
   }
@@ -92,13 +99,7 @@ export async function runLocalHost(
   process.umask(0o077);
   if (lifecycle.signal?.aborted) return;
   if (options.build) await buildHosting(root, "summary");
-  else if (
-    readFileSync(join(root, ".tenkacloud/host-build/catalog-selection.json"), "utf8") !==
-    readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8")
-  )
-    throw new Error(
-      "The selected catalog differs from the built interfaces; rebuild before starting",
-    );
+  else assertHostCatalogBuild(root);
   if (lifecycle.signal?.aborted) return;
   console.log("Starting the host server...");
   const vpn = options.vpnPeerPath

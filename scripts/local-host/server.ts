@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { hostBuildDirectory } from "./build";
+import type { ConsoleAppliance } from "./console-appliance";
 import { type ContainerLimits, DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { hasDatabaseState, persistentKey, prepareDatabase, privateDirectory } from "./files";
 import { type GatewayPortRange, gatewayOffset, gatewayPort } from "./gateway-ports";
@@ -10,8 +11,9 @@ import { localJobDescription, localRuntimeFailure } from "./local-runtime-report
 import type { AccountConnection, RuntimeEngine, SqlDatabase } from "./model";
 import type { PublicExposure } from "./options";
 import type { OrganizerPasswords } from "./organizer-passwords";
+import { PublishedWebBroker } from "./published-web-broker";
 import { HostingService } from "./service";
-import { HostStore } from "./store";
+import { digest, HostStore } from "./store";
 
 export interface LocalHostSettings {
   readonly dataDirectory: string;
@@ -20,6 +22,7 @@ export interface LocalHostSettings {
   readonly participantPort: number;
   readonly gatewayPorts: GatewayPortRange;
   readonly public?: PublicExposure;
+  readonly consoleAppliance?: ConsoleAppliance;
   readonly vpn?: import("./vpn/native-backend").VpnIngress;
   readonly accountConnection?: AccountConnection;
   readonly containerLimits?: ContainerLimits;
@@ -89,6 +92,7 @@ export async function startLocalHost(
   } = {},
 ): Promise<RunningLocalHost> {
   assertVpnSettings(settings);
+  assertConsoleSettings(settings);
   const directory = privateDirectory(settings.dataDirectory);
   const databasePath = join(directory, "hosting.sqlite");
   const masterKeyPath = join(directory, "host-key");
@@ -105,6 +109,7 @@ export async function startLocalHost(
   let admin: HttpHost | undefined;
   let participant: HttpHost | undefined;
   let gateways: SurfaceGateways | undefined;
+  let webBroker: PublishedWebBroker | undefined;
   let service: HostingService | undefined;
   let transportEngine: RuntimeEngine | undefined;
   let uptimeTimer: ReturnType<typeof setInterval> | undefined;
@@ -149,6 +154,7 @@ export async function startLocalHost(
     await service?.drain();
     if (options.stopLocalEnvironments) await stopOwnedEnvironments(unstoppedLocal);
     await gateways?.close();
+    await webBroker?.close();
     await collectVpnCleanupFailure(vpnStopFailures, () => transportEngine?.closeTransports?.());
     service?.flush();
     store.close();
@@ -184,9 +190,7 @@ export async function startLocalHost(
     service.accountConnection = settings.accountConnection;
     service.gatewayPorts = settings.gatewayPorts;
     service.containerLimits = settings.containerLimits ?? DEFAULT_CONTAINER_LIMITS;
-    service.listenerPorts = [settings.adminPort, settings.participantPort].filter(
-      (port) => port !== 0,
-    );
+    service.listenerPorts = listenerPorts(settings);
     // Public mode offers no gateway problems; a recovered one must still not open on every interface.
     const gatewayHostname = settings.public ? "127.0.0.1" : settings.hostname;
     service.gatewayHostname = gatewayHostname;
@@ -227,14 +231,14 @@ export async function startLocalHost(
       settings.vpn ? (remote, job) => settings.vpn?.authorize(remote, job) : undefined,
     );
     gateways = surfaces;
-    service.surfaceLink = (job, team, path) => surfaces.link(job, team, path);
     service.closeSurface = (jobId) => surfaces.closeJob(jobId);
+    webBroker = await configureSurfaceAccess(settings, service, surfaces);
     participant = await startHttpHost({
       kind: "participant",
       hostname: settings.hostname,
       port: settings.participantPort,
-      advertised: settings.public?.participantOrigin,
-      behindProxy: settings.public?.behindProxy,
+      advertised: settings.consoleAppliance?.consoleOrigin ?? settings.public?.participantOrigin,
+      behindProxy: settings.consoleAppliance?.behindProxy ?? settings.public?.behindProxy,
       staticRoot: hostBuildDirectory(repositoryRoot, "participant-portal"),
       service,
       ...vpnHttpAuthorization(settings, store),
@@ -249,7 +253,7 @@ export async function startLocalHost(
       service,
       participantOrigin: participant.origin,
     });
-    service.listenerPorts = [admin.boundPort, participant.boundPort];
+    service.listenerPorts = listenerPorts(settings, admin.boundPort, participant.boundPort);
     service.assertGatewayRange(settings.gatewayPorts);
     const pollUptime = () => {
       if (!service || uptimeTick) return;
@@ -280,4 +284,40 @@ export async function startLocalHost(
     await stop();
     throw error;
   }
+}
+
+function assertConsoleSettings(settings: LocalHostSettings): void {
+  if (
+    settings.consoleAppliance &&
+    (settings.public || settings.vpn || settings.hostname !== "127.0.0.1")
+  )
+    throw new Error("Console appliance listeners require loopback native hosting.");
+}
+function listenerPorts(
+  settings: LocalHostSettings,
+  admin = settings.adminPort,
+  participant = settings.participantPort,
+): number[] {
+  return [
+    admin,
+    participant,
+    ...(settings.consoleAppliance ? [settings.consoleAppliance.webPort] : []),
+  ].filter((port) => port !== 0);
+}
+async function configureSurfaceAccess(
+  settings: LocalHostSettings,
+  service: HostingService,
+  surfaces: SurfaceGateways,
+) {
+  if (!settings.consoleAppliance) {
+    service.surfaceLink = (job, team, path) => surfaces.link(job, team, path);
+    return undefined;
+  }
+  const broker = new PublishedWebBroker(service, settings.consoleAppliance);
+  await broker.listen();
+  service.publicWebServices = settings.consoleAppliance.webServiceIds;
+  service.publicWebRevoke = (teamId) => broker.revokeTeam(teamId);
+  service.publicWebHandoff = (team, problemId, target) =>
+    broker.issue(team.teamId, digest(team.loginKey), problemId, target);
+  return broker;
 }

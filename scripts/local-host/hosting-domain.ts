@@ -272,6 +272,13 @@ export class HostingDomain {
   /** jobId → eventId of single-environment operations still running. */
   private readonly busyJobs = new Map<string, string>();
   readonly uptime: LocalUptime;
+  publicWebServices?: readonly string[];
+  publicWebRevoke?: (teamId: string) => void;
+  publicWebHandoff?: (
+    team: Team,
+    ownProblemId: string,
+    target: { teamId: string; problemId: string; serviceId: string },
+  ) => Promise<string>;
   surfaceLink?: (job: Job, team: Team, path?: string) => Promise<string>;
   closeSurface?: (jobId: string) => Promise<void>;
   /** Fixed exercise-gateway ports; a runtime slot is only used when its gateway port is free. */
@@ -2021,6 +2028,14 @@ export class HostingDomain {
     if (request.path.startsWith("/portal/registration/"))
       throw new HostError(404, "Unknown participant endpoint.");
     const team = this.store.authenticateTeam(request.token);
+    if (request.path === "/portal/me/public-web/logout" && request.method === "POST") {
+      this.publicWebRevoke?.(team.teamId);
+      return ok({ revoked: true });
+    }
+    if (
+      /^\/portal\/me\/problems\/[a-z0-9][a-z0-9-]{0,127}\/public-web-handoff$/u.test(request.path)
+    )
+      return this.issuePublicWeb(request, team);
     if (/^\/portal\/me\/problems\/[a-z0-9][a-z0-9-]{0,127}\/network$/u.test(request.path))
       return this.participantNetwork(request);
     return this.dispatchParticipant(request, team);
@@ -2052,6 +2067,65 @@ export class HostingDomain {
       return this.queue.run(team.eventId, () => this.renameParticipant(request));
     if (request.method !== "POST") throw new HostError(404, "Unknown participant endpoint.");
     return this.submitParticipant(request, team);
+  }
+  private async issuePublicWeb(request: ApiRequest, team: Team): Promise<ApiResponse> {
+    if (!this.publicWebHandoff || request.method !== "POST" || request.query.size)
+      throw new HostError(404, "Public Web access is unavailable.");
+    const ownProblemId = request.path.split("/")[4] ?? "";
+    this.networkContext(request, ownProblemId);
+    const body = object(request.body);
+    if (
+      Object.keys(body)
+        .sort((a, b) => a.localeCompare(b))
+        .join(",") !== "problemId,serviceId,teamId" ||
+      [body.teamId, body.problemId, body.serviceId].some(
+        (value) =>
+          typeof value !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,127}$/u.test(value as string),
+      )
+    )
+      throw new HostError(400, "Select a published team, problem and service ID only.");
+    const url = await this.publicWebHandoff(
+      team,
+      ownProblemId,
+      body as { teamId: string; problemId: string; serviceId: string },
+    );
+    this.networkContext(request, ownProblemId);
+    return ok({ url, expiresInMs: 30_000 });
+  }
+  async authorizePublicWeb(
+    teamId: string,
+    keyHash: string,
+    ownProblemId: string,
+    target: { teamId: string; problemId: string; serviceId: string },
+  ) {
+    const team = this.store.team(teamId);
+    if (digest(team.loginKey) !== keyHash) throw new HostError(401, "Team access was revoked.");
+    const request: ApiRequest = {
+      method: "GET",
+      path: "",
+      body: undefined,
+      token: team.loginKey,
+      query: new URLSearchParams(),
+    };
+    const context = this.networkContext(request, ownProblemId);
+    if (!this.engine.publishedWebTarget)
+      throw new HostError(404, "Public Web access is unavailable.");
+    const own = context.jobs.find((job) => job.problemId === ownProblemId);
+    if (!own) throw new HostError(404, "No requester environment.");
+    const resolved = await this.engine.publishedWebTarget(context, ownProblemId, target);
+    if (digest(this.store.team(teamId).loginKey) !== keyHash)
+      throw new HostError(401, "Team access was revoked.");
+    const current = this.networkContext(request, ownProblemId).jobs.find(
+      (job) => job.jobId === own.jobId,
+    );
+    if (
+      !current ||
+      current.unit !== own.unit ||
+      current.definition !== own.definition ||
+      current.deployedAt !== own.deployedAt
+    )
+      throw new HostError(409, "Requester environment changed.");
+    return { ...resolved, requester: { ...current } };
   }
   private async participantNetwork(request: ApiRequest): Promise<ApiResponse> {
     const problemId = /^\/portal\/me\/problems\/([a-z0-9][a-z0-9-]{0,127})\/network$/u.exec(
@@ -2098,7 +2172,18 @@ export class HostingDomain {
         problemId,
       );
       resolve(); // Revalidate authentication and playing state after asynchronous observation.
-      return ok(view);
+      return ok(
+        this.publicWebHandoff
+          ? {
+              ...view,
+              shared: view.shared.map((entry) => ({
+                ...entry,
+                browserAvailable:
+                  entry.http === true && this.publicWebServices?.includes(entry.serviceId) === true,
+              })),
+            }
+          : view,
+      );
     } finally {
       slot.pending = false;
     }

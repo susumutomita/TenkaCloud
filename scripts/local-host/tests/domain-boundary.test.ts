@@ -1,14 +1,11 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { assertPortableDomain } from "../../quality/portable-domain";
 
-test("domain runtime closure has no concrete Bun or AWS dependencies", () => {
-  expect(assertPortableDomain(resolve(import.meta.dir, "../../.."))).toContain(
-    "scripts/local-host/participant-aws-contract.ts",
-  );
-});
+// The complete repository Program runs in test:host's mandatory compiler preflight.
+// These small graphs keep the rejection behavior covered in the unit-test process.
 test.each([
   "import { Database } from 'bun:sqlite';",
   "import type { SSMClient } from '@aws-sdk/client-ssm';",
@@ -22,6 +19,13 @@ test.each([
   "const principal = {} as import('./organizer-principal').OrganizerPrincipal;",
   "import type { OrganizerPrincipal } from './organizer-principal'; const principal: OrganizerPrincipal = JSON.parse('{}');",
   "import type { OrganizerPrincipal } from './organizer-principal'; declare const viewer: OrganizerPrincipal; const principal = {...viewer, role:'Admin' as const};",
+  "declare const authenticatedOrganizer: unique symbol; const principal = {[authenticatedOrganizer]:true, role:'Admin'};",
+  "declare const authenticatedOrganizer: unique symbol; const principal = {get [authenticatedOrganizer](){return true;}};",
+  "const principal = {'__@authenticatedOrganizerSynthetic':true};",
+  "import type { OrganizerPrincipal } from './organizer-principal'; const principal: Readonly<OrganizerPrincipal> = JSON.parse('{}');",
+  "import type { OrganizerPrincipal } from './organizer-principal'; declare function accept(value: OrganizerPrincipal): void; accept(JSON.parse('{}'));",
+  "import type { OrganizerPrincipal } from './organizer-principal'; function manufacture(): OrganizerPrincipal {return JSON.parse('{}');}",
+  "import type { OrganizerPrincipal } from './organizer-principal'; const principal: OrganizerPrincipal = {...JSON.parse('{}')};",
 ])("a mistaken helper/provider edit is rejected: %s", (source) => {
   const root = mkdtempSync(join(tmpdir(), "portable-domain-"));
   try {

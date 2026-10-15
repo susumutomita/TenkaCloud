@@ -489,7 +489,8 @@
     "incompatible_host_unknown_architecture": "This problem needs a native {{required}} CPU and the Docker host's architecture could not be determined, so it was not started rather than assumed compatible.",
     "incompatible_host_missing_cpu_flags": "This problem needs the CPU features {{flags}}, which this host does not report. It was not started, because the measurement it scores depends on them.",
     "incompatible_host_unknown_cpu_flags": "This problem needs the CPU features {{flags}}, and this host's CPU features could not be read. It was not started rather than assumed compatible.",
-    "incompatible_host_generic": "This problem was not started: its result would not be meaningful on this machine."
+    "incompatible_host_generic": "This problem was not started: its result would not be meaningful on this machine.",
+    "network_open_web": "Open published Web"
   },
   "multi_flag": {
     "progress_header": "Flags solved: {solved} / {total}",

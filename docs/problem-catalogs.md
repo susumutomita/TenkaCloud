@@ -26,6 +26,14 @@ its previous immutable revision. It is an explicit default selection, not a core
 catalog added to other selections. A custom file selects only its listed packs.
 The InterviewCatalog used by Passport remains a separate contract.
 
+A fresh checkout has no downloaded selection yet. `make local` requires explicit
+acquisition; it does not download sources or create an empty `selected.json`.
+Review `catalog-sources.json`, then run `make catalog-download` to acquire that
+selection, or pass `CATALOG_SOURCES=my-catalogs.json` for your own reviewed file.
+Run `make local` again to prepare the catalog and build the matching interfaces.
+`--no-build` additionally requires an existing matching host build. Preserve any
+old submodule checkout or manually maintained `problems/` before catalog preparation.
+
 `bun run build:pages` explicitly acquires `CATALOG_SOURCES` (defaulting to the
 committed `catalog-sources.json`) and prepares it before building the website demos.
 This also works in a clean Pages checkout without submodules or a preexisting

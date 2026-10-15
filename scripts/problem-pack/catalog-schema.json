@@ -380,6 +380,40 @@
                 }
               }
             },
+            "publicServices": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "description": "Explicit isolated competition TCP services; browser brokering requires applicationProtocol=http. Terminal and verifier services cannot be published.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "service", "port", "purpose"],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+                  },
+                  "service": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+                  },
+                  "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "applicationProtocol": {
+                    "enum": ["http"]
+                  }
+                }
+              }
+            },
             "compatibility": {
               "type": "object",
               "additionalProperties": false,

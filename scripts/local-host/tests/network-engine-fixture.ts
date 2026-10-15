@@ -70,7 +70,7 @@ export function networkEngineFixture() {
     problems: [problem],
   });
   const reservations: string[] = [];
-  const add = (name: string, publications = 0, catalogIndex = 0) => {
+  const add = (name: string, publications = 0, catalogIndex = 0, http = false) => {
     const problem = requiredNetworkValue(engine.catalog()[catalogIndex]);
     const event = store.event("event");
     if (!event.problems.some((entry) => entry.problemId === problem.problemId))
@@ -100,7 +100,13 @@ export function networkEngineFixture() {
     const definition = JSON.parse(job.definition) as {
       composeText: string;
       problem: {
-        publicServices?: { id: string; service: string; port: number; purpose: string }[];
+        publicServices?: {
+          id: string;
+          service: string;
+          port: number;
+          purpose: string;
+          applicationProtocol?: "http";
+        }[];
       };
     };
     if (publications) {
@@ -113,6 +119,7 @@ export function networkEngineFixture() {
         service,
         port: 8000 + index,
         purpose: "Synthetic bounded capability",
+        ...(http ? { applicationProtocol: "http" as const } : {}),
       }));
       job.definition = JSON.stringify(definition);
     }

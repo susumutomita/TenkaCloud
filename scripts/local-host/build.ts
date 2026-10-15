@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { readCatalogSelection } from "../problem-pack/catalog-read";
 
 const APPS = {
   "application-admin-console": "host console",
@@ -14,6 +15,17 @@ export type BuildOutput = "full" | "summary";
 /** Output of each app's `vite.host.config.ts`; `main.ts` serves `host.html` from here. */
 export function hostBuildDirectory(repositoryRoot: string, app: App): string {
   return join(repositoryRoot, ".tenkacloud/host-build", app);
+}
+
+export function assertHostCatalogBuild(repositoryRoot: string): void {
+  const selection = readCatalogSelection(repositoryRoot);
+  const manifest = join(repositoryRoot, ".tenkacloud/host-build/catalog-selection.json");
+  if (!existsSync(manifest))
+    throw new Error("Local host interfaces are not built. Run `make local` without --no-build.");
+  if (readFileSync(manifest, "utf8") !== selection)
+    throw new Error(
+      "The selected catalog differs from the built interfaces; rebuild before starting",
+    );
 }
 
 /** Runs Bun with `args`; in `summary` mode the child's stdout and stderr are returned, not shown. */
@@ -41,8 +53,7 @@ export async function buildHosting(
 ): Promise<void> {
   const { materializeCatalog } = await import("../problem-pack/downloaded-catalog");
   materializeCatalog(repositoryRoot);
-  const catalogLock = join(repositoryRoot, ".tenkacloud/catalog-store/selected.json");
-  const catalogIdentity = readFileSync(catalogLock, "utf8");
+  const catalogIdentity = readCatalogSelection(repositoryRoot);
   const apps = Object.keys(APPS) as App[];
   for (const [index, app] of apps.entries()) {
     const started = performance.now();
@@ -68,7 +79,7 @@ export async function buildHosting(
         `Built the ${APPS[app]} in ${((performance.now() - started) / 1000).toFixed(1)}s.`,
       );
   }
-  if (readFileSync(catalogLock, "utf8") !== catalogIdentity)
+  if (readCatalogSelection(repositoryRoot) !== catalogIdentity)
     throw new Error("Catalog selection changed during the build; rebuild before starting");
   writeFileSync(
     join(repositoryRoot, ".tenkacloud/host-build/catalog-selection.json"),

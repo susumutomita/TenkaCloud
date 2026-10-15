@@ -489,7 +489,8 @@
     "incompatible_host_unknown_architecture": "この問題は native な {{required}} CPU を必要としますが、 Docker host の architecture を判定できませんでした。 emulation 上の測定値は正しく見えて正しくないため、 互換とみなさず起動しません。",
     "incompatible_host_missing_cpu_flags": "この問題は CPU 機能 {{flags}} を必要としますが、 この host は報告していません。 採点する測定値がこれらに依存するため起動しません。",
     "incompatible_host_unknown_cpu_flags": "この問題は CPU 機能 {{flags}} を必要としますが、 この host の CPU 機能を読み取れませんでした。 互換とみなさず起動しません。",
-    "incompatible_host_generic": "この問題はこのマシンでは結果に意味がないため起動しません。"
+    "incompatible_host_generic": "この問題はこのマシンでは結果に意味がないため起動しません。",
+    "network_open_web": "公開 Web を開く"
   },
   "multi_flag": {
     "progress_header": "解答した flag: {solved} / {total}",

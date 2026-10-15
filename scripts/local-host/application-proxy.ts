@@ -60,6 +60,7 @@ function upstreamHeaders(
   origin: string,
   keyHash: string,
   cookiePrefix: string,
+  forwardAuthorization = true,
 ): Headers {
   const headers = new Headers({ host: new URL(origin).host });
   for (const name of ["accept", "content-type", "range", "if-none-match", "if-modified-since"]) {
@@ -67,7 +68,11 @@ function upstreamHeaders(
     if (typeof value === "string") headers.set(name, value);
   }
   const authorization = request.headers.authorization;
-  if (authorization && digest(authorization.replace(/^Bearer\s+/iu, "").trim()) !== keyHash)
+  if (
+    forwardAuthorization &&
+    authorization &&
+    digest(authorization.replace(/^Bearer\s+/iu, "").trim()) !== keyHash
+  )
     headers.set("authorization", authorization);
   const cookies = (request.headers.cookie ?? "")
     .split(";")
@@ -133,7 +138,9 @@ export async function proxyApplication(args: {
   origin: string;
   deniedPaths: readonly string[];
   keyHash: string;
-  authorize: () => Job;
+  authorize: () => Job | Promise<Job>;
+  transport?: (target: URL, options: RequestInit) => Promise<Response>;
+  forwardAuthorization?: boolean;
 }): Promise<void> {
   const { request, response } = args;
   const method = request.method ?? "GET";
@@ -145,22 +152,28 @@ export async function proxyApplication(args: {
   if (hasBody && request.headers.origin !== args.origin)
     throw new HostError(403, "A same-origin challenge request is required.");
   const body = hasBody ? await requestBody(request) : undefined;
-  const forwarded = args.authorize();
+  const forwarded = await args.authorize();
   // Cookies ignore TCP ports. Namespace server-managed challenge cookies per job
   // so another exercise cannot receive or overwrite them on this shared hostname.
   const cookiePrefix = `tc_app_${digest(forwarded.jobId).slice(0, 24)}_`;
   const target = new URL(args.upstream.origin);
   target.pathname = incoming.pathname;
   target.search = incoming.search;
-  const result = await fetch(target, {
+  const result = await (args.transport ?? fetch)(target, {
     method,
     body: body ? new Uint8Array(body).buffer : undefined,
-    headers: upstreamHeaders(request, args.origin, args.keyHash, cookiePrefix),
+    headers: upstreamHeaders(
+      request,
+      args.origin,
+      args.keyHash,
+      cookiePrefix,
+      args.forwardAuthorization,
+    ),
     redirect: "manual",
     signal: AbortSignal.timeout(5000),
   });
   const payload = await responseBody(result);
-  const current = args.authorize();
+  const current = await args.authorize();
   if (
     current.unit !== forwarded.unit ||
     current.definition !== forwarded.definition ||

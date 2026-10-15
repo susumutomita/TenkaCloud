@@ -28,3 +28,17 @@ export function publishCompetitionService(
     { method: "POST", body: { serviceId, published }, throwOn400: true, throwOn409: true },
   );
 }
+
+export function openPublishedWeb(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  ownProblemId: string,
+  target: { teamId: string; problemId: string; serviceId: string },
+) {
+  return portalFetch<{ url: string; expiresInMs: number }>(
+    apiBaseUrl,
+    `portal/me/problems/${encodeURIComponent(ownProblemId)}/public-web-handoff`,
+    teamLoginKey,
+    { method: "POST", body: target, throwOn400: true, throwOn409: true },
+  );
+}

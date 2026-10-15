@@ -668,6 +668,67 @@ export class DockerHostingEngine implements RuntimeEngine {
       shared,
     };
   }
+  async publishedWebTarget(
+    context: Context,
+    ownProblemId: string,
+    target: { teamId: string; problemId: string; serviceId: string },
+  ): Promise<{ job: Job; address: string; port: number }> {
+    const epoch = this.policyEpoch(context.event.eventId);
+    const requester = this.publicationJob(context, ownProblemId);
+    const requesterRuntime = this.running.get(requester.jobId);
+    const before = this.networkState
+      ?.jobs()
+      .find(
+        (entry) =>
+          entry.eventId === context.event.eventId &&
+          entry.teamId === target.teamId &&
+          entry.problemId === target.problemId &&
+          entry.status === "COMPLETE",
+      );
+    const publisherRuntime = before && this.running.get(before.jobId);
+    const publisherIdentity =
+      before && JSON.stringify([before.jobId, before.unit, before.definition, before.deployedAt]);
+    const view = await this.networkView(context, ownProblemId);
+    const publication = view.shared.find(
+      (entry) =>
+        entry.teamId === target.teamId &&
+        entry.problemId === target.problemId &&
+        entry.serviceId === target.serviceId,
+    );
+    const job = this.networkState
+      ?.jobs()
+      .find(
+        (entry) =>
+          entry.eventId === context.event.eventId &&
+          entry.teamId === target.teamId &&
+          entry.problemId === target.problemId &&
+          entry.status === "COMPLETE",
+      );
+    if (!publication || !job?.unit || !publication.addresses.length)
+      throw new HostError(404, "The requested service is not currently published.");
+    if (
+      epoch !== this.policyEpoch(context.event.eventId) ||
+      requesterRuntime !== this.running.get(requester.jobId) ||
+      publisherRuntime !== this.running.get(job.jobId) ||
+      publisherIdentity !== JSON.stringify([job.jobId, job.unit, job.definition, job.deployedAt])
+    )
+      throw new HostError(409, "Published Web generation changed.");
+    this.assertRunningGuard(job);
+    if (
+      !definitionOf(job, false).problem.publicServices?.some(
+        (service) => service.id === target.serviceId && service.applicationProtocol === "http",
+      )
+    )
+      throw new HostError(404, "This publication is not an HTTP service.");
+    const unit = JSON.parse(job.unit) as LocalComposeUnit;
+    if (!this.publicServiceIds(job, unit).includes(target.serviceId))
+      throw new HostError(404, "The requested service is not currently published.");
+    return {
+      job: { ...job },
+      address: requiredNetworkValue(publication.addresses[0]),
+      port: publication.port,
+    };
+  }
   private async sharedPublicServices(context: Context): Promise<NetworkPublicationView["shared"]> {
     if (this.applyingPublicationEvent === context.event.eventId)
       throw new HostError(409, "Competition network policy is changing.");
@@ -731,6 +792,7 @@ export class DockerHostingEngine implements RuntimeEngine {
           addresses,
           port: service.port,
           protocol: "tcp",
+          ...(service.applicationProtocol === "http" ? { http: true } : {}),
         });
     }
     return shared;

@@ -261,6 +261,11 @@ export interface RuntimeEngine {
       }[],
     ): void;
   }): void;
+  publishedWebTarget?(
+    context: Context,
+    ownProblemId: string,
+    target: { teamId: string; problemId: string; serviceId: string },
+  ): Promise<{ job: Job; address: string; port: number }>;
   networkView?(
     context: Context,
     problemId: string,

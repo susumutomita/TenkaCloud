@@ -15,7 +15,7 @@
     "start": "bun run scripts/local-host/main.ts",
     "bench:host": "bun run scripts/local-host/bench/capacity.ts",
     "test:host:api-docs": "bun test ./scripts/local-host/tests/api-docs.test.ts && bun run scripts/local-host/tests/api-docs-browser-e2e.ts",
-    "test:host": "bun test ./scripts/local-host/tests/*.test.ts ./scripts/local-host/container/*.test.ts ./scripts/lib/*.test.ts && bun run scripts/local-host/tests/run.ts",
+    "test:host": "bun run check:portable-domain && bun test ./scripts/local-host/tests/*.test.ts ./scripts/local-host/container/*.test.ts ./scripts/lib/*.test.ts && bun run scripts/local-host/tests/run.ts",
     "test:host:network": "bun run scripts/local-host/tests/network-docker-smoke.ts",
     "test:host:docker": "bun run scripts/local-host/tests/docker-smoke.ts",
     "test:host:container": "bun run scripts/local-host/tests/container-smoke.ts",
@@ -65,7 +65,8 @@
     "test:host:tenant-boundary": "bun run build:host && bun run scripts/local-host/tests/tenant-boundary-browser-e2e.ts",
     "test:host:pi-siege": "bun run build:host && bun run scripts/local-host/tests/pi-siege-browser-e2e.ts",
     "test:host:forensic": "bun run build:host && bun run scripts/local-host/tests/forensic-browser-e2e.ts",
-    "test:ctfd:e2e": "bun run build:host && bun run scripts/local-host/tests/ctfd-browser-e2e.ts"
+    "test:ctfd:e2e": "bun run build:host && bun run scripts/local-host/tests/ctfd-browser-e2e.ts",
+    "check:portable-domain": "bun run scripts/quality/portable-domain.ts"
   },
   "trustedDependencies": [],
   "scarfSettings": {
