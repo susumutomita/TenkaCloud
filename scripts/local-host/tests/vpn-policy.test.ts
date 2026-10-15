@@ -65,6 +65,13 @@ describe("VPN public peer identity", () => {
     delete (raw.peers[0] as Partial<(typeof raw.peers)[0]>).teamId;
     expect(() => vpnPeerPlan(raw)).toThrow();
   });
+  test("only the interface that ships with a WireGuard seal drop-in can be planned", () => {
+    expect(vpnPeerPlan(registration()).interface).toBe("tcwg0");
+    for (const name of ["tcwg1", "tcwg-event", "wg0"])
+      expect(() => vpnPeerPlan({ ...registration(), interface: name })).toThrow(
+        "VPN requires the tcwg0 interface",
+      );
+  });
   test("rejects duplicate address/key and public or scoped addresses", () => {
     for (const mutation of [
       (raw: ReturnType<typeof registration>) => {

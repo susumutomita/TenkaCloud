@@ -907,10 +907,17 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   ): VpnReplyRoute[] {
     const service = this.verifyContainer(plan, container, services);
     services.add(service);
-    const names = Object.keys(container.NetworkSettings.Networks);
-    if (names.length !== 1)
-      throw new Error("VPN reply routing requires one unambiguous owned attachment per service.");
-    const segment = plan.segments.find((entry) => `${plan.project}_${entry.name}` === names[0]);
+    // One route per destination, so replies leave through the first owned segment by name, as
+    // publication routes do. A peer that targets another attachment gets no reply. The VPN REPLY
+    // rules pair each bridge with its own subnet, so the misrouted reply falls to the final DROP.
+    const segment = plan.segments
+      .filter((entry) =>
+        Object.hasOwn(container.NetworkSettings.Networks, `${plan.project}_${entry.name}`),
+      )
+      .reduce<LocalNetworkPlan["segments"][number] | undefined>(
+        (first, entry) => (!first || entry.name < first.name ? entry : first),
+        undefined,
+      );
     const sandbox = container.NetworkSettings.SandboxKey;
     const pid = container.State?.Pid;
     if (
@@ -936,7 +943,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       const gateway = this.ownedGateway(plan, segment, ipv6);
       const path = this.namespaceRoute(sandbox, ipv6, gateway);
       const endpoint = requiredNetworkValue(
-        container.NetworkSettings.Networks[requiredNetworkValue(names[0])],
+        container.NetworkSettings.Networks[`${plan.project}_${segment.name}`],
       );
       if (
         path.gateway ||
