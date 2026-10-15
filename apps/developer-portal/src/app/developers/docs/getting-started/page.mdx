@@ -62,8 +62,7 @@ Next: [organizer manual](/developers/docs/manual/organizer/), [participant manua
 [Build Your Own Cloud Competition](https://leanpub.com/build-your-own-cloud-competition)
 explain the teaching examples and design. The source of truth for current behaviour
 is this documentation and its matching checkout. The book source revision in zenn-article PR #304 was merged on 2026-10-05.
-`docs/book-compatibility.md` records its scope and the current command, scoring
-and runtime boundaries. A source merge does not verify publication or playability.
+A source merge does not verify publication or playability.
 
 New installations use `tenkacloud-cloud` stack names; existing `tenkacloud-lite` stacks keep their names. The CLI discovers Lite/cloud installations; if both exist, explicitly choose `TENKACLOUD_STACK_LAYOUT=lite` or `cloud`. Original Lite updates verify ownership and persistent resource IDs. Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use `CLOUD_ARGS="--confirm-no-active-events"` for a noninteractive upgrade; generic `--yes` cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic `make deploy` behavior. Published cloud-v1 resource/database layouts cannot be updated in place, and no data is migrated automatically. `--drain-events` is unavailable; finish event Teardown before removing the platform.
 

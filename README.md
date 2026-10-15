@@ -75,7 +75,7 @@ make local
 
 **Finished for now?** Run `make down` from another terminal. It stops this controller and its owned Docker environments while retaining the database, keys, container writable layers and volumes. Start again with `make local`; participants resume on-demand exercises from their portal. Stop does not retain process memory or reset the event clock. Use the event's **Teardown** action to remove problem environments.
 
-[Local hosting and recovery](./docs/local-hosting.md) · [Requirements and capacity](./docs/local-play-requirements.md) · [Organizer manual](./apps/developer-portal/src/app/developers/docs/manual/organizer/page.mdx)
+[Organizer manual](./apps/developer-portal/src/app/developers/docs/manual/organizer/page.mdx)
 
 ### Open a development environment in Codespaces
 
@@ -132,13 +132,13 @@ To inspect commands without AWS access, use `make deploy CLOUD_ARGS="--help"` or
 | Local | Your computer, disk and Docker capacity; native Cryptography Battle runs in Bun and SQLite |
 | AWS | Hosting services, your chosen database, selected problem resources and retained data; the console pipeline also uses CodeBuild |
 
-No hosting option promises a zero bill. [Cost boundaries and retained resources](./docs/running-costs.md) explain what to review before and after an event.
+No hosting option promises a zero bill.
 
 ## Add your own problems
 
 Problem content lives in [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge). Use its authoring and validation workflow to contribute to the competition catalog. You do not need to fork the platform to author a problem.
 
-Select and download problem repositories with `make catalog-download CATALOG_SOURCES=my-catalogs.json`, then validate and rebuild. Existing event snapshots are retained. See [downloaded catalogs](./docs/problem-catalogs.md). No running host is updated by downloading.
+Select and download problem repositories with `make catalog-download CATALOG_SOURCES=my-catalogs.json`, then validate and rebuild. Existing event snapshots are retained. No running host is updated by downloading.
 
 The update command fetches the tracked branch, then refuses older or divergent commits before checkout or staging. It also refuses unfinished source changes; unrelated platform work is preserved. Keep a reviewed trial pin until the tracked branch can advance it without dropping commits.
 
@@ -151,21 +151,18 @@ bun run pack install ./my-pack
 bun run pack list
 ```
 
-Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads its `problems/` tree and does not consume the Pack store. [Pack tutorial](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx) · [External Git pack workflow](./scripts/problem-pack/README-external-git-pack.md) · [Examples and test fixtures](./packs/README.md)
+Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads its `problems/` tree and does not consume the Pack store. [Pack tutorial](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx) · [External Git pack workflow](./scripts/problem-pack/README-external-git-pack.md)
 
 ## Documentation
 
 | You want to… | Read |
 | --- | --- |
 | Run an event | [Planning and operations](./apps/developer-portal/src/app/developers/docs/operate/run-an-event/page.mdx) |
-| Host locally or recover access | [Local competition hosting](./docs/local-hosting.md) |
 | Deploy or remove AWS hosting | [Deployment guide](./DEPLOYMENT_GUIDE.md) |
-| Prepare competitor accounts | [Account onboarding](./docs/competitor-account-onboarding.md) |
+| Prepare competitor accounts | [Account onboarding](./infrastructure/templates/README.md) |
 | Ask an LLM to help | [LLM entry point](./landing/llms.txt) · [Task guide and code map](./landing/llms-full.txt) |
 | Understand the architecture | [Architecture guide](./docs/architecture/README.md) · [Editable AWS system diagram](./docs/architecture/diagrams/system-architecture.drawio) |
 | Ask for help | [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions) (public) |
-
-[Hosting support and verification](./docs/host-retirement.md) records runtime coverage. [Container build and restart checks](./docs/host-build-verification.md) cover the optional image; no host image has been published by this change.
 
 ## Development
 
@@ -178,7 +175,7 @@ make lint
 make before-commit
 ```
 
-Run focused checks while developing and `make before-commit` before committing. It runs lint and the tests for the files you changed; CI runs every test. Real AWS and external IdP checks have a separate [event rehearsal guide](./docs/host-rehearsal.md).
+Run focused checks while developing and `make before-commit` before committing. It runs lint and the tests for the files you changed; CI runs every test.
 
 ## Vision
 

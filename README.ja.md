@@ -77,7 +77,7 @@ make local
 
 **いったん停止するには:** 別のターミナルで `make down` を実行します。このコントローラーと所有する Docker 環境を停止し、DB・キー・コンテナーの書き込み領域・ボリュームを保持します。次の `make local` の後、オンデマンドの問題は参加者がポータルから再開します。プロセスのメモリーは保持せず、大会の時計もリセットしません。問題環境を削除するときは、大会の **Teardown** を使います。
 
-[起動・運用・復旧](./docs/local-hosting.md) · [必要な環境と容量](./docs/local-play-requirements.md) · [開催者マニュアル](./apps/developer-portal/src/app/developers/docs/manual/organizer/page.ja.mdx)
+[開催者マニュアル](./apps/developer-portal/src/app/developers/docs/manual/organizer/page.ja.mdx)
 
 ### Codespaces で開発環境を開く
 
@@ -134,13 +134,13 @@ AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` 
 | ローカル | 手元の PC・ディスク・Docker の容量。Cryptography Battle は Bun と SQLite で動作 |
 | AWS | 基盤サービス・選択した DB・問題のリソース・保持データ。コンソール pipeline は CodeBuild も使用 |
 
-利用料金がゼロになることは保証しません。大会の前後に[費用と保持リソース](./docs/running-costs.md)を確認してください。
+利用料金がゼロになることは保証しません。
 
 ## 自分の問題を追加する
 
 問題の正本は [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) です。カタログへの追加には、そのリポジトリの作問・検証手順を使います。作問のためにプラットフォームを fork する必要はありません。
 
-`make catalog-download CATALOG_SOURCES=my-catalogs.json` で問題 repo を選択して取得し、検証・再ビルドします。既存大会の snapshot は保持します。[問題カタログの取得](./docs/problem-catalogs.md)を参照してください。取得だけで稼働中の host は更新されません。
+`make catalog-download CATALOG_SOURCES=my-catalogs.json` で問題 repo を選択して取得し、検証・再ビルドします。既存大会の snapshot は保持します。取得だけで稼働中の host は更新されません。
 
 更新コマンドは追跡する branch を取得し、古い commit または分岐した commit であれば checkout や stage の前に停止します。問題ソースに未完了の編集がある場合も停止し、本体側の無関係な作業は保持します。検証用の pin は、その commit を失わずに追跡先へ前進できるまで維持してください。
 
@@ -153,21 +153,18 @@ bun run pack install ./my-pack
 bun run pack list
 ```
 
-Cloud は有効化済みの AWS/CloudFormation Pack を次の配置で読み込みます。Local は手元の `problems/` を読み、Pack store には未接続です。[pack チュートリアル](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.ja.mdx) · [外部 Git pack の手順](./scripts/problem-pack/README-external-git-pack.md) · [作問例とテスト fixture](./packs/README.md)
+Cloud は有効化済みの AWS/CloudFormation Pack を次の配置で読み込みます。Local は手元の `problems/` を読み、Pack store には未接続です。[pack チュートリアル](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.ja.mdx) · [外部 Git pack の手順](./scripts/problem-pack/README-external-git-pack.md)
 
 ## ドキュメント
 
 | やりたいこと | 参照先 |
 | --- | --- |
 | 大会を開く | [計画と運用](./apps/developer-portal/src/app/developers/docs/operate/run-an-event/page.ja.mdx) |
-| ローカル開催・アクセスの復旧 | [ローカル競技の運用](./docs/local-hosting.md) |
 | AWS 基盤の配置・撤収 | [配置ガイド](./DEPLOYMENT_GUIDE.md) |
-| 競技者アカウントの準備 | [アカウント導入手順](./docs/competitor-account-onboarding.md) |
+| 競技者アカウントの準備 | [アカウント導入手順](./infrastructure/templates/README.md) |
 | LLM に作業を依頼する | [LLM の入口](./landing/llms.txt) · [タスク別ガイドとコードマップ](./landing/llms-full.txt) |
 | 設計を理解する | [アーキテクチャ](./docs/architecture/README.md) · [編集可能な AWS 構成図](./docs/architecture/diagrams/system-architecture.drawio) |
 | 質問する | [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions) (公開) |
-
-[機能の対応状況と検証範囲](./docs/host-retirement.md)に runtime の対応を記載しています。任意のコンテナー image は[build・再起動確認](./docs/host-build-verification.md)を参照してください。この変更で host image は公開していません。
 
 ## 開発
 
@@ -180,7 +177,7 @@ make lint
 make before-commit
 ```
 
-開発中は変更に対応する検証を実施し、commit 前に `make before-commit` を通します。lint と、変更したファイルに関係するテストを流します。全テストは CI が流します。実 AWS・外部 IdP の確認は[大会リハーサル](./docs/host-rehearsal.md)に分けて記録します。
+開発中は変更に対応する検証を実施し、commit 前に `make before-commit` を通します。lint と、変更したファイルに関係するテストを流します。全テストは CI が流します。
 
 ## ビジョン
 

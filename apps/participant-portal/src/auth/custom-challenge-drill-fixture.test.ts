@@ -70,9 +70,7 @@ describe("createCustomChallengeDrillFixture", () => {
   it("should give the worked example command rather than only describing it", () => {
     // 「golden をコピーする」だけでは、どこへ置くのかが本文から決まらない。
     for (const locale of ["ja", "en"] as const) {
-      expect(proseFor(locale)).toContain(
-        "packs/golden/basic-aws-pack/problems/challenges/find-the-flag",
-      );
+      expect(proseFor(locale)).toContain("scripts/onboarding/find-the-flag");
       expect(proseFor(locale)).toContain("onboarding:verify-custom-challenge");
     }
   });

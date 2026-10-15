@@ -464,6 +464,15 @@
     "lifecycle_simulator_error_header": "Simulator error",
     "lifecycle_simulator_error_body": "The simulated cloud hit an error. Start it again to retry.",
     "lifecycle_simulator_action_failed_header": "Simulator operation failed",
+    "network_header": "Competition DMZ",
+    "network_description": "Publish a declared service for other teams in this competition. Private services remain private. This does not publish it on the Internet.",
+    "network_refresh": "Refresh",
+    "network_publish": "Publish to teams",
+    "network_withdraw": "Stop publishing",
+    "network_no_declarations": "This catalog does not declare a public service for your environment.",
+    "network_no_publications": "No team has published a service yet.",
+    "network_terminal_hint": "Access these addresses from your team terminal. Reconnect the terminal after a publication changes.",
+    "network_error": "The network operation failed. Refresh the status; contact the organizer if it persists.",
     "terminal_header": "Container terminal",
     "terminal_connect_button": "Connect",
     "terminal_connecting": "Connecting…",
@@ -480,7 +489,8 @@
     "incompatible_host_unknown_architecture": "This problem needs a native {{required}} CPU and the Docker host's architecture could not be determined, so it was not started rather than assumed compatible.",
     "incompatible_host_missing_cpu_flags": "This problem needs the CPU features {{flags}}, which this host does not report. It was not started, because the measurement it scores depends on them.",
     "incompatible_host_unknown_cpu_flags": "This problem needs the CPU features {{flags}}, and this host's CPU features could not be read. It was not started rather than assumed compatible.",
-    "incompatible_host_generic": "This problem was not started: its result would not be meaningful on this machine."
+    "incompatible_host_generic": "This problem was not started: its result would not be meaningful on this machine.",
+    "network_open_web": "Open published Web"
   },
   "multi_flag": {
     "progress_header": "Flags solved: {solved} / {total}",

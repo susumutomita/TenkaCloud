@@ -12,7 +12,7 @@ import type { EventSharedResources } from "./shared.js";
  * Issue #2680: `POST /admin/capacity` — Slice 1 の SSM runbook (event-capacity-runbook.ts) を
  * admin console から起動する write 側 service。read 側の overview 集計は `capacity.ts`。
  *
- * CLI 実行 (docs/operations/dynamodb-event-capacity.md) と完全に同じ document を叩くので、
+ * CLI 実行と完全に同じ document を叩くので、
  * ガード 3 層 (allowedPattern ceiling / allowedValues / automation role IAM) と実行履歴
  * (StartAutomationExecution) はそのまま効く。本 module はその手前に API 側の再検証
  * ({@link CapacityScaleBodySchema} の ceiling / {@link resolveEventHotTables} の allowlist) を

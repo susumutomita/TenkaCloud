@@ -23,6 +23,7 @@ describe("localCompetitionConfig", () => {
       cloudMode: "real",
       hasAws: false,
       problemAuthorsSource: "runtime",
+      publicWebSessions: true,
     });
     expect(config.courseTracksEnabled).not.toBe(true);
     expect(config.localTeamLoginKey).toBeUndefined();

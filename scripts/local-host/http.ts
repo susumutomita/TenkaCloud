@@ -143,6 +143,7 @@ async function serveStatic(
 
 export interface HttpHost {
   origin: string;
+  readonly boundPort: number;
   close(): Promise<void>;
 }
 
@@ -228,6 +229,12 @@ export async function startHttpHost(options: {
   /** The public origin the proxy serves; responses and origin checks use it instead of the bind. */
   advertised?: string;
   behindProxy?: boolean;
+  /** Native ingress already rejects spoofed source addresses; headers are never identities. */
+  authorizePeer?: (socketAddress: string, token: string) => void;
+  authorizeTerminalPeer?: (
+    socketAddress: string,
+    grant: import("./host-terminal").TerminalGrant,
+  ) => void;
   staticRoot: string;
   service: HostingHttpApplication;
   participantOrigin?: string;
@@ -412,6 +419,7 @@ export async function startHttpHost(options: {
             (header) => request.headers[header] !== undefined,
           ),
       };
+      options.authorizePeer?.(request.socket.remoteAddress ?? "", apiRequest.token);
       const result = await dispatch(apiRequest);
       sendApiResponse(response, result);
     } catch (error) {
@@ -428,10 +436,16 @@ export async function startHttpHost(options: {
   if (options.kind === "admin") options.service.saml.bindOrigin(origin);
   const terminalTransport =
     options.kind === "participant"
-      ? installTerminalTransport(server, options.service.terminals, () => origin)
+      ? installTerminalTransport(
+          server,
+          options.service.terminals,
+          () => origin,
+          options.authorizeTerminalPeer,
+        )
       : undefined;
   return {
     origin,
+    boundPort: Number(new URL(bound).port || 80),
     close: async () => {
       terminalTransport?.close();
       await closeServer(server);

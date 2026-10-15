@@ -4,41 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnHostProcess } from "../bench/host-process";
-import { inspectTemporaryDirectories } from "../temporary-directory";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
-
-test("a rehearsal startup failure cleans its new fixture directory", async () => {
-  const occupied = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: () => new Response("occupied"),
-  });
-  const child = Bun.spawn([process.execPath, "run", "scripts/local-host/tests/e2e-host.ts"], {
-    cwd: repository,
-    env: { ...process.env, HOST_E2E_ENGINE: "fixture", HOST_E2E_ADMIN_PORT: String(occupied.port) },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  try {
-    const [code, output] = await Promise.all([
-      child.exited,
-      new Response(child.stderr).text(),
-      new Response(child.stdout).text(),
-    ]);
-    expect(code).toBe(1);
-    expect(output).toContain("EADDRINUSE");
-    expect(
-      inspectTemporaryDirectories(repository).some((entry) => entry.ownerPid === child.pid),
-    ).toBe(false);
-  } finally {
-    if (child.exitCode === null) {
-      child.kill();
-      await child.exited;
-    }
-    await occupied.stop(true);
-  }
-});
 
 test("benchmark stop waits for the exact spawned child before fixture deletion", async () => {
   const root = mkdtempSync(join(tmpdir(), "tenka-bench-child-synthetic-"));

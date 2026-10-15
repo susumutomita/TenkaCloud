@@ -74,6 +74,7 @@ class JobGateway implements Gateway {
     private readonly job: Job,
     private readonly upstream: URL,
     private readonly service: HostingService,
+    private readonly authorizePeer?: (remote: string, job: Job) => void,
   ) {
     this.cookieName = `tc_exercise_${job.jobId.toLowerCase()}`;
     this.server.headersTimeout = 10_000;
@@ -137,6 +138,7 @@ class JobGateway implements Gateway {
       if (grant.expires <= now) this.pending.delete(ticket);
   }
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    this.authorizePeer?.(request.socket.remoteAddress ?? "", this.job);
     if (request.headers.host !== new URL(this.origin).host)
       throw new HostError(403, "Untrusted challenge Host header.");
     const url = new URL(request.url ?? "/", this.origin);
@@ -221,6 +223,7 @@ class JobGateway implements Gateway {
     response.end();
   }
   private authenticate(request: IncomingMessage): Job {
+    this.authorizePeer?.(request.socket.remoteAddress ?? "", this.job);
     const prefix = `${this.cookieName}=`;
     const token =
       (request.headers.cookie ?? "")
@@ -305,6 +308,7 @@ export class SurfaceGateways {
     private readonly service: HostingService,
     private readonly ports: GatewayPortRange,
     private readonly announce: (message: string) => void = () => undefined,
+    private readonly authorizePeer?: (remote: string, job: Job) => void,
   ) {}
   async link(job: Job, team: Team, path?: string): Promise<string> {
     // The caller's job object may be a snapshot from before an await: use the stored job.
@@ -364,7 +368,7 @@ export class SurfaceGateways {
       upstream.password
     )
       throw new Error("Challenge surface must be an explicit loopback HTTP endpoint.");
-    const gateway = new JobGateway(job, upstream, this.service);
+    const gateway = new JobGateway(job, upstream, this.service, this.authorizePeer);
     await gateway.listen(this.hostname, gatewayPort(this.ports, gatewayOffset(job)));
     const team = this.service.store.team(job.teamId);
     this.announce(`Exercise gateway for ${team.internalSlug} / ${job.problemId}: ${gateway.url}`);

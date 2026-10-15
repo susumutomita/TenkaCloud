@@ -116,3 +116,42 @@ test("collecting private-pipe children cannot close later SQLite descriptors", a
   if (process.platform === "linux")
     expect([...openDescriptorTargets()].some((target) => target.startsWith(directory))).toBe(false);
 });
+
+test.each([
+  { code: 0, signal: undefined },
+  { code: 7, signal: undefined },
+  { code: 130, signal: "SIGINT" as const },
+  { code: 137, signal: "SIGKILL" as const },
+])("private pipe preserves exit status $code with signal $signal", async ({ code, signal }) => {
+  const result = spawnPrivateKeyProcess(
+    [
+      process.execPath,
+      "--eval",
+      signal ? "console.log('ready');setInterval(()=>{},1000)" : `process.exit(${code})`,
+    ],
+    { cwd: process.cwd() },
+  );
+  // Attach rejection handling before the child can finish.
+  const exited = result.exited.then(
+    (value) => ({ value }),
+    (error) => ({ error }),
+  );
+  const ready = signal
+    ? new Promise<void>((resolve) => result.stdout.once("data", () => resolve()))
+    : Promise.resolve();
+  result.stdout.resume();
+  result.stderr.resume();
+  result.privateOutput.resume();
+  try {
+    await ready;
+    if (signal) result.child.kill(signal);
+    expect(await exited).toEqual({ value: code });
+    expect(result.child.exitCode).toBe(signal ? null : code);
+    expect(result.child.signalCode).toBe(signal ?? null);
+  } finally {
+    if (result.child.exitCode === null && result.child.signalCode === null)
+      result.child.kill("SIGKILL");
+    await result.child.exited;
+    await exited;
+  }
+});

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { WebSocket } from "ws";
+import { networkEngineFixture } from "./network-engine-fixture";
 import { terminalFixture } from "./terminal-fixture";
 
 async function waitUntil(condition: () => boolean): Promise<void> {
@@ -184,5 +185,72 @@ test("input waits for bounded shell validation, and revocation during validation
   } finally {
     finish.resolve(true);
     await revoked.close();
+  }
+});
+
+test("six authenticated WebSockets remain responsive during slow network audit and revoke only failed team", async () => {
+  const f = await terminalFixture(6);
+  const network = networkEngineFixture();
+  const teams = [f.a, f.b, ...f.extras];
+  for (const team of teams) network.add(team.job.jobId);
+  f.engine.terminalSupported = (job) =>
+    network.engine.terminalSupported(network.store.job(job.jobId));
+  let fail: (error: Error) => void = (_error: Error) => undefined;
+  let finish: () => void = () => undefined;
+  const barrier = new Promise<void>((resolve, reject) => {
+    finish = resolve;
+    fail = reject;
+  });
+  network.guard.audit = async (plan) => {
+    if (plan.project === `tch-${f.a.job.jobId.toLowerCase()}`) await barrier;
+  };
+  const sessions: Awaited<ReturnType<typeof connect>>[] = [];
+  try {
+    for (const team of teams)
+      sessions.push(await connect(f.participant.origin, await f.ticket(team.team.loginKey)));
+    await waitUntil(() => f.shells.length === 6);
+    network.setNow(11_001);
+    await Bun.sleep(600);
+    for (const session of sessions)
+      session.socket.send(JSON.stringify({ type: "input", data: "audit-echo" }));
+    await waitUntil(() =>
+      sessions.every((session) => session.frames.some((frame) => frame.data === "audit-echo")),
+    );
+    expect(sessions.every((session) => session.socket.readyState === WebSocket.OPEN)).toBe(true);
+    fail(new Error("Delayed network audit failed"));
+    await sessions[0]?.closed;
+    expect(sessions.slice(1).every((session) => session.socket.readyState === WebSocket.OPEN)).toBe(
+      true,
+    );
+    expect(f.shells[0]?.kills).toBe(1);
+  } finally {
+    finish();
+    for (const session of sessions) session.socket.close();
+    await f.close();
+    await network.close();
+  }
+});
+
+// Actual loopback HTTP/WS transports with an injected native-admission port; no VPN packet claim.
+test("peer admission binds HTTP credentials and rechecks an open terminal without client input", async () => {
+  let allowed: string | undefined;
+  let revoked = false;
+  const f = await terminalFixture(2, (remote, team) => {
+    if (!remote || revoked || (allowed !== undefined && team.teamId !== allowed))
+      throw new Error("Synthetic peer denied");
+  });
+  try {
+    const stolenTicket = await f.ticket(f.b.team.loginKey);
+    allowed = f.a.team.teamId;
+    expect((await f.issue(f.b.team.loginKey)).status).toBeGreaterThanOrEqual(400);
+    await expect(connect(f.participant.origin, stolenTicket)).rejects.toThrow();
+    const own = await connect(f.participant.origin, await f.ticket());
+    await waitUntil(() => f.shells.length === 1);
+    revoked = true;
+    await own.closed;
+    expect(f.shells[0]?.kills).toBe(1);
+    expect((await f.issue()).status).toBeGreaterThanOrEqual(400);
+  } finally {
+    await f.close();
   }
 });

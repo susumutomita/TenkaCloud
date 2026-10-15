@@ -26,6 +26,12 @@ export interface LocalComposeUnit {
   readonly secretEnv: readonly string[];
   /** Host-assigned compact subnets; retained across stop/resume. */
   readonly networkSubnets?: Readonly<Record<string, string>>;
+  /** Only local competition hosting consumes this owned, fail-closed native guard plan. */
+  readonly isolationVersion?: 1;
+  readonly isolationGeneration?: string;
+  /** Participant-approved catalog service IDs; addresses and ports are never accepted here. */
+  readonly publishedServiceIds?: readonly string[];
+  readonly publicNetworkRoutes?: readonly import("../local-network").LocalPublicRoute[];
   /** Original problem `local/` dir; set when running a remapped copy so relative paths resolve. */
   readonly projectDirectory?: string;
   /** Temp remapped compose to delete on teardown (absent for an unremapped, offset-0 problem). */

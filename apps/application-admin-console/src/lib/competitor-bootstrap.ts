@@ -18,7 +18,7 @@ const DEFAULT_REGION = "ap-northeast-1";
 const DEFAULT_STACK_NAME = "tenkacloud-competitor-bootstrap";
 
 export const COMPETITOR_ACCOUNT_ONBOARDING_URL =
-  "https://github.com/susumutomita/TenkaCloud/blob/main/docs/competitor-account-onboarding.md";
+  "https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md";
 
 /**
  * dev 環境 / runtime-config 未配線時の fallback URL。 CFn console から fetch すると

@@ -113,9 +113,8 @@ owns cloud membership. Preserve capability failures, per-team verifier separatio
 safe endpoint routing and native hardware requirements. Catalog visibility alone
 is not execution evidence.
 
-Use [build verification](../host-build-verification.md) and
-[rehearsal records](../host-rehearsal.md) for validation evidence. Synthetic allocation
-and lifecycle tests do not establish Docker performance or machine capacity.
+Synthetic allocation and lifecycle tests do not establish Docker performance or
+machine capacity.
 
 ## Diagram sources
 

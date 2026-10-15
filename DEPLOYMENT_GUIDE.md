@@ -16,8 +16,7 @@ the previous organizer key and sessions. To rotate it while the host runs, use
 Events, scores and participant data remain. Noninteractive and public/container
 starts keep existing keys without printing them to logs.
 `make down` stops owned runtimes and preserves their data. The event's Teardown
-action removes its problem environments. Read [local hosting](./docs/local-hosting.md)
-for public origins, TLS, data directories and recovery.
+action removes its problem environments.
 
 `make local-clear` confirms deletion of competition history and owned Docker exercise data; it is separate from stop and organizer-key rotation.
 
@@ -61,7 +60,7 @@ console-driven build, review the [cloud pipeline](./infrastructure/README.md#clo
 its source settings and its privileged CodeBuild role before creating the launcher
 or starting a build. Creating the launcher alone does not deploy the application.
 
-The competition's AWS accounts use a separate [competitor bootstrap](./docs/competitor-account-onboarding.md).
+The competition's AWS accounts use a separate [competitor bootstrap](./infrastructure/templates/README.md).
 Keep their deployment role, participant viewer role and mandatory ExternalId boundaries.
 AWS resource exercises require a registered, verified competitor account. Use a
 separate competitor account for third-party events. A self-test can explicitly
@@ -78,8 +77,7 @@ participant portal, submit an answer and verify its score. The current cloud
 backend restores generic CloudFormation deployment, flag/multi-flag and scheduled
 scoring, Console/CLI access and native coordination. Docker/Compose exercises require
 local hosting. Nine current templates exceed the 51,200-byte TemplateBody limit;
-TemplateURL is not implemented, so those problems are not verified deployable. [Runtime coverage](./docs/host-retirement.md)
-distinguishes implemented contracts from complete exercise rehearsals.
+TemplateURL is not implemented, so those problems are not verified deployable.
 
 ## Stop and remove resources
 
@@ -96,8 +94,7 @@ cleanup succeeds so a failed operation can be retried safely. An ordinary local
 `make down` does not remove cloud resources.
 
 Retained data and AWS resources can continue to incur charges. Check the
-[cloud lifecycle and recovery guide](./infrastructure/README.md) and
-[cost boundaries](./docs/running-costs.md) before removing storage. Shared CDK
+[cloud lifecycle and recovery guide](./infrastructure/README.md) before removing storage. Shared CDK
 bootstrap resources are separate from this application's lifecycle.
 
 To read cloud help without AWS calls, append `CLOUD_ARGS="--help"` to `make deploy`

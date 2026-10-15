@@ -122,7 +122,7 @@ caller needs `ssm:GetParameter` for that parameter and authenticated database ac
 for read-only preflight. It does not create or rotate the token.
 
 Competitor registration and verification require the displayed role trust and
-mandatory ExternalId. Review [competitor setup](../docs/competitor-account-onboarding.md)
+mandatory ExternalId. Review [competitor setup](./templates/README.md)
 for individual stacks or Organizations distribution. The bootstrap role's existing
 `AdministratorAccess` exception is for competitor initialization/deployment;
 participant credentials come from the problem's separate participant role.

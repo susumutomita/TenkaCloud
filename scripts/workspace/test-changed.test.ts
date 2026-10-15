@@ -67,7 +67,7 @@ describe("planChangedTests routing", () => {
   it("routes documents, workflows and generated sites to the script suite that reads them", () => {
     for (const path of [
       "README.md",
-      "docs/local-hosting.md",
+      "docs/architecture/README.md",
       "landing/index.html",
       "release/host-candidate.json",
       ".github/workflows/ci.yml",
@@ -78,12 +78,12 @@ describe("planChangedTests routing", () => {
     }
   });
 
-  it("routes host, integration, authoring and pack paths to their suites", () => {
+  it("routes host, integration and authoring paths to their suites", () => {
     expect(selected(["scripts/lib/a.ts", "integrations/ctfd/runtime.py"])).toEqual({
       suites: ["host"],
       workspaces: [],
     });
-    expect(selected(["scripts/problem-pack/a.ts", "packs/golden/README.md"])).toEqual({
+    expect(selected(["scripts/problem-pack/a.ts", "scripts/onboarding/a.ts"])).toEqual({
       suites: ["authoring"],
       workspaces: [],
     });

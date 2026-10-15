@@ -64,8 +64,7 @@ export function buildCapacityRows(overview: CapacityOverview): readonly Capacity
 }
 
 /**
- * runbook 実行コマンド例 (panel の footer にそのまま表示する)。上げ幅は運営が
- * `docs/operations/dynamodb-event-capacity.md` の目安表から選ぶ。
+ * runbook 実行コマンド例 (panel の footer にそのまま表示する)。上げ幅は運営が選ぶ。
  */
 export function buildRunbookCommand(documentName: string, tableName: string): string {
   return [

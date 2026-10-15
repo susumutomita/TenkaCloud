@@ -11,7 +11,10 @@ const unavailable = async (): Promise<never> => {
 };
 
 /** Real HTTP/SQLite/WS authorization; fake shell processes, never a Docker runtime claim. */
-export async function terminalFixture() {
+export async function terminalFixture(
+  teamCount = 2,
+  authorizePeer?: (remote: string, team: { eventId: string; teamId: string }) => void,
+) {
   const store = new HostStore(new Database(":memory:"));
   let clock = Date.parse("2026-10-01T00:00:00Z");
   const shells: { job: Job; writes: string[]; kills: number; handlers: TerminalHandlers }[] = [];
@@ -102,6 +105,9 @@ export async function terminalFixture() {
   };
   const a = add("alpha"),
     b = add("beta");
+  const extras = Array.from({ length: Math.max(0, teamCount - 2) }, (_, index) =>
+    add(`extra-${index}`),
+  );
   const service = new HostingService(store, engine, "synthetic-host-key", () => clock);
   const participant = await startHttpHost({
     kind: "participant",
@@ -109,6 +115,13 @@ export async function terminalFixture() {
     port: 0,
     staticRoot: "/tmp",
     service,
+    ...(authorizePeer
+      ? {
+          authorizePeer: (remote: string, token: string) =>
+            authorizePeer(remote, store.authenticateTeam(token)),
+          authorizeTerminalPeer: authorizePeer,
+        }
+      : {}),
   });
   const admin = await startHttpHost({
     kind: "admin",
@@ -149,6 +162,7 @@ export async function terminalFixture() {
     event,
     a,
     b,
+    extras,
     participant,
     admin,
     request,

@@ -25,6 +25,7 @@ interface Ticket extends TerminalGrant {
   readonly expiresAt: number;
 }
 export interface TerminalSocket {
+  readonly authorize?: () => void;
   readonly send: (payload: string) => void;
   readonly close: () => void;
   readonly onMessage: (handler: (raw: string) => void) => void;
@@ -179,6 +180,7 @@ export class HostTerminals {
     };
     const assertCurrent = () => {
       if (ended) throw new HostError(409, "Terminal has closed.");
+      socket.authorize?.();
       this.authorize(grant);
       if (this.service.now() - began >= MAX_SESSION_MS || this.service.now() - activeAt >= IDLE_MS)
         throw new HostError(409, "Terminal session expired.");
@@ -211,6 +213,7 @@ export class HostTerminals {
       }
     });
     try {
+      socket.authorize?.();
       const job = this.authorize(grant);
       if (!this.service.engine.openTerminal) throw new Error("Terminal runtime is unavailable.");
       shell = await this.service.engine.openTerminal(

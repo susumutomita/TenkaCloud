@@ -20,7 +20,11 @@ test("Cloud selects only requested sources and retains immutable source roots an
     sources: [{ url: "https://example.invalid/aws.git", ref: commit }],
   });
   const fetcher = (request: { destinationDir: string }) => {
-    cpSync(join(repository, "packs/sample-aws-flag"), request.destinationDir, { recursive: true });
+    cpSync(
+      join(repository, "scripts/problem-pack/test/fixtures/sample-aws-flag"),
+      request.destinationDir,
+      { recursive: true },
+    );
     mkdirSync(join(request.destinationDir, "shared"));
     writeFileSync(join(request.destinationDir, "shared/input.txt"), "retained root shared input");
     writeFileSync(join(request.destinationDir, "problems/challenges/README.txt"), "category notes");
@@ -88,7 +92,11 @@ test("Cloud rejects duplicate selected identities even when an on-disk lock bypa
       },
       {
         fetcher: ({ destinationDir }) =>
-          cpSync(join(repository, "packs/sample-aws-flag"), destinationDir, { recursive: true }),
+          cpSync(
+            join(repository, "scripts/problem-pack/test/fixtures/sample-aws-flag"),
+            destinationDir,
+            { recursive: true },
+          ),
       },
     );
     const path = join(root, ".tenkacloud/catalog-store/selected.json");
@@ -113,7 +121,11 @@ test("Cloud detects corrupted preparation copies and removes the failed build di
       },
       {
         fetcher: ({ destinationDir }) =>
-          cpSync(join(repository, "packs/sample-aws-flag"), destinationDir, { recursive: true }),
+          cpSync(
+            join(repository, "scripts/problem-pack/test/fixtures/sample-aws-flag"),
+            destinationDir,
+            { recursive: true },
+          ),
       },
     );
     const copy = (await vi.importActual<typeof import("node:fs")>("node:fs")).cpSync;
@@ -144,7 +156,11 @@ test("repeated Cloud preparation reuses immutable roots without deleting a previ
       },
       {
         fetcher: ({ destinationDir }) =>
-          cpSync(join(repository, "packs/sample-aws-flag"), destinationDir, { recursive: true }),
+          cpSync(
+            join(repository, "scripts/problem-pack/test/fixtures/sample-aws-flag"),
+            destinationDir,
+            { recursive: true },
+          ),
       },
     );
     const first = downloadedCloudCatalog(root);
@@ -177,7 +193,11 @@ test("downloaded Cloud catalog retains crypto-tagged problems and their source a
       },
       {
         fetcher: ({ destinationDir }) => {
-          cpSync(join(repository, "packs/sample-aws-flag"), destinationDir, { recursive: true });
+          cpSync(
+            join(repository, "scripts/problem-pack/test/fixtures/sample-aws-flag"),
+            destinationDir,
+            { recursive: true },
+          );
           const path = join(destinationDir, "problems/challenges/sample-flag/metadata.json");
           const metadata = JSON.parse(readFileSync(path, "utf8"));
           writeFileSync(path, JSON.stringify({ ...metadata, tags: ["cryptography"] }));

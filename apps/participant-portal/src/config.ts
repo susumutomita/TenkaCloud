@@ -48,6 +48,8 @@ export function hasAwsFeatures(config: Pick<AppConfig, "cloudMode" | "hasAws">):
 export interface AppConfig {
   /** Hosting uses the pinned runtime credits, including an absent authors field. */
   readonly problemAuthorsSource?: "runtime";
+  /** Only the local host serves published Web sessions that logout must revoke. */
+  readonly publicWebSessions?: boolean;
   readonly apiBaseUrl: string;
   readonly eventTitle: string;
   readonly eventRegion: string;

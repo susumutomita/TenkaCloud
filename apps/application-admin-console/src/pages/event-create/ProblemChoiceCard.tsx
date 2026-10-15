@@ -8,6 +8,7 @@ import { Markdown } from "@tenkacloud/web-kit";
 import type { ProblemDetail, ProblemSummary } from "../../data/problems";
 import { runtimeProviders } from "../../data/problems";
 import { useT } from "../../i18n";
+import { problemThemeLabel, problemThemeTags } from "../../lib/problem-themes";
 export type ProblemChoiceContent = Pick<ProblemDetail, "description" | "learningGoals">;
 /** Inspection never changes the event's selection. */
 export function ProblemChoiceCard({
@@ -81,6 +82,25 @@ export function ProblemChoiceCard({
           {t("event_create.execution_environment")}: {runtimeProviders(problem.runtime).join(" + ")}
           {"provider" in problem.runtime ? ` · ${problem.runtime.engine}` : ""}
         </Box>
+        {problem.tags.length > 0 && (
+          <ul
+            aria-label={t("problems.tags_header")}
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              listStyle: "none",
+              margin: 0,
+              padding: 0,
+            }}
+          >
+            {problemThemeTags(problem.tags).map((tag) => (
+              <li key={tag}>
+                <Badge>{problemThemeLabel(tag, t)}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
         {option.labelTag && (
           <Box variant="small" color="text-status-inactive">
             {option.labelTag}

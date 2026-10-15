@@ -28,5 +28,6 @@ export function localCompetitionConfig(runtime: LocalHostRuntimeConfig, origin: 
     cloudMode: "real",
     hasAws: runtime.hasAws === true,
     problemAuthorsSource: "runtime",
+    publicWebSessions: true,
   };
 }

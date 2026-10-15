@@ -14,6 +14,7 @@ import {
   type RawMetadata,
   requiredString,
 } from "../../lib/problem-presentation";
+import { type NetworkPublicService, normalizePublicServices } from "../network-publication";
 import { resolveComposeEntryPath } from "./compose-policy";
 import { parseLoopbackUrl } from "./loopback";
 import type { NativeCompatibilityRequirement } from "./native-compatibility";
@@ -67,6 +68,7 @@ export interface ContainerProblem {
   readonly secretEnv: readonly string[];
   /** [#2850] Portal terminal opt-in; absent = this problem has no terminal. */
   readonly terminal?: ContainerTerminal;
+  readonly publicServices?: readonly NetworkPublicService[];
   /**
    * [#3008] Host requirements without which this problem's *result* is meaningless.
    * Absent = the problem runs anywhere, which is every problem in the catalog today.
@@ -332,6 +334,7 @@ export function loadContainerProblem(
   const composePath = resolveComposeEntryPath(problemDir, composeName, fs);
 
   const terminal = normalizeTerminal(runtime.terminal);
+
   const compatibility = normalizeCompatibility(runtime.compatibility);
   const overlay = parseEnglishOverlay(metadata.i18n);
   const containerScoring =
@@ -357,7 +360,13 @@ export function loadContainerProblem(
     verifyUrl: loopbackUrl(runtime.verifyUrl, "runtime.verifyUrl"),
     secretEnv: normalizeSecretEnv(runtime.secretEnv),
     ...(terminal ? { terminal } : {}),
+    ...publicServicesField(runtime.publicServices),
     ...(compatibility ? { compatibility } : {}),
     scoring: containerScoring,
   };
+}
+
+function publicServicesField(value: unknown) {
+  const publicServices = normalizePublicServices(value);
+  return publicServices ? { publicServices } : {};
 }

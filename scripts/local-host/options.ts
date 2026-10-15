@@ -1,6 +1,7 @@
 import { isIPv4 } from "node:net";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { consoleAppliance } from "./console-appliance";
 import { DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { parseDockerNetworkPool } from "./docker-networks";
 import { DEFAULT_GATEWAY_PORTS, gatewayPortsOverlap, parseGatewayPorts } from "./gateway-ports";
@@ -20,7 +21,7 @@ export function parseOptions(
       lan: { type: "string" },
       "unsafe-lan": { type: "boolean", default: false },
       "admin-port": { type: "string", default: "5174" },
-      "participant-port": { type: "string", default: "5175" },
+      "participant-port": { type: "string" },
       "gateway-ports": { type: "string", default: DEFAULT_GATEWAY_PORTS },
       "max-active-per-team": { type: "string", default: String(DEFAULT_CONTAINER_LIMITS.perTeam) },
       "max-active-environments": {
@@ -32,7 +33,13 @@ export function parseOptions(
         default: String(DEFAULT_CONTAINER_LIMITS.memoryMiB),
       },
       "docker-network-pool": { type: "string" },
+      "competition-network": { type: "boolean", default: false },
+      "vpn-peers": { type: "string" },
       "no-build": { type: "boolean", default: false },
+      "console-origin": { type: "string" },
+      "web-origin-template": { type: "string" },
+      "web-port": { type: "string", default: "5176" },
+      "web-services": { type: "string", default: "web" },
       "public-admin-origin": { type: "string" },
       "public-participant-origin": { type: "string" },
       "behind-proxy": { type: "boolean", default: false },
@@ -50,33 +57,34 @@ export function parseOptions(
       throw new Error("Ports must be integers from 1024 to 65535.");
     return Number(raw);
   };
-  const exposure = publicExposure(values);
-  // Inside the hosted image loopback is unreachable and the log would carry the host key.
-  if (!exposure && environment.TENKACLOUD_HOST_REQUIRE_PUBLIC === "1")
-    throw new Error(
-      "This image runs behind a TLS proxy. Pass --public-admin-origin and --public-participant-origin.",
-    );
-  if (exposure && values.lan)
-    throw new Error("Choose either --lan or the public origins, not both.");
+  const appliance = consoleAppliance(values);
+  const exposure = appliance ? undefined : publicExposure(values);
+  assertExposureEnvironment(Boolean(appliance), exposure, values.lan, environment);
+  assertCompetitionOptions(
+    values["competition-network"],
+    values["docker-network-pool"],
+    Boolean(exposure),
+  );
+  assertVpnOptions(values, Boolean(exposure));
   const hostname = exposure ? "0.0.0.0" : listenAddress(values.lan, values["unsafe-lan"]);
   const adminPort = port(values["admin-port"]);
-  const participantPort = port(values["participant-port"]);
-  if (adminPort === participantPort)
-    throw new Error("Use different ports for the host console and participant portal.");
+  const participantPort = port(values["participant-port"] ?? "5175");
   const gatewayPorts = parseGatewayPorts(values["gateway-ports"]);
-  if (
-    gatewayPortsOverlap(gatewayPorts, adminPort) ||
-    gatewayPortsOverlap(gatewayPorts, participantPort)
-  )
-    throw new Error(
-      "--gateway-ports must not include the host console or participant portal port.",
-    );
+  // With --vpn-peers the registration supplies the participant port; vpnListener checks it.
+  assertListenerPorts(
+    adminPort,
+    values["vpn-peers"] ? undefined : participantPort,
+    gatewayPorts,
+    appliance?.webPort,
+  );
   if (values["aws-region"] !== undefined)
     throw new Error(
       "AWS problems require cloud hosting. --aws-region is no longer accepted by make local; use the reviewed make deploy workflow when cloud hosting is ready.",
     );
   return {
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
+    competitionNetwork: values["competition-network"],
+    ...(values["vpn-peers"] ? { vpnPeerPath: resolve(values["vpn-peers"]) } : {}),
     ...(values["submission-catalog"]
       ? { submissionCatalogPath: resolve(values["submission-catalog"]) }
       : {}),
@@ -89,6 +97,7 @@ export function parseOptions(
       ? { dockerNetworkPool: parseDockerNetworkPool(values["docker-network-pool"]) }
       : {}),
     hostname,
+    ...(appliance ? { consoleAppliance: appliance } : {}),
     adminPort,
     participantPort,
     gatewayPorts,
@@ -96,6 +105,58 @@ export function parseOptions(
     build: !values["no-build"],
     help: values.help,
   };
+}
+
+function assertVpnOptions(
+  values: {
+    "vpn-peers"?: string;
+    "competition-network"?: boolean;
+    lan?: string;
+    "participant-port"?: string;
+  },
+  publicExposure: boolean,
+): void {
+  if (values["vpn-peers"] && (!values["competition-network"] || values.lan || publicExposure))
+    throw new Error(
+      "--vpn-peers requires --competition-network and dedicated VPN listeners; LAN/public modes cannot be combined.",
+    );
+  if (values["vpn-peers"] && values["participant-port"] !== undefined)
+    throw new Error(
+      "--vpn-peers takes the participant port from the VPN registration; omit --participant-port.",
+    );
+}
+
+function assertListenerPorts(
+  adminPort: number,
+  participantPort: number | undefined,
+  gatewayPorts: ReturnType<typeof parseGatewayPorts>,
+  webPort: number | undefined,
+): void {
+  if (adminPort === participantPort)
+    throw new Error("Use different ports for the host console and participant portal.");
+  if (participantPort !== undefined)
+    assertWebPort(webPort, adminPort, participantPort, gatewayPorts);
+  if (
+    gatewayPortsOverlap(gatewayPorts, adminPort) ||
+    (participantPort !== undefined && gatewayPortsOverlap(gatewayPorts, participantPort))
+  )
+    throw new Error(
+      "--gateway-ports must not include the host console or participant portal port.",
+    );
+}
+
+/** The root-owned VPN registration owns the participant listener address and port. */
+export function vpnListener(
+  options: ReturnType<typeof parseOptions>,
+  plan: { readonly serverIpv4: string; readonly participantPort: number },
+): { hostname: string; participantPort: number } {
+  assertListenerPorts(
+    options.adminPort,
+    plan.participantPort,
+    options.gatewayPorts,
+    options.consoleAppliance?.webPort,
+  );
+  return { hostname: plan.serverIpv4, participantPort: plan.participantPort };
 }
 
 /** Served through a TLS-terminating proxy; both listeners bind every interface of the container. */
@@ -175,4 +236,44 @@ function positiveLimit(raw: string, maximum: number): number {
   if (!/^\d+$/u.test(raw) || Number(raw) < 1 || Number(raw) > maximum)
     throw new Error(`Resource limit must be an integer from 1 to ${maximum}.`);
   return Number(raw);
+}
+
+function assertCompetitionOptions(
+  enabled: boolean,
+  pool: string | undefined,
+  exposed: boolean,
+): void {
+  if (enabled && (!pool || exposed))
+    throw new Error(
+      "--competition-network requires --docker-network-pool and local native hosting, not public origins.",
+    );
+}
+
+function assertExposureEnvironment(
+  appliance: boolean,
+  exposure: PublicExposure | undefined,
+  lan: string | undefined,
+  environment: Readonly<Record<string, string | undefined>>,
+): void {
+  // Inside the hosted image loopback is unreachable and the log would carry the host key.
+  if (appliance && environment.TENKACLOUD_HOST_REQUIRE_PUBLIC === "1")
+    throw new Error("Console appliance requires native Linux hosting, not the hosted image.");
+  if (!exposure && environment.TENKACLOUD_HOST_REQUIRE_PUBLIC === "1")
+    throw new Error(
+      "This image runs behind a TLS proxy. Pass --public-admin-origin and --public-participant-origin.",
+    );
+  if (exposure && lan) throw new Error("Choose either --lan or the public origins, not both.");
+}
+
+function assertWebPort(
+  webPort: number | undefined,
+  adminPort: number,
+  participantPort: number,
+  gatewayPorts: ReturnType<typeof parseGatewayPorts>,
+): void {
+  if (
+    webPort !== undefined &&
+    ([adminPort, participantPort].includes(webPort) || gatewayPortsOverlap(gatewayPorts, webPort))
+  )
+    throw new Error("Web broker port must not overlap host listeners or gateway slots.");
 }

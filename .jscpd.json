@@ -13,7 +13,6 @@
     "apps/developer-portal/src/content/reference-data.ts",
     "apps/developer-portal/src/content/machine-api.generated.ts",
     "problems/**",
-    "packs/**",
     "landing/**"
   ],
   "minTokens": 50,

@@ -486,7 +486,7 @@ Bun execution, use `bun run --no-env-file scripts/tenkacloud.ts turso-live reset
 
 Select and acquire catalogs with `make catalog-download CATALOG_SOURCES=my-catalogs.json`,
 then run `make validate-problems`. This does not update a running installation.
-See [downloaded catalog contracts](../docs/problem-catalogs.md). Existing source
+Existing source
 ZIP versions and event catalog pins remain retained. Review the selection before
 running `make deploy ENV=development` with the existing installation settings.
 
@@ -520,7 +520,7 @@ limit or turn a Docker problem into a cloud runtime.
 ## Competitor accounts and participant access
 
 Use the existing Competitor Accounts screen and
-[account onboarding guide](../docs/competitor-account-onboarding.md). Registration
+[account onboarding guide](./templates/README.md). Registration
 and verification use the displayed control-plane account, role name and required
 ExternalId; they do not create competitor trust automatically. Install the named
 bootstrap IAM role once per competitor account, in one bootstrap region.
@@ -581,5 +581,4 @@ not hosted Turso or AWS performance evidence.
 Live AWS deployment, participant federation/STS, hosted Turso and a full cloud event
 remain operator-owned rehearsals. No live account change, deployment or cleanup
 is implied by source tests or synthesis. The nine oversized canonical templates
-remain a known historical limitation. See the
-[event rehearsal checklist](../docs/host-rehearsal.md) for recording actual results.
+remain a known historical limitation.

@@ -1,7 +1,12 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
-import { type HostTerminals, TERMINAL_MAX_FRAME_BYTES, type TerminalSocket } from "./host-terminal";
+import {
+  type HostTerminals,
+  TERMINAL_MAX_FRAME_BYTES,
+  type TerminalGrant,
+  type TerminalSocket,
+} from "./host-terminal";
 import { HostError } from "./model";
 
 function refuse(socket: Duplex, status: number): void {
@@ -16,8 +21,9 @@ function frameText(raw: RawData): string {
   return Buffer.from(raw).toString("utf8");
 }
 
-function terminalSocket(socket: WebSocket): TerminalSocket {
+function terminalSocket(socket: WebSocket, authorize?: () => void): TerminalSocket {
   return {
+    authorize,
     send: (payload) => {
       if (socket.readyState !== WebSocket.OPEN) return;
       if (socket.bufferedAmount > TERMINAL_MAX_FRAME_BYTES) {
@@ -75,6 +81,7 @@ export function installTerminalTransport(
   server: Server,
   terminals: TerminalTransportService,
   origin: () => string,
+  authorizePeer?: (socketAddress: string, grant: TerminalGrant) => void,
 ): { close(): void } {
   const wss = new WebSocketServer({
     noServer: true,
@@ -89,9 +96,13 @@ export function installTerminalTransport(
       const upgrade = upgradeRequest(request, origin());
       if (wss.clients.size >= 256) throw new HostError(429, "Too many terminal sockets.");
       const grant = terminals.redeem(upgrade.problemId, upgrade.ticket);
+      const authorize = () => authorizePeer?.(request.socket.remoteAddress ?? "", grant);
+      authorize();
       wss.handleUpgrade(request, socket, head, (accepted) => {
         hadUpgrade = true;
-        void terminals.attach(grant, terminalSocket(accepted)).catch(() => accepted.terminate());
+        void terminals
+          .attach(grant, terminalSocket(accepted, authorize))
+          .catch(() => accepted.terminate());
       });
     } catch (error) {
       refuse(socket, error instanceof HostError ? error.status : 500);

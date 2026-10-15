@@ -45,7 +45,7 @@ const PATH_ROUTES: readonly (readonly [RegExp, Route])[] = [
   [/^(?:\.husky|scripts\/workspace)\//u, { kind: "all" }],
   [/^\.claude\//u, { kind: "none" }],
   [/^(?:scripts\/(?:local-host|lib)|integrations)\//u, { kind: "suite", suite: "host" }],
-  [/^(?:scripts\/(?:problem-pack|onboarding)|packs)\//u, { kind: "suite", suite: "authoring" }],
+  [/^scripts\/(?:problem-pack|onboarding)\//u, { kind: "suite", suite: "authoring" }],
   [/^(?:scripts|docs|landing|release|\.github|\.vscode)\//u, { kind: "suite", suite: "scripts" }],
   [
     /^(?:[^/]+\.md|biome\.json|eslint\.config\.mjs|eslint-suppressions\.json|knip\.json|\.markdownlint-cli2\.jsonc|\.textlintrc|\.textlintignore|textlint-[a-z-]+\.json|\.jscpd\.json|codecov\.yml)$/u,

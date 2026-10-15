@@ -1,3 +1,0 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: Reference deploy body for the hello-world problem. Replace the resources with your own challenge.
-Resources: {}

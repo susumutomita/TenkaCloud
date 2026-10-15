@@ -170,7 +170,6 @@ describe("documentation home by role", () => {
     }
     expect(read("README.md")).not.toContain("CDK/Lambda\nplatform deployment are retired");
     expect(read("README.ja.md")).not.toContain("CDK/Lambda による基盤配置は廃止");
-    expect(read("docs/local-hosting.md")).toContain("AWS-service problems belong to cloud hosting");
   });
 });
 

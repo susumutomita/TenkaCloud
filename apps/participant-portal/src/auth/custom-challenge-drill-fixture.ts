@@ -59,7 +59,7 @@ export function createCustomChallengeDrillFixture({
       'make pack-init ARGS="./my-first-pack"',
       "",
       "# 2. golden を 2 問目としてコピーする。フォルダ名が自分の問題 id になる",
-      "cp -r packs/golden/basic-aws-pack/problems/challenges/find-the-flag \\",
+      "cp -r scripts/onboarding/find-the-flag \\",
       "      ./my-first-pack/problems/challenges/find-the-forgotten-bucket",
       "",
       "# 3. コピーした metadata.json と template.yaml を自分のものに書き換える",
@@ -105,7 +105,7 @@ export function createCustomChallengeDrillFixture({
           "",
           "# 2. Copy the golden challenge in as the second problem.",
           "#    The folder name becomes your problem id.",
-          "cp -r packs/golden/basic-aws-pack/problems/challenges/find-the-flag \\",
+          "cp -r scripts/onboarding/find-the-flag \\",
           "      ./my-first-pack/problems/challenges/find-the-forgotten-bucket",
           "",
           "# 3. Rewrite the copied metadata.json and template.yaml as your own",
@@ -140,11 +140,11 @@ export function createCustomChallengeDrillFixture({
               penalty: 0,
               revealed: false,
               content:
-                '`make pack-init ARGS="./my-first-pack"` で雛形を作ると `hello-world` が 1 問できる。これを消さずに、`packs/golden/basic-aws-pack/problems/challenges/find-the-flag` を 2 問目としてコピーする。`make pack-validate ARGS="./my-first-pack"` の成功表示に出る Problem 数をそのまま提出する。',
+                '`make pack-init ARGS="./my-first-pack"` で雛形を作ると `hello-world` が 1 問できる。これを消さずに、`scripts/onboarding/find-the-flag` を 2 問目としてコピーする。`make pack-validate ARGS="./my-first-pack"` の成功表示に出る Problem 数をそのまま提出する。',
               i18n: {
                 en: {
                   content:
-                    'Running `make pack-init ARGS="./my-first-pack"` scaffolds one problem, `hello-world`. Keep it, and copy `packs/golden/basic-aws-pack/problems/challenges/find-the-flag` in as the second problem. Submit the problem count printed by `make pack-validate ARGS="./my-first-pack"`.',
+                    'Running `make pack-init ARGS="./my-first-pack"` scaffolds one problem, `hello-world`. Keep it, and copy `scripts/onboarding/find-the-flag` in as the second problem. Submit the problem count printed by `make pack-validate ARGS="./my-first-pack"`.',
                 },
               },
             },

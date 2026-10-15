@@ -1,0 +1,18 @@
+[Unit]
+Description=Close TenkaCloud VPN ingress before WireGuard activation
+Before=wg-quick@%i.service
+PartOf=wg-quick@%i.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=root
+Group=root
+ExecStart=/usr/local/bin/bun /opt/tenkacloud/scripts/local-host/vpn/boot-seal.ts --config /etc/tenkacloud/vpn/%i.json
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6

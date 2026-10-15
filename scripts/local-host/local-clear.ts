@@ -318,7 +318,8 @@ export async function clearLocalHistory(
   directory: string,
   options: { plan: boolean; yes: boolean },
   io: LocalClearIo = localClearIo,
-  createEngine: () => Pick<DockerHostingEngine, "stop"> = () =>
+  createEngine: () => Pick<DockerHostingEngine, "stop"> &
+    Partial<Pick<DockerHostingEngine, "bindNetworkState">> = () =>
     new DockerHostingEngine(root, directory),
 ): Promise<void> {
   const path = join(directory, "hosting.sqlite");
@@ -372,6 +373,19 @@ export async function clearLocalHistory(
       (job) => definitionKind(job.definition) === "compose" && job.unit !== null,
     );
     const engine = owned.length ? createEngine() : undefined;
+    engine?.bindNetworkState?.({
+      jobs: () => store.jobs(),
+      retain: (updates) =>
+        store.transaction(() => {
+          for (const update of updates)
+            store.putJob({
+              ...store.job(update.jobId),
+              unit: update.unit,
+              ...(update.status ? { status: update.status } : {}),
+              ...(update.error !== undefined ? { error: update.error } : {}),
+            });
+        }),
+    });
     await removeOwnedJobs(store, owned, engine, io);
     removeGeneratedRuntimeFiles(directory, directories, store);
     const present = tables(store.database);

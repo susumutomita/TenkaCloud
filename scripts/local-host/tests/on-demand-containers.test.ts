@@ -15,7 +15,21 @@ import { HostStore } from "../store";
 import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
+// These fixtures replace the native lifecycle; fingerprint the immutable test catalog once.
+const fixtureCatalog = loadDockerCatalog(root);
 class SyntheticContainers extends DockerHostingEngine {
+  constructor(repository: string, directory: string) {
+    super(
+      repository,
+      directory,
+      undefined,
+      false,
+      undefined,
+      undefined,
+      undefined,
+      () => fixtureCatalog,
+    );
+  }
   readonly retained = new Map<string, { progress: number; running: boolean }>();
   readonly calls = {
     start: [] as string[],
@@ -89,15 +103,17 @@ async function fixture(
     admin: string;
   }) => Promise<void>,
   ctfd = false,
+  isolated = false,
 ) {
   const directory = mkdtempSync(join(tmpdir(), "tenka-demand-"));
   const store = new HostStore(new Database(":memory:"));
   const engine = new SyntheticContainers(root, directory);
+  if (isolated) engine.networkRequirement = () => 1;
   const service = new HostingService(store, engine, "synthetic-host-key");
   service.containerLimits = { perTeam: 3, global: 5, memoryMiB: 65_536 };
   service.gatewayPorts = { start: 5200, end: 5239 };
-  const admin = await bootstrapOrganizer(service, "synthetic-host-key");
   try {
+    const admin = await bootstrapOrganizer(service, "synthetic-host-key");
     const created = await service.admin(
       request("POST", "/events", admin, {
         name: "20 exercises × 5 teams",
@@ -636,3 +652,27 @@ test.each([
     }, true);
   },
 );
+
+test("dormant isolation requirement survives an engine restart without the option", async () => {
+  await fixture(
+    async (f) => {
+      const event = f.store.event(f.eventId);
+      expect(event?.networkIsolationVersion).toBe(1);
+      const jobs = f.store.jobs(f.eventId);
+      expect(jobs.length).toBe(100);
+      expect(jobs.every((job) => !job.unit && job.networkIsolationVersion === 1)).toBe(true);
+      const restarted = new DockerHostingEngine(
+        root,
+        "/virtual-fixture/unused-network-requirement",
+      );
+      expect(restarted.networkRequirement(jobs[0]?.definition ?? "")).toBeUndefined();
+      await expect(
+        restarted.start(jobs[0] as Job, () => {
+          throw new Error("must not retain an unguarded unit");
+        }),
+      ).rejects.toThrow("explicit non-overlapping");
+    },
+    false,
+    true,
+  );
+});

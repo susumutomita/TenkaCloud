@@ -39,9 +39,26 @@ export type Revision = z.infer<typeof RevisionSchema>;
 export const store = (root: string) => join(root, ".tenkacloud/catalog-store");
 export const snapshot = (root: string, digest: string) => join(store(root), "snapshots", digest);
 export const lockPath = (root: string) => join(store(root), "selected.json");
+
+/** Acquisition is an explicit organizer operation; startup must never invent a selection. */
+export function readCatalogSelection(root: string): string {
+  try {
+    return readFileSync(lockPath(root), "utf8");
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
+      throw new Error(
+        "No downloaded problem catalog is selected. Review catalog-sources.json, then run " +
+          "`make catalog-download`; for another reviewed source file use " +
+          "`make catalog-download CATALOG_SOURCES=my-catalogs.json`. Restart `make local`. " +
+          "Startup does not select or download a catalog automatically.",
+        { cause: error },
+      );
+    throw error;
+  }
+}
 /** Verify every selected revision and return immutable source roots. No core fallback. */
 export function selectedCatalogSnapshots(root: string) {
-  const selected = CatalogLockSchema.parse(JSON.parse(readFileSync(lockPath(root), "utf8")));
+  const selected = CatalogLockSchema.parse(JSON.parse(readCatalogSelection(root)));
   return selected.sources.map((revision) => {
     const directory = snapshot(root, revision.digest);
     if (lstatSync(directory).isSymbolicLink() || !lstatSync(directory).isDirectory())
@@ -60,7 +77,7 @@ export function selectedCatalogRoots(root: string): string[] {
 
 /** Retained snapshots are available only to explicit builds of old event UI modules. */
 export function retainedCatalogSnapshots(root: string) {
-  const selected = CatalogLockSchema.parse(JSON.parse(readFileSync(lockPath(root), "utf8")));
+  const selected = CatalogLockSchema.parse(JSON.parse(readCatalogSelection(root)));
   const accepted = [...selected.sources, ...(selected.retained ?? [])];
   return [
     ...new Map(
