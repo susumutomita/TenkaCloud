@@ -14,6 +14,7 @@ import {
   installNetwork,
   networkEndpoints,
   publishNetwork,
+  removeNetwork,
   stopNetwork,
 } from "./network-audit";
 import { vpnAdmissionHook, vpnSealHook, workloadQuarantineHook } from "./vpn/firewall-scope";
@@ -24,7 +25,7 @@ export interface LocalNetworkGuard {
   verify(plan: LocalNetworkPlan): void;
   verifyNetworks(plan: LocalNetworkPlan): void;
   remove(plan: LocalNetworkPlan): void;
-  /** Host routes, minus those on the bridges that `owned` already holds. */
+  /** Host routes, minus the bridge routes that `owned` itself creates inside its subnets. */
   occupiedRoutes(owned?: LocalNetworkPlan): readonly string[];
   update(plan: LocalNetworkPlan, previous: LocalNetworkPlan): void;
   endpoints(plan: LocalNetworkPlan, service: string, port: number): readonly LocalPublicEndpoint[];
@@ -33,6 +34,7 @@ export interface LocalNetworkGuard {
   quarantine(plan: LocalNetworkPlan): void;
   stopOwned(plan: LocalNetworkPlan): Promise<void>;
   installAsync?(plan: LocalNetworkPlan): Promise<void>;
+  removeAsync?(plan: LocalNetworkPlan): Promise<void>;
   audit?(plan: LocalNetworkPlan): Promise<void>;
   quarantineAsync?(plan: LocalNetworkPlan): Promise<void>;
   resetStoppedAsync?(plan: LocalNetworkPlan): Promise<void>;
@@ -384,7 +386,6 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     this.firewall(true, ["-S", "FORWARD"]);
   }
   occupiedRoutes(owned?: LocalNetworkPlan): readonly string[] {
-    const bridges = new Set(owned?.segments.map((segment) => segment.bridge));
     const result: string[] = [];
     for (const ipv6 of [false, true]) {
       const rows: unknown = JSON.parse(
@@ -392,7 +393,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       );
       if (!Array.isArray(rows) || rows.length > 16384)
         throw new Error("Invalid host route inventory.");
-      result.push(...routeDestinations(rows, ipv6, bridges));
+      result.push(...routeDestinations(rows, ipv6, owned?.segments ?? []));
     }
     return result;
   }
@@ -1080,6 +1081,9 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   installAsync(plan: LocalNetworkPlan): Promise<void> {
     return installNetwork(plan);
   }
+  removeAsync(plan: LocalNetworkPlan): Promise<void> {
+    return removeNetwork(plan, (owned) => this.remove(owned));
+  }
   audit(plan: LocalNetworkPlan): Promise<void> {
     return auditNetwork(plan);
   }
@@ -1250,18 +1254,50 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
 function routeDestinations(
   rows: unknown[],
   ipv6: boolean,
-  ownedBridges: ReadonlySet<string>,
+  owned: LocalNetworkPlan["segments"],
 ): string[] {
   const result: string[] = [];
   for (const row of rows) {
     if (!row || typeof row !== "object") throw new Error("Invalid host route.");
-    const { dst: destination, dev } = row as { dst?: unknown; dev?: unknown };
+    const route = row as BridgeRoute & { dst?: unknown; dev?: unknown };
+    const destination = route.dst;
     if (destination === undefined || destination === "default") continue;
-    if (typeof dev === "string" && ownedBridges.has(dev)) continue;
     if (typeof destination !== "string") throw new Error("Invalid routed destination.");
-    result.push(destination.includes("/") ? destination : `${destination}/${routePrefix(ipv6)}`);
+    const cidr = destination.includes("/") ? destination : `${destination}/${routePrefix(ipv6)}`;
+    if (
+      owned.some(
+        (segment) =>
+          segment.bridge === route.dev &&
+          ownBridgeRoute(route, cidr, ipv6 ? segment.ipv6 : segment.ipv4),
+      )
+    )
+      continue;
+    result.push(cidr);
   }
   return result;
+}
+
+interface BridgeRoute {
+  readonly type?: unknown;
+  readonly protocol?: unknown;
+  readonly gateway?: unknown;
+}
+/**
+ * A retained bridge keeps the kernel's routes inside its subnet and Docker's plain on-link route to
+ * all of it. Any other route into the subnet, such as a narrower one, still counts as an overlap.
+ */
+function ownBridgeRoute(route: BridgeRoute, cidr: string, subnet: string): boolean {
+  const [address = "", prefix = ""] = cidr.split("/");
+  const [network = "", length = ""] = subnet.split("/");
+  if (isIP(address) !== isIP(network) || Number(prefix) < Number(length)) return false;
+  const family = isIP(network) === 6 ? "ipv6" : "ipv4";
+  const list = new BlockList();
+  list.addSubnet(network, Number(length), family);
+  if (!list.check(address, family)) return false;
+  return (
+    route.protocol === "kernel" ||
+    (prefix === length && route.type === undefined && route.gateway === undefined)
+  );
 }
 
 function routePrefix(ipv6: boolean): number {

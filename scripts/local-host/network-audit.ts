@@ -63,26 +63,27 @@ async function queuedOperation(
   }
 }
 /**
- * An install inserts hooks at positions read from earlier snapshots, so a quarantine inserted at
- * the head in between would shift them. Quarantines only insert at the head and may overlap each
- * other, never an install. Waiters start in arrival order, so neither side starves.
+ * An install inserts hooks at positions read from earlier snapshots, so any other hook change in
+ * between would shift them. Quarantines insert only at the head and removals delete by rule, so
+ * they may overlap each other, never an install. Waiters start in arrival order, so neither side
+ * starves.
  */
-type HookWork = "install" | "quarantine";
+type HookWork = "install" | "quarantine" | "remove";
 const hookOrder = {
   installing: false,
-  quarantines: 0,
+  sharing: 0,
   waiting: [] as { work: HookWork; start: () => void }[],
 };
 function hookWorkFits(work: HookWork): boolean {
-  return !hookOrder.installing && (work === "quarantine" || hookOrder.quarantines === 0);
+  return !hookOrder.installing && (work !== "install" || hookOrder.sharing === 0);
 }
 function enterHookWork(work: HookWork): void {
   if (work === "install") hookOrder.installing = true;
-  else hookOrder.quarantines++;
+  else hookOrder.sharing++;
 }
 function leaveHookWork(work: HookWork): void {
   if (work === "install") hookOrder.installing = false;
-  else hookOrder.quarantines--;
+  else hookOrder.sharing--;
   let next = hookOrder.waiting[0];
   while (next && hookWorkFits(next.work)) {
     hookOrder.waiting.shift();
@@ -91,17 +92,25 @@ function leaveHookWork(work: HookWork): void {
     next = hookOrder.waiting[0];
   }
 }
+async function inHookOrder(work: HookWork, run: () => Promise<void>): Promise<void> {
+  if (hookOrder.waiting.length || !hookWorkFits(work))
+    await new Promise<void>((start) => hookOrder.waiting.push({ work, start }));
+  else enterHookWork(work);
+  try {
+    await run();
+  } finally {
+    leaveHookWork(work);
+  }
+}
 function ordered(work: HookWork, run: WorkerRunner): WorkerRunner {
-  return async (plan, mode) => {
-    if (hookOrder.waiting.length || !hookWorkFits(work))
-      await new Promise<void>((start) => hookOrder.waiting.push({ work, start }));
-    else enterHookWork(work);
-    try {
-      await run(plan, mode);
-    } finally {
-      leaveHookWork(work);
-    }
-  };
+  return (plan, mode) => inHookOrder(work, () => run(plan, mode));
+}
+/** Removal still runs on the controller thread, but never while an install computes positions. */
+export function removeNetwork(
+  plan: LocalNetworkPlan,
+  remove: (plan: LocalNetworkPlan) => void,
+): Promise<void> {
+  return inHookOrder("remove", async () => remove(plan));
 }
 /** Native subprocess audits and stops run off the controller loop, at most two at a time. */
 export function auditNetwork(plan: LocalNetworkPlan, run: WorkerRunner = runAudit): Promise<void> {

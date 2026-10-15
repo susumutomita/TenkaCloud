@@ -64,7 +64,7 @@ test("a publication batch waits for a recovering runtime's guard install before 
   }
 });
 
-test("the retained runtime's own bridge routes never count as an overlap", () => {
+test("only the retained bridge's kernel routes inside its own subnet are excluded", () => {
   const plan = localNetworkPlan(
     "tch-own-routes",
     { default: "10.240.0.16/28" },
@@ -78,12 +78,20 @@ test("the retained runtime's own bridge routes never count as an overlap", () =>
   const routes = {
     ipv4: [
       { dst: segment.ipv4, dev: segment.bridge, protocol: "kernel" },
-      { type: "local", dst: "10.240.0.17", dev: segment.bridge },
-      { dst: "192.168.10.0/24", dev: "eth0" },
+      { type: "local", dst: "10.240.0.17", dev: segment.bridge, protocol: "kernel" },
+      { type: "broadcast", dst: "10.240.0.31", dev: segment.bridge, protocol: "kernel" },
+      // Added while the runtime was retained: it reroutes part of the subnet, so it still counts.
+      { dst: "10.240.0.24/29", gateway: "10.240.0.20", dev: segment.bridge, protocol: "static" },
+      // Kernel routes on the bridge outside its subnet are not this runtime's to exclude.
+      { dst: "10.240.0.0/24", dev: segment.bridge, protocol: "kernel" },
+      { dst: "192.168.10.0/24", dev: "eth0", protocol: "kernel" },
       { dst: "default", gateway: "192.168.10.1", dev: "eth0" },
     ],
     ipv6: [
-      { dst: segment.ipv6, dev: segment.bridge },
+      { dst: segment.ipv6, dev: segment.bridge, protocol: "kernel", metric: 256 },
+      // Docker adds its own on-link route to the whole IPv6 subnet, without a kernel protocol.
+      { dst: segment.ipv6, dev: segment.bridge, metric: 1024 },
+      { dst: "fe80::/64", dev: segment.bridge, protocol: "kernel" },
       { dst: "fd99::/64", dev: "tcwg0" },
     ],
   };
@@ -97,12 +105,23 @@ test("the retained runtime's own bridge routes never count as an overlap", () =>
       return JSON.stringify(args.includes("-6") ? routes.ipv6 : routes.ipv4);
     },
   });
-  expect(guard.occupiedRoutes(plan)).toEqual(["192.168.10.0/24", "fd99::/64"]);
+  expect(guard.occupiedRoutes(plan)).toEqual([
+    "10.240.0.24/29",
+    "10.240.0.0/24",
+    "192.168.10.0/24",
+    "fe80::/64",
+    "fd99::/64",
+  ]);
   expect(guard.occupiedRoutes()).toEqual([
     segment.ipv4,
     "10.240.0.17/32",
+    "10.240.0.31/32",
+    "10.240.0.24/29",
+    "10.240.0.0/24",
     "192.168.10.0/24",
     segment.ipv6,
+    segment.ipv6,
+    "fe80::/64",
     "fd99::/64",
   ]);
 });

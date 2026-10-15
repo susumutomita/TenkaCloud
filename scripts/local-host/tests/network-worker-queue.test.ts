@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import { LinuxNetworkGuard } from "../linux-network-guard";
 import { localNetworkPlan } from "../local-network";
-import { auditNetwork, emergencyNetwork, installNetwork } from "../network-audit";
+import { auditNetwork, emergencyNetwork, installNetwork, removeNetwork } from "../network-audit";
 
 // No native worker, daemon or firewall is invoked: exercise the production queue with injected I/O.
 test("512 emergency operations stay bounded and progress independently of wedged audits", async () => {
@@ -103,4 +104,53 @@ test("a guard install and a quarantine never interleave their hook insertions", 
   drops.resolve(undefined);
   await Promise.all([...quarantines, next]);
   expect(events.slice(-2)).toEqual(["install-start", "install-end"]);
+});
+
+test("a guard removal waits for an install's hook positions and still overlaps quarantines", async () => {
+  // eslint-disable-next-line sonarjs/no-hardcoded-ip -- pure transport plan; no connection
+  const plan = localNetworkPlan("tch-hook-removal", { default: "10.249.0.0/28" });
+  const events: string[] = [];
+  const guard = new LinuxNetworkGuard({
+    platform: "linux",
+    read: () => "",
+    exists: () => false,
+    link: () => "net:[1]",
+    run: ({ command }) => {
+      events.push(command);
+      return "";
+    },
+  });
+  const install = Promise.withResolvers<undefined>();
+  const started = Promise.withResolvers<undefined>();
+  const installing = installNetwork(plan, async () => {
+    events.push("install-start");
+    started.resolve(undefined);
+    await install.promise;
+    events.push("install-end");
+  });
+  await started.promise;
+  const removing = guard.removeAsync(plan);
+  await Bun.sleep(5);
+  expect(events).toEqual(["install-start"]);
+  install.resolve(undefined);
+  await Promise.all([installing, removing]);
+  expect(events.slice(0, 3)).toEqual(["install-start", "install-end", "docker"]);
+  expect(events).toContain("ip6tables");
+
+  events.length = 0;
+  const drop = Promise.withResolvers<undefined>();
+  const dropping = Promise.withResolvers<undefined>();
+  const quarantine = emergencyNetwork(plan, "quarantine", async () => {
+    events.push("quarantine-start");
+    dropping.resolve(undefined);
+    await drop.promise;
+    events.push("quarantine-end");
+  });
+  await dropping.promise;
+  await removeNetwork(plan, () => {
+    events.push("remove");
+  });
+  expect(events).toEqual(["quarantine-start", "remove"]);
+  drop.resolve(undefined);
+  await quarantine;
 });

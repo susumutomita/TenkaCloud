@@ -7,6 +7,7 @@ import { loadDockerCatalog } from "../docker-catalog";
 import { DockerHostingEngine } from "../docker-engine";
 import type { LocalNetworkGuard } from "../linux-network-guard";
 import type { Job } from "../model";
+import { installNetwork, removeNetwork } from "../network-audit";
 import { publishedComposePorts } from "../runtime-ports";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
@@ -208,6 +209,56 @@ test("another team's start finishes while an isolated start waits for its guard 
       expect(job.unit).toBeNull();
       expect(calls.filter((call) => call === "compose-up")).toHaveLength(1);
       expect(calls).not.toContain("install");
+    },
+  );
+});
+
+test("a failed start removes its guard only after another team's install has placed its hooks", async () => {
+  const alphaInstall = Promise.withResolvers<undefined>();
+  const alphaInstalling = Promise.withResolvers<undefined>();
+  await withStart(
+    "beta",
+    (calls) => ({
+      installAsync: (plan) =>
+        installNetwork(plan, async () => {
+          calls.push(`install-${plan.project}`);
+          if (plan.project !== "tch-alpha") return;
+          alphaInstalling.resolve(undefined);
+          await alphaInstall.promise;
+          calls.push("install-end-tch-alpha");
+        }),
+      audit: async (plan) => {
+        if (plan.project === "tch-beta") await alphaInstalling.promise;
+        throw new Error(`Synthetic drift in ${plan.project}`);
+      },
+      removeAsync: (plan) =>
+        removeNetwork(plan, () => {
+          calls.push(`remove-${plan.project}`);
+        }),
+    }),
+    async ({ engine, job, calls, retain }) => {
+      const failure = (error: unknown) => (error instanceof Error ? error.message : "");
+      const alpha: Job = { ...job, jobId: "alpha", teamId: "alpha", unit: null };
+      const beta = engine.start(job, retain).then(() => "", failure);
+      while (!calls.includes("compose-up")) await Bun.sleep(1);
+      const alphaStart = engine
+        .start(alpha, (unit) => {
+          alpha.unit = unit;
+        })
+        .then(() => "", failure);
+      try {
+        await alphaInstalling.promise;
+        while (!calls.includes("compose-down")) await Bun.sleep(1);
+        await Bun.sleep(10);
+        expect(calls.filter((call) => call.startsWith("remove"))).toEqual([]);
+      } finally {
+        alphaInstall.resolve(undefined);
+      }
+      expect(await beta).toBe("Synthetic drift in tch-beta");
+      expect(await alphaStart).toBe("Synthetic drift in tch-alpha");
+      expect(calls.indexOf("remove-tch-beta")).toBeGreaterThan(
+        calls.indexOf("install-end-tch-alpha"),
+      );
     },
   );
 });

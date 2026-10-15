@@ -445,7 +445,7 @@ export class DockerHostingEngine implements RuntimeEngine {
         // A retry must resume from guard removal, never from paths that need the removed bridges.
         const removed: RetainedUnit = { ...owned.unit, teardown: "down" };
         owned.retain(JSON.stringify(removed));
-        this.networkGuard.remove(owned.guarded);
+        await this.removePlan(owned.guarded);
       }
       removeRuntimeFiles(this.dataDirectory, job.jobId, owned.unit.composePath);
       owned.retain(null);
@@ -548,7 +548,7 @@ export class DockerHostingEngine implements RuntimeEngine {
         down = true;
       }
       const guarded = this.guardPlan(job, unit);
-      if (guarded) this.networkGuard.remove(guarded);
+      if (guarded) await this.removePlan(guarded);
       this.revokeRunning(job.jobId);
       this.networkReservations.delete(job.jobId);
       removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
@@ -1401,6 +1401,11 @@ export class DockerHostingEngine implements RuntimeEngine {
     return this.networkGuard.installAsync
       ? this.networkGuard.installAsync(plan)
       : Promise.resolve().then(() => this.networkGuard.install(plan));
+  }
+  private removePlan(plan: LocalNetworkPlan): Promise<void> {
+    return this.networkGuard.removeAsync
+      ? this.networkGuard.removeAsync(plan)
+      : Promise.resolve().then(() => this.networkGuard.remove(plan));
   }
   private verifyPlan(plan: LocalNetworkPlan): Promise<void> {
     return this.networkGuard.audit
