@@ -76,7 +76,7 @@ async function fixture() {
     expect(issued.status).toBe(200);
     const ticket = new URL(((await issued.json()) as { url: string }).url);
     const joined = await callBroker(address, ticket, "");
-    expect(joined.status).toBe(303);
+    expect(joined.status).toBe(200);
     const cookie = joined.headers["set-cookie"]?.[0]?.split(";")[0] ?? "";
     return (path: string) => callBroker(address, new URL(path, ticket), cookie);
   };

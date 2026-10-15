@@ -1,5 +1,14 @@
 import { Agent, type IncomingMessage, request } from "node:http";
 import { createConnection, isIP } from "node:net";
+import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
+
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+// The proxy forwards no Content-Encoding, so the raw transport must hand it decoded bytes like fetch does.
+const DECODERS: Readonly<Record<string, typeof gunzipSync>> = {
+  gzip: gunzipSync,
+  deflate: inflateSync,
+  br: brotliDecompressSync,
+};
 
 /** One short, bounded request to the already verified literal container endpoint. No DNS or proxy. */
 export async function directWebTransport(target: URL, init: RequestInit): Promise<Response> {
@@ -28,7 +37,7 @@ export async function directWebTransport(target: URL, init: RequestInit): Promis
         let size = 0;
         incoming.on("data", (chunk: Buffer) => {
           size += chunk.length;
-          if (size > 2 * 1024 * 1024) {
+          if (size > MAX_RESPONSE_BYTES) {
             incoming.destroy();
             finish(new Error("Published Web response limit exceeded."));
           } else chunks.push(chunk);
@@ -65,7 +74,15 @@ function webResponse(incoming: IncomingMessage, chunks: Buffer[], method?: strin
     if (key !== undefined && value !== undefined) responseHeaders.append(key, value);
   }
   const status = incoming.statusCode ?? 502;
-  const payload =
+  let payload =
     [204, 205, 304].includes(status) || method === "HEAD" ? null : Buffer.concat(chunks);
+  const encoding = responseHeaders.get("content-encoding")?.trim().toLowerCase();
+  if (encoding && encoding !== "identity") {
+    const decode = DECODERS[encoding];
+    if (!decode) throw new Error("Unsupported published Web content encoding.");
+    if (payload) payload = decode(payload, { maxOutputLength: MAX_RESPONSE_BYTES });
+    responseHeaders.delete("content-encoding");
+    responseHeaders.delete("content-length");
+  }
   return new Response(payload, { status, headers: responseHeaders });
 }

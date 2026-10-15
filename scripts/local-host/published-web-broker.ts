@@ -102,13 +102,18 @@ export class PublishedWebBroker {
       ...grant,
       expiresAt: this.service.now() + 15 * 60_000,
     });
-    response.writeHead(303, {
-      location: "/",
+    // A redirect would carry the console's site into the next request; a same-origin refresh does not.
+    response.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
       "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
       "set-cookie": `${cookieName}=${token}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=900`,
     });
-    response.end();
+    response.end(
+      '<!doctype html><meta http-equiv="refresh" content="0; url=/"><title>Opening</title>',
+    );
   }
   private session(request: IncomingMessage): Grant {
     const cookies = (request.headers.cookie ?? "")
@@ -123,10 +128,8 @@ export class PublishedWebBroker {
       throw new HostError(401, "Open this Web service from the console.");
     if (request.headers.origin && request.headers.origin !== grant.origin)
       throw new HostError(403, "Cross-origin challenge request denied.");
-    if (
-      request.headers["sec-fetch-site"] === "cross-site" &&
-      !(request.method === "GET" && request.headers["sec-fetch-mode"] === "navigate")
-    )
+    const site = request.headers["sec-fetch-site"];
+    if (site !== undefined && site !== "same-origin" && site !== "none")
       throw new HostError(403, "Cross-site challenge request denied.");
     return grant;
   }

@@ -849,7 +849,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     );
     if (!service) throw new HostError(400, "Select a declared public service ID.");
     const unit = JSON.parse(requiredNetworkValue(job.unit)) as LocalComposeUnit;
-    if (published) await this.assertPublishable(job, unit, service);
+    if (published) await this.assertPublishable(job, service);
     const ids = new Set(this.publicServiceIds(job, unit));
     if (published) ids.add(serviceId);
     else ids.delete(serviceId);
@@ -864,21 +864,33 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   /**
    * A participant's own unpublishable service is a refused request, not guard drift. The halt is
-   * kept only when the owned guard itself no longer verifies.
+   * kept only when the retained guard itself no longer verifies under an unchanged policy; the
+   * request context may predate another team's publication, so the retained unit is audited.
    */
   private async assertPublishable(
     job: Job,
-    unit: LocalComposeUnit,
     service: { service: string; port: number },
   ): Promise<void> {
-    const plan = requiredNetworkValue(this.guardPlan(job, unit));
+    const epoch = this.policyEpoch(job.eventId);
+    const started = this.running.get(job.jobId);
+    const retained = this.networkState?.jobs().find((entry) => entry.jobId === job.jobId) ?? job;
+    const unit = JSON.parse(requiredNetworkValue(retained.unit)) as LocalComposeUnit;
+    const plan = requiredNetworkValue(this.guardPlan(retained, unit));
+    const changing = () =>
+      epoch !== this.policyEpoch(job.eventId) || this.running.get(job.jobId) !== started;
     let failure: unknown;
     try {
       if ((await this.publicEndpoints(plan, service.service, service.port)).length) return;
     } catch (error) {
       failure = error;
     }
-    await this.verifyObservedJob(job, unit, plan);
+    try {
+      if (!changing()) await this.verifyPlan(plan);
+    } catch (error) {
+      if (!changing()) return this.haltGuardedUnit(retained, unit, error);
+      failure = error;
+    }
+    if (changing()) throw new HostError(409, "Competition network policy is changing.");
     const refused = new HostError(
       409,
       "The selected public service has no single running instance; publication is refused.",

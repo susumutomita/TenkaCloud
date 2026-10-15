@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { assertHostCatalogBuild, buildHosting } from "./build";
 import { CompetitionEngine } from "./competition-engine";
 import { DEFAULT_GATEWAY_PORTS, formatGatewayPorts } from "./gateway-ports";
-import { parseOptions } from "./options";
+import { parseOptions, vpnListener } from "./options";
 import { openOrganizerKeyDisplay } from "./organizer-key-output";
 import { type RunningLocalHost, startLocalHost } from "./server";
 import { loadVpnPeerPlan } from "./vpn/config";
@@ -105,7 +105,7 @@ export async function runLocalHost(
   const vpn = options.vpnPeerPath
     ? new NativeVpnIngress(loadVpnPeerPlan(options.vpnPeerPath))
     : undefined;
-  const settings = { ...options, ...(vpn ? { hostname: vpn.plan.serverIpv4, vpn } : {}) };
+  const settings = { ...options, ...(vpn ? { ...vpnListener(options, vpn.plan), vpn } : {}) };
   const host = await startLocalHost(
     root,
     settings,

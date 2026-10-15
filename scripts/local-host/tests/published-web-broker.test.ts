@@ -117,7 +117,7 @@ async function fixture() {
   const session = async () => {
     const url = await ticket();
     const joined = await call(url);
-    expect(joined.status).toBe(303);
+    expect(joined.status).toBe(200);
     const cookie = joined.headers["set-cookie"]?.[0]?.split(";")[0] ?? "";
     return { url: new URL("/", url), cookie };
   };
@@ -154,13 +154,29 @@ test("authenticated ID-only handoff uses one-use host-bound tickets and separate
     expect((await f.call(url)).status).toBe(401);
     const valid = await f.ticket();
     const joined = await f.call(valid);
-    expect(joined.status).toBe(303);
+    expect(joined.status).toBe(200);
+    expect(joined.body).toContain('<meta http-equiv="refresh" content="0; url=/">');
     expect(joined.headers["set-cookie"]?.[0]).toContain("Secure; HttpOnly; SameSite=Lax; Path=/");
     expect((await f.call(valid)).status).toBe(401);
     f.advance(30_001);
     const expired = await f.ticket();
     f.advance(30_001);
     expect((await f.call(expired)).status).toBe(401);
+  } finally {
+    await f.close();
+  }
+});
+
+test("established sessions follow only same-origin or direct navigations, not other sites or labs", async () => {
+  const f = await fixture();
+  try {
+    const { url, cookie } = await f.session();
+    const navigate = (site: string) =>
+      f.call(url, { cookie, "sec-fetch-site": site, "sec-fetch-mode": "navigate" });
+    expect((await navigate("cross-site")).status).toBe(403);
+    expect((await navigate("same-site")).status).toBe(403);
+    expect((await navigate("same-origin")).status).toBe(200);
+    expect((await navigate("none")).status).toBe(200);
   } finally {
     await f.close();
   }

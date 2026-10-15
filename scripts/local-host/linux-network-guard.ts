@@ -612,12 +612,10 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   ): void {
     for (const container of containers) {
       if (container.State?.Running !== true) continue;
-      const expected = plan.publicRoutes.flatMap((route) => {
-        const target = publicationRoute(plan, container.NetworkSettings.Networks, route);
-        if (!target) return [];
-        const gateway = segmentGateway(target.segment, target.ipv6);
-        return [`${canonicalPrefix(target.destination)} via ${canonicalAddress(gateway)}`];
-      });
+      const expected = containerRouteTargets(plan, container.NetworkSettings.Networks).map(
+        (target) =>
+          `${canonicalPrefix(target.destination)} via ${canonicalAddress(segmentGateway(target.segment, target.ipv6))}`,
+      );
       if (!expected.length) continue;
       const sandbox = container.NetworkSettings.SandboxKey;
       if (!OWNED_SANDBOX.test(sandbox))
@@ -795,16 +793,10 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       return addresses.length ? [{ segment, addresses, port, service }] : [];
     });
   }
-  private routeForContainer(
-    plan: LocalNetworkPlan,
-    container: { NetworkSettings: { Networks: Record<string, unknown>; SandboxKey: string } },
-    route: LocalNetworkPlan["publicRoutes"][number],
-  ): void {
-    const target = publicationRoute(plan, container.NetworkSettings.Networks, route);
-    if (!target) return;
+  private routeForContainer(plan: LocalNetworkPlan, sandbox: string, target: RouteTarget): void {
     const gateway = this.ownedGateway(plan, target.segment, target.ipv6);
     this.command("nsenter", [
-      `--net=${container.NetworkSettings.SandboxKey}`,
+      `--net=${sandbox}`,
       "ip",
       ...(target.ipv6 ? ["-6"] : []),
       "route",
@@ -868,7 +860,8 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         !OWNED_SANDBOX.test(sandbox)
       )
         throw new Error("Public route requires the verified owned runtime network namespace.");
-      for (const route of plan.publicRoutes) this.routeForContainer(plan, container, route);
+      for (const target of containerRouteTargets(plan, container.NetworkSettings.Networks))
+        this.routeForContainer(plan, sandbox, target);
     }
   }
   /** Exact VPN return routes only, inside verified owned workload namespaces.
@@ -1263,20 +1256,42 @@ function routePrefix(ipv6: boolean): number {
   return ipv6 ? 128 : 32;
 }
 
+interface RouteTarget {
+  readonly segment: LocalNetworkPlan["segments"][number];
+  readonly ipv6: boolean;
+  readonly destination: string;
+}
+
 /** Consumers route to the published address; the publisher routes replies to the consumer subnet. */
 function publicationRoute(
   plan: LocalNetworkPlan,
   networks: Record<string, unknown>,
   route: LocalNetworkPlan["publicRoutes"][number],
-):
-  | { segment: LocalNetworkPlan["segments"][number]; ipv6: boolean; destination: string }
-  | undefined {
+): RouteTarget | undefined {
   const origin = route.fromProject === plan.project;
   const segment = origin ? route.from : route.to;
   if (!networks[`${plan.project}_${segment.name}`]) return undefined;
   const ipv6 = isIP(route.address) === 6;
   if (origin) return { segment, ipv6, destination: `${route.address}/${routePrefix(ipv6)}` };
   return { segment, ipv6, destination: ipv6 ? route.from.ipv6 : route.from.ipv4 };
+}
+
+/**
+ * A namespace holds one route per destination, so a container on several owned segments uses the
+ * first segment by name. Installation and audits must agree on that choice.
+ */
+function containerRouteTargets(
+  plan: LocalNetworkPlan,
+  networks: Record<string, unknown>,
+): RouteTarget[] {
+  const chosen = new Map<string, RouteTarget>();
+  for (const route of plan.publicRoutes) {
+    const target = publicationRoute(plan, networks, route);
+    const current = target && chosen.get(target.destination);
+    if (target && (!current || target.segment.name.localeCompare(current.segment.name) < 0))
+      chosen.set(target.destination, target);
+  }
+  return [...chosen.values()];
 }
 
 /** The kernel prints RFC 5952 text; planned subnets are built from unpadded words and may not be. */

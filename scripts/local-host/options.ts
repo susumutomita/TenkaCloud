@@ -21,7 +21,7 @@ export function parseOptions(
       lan: { type: "string" },
       "unsafe-lan": { type: "boolean", default: false },
       "admin-port": { type: "string", default: "5174" },
-      "participant-port": { type: "string", default: "5175" },
+      "participant-port": { type: "string" },
       "gateway-ports": { type: "string", default: DEFAULT_GATEWAY_PORTS },
       "max-active-per-team": { type: "string", default: String(DEFAULT_CONTAINER_LIMITS.perTeam) },
       "max-active-environments": {
@@ -68,18 +68,9 @@ export function parseOptions(
   assertVpnOptions(values, Boolean(exposure));
   const hostname = exposure ? "0.0.0.0" : listenAddress(values.lan, values["unsafe-lan"]);
   const adminPort = port(values["admin-port"]);
-  const participantPort = port(values["participant-port"]);
-  if (adminPort === participantPort)
-    throw new Error("Use different ports for the host console and participant portal.");
+  const participantPort = port(values["participant-port"] ?? "5175");
   const gatewayPorts = parseGatewayPorts(values["gateway-ports"]);
-  assertWebPort(appliance?.webPort, adminPort, participantPort, gatewayPorts);
-  if (
-    gatewayPortsOverlap(gatewayPorts, adminPort) ||
-    gatewayPortsOverlap(gatewayPorts, participantPort)
-  )
-    throw new Error(
-      "--gateway-ports must not include the host console or participant portal port.",
-    );
+  assertListenerPorts(adminPort, participantPort, gatewayPorts, appliance?.webPort);
   if (values["aws-region"] !== undefined)
     throw new Error(
       "AWS problems require cloud hosting. --aws-region is no longer accepted by make local; use the reviewed make deploy workflow when cloud hosting is ready.",
@@ -111,13 +102,54 @@ export function parseOptions(
 }
 
 function assertVpnOptions(
-  values: { "vpn-peers"?: string; "competition-network"?: boolean; lan?: string },
+  values: {
+    "vpn-peers"?: string;
+    "competition-network"?: boolean;
+    lan?: string;
+    "participant-port"?: string;
+  },
   publicExposure: boolean,
 ): void {
   if (values["vpn-peers"] && (!values["competition-network"] || values.lan || publicExposure))
     throw new Error(
       "--vpn-peers requires --competition-network and dedicated VPN listeners; LAN/public modes cannot be combined.",
     );
+  if (values["vpn-peers"] && values["participant-port"] !== undefined)
+    throw new Error(
+      "--vpn-peers takes the participant port from the VPN registration; omit --participant-port.",
+    );
+}
+
+function assertListenerPorts(
+  adminPort: number,
+  participantPort: number,
+  gatewayPorts: ReturnType<typeof parseGatewayPorts>,
+  webPort: number | undefined,
+): void {
+  if (adminPort === participantPort)
+    throw new Error("Use different ports for the host console and participant portal.");
+  assertWebPort(webPort, adminPort, participantPort, gatewayPorts);
+  if (
+    gatewayPortsOverlap(gatewayPorts, adminPort) ||
+    gatewayPortsOverlap(gatewayPorts, participantPort)
+  )
+    throw new Error(
+      "--gateway-ports must not include the host console or participant portal port.",
+    );
+}
+
+/** The root-owned VPN registration owns the participant listener address and port. */
+export function vpnListener(
+  options: ReturnType<typeof parseOptions>,
+  plan: { readonly serverIpv4: string; readonly participantPort: number },
+): { hostname: string; participantPort: number } {
+  assertListenerPorts(
+    options.adminPort,
+    plan.participantPort,
+    options.gatewayPorts,
+    options.consoleAppliance?.webPort,
+  );
+  return { hostname: plan.serverIpv4, participantPort: plan.participantPort };
 }
 
 /** Served through a TLS-terminating proxy; both listeners bind every interface of the container. */
