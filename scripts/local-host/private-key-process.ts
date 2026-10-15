@@ -32,7 +32,10 @@ export function spawnPrivateKeyProcess(
     finished(stderr),
     finished(privateOutput),
   ]).then(([code]) => {
-    if (child.exitCode !== code) throw new Error("Private-pipe process exit changed.");
+    // Bun represents signal exits with exitCode=null and exited=128+signal.
+    // Read the native owner here even after every borrowed reader has closed.
+    if (child.signalCode === null && child.exitCode !== code)
+      throw new Error("Private-pipe process exit changed.");
     return code;
   });
   return {

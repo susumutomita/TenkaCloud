@@ -52,6 +52,8 @@ import {
   acceptanceWgUnit as wgUnit,
 } from "./vpn-acceptance-units";
 
+import { awaitSyntheticCanary, syntheticCanaryScript } from "./vpn-canary";
+
 const execute = promisify(execFile);
 const iface = "tcwgac";
 const namespaces = Array.from({ length: 6 }, (_, index) => `tcvpa${index}`);
@@ -389,18 +391,6 @@ function cleanupCanaryGuard(): void {
     command(family, ["-F", canaryChain]);
     command(family, ["-X", canaryChain]);
   }
-}
-async function awaitCanary(url: string, marker: string): Promise<void> {
-  for (let attempt = 0; attempt < 30; attempt++) {
-    try {
-      if ((await (await fetch(url, { signal: AbortSignal.timeout(500) })).text()) === marker)
-        return;
-    } catch {
-      /* Owned process readiness only. */
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error("Synthetic canary failed its positive control");
 }
 function cleanupOptionalPolicy(plan: VpnPeerPlan | undefined): void {
   if (plan) cleanupPolicy(plan);
@@ -747,17 +737,36 @@ async function main(): Promise<void> {
           "via",
           `${subnet}.1`,
         ]);
-        const script = `Bun.serve({hostname:'::',port:${adminPort},fetch(){return new Response('synthetic-${namespace}')}});Bun.serve({hostname:'::',port:53,fetch(){return new Response('owned-dns-canary')}});for(const [kind,host] of [['udp4','0.0.0.0'],['udp6','::']]){const s=require('node:dgram').createSocket(kind);s.on('message',(m,r)=>s.send(m,r.port,r.address));s.bind({address:host,port:53,ipv6Only:true})}`;
-        canaries.push(
-          spawn("ip", ["netns", "exec", namespace, process.execPath, "--eval", script], {
-            stdio: "ignore",
-          }),
+        const script = syntheticCanaryScript({
+          httpPort: adminPort,
+          dnsPort: 53,
+          marker: `synthetic-${namespace}`,
+        });
+        const canary = spawn(
+          "ip",
+          ["netns", "exec", namespace, process.execPath, "--eval", script],
+          {
+            stdio: ["ignore", "pipe", "ignore"],
+          },
         );
-        await awaitCanary(`http://${subnet}.2:${adminPort}`, `synthetic-${namespace}`);
-        assert.equal(
-          await (await fetch(httpAddress(`${subnet6}::2`, adminPort))).text(),
-          `synthetic-${namespace}`,
-        );
+        canaries.push(canary);
+        const ready = await awaitSyntheticCanary(canary);
+        assert.equal(ready.httpPort, adminPort);
+        assert.equal(ready.dnsPort, 53);
+        for (const address of [`${subnet}.2`, `${subnet6}::2`]) {
+          assert.equal(
+            await (
+              await fetch(httpAddress(address, adminPort), { signal: AbortSignal.timeout(1000) })
+            ).text(),
+            `synthetic-${namespace}`,
+          );
+          assert.equal(
+            await (
+              await fetch(httpAddress(address, 53), { signal: AbortSignal.timeout(1000) })
+            ).text(),
+            "owned-dns-canary",
+          );
+        }
         await udpProbe(undefined, `${subnet}.2`, true);
         await udpProbe(undefined, `${subnet6}::2`, true);
       }
