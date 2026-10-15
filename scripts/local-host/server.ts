@@ -156,6 +156,8 @@ export async function startLocalHost(
     await gateways?.close();
     await webBroker?.close();
     await collectVpnCleanupFailure(vpnStopFailures, () => transportEngine?.closeTransports?.());
+    // A relay that failed before closeTransports stopped it queued its guard halt after the first drain.
+    await service?.drain();
     service?.flush();
     store.close();
     if (unstoppedLocal.length > 0)

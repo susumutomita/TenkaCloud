@@ -35,6 +35,7 @@ export class PublishedWebBroker {
   private readonly tickets = new Map<string, Grant>();
   private readonly sessions = new Map<string, Grant>();
   private active = 0;
+  private readonly teamRequests = new Map<string, number>();
   private readonly epochs = new Map<string, number>();
   private readonly pending = new Set<string>();
   private readonly server = createHttpServer(
@@ -61,17 +62,26 @@ export class PublishedWebBroker {
       return;
     }
     const grant = this.session(request);
-    await proxyApplication({
-      request,
-      response,
-      upstream: new URL(grant.upstream),
-      origin: grant.origin,
-      deniedPaths: ["/__join"],
-      keyHash: grant.keyHash,
-      forwardAuthorization: false,
-      transport: directWebTransport,
-      authorize: () => this.authorize(grant),
-    });
+    const active = this.teamRequests.get(grant.teamId) ?? 0;
+    if (active >= 16) throw new HostError(429, "Too many Web requests for this team.");
+    this.teamRequests.set(grant.teamId, active + 1);
+    try {
+      await proxyApplication({
+        request,
+        response,
+        upstream: new URL(grant.upstream),
+        origin: grant.origin,
+        deniedPaths: ["/__join"],
+        keyHash: grant.keyHash,
+        forwardAuthorization: false,
+        transport: directWebTransport,
+        authorize: () => this.authorize(grant),
+      });
+    } finally {
+      const remaining = (this.teamRequests.get(grant.teamId) ?? 0) - 1;
+      if (remaining > 0) this.teamRequests.set(grant.teamId, remaining);
+      else this.teamRequests.delete(grant.teamId);
+    }
   }
   private async join(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
     if (request.method !== "GET" || [...url.searchParams.keys()].join(",") !== "ticket")

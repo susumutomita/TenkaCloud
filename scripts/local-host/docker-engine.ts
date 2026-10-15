@@ -70,6 +70,12 @@ import { VpnPolicyRevoked } from "./vpn/native-ingress";
 
 type ComposeAction = "up" | "down" | "stop" | "restart";
 
+/** `teardown: "down"` records a confirmed Compose down whose owned guard and files still need removal. */
+type RetainedUnit = LocalComposeUnit & { readonly teardown?: "down" };
+
+const REMOVED_UNIT =
+  "Competition workloads were removed, but guard cleanup could not be confirmed; retry its removal.";
+
 /** Recognizes "no daemon" across Docker CLI generations, Docker Desktop and Compose v1. */
 const DAEMON_UNAVAILABLE =
   /cannot connect to the docker daemon|failed to connect to the docker api|is the docker daemon running|daemon is not running|error during connect/iu;
@@ -389,8 +395,8 @@ export class DockerHostingEngine implements RuntimeEngine {
     if (networkSubnets) this.networkReservations.set(job.jobId, Object.values(networkSubnets));
     writeFileSync(unit.composePath, plan.composeText, { mode: 0o600 });
     retain(JSON.stringify(unit));
-    const generated = generateSecretEnv(plan.directory, job.problemId, unit.secretEnv);
     try {
+      const generated = generateSecretEnv(plan.directory, job.problemId, unit.secretEnv);
       if (guarded) this.networkGuard.install(guarded);
       await this.runCompose(unit, "up", { ...process.env, ...generated });
       if (guarded) this.networkGuard.verifyNetworks(guarded);
@@ -404,11 +410,12 @@ export class DockerHostingEngine implements RuntimeEngine {
         retain(JSON.stringify(requiredNetworkValue(this.running.get(job.jobId)).unit));
       }
     } catch (error) {
-      return this.cleanupFailedStart(
-        job,
-        { unit, guarded, environment: { ...process.env, ...generated }, retain },
-        error,
-      );
+      // Down interpolates names only; cleanup must not depend on the secret that may have failed.
+      const environment = {
+        ...process.env,
+        ...Object.fromEntries(unit.secretEnv.map((name) => [name, "tenkacloud-host-cleanup"])),
+      };
+      return this.cleanupFailedStart(job, { unit, guarded, environment, retain }, error);
     }
   }
   private async cleanupFailedStart(
@@ -460,6 +467,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     this.revokeRunning(job.jobId);
     const recorded = this.recordedUnit(job);
     this.revokeRunning(job.jobId);
+    if (recorded.teardown) throw new Error(REMOVED_UNIT);
     try {
       const plan = this.plan(job);
       const unit = this.validatedUnit(job, plan.started.unit);
@@ -508,33 +516,53 @@ export class DockerHostingEngine implements RuntimeEngine {
     this.revokeRunning(job.jobId);
     const recorded = this.recordedUnit(job);
     this.revokeRunning(job.jobId);
+    let down = recorded.teardown === "down";
     try {
       // Cleanup must remain possible after a catalog update. The private persisted
       // compose text is the original creation plan, not the new checkout's file.
       const plan = this.plan(job, false, undefined, true);
       const unit = this.validatedUnit(job, plan.started.unit);
-      if (unit.isolationVersion === 1) await this.withdrawRuntimePublications(job);
-      // Reconstruct only a missing file from the private pinned plan. A different
-      // existing file is a conflict, never something we execute or overwrite.
-      if (!existsSync(unit.composePath))
-        writeFileSync(unit.composePath, plan.composeText, { flag: "wx", mode: 0o600 });
-      if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
-        throw new Error("Recorded runtime composition changed; refusing unsafe cleanup.");
-      // Compose down still interpolates variables, but does not need the original
-      // secret. Cleanup must work even if a deployment's private seed file is lost.
-      const cleanupEnvironment = Object.fromEntries(
-        unit.secretEnv.map((name) => [name, "tenkacloud-host-cleanup"]),
-      );
-      await this.runCompose(unit, "down", { ...process.env, ...cleanupEnvironment });
+      // A confirmed down follows a completed withdrawal; its bridges are gone, so a
+      // second withdrawal could only fail against absent networks.
+      if (!down) {
+        if (unit.isolationVersion === 1) await this.withdrawRuntimePublications(job);
+        // Reconstruct only a missing file from the private pinned plan. A different
+        // existing file is a conflict, never something we execute or overwrite.
+        if (!existsSync(unit.composePath))
+          writeFileSync(unit.composePath, plan.composeText, { flag: "wx", mode: 0o600 });
+        if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
+          throw new Error("Recorded runtime composition changed; refusing unsafe cleanup.");
+        // Compose down still interpolates variables, but does not need the original
+        // secret. Cleanup must work even if a deployment's private seed file is lost.
+        const cleanupEnvironment = Object.fromEntries(
+          unit.secretEnv.map((name) => [name, "tenkacloud-host-cleanup"]),
+        );
+        await this.runCompose(unit, "down", { ...process.env, ...cleanupEnvironment });
+        down = true;
+      }
       const guarded = this.guardPlan(job, unit);
       if (guarded) this.networkGuard.remove(guarded);
       this.revokeRunning(job.jobId);
       this.networkReservations.delete(job.jobId);
       removeRuntimeFiles(this.dataDirectory, job.jobId, unit.composePath);
     } catch (error) {
-      if (recorded.isolationVersion === 1) return this.haltGuardedUnit(job, recorded, error);
-      throw error;
+      if (recorded.isolationVersion !== 1) throw error;
+      // No workload remains to halt, and a stopped reset would need the removed bridges.
+      if (down) return this.retainRemovedUnit(job, error);
+      return this.haltGuardedUnit(job, recorded, error);
     }
+  }
+  private retainRemovedUnit(job: Job, error: unknown): never {
+    const unit: RetainedUnit = {
+      ...(JSON.parse(requiredNetworkValue(job.unit)) as LocalComposeUnit),
+      teardown: "down",
+    };
+    job.unit = JSON.stringify(unit);
+    job.status = "FAILED";
+    job.error = REMOVED_UNIT;
+    const failures = [error];
+    this.retainGuardFailure(job, unit, failures);
+    throw new AggregateError(failures, REMOVED_UNIT);
   }
   /** Validated, unchanged private plan of an owned environment. */
   private async ownedUnit(
@@ -542,6 +570,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     verifySources: boolean,
   ): Promise<{ unit: LocalComposeUnit; directory: string }> {
     const recorded = this.recordedUnit(job);
+    if (recorded.teardown) throw new Error(REMOVED_UNIT);
     try {
       const plan = this.plan(job, verifySources);
       const unit = this.validatedUnit(job, plan.started.unit);
@@ -558,10 +587,10 @@ export class DockerHostingEngine implements RuntimeEngine {
       throw error;
     }
   }
-  private recordedUnit(job: Job): LocalComposeUnit {
-    const unit =
+  private recordedUnit(job: Job): RetainedUnit {
+    const unit: RetainedUnit =
       this.running.get(job.jobId)?.unit ??
-      (JSON.parse(requiredNetworkValue(job.unit)) as LocalComposeUnit);
+      (JSON.parse(requiredNetworkValue(job.unit)) as RetainedUnit);
     if (unit.composeProjectName !== `tch-${job.jobId.toLowerCase()}`)
       throw new Error("Retained runtime project does not match the job.");
     return unit;
@@ -616,12 +645,17 @@ export class DockerHostingEngine implements RuntimeEngine {
     });
   }
   private guardPlan(job: Job, unit: LocalComposeUnit): LocalNetworkPlan | undefined {
+    const plan = this.ownedPlan(job, unit);
+    return plan && retainedPublicPlan(plan, unit.publicNetworkRoutes);
+  }
+  /** Owned bridges without retained DMZ routes: enough to quarantine, stop and reset. */
+  private ownedPlan(job: Job, unit: LocalComposeUnit): LocalNetworkPlan | undefined {
     if (unit.isolationVersion === undefined) return undefined;
     if (unit.isolationVersion !== 1) throw new Error("Unsupported local competition network plan.");
     const plan = this.networkPlan(job, unit.composeProjectName, unit.networkSubnets);
     if (plan.generation !== unit.isolationGeneration)
       throw new Error("Competition network generation changed.");
-    return retainedPublicPlan(plan, unit.publicNetworkRoutes);
+    return plan;
   }
   private publicServiceIds(job: Job, unit: LocalComposeUnit): readonly string[] {
     const ids = unit.publishedServiceIds ?? [];
@@ -810,10 +844,12 @@ export class DockerHostingEngine implements RuntimeEngine {
   ): Promise<void> {
     const job = this.publicationJob(context, problemId);
     await this.awaitGuardHalt(job);
-    const declared = definitionOf(job, false).problem.publicServices ?? [];
-    if (!declared.some((service) => service.id === serviceId))
-      throw new HostError(400, "Select a declared public service ID.");
+    const service = (definitionOf(job, false).problem.publicServices ?? []).find(
+      (entry) => entry.id === serviceId,
+    );
+    if (!service) throw new HostError(400, "Select a declared public service ID.");
     const unit = JSON.parse(requiredNetworkValue(job.unit)) as LocalComposeUnit;
+    if (published) await this.assertPublishable(job, unit, service);
     const ids = new Set(this.publicServiceIds(job, unit));
     if (published) ids.add(serviceId);
     else ids.delete(serviceId);
@@ -825,6 +861,30 @@ export class DockerHostingEngine implements RuntimeEngine {
       }),
     };
     await this.reconcilePublications(job.eventId, new Map([[job.jobId, changed]]));
+  }
+  /**
+   * A participant's own unpublishable service is a refused request, not guard drift. The halt is
+   * kept only when the owned guard itself no longer verifies.
+   */
+  private async assertPublishable(
+    job: Job,
+    unit: LocalComposeUnit,
+    service: { service: string; port: number },
+  ): Promise<void> {
+    const plan = requiredNetworkValue(this.guardPlan(job, unit));
+    let failure: unknown;
+    try {
+      if ((await this.publicEndpoints(plan, service.service, service.port)).length) return;
+    } catch (error) {
+      failure = error;
+    }
+    await this.verifyObservedJob(job, unit, plan);
+    const refused = new HostError(
+      409,
+      "The selected public service has no single running instance; publication is refused.",
+    );
+    refused.cause = failure;
+    throw refused;
   }
   private async withdrawRuntimePublications(job: Job): Promise<void> {
     const unit = JSON.parse(requiredNetworkValue(job.unit)) as LocalComposeUnit;
@@ -862,7 +922,8 @@ export class DockerHostingEngine implements RuntimeEngine {
   ): Promise<void> {
     if (!this.networkState)
       throw new Error("DMZ publication requires the existing private host ledger.");
-    for (const candidate of this.networkState.jobs()) await this.awaitGuardHalt(candidate);
+    for (const candidate of this.networkState.jobs())
+      if (candidate.eventId === eventId) await this.awaitGuardHalt(candidate);
     const snapshots = this.networkState
       .jobs()
       .filter(
@@ -882,8 +943,6 @@ export class DockerHostingEngine implements RuntimeEngine {
         requiredNetworkValue(this.guardPlan(job, JSON.parse(requiredNetworkValue(job.unit)))),
       ]),
     );
-    for (const snapshot of snapshots)
-      this.assertPublicationChange(snapshot, changes.get(snapshot.jobId));
     const active = snapshots.filter(
       (job) =>
         !disabled.has(job.jobId) && (job.status === "COMPLETE" || this.running.has(job.jobId)),
@@ -928,10 +987,18 @@ export class DockerHostingEngine implements RuntimeEngine {
       });
       return { jobId: job.jobId, unit, plan };
     });
+    // A halt can begin while this request waits or observes; a revoked runtime keeps its ledger.
+    for (const [jobId, changed] of changes)
+      this.assertPublicationChange(
+        snapshots.find((job) => job.jobId === jobId),
+        changed,
+      );
     this.vpnIngress?.validate(
       this.vpnSnapshot(new Map(planned.map(({ jobId, plan }) => [jobId, plan])), this.guardNow()),
       this.guardNow(),
     );
+    // Peers must not reach endpoints under the outgoing policy; reconcileVpn reopens with the new one.
+    this.vpnIngress?.seal();
     this.policyEpochs.set(eventId, this.policyEpoch(eventId) + 1);
     this.applyingPublicationEvent = eventId;
     try {
@@ -975,13 +1042,18 @@ export class DockerHostingEngine implements RuntimeEngine {
     this.networkGuard.verifyNetworks(plan);
   }
 
-  private assertPublicationChange(snapshot: Job, changed?: Job): void {
+  private assertPublicationChange(snapshot: Job | undefined, changed: Job): void {
+    if (snapshot?.status !== "COMPLETE" || !this.running.has(snapshot.jobId))
+      throw new HostError(
+        409,
+        "DMZ publication requires a running, isolated local environment.",
+        "not_running",
+      );
     if (
-      changed &&
-      (changed.definition !== snapshot.definition ||
-        changed.deployedAt !== snapshot.deployedAt ||
-        changed.eventId !== snapshot.eventId ||
-        changed.teamId !== snapshot.teamId)
+      changed.definition !== snapshot.definition ||
+      changed.deployedAt !== snapshot.deployedAt ||
+      changed.eventId !== snapshot.eventId ||
+      changed.teamId !== snapshot.teamId
     )
       throw new HostError(409, "DMZ environment changed before publication.");
   }
@@ -1107,7 +1179,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     let guarded: LocalNetworkPlan | undefined;
     let quarantine: Promise<void> | undefined;
     try {
-      guarded = this.guardPlan(job, unit);
+      guarded = this.ownedPlan(job, unit);
       if (guarded) quarantine = this.quarantinePlan(guarded);
     } catch (failure) {
       failures.push(failure);
@@ -1127,7 +1199,7 @@ export class DockerHostingEngine implements RuntimeEngine {
         throw new Error("Retained isolated shutdown scope could not be validated.");
       else await this.runCompose(unit, "stop", { ...process.env, ...placeholders });
       if (guarded) {
-        await this.resetStoppedPlan(retainedPublicPlan(guarded, []));
+        await this.resetStoppedPlan(guarded);
         unit = { ...unit, publicNetworkRoutes: [] };
       }
       job.unit = JSON.stringify(unit);

@@ -85,7 +85,8 @@ const nativeIO: GuardIO = {
   },
 };
 type Rule = readonly string[];
-interface VpnReplyContainer {
+const OWNED_SANDBOX = /^\/var\/run\/docker\/netns\/[a-f0-9]{12,64}$/u;
+interface OwnedContainer {
   readonly Id: string;
   readonly Config?: { Labels?: Record<string, string> };
   readonly HostConfig?: { Privileged?: boolean; NetworkMode?: string; CapAdd?: string[] };
@@ -580,7 +581,8 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       throw new Error("Invalid competition container inventory.");
     if (!ids.length && Object.keys(plan.services).length)
       throw new Error("Competition workloads are missing.");
-    const attached = this.verifyContainers(plan, ids);
+    const containers = this.verifyContainers(plan, ids);
+    const attached = new Set(containers.map((container) => container.Id));
     for (const segment of plan.segments) {
       const rows = JSON.parse(
         this.command("docker", ["network", "inspect", `${plan.project}_${segment.name}`]),
@@ -589,23 +591,60 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         throw new Error("Competition network has an unowned endpoint.");
     }
     this.verifyPublicTargets(plan);
+    this.verifyPublicationRoutes(plan, containers);
   }
-  private verifyContainers(plan: LocalNetworkPlan, ids: string[]): Set<string> {
-    const attached = new Set<string>();
-    if (ids.length) {
-      const containers = JSON.parse(this.command("docker", ["inspect", ...ids]));
-      if (!Array.isArray(containers) || containers.length !== ids.length)
-        throw new Error("Invalid competition workload inspection.");
-      const services = new Set<string>();
-      for (const container of containers) {
-        const service = this.verifyContainer(plan, container, services);
-        services.add(service);
-        attached.add(container.Id);
-      }
-      if (services.size !== Object.keys(plan.services).length)
-        throw new Error("Declared competition service is missing.");
+  private verifyContainers(plan: LocalNetworkPlan, ids: string[]): OwnedContainer[] {
+    if (!ids.length) return [];
+    const containers = JSON.parse(this.command("docker", ["inspect", ...ids]));
+    if (!Array.isArray(containers) || containers.length !== ids.length)
+      throw new Error("Invalid competition workload inspection.");
+    const services = new Set<string>();
+    for (const container of containers)
+      services.add(this.verifyContainer(plan, container, services));
+    if (services.size !== Object.keys(plan.services).length)
+      throw new Error("Declared competition service is missing.");
+    return containers;
+  }
+  /** Docker drops these routes whenever it recreates a namespace, so every audit re-reads them. */
+  private verifyPublicationRoutes(
+    plan: LocalNetworkPlan,
+    containers: readonly OwnedContainer[],
+  ): void {
+    for (const container of containers) {
+      if (container.State?.Running !== true) continue;
+      const expected = plan.publicRoutes.flatMap((route) => {
+        const target = publicationRoute(plan, container.NetworkSettings.Networks, route);
+        if (!target) return [];
+        const gateway = segmentGateway(target.segment, target.ipv6);
+        return [`${canonicalPrefix(target.destination)} via ${canonicalAddress(gateway)}`];
+      });
+      if (!expected.length) continue;
+      const sandbox = container.NetworkSettings.SandboxKey;
+      if (!OWNED_SANDBOX.test(sandbox))
+        throw new Error("Public route requires the verified owned runtime network namespace.");
+      const actual = new Set([false, true].flatMap((ipv6) => this.namespaceRoutes(sandbox, ipv6)));
+      if (expected.some((entry) => !actual.has(entry)))
+        throw new Error("Published DMZ route is missing from an owned workload namespace.");
     }
-    return attached;
+  }
+  private namespaceRoutes(sandbox: string, ipv6: boolean): string[] {
+    const rows: unknown = JSON.parse(
+      this.command("nsenter", [
+        `--net=${sandbox}`,
+        "ip",
+        ...(ipv6 ? ["-6"] : []),
+        "-j",
+        "route",
+        "show",
+      ]),
+    );
+    if (!Array.isArray(rows) || rows.length > 16384)
+      throw new Error("Invalid workload route inventory.");
+    return rows.flatMap((row: { dst?: unknown; gateway?: unknown } | null) =>
+      typeof row?.dst === "string" && typeof row.gateway === "string"
+        ? [`${canonicalPrefix(row.dst)} via ${canonicalAddress(row.gateway)}`]
+        : [],
+    );
   }
   private verifyContainer(
     plan: LocalNetworkPlan,
@@ -761,20 +800,16 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     container: { NetworkSettings: { Networks: Record<string, unknown>; SandboxKey: string } },
     route: LocalNetworkPlan["publicRoutes"][number],
   ): void {
-    const origin = route.fromProject === plan.project;
-    const segment = origin ? route.from : route.to;
-    if (!container.NetworkSettings.Networks[`${plan.project}_${segment.name}`]) return;
-    const ipv6 = isIP(route.address) === 6;
-    const gateway = this.ownedGateway(plan, segment, ipv6);
-    let destination = ipv6 ? route.from.ipv6 : route.from.ipv4;
-    if (origin) destination = `${route.address}/${ipv6 ? 128 : 32}`;
+    const target = publicationRoute(plan, container.NetworkSettings.Networks, route);
+    if (!target) return;
+    const gateway = this.ownedGateway(plan, target.segment, target.ipv6);
     this.command("nsenter", [
       `--net=${container.NetworkSettings.SandboxKey}`,
       "ip",
-      ...(ipv6 ? ["-6"] : []),
+      ...(target.ipv6 ? ["-6"] : []),
       "route",
       "replace",
-      destination,
+      target.destination,
       "via",
       gateway,
     ]);
@@ -830,7 +865,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       if (
         container.Config?.Labels?.["tenkacloud.isolation.owner"] !== plan.owner ||
         typeof sandbox !== "string" ||
-        !/^\/var\/run\/docker\/netns\/[a-f0-9]{12,64}$/u.test(sandbox)
+        !OWNED_SANDBOX.test(sandbox)
       )
         throw new Error("Public route requires the verified owned runtime network namespace.");
       for (const route of plan.publicRoutes) this.routeForContainer(plan, container, route);
@@ -855,9 +890,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     );
     if (!ids.length || ids.some((id) => !/^[a-f0-9]{12,64}$/u.test(id)))
       throw new Error("VPN reply workloads are unavailable.");
-    const containers = JSON.parse(
-      this.command("docker", ["inspect", ...ids]),
-    ) as VpnReplyContainer[];
+    const containers = JSON.parse(this.command("docker", ["inspect", ...ids])) as OwnedContainer[];
     if (!Array.isArray(containers) || containers.length !== ids.length)
       throw new Error("Invalid VPN reply workload inventory.");
     const services = new Set<string>();
@@ -870,7 +903,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   }
   private vpnReplyRoutes(
     plan: LocalNetworkPlan,
-    container: VpnReplyContainer,
+    container: OwnedContainer,
     services: Set<string>,
     destinations: readonly string[],
   ): VpnReplyRoute[] {
@@ -887,7 +920,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       container.State?.Running !== true ||
       !Number.isSafeInteger(pid) ||
       Number(pid) < 1 ||
-      !/^\/var\/run\/docker\/netns\/[a-f0-9]{12,64}$/u.test(sandbox)
+      !OWNED_SANDBOX.test(sandbox)
     )
       throw new Error("VPN reply namespace ownership changed.");
     const actualNamespace = this.command("nsenter", [
@@ -1228,6 +1261,31 @@ function routeDestinations(rows: unknown[], ipv6: boolean): string[] {
 
 function routePrefix(ipv6: boolean): number {
   return ipv6 ? 128 : 32;
+}
+
+/** Consumers route to the published address; the publisher routes replies to the consumer subnet. */
+function publicationRoute(
+  plan: LocalNetworkPlan,
+  networks: Record<string, unknown>,
+  route: LocalNetworkPlan["publicRoutes"][number],
+):
+  | { segment: LocalNetworkPlan["segments"][number]; ipv6: boolean; destination: string }
+  | undefined {
+  const origin = route.fromProject === plan.project;
+  const segment = origin ? route.from : route.to;
+  if (!networks[`${plan.project}_${segment.name}`]) return undefined;
+  const ipv6 = isIP(route.address) === 6;
+  if (origin) return { segment, ipv6, destination: `${route.address}/${routePrefix(ipv6)}` };
+  return { segment, ipv6, destination: ipv6 ? route.from.ipv6 : route.from.ipv4 };
+}
+
+/** The kernel prints RFC 5952 text; planned subnets are built from unpadded words and may not be. */
+function canonicalAddress(address: string): string {
+  return isIP(address) === 6 ? new URL(`http://[${address}]/`).hostname.slice(1, -1) : address;
+}
+function canonicalPrefix(destination: string): string {
+  const [address = "", prefix] = destination.split("/");
+  return `${canonicalAddress(address)}/${prefix ?? routePrefix(isIP(address) === 6)}`;
 }
 
 function quarantineHooks(plan: LocalNetworkPlan, _ipv6: boolean): { parent: string; rule: Rule }[] {

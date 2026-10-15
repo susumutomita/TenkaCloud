@@ -7,7 +7,24 @@ interface WorkerQueue {
   readonly waiting: (() => void)[];
 }
 type WorkerMode = "verify" | "stop" | "quarantine" | "reset" | "publish";
+type WorkerOperation = WorkerMode | "endpoints" | "relay-target" | "vpn-prepare";
 type WorkerRunner = (plan: LocalNetworkPlan, mode: WorkerMode) => Promise<void>;
+const BASE_DEADLINE_MS = 20_000;
+// Each admitted route costs every verification pass two firewall checks and three Docker inspections.
+const ROUTE_PASS_MS = 100;
+// Bounds how long one wedged daemon call chain can hold one of the two audit slots.
+const MAX_DEADLINE_MS = 120_000;
+/** Publication verifies the previous plan, then rewrites, routes and re-verifies the new one. */
+export function workerDeadline(
+  operation: WorkerOperation,
+  plan?: LocalNetworkPlan,
+  previous?: LocalNetworkPlan,
+): number {
+  const routes = plan?.publicRoutes.length ?? 0;
+  const passes =
+    operation === "publish" ? (previous?.publicRoutes.length ?? 0) + 3 * routes : routes;
+  return Math.min(MAX_DEADLINE_MS, BASE_DEADLINE_MS + passes * ROUTE_PASS_MS);
+}
 const auditQueue: WorkerQueue = { active: 0, waiting: [] };
 const emergencyQueue: WorkerQueue = { active: 0, waiting: [] };
 async function acquire(queue: WorkerQueue): Promise<void> {
@@ -101,7 +118,7 @@ function runAudit(
 }
 function runWorker<T>(
   plan: LocalNetworkPlan | undefined,
-  mode: WorkerMode | "endpoints" | "relay-target" | "vpn-prepare",
+  mode: WorkerOperation,
   details: {
     config?: import("./vpn/peer-plan").VpnPeerPlan;
     runtimes?: readonly import("./vpn/forward-policy").VpnRuntimeAdmission[];
@@ -129,7 +146,7 @@ function runWorker<T>(
     };
     const timeout = setTimeout(
       () => finish(new Error("Competition network audit timed out.")),
-      20_000,
+      workerDeadline(mode, plan, details.previous),
     );
     timeout.unref();
     worker.once("message", (result: { ok?: boolean; error?: string; value?: T }) =>

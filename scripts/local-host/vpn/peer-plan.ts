@@ -143,6 +143,49 @@ export function vpnPeerPlan(raw: unknown): VpnPeerPlan {
     generation: createHash("sha256").update(JSON.stringify(definition)).digest("hex"),
   });
 }
+export interface VpnHostNetwork {
+  readonly device: string | undefined;
+  readonly network: string;
+}
+function hostSubnet(network: string): BlockList | undefined {
+  if (network === "default") return undefined;
+  const [base = "", prefix, ...rest] = network.split("/");
+  const family = isIP(base);
+  const width = family === 6 ? 128 : 32;
+  const bits = prefix === undefined ? width : Number(prefix);
+  if (
+    !family ||
+    rest.length ||
+    (prefix !== undefined && !/^\d{1,3}$/u.test(prefix)) ||
+    bits > width
+  )
+    throw new Error("Invalid host network inventory; VPN admission must remain closed.");
+  if (bits === 0) return undefined;
+  const subnet = new BlockList();
+  subnet.addSubnet(base, bits, family === 6 ? "ipv6" : "ipv4");
+  return subnet;
+}
+/** Anti-spoof drops and cryptokey routes must never claim an address the host reaches elsewhere. */
+export function assertVpnHostDisjoint(
+  plan: VpnPeerPlan,
+  networks: readonly VpnHostNetwork[],
+): void {
+  const identities = [
+    plan.serverIpv4,
+    plan.serverIpv6,
+    ...plan.peers.flatMap((peer) => [peer.ipv4, peer.ipv6]),
+  ];
+  for (const { device, network } of networks) {
+    const subnet = device === plan.interface ? undefined : hostSubnet(network);
+    const overlap = identities.find((identity) =>
+      subnet?.check(identity, isIP(identity) === 6 ? "ipv6" : "ipv4"),
+    );
+    if (overlap)
+      throw new Error(
+        `VPN identity ${overlap} overlaps host network ${network} on ${device ?? "no device"}; register a dedicated VPN allocation.`,
+      );
+  }
+}
 export interface VpnPeerInventory {
   readonly interface: string;
   readonly kind: string;

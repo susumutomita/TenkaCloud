@@ -8,7 +8,12 @@ import { vpnSealHook, workloadQuarantineHook } from "./firewall-scope";
 import type { VpnForwardPolicy, VpnRuntimeAdmission } from "./forward-policy";
 import { vpnForwardPolicy, vpnLeaseTimeout } from "./forward-policy";
 import { assertVpnTeamPeer, type VpnPeerProof, vpnPeerProof } from "./peer-admission";
-import type { VpnPeerInventory, VpnPeerPlan } from "./peer-plan";
+import {
+  assertVpnHostDisjoint,
+  type VpnHostNetwork,
+  type VpnPeerInventory,
+  type VpnPeerPlan,
+} from "./peer-plan";
 
 export interface VpnCommand {
   readonly command: string;
@@ -192,6 +197,28 @@ export class NativeVpnBackend {
       });
     return { interface: this.plan.interface, kind: "wireguard", publicKey, peers };
   }
+  private hostNetworks(): VpnHostNetwork[] {
+    const links = JSON.parse(this.run("ip", ["-j", "address", "show"])) as {
+      ifname?: string;
+      addr_info?: { local?: string; prefixlen?: number }[];
+    }[];
+    const routes = ["-4", "-6"].flatMap(
+      (family) =>
+        JSON.parse(this.run("ip", ["-j", family, "route", "show", "table", "all"])) as {
+          dst?: string;
+          dev?: string;
+        }[],
+    );
+    return [
+      ...links.flatMap((link) =>
+        (link.addr_info ?? []).map((entry) => ({
+          device: link.ifname,
+          network: `${entry.local}/${entry.prefixlen}`,
+        })),
+      ),
+      ...routes.map((route) => ({ device: route.dev, network: route.dst ?? "" })),
+    ];
+  }
   private assertModules(): void {
     for (const name of ["wireguard", "ip_set", "ip_set_hash_ip", "xt_set", "nf_conntrack"])
       if (!this.io.hasModule(name))
@@ -229,6 +256,33 @@ export class NativeVpnBackend {
         ["*filter", ...additions, "COMMIT", ""].join("\n"),
       );
   }
+  /** Creation and the ownership marker share one restore transaction, and precede every lease set. */
+  private claimChains(): void {
+    const owner = `tc-vpn-v1:${this.plan.generation}`;
+    for (const ipv6 of [false, true]) {
+      const all = this.firewall(ipv6, ["-S"]).split("\n");
+      const missing = [this.inputChain, this.forwardChain].filter((chain) => {
+        if (!all.includes(`-N ${chain}`)) return true;
+        if (!all.some((line) => line.startsWith(`-A ${chain} `) && line.includes(owner)))
+          throw new Error("Refusing to adopt an unowned VPN chain.");
+        return false;
+      });
+      if (missing.length)
+        this.run(
+          ipv6 ? "ip6tables-restore" : "iptables-restore",
+          ["--wait", "2", "--noflush"],
+          [
+            "*filter",
+            ...missing.flatMap((chain) => [
+              `:${chain} - [0:0]`,
+              `-A ${chain} -m comment --comment ${owner}`,
+            ]),
+            "COMMIT",
+            "",
+          ].join("\n"),
+        );
+    }
+  }
   private restore(
     ipv6: boolean,
     parent: string,
@@ -237,11 +291,6 @@ export class NativeVpnBackend {
     directions: readonly string[],
   ): void {
     const owner = `tc-vpn-v1:${this.plan.generation}`;
-    const all = this.firewall(ipv6, ["-S"]);
-    if (all.includes(`-N ${chain}\n`) || all.endsWith(`-N ${chain}`)) {
-      const actual = this.firewall(ipv6, ["-S", chain]);
-      if (!actual.includes(owner)) throw new Error("Refusing to adopt an unowned VPN chain.");
-    } else this.firewall(ipv6, ["-N", chain]);
     const body = [
       "*filter",
       `-F ${chain}`,
@@ -452,6 +501,7 @@ export class NativeVpnBackend {
       this.run("systemctl", ["is-active", sealUnit]) !== "active"
     )
       throw new Error("WireGuard must require an active boot seal before activation.");
+    assertVpnHostDisjoint(this.plan, this.hostNetworks());
     const retainedSets = this.retainedSetNames();
     const proof = vpnPeerProof(this.plan, this.inventory(), this.io.now());
     const compiled = vpnForwardPolicy(this.plan, runtimes, this.io.now());
@@ -472,6 +522,7 @@ export class NativeVpnBackend {
         ...portalLeases,
       ],
     };
+    this.claimChains();
     this.installSets(policy);
     for (const runtime of runtimes) {
       const addresses = [
@@ -506,12 +557,27 @@ export class NativeVpnBackend {
       throw new Error("VPN installation outlived its identity proof.");
     return proof;
   }
+  /** Another registration's seals on this interface; the current hooks already lead and end in DROP. */
+  private removeRetiredSeals(): void {
+    for (const ipv6 of [false, true])
+      for (const parent of ["INPUT", "FORWARD"])
+        for (const line of this.lines(ipv6, parent)) {
+          const rule = line.replaceAll('"', "");
+          if (
+            vpnSealHook(rule) &&
+            !rule.includes(`--comment ${this.owner} `) &&
+            rule.split(" ").includes(this.plan.interface)
+          )
+            this.firewall(ipv6, ["-D", parent, ...rule.split(" ").slice(2)]);
+        }
+  }
   commit(proof: VpnPeerProof): void {
     if (proof.generation !== this.plan.generation)
       throw new Error("VPN prepared generation changed.");
     if (this.io.now() < proof.verifiedAt || this.io.now() - proof.verifiedAt >= 60_000)
       throw new Error("VPN staged proof expired.");
     try {
+      this.removeRetiredSeals();
       for (const ipv6 of [false, true])
         for (const { parent, rule } of this.sealRules())
           while (

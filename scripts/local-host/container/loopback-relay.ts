@@ -51,7 +51,9 @@ export class LoopbackRelays {
   private closing?: Promise<void>;
   private timer?: ReturnType<typeof setInterval>;
   private auditing = false;
-  private pending = 0;
+  private readonly admissions = new Map<Socket, ReturnType<typeof setTimeout>>();
+  private readonly nextCheck = new Map<RelayBinding, Socket[]>();
+  private readonly checking = new Set<RelayBinding>();
   private verifiedAt = Date.now();
   constructor(
     private readonly bindings: readonly RelayBinding[],
@@ -118,45 +120,65 @@ export class LoopbackRelays {
     if (
       this.stopped ||
       !this.current() ||
-      this.sockets.size + this.pending > 62 ||
-      this.pending >= 32
+      this.sockets.size + this.admissions.size > 62 ||
+      this.admissions.size >= 32
     ) {
       client.destroy();
       return;
     }
-    this.pending++;
     this.track(client);
     const deadline = setTimeout(() => client.destroy(), 20_000);
     deadline.unref();
+    this.admissions.set(client, deadline);
+    client.once("close", () => this.admitted(client));
+    this.nextCheck.set(binding, [...(this.nextCheck.get(binding) ?? []), client]);
+    this.check(binding);
+  }
+  private admitted(client: Socket): void {
+    clearTimeout(this.admissions.get(client));
+    this.admissions.delete(client);
+  }
+  /**
+   * Ownership checks share the audit workers with guard proofs, so connection churn may hold at
+   * most one check per binding. Each client is admitted only by a check that started after it
+   * connected; clients that expired while waiting start no check.
+   */
+  private check(binding: RelayBinding): void {
+    if (this.stopped || this.checking.has(binding)) return;
+    const clients = (this.nextCheck.get(binding) ?? []).filter((client) => !client.destroyed);
+    this.nextCheck.delete(binding);
+    if (!clients.length) return;
+    this.checking.add(binding);
     void this.resolve(binding, this.targets.get(binding))
       .then((target) => {
-        clearTimeout(deadline);
-        if (client.destroyed || this.stopped || !this.current()) {
-          client.destroy();
-          return;
-        }
-        const upstream = connect({ host: target.host, port: target.port, allowHalfOpen: true });
-        this.track(upstream);
-        client.once("close", () => upstream.destroy());
-        upstream.once("close", () => client.destroy());
-        upstream.once("connect", () => {
-          if (this.stopped || !this.current()) {
-            upstream.destroy();
-            client.destroy();
-            return;
-          }
-          client.pipe(upstream);
-          upstream.pipe(client);
-          client.resume();
-        });
+        for (const client of clients) this.forward(client, target);
       })
-      .catch((error) => {
-        clearTimeout(deadline);
-        this.fail(error);
-      })
+      .catch((error) => this.fail(error))
       .finally(() => {
-        this.pending--;
+        this.checking.delete(binding);
+        this.check(binding);
       });
+  }
+  private forward(client: Socket, target: RelayTarget): void {
+    this.admitted(client);
+    if (client.destroyed || this.stopped || !this.current()) {
+      client.destroy();
+      return;
+    }
+    const upstream = connect({ host: target.host, port: target.port, allowHalfOpen: true });
+    this.track(upstream);
+    client.once("close", () => upstream.destroy());
+    upstream.once("close", () => client.destroy());
+    upstream.once("connect", () => {
+      if (this.stopped || !this.current()) {
+        upstream.destroy();
+        client.destroy();
+        return;
+      }
+      client.pipe(upstream);
+      upstream.pipe(client);
+      client.resume();
+    });
   }
   private fail(error: unknown): void {
     if (this.stopped) return;
