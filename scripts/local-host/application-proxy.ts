@@ -63,7 +63,9 @@ function upstreamHeaders(
   forwardAuthorization = true,
 ): Headers {
   const headers = new Headers({ host: new URL(origin).host });
-  for (const name of ["accept", "content-type", "range", "if-none-match", "if-modified-since"]) {
+  // Range stays behind: a 206 would reach the browser without Content-Range, and bodies are
+  // buffered under a 2 MiB cap anyway, so a full 200 is the only answer the proxy keeps intact.
+  for (const name of ["accept", "content-type", "if-none-match", "if-modified-since"]) {
     const value = request.headers[name];
     if (typeof value === "string") headers.set(name, value);
   }
