@@ -1,6 +1,6 @@
 import type { ApiRequest, ApiResponse, HostingService } from "../service";
 
-export const PROBLEM_ID = "ac26-crypto-battle";
+export const PROBLEM_ID = "crypto-battle";
 export const HOST_KEY = "bench-host-key";
 export const BENCH_ORGANIZER = {
   username: "bench-admin",

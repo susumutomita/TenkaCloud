@@ -16,7 +16,7 @@ import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-c
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
-test("selected crypto lessons and battle can enter new local events", async () => {
+test("the selected crypto battle can enter new local events", async () => {
   const directory = mkdtempSync(join(tmpdir(), "tenka-selected-crypto-"));
   const database = new Database(":memory:");
   const store = new HostStore(database);
@@ -38,13 +38,8 @@ test("selected crypto lessons and battle can enter new local events", async () =
       (item) => item.problemId,
     );
     const historical = new CompetitionEngine(root, directory).catalog();
-    for (const problemId of [
-      "sha256-bytes-padding",
-      "sha256-compress-digest",
-      "sha256-schedule-logic",
-      "ac26-w1-constraint-lab",
-      "ac26-crypto-battle",
-    ]) {
+    const selected = ["crypto-battle"];
+    for (const problemId of selected) {
       expect(ids).toContain(problemId);
       expect(
         historical.find((problem) => problem.problemId === problemId)?.definition,
@@ -63,7 +58,7 @@ test("selected crypto lessons and battle can enter new local events", async () =
       );
       expect(created.status).toBe(201);
     }
-    expect(store.events()).toHaveLength(5);
+    expect(store.events()).toHaveLength(selected.length);
   } finally {
     database.close();
     rmSync(directory, { recursive: true, force: true });
@@ -132,7 +127,7 @@ test("only organizers receive catalog descriptions and goals from the existing a
       expect(item.definition).toBeUndefined();
     }
     const raw = JSON.parse(
-      readFileSync(join(root, "problems/challenges/ac26-bridge-clock/metadata.json"), "utf8"),
+      readFileSync(join(root, "problems/challenges/sqli-demo/metadata.json"), "utf8"),
     );
     expect(items.find((item) => item.problemId === raw.id)?.content).toEqual({
       description: raw.description,

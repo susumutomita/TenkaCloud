@@ -16,7 +16,7 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.
  * stored -- was never exercised. It is not a formality: with the default
  * `marshallOptions` the client REFUSES an explicit `undefined` property
  * anywhere in the item and throws out of the middleware, before any request is
- * sent. `ac26-crypto-battle` produces exactly that state from its first row
+ * sent. `crypto-battle` produces exactly that state from its first row
  * (`startedAtMs`, `nextContractAtMs`, each team's `lastRotateAtMs` are
  * `undefined` until the match starts), so on the DynamoDB backend every READY
  * and START threw and the match could never begin, while the same problem
@@ -26,7 +26,7 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.
  * local HTTP endpoint and read the bytes it put on the wire.
  */
 
-/** The shape `ac26-crypto-battle.initialState` hands the host before a match starts. */
+/** The shape `crypto-battle.initialState` hands the host before a match starts. */
 const WAITING_MATCH_STATE = {
   phase: "waiting",
   nowMs: 60_000,
@@ -42,7 +42,7 @@ const WAITING_MATCH_STATE = {
 const SCOPE: CoordinationStateScope = {
   tenantId: "tenant1",
   eventId: "event1",
-  problemId: "ac26-crypto-battle",
+  problemId: "crypto-battle",
   runId: "run1",
 };
 

@@ -8,9 +8,9 @@
       "sources": [
         {
           "url": "https://github.com/susumutomita/TenkaCloudChallenge.git",
-          "ref": "bf63f60a383804c5424ece995fd8e24e8e72a4e2",
-          "commit": "bf63f60a383804c5424ece995fd8e24e8e72a4e2",
-          "digest": "d58442d74096d533acbc44a5b07dc73716498bd539e5f151c7c47500f5e4ec27",
+          "ref": "v1.11.0",
+          "commit": "0c5f5ad97f73c6e6d3695d6fd832cd2c832e6aa5",
+          "digest": "bf45948e4874731481c16322c6ab94103d7a0b43c10ad74235bd1d47ce0cc5dd",
           "problemsRoot": "."
         }
       ]
@@ -21,7 +21,7 @@
     "This is an unpublished integration candidate. No reviewed release image or source release tag has been published.",
     "The existing v1.11.0 launcher release and release/tenkacloud-release files are historical records, not this integration release.",
     "Cloud hosting uses Lambda with selectable Turso or DynamoDB and standard CDK bootstrap. Exercise execution currently covers hello-world AWS flags and native Cryptography Battle. Generic legacy AWS runtimes/scorers and a live AWS/Turso end-to-end rehearsal remain incomplete. AWS usage and retained storage can incur charges.",
-    "The 106 local Compose problems share the competition runtime. Representative real Docker/browser flows passed; full-catalog variants and network-address capacity still require validation.",
+    "Local Compose problems share the competition runtime. Representative real Docker/browser flows passed; full-catalog variants and network-address capacity still require validation.",
     "Built-in local course tracks are integrated. External pack execution and final published-book alignment remain incomplete; book publication follows the platform merge."
   ]
 }

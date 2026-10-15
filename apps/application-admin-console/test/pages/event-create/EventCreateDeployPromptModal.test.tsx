@@ -152,7 +152,7 @@ describe("EventCreateDeployPromptModal", () => {
           capacityWarnings: [
             {
               kind: "over",
-              message: 'problem "ac26-crypto-battle" will not fit 99 teams on the dynamodb backend',
+              message: 'problem "crypto-battle" will not fit 99 teams on the dynamodb backend',
             },
             {
               kind: "over",
@@ -163,7 +163,7 @@ describe("EventCreateDeployPromptModal", () => {
       />,
     );
 
-    expect(screen.getByText(/ac26-crypto-battle/)).toBeInTheDocument();
+    expect(screen.getByText(/crypto-battle/)).toBeInTheDocument();
     expect(screen.getByText(/other-battle/)).toBeInTheDocument();
     expect(screen.getByText("event_create.capacity_warning_header")).toBeInTheDocument();
   });
@@ -179,7 +179,7 @@ describe("EventCreateDeployPromptModal", () => {
             {
               kind: "tight",
               message:
-                'problem "ac26-crypto-battle" is close to the limit for 90 teams on the turso backend',
+                'problem "crypto-battle" is close to the limit for 90 teams on the turso backend',
             },
           ],
         })}

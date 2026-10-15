@@ -46,7 +46,7 @@ class SyntheticContainers extends DockerHostingEngine {
     return submission === job.teamId;
   }
   override catalog() {
-    return super.catalog().slice(0, 20);
+    return super.catalog().slice(0, 5);
   }
   override async start(job: Job, retain: (unit: string | null) => void) {
     this.calls.start.push(job.jobId);
@@ -116,9 +116,9 @@ async function fixture(
     const admin = await bootstrapOrganizer(service, "synthetic-host-key");
     const created = await service.admin(
       request("POST", "/events", admin, {
-        name: "20 exercises × 5 teams",
+        name: "5 exercises × 20 teams",
         ...(ctfd ? { scoringAuthority: "ctfd" } : {}),
-        teams: Array.from({ length: 5 }, (_, i) => ({ internalSlug: `team-${i}` })),
+        teams: Array.from({ length: 20 }, (_, i) => ({ internalSlug: `team-${i}` })),
         problems: (ctfd
           ? engine
               .catalog()
@@ -151,7 +151,7 @@ async function fixture(
   }
 }
 
-test("20×5 deployment allocates 100 isolated dormant jobs without launching 100 runtimes", async () => {
+test("5×20 deployment allocates 100 isolated dormant jobs without launching 100 runtimes", async () => {
   await fixture(async (f) => {
     const catalog = await f.service.admin(request("GET", "/host/catalog", f.admin));
     expect((catalog.body as { limits: unknown }).limits).toEqual({

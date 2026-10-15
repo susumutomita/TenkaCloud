@@ -14,20 +14,7 @@ const root = fileURLToPath(new URL("../../../", import.meta.url));
 const endpoint = "/portal/me/coordination/op";
 const nonce = "bound-run-operation";
 
-function readyOperation(problemId: string, p: { revision: number; round: number }) {
-  if (problemId === "pi-siege")
-    return { kind: "ready", requestId: "run_ready", revision: p.revision, round: p.round };
-  if (["session-defense", "tenant-boundary-duel"].includes(problemId))
-    return { kind: "ready", id: "run_ready", revision: p.revision };
-  return { kind: "ready" };
-}
-
-for (const problemId of [
-  "ac26-crypto-battle",
-  "pi-siege",
-  "session-defense",
-  "tenant-boundary-duel",
-]) {
+for (const problemId of ["crypto-battle"]) {
   test(`${problemId}: HTTP rejects foreign and stale runs before ticks or saved retries`, async () => {
     const data = mkdtempSync(join(tmpdir(), "tenka-coordination-run-"));
     const database = join(data, "host.sqlite");
@@ -120,8 +107,7 @@ for (const problemId of [
       await attach();
       const initial = await request(a.teamLoginKey);
       expect(initial.status).toBe(200);
-      const p = initial.body.projection as { revision: number; round: number };
-      const op = readyOperation(problemId, p);
+      const op = { kind: "ready" };
       const body = { op, runId: job.jobId };
       const snapshot = () => ({
         own: store.coordination(own.eventId, problemId),
@@ -180,9 +166,7 @@ for (const problemId of [
       service.flush();
       expect(snapshot()).toEqual(before);
       // Older clients that omit runId retain their existing operation contract.
-      const bView = await request(b.teamLoginKey);
-      const bp = bView.body.projection as { revision: number; round: number };
-      const legacyOp = readyOperation(problemId, bp);
+      const legacyOp = { kind: "ready" };
       expect((await request(b.teamLoginKey, { op: legacyOp })).status).toBe(200);
     } finally {
       plugin.mockRestore();

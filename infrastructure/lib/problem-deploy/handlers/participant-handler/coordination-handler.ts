@@ -409,7 +409,7 @@ export function parseCoordinationConfig(raw: string | undefined): CoordinationCo
  * `ctx.teamIds` は **event の full roster** (= 同じ event で同じ問題を deploy している全チーム、
  * teamId 昇順) を渡す。 requester 1 チームだけを渡していた頃 (Issue #3053) は、 plugin の
  * `initialState(ctx)` が requester しか state に登録できず、 相手チームを対象にする op
- * (`ac26-crypto-battle` の `hunt` など) が必ず `unknown team` で reject されていた。 roster の
+ * (`crypto-battle` の `hunt` など) が必ず `unknown team` で reject されていた。 roster の
  * 定義・ソート・失敗時の縮退は tick 経路と共有する `resolveEventRoster`
  * (`coordination-roster.ts`) が持つ。
  */

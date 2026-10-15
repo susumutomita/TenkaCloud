@@ -223,7 +223,7 @@ describe("EventDetail bulk teardown confirm dialog #1350", () => {
         nativeRuns: [
           {
             runId: "run-1",
-            problemId: "ac26-crypto-battle",
+            problemId: "crypto-battle",
             status: "CLOSED",
             revision: 3,
             purgeState,
@@ -284,7 +284,7 @@ describe("EventDetail bulk teardown confirm dialog #1350", () => {
         nativeRuns: [
           {
             runId: "run-1",
-            problemId: "ac26-crypto-battle",
+            problemId: "crypto-battle",
             status: "CLOSED",
             revision: 3,
             purgeState,

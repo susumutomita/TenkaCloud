@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { CORE_SCHEMA, load, mergeTag } from "js-yaml";
 import { type DockerDefinition, loadDockerCatalog } from "../docker-catalog";
+import { terminalProblemIds } from "../tests/problem-tree";
 import type { LocalComposeUnit } from "./container-runner";
 import { spawnDeclaredTerminal } from "./terminal-shell";
 
@@ -18,12 +19,15 @@ const handlers = {
   onExit: (_code: number | null) => undefined,
 };
 
-test("all 15 declared terminal exercises name a participant build target", () => {
-  const catalog = loadDockerCatalog(fileURLToPath(new URL("../../../", import.meta.url)));
-  const definitions = catalog
+test("every declared terminal exercise names a participant build target", () => {
+  const root = fileURLToPath(new URL("../../../", import.meta.url));
+  const definitions = loadDockerCatalog(root)
     .map((problem) => JSON.parse(problem.definition) as DockerDefinition)
     .filter((definition) => definition.problem.terminal);
-  expect(definitions).toHaveLength(15);
+  expect(definitions.map((definition) => definition.problem.problemId).sort()).toEqual(
+    terminalProblemIds(root).sort(),
+  );
+  expect(definitions.length).toBeGreaterThan(0);
   for (const definition of definitions) {
     const config = load(definition.composeText, { schema: CORE_SCHEMA.withTags(mergeTag) }) as {
       services: Record<string, { build?: { target?: string } }>;

@@ -36,7 +36,7 @@ const catalogProblems = JSON.parse(
   import { readFileSync } from "node:fs";
   import { publicMetadata } from "./scripts/local-host/browser-metadata";
   import { organizerProblemContent } from "./scripts/local-host/model";
-  const paths = ["challenges/ac26-bridge-clock", "battles/ac26-crypto-battle", "challenges/hello-world", "battles/hello-world-battle"];
+  const paths = ["challenges/xss-demo", "battles/crypto-battle", "challenges/hello-world", "battles/hello-world-battle"];
   console.log(JSON.stringify(paths.map((path) => {
     const filename = process.cwd() + "/problems/" + path + "/metadata.json";
     const source = readFileSync(filename, "utf8");
@@ -57,6 +57,7 @@ const projected = catalogProblems.map((entry) => metadataToDetail(entry.public))
 const englishProjected = projected.map((problem) => localizeProblemText(problem, "en"));
 const englishContent = catalogProblems.map((entry) => localizeProblemText(entry.content, "en"));
 const challengeMetadata = englishProjected[0];
+const paragraphs = (markdown: string) => markdown.split(/\n\s*\n/u);
 const sampleMetadata = projected[2];
 const config: AppConfig = {
   mode: "local-host",
@@ -112,7 +113,8 @@ describe("local catalog with production public metadata", () => {
     expect(screen.getByText(challenge.shortDescription)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Description" })).toBeInTheDocument();
     expect(screen.getByText(englishContent[0].learningGoals[0])).toBeInTheDocument();
-    expect(screen.getByText(englishContent[0].description)).toBeInTheDocument();
+    for (const paragraph of paragraphs(englishContent[0].description))
+      expect(screen.getByText(paragraph)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Endpoints issued to participants" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Cost estimate" })).toBeNull();
     expect(get.mock.calls.every(([path]) => path === "host/catalog")).toBe(true);
@@ -128,7 +130,8 @@ describe("local catalog with production public metadata", () => {
     renderCatalog();
     fireEvent.click(await screen.findByRole("link", { name: projected[0].name }));
     expect(screen.getByRole("heading", { name: projected[0].name, level: 1 })).toBeInTheDocument();
-    expect(screen.getByText(catalogProblems[0].content.description)).toBeInTheDocument();
+    for (const paragraph of paragraphs(catalogProblems[0].content.description))
+      expect(screen.getByText(paragraph)).toBeInTheDocument();
     expect(screen.getByText(catalogProblems[0].content.learningGoals[0])).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: englishProjected[0].name, level: 1 })).toBeNull();
   });

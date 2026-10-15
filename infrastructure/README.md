@@ -556,7 +556,7 @@ connection afterwards; the historical SSM registration lifecycle is retained.
 
 Native coordination reuses the original backend and shared problem reducer. Cloud
 state and scores live in the selected Turso or DynamoDB repositories; local state
-continues to live in SQLite. The reviewed `ac26-crypto-battle` profile with
+continues to live in SQLite. The reviewed `crypto-battle` profile with
 `defaultScoreStealEnabled=false` runs without Docker or a competitor AWS account.
 Setting the problem's score-steal parameter to true keeps its AWS-backed variant;
 that variant and mixed events with AWS problems require a separate competitor

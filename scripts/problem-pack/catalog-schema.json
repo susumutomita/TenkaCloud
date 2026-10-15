@@ -1523,7 +1523,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["bytesPerTeam", "baseBytes"],
-          "description": "[Issue #3169] coordination state 1 行が team 数に対してどう伸びるかの実測値。 platform (TenkaCloud) の deploy 前検査が `baseBytes + bytesPerTeam x teams` を選択中 backend の上限と突き合わせ、 収まらない event を配る前に落とす。 **実測すること** — 推定値を書くと、 収まらない event を通すか収まる event を止めるかのどちらかになる。 問題側は full worst-case を再生する自前テストでこの 2 数を固定し、 ゲームが伸びたら test が落ちるようにする (`battles/ac26-crypto-battle/game/src/state-size.test.ts` が先例)。 未宣言の問題は検査対象外で、 従来どおり write 時の platform guard だけが効く。 aiContext: coordination 問題の対応 team 数を backend ごとに確定させたい時に使う。",
+          "description": "[Issue #3169] coordination state 1 行が team 数に対してどう伸びるかの実測値。 platform (TenkaCloud) の deploy 前検査が `baseBytes + bytesPerTeam x teams` を選択中 backend の上限と突き合わせ、 収まらない event を配る前に落とす。 **実測すること** — 推定値を書くと、 収まらない event を通すか収まる event を止めるかのどちらかになる。 問題側は full worst-case を再生する自前テストでこの 2 数を固定し、 ゲームが伸びたら test が落ちるようにする (`battles/crypto-battle/game/src/state-size.test.ts` が先例)。 未宣言の問題は検査対象外で、 従来どおり write 時の platform guard だけが効く。 aiContext: coordination 問題の対応 team 数を backend ごとに確定させたい時に使う。",
           "properties": {
             "bytesPerTeam": {
               "type": "integer",

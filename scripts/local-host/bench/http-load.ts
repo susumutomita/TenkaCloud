@@ -7,7 +7,7 @@ import { ProcessSampler, sqliteBytesTotal } from "./process-metrics";
 import { WindowRecorder } from "./recorder";
 import type { HttpRunResult, HttpStepRecord } from "./types";
 
-const PROBLEM_ID = "ac26-crypto-battle";
+const PROBLEM_ID = "crypto-battle";
 const ADMIN_SESSION_REFRESH_MS = 10 * 60 * 1000;
 const P95_THRESHOLD_MS = 2_000;
 const ERROR_RATE_THRESHOLD = 0.01;

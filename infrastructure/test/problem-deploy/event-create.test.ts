@@ -116,7 +116,7 @@ describe("cloud new-event availability", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it.each([
-    { problemId: "ac26-crypto-battle" },
+    { problemId: "crypto-battle" },
     { problemId: "ac26-w1-constraint-lab" },
     { problemId: "sha256-bytes-padding" },
     { problemId: "pack-cipher", tags: ["cryptography"] },

@@ -179,7 +179,7 @@ import.meta.glob("../../../../problems/*/*/*.yaml");`;
   expect(participant).toBe(hostConsole);
   expect(participant).toContain("challenges/hello-world");
   expect(participant).toContain("challenges/sqli-demo");
-  expect(participant).toContain("battles/ac26-crypto-battle");
+  expect(participant).toContain("battles/crypto-battle");
   expect(participant).toContain("battles/hello-world-battle");
   expect(participant).toContain("challenges/sqli-demo/__local_host_empty__/*.yaml");
   expect(participant).not.toContain("problems/*/*/");

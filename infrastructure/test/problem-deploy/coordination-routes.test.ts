@@ -22,7 +22,7 @@ const { registerCoordinationRoutes } = await import(
 );
 
 const EVENT_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
-const PROBLEM_ID = "ac26-crypto-battle";
+const PROBLEM_ID = "crypto-battle";
 // The route only forwards `shared` to the (mocked) reset, so the minimal shape
 // is enough — casting through `unknown` keeps that explicit without `any`.
 const shared = { ddb: { send: vi.fn() } } as unknown as EventSharedResources;

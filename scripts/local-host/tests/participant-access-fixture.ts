@@ -113,7 +113,7 @@ export async function participantAccessFixture() {
       const made = await api<AccessEvent>("admin", "/events", "POST", {
         name: "Participant access battle",
         teams: Array.from({ length: count }, (_, i) => ({ internalSlug: `team-${i + 1}` })),
-        problems: [{ problemId: "ac26-crypto-battle" }],
+        problems: [{ problemId: "crypto-battle" }],
       });
       assert.equal(made.status, 201);
       const deployed = await api("admin", `/events/${made.body.eventId}/deploy`, "POST", {});

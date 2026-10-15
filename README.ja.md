@@ -142,7 +142,7 @@ AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` 
 
 `make catalog-download CATALOG_SOURCES=my-catalogs.json` で問題 repo を選択して取得し、検証・再ビルドします。既存大会の snapshot は保持します。取得だけで稼働中の host は更新されません。
 
-更新コマンドは追跡する branch を取得し、古い commit または分岐した commit であれば checkout や stage の前に停止します。問題ソースに未完了の編集がある場合も停止し、本体側の無関係な作業は保持します。検証用の pin は、その commit を失わずに追跡先へ前進できるまで維持してください。
+取得元の `ref` には、タグ、ブランチ、完全な commit のどれでも指定できます。取得時に一度だけ解決し、commit と内容の digest を記録します。起動とビルドでは、リモートの ref を読みません。標準の `catalog-sources.json` は、TenkaCloudChallenge のリリースタグを指定しています。上げるときは、タグを書き換えて `make catalog-download catalog-prepare` を実行します。次に `.tenkacloud/catalog-store/selected.json` の `sources` を `catalog-lock.json` に写し、`bun run scripts/release/host-candidate.ts --sync-catalog` を実行します。
 
 再利用する問題や非公開コンテンツには、公開 SDK とオフラインの Problem Pack ツールで作成・検証・不変な revision の保存ができます。
 

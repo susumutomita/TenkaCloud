@@ -140,7 +140,7 @@ Problem content lives in [TenkaCloudChallenge](https://github.com/susumutomita/T
 
 Select and download problem repositories with `make catalog-download CATALOG_SOURCES=my-catalogs.json`, then validate and rebuild. Existing event snapshots are retained. No running host is updated by downloading.
 
-The update command fetches the tracked branch, then refuses older or divergent commits before checkout or staging. It also refuses unfinished source changes; unrelated platform work is preserved. Keep a reviewed trial pin until the tracked branch can advance it without dropping commits.
+Each source's `ref` accepts a tag, a branch or a full commit. Downloading resolves it once and records the commit and content digest; startup and builds never read the remote ref. The default `catalog-sources.json` selects a TenkaCloudChallenge release tag. To move it, change the tag, run `make catalog-download catalog-prepare`, copy the resolved `sources` from `.tenkacloud/catalog-store/selected.json` into `catalog-lock.json`, then run `bun run scripts/release/host-candidate.ts --sync-catalog`.
 
 For reusable or private content, the public SDK and offline Problem Pack tools create, validate and store immutable revisions:
 

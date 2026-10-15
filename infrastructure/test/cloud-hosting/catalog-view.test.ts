@@ -197,3 +197,44 @@ test("saved native dashboard edition remains pinned without exposing private coo
   expect(entries[0]?.dashboardSlots?.status).toBe(`portal/${digest}/StatusPanel.tsx`);
   expect(JSON.stringify(entries)).not.toContain("SECRET");
 });
+
+test("catalogs pinned before the crypto battle rename keep their native identity", () => {
+  const pinned = (problemId: string, problemDir: string) =>
+    JSON.stringify({
+      version: 1,
+      nativeProblems: [
+        {
+          kind: "coordination",
+          problemId,
+          problemDir,
+          artifactDigest: digest,
+          pluginKey: `plugins/${digest}.mjs`,
+          stateBudget: { bytesPerTeam: 1, baseBytes: 0 },
+          name: "Saved battle",
+          description: "",
+          instructions: "",
+        },
+      ],
+      catalog: { [problemId]: problemDir },
+      sources: {},
+      scoring: {},
+      hints: {},
+      endpoints: {},
+      phases: {},
+      visibility: {},
+      runtimes: {},
+      disruptions: {},
+      writeups: {},
+      provenance: {},
+      coordination: {},
+      plugins: { [problemId]: { key: `plugins/${digest}.mjs`, digest } },
+      sourceArchive: { bucket: "source", key: "source.zip", versionId: "pinned" },
+    });
+  for (const id of ["crypto-battle", "ac26-crypto-battle"])
+    expect(
+      parseExecutionCatalog(pinned(id, `problems/battles/${id}`)).nativeProblems?.[0]?.problemId,
+    ).toBe(id);
+  expect(() =>
+    parseExecutionCatalog(pinned("crypto-battle", "problems/battles/ac26-crypto-battle")),
+  ).toThrow("Native problem directory must match its identity.");
+});

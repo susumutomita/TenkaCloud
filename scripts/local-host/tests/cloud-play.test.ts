@@ -15,6 +15,7 @@ import { HostStore } from "../store";
 import { FakeAws, fakeFlag } from "./fake-aws";
 import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 import { bootstrapOrganizer } from "./organizer-fixture";
+import { dockerProblemIds } from "./problem-tree";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const START = Date.parse("2026-09-30T00:00:00.000Z");
@@ -149,7 +150,7 @@ async function startedEvent(fixture: Host): Promise<Created> {
       { internalSlug: "alpha", awsAccountId: "111111111111" },
       { internalSlug: "beta", awsAccountId: "222222222222" },
     ],
-    problems: [{ problemId: "ac26-crypto-battle" }, { problemId: "hello-world" }],
+    problems: [{ problemId: "crypto-battle" }, { problemId: "hello-world" }],
   });
   expect(created.status).toBe(201);
   const event = created.body as Created;
@@ -181,8 +182,8 @@ test("a mixed Battle and hello-world event deploys every team and shows the stac
 
   const jobs = fixture.store.jobs(event.eventId);
   expect(jobs.map((job) => `${job.problemId}:${job.status}`).sort()).toEqual([
-    "ac26-crypto-battle:COMPLETE",
-    "ac26-crypto-battle:COMPLETE",
+    "crypto-battle:COMPLETE",
+    "crypto-battle:COMPLETE",
     "hello-world:COMPLETE",
     "hello-world:COMPLETE",
   ]);
@@ -192,7 +193,7 @@ test("a mixed Battle and hello-world event deploys every team and shows the stac
 
   const me = await fixture.as(alpha).get("/portal/me");
   expect((me.problems as { problemId: string }[]).map((each) => each.problemId)).toEqual([
-    "ac26-crypto-battle",
+    "crypto-battle",
     "hello-world",
   ]);
   const job = required(
@@ -319,8 +320,8 @@ test("pinned hello-world debt, signed Battle loss, and host read models agree", 
   expect(beforeBattle.score).toBe(95);
   fixture.advance(1000);
   const battle = {
-    jobId: required(fixture.store.jobId(event.eventId, alpha.teamId, "ac26-crypto-battle")),
-    problemId: "ac26-crypto-battle",
+    jobId: required(fixture.store.jobId(event.eventId, alpha.teamId, "crypto-battle")),
+    problemId: "crypto-battle",
     source: "coordination",
     points: -100,
     result: "wrong" as const,
@@ -333,7 +334,7 @@ test("pinned hello-world debt, signed Battle loss, and host read models agree", 
   });
   const me = await fixture.as(alpha).get("/portal/me");
   expect(problem(me, "hello-world").score).toBe(95);
-  expect(problem(me, "ac26-crypto-battle").score).toBe(-100);
+  expect(problem(me, "crypto-battle").score).toBe(-100);
   const board = await fixture.as(beta).get("/portal/leaderboard");
   expect(
     (board.entries as { teamId: string; score: number }[]).find(
@@ -359,7 +360,7 @@ test("pinned hello-world debt, signed Battle loss, and host read models agree", 
     }
   ).scoreEventsByTeam.find((row) => row.teamId === alpha.teamId);
   expect(history?.projectedTotal).toBe(-5);
-  expect(history?.projectedByProblem).toEqual({ "ac26-crypto-battle": -100, "hello-world": 95 });
+  expect(history?.projectedByProblem).toEqual({ "crypto-battle": -100, "hello-world": 95 });
   expect(history?.events.map((entry) => [entry.points, entry.projectedTotal])).toEqual([
     [-5, 0],
     [100, 95],
@@ -541,7 +542,7 @@ test("a Battle score, a cloud flag and a cloud hint add up to one total", async 
   expect(team.scoreEvents.reduce((sum, each) => sum + each.points, 0)).toBe(team.score);
   expect(team.scoreEvents.map((each) => each.source)).toEqual(["hint", "flag", "coordination"]);
   const me = await fixture.as(alpha).get("/portal/me");
-  expect(problem(me, "ac26-crypto-battle").score).toBe(battlePoints);
+  expect(problem(me, "crypto-battle").score).toBe(battlePoints);
   expect(problem(me, "hello-world").score).toBe(70);
   const board = await fixture.as(beta).get("/portal/leaderboard");
   expect((board.entries as Record<string, unknown>[])[0]).toMatchObject({
@@ -568,10 +569,10 @@ test("a Docker answer keeps the team's Battle and cloud points and cloud solves"
   const earlier = [
     event("hello-world", "hint", -20, 3),
     event("hello-world", "flag", 100, 2),
-    event("ac26-crypto-battle", "coordination", 30, 1),
+    event("crypto-battle", "coordination", 30, 1),
   ];
   const problems = [...engine.catalog(), ...cloudFormationCatalog(root)].filter((problem) =>
-    ["sqli-demo", "ac26-crypto-battle", "hello-world"].includes(problem.problemId),
+    ["sqli-demo", "crypto-battle", "hello-world"].includes(problem.problemId),
   );
   const context: Context = {
     now: START + 10_000,
@@ -647,19 +648,19 @@ test("local hosting offers no AWS problem and preserves an old stack with a clea
   const data = mkdtempSync(join(tmpdir(), "tenka-no-aws-"));
   directories.push(data);
   const withoutAws = new CompetitionEngine(root, data);
-  expect(withoutAws.catalog().filter((each) => each.runtime === "docker")).toHaveLength(106);
+  expect(
+    withoutAws
+      .catalog()
+      .filter((each) => each.runtime === "docker")
+      .map((each) => each.problemId)
+      .sort(),
+  ).toEqual(dockerProblemIds(root).sort());
   expect(
     withoutAws
       .catalog()
       .filter((each) => each.runtime === "coordination")
       .map((each) => each.problemId),
-  ).toEqual([
-    "ac26-crypto-battle",
-    "forensic-casebook",
-    "pi-siege",
-    "session-defense",
-    "tenant-boundary-duel",
-  ]);
+  ).toEqual(["crypto-battle", "forensic-casebook"]);
   expect(withoutAws.catalog().filter((each) => each.runtime === "cloudformation")).toEqual([]);
   await new HostingService(fixture.store, withoutAws, HOST_KEY, () => START).recover();
   const [job] = fixture.store.jobs(event.eventId);
@@ -683,7 +684,7 @@ test("cloud and coordination credits survive event pinning without revealing ans
   const { alpha } = teams(event);
   const me = await fixture.as(alpha).get("/portal/me");
   expect(problem(me, "hello-world").authors).toEqual(authors);
-  expect(problem(me, "ac26-crypto-battle").authors).toEqual(authors);
+  expect(problem(me, "crypto-battle").authors).toEqual(authors);
   const cloudView = problem(me, "hello-world");
   expect(cloudView).not.toHaveProperty("description");
   expect(cloudView).not.toHaveProperty("flagOutputKey");

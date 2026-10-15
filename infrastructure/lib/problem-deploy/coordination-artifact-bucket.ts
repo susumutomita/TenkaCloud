@@ -31,7 +31,7 @@ import { Construct } from "constructs";
  * ## Cost
  *
  * Storage is the only standing charge: no requests, no data transfer out of the
- * Region, no replication. At `ac26-crypto-battle`'s measured shape — roughly
+ * Region, no replication. At `crypto-battle`'s measured shape — roughly
  * 1 MB of public ledger per 99-team match — a busy event holds single-digit
  * megabytes for at most a week. Versioning is deliberately OFF: these objects
  * are written once and never updated, so versions would only accumulate copies

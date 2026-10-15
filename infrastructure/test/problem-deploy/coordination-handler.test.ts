@@ -764,7 +764,7 @@ describe("makeCoordinationScopeResolver", () => {
 
   // Issue #3053: requester 1 チームだけの ctx では、 相手チームを対象にする op が
   // 必ず `unknown team` で reject され、 チーム間 interaction する plugin
-  // (ac26-crypto-battle の hunt など) が原理的に成立しなかった。
+  // (crypto-battle の hunt など) が原理的に成立しなかった。
   it("should hand the plugin the full event roster, sorted", async () => {
     const resolve = makeCoordinationScopeResolver(
       fakeShared([

@@ -12,6 +12,7 @@ import {
   remapRuntimeComposePorts,
   validateRuntimePorts,
 } from "../runtime-ports";
+import { dockerProblemIds } from "./problem-tree";
 
 const COMPOSE = [
   "services:",
@@ -44,9 +45,9 @@ function assignment(plan: ReadonlyMap<string, RuntimePorts>, jobId: string): Run
   return value;
 }
 
-function twentyProblemBatch(): RuntimePortRequest[] {
-  return catalog.slice(0, 20).flatMap((definition) =>
-    Array.from({ length: 5 }, (_, team) => ({
+function hundredJobBatch(): RuntimePortRequest[] {
+  return catalog.slice(0, 5).flatMap((definition) =>
+    Array.from({ length: 20 }, (_, team) => ({
       jobId: `${definition.problem.problemId}:team-${team}`,
       composeText: definition.composeText,
     })),
@@ -60,13 +61,15 @@ function requiredPorts(requests: readonly RuntimePortRequest[]): number {
   );
 }
 
-test("all 106 real catalog problems use exact dense maps and remain Compose-policy compliant", async () => {
-  expect(catalog).toHaveLength(106);
+test("every real catalog problem uses exact dense maps and remains Compose-policy compliant", async () => {
+  expect(catalog.map((definition) => definition.problem.problemId).sort()).toEqual(
+    dockerProblemIds(root).sort(),
+  );
   const requests = catalog.map((definition) =>
     request(definition.problem.problemId, definition.composeText),
   );
   const plan = await allocateRuntimePorts(requests, { isAvailable: () => true });
-  expect(plan.size).toBe(106);
+  expect(plan.size).toBe(catalog.length);
   expect(targets(plan)).toHaveLength(requiredPorts(requests));
   expect(new Set(targets(plan)).size).toBe(targets(plan).length);
   for (const definition of catalog) {
@@ -90,8 +93,9 @@ test("all 106 real catalog problems use exact dense maps and remain Compose-poli
   }
 });
 
-test("20 real problems × 5 teams fit a deterministic 100-job plan without 1000-port blocks", async () => {
-  const requests = twentyProblemBatch();
+test("5 real problems × 20 teams fit a deterministic 100-job plan without 1000-port blocks", async () => {
+  const requests = hundredJobBatch();
+  expect(catalog.length).toBeGreaterThanOrEqual(5);
   expect(requests).toHaveLength(100);
   const needed = requiredPorts(requests);
   const options = {
