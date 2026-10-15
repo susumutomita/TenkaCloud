@@ -45,7 +45,7 @@ test("a rotated registration removes this interface's seals retained by the prev
   const { f, next, proof } = rotatedAfterShutdown();
   next.commit(proof);
   const spoof = (parent: string, address: string) =>
-    `-A ${parent} ! -i tcwg0 -s ${address} -m comment --comment tc-vpn-seal-v1:${rotated.generation} -j DROP`;
+    `-A ${parent} -s ${address} ! -i tcwg0 -m comment --comment tc-vpn-seal-v1:${rotated.generation} -j DROP`;
   expect(sealTagged(f, "iptables", "INPUT")).toEqual([
     spoof("INPUT", "10.251.0.2"),
     otherInterfaceSeal,

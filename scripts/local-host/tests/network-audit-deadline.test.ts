@@ -25,7 +25,16 @@ test("worker deadlines grow with the admitted route budget and stop at an explic
   expect(workerDeadline("vpn-prepare")).toBe(20_000);
   expect(workerDeadline("verify", withRoutes(0))).toBe(20_000);
   expect(workerDeadline("verify", withRoutes(256))).toBe(45_600);
-  expect(workerDeadline("publish", withRoutes(10), withRoutes(0))).toBe(23_000);
-  expect(workerDeadline("publish", withRoutes(0), withRoutes(256))).toBe(45_600);
-  expect(workerDeadline("publish", withRoutes(256), withRoutes(256))).toBe(120_000);
+  expect(workerDeadline("publish", withRoutes(10), { previous: withRoutes(0) })).toBe(23_000);
+  expect(workerDeadline("publish", withRoutes(0), { previous: withRoutes(256) })).toBe(45_600);
+  expect(workerDeadline("publish", withRoutes(256), { previous: withRoutes(256) })).toBe(120_000);
+});
+
+test("VPN preparation deadlines grow with every admitted runtime and its routes up to the same bound", () => {
+  const runtimes = (count: number, routes: number) =>
+    Array.from({ length: count }, () => ({ plan: withRoutes(routes) }));
+  expect(workerDeadline("vpn-prepare", undefined, { runtimes: [] })).toBe(20_000);
+  expect(workerDeadline("vpn-prepare", undefined, { runtimes: runtimes(4, 0) })).toBe(40_000);
+  expect(workerDeadline("vpn-prepare", undefined, { runtimes: runtimes(2, 10) })).toBe(32_000);
+  expect(workerDeadline("vpn-prepare", undefined, { runtimes: runtimes(40, 0) })).toBe(120_000);
 });

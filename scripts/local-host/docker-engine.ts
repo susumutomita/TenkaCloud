@@ -439,7 +439,12 @@ export class DockerHostingEngine implements RuntimeEngine {
     }
     try {
       await this.runCompose(owned.unit, "down", owned.environment);
-      if (owned.guarded) this.networkGuard.remove(owned.guarded);
+      if (owned.guarded) {
+        // A retry must resume from guard removal, never from paths that need the removed bridges.
+        const removed: RetainedUnit = { ...owned.unit, teardown: "down" };
+        owned.retain(JSON.stringify(removed));
+        this.networkGuard.remove(owned.guarded);
+      }
       removeRuntimeFiles(this.dataDirectory, job.jobId, owned.unit.composePath);
       owned.retain(null);
       this.networkReservations.delete(job.jobId);

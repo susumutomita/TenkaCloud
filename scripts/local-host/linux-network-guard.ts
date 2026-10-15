@@ -1288,7 +1288,7 @@ function containerRouteTargets(
   for (const route of plan.publicRoutes) {
     const target = publicationRoute(plan, networks, route);
     const current = target && chosen.get(target.destination);
-    if (target && (!current || target.segment.name.localeCompare(current.segment.name) < 0))
+    if (target && (!current || target.segment.name < current.segment.name))
       chosen.set(target.destination, target);
   }
   return [...chosen.values()];

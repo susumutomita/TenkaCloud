@@ -1,17 +1,12 @@
 /* eslint-disable sonarjs/no-hardcoded-ip -- No network operations: fake command port captures policy writes. */
 import { expect, test } from "bun:test";
-import type { VpnCommand } from "../vpn/native-backend";
 import { type VpnPeerPlan, vpnPeerPlan } from "../vpn/peer-plan";
-import { type FakeKernel, fixture, plan, registration } from "./vpn-kernel-fixture";
+import { type FakeKernel, fixture, mutates, plan, registration } from "./vpn-kernel-fixture";
 
 const lanPeer = vpnPeerPlan({
   ...registration,
   peers: registration.peers.map((peer) => ({ ...peer, ipv4: "192.168.1.50" })),
 });
-const mutates = ({ command, args }: VpnCommand) =>
-  command.endsWith("-restore") ||
-  (command === "ipset" && ["create", "add", "flush", "destroy"].includes(args[0] ?? "")) ||
-  ["-I", "-D", "-N", "-F"].includes(args[2] ?? "");
 const overlaps: {
   name: string;
   config: VpnPeerPlan;

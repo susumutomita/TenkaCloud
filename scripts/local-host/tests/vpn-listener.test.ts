@@ -35,3 +35,14 @@ test("an explicit participant port cannot silently disagree with the VPN registr
   expect(parseOptions(["--participant-port", "5300"], "/tmp").participantPort).toBe(5300);
   expect(parseOptions([], "/tmp").participantPort).toBe(5175);
 });
+
+test("the unused default participant port does not constrain a VPN host's console port", () => {
+  const options = parseOptions([...vpnArgs, "--admin-port", "5175"], "/tmp");
+  // eslint-disable-next-line sonarjs/no-hardcoded-ip -- synthetic VPN server identity
+  expect(vpnListener(options, { serverIpv4: "10.251.0.1", participantPort: 5300 })).toEqual({
+    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- synthetic VPN server identity
+    hostname: "10.251.0.1",
+    participantPort: 5300,
+  });
+  expect(() => parseOptions(["--admin-port", "5175"], "/tmp")).toThrow("different ports");
+});

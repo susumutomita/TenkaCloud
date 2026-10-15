@@ -12,18 +12,28 @@ type WorkerRunner = (plan: LocalNetworkPlan, mode: WorkerMode) => Promise<void>;
 const BASE_DEADLINE_MS = 20_000;
 // Each admitted route costs every verification pass two firewall checks and three Docker inspections.
 const ROUTE_PASS_MS = 100;
+// VPN preparation fully verifies each admitted runtime, then installs its reply routes.
+const RUNTIME_PASS_MS = 5_000;
 // Bounds how long one wedged daemon call chain can hold one of the two audit slots.
 const MAX_DEADLINE_MS = 120_000;
 /** Publication verifies the previous plan, then rewrites, routes and re-verifies the new one. */
 export function workerDeadline(
   operation: WorkerOperation,
   plan?: LocalNetworkPlan,
-  previous?: LocalNetworkPlan,
+  details: {
+    readonly previous?: LocalNetworkPlan;
+    readonly runtimes?: readonly { readonly plan: LocalNetworkPlan }[];
+  } = {},
 ): number {
   const routes = plan?.publicRoutes.length ?? 0;
+  const runtimes = details.runtimes ?? [];
   const passes =
-    operation === "publish" ? (previous?.publicRoutes.length ?? 0) + 3 * routes : routes;
-  return Math.min(MAX_DEADLINE_MS, BASE_DEADLINE_MS + passes * ROUTE_PASS_MS);
+    (operation === "publish" ? (details.previous?.publicRoutes.length ?? 0) + 3 * routes : routes) +
+    runtimes.reduce((total, runtime) => total + runtime.plan.publicRoutes.length, 0);
+  return Math.min(
+    MAX_DEADLINE_MS,
+    BASE_DEADLINE_MS + runtimes.length * RUNTIME_PASS_MS + passes * ROUTE_PASS_MS,
+  );
 }
 const auditQueue: WorkerQueue = { active: 0, waiting: [] };
 const emergencyQueue: WorkerQueue = { active: 0, waiting: [] };
@@ -146,7 +156,7 @@ function runWorker<T>(
     };
     const timeout = setTimeout(
       () => finish(new Error("Competition network audit timed out.")),
-      workerDeadline(mode, plan, details.previous),
+      workerDeadline(mode, plan, details),
     );
     timeout.unref();
     worker.once("message", (result: { ok?: boolean; error?: string; value?: T }) =>

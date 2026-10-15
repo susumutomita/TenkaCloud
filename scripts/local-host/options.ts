@@ -70,7 +70,13 @@ export function parseOptions(
   const adminPort = port(values["admin-port"]);
   const participantPort = port(values["participant-port"] ?? "5175");
   const gatewayPorts = parseGatewayPorts(values["gateway-ports"]);
-  assertListenerPorts(adminPort, participantPort, gatewayPorts, appliance?.webPort);
+  // With --vpn-peers the registration supplies the participant port; vpnListener checks it.
+  assertListenerPorts(
+    adminPort,
+    values["vpn-peers"] ? undefined : participantPort,
+    gatewayPorts,
+    appliance?.webPort,
+  );
   if (values["aws-region"] !== undefined)
     throw new Error(
       "AWS problems require cloud hosting. --aws-region is no longer accepted by make local; use the reviewed make deploy workflow when cloud hosting is ready.",
@@ -122,16 +128,17 @@ function assertVpnOptions(
 
 function assertListenerPorts(
   adminPort: number,
-  participantPort: number,
+  participantPort: number | undefined,
   gatewayPorts: ReturnType<typeof parseGatewayPorts>,
   webPort: number | undefined,
 ): void {
   if (adminPort === participantPort)
     throw new Error("Use different ports for the host console and participant portal.");
-  assertWebPort(webPort, adminPort, participantPort, gatewayPorts);
+  if (participantPort !== undefined)
+    assertWebPort(webPort, adminPort, participantPort, gatewayPorts);
   if (
     gatewayPortsOverlap(gatewayPorts, adminPort) ||
-    gatewayPortsOverlap(gatewayPorts, participantPort)
+    (participantPort !== undefined && gatewayPortsOverlap(gatewayPorts, participantPort))
   )
     throw new Error(
       "--gateway-ports must not include the host console or participant portal port.",

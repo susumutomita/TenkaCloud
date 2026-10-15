@@ -232,12 +232,13 @@ export class NativeVpnBackend {
     for (const parent of ["INPUT", "FORWARD"]) {
       const existing = this.lines(ipv6, parent).map((line) => line.replaceAll('"', ""));
       for (const address of addresses) {
+        // Spelled in `iptables -S` order so the existing-rule check matches the listing.
         const rule = [
+          "-s",
+          address,
           "!",
           "-i",
           this.plan.interface,
-          "-s",
-          address,
           "-m",
           "comment",
           "--comment",

@@ -12,7 +12,18 @@ import { publishedComposePorts } from "../runtime-ports";
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 
 // Docker is a PATH stub and the guard only records calls; no daemon or firewall is touched.
-test("an isolated start whose secret preparation fails retains no ownership, reservation or guard", async () => {
+async function withStart(
+  jobId: string,
+  guardFor: (calls: string[]) => Partial<LocalNetworkGuard>,
+  run: (f: {
+    engine: DockerHostingEngine;
+    job: Job;
+    data: string;
+    calls: string[];
+    retained: (string | null)[];
+    retain: (unit: string | null) => void;
+  }) => Promise<void>,
+) {
   const data = mkdtempSync(join(tmpdir(), "tenka-start-rollback-synthetic-"));
   const bin = join(data, "bin");
   mkdirSync(bin);
@@ -40,6 +51,7 @@ test("an isolated start whose secret preparation fails retains no ownership, res
     stopOwned: async () => {
       calls.push("stop-owned");
     },
+    ...guardFor(calls),
   };
   try {
     const selected = loadDockerCatalog(repository)[0];
@@ -57,7 +69,7 @@ test("an isolated start whose secret preparation fails retains no ownership, res
       },
     );
     const job: Job = {
-      jobId: "secret-rollback",
+      jobId,
       eventId: "event",
       teamId: "team",
       problemId: selected.problemId,
@@ -69,29 +81,18 @@ test("an isolated start whose secret preparation fails retains no ownership, res
         publishedComposePorts(composeText).map((port, index) => [String(port), 30_000 + index]),
       ),
     };
-    // A directory where the master secret file belongs makes secret preparation fail.
-    mkdirSync(join(data, "runtimes", job.jobId, "problem-secrets.key"), {
-      recursive: true,
-      mode: 0o700,
-    });
     const retained: (string | null)[] = [];
-    await expect(
-      engine.start(job, (unit) => {
+    await run({
+      engine,
+      job,
+      data,
+      calls,
+      retained,
+      retain: (unit) => {
         retained.push(unit);
         job.unit = unit;
-      }),
-    ).rejects.toThrow("EISDIR");
-    expect(retained.map((unit) => (unit === null ? "released" : "owned"))).toEqual([
-      "owned",
-      "released",
-    ]);
-    expect(job.unit).toBeNull();
-    expect((Reflect.get(engine, "networkReservations") as Map<string, unknown>).size).toBe(0);
-    expect(calls).not.toContain("install");
-    expect(calls).not.toContain("compose-up");
-    expect(existsSync(join(data, "runtimes", job.jobId, "tch-secret-rollback.compose.yml"))).toBe(
-      false,
-    );
+      },
+    });
   } finally {
     if (oldPath === undefined) delete process.env.PATH;
     else process.env.PATH = oldPath;
@@ -99,4 +100,79 @@ test("an isolated start whose secret preparation fails retains no ownership, res
     else process.env.TENKACLOUD_COMPOSE_CLI = oldCli;
     rmSync(data, { recursive: true, force: true });
   }
+}
+
+test("an isolated start whose secret preparation fails retains no ownership, reservation or guard", async () => {
+  await withStart(
+    "secret-rollback",
+    () => ({}),
+    async ({ engine, job, data, calls, retained, retain }) => {
+      // A directory where the master secret file belongs makes secret preparation fail.
+      mkdirSync(join(data, "runtimes", job.jobId, "problem-secrets.key"), {
+        recursive: true,
+        mode: 0o700,
+      });
+      await expect(engine.start(job, retain)).rejects.toThrow("EISDIR");
+      expect(
+        retained.map((unit) =>
+          unit === null ? "released" : (JSON.parse(unit).teardown ?? "owned"),
+        ),
+      ).toEqual(["owned", "down", "released"]);
+      expect(job.unit).toBeNull();
+      expect((Reflect.get(engine, "networkReservations") as Map<string, unknown>).size).toBe(0);
+      expect(calls).not.toContain("install");
+      expect(calls).not.toContain("compose-up");
+      expect(existsSync(join(data, "runtimes", job.jobId, "tch-secret-rollback.compose.yml"))).toBe(
+        false,
+      );
+    },
+  );
+});
+
+test("a failed start whose guard removal fails after Compose down resumes from guard removal", async () => {
+  let down = false;
+  let removals = 0;
+  await withStart(
+    "removal-rollback",
+    (calls) => ({
+      // Rule drift after up fails admission; after down every bridge-bound operation fails.
+      verifyNetworks: () => {
+        throw new Error(down ? "Competition bridge is missing." : "Synthetic changed rule order");
+      },
+      update: () => {
+        if (down) throw new Error("Competition bridge is missing.");
+      },
+      resetStopped: () => {
+        throw new Error("Competition bridge is missing or belongs to another runtime.");
+      },
+      // The first removal directly follows the rollback's successful Compose down.
+      remove: () => {
+        down = true;
+        removals++;
+        calls.push("remove");
+        if (removals === 1) throw new Error("Synthetic transient firewall failure");
+      },
+    }),
+    async ({ engine, job, data, calls, retain }) => {
+      engine.bindNetworkState({
+        jobs: () => [job],
+        retain: (updates) => {
+          for (const update of updates) Object.assign(job, update);
+        },
+      });
+      await expect(engine.start(job, retain)).rejects.toThrow(
+        "Synthetic transient firewall failure",
+      );
+      expect(job.unit).not.toBeNull();
+      job.status = "FAILED";
+      await engine.stop(job);
+      expect(removals).toBe(2);
+      expect(calls.filter((call) => call.startsWith("compose-"))).toEqual([
+        "compose-up",
+        "compose-down",
+      ]);
+      expect(calls).not.toContain("stop-owned");
+      expect(existsSync(join(data, "runtimes", job.jobId))).toBe(false);
+    },
+  );
 });

@@ -17,6 +17,26 @@ export const registration = {
 };
 export const plan = vpnPeerPlan(registration);
 
+export const mutates = ({ command, args }: VpnCommand) =>
+  command.endsWith("-restore") ||
+  (command === "ipset" && ["create", "add", "flush", "destroy"].includes(args[0] ?? "")) ||
+  ["-I", "-D", "-N", "-F"].includes(args[2] ?? "");
+
+/** `iptables -S` prints the source before the interface, with an explicit mask and a quoted comment. */
+function listed(rule: string): string {
+  return rule
+    .replace(/^(-A \S+) (! -i \S+) (-s \S+)/u, "$1 $3 $2")
+    .replace(
+      / -s ([^\s/]+)(?= )/u,
+      (_, address: string) => ` -s ${address}/${address.includes(":") ? 128 : 32}`,
+    )
+    .replace(/ --comment ([^\s"]+)/u, ' --comment "$1"');
+}
+/** Rule deletion matches the rule specification, not the spelling it was inserted with. */
+const comparable = (rule: string) =>
+  listed(rule)
+    .replace(/\/(?:32|128)(?=\s|$)/gu, "")
+    .replaceAll('"', "");
 type Table = Map<string, string[]>;
 interface FakeLink {
   readonly ifname: string;
@@ -167,7 +187,8 @@ export class FakeKernel {
     }
     if (verb !== "-D" || /^\d+$/u.test(args[0] ?? ""))
       throw new Error("Only exact owned rule deletion is allowed");
-    const position = rules.indexOf(`-A ${chain} ${args.join(" ")}`);
+    const target = comparable(`-A ${chain} ${args.join(" ")}`);
+    const position = rules.findIndex((rule) => comparable(rule) === target);
     if (position < 0) throw new Error("Absent fake rule");
     rules.splice(position, 1);
   }
@@ -185,10 +206,13 @@ export class FakeKernel {
     const verb = args.shift() ?? "";
     const chain = args.shift();
     if (verb === "-S") {
-      if (!chain) return [...table].flatMap(([name, rules]) => [`-N ${name}`, ...rules]).join("\n");
+      if (!chain)
+        return [...table]
+          .flatMap(([name, rules]) => [`-N ${name}`, ...rules.map(listed)])
+          .join("\n");
       const rules = table.get(chain);
       if (!rules) throw new Error("Fake chain does not exist");
-      return [`-N ${chain}`, ...rules].join("\n");
+      return [`-N ${chain}`, ...rules.map(listed)].join("\n");
     }
     if (!chain) throw new Error("Missing fake chain");
     this.mutation(table, verb, chain, args);
