@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Plugin } from "vite";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { selectableProblem } from "../../../../packages/portal-contracts/src/problem-selection.js";
 import { catalogProjection, catalogTemplatePath } from "../../catalog-projection";
 import { buildEffectiveCatalog, composeCatalogDetails } from "../../src/data/effective-catalog";
 import {
@@ -66,14 +65,14 @@ function requiredProjection(plugin: Plugin, source: string, id: string, addWatch
 }
 
 describe("build-time problem catalog", () => {
-  it("preserves selected non-retired details and cost summaries byte for byte", () => {
+  it("preserves selected details and cost summaries byte for byte", () => {
     const expected = buildEffectiveCatalog({
       core: buildCoreInputs(rawMetadata, rawTemplates),
       packs: [],
     });
     // Installed packs are tested below without changing the checkout's pack store.
     expect(JSON.stringify(PROBLEM_CATALOG.filter((problem) => problem.source !== "pack"))).toBe(
-      JSON.stringify(expected.filter(selectableProblem)),
+      JSON.stringify(expected),
     );
   });
 

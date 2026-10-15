@@ -123,7 +123,7 @@ describe("cloud new-event availability", () => {
     { problemId: "pack-cipher", tags: ["advanced-cryptography"] },
     { problemId: "pack-cipher", tags: ["advanced-cryptography-week-1"] },
   ])(
-    "rejects direct POST of withdrawn $problemId ($tags) before keys or persistence",
+    "accepts selected $problemId regardless of its teaching-topic tags ($tags)",
     async ({ problemId, tags }) => {
       for (const captured of tags ? [true] : [false, true]) {
         const generate = vi.spyOn(teamKeys, "generateTeamLoginKey");
@@ -174,10 +174,9 @@ describe("cloud new-event availability", () => {
             },
           },
         );
-        expect(response.status).toBe(422);
-        expect(await response.json()).toMatchObject({ error: "unknown_problem", problemId });
-        expect(generate).not.toHaveBeenCalled();
-        expect(ddbSend).not.toHaveBeenCalled();
+        expect(response.status).toBe(201);
+        expect(generate).toHaveBeenCalled();
+        expect(ddbSend).toHaveBeenCalled();
         if (captured) expect(shared.executionCatalog?.catalog).toEqual(catalog);
       }
     },

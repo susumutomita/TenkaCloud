@@ -183,16 +183,16 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
     expect((await api(admin, "/host/bootstrap-status")).status).toBe(200);
 
     // Seed a genuine historical event while the owner is stopped. The production
-    // process must reject a new crypto choice yet resume this saved definition.
+    // process accepts selected crypto content and resumes the saved definition.
     expect(
       (
         await api(admin, "/events", token, "POST", {
-          name: "Retired material",
-          teams: [{ internalSlug: "retired" }],
+          name: "Selected material",
+          teams: [{ internalSlug: "review" }],
           problems: [{ problemId: "ac26-crypto-battle" }],
         })
       ).status,
-    ).toBe(422);
+    ).toBe(201);
     await down();
     const legacyStore = new HostStore(new Database(join(data, "hosting.sqlite"), { strict: true }));
     const legacyService = new HostingService(
@@ -275,8 +275,8 @@ test("make local/down preserves a real scored Battle and refuses duplicate owner
     expect(readFileSync(join(data, "host-key"), "utf8").trim() === signingKey).toBe(true);
     const database = new Database(join(data, "hosting.sqlite"), { readonly: true });
     try {
-      expect(database.query("SELECT id FROM host_events").all()).toHaveLength(1);
-      expect(database.query("SELECT id FROM host_teams").all()).toHaveLength(2);
+      expect(database.query("SELECT id FROM host_events").all()).toHaveLength(2);
+      expect(database.query("SELECT id FROM host_teams").all()).toHaveLength(3);
     } finally {
       database.close();
     }

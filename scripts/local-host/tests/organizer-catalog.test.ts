@@ -16,8 +16,8 @@ import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-c
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
-test("legacy SHA-256 lessons stay retained but cannot enter a new local event", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "tenka-retired-sha-"));
+test("selected crypto lessons and battle can enter new local events", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "tenka-selected-crypto-"));
   const database = new Database(":memory:");
   const store = new HostStore(database);
   const service = new HostingService(
@@ -42,27 +42,28 @@ test("legacy SHA-256 lessons stay retained but cannot enter a new local event", 
       "sha256-bytes-padding",
       "sha256-compress-digest",
       "sha256-schedule-logic",
+      "ac26-w1-constraint-lab",
+      "ac26-crypto-battle",
     ]) {
-      expect(ids).not.toContain(problemId);
+      expect(ids).toContain(problemId);
       expect(
         historical.find((problem) => problem.problemId === problemId)?.definition,
       ).toBeTruthy();
-      await expect(
-        service.admin(
-          apiRequest({
-            method: "POST",
-            path: "/events",
-            token: idToken,
-            body: {
-              name: "Withdrawn lesson",
-              teams: [{ internalSlug: "alpha" }],
-              problems: [{ problemId }],
-            },
-          }),
-        ),
-      ).rejects.toMatchObject({ status: 422 });
+      const created = await service.admin(
+        apiRequest({
+          method: "POST",
+          path: "/events",
+          token: idToken,
+          body: {
+            name: "Selected crypto problem",
+            teams: [{ internalSlug: "alpha" }],
+            problems: [{ problemId }],
+          },
+        }),
+      );
+      expect(created.status).toBe(201);
     }
-    expect(store.events()).toHaveLength(0);
+    expect(store.events()).toHaveLength(5);
   } finally {
     database.close();
     rmSync(directory, { recursive: true, force: true });
