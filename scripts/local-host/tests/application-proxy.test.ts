@@ -222,3 +222,24 @@ test("generic challenge gateway caps requests and responses and discards revoked
     );
   }
 });
+
+test("a range request reaches the service as a full request, so a 206 never loses its byte interval", async () => {
+  const seen: (string | undefined)[] = [];
+  await fixture(
+    (request, response) => {
+      seen.push(request.headers.range);
+      if (request.headers.range === "bytes=0-3") {
+        response.writeHead(206, { "content-range": "bytes 0-3/10", "accept-ranges": "bytes" });
+        response.end("0123");
+      } else response.end("0123456789");
+    },
+    async ({ origin }) => {
+      const response = await fetch(`${origin}/document.pdf`, { headers: { range: "bytes=0-3" } });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-range")).toBeNull();
+      expect(response.headers.get("accept-ranges")).toBeNull();
+      expect(await response.text()).toBe("0123456789");
+    },
+  );
+  expect(seen).toEqual([undefined]);
+});
