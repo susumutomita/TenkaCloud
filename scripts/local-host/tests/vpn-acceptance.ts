@@ -40,6 +40,18 @@ import { NativeVpnIngress } from "../vpn/native-ingress";
 import { type VpnPeerPlan, vpnPeerPlan } from "../vpn/peer-plan";
 import { prepareFixture } from "./network-docker-smoke";
 
+import {
+  acceptanceUnitDescription,
+  acceptanceUnitState,
+  acceptanceWgUnitContent,
+  acceptanceWgUnitPath,
+  afterAcceptanceTransportRemoved,
+  assertAcceptanceUnitAvailable,
+  cleanupAcceptanceUnits,
+  acceptanceSealUnit as sealUnit,
+  acceptanceWgUnit as wgUnit,
+} from "./vpn-acceptance-units";
+
 const execute = promisify(execFile);
 const iface = "tcwgac";
 const namespaces = Array.from({ length: 6 }, (_, index) => `tcvpa${index}`);
@@ -51,8 +63,7 @@ const udpPort = 51870;
 const server4 = "10.251.240.1";
 const server6 = "fd55:240::1";
 const adminPort = 19002;
-const sealUnit = `tenkacloud-vpn-seal@${iface}.service`;
-const wgUnit = `wg-quick@${iface}.service`;
+
 const token = () => randomBytes(24).toString("hex");
 
 function command(program: string, args: readonly string[], input?: string): string {
@@ -119,12 +130,14 @@ function scope(exclusive = true): void {
   assert.ok(!command("iptables", ["-S"]).includes(udpChain), "Owned UDP chain already exists");
   for (const family of ["iptables", "ip6tables"])
     assert.ok(!command(family, ["-S"]).includes(canaryChain), "Owned canary chain already exists");
-  for (const unit of [sealUnit, wgUnit])
-    assert.equal(
-      command("systemctl", ["show", unit, "--property=LoadState", "--value"]),
-      "not-found",
-      "Temporary unit name already exists",
-    );
+  for (const unit of [sealUnit, wgUnit]) {
+    const occupied = [
+      `/etc/systemd/system/${unit}`,
+      `/run/systemd/system/${unit}`,
+      ...(unit === wgUnit ? [`/etc/wireguard/${iface}.conf`] : []),
+    ].some(existsSync);
+    assertAcceptanceUnitAvailable(unit, acceptanceUnitState(command, unit), occupied);
+  }
   command("docker", ["image", "inspect", "oven/bun:1.3.11-alpine"]);
 }
 function privateKey(directory: string, name: string): { path: string; publicKey: string } {
@@ -428,7 +441,6 @@ async function main(): Promise<void> {
   engineRequired = engine;
   const createdNamespaces: string[] = [];
   const createdLinks: string[] = [];
-  const units: string[] = [];
   let udpCreated = false;
   let plan: VpnPeerPlan | undefined;
   let ingress: NativeVpnIngress | undefined;
@@ -506,11 +518,7 @@ async function main(): Promise<void> {
     await clean(() => ingress?.seal());
     await admin?.stop(true);
     for (const canary of canaries) await clean(() => killChild(canary));
-    for (const unit of units.toReversed())
-      await clean(() => {
-        command("systemctl", ["stop", unit]);
-      });
-    await clean(() => cleanupOptionalPolicy(plan));
+    await clean(() => cleanupUnits(privateDirectory));
     for (const name of createdNamespaces.toReversed())
       await clean(() => {
         command("ip", ["netns", "delete", name]);
@@ -522,36 +530,9 @@ async function main(): Promise<void> {
         );
         if (present) command("ip", ["link", "delete", name]);
       });
-    if (udpCreated)
-      await clean(() => {
-        command("iptables", [
-          "-D",
-          "INPUT",
-          "-p",
-          "udp",
-          "--dport",
-          String(udpPort),
-          "-j",
-          udpChain,
-        ]);
-        command("iptables", ["-F", udpChain]);
-        command("iptables", ["-X", udpChain]);
-        command("ip6tables", [
-          "-D",
-          "INPUT",
-          "-p",
-          "udp",
-          "--dport",
-          String(udpPort),
-          "-m",
-          "comment",
-          "--comment",
-          "tc-vpn-acceptance-udp",
-          "-j",
-          "DROP",
-        ]);
-      });
-    await clean(cleanupCanaryGuard);
+    await clean(() => cleanupDetached(() => cleanupOptionalPolicy(plan)));
+    if (udpCreated) await clean(() => cleanupDetached(cleanupUdpStrict));
+    await clean(() => cleanupDetached(cleanupCanaryGuard));
     await clean(() => {
       assert.equal(command("docker", ["ps", "-aq", "--filter", "name=tch-vpnacceptance"]), "");
       assert.equal(command("ip", ["-j", "route", "show", "default"]), defaultRoutes);
@@ -619,6 +600,7 @@ async function main(): Promise<void> {
     command("systemd-run", [
       "--quiet",
       `--unit=${sealUnit}`,
+      `--description=${acceptanceUnitDescription(privateDirectory)}`,
       "--service-type=oneshot",
       "--property=RemainAfterExit=yes",
       process.execPath,
@@ -626,18 +608,15 @@ async function main(): Promise<void> {
       "--config",
       configPath,
     ]);
-    units.push(sealUnit);
     command("systemctl", ["is-active", sealUnit]);
-    command("systemd-run", [
-      "--quiet",
-      `--unit=${wgUnit}`,
-      "--service-type=oneshot",
-      "--property=RemainAfterExit=yes",
-      `--property=Requires=${sealUnit}`,
-      `--property=After=${sealUnit}`,
-      "/usr/bin/true",
-    ]);
-    units.push(wgUnit);
+    // An explicit owned runtime instance overrides only this unused instance,
+    // never the vendor wg-quick template or production configuration.
+    writeFileSync(acceptanceWgUnitPath, acceptanceWgUnitContent(privateDirectory), {
+      mode: 0o644,
+      flag: "wx",
+    });
+    command("systemctl", ["daemon-reload"]);
+    command("systemctl", ["start", wgUnit]);
     command("systemctl", ["is-active", wgUnit]);
     command("ip", ["link", "add", iface, "type", "wireguard"]);
     createdLinks.push(iface);
@@ -1168,6 +1147,23 @@ function cleanupUdpGuard(attempt: (work: () => void) => void): void {
       ]);
     });
 }
+function cleanupUdpStrict(): void {
+  cleanupUdpGuard((work) => work());
+}
+function cleanupDetached(work: () => void): void {
+  afterAcceptanceTransportRemoved(
+    () => JSON.parse(command("ip", ["-j", "link"])) as { ifname: string }[],
+    work,
+  );
+}
+function cleanupUnits(directory: string): void {
+  cleanupAcceptanceUnits(directory, {
+    run: command,
+    exists: existsSync,
+    read: (path) => readFileSync(path, "utf8"),
+    remove: (path) => rmSync(path),
+  });
+}
 /** Independent always-step recovery uses only the root-created ownership journal. */
 async function cleanupSaved(): Promise<void> {
   const errors: unknown[] = [];
@@ -1190,15 +1186,15 @@ async function cleanupSaved(): Promise<void> {
       }
     };
     for (const job of saved.jobs) attempt(() => cleanupSavedJob(saved.root, job));
-    for (const unit of [wgUnit, sealUnit])
-      attempt(() => {
-        if (command("systemctl", ["show", unit, "--property=LoadState", "--value"]) !== "not-found")
-          command("systemctl", ["stop", unit]);
-      });
-    if (saved.registration) attempt(() => cleanupPolicy(vpnPeerPlan(saved.registration)));
+    attempt(() => cleanupUnits(directory));
     cleanupNamespaceResources(attempt);
-    cleanupUdpGuard(attempt);
-    attempt(cleanupCanaryGuard);
+    attempt(() =>
+      cleanupDetached(() => {
+        if (saved.registration) cleanupPolicy(vpnPeerPlan(saved.registration));
+        cleanupUdpGuard(attempt);
+        cleanupCanaryGuard();
+      }),
+    );
     if (!errors.length) {
       rmSync(saved.root, { recursive: true, force: true });
       rmSync(directory, { recursive: true, force: true });
