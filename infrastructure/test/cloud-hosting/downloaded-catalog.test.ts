@@ -166,8 +166,8 @@ test("repeated Cloud preparation reuses immutable roots without deleting a previ
   }
 });
 
-test("downloaded Cloud catalog uses arbitrary problem crypto tags without deleting its retained source asset", () => {
-  const root = mkdtempSync(join(tmpdir(), "cloud-tag-filter-"));
+test("downloaded Cloud catalog retains crypto-tagged problems and their source asset", () => {
+  const root = mkdtempSync(join(tmpdir(), "cloud-tag-content-"));
   try {
     downloadCatalog(
       root,
@@ -185,8 +185,8 @@ test("downloaded Cloud catalog uses arbitrary problem crypto tags without deleti
       },
     );
     const prepared = downloadedCloudCatalog(root);
-    expect(prepared.bundle.catalog).toEqual({});
-    expect(prepared.bundle.scoring).toEqual({});
+    expect(prepared.bundle.catalog).toHaveProperty("sample-flag");
+    expect(prepared.bundle.scoring).toHaveProperty("sample-flag");
     expect(prepared.packAssets).toHaveLength(1);
   } finally {
     rmSync(root, { recursive: true, force: true });

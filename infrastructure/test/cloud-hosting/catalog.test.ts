@@ -58,12 +58,12 @@ describe("cloud catalog boundary", () => {
   });
 });
 
-it("retired cryptography is excluded across projections without dropping ordinary AWS entries", () => {
+it("selected crypto IDs remain in every cloud-compatible projection", () => {
   const entries = {
-    "ac26-crypto-battle": "retired",
-    "sha256-bytes-padding": "retired",
-    "sha256-compress-digest": "retired",
-    "sha256-schedule-logic": "retired",
+    "ac26-crypto-battle": "selected",
+    "sha256-bytes-padding": "selected",
+    "sha256-compress-digest": "selected",
+    "sha256-schedule-logic": "selected",
     current: "current",
   };
   const filtered = cloudCatalog({
@@ -77,8 +77,8 @@ it("retired cryptography is excluded across projections without dropping ordinar
     coordination: {},
     coordinationBundles: {},
   });
-  expect(filtered.catalog).toEqual({ current: "current" });
-  expect(filtered.scoring).toEqual({ current: "current" });
+  expect(filtered.catalog).toEqual(entries);
+  expect(filtered.scoring).toEqual(entries);
 });
 
 it("handles legacy bundles with absent projections and excludes compose engines regardless of provider", () => {
@@ -90,27 +90,4 @@ it("handles legacy bundles with absent projections and excludes compose engines 
     runtimes: { local: { provider: "other", engine: "compose" } },
   } as unknown as Parameters<typeof cloudCatalog>[0];
   expect(cloudCatalog(runtimesOnly)).toEqual({ runtimes: {} });
-});
-
-it("excludes non-ac26 cryptography by source metadata tags from every projection", () => {
-  const entries = { "ordinary-name": "retired", current: "current" };
-  const filtered = cloudCatalog(
-    {
-      catalog: entries,
-      scoring: entries,
-      runtimes: {},
-      endpoints: entries,
-      phases: entries,
-      visibility: entries,
-      disruptions: entries,
-      coordination: entries,
-      coordinationBundles: entries,
-    },
-    {
-      "ordinary-name": { tags: ["advanced-cryptography-course"] },
-      current: { tags: ["security"] },
-    },
-  );
-  for (const [name, projection] of Object.entries(filtered))
-    expect(projection).toEqual(name === "runtimes" ? {} : { current: "current" });
 });

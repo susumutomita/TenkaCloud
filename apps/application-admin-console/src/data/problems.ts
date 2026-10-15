@@ -1,4 +1,3 @@
-import { selectableProblem } from "../../../../packages/portal-contracts/src/problem-selection";
 /**
  * 問題カタログ。`problems/` ディレクトリの metadata.json を Vite の `import.meta.glob`
  * で build 時に取り込む。問題を追加するときは `problems/<category>/<id>/{template.yaml,
@@ -151,7 +150,7 @@ export const PROBLEM_CATALOG: readonly ProblemDetail[] = composeCatalogDetails({
   packs: buildPackDetails(packMetadataModules, packManifestModules),
   // Issue #3226: set only by vite.host.config.ts (the local competition host build).
   includeLocalOnly: LOCAL_HOST_BUILD,
-}).filter(selectableProblem);
+});
 
 export function findProblem(id: string): ProblemDetail | undefined {
   return PROBLEM_CATALOG.find((p) => p.id === id);

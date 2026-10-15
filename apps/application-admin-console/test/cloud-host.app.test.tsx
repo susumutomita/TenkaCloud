@@ -157,14 +157,14 @@ afterEach(() => {
 });
 
 describe("cloud organizer SPA journey", () => {
-  it("offers AWS exercises without retired crypto or local Docker problems", async () => {
+  it("offers supported AWS and native exercises without local Docker problems", async () => {
     const f = cloudSession("Admin", "/events/new");
     await screen.findByTestId("problem-select");
     const picker = problemPicker(document.body);
     if (!picker) throw new Error("Missing cloud problem picker");
-    expect(picker.findOptions()).toHaveLength(1);
+    expect(picker.findOptions()).toHaveLength(2);
     expect(picker.findOptionByValue("hello-world")).not.toBeNull();
-    expect(picker.findOptionByValue("ac26-crypto-battle")).toBeNull();
+    expect(picker.findOptionByValue("ac26-crypto-battle")).not.toBeNull();
     for (const id of ["sqli-demo", "db-a1-table-primary-key"])
       expect(picker.findOptionByValue(id)).toBeNull();
     picker.toggleProblem("hello-world");

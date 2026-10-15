@@ -1,4 +1,3 @@
-import { selectableProblem } from "../../packages/portal-contracts/src/problem-selection";
 import type { CloudFormationEngine } from "./cloudformation-engine";
 import {
   coordinationCatalog,
@@ -78,9 +77,7 @@ export class CompetitionEngine extends DockerHostingEngine {
     return this.cloud?.disruptionAdapter();
   }
   override catalog(): readonly Problem[] {
-    return this.catalogEntries().filter((problem) =>
-      selectableProblem({ id: problem.problemId, tags: problem.publicCatalog?.tags }),
-    );
+    return this.catalogEntries();
   }
   /** Complete compatibility registry; saved events execute their persisted definitions. */
   protected catalogEntries(): readonly Problem[] {

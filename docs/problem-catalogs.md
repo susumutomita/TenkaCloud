@@ -76,9 +76,10 @@ certify live AWS/Turso operation. The unpublished host candidate records a catal
 lock containing all repository commits and digests, replacing its single gitlink
 commit. Historical published release manifests are preserved.
 
-Cryptography teaching material is excluded from new host and browser selections.
-Its downloaded source remains intact, and saved event definitions and native UI
-modules remain available for scoring and recovery. Public source files are
+The selected catalogs supply the problem content; the platform does not exclude
+problems by their IDs or teaching-topic tags. Runtime support and reviewed native
+code boundaries still apply. Saved event definitions and native UI modules remain
+available for scoring and recovery. Public source files are
 normalized to readable build inputs (0644, or 0755 for executable files); no file
 is executed by acquisition. Private host state and credentials keep their existing
 permissions.
