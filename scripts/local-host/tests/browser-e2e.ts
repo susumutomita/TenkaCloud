@@ -251,6 +251,18 @@ async function solveAs(
       .getByRole("button", { name: "Stop (keep data)", exact: true })
       .waitFor({ timeout: STEP_TIMEOUT });
   }
+  if (info.engine === "docker" && teamSlug === "team-1") {
+    await page.getByRole("button", { name: "Reveal hint", exact: true }).first().click();
+    const confirmation = page.getByRole("dialog");
+    await confirmation.getByText("Revealing will cost 20 pt. This cannot be undone.").waitFor();
+    await confirmation.getByRole("button", { name: "Reveal", exact: true }).click();
+    await page.getByText("Hints (1 / 2 revealed)", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Stop (keep data)", exact: true }).click();
+    await page.getByRole("button", { name: "Start / resume", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Start / resume", exact: true }).click();
+    await page.getByRole("button", { name: "Stop (keep data)", exact: true }).waitFor();
+    await page.getByText("Hints (1 / 2 revealed)", { exact: true }).waitFor();
+  }
   // "Access URLs → Web": a one-use handoff to this team's own exercise gateway.
   const web = page.locator('a[href*="/__join?ticket="]').first();
   await web.waitFor({ timeout: STEP_TIMEOUT });
@@ -279,7 +291,11 @@ async function solveAs(
   const ranking = page.getByRole("row");
   await ranking.filter({ hasText: "team-1" }).first().waitFor({ timeout: STEP_TIMEOUT });
   await ranking.filter({ hasText: "team-2" }).first().waitFor({ timeout: STEP_TIMEOUT });
-  await ranking.filter({ hasText: "(you)" }).getByText("100 pt").waitFor({ timeout: STEP_TIMEOUT });
+  const expectedScore = info.engine === "docker" && teamSlug === "team-1" ? "80 pt" : "100 pt";
+  await ranking
+    .filter({ hasText: "(you)" })
+    .getByText(expectedScore)
+    .waitFor({ timeout: STEP_TIMEOUT });
   if (teamSlug === "team-1")
     await captureVerifiedUi(page, "participant-scoreboard.png", [info.key, teamKey, flag]);
   return flag;

@@ -61,8 +61,9 @@ export class CompetitionEngine extends DockerHostingEngine {
     private readonly cloud?: CloudFormationEngine,
     networkPool?: string,
     submissionCatalogPath?: string,
+    competitionNetwork = false,
   ) {
-    super(root, dataDirectory, networkPool);
+    super(root, dataDirectory, networkPool, competitionNetwork);
     this.battles = coordinationCatalog(root);
     this.submissions = submissionCatalog(submissionCatalogPath);
     const ids = [

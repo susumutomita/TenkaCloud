@@ -131,6 +131,10 @@ export async function spawnDeclaredTerminal(
     unit.projectDirectory ?? dirname(unit.composePath),
   ];
   const env = interpolationEnvironment(unit);
+  if (unit.isolationVersion === 1) {
+    env.DOCKER_HOST = "unix:///var/run/docker.sock";
+    env.DOCKER_CONTEXT = "";
+  }
   const raw = await (deps.inspect ?? inspect)(
     cli.command,
     [...base, "config", "--format", "json"],

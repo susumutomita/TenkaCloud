@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { hostBuildDirectory } from "./build";
 import { type ContainerLimits, DEFAULT_CONTAINER_LIMITS } from "./container-budget";
 import { hasDatabaseState, persistentKey, prepareDatabase, privateDirectory } from "./files";
-import type { GatewayPortRange } from "./gateway-ports";
+import { type GatewayPortRange, gatewayOffset, gatewayPort } from "./gateway-ports";
 import { SurfaceGateways } from "./gateways";
 import { type HttpHost, startHttpHost } from "./http";
 import { openLocalDatabase } from "./local-database";
@@ -20,6 +20,7 @@ export interface LocalHostSettings {
   readonly participantPort: number;
   readonly gatewayPorts: GatewayPortRange;
   readonly public?: PublicExposure;
+  readonly vpn?: import("./vpn/native-backend").VpnIngress;
   readonly accountConnection?: AccountConnection;
   readonly containerLimits?: ContainerLimits;
 }
@@ -38,6 +39,40 @@ export interface RunningLocalHost {
   stop(options?: { stopLocalEnvironments?: boolean }): Promise<void>;
 }
 
+function assertVpnSettings(settings: LocalHostSettings): void {
+  const vpn = settings.vpn;
+  if (!vpn) return;
+  if (
+    settings.public ||
+    settings.hostname !== vpn.plan.serverIpv4 ||
+    settings.participantPort !== vpn.plan.participantPort
+  )
+    throw new Error(
+      "VPN requires its dedicated participant address/port and loopback administration.",
+    );
+  vpn.seal();
+}
+async function collectVpnCleanupFailure(
+  failures: unknown[],
+  work: () => void | Promise<void>,
+): Promise<void> {
+  try {
+    await work();
+  } catch (error) {
+    failures.push(error);
+  }
+}
+function vpnHttpAuthorization(settings: LocalHostSettings, store: HostStore) {
+  const vpn = settings.vpn;
+  return vpn
+    ? {
+        authorizePeer: (remote: string, token: string) =>
+          vpn.authorize(remote, store.authenticateTeam(token)),
+        authorizeTerminalPeer: (remote: string, grant: import("./host-terminal").TerminalGrant) =>
+          vpn.authorize(remote, grant),
+      }
+    : {};
+}
 /**
  * Compose the hosting service, its two listeners and the exercise gateways over one private
  * data directory. `bun start` passes the Docker engine; the browser rehearsal passes its
@@ -53,6 +88,7 @@ export async function startLocalHost(
     passwords?: OrganizerPasswords;
   } = {},
 ): Promise<RunningLocalHost> {
+  assertVpnSettings(settings);
   const directory = privateDirectory(settings.dataDirectory);
   const databasePath = join(directory, "hosting.sqlite");
   const masterKeyPath = join(directory, "host-key");
@@ -70,12 +106,34 @@ export async function startLocalHost(
   let participant: HttpHost | undefined;
   let gateways: SurfaceGateways | undefined;
   let service: HostingService | undefined;
+  let transportEngine: RuntimeEngine | undefined;
   let uptimeTimer: ReturnType<typeof setInterval> | undefined;
   let uptimeTick: Promise<void> | undefined;
   let disruptionTimer: ReturnType<typeof setInterval> | undefined;
   let disruptionTick: Promise<void> | undefined;
+  let networkTimer: ReturnType<typeof setInterval> | undefined;
+  let networkTick: Promise<void> | undefined;
+  async function stopOwnedEnvironments(unstoppedLocal: string[]): Promise<void> {
+    if (!service) return;
+    const result = await service.stopLocalEnvironments((job) => {
+      unstoppedLocal.push(
+        `${localJobDescription(job)} status=${job.status}: ${localRuntimeFailure(job.error)}`,
+      );
+    });
+    announce(
+      `Stopped ${String(result.stopped)} owned Docker environments; their data is retained.`,
+    );
+    if (result.cloud > 0)
+      announce(
+        `${String(result.cloud)} AWS environments remain deployed; local down does not remove cloud resources.`,
+      );
+  }
   async function stop(options: { stopLocalEnvironments?: boolean } = {}): Promise<void> {
+    const vpnStopFailures: unknown[] = [];
+    await collectVpnCleanupFailure(vpnStopFailures, () => settings.vpn?.seal());
     const unstoppedLocal: string[] = [];
+    if (networkTimer) clearInterval(networkTimer);
+    networkTimer = undefined;
     if (uptimeTimer) clearInterval(uptimeTimer);
     uptimeTimer = undefined;
     if (disruptionTimer) clearInterval(disruptionTimer);
@@ -84,35 +142,36 @@ export async function startLocalHost(
     // snapshot would otherwise keep writing SQLite/Docker state past store.close().
     await Promise.all([admin?.close(), participant?.close()]);
     await disruptionTick;
+    await networkTick;
     admin = undefined;
     participant = undefined;
     await uptimeTick;
     await service?.drain();
-    if (options.stopLocalEnvironments && service) {
-      const result = await service.stopLocalEnvironments((job) => {
-        unstoppedLocal.push(
-          `${localJobDescription(job)} status=${job.status}: ${localRuntimeFailure(job.error)}`,
-        );
-      });
-      announce(
-        `Stopped ${String(result.stopped)} owned Docker environments; their data is retained.`,
-      );
-      if (result.cloud > 0)
-        announce(
-          `${String(result.cloud)} AWS environments remain deployed; local down does not remove cloud resources.`,
-        );
-    }
+    if (options.stopLocalEnvironments) await stopOwnedEnvironments(unstoppedLocal);
     await gateways?.close();
+    await collectVpnCleanupFailure(vpnStopFailures, () => transportEngine?.closeTransports?.());
     service?.flush();
     store.close();
     if (unstoppedLocal.length > 0)
       throw new Error(
         `${String(unstoppedLocal.length)} owned Docker jobs are not confirmed stopped (including earlier failed deployments, not a container count); ownership and data are retained.\n${unstoppedLocal.join("\n")}`,
       );
+    if (vpnStopFailures.length)
+      throw new AggregateError(
+        vpnStopFailures,
+        "VPN closure failed; remaining cleanup was attempted.",
+      );
   }
   try {
     const { key: organizerKey } = store.ensureLocalOrganizerKey();
     const engine = createEngine(directory, store);
+    transportEngine = engine;
+    if (settings.vpn) {
+      if (!engine.bindVpnIngress) throw new Error("Runtime has no fail-closed VPN lifecycle.");
+      engine.bindVpnIngress(settings.vpn, (job) =>
+        gatewayPort(settings.gatewayPorts, gatewayOffset(job)),
+      );
+    }
     service = new HostingService(
       store,
       engine,
@@ -125,13 +184,28 @@ export async function startLocalHost(
     service.accountConnection = settings.accountConnection;
     service.gatewayPorts = settings.gatewayPorts;
     service.containerLimits = settings.containerLimits ?? DEFAULT_CONTAINER_LIMITS;
-    service.listenerPorts = [settings.adminPort, settings.participantPort];
+    service.listenerPorts = [settings.adminPort, settings.participantPort].filter(
+      (port) => port !== 0,
+    );
     // Public mode offers no gateway problems; a recovered one must still not open on every interface.
     const gatewayHostname = settings.public ? "127.0.0.1" : settings.hostname;
     service.gatewayHostname = gatewayHostname;
     service.assertGatewayRange(settings.gatewayPorts);
     await service.recover();
+    if (settings.vpn) await engine.auditNetworks?.();
     const runningService = service;
+    if (engine.auditNetworks)
+      networkTimer = setInterval(() => {
+        if (networkTick) return;
+        networkTick = engine
+          .auditNetworks?.()
+          .catch(() =>
+            announce("Competition network auditing failed; verify retained workload shutdown."),
+          )
+          .finally(() => {
+            networkTick = undefined;
+          });
+      }, 10_000);
     disruptionTimer = setInterval(() => {
       if (disruptionTick) return;
       disruptionTick = runningService.disruptions
@@ -145,7 +219,13 @@ export async function startLocalHost(
           disruptionTick = undefined;
         });
     }, 1000);
-    const surfaces = new SurfaceGateways(gatewayHostname, service, settings.gatewayPorts, announce);
+    const surfaces = new SurfaceGateways(
+      gatewayHostname,
+      service,
+      settings.gatewayPorts,
+      announce,
+      settings.vpn ? (remote, job) => settings.vpn?.authorize(remote, job) : undefined,
+    );
     gateways = surfaces;
     service.surfaceLink = (job, team, path) => surfaces.link(job, team, path);
     service.closeSurface = (jobId) => surfaces.closeJob(jobId);
@@ -157,6 +237,7 @@ export async function startLocalHost(
       behindProxy: settings.public?.behindProxy,
       staticRoot: hostBuildDirectory(repositoryRoot, "participant-portal"),
       service,
+      ...vpnHttpAuthorization(settings, store),
     });
     admin = await startHttpHost({
       kind: "admin",
@@ -168,6 +249,8 @@ export async function startLocalHost(
       service,
       participantOrigin: participant.origin,
     });
+    service.listenerPorts = [admin.boundPort, participant.boundPort];
+    service.assertGatewayRange(settings.gatewayPorts);
     const pollUptime = () => {
       if (!service || uptimeTick) return;
       uptimeTick = service.uptime

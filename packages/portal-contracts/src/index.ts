@@ -262,6 +262,8 @@ export interface ParticipantProblemView {
   readonly problemId: string;
   /** Host-owned Docker terminal capability, independent of legacy practice lifecycle controls. */
   readonly terminal?: true;
+  /** Native local competition network, advertised only after runtime guard verification. */
+  readonly competitionNetwork?: true;
   /** State-preserving on-demand Docker controls authorized by the competition host. */
   readonly containerSession?: {
     readonly status: "stopped" | "starting" | "running" | "stopping" | "error";
@@ -515,4 +517,18 @@ export interface CliCredentialsView {
   readonly expiration: string;
   readonly region: string;
   readonly awsAccountId: string;
+}
+
+export interface CompetitionNetworkView {
+  readonly supported: true;
+  readonly declared: readonly { id: string; purpose: string; published: boolean }[];
+  readonly shared: readonly {
+    teamId: string;
+    problemId: string;
+    serviceId: string;
+    purpose: string;
+    addresses: readonly string[];
+    port: number;
+    protocol: "tcp";
+  }[];
 }

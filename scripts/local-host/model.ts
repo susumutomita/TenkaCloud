@@ -108,6 +108,7 @@ export interface HostedEvent {
   problems: Problem[];
   progressionGate?: ProgressionGateConfig;
   containerMode?: "on-demand";
+  networkIsolationVersion?: 1;
   /** Omission preserves native host scoring for existing events. Fixed at creation. */
   scoringAuthority?: "ctfd";
 }
@@ -171,6 +172,8 @@ export interface AccountConnection {
 }
 
 export interface Job {
+  /** Required before first creation, including deferred jobs after controller restart. */
+  networkIsolationVersion?: 1;
   jobId: string;
   eventId: string;
   teamId: string;
@@ -242,6 +245,37 @@ export interface EngineResult {
 }
 
 export interface RuntimeEngine {
+  bindVpnIngress?(
+    ingress: import("./vpn/native-backend").VpnIngress,
+    gatewayPort?: (job: Job) => number,
+  ): void;
+  /** Local adapter seam backed by the existing private host ledger, never a second store. */
+  bindNetworkState?(state: {
+    jobs(): readonly Job[];
+    retain(
+      updates: readonly {
+        jobId: string;
+        unit: string;
+        status?: "STOPPED" | "FAILED";
+        error?: string;
+      }[],
+    ): void;
+  }): void;
+  networkView?(
+    context: Context,
+    problemId: string,
+  ): Promise<import("./network-publication").NetworkPublicationView>;
+  networkSupported?(job: Job): boolean;
+  drainNetworkChecks?(): Promise<void>;
+  closeTransports?(): Promise<void>;
+  auditNetworks?(): Promise<void>;
+  networkRequirement?(definition: string): 1 | undefined;
+  publishNetworkService?(
+    context: Context,
+    problemId: string,
+    serviceId: string,
+    published: boolean,
+  ): Promise<void>;
   readonly supportsOnDemand?: boolean;
   containerCost?(definition: string): import("./container-budget").ContainerCost;
   disruptionAdapter?(): import("./disruption-model").DisruptionAdapter | undefined;

@@ -75,11 +75,11 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
-async function host(options: { public: boolean; behindProxy?: boolean }) {
+async function host(options: { public: boolean; behindProxy?: boolean; dynamicPorts?: boolean }) {
   const data = mkdtempSync(join(tmpdir(), "tenka-public-"));
   directories.push(data);
-  const adminPort = await freePort();
-  const participantPort = await freePort();
+  let adminPort = options.dynamicPorts ? 0 : await freePort();
+  let participantPort = options.dynamicPorts ? 0 : await freePort();
   const started = await startLocalHost(
     root,
     {
@@ -102,6 +102,8 @@ async function host(options: { public: boolean; behindProxy?: boolean }) {
     () => undefined,
   );
   running.push(started);
+  adminPort = started.admin.boundPort;
+  participantPort = started.participant.boundPort;
   const bootstrap = await call(adminPort, {
     path: "/api/host/login",
     method: "POST",
@@ -267,4 +269,55 @@ test("the host console refuses a non-loopback bind unless a proxy publishes it",
       service: unused as never,
     }),
   ).rejects.toThrow("The host console must bind to IPv4 loopback.");
+});
+
+test("dynamic listeners reserve their actual ports and allow dormant Docker preparation", async () => {
+  const { started, adminPort, participantPort, adminToken } = await host({
+    public: false,
+    dynamicPorts: true,
+  });
+  expect(adminPort).toBeGreaterThan(0);
+  expect(participantPort).toBeGreaterThan(0);
+  expect(adminPort).not.toBe(participantPort);
+  expect(Number(new URL(started.admin.origin).port)).toBe(adminPort);
+  const fields = {
+    method: "POST",
+    host: `127.0.0.1:${adminPort}`,
+    headers: { authorization: `Bearer ${adminToken}` },
+  };
+  const created = await call(adminPort, {
+    ...fields,
+    path: "/api/events",
+    body: {
+      name: "Dynamic listener preparation",
+      teams: [{ internalSlug: "team" }],
+      problems: [{ problemId: "sqli-demo" }],
+    },
+  });
+  expect(created.status).toBe(201);
+  const deploy = await call(adminPort, {
+    ...fields,
+    path: `/api/events/${String(created.body.eventId)}/deploy`,
+    body: {},
+  });
+  expect(deploy.status).toBe(202);
+});
+
+test("dynamic listeners cannot consume a declared gateway port", async () => {
+  const data = mkdtempSync(join(tmpdir(), "tenka-listener-overlap-"));
+  directories.push(data);
+  await expect(
+    startLocalHost(
+      root,
+      {
+        dataDirectory: data,
+        hostname: "127.0.0.1",
+        adminPort: 0,
+        participantPort: 0,
+        gatewayPorts: parseGatewayPorts("1024-65535"),
+      },
+      (directory) => new CompetitionEngine(root, directory, false),
+      () => undefined,
+    ),
+  ).rejects.toThrow("overlaps listener port");
 });

@@ -1,13 +1,9 @@
 #!/usr/bin/env sh
-# Check the staged catalog pin without fetching, changing branches, or hiding failures.
-catalog_status=$(git submodule status -- problems) || exit 1
-case "$catalog_status" in
-  " "*) ;;
-  *)
-    echo "problems/ is uninitialized or differs from its staged commit." >&2
-    echo "Align the checkout deliberately, or stage an intended catalog update. No checkout was changed." >&2
-    exit 1
-    ;;
-esac
-
-mise exec -- make before-commit
+# Validate the selected downloaded snapshots without fetching or executing their code.
+if command -v mise >/dev/null 2>&1; then
+  mise exec -- bun run catalog validate || exit 1
+  mise exec -- make before-commit
+else
+  bun run catalog validate || exit 1
+  make before-commit
+fi

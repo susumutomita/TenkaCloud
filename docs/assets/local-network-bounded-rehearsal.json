@@ -1,0 +1,21 @@
+{
+  "checks": [
+    "Old production adapter + internal:true reaches the synthetic host service (IPv4 baseline)",
+    "All twelve workload containers retain 128 MiB memory, 0.5 CPU and 128 pids limits",
+    "Six root workloads retain same-team DB + embedded service DNS; host TCP denied in IPv4/IPv6, unapproved name resolution fails",
+    "Declared DMZ Web succeeds in both families; private peer DB/host remain denied; withdrawal revokes access",
+    "Six real authenticated HTTP/WebSocket/Compose shell sessions execute independently; fresh-ticket reconnect succeeds (non-PTY)",
+    "Six real verifier submissions commit scores through existing HostingService",
+    "Stop/resume and controller reconstruction preserve generation, ports, dual-stack guard even without the option",
+    "An added unowned attachment prevents adoption and stops the owned workload"
+  ],
+  "status": "passed",
+  "note": "Physical nested Docker lab; no Internet/real LAN/VM escape/browser-UI claim",
+  "environment": "Owned disposable cloud nested Docker; outer network none, no host mounts or exposed ports",
+  "image": "tc-network-lab:cloud-offline; Docker 28.4-dind, Bun 1.3.11, installed cloud ip and runtime libraries",
+  "date": "2026-10-14",
+  "limitations": [
+    "Normal Alpine image build blocked by package download HTTP 403; this used the temporary offline image",
+    "No physical LAN, Internet, VPN peer, browser rendering or VM escape claim"
+  ]
+}

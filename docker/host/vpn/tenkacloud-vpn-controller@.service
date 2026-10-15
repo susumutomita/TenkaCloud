@@ -1,0 +1,25 @@
+[Unit]
+Description=TenkaCloud isolated VPN controller
+Requires=wg-quick@%i.service tenkacloud-vpn-seal@%i.service
+BindsTo=wg-quick@%i.service
+PartOf=wg-quick@%i.service
+After=wg-quick@%i.service tenkacloud-vpn-seal@%i.service docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/tenkacloud
+EnvironmentFile=/etc/tenkacloud/vpn/%i-controller.env
+ExecStart=/usr/local/bin/bun /opt/tenkacloud/scripts/local-host/main.ts --no-build --data /var/lib/tenkacloud/%i --competition-network --docker-network-pool ${TENKACLOUD_VPN_DOCKER_POOL} --vpn-peers /etc/tenkacloud/vpn/%i.json
+ExecStopPost=/usr/local/bin/bun /opt/tenkacloud/scripts/local-host/vpn/boot-seal.ts --config /etc/tenkacloud/vpn/%i.json
+StateDirectory=tenkacloud/%i
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

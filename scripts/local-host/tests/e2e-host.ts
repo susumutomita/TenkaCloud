@@ -75,8 +75,8 @@ async function main(): Promise<void> {
       {
         dataDirectory: data,
         hostname: "127.0.0.1",
-        adminPort: Number(process.env.HOST_E2E_ADMIN_PORT ?? 5184),
-        participantPort: Number(process.env.HOST_E2E_PARTICIPANT_PORT ?? 5185),
+        adminPort: Number(process.env.HOST_E2E_ADMIN_PORT ?? 0),
+        participantPort: Number(process.env.HOST_E2E_PARTICIPANT_PORT ?? 0),
         gatewayPorts: parseGatewayPorts(process.env.HOST_E2E_GATEWAY_PORTS ?? "5300-5339"),
       },
       (directory) => {
