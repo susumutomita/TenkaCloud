@@ -17,7 +17,7 @@ import { hostBrowserProblemPaths } from "../../local-host/browser-metadata.js";
 import { dockerDefinitionOf, loadDockerCatalog } from "../../local-host/docker-catalog.js";
 import type { Job } from "../../local-host/model.js";
 import { CatalogLockSchema, retainedCatalogRoots, selectedCatalogRoots } from "../catalog-read.js";
-import { downloadCatalog, materializeCatalog } from "../downloaded-catalog.js";
+import { downloadCatalog, materializeCatalog, verifyCatalogLock } from "../downloaded-catalog.js";
 import type { GitArchiveFetcher } from "../git-source.js";
 
 const repository = resolve(import.meta.dirname, "../../..");
@@ -306,4 +306,23 @@ test("unsafe standard pack roots cannot replace an accepted catalog selection", 
         previous,
       );
     }
+  }));
+
+test("a moved tag that no longer matches catalog-lock.json is refused", () =>
+  fixture((root, fetcher) => {
+    const tagged = {
+      schemaVersion: 1,
+      sources: [{ url: "https://example.invalid/sample-a.git", ref: "v1" }],
+    };
+    downloadCatalog(root, tagged, { fetcher, resolveRef: () => revision });
+    const selected = CatalogLockSchema.parse(
+      JSON.parse(readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8")),
+    );
+    writeFileSync(
+      join(root, "catalog-lock.json"),
+      JSON.stringify({ schemaVersion: 1, sources: selected.sources }),
+    );
+    expect(() => verifyCatalogLock(root)).not.toThrow();
+    downloadCatalog(root, tagged, { fetcher, resolveRef: () => "b".repeat(40) });
+    expect(() => verifyCatalogLock(root)).toThrow("differs from catalog-lock.json");
   }));

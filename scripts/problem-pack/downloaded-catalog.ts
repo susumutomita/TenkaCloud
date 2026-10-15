@@ -20,6 +20,7 @@ import {
   catalogMetadata,
   lockPath,
   type Revision,
+  readCatalogSelection,
   SelectionSchema,
   selectedCatalogRoots,
   snapshot,
@@ -249,6 +250,21 @@ function downloadCatalogInternal(
   } finally {
     rmSync(transaction, { recursive: true, force: true });
   }
+}
+
+/** A tag can be moved after review; automated acquisition must still match the committed lock. */
+export function verifyCatalogLock(root: string): void {
+  const sources = (text: string) =>
+    JSON.stringify(CatalogLockSchema.parse(JSON.parse(text)).sources);
+  if (
+    sources(readCatalogSelection(root)) !==
+    sources(readFileSync(join(root, "catalog-lock.json"), "utf8"))
+  )
+    throw new Error(
+      "The downloaded catalog differs from catalog-lock.json. Review the resolved source, then " +
+        "copy its sources into catalog-lock.json and run " +
+        "`bun run scripts/release/host-candidate.ts --sync-catalog`.",
+    );
 }
 
 /** Explicit build preparation. Sources used by saved Docker jobs stay in catalog-store. */

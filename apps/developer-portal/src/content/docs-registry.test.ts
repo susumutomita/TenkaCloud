@@ -118,7 +118,7 @@ describe("docs registry — role manuals (#2818)", () => {
         "512",
         "40",
         "100",
-        "105",
+        "300",
         "4096",
         "Start / resume",
         "Stop (keep data)",

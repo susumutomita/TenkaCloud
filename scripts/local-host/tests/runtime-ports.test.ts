@@ -46,12 +46,13 @@ function assignment(plan: ReadonlyMap<string, RuntimePorts>, jobId: string): Run
 }
 
 function hundredJobBatch(): RuntimePortRequest[] {
-  return catalog.slice(0, 5).flatMap((definition) =>
-    Array.from({ length: 20 }, (_, team) => ({
-      jobId: `${definition.problem.problemId}:team-${team}`,
+  return Array.from({ length: 100 }, (_, index) => {
+    const definition = catalog[index % catalog.length] as DockerDefinition;
+    return {
+      jobId: `${definition.problem.problemId}:team-${Math.floor(index / catalog.length)}`,
       composeText: definition.composeText,
-    })),
-  );
+    };
+  });
 }
 
 function requiredPorts(requests: readonly RuntimePortRequest[]): number {
@@ -93,10 +94,10 @@ test("every real catalog problem uses exact dense maps and remains Compose-polic
   }
 });
 
-test("5 real problems × 20 teams fit a deterministic 100-job plan without 1000-port blocks", async () => {
+test("100 jobs cycling through every real problem fit a deterministic plan without 1000-port blocks", async () => {
   const requests = hundredJobBatch();
-  expect(catalog.length).toBeGreaterThanOrEqual(5);
-  expect(requests).toHaveLength(100);
+  expect(new Set(requests.map(({ jobId }) => jobId)).size).toBe(100);
+  expect(new Set(requests.map(({ composeText }) => composeText)).size).toBe(catalog.length);
   const needed = requiredPorts(requests);
   const options = {
     reservedPorts: [20_000, 20_001],
