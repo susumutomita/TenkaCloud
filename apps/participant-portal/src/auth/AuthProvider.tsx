@@ -134,7 +134,7 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
   }, [demoLoginPending, login]);
 
   const logout = useCallback(() => {
-    if (config.mode === "backend" && session)
+    if (config.publicWebSessions && session)
       void fetch(`${config.apiBaseUrl.replace(/\/?$/u, "/")}portal/me/public-web/logout`, {
         method: "POST",
         headers: { authorization: `Bearer ${session.sessionToken}` },
@@ -146,7 +146,7 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
         .catch(() => console.warn("Public Web access revocation could not be confirmed."));
     clearSession();
     setSession(null);
-  }, [config.mode, config.apiBaseUrl, session]);
+  }, [config.publicWebSessions, config.apiBaseUrl, session]);
 
   // Issue #859: session 存在中のみ 6 時間 idle timer を回す。 user 操作で reset。
   useEffect(() => {

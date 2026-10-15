@@ -120,6 +120,36 @@ describe("AuthProvider", () => {
     expect(result.current.session?.expiresAt).toBe(1_700_000_000_000);
   });
 
+  it.each([
+    ["cloud", prodConfig, []],
+    [
+      "local host",
+      { ...prodConfig, publicWebSessions: true },
+      ["https://api.example.com/prod/portal/me/public-web/logout"],
+    ],
+  ] as const)(
+    "%s logout revokes published Web sessions only where the host serves them",
+    async (_host, config, revocations) => {
+      const fetchMock = vi.fn().mockImplementation(async () =>
+        Response.json({
+          team: { teamName: "Alpha", teamNameSetByCompetitor: false, eventId: "EV1", teamId: "T1" },
+          problems: [],
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const { result } = renderAuth(config);
+      await act(async () => {
+        await result.current.login("AbCdEfGhIjKlMnOpQrStUvWx");
+      });
+      fetchMock.mockClear();
+      act(() => {
+        result.current.logout();
+      });
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(revocations);
+      expect(result.current.session).toBeNull();
+    },
+  );
+
   it("backend mode: should throw PortalAuthError on 401 and not change session", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
     const { result } = renderAuth(prodConfig);
