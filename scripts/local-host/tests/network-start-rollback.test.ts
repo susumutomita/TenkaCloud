@@ -176,3 +176,38 @@ test("a failed start whose guard removal fails after Compose down resumes from g
     },
   );
 });
+
+test("another team's start finishes while an isolated start waits for its guard install", async () => {
+  const alphaInstall = Promise.withResolvers<undefined>();
+  await withStart(
+    "alpha",
+    (calls) => ({
+      installAsync: async (plan) => {
+        calls.push(`install-${plan.project}`);
+        if (plan.project === "tch-alpha") await alphaInstall.promise;
+      },
+      verifyNetworks: (plan) => {
+        throw new Error(`Synthetic drift in ${plan.project}`);
+      },
+    }),
+    async ({ engine, job, calls, retain }) => {
+      const alpha = engine.start(job, retain);
+      const beta: Job = { ...job, jobId: "beta", teamId: "beta", unit: null };
+      await expect(
+        engine.start(beta, (unit) => {
+          beta.unit = unit;
+        }),
+      ).rejects.toThrow("Synthetic drift in tch-beta");
+      expect(calls).toContain("install-tch-alpha");
+      expect(calls.filter((call) => call.startsWith("compose-"))).toEqual([
+        "compose-up",
+        "compose-down",
+      ]);
+      alphaInstall.reject(new Error("Synthetic install timeout"));
+      await expect(alpha).rejects.toThrow("Synthetic install timeout");
+      expect(job.unit).toBeNull();
+      expect(calls.filter((call) => call === "compose-up")).toHaveLength(1);
+      expect(calls).not.toContain("install");
+    },
+  );
+});

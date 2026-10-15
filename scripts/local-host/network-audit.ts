@@ -6,7 +6,7 @@ interface WorkerQueue {
   active: number;
   readonly waiting: (() => void)[];
 }
-type WorkerMode = "verify" | "stop" | "quarantine" | "reset" | "publish";
+type WorkerMode = "install" | "verify" | "stop" | "quarantine" | "reset" | "publish";
 type WorkerOperation = WorkerMode | "endpoints" | "relay-target" | "vpn-prepare";
 type WorkerRunner = (plan: LocalNetworkPlan, mode: WorkerMode) => Promise<void>;
 const BASE_DEADLINE_MS = 20_000;
@@ -63,6 +63,12 @@ async function queuedOperation(
   }
 }
 /** Native subprocess audits and stops run off the controller loop, at most two at a time. */
+export function installNetwork(
+  plan: LocalNetworkPlan,
+  run: WorkerRunner = runAudit,
+): Promise<void> {
+  return queuedOperation(auditQueue, plan, "install", run);
+}
 export function auditNetwork(plan: LocalNetworkPlan, run: WorkerRunner = runAudit): Promise<void> {
   return queuedOperation(auditQueue, plan, "verify", run);
 }

@@ -48,6 +48,7 @@ import {
   isolatedCompose,
   type LocalNetworkPlan,
   localNetworkPlan,
+  NetworkOverlapError,
   requiredNetworkValue,
   retainedPublicPlan,
   sharedNetworkPlan,
@@ -397,13 +398,13 @@ export class DockerHostingEngine implements RuntimeEngine {
     retain(JSON.stringify(unit));
     try {
       const generated = generateSecretEnv(plan.directory, job.problemId, unit.secretEnv);
-      if (guarded) this.networkGuard.install(guarded);
+      if (guarded) await this.installPlan(guarded);
       await this.runCompose(unit, "up", { ...process.env, ...generated });
-      if (guarded) this.networkGuard.verifyNetworks(guarded);
+      if (guarded) await this.verifyPlan(guarded);
       await this.openRelays(job, plan.started.unit, plan.relayBindings);
       await ready(plan.started.problem.verifyUrl);
       await this.readySurfaces(plan.started);
-      if (guarded) this.networkGuard.verifyNetworks(guarded);
+      if (guarded) await this.verifyPlan(guarded);
       await this.admitRunning(job, plan.started);
       if (guarded && this.networkState) {
         await this.reconcilePublications(job.eventId);
@@ -489,7 +490,7 @@ export class DockerHostingEngine implements RuntimeEngine {
       await ready(plan.started.problem.verifyUrl);
       await this.readySurfaces(plan.started);
       const guarded = this.guardPlan(job, unit);
-      if (guarded) this.networkGuard.verifyNetworks(guarded);
+      if (guarded) await this.verifyPlan(guarded);
       await this.admitRunning(job, plan.started);
     } catch (error) {
       if (recorded.isolationVersion === 1) return this.haltGuardedUnit(job, recorded, error);
@@ -622,7 +623,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     try {
       await this.runCompose(unit, "restart", { ...process.env, ...generated });
       const guarded = this.guardPlan(job, unit);
-      if (guarded) this.networkGuard.verifyNetworks(guarded);
+      if (guarded) await this.verifyPlan(guarded);
       await this.openRelays(job, plan.started.unit, plan.relayBindings);
       await ready(plan.started.problem.verifyUrl);
       await this.readySurfaces(plan.started);
@@ -1142,8 +1143,10 @@ export class DockerHostingEngine implements RuntimeEngine {
           "An existing unguarded environment cannot be adopted as isolated. Stop and retire it before a new isolated deployment.",
         );
       if (guarded) {
-        this.networkGuard.install(guarded);
-        this.networkGuard.verifyNetworks(guarded);
+        // Host LAN or VPN routes may have moved while the runtime was retained.
+        assertNoNetworkOverlap(guarded, this.networkGuard.occupiedRoutes(guarded));
+        await this.installPlan(guarded);
+        await this.verifyPlan(guarded);
       }
     } catch (error) {
       return this.haltGuardedUnit(job, unit, error);
@@ -1221,7 +1224,10 @@ export class DockerHostingEngine implements RuntimeEngine {
       }
       job.unit = JSON.stringify(unit);
       job.status = "STOPPED";
-      job.error = "Competition guard failed; runtime was stopped and requires verified recovery.";
+      const overlap = overlapCause(error);
+      job.error = overlap
+        ? `${overlap.message} The runtime was stopped; remove the conflicting host route, then restart it.`
+        : "Competition guard failed; runtime was stopped and requires verified recovery.";
       this.unconfirmedHalts.delete(job.jobId);
     } catch (stopError) {
       failures.push(stopError);
@@ -1365,6 +1371,11 @@ export class DockerHostingEngine implements RuntimeEngine {
     return this.networkGuard.resetStoppedAsync
       ? this.networkGuard.resetStoppedAsync(plan)
       : Promise.resolve().then(() => this.networkGuard.resetStopped(plan));
+  }
+  private installPlan(plan: LocalNetworkPlan): Promise<void> {
+    return this.networkGuard.installAsync
+      ? this.networkGuard.installAsync(plan)
+      : Promise.resolve().then(() => this.networkGuard.install(plan));
   }
   private verifyPlan(plan: LocalNetworkPlan): Promise<void> {
     return this.networkGuard.audit
@@ -1642,6 +1653,17 @@ export class DockerHostingEngine implements RuntimeEngine {
  * cause the organizer has to fix; ownership stays recorded, and the next deployment retry
  * removes the partial environment before starting again.
  */
+/** Recovery halts again on the first halt's AggregateError, so the cause can sit one level down. */
+function overlapCause(error: unknown): NetworkOverlapError | undefined {
+  if (error instanceof NetworkOverlapError) return error;
+  if (!(error instanceof AggregateError)) return undefined;
+  for (const inner of error.errors) {
+    const found = overlapCause(inner);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 function startupCleanupFailure(startup: unknown, cleanup: unknown): Error {
   if (startup instanceof DockerDaemonUnavailableError) return new DockerDaemonUnavailableError();
   const reason = startup instanceof Error ? startup.message : String(startup);

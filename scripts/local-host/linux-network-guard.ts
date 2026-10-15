@@ -11,6 +11,7 @@ import {
 import {
   auditNetwork,
   emergencyNetwork,
+  installNetwork,
   networkEndpoints,
   publishNetwork,
   stopNetwork,
@@ -23,13 +24,15 @@ export interface LocalNetworkGuard {
   verify(plan: LocalNetworkPlan): void;
   verifyNetworks(plan: LocalNetworkPlan): void;
   remove(plan: LocalNetworkPlan): void;
-  occupiedRoutes(): readonly string[];
+  /** Host routes, minus those on the bridges that `owned` already holds. */
+  occupiedRoutes(owned?: LocalNetworkPlan): readonly string[];
   update(plan: LocalNetworkPlan, previous: LocalNetworkPlan): void;
   endpoints(plan: LocalNetworkPlan, service: string, port: number): readonly LocalPublicEndpoint[];
   routePublications(plan: LocalNetworkPlan): void;
   resetStopped(plan: LocalNetworkPlan): void;
   quarantine(plan: LocalNetworkPlan): void;
   stopOwned(plan: LocalNetworkPlan): Promise<void>;
+  installAsync?(plan: LocalNetworkPlan): Promise<void>;
   audit?(plan: LocalNetworkPlan): Promise<void>;
   quarantineAsync?(plan: LocalNetworkPlan): Promise<void>;
   resetStoppedAsync?(plan: LocalNetworkPlan): Promise<void>;
@@ -380,7 +383,8 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     this.firewall(false, ["-S", "DOCKER-USER"]);
     this.firewall(true, ["-S", "FORWARD"]);
   }
-  occupiedRoutes(): readonly string[] {
+  occupiedRoutes(owned?: LocalNetworkPlan): readonly string[] {
+    const bridges = new Set(owned?.segments.map((segment) => segment.bridge));
     const result: string[] = [];
     for (const ipv6 of [false, true]) {
       const rows: unknown = JSON.parse(
@@ -388,7 +392,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       );
       if (!Array.isArray(rows) || rows.length > 16384)
         throw new Error("Invalid host route inventory.");
-      result.push(...routeDestinations(rows, ipv6));
+      result.push(...routeDestinations(rows, ipv6, bridges));
     }
     return result;
   }
@@ -1073,6 +1077,9 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   resetStoppedAsync(plan: LocalNetworkPlan): Promise<void> {
     return emergencyNetwork(plan, "reset");
   }
+  installAsync(plan: LocalNetworkPlan): Promise<void> {
+    return installNetwork(plan);
+  }
   audit(plan: LocalNetworkPlan): Promise<void> {
     return auditNetwork(plan);
   }
@@ -1240,12 +1247,17 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   }
 }
 
-function routeDestinations(rows: unknown[], ipv6: boolean): string[] {
+function routeDestinations(
+  rows: unknown[],
+  ipv6: boolean,
+  ownedBridges: ReadonlySet<string>,
+): string[] {
   const result: string[] = [];
   for (const row of rows) {
     if (!row || typeof row !== "object") throw new Error("Invalid host route.");
-    const destination = (row as { dst?: unknown }).dst;
+    const { dst: destination, dev } = row as { dst?: unknown; dev?: unknown };
     if (destination === undefined || destination === "default") continue;
+    if (typeof dev === "string" && ownedBridges.has(dev)) continue;
     if (typeof destination !== "string") throw new Error("Invalid routed destination.");
     result.push(destination.includes("/") ? destination : `${destination}/${routePrefix(ipv6)}`);
   }
