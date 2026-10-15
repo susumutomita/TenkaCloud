@@ -89,12 +89,10 @@ export function vpnPeerPlan(raw: unknown): VpnPeerPlan {
     "participantPort",
     "peers",
   ]);
-  if (
-    value.version !== 1 ||
-    typeof value.interface !== "string" ||
-    !/^tcwg[0-9a-z_-]{1,10}$/u.test(value.interface)
-  )
-    throw new Error("VPN requires an explicitly owned tcwg interface.");
+  // The boot-seal drop-in ships for wg-quick@tcwg0 only. A template drop-in would bind every
+  // wg-quick instance on the host, and any other name would leave the controller sealed forever.
+  if (value.version !== 1 || value.interface !== "tcwg0")
+    throw new Error("VPN requires the tcwg0 interface that the WireGuard seal drop-in covers.");
   const port = value.participantPort;
   if (!Number.isInteger(port) || Number(port) < 1024 || Number(port) > 65535)
     throw new Error("Invalid VPN participant port.");
