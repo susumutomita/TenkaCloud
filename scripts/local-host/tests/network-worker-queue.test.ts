@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { localNetworkPlan } from "../local-network";
-import { auditNetwork, emergencyNetwork } from "../network-audit";
+import { auditNetwork, emergencyNetwork, installNetwork } from "../network-audit";
 
 // No native worker, daemon or firewall is invoked: exercise the production queue with injected I/O.
 test("512 emergency operations stay bounded and progress independently of wedged audits", async () => {
@@ -66,4 +66,41 @@ test("wedged Docker resets cannot occupy the quarantine-only queue", async () =>
     release();
     await Promise.all(resets);
   }
+});
+
+test("a guard install and a quarantine never interleave their hook insertions", async () => {
+  // eslint-disable-next-line sonarjs/no-hardcoded-ip -- pure transport plan; no connection
+  const plan = localNetworkPlan("tch-hook-order", { default: "10.249.0.0/28" });
+  const events: string[] = [];
+  const held = (name: string, gate: Promise<undefined>) => async () => {
+    events.push(`${name}-start`);
+    await gate;
+    events.push(`${name}-end`);
+  };
+  const install = Promise.withResolvers<undefined>();
+  const installing = installNetwork(plan, held("install", install.promise));
+  const quarantine = emergencyNetwork(
+    plan,
+    "quarantine",
+    held("quarantine", Promise.resolve(undefined)),
+  );
+  const audit = auditNetwork(plan, held("audit", Promise.resolve(undefined)));
+  await Bun.sleep(5);
+  expect(events).toEqual(["install-start", "audit-start", "audit-end"]);
+  install.resolve(undefined);
+  await Promise.all([installing, quarantine, audit]);
+  expect(events.slice(3)).toEqual(["install-end", "quarantine-start", "quarantine-end"]);
+
+  events.length = 0;
+  const drops = Promise.withResolvers<undefined>();
+  const quarantines = [
+    emergencyNetwork(plan, "quarantine", held("first", drops.promise)),
+    emergencyNetwork(plan, "quarantine", held("second", drops.promise)),
+  ];
+  const next = installNetwork(plan, held("install", Promise.resolve(undefined)));
+  await Bun.sleep(5);
+  expect(events).toEqual(["first-start", "second-start"]);
+  drops.resolve(undefined);
+  await Promise.all([...quarantines, next]);
+  expect(events.slice(-2)).toEqual(["install-start", "install-end"]);
 });

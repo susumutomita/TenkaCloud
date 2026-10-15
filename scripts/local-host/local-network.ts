@@ -146,7 +146,6 @@ export function isolatedCompose(text: string, plan: LocalNetworkPlan): string {
   return stringify(document);
 }
 
-/** Caller-supplied inventory must include LAN/VPN routes, not just interface addresses. */
 /** Only the organizer can clear a colliding host route, so halts report it by name. */
 export class NetworkOverlapError extends Error {
   constructor() {
@@ -155,6 +154,7 @@ export class NetworkOverlapError extends Error {
   }
 }
 
+/** Caller-supplied inventory must include LAN/VPN routes, not just interface addresses. */
 export function assertNoNetworkOverlap(plan: LocalNetworkPlan, occupied: readonly string[]): void {
   for (const candidate of plan.segments.flatMap((segment) => [segment.ipv4, segment.ipv6])) {
     const [ip = "", rawPrefix = ""] = candidate.split("/");

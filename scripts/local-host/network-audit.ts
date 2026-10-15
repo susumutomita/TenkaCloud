@@ -62,18 +62,59 @@ async function queuedOperation(
     release(queue);
   }
 }
-/** Native subprocess audits and stops run off the controller loop, at most two at a time. */
-export function installNetwork(
-  plan: LocalNetworkPlan,
-  run: WorkerRunner = runAudit,
-): Promise<void> {
-  return queuedOperation(auditQueue, plan, "install", run);
+/**
+ * An install inserts hooks at positions read from earlier snapshots, so a quarantine inserted at
+ * the head in between would shift them. Quarantines only insert at the head and may overlap each
+ * other, never an install. Waiters start in arrival order, so neither side starves.
+ */
+type HookWork = "install" | "quarantine";
+const hookOrder = {
+  installing: false,
+  quarantines: 0,
+  waiting: [] as { work: HookWork; start: () => void }[],
+};
+function hookWorkFits(work: HookWork): boolean {
+  return !hookOrder.installing && (work === "quarantine" || hookOrder.quarantines === 0);
 }
+function enterHookWork(work: HookWork): void {
+  if (work === "install") hookOrder.installing = true;
+  else hookOrder.quarantines++;
+}
+function leaveHookWork(work: HookWork): void {
+  if (work === "install") hookOrder.installing = false;
+  else hookOrder.quarantines--;
+  let next = hookOrder.waiting[0];
+  while (next && hookWorkFits(next.work)) {
+    hookOrder.waiting.shift();
+    enterHookWork(next.work);
+    next.start();
+    next = hookOrder.waiting[0];
+  }
+}
+function ordered(work: HookWork, run: WorkerRunner): WorkerRunner {
+  return async (plan, mode) => {
+    if (hookOrder.waiting.length || !hookWorkFits(work))
+      await new Promise<void>((start) => hookOrder.waiting.push({ work, start }));
+    else enterHookWork(work);
+    try {
+      await run(plan, mode);
+    } finally {
+      leaveHookWork(work);
+    }
+  };
+}
+/** Native subprocess audits and stops run off the controller loop, at most two at a time. */
 export function auditNetwork(plan: LocalNetworkPlan, run: WorkerRunner = runAudit): Promise<void> {
   return queuedOperation(auditQueue, plan, "verify", run);
 }
 export function stopNetwork(plan: LocalNetworkPlan, run: WorkerRunner = runAudit): Promise<void> {
   return queuedOperation(auditQueue, plan, "stop", run);
+}
+export function installNetwork(
+  plan: LocalNetworkPlan,
+  run: WorkerRunner = runAudit,
+): Promise<void> {
+  return queuedOperation(auditQueue, plan, "install", ordered("install", run));
 }
 export function publishNetwork(plan: LocalNetworkPlan, previous: LocalNetworkPlan): Promise<void> {
   return queuedOperation(auditQueue, plan, "publish", () =>
@@ -123,7 +164,9 @@ export function emergencyNetwork(
   run: WorkerRunner = runAudit,
 ): Promise<void> {
   // Only firewall-only drops use the emergency queue; reset inspects Docker and must not block drops.
-  return queuedOperation(mode === "quarantine" ? emergencyQueue : auditQueue, plan, mode, run);
+  if (mode === "quarantine")
+    return queuedOperation(emergencyQueue, plan, mode, ordered("quarantine", run));
+  return queuedOperation(auditQueue, plan, mode, run);
 }
 function runAudit(
   plan: LocalNetworkPlan,

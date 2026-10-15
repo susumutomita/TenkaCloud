@@ -202,6 +202,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   private readonly guardAudits = new Map<string, Promise<void>>();
   private readonly guardRevocations = new Set<Promise<void>>();
   private readonly pendingHalts = new Map<string, Promise<never>>();
+  private readonly pendingAdmissions = new Map<string, Promise<void>>();
   private readonly unconfirmedHalts = new Map<string, { job: Job; unit: LocalComposeUnit }>();
   private readonly policyEpochs = new Map<string, number>();
   private applyingPublicationEvent?: string;
@@ -933,6 +934,20 @@ export class DockerHostingEngine implements RuntimeEngine {
     this.publicationBarriers.set(eventId, barrier);
     return task;
   }
+  /** Install now leaves the controller thread, so never audit a runtime before its guard exists. */
+  private async awaitEventSettled(eventId: string): Promise<void> {
+    const admissions = () =>
+      (this.networkState?.jobs() ?? []).flatMap((candidate) => {
+        const admission =
+          candidate.eventId === eventId ? this.pendingAdmissions.get(candidate.jobId) : undefined;
+        return admission ? [admission] : [];
+      });
+    do {
+      await Promise.allSettled(admissions());
+      for (const candidate of this.networkState?.jobs() ?? [])
+        if (candidate.eventId === eventId) await this.awaitGuardHalt(candidate);
+    } while (admissions().length);
+  }
   private async applyPublications(
     eventId: string,
     changes: ReadonlyMap<string, Job>,
@@ -940,8 +955,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   ): Promise<void> {
     if (!this.networkState)
       throw new Error("DMZ publication requires the existing private host ledger.");
-    for (const candidate of this.networkState.jobs())
-      if (candidate.eventId === eventId) await this.awaitGuardHalt(candidate);
+    await this.awaitEventSettled(eventId);
     const snapshots = this.networkState
       .jobs()
       .filter(
@@ -1135,7 +1149,18 @@ export class DockerHostingEngine implements RuntimeEngine {
       "DMZ publication failed. Quarantine and shutdown were attempted; ownership was retained for verified recovery.",
     );
   }
+  /** A recovering runtime stays COMPLETE in the ledger, so publication batches wait for this. */
   private async assertGuardedAdmission(job: Job, unit: LocalComposeUnit): Promise<void> {
+    const admission = this.admitRetainedGuard(job, unit);
+    this.pendingAdmissions.set(job.jobId, admission);
+    try {
+      await admission;
+    } finally {
+      if (this.pendingAdmissions.get(job.jobId) === admission)
+        this.pendingAdmissions.delete(job.jobId);
+    }
+  }
+  private async admitRetainedGuard(job: Job, unit: LocalComposeUnit): Promise<void> {
     try {
       const guarded = this.guardPlan(job, unit);
       if (!guarded && this.isolationRequired(job))

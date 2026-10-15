@@ -4,8 +4,8 @@ import { LinuxNetworkGuard } from "../linux-network-guard";
 import { localNetworkPlan, requiredNetworkValue } from "../local-network";
 import { networkEngineFixture } from "./network-engine-fixture";
 
-test("resume and recovery refuse a retained subnet that a host route now covers, without reinstalling its guard", async () => {
-  for (const operation of ["resume", "recover"] as const) {
+for (const operation of ["resume", "recover"] as const)
+  test(`${operation} refuses a retained subnet that a host route now covers, without reinstalling its guard`, async () => {
     const f = networkEngineFixture();
     const { job, admitted } = f.add(`overlap-${operation}`);
     await admitted;
@@ -26,6 +26,41 @@ test("resume and recovery refuse a retained subnet that a host route now covers,
     } finally {
       await f.close();
     }
+  });
+
+test("a publication batch waits for a recovering runtime's guard install before auditing it", async () => {
+  const f = networkEngineFixture();
+  const alpha = f.add("alpha");
+  const beta = f.add("beta");
+  await Promise.all([alpha.admitted, beta.admitted]);
+  const install = Promise.withResolvers<undefined>();
+  let installed = false;
+  f.guard.installAsync = async () => {
+    await install.promise;
+    installed = true;
+  };
+  f.guard.audit = async (plan) => {
+    f.calls.push(`audit-${plan.project}`);
+    if (plan.project === "tch-alpha" && !installed) throw new Error("Synthetic absent chains");
+  };
+  const recovering = f.engine.recover({ ...f.store.job("alpha") }).catch(() => undefined);
+  await Bun.sleep(10);
+  f.calls.length = 0;
+  const reconcile = Reflect.get(f.engine, "reconcilePublications") as (
+    eventId: string,
+  ) => Promise<void>;
+  const batch = reconcile.call(f.engine, "event");
+  try {
+    await Bun.sleep(20);
+    expect(f.calls).toEqual([]);
+    install.resolve(undefined);
+    await recovering;
+    await expect(batch).resolves.toBeUndefined();
+    expect(f.calls).toContain("audit-tch-beta");
+  } finally {
+    install.resolve(undefined);
+    await Promise.allSettled([recovering, batch]);
+    await f.close();
   }
 });
 
