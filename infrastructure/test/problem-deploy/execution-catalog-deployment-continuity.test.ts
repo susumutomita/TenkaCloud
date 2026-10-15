@@ -339,7 +339,7 @@ function nativeCatalog(): ResolvedExecutionCatalog {
 }
 
 describe("reviewed native Battle profile", () => {
-  it("refuses new crypto selections but deploys saved account-free teams without provider work", async () => {
+  it("creates selected crypto events and deploys saved account-free teams without provider work", async () => {
     const native = nativeCatalog();
     readers.current.mockResolvedValue(native);
     readers.saved.mockResolvedValue(native);
@@ -358,11 +358,14 @@ describe("reviewed native Battle profile", () => {
           problems: [{ problemId: NATIVE_ID, defaultRegion: "ap-northeast-1" }],
         },
       ),
-    ).rejects.toMatchObject({ name: "UnknownEventProblemError", problemId: NATIVE_ID });
-    expect(ddbSend).not.toHaveBeenCalled();
+    ).resolves.toMatchObject({
+      problems: [{ problemId: NATIVE_ID, defaultRegion: "ap-northeast-1" }],
+      teams: [{ internalSlug: "alpha" }],
+    });
+    expect(ddbSend).toHaveBeenCalled();
     expect(eventsSend).not.toHaveBeenCalled();
     ddbSend.mockClear();
-    // This pre-withdrawal event retains its catalog pin and authored definition.
+    // A saved event retains its catalog pin and authored definition.
     ddbSend.mockResolvedValueOnce({
       Item: sampleEvent({
         catalogKey: KEY_A,

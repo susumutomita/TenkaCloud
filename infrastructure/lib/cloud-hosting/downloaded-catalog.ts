@@ -63,15 +63,7 @@ function prepareSource(buildRoot: string, source: Snapshot): string {
 function sourceBundle(source: Snapshot, asset: PackAsset): ProblemsCatalogBundle {
   const root = join(asset.problemsRootAbs, relative(source.directory, source.problemRoot));
   const loaded = new LocalCatalogSource().loadBundle(root);
-  const metadata = Object.fromEntries(
-    Object.entries(loaded.catalog as Record<string, string>).map(([id, directory]) => [
-      id,
-      JSON.parse(
-        readFileSync(join(root, directory.slice("problems/".length), "metadata.json"), "utf8"),
-      ) as { tags?: readonly string[] },
-    ]),
-  );
-  const bundle = cloudCatalog(loaded, metadata);
+  const bundle = cloudCatalog(loaded);
   const catalog = bundle.catalog as Record<string, string>;
   const prefix = `pack-problems/${asset.packId}/${asset.version}`;
   return {

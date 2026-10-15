@@ -5,14 +5,14 @@ import { CompetitionEngine } from "../competition-engine";
 import { runLocalHost } from "../main";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-test("the production local engine offers the selected non-retired local exercises and no AWS runtime", () => {
+test("the production local engine offers the selected supported local exercises and no AWS runtime", () => {
   const engine = new CompetitionEngine(root, join(root, ".cache", "unused-matrix-state"));
   const catalog = engine.catalog();
-  expect(catalog.filter((item) => item.runtime === "docker")).toHaveLength(58);
+  expect(catalog.filter((item) => item.runtime === "docker")).toHaveLength(106);
   expect(catalog.some((item) => item.runtime === "coordination")).toBe(true);
-  expect(catalog.some((item) => item.problemId.startsWith("ac26-"))).toBe(false);
+  expect(catalog.some((item) => item.problemId.startsWith("ac26-"))).toBe(true);
   for (const id of ["sha256-bytes-padding", "sha256-compress-digest", "sha256-schedule-logic"])
-    expect(catalog.some((item) => item.problemId === id)).toBe(false);
+    expect(catalog.some((item) => item.problemId === id)).toBe(true);
   expect(catalog.some((item) => item.runtime === "cloudformation")).toBe(false);
 });
 test("local help advertises the hosting boundary without offering an AWS startup flag", async () => {

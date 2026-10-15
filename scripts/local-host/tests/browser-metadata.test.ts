@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { metadataToDetail } from "../../../apps/application-admin-console/src/data/problem-mapping";
 import { metadataToEntry } from "../../../packages/portal-contracts/src/problem-catalog";
-import { selectableProblem } from "../../../packages/portal-contracts/src/problem-selection";
 import {
   assertHostingModule,
   hostBrowserProblemPaths,
@@ -22,19 +21,13 @@ const localProblems = hostBrowserProblemPaths().filter((path) => {
 
 test("frontend Docker identities exactly match the host's executable catalog", () => {
   expect(new Set(localProblems.map((path) => path.split("/").at(-1)))).toEqual(
-    new Set(
-      loadDockerCatalog(root)
-        .filter((problem) =>
-          selectableProblem({ id: problem.problemId, tags: problem.publicCatalog?.tags }),
-        )
-        .map((problem) => problem.problemId),
-    ),
+    new Set(loadDockerCatalog(root).map((problem) => problem.problemId)),
   );
 });
 
-test("hosting exposes 58 selectable Docker verify exercises as public Challenge metadata", () => {
-  expect(localProblems).toHaveLength(58);
-  expect(hostBrowserProblemPaths()).toHaveLength(64);
+test("hosting exposes 106 selectable Docker verify exercises as public Challenge metadata", () => {
+  expect(localProblems).toHaveLength(106);
+  expect(hostBrowserProblemPaths()).toHaveLength(113);
   let legacyBattles = 0;
   for (const path of localProblems) {
     const source = readFileSync(join(root, "problems", path, "metadata.json"), "utf8");

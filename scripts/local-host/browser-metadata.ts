@@ -3,7 +3,6 @@ export { publicMetadata } from "./browser-public-metadata";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { selectableProblem } from "../../packages/portal-contracts/src/problem-selection";
 import { retainedCatalogRoots, selectedCatalogRoots } from "../problem-pack/catalog-read";
 import { reviewedCoordinationPaths } from "./coordination-catalog";
 
@@ -70,14 +69,7 @@ export function hostBrowserProblemPaths(root = repositoryRoot): readonly string[
     ...dockerBrowserPaths(root, "challenges"),
     ...dockerBrowserPaths(root, "battles"),
   ];
-  const result = [...new Set(paths)]
-    .filter((path) => {
-      const metadata = JSON.parse(
-        readFileSync(join(root, "problems", path, "metadata.json"), "utf8"),
-      ) as { id: string; tags?: string[] };
-      return selectableProblem(metadata);
-    })
-    .sort((left, right) => left.localeCompare(right));
+  const result = [...new Set(paths)].sort((left, right) => left.localeCompare(right));
   if (root === repositoryRoot) cachedBrowserPaths = result;
   return result;
 }

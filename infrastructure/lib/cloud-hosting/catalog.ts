@@ -1,11 +1,7 @@
-import { selectableProblem } from "../../../packages/portal-contracts/src/problem-selection.js";
 import type { ProblemsCatalogBundle } from "../../../scripts/problem-pack/catalog-types.js";
 
 /** Docker/Compose exercises belong to the local process and never enter a cloud catalog. */
-export function cloudCatalog(
-  bundle: ProblemsCatalogBundle,
-  metadata: Readonly<Record<string, { readonly tags?: readonly string[] }>> = {},
-): ProblemsCatalogBundle {
+export function cloudCatalog(bundle: ProblemsCatalogBundle): ProblemsCatalogBundle {
   const runtimes = bundle.runtimes as Readonly<
     Record<
       string,
@@ -25,8 +21,6 @@ export function cloudCatalog(
       )
       .map(([id]) => id),
   );
-  for (const id of Object.keys((bundle.catalog ?? {}) as Record<string, unknown>))
-    if (!selectableProblem({ id, tags: metadata[id]?.tags })) excluded.add(id);
   const filtered = Object.fromEntries(
     Object.entries(bundle).map(([key, projection]) => [
       key,
