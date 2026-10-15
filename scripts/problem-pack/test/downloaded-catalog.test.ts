@@ -149,9 +149,13 @@ test("standard SDK packs retain safe dotted/relative roots and need no extra leg
   for (const problemsRoot of ["problem.catalog", "./problems"])
     fixture((root) => {
       const fetcher: GitArchiveFetcher = (request) => {
-        cpSync(join(repository, "packs/sample-aws-flag"), request.destinationDir, {
-          recursive: true,
-        });
+        cpSync(
+          join(repository, "scripts/problem-pack/test/fixtures/sample-aws-flag"),
+          request.destinationDir,
+          {
+            recursive: true,
+          },
+        );
         const manifestPath = join(request.destinationDir, "tenkacloud-pack.json");
         const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
         if (problemsRoot === "problem.catalog") {
@@ -229,9 +233,13 @@ test("a standard pack requiring another core version preserves the accepted sele
     expect(() =>
       downloadCatalog(root, config(["incompatible"]), {
         fetcher: (request) => {
-          cpSync(join(repository, "packs/sample-aws-flag"), request.destinationDir, {
-            recursive: true,
-          });
+          cpSync(
+            join(repository, "scripts/problem-pack/test/fixtures/sample-aws-flag"),
+            request.destinationDir,
+            {
+              recursive: true,
+            },
+          );
           const file = join(request.destinationDir, "tenkacloud-pack.json");
           const manifest = JSON.parse(readFileSync(file, "utf8"));
           manifest.core = ">=99.0.0";
@@ -279,7 +287,11 @@ test("unsafe standard pack roots cannot replace an accepted catalog selection", 
       expect(() =>
         downloadCatalog(root, config(["unsafe"]), {
           fetcher: ({ destinationDir }) => {
-            cpSync(join(repository, "packs/sample-aws-flag"), destinationDir, { recursive: true });
+            cpSync(
+              join(repository, "scripts/problem-pack/test/fixtures/sample-aws-flag"),
+              destinationDir,
+              { recursive: true },
+            );
             cpSync(join(destinationDir, "problems"), join(destinationDir, problemsRoot), {
               recursive: true,
             });

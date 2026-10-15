@@ -101,7 +101,7 @@ export interface EventCapacityRunbookProps {
  *  4. イベント後の明示 scale-down (同 runbook で 1/1 に戻す)。CFn がテーブルを次に UPDATE
  *     する deploy でも template の 1/1 に収斂する
  *
- * 実行例 (Slice 3 の運用 doc `docs/operations/dynamodb-event-capacity.md` を参照):
+ * 実行例:
  *   aws ssm start-automation-execution \
  *     --document-name <EventCapacityRunbookName output> \
  *     --parameters TableName=<table>,ReadCapacityUnits=25,WriteCapacityUnits=10

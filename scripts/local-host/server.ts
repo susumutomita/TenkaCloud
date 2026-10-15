@@ -78,7 +78,7 @@ function vpnHttpAuthorization(settings: LocalHostSettings, store: HostStore) {
 }
 /**
  * Compose the hosting service, its two listeners and the exercise gateways over one private
- * data directory. `bun start` passes the Docker engine; the browser rehearsal passes its
+ * data directory. `bun start` passes the Docker engine; tests pass an
  * explicitly test-only exercise adapter. Everything else is the same production wiring.
  */
 export async function startLocalHost(

@@ -3,8 +3,7 @@ export const metadata = { title: "Developer manual" };
 # Developer manual
 
 The current branch is a draft local/cloud integration candidate. Start with the
-`CONTRIBUTING.md`
-and `docs/host-retirement.md`.
+`CONTRIBUTING.md`.
 Original Lite updates require verified resource identity and explicit confirmation
 that all competitions have completed on the installed version. Published cloud-v1
 installations require their matching release or a separate environment/database;
@@ -43,9 +42,7 @@ AWS-service problems are cloud-only. Lambda + Turso/DynamoDB hosting and the ful
 
 Run `bun run test:host`, `bun run test:authoring`, `bun run typecheck` and
 `make before-commit`. Keep existing lint and coverage thresholds. Test the real
-HTTP/SQLite path for state and authorization changes. Follow the
-`docs/host-build-verification.md`
-for distribution changes. Record browser and optional live AWS/IdP evidence
+HTTP/SQLite path for state and authorization changes. Record browser and optional live AWS/IdP evidence
 separately; local tests do not prove external account access.
 
 `make down` preserves local event and Docker data. Cloud `make deploy` / `make destroy` call the existing CLI with reviewed AWS setup and ownership-checked teardown. Cloud hosting uses Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified. Use `CLOUD_ARGS="--help"` to inspect either command without AWS access.

@@ -98,9 +98,8 @@ Deleting a CTFd challenge never implicitly deletes Docker or cloud resources.
 
 The official challenge type contract is documented in
 [CTFd's plugin guide](https://docs.ctfd.io/docs/plugins/challenge-types/).
-Tests use its real Flask application and isolated data, plus the production
-TenkaCloud HTTP/SQLite/Docker engine and a public fixed-flag exercise owned by
-this repository. They never use customer data, existing host state or AWS.
+Tests use its real Flask application and isolated data. They never use customer
+data, existing host state or AWS.
 
 For an isolated development copy, obtain official CTFd 3.8.2 commit
 `d6fc367187fc49134cfffe89fd1523162d29836a`, place an unversioned runtime copy at
@@ -110,19 +109,4 @@ For an isolated development copy, obtain official CTFd 3.8.2 commit
 ```sh
 SECRET_KEY=ephemeral-test-key PYTHONPATH="$PWD/.cache/ctfd/run" \
   .cache/ctfd/venv/bin/python -m unittest discover -s integrations/ctfd/tests -v
-bun run test:ctfd:e2e
 ```
-
-The browser rehearsal needs Docker, Chrome and free ports 5197–5199 and
-5200–5239. Set `HOST_E2E_CHROMIUM` to a Chromium executable if necessary.
-It uses the existing compact test network pool `10.240.0.0/16`, checking occupied
-subnets before allocating. `HOST_DOCKER_NETWORK_POOL` can choose another pool;
-unrelated Docker networks are never pruned.
-`CTFD_ROOT` and `CTFD_PYTHON` can select another isolated CTFd runtime copy.
-Set `CTFD_E2E_PROBLEM_ID=sqli-demo` to exercise the pinned catalog's generated
-flag, or `CTFD_E2E_THEME=core-deprecated` to check the legacy CTFd theme.
-Masked screenshots and a machine-readable result are saved in
-`.tenkacloud/ctfd-e2e/`. The rehearsal checks display, invalid keys, actual
-Docker startup, incorrect/correct flags, CTFd's score, non-duplication in
-TenkaCloud, stop, dialog key clearing, two independent environments and final
-organizer teardown.

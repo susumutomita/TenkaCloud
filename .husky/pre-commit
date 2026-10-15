@@ -1,9 +1,2 @@
 #!/usr/bin/env sh
-# Validate the selected downloaded snapshots without fetching or executing their code.
-if command -v mise >/dev/null 2>&1; then
-  mise exec -- bun run catalog validate || exit 1
-  mise exec -- make before-commit
-else
-  bun run catalog validate || exit 1
-  make before-commit
-fi
+make before-commit

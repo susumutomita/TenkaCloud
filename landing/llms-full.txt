@@ -8,7 +8,7 @@ This guide is a map to current sources, not a substitute for checking the code o
 
 | User goal | Read first | First observable result |
 | --- | --- | --- |
-| Try locally, no AWS | [Local hosting](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-hosting.md) | Portal opens, a supported drill starts, and the requested answer produces a result |
+| Try locally, no AWS | [Organizer manual](https://tenkacloud.com/docs/manual/organizer/index.en.html) | Portal opens, a supported drill starts, and the requested answer produces a result |
 | Host an event on AWS | [Organizer manual](https://tenkacloud.com/docs/manual/organizer/index.en.html) | Admin and participant can sign in; a test team's answer appears in the score |
 | Check cloud readiness or costs | [Cloud implementation status](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/README.md) | Separate implemented checks, incomplete features and unverified real-AWS costs |
 | Join an event | [Participant manual](https://tenkacloud.com/docs/manual/participant/index.en.html) | The team's selected problem accepts its first action |

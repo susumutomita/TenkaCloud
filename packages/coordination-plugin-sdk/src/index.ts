@@ -9,9 +9,7 @@
  *
  * 本パッケージは **型 + 純 util だけ** を提供する (React / AWS SDK 非依存。 portal-plugin-sdk と
  * 同形)。実際の DDB 永続化と cross-account 配送は platform 側の infrastructure が所有する。
- *
- * The reference Battle is
- * `packs/reference-coordination-battle`。public API の変更時は本 SDK の version も更新する。
+ * public API の変更時は本 SDK の version も更新する。
  */
 
 /** Reserved server-only outputs, including namespaced composite stack outputs. */

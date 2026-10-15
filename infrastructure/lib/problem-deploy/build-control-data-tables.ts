@@ -121,8 +121,7 @@ export function buildControlDataTables(
   // ハード上限 ceiling (200) で課金爆死を構造的に防ぐ。オートスケーリングは採用しない。
   //
   // この配列が event-hot テーブルの唯一の stack 側 source。handler 側の対応 (capacity.ts
-  // `resolveEventHotTables`) と運用 doc (docs/operations/dynamodb-event-capacity.md) の表は
-  // この並びと揃えること (増減時は 3 箇所同時に更新)。
+  // `resolveEventHotTables`) はこの並びと揃えること (増減時は 2 箇所同時に更新)。
   //
   // Issue #2440 / #2441 / #2442: 純 SQL backend では Events/Teams/Deployments/ProblemEndpoints
   // が無いので runbook の allowedValues / IAM からも除外する (= filter で undefined を落とす。

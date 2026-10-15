@@ -13,10 +13,7 @@ import { writePackScaffold } from "../problem-pack/init-pack";
  * challenge, so the drill can never silently accept a copy-paste.
  */
 
-const GOLDEN_CHALLENGE_DIR = path.resolve(
-  __dirname,
-  "../../packs/golden/basic-aws-pack/problems/challenges/find-the-flag",
-);
+const GOLDEN_CHALLENGE_DIR = path.resolve(__dirname, "find-the-flag");
 
 const workspaces: string[] = [];
 

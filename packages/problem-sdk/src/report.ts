@@ -2,7 +2,7 @@
  * [Problem SDK / Issue #2108] Deterministic pack-validation report.
  *
  * `buildPackReport(dir, options)` is the single function behind the published
- * `tenkacloud-pack-report` CLI (see `docs/external-pack-ci.md`), which external
+ * `tenkacloud-pack-report` CLI, which external
  * problem-pack repositories run in their own CI to produce a machine-readable,
  * byte-deterministic report of a pack's offline validation. It is the report
  * layer over the SDK's existing offline validator: it NEVER runs a script from

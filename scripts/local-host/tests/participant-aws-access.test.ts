@@ -131,8 +131,8 @@ for (const stage of ["competitor", "participant_viewer", "federation", "token_bo
   });
 }
 
-test("key rotation, lock, expiry and job changes during STS all revoke the pending exchange", async () => {
-  for (const mutation of ["key", "lock", "expiry", "operation", "unit", "team"] as const) {
+for (const mutation of ["key", "lock", "expiry", "operation", "unit", "team"] as const) {
+  test(`key rotation, lock, expiry and job changes during STS all revoke the pending exchange: ${mutation}`, async () => {
     const f = await fixture();
     const mutations = {
       key: async () =>
@@ -154,17 +154,17 @@ test("key rotation, lock, expiry and job changes during STS all revoke the pendi
     expect(response.status).toBe(mutation === "key" ? 401 : 409);
     expect("credentials" in response.body).toBe(false);
     expect(f.calls.length).toBe(1);
-  }
-});
+  });
+}
 
-test("malformed, cross-account and deploy-role viewer targets fail before STS", async () => {
-  for (const output of [
-    undefined,
-    "arn:aws:iam::222222222222:role/viewer",
-    "arn:aws-us-gov:iam::111111111111:role/viewer",
-    "arn:aws:iam::111111111111:role/TenkaCloud-CompetitorDeploy-Role",
-    "https://evil.example",
-  ]) {
+for (const output of [
+  undefined,
+  "arn:aws:iam::222222222222:role/viewer",
+  "arn:aws-us-gov:iam::111111111111:role/viewer",
+  "arn:aws:iam::111111111111:role/TenkaCloud-CompetitorDeploy-Role",
+  "https://evil.example",
+]) {
+  test(`malformed, cross-account and deploy-role viewer targets fail before STS: ${String(output)}`, async () => {
     const f = await fixture();
     const unit = z.record(z.string(), z.unknown()).parse(JSON.parse(f.alpha.job.unit ?? "null"));
     f.store.putJob({
@@ -173,12 +173,12 @@ test("malformed, cross-account and deploy-role viewer targets fail before STS", 
     });
     expect((await f.access()).status).toBe(409);
     expect(f.calls.length).toBe(0);
-  }
-});
+  });
+}
 
 for (const stage of ["competitor", "participant_viewer"] as const) {
-  test(`${stage} failures and missing or expired credentials never expose SDK diagnostics`, async () => {
-    for (const failure of ["failed", "missing", "expired"] as const) {
+  for (const failure of ["failed", "missing", "expired"] as const) {
+    test(`${stage} ${failure} credentials never expose SDK diagnostics`, async () => {
       const f = await fixture();
       f.controls[failure] = stage;
       const response = await f.access("cli");
@@ -188,12 +188,12 @@ for (const stage of ["competitor", "participant_viewer"] as const) {
       expect(JSON.stringify(response.body)).not.toContain("LEAKED_SECRET");
       expect(f.logs).toEqual([]);
       expect(f.federation.length).toBe(0);
-    }
-  });
+    });
+  }
 }
 
-test("federation failures and malformed tokens never expose secrets or login URLs", async () => {
-  for (const failure of ["network", "status", "empty", "number"] as const) {
+for (const failure of ["network", "status", "empty", "number"] as const) {
+  test(`federation failures and malformed tokens never expose secrets or login URLs: ${failure}`, async () => {
     const f = await fixture();
     if (failure === "network") f.controls.failed = "federation";
     if (failure === "status") f.controls.federationStatus = 503;
@@ -209,45 +209,45 @@ test("federation failures and malformed tokens never expose secrets or login URL
     expect("loginUrl" in response.body).toBe(false);
     expect(JSON.stringify(response.body)).not.toContain("secret");
     expect(f.logs).toEqual([]);
-  }
-});
+  });
+}
 
-test("event start, lock, expiry and teardown gates prevent AWS calls", async () => {
-  const changes = [
-    { startsAt: undefined },
-    { startsAt: new Date(Date.now() + 60_000).toISOString() },
-    { scoringLocked: true },
-    { expiresAt: 1 },
-    { endsAt: new Date(Date.now() - 1000).toISOString() },
-    { status: "TEARDOWN" as const },
-    { status: "ARCHIVED" as const },
-  ];
-  for (const change of changes) {
+const EVENT_GATE_CHANGES = [
+  { startsAt: undefined },
+  { startsAt: new Date(Date.now() + 60_000).toISOString() },
+  { scoringLocked: true },
+  { expiresAt: 1 },
+  { endsAt: new Date(Date.now() - 1000).toISOString() },
+  { status: "TEARDOWN" as const },
+  { status: "ARCHIVED" as const },
+];
+for (const change of EVENT_GATE_CHANGES) {
+  test(`event start, lock, expiry and teardown gates prevent AWS calls: ${JSON.stringify(change)}`, async () => {
     const f = await fixture();
     f.store.putEvent({ ...f.store.event(f.eventId), ...change });
     const response = await f.access();
     expect(response.status).toBe(409);
     expect(f.calls.length).toBe(0);
-  }
-});
+  });
+}
 
-test("corrupt units and injected region destinations fail before AWS calls", async () => {
-  for (const unit of [
-    "{",
-    "null",
-    "{}",
-    JSON.stringify({
-      kind: "cloudformation",
-      accountId: "111111111111",
-      roleArn: "arn:aws:iam::111111111111:role/TenkaCloud-CompetitorDeploy-Role",
-      region: "ap-northeast-1.evil.example",
-      outputs: { ParticipantViewerRoleArn: "arn:aws:iam::111111111111:role/viewer" },
-    }),
-  ]) {
+for (const unit of [
+  "{",
+  "null",
+  "{}",
+  JSON.stringify({
+    kind: "cloudformation",
+    accountId: "111111111111",
+    roleArn: "arn:aws:iam::111111111111:role/TenkaCloud-CompetitorDeploy-Role",
+    region: "ap-northeast-1.evil.example",
+    outputs: { ParticipantViewerRoleArn: "arn:aws:iam::111111111111:role/viewer" },
+  }),
+]) {
+  test(`corrupt units and injected region destinations fail before AWS calls: ${unit.slice(0, 40)}`, async () => {
     const f = await fixture();
     f.store.putJob({ ...f.alpha.job, unit });
     expect((await f.access()).status).toBe(409);
     expect(f.calls.length).toBe(0);
     expect(f.logs).toEqual([]);
-  }
-});
+  });
+}

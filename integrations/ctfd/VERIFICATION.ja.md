@@ -62,8 +62,6 @@ flag-wrong 記録の維持を確認した。
 ```sh
 SECRET_KEY=ephemeral-test-key PYTHONPATH="$PWD/.cache/ctfd/run" \
   .cache/ctfd/venv/bin/python -m unittest discover -s integrations/ctfd/tests -v
-CTFD_E2E_PROBLEM_ID=sqli-demo bun run scripts/local-host/tests/ctfd-browser-e2e.ts
-CTFD_E2E_THEME=core-deprecated bun run scripts/local-host/tests/ctfd-browser-e2e.ts
 bun run typecheck:host
 make before-commit
 ```

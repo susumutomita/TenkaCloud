@@ -8,7 +8,7 @@
 
 ## Choose by the user's goal
 
-- [Local practice](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md): `make local` / `make down`, Docker requirements, and state-preserving stop/resume.
+- [Local practice](https://tenkacloud.com/docs/manual/organizer/index.en.html): `make local` / `make down`, Docker requirements, and state-preserving stop/resume.
 - [Host on AWS](https://tenkacloud.com/docs/manual/organizer/index.en.html): reviewed setup, current problem coverage, event/team operations, scoring and teardown.
 - [Cloud status and costs](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/README.md): restored CloudFormation and native cloud exercises, local-only Docker scope, retained resources, load measurements and cost limits.
 - [Join an existing event](https://tenkacloud.com/docs/manual/participant/index.en.html): use the organizer's Portal URL and team key; answer in the format requested by the problem.

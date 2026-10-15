@@ -50,7 +50,7 @@ export function readCatalogSelection(root: string): string {
         "No downloaded problem catalog is selected. Review catalog-sources.json, then run " +
           "`make catalog-download`; for another reviewed source file use " +
           "`make catalog-download CATALOG_SOURCES=my-catalogs.json`. Restart `make local`. " +
-          "See docs/problem-catalogs.md. Startup does not select or download a catalog automatically.",
+          "Startup does not select or download a catalog automatically.",
         { cause: error },
       );
     throw error;

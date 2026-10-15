@@ -115,9 +115,8 @@ interface EventHotTable {
  * その場合はこの role を **監視対象から外す** (= DescribeTable(TableName="") で fail するのを
  * 防ぐ)。dynamodb backend では従来どおり 5 role とも揃う。
  *
- * この並びは stack 側の `EventCapacityRunbook` 配線 (allowedValues + IAM) と
- * `docs/operations/dynamodb-event-capacity.md` の表と対応する。event-hot テーブルを増減する
- * ときは 3 箇所を揃えること。
+ * この並びは stack 側の `EventCapacityRunbook` 配線 (allowedValues + IAM) と対応する。
+ * event-hot テーブルを増減するときは 2 箇所を揃えること。
  */
 export function resolveEventHotTables(
   shared: Pick<

@@ -1,67 +1,86 @@
 import { expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { parse } from "yaml";
+import { join } from "node:path";
+import { stringify } from "yaml";
 import { downloadCatalog } from "../../problem-pack/downloaded-catalog";
 import { assertComposePolicy } from "../container/compose-policy";
 import { loadContainerProblem } from "../container/manifest";
-import { verifySubmission } from "../container/verify-client";
 import { DockerHostingEngine } from "../docker-engine";
 import { requiredNetworkValue } from "../local-network";
 import { normalizePublicServices } from "../network-publication";
 import { networkEngineFixture } from "./network-engine-fixture";
 
-const repository = resolve(import.meta.dirname, "../../..");
+const hardened = {
+  networks: ["lab"],
+  cap_drop: ["ALL"],
+  read_only: true,
+  security_opt: ["no-new-privileges:true"],
+  mem_limit: "128m",
+  cpus: 0.25,
+  pids_limit: 64,
+};
 
-test("reference verifier judges the platform submission envelope and refuses malformed bodies", async () => {
-  let payload = "";
-  await verifySubmission(
-    "http://127.0.0.1:18081/verify",
-    "synthetic-answer",
-    { teamId: "team", problemId: "team-console-lab" },
-    {
-      fetchImpl: async (_url, init) => {
-        payload = String(init.body);
-        return Response.json({ correct: false });
+function writeConsoleLab(catalogDir: string): string {
+  const directory = join(catalogDir, "challenges/team-console-lab");
+  mkdirSync(join(directory, "local"), { recursive: true });
+  writeFileSync(
+    join(directory, "metadata.json"),
+    JSON.stringify({
+      id: "team-console-lab",
+      name: "Team attack lab",
+      category: "Challenge",
+      status: "ready",
+      difficulty: 1,
+      estimatedDuration: "20m",
+      description: "A team attack container with an explicitly published Web service.",
+      shortDescription: "A team attack container and a published Web service.",
+      tags: ["network"],
+      learningGoals: ["Verify private-team and published-service boundaries"],
+      exposedPorts: [{ port: 18081, name: "Verifier (private controller only)" }],
+      runtime: {
+        provider: "docker",
+        engine: "compose",
+        entry: "local/docker-compose.yml",
+        verifyUrl: "http://127.0.0.1:18081/verify",
+        terminal: { service: "attack" },
+        publicServices: [
+          {
+            id: "web",
+            service: "web",
+            port: 8080,
+            purpose: "競技用 Web",
+            applicationProtocol: "http",
+          },
+        ],
       },
-    },
+      scoring: { kind: "verify", points: 100, wrongAnswerPenalty: 0, hints: [] },
+    }),
   );
-  const result = spawnSync(
-    "/usr/bin/python3",
-    [
-      "-c",
-      `
-import io, json, os, runpy, sys
-os.environ["FLAG_SEED"] = "synthetic-seed"
-sys.argv = ["service.py", "verifier"]
-scope = runpy.run_path(sys.argv_path)
-handler_type = scope["Handler"]
-envelope = json.loads(sys.stdin.read())
-assert envelope["submission"] == "synthetic-answer"
-for value, expected in [(dict(envelope, submission=scope["flag"]), True), (envelope, False), ([], None)]:
-    handler = object.__new__(handler_type)
-    encoded = json.dumps(value).encode()
-    handler.headers = {"Content-Length": str(len(encoded))}
-    handler.path = "/verify"
-    handler.rfile = io.BytesIO(encoded)
-    replies = []
-    handler.send = lambda payload, status=200: replies.append((payload, status))
-    handler.do_POST()
-    assert replies == [({"correct": expected}, 200)] if expected is not None else replies == [({"error": "invalid request"}, 400)]
-`.replace(
-        "scope = runpy.run_path(sys.argv_path)",
-        `scope = runpy.run_path(${JSON.stringify(join(repository, "packs/console-team-lab/challenges/team-console-lab/local/service.py"))})`,
-      ),
-    ],
-    { input: payload, encoding: "utf8" },
+  for (const readme of ["README.md", "README.ja.md"])
+    writeFileSync(join(directory, readme), "# Lab\n");
+  writeFileSync(join(directory, "local/Dockerfile"), "FROM scratch\n");
+  const build = (target: string) => ({ context: ".", dockerfile: "Dockerfile", target });
+  writeFileSync(
+    join(directory, "local/docker-compose.yml"),
+    stringify({
+      services: {
+        attack: { build: build("participant"), ...hardened },
+        web: { build: build("web"), ...hardened },
+        verifier: {
+          build: build("verifier"),
+          ...hardened,
+          networks: ["grading"],
+          ports: ["127.0.0.1:18081:8081"],
+        },
+      },
+      networks: { lab: { internal: true }, grading: { internal: true } },
+    }),
   );
-  expect(result.stderr).toBe("");
-  expect(result.status).toBe(0);
-});
+  return directory;
+}
 
-test("explicit immutable catalog acquisition loads the console lab through the normal schema and Compose policy", () => {
+test("explicit immutable catalog acquisition loads a console lab through the normal schema and Compose policy", () => {
   const root = mkdtempSync(join(tmpdir(), "tc-console-catalog-"));
   try {
     downloadCatalog(
@@ -70,18 +89,11 @@ test("explicit immutable catalog acquisition loads the console lab through the n
         schemaVersion: 1,
         sources: [{ url: "https://example.invalid/console.git", ref: "a".repeat(40) }],
       },
-      {
-        fetcher: (request) => {
-          cpSync(join(repository, "packs/console-team-lab"), request.destinationDir, {
-            recursive: true,
-          });
-        },
-      },
+      { fetcher: (request) => void writeConsoleLab(request.destinationDir) },
     );
     const engine = new DockerHostingEngine(root, join(root, "data"));
-    const catalog = engine.catalog();
-    expect(catalog.map((item) => item.problemId)).toEqual(["team-console-lab"]);
-    const directory = join(repository, "packs/console-team-lab/challenges/team-console-lab");
+    expect(engine.catalog().map((item) => item.problemId)).toEqual(["team-console-lab"]);
+    const directory = writeConsoleLab(join(root, "source"));
     const problem = loadContainerProblem(directory);
     expect(problem.terminal?.service).toBe("attack");
     expect(problem.publicServices).toEqual([
@@ -90,21 +102,6 @@ test("explicit immutable catalog acquisition loads the console lab through the n
     const composePath = join(directory, "local/docker-compose.yml");
     const text = readFileSync(composePath, "utf8");
     expect(() => assertComposePolicy(text, { problemDir: directory, composePath })).not.toThrow();
-    const compose = parse(text);
-    for (const service of Object.values(compose.services) as Record<string, unknown>[]) {
-      expect(service.cap_drop).toEqual(["ALL"]);
-      expect(service.read_only).toBe(true);
-      expect(service.privileged).toBeUndefined();
-      expect(service.network_mode).toBeUndefined();
-      expect(service.volumes).toBeUndefined();
-      expect(service.mem_limit).toBeDefined();
-      expect(service.cpus).toBeDefined();
-      expect(service.pids_limit).toBeDefined();
-    }
-    expect(compose.services.attack.ports).toBeUndefined();
-    expect(compose.services.web.ports).toBeUndefined();
-    expect(compose.services.db.ports).toBeUndefined();
-    expect(compose.networks.lab.internal).toBe(true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

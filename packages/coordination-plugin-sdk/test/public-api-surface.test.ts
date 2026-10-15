@@ -1,8 +1,8 @@
 /**
  * [#2216] Frozen public API surface for the coordination plugin SDK.
  *
- * The reference consumer (`packs/reference-coordination-battle`, #2195) uses these
- * exports, so they are public API rather than dead code. This test freezes the exact set of value exports —
+ * Coordination plugins in problem packs use these exports, so they are public API
+ * rather than dead code. This test freezes the exact set of value exports —
  * `runTick` / `defineCoordinationPlugin` were the ones flagged as consumer-zero in
  * #2216, and the adopt decision is to KEEP them. Adding an export is a minor
  * version (update the list below in the same PR); removing or renaming one is a

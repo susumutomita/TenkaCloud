@@ -27,7 +27,7 @@ by symptom. An AWS deployment is needed only when your change requires one.
 Build the host interfaces with `bun run build:host`, then run `make local
 LOCAL_ARGS="--no-build"`. Stop with `make down` to keep event and problem data. Docker is required only for Docker problem execution.
 Use `bun run test:host` for real HTTP/SQLite tests and `bun run test:authoring`
-for the retained pack tools. See [clean checkout verification](docs/host-build-verification.md).
+for the retained pack tools.
 The old mode-specific launchers are retired. Cloud hosting selectively reuses the
 serverless backend without SaaS/SBT and is still under integration verification.
 
@@ -40,8 +40,7 @@ The default `make help` separates hosting commands from these development comman
 
 The catalog section also lists `make catalog-download` (download explicitly selected sources),
 `make validate-problems` (validate the staged catalog pin) and `make build` (build
-artifacts without publishing). Follow the [local catalog update procedure](docs/local-hosting.md#update-the-problem-catalog)
-or [cloud catalog update procedure](infrastructure/README.md#update-the-problem-catalog)
+artifacts without publishing). Follow the [cloud catalog update procedure](infrastructure/README.md#update-the-problem-catalog)
 to apply reviewed changes between events.
 
 ## Make one reviewable change
