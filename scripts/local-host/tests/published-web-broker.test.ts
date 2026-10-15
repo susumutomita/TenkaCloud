@@ -112,8 +112,23 @@ async function fixture() {
     expect(response.status).toBe(200);
     return new URL(((await response.json()) as { url: string }).url);
   };
-  const call = (url: URL, headers: Record<string, string> = {}, method = "GET", body?: string) =>
-    callBroker(address, url, headers, method, body);
+  const call = (
+    url: URL,
+    headers: Record<string, string | undefined> = {},
+    method = "GET",
+    body?: string,
+  ) =>
+    callBroker(
+      address,
+      url,
+      Object.fromEntries(
+        Object.entries({ "sec-fetch-site": "same-origin", ...headers }).filter(
+          (entry): entry is [string, string] => entry[1] !== undefined,
+        ),
+      ),
+      method,
+      body,
+    );
   const session = async () => {
     const url = await ticket();
     const joined = await call(url);
@@ -177,6 +192,7 @@ test("established sessions follow only same-origin or direct navigations, not ot
     expect((await navigate("same-site")).status).toBe(403);
     expect((await navigate("same-origin")).status).toBe(200);
     expect((await navigate("none")).status).toBe(200);
+    expect((await f.call(url, { cookie, "sec-fetch-site": undefined })).status).toBe(403);
   } finally {
     await f.close();
   }

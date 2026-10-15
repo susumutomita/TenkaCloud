@@ -527,8 +527,8 @@ export class DockerHostingEngine implements RuntimeEngine {
       // compose text is the original creation plan, not the new checkout's file.
       const plan = this.plan(job, false, undefined, true);
       const unit = this.validatedUnit(job, plan.started.unit);
-      // A confirmed down follows a completed withdrawal; its bridges are gone, so a
-      // second withdrawal could only fail against absent networks.
+      // A confirmed down means the bridges are gone, so a withdrawal could only fail
+      // against absent networks; resume from guard removal.
       if (!down) {
         if (unit.isolationVersion === 1) await this.withdrawRuntimePublications(job);
         // Reconstruct only a missing file from the private pinned plan. A different

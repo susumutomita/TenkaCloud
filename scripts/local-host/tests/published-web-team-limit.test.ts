@@ -12,7 +12,7 @@ function callBroker(address: URL, url: URL, cookie: string) {
         hostname: address.hostname,
         port: address.port,
         path: url.pathname + url.search,
-        headers: { host: url.host, cookie },
+        headers: { host: url.host, cookie, "sec-fetch-site": "same-origin" },
       },
       (incoming) => {
         incoming.resume();

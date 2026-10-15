@@ -129,7 +129,7 @@ export class PublishedWebBroker {
     if (request.headers.origin && request.headers.origin !== grant.origin)
       throw new HostError(403, "Cross-origin challenge request denied.");
     const site = request.headers["sec-fetch-site"];
-    if (site !== undefined && site !== "same-origin" && site !== "none")
+    if (site !== "same-origin" && site !== "none")
       throw new HostError(403, "Cross-site challenge request denied.");
     return grant;
   }

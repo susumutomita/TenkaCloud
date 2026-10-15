@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { createServer, type Server } from "node:http";
-import { brotliCompressSync, gzipSync } from "node:zlib";
+import { gzipSync } from "node:zlib";
 import { directWebTransport } from "../direct-web-transport";
 
 const servers: Server[] = [];
@@ -9,9 +9,15 @@ afterEach(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-async function serve(encoding: string, body: Buffer): Promise<URL> {
-  const server = createServer((_request, response) => {
-    response.writeHead(200, { "content-type": "text/html", "content-encoding": encoding });
+async function serve(
+  respond: (acceptEncoding: string | undefined) => {
+    headers: Record<string, string>;
+    body: Buffer;
+  },
+): Promise<URL> {
+  const server = createServer((request, response) => {
+    const { headers, body } = respond(request.headers["accept-encoding"]);
+    response.writeHead(200, { "content-type": "text/html", ...headers });
     response.end(body);
   });
   servers.push(server);
@@ -21,24 +27,21 @@ async function serve(encoding: string, body: Buffer): Promise<URL> {
   return new URL(`http://127.0.0.1:${String(address.port)}/`);
 }
 
-test("precompressed published Web responses reach the proxy decoded", async () => {
-  for (const [encoding, body] of [
-    ["gzip", gzipSync("<h1>published</h1>")],
-    ["br", brotliCompressSync("<h1>published</h1>")],
-  ] as const) {
-    const response = await directWebTransport(await serve(encoding, body), { method: "GET" });
-    expect(await response.text()).toBe("<h1>published</h1>");
-    expect(response.headers.get("content-encoding")).toBeNull();
-  }
+test("published Web requests ask for an unencoded body and forward it unchanged", async () => {
+  const url = await serve((acceptEncoding) => ({
+    headers: {},
+    body: Buffer.from(`accept-encoding=${String(acceptEncoding)}`),
+  }));
+  const response = await directWebTransport(url, { method: "GET" });
+  expect(await response.text()).toBe("accept-encoding=identity");
 });
 
-test("unknown encodings and oversized decoded bodies are refused instead of forwarded", async () => {
-  await expect(
-    directWebTransport(await serve("compress", Buffer.from("x")), { method: "GET" }),
-  ).rejects.toThrow("Invalid published Web response.");
-  await expect(
-    directWebTransport(await serve("gzip", gzipSync(Buffer.alloc(3 * 1024 * 1024))), {
-      method: "GET",
-    }),
-  ).rejects.toThrow("Invalid published Web response.");
+test("an encoded body is refused instead of being decoded on the controller or forwarded garbled", async () => {
+  const url = await serve(() => ({
+    headers: { "content-encoding": "gzip" },
+    body: gzipSync("<h1>published</h1>"),
+  }));
+  await expect(directWebTransport(url, { method: "GET" })).rejects.toThrow(
+    "Invalid published Web response.",
+  );
 });
