@@ -1,6 +1,7 @@
 import { Worker } from "node:worker_threads";
 import type { RelayRequest, RelayTarget } from "./container/relay-target";
 import type { LocalNetworkPlan, LocalPublicEndpoint } from "./local-network";
+import { networkHookWorkerContext, releaseNetworkHookWorker } from "./network-hook-lock";
 
 interface WorkerQueue {
   active: number;
@@ -201,8 +202,9 @@ function runWorker<T>(
     const entry = import.meta.url.endsWith(".ts")
       ? new URL("./network-audit-worker.ts", import.meta.url)
       : new URL("./network-audit-worker.mjs", import.meta.url);
+    const hookLock = networkHookWorkerContext();
     const worker = new Worker(entry, {
-      workerData: { plan, mode, ...details },
+      workerData: { plan, mode, ...details, hookLock },
       resourceLimits: { maxOldGenerationSizeMb: 64 },
     });
     let settled = false;
@@ -210,7 +212,11 @@ function runWorker<T>(
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      void worker.terminate().then(() => (error ? reject(error) : resolve(value as T)), reject);
+      void worker.terminate().then(() => {
+        releaseNetworkHookWorker(hookLock);
+        if (error) reject(error);
+        else resolve(value as T);
+      }, reject);
     };
     const timeout = setTimeout(
       () => finish(new Error("Competition network audit timed out.")),

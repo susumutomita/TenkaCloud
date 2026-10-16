@@ -17,6 +17,7 @@ import {
   removeNetwork,
   stopNetwork,
 } from "./network-audit";
+import { withNetworkHookLock } from "./network-hook-lock";
 import { vpnAdmissionHook, vpnSealHook, workloadQuarantineHook } from "./vpn/firewall-scope";
 
 export interface LocalNetworkGuard {
@@ -468,21 +469,25 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         throw new Error(
           "A running unguarded workload must be halted before installing competition rules.",
         );
-      const body = [
-        "*filter",
-        `:${plan.inputChain} - [0:0]`,
-        `:${plan.forwardChain} - [0:0]`,
-        ...inputRules(plan, ipv6).map((rule) => `-A ${plan.inputChain} ${rule.join(" ")}`),
-        ...forwardRules(plan, ipv6).map((rule) => `-A ${plan.forwardChain} ${rule.join(" ")}`),
-        ...hooks(plan, ipv6).map((hook) => this.hookInsertion(plan, ipv6, hook.parent, hook.rule)),
-        "COMMIT",
-        "",
-      ].join("\n");
-      this.command(
-        ipv6 ? "ip6tables-restore" : "iptables-restore",
-        ["--wait", "5", "--noflush"],
-        body,
-      );
+      withNetworkHookLock(() => {
+        const body = [
+          "*filter",
+          `:${plan.inputChain} - [0:0]`,
+          `:${plan.forwardChain} - [0:0]`,
+          ...inputRules(plan, ipv6).map((rule) => `-A ${plan.inputChain} ${rule.join(" ")}`),
+          ...forwardRules(plan, ipv6).map((rule) => `-A ${plan.forwardChain} ${rule.join(" ")}`),
+          ...hooks(plan, ipv6).map((hook) =>
+            this.hookInsertion(plan, ipv6, hook.parent, hook.rule),
+          ),
+          "COMMIT",
+          "",
+        ].join("\n");
+        this.command(
+          ipv6 ? "ip6tables-restore" : "iptables-restore",
+          ["--wait", "5", "--noflush"],
+          body,
+        );
+      });
       this.verifyFamily(plan, ipv6);
     }
   }
@@ -500,22 +505,24 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         ]).trim()
       )
         throw error;
-      const missing = hooks(plan, ipv6).filter(
-        ({ parent, rule }) =>
-          !lines(this.firewall(ipv6, ["-S", parent])).includes(`-A ${parent} ${rule.join(" ")}`),
-      );
-      if (!missing.length) throw error;
-      const body = [
-        "*filter",
-        ...missing.map(({ parent, rule }) => this.hookInsertion(plan, ipv6, parent, rule)),
-        "COMMIT",
-        "",
-      ].join("\n");
-      this.command(
-        ipv6 ? "ip6tables-restore" : "iptables-restore",
-        ["--wait", "5", "--noflush"],
-        body,
-      );
+      withNetworkHookLock(() => {
+        const missing = hooks(plan, ipv6).filter(
+          ({ parent, rule }) =>
+            !lines(this.firewall(ipv6, ["-S", parent])).includes(`-A ${parent} ${rule.join(" ")}`),
+        );
+        if (!missing.length) throw error;
+        const body = [
+          "*filter",
+          ...missing.map(({ parent, rule }) => this.hookInsertion(plan, ipv6, parent, rule)),
+          "COMMIT",
+          "",
+        ].join("\n");
+        this.command(
+          ipv6 ? "ip6tables-restore" : "iptables-restore",
+          ["--wait", "5", "--noflush"],
+          body,
+        );
+      });
       this.verifyFamily(plan, ipv6);
     }
   }
@@ -1025,6 +1032,9 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     return `-I ${parent} ${prefix + count + 1} ${rule.join(" ")}`;
   }
   quarantine(plan: LocalNetworkPlan): void {
+    withNetworkHookLock(() => this.quarantineLocked(plan));
+  }
+  private quarantineLocked(plan: LocalNetworkPlan): void {
     this.assertEmergencyScope(plan);
     const failures: unknown[] = [];
     for (const ipv6 of [false, true]) {
@@ -1165,6 +1175,9 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     }
   }
   private removeQuarantine(plan: LocalNetworkPlan): void {
+    withNetworkHookLock(() => this.removeQuarantineLocked(plan));
+  }
+  private removeQuarantineLocked(plan: LocalNetworkPlan): void {
     for (const ipv6 of [false, true])
       for (const { parent, rule } of quarantineHooks(plan, ipv6)) {
         const matches = () =>
@@ -1238,23 +1251,25 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       )
     )
       throw new Error("Competition network still exists; guard and ownership were retained.");
-    this.removeQuarantine(plan);
-    for (const ipv6 of [false, true]) {
-      const inventory = lines(this.firewall(ipv6, ["-S"]));
-      const chains = [plan.inputChain, plan.forwardChain].filter((chain) =>
-        inventory.includes(`-N ${chain}`),
-      );
-      for (const chain of chains) {
-        this.firewall(ipv6, ["-C", chain, "-m", "comment", "--comment", plan.owner]);
-        for (const hook of hooks(plan, ipv6).filter((entry) => entry.rule.at(-1) === chain)) {
-          const parent = lines(this.firewall(ipv6, ["-S", hook.parent]));
-          if (parent.includes(`-A ${hook.parent} ${hook.rule.join(" ")}`))
-            this.firewall(ipv6, ["-D", hook.parent, ...hook.rule]);
+    withNetworkHookLock(() => {
+      this.removeQuarantine(plan);
+      for (const ipv6 of [false, true]) {
+        const inventory = lines(this.firewall(ipv6, ["-S"]));
+        const chains = [plan.inputChain, plan.forwardChain].filter((chain) =>
+          inventory.includes(`-N ${chain}`),
+        );
+        for (const chain of chains) {
+          this.firewall(ipv6, ["-C", chain, "-m", "comment", "--comment", plan.owner]);
+          for (const hook of hooks(plan, ipv6).filter((entry) => entry.rule.at(-1) === chain)) {
+            const parent = lines(this.firewall(ipv6, ["-S", hook.parent]));
+            if (parent.includes(`-A ${hook.parent} ${hook.rule.join(" ")}`))
+              this.firewall(ipv6, ["-D", hook.parent, ...hook.rule]);
+          }
+          this.firewall(ipv6, ["-F", chain]);
+          this.firewall(ipv6, ["-X", chain]);
         }
-        this.firewall(ipv6, ["-F", chain]);
-        this.firewall(ipv6, ["-X", chain]);
       }
-    }
+    });
   }
 }
 

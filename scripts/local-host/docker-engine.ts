@@ -470,6 +470,9 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
 
   async recover(job: Job): Promise<void> {
+    return this.withRetainedAdmission(job, () => this.recoverRetained(job));
+  }
+  private async recoverRetained(job: Job): Promise<void> {
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
     const recorded = this.recordedUnit(job);
@@ -482,7 +485,7 @@ export class DockerHostingEngine implements RuntimeEngine {
         this.networkReservations.set(job.jobId, Object.values(unit.networkSubnets));
       if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
         throw new Error("Recorded runtime composition changed; refusing to adopt it.");
-      await this.assertGuardedAdmission(job, unit);
+      await this.admitRetainedGuard(job, unit);
       if (!isComposeUnitRunning(unit))
         throw new Error(
           "The recorded problem environment is not running. Retry deployment from the host console.",
@@ -1159,7 +1162,10 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   /** A recovering runtime stays COMPLETE in the ledger, so publication batches wait for this. */
   private async assertGuardedAdmission(job: Job, unit: LocalComposeUnit): Promise<void> {
-    const admission = this.admitRetainedGuard(job, unit);
+    return this.withRetainedAdmission(job, () => this.admitRetainedGuard(job, unit));
+  }
+  private async withRetainedAdmission(job: Job, run: () => Promise<void>): Promise<void> {
+    const admission = Promise.resolve().then(run);
     this.pendingAdmissions.set(job.jobId, admission);
     try {
       await admission;
