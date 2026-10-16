@@ -148,7 +148,7 @@ it("does not offer reopening a settled native match", () => {
     detail: detail({
       status: "ENDED",
       scoringLocked: true,
-      nativeRuns: [{ runId: "r1", problemId: "ac26-crypto-battle", status: "CLOSED", revision: 8 }],
+      nativeRuns: [{ runId: "r1", problemId: "crypto-battle", status: "CLOSED", revision: 8 }],
     }),
   });
   expect(queryBtn("event_detail.scoring_unlock")).not.toBeInTheDocument();

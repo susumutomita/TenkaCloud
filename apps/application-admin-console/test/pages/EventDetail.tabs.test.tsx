@@ -176,14 +176,14 @@ describe("EventDetailPage #1318 tabs", () => {
       mocks.getEvent.mockResolvedValueOnce({
         ...baseDetail,
         status: status === "CLOSED" ? "ENDED" : "READY",
-        problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "ap-northeast-1" }],
+        problems: [{ problemId: "crypto-battle", defaultRegion: "ap-northeast-1" }],
         deploymentsByProblem: {},
         nativeRuns: [
-          { runId: "persisted-native-run", problemId: "ac26-crypto-battle", status, revision: 2 },
+          { runId: "persisted-native-run", problemId: "crypto-battle", status, revision: 2 },
         ],
       });
       window.history.replaceState(null, "", `${window.location.pathname}#tab=problems`);
-      renderPage(undefined, { mode: "cloud-host", nativeProblemIds: ["ac26-crypto-battle"] });
+      renderPage(undefined, { mode: "cloud-host", nativeProblemIds: ["crypto-battle"] });
       expect(await screen.findByText("persisted-native-run")).toBeInTheDocument();
       expect(
         screen.getByText(
@@ -197,11 +197,11 @@ describe("EventDetailPage #1318 tabs", () => {
   it("shows native initialization separately before a run exists", async () => {
     mocks.getEvent.mockResolvedValueOnce({
       ...baseDetail,
-      problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "ap-northeast-1" }],
+      problems: [{ problemId: "crypto-battle", defaultRegion: "ap-northeast-1" }],
       nativeRuns: [],
     });
     window.history.replaceState(null, "", `${window.location.pathname}#tab=problems`);
-    renderPage(undefined, { mode: "cloud-host", nativeProblemIds: ["ac26-crypto-battle"] });
+    renderPage(undefined, { mode: "cloud-host", nativeProblemIds: ["crypto-battle"] });
     expect(await screen.findByText("未初期化（TenkaCloud 内）")).toBeInTheDocument();
   });
   it("should keep TEARDOWN rescue Force ARCHIVED button accessible (Operations tab)", async () => {

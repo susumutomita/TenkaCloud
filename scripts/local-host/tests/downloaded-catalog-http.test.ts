@@ -28,7 +28,7 @@ test("downloaded A/B/A+B native catalogs, answers and saved event metadata survi
   const root = mkdtempSync(join(tmpdir(), "downloaded-catalog-http-"));
   symlinkSync(join(repository, "node_modules"), join(root, "node_modules"), "dir");
   const fetcher: GitArchiveFetcher = (request) => {
-    const id = request.repositoryUrl.endsWith("pack-a.git") ? "forensic-casebook" : "pi-siege";
+    const id = request.repositoryUrl.endsWith("pack-a.git") ? "forensic-casebook" : "crypto-battle";
     mkdirSync(join(request.destinationDir, "battles"));
     const directory = join(request.destinationDir, "battles", id);
     cpSync(join(repository, "problems/battles", id), directory, { recursive: true });
@@ -40,10 +40,10 @@ test("downloaded A/B/A+B native catalogs, answers and saved event metadata survi
   try {
     for (const [packs, expected] of [
       [["pack-a"], ["forensic-casebook"]],
-      [["pack-b"], ["pi-siege"]],
+      [["pack-b"], ["crypto-battle"]],
       [
         ["pack-a", "pack-b"],
-        ["forensic-casebook", "pi-siege"],
+        ["forensic-casebook", "crypto-battle"],
       ],
     ] as const) {
       downloadCatalog(root, config([...packs]), { fetcher });

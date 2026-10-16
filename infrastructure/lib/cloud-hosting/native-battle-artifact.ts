@@ -7,11 +7,11 @@ import { repositoryArtifactFile } from "./execution-artifact-path.js";
 
 /** Build da2's reviewed pure plugin closure; the optional AWS variant has separate source bytes. */
 export function nativeBattleArtifact(repositoryRoot: string) {
-  const problemDir = "problems/battles/ac26-crypto-battle";
+  const problemDir = "problems/battles/crypto-battle";
   const entry = `${problemDir}/coordination/crypto-battle.ts`;
   const metadata = z
     .object({
-      id: z.literal("ac26-crypto-battle"),
+      id: z.literal("crypto-battle"),
       name: z.string(),
       description: z.string(),
       instructions: z.string(),

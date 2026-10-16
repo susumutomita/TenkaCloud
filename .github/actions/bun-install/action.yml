@@ -40,4 +40,4 @@ runs:
 
     - name: Download and prepare the explicit catalog selection
       shell: bash
-      run: make catalog-download catalog-prepare
+      run: make catalog-download catalog-verify-lock catalog-prepare

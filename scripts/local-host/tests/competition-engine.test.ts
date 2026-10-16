@@ -14,11 +14,11 @@ test("SQL awards and hint costs preserve Battle points and never pass Battle job
   const engine = new CompetitionEngine(fileURLToPath(new URL("../../../", import.meta.url)), data);
   const selected = engine
     .catalog()
-    .filter((problem) => ["sqli-demo", "ac26-crypto-battle"].includes(problem.problemId));
+    .filter((problem) => ["sqli-demo", "crypto-battle"].includes(problem.problemId));
   const at = "2026-09-27T00:00:00.000Z";
   const battle: ScoreEvent = {
     jobId: "battle-job",
-    problemId: "ac26-crypto-battle",
+    problemId: "crypto-battle",
     source: "coordination",
     points: 30,
     result: "ok",

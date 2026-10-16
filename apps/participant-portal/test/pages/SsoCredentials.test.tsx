@@ -82,7 +82,7 @@ describe("SsoCredentialsPage render branches", () => {
         problems: [
           {
             jobId: "native-run",
-            problemId: "ac26-crypto-battle",
+            problemId: "crypto-battle",
             runtimeKind: "coordination",
             coordination: true,
             accessCapabilities: [],
@@ -93,7 +93,7 @@ describe("SsoCredentialsPage render branches", () => {
     });
     renderPage();
     expect(screen.getByText("sso_credentials.empty_problems")).toBeInTheDocument();
-    expect(screen.queryByText("ac26-crypto-battle")).not.toBeInTheDocument();
+    expect(screen.queryByText("crypto-battle")).not.toBeInTheDocument();
     expect(screen.queryByText("sso_credentials.label_aws_account")).not.toBeInTheDocument();
     expect(screen.queryByTestId("cli-native-run")).not.toBeInTheDocument();
   });

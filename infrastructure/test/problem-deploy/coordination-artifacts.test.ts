@@ -24,7 +24,7 @@ import {
 /**
  * [Issue #3152] Immutable submissions move out of the state row.
  *
- * Two thirds of `ac26-crypto-battle`'s 99-team row is material nothing will ever
+ * Two thirds of `crypto-battle`'s 99-team row is material nothing will ever
  * edit — proofs, leaked shares, transcripts — and every operation pays for it,
  * because the row is read, modified and written whole.
  *

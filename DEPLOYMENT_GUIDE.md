@@ -76,8 +76,8 @@ Create a test event and team, prepare a supported problem, sign in to the
 participant portal, submit an answer and verify its score. The current cloud
 backend restores generic CloudFormation deployment, flag/multi-flag and scheduled
 scoring, Console/CLI access and native coordination. Docker/Compose exercises require
-local hosting. Nine current templates exceed the 51,200-byte TemplateBody limit;
-TemplateURL is not implemented, so those problems are not verified deployable.
+local hosting. All eight current templates fit within the 51,200-byte TemplateBody limit;
+TemplateURL is not implemented. Template size alone does not establish live deployment verification.
 
 ## Stop and remove resources
 

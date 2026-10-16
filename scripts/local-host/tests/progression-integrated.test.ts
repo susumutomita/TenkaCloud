@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 const config = {
   gateProblemId: "hello-world",
-  unlockTargetIds: ["ac26-crypto-battle"],
+  unlockTargetIds: ["crypto-battle"],
   defaultPolicy: "required",
   completionBonus: 50,
 };

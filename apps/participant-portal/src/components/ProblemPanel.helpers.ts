@@ -453,7 +453,7 @@ export function shouldShowContainerTerminal(problem: ParticipantProblemView): bo
  * The name a participant should see for a problem.
  *
  * [Issue #3171] The last resort used to be `problemId`, and on live that is what
- * a participant got: a card headed `ac26-crypto-battle` sitting under a page
+ * a participant got: a card headed `crypto-battle` sitting under a page
  * titled 「PROVE / LEAK / HUNT — 暗号リアルタイム判断 Battle」, two names for one
  * problem on one screen, one of them an internal identifier.
  *

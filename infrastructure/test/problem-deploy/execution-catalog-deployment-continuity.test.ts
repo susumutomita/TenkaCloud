@@ -317,16 +317,16 @@ describe("saved job retry", () => {
   });
 });
 
-const NATIVE_ID = "ac26-crypto-battle";
+const NATIVE_ID = "crypto-battle";
 function nativeCatalog(): ResolvedExecutionCatalog {
   return {
     ...A,
-    catalog: { [NATIVE_ID]: "problems/battles/ac26-crypto-battle" },
+    catalog: { [NATIVE_ID]: "problems/battles/crypto-battle" },
     nativeProblems: [
       {
         kind: "coordination",
         problemId: NATIVE_ID,
-        problemDir: "problems/battles/ac26-crypto-battle",
+        problemDir: "problems/battles/crypto-battle",
         artifactDigest: "a".repeat(64),
         pluginKey: `plugins/${"a".repeat(64)}.mjs`,
         stateBudget: { bytesPerTeam: 1, baseBytes: 0 },

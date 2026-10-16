@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadDockerCatalog } from "../docker-catalog";
+import { dockerProblemIds } from "./problem-tree";
 
 // Docker's shared scorer retains negative penalties. AWS problems with explicit
 // score floors have a separate policy and are deliberately outside this check.
@@ -14,7 +15,7 @@ const falseZeroFloor = [
 test("the pinned Docker instructions do not promise a zero floor absent from their scorer", () => {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const catalog = loadDockerCatalog(root);
-  expect(catalog).toHaveLength(106);
+  expect(catalog.map((entry) => entry.problemId).sort()).toEqual(dockerProblemIds(root).sort());
   const mismatches: string[] = [];
   for (const entry of catalog) {
     const definition = JSON.parse(entry.definition) as { problem: { problemDir: string } };

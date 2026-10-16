@@ -22,14 +22,10 @@ import { createTemporaryDirectory, removeTemporaryDirectory } from "../temporary
 import { bootstrapOrganizer } from "./organizer-fixture";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const FIRST = "db-a1-table-primary-key";
-const NEXT = "db-a2-index-tradeoff";
-const UNASSIGNED = "db-a3-query-plan";
-const CHECKPOINTS = [
-  "members-table-has-primary-key",
-  "members-rows-loaded",
-  "duplicate-insert-rejected",
-];
+const FIRST = "stackstack-onboarding";
+const NEXT = "wp-exposed-backup";
+const UNASSIGNED = "stackstack-ship";
+const CHECKPOINTS = ["board-open", "log-trail", "board-open-for-posts", "handover"];
 const NOW = Date.parse("2026-10-01T00:00:00Z");
 
 test("local HTTP/SQLite and safe catalog project assigned course checkpoints, gates and restart", async () => {
@@ -116,7 +112,7 @@ test("local HTTP/SQLite and safe catalog project assigned course checkpoints, ga
       assert.equal(tracks.length, 1);
       const track = tracks[0];
       assert.ok(track);
-      assert.equal(track.trackId, "database-track");
+      assert.equal(track.trackId, "stackstack-route");
       assert.deepEqual(
         track.chapters.flatMap((chapter) => chapter.problems.map((problem) => problem.problemId)),
         [FIRST, NEXT],
@@ -170,7 +166,7 @@ test("local HTTP/SQLite and safe catalog project assigned course checkpoints, ga
     assert.equal((await projected(alpha.teamLoginKey)).track.solvedCheckpoints, 1);
     saveCheckpoints(CHECKPOINTS);
     const solved = await projected(alpha.teamLoginKey);
-    assert.equal(solved.track.solvedCheckpoints, 3);
+    assert.equal(solved.track.solvedCheckpoints, CHECKPOINTS.length);
     assert.equal(solved.track.solvedProblems, 1);
     assert.equal(solved.track.recommendedNext?.problemId, NEXT);
     assert.deepEqual(solved.view.progression?.lockedProblemIds, []);
@@ -189,7 +185,7 @@ test("local HTTP/SQLite and safe catalog project assigned course checkpoints, ga
     await service.recover();
     await start();
     const persisted = await projected(alpha.teamLoginKey);
-    assert.equal(persisted.track.solvedCheckpoints, 3);
+    assert.equal(persisted.track.solvedCheckpoints, CHECKPOINTS.length);
     assert.equal(persisted.track.recommendedNext?.problemId, NEXT);
     assert.deepEqual(persisted.view.progression?.lockedProblemIds, []);
   } finally {

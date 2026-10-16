@@ -250,7 +250,7 @@ app.get("/portal/me/coordination/projection", (c) =>
  * Separate from the projection on purpose. The projection is polled constantly
  * and carries references only, which is what keeps a poll from turning into N
  * object reads; the body is fetched at the moment a participant acts on it —
- * `ac26-crypto-battle`'s HUNT reads the shares it is actually hunting.
+ * `crypto-battle`'s HUNT reads the shares it is actually hunting.
  *
  * Authorized by that same projection: if the reference is on your board you may
  * read what it points at, and if it is not, the artifact does not exist as far

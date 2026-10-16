@@ -14,8 +14,9 @@ const pluginSchema = z
 export const nativeArtifactSchema = z
   .object({
     kind: z.literal("coordination"),
-    problemId: z.literal("ac26-crypto-battle"),
-    problemDir: z.literal("problems/battles/ac26-crypto-battle"),
+    // Catalogs pinned by events before the battle was renamed keep its old identity.
+    problemId: z.enum(["crypto-battle", "ac26-crypto-battle"]),
+    problemDir: z.enum(["problems/battles/crypto-battle", "problems/battles/ac26-crypto-battle"]),
     artifactDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     pluginKey: z.string().regex(/^plugins\/[a-f0-9]{64}\.mjs$/u),
     stateBudget: z
@@ -41,7 +42,10 @@ export const nativeArtifactSchema = z
       .strict()
       .optional(),
   })
-  .strict();
+  .strict()
+  .refine((native) => native.problemDir === `problems/battles/${native.problemId}`, {
+    message: "Native problem directory must match its identity.",
+  });
 export const executionCatalogSchema = z
   .object({
     version: z.literal(1),

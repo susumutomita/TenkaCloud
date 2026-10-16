@@ -431,7 +431,7 @@ describe("EventDangerZone teardown modal copy (local hosting vs SaaS)", () => {
         detail: {
           ...twoTeamsOneProblem,
           nativeRuns: [
-            { runId: "run-1", problemId: "ac26-crypto-battle", status: "CLOSED", revision: 3 },
+            { runId: "run-1", problemId: "crypto-battle", status: "CLOSED", revision: 3 },
           ],
         },
         teardown: { open: true },

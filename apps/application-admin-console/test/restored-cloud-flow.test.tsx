@@ -219,7 +219,7 @@ describe("restored cloud SPA with synthetic HTTP", () => {
     wrapper.findAllInputs()[0]?.setInputValue("Restored cloud event");
     const problems = problemPicker(container);
     expect(problems?.findOptionByValue("hello-world-battle")).not.toBeNull();
-    expect(problems?.findOptionByValue("ac26-crypto-battle")).not.toBeNull();
+    expect(problems?.findOptionByValue("crypto-battle")).not.toBeNull();
     expect(problems?.findOptionByValue("db-battle-slow-apparently")).toBeNull();
     problems?.toggleProblem("hello-world-battle");
     for (const [index, region] of ["ap-northeast-1", "us-east-1"].entries()) {

@@ -373,7 +373,7 @@ describe("ProblemPanel pure helpers", () => {
     expect(resolveProblemTitle(p({ name: "Hello World" }))).toBe("Hello World");
 
     // [Issue #3171] A blank name used to fall straight to the id, which is how
-    // a participant ended up looking at a card headed `ac26-crypto-battle`. The
+    // a participant ended up looking at a card headed `crypto-battle`. The
     // catalog knows this problem's name, so it is used before giving up.
     const catalogName = findProblemMetadata("hello-world")?.name;
     if (!catalogName) throw new Error("fixture: hello-world is expected in the bundled catalog");

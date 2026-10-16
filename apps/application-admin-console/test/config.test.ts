@@ -421,13 +421,13 @@ describe("loadConfig", () => {
       async (mode) => {
         const loaded = await loadWithRuntime({
           mode,
-          supportedProblemIds: ["hello-world", "ac26-crypto-battle"],
-          nativeProblemIds: ["ac26-crypto-battle"],
+          supportedProblemIds: ["hello-world", "crypto-battle"],
+          nativeProblemIds: ["crypto-battle"],
         });
         expect(loaded.mode).toBe(mode);
-        expect(loaded.supportedProblemIds).toEqual(["hello-world", "ac26-crypto-battle"]);
+        expect(loaded.supportedProblemIds).toEqual(["hello-world", "crypto-battle"]);
         expect(Object.isFrozen(loaded.supportedProblemIds)).toBe(true);
-        expect(loaded.nativeProblemIds).toEqual(["ac26-crypto-battle"]);
+        expect(loaded.nativeProblemIds).toEqual(["crypto-battle"]);
         expect(Object.isFrozen(loaded.nativeProblemIds)).toBe(true);
         expect(
           (await loadWithRuntime({ mode, supportedProblemIds: ["hello-world"] })).nativeProblemIds,
@@ -436,8 +436,8 @@ describe("loadConfig", () => {
     );
     it("preserves restored cloud features alongside execution capabilities", async () => {
       const loaded = await loadWithRuntime({
-        supportedProblemIds: ["ac26-crypto-battle"],
-        nativeProblemIds: ["ac26-crypto-battle"],
+        supportedProblemIds: ["crypto-battle"],
+        nativeProblemIds: ["crypto-battle"],
         features: { redTeam: true, samlSso: true },
       });
       expect(loaded.mode).toBeUndefined();
@@ -448,9 +448,9 @@ describe("loadConfig", () => {
       { supportedProblemIds: null },
       { supportedProblemIds: ["hello-world", "hello-world"] },
       { supportedProblemIds: ["../escape"] },
-      { nativeProblemIds: ["ac26-crypto-battle"] },
-      { supportedProblemIds: [], nativeProblemIds: ["ac26-crypto-battle"] },
-      { supportedProblemIds: ["ac26-crypto-battle"], nativeProblemIds: null },
+      { nativeProblemIds: ["crypto-battle"] },
+      { supportedProblemIds: [], nativeProblemIds: ["crypto-battle"] },
+      { supportedProblemIds: ["crypto-battle"], nativeProblemIds: null },
     ])("rejects invalid restored cloud capabilities %j", async (capabilities) => {
       await expect(loadWithRuntime(capabilities)).rejects.toThrow();
     });

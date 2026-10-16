@@ -10,6 +10,7 @@ import {
   parseDockerNetworkPool,
 } from "../docker-networks";
 import { parseOptions } from "../options";
+import { dockerProblemIds } from "./problem-tree";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 // eslint-disable-next-line sonarjs/no-hardcoded-ip -- RFC1918 synthetic allocation vectors; no network calls
@@ -79,9 +80,9 @@ test("retained allocations cannot change network names, overlap, use public addr
   ).toThrow("project-owned");
 });
 
-test("all 106 catalog definitions fit compact networks without changing service configuration", () => {
+test("every catalog definition fits compact networks without changing service configuration", () => {
   const catalog = loadDockerCatalog(root);
-  expect(catalog).toHaveLength(106);
+  expect(catalog.map((problem) => problem.problemId).sort()).toEqual(dockerProblemIds(root).sort());
   const retained: string[] = [];
   for (const problem of catalog) {
     const { composeText } = JSON.parse(problem.definition);
@@ -95,10 +96,11 @@ test("all 106 catalog definitions fit compact networks without changing service 
   expect(new Set(retained).size).toBe(retained.length);
 });
 
-test("20 problems × 5 teams can retain every private network without launching containers", () => {
-  const catalog = loadDockerCatalog(root).slice(0, 20);
+test("5 problems × 20 teams can retain every private network without launching containers", () => {
+  const catalog = loadDockerCatalog(root).slice(0, 5);
+  expect(catalog).toHaveLength(5);
   const retained: string[] = [];
-  for (let team = 0; team < 5; team++)
+  for (let team = 0; team < 20; team++)
     for (const problem of catalog) {
       const { composeText } = JSON.parse(problem.definition);
       retained.push(...Object.values(allocateNetworkSubnets(composeText, POOL, retained)));

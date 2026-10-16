@@ -182,8 +182,8 @@ it("does not report missing cloud history as zero solved problems or zero averag
       teams,
       scoreEventsByTeam: scores,
       scoreHistoryAvailable: false,
-      problems: [{ problemId: "ac26-crypto-battle", defaultRegion: "ap-northeast-1" }],
-      nativeRuns: [{ runId: "r1", problemId: "ac26-crypto-battle", revision: 5, status: "CLOSED" }],
+      problems: [{ problemId: "crypto-battle", defaultRegion: "ap-northeast-1" }],
+      nativeRuns: [{ runId: "r1", problemId: "crypto-battle", revision: 5, status: "CLOSED" }],
     }),
   );
   expect(breakdown[0]).toMatchObject({ defaultRegion: "—", solvedCount: null, avgScore: null });

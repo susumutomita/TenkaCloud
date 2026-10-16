@@ -3,6 +3,8 @@
  */
 export const LOCAL_COORDINATION_STATE_LIMIT = 2 * 1024 * 1024;
 export const reviewedCoordinationBattles = [
+  { problemId: "crypto-battle" },
+  // Retained editions of events created before the catalog renamed this battle.
   { problemId: "ac26-crypto-battle" },
   { problemId: "forensic-casebook" },
   { problemId: "pi-siege", requiredTeams: 2 },

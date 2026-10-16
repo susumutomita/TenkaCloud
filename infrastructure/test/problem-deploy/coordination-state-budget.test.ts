@@ -98,7 +98,7 @@ describe("coordinationStateBudget (#3151)", () => {
   it("should give the SQL backend a ceiling that clears the platform's own worst case", () => {
     const budget = coordinationStateBudget({ kind: "pure" });
     expect(budget.backend).toBe("pure");
-    // `ac26-crypto-battle` measures 1.62 MB at the platform's maximum roster
+    // `crypto-battle` measures 1.62 MB at the platform's maximum roster
     // (99 teams). A Turso ceiling below that would forbid a match the backend
     // can serve perfectly well, which the issue calls out by name.
     expect(budget.maxBytes).toBeGreaterThan(1.62 * 1024 * 1024);
