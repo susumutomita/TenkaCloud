@@ -8,6 +8,10 @@ if (workerData.crash) {
   // Model an abruptly terminated native worker that cannot execute its finally block.
   Atomics.store(new Int32Array(workerData.hookLock.buffer), 0, workerData.hookLock.owner);
   parentPort?.postMessage("held");
+  if (workerData.crashDelay) {
+    Atomics.wait(new Int32Array(workerData.trace), 0, 0, workerData.crashDelay);
+    throw new Error("Synthetic worker crash while holding native ownership.");
+  }
 } else if (workerData.inspect) {
   const guard = new LinuxNetworkGuard();
   Reflect.set(guard, "preflight", () => {
