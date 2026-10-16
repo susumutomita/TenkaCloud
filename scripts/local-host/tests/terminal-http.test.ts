@@ -278,3 +278,44 @@ test("peer admission binds HTTP credentials and rechecks an open terminal withou
     await f.close();
   }
 });
+
+test("six PTY sessions resize independently and reconnect with a fresh single-use ticket", async () => {
+  const f = await terminalFixture(6);
+  f.hooks.pty = true;
+  const teams = [f.a, f.b, ...f.extras];
+  try {
+    const clients = [];
+    for (const { team } of teams)
+      clients.push(await connect(f.participant.origin, await f.ticket(team.loginKey)));
+    await waitUntil(() => f.shells.length === 6);
+    for (let index = 0; index < clients.length; index++) {
+      clients[index]?.socket.send(
+        JSON.stringify({ type: "resize", cols: 90 + index, rows: 30 + index }),
+      );
+      clients[index]?.socket.send(JSON.stringify({ type: "input", data: `team-${index}\r` }));
+    }
+    await waitUntil(() =>
+      f.shells.every((shell) => shell.resizes.length === 1 && shell.writes.length === 1),
+    );
+    for (let index = 0; index < teams.length; index++) {
+      expect(f.shells[index]?.job.teamId).toBe(teams[index]?.team.teamId);
+      expect(f.shells[index]?.resizes).toEqual([{ cols: 90 + index, rows: 30 + index }]);
+      expect(f.shells[index]?.writes).toEqual([`team-${index}\r`]);
+    }
+    clients[0]?.socket.close();
+    await clients[0]?.closed;
+    await waitUntil(() => f.shells[0]?.kills === 1);
+    expect(f.shells.slice(1).every((shell) => shell.kills === 0)).toBe(true);
+    const ticket = await f.ticket();
+    const reconnected = await connect(f.participant.origin, ticket);
+    await waitUntil(() => f.shells.length === 7);
+    reconnected.socket.send(JSON.stringify({ type: "resize", cols: 120, rows: 42 }));
+    await waitUntil(() => f.shells[6]?.resizes.length === 1);
+    expect(f.shells[6]?.job.jobId).toBe(f.a.job.jobId);
+    expect(f.shells[0]?.resizes).toEqual([{ cols: 90, rows: 30 }]);
+    expect(f.shells[0]?.kills).toBe(1);
+    await expect(connect(f.participant.origin, ticket)).rejects.toThrow();
+  } finally {
+    await f.close();
+  }
+});

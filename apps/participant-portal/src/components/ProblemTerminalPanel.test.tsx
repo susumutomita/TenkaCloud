@@ -14,6 +14,10 @@ import { ProblemTerminalPanel } from "./ProblemTerminalPanel";
  * (xterm.js 等は使わない、 素の pre/input なので DOM 上の役割で拾える)。
  */
 
+vi.mock("./ProblemPtyTerminal", () => ({
+  ProblemPtyTerminal: () => <section aria-label="Interactive terminal">PTY</section>,
+}));
+
 const apiMocks = vi.hoisted(() => ({
   issueProblemTerminalHandoff: vi.fn(),
 }));
@@ -424,3 +428,26 @@ function fireComposingEnter(input: HTMLElement): void {
   Object.defineProperty(event, "isComposing", { value: true });
   input.dispatchEvent(event);
 }
+
+it("uses the interactive terminal after broker capability admission and resets it for a fresh ticket", async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const ws = await connectAndOpen(user);
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "ready", mode: "pty" }) }));
+  expect(await screen.findByRole("region", { name: "Interactive terminal" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  expect(ws.closeCalls).toBe(1);
+  await connectAndOpen(user, "fresh-ticket");
+  expect(FakeWebSocket.instances[1]?.url).toContain("ticket=fresh-ticket");
+  expect(screen.queryByRole("region", { name: "Interactive terminal" })).not.toBeInTheDocument();
+});
+it("retains the line console and reports its capability on Node hosts", async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const ws = await connectAndOpen(user);
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "ready", mode: "pipe" }) }));
+  expect(screen.getByText(/This host provides a line console/u)).toBeInTheDocument();
+  expect(screen.getByRole("textbox")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+});

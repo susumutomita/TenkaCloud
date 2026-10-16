@@ -17,8 +17,14 @@ export async function terminalFixture(
 ) {
   const store = new HostStore(new Database(":memory:"));
   let clock = Date.parse("2026-10-01T00:00:00Z");
-  const shells: { job: Job; writes: string[]; kills: number; handlers: TerminalHandlers }[] = [];
-  const hooks: { beforeOpen?: () => Promise<void> } = {};
+  const shells: {
+    job: Job;
+    writes: string[];
+    resizes: { cols: number; rows: number }[];
+    kills: number;
+    handlers: TerminalHandlers;
+  }[] = [];
+  const hooks: { beforeOpen?: () => Promise<void>; pty?: boolean; closed?: Promise<void> } = {};
   const engine: RuntimeEngine = {
     catalog: () => [],
     start: unavailable,
@@ -45,9 +51,23 @@ export async function terminalFixture(
     openTerminal: async (job, handlers, assertCurrent) => {
       await hooks.beforeOpen?.();
       assertCurrent();
-      const shell = { job, writes: [] as string[], kills: 0, handlers };
+      const shell = {
+        job,
+        writes: [] as string[],
+        resizes: [] as { cols: number; rows: number }[],
+        kills: 0,
+        handlers,
+      };
       shells.push(shell);
       return {
+        closed: hooks.closed,
+        ...(hooks.pty
+          ? {
+              resize: (cols: number, rows: number) => {
+                shell.resizes.push({ cols, rows });
+              },
+            }
+          : {}),
         write: (data) => {
           shell.writes.push(data);
           handlers.onData(data);
@@ -188,10 +208,12 @@ export async function terminalFixture(
     close: async () => {
       if (closed) return;
       closed = true;
-      service.terminals.closeAll();
-      await participant.close();
-      await admin.close();
-      store.close();
+      try {
+        await participant.close();
+      } finally {
+        await admin.close();
+        store.close();
+      }
     },
   };
 }

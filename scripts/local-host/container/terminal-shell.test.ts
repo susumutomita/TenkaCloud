@@ -49,6 +49,7 @@ test("terminal exec uses only owned coordinates, declared service and fixed shel
     },
     {
       cli,
+      pty: false,
       inspect: async (_command, args) => {
         expect(args.slice(-3)).toEqual(["config", "--format", "json"]);
         return { services: { participant: { build: { target: "participant" } } } };
@@ -59,7 +60,7 @@ test("terminal exec uses only owned coordinates, declared service and fixed shel
       },
     },
   );
-  expect(authorizationChecks).toBe(2);
+  expect(authorizationChecks).toBe(3);
   expect(observed?.command).toBe("docker");
   expect(observed?.args).toEqual([
     "compose",
@@ -117,4 +118,105 @@ test("terminal refuses missing/wrong participant stage and revocation during con
     ),
   ).rejects.toThrow("revoked");
   expect(spawns).toBe(0);
+});
+
+test("interactive terminal pins verified container, detach key and fixed wrapper", async () => {
+  const id = "a".repeat(64);
+  let observed: readonly string[] = [];
+  const shell = await spawnDeclaredTerminal(unit, "participant", handlers, () => undefined, {
+    cli,
+    pty: true,
+    inspect: async (_command, args) => {
+      if (args.includes("config"))
+        return { services: { participant: { build: { target: "participant" } } } };
+      if (args.includes("ps"))
+        return [
+          { ID: id, Project: unit.composeProjectName, Service: "participant", State: "running" },
+        ];
+      return [
+        {
+          Id: id,
+          State: { Running: true },
+          Config: {
+            Labels: {
+              "com.docker.compose.project": unit.composeProjectName,
+              "com.docker.compose.service": "participant",
+              "com.docker.compose.project.config_files": unit.composePath,
+            },
+          },
+        },
+      ];
+    },
+    spawn: (_command, args) => {
+      observed = args;
+      return { write: () => undefined, kill: () => undefined, resize: () => undefined };
+    },
+  });
+  expect(observed.slice(0, 8)).toEqual([
+    "exec",
+    "--interactive",
+    "--tty",
+    "--detach-keys=ctrl-@",
+    "-e",
+    "TERM=xterm-256color",
+    id,
+    "/bin/sh",
+  ]);
+  expect(observed).not.toContain("-T");
+  shell.kill();
+  await expect(shell.closed).rejects.toThrow("identity was not confirmed");
+});
+
+for (const rows of [
+  [],
+  [{ ID: "a".repeat(64), State: "exited" }],
+  [
+    { ID: "b".repeat(64), State: "running" },
+    { ID: "a".repeat(64), State: "dead" },
+  ],
+]) {
+  test(`cleanup confirms stopped/absent pinned container with ${rows.length} Docker rows`, async () => {
+    const { cleanupTerminal } = await import("./terminal-shell");
+    await cleanupTerminal(
+      "a".repeat(64),
+      "42",
+      "12345",
+      {},
+      async () => {
+        throw new Error("exec unavailable");
+      },
+      async () => (rows.length === 1 ? rows[0] : rows),
+    );
+  });
+}
+
+test("cleanup preserves pinned coordinates and fails closed for live container or daemon error", async () => {
+  const { cleanupTerminal } = await import("./terminal-shell");
+  const id = "a".repeat(64);
+  let args: readonly string[] = [];
+  await cleanupTerminal(id, "42", "12345", {}, async (_command, values) => {
+    args = values;
+    return "";
+  });
+  expect(args.slice(0, 4)).toEqual(["exec", id, "/bin/sh", "-c"]);
+  expect(args.slice(-3)).toEqual(["terminal-cleanup", "42", "12345"]);
+  for (const query of [
+    async () => [{ ID: id, State: "running" }],
+    async () => {
+      throw new Error("daemon unavailable");
+    },
+  ]) {
+    await expect(
+      cleanupTerminal(
+        id,
+        "42",
+        "12345",
+        {},
+        async () => {
+          throw new Error("exec failed");
+        },
+        query,
+      ),
+    ).rejects.toThrow();
+  }
 });

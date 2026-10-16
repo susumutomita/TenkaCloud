@@ -15,18 +15,10 @@ import {
 } from "../api/portal-client";
 import { useT } from "../i18n";
 import { formatProblemPanelActionError, type ProblemPanelT } from "./ProblemPanel.helpers";
+import { ProblemPtyTerminal, type PtyOutput } from "./ProblemPtyTerminal";
 
-/**
- * [#2846] local-play container terminal UI。 `ProblemPanel` から `lifecycle.runtimeKind ===
- * "docker"` かつ running の問題にだけ差し込まれる。 TTY 無しの `/bin/sh` に繋ぐだけなので、
- * xterm.js のような pty emulator は不要 — 素の `<pre>` scrollback + 1 行 `<Input>` で足りる
- * (行編集もプロンプトも無い、 1 行送って出力を待つだけの console)。
- *
- * Frontend の polling-only 原則は AWS 向け request-scoped Lambda を前提にしている。一方、local-play
- * backend は単一の長期プロセスで、connection registry や fan-out を追加せず WebSocket を終端できる
- * (`scripts/local-play/problem-terminal.ts` 参照)。AWS mode はこの endpoint 自体を
- * 持たない (`runtimeKind` が "docker" になるのは local-play だけ) ので、 この component が
- * 持たないため、この local-only WebSocket 境界は呼び出し条件そのものが保証する。
+/** Local Terminal Broker capabilities select interactive PTY or the retained line console.
+ * The broker owns targets and authorization; this UI sends only input and bounded dimensions.
  */
 
 const MAX_SCROLLBACK_LINES = 500;
@@ -63,6 +55,7 @@ type TerminalState =
   | { readonly phase: "exited"; readonly exitInfo: ExitInfo };
 
 type InboundFrame =
+  | { readonly type: "ready"; readonly mode: "pty" | "pipe" }
   | { readonly type: "data"; readonly data: string }
   | { readonly type: "exit"; readonly code: number | null; readonly reason?: string };
 
@@ -93,6 +86,8 @@ function parseInboundFrame(raw: string): InboundFrame | undefined {
   }
   if (typeof parsed !== "object" || parsed === null) return undefined;
   const obj = parsed as Record<string, unknown>;
+  if (obj.type === "ready" && (obj.mode === "pty" || obj.mode === "pipe"))
+    return { type: "ready", mode: obj.mode };
   if (obj.type === "data" && typeof obj.data === "string") {
     return { type: "data", data: obj.data };
   }
@@ -207,6 +202,8 @@ export function ProblemTerminalPanel({
   const [error, setError] = useState<string | null>(null);
   const [scrollback, setScrollback] = useState("");
   const [inputValue, setInputValue] = useState("");
+  const [mode, setMode] = useState<"unknown" | "pty" | "pipe">("unknown");
+  const ptyOutput = useRef<PtyOutput>({ pending: "" });
   const wsRef = useRef<WebSocket | null>(null);
   // handoff (fetch) は接続クリック後に unmount されても resolve/reject し得る — その時点で
   // WebSocket を新規に作ってしまうと unmount 後の接続が生き残る (= leak)。 in-flight な
@@ -243,6 +240,8 @@ export function ProblemTerminalPanel({
 
   const connect = useCallback(async () => {
     setError(null);
+    setMode("unknown");
+    ptyOutput.current.pending = "";
     setState({ phase: "connecting" });
     try {
       const ticket = await issueProblemTerminalHandoff(apiBaseUrl, sessionToken, problemId);
@@ -262,8 +261,15 @@ export function ProblemTerminalPanel({
       ws.onmessage = (event) => {
         const frame = parseInboundFrame(String(event.data));
         if (!frame) return;
+        if (frame.type === "ready") {
+          setMode(frame.mode);
+          return;
+        }
         if (frame.type === "data") {
           setScrollback((prev) => appendScrollback(prev, frame.data));
+          const output = ptyOutput.current;
+          if (output.write) output.write(frame.data);
+          else output.pending = appendScrollback(output.pending, frame.data);
           return;
         }
         handleExit(frame.code, frame.reason);
@@ -293,6 +299,11 @@ export function ProblemTerminalPanel({
     setState({ phase: "idle" });
   }, []);
 
+  const ptyFailure = useCallback(() => {
+    handleExit(null, "transport_failed");
+    setError(t("problem_panel.terminal_connect_failed_error"));
+  }, [handleExit, t]);
+
   const sendLine = useCallback(() => {
     const ws = wsRef.current;
     // Send は phase === "connected" のときだけ描画される (= wsRef は ws.onopen で必ず
@@ -319,15 +330,30 @@ export function ProblemTerminalPanel({
         )}
         {state.phase !== "idle" && (
           <SpaceBetween size="s">
-            <pre ref={scrollRef} style={SCROLLBACK_STYLE}>
-              {scrollback}
-            </pre>
+            {mode === "pty" && state.phase === "connected" && wsRef.current ? (
+              <ProblemPtyTerminal
+                socket={wsRef.current}
+                output={ptyOutput.current}
+                label={t("problem_panel.terminal_header")}
+                onFailure={ptyFailure}
+              />
+            ) : (
+              <pre ref={scrollRef} style={SCROLLBACK_STYLE}>
+                {scrollback}
+              </pre>
+            )}
             {state.phase === "connecting" && (
               <StatusIndicator type="loading">
                 {t("problem_panel.terminal_connecting")}
               </StatusIndicator>
             )}
-            {state.phase === "connected" && (
+            {state.phase === "connected" && mode === "pipe" && (
+              <Alert type="info">{t("problem_panel.terminal_pipe_notice")}</Alert>
+            )}
+            {state.phase === "connected" && mode === "pty" && (
+              <Button onClick={disconnect}>{t("problem_panel.terminal_disconnect_button")}</Button>
+            )}
+            {state.phase === "connected" && mode !== "pty" && (
               <TerminalInputRow
                 t={t}
                 inputValue={inputValue}
