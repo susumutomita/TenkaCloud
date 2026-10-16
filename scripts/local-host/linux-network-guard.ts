@@ -1288,9 +1288,7 @@ function routeDestinations(
     const cidr = destination.includes("/") ? destination : `${destination}/${routePrefix(ipv6)}`;
     if (
       owned.some(
-        (segment) =>
-          segment.bridge === route.dev &&
-          ownBridgeRoute(route, cidr, segment, ipv6),
+        (segment) => segment.bridge === route.dev && ownBridgeRoute(route, cidr, segment, ipv6),
       )
     )
       continue;
