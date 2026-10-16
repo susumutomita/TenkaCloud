@@ -334,7 +334,7 @@ function refuseUnmeasurableCoordinationState(
  * before any request leaves the Lambda.
  *
  * A plugin state with an optional field is therefore unwritable on DynamoDB
- * while being perfectly writable on Turso, and `ac26-crypto-battle` is that
+ * while being perfectly writable on Turso, and `crypto-battle` is that
  * state from its very first row: `initialState` leaves `startedAtMs`,
  * `nextContractAtMs` and every team's `lastRotateAtMs` as explicit `undefined`
  * until the match starts. Every READY/START on the DynamoDB backend threw in

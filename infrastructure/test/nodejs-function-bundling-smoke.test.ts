@@ -64,7 +64,7 @@ describe("NodejsFunction real-bundling smoke test (Issue #2515)", () => {
       // The score-mode producer must reach the deployed dispatcher through its
       // build-time catalog literal, without adding to the Lambda env's 4 KiB limit.
       const catalog = discoverProblemsCoordination(resolve(import.meta.dirname, "../../problems"));
-      expect(catalog["ac26-crypto-battle"].scoreMode).toBe("exclusive");
+      expect(catalog["crypto-battle"].scoreMode).toBe("exclusive");
       expect(Buffer.byteLength(JSON.stringify(JSON.stringify(catalog)))).toBeLessThan(
         MAX_DEFINE_VALUE_BYTES,
       );

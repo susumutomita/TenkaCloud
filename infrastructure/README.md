@@ -22,11 +22,10 @@ The existing event/team, deployment and participant APIs provide:
 
 Docker/Compose exercises remain local-only and are excluded from the cloud catalog.
 Catalog availability does not establish that every AWS problem has passed a live
-rehearsal. In particular, nine templates in the current canonical catalog exceed
-CloudFormation's 51,200-byte `TemplateBody` limit. The restored deployer still uses
-`TemplateBody`; it does not implement `TemplateURL` for those larger templates.
-This is a historical limitation, and those templates are not verified deployable
-through this path.
+rehearsal. All eight templates in the current canonical catalog fit within
+CloudFormation's 51,200-byte `TemplateBody` limit. The restored deployer uses
+`TemplateBody`; it does not implement `TemplateURL` for larger templates in
+retained or external catalogs. Template size alone does not verify live deployment.
 
 Both cloud databases retain the original **99-team** event limit. SQL coordination
 retains the original **4 MiB** state policy; DynamoDB has its own item-size budget.
@@ -556,7 +555,7 @@ connection afterwards; the historical SSM registration lifecycle is retained.
 
 Native coordination reuses the original backend and shared problem reducer. Cloud
 state and scores live in the selected Turso or DynamoDB repositories; local state
-continues to live in SQLite. The reviewed `ac26-crypto-battle` profile with
+continues to live in SQLite. The reviewed `crypto-battle` profile with
 `defaultScoreStealEnabled=false` runs without Docker or a competitor AWS account.
 Setting the problem's score-steal parameter to true keeps its AWS-backed variant;
 that variant and mixed events with AWS problems require a separate competitor
@@ -580,5 +579,5 @@ not hosted Turso or AWS performance evidence.
 
 Live AWS deployment, participant federation/STS, hosted Turso and a full cloud event
 remain operator-owned rehearsals. No live account change, deployment or cleanup
-is implied by source tests or synthesis. The nine oversized canonical templates
-remain a known historical limitation.
+is implied by source tests or synthesis. Oversized retained or external templates
+still require a deployment path beyond the current `TemplateBody` implementation.

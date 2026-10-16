@@ -31,7 +31,7 @@ import {
  *
  * ## Why the size is a property of the game, not of the encoding
  *
- * `ac26-crypto-battle`'s measured worst case is 16.4 KB per team at 99 teams
+ * `crypto-battle`'s measured worst case is 16.4 KB per team at 99 teams
  * (1.62 MB), about two thirds of which is the public ledger. That ledger is
  * permanent by design and grows with the number of teams playing. "Make the
  * state smaller" is therefore a request to make the game smaller, and the
@@ -93,7 +93,7 @@ export const DYNAMODB_ROW_OVERHEAD_BYTES = 16 * 1024;
  * which reading, modifying and writing the entire row on every operation stops
  * being something a live match should be doing, and it is set to clear the
  * platform's own worst case with room to spare: 99 teams (the `teams.max(99)`
- * cap) of `ac26-crypto-battle` measure 1.62 MB, so 4 MiB leaves headroom for a
+ * cap) of `crypto-battle` measure 1.62 MB, so 4 MiB leaves headroom for a
  * heavier problem without pretending the row can grow forever.
  *
  * Overridable per environment through `COORDINATION_STATE_MAX_BYTES` precisely
@@ -230,7 +230,7 @@ export function budgetUsedPercent(bytes: number, budget: CoordinationStateBudget
  * the game: how much each team accumulates, and how much of that is permanent.
  *
  * So the problem declares it, from a measurement rather than an estimate. In
- * `ac26-crypto-battle` that measurement already exists and is enforced by the
+ * `crypto-battle` that measurement already exists and is enforced by the
  * problem's own `state-size.test.ts`, which plays a full worst-case match; the
  * declaration is that test's numbers, and the test is what keeps them true.
  *

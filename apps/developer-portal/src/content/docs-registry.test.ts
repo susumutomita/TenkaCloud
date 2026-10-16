@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { allRoutes } from "@/lib/routes";
 import { searchIndex } from "@/lib/search";
+import { CATALOG_DATA } from "./catalog-data";
 import { DOC_PAGES, DOC_SECTIONS, findDocBySlug } from "./docs-registry";
 
 const FIRST_PACK_SLUG = "tutorials/first-pack";
@@ -113,12 +114,12 @@ describe("docs registry — role manuals (#2818)", () => {
       }
       expect(source).not.toContain("lite-pipeline.yaml");
       expect(source).not.toContain("make deploy-saas");
-      expect(source).toContain("106");
+      expect(source).toContain(String(CATALOG_DATA.problems.length));
       for (const detail of [
         "512",
         "40",
         "100",
-        "105",
+        "300",
         "4096",
         "Start / resume",
         "Stop (keep data)",
@@ -147,13 +148,16 @@ describe("docs registry — role manuals (#2818)", () => {
 
   it("should distinguish participant resume, disk retention and representative real terminal evidence", () => {
     for (const source of [PARTICIPANT_MANUAL_SOURCE, PARTICIPANT_MANUAL_JA_SOURCE]) {
-      for (const detail of ["Start / resume", "Stop (keep data)", "RAM", "PostgreSQL", "15"]) {
+      for (const detail of ["Start / resume", "Stop (keep data)", "RAM", "PostgreSQL"]) {
         expect(source).toContain(detail);
       }
     }
     expect(PARTICIPANT_MANUAL_SOURCE).toContain("does not automatically evict or reset");
     expect(PARTICIPANT_MANUAL_SOURCE).toContain("real Docker/browser rehearsal");
-    expect(PARTICIPANT_MANUAL_SOURCE).toContain("does not verify every one");
+    expect(PARTICIPANT_MANUAL_SOURCE).toContain("does not verify the current declared terminal");
+    expect(PARTICIPANT_MANUAL_SOURCE).toContain("earlier snapshot");
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("以前の snapshot");
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("terminal 宣言 1 件");
     expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("実 Docker とブラウザ");
     expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain("全問題を通して確認したわけではありません");
     expect(PARTICIPANT_MANUAL_SOURCE).toContain("remain stopped until you resume");
@@ -437,7 +441,7 @@ describe("integration candidate documentation contract", () => {
       );
       expect(source).toMatch(/reviewed IAM|権限設定/);
       expect(source).toMatch(/generic CloudFormation|汎用 CloudFormation/);
-      expect(source).toContain("106");
+      expect(source).toContain(String(CATALOG_DATA.problems.length));
       expect(source).toMatch(/in progress|進行中/);
     }
   });

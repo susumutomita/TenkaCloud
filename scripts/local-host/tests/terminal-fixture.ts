@@ -109,6 +109,19 @@ export async function terminalFixture(
     add(`extra-${index}`),
   );
   const service = new HostingService(store, engine, "synthetic-host-key", () => clock);
+  const authorizationErrors: { jobId: string; message: string }[] = [];
+  const authorizeSurface = service.authorizeSurface.bind(service);
+  service.authorizeSurface = (jobId, keyHash) => {
+    try {
+      return authorizeSurface(jobId, keyHash);
+    } catch (error) {
+      authorizationErrors.push({
+        jobId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  };
   const participant = await startHttpHost({
     kind: "participant",
     hostname: "127.0.0.1",
@@ -158,6 +171,7 @@ export async function terminalFixture(
     engine,
     service,
     shells,
+    authorizationErrors,
     hooks,
     event,
     a,

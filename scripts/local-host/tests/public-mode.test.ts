@@ -234,13 +234,7 @@ test("public mode offers only problems that need no per-team gateway", async () 
     headers: { authorization: `Bearer ${adminToken}` },
   });
   expect(catalog.body.items).toEqual(
-    [
-      "ac26-crypto-battle",
-      "forensic-casebook",
-      "pi-siege",
-      "session-defense",
-      "tenant-boundary-duel",
-    ].map((problemId) => ({
+    ["crypto-battle", "forensic-casebook"].map((problemId) => ({
       problemId,
       name: expect.any(String),
       runtime: "coordination",

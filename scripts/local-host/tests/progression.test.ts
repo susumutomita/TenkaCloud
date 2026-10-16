@@ -13,7 +13,7 @@ async function fixture() {
 }
 const configuration = {
   gateProblemId: "hello-world",
-  unlockTargetIds: ["ac26-crypto-battle"],
+  unlockTargetIds: ["crypto-battle"],
   defaultPolicy: "required",
   completionBonus: 50,
 };
@@ -63,17 +63,17 @@ test("HTTP gate configuration, participant metadata, access, bonus, isolation an
   const locked = await f.request("/portal/me", "GET", undefined, a.teamLoginKey);
   expect(progression(locked.body)).toMatchObject({
     gateCompleted: false,
-    lockedProblemIds: ["ac26-crypto-battle"],
+    lockedProblemIds: ["crypto-battle"],
   });
-  const battle = problems(locked.body).find((p) => p.problemId === "ac26-crypto-battle");
+  const battle = problems(locked.body).find((p) => p.problemId === "crypto-battle");
   expect(battle?.instructions).toBe("");
   expect(battle?.scoring).toBeUndefined();
   expect(battle?.i18n).toBeUndefined();
   for (const [route, method, body] of [
     ["/portal/me/coordination/projection", "GET", undefined],
     ["/portal/me/coordination/op", "POST", { op: { kind: "ready" } }],
-    ["/portal/me/submit-flag", "POST", { problemId: "ac26-crypto-battle", flag: "x" }],
-    ["/portal/me/problems/ac26-crypto-battle/hints/one/reveal", "POST", {}],
+    ["/portal/me/submit-flag", "POST", { problemId: "crypto-battle", flag: "x" }],
+    ["/portal/me/problems/crypto-battle/hints/one/reveal", "POST", {}],
   ] as const) {
     const blocked = await f.request(route, method, body, a.teamLoginKey);
     expect(blocked.status).toBe(409);
@@ -200,7 +200,7 @@ test("metadata and flag/hint scoring revalidate gate after asynchronous runtime 
   await f.flag(true);
   const reverse = {
     ...configuration,
-    gateProblemId: "ac26-crypto-battle",
+    gateProblemId: "crypto-battle",
     unlockTargetIds: ["hello-world"],
   };
   const view = f.engine.view.bind(f.engine);
@@ -278,7 +278,7 @@ test("hint receipts cannot disclose a reveal after the problem becomes locked", 
   await f.flag(true);
   await f.request(`/events/${event.eventId}/progression-gate`, "PUT", {
     ...configuration,
-    gateProblemId: "ac26-crypto-battle",
+    gateProblemId: "crypto-battle",
     unlockTargetIds: ["hello-world"],
   });
   const replay = await f.request(path, "POST", {}, a.teamLoginKey, "hint-receipt-0001");

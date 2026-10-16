@@ -129,7 +129,7 @@ export function assertHostingModule(id: string): void {
     return;
   }
   if (
-    /\/problems\/battles\/ac26-crypto-battle\/(?:metadata\.json|diagram(?:\.en)?\.svg|portal\/[^/]+\.(?:tsx?|css)|game\/src\/[^/]+\.ts)(?:\?.*)?$/u.test(
+    /\/problems\/battles\/(?:ac26-)?crypto-battle\/(?:metadata\.json|diagram(?:\.en)?\.svg|portal\/[^/]+\.(?:tsx?|css)|game\/src\/[^/]+\.ts)(?:\?.*)?$/u.test(
       normalized,
     )
   ) {

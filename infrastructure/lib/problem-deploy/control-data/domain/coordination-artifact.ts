@@ -10,7 +10,7 @@ import type { CoordinationStateScope } from "./coordination-scope.js";
  * genuinely mutable and small: the score, the phase, the generation, which
  * orders are open. The other is a growing pile of things that are written once
  * and never changed — a PROVE proof, a LEAK artifact, an FHE ciphertext, an MPC
- * transcript. In `ac26-crypto-battle`'s 99-team worst case the second kind is
+ * transcript. In `crypto-battle`'s 99-team worst case the second kind is
  * 1081 KB of a 1624 KB row: two thirds of the state is material nothing will
  * ever edit.
  *
@@ -30,7 +30,7 @@ import type { CoordinationStateScope } from "./coordination-scope.js";
  * its own — id, type, size, digest — and why fetching a body is a separate,
  * explicit request rather than something the projection does implicitly.
  *
- * The operation this matters most for is `ac26-crypto-battle`'s HUNT, which
+ * The operation this matters most for is `crypto-battle`'s HUNT, which
  * recovers a secret from the share values in the ledger. A projection of
  * metadata alone would break it. A projection of references plus an on-demand
  * fetch does not: the hunter fetches the bodies of the shares they are actually
@@ -116,7 +116,7 @@ export interface CoordinationArtifactTombstone {
  * 1 MiB is chosen against what these artifacts actually are — proofs,
  * ciphertexts, transcripts — and against the fact that the body travels inside
  * a participant's operation request. It is far above the measured per-entry
- * sizes in `ac26-crypto-battle` (hundreds of bytes) and far below anything that
+ * sizes in `crypto-battle` (hundreds of bytes) and far below anything that
  * would make a single operation slow to upload or expensive to store.
  *
  * A ceiling exists at all because without one a participant could push

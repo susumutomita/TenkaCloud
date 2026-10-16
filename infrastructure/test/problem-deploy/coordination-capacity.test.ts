@@ -21,7 +21,7 @@ import { buildShared, NOW_MS, sampleEvent, sampleTeams } from "./event-bulk-depl
  * answer "will this fit" is known when the operator presses deploy, and these
  * tests pin that the answer is given there instead.
  *
- * The measured numbers below are `ac26-crypto-battle`'s: 16.4 KB per team and
+ * The measured numbers below are `crypto-battle`'s: 16.4 KB per team and
  * a 1.62 MB row at the platform's 99-team maximum, which fits Turso's 4 MiB
  * policy ceiling and does not fit DynamoDB's 384 KB.
  */
@@ -97,9 +97,9 @@ const problem = (problemId: string): { readonly problemId: string } => ({ proble
 describe("the bulk-deploy preflight", () => {
   it("should refuse a problem whose forecast exceeds the backend ceiling", () => {
     const report = checkBulkDeployCoordinationCapacity({
-      problems: [problem("ac26-crypto-battle")],
+      problems: [problem("crypto-battle")],
       eventTeamCount: 99,
-      problemsCoordination: { "ac26-crypto-battle": { stateBudget: forecast } },
+      problemsCoordination: { "crypto-battle": { stateBudget: forecast } },
       budget: dynamodb,
     });
     expect(report.refusals).toHaveLength(1);
@@ -111,15 +111,15 @@ describe("the bulk-deploy preflight", () => {
     // subset. One coordination row holds the match for EVERY team on the
     // problem, so sizing a partial deploy against its own subset would pass
     // each deploy while the shared row grew past the ceiling.
-    const declaration = { "ac26-crypto-battle": { stateBudget: forecast } };
+    const declaration = { "crypto-battle": { stateBudget: forecast } };
     const wholeEvent = checkBulkDeployCoordinationCapacity({
-      problems: [problem("ac26-crypto-battle")],
+      problems: [problem("crypto-battle")],
       eventTeamCount: 99,
       problemsCoordination: declaration,
       budget: dynamodb,
     });
     const oneLateJoiner = checkBulkDeployCoordinationCapacity({
-      problems: [problem("ac26-crypto-battle")],
+      problems: [problem("crypto-battle")],
       eventTeamCount: 1,
       problemsCoordination: declaration,
       budget: dynamodb,
@@ -145,9 +145,9 @@ describe("the bulk-deploy preflight", () => {
   it("should report a tight problem without refusing it", () => {
     const tightTeams = Math.ceil((turso.warnBytes - AC26_BASE) / AC26_PER_TEAM);
     const report = checkBulkDeployCoordinationCapacity({
-      problems: [problem("ac26-crypto-battle")],
+      problems: [problem("crypto-battle")],
       eventTeamCount: tightTeams,
-      problemsCoordination: { "ac26-crypto-battle": { stateBudget: forecast } },
+      problemsCoordination: { "crypto-battle": { stateBudget: forecast } },
       budget: turso,
     });
     expect(report.refusals).toHaveLength(0);
@@ -159,9 +159,9 @@ describe("the event-creation warning", () => {
   it("should warn without refusing, and say the deploy will be", () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     const warnings = warnOnCoordinationCapacity({
-      problems: [{ problemId: "ac26-crypto-battle" }],
+      problems: [{ problemId: "crypto-battle" }],
       teamCount: 99,
-      problemsCoordination: { "ac26-crypto-battle": { stateBudget: forecast } },
+      problemsCoordination: { "crypto-battle": { stateBudget: forecast } },
       budget: dynamodb,
       tenantId: "tenant-a",
       eventId: "EV1",
@@ -180,9 +180,9 @@ describe("the event-creation warning", () => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
     const tightTeams = Math.ceil((turso.warnBytes - AC26_BASE) / AC26_PER_TEAM);
     const warnings = warnOnCoordinationCapacity({
-      problems: [{ problemId: "ac26-crypto-battle" }],
+      problems: [{ problemId: "crypto-battle" }],
       teamCount: tightTeams,
-      problemsCoordination: { "ac26-crypto-battle": { stateBudget: forecast } },
+      problemsCoordination: { "crypto-battle": { stateBudget: forecast } },
       budget: turso,
       tenantId: "tenant-a",
       eventId: "EV1",
@@ -199,9 +199,9 @@ describe("the event-creation warning", () => {
   it("should stay silent for an event that fits", () => {
     expect(
       warnOnCoordinationCapacity({
-        problems: [{ problemId: "ac26-crypto-battle" }],
+        problems: [{ problemId: "crypto-battle" }],
         teamCount: 4,
-        problemsCoordination: { "ac26-crypto-battle": { stateBudget: forecast } },
+        problemsCoordination: { "crypto-battle": { stateBudget: forecast } },
         budget: turso,
         tenantId: "tenant-a",
         eventId: "EV1",
@@ -338,8 +338,8 @@ describe("reading the declaration out of the Lambda environment", () => {
   };
 
   it("should parse the declaration synth burned in", () => {
-    expect(readEnv(JSON.stringify({ "ac26-crypto-battle": { stateBudget: forecast } }))).toEqual({
-      "ac26-crypto-battle": { stateBudget: forecast },
+    expect(readEnv(JSON.stringify({ "crypto-battle": { stateBudget: forecast } }))).toEqual({
+      "crypto-battle": { stateBudget: forecast },
     });
   });
 
@@ -407,13 +407,13 @@ describe("the scheduled deploy path", () => {
     );
     vi.stubEnv(
       "PROBLEM_COORDINATION",
-      JSON.stringify({ "ac26-crypto-battle": { stateBudget: forecast } }),
+      JSON.stringify({ "crypto-battle": { stateBudget: forecast } }),
     );
     vi.stubEnv("DEPLOY_EVENT_BUS_NAME", "test-bus");
     vi.stubEnv("DEPLOY_ENVIRONMENT", "development");
     vi.stubEnv(
       "BATTLE_PROBLEMS_CATALOG",
-      JSON.stringify({ "ac26-crypto-battle": "problems/battles/ac26-crypto-battle" }),
+      JSON.stringify({ "crypto-battle": "problems/battles/crypto-battle" }),
     );
     vi.stubEnv("COMPETITOR_ACCOUNTS_TABLE_NAME", "C");
     vi.stubEnv("EVENTS_TABLE_NAME", "E");
@@ -423,7 +423,7 @@ describe("the scheduled deploy path", () => {
     const resources = buildScheduledDeployResources(makeTestControlDataRuntime());
 
     expect(resources?.problemsCoordination).toEqual({
-      "ac26-crypto-battle": { stateBudget: forecast },
+      "crypto-battle": { stateBudget: forecast },
     });
   });
 });

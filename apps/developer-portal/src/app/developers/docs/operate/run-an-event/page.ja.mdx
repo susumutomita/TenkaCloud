@@ -28,4 +28,4 @@ End Event で採点を止め、コンソールの teardown で所有する環境
 
 デフォルトの同時起動上限はチームごとに 3 環境、host 全体で 12 環境です。さらに、コンテナに設定されたメモリー上限の合計を 4096 MiB までに制限します。これは起動の受付制限であり、実測使用量や必要な機器の保証ではありません。新しい Compose 計画は作問者の上限を保持し、未指定の項目に 512 MiB、1 CPU、256 PIDs を補います。必要な負荷を確認したうえで `make local LOCAL_ARGS="--max-active-per-team 3 --max-active-environments 12 --container-memory-mib 4096"` から受付制限を指定できます。
 
-40 個の gateway 枠は起動中の環境だけに使います。必要な数だけ割り当てた runtime port は停止後も保持します。20 問 × 5 チームの synthetic テストでは 100 jobs と 105 runtime ports を割り当てました。これは割り当てと lifecycle の確認であり、実 Docker の同時実行性能を示しません。
+40 個の gateway 枠は起動中の環境だけに使います。必要な数だけ割り当てた runtime port は停止後も保持します。選択中のカタログにあるローカル Compose 問題をすべて順に使う 100 jobs の synthetic テストでは、runtime port は 300 未満に収まりました。これは割り当てと lifecycle の確認であり、実 Docker の同時実行性能を示しません。

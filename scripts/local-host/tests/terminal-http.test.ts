@@ -23,7 +23,13 @@ async function connect(
     ...(requestOrigin === null ? {} : { headers: { origin: requestOrigin } }),
   });
   const frames: { type: string; data?: string; code?: number | null; reason?: string }[] = [];
-  const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+  const lifecycle: { close?: { code: number; reason: string }; errors: string[] } = { errors: [] };
+  const closed = new Promise<void>((resolve) =>
+    socket.once("close", (code, reason) => {
+      lifecycle.close = { code, reason: reason.toString() };
+      resolve();
+    }),
+  );
   socket.on("message", (raw) => frames.push(JSON.parse(raw.toString())));
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -34,12 +40,13 @@ async function connect(
       clearTimeout(timer);
       resolve();
     });
-    socket.on("error", () => {
+    socket.on("error", (error) => {
+      lifecycle.errors.push(error.message);
       clearTimeout(timer);
       reject(new Error("WebSocket handshake rejected"));
     });
   });
-  return { socket, frames, closed };
+  return { socket, frames, closed, lifecycle };
 }
 
 test("real terminal WebSocket carries large input and refuses origin, admin and replay attempts", async () => {
@@ -79,6 +86,23 @@ test("terminal sessions revoke without client input and leave another team conne
     await a.closed;
     await waitUntil(() => f.shells[0]?.kills === 1);
     expect(f.shells[0]?.kills).toBe(1);
+    if (f.shells[1]?.kills !== 0)
+      throw new Error(
+        `Beta terminal closed during alpha revocation: ${JSON.stringify({
+          frames: b.frames,
+          transport: b.lifecycle,
+          authorizationErrors: f.authorizationErrors,
+          shells: f.shells.map(({ job, kills }) => ({
+            teamId: job.teamId,
+            jobId: job.jobId,
+            kills,
+          })),
+          alphaTeam: f.a.team.teamId,
+          betaTeam: f.b.team.teamId,
+          betaKeyUnchanged: f.store.team(f.b.team.teamId).loginKey === f.b.team.loginKey,
+          betaUnitUnchanged: f.store.job(f.b.job.jobId).unit === f.b.job.unit,
+        })}`,
+      );
     expect(f.shells[1]?.kills).toBe(0);
     b.socket.send(JSON.stringify({ type: "input", data: "still beta\n" }));
     await waitUntil(() => b.frames.some((frame) => frame.data === "still beta\n"));

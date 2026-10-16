@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { metadataToDetail } from "../../../apps/application-admin-console/src/data/problem-mapping";
@@ -12,6 +12,7 @@ import {
 } from "../browser-metadata";
 import { reviewedCoordinationPaths } from "../coordination-catalog";
 import { loadDockerCatalog } from "../docker-catalog";
+import { dockerProblemPaths } from "./problem-tree";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const localProblems = hostBrowserProblemPaths().filter((path) => {
@@ -25,14 +26,23 @@ test("frontend Docker identities exactly match the host's executable catalog", (
   );
 });
 
-test("hosting exposes 106 selectable Docker verify exercises as public Challenge metadata", () => {
-  expect(localProblems).toHaveLength(106);
-  expect(hostBrowserProblemPaths()).toHaveLength(113);
-  let legacyBattles = 0;
+test("hosting exposes every selectable Docker verify exercise as public Challenge metadata", () => {
+  const dockerOnDisk = dockerProblemPaths(root);
+  expect(dockerOnDisk.length).toBeGreaterThan(0);
+  expect([...localProblems].sort((a, b) => a.localeCompare(b))).toEqual(dockerOnDisk);
+  expect(hostBrowserProblemPaths()).toEqual(
+    [
+      ...dockerOnDisk,
+      "challenges/hello-world",
+      "battles/hello-world-battle",
+      ...reviewedCoordinationPaths.filter((path) =>
+        existsSync(join(root, "problems", path, "metadata.json")),
+      ),
+    ].sort((a, b) => a.localeCompare(b)),
+  );
   for (const path of localProblems) {
     const source = readFileSync(join(root, "problems", path, "metadata.json"), "utf8");
     const raw = JSON.parse(source);
-    if (raw.category === "Battle") legacyBattles += 1;
     const projected = publicMetadata(source, join(root, "problems", path, "metadata.json"));
     if (!projected) throw new Error(`No public metadata for ${path}`);
     const value = JSON.parse(projected);
@@ -66,7 +76,21 @@ test("hosting exposes 106 selectable Docker verify exercises as public Challenge
     ])
       expect(() => assertHostingModule(join(root, "problems", path, hidden))).toThrow();
   }
-  expect(legacyBattles).toBe(4);
+});
+
+test("a Docker Compose verify exercise authored under battles is projected as a Challenge", () => {
+  const path = "/repo/problems/battles/legacy-docker/metadata.json";
+  const projected = publicMetadata(
+    JSON.stringify({
+      id: "legacy-docker",
+      category: "Battle",
+      runtime: { provider: "docker", engine: "compose" },
+      scoring: { kind: "verify" },
+    }),
+    path,
+  );
+  if (!projected) throw new Error("Missing legacy Docker projection.");
+  expect(JSON.parse(projected).category).toBe("Challenge");
 });
 
 test("metadata expansion does not expand executable portal plugins or templates", () => {
@@ -107,42 +131,42 @@ test("empty, single and multiple selected entries generate usable bounded catalo
 });
 
 test("native crypto remains a Battle and server-only game code stays excluded", () => {
-  const path = join(root, "problems/battles/ac26-crypto-battle/metadata.json");
+  const path = join(root, "problems/battles/crypto-battle/metadata.json");
   const projected = publicMetadata(readFileSync(path, "utf8"), path);
   if (!projected) throw new Error("Missing native crypto metadata.");
   expect(JSON.parse(projected).category).toBe("Battle");
   expect(JSON.parse(projected).runtime).toEqual({ provider: "local", engine: "bun" });
   expect(() =>
-    assertHostingModule("/repo/problems/battles/ac26-crypto-battle/game/src/secret.ts"),
+    assertHostingModule("/repo/problems/battles/crypto-battle/game/src/secret.ts"),
   ).toThrow("Server-only game code");
   expect(() =>
-    assertHostingModule("/repo/problems/battles/ac26-crypto-battle/portal/StatusPanel.tsx"),
+    assertHostingModule("/repo/problems/battles/crypto-battle/portal/StatusPanel.tsx"),
   ).not.toThrow();
 });
 
-test("reviewed Pi Siege exposes its public Portal without importing grader or development code", () => {
-  const path = join(root, "problems/battles/pi-siege/metadata.json");
-  const projected = publicMetadata(readFileSync(path, "utf8"), path);
-  if (!projected) throw new Error("Missing Pi Siege metadata.");
-  const value = JSON.parse(projected);
-  expect(value.category).toBe("Battle");
-  expect(value.runtime).toEqual({ provider: "local", engine: "bun" });
-  expect(value.i18n.en.name).toBe("Pi Siege");
-  for (const file of ["StatusPanel.tsx", "content.ts", "content.en.ts", "localize.ts", "style.css"])
-    expect(() =>
-      assertHostingModule(`/repo/problems/battles/pi-siege/portal/${file}`),
-    ).not.toThrow();
-  for (const file of [
-    "game/reducer.ts",
-    "game/math.ts",
-    "coordination/pi-siege.ts",
-    "dev/server.ts",
-    "docs/answers.ts",
-    "portal/private.ts",
-  ])
-    expect(() => assertHostingModule(`/repo/problems/battles/pi-siege/${file}`)).toThrow(
-      "Unreviewed problem content",
-    );
+test("retained editions of reviewed two-seat Battles keep their narrow browser allow-list", () => {
+  for (const [id, allowed] of [
+    ["pi-siege", ["StatusPanel.tsx", "content.ts", "content.en.ts", "localize.ts", "style.css"]],
+    ["session-defense", ["StatusPanel.tsx", "style.css"]],
+    ["tenant-boundary-duel", ["StatusPanel.tsx", "style.css"]],
+  ] as const) {
+    for (const file of allowed)
+      expect(() =>
+        assertHostingModule(`/repo/problems/battles/${id}/portal/${file}`),
+      ).not.toThrow();
+    for (const file of [
+      "game/reducer.ts",
+      `coordination/${id}.ts`,
+      "dev/server.ts",
+      "portal/private.ts",
+    ])
+      expect(() => assertHostingModule(`/repo/problems/battles/${id}/${file}`)).toThrow(
+        "Unreviewed problem content",
+      );
+  }
+});
+
+test("an unreviewed Battle exposes neither private metadata nor portal modules", () => {
   const unknown = publicMetadata(
     JSON.stringify({
       id: "unreviewed-battle",
@@ -160,56 +184,24 @@ test("reviewed Pi Siege exposes its public Portal without importing grader or de
   ).toThrow("Unreviewed problem content");
 });
 
-test("reviewed Session Defense exposes only its component and styles", () => {
-  const path = join(root, "problems/battles/session-defense/metadata.json");
-  const projected = publicMetadata(readFileSync(path, "utf8"), path);
-  if (!projected) throw new Error("Missing Session Defense metadata.");
-  expect(JSON.parse(projected).runtime).toEqual({ provider: "local", engine: "bun" });
-  for (const file of ["portal/StatusPanel.tsx", "portal/style.css"])
-    expect(() =>
-      assertHostingModule(`/repo/problems/battles/session-defense/${file}`),
-    ).not.toThrow();
-  for (const file of [
-    "game/reducer.ts",
-    "game/types.ts",
-    "coordination/session-defense.ts",
-    "dev/app.tsx",
-    "docs/SECURITY.md",
-    "portal/extra.ts",
-  ])
-    expect(() => assertHostingModule(`/repo/problems/battles/session-defense/${file}`)).toThrow(
-      "Unreviewed problem content",
-    );
-});
-
-test("reviewed Tenant Boundary Duel exposes only its component and styles", () => {
-  const path = join(root, "problems/battles/tenant-boundary-duel/metadata.json");
-  const projected = publicMetadata(readFileSync(path, "utf8"), path);
-  if (!projected) throw new Error("Missing Tenant Boundary Duel metadata.");
-  expect(JSON.parse(projected).runtime).toEqual({ provider: "local", engine: "bun" });
-  for (const file of ["portal/StatusPanel.tsx", "portal/style.css"])
-    expect(() =>
-      assertHostingModule(`/repo/problems/battles/tenant-boundary-duel/${file}`),
-    ).not.toThrow();
-  for (const file of [
-    "game/reducer.ts",
-    "game/types.ts",
-    "game/policy.ts",
-    "tests/game.test.ts",
-    "docs/INSTRUCTOR.ja.md",
-    "coordination/tenant-boundary-duel.ts",
-    "dev/app.tsx",
-    "docs/SECURITY.md",
-    "portal/extra.ts",
-  ])
-    expect(() =>
-      assertHostingModule(`/repo/problems/battles/tenant-boundary-duel/${file}`),
-    ).toThrow("Unreviewed problem content");
-});
-
 test("course metadata survives both browser projections without exposing author-only fields", () => {
-  const path = join(root, "problems/challenges/ac26-w5-lwe-rlwe/metadata.json");
+  const path = join(root, "problems/challenges/sqli-demo/metadata.json");
   const raw = JSON.parse(readFileSync(path, "utf8"));
+  raw.courseAlignment = {
+    courseId: "example-course",
+    edition: "2026",
+    week: 5,
+    role: "practice",
+    spoilerPolicy: "public",
+    sources: [
+      {
+        repository: "example/course",
+        ref: "main",
+        path: "week5/README.md",
+        kind: "lecture",
+      },
+    ],
+  };
   raw.track.answer = "private-track-answer";
   raw.courseAlignment.solution = "private-course-answer";
   raw.courseAlignment.sources[0].answer = "private-source-answer";
@@ -316,7 +308,7 @@ test("local browser credits agree with admin and participant projections without
 });
 
 test("native public JSON excludes private coordination configuration and extra dashboard fields", () => {
-  const path = join(root, "problems/battles/ac26-crypto-battle/metadata.json");
+  const path = join(root, "problems/battles/crypto-battle/metadata.json");
   const metadata = JSON.parse(readFileSync(path, "utf8"));
   metadata.interTeamCoordination = {
     ...metadata.interTeamCoordination,

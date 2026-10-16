@@ -154,7 +154,7 @@ export async function progressionFixture(
           { internalSlug: `alpha-${name.replaceAll(" ", "-")}`, awsAccountId: "111111111111" },
           { internalSlug: `beta-${name.replaceAll(" ", "-")}`, awsAccountId: "222222222222" },
         ],
-        problems: [{ problemId: "hello-world" }, { problemId: "ac26-crypto-battle" }],
+        problems: [{ problemId: "hello-world" }, { problemId: "crypto-battle" }],
       });
       if (made.status !== 201) throw new Error(JSON.stringify(made));
       const event = made.body as unknown as CreatedEvent;

@@ -188,7 +188,7 @@ describe("reconcileEventStatuses scheduled auto-deploy", () => {
     });
     deploy.bulkDeployEvent.mockResolvedValue({
       kind: "capacity_exceeded",
-      refusals: ['problem "ac26-crypto-battle" needs 1700252 bytes'],
+      refusals: ['problem "crypto-battle" needs 1700252 bytes'],
     });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
@@ -202,7 +202,7 @@ describe("reconcileEventStatuses scheduled auto-deploy", () => {
       expect.objectContaining({
         eventId: "EVD",
         outcome: "capacity_exceeded",
-        refusals: ['problem "ac26-crypto-battle" needs 1700252 bytes'],
+        refusals: ['problem "crypto-battle" needs 1700252 bytes'],
       }),
     );
     warn.mockRestore();

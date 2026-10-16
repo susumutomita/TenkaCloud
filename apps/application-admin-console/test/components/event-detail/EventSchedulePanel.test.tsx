@@ -115,7 +115,7 @@ describe("EventSchedulePanel", () => {
           nativeRuns: [
             {
               runId: "run-1",
-              problemId: "ac26-crypto-battle",
+              problemId: "crypto-battle",
               status: "CLOSED",
               revision: 3,
               purgeState,
@@ -144,7 +144,7 @@ describe("EventSchedulePanel", () => {
         nativeRuns: [
           {
             runId: "run-1",
-            problemId: "ac26-crypto-battle",
+            problemId: "crypto-battle",
             status: "CLOSED",
             revision: 3,
             purgeState: "complete",
@@ -162,7 +162,7 @@ describe("EventSchedulePanel", () => {
         ...props().detail,
         status: "ARCHIVED",
         nativeRuns: [
-          { runId: "run-1", problemId: "ac26-crypto-battle", status: "COMPLETE", revision: 3 },
+          { runId: "run-1", problemId: "crypto-battle", status: "COMPLETE", revision: 3 },
         ],
       },
     });

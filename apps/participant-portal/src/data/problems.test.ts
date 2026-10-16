@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import englishDiagram from "../../../../problems/battles/ac26-crypto-battle/diagram.en.svg?url";
-import defaultDiagram from "../../../../problems/battles/ac26-crypto-battle/diagram.svg?url";
+import englishDiagram from "../../../../problems/battles/crypto-battle/diagram.en.svg?url";
+import defaultDiagram from "../../../../problems/battles/crypto-battle/diagram.svg?url";
 import {
   buildDiagramMap,
   findProblemDiagramUrl,
@@ -226,8 +226,8 @@ describe("problem architecture diagram (#1929 Phase 1c)", () => {
   });
 
   it("selects the English diagram and preserves fallback for existing diagrams", () => {
-    expect(findProblemDiagramUrl("ac26-crypto-battle", "en")).toBe(englishDiagram);
-    expect(findProblemDiagramUrl("ac26-crypto-battle", "ja")).toBe(defaultDiagram);
+    expect(findProblemDiagramUrl("crypto-battle", "en")).toBe(englishDiagram);
+    expect(findProblemDiagramUrl("crypto-battle", "ja")).toBe(defaultDiagram);
     expect(findProblemDiagramUrl("hello-world", "en")).toBe(
       findProblemDiagramUrl("hello-world", "ja"),
     );

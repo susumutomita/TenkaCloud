@@ -353,12 +353,12 @@ describe("questCardTitle (issue #2189: card must show the display name, not the 
 
   it("should use the i18n.en override for the en locale, not the raw ja name (Quests card / problem detail parity)", () => {
     mockFindMeta.mockImplementation((id: string) =>
-      id === "ac26-crypto-battle"
+      id === "crypto-battle"
         ? { name: "暗号バトル", i18n: { en: { name: "Cryptography Battle" } } }
         : undefined,
     );
-    expect(questCardTitle("ac26-crypto-battle", "en")).toBe("Cryptography Battle");
-    expect(questCardTitle("ac26-crypto-battle", "ja")).toBe("暗号バトル");
+    expect(questCardTitle("crypto-battle", "en")).toBe("Cryptography Battle");
+    expect(questCardTitle("crypto-battle", "ja")).toBe("暗号バトル");
   });
 
   it("should fall back to the ja name for the en locale when no i18n override is declared", () => {

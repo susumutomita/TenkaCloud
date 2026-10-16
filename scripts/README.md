@@ -25,7 +25,8 @@ environments per team, 12 across the host and 4096 MiB of summed configured
 container-memory caps. Override with `--max-active-per-team`,
 `--max-active-environments` and `--container-memory-mib` through `LOCAL_ARGS`.
 The 40 gateway slots are active-only; runtime-port assignments survive Stop.
-The synthetic 100-job / 105-port test is allocation evidence, not a Docker benchmark.
+The synthetic 100-job test checks runtime-port demand below 300 for the selected
+catalog. It provides allocation evidence; Docker capacity needs a separate benchmark.
 Existing events retain their legacy lifecycle.
 
 `make deploy` and `make destroy` use the current cloud CLI. They validate the
@@ -35,8 +36,8 @@ for supported exercises, retained data and recovery. AWS problem-template author
 commands do not deploy the competition platform.
 
 Use `bun run pack --help` for authoring. Local activation records do
-not add a pack to the event catalog. The generic catalog/workbench exposes 106 local definitions and 15 terminal
-declarations. Representative real Docker/browser checks cover SQL and PostgreSQL
+not add a pack to the event catalog. The generic catalog/workbench exposes 24 current definitions (15 Compose problems) and one terminal
+declarations. Representative real Docker/browser checks on earlier snapshots covered SQL and PostgreSQL
 terminal checkpoints, team separation and preserved work after restart; they do
 not prove complete play-throughs of every problem. AWS-service problems are
 cloud-only and cannot be enabled through the local entrypoint.

@@ -606,13 +606,21 @@ export class DockerHostingEngine implements RuntimeEngine {
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
     const { unit } = await this.ownedUnit(job, false);
-    if (unit.isolationVersion === 1) await this.withdrawRuntimePublications(job);
-    // `compose stop` never recreates containers; interpolation needs names, not the secrets.
-    const placeholders = Object.fromEntries(
-      unit.secretEnv.map((name) => [name, "tenkacloud-host-stop"]),
-    );
-    this.revokeRunning(job.jobId);
-    await this.runCompose(unit, "stop", { ...process.env, ...placeholders });
+    try {
+      if (unit.isolationVersion === 1) await this.withdrawRuntimePublications(job);
+      // `compose stop` never recreates containers; interpolation needs names, not the secrets.
+      const placeholders = Object.fromEntries(
+        unit.secretEnv.map((name) => [name, "tenkacloud-host-stop"]),
+      );
+      this.revokeRunning(job.jobId);
+      await this.runCompose(unit, "stop", { ...process.env, ...placeholders });
+    } catch (error) {
+      // Revoked admission is not proof of shutdown. Retain and quarantine an
+      // isolated workload until owned-container shutdown has been confirmed.
+      if (unit.isolationVersion === 1)
+        return this.haltGuardedUnit(job, this.recordedUnit(job), error);
+      throw error;
+    }
   }
   async resume(job: Job): Promise<void> {
     await this.awaitGuardHalt(job);

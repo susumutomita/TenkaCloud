@@ -127,8 +127,8 @@ function captureNativeProfile(
   plugins: ExecutionCatalog["plugins"],
   objects: Map<string, Uint8Array>,
 ) {
-  const problemId = "ac26-crypto-battle";
-  if (asMap(input.bundle.catalog)[problemId] !== "problems/battles/ac26-crypto-battle") return [];
+  const problemId = "crypto-battle";
+  if (asMap(input.bundle.catalog)[problemId] !== "problems/battles/crypto-battle") return [];
   const metadataKey = sources[problemId]?.["metadata.json"]?.key;
   const bytes = metadataKey ? objects.get(metadataKey) : undefined;
   if (!bytes) throw new Error("Native problem metadata is missing.");

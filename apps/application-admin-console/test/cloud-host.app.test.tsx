@@ -18,8 +18,8 @@ import { problemPicker } from "./utils/problem-picker";
 
 const config: AppConfig = {
   mode: "cloud-host",
-  supportedProblemIds: ["hello-world", "ac26-crypto-battle"],
-  nativeProblemIds: ["ac26-crypto-battle"],
+  supportedProblemIds: ["hello-world", "crypto-battle"],
+  nativeProblemIds: ["crypto-battle"],
   cognitoDomain: "https://organizers.example.test",
   cognitoClientId: "synthetic-cloud-client",
   redirectUri: "https://console.example.test/callback",
@@ -164,7 +164,7 @@ describe("cloud organizer SPA journey", () => {
     if (!picker) throw new Error("Missing cloud problem picker");
     expect(picker.findOptions()).toHaveLength(2);
     expect(picker.findOptionByValue("hello-world")).not.toBeNull();
-    expect(picker.findOptionByValue("ac26-crypto-battle")).not.toBeNull();
+    expect(picker.findOptionByValue("crypto-battle")).not.toBeNull();
     for (const id of ["sqli-demo", "db-a1-table-primary-key"])
       expect(picker.findOptionByValue(id)).toBeNull();
     picker.toggleProblem("hello-world");

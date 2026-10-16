@@ -187,8 +187,8 @@ describe("immutable cloud execution artifacts", () => {
   });
 
   it("marks only the reviewed core pure battle native and retains the optional AWS variant", () => {
-    const problemId = "ac26-crypto-battle";
-    const directory = "problems/battles/ac26-crypto-battle";
+    const problemId = "crypto-battle";
+    const directory = "problems/battles/crypto-battle";
     const base = fixture();
     const bundle = {
       ...base.bundle,

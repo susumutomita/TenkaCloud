@@ -6,7 +6,7 @@ import type { CoordinationStateRow } from "./coordination-store.js";
  * against the plugin currently loaded.
  *
  * The issue this closes: plugin state had no version, so new code read old
- * rows unconditionally. `ac26-crypto-battle` hit this four times in one
+ * rows unconditionally. `crypto-battle` hit this four times in one
  * session (missing fields read as `NaN` / silently-stalled distribution /
  * `NaN` scores / a throw) -- three of four failed silently rather than
  * throwing. A version alone does not fix that; a rule for what happens on a

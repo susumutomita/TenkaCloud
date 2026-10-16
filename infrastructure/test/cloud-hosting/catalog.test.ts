@@ -60,7 +60,7 @@ describe("cloud catalog boundary", () => {
 
 it("selected crypto IDs remain in every cloud-compatible projection", () => {
   const entries = {
-    "ac26-crypto-battle": "selected",
+    "crypto-battle": "selected",
     "sha256-bytes-padding": "selected",
     "sha256-compress-digest": "selected",
     "sha256-schedule-logic": "selected",
