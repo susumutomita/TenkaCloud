@@ -9,12 +9,16 @@ import { finished } from "node:stream/promises";
  */
 export function spawnPrivateKeyProcess(
   command: readonly string[],
-  options: { readonly cwd: string; readonly env?: NodeJS.ProcessEnv },
+  options: {
+    readonly cwd: string;
+    readonly env?: NodeJS.ProcessEnv;
+    readonly stdin?: "pipe";
+  },
 ) {
   const child = Bun.spawn([...command], {
     cwd: options.cwd,
     env: options.env,
-    stdio: ["ignore", "pipe", "pipe", "pipe"],
+    stdio: [options.stdin ?? "ignore", "pipe", "pipe", "pipe"],
   });
   const descriptor = child.stdio[3];
   if (descriptor === undefined || descriptor === null) {
