@@ -146,6 +146,14 @@ export function isolatedCompose(text: string, plan: LocalNetworkPlan): string {
   return stringify(document);
 }
 
+/** Only the organizer can clear a colliding host route, so halts report it by name. */
+export class NetworkOverlapError extends Error {
+  constructor() {
+    super("Competition network overlaps an existing host, LAN/VPN or runtime range.");
+    this.name = "NetworkOverlapError";
+  }
+}
+
 /** Caller-supplied inventory must include LAN/VPN routes, not just interface addresses. */
 export function assertNoNetworkOverlap(plan: LocalNetworkPlan, occupied: readonly string[]): void {
   for (const candidate of plan.segments.flatMap((segment) => [segment.ipv4, segment.ipv6])) {
@@ -163,7 +171,7 @@ export function assertNoNetworkOverlap(plan: LocalNetworkPlan, occupied: readonl
         family,
       );
       if (candidateList.check(address, family) || existingList.check(ip, family))
-        throw new Error("Competition network overlaps an existing host, LAN/VPN or runtime range.");
+        throw new NetworkOverlapError();
     }
   }
 }

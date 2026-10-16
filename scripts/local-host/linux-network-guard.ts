@@ -11,10 +11,13 @@ import {
 import {
   auditNetwork,
   emergencyNetwork,
+  installNetwork,
   networkEndpoints,
   publishNetwork,
+  removeNetwork,
   stopNetwork,
 } from "./network-audit";
+import { withNetworkHookLock } from "./network-hook-lock";
 import { vpnAdmissionHook, vpnSealHook, workloadQuarantineHook } from "./vpn/firewall-scope";
 
 export interface LocalNetworkGuard {
@@ -23,13 +26,16 @@ export interface LocalNetworkGuard {
   verify(plan: LocalNetworkPlan): void;
   verifyNetworks(plan: LocalNetworkPlan): void;
   remove(plan: LocalNetworkPlan): void;
-  occupiedRoutes(): readonly string[];
+  /** Host routes, minus the bridge routes that `owned` itself creates inside its subnets. */
+  occupiedRoutes(owned?: LocalNetworkPlan): readonly string[];
   update(plan: LocalNetworkPlan, previous: LocalNetworkPlan): void;
   endpoints(plan: LocalNetworkPlan, service: string, port: number): readonly LocalPublicEndpoint[];
   routePublications(plan: LocalNetworkPlan): void;
   resetStopped(plan: LocalNetworkPlan): void;
   quarantine(plan: LocalNetworkPlan): void;
   stopOwned(plan: LocalNetworkPlan): Promise<void>;
+  installAsync?(plan: LocalNetworkPlan): Promise<void>;
+  removeAsync?(plan: LocalNetworkPlan): Promise<void>;
   audit?(plan: LocalNetworkPlan): Promise<void>;
   quarantineAsync?(plan: LocalNetworkPlan): Promise<void>;
   resetStoppedAsync?(plan: LocalNetworkPlan): Promise<void>;
@@ -380,7 +386,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     this.firewall(false, ["-S", "DOCKER-USER"]);
     this.firewall(true, ["-S", "FORWARD"]);
   }
-  occupiedRoutes(): readonly string[] {
+  occupiedRoutes(owned?: LocalNetworkPlan): readonly string[] {
     const result: string[] = [];
     for (const ipv6 of [false, true]) {
       const rows: unknown = JSON.parse(
@@ -388,7 +394,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       );
       if (!Array.isArray(rows) || rows.length > 16384)
         throw new Error("Invalid host route inventory.");
-      result.push(...routeDestinations(rows, ipv6));
+      result.push(...routeDestinations(rows, ipv6, owned?.segments ?? []));
     }
     return result;
   }
@@ -463,21 +469,25 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         throw new Error(
           "A running unguarded workload must be halted before installing competition rules.",
         );
-      const body = [
-        "*filter",
-        `:${plan.inputChain} - [0:0]`,
-        `:${plan.forwardChain} - [0:0]`,
-        ...inputRules(plan, ipv6).map((rule) => `-A ${plan.inputChain} ${rule.join(" ")}`),
-        ...forwardRules(plan, ipv6).map((rule) => `-A ${plan.forwardChain} ${rule.join(" ")}`),
-        ...hooks(plan, ipv6).map((hook) => this.hookInsertion(plan, ipv6, hook.parent, hook.rule)),
-        "COMMIT",
-        "",
-      ].join("\n");
-      this.command(
-        ipv6 ? "ip6tables-restore" : "iptables-restore",
-        ["--wait", "5", "--noflush"],
-        body,
-      );
+      withNetworkHookLock(() => {
+        const body = [
+          "*filter",
+          `:${plan.inputChain} - [0:0]`,
+          `:${plan.forwardChain} - [0:0]`,
+          ...inputRules(plan, ipv6).map((rule) => `-A ${plan.inputChain} ${rule.join(" ")}`),
+          ...forwardRules(plan, ipv6).map((rule) => `-A ${plan.forwardChain} ${rule.join(" ")}`),
+          ...hooks(plan, ipv6).map((hook) =>
+            this.hookInsertion(plan, ipv6, hook.parent, hook.rule),
+          ),
+          "COMMIT",
+          "",
+        ].join("\n");
+        this.command(
+          ipv6 ? "ip6tables-restore" : "iptables-restore",
+          ["--wait", "5", "--noflush"],
+          body,
+        );
+      });
       this.verifyFamily(plan, ipv6);
     }
   }
@@ -495,22 +505,24 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         ]).trim()
       )
         throw error;
-      const missing = hooks(plan, ipv6).filter(
-        ({ parent, rule }) =>
-          !lines(this.firewall(ipv6, ["-S", parent])).includes(`-A ${parent} ${rule.join(" ")}`),
-      );
-      if (!missing.length) throw error;
-      const body = [
-        "*filter",
-        ...missing.map(({ parent, rule }) => this.hookInsertion(plan, ipv6, parent, rule)),
-        "COMMIT",
-        "",
-      ].join("\n");
-      this.command(
-        ipv6 ? "ip6tables-restore" : "iptables-restore",
-        ["--wait", "5", "--noflush"],
-        body,
-      );
+      withNetworkHookLock(() => {
+        const missing = hooks(plan, ipv6).filter(
+          ({ parent, rule }) =>
+            !lines(this.firewall(ipv6, ["-S", parent])).includes(`-A ${parent} ${rule.join(" ")}`),
+        );
+        if (!missing.length) throw error;
+        const body = [
+          "*filter",
+          ...missing.map(({ parent, rule }) => this.hookInsertion(plan, ipv6, parent, rule)),
+          "COMMIT",
+          "",
+        ].join("\n");
+        this.command(
+          ipv6 ? "ip6tables-restore" : "iptables-restore",
+          ["--wait", "5", "--noflush"],
+          body,
+        );
+      });
       this.verifyFamily(plan, ipv6);
     }
   }
@@ -1020,6 +1032,9 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     return `-I ${parent} ${prefix + count + 1} ${rule.join(" ")}`;
   }
   quarantine(plan: LocalNetworkPlan): void {
+    withNetworkHookLock(() => this.quarantineLocked(plan));
+  }
+  private quarantineLocked(plan: LocalNetworkPlan): void {
     this.assertEmergencyScope(plan);
     const failures: unknown[] = [];
     for (const ipv6 of [false, true]) {
@@ -1079,6 +1094,12 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   }
   resetStoppedAsync(plan: LocalNetworkPlan): Promise<void> {
     return emergencyNetwork(plan, "reset");
+  }
+  installAsync(plan: LocalNetworkPlan): Promise<void> {
+    return installNetwork(plan);
+  }
+  removeAsync(plan: LocalNetworkPlan): Promise<void> {
+    return removeNetwork(plan, (owned) => this.remove(owned));
   }
   audit(plan: LocalNetworkPlan): Promise<void> {
     return auditNetwork(plan);
@@ -1154,6 +1175,9 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     }
   }
   private removeQuarantine(plan: LocalNetworkPlan): void {
+    withNetworkHookLock(() => this.removeQuarantineLocked(plan));
+  }
+  private removeQuarantineLocked(plan: LocalNetworkPlan): void {
     for (const ipv6 of [false, true])
       for (const { parent, rule } of quarantineHooks(plan, ipv6)) {
         const matches = () =>
@@ -1227,36 +1251,75 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       )
     )
       throw new Error("Competition network still exists; guard and ownership were retained.");
-    this.removeQuarantine(plan);
-    for (const ipv6 of [false, true]) {
-      const inventory = lines(this.firewall(ipv6, ["-S"]));
-      const chains = [plan.inputChain, plan.forwardChain].filter((chain) =>
-        inventory.includes(`-N ${chain}`),
-      );
-      for (const chain of chains) {
-        this.firewall(ipv6, ["-C", chain, "-m", "comment", "--comment", plan.owner]);
-        for (const hook of hooks(plan, ipv6).filter((entry) => entry.rule.at(-1) === chain)) {
-          const parent = lines(this.firewall(ipv6, ["-S", hook.parent]));
-          if (parent.includes(`-A ${hook.parent} ${hook.rule.join(" ")}`))
-            this.firewall(ipv6, ["-D", hook.parent, ...hook.rule]);
+    withNetworkHookLock(() => {
+      this.removeQuarantine(plan);
+      for (const ipv6 of [false, true]) {
+        const inventory = lines(this.firewall(ipv6, ["-S"]));
+        const chains = [plan.inputChain, plan.forwardChain].filter((chain) =>
+          inventory.includes(`-N ${chain}`),
+        );
+        for (const chain of chains) {
+          this.firewall(ipv6, ["-C", chain, "-m", "comment", "--comment", plan.owner]);
+          for (const hook of hooks(plan, ipv6).filter((entry) => entry.rule.at(-1) === chain)) {
+            const parent = lines(this.firewall(ipv6, ["-S", hook.parent]));
+            if (parent.includes(`-A ${hook.parent} ${hook.rule.join(" ")}`))
+              this.firewall(ipv6, ["-D", hook.parent, ...hook.rule]);
+          }
+          this.firewall(ipv6, ["-F", chain]);
+          this.firewall(ipv6, ["-X", chain]);
         }
-        this.firewall(ipv6, ["-F", chain]);
-        this.firewall(ipv6, ["-X", chain]);
       }
-    }
+    });
   }
 }
 
-function routeDestinations(rows: unknown[], ipv6: boolean): string[] {
+function routeDestinations(
+  rows: unknown[],
+  ipv6: boolean,
+  owned: LocalNetworkPlan["segments"],
+): string[] {
   const result: string[] = [];
   for (const row of rows) {
     if (!row || typeof row !== "object") throw new Error("Invalid host route.");
-    const destination = (row as { dst?: unknown }).dst;
+    const route = row as BridgeRoute & { dst?: unknown; dev?: unknown };
+    const destination = route.dst;
     if (destination === undefined || destination === "default") continue;
     if (typeof destination !== "string") throw new Error("Invalid routed destination.");
-    result.push(destination.includes("/") ? destination : `${destination}/${routePrefix(ipv6)}`);
+    const cidr = destination.includes("/") ? destination : `${destination}/${routePrefix(ipv6)}`;
+    if (
+      owned.some(
+        (segment) =>
+          segment.bridge === route.dev &&
+          ownBridgeRoute(route, cidr, ipv6 ? segment.ipv6 : segment.ipv4),
+      )
+    )
+      continue;
+    result.push(cidr);
   }
   return result;
+}
+
+interface BridgeRoute {
+  readonly type?: unknown;
+  readonly protocol?: unknown;
+  readonly gateway?: unknown;
+}
+/**
+ * A retained bridge keeps the kernel's routes inside its subnet and Docker's plain on-link route to
+ * all of it. Any other route into the subnet, such as a narrower one, still counts as an overlap.
+ */
+function ownBridgeRoute(route: BridgeRoute, cidr: string, subnet: string): boolean {
+  const [address = "", prefix = ""] = cidr.split("/");
+  const [network = "", length = ""] = subnet.split("/");
+  if (isIP(address) !== isIP(network) || Number(prefix) < Number(length)) return false;
+  const family = isIP(network) === 6 ? "ipv6" : "ipv4";
+  const list = new BlockList();
+  list.addSubnet(network, Number(length), family);
+  if (!list.check(address, family)) return false;
+  return (
+    route.protocol === "kernel" ||
+    (prefix === length && route.type === undefined && route.gateway === undefined)
+  );
 }
 
 function routePrefix(ipv6: boolean): number {

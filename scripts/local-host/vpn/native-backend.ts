@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { LinuxNetworkGuard } from "../linux-network-guard";
 import type { LocalNetworkPlan } from "../local-network";
 import { HostError } from "../model";
+import { withNetworkHookLock } from "../network-hook-lock";
 import { vpnSealHook, workloadQuarantineHook } from "./firewall-scope";
 import type { VpnForwardPolicy, VpnRuntimeAdmission } from "./forward-policy";
 import { vpnForwardPolicy, vpnLeaseTimeout } from "./forward-policy";
@@ -126,6 +127,9 @@ export class NativeVpnBackend {
   /** Synchronous emergency barrier: called before any lifecycle release, and retained on shutdown. */
   seal(): void {
     this.proof = undefined;
+    withNetworkHookLock(() => this.sealLocked());
+  }
+  private sealLocked(): void {
     if (this.io.platform !== "linux" || !this.io.root)
       throw new Error("VPN ingress requires a dedicated native Linux root controller.");
     this.assertSealModules();
@@ -535,18 +539,22 @@ export class NativeVpnBackend {
       ];
       this.io.routeReplies(runtime.plan, addresses);
     }
-    for (const ipv6 of [false, true]) {
-      this.antiSpoof(ipv6);
-      this.restore(
-        ipv6,
-        ipv6 ? "FORWARD" : "DOCKER-USER",
-        this.forwardChain,
-        ipv6 ? policy.ipv6 : policy.ipv4,
-        ["-i", "-o"],
-      );
-      this.restore(ipv6, "INPUT", this.inputChain, this.inputRules(runtimes, policy, ipv6), ["-i"]);
-    }
-    this.assertPreparedHooks();
+    withNetworkHookLock(() => {
+      for (const ipv6 of [false, true]) {
+        this.antiSpoof(ipv6);
+        this.restore(
+          ipv6,
+          ipv6 ? "FORWARD" : "DOCKER-USER",
+          this.forwardChain,
+          ipv6 ? policy.ipv6 : policy.ipv4,
+          ["-i", "-o"],
+        );
+        this.restore(ipv6, "INPUT", this.inputChain, this.inputRules(runtimes, policy, ipv6), [
+          "-i",
+        ]);
+      }
+      this.assertPreparedHooks();
+    });
     const currentNames = new Set(policy.leases.map((lease) => lease.name));
     for (const name of new Set([...this.sets, ...retainedSets]))
       if (!currentNames.has(name)) {
@@ -573,6 +581,9 @@ export class NativeVpnBackend {
         }
   }
   commit(proof: VpnPeerProof): void {
+    withNetworkHookLock(() => this.commitLocked(proof));
+  }
+  private commitLocked(proof: VpnPeerProof): void {
     if (proof.generation !== this.plan.generation)
       throw new Error("VPN prepared generation changed.");
     if (this.io.now() < proof.verifiedAt || this.io.now() - proof.verifiedAt >= 60_000)

@@ -19,6 +19,7 @@ try {
   else if (workerData.mode === "stop") guard.stopOwnedSync(workerData.plan as LocalNetworkPlan);
   else if (workerData.mode === "quarantine") guard.quarantine(workerData.plan as LocalNetworkPlan);
   else if (workerData.mode === "reset") guard.resetStopped(workerData.plan as LocalNetworkPlan);
+  else if (workerData.mode === "install") guard.install(workerData.plan as LocalNetworkPlan);
   else if (workerData.mode === "verify") guard.verifyNetworks(workerData.plan as LocalNetworkPlan);
   else if (workerData.mode === "publish") {
     guard.update(workerData.plan, workerData.previous);
