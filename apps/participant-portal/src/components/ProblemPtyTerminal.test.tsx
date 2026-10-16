@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   disconnect: vi.fn(),
   input: undefined as ((data: string) => void) | undefined,
   changed: undefined as (() => void) | undefined,
-  dimensions: { cols: 100, rows: 30 },
+  dimensions: undefined as { cols: number; rows: number } | undefined,
   fail: false,
 }));
 vi.mock("@xterm/xterm", () => ({
@@ -46,6 +46,7 @@ vi.mock("@xterm/addon-fit", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.write.mockReset();
   mocks.dimensions = { cols: 100, rows: 30 };
   mocks.fail = false;
   mocks.input = undefined;
@@ -156,4 +157,93 @@ describe("interactive terminal", () => {
       JSON.stringify({ type: "input", data: "overflow" }),
     );
   });
+});
+
+it("drains parsed output so a healthy renderer can receive another bounded batch", async () => {
+  const parsed: (() => void)[] = [];
+  mocks.write.mockImplementation((_data: string, callback: () => void) => parsed.push(callback));
+  const socket = { readyState: 1, bufferedAmount: 0, send: vi.fn() } as unknown as WebSocket;
+  const output = { pending: "", write: undefined as ((data: string) => void) | undefined };
+  const onFailure = vi.fn();
+  render(
+    <ProblemPtyTerminal socket={socket} output={output} label="Terminal" onFailure={onFailure} />,
+  );
+  await waitFor(() => expect(output.write).toBeTypeOf("function"));
+  act(() => {
+    output.write?.("x".repeat(4 * 1024 * 1024));
+    for (const callback of parsed.splice(0)) callback();
+    output.write?.("y".repeat(4 * 1024 * 1024));
+    mocks.input?.("hello\r");
+  });
+  expect(onFailure).not.toHaveBeenCalled();
+  expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ type: "input", data: "hello\r" }));
+});
+
+it("disconnects once when pending WebSocket input exceeds its bound", async () => {
+  const socket = {
+    readyState: 1,
+    bufferedAmount: 1024 * 1024,
+    send: vi.fn(),
+  } as unknown as WebSocket;
+  const onFailure = vi.fn();
+  render(
+    <ProblemPtyTerminal
+      socket={socket}
+      output={{ pending: "" }}
+      label="Terminal"
+      onFailure={onFailure}
+    />,
+  );
+  await waitFor(() => expect(mocks.input).toBeTypeOf("function"));
+  act(() => {
+    mocks.input?.("overflow");
+    mocks.input?.("again");
+  });
+  expect(onFailure).toHaveBeenCalledOnce();
+  expect(socket.send).not.toHaveBeenCalledWith(JSON.stringify({ type: "input", data: "overflow" }));
+});
+
+it("cancels initialization when disconnected before imports settle", async () => {
+  const socket = { readyState: 1, send: vi.fn() } as unknown as WebSocket;
+  const onFailure = vi.fn();
+  const { unmount } = render(
+    <ProblemPtyTerminal
+      socket={socket}
+      output={{ pending: "early" }}
+      label="Terminal"
+      onFailure={onFailure}
+    />,
+  );
+  unmount();
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(mocks.write).not.toHaveBeenCalled();
+  expect(socket.send).not.toHaveBeenCalled();
+  expect(onFailure).not.toHaveBeenCalled();
+});
+
+it("uses window resize without observers and clamps minimum dimensions", async () => {
+  vi.stubGlobal("ResizeObserver", undefined);
+  mocks.dimensions = undefined;
+  const socket = { readyState: 1, bufferedAmount: 0, send: vi.fn() } as unknown as WebSocket;
+  render(
+    <ProblemPtyTerminal
+      socket={socket}
+      output={{ pending: "" }}
+      label="Terminal"
+      onFailure={vi.fn()}
+    />,
+  );
+  await waitFor(() => expect(socket.send).toHaveBeenCalledOnce());
+  expect(socket.send).toHaveBeenLastCalledWith(
+    JSON.stringify({ type: "resize", cols: 80, rows: 24 }),
+  );
+  act(() => window.dispatchEvent(new Event("resize")));
+  expect(socket.send).toHaveBeenCalledOnce();
+  mocks.dimensions = { cols: 0, rows: 0 };
+  act(() => window.dispatchEvent(new Event("resize")));
+  expect(socket.send).toHaveBeenLastCalledWith(
+    JSON.stringify({ type: "resize", cols: 2, rows: 1 }),
+  );
 });

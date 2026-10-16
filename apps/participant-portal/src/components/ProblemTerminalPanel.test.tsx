@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PortalNetworkError, PortalValidationError } from "../api/portal-client";
 import { I18nProvider } from "../i18n";
+import type { PtyOutput } from "./ProblemPtyTerminal";
 import { ProblemTerminalPanel } from "./ProblemTerminalPanel";
 
 /**
@@ -14,8 +15,16 @@ import { ProblemTerminalPanel } from "./ProblemTerminalPanel";
  * (xterm.js 等は使わない、 素の pre/input なので DOM 上の役割で拾える)。
  */
 
+const ptyMocks = vi.hoisted(() => ({
+  output: undefined as PtyOutput | undefined,
+  fail: undefined as (() => void) | undefined,
+}));
 vi.mock("./ProblemPtyTerminal", () => ({
-  ProblemPtyTerminal: () => <section aria-label="Interactive terminal">PTY</section>,
+  ProblemPtyTerminal: ({ output, onFailure }: { output: PtyOutput; onFailure: () => void }) => {
+    ptyMocks.output = output;
+    ptyMocks.fail = onFailure;
+    return <section aria-label="Interactive terminal">PTY</section>;
+  },
 }));
 
 const apiMocks = vi.hoisted(() => ({
@@ -450,4 +459,23 @@ it("retains the line console and reports its capability on Node hosts", async ()
   expect(screen.getByText(/This host provides a line console/u)).toBeInTheDocument();
   expect(screen.getByRole("textbox")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+});
+
+it("hands off early output, streams live output and closes on renderer failure", async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const ws = await connectAndOpen(user);
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "data", data: "early" }) }));
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "ready", mode: "pty" }) }));
+  expect(await screen.findByRole("region", { name: "Interactive terminal" })).toBeInTheDocument();
+  if (!ptyMocks.output || !ptyMocks.fail) throw new Error("Renderer was not attached");
+  expect(ptyMocks.output.pending).toBe("early");
+  const write = vi.fn();
+  ptyMocks.output.write = write;
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "data", data: "live" }) }));
+  expect(write).toHaveBeenCalledWith("live");
+  act(() => ptyMocks.fail?.());
+  expect(ws.closeCalls).toBe(1);
+  expect(screen.getByText("transport_failed")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
 });
