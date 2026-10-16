@@ -17,8 +17,14 @@ export async function terminalFixture(
 ) {
   const store = new HostStore(new Database(":memory:"));
   let clock = Date.parse("2026-10-01T00:00:00Z");
-  const shells: { job: Job; writes: string[]; kills: number; handlers: TerminalHandlers }[] = [];
-  const hooks: { beforeOpen?: () => Promise<void> } = {};
+  const shells: {
+    job: Job;
+    writes: string[];
+    resizes: { cols: number; rows: number }[];
+    kills: number;
+    handlers: TerminalHandlers;
+  }[] = [];
+  const hooks: { beforeOpen?: () => Promise<void>; pty?: boolean; closed?: Promise<void> } = {};
   const engine: RuntimeEngine = {
     catalog: () => [],
     start: unavailable,
@@ -45,9 +51,23 @@ export async function terminalFixture(
     openTerminal: async (job, handlers, assertCurrent) => {
       await hooks.beforeOpen?.();
       assertCurrent();
-      const shell = { job, writes: [] as string[], kills: 0, handlers };
+      const shell = {
+        job,
+        writes: [] as string[],
+        resizes: [] as { cols: number; rows: number }[],
+        kills: 0,
+        handlers,
+      };
       shells.push(shell);
       return {
+        closed: hooks.closed,
+        ...(hooks.pty
+          ? {
+              resize: (cols: number, rows: number) => {
+                shell.resizes.push({ cols, rows });
+              },
+            }
+          : {}),
         write: (data) => {
           shell.writes.push(data);
           handlers.onData(data);
@@ -109,6 +129,38 @@ export async function terminalFixture(
     add(`extra-${index}`),
   );
   const service = new HostingService(store, engine, "synthetic-host-key", () => clock);
+  const terminalTrace: { jobId: string; kind: string; bytes?: number }[] = [];
+  const recordTerminal = (jobId: string, kind: string, payload?: string) => {
+    if (terminalTrace.length < 256)
+      terminalTrace.push({
+        jobId,
+        kind,
+        ...(payload === undefined ? {} : { bytes: Buffer.byteLength(payload) }),
+      });
+  };
+  const attach = service.terminals.attach.bind(service.terminals);
+  service.terminals.attach = (grant, socket) =>
+    attach(grant, {
+      ...socket,
+      send: (payload) => {
+        recordTerminal(grant.jobId, "server-send", payload);
+        socket.send(payload);
+      },
+      close: () => {
+        recordTerminal(grant.jobId, "server-close");
+        socket.close();
+      },
+      onMessage: (handler) =>
+        socket.onMessage((payload) => {
+          recordTerminal(grant.jobId, "server-receive", payload);
+          handler(payload);
+        }),
+      onClose: (handler) =>
+        socket.onClose(() => {
+          recordTerminal(grant.jobId, "transport-close");
+          handler();
+        }),
+    });
   const authorizationErrors: { jobId: string; message: string }[] = [];
   const authorizeSurface = service.authorizeSurface.bind(service);
   service.authorizeSurface = (jobId, keyHash) => {
@@ -172,6 +224,7 @@ export async function terminalFixture(
     service,
     shells,
     authorizationErrors,
+    terminalTrace,
     hooks,
     event,
     a,
@@ -188,10 +241,12 @@ export async function terminalFixture(
     close: async () => {
       if (closed) return;
       closed = true;
-      service.terminals.closeAll();
-      await participant.close();
-      await admin.close();
-      store.close();
+      try {
+        await participant.close();
+      } finally {
+        await admin.close();
+        store.close();
+      }
     },
   };
 }

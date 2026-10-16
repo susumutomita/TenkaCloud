@@ -473,6 +473,7 @@
     "network_no_publications": "No team has published a service yet.",
     "network_terminal_hint": "Access these addresses from your team terminal. Reconnect the terminal after a publication changes.",
     "network_error": "The network operation failed. Refresh the status; contact the organizer if it persists.",
+    "terminal_pipe_notice": "This host provides a line console. Interactive PTY and resizing are available with the Bun local host.",
     "terminal_header": "Container terminal",
     "terminal_connect_button": "Connect",
     "terminal_connecting": "Connecting…",

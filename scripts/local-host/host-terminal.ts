@@ -46,7 +46,10 @@ function problemIdFrom(path: string): string {
   return value;
 }
 
-function terminalInput(raw: string): string | undefined {
+type TerminalFrame =
+  | { readonly type: "input"; readonly data: string }
+  | { readonly type: "resize"; readonly cols: number; readonly rows: number };
+function terminalFrame(raw: string): TerminalFrame | undefined {
   if (Buffer.byteLength(raw) > TERMINAL_MAX_FRAME_BYTES) return undefined;
   let value: unknown;
   try {
@@ -56,9 +59,22 @@ function terminalInput(raw: string): string | undefined {
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const frame = value as Record<string, unknown>;
-  if (Object.keys(frame).length !== 2 || frame.type !== "input" || typeof frame.data !== "string")
-    return undefined;
-  return frame.data;
+  if (Object.keys(frame).length === 2 && frame.type === "input" && typeof frame.data === "string")
+    return { type: "input", data: frame.data };
+  if (
+    Object.keys(frame).length === 3 &&
+    frame.type === "resize" &&
+    typeof frame.cols === "number" &&
+    Number.isInteger(frame.cols) &&
+    frame.cols >= 2 &&
+    frame.cols <= 256 &&
+    typeof frame.rows === "number" &&
+    Number.isInteger(frame.rows) &&
+    frame.rows >= 1 &&
+    frame.rows <= 128
+  )
+    return { type: "resize", cols: frame.cols, rows: frame.rows };
+  return undefined;
 }
 
 /** Ephemeral tickets and shell transports never survive host restart or access revocation. */
@@ -66,7 +82,7 @@ export class HostTerminals {
   private readonly tickets = new Map<string, Ticket>();
   private readonly sessions = new Map<
     string,
-    { readonly jobId: string; readonly close: () => void }
+    { readonly jobId: string; readonly close: () => void; readonly settled: () => Promise<void> }
   >();
   constructor(private readonly service: HostingService) {}
 
@@ -154,8 +170,12 @@ export class HostTerminals {
     return [...this.sessions.values()].filter((session) => session.jobId === jobId).length;
   }
 
+  private atCapacity(jobId: string): boolean {
+    return this.sessions.size >= MAX_SESSIONS || this.countFor(jobId) >= MAX_SESSIONS_PER_JOB;
+  }
+
   async attach(grant: TerminalGrant, socket: TerminalSocket): Promise<void> {
-    if (this.sessions.size >= MAX_SESSIONS || this.countFor(grant.jobId) >= MAX_SESSIONS_PER_JOB) {
+    if (this.atCapacity(grant.jobId)) {
       socket.send(JSON.stringify({ type: "exit", code: null, reason: "too_many_sessions" }));
       socket.close();
       return;
@@ -165,15 +185,30 @@ export class HostTerminals {
     let activeAt = began;
     let ended = false;
     let shell: TerminalProcess | undefined;
+    let spawning = true;
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const release = () => {
+      if (spawning) return;
+      if (shell?.closed)
+        void shell.closed.then(
+          () => this.sessions.delete(id),
+          () => undefined,
+        );
+      else this.sessions.delete(id);
+    };
     const pendingInput: string[] = [];
     let pendingBytes = 0;
+    let pendingSize: { cols: number; rows: number } | undefined;
     const end = (code: number | null, reason?: string, notify = true) => {
       if (ended) return;
       ended = true;
       pendingInput.length = 0;
       clearInterval(timer);
-      this.sessions.delete(id);
       shell?.kill();
+      release();
       if (notify)
         socket.send(JSON.stringify({ type: "exit", code, ...(reason ? { reason } : {}) }));
       socket.close();
@@ -195,23 +230,62 @@ export class HostTerminals {
       }
     };
     const timer = setInterval(check, 500);
-    this.sessions.set(id, { jobId: grant.jobId, close: () => end(null, "not_running") });
+    this.sessions.set(id, {
+      jobId: grant.jobId,
+      close: () => end(null, "not_running"),
+      settled: async () => {
+        await started;
+        await shell?.closed;
+      },
+    });
     socket.onClose(() => end(null, undefined, false));
+    const resize = (size: { cols: number; rows: number }) => {
+      if (!shell) pendingSize = size;
+      else if (shell.resize) shell.resize(size.cols, size.rows);
+      else end(null, "resize_not_supported");
+    };
+    const input = (data: string) => {
+      activeAt = this.service.now();
+      if (shell) shell.write(data);
+      else {
+        pendingBytes += Buffer.byteLength(data);
+        if (pendingBytes > TERMINAL_MAX_FRAME_BYTES) end(null, "invalid_input");
+        else pendingInput.push(data);
+      }
+    };
     socket.onMessage((raw) => {
-      const input = terminalInput(raw);
-      if (input === undefined) {
+      const frame = terminalFrame(raw);
+      if (!frame) {
         end(null, "invalid_input");
         return;
       }
       if (!check()) return;
-      activeAt = this.service.now();
-      if (shell) shell.write(input);
-      else {
-        pendingBytes += Buffer.byteLength(input);
-        if (pendingBytes > TERMINAL_MAX_FRAME_BYTES) end(null, "invalid_input");
-        else pendingInput.push(input);
+      try {
+        if (frame.type === "resize") resize(frame);
+        else input(frame.data);
+      } catch {
+        end(null, "transport_failed");
       }
     });
+
+    const activate = (opened: TerminalProcess) => {
+      spawning = false;
+      if (ended) {
+        opened.kill();
+        release();
+        return;
+      }
+      if (!check()) return;
+      if (pendingSize) resize(pendingSize);
+      if (ended) return;
+      socket.send(JSON.stringify({ type: "ready", mode: opened.resize ? "pty" : "pipe" }));
+      for (const input of pendingInput) {
+        assertCurrent();
+        opened.write(input);
+      }
+      pendingInput.length = 0;
+    };
+
     try {
       socket.authorize?.();
       const job = this.authorize(grant);
@@ -230,21 +304,24 @@ export class HostTerminals {
         },
         assertCurrent,
       );
-      if (ended) shell.kill();
-      else if (check()) {
-        for (const input of pendingInput) {
-          assertCurrent();
-          shell.write(input);
-        }
-        pendingInput.length = 0;
-      }
+      activate(shell);
     } catch {
-      end(null, "spawn_failed");
+      spawning = false;
+      if (ended) release();
+      else end(null, "spawn_failed");
+    } finally {
+      markStarted();
     }
   }
 
-  closeAll(): void {
+  async closeAll(): Promise<void> {
     this.tickets.clear();
-    for (const session of [...this.sessions.values()]) session.close();
+    const sessions = [...this.sessions.values()];
+    for (const session of sessions) session.close();
+    const results = await Promise.allSettled(sessions.map((session) => session.settled()));
+    const errors = results
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason as unknown);
+    if (errors.length) throw new AggregateError(errors, "Terminal cleanup is unconfirmed.");
   }
 }
