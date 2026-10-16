@@ -3,10 +3,13 @@ import { WebSocket } from "ws";
 import { networkEngineFixture } from "./network-engine-fixture";
 import { terminalFixture } from "./terminal-fixture";
 
-async function waitUntil(condition: () => boolean): Promise<void> {
+async function waitUntil(condition: () => boolean, diagnose?: () => unknown): Promise<void> {
   const deadline = Date.now() + 2000;
   while (!condition()) {
-    if (Date.now() >= deadline) throw new Error("Terminal condition timed out.");
+    if (Date.now() >= deadline)
+      throw new Error(
+        `Terminal condition timed out. ${diagnose ? JSON.stringify(diagnose()) : ""}`,
+      );
     await Bun.sleep(5);
   }
 }
@@ -92,6 +95,7 @@ test("terminal sessions revoke without client input and leave another team conne
           frames: b.frames,
           transport: b.lifecycle,
           authorizationErrors: f.authorizationErrors,
+          terminalTrace: f.terminalTrace,
           shells: f.shells.map(({ job, kills }) => ({
             teamId: job.teamId,
             jobId: job.jobId,
@@ -225,20 +229,45 @@ test("six authenticated WebSockets remain responsive during slow network audit a
     finish = resolve;
     fail = reject;
   });
+  let auditStarted = false;
   network.guard.audit = async (plan) => {
-    if (plan.project === `tch-${f.a.job.jobId.toLowerCase()}`) await barrier;
+    if (plan.project === `tch-${f.a.job.jobId.toLowerCase()}`) {
+      auditStarted = true;
+      await barrier;
+    }
   };
   const sessions: Awaited<ReturnType<typeof connect>>[] = [];
+  const diagnose = () => ({
+    auditStarted,
+    sessions: sessions.map((session) => ({
+      state: session.socket.readyState,
+      frames: session.frames,
+      lifecycle: session.lifecycle,
+    })),
+    shells: f.shells.map((shell) => ({
+      jobId: shell.job.jobId,
+      writes: shell.writes,
+      kills: shell.kills,
+    })),
+    authorizationErrors: f.authorizationErrors,
+    trace: f.terminalTrace,
+    networkCalls: network.calls,
+    supported: teams.map((team) =>
+      network.engine.terminalSupported(network.store.job(team.job.jobId)),
+    ),
+  });
   try {
     for (const team of teams)
       sessions.push(await connect(f.participant.origin, await f.ticket(team.team.loginKey)));
     await waitUntil(() => f.shells.length === 6);
     network.setNow(11_001);
-    await Bun.sleep(600);
+    await waitUntil(() => auditStarted, diagnose);
     for (const session of sessions)
       session.socket.send(JSON.stringify({ type: "input", data: "audit-echo" }));
-    await waitUntil(() =>
-      sessions.every((session) => session.frames.some((frame) => frame.data === "audit-echo")),
+    await waitUntil(
+      () =>
+        sessions.every((session) => session.frames.some((frame) => frame.data === "audit-echo")),
+      diagnose,
     );
     expect(sessions.every((session) => session.socket.readyState === WebSocket.OPEN)).toBe(true);
     fail(new Error("Delayed network audit failed"));

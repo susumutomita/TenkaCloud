@@ -129,6 +129,38 @@ export async function terminalFixture(
     add(`extra-${index}`),
   );
   const service = new HostingService(store, engine, "synthetic-host-key", () => clock);
+  const terminalTrace: { jobId: string; kind: string; bytes?: number }[] = [];
+  const recordTerminal = (jobId: string, kind: string, payload?: string) => {
+    if (terminalTrace.length < 256)
+      terminalTrace.push({
+        jobId,
+        kind,
+        ...(payload === undefined ? {} : { bytes: Buffer.byteLength(payload) }),
+      });
+  };
+  const attach = service.terminals.attach.bind(service.terminals);
+  service.terminals.attach = (grant, socket) =>
+    attach(grant, {
+      ...socket,
+      send: (payload) => {
+        recordTerminal(grant.jobId, "server-send", payload);
+        socket.send(payload);
+      },
+      close: () => {
+        recordTerminal(grant.jobId, "server-close");
+        socket.close();
+      },
+      onMessage: (handler) =>
+        socket.onMessage((payload) => {
+          recordTerminal(grant.jobId, "server-receive", payload);
+          handler(payload);
+        }),
+      onClose: (handler) =>
+        socket.onClose(() => {
+          recordTerminal(grant.jobId, "transport-close");
+          handler();
+        }),
+    });
   const authorizationErrors: { jobId: string; message: string }[] = [];
   const authorizeSurface = service.authorizeSurface.bind(service);
   service.authorizeSurface = (jobId, keyHash) => {
@@ -192,6 +224,7 @@ export async function terminalFixture(
     service,
     shells,
     authorizationErrors,
+    terminalTrace,
     hooks,
     event,
     a,
