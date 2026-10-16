@@ -35,8 +35,8 @@ for supported exercises, retained data and recovery. AWS problem-template author
 commands do not deploy the competition platform.
 
 Use `bun run pack --help` for authoring. Local activation records do
-not add a pack to the event catalog. The generic catalog/workbench exposes 106 local definitions and 15 terminal
-declarations. Representative real Docker/browser checks cover SQL and PostgreSQL
+not add a pack to the event catalog. The generic catalog/workbench exposes 24 current definitions (15 Compose problems) and one terminal
+declarations. Representative real Docker/browser checks on earlier snapshots covered SQL and PostgreSQL
 terminal checkpoints, team separation and preserved work after restart; they do
 not prove complete play-throughs of every problem. AWS-service problems are
 cloud-only and cannot be enabled through the local entrypoint.

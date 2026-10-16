@@ -8,9 +8,6 @@ import { restoreSourcePermissions } from "./source-permissions.js";
 export const SourceSchema = z
   .object({ url: z.string(), ref: z.string().min(1), subdir: z.string().optional() })
   .strict();
-export const SelectionSchema = z
-  .object({ schemaVersion: z.literal(1), sources: z.array(SourceSchema).min(1) })
-  .strict();
 const RevisionSchema = SourceSchema.extend({
   commit: z.string().regex(/^[a-f0-9]{40}$/u),
   digest: z.string().regex(/^[a-f0-9]{64}$/u),
@@ -28,6 +25,13 @@ const RevisionSchema = SourceSchema.extend({
       "Invalid problems root",
     ),
 }).strict();
+export const SelectionSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    sources: z.array(SourceSchema).min(1),
+    retained: z.array(RevisionSchema).optional(),
+  })
+  .strict();
 export const CatalogLockSchema = z
   .object({
     schemaVersion: z.literal(1),

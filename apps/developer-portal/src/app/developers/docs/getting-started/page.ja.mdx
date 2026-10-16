@@ -25,7 +25,7 @@ make local
 3. Schedule から大会を開始し、各チームへ参加者 URL とチームキーを渡します。
 4. 参加者ポータルへそのキーで入ります。Docker は **Start / resume** で起動し、問題文、操作、得点まで確認します。使い終えた環境は **Stop (keep data)** で停止します。
 
-開催者と参加者が使う一つの競技システムです。個人練習専用のログインはありません。Docker カタログと workbench の復旧は進行中です。106 問が一覧に出ることと、terminal や実 Docker のブラウザ操作まで全問確認済みであることは別です。
+開催者と参加者が使う一つの競技システムです。個人練習専用のログインはありません。Docker カタログと workbench の復旧は進行中です。現行 24 問が一覧に出ることと、terminal や実 Docker のブラウザ操作まで全問確認済みであることは別です。
 
 <h2 id="stop-and-resume">データを消さず停止・再開する</h2>
 
@@ -66,4 +66,4 @@ Codespaces の転送 URL と問題接続は、この candidate では未確認�
 
 新規クラウド環境の stack 名は `tenkacloud-cloud` 系です。既存の `tenkacloud-lite` 系 stack は名前を維持します。CLI は Lite / cloud の既存 stack を検出し、両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` の明示指定が必要です。旧 Lite の更新は所有情報と永続 resource ID を検証します。 catalog pin のない旧 Lite 環境は、resource / schema の検査後、bootstrap・source upload・配置の前に、進行中の大会がないことを初回だけ明示確認します。開催中の大会は完了まで配置済みの版で継続してください。大会が残っていないことを運用者が確認してから対話で承認し、非対話の更新には `CLOUD_ARGS="--confirm-no-active-events"` を使います。通常の `--yes` ではこの確認を省略できません。legacy catalog key だけでは安全な更新を証明できず、過去のデータも自動移行しません。新規環境と復旧済み環境は通常の `make deploy` で自動配置します。公開 cloud-v1 の resource / DB schema への上書き更新は拒否し、データは自動移行しません。`--drain-events` は使えません。問題環境を大会の Teardown で撤収してから基盤を削除してください。
 
-両 DB とも 99 チーム、SQL coordination は旧 4 MiB 上限です。現行 catalog の 9 template は `TemplateBody` の 51,200 bytes 上限を超え、`TemplateURL` は未実装です。全 AWS 問題の配置確認済みを意味しません。
+両 DB とも 99 チーム、SQL coordination は旧 4 MiB 上限です。現行 catalog の 8 template はすべて `TemplateBody` の 51,200 bytes 以内で、`TemplateURL` は未実装です。全 AWS 問題の配置確認済みを意味しません。

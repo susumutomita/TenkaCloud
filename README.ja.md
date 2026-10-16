@@ -97,7 +97,7 @@ Codespace を作成し、依存関係の準備が終わったらターミナル�
 
 クラウド開催は Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。Docker / Compose 問題はローカルで実行します。この checkout は**統合検証中の候補版**です。実 AWS での大会全体のリハーサルと、Battle の一斉アクセス性能には検証が残っています。環境ファイルの `CDK_PARAM_CONTROL_DATA_BACKEND` で `turso` または `dynamodb` を選択します。Turso には DB URL と既存の SSM トークンパラメーターが必要です。[DB 設定](./infrastructure/README.md#database-selection)を参照してください。
 
-新規環境の stack 名は `tenkacloud-cloud` 系とし、既存の `tenkacloud-lite` 系 stack は名前を維持します。CLI が Lite / cloud の既存環境を検出します。両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` を明示します。公開 cloud-v1 の DB・resource 構成は自動移行しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。現行の 9 template は `TemplateBody` 上限を超えるため、全 AWS 問題の配置を保証しません。[既存環境のstack名と制限](./infrastructure/README.md#existing-installations-and-resource-identity)を確認してください。
+新規環境の stack 名は `tenkacloud-cloud` 系とし、既存の `tenkacloud-lite` 系 stack は名前を維持します。CLI が Lite / cloud の既存環境を検出します。両方ある場合は `TENKACLOUD_STACK_LAYOUT=lite` または `cloud` を明示します。公開 cloud-v1 の DB・resource 構成は自動移行しません。両 DB とも 99 チーム、SQL coordination は 4 MiB 上限です。現行の 8 template はすべて `TemplateBody` の 51,200 bytes 以内です。実 AWS での配置確認は別途必要です。[既存環境のstack名と制限](./infrastructure/README.md#existing-installations-and-resource-identity)を確認してください。
 
 AWS CLI のプロファイル、アカウント、リージョン、開催者のメールアドレスを用意します。`make env-init` で公開設定を入力すると、選択した `infrastructure/environments/<ENV>/.env` を所有者だけが読める権限で作成します。既存ファイルは保持するため、設定を変更する場合は編集してください。
 
@@ -143,6 +143,8 @@ AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` 
 `make catalog-download CATALOG_SOURCES=my-catalogs.json` で問題 repo を選択して取得し、検証・再ビルドします。既存大会の snapshot は保持します。取得だけで稼働中の host は更新されません。
 
 取得元の `ref` には、タグ、ブランチ、完全な commit のどれでも指定できます。取得時に一度だけ解決し、commit と内容の digest を記録します。起動とビルドでは、リモートの ref を読みません。標準の `catalog-sources.json` は、TenkaCloudChallenge のリリースタグを指定しています。上げるときは、タグを書き換えて `make catalog-download catalog-prepare` を実行します。次に `.tenkacloud/catalog-store/selected.json` の `sources` を `catalog-lock.json` に写し、`bun run scripts/release/host-candidate.ts --sync-catalog` を実行します。CI は取得後に `make catalog-verify-lock` を実行し、タグが付け替えられて `catalog-lock.json` と食い違うと失敗します。
+
+標準設定は旧固定版も `retained` に commit、内容の digest、問題のルートを指定しています。`catalog-download` は空の store でも旧版を復元・検証し、host と cloud の参加者ポータルに保存済み大会の画面を組み込みます。旧問題は新規大会の選択肢には入りません。対応する大会がある間は `catalog-sources.json` と `catalog-lock.json` の両方に固定記録を残してください。復元に失敗すると選択状態を変える前に停止します。
 
 再利用する問題や非公開コンテンツには、公開 SDK とオフラインの Problem Pack ツールで作成・検証・不変な revision の保存ができます。
 

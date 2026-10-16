@@ -190,6 +190,41 @@ export function downloadCatalog(
 ): void {
   withCatalogMutation(root, () => downloadCatalogInternal(root, config, deps));
 }
+function downloadRevision(
+  root: string,
+  source: z.infer<typeof SelectionSchema>["sources"][number] | Revision,
+  deps: { fetcher?: GitArchiveFetcher; resolveRef?: typeof resolveCatalogRef },
+): Revision {
+  const commit = (deps.resolveRef ?? resolveCatalogRef)(source.url, source.ref);
+  const parsed = parseGitSource({ url: source.url, commit, subdir: source.subdir });
+  if (!parsed.ok) throw new Error(parsed.message);
+  const scratch = mkdtempSync(join(tmpdir(), "tenka-catalog-"));
+  try {
+    (deps.fetcher ?? realGitArchiveFetcher)({
+      ...parsed.source,
+      destinationDir: scratch,
+      rejectLinks: true,
+    });
+    const relativeRoot = problemsRoot(scratch);
+    validateCatalogIdentity(join(scratch, relativeRoot));
+    sealSourcePermissions(scratch);
+    const digest = computeContentDigest(scratch, true);
+    if (
+      "commit" in source &&
+      (commit !== source.commit || digest !== source.digest || relativeRoot !== source.problemsRoot)
+    )
+      throw new Error(
+        "Retained catalog revision does not match its pinned commit, digest or problems root",
+      );
+    const destination = snapshot(root, digest);
+    mkdirSync(join(store(root), "snapshots"), { recursive: true });
+    saveSnapshot(scratch, destination, digest, root);
+    return { ...source, commit, digest, problemsRoot: relativeRoot };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 function downloadCatalogInternal(
   root: string,
   config: unknown,
@@ -197,32 +232,12 @@ function downloadCatalogInternal(
 ): void {
   const selection = SelectionSchema.parse(config);
   const revisions: Revision[] = [];
-  for (const source of selection.sources) {
-    const commit = (deps.resolveRef ?? resolveCatalogRef)(source.url, source.ref);
-    const parsed = parseGitSource({ url: source.url, commit, subdir: source.subdir });
-    if (!parsed.ok) throw new Error(parsed.message);
-    const scratch = mkdtempSync(join(tmpdir(), "tenka-catalog-"));
-    try {
-      (deps.fetcher ?? realGitArchiveFetcher)({
-        ...parsed.source,
-        destinationDir: scratch,
-        rejectLinks: true,
-      });
-      const relativeRoot = problemsRoot(scratch);
-      validateCatalogIdentity(join(scratch, relativeRoot));
-      sealSourcePermissions(scratch);
-      const digest = computeContentDigest(scratch, true);
-      const destination = snapshot(root, digest);
-      mkdirSync(join(store(root), "snapshots"), { recursive: true });
-      saveSnapshot(scratch, destination, digest, root);
-      revisions.push({ ...source, commit, digest, problemsRoot: relativeRoot });
-    } finally {
-      rmSync(scratch, { recursive: true, force: true });
-    }
+  for (const source of [...selection.sources, ...(selection.retained ?? [])]) {
+    revisions.push(downloadRevision(root, source, deps));
   }
   // Reject cross-pack conflicts before changing the selected lock or browser view.
   const ids = new Set<string>();
-  for (const revision of revisions)
+  for (const revision of revisions.slice(0, selection.sources.length))
     for (const directory of directories(
       join(snapshot(root, revision.digest), revision.problemsRoot),
     )) {
@@ -230,6 +245,7 @@ function downloadCatalogInternal(
       if (ids.has(id)) throw new Error(`Duplicate catalog problem ID: ${id}`);
       ids.add(id);
     }
+  const current = revisions.slice(0, selection.sources.length);
   const previous = existsSync(lockPath(root))
     ? CatalogLockSchema.parse(JSON.parse(readFileSync(lockPath(root), "utf8")))
     : undefined;
@@ -241,7 +257,7 @@ function downloadCatalogInternal(
       ]),
     ).values(),
   ];
-  const selected = CatalogLockSchema.parse({ schemaVersion: 1, sources: revisions, retained });
+  const selected = CatalogLockSchema.parse({ schemaVersion: 1, sources: current, retained });
   const transaction = mkdtempSync(join(store(root), ".selection-"));
   const temporary = join(transaction, "selected.json");
   writeFileSync(temporary, `${JSON.stringify(selected, null, 2)}\n`);
@@ -254,11 +270,18 @@ function downloadCatalogInternal(
 
 /** A tag can be moved after review; automated acquisition must still match the committed lock. */
 export function verifyCatalogLock(root: string): void {
-  const sources = (text: string) =>
-    JSON.stringify(CatalogLockSchema.parse(JSON.parse(text)).sources);
+  const selected = CatalogLockSchema.parse(JSON.parse(readCatalogSelection(root)));
+  const expected = CatalogLockSchema.parse(
+    JSON.parse(readFileSync(join(root, "catalog-lock.json"), "utf8")),
+  );
   if (
-    sources(readCatalogSelection(root)) !==
-    sources(readFileSync(join(root, "catalog-lock.json"), "utf8"))
+    JSON.stringify(selected.sources) !== JSON.stringify(expected.sources) ||
+    (expected.retained ?? []).some(
+      (revision) =>
+        !(selected.retained ?? []).some(
+          (entry) => JSON.stringify(entry) === JSON.stringify(revision),
+        ),
+    )
   )
     throw new Error(
       "The downloaded catalog differs from catalog-lock.json. Review the resolved source, then " +

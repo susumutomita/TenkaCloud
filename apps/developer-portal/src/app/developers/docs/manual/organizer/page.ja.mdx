@@ -14,7 +14,7 @@ export const metadata = { title: "競技開催者マニュアル" };
 
 チームと問題を選び、停止状態の Docker jobs の準備結果を確認して Schedule から開始します。Docker 環境は参加者が必要なときに起動します。AWS の配置は別の操作です。参加者 URL とチームキーは対象チームだけに渡します。正答、誤答、ヒント、得点、一つのチームの障害、再起動、撤収までリハーサルしてください。End Event は採点を止めますが、リソース削除の完了を意味しません。
 
-旧ローカル 106 問はすべて Challenge 形式の競技にする方針です。汎用カタログと workbench は実装済みです。実 Docker とブラウザで SQL へのアクセス、PostgreSQL terminal の 3 checkpoints、チーム分離、データを保持した再起動を確認しました。他の問題と terminal の全種類は未確認です。問題が選択欄に出ることだけで大会に使えると判断しないでください。
+現行カタログは 24 問で、Compose は 15 問、terminal 宣言は 1 件です。汎用カタログと workbench は実装済みです。以前の snapshot では実 Docker とブラウザで SQL へのアクセス、PostgreSQL terminal の 3 checkpoints、チーム分離、データを保持した再起動を確認しました。他の問題と terminal の全種類は未確認です。問題が選択欄に出ることだけで大会に使えると判断しないでください。
 
 <h2 id="aws-problems">AWS 問題はクラウド開催へ</h2>
 
