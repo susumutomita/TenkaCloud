@@ -42,6 +42,7 @@ import {
   type NetworkSubnets,
   occupiedDockerSubnets,
 } from "./docker-networks";
+import { assertInternetAccessUnavailable } from "./internet-access";
 import { LinuxNetworkGuard, type LocalNetworkGuard } from "./linux-network-guard";
 import {
   assertNoNetworkOverlap,
@@ -353,6 +354,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     };
   }
   private assertAllocationRequirements(job: Job): void {
+    assertInternetAccessUnavailable(definitionOf(job, false).problem.internetAccess);
     if (this.isolationRequired(job)) job.networkIsolationVersion = 1;
     if (this.isolationRequired(job) && (!this.networkPool || !job.runtimePorts))
       throw new Error(
@@ -475,6 +477,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   private async recoverRetained(job: Job): Promise<void> {
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
+    assertInternetAccessUnavailable(definitionOf(job, false).problem.internetAccess);
     const recorded = this.recordedUnit(job);
     this.revokeRunning(job.jobId);
     if (recorded.teardown) throw new Error(REMOVED_UNIT);
@@ -628,6 +631,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   async resume(job: Job): Promise<void> {
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
+    assertInternetAccessUnavailable(definitionOf(job, false).problem.internetAccess);
     const { unit, directory } = await this.ownedUnit(job, true);
     const plan = this.plan(job);
     await this.assertGuardedAdmission(job, unit);

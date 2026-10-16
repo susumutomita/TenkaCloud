@@ -94,6 +94,7 @@ export interface RawMetadata {
     readonly entry?: unknown;
     readonly challengeEndpoints?: unknown;
     readonly publicServices?: unknown;
+    readonly internetAccess?: unknown;
     readonly verifyUrl?: unknown;
     readonly secretEnv?: unknown;
     readonly terminal?: unknown;
