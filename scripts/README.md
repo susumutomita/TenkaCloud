@@ -25,7 +25,8 @@ environments per team, 12 across the host and 4096 MiB of summed configured
 container-memory caps. Override with `--max-active-per-team`,
 `--max-active-environments` and `--container-memory-mib` through `LOCAL_ARGS`.
 The 40 gateway slots are active-only; runtime-port assignments survive Stop.
-The synthetic 100-job / 105-port test is allocation evidence, not a Docker benchmark.
+The synthetic 100-job test checks runtime-port demand below 300 for the selected
+catalog. It provides allocation evidence; Docker capacity needs a separate benchmark.
 Existing events retain their legacy lifecycle.
 
 `make deploy` and `make destroy` use the current cloud CLI. They validate the
