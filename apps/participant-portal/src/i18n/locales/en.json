@@ -167,11 +167,6 @@
     "recommended_start_here": "Start here",
     "difficulty_label": "Difficulty: {label}",
     "aws_only_badge": "AWS only",
-    "difficulty_1": "Intro",
-    "difficulty_2": "Beginner",
-    "difficulty_3": "Intermediate",
-    "difficulty_4": "Advanced",
-    "difficulty_5": "Expert",
     "course_tracks_link": "Open course tracks"
   },
   "notifications": {
@@ -305,12 +300,7 @@
     "info_diagram_label": "Architecture",
     "info_diagram_alt": "Problem components and their relationships",
     "info_diagram_failed": "The diagram could not be loaded.",
-    "info_diagram_open": "Open the diagram in a new tab",
-    "difficulty_1": "Beginner",
-    "difficulty_2": "Easy",
-    "difficulty_3": "Medium",
-    "difficulty_4": "Hard",
-    "difficulty_5": "Expert"
+    "info_diagram_open": "Open the diagram in a new tab"
   },
   "sso_credentials": {
     "aws_access_unavailable": "AWS access is not available for this deployment. Check its current state or ask the organizer.",

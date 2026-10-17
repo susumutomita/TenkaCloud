@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { ArrowIcon, applicationConsoleCopy } from "../components/ProductLoginShell";
-import type { AppConfig } from "../config";
+import { type AppConfig, isLocalHost } from "../config";
 import { type LocaleCode, useI18n, useT } from "../i18n";
 
 type SessionResponse = Partial<TokenSet> & { message?: unknown };
@@ -85,7 +85,12 @@ export function LocalHostLoginPage({
   return (
     <ConsoleAuthShell
       plane="app"
-      copy={applicationConsoleCopy(t, t("local_host.login_title"), t("local_host.login_subtitle"))}
+      copy={applicationConsoleCopy(
+        t,
+        t("local_host.login_title"),
+        t("local_host.login_subtitle"),
+        isLocalHost(config),
+      )}
       locale={locale}
       onLocale={(code) => setLocale(code as LocaleCode)}
     >

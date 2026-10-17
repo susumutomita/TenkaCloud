@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>TenkaCloud</title>
+  <rect width="512" height="512" rx="114" fill="#1d1d1f"/>
+  <g transform="translate(96 96) scale(2.6667)">
+    <rect x="26" y="24" width="68" height="12" rx="6" fill="#ffffff"/>
+    <path d="M26 90 L60 48 L94 90" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

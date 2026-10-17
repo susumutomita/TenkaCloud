@@ -88,3 +88,15 @@ it("exchanges one key request under StrictMode and follows the normal authentica
     }),
   );
 });
+
+it.each([
+  ["en", "Local competition", "TENKACLOUD · LOCAL COMPETITION", "Run your competition,"],
+  ["ja", "ローカル競技", "TENKACLOUD · ローカル競技", "あなたの競技を、"],
+])("shows local competition copy in %s", (locale, label, eyebrow, headline) => {
+  localStorage.setItem("tenkacloud.application-admin.locale", locale);
+  showLogin();
+  expect(screen.getByText(label)).toBeInTheDocument();
+  expect(screen.getByText(eyebrow)).toBeInTheDocument();
+  expect(screen.getByText(headline)).toBeInTheDocument();
+  expect(screen.queryByText(/GameDay|CLOUD HOSTING|クラウド開催/u)).toBeNull();
+});

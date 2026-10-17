@@ -264,7 +264,13 @@ test("a correct flag scores once, trimmed, and a second one is already solved", 
   expect(problem(me, "hello-world")).toMatchObject({
     score: 100,
     lastResult: "ok",
+    lastScoredAt: new Date(START).toISOString(),
     scoring: { flagSubmitted: true },
+  });
+  const detail = await fixture.as(alpha).get("/portal/me/problems/hello-world");
+  expect(problem(detail, "hello-world")).toMatchObject({
+    lastScoredAt: new Date(START).toISOString(),
+    score: 100,
   });
   const board = await fixture.as(alpha).get("/portal/leaderboard");
   expect(
@@ -302,6 +308,8 @@ test("a wrong flag, including another team's, costs the wrong-answer penalty", a
     { source: "flag-wrong", points: -5, result: "wrong" },
     { source: "flag-wrong", points: -5, result: "wrong" },
   ]);
+  const me = await fixture.as(alpha).get("/portal/me");
+  expect(problem(me, "hello-world").lastScoredAt).toBeUndefined();
 });
 
 test("pinned hello-world debt, signed Battle loss, and host read models agree", async () => {
@@ -334,7 +342,11 @@ test("pinned hello-world debt, signed Battle loss, and host read models agree", 
   });
   const me = await fixture.as(alpha).get("/portal/me");
   expect(problem(me, "hello-world").score).toBe(95);
-  expect(problem(me, "crypto-battle").score).toBe(-100);
+  expect(problem(me, "crypto-battle")).toMatchObject({
+    score: -100,
+    lastScoredAt: new Date(START + 1000).toISOString(),
+  });
+  expect(problem(me, "hello-world").lastScoredAt).toBe(new Date(START).toISOString());
   const board = await fixture.as(beta).get("/portal/leaderboard");
   expect(
     (board.entries as { teamId: string; score: number }[]).find(
@@ -506,6 +518,7 @@ test("a hint is charged once and only its own content is revealed", async () => 
     },
     { id: required(hint2).id, penalty: 30, revealed: false },
   ]);
+  expect(problem(me, "hello-world").lastScoredAt).toBeUndefined();
   expect(fixture.aws.assumed.length).toBe(awsCalls);
 });
 
