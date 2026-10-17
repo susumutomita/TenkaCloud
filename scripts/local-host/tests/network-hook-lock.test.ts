@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { Worker } from "node:worker_threads";
 import { LinuxNetworkGuard } from "../linux-network-guard";
 import { localNetworkPlan } from "../local-network";
@@ -10,11 +11,11 @@ import {
 import { NativeVpnBackend } from "../vpn/native-backend";
 import { fixture, plan } from "./vpn-kernel-fixture";
 
-function holder(crash = false, inspect = false) {
+function holder(crash = false, inspect = false, crashDelay = 0) {
   const hookLock = networkHookWorkerContext();
   const trace = new SharedArrayBuffer(4);
   const worker = new Worker(new URL("./network-hook-worker-fixture.ts", import.meta.url), {
-    workerData: { hookLock, trace, crash, inspect },
+    workerData: { hookLock, trace, crash, inspect, crashDelay },
   });
   const held = new Promise<void>((resolve, reject) => {
     worker.once("message", () => resolve());
@@ -54,13 +55,16 @@ for (const operation of ["seal", "prepare", "commit"] as const)
     }
   });
 
-test("a crashed worker is released only after termination and cannot release another owner", async () => {
+test("a crashed worker cannot release another owner's lock", async () => {
   const held = holder(true);
   await held.held;
   await held.exited;
   const state = new Int32Array(held.hookLock.buffer);
   expect(Atomics.load(state, 0)).toBe(held.hookLock.owner);
-  expect(() => withNetworkHookLock(() => undefined, 1)).toThrow("ordering timed out");
+  if (process.platform === "linux") {
+    withNetworkHookLock(() => expect(Atomics.load(state, 0)).toBe(1), 1500);
+    expect(Atomics.load(state, 0)).toBe(0);
+  } else expect(() => withNetworkHookLock(() => undefined, 1)).toThrow("ordering timed out");
   releaseNetworkHookWorker(held.hookLock);
   expect(() =>
     withNetworkHookLock(() => {
@@ -71,6 +75,70 @@ test("a crashed worker is released only after termination and cannot release ano
   ).toThrow("Synthetic native failure");
   expect(Atomics.load(state, 0)).toBe(0);
 });
+
+for (const terminated of [false, true])
+  test.skipIf(process.platform !== "linux")(
+    `a synchronous seal reclaims a ${terminated ? "terminated" : "crashed"} worker's lock without the controller event loop`,
+    async () => {
+      const held = holder(true, false, 100);
+      await held.held;
+      const f = fixture();
+      const start = performance.now();
+      let controllerObservedExit = false;
+      void held.exited.then(() => {
+        controllerObservedExit = true;
+      });
+      if (terminated) void held.worker.terminate();
+      try {
+        withNetworkHookLock(() => f.ingress.seal(), 1500);
+        expect(f.sealed()).toBe(true);
+        expect(controllerObservedExit).toBe(false);
+        expect(performance.now() - start).toBeLessThan(1500);
+      } finally {
+        await held.exited;
+        releaseNetworkHookWorker(held.hookLock);
+      }
+    },
+  );
+
+for (const mode of ["uninitialized", "live", "unreadable"] as const)
+  test.skipIf(process.platform !== "linux")(
+    `a ${mode} worker task never permits ownership reclamation`,
+    () => {
+      const worker = networkHookWorkerContext();
+      const state = new Int32Array(worker.buffer);
+      Atomics.store(state, 0, worker.owner);
+      if (mode !== "uninitialized")
+        Atomics.store(
+          new Int32Array(worker.thread),
+          0,
+          Number(fs.readlinkSync("/proc/thread-self").split("/").at(-1)),
+        );
+      const stat =
+        mode === "unreadable"
+          ? spyOn(fs, "statSync").mockImplementation((path) => {
+              throw Object.assign(new Error("Synthetic proc inventory failure"), {
+                code: path === "/proc/self/task" ? "EACCES" : "ENOENT",
+              });
+            })
+          : undefined;
+      let ran = false;
+      try {
+        expect(() =>
+          withNetworkHookLock(() => {
+            ran = true;
+          }, 20),
+        ).toThrow(
+          mode === "unreadable" ? "Synthetic proc inventory failure" : "ordering timed out",
+        );
+        expect(ran).toBe(false);
+        expect(Atomics.load(state, 0)).toBe(worker.owner);
+      } finally {
+        stat?.mockRestore();
+        releaseNetworkHookWorker(worker);
+      }
+    },
+  );
 
 test("native guard installation releases its hook lock when the restore fails", () => {
   const state = new Int32Array(networkHookWorkerContext().buffer);
