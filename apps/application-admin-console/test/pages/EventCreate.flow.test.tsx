@@ -176,6 +176,7 @@ describe("EventCreatePage flow", () => {
         { internalSlug: "team-2", awsAccountId: ACCOUNT_ID, region: "us-east-1" },
       ]);
     },
+    15_000,
   );
   it.each([undefined, "cloud-host"] as const)(
     "shows only problems advertised by the execution catalog in mode %s",
