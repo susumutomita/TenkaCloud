@@ -9,7 +9,7 @@
  * ja default / en fallback) も移行前と同一。
  */
 
-import { createI18n } from "@tenkacloud/web-kit";
+import { createI18n, difficultyMessages } from "@tenkacloud/web-kit";
 import en from "./locales/en.json";
 import ja from "./locales/ja.json";
 import { resultCardLocaleMessages } from "./result-card-locales";
@@ -18,8 +18,18 @@ export const SUPPORTED_LOCALES = ["ja", "en"] as const;
 export type LocaleCode = (typeof SUPPORTED_LOCALES)[number];
 
 const dictionaries = {
-  ja: { ...ja, result_card: resultCardLocaleMessages.ja },
-  en: { ...en, result_card: resultCardLocaleMessages.en },
+  ja: {
+    ...ja,
+    quests: { ...ja.quests, ...difficultyMessages.ja },
+    problem_detail: { ...ja.problem_detail, ...difficultyMessages.ja },
+    result_card: resultCardLocaleMessages.ja,
+  },
+  en: {
+    ...en,
+    quests: { ...en.quests, ...difficultyMessages.en },
+    problem_detail: { ...en.problem_detail, ...difficultyMessages.en },
+    result_card: resultCardLocaleMessages.en,
+  },
 };
 
 const kit = createI18n<LocaleCode>({

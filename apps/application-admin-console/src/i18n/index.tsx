@@ -9,7 +9,7 @@
  * interpolate / ja default / en fallback) も移行前と同一。
  */
 
-import { createI18n, interpolate } from "@tenkacloud/web-kit";
+import { createI18n, difficultyMessages, interpolate } from "@tenkacloud/web-kit";
 import en from "./locales/en.json";
 import ja from "./locales/ja.json";
 
@@ -17,7 +17,18 @@ export const SUPPORTED_LOCALES = ["ja", "en"] as const;
 export type LocaleCode = (typeof SUPPORTED_LOCALES)[number];
 
 const kit = createI18n<LocaleCode>({
-  dictionaries: { ja, en },
+  dictionaries: {
+    ja: {
+      ...ja,
+      problems: { ...ja.problems, ...difficultyMessages.ja },
+      problem_detail: { ...ja.problem_detail, ...difficultyMessages.ja },
+    },
+    en: {
+      ...en,
+      problems: { ...en.problems, ...difficultyMessages.en },
+      problem_detail: { ...en.problem_detail, ...difficultyMessages.en },
+    },
+  },
   supportedLocales: SUPPORTED_LOCALES,
   defaultLocale: "ja",
   fallbackLocale: "en",

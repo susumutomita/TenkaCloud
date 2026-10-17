@@ -167,11 +167,6 @@
     "recommended_start_here": "まずはこれ",
     "difficulty_label": "難易度: {label}",
     "aws_only_badge": "AWS 専用",
-    "difficulty_1": "入門",
-    "difficulty_2": "初級",
-    "difficulty_3": "中級",
-    "difficulty_4": "上級",
-    "difficulty_5": "エキスパート",
     "course_tracks_link": "講座トラックを開く"
   },
   "notifications": {
@@ -305,12 +300,7 @@
     "info_diagram_label": "アーキテクチャ図",
     "info_diagram_alt": "問題で使う構成要素とその関係",
     "info_diagram_failed": "図を読み込めませんでした。",
-    "info_diagram_open": "図を別のタブで開く",
-    "difficulty_1": "入門",
-    "difficulty_2": "初級",
-    "difficulty_3": "中級",
-    "difficulty_4": "上級",
-    "difficulty_5": "エキスパート"
+    "info_diagram_open": "図を別のタブで開く"
   },
   "sso_credentials": {
     "aws_access_unavailable": "この問題環境の AWS アクセスはまだ利用できません。現在の状態を確認するか、開催者へ問い合わせてください。",

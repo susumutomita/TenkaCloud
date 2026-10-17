@@ -2658,6 +2658,17 @@ export class HostingDomain {
       context.event.containerMode === "on-demand",
     );
     problem.score = projectedByProblem[String(problem.problemId)] ?? 0;
+    // Hint reveals and wrong-answer penalties are the participant's own costs, not scoring moments.
+    const latestScore = context.team.scoreEvents
+      .filter(
+        (event) =>
+          event.problemId === problem.problemId &&
+          event.points !== 0 &&
+          event.source !== "hint" &&
+          event.source !== "flag-wrong",
+      )
+      .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))[0];
+    if (latestScore) problem.lastScoredAt = latestScore.occurredAt;
     const job = context.jobs.find((candidate) => candidate.problemId === problem.problemId);
     problem.provider = PROVIDERS[runtime];
     problem.jobId = job?.jobId ?? problem.jobId;

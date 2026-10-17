@@ -22,6 +22,7 @@ export {
   ConsoleAuthShell,
   type ConsoleAuthShellProps,
 } from "./ConsoleAuthShell";
+export { difficultyMessages } from "./difficulty";
 export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./EmptyState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState";
 export { toErrorMessage } from "./error-message";

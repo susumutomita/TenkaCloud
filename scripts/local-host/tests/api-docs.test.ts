@@ -209,6 +209,14 @@ test("docs and real HTTP lifecycle preserve role, origin, expiry and replay boun
     expect(scored.scoreEventsByTeam[0].projectedTotal).toBe(result.totalScore);
     expect(scored.scoreEventsByTeam[0].events.length).toBeGreaterThan(0);
     expect(scored.teams[0]).not.toHaveProperty("score");
+    // Only a wrong answer was recorded, so nothing has scored yet.
+    for (const path of ["/portal/me", "/portal/me/problems/sqli-demo"]) {
+      const view = await (await call("participant", path, "GET", undefined, teamKey)).json();
+      expect(
+        view.problems.find((problem: { problemId: string }) => problem.problemId === "sqli-demo")
+          .lastScoredAt,
+      ).toBeUndefined();
+    }
     expect((await call("admin", `/events/${eventId}/end`, "POST", {}, idToken)).status).toBe(200);
     expect(
       (

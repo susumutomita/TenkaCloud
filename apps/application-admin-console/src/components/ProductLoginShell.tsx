@@ -60,10 +60,11 @@ export function applicationConsoleCopy(
   t: Translate,
   title: string,
   subtitle: string,
+  local = false,
 ): ConsoleAuthCopy {
   return {
-    planeLabel: t("login.plane_label"),
-    eyebrow: t("login.stage_eyebrow"),
+    planeLabel: t(local ? "login.local_plane_label" : "login.plane_label"),
+    eyebrow: t(local ? "login.local_stage_eyebrow" : "login.stage_eyebrow"),
     headlineLead: t("login.stage_h1_lead"),
     headlineEm: t("login.stage_h1_em"),
     lede: t("login.stage_lede"),
