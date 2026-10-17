@@ -144,6 +144,8 @@ AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` 
 
 取得元の `ref` には、タグ、ブランチ、完全な commit のどれでも指定できます。取得時に一度だけ解決し、commit と内容の digest を記録します。起動とビルドでは、リモートの ref を読みません。標準の `catalog-sources.json` は、TenkaCloudChallenge のリリースタグを指定しています。上げるときは、タグを書き換えて `make catalog-download catalog-prepare` を実行します。次に `.tenkacloud/catalog-store/selected.json` の `sources` を `catalog-lock.json` に写し、`bun run scripts/release/host-candidate.ts --sync-catalog` を実行します。CI は取得後に `make catalog-verify-lock` を実行し、タグが付け替えられて `catalog-lock.json` と食い違うと失敗します。
 
+TenkaCloudChallenge の新しい安定版は、毎日の確認でカタログ更新 PR として届きます。Catalog release bump ワークフローはタグを指定して手動実行もできます。PR は旧 revision を保持し、host candidate の image がまだ build されていなければ `release/host-candidate.json` のカタログ固定も合わせます。マージ前にリリースノートを読み、問題 ID の改名や本体の変更を確認してください。初回に Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests" を有効にしてください。無効の場合、ワークフローは失敗し、手動で PR を作るためのブランチを残します。`GITHUB_TOKEN` による PR では CI が自動起動しないため、ワークフローが PR ブランチの `ci.yml` を明示実行します。
+
 標準設定は旧固定版も `retained` に commit、内容の digest、問題のルートを指定しています。`catalog-download` は空の store でも旧版を復元・検証し、host と cloud の参加者ポータルに保存済み大会の画面を組み込みます。旧問題は新規大会の選択肢には入りません。対応する大会がある間は `catalog-sources.json` と `catalog-lock.json` の両方に固定記録を残してください。復元に失敗すると選択状態を変える前に停止します。
 
 再利用する問題や非公開コンテンツには、公開 SDK とオフラインの Problem Pack ツールで作成・検証・不変な revision の保存ができます。
