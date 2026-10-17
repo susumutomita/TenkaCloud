@@ -62,7 +62,6 @@ macOS、Linux または WSL2 に Git、Make、**Bun 1.3.11** を用意します�
 git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
-make catalog-download catalog-prepare
 make local
 ```
 
@@ -140,13 +139,13 @@ AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` 
 
 問題の正本は [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) です。カタログへの追加には、そのリポジトリの作問・検証手順を使います。作問のためにプラットフォームを fork する必要はありません。
 
-`make catalog-download CATALOG_SOURCES=my-catalogs.json` で問題 repo を選択して取得し、検証・再ビルドします。既存大会の snapshot は保持します。取得だけで稼働中の host は更新されません。
+`catalog-sources.json` にリポジトリ URL とブランチ（`url` と `ref`）を指定します。標準は TenkaCloudChallenge の `main` ブランチです。`make local` と `make deploy` はビルド前に指定ブランチを取得します。別の設定を使うときは、どちらのコマンドにも `CATALOG_SOURCES=my-catalogs.json` を指定できます。
 
-取得元の `ref` には、タグ、ブランチ、完全な commit のどれでも指定できます。取得時に一度だけ解決し、commit と内容の digest を記録します。起動とビルドでは、リモートの ref を読みません。標準の `catalog-sources.json` は、TenkaCloudChallenge のリリースタグを指定しています。上げるときは、タグを書き換えて `make catalog-download catalog-prepare` を実行します。次に `.tenkacloud/catalog-store/selected.json` の `sources` を `catalog-lock.json` に写し、`bun run scripts/release/host-candidate.ts --sync-catalog` を実行します。CI は取得後に `make catalog-verify-lock` を実行し、タグが付け替えられて `catalog-lock.json` と食い違うと失敗します。
+起動・デプロイのたびに設定ブランチを解決します。取得に失敗した場合は原因を表示して停止し、古いキャッシュで続行しません。`--no-build` でも取得し、画面の再ビルドが必要なら起動を拒否します。稼働中の host へ反映するには再起動または再デプロイが必要です。手動のビルド準備には `make catalog-download catalog-prepare` を使えます。
 
-TenkaCloudChallenge の新しい安定版は、毎日の確認でカタログ更新 PR として届きます。Catalog release bump ワークフローはタグを指定して手動実行もできます。PR は旧 revision を保持し、host candidate の image がまだ build されていなければ `release/host-candidate.json` のカタログ固定も合わせます。マージ前にリリースノートを読み、問題 ID の改名や本体の変更を確認してください。初回に Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests" を有効にしてください。無効の場合、ワークフローは失敗し、手動で PR を作るためのブランチを残します。`GITHUB_TOKEN` による PR では CI が自動起動しないため、ワークフローが PR ブランチの `ci.yml` を明示実行します。
+commit、内容の digest、旧 snapshot は `catalog-lock.json` と `.tenkacloud/catalog-store/` で内部管理します。ブランチの更新後も、保存済み大会の問題定義と進捗を保持します。旧 snapshot は保存済み大会の画面にも使い、新規大会の問題としては表示しません。必要な旧 snapshot の復元に失敗した場合は、選択状態を変える前に停止します。
 
-標準設定は旧固定版も `retained` に commit、内容の digest、問題のルートを指定しています。`catalog-download` は空の store でも旧版を復元・検証し、host と cloud の参加者ポータルに保存済み大会の画面を組み込みます。旧問題は新規大会の選択肢には入りません。対応する大会がある間は `catalog-sources.json` と `catalog-lock.json` の両方に固定記録を残してください。復元に失敗すると選択状態を変える前に停止します。
+CI は `bun run catalog download-locked` と `make catalog-verify-lock` で、ブランチの更新とは独立して内部 lock の固定版を取得・検証します。定期ワークフローやカタログ更新 PR の自動作成は使いません。
 
 再利用する問題や非公開コンテンツには、公開 SDK とオフラインの Problem Pack ツールで作成・検証・不変な revision の保存ができます。
 
