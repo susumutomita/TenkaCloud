@@ -26,10 +26,34 @@ async function connect(
     ...(requestOrigin === null ? {} : { headers: { origin: requestOrigin } }),
   });
   const frames: { type: string; data?: string; code?: number | null; reason?: string }[] = [];
-  const lifecycle: { close?: { code: number; reason: string }; errors: string[] } = { errors: [] };
+  const lifecycle: {
+    createdAt: number;
+    openedAt?: number;
+    close?: { code: number; reason: string; at: number };
+    errors: string[];
+    actions: { kind: string; at: number; stack: string }[];
+  } = { createdAt: Math.round(performance.now()), errors: [], actions: [] };
+  const action = (kind: string) => {
+    if (lifecycle.actions.length < 8)
+      lifecycle.actions.push({
+        kind,
+        at: Math.round(performance.now()),
+        stack: new Error().stack ?? "",
+      });
+  };
+  const close = socket.close.bind(socket);
+  const terminate = socket.terminate.bind(socket);
+  socket.close = (...args) => {
+    action("close");
+    close(...args);
+  };
+  socket.terminate = () => {
+    action("terminate");
+    terminate();
+  };
   const closed = new Promise<void>((resolve) =>
     socket.once("close", (code, reason) => {
-      lifecycle.close = { code, reason: reason.toString() };
+      lifecycle.close = { code, reason: reason.toString(), at: Math.round(performance.now()) };
       resolve();
     }),
   );
@@ -40,6 +64,7 @@ async function connect(
       reject(new Error("WebSocket handshake timed out"));
     }, 1000);
     socket.once("open", () => {
+      lifecycle.openedAt = Math.round(performance.now());
       clearTimeout(timer);
       resolve();
     });

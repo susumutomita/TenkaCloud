@@ -129,12 +129,13 @@ export async function terminalFixture(
     add(`extra-${index}`),
   );
   const service = new HostingService(store, engine, "synthetic-host-key", () => clock);
-  const terminalTrace: { jobId: string; kind: string; bytes?: number }[] = [];
+  const terminalTrace: { jobId: string; kind: string; bytes?: number; at: number }[] = [];
   const recordTerminal = (jobId: string, kind: string, payload?: string) => {
     if (terminalTrace.length < 256)
       terminalTrace.push({
         jobId,
         kind,
+        at: Math.round(performance.now()),
         ...(payload === undefined ? {} : { bytes: Buffer.byteLength(payload) }),
       });
   };
@@ -156,8 +157,13 @@ export async function terminalFixture(
           handler(payload);
         }),
       onClose: (handler) =>
-        socket.onClose(() => {
-          recordTerminal(grant.jobId, "transport-close");
+        socket.onClose((...details: unknown[]) => {
+          const cause = details[0];
+          let event = "unknown";
+          if (typeof cause === "number") event = `close:${cause}`;
+          else if (cause instanceof Error)
+            event = `error:${Reflect.get(cause, "code") ?? cause.name}`;
+          recordTerminal(grant.jobId, `transport-${event}`);
           handler();
         }),
     });
