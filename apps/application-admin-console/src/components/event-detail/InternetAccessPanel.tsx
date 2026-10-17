@@ -74,6 +74,11 @@ export function InternetAccessPanel({
       loaded(await fetchInternetAccess(apiClient, eventId), problemId);
     } catch (err) {
       setError(toErrorMessage(err));
+      try {
+        loaded(await fetchInternetAccess(apiClient, eventId), problemId);
+      } catch (refreshError) {
+        setError(`${toErrorMessage(err)}; ${toErrorMessage(refreshError)}`);
+      }
     } finally {
       setBusy(false);
     }

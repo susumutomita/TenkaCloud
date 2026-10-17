@@ -8,231 +8,8 @@ import {
   segmentGateway,
 } from "../local-network";
 
-// Pure command/ownership test adapter. It is not evidence of real packet enforcement.
-function fixture(override?: ReturnType<typeof localNetworkPlan>) {
-  // eslint-disable-next-line sonarjs/no-hardcoded-ip -- synthetic allocation; pure command oracle never connects
-  const plan = override ?? localNetworkPlan("tch-guard-test", { default: "10.240.0.0/28" });
-  const calls: { command: string; args: readonly string[]; input?: string }[] = [];
-  const tables = new Map<string, Map<string, string[]>>();
-  for (const command of ["iptables", "ip6tables"])
-    tables.set(
-      command,
-      new Map([
-        ["INPUT", []],
-        ["FORWARD", command === "iptables" ? ["-A FORWARD -j DOCKER-USER"] : []],
-        ["DOCKER-USER", []],
-      ]),
-    );
-  const settings = {
-    platform: "linux",
-    version: "28.4.0",
-    rootless: false,
-    bridgeFilter: "1",
-    networkExists: false,
-    failIPv6Restore: false,
-    endpoint: "unix:///var/run/docker.sock",
-    socketOwned: true,
-    running: false,
-    daemonUnavailable: false,
-    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- Synthetic addresses are test data and are never contacted.
-    routes: ["192.168.1.0/24"],
-    interfaces: [] as string[],
-    dockerSubnets: [] as string[],
-  };
-  function info(): string {
-    return JSON.stringify({
-      OSType: "linux",
-      OperatingSystem: "Linux",
-      ServerVersion: settings.version,
-      SecurityOptions: settings.rootless ? ["name=rootless"] : ["name=seccomp"],
-    });
-  }
-  const containerIds = () =>
-    Object.keys(plan.services).map((_, index) => (index + 1).toString(16).padStart(12, "0"));
-  const runningResult = () => (settings.running ? "owned-runtime" : "");
-  function ensureDockerAvailable(): void {
-    if (settings.daemonUnavailable) throw new Error("Synthetic Docker outage");
-  }
-  function dockerResult(call: { args: readonly string[] }): string {
-    if (call.args[0] === "compose") return "2.33.1";
-    if (call.args[0] === "context") return settings.endpoint;
-    if (call.args[0] === "info") return info();
-    if (call.args[0] === "ps")
-      return call.args.includes("-aq") && settings.networkExists
-        ? containerIds().join("\n")
-        : runningResult();
-    if (call.args[0] === "inspect")
-      return JSON.stringify(
-        Object.entries(plan.services).map(([service, networks], index) => ({
-          Id: containerIds()[index],
-          Config: {
-            Labels: {
-              "com.docker.compose.service": service,
-              "com.docker.compose.project": plan.project,
-              "tenkacloud.isolation.owner": plan.owner,
-              "tenkacloud.isolation.generation": plan.generation,
-            },
-          },
-          HostConfig: {
-            Privileged: false,
-            Dns: plan.egressSegments
-              .filter((segment) => segment.service === service)
-              .map((segment) => segmentGateway(segment, false)),
-          },
-          State: { Running: false },
-          NetworkSettings: {
-            Networks: Object.fromEntries(networks.map((name) => [`${plan.project}_${name}`, {}])),
-          },
-        })),
-      );
-    return dockerNetworkResult(call);
-  }
-  function networkNames(): string {
-    return [
-      ...(settings.networkExists
-        ? plan.segments.map((segment) => `${plan.project}_${segment.name}`)
-        : []),
-      ...(settings.dockerSubnets.length ? ["foreign"] : []),
-    ].join("\n");
-  }
-  function dockerNetworkResult(call: { args: readonly string[] }): string {
-    if (call.args[1] === "inspect" && call.args.length > 3)
-      return JSON.stringify(
-        call.args
-          .slice(2)
-          .flatMap((name) =>
-            JSON.parse(dockerNetworkResult({ args: ["network", "inspect", name] })),
-          ),
-      );
-    if (call.args[1] === "ls") return networkNames();
-    if (call.args[1] === "inspect" && call.args[2] === "foreign")
-      return JSON.stringify([
-        { IPAM: { Config: settings.dockerSubnets.map((Subnet) => ({ Subnet })) } },
-      ]);
-    const segment = requiredNetworkValue(
-      plan.segments.find((entry) => `${plan.project}_${entry.name}` === call.args[2]) ??
-        plan.segments[0],
-    );
-    if (call.args[1] === "inspect")
-      return JSON.stringify([
-        {
-          Driver: "bridge",
-          Internal: !plan.egressSegments.some((entry) => entry.name === segment.name),
-          EnableIPv6: true,
-          Options: {
-            "com.docker.network.bridge.name": segment.bridge,
-          },
-          Labels: {
-            "com.docker.compose.project": plan.project,
-            "tenkacloud.isolation.owner": plan.owner,
-          },
-          IPAM: {
-            Config: [
-              { Subnet: segment.ipv4, Gateway: segmentGateway(segment, false) },
-              { Subnet: segment.ipv6, Gateway: segmentGateway(segment, true) },
-            ],
-          },
-          Containers: Object.fromEntries(
-            Object.entries(plan.services).flatMap(([service, networks], index) =>
-              networks.includes(segment.name) ? [[containerIds()[index], { Name: service }]] : [],
-            ),
-          ),
-        },
-      ]);
-    throw new Error("Unexpected Docker operation.");
-  }
-  const guard = new LinuxNetworkGuard({
-    interfaces: () => ({
-      fixture: settings.interfaces.map((address) => ({
-        address,
-        family: address.includes(":") ? "IPv6" : "IPv4",
-        netmask: "",
-        internal: false,
-        mac: "",
-        cidr: null,
-        scopeid: 0,
-      })),
-    }),
-    socketOwned: () => settings.socketOwned,
-    platform: settings.platform,
-    read: (path) => {
-      if (path === "/var/run/docker.pid") return "123";
-      if (path === "/proc/123/comm") return "dockerd";
-      return settings.bridgeFilter;
-    },
-    link: () => "net:[synthetic-native-host]",
-    exists: () => settings.networkExists,
-    run: (call) => {
-      calls.push(call);
-      if (call.command === "docker") {
-        ensureDockerAvailable();
-        return dockerResult(call);
-      }
-      if (call.command === "ip")
-        return JSON.stringify([
-          { dst: "default" },
-          ...settings.routes
-            .filter((dst) => dst.includes(":") === call.args.includes("-6"))
-            .map((dst) => ({ dst })),
-        ]);
-      const restore = call.command.endsWith("-restore");
-      const family = restore ? call.command.replace("-restore", "") : call.command;
-      const table = tables.get(family);
-      if (!table) throw new Error("Unexpected command.");
-      if (restore) {
-        if (settings.failIPv6Restore && family === "ip6tables")
-          throw new Error("Synthetic IPv6 restore failure.");
-        applyRestore(table, requiredNetworkValue(call.input));
-        return "";
-      }
-      return applyFirewall(table, call.args.slice(2));
-    },
-  });
-  return { guard, plan, calls, settings, tables };
-}
-function applyFirewall(table: Map<string, string[]>, args: readonly string[]): string {
-  const [action, chain] = args;
-  if (action === "-S")
-    return chain
-      ? [`-N ${chain}`, ...requiredNetworkValue(table.get(chain))].join("\n")
-      : [...table].flatMap(([name, rules]) => [`-N ${name}`, ...rules]).join("\n");
-  const expected = kernelRule(["-A", chain, ...args.slice(2)].join(" "));
-  if (action === "-C") {
-    if (!table.get(requiredNetworkValue(chain))?.includes(expected))
-      throw new Error("Missing guard rule.");
-  } else if (action === "-D")
-    table.set(
-      requiredNetworkValue(chain),
-      requiredNetworkValue(table.get(requiredNetworkValue(chain))).filter(
-        (line) => line !== expected,
-      ),
-    );
-  else if (action === "-F") table.set(requiredNetworkValue(chain), []);
-  else if (action === "-X") table.delete(requiredNetworkValue(chain));
-  else throw new Error("Unexpected firewall action.");
-  return "";
-}
-function kernelRule(line: string): string {
-  return line.replace(/-p (tcp|udp) (--(?:dport|sport))/gu, "-p $1 -m $1 $2");
-}
-function applyRestore(table: Map<string, string[]>, input: string): void {
-  for (const line of input.split("\n")) {
-    if (line.startsWith(":")) table.set(requiredNetworkValue(line.slice(1).split(" ")[0]), []);
-    else if (line.startsWith("-A "))
-      requiredNetworkValue(table.get(requiredNetworkValue(line.split(" ")[1]))).push(
-        kernelRule(line),
-      );
-    else if (line.startsWith("-F ")) table.set(requiredNetworkValue(line.split(" ")[1]), []);
-    else if (line.startsWith("-I ")) {
-      const tokens = line.split(" ");
-      requiredNetworkValue(table.get(requiredNetworkValue(tokens[1]))).splice(
-        Number(tokens[2]) - 1,
-        0,
-        ["-A", tokens[1], ...tokens.slice(3)].join(" "),
-      );
-    } else if (line.startsWith("-D ")) applyFirewall(table, line.split(" "));
-  }
-}
+import { linuxNetworkGuardFixture as fixture } from "./linux-network-guard-fixture";
+
 test("both families install atomically before an absent bridge and verify exact owned rules", () => {
   const f = fixture();
   f.guard.install(f.plan);
@@ -566,12 +343,13 @@ test("egress grants install exact ORIGINAL and REPLY tuples with final DROP and 
     const rules = requiredNetworkValue(f.tables.get(family)?.get(plan.forwardChain));
     const accept = rules.filter((rule) => rule.endsWith("-j ACCEPT") && rule.includes("-p tcp"));
     expect(accept).toHaveLength(2);
-    expect(accept[0]).toContain(`-i ${plan.segments[0]?.bridge}`);
-    expect(accept[0]).toContain(`-d ${address}/${prefix}`);
-    expect(accept[0]).toContain("--ctdir ORIGINAL");
-    expect(accept[1]).toContain("--ctdir REPLY");
-    for (const rule of accept)
-      expect(rule).toContain(`--ctorigdst ${address}/${prefix} --ctorigdstport 443`);
+    const segment = requiredNetworkValue(plan.segments[0]);
+    const subnet = family === "iptables" ? segment.ipv4 : segment.ipv6;
+    const destination = `${address}/${prefix}`;
+    expect(accept).toEqual([
+      `-A ${plan.forwardChain} -i ${segment.bridge} -s ${subnet} -d ${destination} -p tcp -m tcp --dport 443 -m conntrack --ctorigsrc ${subnet} --ctorigdst ${destination} --ctorigdstport 443 --ctdir ORIGINAL -j ACCEPT`,
+      `-A ${plan.forwardChain} -o ${segment.bridge} -s ${destination} -d ${subnet} -p tcp -m conntrack --ctorigsrc ${subnet} --ctorigdst ${destination} --ctorigdstport 443 --ctdir REPLY --ctstate ESTABLISHED --ctreplsrc ${destination} -j ACCEPT`,
+    ]);
     expect(rules.at(-1)).toBe(`-A ${plan.forwardChain} -j DROP`);
     expect(
       rules.some((rule) => rule.includes("ESTABLISHED") && !rule.includes("--ctorigdstport")),
@@ -732,7 +510,9 @@ test("guard verifies non-internal egress ownership, exact service attachments an
       Networks: Object.fromEntries(networks.map((name) => [`${plan.project}_${name}`, {}])),
     },
   }));
-  const io = Reflect.get(f.guard, "io") as ConstructorParameters<typeof LinuxNetworkGuard>[0];
+  const io = Reflect.get(f.guard, "io") as NonNullable<
+    ConstructorParameters<typeof LinuxNetworkGuard>[0]
+  >;
   if (!io) throw new Error("Missing fixture IO");
   let wrongGateway = false;
   let endpoints = [requiredNetworkValue(ids[0])];
@@ -868,4 +648,78 @@ for (const disappeared of [false, true])
     expect(listings).toBe(2);
   });
 
+/* eslint-enable sonarjs/no-hardcoded-ip */
+
+/* eslint-disable sonarjs/no-hardcoded-ip -- Exact synthetic firewall rules, never contacted. */
+test("DMZ ORIGINAL and REPLY rules use exactly one TCP match module in both families", () => {
+  for (const [family, address, bits] of [
+    ["iptables", "10.240.1.2", 32],
+    ["ip6tables", "fd33:1234::2", 128],
+  ] as const) {
+    const base = localNetworkPlan("tch-dmz-exact", {
+      default: "10.240.0.0/28",
+      public: "10.240.1.0/28",
+    });
+    const from = requiredNetworkValue(base.segments[0]);
+    const to = requiredNetworkValue(base.segments[1]);
+    const plan = {
+      ...base,
+      publicRoutes: [
+        {
+          service: "web",
+          from,
+          to,
+          address,
+          port: 8080,
+          publisherProject: base.project,
+          publisherOwner: base.owner,
+          fromProject: base.project,
+          fromOwner: base.owner,
+        },
+      ],
+    };
+    const f = fixture(plan);
+    f.guard.install(plan);
+    const src = family === "iptables" ? from.ipv4 : from.ipv6;
+    const dst = `${address}/${bits}`;
+    const rules = requiredNetworkValue(f.tables.get(family)?.get(plan.forwardChain));
+    const dmz = rules.filter((rule) => rule.includes("--ctorigdstport 8080"));
+    expect(dmz).toEqual([
+      `-A ${plan.forwardChain} -i ${from.bridge} -o ${to.bridge} -s ${src} -d ${dst} -p tcp -m tcp --dport 8080 -m conntrack --ctdir ORIGINAL --ctorigsrc ${src} --ctorigdst ${dst} --ctorigdstport 8080 -j ACCEPT`,
+      `-A ${plan.forwardChain} -i ${to.bridge} -o ${from.bridge} -s ${dst} -d ${src} -p tcp -m conntrack --ctstate ESTABLISHED --ctdir REPLY --ctorigsrc ${src} --ctorigdst ${dst} --ctorigdstport 8080 --ctreplsrc ${dst} --ctrepldst ${src} -j ACCEPT`,
+    ]);
+  }
+});
+
+test("Internet inventory accepts real Docker bridge host none rows and still protects bridge subnet", () => {
+  const plan = egressPlan();
+  const f = fixture(plan);
+  f.settings.defaultNetworks = true;
+  expect(() => f.guard.assertInternetTargets(["8.8.8.8"])).not.toThrow();
+  expect(() => f.guard.assertInternetTargets(["172.17.0.2"])).toThrow();
+  f.guard.install(plan);
+  f.settings.networkExists = true;
+  f.guard.verifyNetworks(plan);
+  f.guard.verify(plan);
+});
+
+for (const config of [undefined, {}, "invalid", 0])
+  test(`Internet inventory refuses non-array Config ${JSON.stringify(config)} even for availability`, () => {
+    const f = fixture(egressPlan());
+    const io = Reflect.get(f.guard, "io") as NonNullable<
+      ConstructorParameters<typeof LinuxNetworkGuard>[0]
+    >;
+    const guard = new LinuxNetworkGuard({
+      ...io,
+      run: (call) =>
+        call.command === "docker" && call.args[0] === "network" && call.args[1] === "inspect"
+          ? JSON.stringify([{ IPAM: { Config: config } }])
+          : io.run(call),
+    });
+    f.settings.dockerSubnets = ["172.17.0.0/16"];
+    expect(() => guard.assertInternetTargets([])).toThrow("Invalid Docker subnet inventory");
+    expect(() => guard.assertInternetTargets(["8.8.8.8"])).toThrow(
+      "Invalid Docker subnet inventory",
+    );
+  });
 /* eslint-enable sonarjs/no-hardcoded-ip */

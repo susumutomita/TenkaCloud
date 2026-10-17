@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import { parse } from "yaml";
+import { parse, stringify } from "yaml";
 import { allocateNetworkSubnets } from "../docker-networks";
+import * as localNetwork from "../local-network";
 import {
   assertNoNetworkOverlap,
   egressComposeSource,
@@ -261,3 +262,37 @@ for (const source of [
         "Authored networks cannot use the reserved egress- prefix.",
       );
     });
+
+/* eslint-disable sonarjs/no-hardcoded-ip -- Synthetic composition only, never contacted. */
+for (const defect of ["unauthorized attachment", "DNS missing", "DNS extra", "plan mismatch"])
+  test(`final Compose independently refuses ${defect}`, () => {
+    const authored = "services: {web: {image: synthetic}, evil: {image: synthetic}}";
+    const egress = [
+      { id: "up", service: "web", destination: "8.8.8.8", port: 443, purpose: "test" },
+    ];
+    const composeText = egressComposeSource(authored, ["web"]);
+    const plan = localNetworkPlan(
+      "tch-final-check",
+      allocateNetworkSubnets(composeText, "10.240.0.0/24", []),
+      { composeText, definition: "synthetic", egress },
+    );
+    const output = isolatedCompose(authored, plan);
+    expect(output).not.toMatch(/[&*]a\d/u);
+    expect(() => localNetwork.assertEgressCompose(output, plan)).not.toThrow();
+    const document = parse(output);
+    const segment = requiredNetworkValue(plan.egressSegments[0]);
+    let checkedPlan = plan;
+    if (defect === "unauthorized attachment") {
+      document.services.evil.networks = ["default", segment.name];
+      checkedPlan = { ...plan, services: { ...plan.services, evil: ["default", segment.name] } };
+    } else if (defect === "DNS missing") delete document.services.web.dns;
+    else if (defect === "DNS extra") document.services.web.dns.push("8.8.4.4");
+    else document.services.evil.networks = [segment.name];
+    let expected = "DNS must be exactly";
+    if (defect === "unauthorized attachment") expected = "unauthorized Internet attachment";
+    if (defect === "plan mismatch") expected = "differ from the guard plan";
+    expect(() => localNetwork.assertEgressCompose(stringify(document), checkedPlan)).toThrow(
+      expected,
+    );
+  });
+/* eslint-enable sonarjs/no-hardcoded-ip */

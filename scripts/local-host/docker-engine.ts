@@ -49,6 +49,7 @@ import {
 } from "./internet-access";
 import { LinuxNetworkGuard, type LocalNetworkGuard } from "./linux-network-guard";
 import {
+  assertEgressCompose,
   assertNoNetworkOverlap,
   egressComposeSource,
   isolatedCompose,
@@ -318,9 +319,10 @@ export class DockerHostingEngine implements RuntimeEngine {
     persist: () => void,
     action: "approve" | "revoke" = "approve",
   ): Promise<void> {
-    const operation = this.publicMutation.then(async () => {
-      if (action === "revoke") persist();
-      const snapshots = (this.networkState?.jobs() ?? []).filter(
+    if (action === "revoke") persist();
+    this.policyEpochs.set(eventId, this.policyEpoch(eventId) + 1);
+    const snapshotsForProblem = () =>
+      (this.networkState?.jobs() ?? []).filter(
         (job) =>
           job.eventId === eventId &&
           job.problemId === problemId &&
@@ -328,12 +330,14 @@ export class DockerHostingEngine implements RuntimeEngine {
           JSON.parse(job.unit).teardown !== "down" &&
           (JSON.parse(job.unit).egressRequestIds?.length ?? 0) > 0,
       );
+    const operation = this.publicMutation.then(async () => {
+      let snapshots = snapshotsForProblem();
       const previous = new Map<string, LocalNetworkPlan>();
-      this.policyEpochs.set(eventId, this.policyEpoch(eventId) + 1);
       this.applyingPublicationEvent = eventId;
       let saved = action === "revoke";
       try {
         await this.awaitEventSettled(eventId);
+        snapshots = snapshotsForProblem();
         for (const job of snapshots)
           previous.set(
             job.jobId,
@@ -470,6 +474,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     else if (networkSubnets) plannedCompose = applyNetworkSubnets(plannedCompose, networkSubnets);
     const transport = relayCompose(plannedCompose, networkPlan);
     plannedCompose = transport.text;
+    if (networkPlan) assertEgressCompose(plannedCompose, networkPlan);
     const directory = prepareRuntimeDirectory(this.dataDirectory, job.jobId, claimNewDirectory);
     const composePath = join(directory, `${problem.composeProjectName}.compose.yml`);
     const unit: LocalComposeUnit = {
@@ -539,6 +544,13 @@ export class DockerHostingEngine implements RuntimeEngine {
     }
   }
   async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
+    return this.withPendingAdmission(job, (admitted) => this.startPending(job, retain, admitted));
+  }
+  private async startPending(
+    job: Job,
+    retain: (unit: string | null) => void,
+    admitted: () => void,
+  ): Promise<void> {
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
     this.assertAllocationRequirements(job);
@@ -562,13 +574,17 @@ export class DockerHostingEngine implements RuntimeEngine {
     try {
       const generated = generateSecretEnv(plan.directory, job.problemId, unit.secretEnv);
       if (guarded) await this.installPlan(guarded);
+      this.assertStartPolicy(job, unit, guarded);
       await this.runCompose(unit, "up", { ...process.env, ...generated });
       if (guarded) await this.verifyPlan(guarded);
       await this.openRelays(job, plan.started.unit, plan.relayBindings);
       await ready(plan.started.problem.verifyUrl);
       await this.readySurfaces(plan.started);
       if (guarded) await this.verifyPlan(guarded);
+      this.assertStartPolicy(job, unit, guarded);
       await this.admitRunning(job, plan.started);
+      // Publication reconciliation waits for admissions, including this start.
+      admitted();
       if (guarded && this.networkState) {
         await this.reconcilePublications(job.eventId);
         retain(JSON.stringify(requiredNetworkValue(this.running.get(job.jobId)).unit));
@@ -581,6 +597,18 @@ export class DockerHostingEngine implements RuntimeEngine {
       };
       return this.cleanupFailedStart(job, { unit, guarded, environment, retain }, error);
     }
+  }
+  /** Only the egress grant is rechecked; DMZ publications reconcile after admission. */
+  private assertStartPolicy(
+    job: Job,
+    unit: LocalComposeUnit,
+    installed: LocalNetworkPlan | undefined,
+  ): void {
+    if (
+      JSON.stringify(installed?.egressRoutes) !==
+      JSON.stringify(this.guardPlan(job, unit)?.egressRoutes)
+    )
+      throw new HostError(409, "Competition network policy is changing");
   }
   private async cleanupFailedStart(
     job: Job,
@@ -632,7 +660,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
 
   async recover(job: Job): Promise<void> {
-    return this.withRetainedAdmission(job, () => this.recoverRetained(job));
+    return this.withPendingAdmission(job, () => this.recoverRetained(job));
   }
   private async recoverRetained(job: Job): Promise<void> {
     await this.awaitGuardHalt(job);
@@ -1346,16 +1374,23 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   /** A recovering runtime stays COMPLETE in the ledger, so publication batches wait for this. */
   private async assertGuardedAdmission(job: Job, unit: LocalComposeUnit): Promise<void> {
-    return this.withRetainedAdmission(job, () => this.admitRetainedGuard(job, unit));
+    return this.withPendingAdmission(job, () => this.admitRetainedGuard(job, unit));
   }
-  private async withRetainedAdmission(job: Job, run: () => Promise<void>): Promise<void> {
-    const admission = Promise.resolve().then(run);
-    this.pendingAdmissions.set(job.jobId, admission);
-    try {
-      await admission;
-    } finally {
+  private async withPendingAdmission(
+    job: Job,
+    run: (admitted: () => void) => Promise<void>,
+  ): Promise<void> {
+    const { promise: admission, resolve } = Promise.withResolvers<undefined>();
+    const admitted = () => {
       if (this.pendingAdmissions.get(job.jobId) === admission)
         this.pendingAdmissions.delete(job.jobId);
+      resolve(undefined);
+    };
+    this.pendingAdmissions.set(job.jobId, admission);
+    try {
+      await Promise.resolve().then(() => run(admitted));
+    } finally {
+      admitted();
     }
   }
   private async admitRetainedGuard(job: Job, unit: LocalComposeUnit): Promise<void> {

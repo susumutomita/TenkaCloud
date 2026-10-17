@@ -269,8 +269,6 @@ function forwardRules(plan: LocalNetworkPlan, ipv6: boolean): Rule[] {
       "tcp",
       "-m",
       "tcp",
-      "-m",
-      "tcp",
       "--dport",
       String(route.port),
       "-m",
@@ -484,7 +482,6 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       throw new Error(
         "Internet exceptions require Docker Compose 2.33.1 or newer for gateway priority.",
       );
-    if (!addresses.length) return;
     const occupied = this.internetProtectedRanges();
     for (const address of addresses) assertInternetDestination(address, occupied);
   }
@@ -526,10 +523,11 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       expectedCount = remaining.length;
       output = this.command("docker", ["network", "inspect", ...remaining]);
     }
-    const rows: { IPAM?: { Config?: { Subnet?: unknown }[] } }[] = JSON.parse(output);
+    const rows: { IPAM?: { Config?: { Subnet?: unknown }[] | null } }[] = JSON.parse(output);
     if (!Array.isArray(rows) || rows.length !== expectedCount)
       throw new Error("Invalid Docker subnet inventory for Internet access.");
     return rows.flatMap((row) => {
+      if (row.IPAM?.Config === null) return [];
       if (!Array.isArray(row.IPAM?.Config))
         throw new Error("Invalid Docker subnet inventory for Internet access.");
       return row.IPAM.Config.map((config) => {

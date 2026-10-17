@@ -193,3 +193,40 @@ for (const revoke of [false, true])
     });
     expect(checkboxes[1]).toBeChecked();
   });
+
+for (const revoke of [false, true])
+  it(`refreshes the server grant after a 409 on ${revoke ? "DELETE" : "PUT"} and keeps the error`, async () => {
+    const first = view.problems[0];
+    if (!first) throw new Error("Missing problem fixture");
+    const grant = { requestIds: ["one"], grantedAt: new Date(2026, 9, 16, 9, 30).toISOString() };
+    mocks.fetchInternetAccess
+      .mockResolvedValueOnce({
+        ...view,
+        problems: [{ ...first, grant: revoke ? grant : null }],
+      })
+      .mockResolvedValue({ ...view, problems: [{ ...first, grant: revoke ? null : grant }] });
+    const failure = new Error(
+      `409: approval was ${revoke ? "revoked" : "saved"}; environments halted`,
+    );
+    (revoke ? mocks.revokeInternetAccess : mocks.approveInternetAccess).mockRejectedValue(failure);
+    renderPanel();
+    const checkbox = await screen.findByRole("checkbox");
+    if (!revoke) fireEvent.click(checkbox);
+    fireEvent.click(
+      screen.getByRole("button", { name: revoke ? "承認を取り消す" : "選んだ接続を承認" }),
+    );
+    expect(await screen.findByText(failure.message)).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchInternetAccess).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      if (revoke) {
+        expect(checkbox).not.toBeChecked();
+        expect(screen.queryByText("2026/10/16 09:30 に承認")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "承認を取り消す" })).toBeDisabled();
+      } else {
+        expect(checkbox).toBeChecked();
+        expect(screen.getByText("2026/10/16 09:30 に承認")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "承認を取り消す" })).toBeEnabled();
+      }
+    });
+    expect(screen.getByText(failure.message)).toBeInTheDocument();
+  });

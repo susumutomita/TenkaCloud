@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { BlockList, isIP } from "node:net";
-import { parse, stringify } from "yaml";
+import { parse, parseDocument, stringify, visit } from "yaml";
 import { applyNetworkSubnets, type NetworkSubnets } from "./docker-networks";
 import type { InternetAccessRequest } from "./internet-access";
 
@@ -185,7 +185,7 @@ export function isolatedCompose(text: string, plan: LocalNetworkPlan): string {
       "tenkacloud.isolation.generation": plan.generation,
     };
   }
-  return stringify(document);
+  return stringify(document, { aliasDuplicateObjects: false });
 }
 
 /** Only the organizer can clear a colliding host route, so halts report it by name. */
@@ -404,15 +404,29 @@ function assertAuthoredEgressNetworks(document: {
     throw new Error("Authored networks cannot use the reserved egress- prefix.");
 }
 
+function parseEgressSource(text: string, egress: boolean) {
+  const parsed = parseDocument(text, { merge: true });
+  if (parsed.errors.length) throw parsed.errors[0];
+  if (egress)
+    visit(parsed, {
+      Alias() {
+        throw new Error("YAML aliases cannot be used with Internet attachments.");
+      },
+    });
+  return parsed.toJS();
+}
+
 /** Controller-only attachments; gateway priority is supported by the pinned Docker Compose. */
 export function egressComposeSource(text: string, services: readonly string[]): string {
-  const document = parse(text, { merge: true });
+  const document = parseEgressSource(text, services.length > 0);
   assertAuthoredEgressNetworks(document);
   if (!services.length) return text;
   document.networks ??= {};
   for (const name of new Set(services)) {
-    const service = document.services[name];
-    if (!service) throw new Error("Internet request names an undeclared service.");
+    if (!document.services[name]) throw new Error("Internet request names an undeclared service.");
+    const service = { ...document.services[name] };
+    document.services[name] = service;
+
     const network = egressNetworkName(name);
     if (Object.hasOwn(document.networks, network))
       throw new Error("Internet network name collision.");
@@ -420,12 +434,49 @@ export function egressComposeSource(text: string, services: readonly string[]): 
     const attached = service.networks ?? ["default"];
     service.networks = Array.isArray(attached)
       ? Object.fromEntries(attached.map((entry: string) => [entry, {}]))
-      : attached;
+      : { ...attached };
     for (const attachment of Object.values(service.networks)) {
       if (attachment && typeof attachment === "object" && "gw_priority" in attachment)
         throw new Error("Authored gateway priorities cannot override Internet isolation.");
     }
     service.networks[network] = { gw_priority: 1 };
   }
-  return stringify(document);
+  return stringify(document, { aliasDuplicateObjects: false });
+}
+
+/** Check the final transport output independently of the attachment construction. */
+export function assertEgressCompose(text: string, plan: LocalNetworkPlan): void {
+  const document = parse(text, { merge: true });
+  const services = ownedServices(
+    text,
+    plan.segments.map((segment) => segment.name),
+  );
+  if (
+    Object.keys(services).length !== Object.keys(plan.services).length ||
+    Object.entries(services).some(
+      ([name, networks]) => JSON.stringify(networks) !== JSON.stringify(plan.services[name]),
+    )
+  )
+    throw new Error("Final Compose service attachments differ from the guard plan.");
+  for (const [name, networks] of Object.entries(services)) {
+    const egress = plan.egressSegments.filter((segment) => segment.service === name);
+    const expected = egress.map((segment) => segment.name).sort((a, b) => a.localeCompare(b));
+    if (
+      JSON.stringify(
+        networks
+          .filter((network) => network.startsWith("egress-"))
+          .sort((a, b) => a.localeCompare(b)),
+      ) !== JSON.stringify(expected) ||
+      egress.some((segment) => segment.name !== egressNetworkName(name))
+    )
+      throw new Error("Final Compose has an unauthorized Internet attachment.");
+    if (
+      egress.length &&
+      JSON.stringify(document.services[name].dns) !==
+        JSON.stringify(egress.map((segment) => segmentGateway(segment, false)))
+    )
+      throw new Error("Final Compose Internet DNS must be exactly its segment gateway.");
+  }
+  if (plan.egressSegments.some((segment) => !services[segment.service]))
+    throw new Error("Final Compose is missing an Internet service.");
 }
