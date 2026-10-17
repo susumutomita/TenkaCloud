@@ -1517,9 +1517,7 @@ function routeDestinations(
     const cidr = destination.includes("/") ? destination : `${destination}/${routePrefix(ipv6)}`;
     if (
       owned.some(
-        (segment) =>
-          segment.bridge === route.dev &&
-          ownBridgeRoute(route, cidr, ipv6 ? segment.ipv6 : segment.ipv4),
+        (segment) => segment.bridge === route.dev && ownBridgeRoute(route, cidr, segment, ipv6),
       )
     )
       continue;
@@ -1534,21 +1532,50 @@ interface BridgeRoute {
   readonly gateway?: unknown;
 }
 /**
- * A retained bridge keeps the kernel's routes inside its subnet and Docker's plain on-link route to
- * all of it. Any other route into the subnet, such as a narrower one, still counts as an overlap.
+ * A retained bridge keeps only the routes its own addresses create: the connected route (or
+ * Docker's plain on-link route) to the whole subnet, and the kernel's local, broadcast and anycast
+ * routes for its gateway and the subnet's edges. Any other route into the subnet, kernel or not,
+ * such as a narrower prefix or a foreign address, still counts as an overlap.
  */
-function ownBridgeRoute(route: BridgeRoute, cidr: string, subnet: string): boolean {
+function ownBridgeRoute(
+  route: BridgeRoute,
+  cidr: string,
+  segment: LocalNetworkPlan["segments"][number],
+  ipv6: boolean,
+): boolean {
+  const family = ipv6 ? "ipv6" : "ipv4";
   const [address = "", prefix = ""] = cidr.split("/");
-  const [network = "", length = ""] = subnet.split("/");
-  if (isIP(address) !== isIP(network) || Number(prefix) < Number(length)) return false;
-  const family = isIP(network) === 6 ? "ipv6" : "ipv4";
-  const list = new BlockList();
-  list.addSubnet(network, Number(length), family);
-  if (!list.check(address, family)) return false;
-  return (
-    route.protocol === "kernel" ||
-    (prefix === length && route.type === undefined && route.gateway === undefined)
+  const [network = "", length = ""] = (ipv6 ? segment.ipv6 : segment.ipv4).split("/");
+  if (isIP(address) !== (ipv6 ? 6 : 4)) return false;
+  if (prefix === length && sameAddress(address, network, family))
+    return route.type === undefined && route.gateway === undefined;
+  if (route.protocol !== "kernel" || prefix !== String(routePrefix(ipv6))) return false;
+  const gateway = segmentGateway(segment, ipv6);
+  const expected = ipv6
+    ? [
+        { type: "local", address: gateway },
+        { type: "anycast", address: network },
+      ]
+    : [
+        { type: "local", address: gateway },
+        { type: "broadcast", address: ipv4Broadcast(network, Number(length)) },
+        { type: "broadcast", address: network },
+      ];
+  return expected.some(
+    (entry) => entry.type === route.type && sameAddress(address, entry.address, family),
   );
+}
+
+function sameAddress(address: string, expected: string, family: "ipv4" | "ipv6"): boolean {
+  const list = new BlockList();
+  list.addAddress(expected, family);
+  return list.check(address, family);
+}
+
+function ipv4Broadcast(network: string, length: number): string {
+  const first = network.split(".").reduce((total, part) => total * 256 + Number(part), 0);
+  const last = first + 2 ** (32 - length) - 1;
+  return [24, 16, 8, 0].map((shift) => Math.floor(last / 2 ** shift) % 256).join(".");
 }
 
 function routePrefix(ipv6: boolean): number {

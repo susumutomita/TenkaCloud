@@ -64,7 +64,7 @@ test("a publication batch waits for a recovering runtime's guard install before 
   }
 });
 
-test("only the retained bridge's kernel routes inside its own subnet are excluded", () => {
+test("only the routes a retained bridge's own addresses create are excluded", () => {
   const plan = localNetworkPlan(
     "tch-own-routes",
     { default: "10.240.0.16/28" },
@@ -75,11 +75,17 @@ test("only the retained bridge's kernel routes inside its own subnet are exclude
     },
   );
   const segment = requiredNetworkValue(plan.segments[0]);
+  const network6 = segment.ipv6.replace("::/64", "::");
+  const gateway6 = segment.ipv6.replace("::/64", "::1");
+  const foreign6 = segment.ipv6.replace("::/64", "::99");
   const routes = {
     ipv4: [
       { dst: segment.ipv4, dev: segment.bridge, protocol: "kernel" },
       { type: "local", dst: "10.240.0.17", dev: segment.bridge, protocol: "kernel" },
       { type: "broadcast", dst: "10.240.0.31", dev: segment.bridge, protocol: "kernel" },
+      // A foreign address or narrower prefix on the bridge claims workload addresses.
+      { type: "local", dst: "10.240.0.20", dev: segment.bridge, protocol: "kernel" },
+      { dst: "10.240.0.28/30", dev: segment.bridge, protocol: "kernel" },
       // Added while the runtime was retained: it reroutes part of the subnet, so it still counts.
       { dst: "10.240.0.24/29", gateway: "10.240.0.20", dev: segment.bridge, protocol: "static" },
       // Kernel routes on the bridge outside its subnet are not this runtime's to exclude.
@@ -91,6 +97,9 @@ test("only the retained bridge's kernel routes inside its own subnet are exclude
       { dst: segment.ipv6, dev: segment.bridge, protocol: "kernel", metric: 256 },
       // Docker adds its own on-link route to the whole IPv6 subnet, without a kernel protocol.
       { dst: segment.ipv6, dev: segment.bridge, metric: 1024 },
+      { type: "local", dst: gateway6, dev: segment.bridge, protocol: "kernel" },
+      { type: "anycast", dst: network6, dev: segment.bridge, protocol: "kernel" },
+      { type: "local", dst: foreign6, dev: segment.bridge, protocol: "kernel" },
       { dst: "fe80::/64", dev: segment.bridge, protocol: "kernel" },
       { dst: "fd99::/64", dev: "tcwg0" },
     ],
@@ -106,9 +115,12 @@ test("only the retained bridge's kernel routes inside its own subnet are exclude
     },
   });
   expect(guard.occupiedRoutes(plan)).toEqual([
+    "10.240.0.20/32",
+    "10.240.0.28/30",
     "10.240.0.24/29",
     "10.240.0.0/24",
     "192.168.10.0/24",
+    `${foreign6}/128`,
     "fe80::/64",
     "fd99::/64",
   ]);
@@ -116,11 +128,16 @@ test("only the retained bridge's kernel routes inside its own subnet are exclude
     segment.ipv4,
     "10.240.0.17/32",
     "10.240.0.31/32",
+    "10.240.0.20/32",
+    "10.240.0.28/30",
     "10.240.0.24/29",
     "10.240.0.0/24",
     "192.168.10.0/24",
     segment.ipv6,
     segment.ipv6,
+    `${gateway6}/128`,
+    `${network6}/128`,
+    `${foreign6}/128`,
     "fe80::/64",
     "fd99::/64",
   ]);
