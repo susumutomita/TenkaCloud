@@ -208,7 +208,7 @@ function publicOrigin(raw: string, unsafeHttp: boolean): string {
   return url.origin;
 }
 
-/** Loopback by default; a LAN address only when it is private and explicitly acknowledged. */
+/** Loopback by default; bind one acknowledged private or shared-address IPv4. */
 function listenAddress(lan: string | undefined, unsafeLan: boolean): string {
   if (!lan) {
     if (unsafeLan) throw new Error("--unsafe-lan requires --lan <private-ip>.");
@@ -218,7 +218,8 @@ function listenAddress(lan: string | undefined, unsafeLan: boolean): string {
   const privateAddress =
     parts[0] === 10 ||
     (parts[0] === 172 && (parts[1] ?? 0) >= 16 && (parts[1] ?? 0) <= 31) ||
-    (parts[0] === 192 && parts[1] === 168);
+    (parts[0] === 192 && parts[1] === 168) ||
+    (parts[0] === 100 && (parts[1] ?? 0) >= 64 && (parts[1] ?? 0) <= 127);
   if (!isIPv4(lan) || !privateAddress)
     throw new Error("--lan requires an explicit private IPv4 address of this host, not 0.0.0.0.");
   if (!unsafeLan)

@@ -1,10 +1,11 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { request } from "node:http";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as transport from "../../lib/node-http";
 import { parseGatewayPorts } from "../gateway-ports";
 import { startHttpHost } from "../http";
 import { parseOptions } from "../options";
@@ -35,6 +36,93 @@ test("public origins bind every interface and keep both origins", () => {
     behindProxy: true,
   });
   expect(parse().public).toBeUndefined();
+});
+
+// Parser/transport test vectors only; no shared-address interface is opened.
+// eslint-disable-next-line sonarjs/no-hardcoded-ip -- RFC6598 boundary fixtures, never real host addresses.
+const sharedAddresses = ["100.64.0.0", "100.96.12.34", "100.127.255.255"] as const;
+
+test("explicit LAN hosting accepts one shared-address IPv4 and still requires acknowledgement", () => {
+  expect(parse().hostname).toBe("127.0.0.1");
+  for (const address of sharedAddresses) {
+    const options = parse("--lan", address, "--unsafe-lan");
+    expect(options.hostname).toBe(address);
+    expect(options.public).toBeUndefined();
+    expect(() => parse("--lan", address)).toThrow("Add --unsafe-lan");
+  }
+  for (const address of [
+    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- parser rejection fixture; no connection.
+    "100.63.255.255",
+    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- parser rejection fixture; no connection.
+    "100.128.0.0",
+    "100.64.0.256",
+    "100.064.0.1",
+    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- parser rejection fixture; no connection.
+    "100.64.0.1/32",
+    "0.0.0.0",
+    "::",
+    "example.test",
+    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- parser rejection fixture; no connection.
+    "8.8.8.8",
+  ]) {
+    expect(() => parse("--lan", address, "--unsafe-lan")).toThrow("explicit private IPv4");
+  }
+});
+
+test("shared-address hosting keeps admin loopback, exact participant URLs and origin checks", async () => {
+  const address = sharedAddresses[1];
+  const original = transport.listen;
+  const binds: string[] = [];
+  // Exercise server wiring on ephemeral loopback sockets without publishing a real interface.
+  const listener = spyOn(transport, "listen").mockImplementation(async (server, hostname) => {
+    binds.push(hostname);
+    const bound = new URL(await original(server, "127.0.0.1", 0));
+    bound.hostname = hostname;
+    return bound.origin;
+  });
+  let started: Awaited<ReturnType<typeof host>> | undefined;
+  try {
+    started = await host({ public: false, hostname: address, dynamicPorts: true });
+  } finally {
+    listener.mockRestore();
+  }
+  const { adminPort, participantPort } = started;
+  expect(binds).toEqual([address, "127.0.0.1"]);
+  const participantHost = `${address}:${participantPort}`;
+  const participantOrigin = `http://${participantHost}`;
+  const config = await call(participantPort, {
+    path: "/runtime-config.json",
+    host: participantHost,
+  });
+  expect(config.status).toBe(200);
+  expect(config.body.apiBaseUrl).toBe(`${participantOrigin}/api`);
+  const admin = await call(adminPort, {
+    path: "/runtime-config.json",
+    host: `127.0.0.1:${adminPort}`,
+  });
+  expect(admin.body.participantPortalUrl).toBe(participantOrigin);
+  expect(
+    (await call(participantPort, { path: "/healthz", host: `127.0.0.1:${participantPort}` }))
+      .status,
+  ).toBe(403);
+  expect(
+    (
+      await call(participantPort, {
+        path: "/healthz",
+        host: participantHost,
+        headers: { origin: participantOrigin },
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await call(participantPort, {
+        path: "/healthz",
+        host: participantHost,
+        headers: { origin: "http://other.example" },
+      })
+    ).status,
+  ).toBe(403);
 });
 
 test("the hosted image refuses to start without public origins", () => {
@@ -75,7 +163,12 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
-async function host(options: { public: boolean; behindProxy?: boolean; dynamicPorts?: boolean }) {
+async function host(options: {
+  public: boolean;
+  behindProxy?: boolean;
+  dynamicPorts?: boolean;
+  hostname?: string;
+}) {
   const data = mkdtempSync(join(tmpdir(), "tenka-public-"));
   directories.push(data);
   let adminPort = options.dynamicPorts ? 0 : await freePort();
@@ -84,7 +177,7 @@ async function host(options: { public: boolean; behindProxy?: boolean; dynamicPo
     root,
     {
       dataDirectory: data,
-      hostname: options.public ? "0.0.0.0" : "127.0.0.1",
+      hostname: options.public ? "0.0.0.0" : (options.hostname ?? "127.0.0.1"),
       adminPort,
       participantPort,
       gatewayPorts: parseGatewayPorts("5200-5239"),
