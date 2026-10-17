@@ -53,7 +53,8 @@
         "scripts/problem-pack/main.ts",
         "scripts/release/host-candidate.ts",
         "scripts/cloud-hosting/main.ts",
-        "scripts/cloud-hosting/launcher-check.ts"
+        "scripts/cloud-hosting/launcher-check.ts",
+        "scripts/problem-pack/catalog-bump-main.ts"
       ],
       "project": ["scripts/**/*.ts"]
     },
