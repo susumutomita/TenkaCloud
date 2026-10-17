@@ -63,7 +63,7 @@ export function shouldShowNextActionHero(
  * - 全 cleared なら undefined → caller 側で「all_cleared」 state に倒す
  */
 export function isProblemUnsolved(p: ParticipantProblemView): boolean {
-  if (p.status !== "COMPLETE" && p.status !== "IN_PROGRESS" && p.status !== "PENDING") return false;
+  if (!isAttemptable(p)) return false;
   if (p.scoring?.kind === "flag") return p.scoring.flagSubmitted !== true;
   // [#2885] checkpoint 制は「全部出したか」で見る。 `score === 0` だけだと、 1 個でも通した
   // 時点で解答済扱いになり、 残り 4 個ある問題が「次にやること」から消える。
@@ -81,10 +81,21 @@ export function isProblemUnsolved(p: ParticipantProblemView): boolean {
  * であることを先に確かめてから 「未解答ではない」 を見る。
  */
 export function hasSolvedAnyProblem(problems: readonly ParticipantProblemView[]): boolean {
-  return problems.some(
-    (p) =>
-      (p.status === "COMPLETE" || p.status === "IN_PROGRESS" || p.status === "PENDING") &&
-      !isProblemUnsolved(p),
+  return problems.some((p) => isAttemptable(p) && !isProblemUnsolved(p));
+}
+
+/**
+ * 採点対象として取り組める問題か。 参加者が起動する on-demand 環境は、 起動前・停止中は
+ * deploy status が採点対象外 (competition では DELETED) でも、 containerSession / lifecycle を
+ * 持つ限り参加者自身が起動できるので、 未解答として数える。
+ */
+function isAttemptable(p: ParticipantProblemView): boolean {
+  return (
+    p.status === "COMPLETE" ||
+    p.status === "IN_PROGRESS" ||
+    p.status === "PENDING" ||
+    p.containerSession !== undefined ||
+    p.lifecycle !== undefined
   );
 }
 
@@ -162,10 +173,13 @@ export function computeNextActionState(args: {
   }
   const unsolved = view.problems.filter(isProblemUnsolved);
   if (unsolved.length === 0 && view.problems.length > 0) {
-    // uptime / 継続採点問題は「解き終わる」概念が無く、 score>0 でも競技は続く。 全問題が flag
-    // (= 一発 capture) で submit 済のときだけ真の完了 (all_cleared)。 継続採点問題が 1 つでもあれば
-    // 競技継続中なので defending を出す (= 「全問クリア / 最終順位を待ちましょう」 の誤表示を防ぐ)。
-    const allClearable = view.problems.every((p) => p.scoring?.kind === "flag");
+    // uptime / 継続採点問題は「解き終わる」概念が無く、 score>0 でも競技は続く。 全問題が提出型
+    // (flag / multi-flag) で出し終えたときだけ真の完了 (all_cleared)。 継続採点や coordination の
+    // 問題が 1 つでもあれば競技継続中なので defending を出す (= 「全問クリア / 最終順位を待ちましょう」
+    // の誤表示を防ぐ)。
+    const allClearable = view.problems.every(
+      (p) => !p.coordination && (p.scoring?.kind === "flag" || p.scoring?.kind === "multi-flag"),
+    );
     return allClearable ? { kind: "all_cleared" } : { kind: "defending" };
   }
   const next = pickNextProblem(view.problems, preferredNextProblemId);

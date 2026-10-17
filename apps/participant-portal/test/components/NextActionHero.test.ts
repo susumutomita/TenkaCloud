@@ -243,6 +243,54 @@ describe("computeNextActionState", () => {
     expect(state).toEqual({ kind: "defending" });
   });
 
+  it("should point a local competitor at a stopped on-demand challenge instead of a Battle", () => {
+    // Local competitions send a stopped on-demand environment as DELETED with a container session.
+    const stopped = problem({
+      jobId: "j-a",
+      problemId: "stackstack-first-request",
+      status: "DELETED",
+      containerSession: { status: "stopped" },
+      scoring: {
+        kind: "multi-flag",
+        flags: [{ id: "postcard", label: "Read the postcard", points: 25, solved: false }],
+      },
+    });
+    const v = view({ problems: [stopped], eventGate: { kind: "ok" } });
+    const state = computeNextActionState({ view: v, leaderboard: null, nowMs: now });
+    expect(state?.kind).toBe("running");
+    if (state?.kind === "running") {
+      expect(state.unsolvedCount).toBe(1);
+      expect(state.nextProblem?.problemId).toBe("stackstack-first-request");
+    }
+  });
+
+  it("should not count a stopped environment the competitor cannot start", () => {
+    const organizerStopped = problem({
+      jobId: "j-a",
+      problemId: "p",
+      status: "DELETED",
+      scoring: { kind: "flag", flagSubmitted: false },
+    });
+    expect(isProblemUnsolved(organizerStopped)).toBe(false);
+  });
+
+  it("should return all_cleared once every checkpoint of every challenge is in", () => {
+    const done = problem({
+      jobId: "j-a",
+      problemId: "stackstack-first-request",
+      status: "DELETED",
+      containerSession: { status: "stopped" },
+      score: 25,
+      scoring: {
+        kind: "multi-flag",
+        flags: [{ id: "postcard", label: "Read the postcard", points: 25, solved: true }],
+      },
+    });
+    const v = view({ problems: [done], eventGate: { kind: "ok" } });
+    const state = computeNextActionState({ view: v, leaderboard: null, nowMs: now });
+    expect(state).toEqual({ kind: "all_cleared" });
+  });
+
   it("should return defending for a mixed event once all flags are submitted but uptime is up", () => {
     const flagDone = problem({
       jobId: "j-a",
