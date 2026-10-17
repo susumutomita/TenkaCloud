@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readCatalogSelection, selectedCatalogSnapshots } from "../../problem-pack/catalog-read";
@@ -31,15 +39,75 @@ for (const args of [[], ["--no-build"]])
   });
 
 for (const args of [[], ["--no-build"]])
-  test(`make local launcher ${args.join(" ")} refuses an unselected root before creating its controller state`, async () => {
+  test(`make local launcher ${args.join(" ")} rejects missing configuration before creating its controller state`, async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-unselected-launcher-"));
     try {
-      await expect(runManagedLocal(root, args)).rejects.toThrow("make catalog-download");
+      await expect(runManagedLocal(root, args)).rejects.toThrow(
+        "Catalog acquisition from catalog-sources.json failed",
+      );
       expect(existsSync(join(root, ".tenkacloud"))).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+for (const args of [[], ["--no-build"]])
+  test(`make local ${args.join(" ")} stops a failed branch fetch before controller or event state`, async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-branch-startup-"));
+    writeFileSync(
+      join(root, "catalog-sources.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        sources: [{ url: "https://example.invalid/catalog.git", ref: "main" }],
+      }),
+    );
+    try {
+      await expect(
+        runManagedLocal(root, args, {
+          resolveRef: () => {
+            throw new Error("main branch unavailable");
+          },
+        }),
+      ).rejects.toThrow("main branch unavailable");
+      expect(existsSync(join(root, ".tenkacloud/host"))).toBe(false);
+      expect(existsSync(join(root, ".tenkacloud/catalog-store/selected.json"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+test("make local acquires the configured branch before checking built interfaces", async () => {
+  const root = mkdtempSync(join(tmpdir(), "tc-acquired-startup-"));
+  writeFileSync(
+    join(root, "catalog-sources.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      sources: [{ url: "https://example.invalid/catalog.git", ref: "main" }],
+    }),
+  );
+  try {
+    await expect(
+      runManagedLocal(root, ["--no-build"], {
+        resolveRef: (_url, ref) => {
+          expect(ref).toBe("main");
+          return "a".repeat(40);
+        },
+        fetcher: (request) => {
+          mkdirSync(join(request.destinationDir, "challenges"));
+          cpSync(
+            join(import.meta.dirname, "../../../problems/challenges/sqli-demo"),
+            join(request.destinationDir, "challenges/sqli-demo"),
+            { recursive: true },
+          );
+        },
+      }),
+    ).resolves.toBe(1);
+    expect(selectedCatalogSnapshots(root)[0]?.revision.commit).toBe("a".repeat(40));
+    expect(existsSync(join(root, ".tenkacloud/host/hosting.sqlite"))).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("a corrupt catalog selection remains a validation failure rather than an empty or default catalog", () => {
   const root = mkdtempSync(join(tmpdir(), "tc-corrupt-selection-"));

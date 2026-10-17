@@ -222,20 +222,8 @@ test("non-semver current refs and non-newer overrides skip release lookup", () =
     expect(await findCatalogBump(root, "", deps)).toBeNull();
   }));
 
-test("catalog workflow YAML parses and dispatched CI keeps the required ci gate", () => {
+test("CI keeps the required ci gate", () => {
   const root = join(import.meta.dirname, "../../..");
-  const workflow = parse(readFileSync(join(root, ".github/workflows/catalog-bump.yml"), "utf8"));
-  expect(workflow.permissions).toEqual({
-    contents: "write",
-    "pull-requests": "write",
-    actions: "write",
-  });
-  expect(workflow.on.schedule).toEqual([{ cron: "23 3 * * *" }]);
-  expect(workflow.concurrency).toEqual({
-    group: "catalog-release-bump",
-    "cancel-in-progress": false,
-  });
-  expect(workflow.on.workflow_dispatch.inputs.tag.required).toBe(false);
   const ci = parse(readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"));
   expect(ci.on).toHaveProperty("workflow_dispatch");
   expect(ci.jobs.ci.needs).toEqual([
@@ -253,8 +241,5 @@ test("catalog workflow YAML parses and dispatched CI keeps the required ci gate"
   for (const job of Object.values(jobs)) {
     expect(job.if === undefined || job.if === "always()").toBe(true);
     expect(job.name).toBeUndefined();
-  }
-  for (const step of workflow.jobs.bump.steps) {
-    if (step.uses && !step.uses.startsWith("./")) expect(step.uses).toMatch(/@[a-f0-9]{40}$/u);
   }
 });

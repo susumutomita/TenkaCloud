@@ -44,17 +44,16 @@ export const store = (root: string) => join(root, ".tenkacloud/catalog-store");
 export const snapshot = (root: string, digest: string) => join(store(root), "snapshots", digest);
 export const lockPath = (root: string) => join(store(root), "selected.json");
 
-/** Acquisition is an explicit organizer operation; startup must never invent a selection. */
+/** Runtime reads only a completed acquisition; the launcher resolves configured sources first. */
 export function readCatalogSelection(root: string): string {
   try {
     return readFileSync(lockPath(root), "utf8");
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
       throw new Error(
-        "No downloaded problem catalog is selected. Review catalog-sources.json, then run " +
-          "`make catalog-download`; for another reviewed source file use " +
-          "`make catalog-download CATALOG_SOURCES=my-catalogs.json`. Restart `make local`. " +
-          "Startup does not select or download a catalog automatically.",
+        "No downloaded problem catalog is selected. Configure the repository URL and branch " +
+          "in catalog-sources.json, then run `make local`. For build-only preparation use " +
+          "`make catalog-download CATALOG_SOURCES=my-catalogs.json`.",
         { cause: error },
       );
     throw error;

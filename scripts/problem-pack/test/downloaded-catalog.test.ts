@@ -17,7 +17,13 @@ import { hostBrowserProblemPaths } from "../../local-host/browser-metadata.js";
 import { dockerDefinitionOf, loadDockerCatalog } from "../../local-host/docker-catalog.js";
 import type { Job } from "../../local-host/model.js";
 import { CatalogLockSchema, retainedCatalogRoots, selectedCatalogRoots } from "../catalog-read.js";
-import { downloadCatalog, materializeCatalog, verifyCatalogLock } from "../downloaded-catalog.js";
+import {
+  downloadCatalog,
+  downloadConfiguredCatalog,
+  downloadLockedCatalog,
+  materializeCatalog,
+  verifyCatalogLock,
+} from "../downloaded-catalog.js";
 import type { GitArchiveFetcher } from "../git-source.js";
 
 const repository = resolve(import.meta.dirname, "../../..");
@@ -26,6 +32,87 @@ const config = (ids: string[]) => ({
   schemaVersion: 1,
   sources: ids.map((id) => ({ url: `https://example.invalid/${id}.git`, ref: revision })),
 });
+
+test("configured branch acquisition resolves again, keeps old snapshots internally and fails closed", () =>
+  fixture((root, fetcher) => {
+    const selection = {
+      schemaVersion: 1,
+      sources: [{ url: "https://example.invalid/branch.git", ref: "main" }],
+    };
+    const path = join(root, "catalog-sources.json");
+    const text = JSON.stringify(selection);
+    writeFileSync(path, text);
+    let commit = revision;
+    const deps = {
+      resolveRef: (url: string, ref: string) => {
+        expect(url).toBe(selection.sources[0]?.url);
+        expect(ref).toBe("main");
+        return commit;
+      },
+      fetcher: ((request) => {
+        fetcher(request);
+        writeFileSync(join(request.destinationDir, "shared.txt"), request.commit);
+      }) satisfies GitArchiveFetcher,
+    };
+    downloadConfiguredCatalog(root, undefined, deps);
+    const first = selectedCatalogRoots(root)[0];
+    expect(first).toBeDefined();
+    const lock = readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8");
+    writeFileSync(join(root, "catalog-lock.json"), lock);
+    commit = "b".repeat(40);
+    downloadConfiguredCatalog(root, undefined, deps);
+    expect(selectedCatalogRoots(root)[0]).not.toBe(first);
+    expect(retainedCatalogRoots(root)).toContain(String(first));
+    expect(readFileSync(join(String(first), "shared.txt"), "utf8")).toBe(revision);
+    expect(readFileSync(path, "utf8")).toBe(text);
+    expect(readFileSync(join(root, "catalog-lock.json"), "utf8")).toBe(lock);
+    const selected = readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8");
+    expect(() =>
+      downloadConfiguredCatalog(root, undefined, {
+        ...deps,
+        resolveRef: () => {
+          throw new Error("branch unavailable");
+        },
+      }),
+    ).toThrow("branch unavailable");
+    expect(() =>
+      downloadConfiguredCatalog(root, undefined, {
+        ...deps,
+        fetcher: () => {
+          throw new Error("fetch failed");
+        },
+      }),
+    ).toThrow("fetch failed");
+    expect(readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8")).toBe(
+      selected,
+    );
+    expect(existsSync(join(root, ".tenkacloud/catalog-store/mutation.lock"))).toBe(false);
+  }));
+
+test("locked CI acquisition restores and verifies pinned bytes without resolving a branch", () =>
+  fixture((root, fetcher) => {
+    downloadCatalog(root, config(["locked"]), { fetcher });
+    const lock = readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8");
+    writeFileSync(join(root, "catalog-lock.json"), lock);
+    rmSync(join(root, ".tenkacloud"), { recursive: true, force: true });
+    downloadLockedCatalog(root, {
+      fetcher,
+      resolveRef: () => {
+        throw new Error("must not resolve a moving branch");
+      },
+    });
+    expect(() => verifyCatalogLock(root)).not.toThrow();
+    rmSync(join(root, ".tenkacloud"), { recursive: true, force: true });
+    expect(() =>
+      downloadLockedCatalog(root, {
+        fetcher: (request) => {
+          fetcher(request);
+          writeFileSync(join(request.destinationDir, "shared.txt"), "changed");
+        },
+      }),
+    ).toThrow("does not match");
+    expect(existsSync(join(root, ".tenkacloud/catalog-store/selected.json"))).toBe(false);
+  }));
 function fixture(run: (root: string, fetcher: GitArchiveFetcher) => void) {
   const root = mkdtempSync(join(tmpdir(), "downloaded-catalog-"));
   const fetcher: GitArchiveFetcher = (request) => {

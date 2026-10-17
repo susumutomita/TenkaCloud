@@ -10,7 +10,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { downloadCatalog } from "../../problem-pack/downloaded-catalog.js";
+import {
+  downloadCatalog,
+  downloadConfiguredCatalog,
+} from "../../problem-pack/downloaded-catalog.js";
 import type { GitArchiveFetcher } from "../../problem-pack/git-source.js";
 import { CompetitionEngine } from "../competition-engine.js";
 import { forensicFixture, required } from "./forensic-fixture.js";
@@ -106,7 +109,14 @@ test("downloaded A/B/A+B native catalogs, answers and saved event metadata survi
       { token: team.teamLoginKey },
     );
     expect(restored.body.projection).toEqual(answer.body.projection);
-    downloadCatalog(root, config(["pack-a"], secondCommit), { fetcher });
+    writeFileSync(
+      join(root, "catalog-sources.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        sources: [{ url: "https://example.invalid/pack-a.git", ref: "main" }],
+      }),
+    );
+    downloadConfiguredCatalog(root, undefined, { fetcher, resolveRef: () => secondCommit });
     await fixture.restart();
     const fresh = await fixture.create("New edition A");
     const freshTeam = required(fresh.teams[0]);
@@ -115,6 +125,8 @@ test("downloaded A/B/A+B native catalogs, answers and saved event metadata survi
     });
     expect(freshView.body.problemCatalog[0]?.name).toContain(secondCommit);
     expect((await readView()).body.problemCatalog).toEqual(originalView.body.problemCatalog);
+    expect((await readView()).body.problems[0]?.score).toBe(20);
+    expect(fixture.store.team(team.teamId).score).toBe(20);
     expect(freshView.body.problemCatalog[0]?.dashboardSlots).not.toEqual(
       originalView.body.problemCatalog[0]?.dashboardSlots,
     );
