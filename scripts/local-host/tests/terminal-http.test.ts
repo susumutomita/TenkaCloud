@@ -3,10 +3,13 @@ import { WebSocket } from "ws";
 import { networkEngineFixture } from "./network-engine-fixture";
 import { terminalFixture } from "./terminal-fixture";
 
-async function waitUntil(condition: () => boolean): Promise<void> {
+async function waitUntil(condition: () => boolean, diagnose?: () => unknown): Promise<void> {
   const deadline = Date.now() + 2000;
   while (!condition()) {
-    if (Date.now() >= deadline) throw new Error("Terminal condition timed out.");
+    if (Date.now() >= deadline)
+      throw new Error(
+        `Terminal condition timed out. ${diagnose ? JSON.stringify(diagnose()) : ""}`,
+      );
     await Bun.sleep(5);
   }
 }
@@ -23,10 +26,34 @@ async function connect(
     ...(requestOrigin === null ? {} : { headers: { origin: requestOrigin } }),
   });
   const frames: { type: string; data?: string; code?: number | null; reason?: string }[] = [];
-  const lifecycle: { close?: { code: number; reason: string }; errors: string[] } = { errors: [] };
+  const lifecycle: {
+    createdAt: number;
+    openedAt?: number;
+    close?: { code: number; reason: string; at: number };
+    errors: string[];
+    actions: { kind: string; at: number; stack: string }[];
+  } = { createdAt: Math.round(performance.now()), errors: [], actions: [] };
+  const action = (kind: string) => {
+    if (lifecycle.actions.length < 8)
+      lifecycle.actions.push({
+        kind,
+        at: Math.round(performance.now()),
+        stack: new Error().stack ?? "",
+      });
+  };
+  const close = socket.close.bind(socket);
+  const terminate = socket.terminate.bind(socket);
+  socket.close = (...args) => {
+    action("close");
+    close(...args);
+  };
+  socket.terminate = () => {
+    action("terminate");
+    terminate();
+  };
   const closed = new Promise<void>((resolve) =>
     socket.once("close", (code, reason) => {
-      lifecycle.close = { code, reason: reason.toString() };
+      lifecycle.close = { code, reason: reason.toString(), at: Math.round(performance.now()) };
       resolve();
     }),
   );
@@ -37,6 +64,7 @@ async function connect(
       reject(new Error("WebSocket handshake timed out"));
     }, 1000);
     socket.once("open", () => {
+      lifecycle.openedAt = Math.round(performance.now());
       clearTimeout(timer);
       resolve();
     });
@@ -92,6 +120,7 @@ test("terminal sessions revoke without client input and leave another team conne
           frames: b.frames,
           transport: b.lifecycle,
           authorizationErrors: f.authorizationErrors,
+          terminalTrace: f.terminalTrace,
           shells: f.shells.map(({ job, kills }) => ({
             teamId: job.teamId,
             jobId: job.jobId,
@@ -225,20 +254,45 @@ test("six authenticated WebSockets remain responsive during slow network audit a
     finish = resolve;
     fail = reject;
   });
+  let auditStarted = false;
   network.guard.audit = async (plan) => {
-    if (plan.project === `tch-${f.a.job.jobId.toLowerCase()}`) await barrier;
+    if (plan.project === `tch-${f.a.job.jobId.toLowerCase()}`) {
+      auditStarted = true;
+      await barrier;
+    }
   };
   const sessions: Awaited<ReturnType<typeof connect>>[] = [];
+  const diagnose = () => ({
+    auditStarted,
+    sessions: sessions.map((session) => ({
+      state: session.socket.readyState,
+      frames: session.frames,
+      lifecycle: session.lifecycle,
+    })),
+    shells: f.shells.map((shell) => ({
+      jobId: shell.job.jobId,
+      writes: shell.writes,
+      kills: shell.kills,
+    })),
+    authorizationErrors: f.authorizationErrors,
+    trace: f.terminalTrace,
+    networkCalls: network.calls,
+    supported: teams.map((team) =>
+      network.engine.terminalSupported(network.store.job(team.job.jobId)),
+    ),
+  });
   try {
     for (const team of teams)
       sessions.push(await connect(f.participant.origin, await f.ticket(team.team.loginKey)));
     await waitUntil(() => f.shells.length === 6);
     network.setNow(11_001);
-    await Bun.sleep(600);
+    await waitUntil(() => auditStarted, diagnose);
     for (const session of sessions)
       session.socket.send(JSON.stringify({ type: "input", data: "audit-echo" }));
-    await waitUntil(() =>
-      sessions.every((session) => session.frames.some((frame) => frame.data === "audit-echo")),
+    await waitUntil(
+      () =>
+        sessions.every((session) => session.frames.some((frame) => frame.data === "audit-echo")),
+      diagnose,
     );
     expect(sessions.every((session) => session.socket.readyState === WebSocket.OPEN)).toBe(true);
     fail(new Error("Delayed network audit failed"));
@@ -274,6 +328,47 @@ test("peer admission binds HTTP credentials and rechecks an open terminal withou
     await own.closed;
     expect(f.shells[0]?.kills).toBe(1);
     expect((await f.issue()).status).toBeGreaterThanOrEqual(400);
+  } finally {
+    await f.close();
+  }
+});
+
+test("six PTY sessions resize independently and reconnect with a fresh single-use ticket", async () => {
+  const f = await terminalFixture(6);
+  f.hooks.pty = true;
+  const teams = [f.a, f.b, ...f.extras];
+  try {
+    const clients = [];
+    for (const { team } of teams)
+      clients.push(await connect(f.participant.origin, await f.ticket(team.loginKey)));
+    await waitUntil(() => f.shells.length === 6);
+    for (let index = 0; index < clients.length; index++) {
+      clients[index]?.socket.send(
+        JSON.stringify({ type: "resize", cols: 90 + index, rows: 30 + index }),
+      );
+      clients[index]?.socket.send(JSON.stringify({ type: "input", data: `team-${index}\r` }));
+    }
+    await waitUntil(() =>
+      f.shells.every((shell) => shell.resizes.length === 1 && shell.writes.length === 1),
+    );
+    for (let index = 0; index < teams.length; index++) {
+      expect(f.shells[index]?.job.teamId).toBe(teams[index]?.team.teamId);
+      expect(f.shells[index]?.resizes).toEqual([{ cols: 90 + index, rows: 30 + index }]);
+      expect(f.shells[index]?.writes).toEqual([`team-${index}\r`]);
+    }
+    clients[0]?.socket.close();
+    await clients[0]?.closed;
+    await waitUntil(() => f.shells[0]?.kills === 1);
+    expect(f.shells.slice(1).every((shell) => shell.kills === 0)).toBe(true);
+    const ticket = await f.ticket();
+    const reconnected = await connect(f.participant.origin, ticket);
+    await waitUntil(() => f.shells.length === 7);
+    reconnected.socket.send(JSON.stringify({ type: "resize", cols: 120, rows: 42 }));
+    await waitUntil(() => f.shells[6]?.resizes.length === 1);
+    expect(f.shells[6]?.job.jobId).toBe(f.a.job.jobId);
+    expect(f.shells[0]?.resizes).toEqual([{ cols: 90, rows: 30 }]);
+    expect(f.shells[0]?.kills).toBe(1);
+    await expect(connect(f.participant.origin, ticket)).rejects.toThrow();
   } finally {
     await f.close();
   }

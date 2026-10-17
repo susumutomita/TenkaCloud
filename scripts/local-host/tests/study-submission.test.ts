@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { spawnPrivateKeyProcess } from "../private-key-process";
 import { submissionCatalog } from "../submission-runtime";
 import { repairArtifact, repairChecks, repairSource } from "./study-repair.test-helpers";
 
@@ -93,14 +93,22 @@ test("Node24 organizer / separate participant process: fixed edition, gates, six
     encoding: "utf8",
   });
   expect(build.status).toBe(0);
-  // eslint-disable-next-line sonarjs/no-os-command-from-path -- CI pins Node24; fixture secrets use a private pipe, never argv or output.
-  const child = spawn("node", [join(root, ".tenkacloud/node-host/study.mjs"), directory, catalog], {
-    cwd: root,
-    stdio: ["pipe", "pipe", "pipe", "pipe"],
-  });
-  const output = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+  const {
+    child,
+    stdout,
+    stderr: diagnostic,
+    privateOutput,
+    exited,
+  } = spawnPrivateKeyProcess(
+    ["node", join(root, ".tenkacloud/node-host/study.mjs"), directory, catalog],
+    { cwd: root, stdin: "pipe" },
+  );
+  const input = child.stdin;
+  if (!input) throw new Error("Study host control pipe was not created.");
+  const lines = createInterface({ input: stdout });
+  const output = lines[Symbol.asyncIterator]();
   let stderr = "";
-  child.stderr.on("data", (data: Buffer) => {
+  diagnostic.on("data", (data: Buffer) => {
     stderr += data.toString();
   });
   async function next() {
@@ -108,13 +116,11 @@ test("Node24 organizer / separate participant process: fixed edition, gates, six
     if (line.done) throw new Error(`Study host exited: ${stderr}`);
     return JSON.parse(line.value) as Record<string, unknown>;
   }
-  const keyPipe = createInterface({ input: child.stdio[3] as Readable })[Symbol.asyncIterator]();
-  const keyLine = await keyPipe.next();
-  expect(keyLine.done).toBe(false);
-  const key = String(keyLine.value);
-  let addresses = await next();
+  const keyLines = createInterface({ input: privateOutput });
+  const keyPipe = keyLines[Symbol.asyncIterator]();
+  let addresses: Record<string, unknown>;
   const control = async (command: unknown) => {
-    child.stdin.write(`${JSON.stringify(command)}\n`);
+    input.write(`${JSON.stringify(command)}\n`);
     return next();
   };
   async function api(
@@ -137,6 +143,10 @@ test("Node24 organizer / separate participant process: fixed edition, gates, six
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   }
   try {
+    const keyLine = await keyPipe.next();
+    expect(keyLine.done).toBe(false);
+    const key = String(keyLine.value);
+    addresses = await next();
     const login = await api("admin", "/host/login", "POST", { key });
     expect(login.status).toBe(200);
     const admin = String(login.body.idToken);
@@ -331,10 +341,21 @@ test("Node24 organizer / separate participant process: fixed edition, gates, six
     // Previously acknowledged receipts remain queryable after the cutoff, with no new award.
     expect((await submit(token, envelope, "study-answer-0")).body).toEqual(results[0]?.body ?? {});
   } finally {
-    child.stdin.write('{"kind":"stop"}\n');
-    child.stdin.end();
-    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
-    expect(child.exitCode, stderr).toBe(0);
-    rmSync(directory, { recursive: true, force: true });
+    try {
+      if (child.exitCode === null && child.signalCode === null) {
+        input.write('{"kind":"stop"}\n');
+        await input.end();
+      }
+    } finally {
+      lines.close();
+      keyLines.close();
+      stdout.resume();
+      privateOutput.resume();
+      try {
+        expect(await exited, stderr).toBe(0);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    }
   }
 }, 60_000);

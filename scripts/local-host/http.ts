@@ -447,8 +447,11 @@ export async function startHttpHost(options: {
     origin,
     boundPort: Number(new URL(bound).port || 80),
     close: async () => {
-      terminalTransport?.close();
-      await closeServer(server);
+      try {
+        await terminalTransport?.close();
+      } finally {
+        await closeServer(server);
+      }
     },
   };
 }

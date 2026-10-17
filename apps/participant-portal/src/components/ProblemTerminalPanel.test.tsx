@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PortalNetworkError, PortalValidationError } from "../api/portal-client";
 import { I18nProvider } from "../i18n";
+import type { PtyOutput } from "./ProblemPtyTerminal";
 import { ProblemTerminalPanel } from "./ProblemTerminalPanel";
 
 /**
@@ -13,6 +14,18 @@ import { ProblemTerminalPanel } from "./ProblemTerminalPanel";
  * だけ mock し (= HTTP を叩かない)、 WebSocket は global を差し替えたフェイクで駆動する
  * (xterm.js 等は使わない、 素の pre/input なので DOM 上の役割で拾える)。
  */
+
+const ptyMocks = vi.hoisted(() => ({
+  output: undefined as PtyOutput | undefined,
+  fail: undefined as (() => void) | undefined,
+}));
+vi.mock("./ProblemPtyTerminal", () => ({
+  ProblemPtyTerminal: ({ output, onFailure }: { output: PtyOutput; onFailure: () => void }) => {
+    ptyMocks.output = output;
+    ptyMocks.fail = onFailure;
+    return <section aria-label="Interactive terminal">PTY</section>;
+  },
+}));
 
 const apiMocks = vi.hoisted(() => ({
   issueProblemTerminalHandoff: vi.fn(),
@@ -424,3 +437,45 @@ function fireComposingEnter(input: HTMLElement): void {
   Object.defineProperty(event, "isComposing", { value: true });
   input.dispatchEvent(event);
 }
+
+it("uses the interactive terminal after broker capability admission and resets it for a fresh ticket", async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const ws = await connectAndOpen(user);
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "ready", mode: "pty" }) }));
+  expect(await screen.findByRole("region", { name: "Interactive terminal" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Disconnect" }));
+  expect(ws.closeCalls).toBe(1);
+  await connectAndOpen(user, "fresh-ticket");
+  expect(FakeWebSocket.instances[1]?.url).toContain("ticket=fresh-ticket");
+  expect(screen.queryByRole("region", { name: "Interactive terminal" })).not.toBeInTheDocument();
+});
+it("retains the line console and reports its capability on Node hosts", async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const ws = await connectAndOpen(user);
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "ready", mode: "pipe" }) }));
+  expect(screen.getByText(/This host provides a line console/u)).toBeInTheDocument();
+  expect(screen.getByRole("textbox")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
+});
+
+it("hands off early output, streams live output and closes on renderer failure", async () => {
+  const user = userEvent.setup();
+  renderPanel();
+  const ws = await connectAndOpen(user);
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "data", data: "early" }) }));
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "ready", mode: "pty" }) }));
+  expect(await screen.findByRole("region", { name: "Interactive terminal" })).toBeInTheDocument();
+  if (!ptyMocks.output || !ptyMocks.fail) throw new Error("Renderer was not attached");
+  expect(ptyMocks.output.pending).toBe("early");
+  const write = vi.fn();
+  ptyMocks.output.write = write;
+  act(() => ws.onmessage?.({ data: JSON.stringify({ type: "data", data: "live" }) }));
+  expect(write).toHaveBeenCalledWith("live");
+  act(() => ptyMocks.fail?.());
+  expect(ws.closeCalls).toBe(1);
+  expect(screen.getByText("transport_failed")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
+});
