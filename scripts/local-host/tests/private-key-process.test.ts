@@ -1,9 +1,12 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readlinkSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
+import { WebSocket, WebSocketServer } from "ws";
+import { closeServer, listen } from "../../lib/node-http";
 import { spawnPrivateKeyProcess } from "../private-key-process";
 
 const syntheticKey = "sssssssssssssssssssssssssssssssssssssssssss";
@@ -117,41 +120,134 @@ test("collecting private-pipe children cannot close later SQLite descriptors", a
     expect([...openDescriptorTargets()].some((target) => target.startsWith(directory))).toBe(false);
 });
 
-test.each([
+async function controlledChild(): Promise<void> {
+  const result = spawnPrivateKeyProcess(
+    [
+      "node",
+      "--eval",
+      `require("node:fs").writeSync(3, ${JSON.stringify(syntheticKeyLine)});
+process.stdin.on("data", (data) => process.stdout.write(data));
+process.stdin.on("end", () => process.exit(0));`,
+    ],
+    { cwd: process.cwd(), stdin: "pipe" },
+  );
+  const input = result.child.stdin;
+  if (!input) throw new Error("Synthetic control pipe was not created.");
+  const output = Promise.all([
+    result.exited,
+    text(result.stdout),
+    text(result.stderr),
+    text(result.privateOutput),
+  ]);
+  input.write("controlled input\n");
+  await input.end();
+  expect(await output).toEqual([0, "controlled input\n", "", syntheticKeyLine]);
+}
+
+test("collecting controlled Node children leaves later WebSockets connected and responsive", async () => {
+  const server = createServer();
+  const sockets = new WebSocketServer({ noServer: true });
+  const unexpected: unknown[] = [];
+  server.on("upgrade", (request, socket, head) =>
+    sockets.handleUpgrade(request, socket, head, (accepted) => {
+      accepted.on("message", (data) => accepted.send(data));
+      accepted.on("close", (code) => unexpected.push({ side: "server", code }));
+      accepted.on("error", (error) => unexpected.push(error));
+    }),
+  );
+  const origin = await listen(server, "127.0.0.1", 0);
+  const clients: WebSocket[] = [];
+  const echoed = new Set<number>();
+  try {
+    // The study fixture's Node host has a writable control pipe and a private fd 3.
+    // Allocate new transports after its normal exit, then collect the old owners.
+    // The former node:child_process adapter can close one of these live sockets.
+    for (let index = 0; index < 12; index++) await controlledChild();
+    for (let index = 0; index < 24; index++) {
+      const client = new WebSocket(origin.replace(/^http/u, "ws"));
+      clients.push(client);
+      client.on("message", (data) => {
+        if (data.toString() === "echo") echoed.add(index);
+      });
+      client.on("close", (code) => unexpected.push({ side: "client", index, code }));
+      client.on("error", (error) => unexpected.push(error));
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Synthetic handshake timed out.")), 1000);
+        client.once("open", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        client.once("error", (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+      });
+    }
+    for (let round = 0; round < 6; round++) {
+      Bun.gc(true);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    for (const client of clients) client.send("echo");
+    const deadline = Date.now() + 1000;
+    while (echoed.size !== clients.length && unexpected.length === 0 && Date.now() < deadline)
+      await Bun.sleep(5);
+    expect(unexpected).toEqual([]);
+    expect(echoed.size).toBe(clients.length);
+    expect(clients.every((client) => client.readyState === WebSocket.OPEN)).toBe(true);
+  } finally {
+    for (const client of clients) client.terminate();
+    for (const socket of sockets.clients) socket.terminate();
+    sockets.close();
+    server.closeAllConnections();
+    await closeServer(server);
+  }
+});
+
+const exitCases = [
   { code: 0, signal: undefined },
   { code: 7, signal: undefined },
   { code: 130, signal: "SIGINT" as const },
   { code: 137, signal: "SIGKILL" as const },
-])("private pipe preserves exit status $code with signal $signal", async ({ code, signal }) => {
-  const result = spawnPrivateKeyProcess(
-    [
-      process.execPath,
-      "--eval",
-      signal ? "console.log('ready');setInterval(()=>{},1000)" : `process.exit(${code})`,
-    ],
-    { cwd: process.cwd() },
-  );
-  // Attach rejection handling before the child can finish.
-  const exited = result.exited.then(
-    (value) => ({ value }),
-    (error) => ({ error }),
-  );
-  const ready = signal
-    ? new Promise<void>((resolve) => result.stdout.once("data", () => resolve()))
-    : Promise.resolve();
-  result.stdout.resume();
-  result.stderr.resume();
-  result.privateOutput.resume();
-  try {
-    await ready;
-    if (signal) result.child.kill(signal);
-    expect(await exited).toEqual({ value: code });
-    expect(result.child.exitCode).toBe(signal ? null : code);
-    expect(result.child.signalCode).toBe(signal ?? null);
-  } finally {
-    if (result.child.exitCode === null && result.child.signalCode === null)
-      result.child.kill("SIGKILL");
-    await result.child.exited;
-    await exited;
-  }
-});
+] as const;
+
+test.each(
+  exitCases.flatMap((entry) => [
+    { ...entry, stdin: undefined },
+    { ...entry, stdin: "pipe" as const },
+  ]),
+)(
+  "private pipe preserves exit status $code with signal $signal and stdin $stdin",
+  async ({ code, signal, stdin }) => {
+    const result = spawnPrivateKeyProcess(
+      [
+        process.execPath,
+        "--eval",
+        signal ? "console.log('ready');setInterval(()=>{},1000)" : `process.exit(${code})`,
+      ],
+      { cwd: process.cwd(), stdin },
+    );
+    // Attach rejection handling before the child can finish.
+    const exited = result.exited.then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    const ready = signal
+      ? new Promise<void>((resolve) => result.stdout.once("data", () => resolve()))
+      : Promise.resolve();
+    result.stdout.resume();
+    result.stderr.resume();
+    result.privateOutput.resume();
+    try {
+      await ready;
+      if (signal) result.child.kill(signal);
+      expect(await exited).toEqual({ value: code });
+      expect(result.child.exitCode).toBe(signal ? null : code);
+      expect(result.child.signalCode).toBe(signal ?? null);
+    } finally {
+      if (result.child.exitCode === null && result.child.signalCode === null)
+        result.child.kill("SIGKILL");
+      await result.child.exited;
+      await exited;
+    }
+  },
+);
