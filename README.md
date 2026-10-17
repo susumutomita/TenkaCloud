@@ -60,7 +60,6 @@ Install Git, Make and **Bun 1.3.11** on macOS, Linux or WSL2. Docker Engine with
 git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
-make catalog-download catalog-prepare
 make local
 ```
 
@@ -138,13 +137,13 @@ No hosting option promises a zero bill.
 
 Problem content lives in [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge). Use its authoring and validation workflow to contribute to the competition catalog. You do not need to fork the platform to author a problem.
 
-Select and download problem repositories with `make catalog-download CATALOG_SOURCES=my-catalogs.json`, then validate and rebuild. Existing event snapshots are retained. No running host is updated by downloading.
+Configure the repository URL and branch in `catalog-sources.json` (`url` and `ref`). The default is TenkaCloudChallenge's `main` branch. `make local` and `make deploy` acquire that branch before building. For another source configuration, use `CATALOG_SOURCES=my-catalogs.json` with either command.
 
-Each source's `ref` accepts a tag, a branch or a full commit. Downloading resolves it once and records the commit and content digest; startup and builds never read the remote ref. The default `catalog-sources.json` selects a TenkaCloudChallenge release tag. To move it, change the tag, run `make catalog-download catalog-prepare`, copy the resolved `sources` from `.tenkacloud/catalog-store/selected.json` into `catalog-lock.json`, then run `bun run scripts/release/host-candidate.ts --sync-catalog`. CI runs `make catalog-verify-lock` after downloading and fails when a moved tag no longer matches `catalog-lock.json`.
+Each launch or deployment resolves the configured branch again. Acquisition failures stop the command and report the cause; they do not continue with an older cached selection. `--no-build` also acquires the branch and refuses to start if its interfaces need rebuilding. A running host is unchanged until restarted or redeployed. Manual build preparation remains available through `make catalog-download catalog-prepare`.
 
-New stable TenkaCloudChallenge releases arrive as automated catalog PRs, checked daily or through the Catalog release bump workflow with an optional tag. Each PR retains the previous revision and, while the host candidate has no built image, syncs its catalog pin in `release/host-candidate.json`. Review release notes for renamed problem IDs and required core changes before merging. Enable the one-time repository setting under Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests". If it is disabled, the workflow fails and leaves the pushed branch for manual PR creation. The workflow dispatches `ci.yml` on the PR branch because `GITHUB_TOKEN` PRs do not start CI automatically.
+Commits, content digests and historical snapshots are managed internally in `catalog-lock.json` and `.tenkacloud/catalog-store/`. Saved events keep their problem definitions and progress when a branch advances. Historical snapshots supply saved events' browser modules and are not offered as new-event problems. Restoring a required internal snapshot must succeed before the selection changes.
 
-The default selection also declares the previous fixed catalog in `retained`, including its commit, content digest and problems root. `catalog-download` restores and verifies it even in an empty store so host and cloud portal builds include saved events' browser modules. Retained problems are not offered in new events. Keep these pins in both `catalog-sources.json` and `catalog-lock.json` while those editions need support; a failed restore stops acquisition before changing the selection.
+CI uses `bun run catalog download-locked` followed by `make catalog-verify-lock` to verify the committed internal snapshot independently of branch updates. No scheduled workflow or automated update PR is required.
 
 For reusable or private content, the public SDK and offline Problem Pack tools create, validate and store immutable revisions:
 

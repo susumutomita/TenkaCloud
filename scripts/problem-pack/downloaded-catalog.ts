@@ -48,7 +48,7 @@ ajv.addFormat("uri", {
 });
 const validateMetadata = ajv.compile(schema);
 
-/** Resolve only during explicit acquisition. Runtime uses selected.json, never a remote ref. */
+/** Resolve at acquisition, before startup/build. Running events use immutable snapshots. */
 export function resolveCatalogRef(url: string, ref: string): string {
   const parsed = parseGitSource({ url, commit: dummyCommit });
   if (!parsed.ok) throw new Error(parsed.message);
@@ -188,14 +188,72 @@ export function downloadCatalog(
   config: unknown,
   deps: { fetcher?: GitArchiveFetcher; resolveRef?: typeof resolveCatalogRef } = {},
 ): void {
-  withCatalogMutation(root, () => downloadCatalogInternal(root, config, deps));
+  withCatalogMutation(root, () =>
+    downloadCatalogInternal(root, SelectionSchema.parse(config), deps),
+  );
+}
+
+/** User configuration contains sources; historical pins remain in the internal lock/store. */
+export function downloadConfiguredCatalog(
+  root: string,
+  configPath = process.env.CATALOG_SOURCES ?? "catalog-sources.json",
+  deps: Parameters<typeof downloadCatalog>[2] = {},
+): void {
+  try {
+    const selection = SelectionSchema.parse(
+      JSON.parse(readFileSync(resolve(root, configPath), "utf8")),
+    );
+    const internalPath = join(root, "catalog-lock.json");
+    const internal = existsSync(internalPath)
+      ? CatalogLockSchema.parse(JSON.parse(readFileSync(internalPath, "utf8")))
+      : undefined;
+    downloadCatalog(
+      root,
+      {
+        ...selection,
+        retained: [
+          ...(internal?.sources ?? []),
+          ...(internal?.retained ?? []),
+          ...(selection.retained ?? []),
+        ],
+      },
+      deps,
+    );
+  } catch (error) {
+    throw new Error(
+      `Catalog acquisition from ${configPath} failed; startup/build stopped. ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+/** Reproducible CI/release acquisition verifies the internal pins without resolving a moving ref. */
+export function downloadLockedCatalog(
+  root: string,
+  deps: Parameters<typeof downloadCatalog>[2] = {},
+): void {
+  const lock = CatalogLockSchema.parse(
+    JSON.parse(readFileSync(join(root, "catalog-lock.json"), "utf8")),
+  );
+  withCatalogMutation(root, () => downloadCatalogInternal(root, lock, deps));
 }
 function downloadRevision(
   root: string,
   source: z.infer<typeof SelectionSchema>["sources"][number] | Revision,
   deps: { fetcher?: GitArchiveFetcher; resolveRef?: typeof resolveCatalogRef },
 ): Revision {
-  const commit = (deps.resolveRef ?? resolveCatalogRef)(source.url, source.ref);
+  if (
+    "commit" in source &&
+    /^[a-f0-9]{40}$/iu.test(source.ref) &&
+    source.ref.toLowerCase() !== source.commit
+  )
+    throw new Error(
+      "Retained catalog revision does not match its pinned commit, digest or problems root",
+    );
+  const commit =
+    "commit" in source
+      ? source.commit
+      : (deps.resolveRef ?? resolveCatalogRef)(source.url, source.ref);
   const parsed = parseGitSource({ url: source.url, commit, subdir: source.subdir });
   if (!parsed.ok) throw new Error(parsed.message);
   const scratch = mkdtempSync(join(tmpdir(), "tenka-catalog-"));
@@ -227,10 +285,9 @@ function downloadRevision(
 
 function downloadCatalogInternal(
   root: string,
-  config: unknown,
+  selection: z.infer<typeof SelectionSchema>,
   deps: { fetcher?: GitArchiveFetcher; resolveRef?: typeof resolveCatalogRef },
 ): void {
-  const selection = SelectionSchema.parse(config);
   const revisions: Revision[] = [];
   for (const source of [...selection.sources, ...(selection.retained ?? [])]) {
     revisions.push(downloadRevision(root, source, deps));
@@ -251,7 +308,7 @@ function downloadCatalogInternal(
     : undefined;
   const retained = [
     ...new Map(
-      [...(previous?.retained ?? previous?.sources ?? []), ...revisions].map((entry) => [
+      [...(previous?.retained ?? []), ...(previous?.sources ?? []), ...revisions].map((entry) => [
         `${entry.commit}:${entry.digest}`,
         entry,
       ]),

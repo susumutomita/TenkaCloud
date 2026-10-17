@@ -4,7 +4,7 @@ import { createServer, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { readCatalogSelection } from "../problem-pack/catalog-read";
+import { downloadConfiguredCatalog } from "../problem-pack/downloaded-catalog";
 import { randomToken, sameSecret } from "./auth";
 import { hasDatabaseState, prepareDatabase, privateDirectory } from "./files";
 import { clearLocalHistory, parseLocalClearOptions } from "./local-clear";
@@ -232,13 +232,17 @@ function replyWithRotatedKey(
   }
 }
 
-export async function runManagedLocal(root: string, args: string[]): Promise<number> {
+export async function runManagedLocal(
+  root: string,
+  args: string[],
+  catalogDeps: Parameters<typeof downloadConfiguredCatalog>[2] = {},
+): Promise<number> {
   const options = parseOptions(args, root);
   if (options.help) {
     await runLocalHost(args, { repositoryRoot: root });
     return 0;
   }
-  readCatalogSelection(root);
+  downloadConfiguredCatalog(root, undefined, catalogDeps);
   process.umask(0o077);
   const directory = realpathSync(privateDirectory(options.dataDirectory));
   const path = join(directory, SESSION_FILE);

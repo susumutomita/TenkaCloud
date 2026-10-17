@@ -322,6 +322,7 @@ function preparationFixture(): { root: string; bin: string; log: string } {
     [
       "#!/usr/bin/env bash",
       'echo "bun|$PWD|$*" >> "$COMMAND_LOG"',
+      'if [ "$3 $4" = "catalog download" ] && [ "$FAIL_CATALOG" = "1" ]; then echo "configured branch unavailable" >&2; exit 12; fi',
       `if [ "$3" = "build" ]; then [ "$FAIL_BUILD" != "1" ]; else echo '{"Rules":[]}'; fi`,
     ].join("\n"),
   );
@@ -349,6 +350,20 @@ function runPreparation(
 }
 
 describe("scripts/prepare-source-bundle.sh offline orchestration", { timeout: 30_000 }, () => {
+  it("stops a failed configured branch download before builds and AWS mutation", () => {
+    const fixture = preparationFixture();
+    const result = runPreparation(fixture, false, {
+      FAIL_CATALOG: "1",
+      CATALOG_SOURCES: "my catalogs.json",
+    });
+    expect(result.status).toBe(12);
+    expect(result.stderr).toContain("configured branch unavailable");
+    const log = readFileSync(fixture.log, "utf8");
+    expect(log).toContain("run catalog download my catalogs.json");
+    expect(log).not.toContain("run catalog prepare");
+    expect(log).not.toContain("run build");
+    expect(log).not.toContain("s3api");
+  });
   it("runs the make-deploy adapter through real subprocesses and ZIP preparation with only AWS/build tools replaced", async () => {
     const fixture = preparationFixture();
     const env = await prepareCloudSourceBundle(
@@ -386,6 +401,9 @@ describe("scripts/prepare-source-bundle.sh offline orchestration", { timeout: 30
     const log = readFileSync(fixture.log, "utf8");
     const calls = log.trim().split("\n");
     expect(log).toContain("--no-env-file run catalog prepare");
+    expect(log).toContain("--no-env-file run catalog download catalog-sources.json");
+    expect(log.indexOf("run catalog download")).toBeLessThan(log.indexOf("run catalog prepare"));
+    expect(log.indexOf("run catalog prepare")).toBeLessThan(log.indexOf("run build"));
     expect(log).not.toContain("--force");
     expect(log).not.toContain("install");
     for (const call of calls.filter((call) => call.startsWith("bun|"))) {

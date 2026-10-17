@@ -483,8 +483,11 @@ Bun execution, use `bun run --no-env-file scripts/tenkacloud.ts turso-live reset
 
 ## Update the problem catalog
 
-Select and acquire catalogs with `make catalog-download CATALOG_SOURCES=my-catalogs.json`,
-then run `make validate-problems`. This does not update a running installation.
+Set repository URLs and branches (`url` and `ref`) in `catalog-sources.json`.
+`make deploy` acquires them before building; use `CATALOG_SOURCES=my-catalogs.json`
+to select another configuration. Failed acquisition stops deployment without using a stale selection.
+Manual preparation remains available with `make catalog-download catalog-prepare`.
+This does not update a running installation.
 Existing source
 ZIP versions and event catalog pins remain retained. Review the selection before
 running `make deploy ENV=development` with the existing installation settings.
