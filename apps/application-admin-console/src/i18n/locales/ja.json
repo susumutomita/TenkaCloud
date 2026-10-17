@@ -550,7 +550,14 @@
     "deploy_progress_status_auto_deleted": "撤収済み",
     "deploy_progress_status_stopped": "停止中",
     "deploy_progress_auto_refresh_local": "処理中は状態を自動取得します。再読み込みでも取得できます。",
-    "deploy_progress_status_approval_pending": "承認待ち"
+    "deploy_progress_status_approval_pending": "承認待ち",
+    "internet_title": "インターネット接続の申請",
+    "internet_description": "問題が申請した接続先を、1 件ずつ選んで承認します。承認しない接続は遮断されたままです。許可は IP アドレスと TCP ポートの単位で、URL の単位ではありません。承認は、そのあとに起動した環境から有効になります。取り消すと、稼働中の環境でもすぐに遮断されます。",
+    "internet_unavailable": "このホストでは承認できません",
+    "internet_unavailable_body": "インターネット接続の許可には、Linux のチーム別ネットワーク隔離が必要です。このホストでは使えないため、申請された接続はすべて遮断されます。",
+    "internet_approve": "選んだ接続を承認",
+    "internet_revoke": "承認を取り消す",
+    "internet_granted": "{time} に承認"
   },
   "send_notification": {
     "header": "通知を送る",

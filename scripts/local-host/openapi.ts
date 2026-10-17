@@ -56,6 +56,34 @@ export function localOpenApi(role: "admin" | "participant") {
     Record<string, ReturnType<typeof operation> & { description?: string; security?: unknown[] }>
   > = role === "admin"
     ? {
+        "/events/{eventId}/internet-access": {
+          get: operation(
+            "getInternetAccess",
+            "List declared Internet requests and organizer approvals",
+            200,
+            undefined,
+            [eventId],
+          ),
+        },
+        "/events/{eventId}/internet-access/{problemId}": {
+          put: operation(
+            "approveInternetAccess",
+            "Approve individual IP and TCP port requests",
+            200,
+            object(
+              { requestIds: { ...array(string), minItems: 1, maxItems: 8, uniqueItems: true } },
+              ["requestIds"],
+            ),
+            [eventId, problemId],
+          ),
+          delete: operation(
+            "revokeInternetAccess",
+            "Revoke Internet access including running environments",
+            200,
+            undefined,
+            [eventId, problemId],
+          ),
+        },
         "/host/login": {
           post: {
             ...operation(

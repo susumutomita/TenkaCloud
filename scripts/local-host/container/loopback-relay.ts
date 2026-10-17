@@ -1,9 +1,13 @@
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { parse, stringify } from "yaml";
+import type { LocalNetworkPlan } from "../local-network";
 import type { RelayBinding, RelayTarget } from "./relay-target";
 
 /** Docker does not program published ports for internal-only bridges. Keep those bridges internal. */
-export function relayCompose(text: string): { text: string; bindings: RelayBinding[] } {
+export function relayCompose(
+  text: string,
+  plan?: LocalNetworkPlan,
+): { text: string; bindings: RelayBinding[] } {
   const document = parse(text, { merge: true });
   const bindings: RelayBinding[] = [];
   // Preserve ordinary Compose validation/rollback; only internal networks need a transport rewrite.
@@ -30,7 +34,13 @@ export function relayCompose(text: string): { text: string; bindings: RelayBindi
     else if (service.networks) networks = Object.keys(service.networks);
     if (
       !networks.length ||
-      !networks.every((network) => document.networks?.[network]?.internal === true)
+      !networks.every(
+        (network) =>
+          document.networks?.[network]?.internal === true ||
+          plan?.egressSegments.some(
+            (segment) => segment.name === network && segment.service === name,
+          ),
+      )
     )
       continue;
     for (const port of service.ports ?? []) {

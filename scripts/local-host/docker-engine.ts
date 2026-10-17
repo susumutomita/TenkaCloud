@@ -42,10 +42,15 @@ import {
   type NetworkSubnets,
   occupiedDockerSubnets,
 } from "./docker-networks";
-import { assertInternetAccessUnavailable } from "./internet-access";
+import {
+  assertInternetAccessUnavailable,
+  type InternetAccessRequest,
+  normalizeInternetAccess,
+} from "./internet-access";
 import { LinuxNetworkGuard, type LocalNetworkGuard } from "./linux-network-guard";
 import {
   assertNoNetworkOverlap,
+  egressComposeSource,
   isolatedCompose,
   type LocalNetworkPlan,
   localNetworkPlan,
@@ -198,7 +203,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   >();
   private readonly guardProofs = new Map<
     string,
-    { unit: LocalComposeUnit; verifiedAt: number; attemptedAt: number }
+    { unit: LocalComposeUnit; plan: LocalNetworkPlan; verifiedAt: number; attemptedAt: number }
   >();
   private readonly guardAudits = new Map<string, Promise<void>>();
   private readonly guardRevocations = new Set<Promise<void>>();
@@ -266,6 +271,139 @@ export class DockerHostingEngine implements RuntimeEngine {
   bindNetworkState(state: NonNullable<DockerHostingEngine["networkState"]>): void {
     this.networkState = state;
   }
+  internetAccessAvailability(): { available: boolean; reason?: string } {
+    try {
+      this.checkInternetAccess([]);
+      return { available: true };
+    } catch (error) {
+      return { available: false, reason: error instanceof Error ? error.message : String(error) };
+    }
+  }
+  checkInternetAccess(addresses: readonly string[]): void {
+    if (!this.competitionNetwork || !this.networkGuard.assertInternetTargets)
+      throw new HostError(409, "Internet exceptions need the isolated native network adapter.");
+    this.networkGuard.preflight();
+    this.networkGuard.assertInternetTargets(addresses);
+  }
+  private egressRequests(
+    job: Job,
+    appliedIds?: readonly string[],
+    attachments = false,
+  ): readonly InternetAccessRequest[] {
+    const definition = definitionOf(job, false);
+    const declared = normalizeInternetAccess(definition.problem.internetAccess) ?? [];
+    if (
+      appliedIds &&
+      (new Set(appliedIds).size !== appliedIds.length ||
+        appliedIds.some((id) => !declared.some((entry) => entry.id === id)))
+    )
+      throw new Error("Retained Internet requests do not match the pinned problem.");
+    if (attachments && appliedIds) return declared.filter((entry) => appliedIds.includes(entry.id));
+    const grant = this.networkState?.internetGrant?.(job.eventId, job.problemId);
+    if (
+      !grant ||
+      grant.eventId !== job.eventId ||
+      grant.problemId !== job.problemId ||
+      grant.definitionDigest !== definition.catalogSnapshot?.digest
+    )
+      return [];
+    return declared.filter(
+      (entry) =>
+        grant.requestIds.includes(entry.id) && (!appliedIds || appliedIds.includes(entry.id)),
+    );
+  }
+  async updateInternetAccess(
+    eventId: string,
+    problemId: string,
+    persist: () => void,
+    action: "approve" | "revoke" = "approve",
+  ): Promise<void> {
+    const operation = this.publicMutation.then(async () => {
+      if (action === "revoke") persist();
+      const snapshots = (this.networkState?.jobs() ?? []).filter(
+        (job) =>
+          job.eventId === eventId &&
+          job.problemId === problemId &&
+          job.unit &&
+          JSON.parse(job.unit).teardown !== "down" &&
+          (JSON.parse(job.unit).egressRequestIds?.length ?? 0) > 0,
+      );
+      const previous = new Map<string, LocalNetworkPlan>();
+      this.policyEpochs.set(eventId, this.policyEpoch(eventId) + 1);
+      this.applyingPublicationEvent = eventId;
+      let saved = action === "revoke";
+      try {
+        await this.awaitEventSettled(eventId);
+        for (const job of snapshots)
+          previous.set(
+            job.jobId,
+            this.guardProofs.get(job.jobId)?.plan ??
+              requiredNetworkValue(this.guardPlan(job, JSON.parse(requiredNetworkValue(job.unit)))),
+          );
+        if (action === "approve") {
+          persist();
+          saved = true;
+        }
+        await this.applyInternetAccess(snapshots, previous);
+        await this.reconcileVpn();
+      } catch (error) {
+        if (!saved) throw error;
+        await this.failInternetAccess(snapshots, previous, action, error);
+      } finally {
+        this.applyingPublicationEvent = undefined;
+      }
+    });
+    const barrier = operation
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.publicationBarriers.get(eventId) === barrier)
+          this.publicationBarriers.delete(eventId);
+      });
+    this.publicMutation = barrier;
+    this.publicationBarriers.set(eventId, barrier);
+    return operation;
+  }
+  private async applyInternetAccess(
+    snapshots: readonly Job[],
+    previous: ReadonlyMap<string, LocalNetworkPlan>,
+  ): Promise<void> {
+    this.vpnIngress?.seal();
+    for (const job of snapshots) {
+      const unit: LocalComposeUnit = JSON.parse(requiredNetworkValue(job.unit));
+      const plan = requiredNetworkValue(this.guardPlan(job, unit));
+      // A retained stopped namespace still holds rules from its last admission.
+      if (!this.running.has(job.jobId)) {
+        await this.resetStoppedPlan(plan);
+        continue;
+      }
+      const old = requiredNetworkValue(previous.get(job.jobId));
+      await this.applyPublicationPlan(plan, old);
+      const started = requiredNetworkValue(this.running.get(job.jobId));
+      await this.admitRunning(job, started);
+    }
+  }
+  private async failInternetAccess(
+    snapshots: readonly Job[],
+    previous: ReadonlyMap<string, LocalNetworkPlan>,
+    action: "approve" | "revoke",
+    error: unknown,
+  ): Promise<never> {
+    try {
+      return await this.performFailedPublications(snapshots, previous, error);
+    } catch (failure) {
+      const halted = snapshots.every((job) => !this.unconfirmedHalts.has(job.jobId));
+      const decision = action === "revoke" ? "approval was revoked" : "approval was saved";
+      const outcome = halted
+        ? "Affected environments were halted."
+        : "Some affected environments could not be halted; quarantine and shutdown were attempted. Check the host before retrying.";
+      const refused = new HostError(
+        409,
+        `Internet access ${decision}. ${outcome} ${String(error)}`,
+      );
+      refused.cause = failure;
+      throw refused;
+    }
+  }
   private isolationRequired(job: Job): boolean {
     assertNetworkRequirement(job);
     return this.competitionNetwork || job.networkIsolationVersion === 1;
@@ -321,11 +459,16 @@ export class DockerHostingEngine implements RuntimeEngine {
     assertNetworkRequirement(job);
     const isolated = recorded?.isolationVersion === 1 || (!recorded && this.isolationRequired(job));
     const networkPlan = isolated
-      ? this.networkPlan(job, problem.composeProjectName, networkSubnets)
+      ? this.networkPlan(
+          job,
+          problem.composeProjectName,
+          networkSubnets,
+          recorded?.egressRequestIds,
+        )
       : undefined;
     if (networkPlan) plannedCompose = isolatedCompose(plannedCompose, networkPlan);
     else if (networkSubnets) plannedCompose = applyNetworkSubnets(plannedCompose, networkSubnets);
-    const transport = relayCompose(plannedCompose);
+    const transport = relayCompose(plannedCompose, networkPlan);
     plannedCompose = transport.text;
     const directory = prepareRuntimeDirectory(this.dataDirectory, job.jobId, claimNewDirectory);
     const composePath = join(directory, `${problem.composeProjectName}.compose.yml`);
@@ -338,7 +481,15 @@ export class DockerHostingEngine implements RuntimeEngine {
       projectDirectory: dirname(problem.composePath),
       remappedComposePath: composePath,
       ...(networkSubnets ? { networkSubnets } : {}),
-      ...(networkPlan ? { isolationVersion: 1, isolationGeneration: networkPlan.generation } : {}),
+      ...(networkPlan
+        ? {
+            isolationVersion: 1,
+            isolationGeneration: networkPlan.generation,
+            egressRequestIds:
+              recorded?.egressRequestIds ??
+              networkPlan.egressRoutes.map((route) => route.requestId),
+          }
+        : {}),
       ...(recorded?.publishedServiceIds
         ? { publishedServiceIds: this.publicServiceIds(job, recorded) }
         : {}),
@@ -354,7 +505,9 @@ export class DockerHostingEngine implements RuntimeEngine {
     };
   }
   private assertAllocationRequirements(job: Job): void {
-    assertInternetAccessUnavailable(definitionOf(job, false).problem.internetAccess);
+    if (!this.competitionNetwork)
+      assertInternetAccessUnavailable(definitionOf(job, false).problem.internetAccess);
+    else normalizeInternetAccess(definitionOf(job, false).problem.internetAccess);
     if (this.isolationRequired(job)) job.networkIsolationVersion = 1;
     if (this.isolationRequired(job) && (!this.networkPool || !job.runtimePorts))
       throw new Error(
@@ -365,13 +518,20 @@ export class DockerHostingEngine implements RuntimeEngine {
     this.assertAllocationRequirements(job);
     if (!this.networkPool || !job.runtimePorts) return undefined;
     try {
-      return allocateNetworkSubnets(definitionOf(job, true).composeText, this.networkPool, [
-        ...occupiedDockerSubnets(),
-        ...(this.isolationRequired(job)
-          ? this.networkGuard.occupiedRoutes().filter((cidr) => !cidr.includes(":"))
-          : []),
-        ...[...this.networkReservations.values()].flat(),
-      ]);
+      return allocateNetworkSubnets(
+        egressComposeSource(
+          definitionOf(job, true).composeText,
+          this.egressRequests(job).map((entry) => entry.service),
+        ),
+        this.networkPool,
+        [
+          ...occupiedDockerSubnets(),
+          ...(this.isolationRequired(job)
+            ? this.networkGuard.occupiedRoutes().filter((cidr) => !cidr.includes(":"))
+            : []),
+          ...[...this.networkReservations.values()].flat(),
+        ],
+      );
     } catch (cause) {
       if (cause instanceof DockerNetworkInventoryError && cause.daemonUnavailable)
         throw new DockerDaemonUnavailableError();
@@ -477,7 +637,9 @@ export class DockerHostingEngine implements RuntimeEngine {
   private async recoverRetained(job: Job): Promise<void> {
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
-    assertInternetAccessUnavailable(definitionOf(job, false).problem.internetAccess);
+    if (!this.competitionNetwork)
+      assertInternetAccessUnavailable(definitionOf(job, false).problem.internetAccess);
+    else normalizeInternetAccess(definitionOf(job, false).problem.internetAccess);
     const recorded = this.recordedUnit(job);
     this.revokeRunning(job.jobId);
     if (recorded.teardown) throw new Error(REMOVED_UNIT);
@@ -631,7 +793,9 @@ export class DockerHostingEngine implements RuntimeEngine {
   async resume(job: Job): Promise<void> {
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
-    assertInternetAccessUnavailable(definitionOf(job, false).problem.internetAccess);
+    if (!this.competitionNetwork)
+      assertInternetAccessUnavailable(definitionOf(job, false).problem.internetAccess);
+    else normalizeInternetAccess(definitionOf(job, false).problem.internetAccess);
     const { unit, directory } = await this.ownedUnit(job, true);
     const plan = this.plan(job);
     await this.assertGuardedAdmission(job, unit);
@@ -658,13 +822,24 @@ export class DockerHostingEngine implements RuntimeEngine {
     job: Job,
     project: string,
     subnets: NetworkSubnets | undefined,
+    appliedIds?: readonly string[],
   ): LocalNetworkPlan {
     if (!subnets) throw new Error("An isolated runtime must retain its exact network allocation.");
-    return localNetworkPlan(project, subnets, {
-      composeText: definitionOf(job, false).composeText,
+    const egress = this.egressRequests(job, appliedIds, true);
+    const plan = localNetworkPlan(project, subnets, {
+      composeText: egressComposeSource(
+        definitionOf(job, false).composeText,
+        egress.map((entry) => entry.service),
+      ),
+      egress,
       definition: job.definition,
       eventId: job.eventId,
     });
+    const allowed = new Set(this.egressRequests(job, appliedIds).map((entry) => entry.id));
+    return {
+      ...plan,
+      egressRoutes: plan.egressRoutes.filter((route) => allowed.has(route.requestId)),
+    };
   }
   private guardPlan(job: Job, unit: LocalComposeUnit): LocalNetworkPlan | undefined {
     const plan = this.ownedPlan(job, unit);
@@ -674,7 +849,12 @@ export class DockerHostingEngine implements RuntimeEngine {
   private ownedPlan(job: Job, unit: LocalComposeUnit): LocalNetworkPlan | undefined {
     if (unit.isolationVersion === undefined) return undefined;
     if (unit.isolationVersion !== 1) throw new Error("Unsupported local competition network plan.");
-    const plan = this.networkPlan(job, unit.composeProjectName, unit.networkSubnets);
+    const plan = this.networkPlan(
+      job,
+      unit.composeProjectName,
+      unit.networkSubnets,
+      unit.egressRequestIds ?? [],
+    );
     if (plan.generation !== unit.isolationGeneration)
       throw new Error("Competition network generation changed.");
     return plan;
@@ -1396,6 +1576,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     if (started.unit.isolationVersion === 1)
       this.guardProofs.set(job.jobId, {
         unit: started.unit,
+        plan: requiredNetworkValue(this.guardPlan(job, started.unit)),
         verifiedAt: this.guardNow(),
         attemptedAt: this.guardNow(),
       });
@@ -1447,11 +1628,16 @@ export class DockerHostingEngine implements RuntimeEngine {
     if (proof) proof.attemptedAt = this.guardNow();
     const epoch = this.policyEpoch(job.eventId);
     const task = Promise.resolve()
-      .then(() => this.verifyPlan(requiredNetworkValue(this.guardPlan(job, started.unit))))
-      .then(() => {
+      .then(async () => {
+        const plan = requiredNetworkValue(this.guardPlan(job, started.unit));
+        await this.verifyPlan(plan);
+        return plan;
+      })
+      .then((plan) => {
         if (epoch === this.policyEpoch(job.eventId) && this.running.get(job.jobId) === started)
           this.guardProofs.set(job.jobId, {
             unit: started.unit,
+            plan,
             verifiedAt: this.guardNow(),
             attemptedAt: this.guardNow(),
           });

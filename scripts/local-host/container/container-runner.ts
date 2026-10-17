@@ -30,6 +30,7 @@ export interface LocalComposeUnit {
   /** Only local competition hosting consumes this owned, fail-closed native guard plan. */
   readonly isolationVersion?: 1;
   readonly isolationGeneration?: string;
+  readonly egressRequestIds?: readonly string[];
   /** Participant-approved catalog service IDs; addresses and ports are never accepted here. */
   readonly publishedServiceIds?: readonly string[];
   readonly publicNetworkRoutes?: readonly import("../local-network").LocalPublicRoute[];

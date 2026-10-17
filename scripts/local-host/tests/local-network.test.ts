@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import { parse } from "yaml";
+import { allocateNetworkSubnets } from "../docker-networks";
 import {
   assertNoNetworkOverlap,
+  egressComposeSource,
   isolatedCompose,
   localNetworkPlan,
   requiredNetworkValue,
@@ -188,3 +190,74 @@ test("six independently owned plans have distinct bridge, chain and IPv6 identit
   expect(new Set(plans.map((plan) => plan.inputChain)).size).toBe(6);
   expect(new Set(plans.map((plan) => plan.segments[0]?.ipv6)).size).toBe(6);
 });
+
+/* eslint-disable sonarjs/no-hardcoded-ip -- Synthetic addresses are test data and are never contacted. */
+test("egress Compose attaches only the named service to an owned non-internal default gateway", () => {
+  const services = ["web"];
+  const document = parse(source);
+  const request = {
+    id: "upstream",
+    service: "web",
+    destination: "8.8.8.8",
+    port: 443,
+    purpose: "Synthetic upstream",
+  };
+  const authored = egressComposeSource(source, services);
+  const subnets = allocateNetworkSubnets(authored, "10.240.0.0/24", []);
+  const plan = localNetworkPlan("tch-egress-compose", subnets, {
+    composeText: authored,
+    definition: "pinned",
+    egress: [request],
+  });
+  const actual = parse(isolatedCompose(source, plan));
+  const segment = requiredNetworkValue(plan.egressSegments[0]);
+  expect(segment.bridge).toMatch(/^tce[a-f0-9]{12}$/u);
+  expect(actual.networks[segment.name].internal).toBe(false);
+  expect(actual.networks[segment.name].labels["tenkacloud.isolation.owner"]).toBe(plan.owner);
+  expect(actual.networks[segment.name].driver_opts["com.docker.network.bridge.name"]).toBe(
+    segment.bridge,
+  );
+  expect(
+    actual.networks[segment.name].ipam.config.map((entry: { subnet: string }) => entry.subnet),
+  ).toEqual([segment.ipv4, segment.ipv6]);
+  expect(actual.services.web.dns).toEqual(["10.240.0.17"]);
+  expect(actual.services.db.dns).toBeUndefined();
+  const authoredDns = source.replace("image: sample", "image: sample\n    dns: [8.8.8.8]");
+  expect(() => isolatedCompose(authoredDns, plan)).toThrow(
+    "services.web.dns is not in the reviewed allowlist",
+  );
+  expect(actual.services.web.networks[segment.name]).toEqual({ gw_priority: 1 });
+  expect(
+    Object.entries(actual.services.web.networks).filter(
+      ([, value]) => (value as { gw_priority?: number })?.gw_priority === 1,
+    ),
+  ).toHaveLength(1);
+  expect(actual.services.db.networks).toBeUndefined();
+  expect(plan.services.db).not.toContain(segment.name);
+  expect(plan.services.web).toContain(segment.name);
+  expect(document.services.web.networks).toBeUndefined();
+  const denied = make();
+  expect(denied.egressSegments).toEqual([]);
+  const deniedCompose = parse(isolatedCompose(source, denied));
+  expect(deniedCompose.services.web.dns).toBeUndefined();
+  expect(deniedCompose.services.db.dns).toBeUndefined();
+  expect(
+    Object.values(parse(isolatedCompose(source, denied)).networks).every(
+      (network) => (network as { internal: boolean }).internal,
+    ),
+  ).toBe(true);
+});
+
+/* eslint-enable sonarjs/no-hardcoded-ip */
+
+for (const source of [
+  "services: {app: {image: synthetic}}\nnetworks: {egress-authored: null}",
+  "services: {app: {image: synthetic}, db: {image: synthetic, networks: [egress-authored]}}",
+  "services: {app: {image: synthetic}, db: {image: synthetic, networks: {egress-authored: {}}}}",
+])
+  for (const services of [[], ["app"]])
+    test("egress composition refuses authored reserved networks before Docker even without grants", () => {
+      expect(() => egressComposeSource(source, services)).toThrow(
+        "Authored networks cannot use the reserved egress- prefix.",
+      );
+    });

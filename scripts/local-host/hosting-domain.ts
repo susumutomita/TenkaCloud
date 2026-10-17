@@ -34,6 +34,7 @@ import {
 import { gatewayText } from "./gateway-text";
 import { HostTerminals } from "./host-terminal";
 import { hostWorkbench } from "./host-workbench";
+import { LocalInternetAccess } from "./internet-grants";
 import { requiredNetworkValue } from "./local-network";
 import {
   type AccountConnection,
@@ -267,6 +268,7 @@ export class HostingDomain {
   private readonly coordination: LocalCoordination = new LocalCoordination(this);
   readonly progression: HostProgression;
   readonly disruptions: LocalDisruptions;
+  readonly internetAccess: LocalInternetAccess;
   private readonly tasks = new Set<Promise<void>>();
   private readonly busyEvents = new Set<string>();
   /** jobId → eventId of single-environment operations still running. */
@@ -297,7 +299,9 @@ export class HostingDomain {
     uptimeProbe: ProbeFn | undefined,
     private readonly passwords: OrganizerPasswords,
   ) {
+    this.internetAccess = new LocalInternetAccess(this);
     this.engine.bindNetworkState?.({
+      internetGrant: (eventId, problemId) => this.internetAccess.store.get(eventId, problemId),
       jobs: () => this.store.jobs(),
       retain: (updates) => {
         this.store.transaction(() => {
@@ -474,7 +478,11 @@ export class HostingDomain {
       const current = this.store.authenticateAdmin(request.token, this.now());
       let permission: OrganizerPermission = "run-events";
       if (parts[2] === "teams") permission = "reveal-team-keys";
-      else if (parts[2] === "disruptions" && request.method === "GET") permission = "read";
+      else if (
+        (parts[2] === "disruptions" || parts[2] === "internet-access") &&
+        request.method === "GET"
+      )
+        permission = "read";
       requireRole(current, permission);
       return this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request, current);
     });
@@ -1065,6 +1073,7 @@ export class HostingDomain {
     request: ApiRequest,
     principal: OrganizerPrincipal,
   ): Promise<ApiResponse> {
+    if (parts[0] === "internet-access") return this.internetAccess.route(event, parts, request);
     const disruption = this.disruptions.route(event, parts, request, principal);
     if (disruption) return disruption;
     if (this.busyEvents.has(event.eventId))

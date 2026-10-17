@@ -33,6 +33,7 @@ const HISTORY_TABLES = [
   "host_coordination",
   "host_jobs",
   "host_teams",
+  "host_internet_grants",
   "host_events",
 ] as const;
 const RETAINED_TABLES = [

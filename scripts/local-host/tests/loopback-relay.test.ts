@@ -2,6 +2,14 @@ import { expect, test } from "bun:test";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { LoopbackRelays, relayCompose } from "../container/loopback-relay";
 import { type RelayTarget, resolveRelayTarget } from "../container/relay-target";
+import { allocateNetworkSubnets } from "../docker-networks";
+import {
+  egressComposeSource,
+  isolatedCompose,
+  localNetworkPlan,
+  requiredNetworkValue,
+  segmentGateway,
+} from "../local-network";
 
 const binding = { service: "web", hostPort: 18080, port: 8080, networks: ["default"] };
 async function listen(server: Server): Promise<number> {
@@ -275,3 +283,55 @@ test("identity drift closes pending and established connections together", async
     await close(echo);
   }
 });
+
+/* eslint-disable sonarjs/no-hardcoded-ip -- Pure transport inventory; synthetic addresses never contacted. */
+test("egress-attached services keep verified internal scoring and authentication relays", () => {
+  const text = 'services: {web: {image: synthetic, ports: ["127.0.0.1:18080:8080"]}}';
+  const request = {
+    id: "upstream",
+    service: "web",
+    destination: "8.8.8.8",
+    port: 443,
+    purpose: "Synthetic",
+  };
+  const authored = egressComposeSource(text, ["web"]);
+  const plan = localNetworkPlan("tch-job", allocateNetworkSubnets(authored, "10.248.0.0/24", []), {
+    composeText: authored,
+    definition: "pinned",
+    egress: [request],
+  });
+  const compose = relayCompose(isolatedCompose(text, plan), plan);
+  expect(compose.text).not.toContain("127.0.0.1:18080:8080");
+  expect(compose.bindings).toHaveLength(1);
+  const binding = requiredNetworkValue(compose.bindings[0]);
+  expect(binding.networks).toHaveLength(2);
+  const f = inventory();
+  const egress = requiredNetworkValue(plan.egressSegments[0]);
+  const networkId = "c".repeat(64);
+  const egressNetwork = {
+    ...f.network,
+    Id: networkId,
+    Name: `${plan.project}_${egress.name}`,
+    Internal: false,
+    Options: { "com.docker.network.bridge.name": egress.bridge },
+    IPAM: { Config: [{ Subnet: egress.ipv4, Gateway: segmentGateway(egress, false) }] },
+  };
+  const attachments: Record<string, { NetworkID: string; IPAddress: string }> =
+    f.container.NetworkSettings.Networks;
+  attachments[egressNetwork.Name] = {
+    NetworkID: networkId,
+    IPAddress: egress.ipv4.replace(".16/28", ".18"),
+  };
+  const originalRun = f.io.run;
+  f.io.run = (command, args) => {
+    if (command === "docker" && args[0] === "network")
+      return JSON.stringify([f.network, egressNetwork]);
+    if (command === "ip" && args.includes(attachments[egressNetwork.Name]?.IPAddress ?? ""))
+      return JSON.stringify([{ dev: egress.bridge }]);
+    return originalRun(command, args);
+  };
+  const target = resolveRelayTarget({ project: plan.project, binding, plan }, undefined, f.io);
+  expect(target.host).toBe("10.248.0.2");
+  expect(target.identity).toContain(networkId);
+});
+/* eslint-enable sonarjs/no-hardcoded-ip */

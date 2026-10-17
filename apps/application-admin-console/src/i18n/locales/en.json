@@ -550,7 +550,14 @@
     "deploy_progress_status_auto_deleted": "Removed",
     "deploy_progress_status_stopped": "Stopped",
     "deploy_progress_auto_refresh_local": "Status refreshes automatically while work is in progress. You can also reload manually.",
-    "deploy_progress_status_approval_pending": "Awaiting approval"
+    "deploy_progress_status_approval_pending": "Awaiting approval",
+    "internet_title": "Internet access requests",
+    "internet_description": "Approve the destinations a problem requests, one at a time. Requests you do not approve stay blocked. Approval allows an IP address and TCP port, not a URL. It applies to environments started after approval. Revoking it blocks running environments immediately.",
+    "internet_unavailable": "Approval is not available on this host",
+    "internet_unavailable_body": "Allowing Internet access requires Linux per-team network isolation. This host does not provide it, so every requested connection stays blocked.",
+    "internet_approve": "Approve selected",
+    "internet_revoke": "Revoke approval",
+    "internet_granted": "Approved {time}"
   },
   "send_notification": {
     "header": "Send notification",

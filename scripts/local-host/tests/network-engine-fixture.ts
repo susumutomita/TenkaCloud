@@ -7,8 +7,10 @@ import { parse, stringify } from "yaml";
 import type { StartedContainer } from "../container/container-runner";
 import { DockerHostingEngine } from "../docker-engine";
 import { allocateNetworkSubnets, type NetworkSubnets } from "../docker-networks";
+import type { InternetAccessRequest } from "../internet-access";
+import { InternetGrantStore } from "../internet-grant-store";
 import type { LocalNetworkGuard } from "../linux-network-guard";
-import { requiredNetworkValue } from "../local-network";
+import { egressComposeSource, requiredNetworkValue } from "../local-network";
 import type { Job } from "../model";
 import { HostStore } from "../store";
 
@@ -21,6 +23,9 @@ export function networkEngineFixture() {
     calls.push(action);
   };
   const guard: LocalNetworkGuard = {
+    assertInternetTargets: () => {
+      return undefined;
+    },
     preflight: record("preflight"),
     install: record("install"),
     verify: record("verify"),
@@ -69,8 +74,15 @@ export function networkEngineFixture() {
     scoreboardFreezeMinutes: 0,
     problems: [problem],
   });
+  const grants = new InternetGrantStore(store);
   const reservations: string[] = [];
-  const add = (name: string, publications = 0, catalogIndex = 0, http = false) => {
+  const add = (
+    name: string,
+    publications = 0,
+    catalogIndex = 0,
+    http = false,
+    egress: readonly InternetAccessRequest[] = [],
+  ) => {
     const problem = requiredNetworkValue(engine.catalog()[catalogIndex]);
     const event = store.event("event");
     if (!event.problems.some((entry) => entry.problemId === problem.problemId))
@@ -99,7 +111,9 @@ export function networkEngineFixture() {
     };
     const definition = JSON.parse(job.definition) as {
       composeText: string;
+      catalogSnapshot?: { root: string; digest: string };
       problem: {
+        internetAccess?: readonly InternetAccessRequest[];
         publicServices?: {
           id: string;
           service: string;
@@ -109,6 +123,18 @@ export function networkEngineFixture() {
         }[];
       };
     };
+    if (egress.length) {
+      definition.problem.internetAccess = egress;
+      definition.catalogSnapshot ??= { root: directory, digest: "synthetic-pinned-digest" };
+      grants.put({
+        eventId: job.eventId,
+        problemId: job.problemId,
+        definitionDigest: definition.catalogSnapshot.digest,
+        requestIds: egress.map((entry) => entry.id).sort((a, b) => (a < b ? -1 : Number(a > b))),
+        grantedAt: "2026-10-16T00:00:00Z",
+      });
+      job.definition = JSON.stringify(definition);
+    }
     if (publications) {
       const document = parse(definition.composeText);
       const service = "public-fixture";
@@ -123,8 +149,15 @@ export function networkEngineFixture() {
       }));
       job.definition = JSON.stringify(definition);
     }
-    // eslint-disable-next-line sonarjs/no-hardcoded-ip -- synthetic allocator, no connection
-    const subnets = allocateNetworkSubnets(definition.composeText, "10.240.0.0/24", reservations);
+    const subnets = allocateNetworkSubnets(
+      egressComposeSource(
+        definition.composeText,
+        egress.map((entry) => entry.service),
+      ),
+      // eslint-disable-next-line sonarjs/no-hardcoded-ip -- Synthetic addresses are test data and are never contacted.
+      "10.240.0.0/24",
+      reservations,
+    );
     reservations.push(...Object.values(subnets));
     const prepare = Reflect.get(engine, "plan") as (
       job: Job,
@@ -158,6 +191,7 @@ export function networkEngineFixture() {
     return { job, unit: started.unit, prepared, admitted };
   };
   engine.bindNetworkState({
+    internetGrant: (eventId, problemId) => grants.get(eventId, problemId),
     jobs: () => store.jobs("event"),
     retain: (updates) => {
       calls.push("retain");
@@ -166,6 +200,7 @@ export function networkEngineFixture() {
   });
   return {
     engine,
+    grants,
     store,
     guard,
     calls,
