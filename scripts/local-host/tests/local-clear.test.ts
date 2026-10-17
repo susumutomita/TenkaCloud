@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DisruptionStore } from "../disruption-store";
+import { InternetGrantStore } from "../internet-grant-store";
 import { clearManagedLocal } from "../local";
 import { clearLocalHistory, type LocalClearIo, parseLocalClearOptions } from "../local-clear";
 import { localRuntimeFailure } from "../local-runtime-report";
@@ -45,6 +46,13 @@ function setup() {
     scoringLocked: false,
     scoreboardFreezeMinutes: 0,
     problems: [],
+  });
+  new InternetGrantStore(store).put({
+    eventId: "event",
+    problemId: "internet",
+    definitionDigest: "pinned",
+    requestIds: ["upstream"],
+    grantedAt: "2026-10-16T00:00:00Z",
   });
   store.putTeam({
     eventId: "event",

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readlinkSync, statSync } from "node:fs";
 import { BlockList, isIP } from "node:net";
+import { networkInterfaces } from "node:os";
 import {
   type LocalNetworkPlan,
   type LocalPublicEndpoint,
@@ -20,7 +21,10 @@ import {
 import { withNetworkHookLock } from "./network-hook-lock";
 import { vpnAdmissionHook, vpnSealHook, workloadQuarantineHook } from "./vpn/firewall-scope";
 
+class GuardBodyChanged extends Error {}
+
 export interface LocalNetworkGuard {
+  assertInternetTargets?(addresses: readonly string[]): void;
   preflight(): void;
   install(plan: LocalNetworkPlan): void;
   verify(plan: LocalNetworkPlan): void;
@@ -56,11 +60,13 @@ interface GuardIO {
   readonly read: (path: string) => string;
   readonly exists: (path: string) => boolean;
   readonly link: (path: string) => string;
+  readonly interfaces?: typeof networkInterfaces;
   readonly platform: string;
   readonly dockerHost?: string;
   readonly socketOwned?: () => boolean;
 }
 const nativeIO: GuardIO = {
+  interfaces: networkInterfaces,
   platform: process.platform,
   dockerHost: process.env.DOCKER_HOST,
   socketOwned: () => {
@@ -95,7 +101,12 @@ const OWNED_SANDBOX = /^\/var\/run\/docker\/netns\/[a-f0-9]{12,64}$/u;
 interface OwnedContainer {
   readonly Id: string;
   readonly Config?: { Labels?: Record<string, string> };
-  readonly HostConfig?: { Privileged?: boolean; NetworkMode?: string; CapAdd?: string[] };
+  readonly HostConfig?: {
+    Privileged?: boolean;
+    NetworkMode?: string;
+    CapAdd?: string[];
+    Dns?: string[];
+  };
   readonly State?: { Running?: boolean; Pid?: number };
   readonly NetworkSettings: {
     readonly SandboxKey: string;
@@ -126,22 +137,23 @@ function inputRules(plan: LocalNetworkPlan, ipv6: boolean): Rule[] {
     const subnet = ipv6 ? segment.ipv6 : segment.ipv4;
     // Both trusted ingress and the ORIGINAL connection's reply source are bound
     // to this segment. A reply tuple from another team's bridge is not sufficient.
-    rules.push([
-      "-i",
-      segment.bridge,
-      "-s",
-      subnet,
-      "-m",
-      "conntrack",
-      "--ctstate",
-      "ESTABLISHED",
-      "--ctdir",
-      "REPLY",
-      "--ctreplsrc",
-      subnet,
-      "-j",
-      "ACCEPT",
-    ]);
+    if (!plan.egressSegments.some((entry) => entry.bridge === segment.bridge))
+      rules.push([
+        "-i",
+        segment.bridge,
+        "-s",
+        subnet,
+        "-m",
+        "conntrack",
+        "--ctstate",
+        "ESTABLISHED",
+        "--ctdir",
+        "REPLY",
+        "--ctreplsrc",
+        subnet,
+        "-j",
+        "ACCEPT",
+      ]);
     if (ipv6)
       for (const type of ["135", "136"])
         rules.push([
@@ -196,44 +208,50 @@ function forwardRules(plan: LocalNetworkPlan, ipv6: boolean): Rule[] {
           ]),
         )
       : []),
-    ...plan.segments.flatMap((from) =>
-      plan.segments.flatMap((to) => [
-        [
-          "-i",
-          from.bridge,
-          "-o",
-          to.bridge,
-          "-m",
-          "conntrack",
-          "--ctdir",
-          "ORIGINAL",
-          "--ctorigsrc",
-          ipv6 ? from.ipv6 : from.ipv4,
-          "--ctorigdst",
-          ipv6 ? to.ipv6 : to.ipv4,
-          "-j",
-          "ACCEPT",
-        ],
-        [
-          "-i",
-          to.bridge,
-          "-o",
-          from.bridge,
-          "-m",
-          "conntrack",
-          "--ctdir",
-          "REPLY",
-          "--ctstate",
-          "ESTABLISHED",
-          "--ctorigsrc",
-          ipv6 ? from.ipv6 : from.ipv4,
-          "--ctorigdst",
-          ipv6 ? to.ipv6 : to.ipv4,
-          "-j",
-          "ACCEPT",
-        ],
-      ]),
-    ),
+    ...plan.segments
+      .filter((segment) => !plan.egressSegments.some((entry) => entry.bridge === segment.bridge))
+      .flatMap((from) =>
+        plan.segments
+          .filter(
+            (segment) => !plan.egressSegments.some((entry) => entry.bridge === segment.bridge),
+          )
+          .flatMap((to) => [
+            [
+              "-i",
+              from.bridge,
+              "-o",
+              to.bridge,
+              "-m",
+              "conntrack",
+              "--ctdir",
+              "ORIGINAL",
+              "--ctorigsrc",
+              ipv6 ? from.ipv6 : from.ipv4,
+              "--ctorigdst",
+              ipv6 ? to.ipv6 : to.ipv4,
+              "-j",
+              "ACCEPT",
+            ],
+            [
+              "-i",
+              to.bridge,
+              "-o",
+              from.bridge,
+              "-m",
+              "conntrack",
+              "--ctdir",
+              "REPLY",
+              "--ctstate",
+              "ESTABLISHED",
+              "--ctorigsrc",
+              ipv6 ? from.ipv6 : from.ipv4,
+              "--ctorigdst",
+              ipv6 ? to.ipv6 : to.ipv4,
+              "-j",
+              "ACCEPT",
+            ],
+          ]),
+      ),
   ];
   for (const route of plan.publicRoutes.filter((entry) => isIP(entry.address) === (ipv6 ? 6 : 4))) {
     const subnet = ipv6 ? route.from.ipv6 : route.from.ipv4;
@@ -297,6 +315,58 @@ function forwardRules(plan: LocalNetworkPlan, ipv6: boolean): Rule[] {
       "ACCEPT",
     ]);
   }
+  for (const route of plan.egressRoutes.filter((entry) => isIP(entry.address) === (ipv6 ? 6 : 4))) {
+    const subnet = ipv6 ? route.segment.ipv6 : route.segment.ipv4;
+    const address = `${route.address}/${ipv6 ? 128 : 32}`;
+    const tuple = [
+      "-m",
+      "conntrack",
+      "--ctorigsrc",
+      subnet,
+      "--ctorigdst",
+      address,
+      "--ctorigdstport",
+      String(route.port),
+    ];
+    rules.push([
+      "-i",
+      route.segment.bridge,
+      "-s",
+      subnet,
+      "-d",
+      address,
+      "-p",
+      "tcp",
+      "-m",
+      "tcp",
+      "--dport",
+      String(route.port),
+      ...tuple,
+      "--ctdir",
+      "ORIGINAL",
+      "-j",
+      "ACCEPT",
+    ]);
+    rules.push([
+      "-o",
+      route.segment.bridge,
+      "-s",
+      address,
+      "-d",
+      subnet,
+      "-p",
+      "tcp",
+      ...tuple,
+      "--ctdir",
+      "REPLY",
+      "--ctstate",
+      "ESTABLISHED",
+      "--ctreplsrc",
+      address,
+      "-j",
+      "ACCEPT",
+    ]);
+  }
   return [...rules, ["-j", "DROP"]];
 }
 function hooks(plan: LocalNetworkPlan, ipv6: boolean): { parent: string; rule: Rule }[] {
@@ -312,7 +382,7 @@ function lines(text: string): string[] {
 }
 function ownedHook(line: string): boolean {
   if (vpnAdmissionHook(line)) return true;
-  return /^-A (INPUT|FORWARD|DOCKER-USER) -[io] tci[a-f0-9]{12} -j TCI_[a-f0-9]{16}_[IF]$/u.test(
+  return /^-A (INPUT|FORWARD|DOCKER-USER) -[io] tc[ie][a-f0-9]{12} -j TCI_[a-f0-9]{16}_[IF]$/u.test(
     line,
   );
 }
@@ -398,6 +468,75 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     }
     return result;
   }
+  assertInternetTargets(addresses: readonly string[]): void {
+    this.preflight();
+    const version = /^v?(\d+)\.(\d+)\.(\d+)/u.exec(
+      this.command("docker", ["compose", "version", "--short"]),
+    );
+    if (
+      !version ||
+      Number(version[1]) < 2 ||
+      (Number(version[1]) === 2 &&
+        (Number(version[2]) < 33 || (Number(version[2]) === 33 && Number(version[3]) < 1)))
+    )
+      throw new Error(
+        "Internet exceptions require Docker Compose 2.33.1 or newer for gateway priority.",
+      );
+    const occupied = this.internetProtectedRanges();
+    for (const address of addresses) assertInternetDestination(address, occupied);
+  }
+  private internetProtectedRanges(): string[] {
+    if (!this.io.interfaces)
+      throw new Error("Host interface inventory is unavailable for Internet access.");
+    for (const ipv6 of [false, true]) {
+      const routes: { dst?: string; table?: string | number }[] = JSON.parse(
+        this.command("ip", ["-j", ...(ipv6 ? ["-6"] : []), "route", "show", "table", "all"]),
+      );
+      if (!Array.isArray(routes)) throw new Error("Invalid host route inventory.");
+      if (
+        routes.some(
+          (route) =>
+            route.dst === "default" &&
+            route.table !== undefined &&
+            route.table !== "main" &&
+            route.table !== 254,
+        )
+      )
+        throw new Error("Internet access refuses a default route outside the main routing table.");
+    }
+    const interfaces = Object.values(this.io.interfaces()).flatMap((entries) =>
+      (entries ?? []).map((entry) => entry.address),
+    );
+    return [...this.occupiedRoutes(), ...interfaces, ...this.internetDockerSubnets()];
+  }
+  private internetDockerSubnets(): string[] {
+    const names = this.networkNames();
+    if (!names.length) return [];
+    let output: string;
+    let expectedCount = names.length;
+    try {
+      output = this.command("docker", ["network", "inspect", ...names]);
+    } catch (error) {
+      const remaining = this.networkNames();
+      if (!names.some((name) => !remaining.includes(name))) throw error;
+      if (!remaining.length) return [];
+      expectedCount = remaining.length;
+      output = this.command("docker", ["network", "inspect", ...remaining]);
+    }
+    const rows: { IPAM?: { Config?: { Subnet?: unknown }[] | null } }[] = JSON.parse(output);
+    if (!Array.isArray(rows) || rows.length !== expectedCount)
+      throw new Error("Invalid Docker subnet inventory for Internet access.");
+    return rows.flatMap((row) => {
+      if (row.IPAM?.Config === null) return [];
+      if (!Array.isArray(row.IPAM?.Config))
+        throw new Error("Invalid Docker subnet inventory for Internet access.");
+      return row.IPAM.Config.map((config) => {
+        if (typeof config.Subnet !== "string") throw new Error("Invalid Docker subnet.");
+        return config.Subnet;
+      });
+    });
+  }
+
   private networkNames(): string[] {
     return lines(this.command("docker", ["network", "ls", "--format", "{{.Name}}"]));
   }
@@ -424,16 +563,28 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
           EnableIPv6?: boolean;
           Options?: Record<string, string>;
           Labels?: Record<string, string>;
-          IPAM?: { Config?: { Subnet?: string }[] };
+          IPAM?: { Config?: { Subnet?: string; Gateway?: string }[] };
         }
       | undefined,
     plan: LocalNetworkPlan,
     segment: LocalNetworkPlan["segments"][number],
     path: string,
   ): void {
+    const egress = plan.egressSegments.some((entry) => entry.bridge === segment.bridge);
+    if (
+      egress &&
+      ![false, true].every((ipv6) =>
+        network?.IPAM?.Config?.some(
+          (entry) =>
+            entry.Subnet === (ipv6 ? segment.ipv6 : segment.ipv4) &&
+            entry.Gateway === segmentGateway(segment, ipv6),
+        ),
+      )
+    )
+      throw new Error("Owned Internet network gateway changed.");
     if (
       network?.Driver !== "bridge" ||
-      network.Internal !== true ||
+      network.Internal !== !egress ||
       network.EnableIPv6 !== true ||
       network.Options?.["com.docker.network.bridge.name"] !== segment.bridge ||
       network.Labels?.["com.docker.compose.project"] !== plan.project ||
@@ -448,6 +599,8 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   }
   install(plan: LocalNetworkPlan): void {
     this.preflight();
+    if (plan.egressRoutes.length)
+      this.assertInternetTargets(plan.egressRoutes.map((route) => route.address));
     this.assertOwnership(plan, false);
     for (const ipv6 of [false, true]) {
       const inventory = lines(this.firewall(ipv6, ["-S"]));
@@ -455,7 +608,14 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         inventory.includes(`-N ${plan.inputChain}`) ||
         inventory.includes(`-N ${plan.forwardChain}`)
       ) {
-        this.repairStoppedHooks(plan, ipv6);
+        try {
+          this.repairStoppedHooks(plan, ipv6);
+        } catch (error) {
+          if (!plan.egressSegments.length || !(error instanceof GuardBodyChanged)) throw error;
+          this.verifyHooks(plan, ipv6);
+          this.rewriteStoppedBodies(plan, ipv6);
+          this.verifyFamily(plan, ipv6);
+        }
         continue;
       }
       if (
@@ -535,7 +695,7 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         line.startsWith("-A "),
       );
       if (actual.length !== rules.length || actual.at(-1) !== `-A ${chain} -j DROP`)
-        throw new Error("Competition guard changed; runtime admission is refused.");
+        throw new GuardBodyChanged("Competition guard changed; runtime admission is refused.");
       if (
         actual.some(
           (line, index) =>
@@ -543,12 +703,17 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
             ruleFingerprint(rules[index]?.join(" ") ?? ""),
         )
       )
-        throw new Error("Competition guard rule order changed; runtime admission is refused.");
+        throw new GuardBodyChanged(
+          "Competition guard rule order changed; runtime admission is refused.",
+        );
       for (const rule of rules) this.firewall(ipv6, ["-C", chain, ...rule]);
     }
   }
   private verifyFamily(plan: LocalNetworkPlan, ipv6: boolean): void {
     this.verifyBodies(plan, ipv6);
+    this.verifyHooks(plan, ipv6);
+  }
+  private verifyHooks(plan: LocalNetworkPlan, ipv6: boolean): void {
     for (const { parent, rule } of hooks(plan, ipv6)) {
       this.firewall(ipv6, ["-C", parent, ...rule]);
       const actual = lines(this.firewall(ipv6, ["-S", parent])).filter((line) =>
@@ -565,6 +730,8 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
   }
   verify(plan: LocalNetworkPlan): void {
     this.preflight();
+    if (plan.egressRoutes.length)
+      this.assertInternetTargets(plan.egressRoutes.map((route) => route.address));
     for (const ipv6 of [false, true]) this.verifyFamily(plan, ipv6);
   }
   verifyNetworks(plan: LocalNetworkPlan): void {
@@ -599,7 +766,19 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       const rows = JSON.parse(
         this.command("docker", ["network", "inspect", `${plan.project}_${segment.name}`]),
       );
-      if (Object.keys(rows[0]?.Containers ?? {}).some((id) => !attached.has(id)))
+      const endpoints = Object.keys(rows[0]?.Containers ?? {});
+      const egress = plan.egressSegments.find((entry) => entry.name === segment.name);
+      if (
+        egress &&
+        (endpoints.length !== 1 ||
+          !containers.some(
+            (container) =>
+              container.Id === endpoints[0] &&
+              container.Config?.Labels?.["com.docker.compose.service"] === egress.service,
+          ))
+      )
+        throw new Error("Internet network must contain exactly its owned service container.");
+      if (endpoints.some((id) => !attached.has(id)))
         throw new Error("Competition network has an unowned endpoint.");
     }
     this.verifyPublicTargets(plan);
@@ -628,11 +807,17 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         (target) =>
           `${canonicalPrefix(target.destination)} via ${canonicalAddress(segmentGateway(target.segment, target.ipv6))}`,
       );
-      if (!expected.length) continue;
+      expected.push(...containerDefaultRoutes(plan, container));
+      if (!expected.length && !plan.egressSegments.length) continue;
       const sandbox = container.NetworkSettings.SandboxKey;
       if (!OWNED_SANDBOX.test(sandbox))
         throw new Error("Public route requires the verified owned runtime network namespace.");
       const actual = new Set([false, true].flatMap((ipv6) => this.namespaceRoutes(sandbox, ipv6)));
+      if (
+        plan.egressSegments.length &&
+        [...actual].some((entry) => entry.startsWith("default via ") && !expected.includes(entry))
+      )
+        throw new Error("Unexpected Internet default gateway in an owned workload namespace.");
       if (expected.some((entry) => !actual.has(entry)))
         throw new Error("Published DMZ route is missing from an owned workload namespace.");
     }
@@ -661,7 +846,12 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     container: {
       Config?: { Labels?: Record<string, string> };
       Id: string;
-      HostConfig?: { Privileged?: boolean; NetworkMode?: string; CapAdd?: string[] };
+      HostConfig?: {
+        Privileged?: boolean;
+        NetworkMode?: string;
+        CapAdd?: string[];
+        Dns?: string[];
+      };
       NetworkSettings?: { Networks?: Record<string, unknown> };
     },
     services: Set<string>,
@@ -689,6 +879,23 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
         )
     )
       throw new Error("Competition workload ownership, generation or attachments changed.");
+    if (
+      plan.egressSegments.some(
+        (segment) =>
+          segment.service !== service &&
+          networks &&
+          Object.hasOwn(networks, `${plan.project}_${segment.name}`),
+      )
+    )
+      throw new Error("Internet network attachment belongs to another service.");
+    const egress = plan.egressSegments.find((segment) => segment.service === service);
+    if (
+      egress &&
+      (!Array.isArray(container.HostConfig?.Dns) ||
+        container.HostConfig.Dns.length !== 1 ||
+        container.HostConfig.Dns[0] !== segmentGateway(egress, false))
+    )
+      throw new Error("Competition egress DNS must be exactly its segment gateway.");
     return requiredNetworkValue(service);
   }
   private verifyPublicTargets(plan: LocalNetworkPlan): void {
@@ -750,6 +957,8 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       plan.generation !== previous.generation
     )
       throw new Error("DMZ changes cannot replace a runtime's ownership or generation.");
+    if (plan.egressRoutes.length)
+      this.assertInternetTargets(plan.egressRoutes.map((route) => route.address));
     this.verifyNetworks(previous);
     for (const ipv6 of [false, true]) {
       const body = [
@@ -796,14 +1005,16 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       container.Config?.Labels?.["tenkacloud.isolation.generation"] !== plan.generation
     )
       throw new Error("Public service generation changed.");
-    return plan.segments.flatMap((segment) => {
-      const network = container.NetworkSettings?.Networks?.[`${plan.project}_${segment.name}`];
-      if (!network) return [];
-      const addresses = [network.IPAddress, network.GlobalIPv6Address].filter(
-        (value: unknown): value is string => typeof value === "string" && isIP(value) !== 0,
-      );
-      return addresses.length ? [{ segment, addresses, port, service }] : [];
-    });
+    return plan.segments
+      .filter((segment) => !plan.egressSegments.some((entry) => entry.bridge === segment.bridge))
+      .flatMap((segment) => {
+        const network = container.NetworkSettings?.Networks?.[`${plan.project}_${segment.name}`];
+        if (!network) return [];
+        const addresses = [network.IPAddress, network.GlobalIPv6Address].filter(
+          (value: unknown): value is string => typeof value === "string" && isIP(value) !== 0,
+        );
+        return addresses.length ? [{ segment, addresses, port, service }] : [];
+      });
   }
   private routeForContainer(plan: LocalNetworkPlan, sandbox: string, target: RouteTarget): void {
     const gateway = this.ownedGateway(plan, target.segment, target.ipv6);
@@ -918,8 +1129,10 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     // publication routes do. A peer that targets another attachment gets no reply. The VPN REPLY
     // rules pair each bridge with its own subnet, so the misrouted reply falls to the final DROP.
     const segment = plan.segments
-      .filter((entry) =>
-        Object.hasOwn(container.NetworkSettings.Networks, `${plan.project}_${entry.name}`),
+      .filter(
+        (entry) =>
+          !plan.egressSegments.some((egress) => egress.name === entry.name) &&
+          Object.hasOwn(container.NetworkSettings.Networks, `${plan.project}_${entry.name}`),
       )
       .reduce<LocalNetworkPlan["segments"][number] | undefined>(
         (first, entry) => (!first || entry.name < first.name ? entry : first),
@@ -1082,7 +1295,10 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
       !plan.segments.length ||
       plan.segments.some((segment) => {
         const expected = digest([plan.project, segment.name].join("/"));
-        return segment.bridge !== `tci${expected.slice(0, 12)}`;
+        return (
+          segment.bridge !==
+          `${plan.egressSegments.some((entry) => entry.name === segment.name) ? "tce" : "tci"}${expected.slice(0, 12)}`
+        );
       })
     )
       throw new Error(
@@ -1195,6 +1411,33 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
           throw new Error("Owned quarantine could not be removed; ownership was retained.");
       }
   }
+  private rewriteStoppedBodies(plan: LocalNetworkPlan, ipv6: boolean): void {
+    if (
+      this.command("docker", [
+        "ps",
+        "-q",
+        "--filter",
+        `label=com.docker.compose.project=${plan.project}`,
+      ]).trim()
+    )
+      throw new Error("Owned workloads must be stopped before a guard recovery.");
+    for (const chain of [plan.inputChain, plan.forwardChain])
+      this.firewall(ipv6, ["-C", chain, "-m", "comment", "--comment", plan.owner]);
+    const body = [
+      "*filter",
+      `-F ${plan.inputChain}`,
+      `-F ${plan.forwardChain}`,
+      ...inputRules(plan, ipv6).map((rule) => `-A ${plan.inputChain} ${rule.join(" ")}`),
+      ...forwardRules(plan, ipv6).map((rule) => `-A ${plan.forwardChain} ${rule.join(" ")}`),
+      "COMMIT",
+      "",
+    ].join("\n");
+    this.command(
+      ipv6 ? "ip6tables-restore" : "iptables-restore",
+      ["--wait", "5", "--noflush"],
+      body,
+    );
+  }
   resetStopped(plan: LocalNetworkPlan): void {
     if (
       this.command("docker", [
@@ -1206,27 +1449,13 @@ export class LinuxNetworkGuard implements LocalNetworkGuard {
     )
       throw new Error("Owned workloads must be stopped before a guard recovery.");
     this.preflight();
+    if (plan.egressRoutes.length)
+      this.assertInternetTargets(plan.egressRoutes.map((route) => route.address));
     this.assertOwnership(plan, true);
     for (const ipv6 of [false, true]) {
-      for (const chain of [plan.inputChain, plan.forwardChain])
-        this.firewall(ipv6, ["-C", chain, "-m", "comment", "--comment", plan.owner]);
-      const body = [
-        "*filter",
-        `-F ${plan.inputChain}`,
-        `-F ${plan.forwardChain}`,
-        ...inputRules(plan, ipv6).map((rule) => `-A ${plan.inputChain} ${rule.join(" ")}`),
-        ...forwardRules(plan, ipv6).map((rule) => `-A ${plan.forwardChain} ${rule.join(" ")}`),
-        "COMMIT",
-        "",
-      ].join("\n");
-      this.command(
-        ipv6 ? "ip6tables-restore" : "iptables-restore",
-        ["--wait", "5", "--noflush"],
-        body,
-      );
+      this.rewriteStoppedBodies(plan, ipv6);
+      this.repairStoppedHooks(plan, ipv6);
     }
-    this.install(plan);
-    this.verify(plan);
     this.verifyNetworkInventory(plan);
     this.removeQuarantine(plan);
     this.assertNoQuarantine(plan);
@@ -1369,6 +1598,7 @@ function canonicalAddress(address: string): string {
   return isIP(address) === 6 ? new URL(`http://[${address}]/`).hostname.slice(1, -1) : address;
 }
 function canonicalPrefix(destination: string): string {
+  if (destination === "default") return destination;
   const [address = "", prefix] = destination.split("/");
   return `${canonicalAddress(address)}/${prefix ?? routePrefix(isIP(address) === 6)}`;
 }
@@ -1402,4 +1632,31 @@ function ruleFingerprint(line: string): string {
   }
   clauses.sort((a, b) => a.localeCompare(b));
   return clauses.join("|");
+}
+
+function assertInternetDestination(address: string, occupied: readonly string[]): void {
+  const family = isIP(address);
+  if (!family) throw new Error("Invalid Internet destination.");
+  const protocol = family === 4 ? "ipv4" : "ipv6";
+  const prefixLength = family === 4 ? 32 : 128;
+  for (const cidr of occupied) {
+    const [base = "", prefix] = cidr.split("/");
+    if (!isIP(base)) throw new Error("Invalid protected route inventory.");
+    if (isIP(base) !== family) continue;
+    const block = new BlockList();
+    block.addSubnet(base, prefix === undefined ? prefixLength : Number(prefix), protocol);
+    if (block.check(address, protocol))
+      throw new Error(
+        `Internet destination ${address} overlaps a protected host, LAN/VPN or Docker address.`,
+      );
+  }
+}
+
+function containerDefaultRoutes(plan: LocalNetworkPlan, container: OwnedContainer): string[] {
+  const egress = plan.egressSegments.find(
+    (segment) => segment.service === container.Config?.Labels?.["com.docker.compose.service"],
+  );
+  return egress
+    ? [false, true].map((ipv6) => `default via ${canonicalAddress(segmentGateway(egress, ipv6))}`)
+    : [];
 }

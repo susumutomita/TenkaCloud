@@ -21,6 +21,7 @@ import { EventProblemSetPanel } from "../../components/event-detail/EventProblem
 import { EventProgressionGatePanel } from "../../components/event-detail/EventProgressionGatePanel";
 import { EventSchedulePanel } from "../../components/event-detail/EventSchedulePanel";
 import { EventTeamsPanel } from "../../components/event-detail/EventTeamsPanel";
+import { InternetAccessPanel } from "../../components/event-detail/InternetAccessPanel";
 import { LocalEnvironmentsPanel } from "../../components/event-detail/LocalEnvironmentsPanel";
 import { TeamRankingPanel } from "../../components/TeamRankingPanel";
 import { TeamScoreEventsPanel } from "../../components/TeamScoreEventsPanel";
@@ -109,14 +110,30 @@ export function ScheduleTab({
   );
 }
 
-export function ProblemsTab({ config, detail, t }: EventTabContentProps) {
+export function ProblemsTab({
+  apiClient,
+  canMutateTenant,
+  config,
+  detail,
+  t,
+}: EventTabContentProps) {
   return (
-    <EventProblemSetPanel
-      detail={detail}
-      localHost={isLocalHost(config)}
-      nativeProblemIds={config.nativeProblemIds}
-      t={t}
-    />
+    <>
+      <EventProblemSetPanel
+        detail={detail}
+        localHost={isLocalHost(config)}
+        nativeProblemIds={config.nativeProblemIds}
+        t={t}
+      />
+      {isLocalHost(config) && (
+        <InternetAccessPanel
+          apiClient={apiClient}
+          canMutateTenant={canMutateTenant}
+          eventId={detail.eventId}
+          t={t}
+        />
+      )}
+    </>
   );
 }
 

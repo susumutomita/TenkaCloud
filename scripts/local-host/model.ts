@@ -3,6 +3,7 @@ import {
   problemAuthorFields,
 } from "../../packages/portal-contracts/src/problem-authors";
 import type { ProgressionGateConfig } from "../../packages/problem-sdk/src/progression-gate.js";
+import type { InternetAccessGrant } from "./internet-grant-store";
 
 /** Local hosting's durable records. Private runtime descriptors never enter browser responses. */
 type SqlBinding = string | number | null;
@@ -249,8 +250,17 @@ export interface RuntimeEngine {
     ingress: import("./vpn/native-backend").VpnIngress,
     gatewayPort?: (job: Job) => number,
   ): void;
+  internetAccessAvailability?(): { available: boolean; reason?: string };
+  checkInternetAccess?(addresses: readonly string[]): void;
+  updateInternetAccess?(
+    eventId: string,
+    problemId: string,
+    persist: () => void,
+    operation?: "approve" | "revoke",
+  ): Promise<void>;
   /** Local adapter seam backed by the existing private host ledger, never a second store. */
   bindNetworkState?(state: {
+    internetGrant?(eventId: string, problemId: string): InternetAccessGrant | undefined;
     jobs(): readonly Job[];
     retain(
       updates: readonly {

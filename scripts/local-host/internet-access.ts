@@ -108,6 +108,6 @@ export function normalizeInternetAccess(
 export function assertInternetAccessUnavailable(value: unknown): void {
   if (normalizeInternetAccess(value))
     throw new Error(
-      "Catalog Internet access is a request, not approval. This runtime has no approved Internet-egress backend; refusing to start or adopt the environment.",
+      "Catalog Internet access is a request, not approval. Internet exceptions need the isolated native network adapter; refusing to start or adopt the environment.",
     );
 }

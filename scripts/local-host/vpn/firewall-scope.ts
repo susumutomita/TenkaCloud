@@ -19,7 +19,7 @@ export function vpnAdmissionHook(line: string): boolean {
 
 /** Only exact workload bridge DROP hooks may be treated as a closure prefix. */
 export function workloadQuarantineHook(line: string): boolean {
-  return /^-A (INPUT|FORWARD|DOCKER-USER) -[io] tci[a-f0-9]{12} -m comment --comment "?tc-quarantine-v1:[a-f0-9]{64}"? -j DROP$/u.test(
+  return /^-A (INPUT|FORWARD|DOCKER-USER) -[io] tc[ie][a-f0-9]{12} -m comment --comment "?tc-quarantine-v1:[a-f0-9]{64}"? -j DROP$/u.test(
     line,
   );
 }

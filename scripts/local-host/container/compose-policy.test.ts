@@ -614,3 +614,12 @@ services:
     ).toEqual([]);
   });
 });
+
+for (const networks of [
+  "services: {app: {image: synthetic}}\nnetworks: {egress-authored: null}",
+  "services: {app: {image: synthetic, networks: [egress-authored]}}",
+  "services: {app: {image: synthetic, networks: {egress-authored: {}}}}",
+])
+  it("reserves the egress prefix in authored network definitions and service references", () => {
+    expect(rulesFor(networks)).toContain("reserved-egress-network");
+  });

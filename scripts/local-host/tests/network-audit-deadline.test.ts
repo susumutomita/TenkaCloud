@@ -38,3 +38,20 @@ test("VPN preparation deadlines grow with every admitted runtime and its routes 
   expect(workerDeadline("vpn-prepare", undefined, { runtimes: runtimes(2, 10) })).toBe(32_000);
   expect(workerDeadline("vpn-prepare", undefined, { runtimes: runtimes(40, 0) })).toBe(120_000);
 });
+
+/* eslint-disable sonarjs/no-hardcoded-ip -- Synthetic deadline input; no connections. */
+test("worker deadlines count egress routes and segments for audits, publication and VPN preparation", () => {
+  const segment = { ...requiredNetworkValue(base.segments[0]), service: "web" };
+  const plan = {
+    ...base,
+    egressSegments: [segment],
+    egressRoutes: [
+      { requestId: "upstream", service: "web", segment, address: "8.8.8.8", port: 443 },
+    ],
+  };
+  expect(workerDeadline("verify", plan)).toBe(20_200);
+  expect(workerDeadline("publish", plan, { previous: plan })).toBe(20_800);
+  expect(workerDeadline("vpn-prepare", undefined, { runtimes: [{ plan }] })).toBe(25_200);
+});
+
+/* eslint-enable sonarjs/no-hardcoded-ip */
