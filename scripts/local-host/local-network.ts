@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { BlockList, isIP } from "node:net";
-import { parse, stringify } from "yaml";
+import { parse, parseDocument, stringify, visit } from "yaml";
 import { applyNetworkSubnets, type NetworkSubnets } from "./docker-networks";
+import type { InternetAccessRequest } from "./internet-access";
 
 /** Trusted controller contract; neither packet source addresses nor browser selectors own a segment. */
 export interface LocalNetworkSegment {
@@ -21,6 +22,15 @@ export interface LocalNetworkPlan {
   readonly services: Readonly<Record<string, readonly string[]>>;
   readonly eventId: string;
   readonly publicRoutes: readonly LocalPublicRoute[];
+  readonly egressSegments: readonly (LocalNetworkSegment & { readonly service: string })[];
+  readonly egressRoutes: readonly LocalEgressRoute[];
+}
+export interface LocalEgressRoute {
+  readonly requestId: string;
+  readonly service: string;
+  readonly segment: LocalNetworkSegment;
+  readonly address: string;
+  readonly port: number;
 }
 export interface LocalPublicEndpoint {
   readonly service: string;
@@ -48,7 +58,12 @@ function hash(value: string): string {
 export function localNetworkPlan(
   project: string,
   subnets: NetworkSubnets,
-  source?: { readonly composeText: string; readonly definition: string; readonly eventId?: string },
+  source?: {
+    readonly composeText: string;
+    readonly definition: string;
+    readonly eventId?: string;
+    readonly egress?: readonly InternetAccessRequest[];
+  },
 ): LocalNetworkPlan {
   if (!/^tch-[a-z0-9_-]{1,128}$/u.test(project)) throw new Error("Invalid local network owner.");
   const names = Object.keys(subnets).sort((a, b) => String(a).localeCompare(String(b)));
@@ -65,12 +80,18 @@ export function localNetworkPlan(
     );
     return Object.freeze({
       name,
-      bridge: `tci${digest.slice(0, 12)}`,
+      bridge: `${source?.egress?.some((entry) => egressNetworkName(entry.service) === name) ? "tce" : "tci"}${digest.slice(0, 12)}`,
       ipv4: requiredNetworkValue(subnets[name]),
       ipv6: `fd33:${words.join(":")}::/64`,
     });
   });
   const services = ownedServices(source?.composeText, names);
+  const egressSegments = segments.flatMap((segment) => {
+    const request = source?.egress?.find(
+      (entry) => egressNetworkName(entry.service) === segment.name,
+    );
+    return request ? [{ ...segment, service: request.service }] : [];
+  });
   return Object.freeze({
     version: 1,
     project,
@@ -82,6 +103,18 @@ export function localNetworkPlan(
     services: Object.freeze(services),
     eventId: source?.eventId ?? project,
     publicRoutes: Object.freeze([]),
+    egressSegments: Object.freeze(egressSegments),
+    egressRoutes: Object.freeze(
+      (source?.egress ?? []).map((request) => ({
+        requestId: request.id,
+        service: request.service,
+        address: request.destination,
+        port: request.port,
+        segment: requiredNetworkValue(
+          egressSegments.find((segment) => segment.service === request.service),
+        ),
+      })),
+    ),
   });
 }
 /** Only controller-resolved endpoints of another owned runtime in the same event are eligible. */
@@ -116,7 +149,10 @@ export function retainedPublicPlan(plan: LocalNetworkPlan, value: unknown): Loca
 export function isolatedCompose(text: string, plan: LocalNetworkPlan): string {
   const document = parse(
     applyNetworkSubnets(
-      text,
+      egressComposeSource(
+        text,
+        plan.egressSegments.map((segment) => segment.service),
+      ),
       Object.fromEntries(plan.segments.map((segment) => [segment.name, segment.ipv4])),
     ),
     { merge: true },
@@ -124,7 +160,7 @@ export function isolatedCompose(text: string, plan: LocalNetworkPlan): string {
   for (const segment of plan.segments) {
     document.networks[segment.name] = {
       driver: "bridge",
-      internal: true,
+      internal: !plan.egressSegments.some((entry) => entry.name === segment.name),
       enable_ipv6: true,
       driver_opts: { "com.docker.network.bridge.name": segment.bridge },
       labels: { "tenkacloud.isolation.owner": plan.owner },
@@ -136,6 +172,12 @@ export function isolatedCompose(text: string, plan: LocalNetworkPlan): string {
       },
     };
   }
+  for (const segment of plan.egressSegments) {
+    if (Object.hasOwn(document.services[segment.service], "dns"))
+      throw new Error(`services.${segment.service}.dns is not in the reviewed allowlist`);
+    // Explicit DNS prevents Docker forwarding loopback-resolver queries from the host namespace.
+    document.services[segment.service].dns = [segmentGateway(segment, false)];
+  }
   for (const service of Object.values(document.services) as Record<string, unknown>[]) {
     service.restart = "no";
     service.labels = {
@@ -143,7 +185,7 @@ export function isolatedCompose(text: string, plan: LocalNetworkPlan): string {
       "tenkacloud.isolation.generation": plan.generation,
     };
   }
-  return stringify(document);
+  return stringify(document, { aliasDuplicateObjects: false });
 }
 
 /** Only the organizer can clear a colliding host route, so halts report it by name. */
@@ -213,6 +255,12 @@ function ownedServices(
   return services;
 }
 
+function internalSegments(plan: LocalNetworkPlan): readonly LocalNetworkSegment[] {
+  return plan.segments.filter(
+    (segment) => !plan.egressSegments.some((entry) => entry.bridge === segment.bridge),
+  );
+}
+
 function endpointRoutes(
   plan: LocalNetworkPlan,
   publisher: LocalNetworkPlan,
@@ -242,7 +290,7 @@ function endpointRoutes(
   return endpoint.addresses.flatMap((address) => {
     assertEndpointAddress(endpoint, address);
     return eligible.flatMap((participant) =>
-      participant.segments.map((from) =>
+      internalSegments(participant).map((from) =>
         Object.freeze({
           from,
           to: endpoint.segment,
@@ -335,4 +383,100 @@ export function segmentGateway(segment: LocalNetworkSegment, ipv6: boolean): str
   if (parts.length !== 4) throw new Error("Invalid protected bridge allocation.");
   parts[3] = String(Number(parts[3]) + 1);
   return parts.join(".");
+}
+
+export function egressNetworkName(service: string): string {
+  return `egress-${hash(service).slice(0, 12)}`;
+}
+
+function assertAuthoredEgressNetworks(document: {
+  readonly networks?: Record<string, unknown>;
+  readonly services?: Record<string, { readonly networks?: string[] | Record<string, unknown> }>;
+}): void {
+  const authoredNames = [
+    ...Object.keys(document.networks ?? {}),
+    ...Object.values(document.services ?? {}).flatMap((service) => {
+      const networks = service.networks;
+      return Array.isArray(networks) ? networks : Object.keys(networks ?? {});
+    }),
+  ];
+  if (authoredNames.some((name) => name.startsWith("egress-")))
+    throw new Error("Authored networks cannot use the reserved egress- prefix.");
+}
+
+function parseEgressSource(text: string, egress: boolean) {
+  const parsed = parseDocument(text, { merge: true });
+  if (parsed.errors.length) throw parsed.errors[0];
+  if (egress)
+    visit(parsed, {
+      Alias() {
+        throw new Error("YAML aliases cannot be used with Internet attachments.");
+      },
+    });
+  return parsed.toJS();
+}
+
+/** Controller-only attachments; gateway priority is supported by the pinned Docker Compose. */
+export function egressComposeSource(text: string, services: readonly string[]): string {
+  const document = parseEgressSource(text, services.length > 0);
+  assertAuthoredEgressNetworks(document);
+  if (!services.length) return text;
+  document.networks ??= {};
+  for (const name of new Set(services)) {
+    if (!document.services[name]) throw new Error("Internet request names an undeclared service.");
+    const service = { ...document.services[name] };
+    document.services[name] = service;
+
+    const network = egressNetworkName(name);
+    if (Object.hasOwn(document.networks, network))
+      throw new Error("Internet network name collision.");
+    document.networks[network] = {};
+    const attached = service.networks ?? ["default"];
+    service.networks = Array.isArray(attached)
+      ? Object.fromEntries(attached.map((entry: string) => [entry, {}]))
+      : { ...attached };
+    for (const attachment of Object.values(service.networks)) {
+      if (attachment && typeof attachment === "object" && "gw_priority" in attachment)
+        throw new Error("Authored gateway priorities cannot override Internet isolation.");
+    }
+    service.networks[network] = { gw_priority: 1 };
+  }
+  return stringify(document, { aliasDuplicateObjects: false });
+}
+
+/** Check the final transport output independently of the attachment construction. */
+export function assertEgressCompose(text: string, plan: LocalNetworkPlan): void {
+  const document = parse(text, { merge: true });
+  const services = ownedServices(
+    text,
+    plan.segments.map((segment) => segment.name),
+  );
+  if (
+    Object.keys(services).length !== Object.keys(plan.services).length ||
+    Object.entries(services).some(
+      ([name, networks]) => JSON.stringify(networks) !== JSON.stringify(plan.services[name]),
+    )
+  )
+    throw new Error("Final Compose service attachments differ from the guard plan.");
+  for (const [name, networks] of Object.entries(services)) {
+    const egress = plan.egressSegments.filter((segment) => segment.service === name);
+    const expected = egress.map((segment) => segment.name).sort((a, b) => a.localeCompare(b));
+    if (
+      JSON.stringify(
+        networks
+          .filter((network) => network.startsWith("egress-"))
+          .sort((a, b) => a.localeCompare(b)),
+      ) !== JSON.stringify(expected) ||
+      egress.some((segment) => segment.name !== egressNetworkName(name))
+    )
+      throw new Error("Final Compose has an unauthorized Internet attachment.");
+    if (
+      egress.length &&
+      JSON.stringify(document.services[name].dns) !==
+        JSON.stringify(egress.map((segment) => segmentGateway(segment, false)))
+    )
+      throw new Error("Final Compose Internet DNS must be exactly its segment gateway.");
+  }
+  if (plan.egressSegments.some((segment) => !services[segment.service]))
+    throw new Error("Final Compose is missing an Internet service.");
 }

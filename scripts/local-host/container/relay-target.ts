@@ -147,10 +147,13 @@ function relayAddresses(
   for (const name of names) {
     const network = networks.find((value: { Name: string }) => value.Name === name);
     const endpoint = attachments[name];
+    const egress = request.plan?.egressSegments.some(
+      (segment) => `${project}_${segment.name}` === name && segment.service === binding.service,
+    );
     if (
       !network ||
       !/^[a-f0-9]{64}$/u.test(network.Id) ||
-      network.Internal !== true ||
+      network.Internal !== !egress ||
       network.Driver !== "bridge" ||
       network.Labels?.["com.docker.compose.project"] !== project ||
       endpoint.NetworkID !== network.Id
@@ -158,7 +161,7 @@ function relayAddresses(
       throw new Error("Internal network ownership changed.");
     const address = relayAddress(network, endpoint.IPAddress, io);
     identities.push(`${name}:${network.Id}:${address}`);
-    host ??= address;
+    if (!egress) host ??= address;
   }
   if (!host) throw new Error("Internal service has no address.");
   return { host, identities };

@@ -14,6 +14,7 @@ import {
   type RawMetadata,
   requiredString,
 } from "../../lib/problem-presentation";
+import { type InternetAccessRequest, normalizeInternetAccess } from "../internet-access";
 import { type NetworkPublicService, normalizePublicServices } from "../network-publication";
 import { resolveComposeEntryPath } from "./compose-policy";
 import { parseLoopbackUrl } from "./loopback";
@@ -69,6 +70,8 @@ export interface ContainerProblem {
   /** [#2850] Portal terminal opt-in; absent = this problem has no terminal. */
   readonly terminal?: ContainerTerminal;
   readonly publicServices?: readonly NetworkPublicService[];
+  /** A catalog request only; starting/adopting it requires an enforcing approved backend. */
+  readonly internetAccess?: readonly InternetAccessRequest[];
   /**
    * [#3008] Host requirements without which this problem's *result* is meaningless.
    * Absent = the problem runs anywhere, which is every problem in the catalog today.
@@ -361,6 +364,7 @@ export function loadContainerProblem(
     secretEnv: normalizeSecretEnv(runtime.secretEnv),
     ...(terminal ? { terminal } : {}),
     ...publicServicesField(runtime.publicServices),
+    ...internetAccessField(runtime.internetAccess),
     ...(compatibility ? { compatibility } : {}),
     scoring: containerScoring,
   };
@@ -369,4 +373,9 @@ export function loadContainerProblem(
 function publicServicesField(value: unknown) {
   const publicServices = normalizePublicServices(value);
   return publicServices ? { publicServices } : {};
+}
+
+function internetAccessField(value: unknown) {
+  const internetAccess = normalizeInternetAccess(value);
+  return internetAccess ? { internetAccess } : {};
 }

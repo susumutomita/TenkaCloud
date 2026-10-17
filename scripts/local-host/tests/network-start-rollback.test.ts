@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { computeContentDigest } from "../../../packages/problem-sdk/src/content-digest";
 import { loadDockerCatalog } from "../docker-catalog";
 import { DockerHostingEngine } from "../docker-engine";
 import type { LocalNetworkGuard } from "../linux-network-guard";
@@ -262,3 +263,86 @@ test("a failed start removes its guard only after another team's install has pla
     },
   );
 });
+
+/* eslint-disable sonarjs/no-hardcoded-ip -- Synthetic addresses are test data and are never contacted. */
+async function grantStart(
+  engine: DockerHostingEngine,
+  job: Job,
+  data: string,
+  destination = "8.8.8.8",
+) {
+  const definition = JSON.parse(job.definition);
+  const document = (await import("yaml")).parse(definition.composeText);
+  const request = {
+    id: "upstream",
+    service: Object.keys(document.services)[0],
+    destination,
+    port: 443,
+    purpose: "Synthetic upstream",
+  };
+  definition.problem.internetAccess = [request];
+  const root = join(data, "snapshot");
+  mkdirSync(root);
+  const digest = computeContentDigest(root, true);
+  definition.catalogSnapshot = { root, digest };
+  job.definition = JSON.stringify(definition);
+  engine.bindNetworkState({
+    jobs: () => [],
+    retain: () => {
+      return undefined;
+    },
+    internetGrant: () => ({
+      eventId: job.eventId,
+      problemId: job.problemId,
+      definitionDigest: digest,
+      requestIds: ["upstream"],
+      grantedAt: "2026-10-16T00:00:00Z",
+    }),
+  });
+}
+
+test("egress install failure quarantines and rolls back before Compose up or RUNNING admission", async () => {
+  let egress = false;
+  await withStart(
+    "egress-install-failure",
+    () => ({
+      install: (plan) => {
+        egress = plan.egressSegments.length === 1;
+        throw new Error("Synthetic egress install failure");
+      },
+    }),
+    async ({ engine, job, data, calls, retain }) => {
+      await grantStart(engine, job, data);
+      await expect(engine.start(job, retain)).rejects.toThrow("Synthetic egress install failure");
+      expect(egress).toBe(true);
+      expect(calls).not.toContain("compose-up");
+      expect(calls).toContain("quarantine");
+      expect(calls).toContain("compose-down");
+      expect(calls).toContain("remove");
+      expect(job.unit).toBeNull();
+      expect(engine.networkSupported(job)).toBe(false);
+      expect(job.status).not.toBe("COMPLETE");
+    },
+  );
+});
+
+for (const family of ["IPv4", "IPv6"])
+  test(`egress protected ${family} live inventory refuses start before Compose up`, async () => {
+    await withStart(
+      "egress-protected-start",
+      () => ({
+        install: (plan) => {
+          if (plan.egressRoutes.length) throw new Error(`Protected ${family} destination`);
+        },
+      }),
+      async ({ engine, job, data, calls, retain }) => {
+        await grantStart(engine, job, data, family === "IPv6" ? "2606:4700:4700::1111" : "8.8.8.8");
+        await expect(engine.start(job, retain)).rejects.toThrow(`Protected ${family}`);
+        expect(calls).not.toContain("compose-up");
+        expect(calls).toContain("quarantine");
+        expect(job.unit).toBeNull();
+      },
+    );
+  });
+
+/* eslint-enable sonarjs/no-hardcoded-ip */

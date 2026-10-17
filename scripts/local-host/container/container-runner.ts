@@ -12,6 +12,7 @@
  */
 
 import { dirname, join, resolve } from "node:path";
+import { assertInternetAccessUnavailable } from "../internet-access";
 import { assertComposePolicy } from "./compose-policy";
 import type { ContainerProblem } from "./manifest";
 import { remapComposeHostPorts, remapContainerProblem } from "./port-remap";
@@ -29,6 +30,7 @@ export interface LocalComposeUnit {
   /** Only local competition hosting consumes this owned, fail-closed native guard plan. */
   readonly isolationVersion?: 1;
   readonly isolationGeneration?: string;
+  readonly egressRequestIds?: readonly string[];
   /** Participant-approved catalog service IDs; addresses and ports are never accepted here. */
   readonly publishedServiceIds?: readonly string[];
   readonly publicNetworkRoutes?: readonly import("../local-network").LocalPublicRoute[];
@@ -124,6 +126,7 @@ export class ContainerRunner {
     offset: number,
     ownership?: ContainerStartOwnershipHooks,
   ): Promise<StartedContainer> {
+    assertInternetAccessUnavailable(problem.internetAccess);
     const originalCompose = this.deps.readCompose(problem.composePath);
     // [Issue #3097] Deny-by-default structural policy, fail-closed before anything is written or
     // started. Port remapping below only rewrites published-port text (port-remap.ts preserves
@@ -202,6 +205,7 @@ export class ContainerRunner {
    * rejected instead of inventing an offset and pointing the portal at the wrong container.
    */
   async recover(problem: ContainerProblem, unit: LocalComposeUnit): Promise<RecoveredContainer> {
+    assertInternetAccessUnavailable(problem.internetAccess);
     const originalCompose = this.deps.readCompose(problem.composePath);
     // [Issue #3097] Same fail-closed policy as `start`: a compose file that was compliant when a
     // container was first started must still be compliant when the control plane reconciles it

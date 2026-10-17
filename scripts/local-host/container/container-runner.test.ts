@@ -49,6 +49,36 @@ function makeDeps(over: Partial<ContainerRunnerDeps> = {}) {
   return { deps, compose, composeEnvs, reached, temps, removed };
 }
 
+it("refuses requested Internet access before local start or recovery while retaining cleanup", async () => {
+  const { deps, compose } = makeDeps();
+  const runner = new ContainerRunner("/local", deps);
+  const requested = {
+    ...problem(),
+    internetAccess: [
+      {
+        id: "upstream",
+        service: "app",
+        // eslint-disable-next-line sonarjs/no-hardcoded-ip -- Synthetic request rejected before any dependency runs.
+        destination: "8.8.8.8",
+        port: 443,
+        purpose: "Synthetic request",
+      },
+    ],
+  };
+  const unit = {
+    problemId: requested.problemId,
+    composePath: requested.composePath,
+    composeProjectName: requested.composeProjectName,
+    secretEnv: [],
+  };
+  await expect(runner.start(requested, 0)).rejects.toThrow("not approval");
+  await expect(runner.recover(requested, unit)).rejects.toThrow("not approval");
+  expect(deps.readCompose).not.toHaveBeenCalled();
+  expect(deps.generateSecretEnv).not.toHaveBeenCalled();
+  runner.stopPhysical(unit);
+  expect(compose.map(([action]) => action)).toEqual(["down"]);
+});
+
 describe("ContainerRunner: start (#2392 Phase 2)", () => {
   it("should run offset 0 from the original compose with no temp file", async () => {
     const { deps, compose, reached, temps } = makeDeps();

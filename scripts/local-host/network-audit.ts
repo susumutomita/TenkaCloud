@@ -26,11 +26,15 @@ export function workerDeadline(
     readonly runtimes?: readonly { readonly plan: LocalNetworkPlan }[];
   } = {},
 ): number {
-  const routes = plan?.publicRoutes.length ?? 0;
+  const count = (value?: LocalNetworkPlan) =>
+    (value?.publicRoutes.length ?? 0) +
+    (value?.egressRoutes.length ?? 0) +
+    (value?.egressSegments.length ?? 0);
+  const routes = count(plan);
   const runtimes = details.runtimes ?? [];
   const passes =
-    (operation === "publish" ? (details.previous?.publicRoutes.length ?? 0) + 3 * routes : routes) +
-    runtimes.reduce((total, runtime) => total + runtime.plan.publicRoutes.length, 0);
+    (operation === "publish" ? count(details.previous) + 3 * routes : routes) +
+    runtimes.reduce((total, runtime) => total + count(runtime.plan), 0);
   return Math.min(
     MAX_DEADLINE_MS,
     BASE_DEADLINE_MS + runtimes.length * RUNTIME_PASS_MS + passes * ROUTE_PASS_MS,

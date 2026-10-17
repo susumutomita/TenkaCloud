@@ -363,10 +363,20 @@ function checkOneNetworkDef(
   }
 }
 
+function checkReservedNetwork(name: string, violations: ComposePolicyViolation[]): void {
+  if (name.startsWith("egress-"))
+    deny(
+      violations,
+      "reserved-egress-network",
+      `Network ${name} uses the reserved egress- prefix.`,
+    );
+}
+
 function checkNetworks(doc: PlainObject, violations: ComposePolicyViolation[]): void {
   const networks = doc.networks;
   if (!isPlainObject(networks)) return;
   for (const [name, def] of Object.entries(networks)) {
+    checkReservedNetwork(name, violations);
     if (def === null || def === undefined) continue;
     if (!isPlainObject(def)) {
       deny(violations, "unknown-compose-feature", `networks.${name} must be empty or a mapping`);
@@ -630,6 +640,12 @@ function checkService(
   for (const key of Object.keys(service)) {
     if (!ALLOWED_SERVICE_KEYS.has(key)) checkServiceKey(name, key, violations);
   }
+  const networks = service.networks;
+  let networkNames: unknown[] = [];
+  if (Array.isArray(networks)) networkNames = networks;
+  else if (isPlainObject(networks)) networkNames = Object.keys(networks);
+  for (const network of networkNames)
+    if (typeof network === "string") checkReservedNetwork(network, violations);
   checkBuild(name, service.build, context, fs, violations);
   checkServiceVolumes(name, service.volumes, namedVolumes, context, fs, violations);
   checkPorts(name, service.ports, violations);

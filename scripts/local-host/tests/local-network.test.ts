@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
-import { parse } from "yaml";
+import { parse, stringify } from "yaml";
+import { allocateNetworkSubnets } from "../docker-networks";
+import * as localNetwork from "../local-network";
 import {
   assertNoNetworkOverlap,
+  egressComposeSource,
   isolatedCompose,
   localNetworkPlan,
   requiredNetworkValue,
@@ -188,3 +191,108 @@ test("six independently owned plans have distinct bridge, chain and IPv6 identit
   expect(new Set(plans.map((plan) => plan.inputChain)).size).toBe(6);
   expect(new Set(plans.map((plan) => plan.segments[0]?.ipv6)).size).toBe(6);
 });
+
+/* eslint-disable sonarjs/no-hardcoded-ip -- Synthetic addresses are test data and are never contacted. */
+test("egress Compose attaches only the named service to an owned non-internal default gateway", () => {
+  const services = ["web"];
+  const document = parse(source);
+  const request = {
+    id: "upstream",
+    service: "web",
+    destination: "8.8.8.8",
+    port: 443,
+    purpose: "Synthetic upstream",
+  };
+  const authored = egressComposeSource(source, services);
+  const subnets = allocateNetworkSubnets(authored, "10.240.0.0/24", []);
+  const plan = localNetworkPlan("tch-egress-compose", subnets, {
+    composeText: authored,
+    definition: "pinned",
+    egress: [request],
+  });
+  const actual = parse(isolatedCompose(source, plan));
+  const segment = requiredNetworkValue(plan.egressSegments[0]);
+  expect(segment.bridge).toMatch(/^tce[a-f0-9]{12}$/u);
+  expect(actual.networks[segment.name].internal).toBe(false);
+  expect(actual.networks[segment.name].labels["tenkacloud.isolation.owner"]).toBe(plan.owner);
+  expect(actual.networks[segment.name].driver_opts["com.docker.network.bridge.name"]).toBe(
+    segment.bridge,
+  );
+  expect(
+    actual.networks[segment.name].ipam.config.map((entry: { subnet: string }) => entry.subnet),
+  ).toEqual([segment.ipv4, segment.ipv6]);
+  expect(actual.services.web.dns).toEqual(["10.240.0.17"]);
+  expect(actual.services.db.dns).toBeUndefined();
+  const authoredDns = source.replace("image: sample", "image: sample\n    dns: [8.8.8.8]");
+  expect(() => isolatedCompose(authoredDns, plan)).toThrow(
+    "services.web.dns is not in the reviewed allowlist",
+  );
+  expect(actual.services.web.networks[segment.name]).toEqual({ gw_priority: 1 });
+  expect(
+    Object.entries(actual.services.web.networks).filter(
+      ([, value]) => (value as { gw_priority?: number })?.gw_priority === 1,
+    ),
+  ).toHaveLength(1);
+  expect(actual.services.db.networks).toBeUndefined();
+  expect(plan.services.db).not.toContain(segment.name);
+  expect(plan.services.web).toContain(segment.name);
+  expect(document.services.web.networks).toBeUndefined();
+  const denied = make();
+  expect(denied.egressSegments).toEqual([]);
+  const deniedCompose = parse(isolatedCompose(source, denied));
+  expect(deniedCompose.services.web.dns).toBeUndefined();
+  expect(deniedCompose.services.db.dns).toBeUndefined();
+  expect(
+    Object.values(parse(isolatedCompose(source, denied)).networks).every(
+      (network) => (network as { internal: boolean }).internal,
+    ),
+  ).toBe(true);
+});
+
+/* eslint-enable sonarjs/no-hardcoded-ip */
+
+for (const source of [
+  "services: {app: {image: synthetic}}\nnetworks: {egress-authored: null}",
+  "services: {app: {image: synthetic}, db: {image: synthetic, networks: [egress-authored]}}",
+  "services: {app: {image: synthetic}, db: {image: synthetic, networks: {egress-authored: {}}}}",
+])
+  for (const services of [[], ["app"]])
+    test("egress composition refuses authored reserved networks before Docker even without grants", () => {
+      expect(() => egressComposeSource(source, services)).toThrow(
+        "Authored networks cannot use the reserved egress- prefix.",
+      );
+    });
+
+/* eslint-disable sonarjs/no-hardcoded-ip -- Synthetic composition only, never contacted. */
+for (const defect of ["unauthorized attachment", "DNS missing", "DNS extra", "plan mismatch"])
+  test(`final Compose independently refuses ${defect}`, () => {
+    const authored = "services: {web: {image: synthetic}, evil: {image: synthetic}}";
+    const egress = [
+      { id: "up", service: "web", destination: "8.8.8.8", port: 443, purpose: "test" },
+    ];
+    const composeText = egressComposeSource(authored, ["web"]);
+    const plan = localNetworkPlan(
+      "tch-final-check",
+      allocateNetworkSubnets(composeText, "10.240.0.0/24", []),
+      { composeText, definition: "synthetic", egress },
+    );
+    const output = isolatedCompose(authored, plan);
+    expect(output).not.toMatch(/[&*]a\d/u);
+    expect(() => localNetwork.assertEgressCompose(output, plan)).not.toThrow();
+    const document = parse(output);
+    const segment = requiredNetworkValue(plan.egressSegments[0]);
+    let checkedPlan = plan;
+    if (defect === "unauthorized attachment") {
+      document.services.evil.networks = ["default", segment.name];
+      checkedPlan = { ...plan, services: { ...plan.services, evil: ["default", segment.name] } };
+    } else if (defect === "DNS missing") delete document.services.web.dns;
+    else if (defect === "DNS extra") document.services.web.dns.push("8.8.4.4");
+    else document.services.evil.networks = [segment.name];
+    let expected = "DNS must be exactly";
+    if (defect === "unauthorized attachment") expected = "unauthorized Internet attachment";
+    if (defect === "plan mismatch") expected = "differ from the guard plan";
+    expect(() => localNetwork.assertEgressCompose(stringify(document), checkedPlan)).toThrow(
+      expected,
+    );
+  });
+/* eslint-enable sonarjs/no-hardcoded-ip */

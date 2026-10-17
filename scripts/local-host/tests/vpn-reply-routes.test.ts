@@ -3,8 +3,8 @@ import { expect, test } from "bun:test";
 import { LinuxNetworkGuard } from "../linux-network-guard";
 import { localNetworkPlan, requiredNetworkValue, segmentGateway } from "../local-network";
 
-function fixture() {
-  const plan = localNetworkPlan(
+function fixture(egress = false) {
+  let plan = localNetworkPlan(
     "tch-vpnreply",
     { default: "10.240.0.0/28" },
     {
@@ -13,7 +13,20 @@ function fixture() {
       eventId: "event",
     },
   );
-  const segment = requiredNetworkValue(plan.segments[0]);
+  const outbound = {
+    ...requiredNetworkValue(
+      localNetworkPlan("tch-vpnreply", { "aaa-egress": "10.240.0.16/28" }).segments[0],
+    ),
+    service: "web",
+  };
+  if (egress)
+    plan = {
+      ...plan,
+      segments: [outbound, ...plan.segments],
+      egressSegments: [outbound],
+      services: { web: ["default", outbound.name] },
+    };
+  const segment = requiredNetworkValue(plan.segments.find((entry) => entry.name === "default"));
   const ip6 = `${requiredNetworkValue(segment.ipv6.split("/")[0])}2`;
   const container = {
     Id: "abcdef123456",
@@ -25,11 +38,23 @@ function fixture() {
         "tenkacloud.isolation.generation": plan.generation,
       },
     },
-    HostConfig: { Privileged: false, CapAdd: [] },
+    HostConfig: {
+      Privileged: false,
+      CapAdd: [],
+      ...(egress ? { Dns: [segmentGateway(outbound, false)] } : {}),
+    },
     State: { Running: true, Pid: 42 },
     NetworkSettings: {
       SandboxKey: "/var/run/docker/netns/abcdef123456",
       Networks: {
+        ...(egress
+          ? {
+              [`${plan.project}_${outbound.name}`]: {
+                IPAddress: "10.240.0.18",
+                GlobalIPv6Address: "fd33::2",
+              },
+            }
+          : {}),
         [`${plan.project}_default`]: { IPAddress: "10.240.0.2", GlobalIPv6Address: ip6 },
       },
     },
@@ -70,6 +95,7 @@ function fixture() {
     ]);
   }
   const guard = new LinuxNetworkGuard({
+    interfaces: () => ({}),
     platform: "linux",
     read: () => {
       throw new Error("Unexpected read");
@@ -295,4 +321,15 @@ test("a two-network service whose reply route reads back wrong keeps admission c
   expect(() => f.guard.routeVpnReplies(f.plan, ["10.251.240.2"])).toThrow(
     "VPN reply route readback did not match its owned gateway.",
   );
+});
+
+test("VPN reply routes exclude an alphabetically first egress attachment in both families", () => {
+  const f = fixture(true);
+  f.guard.routeVpnReplies(f.plan, ["10.251.240.2", "fd55:240::2"]);
+  expect(f.mutations).toHaveLength(2);
+  const internal = requiredNetworkValue(
+    f.plan.segments.find((segment) => segment.name === "default"),
+  );
+  expect(f.mutations[0]).toContain(segmentGateway(internal, false));
+  expect(f.mutations[1]).toContain(segmentGateway(internal, true));
 });
