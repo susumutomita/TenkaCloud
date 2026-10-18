@@ -132,7 +132,8 @@ describe("dev-mock fixtures", () => {
   it("should route local players through event setup and their own team key", () => {
     const local = drills.find((p) => p.problemId === LOCAL_DRILL_PROBLEM_ID);
     expect(local?.description).toContain("大会・チーム・問題");
-    expect(local?.description).toContain("参加者 URL とチームキー");
+    expect(local?.description).toContain("http://127.0.0.1:5175/");
+    expect(local?.description).toContain("チームキーでサインイン");
     expect(local?.description).not.toContain("自動で入力済み");
     expect(local?.i18n?.en?.description).toContain("create an event and teams");
     expect(local?.i18n?.en?.description).toContain("with the team key");
@@ -323,7 +324,13 @@ describe("dev-mock fixtures", () => {
     const drill = drills.find((problem) => problem.problemId === LOCAL_DRILL_PROBLEM_ID);
     for (const body of [drill?.description, drill?.i18n?.en?.description]) {
       expect(body).toContain("`make local`");
-      expect(body).not.toContain("make install");
+      expect(body).toContain("make install");
+      expect(body).toContain("Bun 1.3.11");
+      expect(body).not.toContain("--recurse-submodules");
+      expect(body).toContain("catalog-sources.json");
+      expect(body).toContain("ref: main");
+      expect(body).toContain('"path"');
+      expect(body).toContain("5174");
       expect(body).not.toContain("bun link");
       expect(body).not.toContain("bun run");
       expect(body).toContain("Codespaces");

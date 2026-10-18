@@ -166,19 +166,19 @@
       </h1>
       <p class="sub" data-i18n="hero.sub">An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. Start with a local competition on one PC.</p>
       <p class="hero-vibe" data-i18n="hero.vibe"><strong>Start on one PC.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.</p>
-      <a class="hero-quest-card" href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" data-cta="local-start">
-        <span class="hero-quest-meta" data-i18n="hero.quest_meta">Local startup · No AWS account</span>
+      <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
+        <span class="hero-quest-meta" data-i18n="hero.quest_meta">First problem · No signup · About 3 minutes</span>
         <span class="hero-quest-tags">
-          <code>make local</code>
-          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">Getting started</span>
-          <span class="hero-quest-badge" data-i18n="hero.quest_diff">Requires Bun and Make</span>
+          <code>what-is-tenkacloud</code>
+          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">Browser walkthrough</span>
+          <span class="hero-quest-badge" data-i18n="hero.quest_diff">No installation</span>
         </span>
-        <span class="hero-quest-title" data-i18n="hero.quest_title">Start the host and solve a problem as a team.</span>
-        <span class="hero-quest-desc" data-i18n="hero.quest_desc">Follow the clone, startup and connection checks. Try Docker exercises on the same PC first. Remote Docker requires supported native Linux isolation; Mac / Docker Desktop is unsupported.</span>
-        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">Open the startup guide</span> →</span>
+        <span class="hero-quest-title" data-i18n="hero.quest_title">Learn TenkaCloud by solving a problem.</span>
+        <span class="hero-quest-desc" data-i18n="hero.quest_desc">Open a practice environment, reveal hints, submit answers and earn points in six steps. Then follow the same flow to start a competition on your own PC.</span>
+        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">Solve the first problem</span> →</span>
       </a>
       <p class="hero-secondary">
-        <a href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill"><span data-i18n="hero.cta_demo">Earlier introductory demo</span></a>
+        <a href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" data-cta="local-start"><span data-i18n="hero.cta_demo">Start on your computer</span></a>
         ·
         <a href="/videos/lp/tenkacloud-30s.mp4" target="_blank" rel="noopener noreferrer" data-cta="watch-30s"><span data-i18n="hero.cta_video">▶ Watch the 30-second tour</span></a>
         ·
@@ -267,7 +267,7 @@
   <div class="wrap">
     <div class="eyebrow" data-i18n="modes.eyebrow">Two competition formats</div>
     <h2 data-i18n="modes.h2">Live battles. Solo challenges. Or both.</h2>
-    <p class="lead" data-i18n="modes.lead">Battles share a live match; Challenges score problem-solving. The screens below show the earlier interface. Check the organizer guide for currently supported problems.</p>
+    <p class="lead" data-i18n="modes.lead">Battles share a live match; Challenges score problem-solving. The screens below are illustrative samples. Check the organizer guide for currently supported problems.</p>
     <div class="twoup">
       <div class="tile">
         <h3 class="kicker" data-i18n="modes.battle.kicker">Battle</h3>
@@ -434,7 +434,7 @@
       </div>
       <div class="flow sso-preview">
         <div class="credential-title">SSO Credentials</div>
-        <div class="credential-sub" data-i18n="preview.sso.desc">The earlier AWS Console interface is illustrated below. Available Console / CLI access in the current version depends on each problem’s access definition and hosting conditions.</div>
+        <div class="credential-sub" data-i18n="preview.sso.desc">The AWS Console screen below is an illustrative sample. Available Console / CLI access in the current version depends on each problem’s access definition and hosting conditions.</div>
         <div class="sso-alert">
           <b data-i18n="preview.sso.howto">How to use</b>
           <span data-i18n="preview.sso.body">Credential expiry is shown in the participant portal. Check the organizer guide for AWS setup and per-problem access conditions. Live AWS event performance remains unverified.</span>
@@ -443,7 +443,7 @@
           <div class="credential-row">
             <div class="credential-row-head">
               <code>microservice-migration-battle</code>
-              <button type="button"><span data-i18n="preview.sso.button">Earlier UI: AWS Console</span> ↗</button>
+              <button type="button"><span data-i18n="preview.sso.button">Example: AWS Console</span> ↗</button>
             </div>
             <div class="credential-kv">
               <div><span>AWS Account</span><code>c7782015332</code></div>
@@ -453,7 +453,7 @@
           <div class="credential-row">
             <div class="credential-row-head">
               <code>hello-world</code>
-              <button type="button"><span data-i18n="preview.sso.button">Earlier UI: AWS Console</span> ↗</button>
+              <button type="button"><span data-i18n="preview.sso.button">Example: AWS Console</span> ↗</button>
             </div>
             <div class="credential-kv">
               <div><span>AWS Account</span><code>677c9285832</code></div>
@@ -463,7 +463,7 @@
           <div class="credential-row">
             <div class="credential-row-head">
               <code>hello-world-battle</code>
-              <button type="button"><span data-i18n="preview.sso.button">Earlier UI: AWS Console</span> ↗</button>
+              <button type="button"><span data-i18n="preview.sso.button">Example: AWS Console</span> ↗</button>
             </div>
             <div class="credential-kv">
               <div><span>AWS Account</span><code>677c9285832</code></div>
@@ -502,11 +502,11 @@
       <p class="agent-prompt-lead" data-i18n="extend.agent_lead">Paste the prompt below into Claude Code or Codex and the agent will explain TenkaCloud and guide you through playing or hosting. It reads the LLM briefing <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a>.</p>
       <pre class="agent-prompt-text" id="agent-prompt-text">Fetch https://tenkacloud.com/llms-full.txt and read it — it is the canonical AI-agent briefing for TenkaCloud. If you cannot fetch URLs, ask me to paste its contents instead. Then, in my language: (1) explain what TenkaCloud is in about five sentences, (2) ask whether I want to PLAY (no AWS account needed) or HOST my own event on AWS, and (3) guide me step by step through the matching quick start from the briefing, stating costs and teardown before anything touches a real AWS account.</pre>
       <div class="agent-prompt-video">
-        <iframe src="https://www.youtube.com/embed/GDu9FhWrQns" title="Earlier local startup walkthrough; use the guide for current steps" data-i18n-src="extend.agent_video_embed_src" data-i18n-title="extend.agent_video_title" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+        <iframe src="https://www.youtube.com/embed/GDu9FhWrQns" title="Local startup introduction; use the walkthrough and guide for current steps" data-i18n-src="extend.agent_video_embed_src" data-i18n-title="extend.agent_video_title" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
       </div>
       <div class="agent-prompt-actions">
         <a href="https://www.youtube.com/watch?v=GDu9FhWrQns" target="_blank" rel="noopener noreferrer" data-cta="watch-ai-local-mac" data-i18n-href="extend.agent_video_href"><span data-i18n="extend.agent_video">▶ Watch on YouTube</span></a>
-        <a href="/portal-demo/?demo=1&amp;goto=/problems/01HZX0M2A1AGENTMACTENKA0003" data-cta="try-ai-local-mac"><span data-i18n="extend.agent_tutorial">View the earlier introductory demo →</span></a>
+        <a href="/portal-demo/?demo=1&amp;goto=/problems/01HZX0M2A1AGENTMACTENKA0003" data-cta="try-ai-local-mac"><span data-i18n="extend.agent_tutorial">Continue in the browser walkthrough →</span></a>
       </div>
     </div>
   </div>
@@ -688,7 +688,7 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=0506e0925a" defer></script>
+<script src="./app.js?v=cc787e2d09" defer></script>
 
 </body>
 </html>

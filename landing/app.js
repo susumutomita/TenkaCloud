@@ -141,15 +141,15 @@
         "ローカルと AWS クラウドで開催する OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。まずは同じ PC でローカル競技を試せます。",
       "hero.vibe":
         "<strong>まずは、同じ PC で。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。",
-      "hero.quest_meta": "ローカル起動 · AWS アカウント不要",
-      "hero.quest_badge": "起動ガイド",
-      "hero.quest_diff": "Bun・Make を用意",
-      "hero.quest_title": "起動して、チームで問題を解く。",
+      "hero.quest_meta": "最初の1問 · 登録不要 · 約3分",
+      "hero.quest_badge": "ブラウザ体験版",
+      "hero.quest_diff": "インストール不要",
+      "hero.quest_title": "TenkaCloud を、問題を解きながら知る。",
       "hero.quest_desc":
-        "取得・起動・接続確認を順番に案内します。Docker 演習はまず同じ PC で。別端末からの Docker 利用には対応 Linux の隔離モードが必要で、Mac / Docker Desktop は未対応です。",
-      "hero.quest_cta": "起動手順を開く",
+        "練習環境を開き、ヒントと回答提出、得点を6つのステップで体験します。ブラウザ内の体験後は、同じ流れで自分の PC に競技を起動できます。",
+      "hero.quest_cta": "最初の問題を解く",
       "hero.startHref": "/docs/getting-started/#local-start",
-      "hero.cta_demo": "旧版の紹介デモ",
+      "hero.cta_demo": "自分の PC で起動する",
       "hero.cta_video": "▶ 30 秒でわかる",
       "hero.host_prefix": "主催者の方へ:",
       "hero.cta_host": "開催ガイド",
@@ -193,7 +193,7 @@
       "modes.eyebrow": "2 つの競技形式",
       "modes.h2": "対戦か、演習か。両方か。",
       "modes.lead":
-        "共有状態で競う Battle と、問題を解く Challenge。下の画面は旧版の表示例です。現行の対応問題は運営ガイドで確認してください。",
+        "共有状態で競う Battle と、問題を解く Challenge。下は画面サンプルです。現行の対応問題は運営ガイドで確認してください。",
       "modes.battle.kicker": "Battle",
       "modes.battle.p":
         "Cryptography Battle はチーム共通の試合状態を使い、行動に応じて得点します。AWS 問題の採点方式と接続条件は運営ガイドで確認してください。",
@@ -224,11 +224,11 @@
       "preview.quests.unsolved_status": "未解答",
       "preview.quests.cleared": "⌄ 解決済み (0)",
       "preview.sso.desc":
-        "下は旧版の AWS Console 接続画面の例です。現行版で利用できる Console / CLI は、問題ごとの access 定義と開催条件で決まります。",
+        "下は AWS Console 接続の画面サンプルです。現行版で利用できる Console / CLI は、問題ごとの access 定義と開催条件で決まります。",
       "preview.sso.howto": "使い方",
       "preview.sso.body":
         "資格情報の期限は参加者画面に表示します。AWS 開催の設定と問題ごとの接続条件は運営ガイドで確認してください。実 AWS での大会性能は未検証です。",
-      "preview.sso.button": "旧版: AWS Console",
+      "preview.sso.button": "表示例: AWS Console",
 
       "aud.eyebrow": "誰のための",
       "aud.h2": "クラウド実戦力を、組織で育てる。",
@@ -326,8 +326,8 @@
       "extend.agent_video": "▶ YouTube で見る",
       "extend.agent_video_href": "https://www.youtube.com/watch?v=nLsSJ3npdfw",
       "extend.agent_video_embed_src": "https://www.youtube.com/embed/nLsSJ3npdfw",
-      "extend.agent_video_title": "以前のローカル起動手順の動画（現行手順はガイド参照）",
-      "extend.agent_tutorial": "旧版の紹介デモを見る →",
+      "extend.agent_video_title": "ローカル起動の紹介動画（現行手順は体験版・ガイド参照）",
+      "extend.agent_tutorial": "ブラウザ体験版で進める →",
 
       "book.eyebrow": "本で読む",
       "book.h2": "作り方を、一冊にまとめてあります。",
@@ -441,15 +441,15 @@
         "An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. Start with a local competition on one PC.",
       "hero.vibe":
         "<strong>Start on one PC.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.",
-      "hero.quest_meta": "Local startup · No AWS account",
-      "hero.quest_badge": "Getting started",
-      "hero.quest_diff": "Requires Bun and Make",
-      "hero.quest_title": "Start the host and solve a problem as a team.",
+      "hero.quest_meta": "First problem · No signup · About 3 minutes",
+      "hero.quest_badge": "Browser walkthrough",
+      "hero.quest_diff": "No installation",
+      "hero.quest_title": "Learn TenkaCloud by solving a problem.",
       "hero.quest_desc":
-        "Follow the clone, startup and connection checks. Try Docker exercises on the same PC first. Remote Docker requires supported native Linux isolation; Mac / Docker Desktop is unsupported.",
-      "hero.quest_cta": "Open the startup guide",
+        "Open a practice environment, reveal hints, submit answers and earn points in six steps. Then follow the same flow to start a competition on your own PC.",
+      "hero.quest_cta": "Solve the first problem",
       "hero.startHref": "/docs/getting-started/index.en.html#local-start",
-      "hero.cta_demo": "Earlier introductory demo",
+      "hero.cta_demo": "Start on your computer",
       "hero.cta_video": "▶ Watch the 30-second tour",
       "hero.host_prefix": "Hosting an event?",
       "hero.cta_host": "Hosting guide",
@@ -493,7 +493,7 @@
       "modes.eyebrow": "Two competition formats",
       "modes.h2": "Live battles. Solo challenges. Or both.",
       "modes.lead":
-        "Battles share a live match; Challenges score problem-solving. The screens below show the earlier interface. Check the organizer guide for currently supported problems.",
+        "Battles share a live match; Challenges score problem-solving. The screens below are illustrative samples. Check the organizer guide for currently supported problems.",
       "modes.battle.kicker": "Battle",
       "modes.battle.p":
         "Cryptography Battle keeps shared match state and scores player actions. Check the organizer guide for AWS problem scoring and access conditions.",
@@ -524,11 +524,11 @@
       "preview.quests.unsolved_status": "Unanswered",
       "preview.quests.cleared": "⌄ Cleared (0)",
       "preview.sso.desc":
-        "The earlier AWS Console interface is illustrated below. Available Console / CLI access in the current version depends on each problem’s access definition and hosting conditions.",
+        "The AWS Console screen below is an illustrative sample. Available Console / CLI access in the current version depends on each problem’s access definition and hosting conditions.",
       "preview.sso.howto": "How to use",
       "preview.sso.body":
         "Credential expiry is shown in the participant portal. Check the organizer guide for AWS setup and per-problem access conditions. Live AWS event performance remains unverified.",
-      "preview.sso.button": "Earlier UI: AWS Console",
+      "preview.sso.button": "Example: AWS Console",
 
       "aud.eyebrow": "Who it's for",
       "aud.h2": "Build cloud capability across the org.",
@@ -627,8 +627,8 @@
       "extend.agent_video_href": "https://www.youtube.com/watch?v=GDu9FhWrQns",
       "extend.agent_video_embed_src": "https://www.youtube.com/embed/GDu9FhWrQns",
       "extend.agent_video_title":
-        "Earlier local startup walkthrough; use the guide for current steps",
-      "extend.agent_tutorial": "View the earlier introductory demo →",
+        "Local startup introduction; use the walkthrough and guide for current steps",
+      "extend.agent_tutorial": "Continue in the browser walkthrough →",
 
       "book.eyebrow": "Read the book",
       "book.h2": "The whole method, in one book.",

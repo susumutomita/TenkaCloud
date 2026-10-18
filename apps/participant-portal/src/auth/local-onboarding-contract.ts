@@ -1,14 +1,7 @@
-/**
- * Participant-facing fresh-clone contract: Docker only (Issue #2906).
- *
- * README.md, README.ja.md, and the demo fixture are pinned
- * to this sequence by tests. `make local` needs Git, Make, Docker Engine, and
- * Docker Compose v2 on the host — no Bun, Node, or node_modules. The prior
- * Bun-based sequence (`make local-onboard` then `make local`) survives as the
- * developer path under `make local-dev`.
- */
+/** Fresh-clone local hosting uses Bun + SQLite; Docker is needed for Docker exercises. */
 export const LOCAL_ONBOARDING_COMMANDS = [
-  "git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git",
+  "git clone https://github.com/susumutomita/TenkaCloud.git",
   "cd TenkaCloud",
+  "make install",
   "make local",
 ] as const;

@@ -173,8 +173,8 @@ describe("documentation home by role", () => {
   });
 });
 
-/** Current startup is primary; the earlier demo stays secondary with its analytics key. */
-describe("landing current startup entry", () => {
+/** The browser onboarding is primary; current startup stays accessible after the walkthrough. */
+describe("landing interactive onboarding entry", () => {
   const index = read("landing/index.html");
   const app = read("landing/app.js");
 
@@ -192,20 +192,21 @@ describe("landing current startup entry", () => {
     expect(hero).not.toContain("cta-row");
   });
 
-  it("routes the primary card to current startup before the earlier demo", () => {
+  it("routes the primary card to the existing six-step browser walkthrough", () => {
     const hero = heroSection(index);
     expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
     const card = hero.slice(hero.indexOf('class="hero-quest-card"'));
     const opening = card.slice(0, card.indexOf(">"));
-    expect(opening).toContain('href="/docs/getting-started/#local-start"');
-    expect(opening).toContain('data-cta="local-start"');
+    expect(opening).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
+    expect(opening).toContain('data-cta="start-drill"');
     expect(opening).not.toContain("target=");
-    expect(hero.indexOf('href="/portal-demo/?demo=1&amp;goto=start"')).toBeGreaterThan(
+    expect(hero.indexOf('href="/docs/getting-started/#local-start"')).toBeGreaterThan(
       hero.indexOf('class="hero-secondary"'),
     );
     expect(hero).not.toContain('href="/portal-demo/start');
     expect(hero).toContain('data-cta="start-drill"');
-    expect(hero).toContain("Mac / Docker Desktop");
+    expect(hero).toContain("ヒントと回答提出、得点を6つのステップ");
+    expect(hero).not.toContain("旧版");
   });
 
   it("should not present the Lite/Codespaces mode choice anywhere in the hero", () => {
@@ -228,7 +229,7 @@ describe("landing current startup entry", () => {
     expect(index).toContain('data-i18n-href="hero.startHref"');
   });
 
-  it("publishes the startup path and remote Docker condition in static English", () => {
+  it("publishes the walkthrough and secondary startup path in static English", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
     expect(hero).toContain('href="./docs/manual/organizer/index.en.html"');
@@ -237,8 +238,8 @@ describe("landing current startup entry", () => {
     expect(hero).toContain('data-cta="start-drill"');
     expect(hero).toContain('href="/docs/getting-started/index.en.html#local-start"');
     expect(hero).toContain('data-cta="local-start"');
-    expect(hero).toContain("Remote Docker requires supported native Linux isolation");
-    expect(hero).toContain("Earlier introductory demo");
+    expect(hero).toContain("submit answers and earn points in six steps");
+    expect(hero).not.toContain("Earlier introductory demo");
   });
 });
 
