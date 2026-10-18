@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" width="720" height="400" role="img" aria-label="stackstack-recover architecture">
+  <style>
+    .box { fill: #ffffff; stroke: #37475a; stroke-width: 1.5; }
+    .soft { fill: #f4f6f8; stroke: #9aa7b4; stroke-width: 1.2; }
+    .t { font-family: system-ui, sans-serif; font-size: 13px; fill: #16191f; }
+    .s { font-family: system-ui, sans-serif; font-size: 11px; fill: #5f6b7a; }
+    .h { font-family: system-ui, sans-serif; font-size: 14px; font-weight: 600; fill: #16191f; }
+    .flow { stroke: #37475a; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+    .dash { stroke: #9aa7b4; stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; marker-end: url(#b); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#37475a"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9aa7b4"/>
+    </marker>
+  </defs>
+
+  <rect x="12" y="12" width="696" height="376" rx="10" class="soft"/>
+  <text x="28" y="36" class="h">one container — your machine (no cloud account)</text>
+
+  <rect x="28" y="52" width="188" height="96" rx="6" class="box"/>
+  <text x="40" y="76" class="t">your checkout</text>
+  <text x="40" y="96" class="s">API /api/settings  (runtime)</text>
+  <text x="40" y="113" class="s">API /api/config    (runtime)</text>
+  <text x="40" y="130" class="s">state/              (writable)</text>
+
+  <rect x="264" y="52" width="188" height="96" rx="6" class="box"/>
+  <text x="276" y="76" class="t">edge — public entrance</text>
+  <text x="276" y="96" class="s">GET  /edge/healthz</text>
+  <text x="276" y="113" class="s">GET  /edge/board</text>
+  <text x="276" y="130" class="s">POST /edge/posts</text>
+
+  <rect x="500" y="52" width="188" height="96" rx="6" class="box"/>
+  <text x="512" y="76" class="t">board (the origin)</text>
+  <text x="512" y="96" class="s">GET /, /api/board, /api/logs</text>
+  <text x="512" y="113" class="s">GET /posture, /healthz</text>
+  <text x="512" y="130" class="s">POST /api/posts</text>
+
+  <rect x="264" y="196" width="188" height="80" rx="6" class="box"/>
+  <text x="276" y="220" class="t">watchdog</text>
+  <text x="276" y="240" class="s">asks /edge/healthz over HTTP</text>
+  <text x="276" y="257" class="s">drains the board's public paths</text>
+
+  <rect x="500" y="196" width="188" height="80" rx="6" class="box"/>
+  <text x="512" y="220" class="t">scheduled job</text>
+  <text x="512" y="240" class="s">writes state/digest/latest.json</text>
+  <text x="512" y="257" class="s">only where the policy permits</text>
+
+  <rect x="28" y="196" width="188" height="80" rx="6" class="box"/>
+  <text x="40" y="220" class="t">ops plane</text>
+  <text x="40" y="240" class="s">/ops, /ops/status</text>
+  <text x="40" y="257" class="s">separate from the entrance</text>
+
+  <rect x="28" y="312" width="660" height="56" rx="6" class="box"/>
+  <text x="40" y="336" class="t">GET /posture — five gates, measured</text>
+  <text x="40" y="356" class="s">service_restored · auth_enforced · digest_ok · scope_narrow · survived_restart</text>
+
+  <path class="flow" d="M216 100 L258 100"/>
+  <path class="flow" d="M452 100 L494 100"/>
+  <path class="dash" d="M358 190 L358 154"/>
+  <path class="dash" d="M594 190 L594 154"/>
+  <path class="dash" d="M122 190 L122 154"/>
+  <path class="dash" d="M358 306 L358 282"/>
+  <path class="dash" d="M594 306 L594 282"/>
+  <path class="dash" d="M122 306 L122 282"/>
+</svg>

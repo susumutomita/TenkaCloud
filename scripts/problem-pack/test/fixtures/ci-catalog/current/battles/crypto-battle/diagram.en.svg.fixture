@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="650" viewBox="0 0 760 650" role="img" aria-labelledby="title desc">
+  <title id="title">Cryptography Battle: solve, score, and use public evidence</title>
+  <desc id="desc">Choose an Order, calculate, and submit before its deadline. LEAK publishes information that opponents can use in HUNT. Opening your own vault does not publish it.</desc>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10" fill="#52677e"/></marker></defs>
+  <style>text{font-family:system-ui,-apple-system,'Noto Sans JP',sans-serif;fill:#183149}.heading{font-size:23px;font-weight:700}.label{font-size:18px;font-weight:700}.small{font-size:15px}.arrow{stroke:#52677e;stroke-width:2.5;fill:none;marker-end:url(#arrow)}</style>
+  <rect width="760" height="650" rx="16" fill="#f4f8fc"/>
+  <text x="30" y="43" class="heading">Solve an Order to earn points</text>
+  <text x="30" y="71" class="small">Ready → Order → Calculate → Score</text>
+  <g fill="white" stroke="#9bb8d5" stroke-width="2">
+    <rect x="30" y="92" width="210" height="94" rx="12"/>
+    <rect x="276" y="92" width="210" height="94" rx="12"/>
+    <rect x="522" y="92" width="208" height="94" rx="12"/>
+  </g>
+  <text x="48" y="126" class="label">① Get ready</text><text x="48" y="159" class="small">Start when all are ready</text>
+  <text x="294" y="126" class="label">② Pick an Order</text><text x="294" y="159" class="small">Check its deadline</text>
+  <text x="540" y="126" class="label">③ Calculate &amp; send</text><text x="540" y="159" class="small">Correct answer → points</text>
+  <path d="M243 139H271" class="arrow"/><path d="M489 139H517" class="arrow"/>
+  <text x="30" y="236" class="heading">Published information becomes evidence</text>
+  <text x="30" y="264" class="small">LEAK → Public record → HUNT</text>
+  <rect x="30" y="287" width="700" height="88" rx="12" fill="#fff4df" stroke="#c89127" stroke-width="2"/>
+  <text x="50" y="321" class="label">Publish for quick points (LEAK)</text>
+  <text x="50" y="351" class="small">Skip the calculation, but give opponents the displayed information.</text>
+  <path d="M380 378V403" class="arrow"/>
+  <rect x="30" y="409" width="320" height="101" rx="12" fill="white" stroke="#9bb8d5" stroke-width="2"/>
+  <rect x="410" y="409" width="320" height="101" rx="12" fill="#f2edff" stroke="#a58acb" stroke-width="2"/>
+  <path d="M380 403V424H356" class="arrow"/>
+  <text x="50" y="445" class="label">Public records</text><text x="50" y="477" class="small">See whose data is available</text>
+  <path d="M354 460H404" class="arrow"/>
+  <text x="430" y="445" class="label">Recover a secret (HUNT)</text><text x="430" y="477" class="small">Use evidence to earn points</text>
+  <rect x="30" y="535" width="700" height="91" rx="12" fill="#e8f3ed"/>
+  <text x="50" y="568" class="label">Your vault is visible only to you</text>
+  <text x="50" y="598" class="small">Opening it publishes nothing. Check what LEAK will reveal.</text>
+</svg>

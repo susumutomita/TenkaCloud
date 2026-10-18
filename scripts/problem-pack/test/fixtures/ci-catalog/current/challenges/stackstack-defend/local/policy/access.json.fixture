@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "readsPerRound": 200,
+  "rules": [
+    {
+      "effect": "allow",
+      "actions": ["read"],
+      "actor": { "role": "moderator" },
+      "resource": "*"
+    },
+    {
+      "effect": "allow",
+      "actions": ["read", "publish"],
+      "actor": "*",
+      "resource": "*"
+    }
+  ]
+}

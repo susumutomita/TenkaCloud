@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 320" font-family="Helvetica,Arial,sans-serif">
+<defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748B"/></marker></defs>
+<rect x="0" y="0" width="640" height="320" fill="#FFFFFF"/>
+<text x="320" y="28" text-anchor="middle" font-size="17" font-weight="700" fill="#0F172A">wp2shell-local-lab -- one disposable box, two stages</text>
+
+<!-- Stage 1: attack -->
+<text x="20" y="54" font-size="12" font-weight="700" fill="#B91C1C">Stage 1 -- attack (unauthenticated)</text>
+<rect x="20" y="66" width="150" height="56" rx="8" fill="#FEF2F2" stroke="#DC2626" stroke-width="2"/>
+<text x="95" y="88" text-anchor="middle" font-size="11" font-weight="700" fill="#7F1D1D">POST /batch/v1</text>
+<text x="95" y="104" text-anchor="middle" font-size="10" fill="#7F1D1D">trailing-slash path</text>
+
+<rect x="222" y="66" width="170" height="56" rx="8" fill="#FEF2F2" stroke="#DC2626" stroke-width="2"/>
+<text x="307" y="88" text-anchor="middle" font-size="11" font-weight="700" fill="#7F1D1D">route confusion</text>
+<text x="307" y="104" text-anchor="middle" font-size="10" fill="#7F1D1D">permission lookup misses -&gt; fail-open</text>
+
+<rect x="444" y="66" width="176" height="56" rx="8" fill="#FEF2F2" stroke="#DC2626" stroke-width="2"/>
+<text x="532" y="88" text-anchor="middle" font-size="11" font-weight="700" fill="#7F1D1D">internal reports handler</text>
+<text x="532" y="104" text-anchor="middle" font-size="10" fill="#7F1D1D">flag 1: chain-discovery</text>
+
+<line x1="170" y1="94" x2="219" y2="94" stroke="#DC2626" stroke-width="2" marker-end="url(#a)"/>
+<line x1="392" y1="94" x2="441" y2="94" stroke="#DC2626" stroke-width="2" marker-end="url(#a)"/>
+
+<rect x="222" y="150" width="170" height="56" rx="8" fill="#FEF2F2" stroke="#DC2626" stroke-width="2"/>
+<text x="307" y="172" text-anchor="middle" font-size="11" font-weight="700" fill="#7F1D1D">category = ' UNION SELECT</text>
+<text x="307" y="188" text-anchor="middle" font-size="10" fill="#7F1D1D">(string-concatenated SQL)</text>
+
+<rect x="444" y="150" width="176" height="56" rx="8" fill="#FEF2F2" stroke="#DC2626" stroke-width="2"/>
+<text x="532" y="172" text-anchor="middle" font-size="11" font-weight="700" fill="#7F1D1D">vault table</text>
+<text x="532" y="188" text-anchor="middle" font-size="10" fill="#7F1D1D">flag 2: compromise-proof</text>
+
+<line x1="532" y1="122" x2="307" y2="148" stroke="#DC2626" stroke-width="2" marker-end="url(#a)"/>
+<line x1="392" y1="178" x2="441" y2="178" stroke="#DC2626" stroke-width="2" marker-end="url(#a)"/>
+
+<!-- Stage 2: defend -->
+<text x="20" y="250" font-size="12" font-weight="700" fill="#166534">Stage 2 -- defend (SRE console, token-authenticated)</text>
+<rect x="20" y="262" width="180" height="46" rx="8" fill="#F0FDF4" stroke="#16A34A" stroke-width="2"/>
+<text x="110" y="281" text-anchor="middle" font-size="10.5" font-weight="700" fill="#14532D">set-config: routeIsolation</text>
+<text x="110" y="296" text-anchor="middle" font-size="10" fill="#14532D">+ parameterizedQueries</text>
+
+<rect x="228" y="262" width="180" height="46" rx="8" fill="#F0FDF4" stroke="#16A34A" stroke-width="2"/>
+<text x="318" y="281" text-anchor="middle" font-size="10.5" font-weight="700" fill="#14532D">remove-rogue-admin</text>
+<text x="318" y="296" text-anchor="middle" font-size="10" fill="#14532D">remove-persistence</text>
+
+<rect x="436" y="262" width="184" height="46" rx="8" fill="#F0FDF4" stroke="#16A34A" stroke-width="2"/>
+<text x="528" y="281" text-anchor="middle" font-size="10.5" font-weight="700" fill="#14532D">rotate-salts</text>
+<text x="528" y="296" text-anchor="middle" font-size="10" fill="#14532D">then replay -&gt; rejected</text>
+
+<line x1="200" y1="285" x2="225" y2="285" stroke="#16A34A" stroke-width="2" marker-end="url(#a)"/>
+<line x1="408" y1="285" x2="433" y2="285" stroke="#16A34A" stroke-width="2" marker-end="url(#a)"/>
+</svg>

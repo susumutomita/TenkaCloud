@@ -1,0 +1,242 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "wp-midnight-admin",
+  "name": "深夜の管理者",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45 分",
+  "shortDescription": "デザイン事務所 「さくらデザイン」 の WordPress サイトを引き継いだ翌朝、監視ツールから 「見覚えのない管理者アカウントが夜間に増えた」 という通知が届いた。 攻撃するのではなく、外から見える手がかりだけで 「誰が・どうやって・何を残したか」 を突き止めよう。",
+  "instructions": "Fixture wp-midnight-admin: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture wp-midnight-admin: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture wp-midnight-admin: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "wordpress",
+    "incident-response",
+    "account-compromise",
+    "log-analysis",
+    "operations",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (WordPress site)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback scorer)"
+    }
+  ],
+  "learningGoals": [
+    "予期しない管理者アカウントがインシデントの最重要シグナルであることを、 実際の環境で体感できるようになる",
+    "WordPress が REST API で利用者一覧を外部公開しうること・ アクセスログからブルートフォースと成功ログインを読み分けられること・ 入っているプラグインを棚卸しできることを、 自分で確かめられるようになる",
+    "コードを触らずにできる是正 (アカウント削除・資格情報のローテーション・MFA / 最小権限・不要プラグインの削除・利用者一覧の公開制限) を説明できるようになる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Midnight Admin",
+      "shortDescription": "Fixture wp-midnight-admin: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture wp-midnight-admin: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture wp-midnight-admin: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture wp-midnight-admin: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Feel, in a real environment, that an unexpected administrator account is a top incident signal",
+        "Confirm, yourself, that WordPress can expose the user list through the REST API, that you can tell a brute-force burst from the one successful login in an access log, and that you can take inventory of the installed plugins",
+        "Be able to explain the code-free fixes — delete the account, rotate credentials, MFA / least privilege, remove abandoned plugins, and restrict the public user listing"
+      ],
+      "checks": [
+        {
+          "id": "rogue-admin",
+          "label": "The admin nobody added",
+          "hints": [
+            {
+              "id": "rogue-admin-1",
+              "content": "Fixture wp-midnight-admin: .i18n.en.checks.0.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "rogue-admin-2",
+              "content": "Fixture wp-midnight-admin: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "rogue-admin-3",
+              "content": "Fixture wp-midnight-admin: .i18n.en.checks.0.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "login-trail",
+          "label": "How they got in",
+          "hints": [
+            {
+              "id": "login-trail-1",
+              "content": "After WHO comes HOW they got in. The intruder came in from somewhere. If you can read the record of access the server keeps (a log), you'll see a wall of failures and one success."
+            },
+            {
+              "id": "login-trail-2",
+              "content": "Fixture wp-midnight-admin: .i18n.en.checks.1.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "login-trail-3",
+              "content": "Fixture wp-midnight-admin: .i18n.en.checks.1.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "orphan-plugin",
+          "label": "The plugin left to rot",
+          "hints": [
+            {
+              "id": "orphan-plugin-1",
+              "content": "Fixture wp-midnight-admin: .i18n.en.checks.2.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "orphan-plugin-2",
+              "content": "A WordPress plugin exposes a description file at `/wp-content/plugins/<name>/readme.txt`. Its `Stable tag` and `Tested up to` lines tell you how long ago its updates stopped."
+            },
+            {
+              "id": "orphan-plugin-3",
+              "content": "Fixture wp-midnight-admin: .i18n.en.checks.2.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "spam-post",
+          "label": "A post you never wrote",
+          "hints": [
+            {
+              "id": "spam-post-1",
+              "content": "The last question is WHAT the intruder did. Whoever hijacks an admin usually leaves a trace — a post, a link. Look over the published posts and check whether you wrote each one."
+            },
+            {
+              "id": "spam-post-2",
+              "content": "Fixture wp-midnight-admin: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "spam-post-3",
+              "content": "Fixture wp-midnight-admin: .i18n.en.checks.3.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "hintReveal": "flat",
+    "checks": [
+      {
+        "id": "rogue-admin",
+        "label": "身に覚えのない管理者",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "rogue-admin-1",
+            "content": "インシデントで最初に確かめるのは 「誰が」 だ。 まず、 今このサイトに何人の利用者 (投稿者) がいて、 それぞれ身に覚えがあるかを確認しよう。 WordPress はその一覧を外部に見せてしまうことがある。",
+            "penalty": 0
+          },
+          {
+            "id": "rogue-admin-2",
+            "content": "Fixture wp-midnight-admin: .scoring.checks.0.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 6
+          },
+          {
+            "id": "rogue-admin-3",
+            "content": "アクセス先 URL の `/wp-json/wp/v2/users` を開くと、 誰も追加していない管理者 `media-sync` が混じっている。 その `description` (bio) に監査用の合言葉が書かれている。 対策: 不審な管理者アカウントは即削除し、 全管理者を棚卸しする。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "login-trail",
+        "label": "破られた入口",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "login-trail-1",
+            "content": "「誰が」 の次は 「どうやって入ったか」 だ。 侵入者はどこかから入っている。 サーバが記録しているアクセスの記録 (ログ) を読めば、 失敗の山と 1 回の成功が見える。",
+            "penalty": 0
+          },
+          {
+            "id": "login-trail-2",
+            "content": "運用者がログを公開フォルダに置き忘れていることがある。 `/server-logs/` の下のアクセスログ (`access.log`) を開き、 同じ IP から `POST /wp-login.php` が何度も失敗している 「総当たり」 の跡を探そう。",
+            "penalty": 6
+          },
+          {
+            "id": "login-trail-3",
+            "content": "Fixture wp-midnight-admin: .scoring.checks.1.hints.2.content. Synthetic narrative for platform contract tests.",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "orphan-plugin",
+        "label": "放置されたプラグイン",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "orphan-plugin-1",
+            "content": "侵入経路を調べるついでに、 サイトに入っている拡張機能 (プラグイン) を棚卸ししよう。 長年更新されていない放置プラグインは、 それ自体がリスクの温床だ。",
+            "penalty": 0
+          },
+          {
+            "id": "orphan-plugin-2",
+            "content": "WordPress のプラグインは `/wp-content/plugins/<名前>/readme.txt` という説明ファイルを公開している。 中の `Stable tag` や `Tested up to` を見れば、 いつから更新が止まっているかがわかる。",
+            "penalty": 6
+          },
+          {
+            "id": "orphan-plugin-3",
+            "content": "アクセス先 URL の `/wp-content/plugins/legacy-contact-form/readme.txt` を開くと、 `Tested up to: 4.9` という古いプラグインで、 運用メモ (NOTE) の行に合言葉がある。 対策: 使っていない / 放置されたプラグインは削除し、 残すものは最新に保つ。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "spam-post",
+        "label": "見知らぬ投稿",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "spam-post-1",
+            "content": "最後は 「侵入者が何をしたか」 だ。 管理者を乗っ取った相手は、 たいてい痕跡 (投稿・リンク) を残す。 公開されている投稿の一覧を、 書いた覚えがあるか眺めよう。",
+            "penalty": 0
+          },
+          {
+            "id": "spam-post-2",
+            "content": "投稿の一覧も REST で取れる: `/wp-json/wp/v2/posts`。 見知らぬ宣伝 (スパム) 投稿が混じっていないか探し、 その本文の 「元の HTML」 (ページのソース) まで覗こう。 合言葉は表示されない場所に隠れていることがある。",
+            "penalty": 6
+          },
+          {
+            "id": "spam-post-3",
+            "content": "Fixture wp-midnight-admin: .scoring.checks.3.hints.2.content. Synthetic narrative for platform contract tests.",
+            "penalty": 12
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 90,
+    "chapter": "3. 運用で直す"
+  }
+}

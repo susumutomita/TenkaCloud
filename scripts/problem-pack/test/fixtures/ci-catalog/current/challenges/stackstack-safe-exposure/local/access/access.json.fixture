@@ -1,0 +1,12 @@
+{
+  "defaultEffect": "allow",
+  "rules": [
+    {
+      "id": "monitoring-is-public",
+      "effect": "allow",
+      "methods": ["GET"],
+      "path": "/portal/healthz",
+      "require": []
+    }
+  ]
+}

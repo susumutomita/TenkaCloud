@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud cryptography Battle. Match state and scoring use the existing
+  coordination dispatcher. The default stack grants participant access only.
+  Enabling ScoreSteal adds one Standard String SSM parameter per team for an
+  optional hand-decryption exercise. No extra Lambda or KMS key is created.
+
+Parameters:
+  ScoreStealEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: Optional score-steal exercise; applies to a new match after deployment.
+  ScoreStealKey:
+    Type: Number
+    Default: 3
+    MinValue: 1
+    MaxValue: 9
+    Description: One-digit classroom decryption key. Not a production cryptographic key.
+  ScoreStealSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    MaxLength: 32
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: Random per-deployment receipt injected by the existing deploy chain.
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy-battles.sh script auto-injects
+      this value, you do not need to set it manually.
+    Description: >
+      Common prefix attached to all resource names. Used to prevent collisions
+      when multiple teams' stacks coexist in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+
+Conditions:
+  ScoreStealOn: !Equals [!Ref ScoreStealEnabled, "true"]
+
+Resources:
+  ScoreItemParameter:
+    Type: AWS::SSM::Parameter
+    Condition: ScoreStealOn
+    Properties:
+      Name: !Sub "/${NamePrefix}/score-item"
+      Type: String
+      Tier: Standard
+      Value: !Sub '{"key":${ScoreStealKey},"receipt":"${ScoreStealSeed}"}'
+      Description: Classroom decryption material and per-team retrieval receipt.
+  # Reuse the hello-world participant baseline and scoped SSM value access.
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # Participant access baseline (same across every problem in this catalog):
+      #   * SignInLocalDevelopmentAccess -- `aws login` (2025-11) OAuth2 flow
+      #     needs signin:* on the role's own oauth2/public-client/{localhost,remote}.
+      #     AWS-managed policy scoped narrowly to exactly that.
+      #   * cloudshell:* allow-list below -- browser shell with this role's
+      #     creds. Resource:* is unavoidable (environments are per-identity);
+      #     action set narrowed to the interactive open / use / close cycle +
+      #     credential rotation.
+      # Both are validated by scripts/validate-problems.ts; do not remove.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - !If
+                - ScoreStealOn
+                - Sid: ReadScoreItem
+                  Effect: Allow
+                  Action: [ssm:GetParameter, ssm:GetParameters]
+                  Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${NamePrefix}/score-item"
+                - !Ref AWS::NoValue
+              # Like hello-world: the Console detail page needs metadata listing.
+              # DescribeParameters has no resource-level scope; values remain
+              # restricted to the exact team parameter above. Competitor accounts
+              # must be dedicated to one team when enabling this Console exercise.
+              - !If
+                - ScoreStealOn
+                - Sid: DescribeOwnParameters
+                  Effect: Allow
+                  Action: ssm:DescribeParameters
+                  Resource: "*"
+                - !Ref AWS::NoValue
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+Outputs:
+  CoordinationItemEnabled:
+    Value: !Ref ScoreStealEnabled
+  CoordinationPrivateItem:
+    Condition: ScoreStealOn
+    Description: Server-only coordination input, excluded from participant outputs.
+    Value: !GetAtt ScoreItemParameter.Value
+  CoordinationParameterName:
+    Condition: ScoreStealOn
+    Value: !Ref ScoreItemParameter
+  CoordinationParameterConsoleUrl:
+    Condition: ScoreStealOn
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/${NamePrefix}/score-item/description?region=${AWS::Region}&tab=Table"
+  NamePrefix:
+    Description: Common resource prefix that this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN that competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

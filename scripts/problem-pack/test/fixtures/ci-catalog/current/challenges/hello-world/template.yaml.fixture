@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud sample problem (hello-world). Minimal smoke test stack that creates
+  a single SSM Parameter and nothing else. Use this for verifying that
+  `make deploy-battles` end-to-end works without exposing any vulnerable software
+  or public-facing resources. Free of charge under standard SSM tier.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy-battles.sh script auto-injects
+      this value, you do not need to set it manually.
+    Description: >
+      Common prefix attached to all resource names. Used to prevent collisions
+      when multiple teams' stacks coexist in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret injected by the deploy chain (cfnParameters:
+      FlagSeed = __RANDOM_PASSWORD__). Wrapped as TC{...} and stored as the SSM
+      Parameter value, so the flag can only be learned by reading the parameter
+      (never derived from the public NamePrefix). Same idiom as
+      challenges/net-evo-01-reachability.
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      # Public ownership metadata for the operator's AssumeRole permission boundary.
+      # ExternalId here is the deployment job ID, never the bootstrap/SSM secret.
+      Tags:
+        - Key: TenkaCloud:Purpose
+          Value: participant-viewer
+        - Key: TenkaCloud:ProblemId
+          Value: hello-world
+        - Key: TenkaCloud:JobId
+          Value: !Ref ExternalId
+        - Key: TenkaCloud:OperatorAccount
+          Value: !Ref TenkaCloudAccountId
+        - Key: TenkaCloud:StackId
+          Value: !Ref AWS::StackId
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow returns HTTP 400 unless the assumed
+      # role can call signin:* on its own oauth2/public-client/{localhost,remote}
+      # resources. SignInLocalDevelopmentAccess is the AWS-managed policy that
+      # scopes those permissions narrowly (= the minimal set AWS endorses).
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Issue #820 retraction / ADR-021: JAM/GameDay baseline = participant IAM
+              # Role MUST only touch its own problem's resources. Previous policy
+              # granted ssm:DescribeParameters / ssm:GetParametersByPath /
+              # cloudformation:ListStacks at Resource:*, leaking other tenants' SSM
+              # parameter names and CFn stack metadata via CLI. List-style IAM actions
+              # are no longer granted (AWS Console list view stays empty by design;
+              # the participant portal provides deep links to specific resources).
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  # GetParametersByPath is resource-scopable via path-prefix ARN.
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # ssm:DescribeParameters is a metadata-only API that AWS IAM
+              # does NOT accept resource-level permissions or tag-based
+              # Condition keys on. The AWS Console Parameter detail page
+              # calls it to render the sidebar list / breadcrumb, so without
+              # this Sid the hint's `ParameterConsoleUrl` deep link returns
+              # AccessDenied. Under TenkaCloud's per-team dedicated AWS
+              # account model (= one account holds exactly one team's stack),
+              # Resource:"*" here carries no cross-tenant leak risk. Same
+              # allowlist treatment as ConsoleEc2Metadata /
+              # ManageOwnTaskDefinitions / ReadLoadBalancerState on other
+              # problems (see TenkaCloud Issue #1316).
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              # CloudShell session lifecycle. Deliberately narrower than the
+              # AWS-managed AWSCloudShellFullAccess (which grants cloudshell:*):
+              # only the actions an interactive open / use / close cycle calls,
+              # plus credential rotation. File upload / download
+              # (cloudshell:GetFile{Upload,Download}Urls) is omitted -- the
+              # problem doesn't need it. CloudShell environments are per-identity
+              # so resource:* is the only practical scope for these actions.
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+
+  HelloParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/hello"
+      Type: String
+      # Discovered flag: the per-deploy random FlagSeed wrapped as TC{...}. The
+      # learner must actually read this parameter to obtain it - it is NOT
+      # derivable from the public NamePrefix (the previous "Hello from ${NamePrefix}"
+      # value could be reconstructed without reading anything, defeating the flag).
+      Value: !Sub "TC{${FlagSeed}}"
+      Description: !Sub "TenkaCloud hello-world flag parameter (${NamePrefix}). The value is the discovered flag."
+      Tier: Standard
+
+Outputs:
+  ParameterName:
+    Description: SSM Parameter name created by this stack.
+    Value: !Ref HelloParameter
+  # Canonical answer, scoring engine only (the player is not granted
+  # cloudformation:DescribeStacks, so this Output is invisible to them - they
+  # must read the SSM Parameter to learn the flag).
+  ParameterValue:
+    Description: The flag the learner submits after reading the SSM Parameter.
+    Value: !GetAtt HelloParameter.Value
+  # AWS Console deep link to THIS stack's parameter detail page. The detail
+  # page itself reads the value via ssm:GetParameter (scoped to
+  # `arn:aws:ssm:*:*:parameter/${NamePrefix}/*` above), but the Console
+  # navigation chrome (sidebar list, breadcrumb) calls ssm:DescribeParameters
+  # - a metadata-only API that AWS IAM does not allow resource-scoping on.
+  # `DescribeOwnParameters` Sid grants it with Resource:"*" (allowlisted; safe
+  # under per-team dedicated AWS account assumption - see Sid comment above).
+  # Console SSM router accepts literal slashes in the path (the leading `/` of
+  # the param name is dropped, internal slashes stay literal); the URL-encoded
+  # `%2F` variant returns HTTP 400.
+  ParameterConsoleUrl:
+    Description: AWS Console deep link to this stack's SSM Parameter detail page.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/${NamePrefix}/hello/description?region=${AWS::Region}&tab=Table"
+  NamePrefix:
+    Description: Common resource prefix that this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN that competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

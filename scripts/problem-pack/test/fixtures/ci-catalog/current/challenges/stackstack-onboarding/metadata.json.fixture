@@ -1,0 +1,203 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-onboarding",
+  "name": "初日の 15 分",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "15 分",
+  "shortDescription": "Fixture stackstack-onboarding: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture stackstack-onboarding: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack-onboarding: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture stackstack-onboarding: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "onboarding",
+    "stackstack",
+    "getting-started",
+    "local-play",
+    "container",
+    "web-app"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (board)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "ポータル・アプリ・ログ・設定ファイル・採点がどうつながっているかを、 1 周まわして体で覚える",
+    "アプリのログを自分で開いて、 起動時に何が起きたかを読み取れるようになる",
+    "設定を変えただけでは終わりではなく、 変えた結果を実際の挙動で確かめるまでが 1 セットだと理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The First Fifteen Minutes",
+      "shortDescription": "Fixture stackstack-onboarding: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack-onboarding: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack-onboarding: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture stackstack-onboarding: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Walk one full lap of portal, app, log, config file, and scoring, so the loop is familiar before it matters",
+        "Open an application's log yourself and read what happened at boot",
+        "Learn that changing a setting is only half the job: confirming the change through actual behavior is the other half"
+      ],
+      "checks": [
+        {
+          "id": "board-open",
+          "label": "Reach the board",
+          "hints": [
+            {
+              "id": "board-open-1",
+              "content": "Open the board from the portal's `Web` endpoint. The value this checkpoint wants is printed on that page itself."
+            },
+            {
+              "id": "board-open-2",
+              "content": "The board prints `board serial: SS-xxxxxxxx` near the top. Submit that whole string, `SS-` included. You can also run `GET /api/board` from `/docs` and read `serial`."
+            }
+          ]
+        },
+        {
+          "id": "log-trail",
+          "label": "Read the app's log",
+          "hints": [
+            {
+              "id": "log-trail-1",
+              "content": "The app keeps its own recent log lines and serves them. One of the lines written at boot carries the value this checkpoint wants."
+            },
+            {
+              "id": "log-trail-2",
+              "content": "Run `GET /api/logs` from `/docs`. Find the line reading `boot ok boot-check=<value>` and submit just the value after the `=`."
+            }
+          ]
+        },
+        {
+          "id": "board-open-for-posts",
+          "label": "Open the board for posts",
+          "hints": [
+            {
+              "id": "board-open-for-posts-1",
+              "content": "The board says on its own page whether it is accepting posts and which setting decides that. Runtime changes made through `/docs` take effect on every request — no restart."
+            },
+            {
+              "id": "board-open-for-posts-2",
+              "content": "Fixture stackstack-onboarding: .i18n.en.checks.2.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "handover",
+          "label": "Sign-off for the environment check",
+          "hints": [
+            {
+              "id": "handover-1",
+              "content": "Fixture stackstack-onboarding: .i18n.en.checks.3.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "handover-2",
+              "content": "Fixture stackstack-onboarding: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "board-open",
+        "label": "掲示板に手が届く",
+        "points": 25,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "board-open-1",
+            "content": "ポータルの `Web` endpoint から掲示板を開いてください。 このチェックポイントが求めている値は、 そのページ自体に印刷されています。",
+            "penalty": 0
+          },
+          {
+            "id": "board-open-2",
+            "content": "板の上のほうに `board serial: SS-xxxxxxxx` と出ています。 `SS-` を含めた文字列をそのまま提出してください。 `/docs` から `GET /api/board` を実行して `serial` を読むこともできます。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "log-trail",
+        "label": "アプリのログを読む",
+        "points": 25,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "log-trail-1",
+            "content": "アプリは自分の直近のログ行を持っていて、 それを返す経路があります。 起動時に書かれた行の 1 つに、 このチェックポイントが求めている値が入っています。",
+            "penalty": 0
+          },
+          {
+            "id": "log-trail-2",
+            "content": "`/docs` から `GET /api/logs` を実行します。 `boot ok boot-check=<値>` の行を探し、 `=` の後ろの値だけを提出してください。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "board-open-for-posts",
+        "label": "投稿を受け付ける",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "board-open-for-posts-1",
+            "content": "投稿を受け付けているかどうかと、 それを決めている設定名は、 板のページ自身に書いてあります。 `/docs` から行った実行時変更はリクエストごとに反映されるので、 再起動は不要です。",
+            "penalty": 0
+          },
+          {
+            "id": "board-open-for-posts-2",
+            "content": "Fixture stackstack-onboarding: .scoring.checks.2.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "handover",
+        "label": "本番前チェックの合格印",
+        "points": 25,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "handover-1",
+            "content": "`GET /posture` は走っているアプリから実測した 4 つの gate を返します。 合格印の値は 4 つ全部が true になって初めて出ます。 まだ null なら、 どの gate が false かがそのまま次にやることです。",
+            "penalty": 0
+          },
+          {
+            "id": "handover-2",
+            "content": "Fixture stackstack-onboarding: .scoring.checks.3.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 8
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 10,
+    "chapter": "1. はじめの一歩"
+  }
+}

@@ -1,0 +1,204 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-first-request",
+  "name": "はじめてのリクエスト",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "10 分",
+  "shortDescription": "Fixture stackstack-first-request: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture stackstack-first-request: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack-first-request: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture stackstack-first-request: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "stackstack",
+    "getting-started",
+    "local-play",
+    "container",
+    "web-app",
+    "http",
+    "beginner"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (board)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "リクエストを送ってレスポンスを読む一往復を、 メソッドとパスを自分で選んで完了できる",
+    "エラーレスポンス (400) の本文を読み、 自分のリクエストを直して再送できる",
+    "ステータスコード (200 / 201 / 400) を「アプリからの返事の種類」として読み分けられる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Your First Request",
+      "shortDescription": "Fixture stackstack-first-request: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack-first-request: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack-first-request: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture stackstack-first-request: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Complete the request-response round trip choosing the method and path yourself, and read the value you need out of the response",
+        "Read a 400's body and repair your own request until it succeeds",
+        "Tell status codes apart (200 / 201 / 400) as kinds of reply, not as noise"
+      ],
+      "checks": [
+        {
+          "id": "postcard",
+          "label": "Read the postcard",
+          "hints": [
+            {
+              "id": "postcard-1",
+              "content": "In `/docs`, use **Try any API** with method GET and path `/api/postcard`. The value this checkpoint wants is in that response."
+            },
+            {
+              "id": "postcard-2",
+              "content": "Submit the response's `token` value — the string starting with `postcard-` — exactly as printed."
+            }
+          ]
+        },
+        {
+          "id": "locked-door",
+          "label": "Get refused, then fix it",
+          "hints": [
+            {
+              "id": "locked-door-1",
+              "content": "Run `GET /api/door` as-is first. The 400 that comes back tells you in `detail` exactly what to do next."
+            },
+            {
+              "id": "locked-door-2",
+              "content": "Change the path to `/api/door?key=<the postcard token>` and send again. Submit the `token` from the 200 response (`TC{door_...}`)."
+            }
+          ]
+        },
+        {
+          "id": "guestbook",
+          "label": "Sign the guestbook",
+          "hints": [
+            {
+              "id": "guestbook-1",
+              "content": "Method POST, path `/api/guestbook`, body `{\"name\":\"you\",\"message\":\"hello\"}` — then Send."
+            },
+            {
+              "id": "guestbook-2",
+              "content": "Submit the `receipt` from the 201 response (`TC{guestbook_...}`). If you get a 400, its `detail` explains what to fix."
+            }
+          ]
+        },
+        {
+          "id": "round-trip",
+          "label": "Prove the full lap",
+          "hints": [
+            {
+              "id": "round-trip-1",
+              "content": "`GET /posture` reports three gates measured from the running app. Any gate still false is your remaining homework."
+            },
+            {
+              "id": "round-trip-2",
+              "content": "Once all three gates are true, `readyToken` (`TC{ready_...}`) appears. Submit it."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "postcard",
+        "label": "葉書を読む",
+        "points": 25,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "postcard-1",
+            "content": "`/docs` の「任意の API を試す」で、 メソッド GET・パス `/api/postcard` を実行してください。 このチェックポイントが求めている値は、 そのレスポンスに入っています。",
+            "penalty": 0
+          },
+          {
+            "id": "postcard-2",
+            "content": "レスポンス JSON の `token` の値 (`postcard-` で始まる文字列) を、 そのまま提出してください。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "locked-door",
+        "label": "断られて、 直す",
+        "points": 25,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "locked-door-1",
+            "content": "まず `GET /api/door` をそのまま実行してください。 400 が返りますが、 その `detail` に次にやることがそのまま書いてあります。",
+            "penalty": 0
+          },
+          {
+            "id": "locked-door-2",
+            "content": "パスを `/api/door?key=<葉書の token>` に変えてもう一度実行します。 200 のレスポンスの `token` (`TC{door_...}`) を提出してください。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "guestbook",
+        "label": "芳名帳に書く",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "guestbook-1",
+            "content": "メソッド POST・パス `/api/guestbook`、 body に `{\"name\":\"あなたの名前\",\"message\":\"ひとこと\"}` を入れて実行してください。",
+            "penalty": 0
+          },
+          {
+            "id": "guestbook-2",
+            "content": "201 のレスポンスの `receipt` (`TC{guestbook_...}`) を提出してください。 400 が返るときは、 `detail` が直すところを教えてくれます。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "round-trip",
+        "label": "一周の証明",
+        "points": 25,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "round-trip-1",
+            "content": "`GET /posture` は走っているアプリから実測した 3 つの gate を返します。 まだ false の gate が、 そのまま残りの宿題です。",
+            "penalty": 0
+          },
+          {
+            "id": "round-trip-2",
+            "content": "3 つの gate が全部 true になると `readyToken` (`TC{ready_...}`) が現れます。 それを提出してください。",
+            "penalty": 8
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 2,
+    "chapter": "0. 安全に始める"
+  }
+}

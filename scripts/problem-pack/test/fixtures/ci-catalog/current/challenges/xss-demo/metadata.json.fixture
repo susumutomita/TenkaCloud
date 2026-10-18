@@ -1,0 +1,104 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "xss-demo",
+  "name": "社内掲示板の忍び込み",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "30 分",
+  "track": {
+    "id": "ipa-web-security",
+    "order": 1,
+    "chapter": "IPA §1.5 XSS"
+  },
+  "shortDescription": "スタッフ専用の社内掲示板。投稿を見たセキュリティ担当が持つ合言葉を、投稿の中身だけで奪い取れ。",
+  "instructions": "Fixture xss-demo: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture xss-demo: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture xss-demo: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "web-security",
+    "xss",
+    "owasp",
+    "ipa",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (challenge surface)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
+  ],
+  "learningGoals": [
+    "利用者の入力をエスケープせずに画面へ埋め込む実装が、 なぜ危険なのかを理解する",
+    "格納型 XSS が「投稿者本人」ではなく「別の閲覧者」の権限を奪う攻撃であることを体感する",
+    "HTML エスケープ・HttpOnly Cookie・CSP という多層防御の役割を理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Breaking Into the Staff Bulletin Board",
+      "shortDescription": "A staff-only bulletin board. A security reviewer checks new posts — steal the passphrase they hold, using nothing but a post's contents.",
+      "instructions": "Fixture xss-demo: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture xss-demo: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture xss-demo: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Understand why splicing unescaped user input into a page is dangerous",
+        "See, hands-on, that stored XSS steals a *different viewer's* privileges, not the poster's own",
+        "Understand the layered defense of HTML escaping, HttpOnly cookies, and CSP"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Fixture xss-demo: .i18n.en.hints.0.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-2",
+          "content": "Fixture xss-demo: .i18n.en.hints.1.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-3",
+          "content": "Fixture xss-demo: .i18n.en.hints.2.content. Synthetic narrative for platform contract tests."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "自分の投稿がページ上でどう表示されるかをよく見てみよう。 `<` のような記号を入力したのに、 `&lt;` に変換されず そのまま出てくるなら、 その画面は入力をエスケープしていない。",
+        "penalty": 10
+      },
+      {
+        "id": "hint-2",
+        "content": "Fixture xss-demo: .scoring.hints.1.content. Synthetic narrative for platform contract tests.",
+        "penalty": 15
+      },
+      {
+        "id": "hint-3",
+        "content": "Fixture xss-demo: .scoring.hints.2.content. Synthetic narrative for platform contract tests.",
+        "penalty": 25
+      }
+    ]
+  }
+}

@@ -37,7 +37,3 @@ runs:
         npm_config_ignore_scripts: "true"
         CI: "true"
       run: make install_ci
-
-    - name: Download and prepare the explicit catalog selection
-      shell: bash
-      run: bun run catalog download-locked && make catalog-verify-lock catalog-prepare

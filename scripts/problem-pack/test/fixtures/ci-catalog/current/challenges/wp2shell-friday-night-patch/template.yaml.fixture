@@ -1,0 +1,812 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud Challenge (wp2shell-friday-night-patch). The AWS incident-response half
+  of a training pair with wp2shell-local-lab (the safe local rehearsal). It is 17:30
+  on a Friday; monitoring reports suspicious REST API traffic against your
+  production WordPress-like site, and the business requires the site to stay
+  online through the response.
+
+  This is a from-scratch simulator, not real WordPress: one Lambda (Python) serves
+  a small mock REST surface behind a REGIONAL API Gateway, fronted by a WAFv2
+  WebACL whose one custom rule currently only COUNTS (detect/log) the exact
+  attack pattern found in the evidence. The same Lambda's underlying batch-routing
+  and query-construction logic is genuinely fixable (both root causes, exactly
+  like wp2shell-local-lab), and a "grade" invocation replays the live attack /
+  legitimate traffic to decide each flag -- never a submitted string taken at
+  face value. All fixes are settings changes (ssm:PutParameter + wafv2:UpdateWebACL
+  on resources this template already created) -- nothing is created or destroyed
+  by the player, so delete-stack removes everything cleanly.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    ConstraintDescription: >
+      `tc-{problemSlug}-{teamSlug}` format. The deploy chain injects this value
+      automatically -- you do not set it manually.
+    Description: >
+      Common prefix attached to all resource names. Keeps per-team stacks from
+      colliding in the same account / region.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret injected by the deploy chain (cfnParameters:
+      FlagSeed = __RANDOM_PASSWORD__). Every flag and the app-level SRE token
+      are derived from it inside the Lambda -- never derivable from the public
+      NamePrefix, and never committed anywhere.
+
+Resources:
+  # ----- Evidence (private; the SOC's already-captured incident record) -----
+  EvidenceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${NamePrefix}-evidence-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  # ----- Live config / data (the "database" this incident touches) -----
+  # THE PLANTED FAULTS. Both root-cause settings start "false" (broken), and the
+  # incident-aftermath data flags start "true" (present) -- fix-by-settings: the
+  # player's job is to flip/overwrite these EXISTING parameters, never to create
+  # a new resource. Every one is scoped for ssm:PutParameter in
+  # ParticipantViewerRole below.
+  RouteIsolationParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/config/route-isolation"
+      Type: String
+      Value: "false"
+      Description: >
+        Root cause #1 (routing). "false" = the batch dispatcher's permission
+        check and its handler-resolution use different path normalization, so a
+        trailing-slash sub-request bypasses the internal-only gate. Set to
+        "true" to unify both onto the same normalization.
+      Tier: Standard
+  ParameterizedQueriesParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/config/parameterized-queries"
+      Type: String
+      Value: "false"
+      Description: >
+        Root cause #2 (query construction). "false" = the report-lookup query
+        is built by string concatenation. Set to "true" to switch to a
+        parameterized statement plus a category allow-list.
+      Tier: Standard
+  SaltVersionParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/config/salt-version"
+      Type: String
+      Value: "0"
+      Description: >
+        The app-level SRE token is derived from this version + FlagSeed.
+        Increment it (any higher integer) to rotate the key and invalidate
+        whatever token the intrusion evidence shows was in use.
+      Tier: Standard
+  RogueAdminPresentParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/data/rogue-admin-present"
+      Type: String
+      Value: "true"
+      Description: >
+        "true" = the administrator account the intruder created is still
+        present. Set to "false" once you have removed it.
+      Tier: Standard
+  PersistenceMarkerPresentParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/data/persistence-marker-present"
+      Type: String
+      Value: "true"
+      Description: >
+        "true" = the benign persistence marker the intruder left is still
+        present. Set to "false" once you have removed it.
+      Tier: Standard
+  ThemeFunctionsParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/site/theme-functions"
+      Type: String
+      Value: "// functions.php (tampered) -- benign marker: <!-- planted-by-incident -->"
+      Description: >
+        The active theme's functions file, as currently deployed. Currently
+        tampered. Overwrite it with the clean baseline from the
+        ThemeFunctionsBaseline Output to restore it.
+      Tier: Standard
+  BriefingParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/briefing"
+      Type: String
+      Value: !Sub >-
+        17:30 Friday. Monitoring flagged suspicious REST traffic against this
+        production site. STEP 1 pull the evidence: aws s3 cp
+        s3://${NamePrefix}-evidence-${AWS::AccountId}/incident-log.json . --
+        it has the timeline, the exact suspicious request, and an audit token.
+        STEP 2 contain immediately without downtime: aws wafv2 get-web-acl
+        --scope REGIONAL --name ${NamePrefix}-detect --id <WebAclId Output>,
+        edit the one rule's Action from Count to Block, then aws wafv2
+        update-web-acl with the same body + LockToken. STEP 3 patch the
+        workload (zero downtime, settings only): aws ssm put-parameter
+        --name /${NamePrefix}/config/route-isolation --value true --overwrite
+        and the same for /${NamePrefix}/config/parameterized-queries. STEP 4
+        clean up: set /${NamePrefix}/data/rogue-admin-present and
+        /${NamePrefix}/data/persistence-marker-present to "false", and
+        overwrite /${NamePrefix}/site/theme-functions with the
+        ThemeFunctionsBaseline Output value. STEP 5 rotate: put a higher
+        integer into /${NamePrefix}/config/salt-version. STEP 6 grade each
+        checkpoint: aws lambda invoke --function-name <AppFunctionName
+        Output> --cli-binary-format raw-in-base64-out --payload
+        '{"action":"grade","check":"<id>"}' out.json && cat out.json -- a
+        ready:true response carries that checkpoint's flag. Submit it in the
+        Participant Portal.
+      Description: !Sub "TenkaCloud wp2shell-friday-night-patch briefing for ${NamePrefix}."
+      Tier: Standard
+
+  # ----- The app (Lambda behind API Gateway) + the CFn evidence seeder -----
+  AppFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: AppRuntime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadOwnConfigAndData
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${NamePrefix}/*"
+              # Seed the evidence object on create and remove it on delete (the
+              # custom-resource branch below); read it back for the
+              # evidence-preservation grading check.
+              - Sid: EvidenceObjectLifecycle
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                Resource: !Sub "arn:aws:s3:::${NamePrefix}-evidence-${AWS::AccountId}/*"
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  AppFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-app"
+      Description: !Sub "wp2shell-friday-night-patch mock REST app + grader for ${NamePrefix}."
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 15
+      MemorySize: 128
+      Role: !GetAtt AppFunctionRole.Arn
+      Environment:
+        Variables:
+          NAME_PREFIX: !Ref NamePrefix
+          FLAG_SEED: !Ref FlagSeed
+          EVIDENCE_BUCKET: !Sub "${NamePrefix}-evidence-${AWS::AccountId}"
+          API_BASE_URL: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+      # Literal block (config arrives via env / SSM) -- no CFn interpolation.
+      Code:
+        ZipFile: |
+          import json, os, re, sqlite3, hashlib
+          import urllib.request, urllib.error
+          import boto3
+
+          ssm = boto3.client("ssm")
+          s3 = boto3.client("s3")
+
+          PREFIX = os.environ["NAME_PREFIX"]
+          FLAG_SEED = os.environ["FLAG_SEED"]
+          API_BASE_URL = os.environ["API_BASE_URL"]
+          EVIDENCE_BUCKET = os.environ["EVIDENCE_BUCKET"]
+          EVIDENCE_KEY = "incident-log.json"
+
+          def sha256_hex(s):
+              return hashlib.sha256(s.encode()).hexdigest()
+
+          # NOTE: deliberately NOT a hash of FLAG_SEED (CloudFormation's `!Sub` has
+          # no SHA256 function, so an Outputs: value must be reproducible with
+          # plain string interpolation to stay in sync with this Lambda -- see
+          # each `<Check>Flag` Output in this template, which is
+          # `TC{<check_id>-${FlagSeed}}`, byte-for-byte the same as this).
+          def flag_for(check_id):
+              return "TC{%s-%s}" % (check_id, FLAG_SEED)
+
+          def cfg(name, default=""):
+              try:
+                  r = ssm.get_parameter(Name="/%s/%s" % (PREFIX, name))
+                  return r["Parameter"]["Value"].strip()
+              except Exception:
+                  return default
+
+          def derive_token(version):
+              return sha256_hex("sre-token:v%s:%s" % (version, FLAG_SEED))[:32]
+
+          def current_token():
+              return derive_token(cfg("config/salt-version", "0"))
+
+          # In-memory SQL surface, re-seeded fresh on every cold start. This data
+          # is static narrative content that remediation never mutates -- only
+          # the SSM config/data parameters above carry state that must survive
+          # across the whole incident-response session regardless of Lambda
+          # cold starts.
+          _db = sqlite3.connect(":memory:")
+          _db.execute("CREATE TABLE reports (id INTEGER, category TEXT, status TEXT, title TEXT, note TEXT)")
+          _db.execute("CREATE TABLE vault (id INTEGER, marker TEXT, note TEXT)")
+          _db.execute("INSERT INTO reports VALUES (1,'general','open','Status page','All systems normal.')")
+          _db.execute("INSERT INTO reports VALUES (2,'maintenance','open','Maintenance window','Planned maintenance next Tuesday.')")
+          _db.execute("INSERT INTO reports VALUES (3,'internal-audit','open','Q3 internal access review','Internal-only report.')")
+          _db.execute("INSERT INTO vault VALUES (1,'deep-vault-row','No route legitimately selects from this table.')")
+          _db.commit()
+
+          ROUTES = {"/wp2shell-lab/v1/reports": "internal"}
+          REPORT_CATEGORIES = {"general", "maintenance", "internal-audit"}
+
+          def run_reports_query(category):
+              category = category or ""
+              if cfg("config/parameterized-queries", "false") == "true":
+                  if category not in REPORT_CATEGORIES:
+                      return 400, {"error": "invalid_category"}
+                  cur = _db.execute(
+                      "SELECT id, title, note FROM reports WHERE status = 'open' AND category = ?",
+                      (category,),
+                  )
+                  rows = [dict(zip(["id", "title", "note"], r)) for r in cur.fetchall()]
+                  return 200, {"reports": rows}
+              # VULNERABLE PATH: string concatenation -- root cause #2.
+              sql = "SELECT id, title, note FROM reports WHERE status = 'open' AND category = '%s'" % category
+              try:
+                  cur = _db.execute(sql)
+                  rows = [dict(zip(["id", "title", "note"], r)) for r in cur.fetchall()]
+                  return 200, {"reports": rows}
+              except sqlite3.Error:
+                  return 200, {"reports": []}
+
+          def single_dispatch(path, category, authorized):
+              normalized = re.sub(r"/+$", "", path)
+              perm = ROUTES.get(normalized)
+              if perm is None:
+                  return 404, {"error": "rest_no_route"}
+              if perm == "internal" and not authorized:
+                  return 401, {"error": "rest_forbidden"}
+              return run_reports_query(category)
+
+          def batch_dispatch(path, category):
+              # THE CONFUSION BUG: handler resolution always normalizes; permission
+              # resolution uses the raw path unless route-isolation is on -- root
+              # cause #1 (routing), same as wp2shell-local-lab.
+              normalized = re.sub(r"/+$", "", path)
+              if normalized not in ROUTES:
+                  return 404, {"error": "rest_no_route"}
+              route_isolation = cfg("config/route-isolation", "false") == "true"
+              perm = ROUTES.get(normalized) if route_isolation else ROUTES.get(path)
+              effective = perm if perm else "public"
+              if effective == "internal":
+                  return 401, {"error": "rest_forbidden"}
+              return run_reports_query(category)
+
+          POSTS = [
+              {"id": 1, "title": "Welcome to Example Co", "content": "We help small teams ship WordPress-like sites."},
+              {"id": 2, "title": "Office hours moved", "content": "Support hours are now 9-17 JST, Mon-Fri."},
+          ]
+
+          def reply(status, obj):
+              return {"statusCode": status, "headers": {"content-type": "application/json"}, "body": json.dumps(obj)}
+
+          def handle_api_request(event):
+              method = event.get("httpMethod", "GET")
+              path = "/" + ((event.get("pathParameters") or {}).get("proxy") or "")
+              qs = event.get("queryStringParameters") or {}
+              headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
+
+              if method == "GET" and path == "/wp-json/":
+                  return reply(200, {"name": "Example Co", "namespaces": ["wp/v2", "batch/v1", "wp2shell-lab/v1"]})
+              if method == "GET" and path == "/wp-json/wp/v2/posts":
+                  return reply(200, {"posts": POSTS})
+              if method == "GET" and re.sub(r"/+$", "", path) == "/wp-json/wp2shell-lab/v1/reports":
+                  authorized = headers.get("authorization") == "Bearer " + current_token()
+                  status, body = single_dispatch("/wp2shell-lab/v1/reports", qs.get("category", ""), authorized)
+                  return reply(status, body)
+              if method == "POST" and path == "/wp-json/batch/v1":
+                  try:
+                      parsed = json.loads(event.get("body") or "{}")
+                  except Exception:
+                      parsed = {}
+                  responses = []
+                  for sub in (parsed.get("requests") or [])[:5]:
+                      sub_path = sub.get("path", "")
+                      category = (sub.get("body") or {}).get("category", "")
+                      status, body = batch_dispatch(sub_path, category)
+                      responses.append({"status": status, "body": body})
+                  return reply(200, {"responses": responses})
+              return reply(404, {"error": "not_found"})
+
+          MALICIOUS_PATHS = ["/wp2shell-lab/v1/reports/", "/wp2shell-lab/v1/reports//"]
+          SQLI_CATEGORY = "x' UNION SELECT id, marker, note FROM vault -- "
+
+          def http_post_json(url, payload, timeout=6):
+              data = json.dumps(payload).encode()
+              req = urllib.request.Request(url, data=data, headers={"content-type": "application/json"}, method="POST")
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout) as resp:
+                      body = resp.read()
+                      return resp.status, (json.loads(body) if body else {})
+              except urllib.error.HTTPError as e:
+                  return e.code, {}
+              except Exception:
+                  return 0, {}
+
+          def http_get(url, headers=None, timeout=6):
+              req = urllib.request.Request(url, headers=headers or {}, method="GET")
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout) as resp:
+                      body = resp.read()
+                      return resp.status, (json.loads(body) if body else {})
+              except urllib.error.HTTPError as e:
+                  return e.code, {}
+              except Exception:
+                  return 0, {}
+
+          def check_waf_containment():
+              # Replay the EXACT malicious request over the real public endpoint,
+              # through WAF. Contained only once WAF itself rejects it (403).
+              status, _ = http_post_json(
+                  API_BASE_URL + "/wp-json/batch/v1",
+                  {"requests": [{"method": "GET", "path": MALICIOUS_PATHS[0], "body": {"category": SQLI_CATEGORY}}]},
+              )
+              return status == 403
+
+          def check_patched_workload():
+              # Bypass WAF entirely (in-process call) so this isolates the CODE
+              # fix, independent of the WAF rule.
+              for path in MALICIOUS_PATHS:
+                  status, body = batch_dispatch(path, SQLI_CATEGORY)
+                  if status == 200 and isinstance(body.get("reports"), list):
+                      if any(r.get("title") == "deep-vault-row" for r in body["reports"]):
+                          return False
+              return True
+
+          # Must match the ThemeFunctionsBaseline Output exactly -- that Output is
+          # the player-visible copy of this same constant (see template Outputs).
+          THEME_FUNCTIONS_BASELINE = "// functions.php (clean baseline, no marker)"
+
+          def check_persistence_removal():
+              rogue = cfg("data/rogue-admin-present", "true") == "true"
+              marker = cfg("data/persistence-marker-present", "true") == "true"
+              theme = cfg("site/theme-functions", "")
+              return (not rogue) and (not marker) and theme == THEME_FUNCTIONS_BASELINE
+
+          def check_credential_rotation():
+              version = cfg("config/salt-version", "0")
+              if version == "0":
+                  return False
+              old_token = derive_token("0")
+              status, _ = http_get(
+                  API_BASE_URL + "/wp-json/wp2shell-lab/v1/reports?category=general",
+                  headers={"authorization": "Bearer " + old_token},
+              )
+              return status == 401
+
+          def check_evidence_preservation():
+              try:
+                  obj = s3.get_object(Bucket=EVIDENCE_BUCKET, Key=EVIDENCE_KEY)
+                  body = obj["Body"].read().decode()
+                  return flag_for("timeline-iocs") in body
+              except Exception:
+                  return False
+
+          def check_uptime_and_legit_traffic():
+              s1, _ = http_get(API_BASE_URL + "/wp-json/")
+              s2, b2 = http_get(API_BASE_URL + "/wp-json/wp/v2/posts")
+              s3status, b3 = http_get(
+                  API_BASE_URL + "/wp-json/wp2shell-lab/v1/reports?category=general",
+                  headers={"authorization": "Bearer " + current_token()},
+              )
+              return (
+                  s1 == 200
+                  and s2 == 200
+                  and isinstance(b2.get("posts"), list)
+                  and s3status == 200
+                  and isinstance(b3.get("reports"), list)
+              )
+
+          CHECKS = {
+              "waf-containment": check_waf_containment,
+              "patched-workload": check_patched_workload,
+              "persistence-removal": check_persistence_removal,
+              "credential-rotation": check_credential_rotation,
+              "evidence-preservation": check_evidence_preservation,
+              "uptime-and-legit-traffic": check_uptime_and_legit_traffic,
+          }
+
+          def handle_grade(check_id):
+              fn = CHECKS.get(check_id)
+              if fn is None:
+                  return reply(400, {"error": "unknown_check"})
+              try:
+                  ok = bool(fn())
+              except Exception:
+                  ok = False
+              if not ok:
+                  return reply(200, {"check": check_id, "ready": False, "message": "Not yet -- condition not met."})
+              return reply(200, {"check": check_id, "ready": True, "flag": flag_for(check_id)})
+
+          def handle_custom_resource(event, ctx):
+              import cfnresponse
+              try:
+                  if event["RequestType"] == "Delete":
+                      try:
+                          s3.delete_object(Bucket=EVIDENCE_BUCKET, Key=EVIDENCE_KEY)
+                      except Exception:
+                          pass
+                      cfnresponse.send(event, ctx, cfnresponse.SUCCESS, {})
+                      return
+                  timeline_flag = flag_for("timeline-iocs")
+                  incident = {
+                      "incident_id": "INC-2026-0724",
+                      "detected_at": "2026-07-24T08:31:00Z",
+                      "summary": "Suspicious REST API traffic against the production site.",
+                      "suspicious_request": {
+                          "method": "POST",
+                          "path": "/wp-json/batch/v1",
+                          "body": {
+                              "requests": [
+                                  {
+                                      "method": "GET",
+                                      "path": "/wp2shell-lab/v1/reports/",
+                                      "body": {"category": SQLI_CATEGORY},
+                                  }
+                              ]
+                          },
+                          "source_ip": "203.0.113.77",
+                          "observed_at": "2026-07-24T08:29:41Z",
+                      },
+                      "findings": [
+                          "A benign persistence marker was planted (/%s/data/persistence-marker-present)." % PREFIX,
+                          "A rogue administrator was added (/%s/data/rogue-admin-present)." % PREFIX,
+                          "The active theme's functions file was modified (/%s/site/theme-functions)." % PREFIX,
+                      ],
+                      "audit_token": timeline_flag,
+                  }
+                  s3.put_object(
+                      Bucket=EVIDENCE_BUCKET,
+                      Key=EVIDENCE_KEY,
+                      Body=json.dumps(incident, indent=2).encode(),
+                      ContentType="application/json",
+                  )
+                  cfnresponse.send(event, ctx, cfnresponse.SUCCESS, {}, physicalResourceId=EVIDENCE_KEY)
+              except Exception as e:
+                  cfnresponse.send(event, ctx, cfnresponse.FAILED, {"error": str(e)})
+
+          def handler(event, ctx):
+              if event.get("RequestType") and event.get("ResponseURL"):
+                  return handle_custom_resource(event, ctx)
+              if "httpMethod" in event:
+                  return handle_api_request(event)
+              action = event.get("action")
+              if action == "grade":
+                  return handle_grade(event.get("check", ""))
+              return reply(400, {"error": "unknown_action"})
+
+  EvidenceSeed:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt AppFunction.Arn
+
+  # ----- API Gateway (REGIONAL, so a WAFv2 REGIONAL WebACL can attach) -----
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "${NamePrefix}-wp2shell-api"
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  ProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: "{proxy+}"
+
+  RootMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !GetAtt RestApi.RootResourceId
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AppFunction.Arn}/invocations"
+
+  ProxyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      RequestParameters:
+        method.request.path.proxy: true
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AppFunction.Arn}/invocations"
+        RequestParameters:
+          integration.request.path.proxy: method.request.path.proxy
+
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - RootMethod
+      - ProxyMethod
+    Properties:
+      RestApiId: !Ref RestApi
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref RestApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: prod
+
+  ApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AppFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/*/*"
+
+  # ----- WAFv2 (REGIONAL): the immediate-containment lever -----
+  # THE PLANTED FAULT: this rule only COUNTS (detects/logs) the exact malicious
+  # pattern found in the evidence -- it does not block yet. Flipping Action from
+  # Count to Block (a settings change on this EXISTING rule via
+  # wafv2:UpdateWebACL) is the "immediate WAF containment" checkpoint. Nothing
+  # else about the WebACL changes; legitimate traffic never matches this rule.
+  WafWebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub "${NamePrefix}-detect"
+      Scope: REGIONAL
+      Description: !Sub "Detects the batch/v1 + SQLi incident pattern for ${NamePrefix}. Flip to Block to contain."
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub "${NamePrefix}-detect"
+        SampledRequestsEnabled: true
+      Rules:
+        - Name: detect-batch-sqli
+          Priority: 0
+          Action:
+            Count: {}
+          Statement:
+            AndStatement:
+              Statements:
+                - ByteMatchStatement:
+                    SearchString: /wp-json/batch/v1
+                    FieldToMatch:
+                      UriPath: {}
+                    TextTransformations:
+                      - Priority: 0
+                        Type: NONE
+                    PositionalConstraint: ENDS_WITH
+                - SqliMatchStatement:
+                    FieldToMatch:
+                      Body:
+                        OversizeHandling: CONTINUE
+                    TextTransformations:
+                      - Priority: 0
+                        Type: URL_DECODE
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub "${NamePrefix}-detect-batch-sqli"
+            SampledRequestsEnabled: true
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  WafWebAclAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Sub "arn:aws:apigateway:${AWS::Region}::/restapis/${RestApi}/stages/${ApiStage}"
+      WebACLArn: !GetAtt WafWebAcl.Arn
+
+  # ----- IAM: participant viewer (read everything + scoped incident-response fixes) -----
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # Participant access baseline (same across every problem in this catalog).
+      # `aws login` (2025-11) OAuth2 flow needs SignInLocalDevelopmentAccess;
+      # do not remove (validated by scripts/validate-problems.ts).
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CloudShell baseline -- 7-action allow-list, Resource:* unavoidable
+              # (environments are per-identity). Do not remove (validated).
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              - Sid: ConsoleSelfIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              # Read the evidence bundle (timeline, suspicious request, findings).
+              - Sid: ReadEvidence
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${NamePrefix}-evidence-${AWS::AccountId}"
+                  - !Sub "arn:aws:s3:::${NamePrefix}-evidence-${AWS::AccountId}/*"
+              # THE FIX GRANT: read AND write every settings parameter this
+              # incident touches -- all EXISTING parameters this template
+              # created, never a new resource.
+              - Sid: ReadFixOwnParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                  - ssm:PutParameter
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+              # ssm:DescribeParameters is metadata-only; AWS IAM does not accept
+              # resource-level scoping on it (same treatment as hello-world /
+              # x402-paywall).
+              - Sid: DescribeOwnParameters
+                Effect: Allow
+                Action: ssm:DescribeParameters
+                Resource: "*"
+              # THE CONTAINMENT GRANT: read + update this stack's own WebACL to
+              # flip the one rule from Count to Block. Scoped to the specific
+              # WebACL this template created.
+              - Sid: ContainViaOwnWebAcl
+                Effect: Allow
+                Action:
+                  - wafv2:GetWebACL
+                  - wafv2:UpdateWebACL
+                Resource: !GetAtt WafWebAcl.Arn
+              # Grade a checkpoint (the Lambda replays the live attack /
+              # legitimate traffic and only then reveals that checkpoint's
+              # flag). Scoped to this stack's own function.
+              - Sid: InvokeGrader
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt AppFunction.Arn
+              # Deliberately NO cloudformation:DescribeStacks and NO
+              # lambda:GetFunction* -- every flag Output below must stay
+              # unreadable directly; each is earned only through a passing
+              # grade invocation (or, for timeline-iocs, by reading the
+              # evidence object itself).
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+Outputs:
+  ApiInvokeUrl:
+    Description: Base URL of the production site (behind WAF). GET /wp-json/ to start.
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  AppFunctionName:
+    Description: Name of the app/grader Lambda. Invoke with {"action":"grade","check":"<id>"}.
+    Value: !Ref AppFunction
+  EvidenceBucketName:
+    Description: Evidence bucket. Download with `aws s3 cp s3://<this>/incident-log.json .`.
+    Value: !Ref EvidenceBucket
+  WebAclId:
+    Description: WAFv2 WebACL id (REGIONAL scope) -- needed for `aws wafv2 get-web-acl`.
+    Value: !Ref WafWebAcl
+  WebAclName:
+    Description: WAFv2 WebACL name -- needed for `aws wafv2 get-web-acl`.
+    Value: !Sub "${NamePrefix}-detect"
+  ThemeFunctionsBaseline:
+    Description: The clean functions.php content to restore into /NamePrefix/site/theme-functions.
+    Value: "// functions.php (clean baseline, no marker)"
+  BriefingParameterName:
+    Description: SSM Parameter holding the incident-response briefing.
+    Value: !Ref BriefingParameter
+  # Canonical answers, scoring engine only (no DescribeStacks granted to the
+  # player). Each is earned by invoking the grader Lambda
+  # ({"action":"grade","check":"<id>"}), which only echoes the matching value
+  # here once it has replayed the live attack / legitimate traffic and
+  # confirmed the condition -- except TimelineIocsFlag, which is discovery
+  # (found directly in the evidence bundle, same convention as
+  # x402-paywall's briefing flag).
+  TimelineIocsFlag:
+    Description: Found directly in the evidence bundle (audit_token).
+    Value: !Sub "TC{timeline-iocs-${FlagSeed}}"
+  WafContainmentFlag:
+    Description: Earned once the WAF rule is Block and the replayed attack returns 403.
+    Value: !Sub "TC{waf-containment-${FlagSeed}}"
+  PatchedWorkloadFlag:
+    Description: Earned once both root-cause settings hold under a direct replay.
+    Value: !Sub "TC{patched-workload-${FlagSeed}}"
+  PersistenceRemovalFlag:
+    Description: Earned once the rogue admin, the persistence marker, and the modified file are all cleared.
+    Value: !Sub "TC{persistence-removal-${FlagSeed}}"
+  CredentialRotationFlag:
+    Description: Earned once the salt is rotated and the old token no longer authenticates.
+    Value: !Sub "TC{credential-rotation-${FlagSeed}}"
+  EvidencePreservationFlag:
+    Description: Earned as long as the original evidence object is intact.
+    Value: !Sub "TC{evidence-preservation-${FlagSeed}}"
+  UptimeLegitTrafficFlag:
+    Description: Earned once the index, the normal feed, and a legitimate authenticated request all return 200.
+    Value: !Sub "TC{uptime-and-legit-traffic-${FlagSeed}}"
+  NamePrefix:
+    Description: Common resource prefix this stack used.
+    Value: !Ref NamePrefix
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to access their own stack via AWS Console.
+    Value: !GetAtt ParticipantViewerRole.Arn

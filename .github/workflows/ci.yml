@@ -32,7 +32,7 @@ concurrency:
 # Coverage parts are defined in scripts/workspace/run-coverage.ts. Independent jobs run
 # concurrently; the final ci job requires every surviving gate to succeed.
 jobs:
-  # Cheap contract gates: dependency lifecycle audit, dead code, catalog schema,
+  # Cheap contract gates: dependency lifecycle audit, dead code,
   # prose, formatting, and the repo-root script tests. Together ~25s, so they share one leg.
   gates:
     runs-on: ubuntu-latest
@@ -44,6 +44,9 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/bun-install
+
+      - name: Prepare offline platform catalog fixtures
+        run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
 
       # Supply Chain Security: dependency lifecycle script auditor。
       # scripts/security/audit-baseline.json と比較し、 新規 lifecycle script 付き package /
@@ -97,6 +100,9 @@ jobs:
 
       - uses: ./.github/actions/bun-install
 
+      - name: Prepare offline platform catalog fixtures
+        run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
+
       - name: ESLint (repo-wide, ratcheted)
         run: make lint-ts
 
@@ -108,6 +114,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - uses: ./.github/actions/bun-install
+
+      - name: Prepare offline platform catalog fixtures
+        run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
 
       # One `tsc --noEmit` saturates a single core, so the serial workspace chain used 1m33s of
       # CPU across 51.9s of wall time on a 4-core runner. WORKSPACE_JOBS runs four at a time.
@@ -122,6 +131,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - uses: ./.github/actions/bun-install
+
+      - name: Prepare offline platform catalog fixtures
+        run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
 
       - name: Build
         run: make build WORKSPACE_JOBS=4
@@ -158,6 +170,9 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - uses: ./.github/actions/bun-install
+
+      - name: Prepare offline platform catalog fixtures
+        run: bun run scripts/problem-pack/test/prepare-ci-catalog.ts
 
       # Issue #993 / #2513: run this leg's workspaces (and, when the shard is split, this leg's
       # slice of its test files) and generate coverage/lcov.info.

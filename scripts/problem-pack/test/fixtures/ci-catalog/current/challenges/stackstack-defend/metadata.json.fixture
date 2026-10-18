@@ -1,0 +1,238 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-defend",
+  "name": "止めずに直す",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45〜60 分",
+  "shortDescription": "Fixture stackstack-defend: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture stackstack-defend: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack-defend: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture stackstack-defend: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "stackstack",
+    "local-play",
+    "container",
+    "web-app",
+    "access-control",
+    "incident-response",
+    "defense"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (board + drafts desk)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "実際に成立している不正アクセスを、 自分の手で再現して確かめられるようになる",
+    "許可を積み上げる方針の中で 「一番緩いルールが実質の方針になる」 ことを、 走っているアプリで体験する",
+    "攻撃を止めたことと、 正規利用が続いていることを別々に測る習慣をつける",
+    "止める・落とす・絞る・名指しで塞ぐ、 が根本原因の修正ではないと説明できるようになる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Fix It Without Taking It Down",
+      "shortDescription": "Fixture stackstack-defend: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack-defend: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack-defend: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture stackstack-defend: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Reproduce a live unauthorized-access path with your own hands before claiming to have fixed it",
+        "Feel, on a running app, that in an allow-list policy the loosest rule is the effective policy",
+        "Get into the habit of measuring \"the attack stopped\" and \"legitimate use continued\" as two separate facts",
+        "Be able to explain why taking it down, switching it off, throttling it, or blocking one name is not a root-cause fix"
+      ],
+      "checks": [
+        {
+          "id": "read-the-leak",
+          "label": "See for yourself what is leaking out of the drafts",
+          "hints": [
+            {
+              "id": "defend-leak-1",
+              "content": "`/desk` prints the token for the investigation account (`u-guest`). Use it to list the drafts, and check whether things you did not write are in the list."
+            },
+            {
+              "id": "defend-leak-2",
+              "content": "Fixture stackstack-defend: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "stop-the-leak",
+          "label": "Stop other people's drafts from being readable",
+          "hints": [
+            {
+              "id": "defend-stop-1",
+              "content": "Fixture stackstack-defend: .i18n.en.checks.1.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "defend-stop-2",
+              "content": "Fixture stackstack-defend: .i18n.en.checks.1.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "keep-serving",
+          "label": "Keep every legitimate user working",
+          "hints": [
+            {
+              "id": "defend-keep-1",
+              "content": "Fixture stackstack-defend: .i18n.en.checks.2.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "defend-keep-2",
+              "content": "Fixture stackstack-defend: .i18n.en.checks.2.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "close-the-write-path",
+          "label": "Close the publish path too",
+          "hints": [
+            {
+              "id": "defend-write-1",
+              "content": "Who may read and who may publish are not the same people. The operations-rule post says one line about publishing, and it has two halves."
+            },
+            {
+              "id": "defend-write-2",
+              "content": "Fixture stackstack-defend: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "signoff",
+          "label": "Sign-off: fixed without taking it down",
+          "hints": [
+            {
+              "id": "defend-signoff-1",
+              "content": "`GET /posture` reports five gates measured from the running app. The sign-off appears only once all five are true, so a false gate is simply your next action."
+            },
+            {
+              "id": "defend-signoff-2",
+              "content": "Fixture stackstack-defend: .i18n.en.checks.4.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "read-the-leak",
+        "label": "下書きから漏れているものを、 自分の目で確かめる",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "defend-leak-1",
+            "content": "`/desk` に調査用の閲覧アカウント (`u-guest`) の token が出ています。 その token で下書きの一覧を取り、 自分が書いたものではないものまで並んでいないか確かめてください。",
+            "penalty": 0
+          },
+          {
+            "id": "defend-leak-2",
+            "content": "Fixture stackstack-defend: .scoring.checks.0.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 14
+          }
+        ]
+      },
+      {
+        "id": "stop-the-leak",
+        "label": "他人の下書きが読める状態を止める",
+        "points": 45,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "defend-stop-1",
+            "content": "誰がどの下書きに触れてよいかは、 実行時 policy の `rules` だけで決まります。 `/docs` の `PATCH /api/settings` で変更でき、 再起動は不要です。 いまの policy は `GET /api/policy` で見られます。",
+            "penalty": 0
+          },
+          {
+            "id": "defend-stop-2",
+            "content": "Fixture stackstack-defend: .scoring.checks.1.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "keep-serving",
+        "label": "正規の利用者を 1 人も止めない",
+        "points": 45,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "defend-keep-1",
+            "content": "この板には 4 種類の利用者がいます。 全員が同じものを見てよいわけではありませんが、 全員が何かを見てよい立場です。 誰の何が見えるべきかは、 板に残っている運用ルールの投稿に書いてあります。",
+            "penalty": 0
+          },
+          {
+            "id": "defend-keep-2",
+            "content": "毎ラウンド、 各アカウントの一覧が 「見えてよい集合」 とちょうど一致しているかを比べています。 多すぎても少なすぎても駄目です。 `/docs` から `GET /api/drill` を実行し、 `lastFailures` でどの利用者のどの操作が止まったか (または通ったか) を確認します。 token は `/desk` にあります。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "close-the-write-path",
+        "label": "公開の経路も閉じる",
+        "points": 40,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "defend-write-1",
+            "content": "読んでよい人と、 公開してよい人は同じではありません。 運用ルールの投稿は公開について 1 行だけ書いていて、 その 1 行には 2 つの条件が入っています。",
+            "penalty": 0
+          },
+          {
+            "id": "defend-write-2",
+            "content": "ルールは `actions` で対象の操作を宣言するので、 read と publish は別々に判断できます。 read だけ直すと公開の経路は開いたままです。 `/docs` から `GET /api/drill` を実行し、 `window.attack.publish` を見てください。 `leaked` が 0 でないうちは受領証は出ません。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "signoff",
+        "label": "止めずに直したことの合格印",
+        "points": 40,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "defend-signoff-1",
+            "content": "`GET /posture` は走っているアプリから実測した 5 つの gate を返します。 合格印は 5 つ全部が true になって初めて出るので、 false の gate がそのまま次にやることです。",
+            "penalty": 0
+          },
+          {
+            "id": "defend-signoff-2",
+            "content": "`/docs` から `GET /posture` を実行すると `gates` と `readyToken` が出ます。 最後の gate は修正が一度も崩れずに保たれた時間で、 既定は 60 秒です。 直したあとは触らずに走らせ、 `GET /api/drill` の `cleanForMs` と `holdMs` で残りを確認します。",
+            "penalty": 18
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 140,
+    "chapter": "4. StackStack 本編"
+  }
+}

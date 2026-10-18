@@ -1,0 +1,245 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "wp-harden-leaks",
+  "name": "後任の大掃除",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "約40分",
+  "shortDescription": "前任者が公開領域に残した漏れが複数ある WordPress サイト。 あなたは後任担当として、 サーバに入り、 外部スキャナが 「クリーン」 と言うまで穴を一つずつ塞ぐ。 ただし、 表面的に消しただけでは塞がらない穴もある。",
+  "description": "Fixture wp-harden-leaks: .description. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture wp-harden-leaks: .instructions. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture wp-harden-leaks: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "wordpress",
+    "misconfiguration",
+    "remediation",
+    "hardening",
+    "operations",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (WordPress site)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
+  ],
+  "learningGoals": [
+    "「動いているサイトを安全にする」 とは、 コードを書くことではなく運用の是正 (不要ファイルの削除・設定の無効化) であることを、 実際に手を動かして体得する",
+    "表面 (ファイル) を消すだけでは塞がらず、 発生源 (デバッグ設定) を止めて初めて閉じる穴があることを、 外部スキャナの再判定で自分で確かめられるようになる",
+    "公開領域に置くファイルの棚卸し・ディレクトリ一覧の無効化・デバッグ出力の停止という、 コードを触らない基本の是正を自分で適用できるようになる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Successor's Cleanup",
+      "shortDescription": "Fixture wp-harden-leaks: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "description": "Fixture wp-harden-leaks: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture wp-harden-leaks: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture wp-harden-leaks: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Experience, hands-on, that 'making a running site safe' is not writing code but operational remediation — deleting unneeded files and disabling settings",
+        "Confirm for yourself, via the external scanner's re-judgement, that some holes do not close by deleting the file (symptom) and only close once you stop the source (a debug setting)",
+        "Be able to apply the basic, code-free remediations yourself: inventory what is in public folders, disable directory listing, and stop debug output"
+      ],
+      "checks": [
+        {
+          "id": "close-backup",
+          "label": "Close the public backup",
+          "hints": [
+            {
+              "id": "backup-1",
+              "content": "Fixture wp-harden-leaks: .i18n.en.checks.0.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "backup-2",
+              "content": "Fixture wp-harden-leaks: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "backup-3",
+              "content": "`docker compose exec wordpress rm /var/www/html/wp-content/backups/db-backup.sql`, then re-scan. Backups should never sit where the web server can serve them."
+            }
+          ]
+        },
+        {
+          "id": "close-config",
+          "label": "Close the config copy",
+          "hints": [
+            {
+              "id": "config-1",
+              "content": "Fixture wp-harden-leaks: .i18n.en.checks.1.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "config-2",
+              "content": "Editors often leave a copy like `wp-config.php.bak`, `.save`, or `wp-config.php~`. Check the docroot root. If present, the DB credentials are leaking in plain text."
+            },
+            {
+              "id": "config-3",
+              "content": "`docker compose exec wordpress rm /var/www/html/wp-config.php.bak`, then re-scan. Keep such copies off the server, and rotate any credential that leaked."
+            }
+          ]
+        },
+        {
+          "id": "close-listing",
+          "label": "Stop the browsable internal folder",
+          "hints": [
+            {
+              "id": "listing-1",
+              "content": "Fixture wp-harden-leaks: .i18n.en.checks.2.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "listing-2",
+              "content": "Fixture wp-harden-leaks: .i18n.en.checks.2.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "listing-3",
+              "content": "Fixture wp-harden-leaks: .i18n.en.checks.2.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "close-debug",
+          "label": "Stop the production debug output",
+          "hints": [
+            {
+              "id": "debug-1",
+              "content": "This log is detected again even after you 'delete' it. Suspect the setting that produces it, not the file itself."
+            },
+            {
+              "id": "debug-2",
+              "content": "Fixture wp-harden-leaks: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "debug-3",
+              "content": "Fixture wp-harden-leaks: .i18n.en.checks.3.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ],
+    "terminal": {
+      "service": "wordpress"
+    }
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "hintReveal": "flat",
+    "checks": [
+      {
+        "id": "close-backup",
+        "label": "公開領域のバックアップを塞ぐ",
+        "points": 40,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "backup-1",
+            "content": "外部スキャナは 「公開領域に置かれたバックアップ」 をまだ検知している。 まずサーバの中に入り、 Web から届く場所 (`/var/www/html` の下) に、 本来置いてはいけないバックアップ的なファイルが残っていないか歩いて確認しよう。",
+            "penalty": 0
+          },
+          {
+            "id": "backup-2",
+            "content": "サイト移行時に取ったデータベースのダンプ (`.sql`) が公開フォルダに残っているのが典型。 `/var/www/html/wp-content/backups/` の中を見てみよう。 Web から届く=消せば外から 404 になる。",
+            "penalty": 4
+          },
+          {
+            "id": "backup-3",
+            "content": "`docker compose exec wordpress rm /var/www/html/wp-content/backups/db-backup.sql` で削除し、 再スキャンする。 バックアップはそもそも Web から届く場所に置かない。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "close-config",
+        "label": "設定ファイルの控えを塞ぐ",
+        "points": 40,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "config-1",
+            "content": "設定ファイル本体 `wp-config.php` は PHP として実行されるので中身は見えない。 だが 「実行されない拡張子」 で保存された控えが公開領域に残ると、 平文で配信されてしまう。 そういう控えを探そう。",
+            "penalty": 0
+          },
+          {
+            "id": "config-2",
+            "content": "エディタは編集前に `wp-config.php.bak` / `.save` / `wp-config.php~` のような控えを作りがち。 docroot 直下に残っていないか確認しよう。 あれば認証情報が平文で漏れている。",
+            "penalty": 4
+          },
+          {
+            "id": "config-3",
+            "content": "`docker compose exec wordpress rm /var/www/html/wp-config.php.bak` で削除し、 再スキャンする。 控えはサーバの外で管理し、 漏れた認証情報はローテーションする。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "close-listing",
+        "label": "内部フォルダの丸見えを止める",
+        "points": 50,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "listing-1",
+            "content": "ファイル名を知らなくても、 フォルダを開くだけで中のファイルが一覧表示されてしまう状態がある。 `robots.txt` が気にしていたもう一つのフォルダを、 外から開くとどうなるか見てみよう。",
+            "penalty": 0
+          },
+          {
+            "id": "listing-2",
+            "content": "`/internal/` に Apache のディレクトリ一覧 (Indexes) が有効なままで、 中身が丸見えになっている。 止め方は 3 つ ── 一覧を無効化する / `index.html` を置く / フォルダごと消す。 どれでも 「一覧が出ない」 状態になればよい。",
+            "penalty": 5
+          },
+          {
+            "id": "listing-3",
+            "content": "Fixture wp-harden-leaks: .scoring.checks.2.hints.2.content. Synthetic narrative for platform contract tests.",
+            "penalty": 10
+          }
+        ]
+      },
+      {
+        "id": "close-debug",
+        "label": "本番のデバッグ出力を止める",
+        "points": 70,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "debug-1",
+            "content": "このログは 「消しても」 スキャナがまた検知する。 ファイルそのものより、 それを生み出している設定を疑おう。",
+            "penalty": 0
+          },
+          {
+            "id": "debug-2",
+            "content": "WordPress には開発中に有効化して本番で切り忘れる出力設定がある (デバッグログ)。 その設定が生きている限り、 サイトにリクエストが来るたびにログが再生成される。 まず設定を止め、 それからファイルを消すのが順序だ。",
+            "penalty": 7
+          },
+          {
+            "id": "debug-3",
+            "content": "Fixture wp-harden-leaks: .scoring.checks.3.hints.2.content. Synthetic narrative for platform contract tests.",
+            "penalty": 14
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 80,
+    "chapter": "3. 運用で直す"
+  }
+}

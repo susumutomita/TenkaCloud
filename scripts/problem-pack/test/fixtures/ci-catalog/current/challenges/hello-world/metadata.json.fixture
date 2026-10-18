@@ -1,0 +1,92 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "hello-world",
+  "name": "Hello World (Sample)",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "1 分",
+  "shortDescription": "天下クラウド株式会社への入社初日。 前任の SRE が本番環境に残していったのは、 SSM パラメータストア (= AWS の 「設定値をしまう棚」) に置かれた値ひとつだけでした。\n\n引き継ぎ書には 「SSM の hello を見て」 と一行だけ。 AWS Console か CLI からその値を読み、 前任者のメッセージを見つけてください。",
+  "instructions": "Fixture hello-world: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture hello-world: .description. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "sample",
+    "challenge",
+    "flag",
+    "ssm"
+  ],
+  "exposedPorts": [
+    {
+      "port": 1,
+      "name": "(no public endpoint — SSM Parameter only, port unused)"
+    }
+  ],
+  "learningGoals": [
+    "AWS Console / CLI で SSM Parameter Store の値を読み出す経路を体験する",
+    "TenkaCloud の deploy → flag 提出 → 加点 経路が end-to-end で動くことを確認する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "FlagSeed": "__RANDOM_PASSWORD__"
+  },
+  "i18n": {
+    "en": {
+      "name": "Hello World (Sample)",
+      "shortDescription": "Fixture hello-world: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture hello-world: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture hello-world: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Experience reading a value from SSM Parameter Store via AWS Console / CLI",
+        "Verify that TenkaCloud's deploy → flag-submission → score pipeline works end-to-end"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Open the `ParameterConsoleUrl` Output to land directly on the SSM Parameter detail page in the AWS Console. From the CLI: `aws ssm get-parameter --name /{NamePrefix}/hello`."
+        },
+        {
+          "id": "hint-2",
+          "content": "Fixture hello-world: .i18n.en.hints.1.content. Synthetic narrative for platform contract tests."
+        }
+      ]
+    }
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "ParameterValue",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Outputs の `ParameterConsoleUrl` を開くと AWS Console の SSM Parameter 詳細ページに直接着地します。 CLI 派は `aws ssm get-parameter --name /{NamePrefix}/hello`。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "値は `TC{…}` 形式。 中括弧の中身は deploy ごとのランダム値で、NamePrefix からは導出できない ── 必ず Parameter の実値を読んで、`TC{` から `}` までをそのまま貼り付けること。",
+        "penalty": 30
+      }
+    ]
+  },
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  },
+  "skillEvidence": [
+    {
+      "skillId": "aws.parameter.read",
+      "label": "配置したParameter値の取得と正答提出",
+      "i18n": {
+        "en": {
+          "label": "Retrieve the deployed parameter and submit an accepted answer"
+        }
+      },
+      "rule": {
+        "source": "flag",
+        "result": "ok"
+      }
+    }
+  ]
+}

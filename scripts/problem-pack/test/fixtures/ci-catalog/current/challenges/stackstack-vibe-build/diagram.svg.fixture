@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" role="img" aria-label="stackstack-vibe-build architecture">
+  <title>stackstack-vibe-build</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5b6472" />
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #5b6472; stroke-width: 1.5; rx: 8; }
+      .soft { fill: #f4f6f9; stroke: #9aa4b2; stroke-width: 1.2; rx: 8; }
+      .t { font: 13px system-ui, sans-serif; fill: #1f2733; }
+      .s { font: 11px system-ui, sans-serif; fill: #5b6472; }
+      .h { font: 600 13px system-ui, sans-serif; fill: #1f2733; }
+      .l { stroke: #5b6472; stroke-width: 1.4; fill: none; marker-end: url(#a); }
+    </style>
+  </defs>
+
+  <rect class="soft" x="12" y="12" width="736" height="356" />
+  <text class="s" x="26" y="34">container (loopback only) — no cloud account</text>
+
+  <rect class="box" x="30" y="52" width="200" height="86" />
+  <text class="h" x="44" y="76">your checkout</text>
+  <text class="s" x="44" y="96">API /api/source</text>
+  <text class="s" x="44" y="114">search() / renderResults()</text>
+  <text class="s" x="44" y="130">read-only mount, re-read on save</text>
+
+  <rect class="box" x="30" y="188" width="200" height="72" />
+  <text class="h" x="44" y="212">child process</text>
+  <text class="s" x="44" y="232">env: {} — no FLAG_SEED</text>
+  <text class="s" x="44" y="250">one call at a time, with a timeout</text>
+
+  <rect class="box" x="286" y="52" width="216" height="208" />
+  <text class="h" x="300" y="76">the board app</text>
+  <text class="s" x="300" y="98">GET /api/spec — R1..R9</text>
+  <text class="s" x="300" y="118">GET /api/search — JSON</text>
+  <text class="s" x="300" y="138">GET /search — HTML + CSP</text>
+  <text class="s" x="300" y="158">GET /api/archive — public view</text>
+  <text class="s" x="300" y="178">GET /api/feature — load state</text>
+  <text class="s" x="300" y="198">GET /api/selfcheck — measure</text>
+  <text class="s" x="300" y="218">GET /posture — gates + receipts</text>
+  <text class="s" x="300" y="242">archive: public rows + rows that are not</text>
+
+  <rect class="box" x="558" y="52" width="170" height="86" />
+  <text class="h" x="572" y="76">probe batch</text>
+  <text class="s" x="572" y="96">fresh rows per run</text>
+  <text class="s" x="572" y="114">asked over real HTTP</text>
+  <text class="s" x="572" y="130">removed afterwards</text>
+
+  <rect class="box" x="558" y="188" width="170" height="72" />
+  <text class="h" x="572" y="212">/verify :18081</text>
+  <text class="s" x="572" y="232">5 checkpoints</text>
+  <text class="s" x="572" y="250">re-measures, then compares</text>
+
+  <path class="l" d="M130 138 L130 186" />
+  <path class="l" d="M232 224 L284 190" />
+  <path class="l" d="M284 150 L234 206" />
+  <path class="l" d="M504 110 L556 96" />
+  <path class="l" d="M556 120 L504 140" />
+  <path class="l" d="M643 138 L643 186" />
+
+  <text class="s" x="140" y="170">loaded</text>
+  <text class="s" x="238" y="186">call</text>
+  <text class="s" x="510" y="286">receipt appears on /posture only while its gate is true</text>
+</svg>

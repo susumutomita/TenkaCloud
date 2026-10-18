@@ -1,0 +1,27 @@
+# Local-play problem container for sqli-demo.
+# Bound to 127.0.0.1 only: the challenge surface and /verify never leave the box.
+name: sqli-demo
+services:
+  sqli-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Per-deploy random secret injected by `make local`; the flag and the admin
+      # password are derived from it inside the container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    ports:
+      - "127.0.0.1:18080:8080" # challenge surface
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

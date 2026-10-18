@@ -1,0 +1,240 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-ship",
+  "name": "外から見えるところまで",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45 分",
+  "shortDescription": "Fixture stackstack-ship: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture stackstack-ship: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack-ship: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture stackstack-ship: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "stackstack",
+    "deploy",
+    "release",
+    "secrets",
+    "health-check",
+    "local-play",
+    "container",
+    "web-app"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (board / shipyard / site)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "ビルド済みの成果物が存在することと、 それが配られていることが別の事実だと区別できる",
+    "stage 単位のデプロイログから、 止まった原因と次に直す場所を切り分けられる",
+    "秘密を値で渡すか参照で渡すかで、 入れ替え時の壊れ方が変わることを挙動で説明できる",
+    "デプロイの成功記録ではなく、 公開側の応答で正常性を確認する習慣をつける"
+  ],
+  "i18n": {
+    "en": {
+      "name": "As Far As the Outside",
+      "shortDescription": "Fixture stackstack-ship: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack-ship: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack-ship: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture stackstack-ship: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Separate \"the artifact exists\" from \"the artifact is being served\" as two distinct facts",
+        "Use a stage-by-stage deploy log to isolate why a release stopped and what to fix next",
+        "Explain, from observed behaviour, how passing a secret by value differs from passing it by reference when the secret rotates",
+        "Confirm health from what the public side answers rather than from a successful deployment record"
+      ],
+      "checks": [
+        {
+          "id": "built-artifact",
+          "label": "Identify what gets shipped",
+          "hints": [
+            {
+              "id": "ship-artifact-1",
+              "content": "Something was built before you arrived, and nothing is serving it. The release plane keeps a list of what it has on hand — ask it for that list."
+            },
+            {
+              "id": "ship-artifact-2",
+              "content": "Fixture stackstack-ship: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "release-receipt",
+          "label": "Get one release through",
+          "hints": [
+            {
+              "id": "ship-receipt-1",
+              "content": "Fixture stackstack-ship: .i18n.en.checks.1.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "ship-receipt-2",
+              "content": "Fixture stackstack-ship: .i18n.en.checks.1.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "published-title",
+          "label": "Change what the outside sees",
+          "hints": [
+            {
+              "id": "ship-title-1",
+              "content": "Fixture stackstack-ship: .i18n.en.checks.2.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "ship-title-2",
+              "content": "Fixture stackstack-ship: .i18n.en.checks.2.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "rotation-survives",
+          "label": "Survive a key rotation",
+          "hints": [
+            {
+              "id": "ship-rotation-1",
+              "content": "Fixture stackstack-ship: .i18n.en.checks.3.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "ship-rotation-2",
+              "content": "Fixture stackstack-ship: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "clean-cutover",
+          "label": "Clean up without an outage",
+          "hints": [
+            {
+              "id": "ship-cutover-1",
+              "content": "Fixture stackstack-ship: .i18n.en.checks.4.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "ship-cutover-2",
+              "content": "Fixture stackstack-ship: .i18n.en.checks.4.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Ops": "http://127.0.0.1:18080/shipyard",
+      "Public": "http://127.0.0.1:18080/site"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "built-artifact",
+        "label": "配るものを突き止める",
+        "points": 20,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "ship-artifact-1",
+            "content": "あなたが来る前に、 何かがビルドされています。 そして、 それを配っているものは 1 つもありません。 リリース基盤は手元にあるものの一覧を持っています。 まずその一覧を出させてください。",
+            "penalty": 0
+          },
+          {
+            "id": "ship-artifact-2",
+            "content": "`/docs` から `GET /shipyard/artifacts` を実行すると、 `artifacts` に id がちょうど 1 つ返ります。 それをそのまま提出してください。 初期 manifest の id は別のマシンで焼いたビルドなので違います。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "release-receipt",
+        "label": "リリースを 1 本通す",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "ship-receipt-1",
+            "content": "`POST /shipyard/releases` はパイプラインを走らせ、 進めなかった最初の stage で止まって、 その stage 名と理由を返します。 その行が言っていることを直して、 もう一度打つ。 これを繰り返してください。 リリースがついに live になったときに書かれるログ行に、 このチェックポイントが求めている値が入っています。",
+            "penalty": 0
+          },
+          {
+            "id": "ship-receipt-2",
+            "content": "Fixture stackstack-ship: .scoring.checks.1.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "published-title",
+        "label": "公開側の見出しを差し替える",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "ship-title-1",
+            "content": "公開側の入口に出る見出しは、 板の設定ファイルから来ていません。 リリースから来ています。 リリース側で書き換えて、 もう一度デプロイして、 外が実際に何を返しているかを見てください。",
+            "penalty": 0
+          },
+          {
+            "id": "ship-title-2",
+            "content": "Fixture stackstack-ship: .scoring.checks.2.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 16
+          }
+        ]
+      },
+      {
+        "id": "rotation-survives",
+        "label": "鍵の入れ替えをまたぐ",
+        "points": 60,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "ship-rotation-1",
+            "content": "本番の鍵は入れ替わります。 `/shipyard/secrets` にあるものを自分で入れ替えて、 そのあと公開側の入口がどうなるかを見てください。 `GET /posture` の gate は、 何も壊さずに同じことを見ています。 採点があなたの代わりに鍵を入れ替えることはありません。",
+            "penalty": 0
+          },
+          {
+            "id": "ship-rotation-2",
+            "content": "Fixture stackstack-ship: .scoring.checks.3.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 28
+          }
+        ]
+      },
+      {
+        "id": "clean-cutover",
+        "label": "止めずに片付ける",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "ship-cutover-1",
+            "content": "`GET /posture` は走っている plane から実測した 3 つの gate を返します。 合格印は 3 つとも true になって初めて出ます。 false の gate がそのまま次にやることです。 そのうち 1 つは、 うまくいかなかった試行の残骸についてのものです。",
+            "penalty": 0
+          },
+          {
+            "id": "ship-cutover-2",
+            "content": "Fixture stackstack-ship: .scoring.checks.4.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 16
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 100,
+    "chapter": "4. StackStack 本編"
+  }
+}

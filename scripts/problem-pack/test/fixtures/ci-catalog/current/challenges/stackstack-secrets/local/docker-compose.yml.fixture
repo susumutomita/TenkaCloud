@@ -1,0 +1,45 @@
+# Local-play container for stackstack-secrets.
+#
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
+# copy of it: this problem acts on the same board stackstack-onboarding and
+# stackstack-ship did, with `SCENARIO=secrets` adding the ops API, the key store
+# and the nightly digest on top.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
+# There is no key material in this directory — the leaked credential, the
+# break-glass credential and every receipt are derived from FLAG_SEED inside the
+# container, so no two deploys share an answer and none is committed.
+name: stackstack-secrets
+services:
+  stackstack-secrets:
+    build:
+      context: ../../../runtimes/stackstack
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: secrets
+      # Per-deploy random secret injected by `make local`. The published ops key,
+      # the break-glass credential, every fingerprint, witness, revocation
+      # receipt and policy digest are derived from it inside the container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
+      # The manifest names a key — it never holds one.
+      - ./config:/app/config:ro
+      - ./ops:/app/ops:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board and the ops console
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

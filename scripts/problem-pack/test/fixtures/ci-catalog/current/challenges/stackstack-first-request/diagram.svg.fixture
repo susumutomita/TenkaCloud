@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 340" font-family="Helvetica,Arial,sans-serif">
+<defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748B"/></marker></defs>
+<rect x="0" y="0" width="620" height="340" fill="#FFFFFF"/>
+<text x="310" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#0F172A">Your first request — three round trips</text>
+<text x="310" y="50" text-anchor="middle" font-size="11" fill="#64748B">everything happens between your browser and one local container</text>
+
+<rect x="20" y="120" width="150" height="120" rx="8" fill="#F8FAFC" stroke="#2563EB" stroke-width="2"/>
+<rect x="20" y="120" width="150" height="26" rx="8" fill="#2563EB"/>
+<rect x="20" y="138" width="150" height="8" fill="#2563EB"/>
+<text x="95" y="138" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">Your browser</text>
+<text x="95" y="166" text-anchor="middle" font-size="10.5" fill="#334155">the board and its</text>
+<text x="95" y="181" text-anchor="middle" font-size="10.5" fill="#334155">API console (/docs)</text>
+<text x="95" y="196" text-anchor="middle" font-size="10.5" fill="#334155">— Try any API —</text>
+<text x="95" y="221" text-anchor="middle" font-size="10.5" fill="#64748B">no terminal needed</text>
+
+<rect x="238" y="66" width="200" height="242" rx="10" fill="#FFFFFF" stroke="#0F172A" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="338" y="86" text-anchor="middle" font-size="11" font-weight="700" fill="#0F172A">Docker (your machine)</text>
+
+<rect x="254" y="98" width="168" height="60" rx="8" fill="#F8FAFC" stroke="#16A34A" stroke-width="2"/>
+<text x="338" y="120" text-anchor="middle" font-size="11.5" font-weight="700" fill="#166534">1 · GET /api/postcard</text>
+<text x="338" y="137" text-anchor="middle" font-size="10.5" fill="#334155">200 — the door's password</text>
+<text x="338" y="151" text-anchor="middle" font-size="10.5" fill="#334155">is in the response</text>
+
+<rect x="254" y="168" width="168" height="60" rx="8" fill="#F8FAFC" stroke="#D97706" stroke-width="2"/>
+<text x="338" y="190" text-anchor="middle" font-size="11.5" font-weight="700" fill="#92400E">2 · GET /api/door</text>
+<text x="338" y="207" text-anchor="middle" font-size="10.5" fill="#334155">400 tells you the fix →</text>
+<text x="338" y="221" text-anchor="middle" font-size="10.5" fill="#334155">?key=… earns the 200</text>
+
+<rect x="254" y="238" width="168" height="60" rx="8" fill="#F8FAFC" stroke="#7C3AED" stroke-width="2"/>
+<text x="338" y="260" text-anchor="middle" font-size="11.5" font-weight="700" fill="#5B21B6">3 · POST /api/guestbook</text>
+<text x="338" y="277" text-anchor="middle" font-size="10.5" fill="#334155">a JSON body in,</text>
+<text x="338" y="291" text-anchor="middle" font-size="10.5" fill="#334155">201 and a receipt back</text>
+
+<rect x="470" y="120" width="130" height="120" rx="8" fill="#F8FAFC" stroke="#0F172A" stroke-width="2"/>
+<rect x="470" y="120" width="130" height="26" rx="8" fill="#0F172A"/>
+<rect x="470" y="138" width="130" height="8" fill="#0F172A"/>
+<text x="535" y="138" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">GET /posture</text>
+<text x="535" y="166" text-anchor="middle" font-size="10.5" fill="#334155">3 gates, measured</text>
+<text x="535" y="181" text-anchor="middle" font-size="10.5" fill="#334155">from the running app</text>
+<text x="535" y="196" text-anchor="middle" font-size="10.5" fill="#334155">all green →</text>
+<text x="535" y="211" text-anchor="middle" font-size="10.5" fill="#334155">readyToken</text>
+
+<line x1="170" y1="180" x2="238" y2="180" stroke="#64748B" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="204" y="170" text-anchor="middle" font-size="9.5" fill="#64748B">requests</text>
+<line x1="438" y1="180" x2="470" y2="180" stroke="#64748B" stroke-width="1.5" marker-end="url(#a)"/>
+
+<text x="310" y="328" text-anchor="middle" font-size="10.5" fill="#64748B">No cloud account, no bill. Break anything — a rebuild puts it back.</text>
+</svg>

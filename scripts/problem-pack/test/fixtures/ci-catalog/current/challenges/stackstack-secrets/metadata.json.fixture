@@ -1,0 +1,240 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-secrets",
+  "name": "板に載ってしまった鍵",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "40 分",
+  "shortDescription": "Fixture stackstack-secrets: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture stackstack-secrets: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack-secrets: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture stackstack-secrets: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "stackstack",
+    "secrets",
+    "credentials",
+    "least-privilege",
+    "key-rotation",
+    "local-play",
+    "container",
+    "web-app"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (board / ops console)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "公開されてしまった資格情報は撤回できず、 無効化しかできないことを、 実際の挙動で説明できる",
+    "止めてはいけないジョブを抱えたまま、 発行 → 切替 → 失効の順で資格情報を入れ替えられる",
+    "資格情報の発行・失効の権限を、 その資格情報自身から切り離す理由を説明できる",
+    "ワイルドカードの権限を、 実行して拒否を読む手順で必要最小限まで絞り込める"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Key That Made It Onto the Board",
+      "shortDescription": "Fixture stackstack-secrets: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack-secrets: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack-secrets: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture stackstack-secrets: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Explain from observed behaviour why a published credential cannot be retracted, only invalidated",
+        "Swap a credential in the order issue → cut over → revoke while a job that depends on it keeps running",
+        "Explain why the authority to issue and revoke credentials is kept out of the credential being used",
+        "Narrow a wildcard permission to the minimum by running the work and reading what it is refused"
+      ],
+      "checks": [
+        {
+          "id": "leak-live",
+          "label": "The ops key the handover left behind",
+          "hints": [
+            {
+              "id": "secrets-leak-1",
+              "content": "Fixture stackstack-secrets: .i18n.en.checks.0.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "secrets-leak-2",
+              "content": "Fixture stackstack-secrets: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "key-rotated",
+          "label": "The key the nightly digest runs as now",
+          "hints": [
+            {
+              "id": "secrets-rotate-1",
+              "content": "Fixture stackstack-secrets: .i18n.en.checks.1.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "secrets-rotate-2",
+              "content": "Fixture stackstack-secrets: .i18n.en.checks.1.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "key-revoked",
+          "label": "The old key no longer opens anything",
+          "hints": [
+            {
+              "id": "secrets-revoke-1",
+              "content": "Fixture stackstack-secrets: .i18n.en.checks.2.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "secrets-revoke-2",
+              "content": "Fixture stackstack-secrets: .i18n.en.checks.2.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "least-privilege",
+          "label": "What the ops key can do",
+          "hints": [
+            {
+              "id": "secrets-scope-1",
+              "content": "Fixture stackstack-secrets: .i18n.en.checks.3.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "secrets-scope-2",
+              "content": "Fixture stackstack-secrets: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "sign-off",
+          "label": "Sign-off for the handover",
+          "hints": [
+            {
+              "id": "secrets-signoff-1",
+              "content": "`GET /posture` returns five gates measured from the running app. While `readyToken` is null, the gates that are false are your remaining work, in the order they are listed."
+            },
+            {
+              "id": "secrets-signoff-2",
+              "content": "Run `GET /posture` from `/docs`. After any change, run `POST /api/ops/digest/run` once so the measurement catches up. When all five gates are true, submit `readyToken`."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Board": "http://127.0.0.1:18080/",
+      "Ops": "http://127.0.0.1:18080/api/ops"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "leak-live",
+        "label": "引き継ぎに残っていた運用キー",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "secrets-leak-1",
+            "content": "この板には運用 API がぶら下がっていて、 その入口は 「いま出された資格情報が何者か」 を教えてくれます。 ただし、 その資格情報を実際に出せる人にだけです。 サーフェスの一覧は `GET /api/ops` にあります。",
+            "penalty": 0
+          },
+          {
+            "id": "secrets-leak-2",
+            "content": "鍵は板の引き継ぎ投稿にそのまま載っています。 `/docs` で header に `{\"X-Ops-Key\":\"SSOPS-…\"}` を入れて `GET /api/ops/whoami` を実行し、 応答の `witness` を提出してください。 鍵を止めた後でも同じ値が引けるので、 やる順番は自由です。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "key-rotated",
+        "label": "夜間ダイジェストがいま使っている鍵",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "secrets-rotate-1",
+            "content": "新しい鍵は運用キーでは発行できません。 発行と失効はホストに手が届く人の操作で、 どのヘッダが要るかは運用コンソールに書いてあります。 夜間ジョブがどの鍵で動くかを決めているのは鍵ストアではなく `ops.json` です。",
+            "penalty": 0
+          },
+          {
+            "id": "secrets-rotate-2",
+            "content": "Fixture stackstack-secrets: .scoring.checks.1.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "key-revoked",
+        "label": "古い鍵はもう何も開けない",
+        "points": 45,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "secrets-revoke-1",
+            "content": "投稿を隠すことも、 手元の控えを捨てることも、 その鍵が何かを開けるかどうかを 1 ミリも変えません (そもそもこの板に delete はありません)。 それを決めている状態は鍵ストアの側にあり、 `GET /api/ops/keys` に出ています。",
+            "penalty": 0
+          },
+          {
+            "id": "secrets-revoke-2",
+            "content": "Fixture stackstack-secrets: .scoring.checks.2.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 22
+          }
+        ]
+      },
+      {
+        "id": "least-privilege",
+        "label": "運用キーにできること",
+        "points": 45,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "secrets-scope-1",
+            "content": "`GET /api/ops/policy` は 「設定ファイルに何と書いたか」 ではなく 「その設定でいま実際に何ができるか」 を返します。 この板で定期的に走っているものはちょうど 1 つです。 カタログは各 action が何をするかを書いていますが、 どれが要るかは書いていません。",
+            "penalty": 0
+          },
+          {
+            "id": "secrets-scope-2",
+            "content": "Fixture stackstack-secrets: .scoring.checks.3.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 22
+          }
+        ]
+      },
+      {
+        "id": "sign-off",
+        "label": "引き継ぎ完了の合格印",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "secrets-signoff-1",
+            "content": "`GET /posture` は走っているアプリから実測した 5 つの gate を返します。 `readyToken` が null のあいだ、 false の gate が並んでいる順にそのまま残りの作業です。",
+            "penalty": 0
+          },
+          {
+            "id": "secrets-signoff-2",
+            "content": "`/docs` から `GET /posture` を実行します。 何かを変えたあとは `POST /api/ops/digest/run` を 1 回実行して実測を追いつかせてください。 5 つ全部 true になったら `readyToken` を提出します。",
+            "penalty": 14
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 130,
+    "chapter": "4. StackStack 本編"
+  }
+}

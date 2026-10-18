@@ -1,0 +1,75 @@
+# Local-play problem container for wp2shell-local-lab.
+#
+# Safety boundary (this is the crux of the problem -- see AGENTS.md and the issue
+# this ships against): the app is a from-scratch simulator, never real WordPress,
+# and never a reusable public-internet exploit.
+#   - `networks.labnet.internal: true` means this compose network has NO route to
+#     the internet or the host's external interface at all -- not "firewalled",
+#     genuinely unrouteable. Even if the app tried to phone home, there is nowhere
+#     for the packet to go.
+#   - `workshop-host` is the second network the service needs to be PLAYABLE.
+#     Docker will not establish a host port binding for a container attached only
+#     to internal networks: `HostConfig.PortBindings` is recorded, but
+#     `NetworkSettings.Ports` comes back null and `docker ps` shows a bare
+#     `8080-8081/tcp` with no `127.0.0.1:...->` mapping. The container then passes
+#     its own in-container healthcheck (`Up (healthy)`) while the host -- and so
+#     the platform's `/verify` readiness probe -- can reach nothing (TenkaCloud#347).
+#     It is a bridge with `enable_ip_masquerade: "false"`, which carries the
+#     inbound published-port path and still grants no egress: with no SNAT, a
+#     packet leaving the container has no return route. Measured, not assumed --
+#     from inside the container both the default route and a send forced out this
+#     interface time out. Same arrangement the other two internal-network problems
+#     already use (`challenges/ai-riscv-screen-repair`,
+#     `challenges/secure-ota-rollback`); this problem declared the internal half
+#     without the publishing half.
+#   - Both published ports are bound to 127.0.0.1 only.
+#   - No `privileged`, no `cap_add`, no host bind mounts, no docker.sock.
+#   - The app itself has no shell/exec/eval capability -- see server.mjs's
+#     top-of-file comment and scripts/wp2shell-local-lab.test.ts, which greps the
+#     shipped source for child_process/exec/eval/spawn and fails the build if any
+#     of them appear.
+name: wp2shell-local-lab
+services:
+  wp2shell-local-lab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      - labnet
+      - workshop-host
+    environment:
+      # Per-deploy random secret injected by `make local`; both checkpoint flags
+      # and the SRE console token are derived from it inside the container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    ports:
+      - "127.0.0.1:18080:8080" # challenge surface + SRE console
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"
+
+networks:
+  # internal: true means Docker gives this network no gateway to the outside --
+  # not a firewall rule that could be misconfigured, an actual absence of a route.
+  labnet:
+    internal: true
+  # The publish-only path. A container on internal networks alone gets no host
+  # port binding at all, so this bridge exists purely to make `ports:` above
+  # take effect. Masquerade is off, so it adds inbound reachability from host
+  # loopback without adding outbound reach: an egress packet gets no source NAT
+  # and never comes back. host_binding_ipv4 pins any unqualified publish to
+  # loopback, so the `127.0.0.1:` prefixes above cannot be undercut by a default.
+  workshop-host:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"

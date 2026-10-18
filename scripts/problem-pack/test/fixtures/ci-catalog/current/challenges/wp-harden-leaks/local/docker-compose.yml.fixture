@@ -1,0 +1,145 @@
+# Local-play problem stack for wp-harden-leaks (remediation companion to wp-exposed-backup).
+#
+# A REAL WordPress + MariaDB, run isolated for teaching REMEDIATION. The site starts
+# already-leaky (the previous operator left four things in the public web root); the
+# player enters the container and CLOSES each hole. Judging is STATE-BASED: the verify
+# container HTTP-probes the running WordPress over the compose network (http://wordpress/,
+# the internal :80 — NOT the host-published :18080) and passes a checkpoint only when that
+# surface is genuinely no longer reachable. One hole (the debug log) regenerates unless the
+# player also turns WP_DEBUG off — fix the cause, not the symptom. Everything is bound to
+# 127.0.0.1 only and never leaves the box.
+#
+# Services:
+#   db          real MariaDB (dummy data only)
+#   wordpress   real WordPress (Apache). A wrapper entrypoint plants the four leftovers
+#               (and a mu-plugin that regenerates debug.log) before Apache starts.
+#   wpinit      one-shot WP-CLI: installs WordPress and seeds content so it is a working site.
+#   verify      loopback /verify = the "external scanner": probes http://wordpress/ and
+#               judges each hole CLOSED by the live response.
+name: wp-harden-leaks
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+      MARIADB_ROOT_PASSWORD: root-not-secret
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: "5s"
+      timeout: "5s"
+      retries: 30
+    restart: "no"
+
+  wordpress:
+    build:
+      context: ./wordpress
+      dockerfile: Dockerfile
+      target: participant
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+      # The classic production mistake: debug logging left ON. WP_DEBUG writes PHP
+      # notices to wp-content/debug.log while WP_DEBUG_LOG is true; display is off so
+      # the site still looks clean. WP_DEBUG_LOG is applied via eval (not a literal line),
+      # so the player turns off the literal WP_DEBUG line in wp-config.php to stop the log
+      # regenerating — deleting the file alone loses.
+      WORDPRESS_DEBUG: "1"
+      # ポートを焼き込まない (Issue 399)。local play は空いているポートへ再割り当てするので、
+      # DB に保存された siteurl が 18080 のままだと、19080 で開いた参加者は WordPress の
+      # canonical redirect で 18080 = **別の問題**へ飛ばされる。リクエストの Host から
+      # 毎回組み立てれば、割り当てがどこであっても正しい先を指す。
+      #
+      # Host ヘッダーを信じる形は production では host header injection の入口になるが、
+      # この compose は 127.0.0.1 にだけ bind する単一参加者の訓練コンテナで、Host を
+      # 詐称できるのは参加者自身しかいない。
+      #
+      # `$$` は compose の変数展開を抜けて PHP へ `$` を渡すための書き方。
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_DEBUG_LOG', true );
+        define( 'WP_DEBUG_DISPLAY', false );
+        @ini_set( 'display_errors', 0 );
+        if ( ! empty( $$_SERVER['HTTP_HOST'] ) ) {
+          define( 'WP_HOME', 'http://' . $$_SERVER['HTTP_HOST'] );
+          define( 'WP_SITEURL', 'http://' . $$_SERVER['HTTP_HOST'] );
+        }
+    volumes:
+      - wp_data:/var/www/html
+    ports:
+      - "127.0.0.1:18080:80" # WordPress site (challenge surface)
+    healthcheck:
+      # Ready = Apache is accepting on :80. Deliberately NOT gated on the leaks being
+      # open (the player closes them), so the stack stays healthy through hardening.
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 80) ? 0 : 1);"]
+      interval: "5s"
+      timeout: "5s"
+      retries: 40
+    restart: "no"
+
+  wpinit:
+    image: wordpress:cli-php8.3
+    # Match the debian WordPress image's www-data uid so WP-CLI can use the shared
+    # docroot volume and its generated wp-config.php.
+    user: "33:33"
+    depends_on:
+      db:
+        condition: service_healthy
+      wordpress:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      - wp_data:/var/www/html
+      - ./wpinit/init.sh:/usr/local/bin/init.sh:ro
+    entrypoint: ["sh", "/usr/local/bin/init.sh"]
+    restart: "no"
+
+  verify:
+    build:
+      context: ./verify
+      dockerfile: Dockerfile
+    depends_on:
+      wordpress:
+        condition: service_healthy
+      # Scoring must not be able to start before the leftovers exist. An unseeded site
+      # answers 404 on every probe, which reads as "every hole closed" — 200 points for
+      # doing nothing, with nothing in any log to say so. This edge is the first of two
+      # defences; the second is the marker check in verify/server.mjs, which holds even
+      # if this condition is ever relaxed.
+      wpinit:
+        condition: service_completed_successfully
+    volumes:
+      # Read-only, and only to see wpinit's completion marker. The scanner judges the
+      # site over HTTP like any external scanner would — it must not be able to inspect
+      # or edit the docroot to decide whether a hole is closed.
+      - wp_data:/wp:ro
+    ports:
+      - "127.0.0.1:18081:8081" # loopback /verify (the external scanner)
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "3s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"
+
+volumes:
+  db_data:
+  wp_data:

@@ -1,0 +1,43 @@
+# Local-play container for stackstack-defend.
+#
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
+# copy of it: this problem acts on the same board stackstack-onboarding did, with
+# `SCENARIO=defend` adding the drafts desk, the access policy engine, and the
+# traffic drill on top.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
+# There is no attacker container and no second network — the drill sends real
+# HTTP to this same listener from inside the process. The READMEs say so plainly.
+name: stackstack-defend
+services:
+  stackstack-defend:
+    build:
+      context: ../../../runtimes/stackstack
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: defend
+      # Per-deploy random secret injected by `make local`. The draft ids, the
+      # account tokens and the leaked marker are all derived from it inside the
+      # container; the gate receipts come from a separate boot secret.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
+      - ./config:/app/config:ro
+      - ./policy:/app/policy:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board and the drafts desk
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

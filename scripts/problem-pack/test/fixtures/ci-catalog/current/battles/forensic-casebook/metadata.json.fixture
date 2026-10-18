@@ -1,0 +1,64 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "forensic-casebook",
+  "name": "フォレンジック調査室 — 証拠で結論を支える",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "90〜120 分 / 90–120 minutes",
+  "shortDescription": "侵入後に残った記録を調べる教材。誰の権限が使われ、何が外に出て、どこまで復旧できるかを証拠で示します。",
+  "instructions": "Fixture forensic-casebook: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "合成の侵入後調査4ケース、15チェックポイント。HMACで試合・チーム・世代別の証拠を生成し、結論と最小根拠集合をサーバー側で採点。ネイティブcoordination runtimeとローカル練習UIを備える。実際のクラウド展開はこの変更で実施しない。",
+  "tags": [
+    "forensics",
+    "incident-response",
+    "beginner",
+    "evidence",
+    "recovery",
+    "native-battle"
+  ],
+  "exposedPorts": [],
+  "learningGoals": [
+    "認証成功・技術上の権限・業務承認・人物への帰属を区別する",
+    "時差・操作番号・内容指紋から時系列と確認済みの外部到達範囲を復元する",
+    "記録の欠落を安全の証拠とせず、確認済みと不明を分ける",
+    "バックアップの共通管理権限を見抜き、復元試験と本番復旧を区別する",
+    "正常更新と不審な再実行を区別し、証拠保全・対象限定の模擬対処・再起動後の観測を実施する"
+  ],
+  "runtime": {
+    "provider": "local",
+    "engine": "bun",
+    "entry": "coordination/plugin.ts"
+  },
+  "dashboard": {
+    "slots": {
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
+  },
+  "interTeamCoordination": {
+    "plugin": "coordination/plugin.ts",
+    "name": "証拠に基づく調査 / Evidence-based investigation",
+    "description": "回答と根拠を組にして送信。4ケース・最大400点。 / Submit conclusions with evidence. Four cases, up to 400 points.",
+    "publicHint": true,
+    "stateBudget": {
+      "bytesPerTeam": 16384,
+      "baseBytes": 2048
+    }
+  },
+  "i18n": {
+    "en": {
+      "name": "Forensic Casebook — Support Every Conclusion",
+      "shortDescription": "Investigate post-compromise records. Establish whose authority was used, what reached outside, and how far recovery is demonstrated.",
+      "instructions": "Fixture forensic-casebook: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture forensic-casebook: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Distinguish authentication, technical permission, business approval, and attribution to a person",
+        "Reconstruct chronology and demonstrated outside delivery using time zones, request IDs, and content fingerprints",
+        "Separate confirmed scope from uncertainty instead of treating missing records as proof of safety",
+        "Identify shared backup administrative authority and distinguish restore tests from production recovery",
+        "Separate approved updates from suspicious recurrence; preserve evidence, simulate targeted response, and assess post-restart observations"
+      ]
+    }
+  }
+}

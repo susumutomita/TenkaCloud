@@ -1,0 +1,42 @@
+# Local-play container for stackstack-ship.
+#
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
+# copy of it: this problem acts on the same board stackstack-onboarding did, with
+# `SCENARIO=ship` adding the release plane and the published site on top.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
+# There is no third port — the "published site" is a separate surface on the same
+# origin (`/site`), not a separate network. The READMEs say so plainly.
+name: stackstack-ship
+services:
+  stackstack-ship:
+    build:
+      context: ../../../runtimes/stackstack
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: ship
+      # Per-deploy random secret injected by `make local`. The artifact id, the
+      # public serial, the deploy receipts and the signing key store are all
+      # derived from it inside the container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
+      - ./config:/app/config:ro
+      - ./release:/app/release:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board, the Shipyard console, and /site
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

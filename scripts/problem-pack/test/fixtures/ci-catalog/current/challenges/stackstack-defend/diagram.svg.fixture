@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 400" width="760" height="400" role="img" aria-label="stackstack-defend architecture">
+  <style>
+    text { font-family: system-ui, sans-serif; fill: #1b2733; }
+    .t { font-size: 15px; font-weight: 600; }
+    .s { font-size: 12px; fill: #4a5b6b; }
+    .box { fill: #ffffff; stroke: #93a4b5; stroke-width: 1.5; rx: 8; }
+    .host { fill: #f5f8fb; stroke: #b6c4d2; stroke-width: 1.5; rx: 12; }
+    .own { fill: #fff9ec; stroke: #d9ac52; stroke-width: 1.5; rx: 8; }
+    .arrow { stroke: #6b7c8d; stroke-width: 1.4; fill: none; marker-end: url(#a); }
+    .bad { stroke: #b4553f; stroke-width: 1.4; fill: none; marker-end: url(#b); stroke-dasharray: 5 3; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6b7c8d"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#b4553f"/>
+    </marker>
+  </defs>
+
+  <rect class="host" x="16" y="16" width="728" height="368"/>
+  <text class="t" x="34" y="42">your machine — one container, no cloud account</text>
+
+  <rect class="box" x="40" y="62" width="300" height="150"/>
+  <text class="t" x="56" y="86">StackStack base app (SCENARIO=defend)</text>
+  <text class="s" x="56" y="110">GET /            the board</text>
+  <text class="s" x="56" y="130">GET /desk        accounts, tokens, drafts</text>
+  <text class="s" x="56" y="150">GET /api/drafts  ·  /api/draft?id=…</text>
+  <text class="s" x="56" y="170">POST /api/publish?id=…</text>
+  <text class="s" x="56" y="190">GET /api/drill   ·  /posture</text>
+
+  <rect class="box" x="400" y="62" width="304" height="150"/>
+  <text class="t" x="416" y="86">the drill — traffic, every round</text>
+  <text class="s" x="416" y="110">4 accounts list what they may see</text>
+  <text class="s" x="416" y="130">owners read · the moderator publishes</text>
+  <text class="s" x="416" y="152">reads and publishes that must be refused</text>
+  <text class="s" x="416" y="176">a new draft appears every few rounds</text>
+  <text class="s" x="416" y="196">judged against the rule, not against your file</text>
+
+  <path class="arrow" d="M400 118 C 372 118, 368 118, 344 118"/>
+  <path class="bad" d="M400 160 C 372 160, 368 160, 344 160"/>
+
+  <rect class="own" x="40" y="240" width="300" height="120"/>
+  <text class="t" x="56" y="264">your checkout (read-only mount)</text>
+  <text class="s" x="56" y="288">API /api/settings</text>
+  <text class="s" x="56" y="308">who may read, who may publish</text>
+  <text class="s" x="56" y="330">data, not code — never imported</text>
+  <text class="s" x="56" y="350">re-read on every request, no restart</text>
+
+  <path class="arrow" d="M190 240 L 190 214"/>
+
+  <rect class="box" x="400" y="240" width="304" height="120"/>
+  <text class="t" x="416" y="264">GET /posture — five measured gates</text>
+  <text class="s" x="416" y="288">policy_loaded · service_intact</text>
+  <text class="s" x="416" y="308">reads_held · publishes_held</text>
+  <text class="s" x="416" y="328">held_under_load (60 s, no bad round)</text>
+  <text class="s" x="416" y="350">a receipt appears only while its gate is true</text>
+
+  <path class="arrow" d="M400 300 C 372 300, 368 300, 344 300" transform="translate(0,0)"/>
+</svg>

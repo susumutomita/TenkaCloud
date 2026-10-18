@@ -1,0 +1,211 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-observability",
+  "name": "黙っているアプリに口を割らせる",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45 分",
+  "shortDescription": "Fixture stackstack-observability: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture stackstack-observability: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack-observability: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture stackstack-observability: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "stackstack",
+    "observability",
+    "logging",
+    "metrics",
+    "health-check",
+    "incident-response",
+    "local-play",
+    "container",
+    "web-app"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (board / relay / metrics)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "アプリのログに 「出ていない」 ことと 「起きていない」 ことを区別できる",
+    "メトリクスの内訳から、 落ちている依存先を 1 つに絞り込める",
+    "死活確認の条件を、 正常・異常・見落としの 3 通りで評価して直せる",
+    "調査に使ったログを、 秘密を落として調査項目を残したまま人に渡せる",
+    "沈黙 (エラーが出ない状態) を復旧と取り違えない"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Making a Silent App Talk",
+      "shortDescription": "Fixture stackstack-observability: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack-observability: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack-observability: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture stackstack-observability: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Tell \"nothing is being logged\" apart from \"nothing is going wrong\"",
+        "Narrow a failing dependency down to one slice from a metrics breakdown",
+        "Evaluate and fix a health check's condition against the healthy, failing and blind-spot cases",
+        "Hand over an investigation log with the secret removed and the diagnostic fields intact",
+        "Avoid mistaking silence — no errors on screen — for recovery"
+      ],
+      "checks": [
+        {
+          "id": "silent-failures",
+          "label": "Get the writes that never landed into the record",
+          "hints": [
+            {
+              "id": "obs-signal-1",
+              "content": "Fixture stackstack-observability: .i18n.en.checks.0.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "obs-signal-2",
+              "content": "Fixture stackstack-observability: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "honest-health",
+          "label": "Make the health check tell the truth",
+          "hints": [
+            {
+              "id": "obs-health-1",
+              "content": "Fixture stackstack-observability: .i18n.en.checks.1.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "obs-health-2",
+              "content": "Fixture stackstack-observability: .i18n.en.checks.1.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "leak-shut",
+          "label": "Make the investigation log safe to hand over",
+          "hints": [
+            {
+              "id": "obs-handover-1",
+              "content": "Fixture stackstack-observability: .i18n.en.checks.2.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "obs-handover-2",
+              "content": "Fixture stackstack-observability: .i18n.en.checks.2.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "root-cause",
+          "label": "Name the slice that is actually down",
+          "hints": [
+            {
+              "id": "obs-slice-1",
+              "content": "Fixture stackstack-observability: .i18n.en.checks.3.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "obs-slice-2",
+              "content": "Fixture stackstack-observability: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Board": "http://127.0.0.1:18080/",
+      "Relay": "http://127.0.0.1:18080/relay"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "silent-failures",
+        "label": "届かなかった書き込みを記録に残す",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "obs-signal-1",
+            "content": "数字のほうはすでに失敗を数えていますが、 ログは何も言っていません。 その差は relay の実行時設定で制御されています。 `/docs` の `GET /api/settings` と `PATCH /api/settings` で確認・変更でき、 再起動は不要です。",
+            "penalty": 0
+          },
+          {
+            "id": "obs-signal-2",
+            "content": "Fixture stackstack-observability: .scoring.checks.0.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "honest-health",
+        "label": "死活確認に本当のことを言わせる",
+        "points": 45,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "obs-health-1",
+            "content": "Fixture stackstack-observability: .scoring.checks.1.hints.0.content. Synthetic narrative for platform contract tests.",
+            "penalty": 0
+          },
+          {
+            "id": "obs-health-2",
+            "content": "Fixture stackstack-observability: .scoring.checks.1.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "leak-shut",
+        "label": "調査ログをそのまま渡せる状態にする",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "obs-handover-1",
+            "content": "いま出るようにしたログを、 チケットに貼る前にもう一度自分で読み直してください。 relay が下流に渡している値が 1 つ、 行にそのまま載っています。 なお 「ログを止める」 はこの checkpoint の答えではありません ── 止めると採点は 1 つ前の段階に戻ります。",
+            "penalty": 0
+          },
+          {
+            "id": "obs-handover-2",
+            "content": "Fixture stackstack-observability: .scoring.checks.2.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 24
+          }
+        ]
+      },
+      {
+        "id": "root-cause",
+        "label": "落ちている一枚を名指しする",
+        "points": 45,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "obs-slice-1",
+            "content": "設定を何も変えなくても読める面がひとつあり、 そこに archive の内訳が出ています。 最初はほとんど空です ── 内訳はそこに 1 度でも書き込みがあってから初めて出ます。 まず違うタイトルで何回か投稿を流して、 数字が動かない場所を探してください。",
+            "penalty": 0
+          },
+          {
+            "id": "obs-slice-2",
+            "content": "Fixture stackstack-observability: .scoring.checks.3.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 18
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 150,
+    "chapter": "4. StackStack 本編"
+  }
+}

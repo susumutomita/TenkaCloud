@@ -1,0 +1,46 @@
+# Local-play container for stackstack-vibe-build.
+#
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
+# copy of it: this problem acts on the same board stackstack-onboarding did, with
+# `SCENARIO=vibe-build` adding the archive, the search surfaces, and the
+# self-check on top.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
+# That matters more than usual for this problem. The search page embeds whatever
+# the participant's own `renderResults` returns without escaping it — that is the
+# thing being graded — so the response carries a Content-Security-Policy that
+# permits nothing, and the port never leaves loopback.
+name: stackstack-vibe-build
+services:
+  stackstack-vibe-build:
+    build:
+      context: ../../../runtimes/stackstack
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: vibe-build
+      # Per-deploy random secret injected by `make local`. Nothing this problem
+      # grades is derived from it — the gate receipts come from a secret the app
+      # generates at boot, because participant code runs inside this container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. The implementation is written at
+      # /editor and stored through the API inside the container, so a rebuild
+      # is a full reset back to this starter.
+      - ./config:/app/config:ro
+      - ./feature:/app/feature:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board, /search and /api/*
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

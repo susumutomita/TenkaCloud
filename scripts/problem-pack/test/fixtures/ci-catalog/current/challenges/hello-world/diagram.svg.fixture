@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 220" font-family="Helvetica,Arial,sans-serif">
+<defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748B"/></marker></defs>
+<rect x="0" y="0" width="440" height="220" fill="#FFFFFF"/>
+<text x="220" y="34" text-anchor="middle" font-size="18" font-weight="700" fill="#0F172A">Hello World — the hidden SSM parameter</text>
+<rect x="24" y="86" width="168" height="70" rx="8" fill="#F8FAFC" stroke="#759C3E" stroke-width="2"/>
+<rect x="24" y="86" width="168" height="26" rx="8" fill="#759C3E"/>
+<rect x="24" y="104" width="168" height="8" fill="#759C3E"/>
+<text x="108" y="104" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">SSM Parameter</text>
+<text x="108" y="132" text-anchor="middle" font-size="10.5" fill="#334155">/&lt;prefix&gt;/hello</text>
+<text x="108" y="147" text-anchor="middle" font-size="10.5" fill="#334155">the hidden message</text>
+<rect x="248" y="86" width="168" height="70" rx="8" fill="#F8FAFC" stroke="#16A34A" stroke-width="2"/>
+<rect x="248" y="86" width="168" height="26" rx="8" fill="#16A34A"/>
+<rect x="248" y="104" width="168" height="8" fill="#16A34A"/>
+<text x="332" y="104" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">You</text>
+<text x="332" y="132" text-anchor="middle" font-size="10.5" fill="#334155">read it (Console/CLI)</text>
+<line x1="192" y1="121" x2="245" y2="121" stroke="#64748B" stroke-width="2" marker-end="url(#a)"/>
+<text x="220" y="114" text-anchor="middle" font-size="9.5" fill="#7C3AED">get-parameter</text>
+<text x="220" y="198" text-anchor="middle" font-size="11" fill="#475569">Read the parameter value and submit the TC{…} message.</text>
+</svg>
