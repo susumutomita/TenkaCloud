@@ -4,7 +4,7 @@ export const metadata = { title: "問題カタログの選択" };
 
 # 問題カタログの選択 <MaturityBadge level="preview" />
 
-起動は[開催のクイックスタート](/developers/docs/getting-started/#local-start)、作成は[問題作成マニュアル](/developers/docs/manual/problem-author/)から始めます。このページは、この checkout の取得元設定の仕様です。ローカルパス対応は該当 revision がリリースされるまではローカルの開発変更です。公開サイトや古い checkout に同じ機能があるとは限りません。
+起動は[開催のクイックスタート](/developers/docs/getting-started/#local-start)、作成は[問題作成マニュアル](/developers/docs/manual/problem-author/)から始めます。このページは、この checkout の取得元設定の仕様です。ローカルパス対応は main に実装済みですが、該当 revision がリリースされるまでは開発版の機能です。公開サイトや古い checkout に同じ機能があるとは限りません。
 
 <h2 id="catalog-source-schema">カタログ取得元の正式 schema</h2>
 
@@ -61,6 +61,15 @@ CATALOG_SOURCES=./config/my-catalogs.json make local
 問題専用のディレクトリを使ってください。dot file / directory、`node_modules`・`dist`・`coverage`、credential / secret 名や一般的な秘密鍵ファイルはコピーから除外します。これはファイル名フィルターであり、**内容中の秘密情報を検出する機能ではありません**。必要な hidden asset も除外されるため、名前変更や分離を行って結果を検証します。取得前に全ファイルを確認し、home directory や private repository 全体の無害化には使わないでください。
 
 `selected.json` は digest と解決済み取得元を記録します。ローカル revision の互換用 `commit` は digest の先頭 40 文字で、Git commit ではありません。保持したローカル revision は保存済み snapshot を読み、変更可能な作成元を再取得しません。lock ファイルだけでは失われたローカル snapshot を復元できません。既存イベントに必要な snapshot store も保持してください。
+
+<h2 id="replace-catalog">問題を追加・入れ替える</h2>
+
+1. 追加なら既存と重複しない問題 ID を使い、取得元の `challenges/<id>/metadata.json` または `battles/<id>/metadata.json` と必要なファイルを用意します。入れ替えなら取得元の URL / `ref` / `path` またはその中の問題定義を変更します。別の取得元を末尾に足しても同じ ID の上書きにはならず、重複として拒否します。
+2. `CATALOG_SOURCES` で選ぶ設定を保存します。Git の版を固定するには `ref` を確認済みの完全な commit にします。ローカル編集は `path` から取得し直すまで反映されません。既存大会に必要な retained snapshot は削除しません。
+3. 別の確認用 checkout で、前述の `make catalog-download` と `make catalog-prepare` を実行します。metadata・runtime の対応範囲と取得エラーを確認してから、開催者と反映時刻を決めます。ダウンロード成功だけで新しい問題の起動・採点まで完了したとは判断しません。
+4. Local は同じ非公開データディレクトリを使って `make down` 後に、同じ `CATALOG_SOURCES` と必要な `LOCAL_ARGS` で `make local` を実行します。独自の `--data` を使う場合は、停止側にも `make down LOCAL_ARGS="--data <同じディレクトリ>"` と指定します。変更を取り込む build を省略しません。新しい大会を作り、その問題を選択して起動・解答・採点・撤収を確認します。保存済みの大会は再起動後も元の snapshot と得点を使い、新しい問題へ自動移行しません。
+
+Cloud は選択後の `make deploy` が別途必要です。これは実 AWS の変更なので、対象・権限・費用を確認し、通常の deploy 手順に従います。既存大会の pin を書き換えたり、問題の入れ替えのために全データを初期化したりしません。取得と保持の根拠は [`downloaded-catalog.ts`](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts)、旧大会と新大会の分離は [`downloaded-catalog-http.test.ts`](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/tests/downloaded-catalog-http.test.ts)で確認できます。別端末から参加させる場合は [Tailscale の前提と接続確認](/developers/docs/getting-started/#tailscale-first-connection)、IP が変わった場合は [待受と URL の更新](/developers/docs/getting-started/#changed-host-ip)も確認します。
 
 <h2 id="runtime-boundary">実行制限と Pack CLI の境界</h2>
 

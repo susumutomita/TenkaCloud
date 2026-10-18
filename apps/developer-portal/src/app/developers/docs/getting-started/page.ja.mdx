@@ -17,7 +17,7 @@ make install
 make local
 ```
 
-`make local` は起動前に `catalog-sources.json` の URL と `ref` から問題を取得します。既定は TenkaCloudChallenge の `main` です。取得にはネットワーク接続が必要で、失敗すると起動を中止します。`make deploy` も同じ選択を使います。保存済みの大会は取得時の不変 snapshot を使い続けます。`problems/` は生成される build 用ビューで、Git submodule ではありません。作問用 branch を使う場合は設定の `ref` を変更します。設定と取得処理は [catalog-sources.json](https://github.com/susumutomita/TenkaCloud/blob/main/catalog-sources.json) と [downloaded-catalog.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts) で確認できます。
+`make local` は起動前に `catalog-sources.json` の Git 取得元（URL と `ref`）またはローカル取得元（`path`）から問題を取得します。既定は TenkaCloudChallenge の `main` で、この Git 取得にはネットワーク接続が必要です。取得に失敗すると起動を中止します。`make deploy` も同じ選択を使います。保存済みの大会は取得時の不変 snapshot を使い続けます。`problems/` は生成される build 用ビューで、Git submodule ではありません。作問用 branch を使う場合は設定の `ref` を変更します。設定と取得処理は [catalog-sources.json](https://github.com/susumutomita/TenkaCloud/blob/main/catalog-sources.json) と [downloaded-catalog.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts) で確認できます。
 
 既定の開催者 URL は `http://127.0.0.1:5174`、参加者 URL は `http://127.0.0.1:5175` です。実際にはプロセスが表示した URL を使います。主催者キーだけでログインし、ユーザー名・パスワードは使いません。対話ターミナルで `make local` を起動するたびに新しいキーを一度だけ表示し、以前の主催者キーとログインを失効させます。起動中の再発行は、別の対話ターミナルで同じデータディレクトリを指定して `make local-reset` を実行します。大会・得点・参加者キー・問題のデータを保持します。非対話起動と public/container 起動では既存のキーを保持し、ログにキーを出力しません。
 
@@ -79,6 +79,14 @@ health は `status: ok` / `role: participant`、5175 は接続成功、5174 は�
 全員の接続を確認してから大会を開始します。native 問題は操作と得点、Docker 問題はポータルが発行した gateway URL から自チームの演習への接続を確認します。正答・誤答・ヒントは対応する問題で確認します。終了時は End Event で採点を止め、必要な結果を保存します。環境を残すなら Stop (keep data) で停止し、主催者が保守手順に沿って host を停止します。削除を選ぶ場合は Teardown の対象とデータ消去を先に確認します。
 
 最後に主催者が対象端末の Share 画面から対象者の Revoke invite を実行し、未使用の招待も取り消します。Share 画面で対象者と未使用招待が失効したことを確認します。参加者の再接続失敗は補助確認です。host 停止による接続失敗だけでは共有失効の証明になりません。これは共有の失効で、他人の端末本体を削除する操作ではありません。再参加には新しい招待と承認が必要です。受信側の解除メニューは実画面の対象・影響を確認してから使い、一般の Remove machine と混同しません。
+
+<h2 id="changed-host-ip">開催端末の IP が変わったとき</h2>
+
+`--lan` は起動時に指定した IPv4 に固定され、Tailscale の端末登録や tailnet を変えても自動追従しません。主催者は開催端末自身の `tailscale ip -4`、選択中の tailnet、共有先で見える端末名と IP を再照合します。参加者自身の IP や、共有時の競合で割り当てられた別 IP を bind 先に使いません。共有先だけ別 IP の場合は、この IP ベースの手順の対応範囲外として接続を止め、管理者と経路を確認します。
+
+保守時間を決め、データを保持する `make down` の後、正しい IPv4 を `--lan` に指定して `make local` を起動します。`--data`、`CATALOG_SOURCES`、隔離・gateway の必要なオプションは元の設定を確認して引き継ぎ、build は省略しません。独自の `--data` を使う場合は、停止側にも `make down LOCAL_ARGS="--data <同じディレクトリ>"` と指定します。これらは主催者が確認して実行する操作です。IP のために `local-clear` やデータ削除を行う必要はありません。
+
+起動ログの新しい `http://<開催端末のIPv4>:5175/` を参加者へ再配布し、`/healthz`、ログイン、使用する gateway を再確認します。主催者は引き続き `http://127.0.0.1:5174` を使います。IP に依存する共有・許可の有効範囲は管理者が別途レビューし、Tailscale や OS の設定を起動コマンドが修正するとは扱いません。待受と URL の根拠は [`options.ts`](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts) と [`server.ts`](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts)です。
 
 <h2 id="check-local-connection">起動と接続を確認する</h2>
 
