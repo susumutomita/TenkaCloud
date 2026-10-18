@@ -1,0 +1,42 @@
+# Local-play container for stackstack-onboarding.
+#
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
+# copy of it: the onboarding problem and every later StackStack problem act on
+# the same board. The relative build context resolves against this directory —
+# the platform's local runner pins `--project-directory` here even when it
+# rewrites host ports, so this works at any port offset.
+#
+# Both published ports are bound to 127.0.0.1 only: neither the board nor
+# /verify leaves the box.
+name: stackstack-onboarding
+services:
+  stackstack-onboarding:
+    build:
+      context: ../../../runtimes/stackstack
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: onboarding
+      # Per-deploy random secret injected by `make local`. The board serial, the
+      # boot-check value, and the handover token are all derived from it inside
+      # the container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
+      - ./config:/app/config:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

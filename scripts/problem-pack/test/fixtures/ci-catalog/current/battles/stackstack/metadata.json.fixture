@@ -1,0 +1,353 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack",
+  "name": "StackStack — Vibe to Production",
+  "category": "Battle",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "動くけれど本番品質ではない掲示板を、用意済みの AWS リソースだけで安全にします。最初は app host で `vibe-status` を実行し、`AppUrlHint` を Portal に登録します。以後は画面が示す次の1項目を直します。",
+  "instructions": "Fixture stackstack: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack: .description. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "platform-engineering",
+    "ai-native",
+    "governance",
+    "waf",
+    "rds",
+    "incident-response"
+  ],
+  "exposedPorts": [
+    {
+      "port": 80,
+      "name": "application load balancer"
+    }
+  ],
+  "learningGoals": [
+    "ローカルで動く AI 製アプリを本物のクラウドにデプロイし、 新規トップレベルリソース作成なしで本番化する判断と順序付けを体験する",
+    "URL 登録ゲート、 backup restore、 WAF association、 audit write、 RDS PostgreSQL migration、 public SSH 閉鎖を実状態チェックで検証する",
+    "revert 付き disruption 下で再診断・再修復する incident response のリズムを訓練する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "DbPassword": "__RANDOM_PASSWORD__"
+  },
+  "i18n": {
+    "en": {
+      "name": "StackStack — Vibe to Production",
+      "shortDescription": "Fixture stackstack: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Practice taking an AI-generated app to production without creating unmanaged top-level resources",
+        "Verify URL registration, backup restore, WAF association, audit writes, RDS PostgreSQL migration, and public SSH closure through real posture checks",
+        "Practice incident response against reversible disruptions"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Fixture stackstack: .i18n.en.hints.0.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-2",
+          "content": "Fixture stackstack: .i18n.en.hints.1.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-3",
+          "content": "Fixture stackstack: .i18n.en.hints.2.content. Synthetic narrative for platform contract tests."
+        }
+      ]
+    }
+  },
+  "endpoints": [
+    {
+      "slot": "app",
+      "default": {
+        "from": "cfn-output",
+        "key": "RegisteredUrl"
+      },
+      "overridable": true,
+      "label": "Vibe app",
+      "description": "Deploy 後は空。 Stack Output の AppUrlHint を貼ると score engine が /meta + /score を probe し始める。"
+    }
+  ],
+  "scoring": {
+    "kind": "phased-polling",
+    "intervalMinutes": 1,
+    "probe": {
+      "metaPath": "/meta",
+      "scorePath": "/score",
+      "posturePath": "/posture"
+    },
+    "platformRules": {
+      "posture-0": {
+        "points": 0,
+        "degradedPoints": 0
+      },
+      "posture-1": {
+        "points": 100,
+        "degradedPoints": 50
+      },
+      "posture-2": {
+        "points": 200,
+        "degradedPoints": 100
+      },
+      "posture-3": {
+        "points": 300
+      },
+      "posture-4": {
+        "points": 400
+      },
+      "posture-5": {
+        "points": 500
+      },
+      "production": {
+        "points": 600
+      },
+      "production-optimized": {
+        "points": 800
+      }
+    },
+    "failurePenalty": -100,
+    "responsePenalties": [
+      {
+        "if": "responseTimeMs > 5000",
+        "points": -25
+      }
+    ],
+    "bonuses": [
+      {
+        "kind": "all-slots-on-platforms",
+        "platforms": [
+          "production",
+          "production-optimized"
+        ],
+        "points": 30000,
+        "once": true
+      }
+    ],
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Fixture stackstack: .scoring.hints.0.content. Synthetic narrative for platform contract tests.",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "Fixture stackstack: .scoring.hints.1.content. Synthetic narrative for platform contract tests.",
+        "penalty": 100
+      },
+      {
+        "id": "hint-3",
+        "content": "Fixture stackstack: .scoring.hints.2.content. Synthetic narrative for platform contract tests.",
+        "penalty": 200
+      }
+    ]
+  },
+  "phases": [
+    {
+      "name": "production-ramp",
+      "afterMinutes": 30,
+      "effect": {
+        "switchPlatformToDegraded": [
+          "posture-0",
+          "posture-1",
+          "posture-2"
+        ]
+      },
+      "description": "公開期限 phase: posture が浅いチームの per-cycle points を degraded 値へ切替。",
+      "publicHint": false
+    },
+    {
+      "name": "incident-response",
+      "afterMinutes": 75,
+      "effect": {
+        "scorePathOverride": "/score?incident=true"
+      },
+      "description": "Incident phase: production でない app は legacy slow path に入り response penalty を受ける。",
+      "publicHint": false
+    }
+  ],
+  "disruptions": [
+    {
+      "id": "anonymous-spam",
+      "name": "匿名スパム投稿攻撃",
+      "eventDetailType": "AttackFired",
+      "defaultAfterMinutes": 45,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "parameters": {
+        "probe": "redteam/probes/anon-spam.sh"
+      },
+      "description": "Fixture stackstack: .disruptions.0.description. Synthetic narrative for platform contract tests."
+    },
+    {
+      "id": "ai-wipes-database",
+      "name": "AI が DB を再 wipe",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 35,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "parameters": {},
+      "description": "レッドチームが app host 上で SQLite / RDS の posts を空にする実障害注入。 revert は stack-owned S3 backup から再復元する。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "/opt/tenkacloud/vibe/wipe_database.sh || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 300,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "set -a; . /etc/tenkacloud-vibe/runtime.env; set +a",
+              "aws s3 cp s3://$BACKUP_BUCKET/seed-sqlite.sql /tmp/seed-sqlite.sql --region $AWS_REGION || true",
+              "sqlite3 $SQLITE_DB < /tmp/seed-sqlite.sql || true",
+              "if command -v psql >/dev/null 2>&1; then aws s3 cp s3://$BACKUP_BUCKET/seed-postgres.sql /tmp/seed-postgres.sql --region $AWS_REGION && PGPASSWORD=$DB_PASSWORD psql -h $DB_ENDPOINT -U $DB_USER -d $DB_NAME -f /tmp/seed-postgres.sql || true; fi",
+              "systemctl restart tenkacloud-vibe || true"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "auth-setting-removed",
+      "name": "認証設定が剥がされた",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 50,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "parameters": {},
+      "description": "レッドチームが auth flag を false に戻す設定ドリフトを注入する。 revert は注入直前の config backup を復元する。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "cp /etc/tenkacloud-vibe/config.json /etc/tenkacloud-vibe/config.json.redteam-auth.bak || true",
+            "tmp=$(mktemp); jq '.auth_required=false' /etc/tenkacloud-vibe/config.json > \"$tmp\" && mv \"$tmp\" /etc/tenkacloud-vibe/config.json || true",
+            "systemctl restart tenkacloud-vibe || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 300,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "test -f /etc/tenkacloud-vibe/config.json.redteam-auth.bak && mv /etc/tenkacloud-vibe/config.json.redteam-auth.bak /etc/tenkacloud-vibe/config.json || true",
+              "systemctl restart tenkacloud-vibe || true"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "vibe-app-stopped",
+      "name": "vibe app service 停止",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 65,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "parameters": {},
+      "description": "レッドチームが app service を停止する。 ALB probe は 5xx になり、 revert または参加者の systemctl start まで failurePenalty が入る。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "systemctl stop tenkacloud-vibe || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 180,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "systemctl start tenkacloud-vibe || true"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "site-defaced",
+      "name": "サイトが改ざんされた",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 55,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "parameters": {},
+      "description": "レッドチームが掲示板を改ざんする (おもちゃにされた状態)。 app は PWNED バナーを返し、 posture の site_intact が false になって production から転落する。 revert は改ざんマーカーを除去して復旧する。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "/opt/tenkacloud/vibe/deface_site.sh || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 300,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "/opt/tenkacloud/vibe/restore_site.sh || true"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "supply-chain-backdoor",
+      "name": "サプライチェーン攻撃でバックドア混入",
+      "eventDetailType": "StackStackDisruptionFired",
+      "defaultAfterMinutes": 70,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "parameters": {},
+      "description": "依存関係 (サプライチェーン) 経由で app host にバックドア成果物が仕込まれる。 posture の no_backdoor が false になって production から転落する。 revert はバックドア成果物を除去して復旧する。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "/opt/tenkacloud/vibe/install_backdoor.sh || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 300,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "/opt/tenkacloud/vibe/remove_backdoor.sh || true"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "dashboard": {
+    "slots": {
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
+  },
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  }
+}

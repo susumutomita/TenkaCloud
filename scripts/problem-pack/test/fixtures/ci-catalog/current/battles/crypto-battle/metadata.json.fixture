@@ -1,0 +1,75 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "crypto-battle",
+  "name": "暗号バトル",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "120 分",
+  "shortDescription": "届くお題を小さな暗号計算で解き、相手の公開情報から秘密を見破る対戦ゲーム。終了時に得点が高いチームの勝ちです。",
+  "instructions": "Fixture crypto-battle: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture crypto-battle: .description. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "advanced-cryptography",
+    "advanced-cryptography-2026",
+    "secret-sharing",
+    "shamir",
+    "zero-knowledge",
+    "battle",
+    "real-time"
+  ],
+  "exposedPorts": [
+    {
+      "port": 1,
+      "name": "(no public endpoint -- match state is coordination-plugin driven, not per-team infra; port unused)"
+    }
+  ],
+  "learningGoals": [
+    "Shamir (t, n) しきい値秘密分散と Lagrange 補間を、公開情報から秘密を復元するHUNTで使う",
+    "share を公開 (LEAK) するコストが即時ではなく将来の HUNT リスクとして発生することを理解する",
+    "しきい値未満の share が秘密について何も語らないことを実行可能な形で確認する",
+    "公開するシェアの異なる番号が増えると、秘密を復元できる条件に近づくことを体験する",
+    "Schnorrの公開検証、模擬会話、知識の抽出を小さな数で確かめ、HVZKと実用上の安全性を区別する",
+    "楕円曲線上の点加算・倍算を小さい数で計算し、ECDSA署名全体との違いを説明する。",
+    "SNARKの算術化で、計算の制約とコピー制約を手計算で区別する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "dashboard": {
+    "slots": {
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
+  },
+  "interTeamCoordination": {
+    "plugin": "coordination/crypto-battle.ts",
+    "name": "暗号 Battle 進行エンジン",
+    "description": "Contract の供給、LEAK / PROVE / HUNT / ROTATE の裁定、Public Ledger の共有を行う。試合中の得点はすべてここで判定される (推量では通らない)。",
+    "publicHint": true,
+    "stateBudget": {
+      "bytesPerTeam": 31744,
+      "baseBytes": 1536
+    }
+  },
+  "i18n": {
+    "en": {
+      "name": "Cryptography Battle",
+      "shortDescription": "Solve incoming tasks with small-number cryptography and recover opponents’ secrets from public evidence. The highest score at the end wins.",
+      "instructions": "Fixture crypto-battle: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture crypto-battle: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Apply Shamir (t, n) threshold secret sharing and Lagrange interpolation to recover secrets from public evidence in HUNT",
+        "Understand that revealing a share (LEAK) costs nothing immediately -- the cost arrives later, as HUNT risk",
+        "Verify, executably, that fewer than the threshold of shares reveal nothing about the secret",
+        "Experience how publishing distinct share indices brings opponents closer to reconstructing a secret",
+        "Hand-check Schnorr verification, simulation and knowledge extraction, distinguishing HVZK from practical security.",
+        "Calculate elliptic-curve addition and doubling with small numbers, distinguishing them from a complete ECDSA signature.",
+        "Distinguish gate and copy constraints by hand in SNARK arithmetization"
+      ]
+    }
+  },
+  "cfnParameters": {
+    "ScoreStealEnabled": "false",
+    "ScoreStealKey": "3",
+    "ScoreStealSeed": "__RANDOM_PASSWORD__"
+  }
+}

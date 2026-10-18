@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" width="720" height="380" role="img" aria-label="stackstack-ship architecture">
+  <style>
+    .box { fill: #ffffff; stroke: #37475a; stroke-width: 1.5; }
+    .soft { fill: #f4f6f8; stroke: #9aa7b4; stroke-width: 1.2; }
+    .t { font-family: system-ui, sans-serif; font-size: 13px; fill: #16191f; }
+    .s { font-family: system-ui, sans-serif; font-size: 11px; fill: #5f6b7a; }
+    .h { font-family: system-ui, sans-serif; font-size: 14px; font-weight: 600; fill: #16191f; }
+    .flow { stroke: #37475a; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#37475a"/>
+    </marker>
+  </defs>
+
+  <rect x="12" y="12" width="696" height="356" rx="10" class="soft"/>
+  <text x="28" y="36" class="h">one container — your machine</text>
+
+  <rect x="28" y="52" width="180" height="72" rx="6" class="box"/>
+  <text x="40" y="76" class="t">your checkout</text>
+  <text x="40" y="95" class="s">API /api/settings</text>
+  <text x="40" y="112" class="s">API /api/config</text>
+
+  <rect x="28" y="152" width="180" height="86" rx="6" class="box"/>
+  <text x="40" y="176" class="t">Shipyard console</text>
+  <text x="40" y="195" class="s">GET /shipyard</text>
+  <text x="40" y="212" class="s">POST /shipyard/releases</text>
+  <text x="40" y="229" class="s">artifacts · releases · log</text>
+
+  <rect x="268" y="52" width="188" height="186" rx="6" class="box"/>
+  <text x="280" y="76" class="t">release plane</text>
+  <text x="280" y="98" class="s">registry: 1 built artifact</text>
+  <text x="280" y="118" class="s">read-manifest</text>
+  <text x="280" y="136" class="s">resolve-artifact</text>
+  <text x="280" y="154" class="s">resolve-config</text>
+  <text x="280" y="172" class="s">start</text>
+  <text x="280" y="190" class="s">health-gate</text>
+  <text x="280" y="208" class="s">promote → live, gen++</text>
+  <text x="280" y="228" class="s">signing key store (versioned)</text>
+
+  <rect x="516" y="52" width="176" height="96" rx="6" class="box"/>
+  <text x="528" y="76" class="t">published site</text>
+  <text x="528" y="95" class="s">GET /site</text>
+  <text x="528" y="112" class="s">GET /site/healthz</text>
+  <text x="528" y="132" class="s">200 only while live + accepted</text>
+
+  <rect x="516" y="176" width="176" height="86" rx="6" class="box"/>
+  <text x="528" y="200" class="t">GET /posture</text>
+  <text x="528" y="219" class="s">site_serving</text>
+  <text x="528" y="236" class="s">survives_key_rotation</text>
+  <text x="528" y="253" class="s">single_release</text>
+
+  <rect x="268" y="278" width="188" height="66" rx="6" class="box"/>
+  <text x="280" y="302" class="t">the board itself</text>
+  <text x="280" y="321" class="s">GET / · /api/board · /api/logs</text>
+  <text x="280" y="337" class="s">unchanged from onboarding</text>
+
+  <path d="M208,88 L268,110" class="flow"/>
+  <path d="M208,190 L268,168" class="flow"/>
+  <path d="M456,110 L516,100" class="flow"/>
+  <path d="M456,196 L516,208" class="flow"/>
+
+  <text x="214" y="252" class="s">re-read per deploy</text>
+  <text x="462" y="284" class="s">measured, not claimed</text>
+</svg>

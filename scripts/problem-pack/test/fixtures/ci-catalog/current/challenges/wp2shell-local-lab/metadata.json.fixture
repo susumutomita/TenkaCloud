@@ -1,0 +1,410 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "wp2shell-local-lab",
+  "name": "予行演習",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "90 分",
+  "shortDescription": "ある朝、 セキュリティベンダーから一通の勧告が届く。 『まとめ処理 (バッチ) の経路解決と、 データ問い合わせの組み方の間に、 認証をすり抜けられる抜け道がある』 という。 CTO の指示は明快だ ── 本番を触る前に、 同じ構成を再現した自分専用の使い捨てラボで、 抜け道を実際にたどり、 直し方を証明してから来い。",
+  "instructions": "Fixture wp2shell-local-lab: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture wp2shell-local-lab: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture wp2shell-local-lab: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "wordpress",
+    "rest-api",
+    "batch-processing",
+    "query-construction",
+    "privilege-escalation",
+    "incident-response",
+    "remediation",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (challenge surface + SRE console)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback scorer)"
+    }
+  ],
+  "learningGoals": [
+    "REST のバッチ (まとめ) 経路と単体経路とで権限判定の正規化がずれると認証をすり抜けられることを、 自分の手で再現して理解する。",
+    "文字列連結によるデータ問い合わせの組み立てが、 経路の抜け道と組み合わさったときにどれだけ被害を広げるかを体感する。",
+    "根本原因は 2 つとも設定で直せること、 そして 『同じ手口で再現攻撃し、 弾かれることを確認する』 までやって初めて是正が完了したと言えることを説明できるようになる。",
+    "侵入の痕跡 (見覚えのない管理者・居座り用の目印) の片付けと鍵のローテーションが、 根本原因の修正と並んで必須の後始末であることを理解する。"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Dry Run",
+      "shortDescription": "Fixture wp2shell-local-lab: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture wp2shell-local-lab: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture wp2shell-local-lab: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture wp2shell-local-lab: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Reproduce, with your own hands, how a mismatch in path normalization between a REST batch route and its single-request counterpart lets a request slip past a permission check.",
+        "Feel how much damage a string-concatenated data query adds once it is chained behind a routing loophole.",
+        "Be able to explain that both root causes are fixable by settings, and that remediation is not complete until you replay the same attack and confirm it is rejected.",
+        "Understand that cleaning up intrusion aftermath (an unrecognized administrator, a persistence marker) and rotating keys are required cleanup steps alongside the root-cause fix, not optional extras."
+      ],
+      "checks": [
+        {
+          "id": "chain-discovery",
+          "label": "The entrance meant to stay internal",
+          "hints": [
+            {
+              "id": "chain-discovery-1",
+              "content": "A site sometimes advertises which namespaces it exposes. Start by listing the REST entry point -- is there a namespace for batch processing, and one that looks internal, mixed in?"
+            },
+            {
+              "id": "chain-discovery-2",
+              "content": "Fixture wp2shell-local-lab: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "chain-discovery-3",
+              "content": "Fixture wp2shell-local-lab: .i18n.en.checks.0.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "compromise-proof",
+          "label": "From the deep vault",
+          "hints": [
+            {
+              "id": "compromise-proof-1",
+              "content": "The report-lookup handler you reached through the loophole takes a category string and filters on it. Think about how that string might be used from the behavior you observe."
+            },
+            {
+              "id": "compromise-proof-2",
+              "content": "Try a category value with a stray quote character in it and see if the response changes. That is a common symptom of a string being fed straight into something without escaping."
+            },
+            {
+              "id": "compromise-proof-3",
+              "content": "Fixture wp2shell-local-lab: .i18n.en.checks.1.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "fix-route",
+          "label": "Close the batch-routing hole",
+          "hints": [
+            {
+              "id": "fix-route-1",
+              "content": "The routing loophole exists because the batch dispatcher's 'check permission' step and its 'run the handler' step read the path differently."
+            },
+            {
+              "id": "fix-route-2",
+              "content": "The SRE console (`/admin/action`) has a setting toggle. Look for the one that unifies route resolution with the same procedure the single-request path already uses."
+            },
+            {
+              "id": "fix-route-3",
+              "content": "Fixture wp2shell-local-lab: .i18n.en.checks.2.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "fix-query",
+          "label": "Fix how the query is built",
+          "hints": [
+            {
+              "id": "fix-query-1",
+              "content": "Closing the route does not change how the report-lookup handler itself builds its query. That still needs a separate fix."
+            },
+            {
+              "id": "fix-query-2",
+              "content": "The same `set-config` action has another toggle: one that switches the query to a placeholder (parameterized) form and enforces a category allow-list."
+            },
+            {
+              "id": "fix-query-3",
+              "content": "Fixture wp2shell-local-lab: .i18n.en.checks.3.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "cleanup-persistence",
+          "label": "Clean up what stayed behind",
+          "hints": [
+            {
+              "id": "cleanup-persistence-1",
+              "content": "Fixture wp2shell-local-lab: .i18n.en.checks.4.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "cleanup-persistence-2",
+              "content": "The `/admin/action` endpoint has one action for removing the rogue administrator and a separate one for clearing the persistence marker."
+            },
+            {
+              "id": "cleanup-persistence-3",
+              "content": "POST `{\"action\":\"remove-rogue-admin\"}` and `{\"action\":\"remove-persistence\"}` to `/admin/action`. `GET /admin/audit` should show both gone."
+            }
+          ]
+        },
+        {
+          "id": "rotate-secrets",
+          "label": "Remake the keys",
+          "hints": [
+            {
+              "id": "rotate-secrets-1",
+              "content": "Fixture wp2shell-local-lab: .i18n.en.checks.5.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "rotate-secrets-2",
+              "content": "`/admin/action` has a dedicated action for rotating that key. Running it invalidates the old token immediately."
+            },
+            {
+              "id": "rotate-secrets-3",
+              "content": "POST `{\"action\":\"rotate-salts\"}`. The response carries the new token (also logged via `docker compose logs`). Use the new token for every SRE console call from here on."
+            }
+          ]
+        },
+        {
+          "id": "replay-blocked",
+          "label": "Prove the same trick no longer works",
+          "hints": [
+            {
+              "id": "replay-blocked-1",
+              "content": "Try the exact batch-bypass trick from stage 1 again. If the fix holds, it should no longer work."
+            },
+            {
+              "id": "replay-blocked-2",
+              "content": "Fixture wp2shell-local-lab: .i18n.en.checks.6.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "replay-blocked-3",
+              "content": "Fixture wp2shell-local-lab: .i18n.en.checks.6.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "site-healthy",
+          "label": "Working as normal",
+          "hints": [
+            {
+              "id": "site-healthy-1",
+              "content": "Check that your fixes did not break ordinary access. The namespace index and the normal post listing should still work."
+            },
+            {
+              "id": "site-healthy-2",
+              "content": "Also try a legitimate, token-authenticated call with a real category (like `general`)."
+            },
+            {
+              "id": "site-healthy-3",
+              "content": "This checkpoint passes once `GET /wp-json/`, `GET /wp-json/wp/v2/posts`, and a token-authenticated `GET /wp-json/wp2shell-lab/v1/reports?category=general` all return 200."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "hintReveal": "flat",
+    "checks": [
+      {
+        "id": "chain-discovery",
+        "label": "内部だけのはずの入り口",
+        "points": 35,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "chain-discovery-1",
+            "content": "サイトは自分がどんな名前空間を持っているか教えてくれることがある。 まずは REST の入口を一覧してみよう。 まとめ処理用と、 見慣れない内部っぽい名前空間が混じっていないか。",
+            "penalty": 0
+          },
+          {
+            "id": "chain-discovery-2",
+            "content": "見慣れない名前空間に直接アクセスすると、 権限が無いと断られるはずだ。 だが単体アクセスとは別に、 複数のリクエストを 1 回でまとめて送る仕組みが用意されている。 その仕組みが単体アクセスと同じルールで経路を解決しているとは限らない。",
+            "penalty": 3
+          },
+          {
+            "id": "chain-discovery-3",
+            "content": "まとめ処理の副リクエストのパスに、 末尾のスラッシュを 1 つ足して送ってみよう (`.../reports/` のように)。 単体アクセスでは弾かれる経路が、 まとめ処理経由だとすり抜けて、 内部専用のはずのレポートが返ってくる。 その本文に合言葉がある。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "compromise-proof",
+        "label": "奥の金庫から",
+        "points": 45,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "compromise-proof-1",
+            "content": "抜け道をたどって届いたレポート取得処理は、 カテゴリという文字列を受け取って絞り込みをしている。 その文字列がどう使われているか、 挙動から想像してみよう。",
+            "penalty": 0
+          },
+          {
+            "id": "compromise-proof-2",
+            "content": "カテゴリにわざと引用符を含む値を入れてみると、 応答が変わることがある。 文字列がそのまま組み立てに使われている時によく起きる挙動だ。",
+            "penalty": 4
+          },
+          {
+            "id": "compromise-proof-3",
+            "content": "カテゴリに `x' UNION SELECT id, audit_token, note FROM vault -- ` のような値を、 まとめ処理の副リクエスト経由 (末尾スラッシュ付きのパス) で送ってみよう。 レポート用のテーブルとは別の、 奥の金庫のようなテーブルの中身が、 レポートの体裁で返ってくる。 その中に合言葉がある。",
+            "penalty": 9
+          }
+        ]
+      },
+      {
+        "id": "fix-route",
+        "label": "まとめ処理の穴をふさぐ",
+        "points": 40,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "fix-route-1",
+            "content": "経路の抜け道は、 まとめ処理の中の 『権限を確認する手順』 と 『実際に処理を実行する手順』 とで、 パスの読み方が食い違っていることが原因だ。",
+            "penalty": 0
+          },
+          {
+            "id": "fix-route-2",
+            "content": "SRE コンソール (`/admin/action`) には設定を切り替える操作がある。 経路解決を単体アクセスと同じ手順に統一する設定を探そう。",
+            "penalty": 4
+          },
+          {
+            "id": "fix-route-3",
+            "content": "Fixture wp2shell-local-lab: .scoring.checks.2.hints.2.content. Synthetic narrative for platform contract tests.",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "fix-query",
+        "label": "問い合わせの組み方を直す",
+        "points": 40,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "fix-query-1",
+            "content": "経路を塞いでも、 レポート取得処理そのものの問い合わせの組み立て方は変わっていない。 そこも直す必要がある。",
+            "penalty": 0
+          },
+          {
+            "id": "fix-query-2",
+            "content": "同じ `set-config` 操作には、 問い合わせの組み立て方を切り替える設定も用意されている。 プレースホルダ化 (パラメータ化) と、 カテゴリのホワイトリスト化の両方が有効になる。",
+            "penalty": 4
+          },
+          {
+            "id": "fix-query-3",
+            "content": "`POST /admin/action` に `{\"action\":\"set-config\",\"parameterizedQueries\":true}` を送ろう。 引用符を含むカテゴリ値は 400 で弾かれ、 正規のカテゴリ (`general` / `maintenance` / `internal-audit`) だけが通る。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "cleanup-persistence",
+        "label": "居座りの後片付け",
+        "points": 35,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "cleanup-persistence-1",
+            "content": "このラボには、 前回同じ抜け道を使われた痕跡があらかじめ残っている。 見覚えのない管理者アカウントと、 居座り用の目印だ。 `GET /admin/audit` (トークン必須) で今の状態を確認できる。",
+            "penalty": 0
+          },
+          {
+            "id": "cleanup-persistence-2",
+            "content": "`POST /admin/action` の `action` には、 管理者アカウントの削除と、 居座り用の目印の削除、 それぞれ専用の操作が用意されている。",
+            "penalty": 3
+          },
+          {
+            "id": "cleanup-persistence-3",
+            "content": "`{\"action\":\"remove-rogue-admin\"}` と `{\"action\":\"remove-persistence\"}` を、 それぞれ `POST /admin/action` に送ろう。 `GET /admin/audit` で両方とも消えたことを確認できる。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "rotate-secrets",
+        "label": "鍵を作り直す",
+        "points": 35,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "rotate-secrets-1",
+            "content": "管理者アカウントと目印を片付けても、 認証に使っている鍵 (salt) そのものは古いままだ。 侵害の後片付けでは、 鍵そのものを作り直すのが基本の手順になる。",
+            "penalty": 0
+          },
+          {
+            "id": "rotate-secrets-2",
+            "content": "`POST /admin/action` にはトークンを作り直す専用の操作がある。 実行すると古いトークンはその場で使えなくなる。",
+            "penalty": 3
+          },
+          {
+            "id": "rotate-secrets-3",
+            "content": "`{\"action\":\"rotate-salts\"}` を送ろう。 応答に新しいトークンが返る (`docker compose logs` にも記録される)。 以降の SRE コンソール操作はこの新しいトークンで行う。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "replay-blocked",
+        "label": "同じ手口が通らないことを証明する",
+        "points": 40,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "replay-blocked-1",
+            "content": "第 1 段階で使った、 まとめ処理経由の手口をもう一度そのまま試してみよう。 直っていれば、 今度は同じことができないはずだ。",
+            "penalty": 0
+          },
+          {
+            "id": "replay-blocked-2",
+            "content": "2 つの根本原因のうち経路だけを直しても、 まとめ処理経由の入口自体が閉じるので、 この再現テストは通ることが多い。 ただし `fix-query` は別のチェックポイントとして独立に判定されるので、 経路だけ直して満点にはならない。",
+            "penalty": 4
+          },
+          {
+            "id": "replay-blocked-3",
+            "content": "末尾スラッシュ (1 個・2 個) を付けたパスに、 SQL の合言葉探しに使った値をもう一度乗せて、 まとめ処理経由で送ろう。 401 で弾かれるか、 200 が返っても金庫のテーブルの中身が混じっていなければ、 このチェックポイントは通る。",
+            "penalty": 8
+          }
+        ]
+      },
+      {
+        "id": "site-healthy",
+        "label": "普段どおりに動いている",
+        "points": 30,
+        "wrongAnswerPenalty": 0,
+        "hints": [
+          {
+            "id": "site-healthy-1",
+            "content": "直したことで普段どおりのアクセスまで壊れていないか確認しよう。 トップページの名前空間一覧や、 通常の投稿一覧はまだ動くはずだ。",
+            "penalty": 0
+          },
+          {
+            "id": "site-healthy-2",
+            "content": "正規のカテゴリ (`general` など) を使った、 トークン付きの通常アクセスも試してみよう。",
+            "penalty": 3
+          },
+          {
+            "id": "site-healthy-3",
+            "content": "`GET /wp-json/`、 `GET /wp-json/wp/v2/posts`、 そしてトークン付きの `GET /wp-json/wp2shell-lab/v1/reports?category=general` の 3 つがすべて 200 で返れば、 このチェックポイントは通る。",
+            "penalty": 6
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 170,
+    "chapter": "5. 本番インシデント"
+  }
+}

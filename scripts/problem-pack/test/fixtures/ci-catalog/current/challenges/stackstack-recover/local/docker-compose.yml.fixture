@@ -1,0 +1,57 @@
+# Local-play container for stackstack-recover.
+#
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
+# copy of it: this problem acts on the same board stackstack-onboarding and
+# stackstack-ship did, with `SCENARIO=recover` adding the public entrance
+# (`/edge`), the ops plane (`/ops`), the watchdog and the scheduled job on top.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
+# There is no load balancer and no cloud account — the entrance, the watchdog and
+# the write-permission check are all modelled inside this one process, and the
+# READMEs say so plainly.
+name: stackstack-recover
+services:
+  stackstack-recover:
+    build:
+      context: ../../../runtimes/stackstack
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: recover
+      # Where the scheduled job's OUTPUT lands in the participant's checkout — a
+      # read-to-verify location, never an edit target. The directory ignores its
+      # own contents, so nothing the app writes ever dirties git status.
+      RECOVER_STATE_HINT: problems/challenges/stackstack-recover/local/state
+      # Per-deploy random secret injected by `make local`. The incident
+      # signature and the seed-derived probe identities are all derived from it
+      # inside the container; the gate receipts come from a boot secret that was
+      # never in the environment at all.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
+      - ./config:/app/config:ro
+      - ./policy:/app/policy:ro
+      # The one place the app is allowed to write — and only as far as the
+      # policy lets it. Read-write so the scheduled job's output shows up in the
+      # participant's own checkout.
+      - ./state:/app/state
+    ports:
+      - "127.0.0.1:18080:8080" # the board, /edge (public entrance) and /ops
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      # The board's own /healthz, which is the origin behind the entrance and is
+      # never covered by the policy's auth rule: this problem takes the *public*
+      # entrance dark on purpose, and a liveness check pointed at that entrance
+      # would report the container as failed-to-start instead of running-broken.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

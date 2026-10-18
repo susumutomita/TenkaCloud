@@ -1,0 +1,228 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-safe-exposure",
+  "name": "誰に見せるかを決める",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "60〜75 分",
+  "shortDescription": "Fixture stackstack-safe-exposure: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture stackstack-safe-exposure: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack-safe-exposure: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture stackstack-safe-exposure: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "stackstack",
+    "authorization",
+    "authentication",
+    "multi-tenant",
+    "access-control",
+    "local-play",
+    "container",
+    "web-app"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (board / portal review)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "認証 (誰か) と認可 (何をしてよいか) を、 同じリクエストの別の判定として区別できる",
+    "公開したままにするエンドポイントと保護するエンドポイントを、 一覧の上で仕分けられる",
+    "オブジェクトの owner / tenant / visibility が判定に参加する認可を、 宣言的なルールとして書ける",
+    "一覧ルートと単体ルートを同じ判定で通し、 存在の有無を応答から漏らさない",
+    "遮断だけで満足せず、 正常利用と監視経路が生きていることを実測で確かめる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Deciding Who Sees What",
+      "shortDescription": "Fixture stackstack-safe-exposure: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack-safe-exposure: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack-safe-exposure: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture stackstack-safe-exposure: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Separate authentication (who is this) from authorization (may they do this) as two decisions about one request",
+        "Sort the endpoints that stay public from the ones that must be protected, as a list you can check",
+        "Express authorization where the object's owner / tenant / visibility participate in the decision, as declarative rules",
+        "Run a collection route and an object route through one decision, and keep existence out of the response",
+        "Refuse to stop at blocking: confirm by measurement that normal use and the monitoring path are still alive"
+      ],
+      "checks": [
+        {
+          "id": "exposed-record",
+          "label": "The reference inside the customer's draft",
+          "hints": [
+            {
+              "id": "exp-record-1",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.0.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "exp-record-2",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "admin-sealed",
+          "label": "Admin screens, for admins only",
+          "hints": [
+            {
+              "id": "admin-seal-1",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.1.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "admin-seal-2",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.1.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "admin-seal-3",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.1.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "drafts-sealed",
+          "label": "Drafts, for their owner and whoever they were shared with",
+          "hints": [
+            {
+              "id": "drafts-seal-1",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.2.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "drafts-seal-2",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.2.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "drafts-seal-3",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.2.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "exposure-signoff",
+          "label": "Sign-off for the exposure review",
+          "hints": [
+            {
+              "id": "signoff-1",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.3.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "signoff-2",
+              "content": "Fixture stackstack-safe-exposure: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Review": "http://127.0.0.1:18080/portal",
+      "Board": "http://127.0.0.1:18080/"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "exposed-record",
+        "label": "取引先の下書きに書かれていた管理番号",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "exp-record-1",
+            "content": "レビュー画面には、 まだ触っていない下書きのルートが並んでいます。 下書きは 1 件ずつ 「誰のものか」 と 「どのテナントのものか」 を持っています。 ステージング用の鍵のどれかで一覧を出して、 返ってきたものの owner と tenant を見てください。",
+            "penalty": 4
+          },
+          {
+            "id": "exp-record-2",
+            "content": "Fixture stackstack-safe-exposure: .scoring.checks.0.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 9
+          }
+        ]
+      },
+      {
+        "id": "admin-sealed",
+        "label": "管理画面を管理者だけに戻す",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "admin-seal-1",
+            "content": "`/docs` から `GET /portal/review` を実行し、 `groups.admin_sealed.probes` の失敗項目を見ます。 どの rule が決めたか (`decidedBy`) も出ます。 admin 側は gate が 2 つあり、 両方同時に true でないと通りません。",
+            "penalty": 5
+          },
+          {
+            "id": "admin-seal-2",
+            "content": "落とすべき probe は全員、 このアプリが知っている鍵を出しています。 だから 「鍵を要求する」 だけでは 1 本も変わりません。 cto-daichi と他の 3 人を分けているものは `/portal/me` に出ています。 admin の surface は 4 ルートあって、 そのうち 1 本は GET ではないことも忘れずに。",
+            "penalty": 7
+          },
+          {
+            "id": "admin-seal-3",
+            "content": "Fixture stackstack-safe-exposure: .scoring.checks.1.hints.2.content. Synthetic narrative for platform contract tests.",
+            "penalty": 11
+          }
+        ]
+      },
+      {
+        "id": "drafts-sealed",
+        "label": "下書きを持ち主と共有先だけに戻す",
+        "points": 60,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "drafts-seal-1",
+            "content": "下書きは `owner` と `tenant` と `visibility` を持っています。 最初からある 4 件のうち、 ちょうど 1 件は 「書いていない同僚が読めたままでよい」 もので、 よく似たもう 1 件は違います。 その差は caller ではなく、 オブジェクト自身に書いてあります。",
+            "penalty": 6
+          },
+          {
+            "id": "drafts-seal-2",
+            "content": "Fixture stackstack-safe-exposure: .scoring.checks.2.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 9
+          },
+          {
+            "id": "drafts-seal-3",
+            "content": "Fixture stackstack-safe-exposure: .scoring.checks.2.hints.2.content. Synthetic narrative for platform contract tests.",
+            "penalty": 13
+          }
+        ]
+      },
+      {
+        "id": "exposure-signoff",
+        "label": "公開範囲レビューの合格印",
+        "points": 60,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "signoff-1",
+            "content": "`GET /posture` は gate を 5 つ返します。 合格印は 5 つとも true になって初めて出ます。 null の間は、 赤い gate がそのままやることリストです。 どの probe が落ちていて、 どの rule が決めたかは `GET /portal/review` に出ています。",
+            "penalty": 8
+          },
+          {
+            "id": "signoff-2",
+            "content": "`/docs` から `GET /posture` を実行し、 `readyToken` を提出してください。 `service_intact` が赤なら締めすぎです。 監視経路は鍵なしで答え、 4 アカウントとも `/portal/me` に届き、 共有 runbook は共有先の同僚が読める必要があります。",
+            "penalty": 15
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 120,
+    "chapter": "4. StackStack 本編"
+  }
+}

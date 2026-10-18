@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" width="720" height="400" role="img" aria-label="stackstack-secrets architecture">
+  <style>
+    .box { fill: #ffffff; stroke: #37475a; stroke-width: 1.5; }
+    .soft { fill: #f4f6f8; stroke: #9aa7b4; stroke-width: 1.2; }
+    .t { font-family: system-ui, sans-serif; font-size: 13px; fill: #16191f; }
+    .s { font-family: system-ui, sans-serif; font-size: 11px; fill: #5f6b7a; }
+    .h { font-family: system-ui, sans-serif; font-size: 14px; font-weight: 600; fill: #16191f; }
+    .flow { stroke: #37475a; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+    .dash { stroke: #9aa7b4; stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; marker-end: url(#b); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#37475a"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9aa7b4"/>
+    </marker>
+  </defs>
+
+  <rect x="12" y="12" width="696" height="376" rx="10" class="soft"/>
+  <text x="28" y="36" class="h">one container — your machine</text>
+
+  <rect x="28" y="52" width="184" height="90" rx="6" class="box"/>
+  <text x="40" y="76" class="t">the board</text>
+  <text x="40" y="95" class="s">GET /  ·  GET /api/board</text>
+  <text x="40" y="113" class="s">post 2: the handover</text>
+  <text x="40" y="131" class="s">no delete route</text>
+
+  <rect x="28" y="170" width="184" height="90" rx="6" class="box"/>
+  <text x="40" y="194" class="t">your checkout</text>
+  <text x="40" y="213" class="s">API /api/settings</text>
+  <text x="40" y="231" class="s">identity: which key</text>
+  <text x="40" y="249" class="s">grants: what it may do</text>
+
+  <rect x="28" y="288" width="184" height="76" rx="6" class="box"/>
+  <text x="40" y="312" class="t">startup output</text>
+  <text x="40" y="331" class="s">docker compose logs</text>
+  <text x="40" y="349" class="s">break-glass, once, no HTTP</text>
+
+  <rect x="264" y="52" width="192" height="126" rx="6" class="box"/>
+  <text x="276" y="76" class="t">ops API  /api/ops</text>
+  <text x="276" y="98" class="s">whoami   who a key is</text>
+  <text x="276" y="116" class="s">keys     issue · revoke</text>
+  <text x="276" y="134" class="s">policy   allow-only</text>
+  <text x="276" y="152" class="s">act      one action</text>
+  <text x="276" y="170" class="s">journal  allowed + refused</text>
+
+  <rect x="264" y="206" width="192" height="76" rx="6" class="box"/>
+  <text x="276" y="230" class="t">key store</text>
+  <text x="276" y="249" class="s">ops-legacy  active | revoked</text>
+  <text x="276" y="267" class="s">secrets leave once, at issue</text>
+
+  <rect x="264" y="310" width="192" height="54" rx="6" class="box"/>
+  <text x="276" y="334" class="t">nightly digest</text>
+  <text x="276" y="353" class="s">POST /api/ops/digest/run</text>
+
+  <rect x="508" y="52" width="184" height="126" rx="6" class="box"/>
+  <text x="520" y="76" class="t">GET /posture</text>
+  <text x="520" y="98" class="s">leak_confirmed</text>
+  <text x="520" y="116" class="s">key_rotated</text>
+  <text x="520" y="134" class="s">legacy_revoked</text>
+  <text x="520" y="152" class="s">least_privilege</text>
+  <text x="520" y="170" class="s">service_intact  ← green at start</text>
+
+  <rect x="508" y="206" width="184" height="76" rx="6" class="box"/>
+  <text x="520" y="230" class="t">:18081 /verify</text>
+  <text x="520" y="249" class="s">5 checkpoints, 200 points</text>
+  <text x="520" y="267" class="s">runs the job, probes over HTTP</text>
+
+  <path d="M212,97 L264,97" class="flow"/>
+  <path d="M212,215 L264,235" class="flow"/>
+  <path d="M212,326 L264,332" class="dash"/>
+  <path d="M456,115 L508,115" class="flow"/>
+  <path d="M456,244 L508,244" class="flow"/>
+  <path d="M360,282 L360,310" class="flow"/>
+  <text x="222" y="90" class="s">the key is here</text>
+  <text x="466" y="300" class="s">measured, never claimed</text>
+</svg>

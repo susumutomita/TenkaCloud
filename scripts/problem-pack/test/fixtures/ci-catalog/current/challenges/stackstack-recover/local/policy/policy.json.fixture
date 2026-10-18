@@ -1,0 +1,13 @@
+{
+  "auth": {
+    "requireToken": true,
+    "token": "night-deploy-4f2a",
+    "protect": ["/"]
+  },
+  "storage": {
+    "writable": ["/app/state/quarantine"]
+  },
+  "digest": {
+    "enabled": true
+  }
+}

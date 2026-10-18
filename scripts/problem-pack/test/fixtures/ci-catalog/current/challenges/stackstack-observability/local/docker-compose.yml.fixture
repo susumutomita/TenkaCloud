@@ -1,0 +1,45 @@
+# Local-play container for stackstack-observability.
+#
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
+# copy of it: this problem acts on the same board stackstack-onboarding did, with
+# `SCENARIO=observability` adding the archive relay, its metrics surface and its
+# own health check on top.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
+# There is no monitoring stack and no third port — `/metrics` is a surface on the
+# same origin, scraped by nobody. The READMEs say so plainly.
+name: stackstack-observability
+services:
+  stackstack-observability:
+    build:
+      context: ../../../runtimes/stackstack
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: observability
+      # Per-deploy random secret injected by `make local`. The shard names, the
+      # shard codes, the incident id, the safe-log token, the relay credential
+      # and the title-to-shard map are all derived from it inside the container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
+      - ./config:/app/config:ro
+      - ./relay:/app/relay:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board, /relay, /metrics, /archive
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      # The board's own /healthz, not the relay's: the relay's health check is
+      # the thing being fixed, and a correct fix makes it answer 503 on purpose.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"

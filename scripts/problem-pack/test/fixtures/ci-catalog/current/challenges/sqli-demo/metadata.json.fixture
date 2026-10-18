@@ -1,0 +1,95 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "sqli-demo",
+  "name": "スタッフ専用ログイン",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "30 分",
+  "shortDescription": "社内スタッフ専用のログイン画面。 admin としてサインインできれば、 管理者だけが見られる合言葉が手に入る ── だが管理者のパスワードは誰も知らない。",
+  "instructions": "Fixture sqli-demo: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture sqli-demo: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture sqli-demo: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "web-security",
+    "sql-injection",
+    "owasp",
+    "ipa",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (challenge surface)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
+  ],
+  "learningGoals": [
+    "正規の認証情報を持たずにログインを突破できてしまう典型的な穴を、 自分で発見できるようになる",
+    "利用者の入力を裏側の問い合わせ文へそのまま連結する実装が、 なぜ危険なのかを理解する",
+    "プレースホルダ (パラメータ化クエリ) がなぜ根本対策になるのかを理解する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Staff-Only Login",
+      "shortDescription": "An internal staff-only login screen. Sign in as the administrator and you get a passphrase only admins can see — but nobody knows the admin's password.",
+      "instructions": "Fixture sqli-demo: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture sqli-demo: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture sqli-demo: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Learn to discover, yourself, a classic hole that lets you bypass a login without valid credentials",
+        "Understand why concatenating user input straight into a back-end query is dangerous",
+        "Understand why placeholders (parameterized queries) are the root-cause fix"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Fixture sqli-demo: .i18n.en.hints.0.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-2",
+          "content": "Fixture sqli-demo: .i18n.en.hints.1.content. Synthetic narrative for platform contract tests."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "正規のパスワードを当てようとしても無駄だ。 むしろ、 あなたが入力した文字が画面の裏側でどう扱われているかを疑ってみよう。 ユーザー名に記号 ── たとえば `'` (シングルクオート) ── を 1 つ混ぜると、 挙動が変わるかもしれない。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "この画面は、 あなたの入力を裏側の SQL 問い合わせ文にそのまま文字列連結している (SQL インジェクション)。 ユーザー名を `admin' --` (末尾はコメント) にし、 パスワードは任意にして送信すると、 パスワード照合が無効化され admin としてサインインできる。",
+        "penalty": 30
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 40,
+    "chapter": "2. 壊れ方を知る"
+  }
+}

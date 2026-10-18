@@ -1,0 +1,240 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-recover",
+  "name": "戻さないで直す",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "40 分",
+  "shortDescription": "Fixture stackstack-recover: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture stackstack-recover: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack-recover: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture stackstack-recover: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "stackstack",
+    "incident-response",
+    "availability",
+    "least-privilege",
+    "health-check",
+    "local-play",
+    "container",
+    "web-app"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (board / edge / ops)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "障害の影響範囲を、 症状の集合として名指しできる形まで切り分けられる",
+    "セキュリティ修正の適用範囲を狭めることと、 修正そのものを巻き戻すことを区別できる",
+    "権限を絞ったあとに壊れる必須処理を、 権限を広げ直さずに復旧できる",
+    "再起動で消えるものと消えないものを区別し、 再発しないことを実測で示せる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Fix It Without Rolling It Back",
+      "shortDescription": "Fixture stackstack-recover: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack-recover: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack-recover: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture stackstack-recover: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Isolate the blast radius of an outage until it can be named as a set of symptoms",
+        "Distinguish narrowing the scope of a security fix from rolling the fix back",
+        "Restore a required job that broke when a permission was narrowed, without widening the permission again",
+        "Separate what a restart clears from what it does not, and show the absence of recurrence by measurement"
+      ],
+      "checks": [
+        {
+          "id": "incident-scope",
+          "label": "Name what stopped",
+          "hints": [
+            {
+              "id": "recover-scope-1",
+              "content": "The public entrance is not the only surface this container has, and the container's own log kept talking all night. Both are still reachable."
+            },
+            {
+              "id": "recover-scope-2",
+              "content": "Fixture stackstack-recover: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "board-back",
+          "label": "Bring the board back with last night's protection intact",
+          "hints": [
+            {
+              "id": "recover-board-1",
+              "content": "`GET /ops/status` shows which paths the current policy covers, and separately what a monitor and an anonymous reader each got back. Read those two next to each other."
+            },
+            {
+              "id": "recover-board-2",
+              "content": "Fixture stackstack-recover: .i18n.en.checks.1.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "job-restored",
+          "label": "The scheduled job that stopped writing",
+          "hints": [
+            {
+              "id": "recover-job-1",
+              "content": "Fixture stackstack-recover: .i18n.en.checks.2.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "recover-job-2",
+              "content": "Fixture stackstack-recover: .i18n.en.checks.2.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "least-privilege-held",
+          "label": "How wide the write permission is",
+          "hints": [
+            {
+              "id": "recover-scope-narrow-1",
+              "content": "Fixture stackstack-recover: .i18n.en.checks.3.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "recover-scope-narrow-2",
+              "content": "Fixture stackstack-recover: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "no-recurrence",
+          "label": "It stays fixed across a restart",
+          "hints": [
+            {
+              "id": "recover-stable-1",
+              "content": "Green once is not green again. `GET /ops/status` keeps a record of every worker restart this container has performed, and of what the app looked like immediately after each one."
+            },
+            {
+              "id": "recover-stable-2",
+              "content": "Fixture stackstack-recover: .i18n.en.checks.4.hints.1.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Ops": "http://127.0.0.1:18080/ops",
+      "Public": "http://127.0.0.1:18080/edge/board"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "incident-scope",
+        "label": "止まったものを名指しする",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "recover-scope-1",
+            "content": "このコンテナが持っている面は公開側の入口だけではありません。 コンテナ自身のログは、 昨夜からずっと喋り続けています。 どちらもいま到達できます。",
+            "penalty": 0
+          },
+          {
+            "id": "recover-scope-2",
+            "content": "Fixture stackstack-recover: .scoring.checks.0.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "board-back",
+        "label": "昨夜の対策を残したまま掲示板を戻す",
+        "points": 50,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "recover-board-1",
+            "content": "`GET /ops/status` には 「いまの設定がどの経路を覆っているか」 と 「監視と匿名の読み手がそれぞれ何を返されたか」 が別々に出ています。 その 2 つを並べて読んでください。",
+            "penalty": 0
+          },
+          {
+            "id": "recover-board-2",
+            "content": "Fixture stackstack-recover: .scoring.checks.1.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 22
+          }
+        ]
+      },
+      {
+        "id": "job-restored",
+        "label": "書けなくなった定期処理",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "recover-job-1",
+            "content": "ログには同じ拒否が、 定期処理が走るたびに並んでいます。 その行はパスと、 拒否している設定の名前の両方を書いています。 拒否しているのは OS ではなくアプリ自身です。",
+            "penalty": 0
+          },
+          {
+            "id": "recover-job-2",
+            "content": "Fixture stackstack-recover: .scoring.checks.2.hints.1.content. Synthetic narrative for platform contract tests.",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "least-privilege-held",
+        "label": "書き込み許可の広さ",
+        "points": 45,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "recover-scope-narrow-1",
+            "content": "`GET /ops/status` の `storage` には、 定期処理のディレクトリが許可されているかと、 許可してはいけないパスがいくつ許可されているかの両方が出ています。 定期処理を動かすと 1 つ目が動きます。 2 つ目も動くことがあります。",
+            "penalty": 0
+          },
+          {
+            "id": "recover-scope-narrow-2",
+            "content": "必要より 1 段広いだけで `forbiddenPathsAdmitted` は 0 でなくなります。 出力先のディレクトリそのものを宣言してください (ちょうど一致も許可として数えます)。 その上の階層は宣言しないこと。 直ったら `GET /posture` の `tokens` にある `scope_narrow` を提出します。",
+            "penalty": 20
+          }
+        ]
+      },
+      {
+        "id": "no-recurrence",
+        "label": "再起動しても戻らないこと",
+        "points": 35,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "recover-stable-1",
+            "content": "1 度緑になったことと、 もう 1 度緑になることは違います。 `GET /ops/status` は、 このコンテナが行ったワーカー再起動と、 その直後にアプリがどう見えたかを 1 件ずつ残しています。",
+            "penalty": 0
+          },
+          {
+            "id": "recover-stable-2",
+            "content": "台帳の各エントリは、 その再起動時の policy revision を持っています。 必要なのは現在の revision で行われた 1 件です。 最後の変更後に `/docs` から `POST /ops/restart` を実行し、 `GET /posture` の `tokens` にある `survived_restart` を提出してください。",
+            "penalty": 16
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 160,
+    "chapter": "4. StackStack 本編"
+  }
+}

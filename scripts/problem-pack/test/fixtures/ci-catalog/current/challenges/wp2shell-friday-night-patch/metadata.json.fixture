@@ -1,0 +1,225 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "wp2shell-friday-night-patch",
+  "name": "金曜深夜のパッチ当て",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "75 分",
+  "shortDescription": "金曜 17:30。 監視から、 本番の WordPress 風サイトへの不審な REST API トラフィックの通知が届く。 事業からの要求はひとつ ── サイトを止めずに、 今すぐ食い止め、 きれいに片付け、 再発しないようにすること。",
+  "instructions": "Fixture wp2shell-friday-night-patch: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture wp2shell-friday-night-patch: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture wp2shell-friday-night-patch: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "wordpress",
+    "incident-response",
+    "waf",
+    "rest-api",
+    "aws",
+    "credential-rotation",
+    "evidence-preservation",
+    "serverless"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "REST API (API Gateway, HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "WAF のルールを Count (検知) から Block (遮断) に切り替えることが、 ダウンタイムなしの即時封じ込め手段であることを理解する。",
+    "根本原因の修正 (設定変更) と、 封じ込め (WAF) と、 後片付け (居座り・不正アカウント・改変ファイルの是正) が、 それぞれ独立した対応であることを体感する。",
+    "資格情報のローテーションと証拠の保全が、 コードの修正と並んで欠かせない対応であることを説明できるようになる。",
+    "『サイトを止めない』 という事業要求のもとで、 設定変更だけで安全に対応を完結できることを、 実際の AWS 環境で確認する。"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Friday Night Patch",
+      "shortDescription": "Fixture wp2shell-friday-night-patch: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture wp2shell-friday-night-patch: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture wp2shell-friday-night-patch: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture wp2shell-friday-night-patch: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Understand that flipping a WAF rule from Count (detect) to Block (reject) is a zero-downtime immediate-containment lever.",
+        "Feel that root-cause remediation (settings), containment (WAF), and cleanup (persistence / rogue account / modified file) are three independent jobs.",
+        "Be able to explain why credential rotation and evidence preservation are just as required as the code-level fix.",
+        "Confirm, in a real AWS environment, that a full incident response can be completed purely through settings changes while honoring a 'never take the site down' requirement."
+      ]
+    }
+  },
+  "cfnTemplate": "template.yaml",
+  "scoring": {
+    "kind": "multi-flag",
+    "flags": [
+      {
+        "id": "timeline-iocs",
+        "label": "時系列と侵害の全体像",
+        "flagOutputKey": "TimelineIocsFlag",
+        "points": 45,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "timeline-iocs-1",
+            "content": "証拠はまだ確認されていない。 まず S3 の証拠バケットの存在を確認しよう。 Output と briefing にバケット名がある。",
+            "penalty": 0
+          },
+          {
+            "id": "timeline-iocs-2",
+            "content": "`aws s3 cp s3://<証拠バケット>/incident-log.json .` で証拠ファイルを取得して中身を見よう。 時系列・不審なリクエスト・調査結果が書かれている。",
+            "penalty": 4
+          },
+          {
+            "id": "timeline-iocs-3",
+            "content": "証拠ファイルの `audit_token` フィールドに合言葉がそのまま書かれている。 それを提出しよう。",
+            "penalty": 9
+          }
+        ]
+      },
+      {
+        "id": "waf-containment",
+        "label": "WAF での即時封じ込め",
+        "flagOutputKey": "WafContainmentFlag",
+        "points": 45,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "waf-containment-1",
+            "content": "サイトを止めずに今すぐ止血する手段が、 このスタックにはすでに用意されている。 WAF の WebACL を確認しよう (Output に名前と ID がある)。",
+            "penalty": 0
+          },
+          {
+            "id": "waf-containment-2",
+            "content": "`aws wafv2 get-web-acl --scope REGIONAL --name <名前> --id <ID>` で現在の設定を取得しよう。 ルールが 1 つ見つかるはずだ。 その Action を確認する。",
+            "penalty": 4
+          },
+          {
+            "id": "waf-containment-3",
+            "content": "そのルールの Action は今 `Count` (検知のみ) になっている。 取得した JSON の中でそこだけ `Block` に書き換え、 `aws wafv2 update-web-acl` に同じ JSON と LockToken を渡して反映しよう。 反映後にグレーダーを呼ぶと合言葉が返る。",
+            "penalty": 9
+          }
+        ]
+      },
+      {
+        "id": "patched-workload",
+        "label": "根本原因を直したワークロード",
+        "flagOutputKey": "PatchedWorkloadFlag",
+        "points": 45,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "patched-workload-1",
+            "content": "WAF は既知のパターンを止めるが、 アプリ自体の作りはまだ直っていない。 設定 (SSM Parameter) を確認しよう。",
+            "penalty": 0
+          },
+          {
+            "id": "patched-workload-2",
+            "content": "`/<prefix>/config/route-isolation` と `/<prefix>/config/parameterized-queries` の 2 つが、 このインシデントの根本原因に対応する設定だ。 どちらも今は `false` になっている。",
+            "penalty": 4
+          },
+          {
+            "id": "patched-workload-3",
+            "content": "両方を `aws ssm put-parameter --overwrite --value true` で `true` にしよう。 グレーダーはコードの経路を直接呼び出して確認するので、 WAF を経由しなくても判定される。",
+            "penalty": 9
+          }
+        ]
+      },
+      {
+        "id": "persistence-removal",
+        "label": "居座りと不正アカウントの後片付け",
+        "flagOutputKey": "PersistenceRemovalFlag",
+        "points": 40,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "persistence-removal-1",
+            "content": "証拠に書かれていた 3 つの調査結果 (居座り用の目印・不正な管理者・改変されたファイル) は、 まだどれも片付いていない。",
+            "penalty": 0
+          },
+          {
+            "id": "persistence-removal-2",
+            "content": "`/<prefix>/data/rogue-admin-present` と `/<prefix>/data/persistence-marker-present` を確認しよう。 それぞれ専用のフラグになっている。",
+            "penalty": 3
+          },
+          {
+            "id": "persistence-removal-3",
+            "content": "両方のフラグを `false` に、 `/<prefix>/site/theme-functions` を `ThemeFunctionsBaseline` Output の内容に、 それぞれ `aws ssm put-parameter --overwrite` で上書きしよう。 3 つとも揃って初めて片付いたと判定される。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "credential-rotation",
+        "label": "資格情報のローテーション",
+        "flagOutputKey": "CredentialRotationFlag",
+        "points": 40,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "credential-rotation-1",
+            "content": "居座りや不正アカウントを片付けても、 認証に使っている鍵そのものはまだ古いままだ。",
+            "penalty": 0
+          },
+          {
+            "id": "credential-rotation-2",
+            "content": "`/<prefix>/config/salt-version` を確認しよう。 この値がアプリの内部トークンの元になっている。",
+            "penalty": 3
+          },
+          {
+            "id": "credential-rotation-3",
+            "content": "この値を今より大きい整数に書き換えよう。 古いトークンはその場で使えなくなる。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "evidence-preservation",
+        "label": "証拠の保全",
+        "flagOutputKey": "EvidencePreservationFlag",
+        "points": 40,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "evidence-preservation-1",
+            "content": "対応を進める間、 最初に取得した証拠そのものを壊していないか気をつけよう。",
+            "penalty": 0
+          },
+          {
+            "id": "evidence-preservation-2",
+            "content": "証拠バケットのオブジェクトを削除したり上書きしたりしていないか確認しよう。",
+            "penalty": 3
+          },
+          {
+            "id": "evidence-preservation-3",
+            "content": "何もしなければこのチェックポイントは最初から満たされている ── 逆に言えば、 証拠オブジェクトを消したり書き換えたりした場合だけ満たされなくなる。",
+            "penalty": 7
+          }
+        ]
+      },
+      {
+        "id": "uptime-and-legit-traffic",
+        "label": "稼働継続と正規リクエストの健全性",
+        "flagOutputKey": "UptimeLegitTrafficFlag",
+        "points": 45,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "uptime-and-legit-traffic-1",
+            "content": "設定を変えるたびに、 サイトが引き続き普通に動いているか確認しよう。",
+            "penalty": 0
+          },
+          {
+            "id": "uptime-and-legit-traffic-2",
+            "content": "トップページ・通常の投稿一覧・正規のカテゴリでのレポート取得、 この 3 つが今もすべて 200 で返るか確認しよう。",
+            "penalty": 4
+          },
+          {
+            "id": "uptime-and-legit-traffic-3",
+            "content": "3 つとも 200 で返れば、 このチェックポイントは満たされる。 途中で 500 や 403 が混じる設定変更をしていないか見直そう。",
+            "penalty": 9
+          }
+        ]
+      }
+    ]
+  }
+}

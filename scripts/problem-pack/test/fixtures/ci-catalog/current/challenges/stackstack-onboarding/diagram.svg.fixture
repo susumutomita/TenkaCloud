@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 340" font-family="Helvetica,Arial,sans-serif">
+<defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748B"/></marker></defs>
+<rect x="0" y="0" width="620" height="340" fill="#FFFFFF"/>
+<text x="310" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#0F172A">The first fifteen minutes — one lap of the loop</text>
+<text x="310" y="50" text-anchor="middle" font-size="11" fill="#64748B">what you touch, and what it touches</text>
+
+<rect x="20" y="76" width="150" height="86" rx="8" fill="#F8FAFC" stroke="#2563EB" stroke-width="2"/>
+<rect x="20" y="76" width="150" height="26" rx="8" fill="#2563EB"/>
+<rect x="20" y="94" width="150" height="8" fill="#2563EB"/>
+<text x="95" y="94" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">Participant Portal</text>
+<text x="95" y="122" text-anchor="middle" font-size="10.5" fill="#334155">endpoint list, hints,</text>
+<text x="95" y="137" text-anchor="middle" font-size="10.5" fill="#334155">4 checkpoints to submit</text>
+<text x="95" y="152" text-anchor="middle" font-size="10.5" fill="#334155">to</text>
+
+<rect x="20" y="212" width="150" height="86" rx="8" fill="#F8FAFC" stroke="#7C3AED" stroke-width="2"/>
+<rect x="20" y="212" width="150" height="26" rx="8" fill="#7C3AED"/>
+<rect x="20" y="230" width="150" height="8" fill="#7C3AED"/>
+<text x="95" y="230" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">Your editor</text>
+<text x="95" y="258" text-anchor="middle" font-size="10.5" fill="#334155">API /api/config</text>
+<text x="95" y="273" text-anchor="middle" font-size="10.5" fill="#334155">acceptingPosts</text>
+<text x="95" y="288" text-anchor="middle" font-size="10.5" fill="#334155">(mounted read-only)</text>
+
+<rect x="238" y="76" width="176" height="222" rx="10" fill="#FFFFFF" stroke="#0F172A" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="326" y="96" text-anchor="middle" font-size="11" font-weight="700" fill="#0F172A">Docker (your machine)</text>
+
+<rect x="254" y="108" width="144" height="96" rx="8" fill="#F8FAFC" stroke="#16A34A" stroke-width="2"/>
+<rect x="254" y="108" width="144" height="26" rx="8" fill="#16A34A"/>
+<rect x="254" y="126" width="144" height="8" fill="#16A34A"/>
+<text x="326" y="126" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">The board :18080</text>
+<text x="326" y="152" text-anchor="middle" font-size="10.5" fill="#334155">GET /  ·  /api/board</text>
+<text x="326" y="167" text-anchor="middle" font-size="10.5" fill="#334155">GET /api/logs</text>
+<text x="326" y="182" text-anchor="middle" font-size="10.5" fill="#334155">GET /posture</text>
+<text x="326" y="197" text-anchor="middle" font-size="10.5" fill="#334155">POST /api/posts</text>
+
+<rect x="254" y="222" width="144" height="60" rx="8" fill="#F8FAFC" stroke="#B45309" stroke-width="2"/>
+<rect x="254" y="222" width="144" height="26" rx="8" fill="#B45309"/>
+<rect x="254" y="240" width="144" height="8" fill="#B45309"/>
+<text x="326" y="240" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">/verify :18081</text>
+<text x="326" y="266" text-anchor="middle" font-size="10.5" fill="#334155">judges each checkpoint</text>
+
+<rect x="452" y="108" width="148" height="96" rx="8" fill="#F8FAFC" stroke="#475569" stroke-width="2"/>
+<rect x="452" y="108" width="148" height="26" rx="8" fill="#475569"/>
+<rect x="452" y="126" width="148" height="8" fill="#475569"/>
+<text x="526" y="126" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">Measured state</text>
+<text x="526" y="152" text-anchor="middle" font-size="10.5" fill="#334155">board_visited</text>
+<text x="526" y="167" text-anchor="middle" font-size="10.5" fill="#334155">logs_read</text>
+<text x="526" y="182" text-anchor="middle" font-size="10.5" fill="#334155">posts_open</text>
+<text x="526" y="197" text-anchor="middle" font-size="10.5" fill="#334155">post_created</text>
+
+<rect x="452" y="222" width="148" height="60" rx="8" fill="#FEF9C3" stroke="#CA8A04" stroke-width="2"/>
+<text x="526" y="246" text-anchor="middle" font-size="11" font-weight="700" fill="#713F12">readyToken</text>
+<text x="526" y="266" text-anchor="middle" font-size="10.5" fill="#713F12">only when all four green</text>
+
+<path d="M170 119 L250 132" fill="none" stroke="#64748B" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="208" y="112" text-anchor="middle" font-size="9.5" fill="#475569">open</text>
+
+<path d="M170 252 L250 246" fill="none" stroke="#64748B" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="210" y="238" text-anchor="middle" font-size="9.5" fill="#475569">edit</text>
+
+<path d="M170 138 C 200 200, 200 220, 250 240" fill="none" stroke="#64748B" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="196" y="290" text-anchor="middle" font-size="9.5" fill="#475569">submit</text>
+
+<path d="M398 156 L448 156" fill="none" stroke="#64748B" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="423" y="149" text-anchor="middle" font-size="9.5" fill="#475569">looks</text>
+
+<path d="M526 204 L526 218" fill="none" stroke="#64748B" stroke-width="1.6" marker-end="url(#a)"/>
+
+<path d="M452 252 L402 252" fill="none" stroke="#64748B" stroke-width="1.6" marker-end="url(#a)"/>
+<text x="427" y="245" text-anchor="middle" font-size="9.5" fill="#475569">signs</text>
+
+<text x="310" y="322" text-anchor="middle" font-size="10.5" fill="#64748B">Nothing is claimed: every gate is decided by looking at the running app.</text>
+</svg>

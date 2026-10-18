@@ -1,0 +1,131 @@
+# Local-play problem stack for wp-exposed-backup.
+#
+# A REAL WordPress + MariaDB, run in an isolated environment for teaching. The
+# problem is NOT vulnerable code — it is an operational-neglect scenario: a
+# database backup the previous operator left in the public web root. Everything is
+# bound to 127.0.0.1 only and never leaves the box.
+#
+# Services:
+#   db          real MariaDB (dummy data only)
+#   wordpress   real WordPress (Apache). A wrapper entrypoint drops the neglected
+#               backup file into the docroot before Apache starts, so the challenge
+#               surface exists the moment the site is reachable.
+#   wpinit       one-shot WP-CLI: installs WordPress and seeds a little content so
+#               the site is a working install, not the setup wizard.
+#   verify      loopback /verify the TenkaCloud scorer delegates to.
+name: wp-exposed-backup
+services:
+  db:
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+      MARIADB_ROOT_PASSWORD: root-not-secret
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: "5s"
+      timeout: "5s"
+      retries: 30
+    restart: "no"
+
+  wordpress:
+    build:
+      context: ./wordpress
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+      # Per-deploy random secret injected by `make local`; the four checkpoint
+      # flags are derived from it inside the container.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+      # ポートを焼き込まない (Issue 399)。local play は空いているポートへ再割り当てするので、
+      # DB に保存された siteurl が 18080 のままだと、19080 で開いた参加者は WordPress の
+      # canonical redirect で 18080 = **別の問題**へ飛ばされる。リクエストの Host から
+      # 毎回組み立てれば、割り当てがどこであっても正しい先を指す。
+      #
+      # Host ヘッダーを信じる形は production では host header injection の入口になるが、
+      # この compose は 127.0.0.1 にだけ bind する単一参加者の訓練コンテナで、Host を
+      # 詐称できるのは参加者自身しかいない。
+      #
+      # `$$` は compose の変数展開を抜けて PHP へ `$` を渡すための書き方。
+      WORDPRESS_CONFIG_EXTRA: |
+        if ( ! empty( $$_SERVER['HTTP_HOST'] ) ) {
+          define( 'WP_HOME', 'http://' . $$_SERVER['HTTP_HOST'] );
+          define( 'WP_SITEURL', 'http://' . $$_SERVER['HTTP_HOST'] );
+        }
+    volumes:
+      - wp_data:/var/www/html
+    ports:
+      - "127.0.0.1:18080:80" # WordPress site (challenge surface)
+    healthcheck:
+      # Ready = Apache is serving AND all four leftover surfaces are reachable
+      # (the last one, /internal/, also proves directory listing is on).
+      test:
+        [
+          "CMD",
+          "php",
+          "-r",
+          "exit((@file_get_contents('http://127.0.0.1/wp-content/backups/db-backup.sql')!==false&&@file_get_contents('http://127.0.0.1/wp-config.php.bak')!==false&&@file_get_contents('http://127.0.0.1/wp-content/debug.log')!==false&&@file_get_contents('http://127.0.0.1/internal/')!==false)?0:1);",
+        ]
+      interval: "5s"
+      timeout: "5s"
+      retries: 40
+    restart: "no"
+
+  wpinit:
+    image: wordpress:cli-php8.3
+    # Match the debian WordPress image's www-data uid so WP-CLI can use the shared
+    # docroot volume and its generated wp-config.php.
+    user: "33:33"
+    depends_on:
+      db:
+        condition: service_healthy
+      wordpress:
+        condition: service_healthy
+    environment:
+      # wp-config.php resolves these from the loading process's env (getenv_docker),
+      # so WP-CLI needs the same DB settings as the wordpress service or it falls
+      # back to host "mysql" and cannot connect.
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      - wp_data:/var/www/html
+      - ./wpinit/init.sh:/usr/local/bin/init.sh:ro
+    entrypoint: ["sh", "/usr/local/bin/init.sh"]
+    restart: "no"
+
+  verify:
+    build:
+      context: ./verify
+      dockerfile: Dockerfile
+    environment:
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    ports:
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "3s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"
+
+volumes:
+  db_data:
+  wp_data:

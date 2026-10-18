@@ -1,0 +1,118 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "hello-multicloud",
+  "name": "Hello Multicloud (Sample)",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "10 分",
+  "shortDescription": "Fixture hello-multicloud: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture hello-multicloud: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture hello-multicloud: .description. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "sample",
+    "multicloud",
+    "composite",
+    "smoke-test",
+    "gcp",
+    "azure",
+    "sakura"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "hello endpoints (AWS / GCP / Azure / Sakura)"
+    }
+  ],
+  "learningGoals": [
+    "1 つの composite 問題が 4 provider へ展開される流れを体験する",
+    "target ごとの status、outputs、HTTP path、採点の対応を確認する"
+  ],
+  "runtime": {
+    "kind": "composite",
+    "targets": [
+      {
+        "id": "aws-hello",
+        "provider": "aws",
+        "engine": "cloudformation",
+        "entry": "template.yaml"
+      },
+      {
+        "id": "gcp-hello",
+        "provider": "gcp",
+        "engine": "infra-manager",
+        "entry": "gcp/terraform"
+      },
+      {
+        "id": "azure-hello",
+        "provider": "azure",
+        "engine": "bicep",
+        "entry": "azure/main.bicep"
+      },
+      {
+        "id": "sakura-hello",
+        "provider": "sakura",
+        "engine": "apprun",
+        "entry": "sakura/application.json"
+      }
+    ]
+  },
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  },
+  "scoring": {
+    "kind": "composite-probe",
+    "success": "all",
+    "pointsAllOk": 100,
+    "targets": [
+      {
+        "targetId": "aws-hello",
+        "probe": "https",
+        "outputKey": "AwsHelloUrl",
+        "expectStatus": [
+          200
+        ]
+      },
+      {
+        "targetId": "gcp-hello",
+        "probe": "https",
+        "outputKey": "GcpHelloUrl",
+        "expectStatus": [
+          200
+        ]
+      },
+      {
+        "targetId": "azure-hello",
+        "probe": "https",
+        "outputKey": "AzureHelloUrl",
+        "path": "/healthz",
+        "expectStatus": [
+          200
+        ]
+      },
+      {
+        "targetId": "sakura-hello",
+        "probe": "https",
+        "outputKey": "BaseUrl",
+        "path": "/healthz",
+        "expectStatus": [
+          200
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Hello Multicloud (Sample)",
+      "shortDescription": "Fixture hello-multicloud: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture hello-multicloud: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture hello-multicloud: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Experience one composite problem fanning out to four providers",
+        "Verify the mapping between per-target status, outputs, HTTP paths, and scoring"
+      ]
+    }
+  }
+}

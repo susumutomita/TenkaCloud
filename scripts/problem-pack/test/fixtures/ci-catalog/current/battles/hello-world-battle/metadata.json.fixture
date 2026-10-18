@@ -1,0 +1,145 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "hello-world-battle",
+  "name": "Hello World Battle (Sample)",
+  "category": "Battle",
+  "status": "ready",
+  "visibility": "public",
+  "onboardingOrder": 1,
+  "difficulty": 1,
+  "estimatedDuration": "30 分",
+  "shortDescription": "Fixture hello-world-battle: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture hello-world-battle: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture hello-world-battle: .description. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "sample",
+    "battle",
+    "uptime",
+    "ec2",
+    "nginx"
+  ],
+  "exposedPorts": [
+    {
+      "port": 80,
+      "name": "frontend (nginx)"
+    },
+    {
+      "port": 8080,
+      "name": "api (python http.server)"
+    }
+  ],
+  "learningGoals": [
+    "TenkaCloud の Battle uptime scoring engine が実 endpoint で動くことを確認する",
+    "EC2 + nginx + Python の最小 web stack で health check probe を受ける流れを体験する",
+    "SSM Session Manager で SSH 不要に接続し、サービスを start / stop する操作"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Hello World Battle (Sample)",
+      "shortDescription": "Fixture hello-world-battle: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture hello-world-battle: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture hello-world-battle: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Verify that TenkaCloud's Battle uptime scoring engine works against real endpoints",
+        "Experience a minimal web stack (EC2 + nginx + Python) receiving health-check probes",
+        "Practice connecting via SSM Session Manager without SSH to start/stop the service"
+      ]
+    }
+  },
+  "endpoints": [
+    {
+      "slot": "frontend",
+      "default": {
+        "from": "cfn-output",
+        "key": "FrontendUrl"
+      },
+      "overridable": true,
+      "label": "Frontend (nginx)",
+      "description": "Ec2HostHint の DNS 名を使い、`http://<host>` を登録します。"
+    },
+    {
+      "slot": "api",
+      "default": {
+        "from": "cfn-output",
+        "key": "ApiUrl"
+      },
+      "overridable": true,
+      "label": "API (python http.server)",
+      "description": "Ec2HostHint の DNS 名を使い、`http://<host>:8080` を登録します。採点時に `/healthz` を確認します。"
+    }
+  ],
+  "scoring": {
+    "kind": "uptime-flat",
+    "endpoints": [
+      {
+        "slot": "frontend",
+        "path": "/",
+        "expectStatus": [
+          200
+        ]
+      },
+      {
+        "slot": "api",
+        "path": "/healthz",
+        "expectStatus": [
+          200
+        ]
+      }
+    ],
+    "pointsPerSuccess": 100,
+    "failurePenalty": -100
+  },
+  "disruptions": [
+    {
+      "id": "frontend-down",
+      "name": "frontend 停止",
+      "eventDetailType": "OutageDisruptionFired",
+      "defaultAfterMinutes": 10,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "publicHint": true,
+      "description": "運営が対象チームの EC2 で nginx を停止します。参加者は SSM Session Manager で接続し、`systemctl start nginx` で復旧します。10 分後には自動復旧が実行されます。",
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "systemctl stop nginx || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 600,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "systemctl start nginx || true"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  },
+  "skillEvidence": [
+    {
+      "skillId": "service.endpoint.probe",
+      "label": "登録したサービスの1つのエンドポイントの成功probe",
+      "i18n": {
+        "en": {
+          "label": "Successful probe of a registered service endpoint"
+        }
+      },
+      "rule": {
+        "source": "uptime",
+        "result": "ok"
+      }
+    }
+  ]
+}

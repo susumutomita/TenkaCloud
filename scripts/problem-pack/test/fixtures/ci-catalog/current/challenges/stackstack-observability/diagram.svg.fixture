@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 430" width="880" height="430" font-family="system-ui, sans-serif" role="img" aria-label="stackstack-observability architecture">
+  <title>stackstack-observability — the board, the relay, and the four archive shards</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5b6472"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b3261e"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="880" height="430" fill="#ffffff"/>
+  <rect x="14" y="14" width="852" height="402" rx="12" fill="none" stroke="#c9ced6" stroke-dasharray="6 5"/>
+  <text x="30" y="40" font-size="13" fill="#5b6472">one container on your machine — 127.0.0.1 only, no cloud account</text>
+
+  <!-- participant -->
+  <rect x="36" y="150" width="120" height="60" rx="8" fill="#eef2f7" stroke="#8d97a5"/>
+  <text x="96" y="176" font-size="14" text-anchor="middle" fill="#1f2733">you</text>
+  <text x="96" y="196" font-size="11" text-anchor="middle" fill="#5b6472">curl / browser</text>
+
+  <!-- board -->
+  <rect x="212" y="130" width="160" height="100" rx="8" fill="#ffffff" stroke="#3b6ea5" stroke-width="2"/>
+  <text x="292" y="156" font-size="14" text-anchor="middle" fill="#1f2733">board</text>
+  <text x="292" y="177" font-size="11" text-anchor="middle" fill="#5b6472">POST /api/posts</text>
+  <text x="292" y="194" font-size="11" text-anchor="middle" fill="#5b6472">GET /api/board</text>
+  <text x="292" y="214" font-size="11" text-anchor="middle" fill="#2e7d32">every post is kept</text>
+
+  <!-- relay -->
+  <rect x="430" y="130" width="160" height="100" rx="8" fill="#ffffff" stroke="#3b6ea5" stroke-width="2"/>
+  <text x="510" y="156" font-size="14" text-anchor="middle" fill="#1f2733">archive relay</text>
+  <text x="510" y="177" font-size="11" text-anchor="middle" fill="#5b6472">GET /relay</text>
+  <text x="510" y="194" font-size="11" text-anchor="middle" fill="#5b6472">GET /relay/healthz</text>
+  <text x="510" y="211" font-size="11" text-anchor="middle" fill="#5b6472">GET /metrics</text>
+
+  <!-- shards -->
+  <text x="740" y="102" font-size="12" text-anchor="middle" fill="#5b6472">archive (4 shards)</text>
+  <rect x="660" y="116" width="160" height="34" rx="6" fill="#f2f8f2" stroke="#2e7d32"/>
+  <text x="740" y="138" font-size="12" text-anchor="middle" fill="#1f2733">AR-……</text>
+  <rect x="660" y="158" width="160" height="34" rx="6" fill="#f2f8f2" stroke="#2e7d32"/>
+  <text x="740" y="180" font-size="12" text-anchor="middle" fill="#1f2733">AR-……</text>
+  <rect x="660" y="200" width="160" height="34" rx="6" fill="#fdf1f0" stroke="#b3261e" stroke-width="2"/>
+  <text x="740" y="222" font-size="12" text-anchor="middle" fill="#b3261e">AR-…… (not answering)</text>
+  <rect x="660" y="242" width="160" height="34" rx="6" fill="#f2f8f2" stroke="#2e7d32"/>
+  <text x="740" y="264" font-size="12" text-anchor="middle" fill="#1f2733">AR-……</text>
+
+  <!-- flows -->
+  <line x1="158" y1="180" x2="208" y2="180" stroke="#5b6472" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="374" y1="180" x2="426" y2="180" stroke="#5b6472" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="400" y="170" font-size="10" text-anchor="middle" fill="#5b6472">each new post</text>
+
+  <line x1="592" y1="168" x2="656" y2="134" stroke="#2e7d32" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="592" y1="175" x2="656" y2="175" stroke="#2e7d32" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="592" y1="190" x2="656" y2="217" stroke="#b3261e" stroke-width="2" marker-end="url(#arrowRed)"/>
+  <line x1="592" y1="200" x2="656" y2="259" stroke="#2e7d32" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- settings file -->
+  <rect x="430" y="292" width="240" height="96" rx="8" fill="#fffbe9" stroke="#b08900"/>
+  <text x="550" y="314" font-size="12" text-anchor="middle" fill="#1f2733">API /api/settings — runtime only</text>
+  <text x="446" y="336" font-size="11" fill="#5b6472">archiveLogging</text>
+  <text x="446" y="354" font-size="11" fill="#5b6472">healthCheckProbes</text>
+  <text x="446" y="372" font-size="11" fill="#5b6472">logDetail</text>
+  <text x="660" y="336" font-size="11" text-anchor="end" fill="#8d6a00">is anything written down?</text>
+  <text x="660" y="354" font-size="11" text-anchor="end" fill="#8d6a00">what does health look at?</text>
+  <text x="660" y="372" font-size="11" text-anchor="end" fill="#8d6a00">how much is in each line?</text>
+  <line x1="510" y1="288" x2="510" y2="234" stroke="#b08900" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- outputs -->
+  <rect x="36" y="292" width="340" height="96" rx="8" fill="#ffffff" stroke="#8d97a5"/>
+  <text x="206" y="314" font-size="12" text-anchor="middle" fill="#1f2733">where the evidence comes out</text>
+  <text x="52" y="338" font-size="11" fill="#5b6472">GET /metrics — what is failing, as counts</text>
+  <text x="52" y="356" font-size="11" fill="#5b6472">GET /api/logs — why, line by line</text>
+  <text x="52" y="374" font-size="11" fill="#5b6472">GET /posture — four measured gates</text>
+  <line x1="430" y1="200" x2="380" y2="300" stroke="#5b6472" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+
+  <text x="30" y="404" font-size="11" fill="#8d97a5">Scoring is delegated to a loopback /verify on 127.0.0.1:18081. Nothing here reaches a cloud account.</text>
+</svg>

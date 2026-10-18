@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="650" viewBox="0 0 760 650" role="img" aria-labelledby="title desc">
+  <title id="title">暗号バトル：答える、得点する、公開情報で攻撃する</title>
+  <desc id="desc">準備完了後、届くお題を選んで計算・送信すると得点。LEAKは表示された情報を公開して即答する方法。公開記録は全チームに見え、相手はそれを材料にHUNTで秘密を計算する。自分の保管庫を開くだけでは情報は公開されない。</desc>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10" fill="#52677e"/></marker></defs>
+  <style>text{font-family:system-ui,-apple-system,'Noto Sans JP',sans-serif;fill:#183149}.heading{font-size:25px;font-weight:700}.label{font-size:22px;font-weight:700}.small{font-size:17px}.arrow{stroke:#52677e;stroke-width:2.5;fill:none;marker-end:url(#arrow)}</style>
+  <rect width="760" height="650" rx="16" fill="#f4f8fc"/>
+  <text x="30" y="43" class="heading">まずは、お題を1つ解いて得点する</text>
+  <text x="30" y="71" class="small">Ready → Order → Calculate → Score</text>
+  <g fill="white" stroke="#9bb8d5" stroke-width="2">
+    <rect x="30" y="92" width="210" height="94" rx="12"/>
+    <rect x="276" y="92" width="210" height="94" rx="12"/>
+    <rect x="522" y="92" width="208" height="94" rx="12"/>
+  </g>
+  <text x="48" y="126" class="label">① 準備完了</text><text x="48" y="159" class="small">全員がそろうと開始</text>
+  <text x="294" y="126" class="label">② お題を選ぶ</text><text x="294" y="159" class="small">残り時間を確認</text>
+  <text x="540" y="126" class="label">③ 計算して送信</text><text x="540" y="159" class="small">正解 → 得点が増える</text>
+  <path d="M243 139H271" class="arrow"/><path d="M489 139H517" class="arrow"/>
+  <text x="30" y="236" class="heading">情報を公開すると、攻撃の材料になる</text>
+  <text x="30" y="264" class="small">LEAK → Public record → HUNT</text>
+  <rect x="30" y="287" width="700" height="88" rx="12" fill="#fff4df" stroke="#c89127" stroke-width="2"/>
+  <text x="50" y="321" class="label">公開して即答する（LEAK）</text>
+  <text x="50" y="351" class="small">計算を省いて得点。その代わり、表示された情報を相手に渡す。</text>
+  <path d="M380 378V403" class="arrow"/>
+  <rect x="30" y="409" width="320" height="101" rx="12" fill="white" stroke="#9bb8d5" stroke-width="2"/>
+  <rect x="410" y="409" width="320" height="101" rx="12" fill="#f2edff" stroke="#a58acb" stroke-width="2"/>
+  <path d="M380 403V424H356" class="arrow"/>
+  <text x="50" y="445" class="label">全員の公開記録</text><text x="50" y="477" class="small">誰の情報か・何があるかを見る</text>
+  <path d="M354 460H404" class="arrow"/>
+  <text x="430" y="445" class="label">秘密を計算（HUNT）</text><text x="430" y="477" class="small">材料がそろい、当てると得点</text>
+  <rect x="30" y="535" width="700" height="91" rx="12" fill="#e8f3ed"/>
+  <text x="50" y="568" class="label">自分の保管庫は、自分だけに見える</text>
+  <text x="50" y="598" class="small">開くだけでは公開されません。公開前に、何を渡すか確認しましょう。</text>
+</svg>

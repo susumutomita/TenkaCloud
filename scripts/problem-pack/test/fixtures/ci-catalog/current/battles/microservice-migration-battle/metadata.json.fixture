@@ -1,0 +1,242 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "microservice-migration-battle",
+  "name": "Microservice Migration Battle",
+  "category": "Battle",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "90〜120 分",
+  "shortDescription": "Fixture microservice-migration-battle: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture microservice-migration-battle: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture microservice-migration-battle: .description. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "microservices",
+    "migration",
+    "lambda",
+    "ecs",
+    "apprunner",
+    "ec2",
+    "docker"
+  ],
+  "exposedPorts": [
+    {
+      "port": 80,
+      "name": "nginx reverse proxy (users / orders / catalog)"
+    }
+  ],
+  "learningGoals": [
+    "モノリスから 3 ホスティング (Lambda / ECS Fargate / App Runner) へのマイクロサービス分割を体験する",
+    "サーバレス / マネージドコンテナ / オーケストレーションのトレードオフを実機で比較する",
+    "Score 観点でどのサービスから切り出すかの優先順位を判断する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "simulationOverlay": {
+    "schemaVersion": "1",
+    "entry": "simulation.json"
+  },
+  "cfnParameters": {},
+  "i18n": {
+    "en": {
+      "name": "Microservice Migration Battle",
+      "shortDescription": "Fixture microservice-migration-battle: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture microservice-migration-battle: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture microservice-migration-battle: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Experience splitting a monolith into 3 hosting tiers (Lambda / ECS Fargate / App Runner)",
+        "Compare serverless / managed containers / orchestration tradeoffs on real infrastructure",
+        "Judge migration priority from a scoring standpoint"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Fixture microservice-migration-battle: .i18n.en.hints.0.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-2",
+          "content": "Fixture microservice-migration-battle: .i18n.en.hints.1.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-3",
+          "content": "Fixture microservice-migration-battle: .i18n.en.hints.2.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-4",
+          "content": "Fixture microservice-migration-battle: .i18n.en.hints.3.content. Synthetic narrative for platform contract tests."
+        }
+      ]
+    }
+  },
+  "endpoints": [
+    {
+      "slot": "users",
+      "default": {
+        "from": "cfn-output",
+        "key": "BaseUrl",
+        "appendPath": "/users"
+      },
+      "overridable": true,
+      "label": "Users service",
+      "description": "初期は EC2 同居 (nginx :80 → users :3001)。 切り出したら新 URL をここに登録すると score engine が新 URL を probe する。"
+    },
+    {
+      "slot": "orders",
+      "default": {
+        "from": "cfn-output",
+        "key": "BaseUrl",
+        "appendPath": "/orders"
+      },
+      "overridable": true,
+      "label": "Orders service",
+      "description": "初期は EC2 同居 (nginx :80 → orders :3002)。 切り出したら新 URL をここに登録。"
+    },
+    {
+      "slot": "catalog",
+      "default": {
+        "from": "cfn-output",
+        "key": "BaseUrl",
+        "appendPath": "/catalog"
+      },
+      "overridable": true,
+      "label": "Catalog service",
+      "description": "初期は EC2 同居 (nginx :80 → catalog :3003)。 切り出したら新 URL をここに登録。"
+    }
+  ],
+  "scoring": {
+    "kind": "phased-polling",
+    "intervalMinutes": 1,
+    "probe": {
+      "metaPath": "/meta",
+      "scorePath": "/score"
+    },
+    "platformRules": {
+      "ec2": {
+        "points": 100,
+        "degradedPoints": 10
+      },
+      "lambda": {
+        "points": 1000
+      },
+      "ecs": {
+        "points": 1000
+      },
+      "apprunner": {
+        "points": 1000
+      }
+    },
+    "failurePenalty": -100,
+    "responsePenalties": [
+      {
+        "if": "responseTimeMs > 1500",
+        "points": -10
+      }
+    ],
+    "bonuses": [
+      {
+        "kind": "all-slots-on-platforms",
+        "platforms": [
+          "lambda",
+          "ecs",
+          "apprunner"
+        ],
+        "points": 5000,
+        "once": true
+      }
+    ],
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Fixture microservice-migration-battle: .scoring.hints.0.content. Synthetic narrative for platform contract tests.",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "1 サービスを Lambda + API GW / ECS Fargate / App Runner のいずれかに切り出して slot override を切替えると加点が 1000 pt/cycle/slot にジャンプします。 `services/<name>/Dockerfile` をそのまま 3 種 hosting に load し直せます。",
+        "penalty": 50
+      },
+      {
+        "id": "hint-3",
+        "content": "3 slot を全て EC2 から managed tier (lambda / ecs / apprunner -- 組み合わせは自由。 1 種ずつが推奨形) に乗せると \"all-slots-on-platforms\" bonus +5000 pt が 1 回入ります。 ec2 が 1 つでも残っていると bonus は付きません。",
+        "penalty": 100
+      },
+      {
+        "id": "hint-4",
+        "content": "EC2 上の挙動だけ深掘りすると後半でスコアが伸び悩む可能性があります。 各 service の `/score` ハンドラに目を通すと、 終盤に効くチューニングポイントが見つかります。",
+        "penalty": 200
+      }
+    ]
+  },
+  "phases": [
+    {
+      "name": "degraded",
+      "afterMinutes": 60,
+      "effect": {
+        "switchPlatformToDegraded": [
+          "ec2"
+        ]
+      },
+      "description": "EC2 hosting で稼働を続けているとスコア加算が degraded 値に切り替わる予告フェーズ。",
+      "publicHint": false
+    },
+    {
+      "name": "legacy",
+      "afterMinutes": 90,
+      "effect": {
+        "scorePathOverride": "/score?legacy=true",
+        "switchPlatformToDegraded": [
+          "ec2"
+        ]
+      },
+      "description": "スコア engine が `/score?legacy=true` に切替わる予告フェーズ。",
+      "publicHint": false
+    }
+  ],
+  "disruptions": [
+    {
+      "id": "ec2-latency-injection",
+      "name": "EC2 ネットワーク遅延注入",
+      "eventDetailType": "DegradedDisruptionFired",
+      "defaultAfterMinutes": 60,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "parameters": {
+        "delayMs": 200
+      },
+      "description": "deploy 後 60 分 (default) で EC2 のネットワーク遅延が増加する予告。",
+      "publicHint": false,
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "command -v tc >/dev/null 2>&1 || dnf install -y iproute-tc",
+            "DEV=$(ip route show default | awk '{print $5; exit}'); tc qdisc add dev \"$DEV\" root netem delay {{delayMs}}ms || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 600,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "DEV=$(ip route show default | awk '{print $5; exit}'); tc qdisc del dev \"$DEV\" root || true"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "dashboard": {
+    "slots": {
+      "RegistrationPanel": "portal/RegistrationPanel.tsx",
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
+  },
+  "interTeamCoordination": {
+    "plugin": "coordination/router.ts",
+    "name": "サービスルーター",
+    "description": "切り出した service の公開 URL を register すると、 全チームの route directory に共有される。 他チームが移行済みの service を呼び出せるようになる簡易 service mesh (= 参加者間 interaction)。",
+    "publicHint": true
+  }
+}

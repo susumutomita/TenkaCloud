@@ -1,0 +1,284 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "stackstack-vibe-build",
+  "name": "AI が書いた検索を、 出荷できる状態にする",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "45 分",
+  "shortDescription": "Fixture stackstack-vibe-build: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture stackstack-vibe-build: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture stackstack-vibe-build: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture stackstack-vibe-build: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "stackstack",
+    "ai-assisted",
+    "code-review",
+    "requirements",
+    "input-validation",
+    "output-encoding",
+    "local-play",
+    "container",
+    "web-app"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (board / search)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback)"
+    }
+  ],
+  "learningGoals": [
+    "機械可読な要求仕様に対して、 生成されたコードが満たしている項目と満たしていない項目を、 走らせて 1 つずつ切り分けられるようになる",
+    "「渡されたデータは全部使ってよい」 という生成コードの既定の仮定を疑い、 公開してよい範囲をコードとして書けるようになる",
+    "利用者が書いた文字を画面に出すときに、 削除ではなくエスケープで扱う理由を、 正常系を壊さないという観点から説明できるようになる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Ship the search your AI wrote",
+      "shortDescription": "Fixture stackstack-vibe-build: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture stackstack-vibe-build: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture stackstack-vibe-build: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "writeup": "Fixture stackstack-vibe-build: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Given a machine-readable requirement, separate what generated code satisfies from what it does not, one rule at a time, by running it",
+        "Question generated code's default assumption that every record it was handed is fair to return, and write the publish boundary as code",
+        "Explain why user-written text is escaped rather than stripped, in terms of not breaking the feature that works"
+      ],
+      "checks": [
+        {
+          "id": "search-answers",
+          "label": "Search returns answers",
+          "hints": [
+            {
+              "id": "vibe-answers-1",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.0.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "vibe-answers-2",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "vibe-answers-3",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.0.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "search-order",
+          "label": "Order and count of results",
+          "hints": [
+            {
+              "id": "vibe-order-1",
+              "content": "Re-read R7 and R8. `GET /api/selfcheck` tells you how many entries should have come back against how many did, and whether the order was descending."
+            },
+            {
+              "id": "vibe-order-2",
+              "content": "At most ten, ordered by `id` descending. The mix-up generated code makes most often is the order in which those two are applied. And nothing found is not an error."
+            },
+            {
+              "id": "vibe-order-3",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.1.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "search-bad-queries",
+          "label": "Broken search terms",
+          "hints": [
+            {
+              "id": "vibe-bad-1",
+              "content": "R1 and R2 give three ways a term can be broken, and the status and error name to answer with for each. A missing `q` and an empty `q` are the same case."
+            },
+            {
+              "id": "vibe-bad-2",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.2.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "vibe-bad-3",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.2.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "drafts-withheld",
+          "label": "What the archive publishes",
+          "hints": [
+            {
+              "id": "vibe-scope-1",
+              "content": "`GET /api/archive` is the list this app shows on its public side. Put it next to the `posts` array your own `search` was handed and compare them."
+            },
+            {
+              "id": "vibe-scope-2",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.3.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "vibe-scope-3",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.3.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "results-are-text",
+          "label": "How results appear on the page",
+          "hints": [
+            {
+              "id": "vibe-page-1",
+              "content": "`GET /search?q=...` puts the string `renderResults` returned onto the page as-is. R9 decides what is displayed and how. Open that page yourself first."
+            },
+            {
+              "id": "vibe-page-2",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.4.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "vibe-page-3",
+              "content": "Fixture stackstack-vibe-build: .i18n.en.checks.4.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080",
+      "Search": "http://127.0.0.1:18080/search"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "search-answers",
+        "label": "検索が答えを返す",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "vibe-answers-1",
+            "content": "まず `GET /api/spec` を開いてください。 R3 が 200 のときの body の形、 R5 が 「一致」 の定義です。 `GET /api/selfcheck` は落ちた規則の番号と、 期待した件数・返ってきた件数を返します。",
+            "penalty": 0
+          },
+          {
+            "id": "vibe-answers-2",
+            "content": "`body.query` は受け取った `query` そのものではなく、 trim した検索語です。 スターターは空文字を返しているので、 まずそこが合いません。 一致判定は `title` と `body` の両方を見ます。",
+            "penalty": 8
+          },
+          {
+            "id": "vibe-answers-3",
+            "content": "返す要素は post そのものではありません (R4)。 キーは `id` / `title` / `author` / `at` の 4 つちょうどで、 値は元のまま。 `posts` には検索語を含まない投稿も混ざっているので、 絞り込みを忘れると件数が合いません。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "search-order",
+        "label": "一覧の並びと件数",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "vibe-order-1",
+            "content": "R7 と R8 を読み直してください。 `GET /api/selfcheck` は、 何件返るはずで何件返ったか、 並びが降順だったかまで教えます。",
+            "penalty": 0
+          },
+          {
+            "id": "vibe-order-2",
+            "content": "上限は 10 件、 並びは `id` の降順。 生成コードでいちばん多い取り違えは、 この 2 つを適用する順番です。 それから、 一致が 0 件のときはエラーではありません。",
+            "penalty": 8
+          },
+          {
+            "id": "vibe-order-3",
+            "content": "「10 件取ってから並べる」 と 「並べてから 10 件取る」 は違う結果になります。 仕様は後者です。 大文字小文字は区別しません (R5) ── 検索語と投稿側を、 比較の前に同じ側へ揃えてください。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "search-bad-queries",
+        "label": "壊れた検索語の扱い",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "vibe-bad-1",
+            "content": "R1 と R2 に、 検索語の 3 つの壊れ方と、 それぞれで返す status とエラー名が書いてあります。 `q` が無いときと空のときは同じ扱いです。",
+            "penalty": 0
+          },
+          {
+            "id": "vibe-bad-2",
+            "content": "`query` は `?q=` が無いとき `null`、 `?q=` が空のときは空文字で届きます。 長さは trim した後で数えます。 エラー名は 2 つだけで、 綴りも完全一致で見られます。",
+            "penalty": 8
+          },
+          {
+            "id": "vibe-bad-3",
+            "content": "境界は 「64 は通す、 65 から断る」 です。 そして全部断る実装は通りません ── 同じ検査の中で、 ちょうど 64 文字の検索語と普通の検索語が 200 と正しい結果を返すことも見ています。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "drafts-withheld",
+        "label": "アーカイブの公開範囲",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "vibe-scope-1",
+            "content": "`GET /api/archive` は、 このアプリが公開面に出している一覧です。 自分の `search` に渡ってきた `posts` と並べて見比べてください。",
+            "penalty": 0
+          },
+          {
+            "id": "vibe-scope-2",
+            "content": "post には `visibility` があり、 値は 1 種類ではありません。 返してよい範囲を決めているのは R6 で、 判定はこのフィールドでやります ── タイトルが似ているかどうかではありません。",
+            "penalty": 8
+          },
+          {
+            "id": "vibe-scope-3",
+            "content": "返してよいのは `visibility === \"public\"` のものだけです。 それと、 `matches` の外に足した情報もレスポンスの一部です ── `posts` をそのまま入れた 「デバッグ用」 のフィールドがあると、 絞り込みが正しくてもここで落ちます。",
+            "penalty": 12
+          }
+        ]
+      },
+      {
+        "id": "results-are-text",
+        "label": "検索結果ページの見え方",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "vibe-page-1",
+            "content": "`GET /search?q=...` は `renderResults` が返した文字列をそのままページに置きます。 何をどう表示するかは R9 が決めています。 まず自分の目でそのページを開いてください。",
+            "penalty": 0
+          },
+          {
+            "id": "vibe-page-2",
+            "content": "投稿を書いた人が何を打ち込むかはこちらで決められません。 title にも author にも記号が入り得ます。 R9 は 「1 文字も落とさず」 と 「文字として」 を両方要求しています ── 消す実装では前半を満たせません。",
+            "penalty": 8
+          },
+          {
+            "id": "vibe-page-3",
+            "content": "`&` `<` `>` `\"` `'` を実体参照に置き換えてから埋め込みます。 対象は entry の `title` と `author`、 そして画面に返す検索語そのもの (0 件のときも表示されます)。 テンプレートリテラルに値を直に差し込んでいる箇所が、 全部その場所です。",
+            "penalty": 12
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 110,
+    "chapter": "4. StackStack 本編"
+  }
+}

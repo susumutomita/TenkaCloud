@@ -1,0 +1,5 @@
+{
+  "archiveLogging": "off",
+  "healthCheckProbes": ["config"],
+  "logDetail": "full"
+}

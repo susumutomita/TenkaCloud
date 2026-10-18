@@ -1,0 +1,214 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "security-battle-royale",
+  "name": "Security Battle Royale",
+  "category": "Battle",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 4,
+  "estimatedDuration": "60〜90 分",
+  "shortDescription": "Fixture security-battle-royale: .shortDescription. Synthetic narrative for platform contract tests.",
+  "instructions": "Fixture security-battle-royale: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture security-battle-royale: .description. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "security",
+    "web",
+    "incident-response",
+    "uptime"
+  ],
+  "exposedPorts": [
+    {
+      "port": 80,
+      "name": "frontend (nginx)"
+    },
+    {
+      "port": 8080,
+      "name": "api (Flask)"
+    }
+  ],
+  "learningGoals": [
+    "本物の web アプリを 「落とさないまま」 修正していくインシデント対応のリズムを体験する",
+    "EC2 + docker compose で運用されている既存サービスのコードを限られた時間で読み解く",
+    "可用性と修復のトレードオフ - 完璧な修正より 200 を返し続ける運用判断を訓練する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "DbPassword": "__RANDOM_PASSWORD__"
+  },
+  "i18n": {
+    "en": {
+      "name": "Security Battle Royale",
+      "shortDescription": "Fixture security-battle-royale: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture security-battle-royale: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture security-battle-royale: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Experience the rhythm of incident response: patching a live web app without taking it offline",
+        "Read and reason about an inherited EC2 + docker-compose codebase under time pressure",
+        "Practice the availability-versus-hardening tradeoff -- judgment calls over perfect fixes"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Fixture security-battle-royale: .i18n.en.hints.0.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-2",
+          "content": "Fixture security-battle-royale: .i18n.en.hints.1.content. Synthetic narrative for platform contract tests."
+        },
+        {
+          "id": "hint-3",
+          "content": "Fixture security-battle-royale: .i18n.en.hints.2.content. Synthetic narrative for platform contract tests."
+        }
+      ]
+    }
+  },
+  "endpoints": [
+    {
+      "slot": "frontend",
+      "default": {
+        "from": "cfn-output",
+        "key": "FrontendUrl"
+      },
+      "overridable": true,
+      "label": "Frontend (nginx)",
+      "description": "競技者が公開する商品ページ。 防御側は WAF / CDN を被せて override 可能。"
+    },
+    {
+      "slot": "api",
+      "default": {
+        "from": "cfn-output",
+        "key": "ApiUrl"
+      },
+      "overridable": true,
+      "label": "API (Flask)",
+      "description": "Flask の JSON API endpoint。 `/api/v1/apistatus` が 200 を返している cycle にだけ加点が入る。"
+    }
+  ],
+  "scoring": {
+    "kind": "uptime-multi",
+    "probedSlots": [
+      {
+        "slot": "frontend",
+        "path": "/",
+        "expectStatus": [
+          200
+        ]
+      },
+      {
+        "slot": "api",
+        "path": "/api/v1/apistatus",
+        "expectStatus": [
+          200
+        ]
+      }
+    ],
+    "pointsAllOk": 100,
+    "failurePenalty": 0,
+    "attackProbes": [
+      {
+        "slot": "api",
+        "path": "/api/v1/auth",
+        "method": "POST",
+        "body": "{\"username\": \"' OR '1'='1' -- \", \"password\": \"x\"}",
+        "vulnerableStatus": [
+          200
+        ],
+        "penalty": 20
+      },
+      {
+        "slot": "api",
+        "path": "/api/v1/auth",
+        "method": "POST",
+        "body": "{\"username\": \"admin' UNION SELECT username FROM username -- \", \"password\": \"x\"}",
+        "vulnerableStatus": [
+          200
+        ],
+        "penalty": 20
+      }
+    ],
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "Deploy 完了直後は加点 0 です。 stack Outputs の `Ec2HostHint` を Participant Portal の `frontend` slot に `http://<host>` 、 `api` slot に `http://<host>:8080` で貼ると score engine が probe を始めます。",
+        "penalty": 0
+      },
+      {
+        "id": "hint-2",
+        "content": "Fixture security-battle-royale: .scoring.hints.1.content. Synthetic narrative for platform contract tests.",
+        "penalty": 20
+      },
+      {
+        "id": "hint-3",
+        "content": "api コードを読む順序は `auth → setdbpwd → dragons → proxy → backdoor`。 認証系の入力検証から手を付けると、 後段の漏洩経路が止まりやすくなります。",
+        "penalty": 40
+      }
+    ]
+  },
+  "disruptions": [
+    {
+      "id": "sqli-auth-bypass",
+      "name": "Auth bypass attack",
+      "eventDetailType": "AttackFired",
+      "defaultAfterMinutes": 15,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "parameters": {
+        "probe": "redteam/probes/sqli-auth-bypass.sh"
+      },
+      "description": "Fixture security-battle-royale: .disruptions.0.description. Synthetic narrative for platform contract tests.",
+      "publicHint": false
+    },
+    {
+      "id": "sqli-data-exfil",
+      "name": "Auth bypass (UNION payload)",
+      "eventDetailType": "AttackFired",
+      "defaultAfterMinutes": 35,
+      "operatorEditable": [
+        "afterMinutes"
+      ],
+      "parameters": {
+        "probe": "redteam/probes/sqli-data-exfil.sh"
+      },
+      "description": "Fixture security-battle-royale: .disruptions.1.description. Synthetic narrative for platform contract tests.",
+      "publicHint": false
+    },
+    {
+      "id": "availability-flood",
+      "name": "Availability stress",
+      "eventDetailType": "AttackFired",
+      "defaultAfterMinutes": 55,
+      "operatorEditable": [
+        "afterMinutes",
+        "concurrency"
+      ],
+      "parameters": {
+        "probe": "redteam/probes/availability-flood.sh",
+        "durationSeconds": 30,
+        "concurrency": 50
+      },
+      "action": {
+        "kind": "ssm-run-command",
+        "targetRef": "InstanceId",
+        "documentName": "AWS-RunShellScript",
+        "paramTemplate": {
+          "commands": [
+            "END=$(( $(date +%s) + {{durationSeconds}} ))",
+            "while [ $(date +%s) -lt $END ]; do for i in $(seq 1 {{concurrency}}); do curl -s -o /dev/null --max-time 2 http://localhost:8080/api/v1/apistatus & curl -s -o /dev/null --max-time 2 http://localhost/ & done; wait; done || true"
+          ]
+        },
+        "revert": {
+          "afterSeconds": 90,
+          "documentName": "AWS-RunShellScript",
+          "paramTemplate": {
+            "commands": [
+              "pkill -f 'curl -s -o /dev/null' || true"
+            ]
+          }
+        }
+      },
+      "description": "Fixture security-battle-royale: .disruptions.2.description. Synthetic narrative for platform contract tests.",
+      "publicHint": false
+    }
+  ]
+}

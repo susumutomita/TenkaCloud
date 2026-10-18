@@ -1,0 +1,242 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "wp-exposed-backup",
+  "name": "前任者の忘れ物",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "30 分",
+  "shortDescription": "普通に動いている会社の WordPress サイト。 だが前任の担当者が移行のときに公開フォルダへ置いたまま消し忘れた 「忘れ物」 が複数あり、 サイトの中身や設定が外から読めてしまっているらしい。 一つずつ見つけよう。",
+  "instructions": "Fixture wp-exposed-backup: .instructions. Synthetic narrative for platform contract tests.",
+  "description": "Fixture wp-exposed-backup: .description. Synthetic narrative for platform contract tests.",
+  "writeup": "Fixture wp-exposed-backup: .writeup. Synthetic narrative for platform contract tests.",
+  "tags": [
+    "wordpress",
+    "misconfiguration",
+    "data-exposure",
+    "backup-exposure",
+    "operations",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (WordPress site)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
+  ],
+  "learningGoals": [
+    "WordPress は PHP・DB・認証・設定の上で動いていて、 デフォルトや初期設定を放置すると何が守れなくなるかを、 実際の環境で体感できるようになる",
+    "バックアップ・設定ファイルの控え・デバッグログ・ディレクトリ一覧など、 別々の運用不備が同じ 「公開領域への置き忘れ」 から生まれることを、 自分で確かめられるようになる",
+    "公開領域に置くファイルの見直し・不要ファイルの削除・ディレクトリ一覧の無効化・デバッグ出力の停止が、 コードを触らずにできる基本の対策であることを理解する"
+  ],
+  "i18n": {
+    "en": {
+      "writeup": "Fixture wp-exposed-backup: .i18n.en.writeup. Synthetic narrative for platform contract tests.",
+      "name": "The Predecessor's Leftovers",
+      "shortDescription": "Fixture wp-exposed-backup: .i18n.en.shortDescription. Synthetic narrative for platform contract tests.",
+      "instructions": "Fixture wp-exposed-backup: .i18n.en.instructions. Synthetic narrative for platform contract tests.",
+      "description": "Fixture wp-exposed-backup: .i18n.en.description. Synthetic narrative for platform contract tests.",
+      "learningGoals": [
+        "Feel, in a real environment, that WordPress runs on PHP, a DB, auth, and settings — and what stops being protected when defaults and initial setup are left alone",
+        "Confirm, yourself, that separate operational mistakes — a backup, a config copy, a debug log, a directory listing — all grow from the same 'left it in the public area' habit",
+        "Understand that reviewing what goes in public folders, deleting unneeded files, turning off directory listing, and stopping debug output are the basic, code-free fixes"
+      ],
+      "checks": [
+        {
+          "id": "public-backup",
+          "label": "Backup in a public folder",
+          "hints": [
+            {
+              "id": "public-backup-1",
+              "content": "Fixture wp-exposed-backup: .i18n.en.checks.0.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "public-backup-2",
+              "content": "Fixture wp-exposed-backup: .i18n.en.checks.0.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "public-backup-3",
+              "content": "Fixture wp-exposed-backup: .i18n.en.checks.0.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "exposed-config",
+          "label": "A copy of the config file",
+          "hints": [
+            {
+              "id": "exposed-config-1",
+              "content": "Fixture wp-exposed-backup: .i18n.en.checks.1.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "exposed-config-2",
+              "content": "Fixture wp-exposed-backup: .i18n.en.checks.1.hints.1.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "exposed-config-3",
+              "content": "Fixture wp-exposed-backup: .i18n.en.checks.1.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "debug-log",
+          "label": "A log left on in production",
+          "hints": [
+            {
+              "id": "debug-log-1",
+              "content": "Fixture wp-exposed-backup: .i18n.en.checks.2.hints.0.content. Synthetic narrative for platform contract tests."
+            },
+            {
+              "id": "debug-log-2",
+              "content": "[Hypothesize] Enabling `WP_DEBUG_LOG` writes PHP errors and notes to `wp-content/debug.log`. Left on in production, that log sits somewhere anyone can read."
+            },
+            {
+              "id": "debug-log-3",
+              "content": "Fixture wp-exposed-backup: .i18n.en.checks.2.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        },
+        {
+          "id": "dir-listing",
+          "label": "A browsable internal folder",
+          "hints": [
+            {
+              "id": "dir-listing-1",
+              "content": "[Observe] Sometimes you don't even need a filename — opening a folder shows every file in it. Look at the other folder `/robots.txt` was hiding."
+            },
+            {
+              "id": "dir-listing-2",
+              "content": "[Hypothesize] A folder with no `index.html` (like `/internal/`) will list its contents the moment you open it, if the server's directory listing (Apache `Indexes`) is left on."
+            },
+            {
+              "id": "dir-listing-3",
+              "content": "Fixture wp-exposed-backup: .i18n.en.checks.3.hints.2.content. Synthetic narrative for platform contract tests."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "hintReveal": "flat",
+    "checks": [
+      {
+        "id": "public-backup",
+        "label": "公開フォルダのバックアップ",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "public-backup-1",
+            "content": "【観察】 サイト自体は正常に動いている。 だから WordPress 本体を攻めるのではない。 狙いは 「運用者が公開フォルダに置き忘れたファイル」 だ。 まず `/robots.txt` (検索エンジンへ 「ここは見ないで」 と頼む公開ファイル。 アクセス制限ではない) を開き、 隠したつもりで書かれた `Disallow` のフォルダを確認しよう。",
+            "penalty": 0
+          },
+          {
+            "id": "public-backup-2",
+            "content": "【仮説】 サイト移行のとき、 運用者はデータベースを丸ごと書き出した 「バックアップ (ダンプ)」 を取ることが多い。 robots.txt に出ていた `/wp-content/backups/` に、 よくある名前 (`db-backup.sql` / `backup.sql` / `dump.sql`) で残っていないか試そう。",
+            "penalty": 0
+          },
+          {
+            "id": "public-backup-3",
+            "content": "【確認と対策】 アクセス先 URL の `/wp-content/backups/db-backup.sql` を開くと DB のダンプが丸見えになる。 `maintenance_notes` の行に監査用の合言葉がある。 対策: バックアップを Web から届く場所に置かない・不要になったら削除する。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "exposed-config",
+        "label": "設定ファイルの控え",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "exposed-config-1",
+            "content": "【観察】 設定ファイル `wp-config.php` 自体は PHP として実行されるので中身は見えない。 だが 「編集する前に取った控え」 が、 別の拡張子 (ファイル名末尾の `.php` や `.bak` のような、 種類を表す部分) で公開領域に残っていることがある。",
+            "penalty": 0
+          },
+          {
+            "id": "exposed-config-2",
+            "content": "【仮説】 エディタは編集前に `wp-config.php.bak` / `.save` / `wp-config.php~` のような控えを作りがち。 `.bak` などは PHP として実行されず、 Apache がそのままプレーンテキストで返すので、 中身 (DB 接続情報など) が丸見えになる。",
+            "penalty": 0
+          },
+          {
+            "id": "exposed-config-3",
+            "content": "【確認と対策】 アクセス先 URL の `/wp-config.php.bak` を開くと、 DB 接続情報と 「ops handoff token」 の行が読める。 その token が合言葉だ。 対策: 編集用の控えを公開領域に残さない (サーバの外で管理する)。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "debug-log",
+        "label": "本番に残ったログ",
+        "points": 20,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "debug-log-1",
+            "content": "【観察】 本番環境で付けっぱなしにすると危険な 「出力」 がある。 WordPress の開発・デバッグ機能を思い出そう ── 開発中に有効化して、 本番で切り忘れるものだ。",
+            "penalty": 0
+          },
+          {
+            "id": "debug-log-2",
+            "content": "【仮説】 `WP_DEBUG_LOG` を有効にすると、 PHP のエラーやメモが `wp-content/debug.log` に書き出される。 本番で有効なままだと、 このログが誰でも読める場所に残る。",
+            "penalty": 0
+          },
+          {
+            "id": "debug-log-3",
+            "content": "【確認と対策】 アクセス先 URL の `/wp-content/debug.log` を開き、 `[ops]` から始まる運用メモの行を読む。 そこに合言葉がある。 対策: 本番では `WP_DEBUG` / `WP_DEBUG_LOG` を無効化し、 ログを公開領域に置かない。",
+            "penalty": 0
+          }
+        ]
+      },
+      {
+        "id": "dir-listing",
+        "label": "中身が見える内部フォルダ",
+        "points": 20,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "dir-listing-1",
+            "content": "【観察】 ファイル名を知らなくても、 フォルダを開くだけで中のファイルが全部見えてしまうことがある。 `/robots.txt` がもう一つ隠していたフォルダに注目しよう。",
+            "penalty": 0
+          },
+          {
+            "id": "dir-listing-2",
+            "content": "【仮説】 `/internal/` のように `index.html` が無いフォルダは、 サーバのディレクトリ一覧 (Apache の `Indexes`) が有効なままだと、 開いた瞬間に中のファイルが一覧表示される。",
+            "penalty": 0
+          },
+          {
+            "id": "dir-listing-3",
+            "content": "【確認と対策】 アクセス先 URL の `/internal/` を開くと、 引き継ぎメモ (`handover.txt`) が一覧に並ぶ。 それを開いて合言葉を読む。 対策: `Options -Indexes` でディレクトリ一覧を無効化し、 内部ファイルを公開領域に置かない。",
+            "penalty": 0
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 30,
+    "chapter": "2. 壊れ方を知る"
+  }
+}

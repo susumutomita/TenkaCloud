@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 420" width="760" height="420" role="img" aria-label="stackstack-safe-exposure architecture">
+  <style>
+    .box { fill: #ffffff; stroke: #37475a; stroke-width: 1.5; }
+    .soft { fill: #f4f6f8; stroke: #9aa7b4; stroke-width: 1.2; }
+    .t { font-family: system-ui, sans-serif; font-size: 13px; fill: #16191f; }
+    .s { font-family: system-ui, sans-serif; font-size: 11px; fill: #5f6b7a; }
+    .h { font-family: system-ui, sans-serif; font-size: 14px; font-weight: 600; fill: #16191f; }
+    .flow { stroke: #37475a; stroke-width: 1.5; fill: none; marker-end: url(#a); }
+    .dash { stroke: #9aa7b4; stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; marker-end: url(#b); }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#37475a"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9aa7b4"/>
+    </marker>
+  </defs>
+
+  <rect x="12" y="12" width="736" height="396" rx="10" class="soft"/>
+  <text x="28" y="36" class="h">one container — your machine</text>
+
+  <rect x="28" y="52" width="170" height="96" rx="6" class="box"/>
+  <text x="40" y="76" class="t">your checkout</text>
+  <text x="40" y="96" class="s">API /api/settings</text>
+  <text x="40" y="112" class="s">the one file you edit</text>
+  <text x="40" y="132" class="s">re-read every request</text>
+
+  <rect x="242" y="52" width="230" height="96" rx="6" class="box"/>
+  <text x="254" y="76" class="t">the decision</text>
+  <text x="254" y="96" class="s">first rule whose method + path</text>
+  <text x="254" y="112" class="s">+ every require holds decides</text>
+  <text x="254" y="132" class="s">else defaultEffect</text>
+
+  <path d="M198,100 L238,100" class="flow"/>
+
+  <rect x="516" y="52" width="200" height="96" rx="6" class="box"/>
+  <text x="528" y="76" class="t">four accounts</text>
+  <text x="528" y="96" class="s">sre-anzu · pm-kenji  (tenka)</text>
+  <text x="528" y="112" class="s">mika-hoshino        (hoshino)</text>
+  <text x="528" y="132" class="s">cto-daichi          (admin)</text>
+  <path d="M512,100 L476,100" class="flow"/>
+
+  <rect x="28" y="180" width="444" height="128" rx="6" class="box"/>
+  <text x="40" y="204" class="t">/portal — governed by the document</text>
+  <text x="40" y="226" class="s">GET  portal/healthz            the monitoring path</text>
+  <text x="40" y="244" class="s">GET  portal/me                 which identity a key is</text>
+  <text x="40" y="262" class="s">GET/POST portal/drafts         list (filtered) · write</text>
+  <text x="40" y="280" class="s">GET/DELETE portal/draft?id=    one document</text>
+  <text x="40" y="298" class="s">GET/DELETE portal/admin/*      handover · audit · all drafts</text>
+  <path d="M357,152 L357,176" class="flow"/>
+
+  <rect x="516" y="180" width="200" height="128" rx="6" class="box"/>
+  <text x="528" y="204" class="t">four documents</text>
+  <text x="528" y="226" class="s">owner · tenant · visibility</text>
+  <text x="528" y="248" class="s">one is private, same tenant</text>
+  <text x="528" y="266" class="s">one is shared with the team</text>
+  <text x="528" y="284" class="s">one belongs to the customer</text>
+  <path d="M512,244 L476,244" class="dash"/>
+
+  <rect x="28" y="332" width="688" height="60" rx="6" class="soft"/>
+  <text x="40" y="356" class="t">GET /posture — five gates, each the verdict of one group of real requests</text>
+  <text x="40" y="378" class="s">service_intact · drafts_usable · drafts_scoped · admin_available · admin_sealed  →  receipts, then readyToken</text>
+  <path d="M250,312 L250,328" class="flow"/>
+</svg>

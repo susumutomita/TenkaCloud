@@ -1,0 +1,43 @@
+# Local-play container for stackstack-safe-exposure.
+#
+# The image is the shared StackStack base app (../../../runtimes/stackstack), not a
+# copy of it: this problem acts on the same board stackstack-onboarding and
+# stackstack-ship did, with `SCENARIO=safe-exposure` adding the /portal surface
+# and the access document that governs it.
+#
+# Both published ports are bound to 127.0.0.1 only: nothing here leaves the box.
+# There is no identity provider and no second network — the four accounts are
+# Bearer keys derived inside the container, and the READMEs say so plainly.
+name: stackstack-safe-exposure
+services:
+  stackstack-safe-exposure:
+    build:
+      context: ../../../runtimes/stackstack
+      dockerfile: Dockerfile
+    environment:
+      SCENARIO: safe-exposure
+      # Per-deploy random secret injected by `make local`. The four API keys, the
+      # draft ids and the two markers are all derived from it inside the
+      # container; the gate receipts come from a separate boot-time secret.
+      FLAG_SEED: "${FLAG_SEED:-local-dev-seed}"
+    volumes:
+      # The participant's own checkout, read-only: the starting point the app
+      # reads, never a place anything writes. Changes go through the board's
+      # settings API and live in the container, so a rebuild is a full reset.
+      - ./config:/app/config:ro
+      - ./access:/app/access:ro
+    ports:
+      - "127.0.0.1:18080:8080" # the board and the /portal review surface
+      - "127.0.0.1:18081:8081" # loopback /verify
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: "2s"
+      timeout: "3s"
+      retries: 20
+    restart: "no"
