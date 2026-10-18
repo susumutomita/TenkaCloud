@@ -163,23 +163,22 @@
       <h1>
         <span data-i18n="hero.h1a">クラウドエンジニアの、</span><em data-i18n="hero.h1b">天下一武道会。</em>
       </h1>
-      <p class="sub" data-i18n="hero.sub">ローカルと AWS クラウドで開催する、OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。現行版はローカルの Compose 問題と、クラウドの hello-world / Cryptography Battle に対応しています。</p>
-      <p class="hero-vibe" data-i18n="hero.vibe"><strong>まずは、手元で競技を。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。クラウド開催の対応範囲と費用は <a href="/docs/manual/organizer/">運営ガイド</a>で確認できます。</p>
-      <!-- #2711 follow-up: /portal-demo/start の deep link は静的ホスティングの rewrite が
-           効かない環境で 404 fallback に崩れるため、 実在する index.html に着地して
-           SPA 側 (`goto=start`) で /start へ遷移する。 -->
-      <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
-        <span class="hero-quest-meta" data-i18n="hero.quest_meta">最初の 1 問 · 登録不要 · 約 3 分</span>
+      <p class="sub" data-i18n="hero.sub">ローカルと AWS クラウドで開催する OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。まずは同じ PC でローカル競技を試せます。</p>
+      <p class="hero-vibe" data-i18n="hero.vibe"><strong>まずは、同じ PC で。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。</p>
+      <a class="hero-quest-card" href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-cta="local-start">
+        <span class="hero-quest-meta" data-i18n="hero.quest_meta">ローカル起動 · AWS アカウント不要</span>
         <span class="hero-quest-tags">
-          <code>what-is-tenkacloud</code>
-          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">チュートリアル</span>
-          <span class="hero-quest-badge" data-i18n="hero.quest_diff">難易度: 入門</span>
+          <code>make local</code>
+          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">起動ガイド</span>
+          <span class="hero-quest-badge" data-i18n="hero.quest_diff">Bun・Make を用意</span>
         </span>
-        <span class="hero-quest-title" data-i18n="hero.quest_title">TenkaCloud とは? を、触って知る。</span>
-        <span class="hero-quest-desc" data-i18n="hero.quest_desc">ブラウザだけで触れる旧版の紹介デモです。実際の大会とは認証・得点・操作が異なります。現在の開催手順はドキュメントから確認してください。</span>
-        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">この問題で始める</span> →</span>
+        <span class="hero-quest-title" data-i18n="hero.quest_title">起動して、チームで問題を解く。</span>
+        <span class="hero-quest-desc" data-i18n="hero.quest_desc">取得・起動・接続確認を順番に案内します。Docker 演習はまず同じ PC で。別端末からの Docker 利用には対応 Linux の隔離モードが必要で、Mac / Docker Desktop は未対応です。</span>
+        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">起動手順を開く</span> →</span>
       </a>
       <p class="hero-secondary">
+        <a href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill"><span data-i18n="hero.cta_demo">旧版の紹介デモ</span></a>
+        ·
         <a href="/videos/lp/tenkacloud-30s.mp4" target="_blank" rel="noopener noreferrer" data-cta="watch-30s"><span data-i18n="hero.cta_video">▶ 30 秒でわかる</span></a>
         ·
         <span data-i18n="hero.host_prefix">主催者の方へ:</span>
@@ -271,7 +270,7 @@
     <div class="twoup">
       <div class="tile">
         <h3 class="kicker" data-i18n="modes.battle.kicker">Battle</h3>
-        <p data-i18n="modes.battle.p">Cryptography Battle はチーム共通の試合状態を使い、行動に応じて得点します。AWS endpoint の稼働率型 Battle はクラウド復旧の残件です。</p>
+        <p data-i18n="modes.battle.p">Cryptography Battle はチーム共通の試合状態を使い、行動に応じて得点します。AWS 問題の採点方式と接続条件は運営ガイドで確認してください。</p>
         <div class="demo">
           <div class="portal-preview score-events-preview">
             <div class="portal-page-title" data-i18n="preview.score_events.title">Score events</div>
@@ -380,8 +379,8 @@
     <div class="col">
       <div class="role" data-i18n="aud.b.role">Platform / SRE</div>
       <h3 data-i18n="aud.b.h">演習設計を、 1 画面で。</h3>
-      <p data-i18n="aud.b.p">イベント、チーム、問題、得点を共通の画面で管理します。現行クラウドの hello-world は限定した CLI 接続を使います。Console 接続や未対応の問題は検証状況をご確認ください。</p>
-      <a class="more" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.b.more">運営ガイド</span> ›</a>
+      <p data-i18n="aud.b.p">イベント、チーム、問題、得点を共通の画面で管理します。ローカルと AWS 開催では実行環境が異なります。問題ごとの接続条件と検証状況は運営ガイドで確認できます。</p>
+      <a class="more" href="./docs/manual/organizer/" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.b.more">運営ガイド</span> ›</a>
     </div>
     <div class="col">
       <div class="role" data-i18n="aud.c.role">エンジニア / 個人参加</div>
@@ -397,26 +396,26 @@
     <div class="onboard-layout">
       <div>
         <div class="eyebrow" data-i18n="onboard.eyebrow">オンボーディング</div>
-        <h2 data-i18n="onboard.h2">クラウドの接続と競技運営。</h2>
-        <p class="lead" data-i18n="onboard.lead">主催者基盤と競技者アカウントの権限を確認してから進めます。現行 CLI と、固定した旧版を使う pipeline は別の配置経路です。</p>
+        <h2 data-i18n="onboard.h2">ローカル競技を、順番に試す。</h2>
+        <p class="lead" data-i18n="onboard.lead">まず同じ PC で起動と得点を確認します。AWS 開催は、対応範囲・費用・権限を運営ガイドで確認してから別途設定します。</p>
       </div>
       <div class="steps">
         <div class="step">
           <div class="n">01</div>
-          <h4 data-i18n="onboard.s1.h">主催者の基盤を準備。</h4>
-          <p data-i18n="onboard.s1.p">AWS アカウント・リージョン・必要な権限を確認し、運営ガイドに沿って make deploy を実行します。</p>
+          <h4 data-i18n="onboard.s1.h">取得して、起動する。</h4>
+          <p data-i18n="onboard.s1.p">起動ガイドに沿って clone → make install → make local。問題カタログは指定した URL と ref から取得します。初回は build を省略しません。</p>
           <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><path d="M21 43H17a10 10 0 0 1 0-20 15 15 0 0 1 28-5 12 12 0 0 1 2 24h-5" fill="none" stroke="#a855f7" stroke-width="3"/><path d="M32 48V29m0 0-8 8m8-8 8 8" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
         <div class="step">
           <div class="n">02</div>
-          <h4 data-i18n="onboard.s2.h">ExternalId で、固く守る。</h4>
-          <p data-i18n="onboard.s2.p">AWS 問題を使う場合は競技者側の bootstrap を用意し、登録した Role と ExternalId を検証します。</p>
+          <h4 data-i18n="onboard.s2.h">大会とチームを用意する。</h4>
+          <p data-i18n="onboard.s2.p">同じ PC の 127.0.0.1:5174 で、表示された主催者キーを使います。大会・チーム・対応問題を選び、開始します。主催者キーは参加者へ渡しません。</p>
           <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><circle cx="32" cy="23" r="10" fill="none" stroke="#22c55e" stroke-width="4"/><path d="M15 53c3-11 10-17 17-17s14 6 17 17" fill="none" stroke="#07111f" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="23" r="16" fill="none" stroke="#a855f7" stroke-width="2" opacity=".45"/></svg></div>
         </div>
         <div class="step">
           <div class="n">03</div>
-          <h4 data-i18n="onboard.s3.h">ポータルから、競技へ。</h4>
-          <p data-i18n="onboard.s3.p">大会とチームを作成し、対応する問題を準備して開始します。ローカルの Docker 問題は、参加者が必要なときに起動します。</p>
+          <h4 data-i18n="onboard.s3.h">参加して、得点を確認する。</h4>
+          <p data-i18n="onboard.s3.p">同じ PC の 127.0.0.1:5175 へチームキーで参加します。まず Crypto Battle などの native 問題を試し、操作と得点を確認します。Docker の利用条件は起動ガイドで確認してください。</p>
           <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><rect x="12" y="14" width="40" height="31" rx="3" fill="none" stroke="#07111f" stroke-width="3"/><path d="M20 50h24" stroke="#07111f" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="30" r="8" fill="none" stroke="#2563eb" stroke-width="3"/></svg></div>
         </div>
       </div>
@@ -434,10 +433,10 @@
       </div>
       <div class="flow sso-preview">
         <div class="credential-title">SSO Credentials</div>
-        <div class="credential-sub" data-i18n="preview.sso.desc">旧版の AWS Console 接続画面の例です。現行クラウドでは hello-world 向けの限定 CLI 接続を提供します。</div>
+        <div class="credential-sub" data-i18n="preview.sso.desc">下は旧版の AWS Console 接続画面の例です。現行版で利用できる Console / CLI は、問題ごとの access 定義と開催条件で決まります。</div>
         <div class="sso-alert">
           <b data-i18n="preview.sso.howto">使い方</b>
-          <span data-i18n="preview.sso.body">現行 CLI の資格情報は最大 15 分です。画面に実際の期限を表示します。Console 接続は対応条件の確認が必要です。</span>
+          <span data-i18n="preview.sso.body">資格情報の期限は参加者画面に表示します。AWS 開催の設定と問題ごとの接続条件は運営ガイドで確認してください。実 AWS での大会性能は未検証です。</span>
         </div>
         <div class="credential-list">
           <div class="credential-row">
@@ -486,7 +485,7 @@
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="extend.eyebrow">問題は、増やせる</div>
     <h2 data-i18n="extend.h2">足りない問題は、自分で作ればいい。</h2>
-    <p class="lead" data-i18n="extend.lead">問題の正本は <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> です。形式に応じた定義・実行環境・採点方法を用意し、作問ガイドで検証します。Problem Pack の検証・インストール機能は保持していますが、現在の大会カタログへの activation と drill の統合は未完成です。</p>
+    <p class="lead" data-i18n="extend.lead">問題は <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> などの URL と ref を選んで取得し、大会は不変 snapshot を使います。独自問題の定義・実行環境・採点方法は作問ガイドで検証してください。Problem Pack の対応範囲も同ガイドで確認できます。</p>
     <div class="extend-cta">
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta1">問題カタログを見る</span> ›</a>
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/.claude/skills/new-problem/SKILL.md#new-problem--scaffold-a-tenkacloudchallenge-problem" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta2">new-problem skill</span> ›</a>
@@ -688,7 +687,7 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=c9d40b8b97" defer></script>
+<script src="./app.js?v=ba5c61c254" defer></script>
 
 </body>
 </html>

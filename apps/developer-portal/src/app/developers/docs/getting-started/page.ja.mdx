@@ -8,15 +8,97 @@ export const metadata = { title: "はじめに" };
 
 <h2 id="local-start">ローカル競技を起動する</h2>
 
-確認対象の checkout、Bun 1.3.11、明示選択して取得した問題カタログ を使います。macOS または Linux（WSL2 を含む）が対象です。Docker 問題には Docker Engine と Compose が必要です。リポジトリのルートで実行します。
+Git、Make、Bun 1.3.11 と確認対象の checkout を用意します。macOS または Linux（WSL2 を含む）が対象です。Docker 問題には Docker Engine と Compose が必要です。リポジトリのルートで実行します。
 
 ```sh
-bun install --frozen-lockfile --ignore-scripts
-make catalog-download catalog-prepare
+git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
 make local
 ```
 
+`make local` は起動前に `catalog-sources.json` の URL と `ref` から問題を取得します。既定は TenkaCloudChallenge の `main` です。取得にはネットワーク接続が必要で、失敗すると起動を中止します。`make deploy` も同じ選択を使います。保存済みの大会は取得時の不変 snapshot を使い続けます。`problems/` は生成される build 用ビューで、Git submodule ではありません。作問用 branch を使う場合は設定の `ref` を変更します。設定と取得処理は [catalog-sources.json](https://github.com/susumutomita/TenkaCloud/blob/main/catalog-sources.json) と [downloaded-catalog.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts) で確認できます。
+
 既定の開催者 URL は `http://127.0.0.1:5174`、参加者 URL は `http://127.0.0.1:5175` です。実際にはプロセスが表示した URL を使います。主催者キーだけでログインし、ユーザー名・パスワードは使いません。対話ターミナルで `make local` を起動するたびに新しいキーを一度だけ表示し、以前の主催者キーとログインを失効させます。起動中の再発行は、別の対話ターミナルで同じデータディレクトリを指定して `make local-reset` を実行します。大会・得点・参加者キー・問題のデータを保持します。非対話起動と public/container 起動では既存のキーを保持し、ログにキーを出力しません。
+
+<h2 id="connect-from-another-device">別の端末から参加する</h2>
+
+既定の loopback URL は同じ PC でだけ開けます。信頼できる隔離ネットワーク上で参加者へ接続させる場合は、host に割り当て済みの IPv4 を明示します。以下の `100.96.12.34` は説明用なので、実際のアドレスへ置き換えてください。Tailscale の `100.64.0.0/10` 内の IPv4 も受け付けます。VPN や権限をこのコマンドで設定することはありません。
+
+```sh
+make local LOCAL_ARGS="--lan 100.96.12.34 --unsafe-lan"
+```
+
+開催者は host 自身の `http://127.0.0.1:5174` を開きます。参加者へは `http://100.96.12.34:5175` と、そのチームのキーを渡します。参加者側で `127.0.0.1` を開くと参加者自身の端末へ接続するため、host には届きません。主催者キーは参加者へ渡さないでください。
+
+`--unsafe-lan` は HTTP での待受への同意です。アプリ自身が TLS を提供するわけではありません。上の LAN 起動では、Docker を使わない native 問題（例: Crypto Battle）を利用できます。Docker / Compose 問題の開始・再開・復旧は、専用の隔離モードがないと `network_isolation_required` で拒否します。Mac / Docker Desktop はこの隔離モードに未対応です。同じ PC の loopback 演習は従来どおり利用できますが、専用 guard による隔離の保証はありません。
+
+別端末から Docker 問題を使うには、対応する native Linux 上で `--competition-network` と、LAN / VPN の経路と重ならない `--docker-network-pool` を明示する必要があります。Docker 28.4.x、rootful のローカル daemon、firewall / nsenter の権限などの前提を満たさなければ拒否します。[guard の前提](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/linux-network-guard.ts)を先に確認してください。単に LAN の待受 IP を指定しても、firewall や VPN の設定を自動で変更しません。
+
+非隔離の Docker unit が保存されている場合は、停止状態でも LAN host の起動を listener 開始前に拒否します。既存 job / unit を自動停止・移行することはありません。主催者と保守時間を決め、元の loopback host で必要なデータを保存して対象環境を停止・削除してから、隔離環境を新規作成します。稼働中の host をそのまま更新・再起動しないでください。
+
+この制約は演習コンテナの境界です。Tailscale 接続だけで参加者端末全体の通信や端末間アクセスを制限することはありません。HTTPS 構成、VM からの実通信、多人数での競技開催は、この手順で検証済みとは扱いません。
+
+初回は build を省略しません。すでに同じコードと選択カタログで build 済みの場合だけ `--no-build` を追加できます。未 build またはカタログ不一致で起動を拒否されたら、次の起動で省略せずに build します。稼働中の host を変更する場合は、開催者と停止・再開の時刻を決めてから進めます。
+
+<h2 id="tailscale-first-connection">Tailscale 未接続の端末から参加する</h2>
+
+専用開催端末だけを共有する手順です。参加者を会社の tailnet 全体へ加入させる前提ではありません。会社所属の PC や既存サービスを、所有者・管理者の承認なしに共有しないでください。以下は承認後に行う確認用手順で、共有経路を含む実機リハーサルは未完了です。Docker の別端末利用には、前述の native Linux 隔離条件も必要です。
+
+**主催者の準備**
+
+1. 共有を許可された専用端末を用意し、[公式ダウンロード](https://tailscale.com/download)から Tailscale を導入します。開催用に承認されたアカウントでログインし、選択中の tailnet、開催端末名、自 IPv4 を記録します。端末では `tailscale ip -4` と `tailscale status` で照合できます。VM なら VM 自身の IP を使います。
+2. 参加者と、共有を受けるログイン方法・アカウント・参加者自身の tailnet を事前に確認します。共有の発行・承認には、それぞれの tailnet の Owner / Admin / IT admin 権限が必要です。個人用と会社用がある場合、同じ名前でも選択先を確認します。
+3. 開催側と参加側の管理者が [grants](https://tailscale.com/docs/features/access-control/grants) / [ACL](https://tailscale.com/docs/features/access-control/acls) の有効な許可をレビューします。共有先ユーザーから専用開催端末への TCP 5175 を対象にし、Docker の演習 gateway を使う場合だけ、設定した `--gateway-ports` の TCP 範囲も対象にします。既定は 5200–5239 です。5174、SSH、不要なサービスや生のコンテナ port は許可しません。既存の広い許可が残っていれば、狭い許可を追加するだけでは制限できません。
+4. 管理画面の Machines で開催端末の名前と IP を確認し、Share → Copy invite link → Copy share link から、参加者ごとに単発の招待を発行します。再利用リンクは選びません。招待リンクは接続権を与えるため、本人にだけ渡します。共有は端末へのアクセスを渡す仕組みで、単一 port の公開保証ではありません。[共有の公式仕様](https://tailscale.com/docs/features/sharing)を確認してください。
+
+**初参加者の準備と接続**
+
+1. 自分の端末へ公式アプリを導入します。iPhone は [公式 iOS 手順](https://tailscale.com/docs/install/ios)に従い、VPN 構成を許可して、事前に決めた自分のアカウントでログインします。会社のログイン情報を主催者から受け取る必要はありません。
+2. 主催者から受け取った招待を開き、ブラウザのログイン方法・アカウント・承認先 tailnet を確認して承認します。アプリでも、その共有を受けた同じアカウント / tailnet を選び、Connected を確認します。別の tailnet に切り替わっている場合は続行せず、選択先を照合します。
+3. 一覧から主催者が伝えた開催端末名を探し、共有された IP を確認します。自分のスマホの IP、別の Mac、古い登録を接続先にしないでください。共有端末は別 tailnet にあっても表示されるため、単に IP が見えるだけで所属が同じとは判断できません。
+4. その IP と host の起動ログに出た参加者 URL を照合し、`http://<開催端末のIPv4>:5175/` を開きます。この LAN 手順は IP による Host / Origin 検査を使うため、MagicDNS 名の URL に置き換えません。共有時の IP 競合で受信側に別 IP が割り当てられた場合も、そのまま進めず主催者へ確認します。
+
+**共有後の確認と競技終了**
+
+主催者は Host Console を `127.0.0.1:5174` のままにし、参加者用に forward / proxy しません。参加者にはチームキーだけを渡します。大会開始前は参加端末で 5175 の画面とログインまでを確認します。gateway は使用中のものだけ listen するため、範囲全体に常時応答するわけではありません。
+
+管理者は有効な policy の検査・テストで、5175 と使用する gateway の許可、5174 と不要なサービスの不許可を確認します。native 問題だけなら gateway の許可は不要です。ポートの許可、Tailscale の端末共有、演習コンテナの Linux guard、アプリのチームキー認証は別の境界です。共有しただけで演習や参加者 PC 全体が隔離されるとは扱いません。
+
+PC の参加端末では、承認済みの開催端末だけを次のように確認できます。例の IP は実際の開催端末へ置き換えます。
+
+```sh
+EVENT_HOST_IP=100.96.12.34
+curl --fail "http://${EVENT_HOST_IP}:5175/healthz"
+nc -vz -w 3 "$EVENT_HOST_IP" 5175
+nc -vz -w 3 "$EVENT_HOST_IP" 5174
+```
+
+health は `status: ok` / `role: participant`、5175 は接続成功、5174 は接続不可を確認します。スマホでは同じ `/healthz` をブラウザで開けます。5174 の接続失敗だけでは ACL の証明にならないため、管理者は policy テストも確認します。gateway は実際に発行された URL と使用中の port を確認し、未起動の port の無応答を障害と扱いません。
+
+全員の接続を確認してから大会を開始します。native 問題は操作と得点、Docker 問題はポータルが発行した gateway URL から自チームの演習への接続を確認します。正答・誤答・ヒントは対応する問題で確認します。終了時は End Event で採点を止め、必要な結果を保存します。環境を残すなら Stop (keep data) で停止し、主催者が保守手順に沿って host を停止します。削除を選ぶ場合は Teardown の対象とデータ消去を先に確認します。
+
+最後に主催者が対象端末の Share 画面から対象者の Revoke invite を実行し、未使用の招待も取り消します。Share 画面で対象者と未使用招待が失効したことを確認します。参加者の再接続失敗は補助確認です。host 停止による接続失敗だけでは共有失効の証明になりません。これは共有の失効で、他人の端末本体を削除する操作ではありません。再参加には新しい招待と承認が必要です。受信側の解除メニューは実画面の対象・影響を確認してから使い、一般の Remove machine と混同しません。
+
+<h2 id="check-local-connection">起動と接続を確認する</h2>
+
+host 上で開催者画面、参加者の端末で参加者画面の HTTP 応答を確認します。別端末の例の IP は実際の host の IP へ置き換えます。
+
+```sh
+# host 上で実行
+curl --fail --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:5174/
+# 参加者の端末で実行
+curl --fail --silent --output /dev/null --write-out '%{http_code}\n' http://100.96.12.34:5175/
+```
+
+どちらも `200` を確認してから、ブラウザでログイン画面を開きます。応答がない場合は、起動ログの URL、指定 IP が host にあること、端末間の既存の接続経路を確認します。HTTP 応答だけではログイン・採点・問題環境への接続は確認できません。次の大会手順で正答・誤答と得点も確認してください。
+
+この説明の実装根拠は [options.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts) 、[server.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts)、[LAN の engine 構成](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/application.ts)、[Docker の拒否条件](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/docker-engine.ts) です。開発時の回帰確認は次を実行します。待受アドレスと origin、隔離なしの LAN 演習の拒否、取得失敗・snapshot と build の整合性のテストであり、実際のネットワーク隔離の証明ではありません。
+
+```sh
+make catalog-download catalog-prepare
+bun test scripts/local-host/tests/public-mode.test.ts scripts/local-host/tests/catalog-startup.test.ts scripts/local-host/tests/lan-isolation.test.ts
+```
 
 <h2 id="first-event">大会を作成して参加する</h2>
 

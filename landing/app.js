@@ -138,16 +138,18 @@
       "hero.h1a": "クラウドエンジニアの、",
       "hero.h1b": "天下一武道会。",
       "hero.sub":
-        "ローカルと AWS クラウドで開催する、OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。現行版はローカルの Compose 問題と、クラウドの hello-world / Cryptography Battle に対応しています。",
+        "ローカルと AWS クラウドで開催する OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。まずは同じ PC でローカル競技を試せます。",
       "hero.vibe":
-        '<strong>まずは、手元で競技を。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。クラウド開催の対応範囲と費用は <a href="/docs/manual/organizer/">運営ガイド</a>で確認できます。',
-      "hero.quest_meta": "最初の 1 問 · 登録不要 · 約 3 分",
-      "hero.quest_badge": "チュートリアル",
-      "hero.quest_diff": "難易度: 入門",
-      "hero.quest_title": "TenkaCloud とは? を、触って知る。",
+        "<strong>まずは、同じ PC で。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。",
+      "hero.quest_meta": "ローカル起動 · AWS アカウント不要",
+      "hero.quest_badge": "起動ガイド",
+      "hero.quest_diff": "Bun・Make を用意",
+      "hero.quest_title": "起動して、チームで問題を解く。",
       "hero.quest_desc":
-        "ブラウザだけで触れる旧版の紹介デモです。実際の大会とは認証・得点・操作が異なります。現在の開催手順はドキュメントから確認してください。",
-      "hero.quest_cta": "この問題で始める",
+        "取得・起動・接続確認を順番に案内します。Docker 演習はまず同じ PC で。別端末からの Docker 利用には対応 Linux の隔離モードが必要で、Mac / Docker Desktop は未対応です。",
+      "hero.quest_cta": "起動手順を開く",
+      "hero.startHref": "/docs/getting-started/#local-start",
+      "hero.cta_demo": "旧版の紹介デモ",
       "hero.cta_video": "▶ 30 秒でわかる",
       "hero.host_prefix": "主催者の方へ:",
       "hero.cta_host": "開催ガイド",
@@ -193,7 +195,7 @@
         "共有状態で競う Battle と、問題を解く Challenge。下の画面は旧版の表示例です。現行の対応問題は運営ガイドで確認してください。",
       "modes.battle.kicker": "Battle",
       "modes.battle.p":
-        "Cryptography Battle はチーム共通の試合状態を使い、行動に応じて得点します。AWS endpoint の稼働率型 Battle はクラウド復旧の残件です。",
+        "Cryptography Battle はチーム共通の試合状態を使い、行動に応じて得点します。AWS 問題の採点方式と接続条件は運営ガイドで確認してください。",
       "modes.battle.live": "ROUND 03 · LIVE",
       "modes.challenge.kicker": "Challenge",
       "modes.challenge.p":
@@ -221,10 +223,10 @@
       "preview.quests.unsolved_status": "未解答",
       "preview.quests.cleared": "⌄ 解決済み (0)",
       "preview.sso.desc":
-        "旧版の AWS Console 接続画面の例です。現行クラウドでは hello-world 向けの限定 CLI 接続を提供します。",
+        "下は旧版の AWS Console 接続画面の例です。現行版で利用できる Console / CLI は、問題ごとの access 定義と開催条件で決まります。",
       "preview.sso.howto": "使い方",
       "preview.sso.body":
-        "現行 CLI の資格情報は最大 15 分です。画面に実際の期限を表示します。Console 接続は対応条件の確認が必要です。",
+        "資格情報の期限は参加者画面に表示します。AWS 開催の設定と問題ごとの接続条件は運営ガイドで確認してください。実 AWS での大会性能は未検証です。",
       "preview.sso.button": "旧版: AWS Console",
 
       "aud.eyebrow": "誰のための",
@@ -239,7 +241,7 @@
       "aud.b.role": "Platform / SRE",
       "aud.b.h": "演習設計を、 1 画面で。",
       "aud.b.p":
-        "イベント、チーム、問題、得点を共通の画面で管理します。現行クラウドの hello-world は限定した CLI 接続を使います。Console 接続や未対応の問題は検証状況をご確認ください。",
+        "イベント、チーム、問題、得点を共通の画面で管理します。ローカルと AWS 開催では実行環境が異なります。問題ごとの接続条件と検証状況は運営ガイドで確認できます。",
       "aud.b.more": "運営ガイド",
       "aud.c.role": "エンジニア / 個人参加",
       "aud.c.h": "実戦で、腕を上げる。",
@@ -248,18 +250,18 @@
       "aud.c.more": "問題を作る",
 
       "onboard.eyebrow": "オンボーディング",
-      "onboard.h2": "クラウドの接続と競技運営。",
+      "onboard.h2": "ローカル競技を、順番に試す。",
       "onboard.lead":
-        "主催者基盤と競技者アカウントの権限を確認してから進めます。現行 CLI と、固定した旧版を使う pipeline は別の配置経路です。",
-      "onboard.s1.h": "主催者の基盤を準備。",
+        "まず同じ PC で起動と得点を確認します。AWS 開催は、対応範囲・費用・権限を運営ガイドで確認してから別途設定します。",
+      "onboard.s1.h": "取得して、起動する。",
       "onboard.s1.p":
-        "AWS アカウント・リージョン・必要な権限を確認し、運営ガイドに沿って make deploy を実行します。",
-      "onboard.s2.h": "ExternalId で、固く守る。",
+        "起動ガイドに沿って clone → make install → make local。問題カタログは指定した URL と ref から取得します。初回は build を省略しません。",
+      "onboard.s2.h": "大会とチームを用意する。",
       "onboard.s2.p":
-        "AWS 問題を使う場合は競技者側の bootstrap を用意し、登録した Role と ExternalId を検証します。",
-      "onboard.s3.h": "ポータルから、競技へ。",
+        "同じ PC の 127.0.0.1:5174 で、表示された主催者キーを使います。大会・チーム・対応問題を選び、開始します。主催者キーは参加者へ渡しません。",
+      "onboard.s3.h": "参加して、得点を確認する。",
       "onboard.s3.p":
-        "大会とチームを作成し、対応する問題を準備して開始します。ローカルの Docker 問題は、参加者が必要なときに起動します。",
+        "同じ PC の 127.0.0.1:5175 へチームキーで参加します。まず Crypto Battle などの native 問題を試し、操作と得点を確認します。Docker の利用条件は起動ガイドで確認してください。",
       "onboard.s3.line2": "問題が割り当てられました",
 
       "trust.eyebrow": "セキュリティ",
@@ -309,7 +311,7 @@
       "extend.eyebrow": "問題は、増やせる",
       "extend.h2": "足りない問題は、自分で作ればいい。",
       "extend.lead":
-        '問題の正本は <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> です。形式に応じた定義・実行環境・採点方法を用意し、作問ガイドで検証します。Problem Pack の検証・インストール機能は保持していますが、現在の大会カタログへの activation と drill の統合は未完成です。',
+        '問題は <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> などの URL と ref を選んで取得し、大会は不変 snapshot を使います。独自問題の定義・実行環境・採点方法は作問ガイドで検証してください。Problem Pack の対応範囲も同ガイドで確認できます。',
       "extend.cta1": "問題カタログを見る",
       "extend.cta2": "new-problem skill",
       "extend.cta3": "Problem Pack の対応状況",
@@ -432,16 +434,18 @@
       "hero.h1a": "The cloud engineer's ",
       "hero.h1b": "Tenka-Ichi.",
       "hero.sub":
-        "An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. The current version supports local Compose exercises and cloud hello-world / Cryptography Battle.",
+        "An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. Start with a local competition on one PC.",
       "hero.vibe":
-        '<strong>Start with a local competition.</strong> Local hosting uses SQLite and needs no AWS account. Check the <a href="/docs/manual/organizer/index.en.html">organizer guide</a> for cloud capabilities and costs.',
-      "hero.quest_meta": "First quest · No signup · ~3 min",
-      "hero.quest_badge": "Tutorial",
-      "hero.quest_diff": "Difficulty: Intro",
-      "hero.quest_title": "Learn what TenkaCloud is — by playing it.",
+        "<strong>Start on one PC.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.",
+      "hero.quest_meta": "Local startup · No AWS account",
+      "hero.quest_badge": "Getting started",
+      "hero.quest_diff": "Requires Bun and Make",
+      "hero.quest_title": "Start the host and solve a problem as a team.",
       "hero.quest_desc":
-        "An introductory browser demo of the earlier interface. Authentication, scores and operations differ from a real event. Use the documentation for current hosting instructions.",
-      "hero.quest_cta": "Start with this quest",
+        "Follow the clone, startup and connection checks. Try Docker exercises on the same PC first. Remote Docker requires supported native Linux isolation; Mac / Docker Desktop is unsupported.",
+      "hero.quest_cta": "Open the startup guide",
+      "hero.startHref": "/docs/getting-started/index.en.html#local-start",
+      "hero.cta_demo": "Earlier introductory demo",
       "hero.cta_video": "▶ Watch the 30-second tour",
       "hero.host_prefix": "Hosting an event?",
       "hero.cta_host": "Hosting guide",
@@ -487,7 +491,7 @@
         "Battles share a live match; Challenges score problem-solving. The screens below show the earlier interface. Check the organizer guide for currently supported problems.",
       "modes.battle.kicker": "Battle",
       "modes.battle.p":
-        "Cryptography Battle keeps shared match state and scores player actions. AWS endpoint-uptime Battles remain part of the cloud restoration work.",
+        "Cryptography Battle keeps shared match state and scores player actions. Check the organizer guide for AWS problem scoring and access conditions.",
       "modes.battle.live": "ROUND 03 · LIVE",
       "modes.challenge.kicker": "Challenge",
       "modes.challenge.p":
@@ -515,10 +519,10 @@
       "preview.quests.unsolved_status": "Unanswered",
       "preview.quests.cleared": "⌄ Cleared (0)",
       "preview.sso.desc":
-        "Example of the earlier AWS Console interface. Current cloud hosting provides scoped CLI access for hello-world.",
+        "The earlier AWS Console interface is illustrated below. Available Console / CLI access in the current version depends on each problem’s access definition and hosting conditions.",
       "preview.sso.howto": "How to use",
       "preview.sso.body":
-        "Current CLI credentials last at most 15 minutes; the actual expiry is shown in the portal. Console access remains subject to the implementation requirements.",
+        "Credential expiry is shown in the participant portal. Check the organizer guide for AWS setup and per-problem access conditions. Live AWS event performance remains unverified.",
       "preview.sso.button": "Earlier UI: AWS Console",
 
       "aud.eyebrow": "Who it's for",
@@ -533,7 +537,7 @@
       "aud.b.role": "Platform / SRE",
       "aud.b.h": "Design drills from one screen.",
       "aud.b.p":
-        "Manage events, teams, problems and scores in shared consoles. The current cloud hello-world exercise uses scoped CLI access. Check implementation status for Console access and other exercises.",
+        "Manage events, teams, problems and scores in shared consoles. Local and AWS hosting use different runtimes. Check the organizer guide for each problem’s access conditions and verification status.",
       "aud.b.more": "Operator guide",
       "aud.c.role": "Engineers / individual learners",
       "aud.c.h": "Sharpen on the real thing.",
@@ -542,18 +546,18 @@
       "aud.c.more": "Author a problem",
 
       "onboard.eyebrow": "Onboarding",
-      "onboard.h2": "Connect and run a cloud competition.",
+      "onboard.h2": "Try a local competition, step by step.",
       "onboard.lead":
-        "Review platform and competitor-account permissions before starting. The current CLI and the pipeline pinned to an earlier release are separate deployment paths.",
-      "onboard.s1.h": "Prepare the platform.",
+        "First check startup and scoring on one PC. For AWS hosting, review supported capabilities, costs and permissions in the organizer guide before configuring it separately.",
+      "onboard.s1.h": "Clone and start the host.",
       "onboard.s1.p":
-        "Check the AWS account, region and required permissions, then follow the organizer guide for make deploy.",
-      "onboard.s2.h": "Locked with ExternalId.",
+        "Follow the startup guide: clone, make install, then make local. The catalog is downloaded from the selected URL and ref. Keep the build enabled on the first start.",
+      "onboard.s2.h": "Create an event and a team.",
       "onboard.s2.p":
-        "For AWS exercises, prepare the competitor bootstrap and verify its registered role and ExternalId.",
-      "onboard.s3.h": "Compete from the portal.",
+        "Open 127.0.0.1:5174 on the host and sign in with the displayed organizer key. Create the event and team, select supported problems and start. Keep the organizer key private.",
+      "onboard.s3.h": "Join and check the score.",
       "onboard.s3.p":
-        "Create the event and teams, prepare supported problems and start the competition. Participants start local Docker exercises when needed.",
+        "Join 127.0.0.1:5175 on the same PC with the team key. Try a native problem such as Crypto Battle and check actions and scores. See the startup guide for Docker requirements.",
       "onboard.s3.line2": "Problem assigned",
 
       "trust.eyebrow": "Security",
@@ -603,7 +607,7 @@
       "extend.eyebrow": "Catalog grows with you",
       "extend.h2": "Missing a problem? Author your own.",
       "extend.lead":
-        'Canonical problem content lives in <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a>. Follow the authoring guide to define and verify the runtime and scoring for each format. Problem Pack validation and installation remain available; activation into the current event catalog and drill integration are incomplete.',
+        'Select a repository URL and ref, such as <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a>, to download problems; events retain immutable snapshots. Use the authoring guide to verify custom definitions, runtimes and scoring, and check its Problem Pack support boundaries.',
       "extend.cta1": "Browse the catalog",
       "extend.cta2": "new-problem skill",
       "extend.cta3": "Problem Pack support status",

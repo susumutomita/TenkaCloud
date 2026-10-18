@@ -173,16 +173,8 @@ describe("documentation home by role", () => {
   });
 });
 
-/**
- * Issue #2711 (design 6a, supersedes the #2707 start-direct buttons): the hero
- * shows exactly one participant entry — a quest card for the tutorial problem
- * what-is-tenkacloud — with no stacked primary buttons. The organizer path is
- * demoted to a text-link row below the card. The Lite/Codespaces mode choice
- * must not appear on the LP at all (it lives inside the problem, step 3).
- * Analytics continuity: start-drill / deploy-aws / get-quote keep their
- * data-cta attributes and destinations.
- */
-describe("landing hero quest card (Issue #2711)", () => {
+/** Current startup is primary; the earlier demo stays secondary with its analytics key. */
+describe("landing current startup entry", () => {
   const index = read("landing/index.html");
   const app = read("landing/app.js");
 
@@ -200,18 +192,20 @@ describe("landing hero quest card (Issue #2711)", () => {
     expect(hero).not.toContain("cta-row");
   });
 
-  it("should present exactly one quest card that lands on a real file (rewrite-independent)", () => {
+  it("routes the primary card to current startup before the earlier demo", () => {
     const hero = heroSection(index);
     expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
-    // /portal-demo/start の deep link は静的ホスティングの rewrite が無い環境で 404
-    // fallback に崩れる。 入口は必ず実在する index.html + `goto=start` (SPA 側で遷移)。
-    expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
+    const card = hero.slice(hero.indexOf('class="hero-quest-card"'));
+    const opening = card.slice(0, card.indexOf(">"));
+    expect(opening).toContain('href="/docs/getting-started/#local-start"');
+    expect(opening).toContain('data-cta="local-start"');
+    expect(opening).not.toContain("target=");
+    expect(hero.indexOf('href="/portal-demo/?demo=1&amp;goto=start"')).toBeGreaterThan(
+      hero.indexOf('class="hero-secondary"'),
+    );
     expect(hero).not.toContain('href="/portal-demo/start');
     expect(hero).toContain('data-cta="start-drill"');
-    expect(hero).toContain("<code>what-is-tenkacloud</code>");
-    // 同一 origin への直行なので新規 tab で開かない (= 直行型の体験を壊さない)。
-    const card = hero.slice(hero.indexOf('class="hero-quest-card"'));
-    expect(card.slice(0, card.indexOf(">"))).not.toContain("target=");
+    expect(hero).toContain("Mac / Docker Desktop");
   });
 
   it("should not present the Lite/Codespaces mode choice anywhere in the hero", () => {
@@ -228,27 +222,23 @@ describe("landing hero quest card (Issue #2711)", () => {
     expect(hero).toContain('href="#pricing"');
   });
 
-  it("should define matching ja/en quest-card copy in app.js", () => {
-    expect(app).toContain('"hero.quest_meta": "最初の 1 問 · 登録不要 · 約 3 分"');
-    expect(app).toContain('"hero.quest_badge": "チュートリアル"');
-    expect(app).toContain('"hero.quest_title": "TenkaCloud とは? を、触って知る。"');
-    expect(app).toContain('"hero.quest_cta": "この問題で始める"');
-    expect(app).toContain('"hero.host_prefix": "主催者の方へ:"');
-    expect(app).toContain('"hero.quest_meta": "First quest · No signup · ~3 min"');
-    expect(app).toContain('"hero.quest_badge": "Tutorial"');
-    expect(app).toContain('"hero.quest_title": "Learn what TenkaCloud is — by playing it."');
-    expect(app).toContain('"hero.quest_cta": "Start with this quest"');
-    expect(app).toContain('"hero.host_prefix": "Hosting an event?"');
+  it("keeps language switches on the matching startup guide", () => {
+    expect(app).toContain('"hero.startHref": "/docs/getting-started/#local-start"');
+    expect(app).toContain('"hero.startHref": "/docs/getting-started/index.en.html#local-start"');
+    expect(index).toContain('data-i18n-href="hero.startHref"');
   });
 
-  it("should publish the same quest-card structure on the generated English landing page", () => {
+  it("publishes the startup path and remote Docker condition in static English", () => {
     const english = read("landing/index.en.html");
     const hero = heroSection(english);
     expect(hero).toContain('href="./docs/manual/organizer/index.en.html"');
     expect(hero).not.toContain("cta-primary");
     expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
     expect(hero).toContain('data-cta="start-drill"');
-    expect(english).toContain("Learn what TenkaCloud is");
+    expect(hero).toContain('href="/docs/getting-started/index.en.html#local-start"');
+    expect(hero).toContain('data-cta="local-start"');
+    expect(hero).toContain("Remote Docker requires supported native Linux isolation");
+    expect(hero).toContain("Earlier introductory demo");
   });
 });
 
