@@ -283,7 +283,9 @@ describe("planChangedTests on this repository", () => {
   it("still selects the importers of a file whose deletion or rename is staged", () => {
     const deleted = "packages/web-kit/src/ProblemAuthors.tsx";
     const remaining = repoFiles.filter((file) => file !== deleted);
-    expect(repoPlan([deleted], remaining).workspaces).toContain("apps/developer-portal");
+    expect(repoPlan([deleted], remaining).workspaces).toEqual(
+      expect.arrayContaining(["apps/application-admin-console", "apps/participant-portal"]),
+    );
   });
 
   it("runs the landing checks for developer-portal docs", () => {
