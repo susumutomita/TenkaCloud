@@ -11,7 +11,11 @@
     "cpus": 8,
     "memory": "32gb"
   },
-  "postCreateCommand": "bun install --frozen-lockfile --ignore-scripts && git submodule update --init problems",
+  "remoteEnv": {
+    "BUN_INSTALL": "/home/codespace/.bun",
+    "PATH": "/home/codespace/.bun/bin:${containerEnv:PATH}"
+  },
+  "postCreateCommand": ["bash", ".devcontainer/post-create.sh"],
   "forwardPorts": [5174, 5175],
   "portsAttributes": {
     "5174": {

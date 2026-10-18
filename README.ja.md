@@ -104,7 +104,17 @@ make local LOCAL_ARGS="--lan $(tailscale ip -4) --unsafe-lan"
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
 
-Codespace を作成し、依存関係の準備が終わったらターミナルで `make local` を実行します。開催者と参加者のポートは 5174 と 5175 です。動画は以前のローカル体験を収録しています。現在の競技 host では、転送 origin と問題への接続経路の検証が残っています。大会には上記のローカル手順を使って確認してください。
+新しい Codespaces は [.devcontainer/post-create.sh](./.devcontainer/post-create.sh) で、`mise.toml` の指定版 Bun を[公式 installer](https://bun.com/docs/installation)から導入し、版を確認してから `make install` を実行します。依存の lifecycle script は無効にし、Husky だけ明示的に準備します。指定した universal image の `/home/codespace/.bun` を使い、新しいターミナルには `remoteEnv` で PATH を設定します。問題は `make local` が指定の sources から取得し、Git submodule は使いません。
+
+既存の Codespace は checkout を更新しただけでは初期化を再実行しません。この revision の採用後、依存を準備する場合はリポジトリのルートで次を明示的に実行します。host が稼働中なら先に保守時間を調整してください。Codespace の再構築や host の起動は行わないコマンドです。
+
+```bash
+bash .devcontainer/post-create.sh
+export PATH="${BUN_INSTALL:-$HOME/.bun}/bin:$PATH"
+bun --version # mise.toml の指定版を確認
+```
+
+設定した port は従来どおり 5174 と 5175 です。通常の `make local` は転送先の HTTPS origin を認識せず、転送 URL を開くと厳密な Host/Origin 検査で拒否される場合があります。既存の `--public-admin-origin` と `--public-participant-origin` は、主催者 port を Private に保つ native 専用の候補ですが、Codespaces の proxy・認証・リモート競技は未検証です。動画は以前の構成の紹介です。確認済みの開催には前述のローカル手順を使ってください。
 
 ### AWS にデプロイする
 
