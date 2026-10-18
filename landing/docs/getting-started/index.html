@@ -79,8 +79,10 @@ make local
 <pre><code class="language-sh">make local LOCAL_ARGS=&quot;--lan 100.96.12.34 --unsafe-lan&quot;
 </code></pre>
 <p>開催者は host 自身の <code>http://127.0.0.1:5174</code> を開きます。参加者へは <code>http://100.96.12.34:5175</code> と、そのチームのキーを渡します。参加者側で <code>127.0.0.1</code> を開くと参加者自身の端末へ接続するため、host には届きません。主催者キーは参加者へ渡さないでください。</p>
-<p><code>--unsafe-lan</code> は HTTP での待受への同意です。アプリ自身が TLS を提供するわけではありません。通常の LAN 起動では <code>--competition-network</code> は無効で、演習からホスト・家庭 LAN への通信を拒否する専用 firewall guard は適用されません。コンテナ内で操作できる参加者からの到達は、Docker と OS の経路に依存します。待受 IP の指定だけでチーム間・家庭 LAN を隔離できるとは扱わないでください。HTTPS 構成、VM からの実通信、多人数での競技開催は、この手順で検証済みとは扱いません。</p>
-<p>隔離用の native Linux モードは別の実装です。設定不足や未対応環境では拒否し、Mac / Docker Desktop へ自動で適用することはありません。<a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts">初期値と条件</a>・<a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/linux-network-guard.ts">guard の前提</a>を確認してください。Tailscale 接続は、この専用モードや参加者端末間のアクセス制限を有効にする操作ではありません。</p>
+<p><code>--unsafe-lan</code> は HTTP での待受への同意です。アプリ自身が TLS を提供するわけではありません。上の LAN 起動では、Docker を使わない native 問題（例: Crypto Battle）を利用できます。Docker / Compose 問題の開始・再開・復旧は、専用の隔離モードがないと <code>network_isolation_required</code> で拒否します。Mac / Docker Desktop はこの隔離モードに未対応です。同じ PC の loopback 演習は従来どおり利用できますが、専用 guard による隔離の保証はありません。</p>
+<p>別端末から Docker 問題を使うには、対応する native Linux 上で <code>--competition-network</code> と、LAN / VPN の経路と重ならない <code>--docker-network-pool</code> を明示する必要があります。Docker 28.4.x、rootful のローカル daemon、firewall / nsenter の権限などの前提を満たさなければ拒否します。<a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/linux-network-guard.ts">guard の前提</a>を先に確認してください。単に LAN の待受 IP を指定しても、firewall や VPN の設定を自動で変更しません。</p>
+<p>非隔離の Docker unit が保存されている場合は、停止状態でも LAN host の起動を listener 開始前に拒否します。既存 job / unit を自動停止・移行することはありません。主催者と保守時間を決め、元の loopback host で必要なデータを保存して対象環境を停止・削除してから、隔離環境を新規作成します。稼働中の host をそのまま更新・再起動しないでください。</p>
+<p>この制約は演習コンテナの境界です。Tailscale 接続だけで参加者端末全体の通信や端末間アクセスを制限することはありません。HTTPS 構成、VM からの実通信、多人数での競技開催は、この手順で検証済みとは扱いません。</p>
 <p>初回は build を省略しません。すでに同じコードと選択カタログで build 済みの場合だけ <code>--no-build</code> を追加できます。未 build またはカタログ不一致で起動を拒否されたら、次の起動で省略せずに build します。稼働中の host を変更する場合は、開催者と停止・再開の時刻を決めてから進めます。</p>
 <h2 id="check-local-connection">起動と接続を確認する</h2><p>host 上で開催者画面、参加者の端末で参加者画面の HTTP 応答を確認します。別端末の例の IP は実際の host の IP へ置き換えます。</p>
 <pre><code class="language-sh"># host 上で実行
@@ -89,9 +91,9 @@ curl --fail --silent --output /dev/null --write-out &#39;%{http_code}\n&#39; htt
 curl --fail --silent --output /dev/null --write-out &#39;%{http_code}\n&#39; http://100.96.12.34:5175/
 </code></pre>
 <p>どちらも <code>200</code> を確認してから、ブラウザでログイン画面を開きます。応答がない場合は、起動ログの URL、指定 IP が host にあること、端末間の既存の接続経路を確認します。HTTP 応答だけではログイン・採点・問題環境への接続は確認できません。次の大会手順で正答・誤答と得点も確認してください。</p>
-<p>この説明の実装根拠は <a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts">options.ts</a> と <a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts">server.ts</a> です。開発時の回帰確認は次を実行します。待受アドレスと origin のテスト、取得失敗・snapshot と build の整合性のテストであり、実際のネットワーク隔離の証明ではありません。</p>
+<p>この説明の実装根拠は <a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts">options.ts</a> 、<a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts">server.ts</a>、<a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/application.ts">LAN の engine 構成</a>、<a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/docker-engine.ts">Docker の拒否条件</a> です。開発時の回帰確認は次を実行します。待受アドレスと origin、隔離なしの LAN 演習の拒否、取得失敗・snapshot と build の整合性のテストであり、実際のネットワーク隔離の証明ではありません。</p>
 <pre><code class="language-sh">make catalog-download catalog-prepare
-bun test scripts/local-host/tests/public-mode.test.ts scripts/local-host/tests/catalog-startup.test.ts
+bun test scripts/local-host/tests/public-mode.test.ts scripts/local-host/tests/catalog-startup.test.ts scripts/local-host/tests/lan-isolation.test.ts
 </code></pre>
 <h2 id="first-event">大会を作成して参加する</h2><ol>
 <li>開催者コンソールで大会、チーム、出題する問題を選びます。</li>

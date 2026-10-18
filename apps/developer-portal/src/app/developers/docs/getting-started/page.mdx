@@ -31,9 +31,13 @@ make local LOCAL_ARGS="--lan 100.96.12.34 --unsafe-lan"
 
 The organizer opens `http://127.0.0.1:5174` on the host. Give participants `http://100.96.12.34:5175` and their own team key. Opening `127.0.0.1` on a participant's device connects to that device, not the host. Keep the organizer key private.
 
-`--unsafe-lan` acknowledges an HTTP listener; the application does not provide TLS here. Ordinary LAN startup leaves `--competition-network` disabled and does not install the dedicated firewall guard that denies exercise traffic to the host and home LAN. Reachability from a participant-controlled container depends on Docker and OS routes. Binding one IP does not establish team or home LAN isolation. This procedure does not establish verified HTTPS hosting, VM connectivity or a full multiplayer competition.
+`--unsafe-lan` acknowledges an HTTP listener; the application does not provide TLS here. The LAN command above supports native problems that do not use Docker, such as Crypto Battle. Starting, resuming or recovering Docker / Compose exercises without the dedicated isolation mode is rejected with `network_isolation_required`. Mac / Docker Desktop does not support that mode. Same-PC loopback exercises remain available, without the dedicated guard's isolation guarantee.
 
-The isolated native Linux mode is a separate implementation. Missing configuration or unsupported environments are rejected; it is not automatically applied on Mac / Docker Desktop. See [defaults and conditions](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts) and [guard prerequisites](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/linux-network-guard.ts). Connecting through Tailscale does not activate that mode or restrict connectivity between participant devices.
+Remote Docker exercises require supported native Linux with explicit `--competition-network` and `--docker-network-pool` settings. The pool must not overlap LAN / VPN routes. Missing prerequisites, including Docker 28.4.x, a rootful local daemon and firewall / nsenter permissions, cause rejection. Read the [guard prerequisites](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/linux-network-guard.ts) first. Selecting a LAN listener alone does not automatically change firewall or VPN settings.
+
+If a retained Docker unit lacks isolation, even when stopped, LAN host startup is rejected before listeners open. Existing jobs / units are not automatically stopped or migrated. Agree on maintenance with the organizer, preserve needed data, then stop and retire those environments through the original loopback host before creating isolated ones. Do not update or restart a running host without that coordination.
+
+This boundary concerns exercise containers. Tailscale connectivity alone does not restrict a participant device's entire network access or communication between devices. This procedure does not establish verified HTTPS hosting, VM connectivity or a full multiplayer competition.
 
 Keep the build enabled on first startup. Add `--no-build` only after building the same code and selected catalog. If startup rejects a missing build or mismatched catalog, rebuild on the next start by omitting that flag. Agree on a maintenance window with the organizer before changing a running host.
 
@@ -50,11 +54,11 @@ curl --fail --silent --output /dev/null --write-out '%{http_code}\n' http://100.
 
 Expect `200` from each, then open the login pages in a browser. If unreachable, check the startup URLs, that the IP belongs to the host and the existing route between devices. HTTP responses alone do not verify authentication, scoring or exercise access. Follow the event steps below and check both correct and incorrect submissions and the score.
 
-Implementation evidence: [options.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts) and [server.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts). Developers can run the following regression checks for listener/origin behavior, acquisition failures and snapshot/build consistency. These tests do not prove isolation on a real network.
+Implementation evidence: [options.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts) , [server.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts), [LAN engine composition](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/application.ts) and [Docker rejection conditions](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/docker-engine.ts). Developers can run the following regression checks for listener/origin behavior, rejection of unisolated LAN exercises, acquisition failures and snapshot/build consistency. These tests do not prove isolation on a real network.
 
 ```sh
 make catalog-download catalog-prepare
-bun test scripts/local-host/tests/public-mode.test.ts scripts/local-host/tests/catalog-startup.test.ts
+bun test scripts/local-host/tests/public-mode.test.ts scripts/local-host/tests/catalog-startup.test.ts scripts/local-host/tests/lan-isolation.test.ts
 ```
 
 <h2 id="first-event">Create and play an event</h2>

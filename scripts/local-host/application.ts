@@ -77,6 +77,26 @@ function displayLocalOrganizerKey(host: RunningLocalHost): void {
   }
 }
 
+/** Listener exposure requires isolation without implicitly enabling native firewall changes. */
+export function localCompetitionEngine(
+  root: string,
+  directory: string,
+  options: ReturnType<typeof parseOptions>,
+): CompetitionEngine {
+  const engine = new CompetitionEngine(
+    root,
+    directory,
+    !options.public,
+    undefined,
+    options.dockerNetworkPool,
+    options.submissionCatalogPath,
+    options.competitionNetwork,
+  );
+  return !options.public && options.hostname !== "127.0.0.1"
+    ? engine.requireNetworkIsolation()
+    : engine;
+}
+
 export async function runLocalHost(
   args: string[],
   lifecycle: {
@@ -90,7 +110,7 @@ export async function runLocalHost(
   const options = parseOptions(args, root);
   if (options.help) {
     console.log(
-      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --console-origin https://play.example --web-origin-template https://{target}.labs.example  Native console-only appliance behind an operator-managed TLS proxy\n  --web-port 5176 --web-services web  Loopback Web broker and declared HTTP service IDs\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted hosting on one RFC1918 or Tailscale IPv4\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. AWS service problems are available only with cloud hosting.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
+      `TenkaCloud local competition hosting\n\nmake local LOCAL_ARGS="[--data <directory>] [--no-build]"\n  --submission-catalog <file>  Organizer-owned fixed-edition answer / self-report catalog\n  --admin-port 5174       Host console; always loopback-only\n  --participant-port 5175 Participant portal\n  --gateway-ports ${DEFAULT_GATEWAY_PORTS}  Exercise gateways, leased only by active local environments\n  --max-active-per-team 3  Per-team local environment limit\n  --max-active-environments 12  Host-wide active environment limit\n  --container-memory-mib 4096  Sum of container memory caps, not a hardware benchmark\n  --docker-network-pool <CIDR>  Explicit private /16–/24 pool for compact project networks; must not overlap LAN/VPN routes\n  --competition-network  Fail-closed native Linux 28.4.x team isolation (requires pool, root firewall/nsenter access)\n  --console-origin https://play.example --web-origin-template https://{target}.labs.example  Native console-only appliance behind an operator-managed TLS proxy\n  --web-port 5176 --web-services web  Loopback Web broker and declared HTTP service IDs\n  --vpn-peers <root-owned-json>  Preconfigured dedicated Linux WireGuard ingress (requires boot seal service)\n  --lan <private-ip> --unsafe-lan  Explicit unencrypted hosting; Docker exercises require native isolation\n  --public-admin-origin https://… --public-participant-origin https://…  Behind a TLS-terminating proxy that passes the original Host header\n  --behind-proxy          Rate-limit by the proxy-appended X-Forwarded-For entry\n\nThe local host uses Bun, or the Node 24 development entry with built interfaces and SQLite. The local Challenge catalog requires Docker Compose. AWS service problems are available only with cloud hosting.\nmake local opens the unified competition console. make down stops local environments while retaining their data.`,
     );
     return;
   }
@@ -106,19 +126,8 @@ export async function runLocalHost(
     ? new NativeVpnIngress(loadVpnPeerPlan(options.vpnPeerPath))
     : undefined;
   const settings = { ...options, ...(vpn ? { ...vpnListener(options, vpn.plan), vpn } : {}) };
-  const host = await startLocalHost(
-    root,
-    settings,
-    (directory) =>
-      new CompetitionEngine(
-        root,
-        directory,
-        !options.public,
-        undefined,
-        options.dockerNetworkPool,
-        options.submissionCatalogPath,
-        options.competitionNetwork,
-      ),
+  const host = await startLocalHost(root, settings, (directory) =>
+    localCompetitionEngine(root, directory, options),
   );
   try {
     lifecycle.onReady?.(host);

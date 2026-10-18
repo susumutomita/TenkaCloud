@@ -191,6 +191,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     return boundedCompose((JSON.parse(definition) as Definition).composeText).cost;
   }
   private problems: Problem[] | undefined;
+  private isolationMandatory = false;
   private readonly relays = new Map<string, LoopbackRelays>();
   private readonly relayClosures = new Map<string, Promise<void>>();
   private readonly running = new Map<string, StartedContainer>();
@@ -269,7 +270,36 @@ export class DockerHostingEngine implements RuntimeEngine {
       await this.reconcileVpn(attempt + 1);
     }
   }
+  /** Monotonic requirement set by the listener composition before recovery. */
+  requireNetworkIsolation(): this {
+    this.isolationMandatory = true;
+    if (this.networkState) this.assertRetainedIsolation(this.networkState.jobs());
+    return this;
+  }
+  private assertIsolationEnabled(): void {
+    if (this.isolationMandatory && !this.competitionNetwork)
+      throw new HostError(
+        409,
+        "Remote Docker exercises require --competition-network with an explicit --docker-network-pool on supported native Linux. Mac/Docker Desktop is not supported; no environment was started or resumed.",
+        "network_isolation_required",
+      );
+  }
+  private assertRetainedIsolation(jobs: readonly Job[]): void {
+    if (!this.isolationMandatory) return;
+    for (const job of jobs) {
+      if (definitionKind(job.definition) !== "compose" || !job.unit || job.status === "DELETED")
+        continue;
+      this.assertIsolationEnabled();
+      if ((JSON.parse(job.unit) as LocalComposeUnit).isolationVersion !== 1)
+        throw new HostError(
+          409,
+          "Retained unisolated Docker environments prevent remote hosting. Stop and retire them through the original loopback host before creating isolated environments. No retained environment was changed.",
+          "network_isolation_required",
+        );
+    }
+  }
   bindNetworkState(state: NonNullable<DockerHostingEngine["networkState"]>): void {
+    this.assertRetainedIsolation(state.jobs());
     this.networkState = state;
   }
   internetAccessAvailability(): { available: boolean; reason?: string } {
@@ -410,10 +440,13 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   private isolationRequired(job: Job): boolean {
     assertNetworkRequirement(job);
-    return this.competitionNetwork || job.networkIsolationVersion === 1;
+    return this.competitionNetwork || this.isolationMandatory || job.networkIsolationVersion === 1;
   }
   networkRequirement(definition: string): 1 | undefined {
-    return this.competitionNetwork && definitionKind(definition) === "compose" ? 1 : undefined;
+    return (this.competitionNetwork || this.isolationMandatory) &&
+      definitionKind(definition) === "compose"
+      ? 1
+      : undefined;
   }
   networkSupported(job: Job): boolean {
     return Boolean(this.running.get(job.jobId)?.unit.isolationVersion === 1);
@@ -551,6 +584,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     retain: (unit: string | null) => void,
     admitted: () => void,
   ): Promise<void> {
+    this.assertIsolationEnabled();
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
     this.assertAllocationRequirements(job);
@@ -663,6 +697,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     return this.withPendingAdmission(job, () => this.recoverRetained(job));
   }
   private async recoverRetained(job: Job): Promise<void> {
+    this.assertIsolationEnabled();
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
     if (!this.competitionNetwork)
@@ -819,6 +854,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     }
   }
   async resume(job: Job): Promise<void> {
+    this.assertIsolationEnabled();
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
     if (!this.competitionNetwork)
@@ -1718,6 +1754,8 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   private assertRunningGuard(job: Job): void {
     const started = this.running.get(job.jobId);
+    if (started && this.isolationRequired(job) && started.unit.isolationVersion !== 1)
+      throw new HostError(409, "This Docker environment has no required network isolation.");
     if (started?.unit.isolationVersion !== 1) return;
     const proof = this.guardProofs.get(job.jobId);
     if (!proof || this.guardNow() - proof.attemptedAt >= 10_000)
