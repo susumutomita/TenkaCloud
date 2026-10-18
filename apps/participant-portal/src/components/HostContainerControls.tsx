@@ -2,6 +2,7 @@ import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
+import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
@@ -127,7 +128,20 @@ export function HostContainerControls({
         <Box>{copy.retained}</Box>
         {(error || session.error) && (
           <Alert type="error" header={copy.failed}>
-            {error ?? session.error}
+            {error ?? (session.diagnostic ? copy.retainedFailure : session.error)}
+            {session.status === "error" && session.diagnostic && (
+              <SpaceBetween size="xs">
+                <Box>{copy.diagnostic}</Box>
+                <CopyToClipboard
+                  textToCopy={`reference: ${session.diagnostic.reference}\noperation: ${session.diagnostic.operation}\nproblem: ${problemId}`}
+                  copyButtonText={copy.copy}
+                  copyButtonAriaLabel={copy.copy}
+                  copySuccessText={copy.copied}
+                  copyErrorText={copy.copyFailed}
+                  variant="inline"
+                />
+              </SpaceBetween>
+            )}
           </Alert>
         )}
         <Button

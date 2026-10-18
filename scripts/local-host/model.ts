@@ -190,6 +190,12 @@ export interface Job {
   /** Committed before a runtime can be created; retained until physical cleanup succeeds. */
   unit: string | null;
   error?: string;
+  /** Correlates an on-demand failure with organizer deployment details. */
+  diagnostic?: {
+    reference: string;
+    operation: "start" | "stop" | "restart" | "teardown" | "recover";
+    problemId: string;
+  };
   /** Successful creation time for this deployment generation; resuming preserves it. */
   deployedAt?: number;
   /** An organizer operation on this single environment that has not finished yet. */

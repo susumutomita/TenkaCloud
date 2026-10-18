@@ -81,6 +81,11 @@ export interface EventDeploymentSummary {
   status: EventDeploymentStatus;
   /** Why the last deployment or environment operation failed (local competition host). */
   readonly error?: string;
+  readonly diagnostic?: {
+    readonly reference: string;
+    readonly operation: "start" | "stop" | "restart" | "teardown" | "recover";
+    readonly problemId: string;
+  };
   /** Issue #3226: an in-flight single-environment operation (local competition host). */
   readonly operation?: LocalEnvironmentOperation;
   /** Whether the pinned local-host runtime supports pausing this environment. */

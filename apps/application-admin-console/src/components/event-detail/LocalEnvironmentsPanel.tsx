@@ -154,6 +154,13 @@ export function LocalEnvironmentsPanel({
                       ? t(`local_host.env_operation_${row.operation}`)
                       : t(`local_host.env_status_${row.status}`)}
                   </StatusIndicator>
+                  {row.diagnostic && (
+                    <Box variant="small">
+                      <code>
+                        {row.diagnostic.reference} / {row.diagnostic.operation} / {row.problemId}
+                      </code>
+                    </Box>
+                  )}
                   {row.error && (
                     <Box variant="small" color="text-status-error">
                       {row.error}

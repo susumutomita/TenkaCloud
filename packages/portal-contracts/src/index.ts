@@ -268,6 +268,12 @@ export interface ParticipantProblemView {
   readonly containerSession?: {
     readonly status: "stopped" | "starting" | "running" | "stopping" | "error";
     readonly error?: string;
+    /** Safe correlation with organizer-only deployment details. */
+    readonly diagnostic?: {
+      readonly reference: string;
+      readonly operation: "start" | "stop" | "restart" | "teardown" | "recover";
+      readonly problemId: string;
+    };
   };
   /**
    * #1975: 問題文 (metadata.json 由来)。 local mode の Participant API は同梱して返すので、
