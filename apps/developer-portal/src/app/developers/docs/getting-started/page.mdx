@@ -17,7 +17,7 @@ make install
 make local
 ```
 
-Before startup, `make local` downloads the URL and `ref` selected in `catalog-sources.json`, defaulting to TenkaCloudChallenge's `main`. Network access is required; acquisition failure stops startup. `make deploy` uses the same selection. Saved events retain their immutable acquisition snapshots. `problems/` is a generated build view, not a Git submodule. To use an authoring branch, change the configured `ref`. See [catalog-sources.json](https://github.com/susumutomita/TenkaCloud/blob/main/catalog-sources.json) and [downloaded-catalog.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts).
+Before startup, `make local` acquires the Git sources (URL and `ref`) or local sources (`path`) selected in `catalog-sources.json`. The default is TenkaCloudChallenge's `main`, which requires network access. Acquisition failure stops startup. `make deploy` uses the same selection. Saved events retain their immutable acquisition snapshots. `problems/` is a generated build view, not a Git submodule. To use an authoring branch, change the configured `ref`. See [catalog-sources.json](https://github.com/susumutomita/TenkaCloud/blob/main/catalog-sources.json) and [downloaded-catalog.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts).
 
 The default organizer URL is `http://127.0.0.1:5174`; the participant URL is `http://127.0.0.1:5175`. Use the URLs printed by the process. Sign in with the organizer key only; no username or password is needed. Each interactive `make local` start displays a new key once and revokes the previous organizer key and sessions. To rotate it while running, use `make local-reset` in another interactive terminal with the same data directory. Events, scores, participant keys and problem data are preserved. Noninteractive and public/container starts retain existing keys without printing them to logs.
 
@@ -79,6 +79,14 @@ Expect health `status: ok` / `role: participant`, successful TCP 5175 and unreac
 Start the event after everyone connects. Check native actions and scores; for Docker, use the portal-issued gateway URL to reach that team’s exercise. Check correct/incorrect submissions and hints where the problem supports them. End Event stops scoring; preserve needed results. Use Stop (keep data) to retain environments, then have the organizer stop the host through the maintenance procedure. Before selecting Teardown, confirm the deletion target and data impact.
 
 Finally, the organizer uses the event host's Share dialog to Revoke invite for the recipient and cancel unused invitations. Verify in the Share dialog that the recipient and unused invitations are revoked. Failed participant reconnection is a supplementary check: failure after host shutdown alone does not prove revocation. This revokes sharing without deleting someone else's device. Joining again requires a fresh invitation and acceptance. Use a recipient-side removal menu only after verifying its target and scope; do not confuse it with generic Remove machine.
+
+<h2 id="changed-host-ip">When the event host IP changes</h2>
+
+`--lan` binds the IPv4 selected at startup; it does not follow changes to Tailscale registration or the selected tailnet. Recheck the host's own `tailscale ip -4`, its selected tailnet, and the host name/IP shown to the recipient. Do not bind a participant's IP or a conflict-remapped recipient address. If only the recipient sees a different IP, stop this IP-based setup and review the route with the administrators; that case is outside this procedure's supported path.
+
+Arrange a maintenance window, preserve data with `make down`, then start `make local` with the correct IPv4 in `--lan`. Carry over the reviewed `--data`, `CATALOG_SOURCES`, isolation and gateway options; keep the build enabled. For a custom `--data`, also stop with `make down LOCAL_ARGS="--data <same-directory>"`. These are operations for the organizer to review and perform. An IP change requires neither `local-clear` nor deleting data.
+
+Redistribute the new `http://<host-IPv4>:5175/` from the startup log and recheck `/healthz`, login and any active gateways. The organizer still uses `http://127.0.0.1:5174`. Administrators separately review IP-dependent sharing and effective permissions; startup does not repair Tailscale or OS settings. See [`options.ts`](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts) and [`server.ts`](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts) for the binding and URL behavior.
 
 <h2 id="check-local-connection">Check startup and connectivity</h2>
 

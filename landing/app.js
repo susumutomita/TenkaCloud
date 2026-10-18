@@ -258,13 +258,13 @@
         "まず同じ PC で起動と得点を確認します。AWS 開催は、対応範囲・費用・権限を運営ガイドで確認してから別途設定します。",
       "onboard.s1.h": "取得して、起動する。",
       "onboard.s1.p":
-        "起動ガイドに沿って clone → make install → make local。問題カタログは指定した URL と ref から取得します。初回は build を省略しません。",
+        "起動ガイドに沿って clone → make install → make local。問題は URL/ref またはローカル path から取得します。初回は build を省略しません。",
       "onboard.s2.h": "大会とチームを用意する。",
       "onboard.s2.p":
         "同じ PC の 127.0.0.1:5174 で、表示された主催者キーを使います。大会・チーム・対応問題を選び、開始します。主催者キーは参加者へ渡しません。",
       "onboard.s3.h": "参加して、得点を確認する。",
       "onboard.s3.p":
-        "同じ PC の 127.0.0.1:5175 へチームキーで参加します。まず Crypto Battle などの native 問題を試し、操作と得点を確認します。Docker の利用条件は起動ガイドで確認してください。",
+        "同じ PC の 127.0.0.1:5175 へチームキーで参加します。まず Crypto Battle などの native 問題を試し、操作と得点を確認します。別端末の Tailscale 接続と Docker の利用条件は起動ガイドで確認してください。",
       "onboard.s3.line2": "問題が割り当てられました",
 
       "trust.eyebrow": "セキュリティ",
@@ -558,13 +558,13 @@
         "First check startup and scoring on one PC. For AWS hosting, review supported capabilities, costs and permissions in the organizer guide before configuring it separately.",
       "onboard.s1.h": "Clone and start the host.",
       "onboard.s1.p":
-        "Follow the startup guide: clone, make install, then make local. The catalog is downloaded from the selected URL and ref. Keep the build enabled on the first start.",
+        "Follow the startup guide: clone, make install, then make local. Problems are acquired from selected URL/ref or local path sources. Keep the build enabled on the first start.",
       "onboard.s2.h": "Create an event and a team.",
       "onboard.s2.p":
         "Open 127.0.0.1:5174 on the host and sign in with the displayed organizer key. Create the event and team, select supported problems and start. Keep the organizer key private.",
       "onboard.s3.h": "Join and check the score.",
       "onboard.s3.p":
-        "Join 127.0.0.1:5175 on the same PC with the team key. Try a native problem such as Crypto Battle and check actions and scores. See the startup guide for Docker requirements.",
+        "Join 127.0.0.1:5175 on the same PC with the team key. Try a native problem such as Crypto Battle and check actions and scores. See the startup guide for remote Tailscale access and Docker requirements.",
       "onboard.s3.line2": "Problem assigned",
 
       "trust.eyebrow": "Security",
