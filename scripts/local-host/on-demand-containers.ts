@@ -76,6 +76,7 @@ export function assertContainerBudget(
 export function containerSession(job: Job): {
   status: "stopped" | "starting" | "running" | "stopping" | "error";
   error?: string;
+  diagnostic?: Job["diagnostic"];
 } {
   if (job.operation === "stop") return { status: "stopping" };
   if (job.operation === "restart" || job.status === "IN_PROGRESS") return { status: "starting" };
@@ -83,6 +84,15 @@ export function containerSession(job: Job): {
   if (job.status === "FAILED")
     return {
       status: "error",
+      ...(job.diagnostic
+        ? {
+            diagnostic: {
+              reference: job.diagnostic.reference,
+              operation: job.diagnostic.operation,
+              problemId: job.problemId,
+            },
+          }
+        : {}),
       error:
         "The environment operation failed. Its retained data was not reset; retry or ask the organizer to inspect it.",
     };

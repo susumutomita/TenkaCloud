@@ -37,7 +37,10 @@ class SyntheticContainers extends DockerHostingEngine {
     pause: [] as string[],
     remove: [] as string[],
   };
+  failRecover = false;
+  failPause = false;
   failResume = false;
+  resumeError = "Synthetic resume failure";
   readonly evaluations: { jobId: string; submission: string }[] = [];
   afterEvaluate?: () => void;
   override async evaluate(job: Job, submission: string): Promise<boolean> {
@@ -54,18 +57,20 @@ class SyntheticContainers extends DockerHostingEngine {
     this.retained.set(job.jobId, { progress: 7, running: true });
   }
   override async pause(job: Job) {
+    if (this.failPause) throw new Error("Synthetic stop failure");
     this.calls.pause.push(job.jobId);
     const state = this.retained.get(job.jobId);
     if (state) state.running = false;
   }
   override async resume(job: Job) {
     this.calls.resume.push(job.jobId);
-    if (this.failResume) throw new Error("Synthetic resume failure");
+    if (this.failResume) throw new Error(this.resumeError);
     const state = this.retained.get(job.jobId);
     if (!state) throw new Error("Missing synthetic runtime");
     state.running = true;
   }
   override async recover(job: Job) {
+    if (this.failRecover) throw new Error("Synthetic recovery failure");
     if (!this.retained.has(job.jobId)) throw new Error("Missing synthetic runtime");
   }
   override async stop(job: Job) {
@@ -675,4 +680,73 @@ test("dormant isolation requirement survives an engine restart without the optio
     false,
     true,
   );
+});
+
+test("failure references correlate only the authenticated team's safe details with organizer causes", async () => {
+  await fixture(async (f) => {
+    const [team, other] = f.teams;
+    if (!team || !other) throw new Error("Expected teams");
+    const job = f.store.jobs(f.eventId, team.teamId)[0];
+    if (!job) throw new Error("Expected job");
+    const controlPath = `/portal/me/problems/${job.problemId}/container`;
+    const action = (verb: "start" | "stop") =>
+      f.service.participant(request("POST", `${controlPath}/${verb}`, team.teamLoginKey));
+    await action("start");
+    await f.service.drain();
+    await action("stop");
+    await f.service.drain();
+    f.engine.failResume = true;
+    f.engine.resumeError = "token=synthetic-secret /private/host/path internal container stderr";
+    await action("start");
+    await f.service.drain();
+    const failed = f.store.job(job.jobId);
+    expect(failed.diagnostic).toMatchObject({ operation: "start", problemId: job.problemId });
+    const reference = failed.diagnostic?.reference;
+    expect(reference).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/u);
+    const participant = await f.service.participant(
+      request("GET", "/portal/me", team.teamLoginKey),
+    );
+    const publicBody = JSON.stringify(participant.body);
+    expect(publicBody).toContain(reference as string);
+    for (const secret of ["synthetic-secret", "/private/host/path", "stderr"])
+      expect(publicBody).not.toContain(secret);
+    const otherView = await f.service.participant(request("GET", "/portal/me", other.teamLoginKey));
+    expect(JSON.stringify(otherView.body)).not.toContain(reference as string);
+    await expect(
+      f.service.admin(request("GET", `/events/${f.eventId}`, team.teamLoginKey)),
+    ).rejects.toMatchObject({ status: 401 });
+    const admin = await f.service.admin(request("GET", `/events/${f.eventId}`, f.admin));
+    expect(JSON.stringify(admin.body)).toContain(reference as string);
+    expect(JSON.stringify(admin.body)).toContain(f.engine.resumeError);
+    await action("start");
+    await f.service.drain();
+    expect(f.store.job(job.jobId).diagnostic?.reference).not.toBe(reference);
+    f.engine.failRecover = true;
+    await f.service.recover();
+    expect(f.store.job(job.jobId).diagnostic).toMatchObject({
+      operation: "recover",
+      problemId: job.problemId,
+    });
+    expect(f.store.job(job.jobId).diagnostic?.reference).not.toBe(reference);
+    f.engine.failRecover = false;
+    f.engine.failResume = false;
+    await action("start");
+    await f.service.drain();
+    expect(f.store.job(job.jobId).diagnostic).toBeUndefined();
+    expect(f.store.job(job.jobId).error).toBeUndefined();
+    f.engine.failPause = true;
+    await action("stop");
+    await f.service.drain();
+    expect(f.store.job(job.jobId).diagnostic).toMatchObject({
+      operation: "stop",
+      problemId: job.problemId,
+    });
+    const interrupted = f.store.job(job.jobId);
+    const stopReference = interrupted.diagnostic?.reference;
+    f.store.putJob({ ...interrupted, status: "IN_PROGRESS", unit: null });
+    await f.service.recover();
+    expect(f.store.job(job.jobId).diagnostic?.reference).not.toBe(stopReference);
+    expect(f.store.job(job.jobId).diagnostic?.operation).toBe("recover");
+    expect(f.store.job(job.jobId).error).toContain("interrupted");
+  });
 });

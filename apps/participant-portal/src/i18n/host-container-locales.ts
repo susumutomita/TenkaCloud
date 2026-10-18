@@ -12,6 +12,12 @@ export const hostContainerMessages = {
     stop: "Stop (keep data)",
     retained: "Stopping preserves your work. Start again to resume it.",
     failed: "Environment operation failed",
+    diagnostic:
+      "Share this reference with the organizer. They can find the cause in the event problem environments.",
+    retainedFailure: "The operation failed. Your retained data was not reset.",
+    copy: "Copy diagnostic details",
+    copied: "Copied",
+    copyFailed: "Copy failed",
     team_container_limit:
       "Your team has reached its active environment limit. Stop one of your running environments, then retry.",
     host_container_limit:
@@ -34,6 +40,12 @@ export const hostContainerMessages = {
     stop: "停止（データ保持）",
     retained: "停止しても作業データは保持されます。再開すると続きを実行できます。",
     failed: "問題環境の操作に失敗しました",
+    diagnostic:
+      "この参照情報を主催者に共有してください。主催者は大会の問題環境から原因を確認できます。",
+    retainedFailure: "操作に失敗しました。保持しているデータは初期化されていません。",
+    copy: "診断情報をコピー",
+    copied: "コピーしました",
+    copyFailed: "コピーできませんでした",
     team_container_limit:
       "チームの起動上限に達しています。実行中の環境を1つ停止してから、再度お試しください。",
     host_container_limit:
