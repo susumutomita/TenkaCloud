@@ -102,7 +102,17 @@ Use the printed IP URL rather than a MagicDNS URL with this setup. Changing the 
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
 
-Create a codespace, wait for dependency setup, then run `make local` in its terminal. The configured organizer and participant ports are 5174 and 5175. The recording shows an earlier local experience; forwarded-origin and exercise routing for the current competition host still need verification. Use the local setup above for a reviewed event.
+New Codespaces run [.devcontainer/post-create.sh](./.devcontainer/post-create.sh): it installs the exact Bun version from `mise.toml` with the [official installer](https://bun.com/docs/installation), verifies it, then runs `make install` with lifecycle scripts disabled and explicit Husky setup. The configured universal image uses `/home/codespace/.bun`; `remoteEnv` adds its binary directory to new terminals. Problems are acquired by `make local` from the selected sources, not a Git submodule.
+
+An existing codespace does not rerun initialization just because its checkout changes. After adopting this revision, you can explicitly prepare dependencies from the repository root as below. Coordinate maintenance first if a host is running; this does not rebuild the codespace or start a host.
+
+```bash
+bash .devcontainer/post-create.sh
+export PATH="${BUN_INSTALL:-$HOME/.bun}/bin:$PATH"
+bun --version # must match mise.toml
+```
+
+The configured ports remain 5174 and 5175. Ordinary `make local` does not recognize forwarded HTTPS origins: opening a forwarded URL can fail the strict Host/Origin checks. Existing `--public-admin-origin` and `--public-participant-origin` are a native-only candidate, with the organizer port kept Private; Codespaces proxy/authentication and remote play remain unverified. The recording shows an earlier experience. Use the local setup above for a reviewed event.
 
 ### Deploy on AWS
 
