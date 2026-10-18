@@ -82,7 +82,10 @@ function renderCatalog(path = "/problems") {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/problems" element={<LocalHostCatalogPage config={config} />} />
-          <Route path="/detail-without-id" element={<LocalHostCatalogPage config={config} detail />} />
+          <Route
+            path="/detail-without-id"
+            element={<LocalHostCatalogPage config={config} detail />}
+          />
           <Route
             path="/problems/:problemId"
             element={<LocalHostCatalogPage config={config} detail />}
