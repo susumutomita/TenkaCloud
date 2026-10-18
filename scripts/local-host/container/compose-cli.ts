@@ -33,12 +33,16 @@ const DOCKER_COMPOSE_STANDALONE: ComposeCli = {
   label: "docker-compose",
 };
 
-export type CommandSucceeds = (command: string, args: readonly string[]) => boolean;
+export type CommandSucceeds = (
+  command: string,
+  args: readonly string[],
+  timeoutMs?: number,
+) => boolean;
 
-function commandSucceeds(command: string, args: readonly string[]): boolean {
+function commandSucceeds(command: string, args: readonly string[], timeoutMs = 3_000): boolean {
   return (
-    spawnSync(command, [...args], { stdio: "ignore", env: process.env, timeout: 3_000 }).status ===
-    0
+    spawnSync(command, [...args], { stdio: "ignore", env: process.env, timeout: timeoutMs })
+      .status === 0
   );
 }
 
@@ -80,13 +84,23 @@ export function resolveComposeCli(
 }
 
 /** Read-only capability check; no pull, build, context switch or daemon startup. */
-export function dockerAvailability(succeeds: CommandSucceeds = commandSucceeds): {
+export function dockerAvailability(
+  succeeds: CommandSucceeds = commandSucceeds,
+  now: () => number = performance.now.bind(performance),
+): {
   available: boolean;
   reason?: string;
 } {
   try {
-    resolveComposeCli(undefined, succeeds);
-    if (!succeeds("docker", ["info", "--format", "{{.ServerVersion}}"]))
+    // Share one startup budget across plugin/fallback/daemon probes. Giving each
+    // a full timeout can delay even native-only hosting for up to nine seconds.
+    const deadline = now() + 3_000;
+    const withinBudget: CommandSucceeds = (command, args) => {
+      const remaining = Math.ceil(deadline - now());
+      return remaining > 0 && succeeds(command, args, remaining) && now() < deadline;
+    };
+    resolveComposeCli(undefined, withinBudget);
+    if (!withinBudget("docker", ["info", "--format", "{{.ServerVersion}}"]))
       throw new Error("Docker daemon is unavailable.");
     return { available: true };
   } catch {

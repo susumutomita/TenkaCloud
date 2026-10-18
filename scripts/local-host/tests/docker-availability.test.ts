@@ -31,6 +31,53 @@ for (const missing of ["cli", "compose", "daemon", "healthy"])
     ).toBe(true);
   });
 
+test("Docker probes share one startup deadline, including the standalone fallback", () => {
+  let elapsed = 0;
+  const budgets: (number | undefined)[] = [];
+  const status = dockerAvailability(
+    (command, args, timeoutMs) => {
+      budgets.push(timeoutMs);
+      elapsed += args.includes("info") ? 900 : 1_000;
+      return command === "docker-compose" || args.includes("info");
+    },
+    () => elapsed,
+  );
+  expect(status.available).toBe(true);
+  expect(budgets).toEqual([3_000, 2_000, 1_000]);
+});
+
+for (const elapsedAfterFirst of [3_000, 3_100])
+  test(`Docker startup stops probing after ${elapsedAfterFirst}ms even if the command succeeds`, () => {
+    let elapsed = 0;
+    let calls = 0;
+    const status = dockerAvailability(
+      () => {
+        calls++;
+        elapsed = elapsedAfterFirst;
+        return true;
+      },
+      () => elapsed,
+    );
+    expect(status.available).toBe(false);
+    expect(calls).toBe(1);
+    expect(status.reason).toContain("Native problems remain available");
+  });
+
+test("Docker daemon success after the shared deadline is unavailable", () => {
+  let elapsed = 0;
+  const budgets: (number | undefined)[] = [];
+  const status = dockerAvailability(
+    (_command, args, timeoutMs) => {
+      budgets.push(timeoutMs);
+      elapsed += args.includes("info") ? 400 : 2_700;
+      return true;
+    },
+    () => elapsed,
+  );
+  expect(status.available).toBe(false);
+  expect(budgets).toEqual([3_000, 300]);
+});
+
 test("unavailable Docker is warned and cannot enter new events while native problems remain selectable", async () => {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const directory = mkdtempSync(join(tmpdir(), "tc-no-docker-catalog-"));
