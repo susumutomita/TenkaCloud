@@ -6,9 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as transport from "../../lib/node-http";
+import { localCompetitionEngine } from "../application";
 import { parseGatewayPorts } from "../gateway-ports";
 import { startHttpHost } from "../http";
-import { parseOptions } from "../options";
+import { definitionKind } from "../model";
+import { type PublicExposure, parseOptions } from "../options";
 import { type RunningLocalHost, startLocalHost } from "../server";
 import { HistoricalCompetitionEngine as CompetitionEngine } from "./historical-competition-fixture";
 
@@ -26,6 +28,142 @@ afterEach(async () => {
 
 const parse = (...args: string[]) => parseOptions(args, root);
 const publicArgs = ["--public-admin-origin", ADMIN, "--public-participant-origin", PLAY];
+const codespaces = {
+  CODESPACES: "true",
+  CODESPACE_NAME: "fixture-codespace-abc123",
+  GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
+};
+
+test("Codespaces derives exact HTTPS origins from validated environment and selected ports", () => {
+  const options = parseOptions([], root, codespaces);
+  expect(options.public).toEqual({
+    adminOrigin: "https://fixture-codespace-abc123-5174.app.github.dev",
+    participantOrigin: "https://fixture-codespace-abc123-5175.app.github.dev",
+    behindProxy: false,
+  });
+  expect(options.hostname).toBe("0.0.0.0");
+  const changed = parseOptions(
+    ["--admin-port", "6100", "--participant-port", "6101"],
+    root,
+    codespaces,
+  );
+  expect(changed.public?.adminOrigin).toBe("https://fixture-codespace-abc123-6100.app.github.dev");
+  expect(changed.public?.participantOrigin).toBe(
+    "https://fixture-codespace-abc123-6101.app.github.dev",
+  );
+});
+
+test("Codespaces preserves explicit origins and networking choices without enabling proxy trust", () => {
+  expect(parseOptions(publicArgs, root, { CODESPACES: "true" }).public?.adminOrigin).toBe(ADMIN);
+  expect(() => parseOptions(["--public-admin-origin", ADMIN], root, codespaces)).toThrow(
+    "Give both",
+  );
+  const lan = parseOptions(["--lan", sharedAddresses[1], "--unsafe-lan"], root, codespaces);
+  expect(lan.public).toBeUndefined();
+  expect(lan.hostname).toBe(sharedAddresses[1]);
+  expect(parseOptions([], root, { ...codespaces, CODESPACES: "false" }).hostname).toBe("127.0.0.1");
+  expect(parseOptions([], root, {}).public).toBeUndefined();
+});
+
+test("Codespaces preserves explicit native VPN/appliance configuration and excludes Compose in its default factory", () => {
+  // eslint-disable-next-line sonarjs/no-hardcoded-ip -- Parser-only private pool fixture.
+  const isolated = ["--competition-network", "--docker-network-pool", "10.240.0.0/16"];
+  const vpn = parseOptions([...isolated, "--vpn-peers", "/fixture/peers.json"], root, codespaces);
+  expect(vpn.public).toBeUndefined();
+  expect(vpn.vpnPeerPath).toBe("/fixture/peers.json");
+  const appliance = parseOptions(
+    [
+      ...isolated,
+      "--console-origin",
+      PLAY,
+      "--web-origin-template",
+      "https://{target}.labs.example.test",
+    ],
+    root,
+    codespaces,
+  );
+  expect(appliance.public).toBeUndefined();
+  expect(appliance.hostname).toBe("127.0.0.1");
+  const directory = mkdtempSync(join(tmpdir(), "tenka-codespaces-factory-"));
+  directories.push(directory);
+  const engine = localCompetitionEngine(root, directory, parseOptions([], root, codespaces));
+  expect(engine.catalog().some((problem) => problem.problemId === "crypto-battle")).toBe(true);
+  expect(engine.catalog().some((problem) => definitionKind(problem.definition) === "compose")).toBe(
+    false,
+  );
+});
+
+test("incomplete or unsafe Codespaces metadata fails before opening listeners", () => {
+  for (const name of [
+    "",
+    "with.dot",
+    "UPPER",
+    "-leading",
+    "trailing-",
+    "a".repeat(64),
+    "name/path",
+  ])
+    expect(() => parseOptions([], root, { ...codespaces, CODESPACE_NAME: name })).toThrow(
+      "Codespaces",
+    );
+  for (const domain of [
+    undefined,
+    "",
+    "evil.test",
+    "app.github.dev.evil.test",
+    "https://app.github.dev",
+    "*.app.github.dev",
+  ])
+    expect(() =>
+      parseOptions([], root, { ...codespaces, GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: domain }),
+    ).toThrow("Codespaces");
+  expect(() => parseOptions([], root, { CODESPACES: "true" })).toThrow("Codespaces");
+});
+
+test("Codespaces HTTP accepts only the selected forwarded origins and retains organizer authentication", async () => {
+  const exposure = parseOptions([], root, codespaces).public;
+  expect(exposure).toBeDefined();
+  const { adminPort, participantPort } = await host({ public: true, exposure });
+  const adminHost = new URL(exposure?.adminOrigin ?? "").host;
+  const playHost = new URL(exposure?.participantOrigin ?? "").host;
+  const adminConfig = await call(adminPort, { path: "/runtime-config.json", host: adminHost });
+  expect(adminConfig.status).toBe(200);
+  expect(adminConfig.body.participantPortalUrl).toBe(exposure?.participantOrigin);
+  expect(
+    (await call(participantPort, { path: "/runtime-config.json", host: playHost })).status,
+  ).toBe(200);
+  expect(
+    (await call(participantPort, { path: "/runtime-config.json", host: adminHost })).status,
+  ).toBe(403);
+  expect(
+    (
+      await call(participantPort, {
+        path: "/runtime-config.json",
+        host: "another-5175.app.github.dev",
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await call(participantPort, {
+        path: "/runtime-config.json",
+        host: playHost,
+        headers: { origin: ADMIN },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await call(adminPort, {
+        path: "/api/host/login",
+        method: "POST",
+        host: adminHost,
+        headers: { origin: exposure?.adminOrigin ?? "" },
+        body: { key: INVALID_KEY },
+      })
+    ).status,
+  ).toBe(401);
+});
 
 test("public origins bind every interface and keep both origins", () => {
   const options = parse(...publicArgs, "--behind-proxy");
@@ -168,6 +306,7 @@ async function host(options: {
   behindProxy?: boolean;
   dynamicPorts?: boolean;
   hostname?: string;
+  exposure?: PublicExposure;
 }) {
   const data = mkdtempSync(join(tmpdir(), "tenka-public-"));
   directories.push(data);
@@ -183,7 +322,7 @@ async function host(options: {
       gatewayPorts: parseGatewayPorts("5200-5239"),
       ...(options.public
         ? {
-            public: {
+            public: options.exposure ?? {
               adminOrigin: ADMIN,
               participantOrigin: PLAY,
               behindProxy: options.behindProxy ?? false,
@@ -200,7 +339,9 @@ async function host(options: {
   const bootstrap = await call(adminPort, {
     path: "/api/host/login",
     method: "POST",
-    host: options.public ? "admin.example.test" : `127.0.0.1:${adminPort}`,
+    host: options.public
+      ? new URL(options.exposure?.adminOrigin ?? ADMIN).host
+      : `127.0.0.1:${adminPort}`,
     body: { key: started.organizerKey },
   });
   if (bootstrap.status !== 200) throw new Error("Public-mode organizer-key sign-in failed.");
