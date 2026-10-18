@@ -164,23 +164,22 @@
       <h1>
         <span data-i18n="hero.h1a">The cloud engineer's </span><em data-i18n="hero.h1b">Tenka-Ichi.</em>
       </h1>
-      <p class="sub" data-i18n="hero.sub">An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. The current version supports local Compose exercises and cloud hello-world / Cryptography Battle.</p>
-      <p class="hero-vibe" data-i18n="hero.vibe"><strong>Start with a local competition.</strong> Local hosting uses SQLite and needs no AWS account. Check the <a href="/docs/manual/organizer/index.en.html">organizer guide</a> for cloud capabilities and costs.</p>
-      <!-- #2711 follow-up: /portal-demo/start の deep link は静的ホスティングの rewrite が
-           効かない環境で 404 fallback に崩れるため、 実在する index.html に着地して
-           SPA 側 (`goto=start`) で /start へ遷移する。 -->
-      <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
-        <span class="hero-quest-meta" data-i18n="hero.quest_meta">First quest · No signup · ~3 min</span>
+      <p class="sub" data-i18n="hero.sub">An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. Start with a local competition on one PC.</p>
+      <p class="hero-vibe" data-i18n="hero.vibe"><strong>Start on one PC.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.</p>
+      <a class="hero-quest-card" href="/docs/getting-started/index.en.html#local-start" data-i18n-href="hero.startHref" data-cta="local-start">
+        <span class="hero-quest-meta" data-i18n="hero.quest_meta">Local startup · No AWS account</span>
         <span class="hero-quest-tags">
-          <code>what-is-tenkacloud</code>
-          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">Tutorial</span>
-          <span class="hero-quest-badge" data-i18n="hero.quest_diff">Difficulty: Intro</span>
+          <code>make local</code>
+          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">Getting started</span>
+          <span class="hero-quest-badge" data-i18n="hero.quest_diff">Requires Bun and Make</span>
         </span>
-        <span class="hero-quest-title" data-i18n="hero.quest_title">Learn what TenkaCloud is — by playing it.</span>
-        <span class="hero-quest-desc" data-i18n="hero.quest_desc">An introductory browser demo of the earlier interface. Authentication, scores and operations differ from a real event. Use the documentation for current hosting instructions.</span>
-        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">Start with this quest</span> →</span>
+        <span class="hero-quest-title" data-i18n="hero.quest_title">Start the host and solve a problem as a team.</span>
+        <span class="hero-quest-desc" data-i18n="hero.quest_desc">Follow the clone, startup and connection checks. Try Docker exercises on the same PC first. Remote Docker requires supported native Linux isolation; Mac / Docker Desktop is unsupported.</span>
+        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">Open the startup guide</span> →</span>
       </a>
       <p class="hero-secondary">
+        <a href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill"><span data-i18n="hero.cta_demo">Earlier introductory demo</span></a>
+        ·
         <a href="/videos/lp/tenkacloud-30s.mp4" target="_blank" rel="noopener noreferrer" data-cta="watch-30s"><span data-i18n="hero.cta_video">▶ Watch the 30-second tour</span></a>
         ·
         <span data-i18n="hero.host_prefix">Hosting an event?</span>
@@ -272,7 +271,7 @@
     <div class="twoup">
       <div class="tile">
         <h3 class="kicker" data-i18n="modes.battle.kicker">Battle</h3>
-        <p data-i18n="modes.battle.p">Cryptography Battle keeps shared match state and scores player actions. AWS endpoint-uptime Battles remain part of the cloud restoration work.</p>
+        <p data-i18n="modes.battle.p">Cryptography Battle keeps shared match state and scores player actions. Check the organizer guide for AWS problem scoring and access conditions.</p>
         <div class="demo">
           <div class="portal-preview score-events-preview">
             <div class="portal-page-title" data-i18n="preview.score_events.title">Score events</div>
@@ -381,8 +380,8 @@
     <div class="col">
       <div class="role" data-i18n="aud.b.role">Platform / SRE</div>
       <h3 data-i18n="aud.b.h">Design drills from one screen.</h3>
-      <p data-i18n="aud.b.p">Manage events, teams, problems and scores in shared consoles. The current cloud hello-world exercise uses scoped CLI access. Check implementation status for Console access and other exercises.</p>
-      <a class="more" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.b.more">Operator guide</span> ›</a>
+      <p data-i18n="aud.b.p">Manage events, teams, problems and scores in shared consoles. Local and AWS hosting use different runtimes. Check the organizer guide for each problem’s access conditions and verification status.</p>
+      <a class="more" href="./docs/manual/organizer/index.en.html" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.b.more">Operator guide</span> ›</a>
     </div>
     <div class="col">
       <div class="role" data-i18n="aud.c.role">Engineers / individual learners</div>
@@ -398,26 +397,26 @@
     <div class="onboard-layout">
       <div>
         <div class="eyebrow" data-i18n="onboard.eyebrow">Onboarding</div>
-        <h2 data-i18n="onboard.h2">Connect and run a cloud competition.</h2>
-        <p class="lead" data-i18n="onboard.lead">Review platform and competitor-account permissions before starting. The current CLI and the pipeline pinned to an earlier release are separate deployment paths.</p>
+        <h2 data-i18n="onboard.h2">Try a local competition, step by step.</h2>
+        <p class="lead" data-i18n="onboard.lead">First check startup and scoring on one PC. For AWS hosting, review supported capabilities, costs and permissions in the organizer guide before configuring it separately.</p>
       </div>
       <div class="steps">
         <div class="step">
           <div class="n">01</div>
-          <h4 data-i18n="onboard.s1.h">Prepare the platform.</h4>
-          <p data-i18n="onboard.s1.p">Check the AWS account, region and required permissions, then follow the organizer guide for make deploy.</p>
+          <h4 data-i18n="onboard.s1.h">Clone and start the host.</h4>
+          <p data-i18n="onboard.s1.p">Follow the startup guide: clone, make install, then make local. The catalog is downloaded from the selected URL and ref. Keep the build enabled on the first start.</p>
           <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><path d="M21 43H17a10 10 0 0 1 0-20 15 15 0 0 1 28-5 12 12 0 0 1 2 24h-5" fill="none" stroke="#a855f7" stroke-width="3"/><path d="M32 48V29m0 0-8 8m8-8 8 8" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
         <div class="step">
           <div class="n">02</div>
-          <h4 data-i18n="onboard.s2.h">Locked with ExternalId.</h4>
-          <p data-i18n="onboard.s2.p">For AWS exercises, prepare the competitor bootstrap and verify its registered role and ExternalId.</p>
+          <h4 data-i18n="onboard.s2.h">Create an event and a team.</h4>
+          <p data-i18n="onboard.s2.p">Open 127.0.0.1:5174 on the host and sign in with the displayed organizer key. Create the event and team, select supported problems and start. Keep the organizer key private.</p>
           <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><circle cx="32" cy="23" r="10" fill="none" stroke="#22c55e" stroke-width="4"/><path d="M15 53c3-11 10-17 17-17s14 6 17 17" fill="none" stroke="#07111f" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="23" r="16" fill="none" stroke="#a855f7" stroke-width="2" opacity=".45"/></svg></div>
         </div>
         <div class="step">
           <div class="n">03</div>
-          <h4 data-i18n="onboard.s3.h">Compete from the portal.</h4>
-          <p data-i18n="onboard.s3.p">Create the event and teams, prepare supported problems and start the competition. Participants start local Docker exercises when needed.</p>
+          <h4 data-i18n="onboard.s3.h">Join and check the score.</h4>
+          <p data-i18n="onboard.s3.p">Join 127.0.0.1:5175 on the same PC with the team key. Try a native problem such as Crypto Battle and check actions and scores. See the startup guide for Docker requirements.</p>
           <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><rect x="12" y="14" width="40" height="31" rx="3" fill="none" stroke="#07111f" stroke-width="3"/><path d="M20 50h24" stroke="#07111f" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="30" r="8" fill="none" stroke="#2563eb" stroke-width="3"/></svg></div>
         </div>
       </div>
@@ -435,10 +434,10 @@
       </div>
       <div class="flow sso-preview">
         <div class="credential-title">SSO Credentials</div>
-        <div class="credential-sub" data-i18n="preview.sso.desc">Example of the earlier AWS Console interface. Current cloud hosting provides scoped CLI access for hello-world.</div>
+        <div class="credential-sub" data-i18n="preview.sso.desc">The earlier AWS Console interface is illustrated below. Available Console / CLI access in the current version depends on each problem’s access definition and hosting conditions.</div>
         <div class="sso-alert">
           <b data-i18n="preview.sso.howto">How to use</b>
-          <span data-i18n="preview.sso.body">Current CLI credentials last at most 15 minutes; the actual expiry is shown in the portal. Console access remains subject to the implementation requirements.</span>
+          <span data-i18n="preview.sso.body">Credential expiry is shown in the participant portal. Check the organizer guide for AWS setup and per-problem access conditions. Live AWS event performance remains unverified.</span>
         </div>
         <div class="credential-list">
           <div class="credential-row">
@@ -487,7 +486,7 @@
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="extend.eyebrow">Catalog grows with you</div>
     <h2 data-i18n="extend.h2">Missing a problem? Author your own.</h2>
-    <p class="lead" data-i18n="extend.lead">Canonical problem content lives in <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a>. Follow the authoring guide to define and verify the runtime and scoring for each format. Problem Pack validation and installation remain available; activation into the current event catalog and drill integration are incomplete.</p>
+    <p class="lead" data-i18n="extend.lead">Select a repository URL and ref, such as <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a>, to download problems; events retain immutable snapshots. Use the authoring guide to verify custom definitions, runtimes and scoring, and check its Problem Pack support boundaries.</p>
     <div class="extend-cta">
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta1">Browse the catalog</span> ›</a>
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/.claude/skills/new-problem/SKILL.md#new-problem--scaffold-a-tenkacloudchallenge-problem" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta2">new-problem skill</span> ›</a>
@@ -689,7 +688,7 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=c9d40b8b97" defer></script>
+<script src="./app.js?v=ba5c61c254" defer></script>
 
 </body>
 </html>

@@ -41,6 +41,45 @@ This boundary concerns exercise containers. Tailscale connectivity alone does no
 
 Keep the build enabled on first startup. Add `--no-build` only after building the same code and selected catalog. If startup rejects a missing build or mismatched catalog, rebuild on the next start by omitting that flag. Agree on a maintenance window with the organizer before changing a running host.
 
+<h2 id="tailscale-first-connection">Join before Tailscale is configured</h2>
+
+Share only a dedicated event host. Participants do not need to join the organizer's company tailnet. Obtain the device owner's and administrator's approval before sharing a company PC or its services. These are steps for an approved setup; a real-device rehearsal including sharing remains incomplete. Remote Docker still requires the native Linux isolation prerequisites above.
+
+**Organizer preparation**
+
+1. Install Tailscale from the [official download](https://tailscale.com/download) on an approved dedicated host. Sign in with the approved event account. Record the selected tailnet, host name and its own IPv4; compare `tailscale ip -4` and `tailscale status`. For a VM, use the VM's own address.
+2. Agree with each participant on their sign-in method, account and receiving tailnet. Issuing and accepting shares requires Owner / Admin / IT admin privileges in the respective tailnets. Check the selected identity when personal and company accounts coexist.
+3. Administrators on both sides review effective [grants](https://tailscale.com/docs/features/access-control/grants) / [ACLs](https://tailscale.com/docs/features/access-control/acls). Scope access from the receiving user to the dedicated host's TCP 5175. Only for Docker exercise gateways, also scope the configured `--gateway-ports` TCP range, default 5200–5239. Do not permit 5174, SSH, unnecessary services or raw container ports. Adding a narrow permission does not constrain an existing broader allowance.
+4. In Machines, verify the event host name and IP, then use Share → Copy invite link → Copy share link to issue an individual single-use invitation. Leave reusable links disabled. Give its link only to the intended recipient: it grants access. Sharing exposes a machine, not a guaranteed single port. Read the [official sharing rules](https://tailscale.com/docs/features/sharing).
+
+**First-time participant preparation**
+
+1. Install the official app on your device. On iPhone, follow the [iOS guide](https://tailscale.com/docs/install/ios), approve the VPN configuration and sign in with your agreed account. The organizer does not need to give you company credentials.
+2. Open the invitation and verify the browser's sign-in method, account and receiving tailnet before accepting. In the app, select the same receiving account / tailnet and check Connected. If another tailnet is selected, stop and compare identities first.
+3. Find the event host name supplied by the organizer and check its shared IP. Do not use your phone's own IP, a different Mac or an old registration. A shared host can appear across tailnets, so visibility alone does not prove common membership.
+4. Compare that IP with the participant URL printed by the host and open `http://<event-host-IPv4>:5175/`. This LAN setup checks IP-based Host / Origin values; do not substitute a MagicDNS hostname. If sharing assigns a different recipient-side IP because of a conflict, stop and ask the organizer rather than proceeding with that address.
+
+**Verify, play and finish**
+
+Keep the Host Console on `127.0.0.1:5174`; do not forward or proxy it to participants. Give each participant only their team key. Before starting the event, verify only the 5175 page and login from the participant device. Gateways listen only while in use; every port in the range is not expected to answer continuously.
+
+Administrators check and test effective policy for allowed 5175 / required gateways and denied 5174 / unnecessary services. Native-only events need no gateway permission. Port permissions, Tailscale machine sharing, the exercise Linux guard and application team-key authorization are separate boundaries. Sharing alone does not isolate exercises or the rest of a participant device.
+
+On a participant PC, check only the approved event host, replacing the example IP:
+
+```sh
+EVENT_HOST_IP=100.96.12.34
+curl --fail "http://${EVENT_HOST_IP}:5175/healthz"
+nc -vz -w 3 "$EVENT_HOST_IP" 5175
+nc -vz -w 3 "$EVENT_HOST_IP" 5174
+```
+
+Expect health `status: ok` / `role: participant`, successful TCP 5175 and unreachable 5174. On a phone, open the same `/healthz` in the browser. A failed 5174 connection alone does not prove ACL enforcement; administrators also verify policy tests. Check the actual issued gateway URL and active port, not responses from every unused port.
+
+Start the event after everyone connects. Check native actions and scores; for Docker, use the portal-issued gateway URL to reach that team’s exercise. Check correct/incorrect submissions and hints where the problem supports them. End Event stops scoring; preserve needed results. Use Stop (keep data) to retain environments, then have the organizer stop the host through the maintenance procedure. Before selecting Teardown, confirm the deletion target and data impact.
+
+Finally, the organizer uses the event host's Share dialog to Revoke invite for the recipient and cancel unused invitations. Verify in the Share dialog that the recipient and unused invitations are revoked. Failed participant reconnection is a supplementary check: failure after host shutdown alone does not prove revocation. This revokes sharing without deleting someone else's device. Joining again requires a fresh invitation and acceptance. Use a recipient-side removal menu only after verifying its target and scope; do not confuse it with generic Remove machine.
+
 <h2 id="check-local-connection">Check startup and connectivity</h2>
 
 Check the organizer page on the host and the participant page from the participant's device. Replace the example IP with the actual host IP.
