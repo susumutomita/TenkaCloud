@@ -66,7 +66,6 @@ export interface SecurityCopy {
 export interface CatalogTeaserCopy {
   readonly eyebrow: string;
   readonly heading: string;
-  // {ready}/{battle}/{challenge}/{total} are substituted from the live catalog data.
   readonly lead: string;
   readonly cta: string;
 }
@@ -208,7 +207,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
     catalog: {
       eyebrow: "問題カタログ",
       heading: "実戦問題は、公開されている。",
-      lead: "今すぐプレイできる Battle {battle} 問と Challenge {challenge} 問を含む、合計 {total} 問の公開カタログ。すべて metadata.json + template.yaml の 2 ファイルで表現され、自分で追加することもできます。",
+      lead: "公開問題の定義と利用条件は TenkaCloudChallenge で確認できます。開催時は使う問題ソースを選び、対応する実行環境を確認してください。",
       cta: "問題カタログを見る",
     },
     offerings: {
@@ -355,7 +354,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
     catalog: {
       eyebrow: "Problem catalog",
       heading: "The problems are in the open.",
-      lead: "A public catalog of {total} problems, including {battle} Battles and {challenge} Challenges you can play right now. Every one is expressed as two files — metadata.json + template.yaml — so you can add your own.",
+      lead: "Browse public problem definitions and requirements in TenkaCloudChallenge. Select your problem sources and check their runtime requirements before hosting.",
       cta: "Browse the catalog",
     },
     offerings: {
@@ -416,65 +415,5 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
       discussionsCta: "GitHub Discussions (public)",
     },
     legalLine: "Privacy Policy / Terms of Service / Business identification (Japan TokushoHo)",
-  },
-};
-
-export interface CatalogPageCopy {
-  readonly meta: PageMeta;
-  readonly langSwitch: LangSwitchCopy;
-  readonly heading: string;
-  // {ready}/{total} substituted from live catalog data.
-  readonly lead: string;
-  readonly categoryColumn: string;
-  readonly difficultyColumn: string;
-  readonly statusColumn: string;
-  readonly tagsLabel: string;
-  readonly readyLegend: string;
-  readonly draftLegend: string;
-  readonly sourceNote: string;
-  readonly authorCta: string;
-  readonly homeCta: string;
-}
-
-export const CATALOG_COPY: Record<Locale, CatalogPageCopy> = {
-  ja: {
-    meta: {
-      title: "問題カタログ — TenkaCloud",
-      description:
-        "TenkaCloud で開催できる Battle / Challenge 問題の公開カタログ。難易度・状態・タグとともに一覧できます。",
-    },
-    langSwitch: { toOther: "English", ariaLabel: "言語" },
-    heading: "問題カタログ",
-    lead: "本物の AWS で開催できる公開問題は合計 {total} 問。うち {ready} 問が今すぐプレイできます（準備中の問題は「準備中」と表示しています）。",
-    categoryColumn: "カテゴリ",
-    difficultyColumn: "難易度",
-    statusColumn: "状態",
-    tagsLabel: "タグ",
-    readyLegend: "公開中：今すぐプレイできます",
-    draftLegend: "準備中：制作中のためまだ提供していません",
-    sourceNote:
-      "このカタログは問題の metadata.json（TenkaCloudChallenge リポジトリ）から生成しています。",
-    authorCta: "自分で問題を作る",
-    homeCta: "ホームに戻る",
-  },
-  en: {
-    meta: {
-      title: "Problem catalog — TenkaCloud",
-      description:
-        "The public catalog of Battle and Challenge problems you can run on TenkaCloud, listed with difficulty, status, and tags.",
-    },
-    langSwitch: { toOther: "日本語", ariaLabel: "Language" },
-    heading: "Problem catalog",
-    lead: 'There are {total} public problems you can run on real AWS. {ready} of them are playable right now (problems still being prepared are marked "In development").',
-    categoryColumn: "Category",
-    difficultyColumn: "Difficulty",
-    statusColumn: "Status",
-    tagsLabel: "Tags",
-    readyLegend: "Available: playable right now",
-    draftLegend: "In development: being prepared, not yet available",
-    sourceNote:
-      "This catalog is generated from each problem's metadata.json (the TenkaCloudChallenge repository).",
-    authorCta: "Author your own problem",
-    homeCta: "Back to home",
   },
 };

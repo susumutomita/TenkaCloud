@@ -9,14 +9,6 @@ import type { Locale } from "@/lib/i18n";
 
 // Locale-aware internal paths. Japanese is the canonical root; English mirrors sit
 // under /en. Trailing slashes match the static-export routing (routes.ts).
-export function homePath(locale: Locale): string {
-  return locale === "ja" ? "/" : "/en/";
-}
-
-export function catalogPath(locale: Locale): string {
-  return locale === "ja" ? "/catalog/" : "/en/catalog/";
-}
-
 export function privacyPath(locale: Locale): string {
   return locale === "ja" ? "/privacy/" : "/en/privacy/";
 }

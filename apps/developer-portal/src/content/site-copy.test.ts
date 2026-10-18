@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { LOCALES } from "@/lib/i18n";
-import { CATALOG_COPY, HOME_COPY } from "./site-copy";
+import { HOME_COPY } from "./site-copy";
 
-// The marketing home and catalog render from one bilingual model. TypeScript already
+// The marketing home renders from one bilingual model. TypeScript already
 // forces both locales to share a shape; these tests additionally pin the array
 // lengths (which the type system does not) and forbid empty strings, so a JA/EN
 // parity gap or a blank field fails here rather than shipping.
@@ -43,15 +43,10 @@ function assertNoEmptyStrings(value: unknown, path: string): void {
 describe("site copy parity", () => {
   it("should expose exactly the ja and en locales", () => {
     expect(Object.keys(HOME_COPY).sort()).toEqual([...LOCALES].sort());
-    expect(Object.keys(CATALOG_COPY).sort()).toEqual([...LOCALES].sort());
   });
 
   it("should have structurally identical home copy across locales", () => {
     expect(shapeOf(HOME_COPY.ja)).toEqual(shapeOf(HOME_COPY.en));
-  });
-
-  it("should have structurally identical catalog copy across locales", () => {
-    expect(shapeOf(CATALOG_COPY.ja)).toEqual(shapeOf(CATALOG_COPY.en));
   });
 
   it("should carry three offerings, three audiences, and three onboarding steps", () => {
@@ -62,18 +57,7 @@ describe("site copy parity", () => {
     }
   });
 
-  it("should keep the catalog-teaser substitution tokens in both locales", () => {
-    for (const locale of LOCALES) {
-      expect(HOME_COPY[locale].catalog.lead).toContain("{total}");
-      expect(HOME_COPY[locale].catalog.lead).toContain("{battle}");
-      expect(HOME_COPY[locale].catalog.lead).toContain("{challenge}");
-      expect(CATALOG_COPY[locale].lead).toContain("{total}");
-      expect(CATALOG_COPY[locale].lead).toContain("{ready}");
-    }
-  });
-
   it("should never leave a copy field blank", () => {
     assertNoEmptyStrings(HOME_COPY, "HOME_COPY");
-    assertNoEmptyStrings(CATALOG_COPY, "CATALOG_COPY");
   });
 });

@@ -1,3 +1,4 @@
+import { CATALOG_REPO } from "./links";
 import type { Maturity } from "./maturity";
 
 // The single source of truth for navigation across every surface. Landing, docs,
@@ -19,7 +20,7 @@ export interface NavSection {
 // Top-level header navigation, identical on every route.
 export const PRIMARY_NAV: readonly NavLink[] = [
   { label: "Product", href: "/product/" },
-  { label: "Catalog", href: "/catalog/" },
+  { label: "Catalog", href: CATALOG_REPO },
   { label: "Developers", href: "/developers/" },
   { label: "Docs", href: "/developers/docs/getting-started/" },
   { label: "API Reference", href: "/developers/api/" },
@@ -33,7 +34,7 @@ export const FOOTER_SECTIONS: readonly NavSection[] = [
     title: "Product",
     links: [
       { label: "Overview", href: "/product/" },
-      { label: "Problem catalog", href: "/catalog/" },
+      { label: "Problem catalog", href: CATALOG_REPO },
       { label: "Developer hub", href: "/developers/" },
     ],
   },
