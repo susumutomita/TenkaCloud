@@ -165,19 +165,19 @@
       </h1>
       <p class="sub" data-i18n="hero.sub">ローカルと AWS クラウドで開催する OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。まずは同じ PC でローカル競技を試せます。</p>
       <p class="hero-vibe" data-i18n="hero.vibe"><strong>まずは、同じ PC で。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。</p>
-      <a class="hero-quest-card" href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-cta="local-start">
-        <span class="hero-quest-meta" data-i18n="hero.quest_meta">ローカル起動 · AWS アカウント不要</span>
+      <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
+        <span class="hero-quest-meta" data-i18n="hero.quest_meta">最初の1問 · 登録不要 · 約3分</span>
         <span class="hero-quest-tags">
-          <code>make local</code>
-          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">起動ガイド</span>
-          <span class="hero-quest-badge" data-i18n="hero.quest_diff">Bun・Make を用意</span>
+          <code>what-is-tenkacloud</code>
+          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">ブラウザ体験版</span>
+          <span class="hero-quest-badge" data-i18n="hero.quest_diff">インストール不要</span>
         </span>
-        <span class="hero-quest-title" data-i18n="hero.quest_title">起動して、チームで問題を解く。</span>
-        <span class="hero-quest-desc" data-i18n="hero.quest_desc">取得・起動・接続確認を順番に案内します。Docker 演習はまず同じ PC で。別端末からの Docker 利用には対応 Linux の隔離モードが必要で、Mac / Docker Desktop は未対応です。</span>
-        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">起動手順を開く</span> →</span>
+        <span class="hero-quest-title" data-i18n="hero.quest_title">TenkaCloud を、問題を解きながら知る。</span>
+        <span class="hero-quest-desc" data-i18n="hero.quest_desc">練習環境を開き、ヒントと回答提出、得点を6つのステップで体験します。ブラウザ内の体験後は、同じ流れで自分の PC に競技を起動できます。</span>
+        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">最初の問題を解く</span> →</span>
       </a>
       <p class="hero-secondary">
-        <a href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill"><span data-i18n="hero.cta_demo">旧版の紹介デモ</span></a>
+        <a href="/docs/getting-started/#local-start" data-i18n-href="hero.startHref" data-cta="local-start"><span data-i18n="hero.cta_demo">自分の PC で起動する</span></a>
         ·
         <a href="/videos/lp/tenkacloud-30s.mp4" target="_blank" rel="noopener noreferrer" data-cta="watch-30s"><span data-i18n="hero.cta_video">▶ 30 秒でわかる</span></a>
         ·
@@ -266,7 +266,7 @@
   <div class="wrap">
     <div class="eyebrow" data-i18n="modes.eyebrow">2 つの競技形式</div>
     <h2 data-i18n="modes.h2">対戦か、演習か。両方か。</h2>
-    <p class="lead" data-i18n="modes.lead">共有状態で競う Battle と、問題を解く Challenge。下の画面は旧版の表示例です。現行の対応問題は運営ガイドで確認してください。</p>
+    <p class="lead" data-i18n="modes.lead">共有状態で競う Battle と、問題を解く Challenge。下は画面サンプルです。現行の対応問題は運営ガイドで確認してください。</p>
     <div class="twoup">
       <div class="tile">
         <h3 class="kicker" data-i18n="modes.battle.kicker">Battle</h3>
@@ -433,7 +433,7 @@
       </div>
       <div class="flow sso-preview">
         <div class="credential-title">SSO Credentials</div>
-        <div class="credential-sub" data-i18n="preview.sso.desc">下は旧版の AWS Console 接続画面の例です。現行版で利用できる Console / CLI は、問題ごとの access 定義と開催条件で決まります。</div>
+        <div class="credential-sub" data-i18n="preview.sso.desc">下は AWS Console 接続の画面サンプルです。現行版で利用できる Console / CLI は、問題ごとの access 定義と開催条件で決まります。</div>
         <div class="sso-alert">
           <b data-i18n="preview.sso.howto">使い方</b>
           <span data-i18n="preview.sso.body">資格情報の期限は参加者画面に表示します。AWS 開催の設定と問題ごとの接続条件は運営ガイドで確認してください。実 AWS での大会性能は未検証です。</span>
@@ -442,7 +442,7 @@
           <div class="credential-row">
             <div class="credential-row-head">
               <code>microservice-migration-battle</code>
-              <button type="button"><span data-i18n="preview.sso.button">旧版: AWS Console</span> ↗</button>
+              <button type="button"><span data-i18n="preview.sso.button">表示例: AWS Console</span> ↗</button>
             </div>
             <div class="credential-kv">
               <div><span>AWS Account</span><code>c7782015332</code></div>
@@ -452,7 +452,7 @@
           <div class="credential-row">
             <div class="credential-row-head">
               <code>hello-world</code>
-              <button type="button"><span data-i18n="preview.sso.button">旧版: AWS Console</span> ↗</button>
+              <button type="button"><span data-i18n="preview.sso.button">表示例: AWS Console</span> ↗</button>
             </div>
             <div class="credential-kv">
               <div><span>AWS Account</span><code>677c9285832</code></div>
@@ -462,7 +462,7 @@
           <div class="credential-row">
             <div class="credential-row-head">
               <code>hello-world-battle</code>
-              <button type="button"><span data-i18n="preview.sso.button">旧版: AWS Console</span> ↗</button>
+              <button type="button"><span data-i18n="preview.sso.button">表示例: AWS Console</span> ↗</button>
             </div>
             <div class="credential-kv">
               <div><span>AWS Account</span><code>677c9285832</code></div>
@@ -505,7 +505,7 @@
       </div>
       <div class="agent-prompt-actions">
         <a href="https://www.youtube.com/watch?v=nLsSJ3npdfw" target="_blank" rel="noopener noreferrer" data-cta="watch-ai-local-mac" data-i18n-href="extend.agent_video_href"><span data-i18n="extend.agent_video">▶ YouTube で見る</span></a>
-        <a href="/portal-demo/?demo=1&amp;goto=/problems/01HZX0M2A1AGENTMACTENKA0003" data-cta="try-ai-local-mac"><span data-i18n="extend.agent_tutorial">旧版の紹介デモを見る →</span></a>
+        <a href="/portal-demo/?demo=1&amp;goto=/problems/01HZX0M2A1AGENTMACTENKA0003" data-cta="try-ai-local-mac"><span data-i18n="extend.agent_tutorial">ブラウザ体験版で進める →</span></a>
       </div>
     </div>
   </div>
@@ -687,7 +687,7 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=0506e0925a" defer></script>
+<script src="./app.js?v=cc787e2d09" defer></script>
 
 </body>
 </html>
