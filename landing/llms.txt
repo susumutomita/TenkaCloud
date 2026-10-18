@@ -23,7 +23,7 @@ Read the matching guide instead of loading every document. The [task guide and c
 - [README](https://github.com/susumutomita/TenkaCloud/blob/main/README.md): the two starting paths.
 - [AGENTS.md](https://github.com/susumutomita/TenkaCloud/blob/main/AGENTS.md): repository working rules. `CLAUDE.md` only imports this file.
 - [Release status](https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md): published/candidate identity and recorded verification.
-- [Problem catalog](https://github.com/susumutomita/TenkaCloudChallenge): canonical problem content. Use the platform's pinned `problems/` commit when diagnosing a deployment.
+- [Problem catalog](https://github.com/susumutomita/TenkaCloudChallenge): canonical problem content. Use the selected snapshot digest and resolved source in `.tenkacloud/catalog-store/selected.json` when diagnosing a deployment.
 
 ## Book
 
@@ -31,3 +31,7 @@ Read the matching guide instead of loading every document. The [task guide and c
 - [『自分で作るクラウド競技』(日本語)](https://zenn.dev/bull/books/cloud-competition)
 
 These explain design decisions, **not** a specification. Current code and tests take precedence.
+
+## Catalog contract / カタログ仕様
+
+Read the [source contract, schema links, mixed Git/local example and verification commands](https://tenkacloud.com/docs/operate/use-existing-pack/index.en.html#catalog-source-schema) ([日本語](https://tenkacloud.com/docs/operate/use-existing-pack/#catalog-source-schema)). For unreleased local-path changes, read `apps/developer-portal/src/app/developers/docs/operate/use-existing-pack/page.mdx` in the same checkout; published pages and main may describe an older revision. `llms.txt` is a document index, not an automatically enforced agent setting.

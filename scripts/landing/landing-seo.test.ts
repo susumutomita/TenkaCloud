@@ -449,3 +449,58 @@ describe("30-second product video placement (#2696 P1)", () => {
     }
   });
 });
+
+describe("catalog documentation entry points", () => {
+  for (const [landing, suffix] of [
+    ["landing/index.html", ""],
+    ["landing/index.en.html", "index.en.html"],
+  ]) {
+    it(`connects ${landing} through hosting and author guides to the source contract`, () => {
+      const html = read(landing);
+      for (const manual of ["organizer", "problem-author"]) {
+        expect(html).toContain(`href="./docs/manual/${manual}/${suffix}"`);
+        const guide = read(`landing/docs/manual/${manual}/${suffix || "index.html"}`);
+        // Organizer reaches the contract through the quickstart; authors link directly.
+        const via =
+          manual === "organizer"
+            ? read(`landing/docs/getting-started/${suffix || "index.html"}`)
+            : guide;
+        expect(via).toContain("/docs/operate/use-existing-pack/");
+        expect(via).toContain("#catalog-source-schema");
+      }
+      const contract = read(`landing/docs/operate/use-existing-pack/${suffix || "index.html"}`);
+      expect(contract).toContain('id="catalog-source-schema"');
+      expect(contract).toContain("scripts/problem-pack/catalog-read.ts");
+      expect(contract).toContain("SelectionSchema");
+      expect(contract).toContain("make catalog-download CATALOG_SOURCES=./config/my-catalogs.json");
+      expect(contract).toContain("../../private-event-problems");
+      expect(contract).toContain("scripts/problem-pack/test/local-catalog.test.ts");
+    });
+  }
+  it("provides author-guide targets for both runtime locales, including English HTML shown in Japanese", () => {
+    const app = read("landing/app.js");
+    for (const key of ["aud.c.moreHref", "extend.cta3Href"]) {
+      expect(app).toContain(`"${key}": "./docs/manual/problem-author/"`);
+      expect(app).toContain(`"${key}": "./docs/manual/problem-author/index.en.html"`);
+    }
+  });
+  it("provides organizer-guide targets for both runtime locales", () => {
+    const app = read("landing/app.js");
+    for (const key of ["hero.hostHref", "aud.b.moreHref"]) {
+      expect(app).toContain(`"${key}": "./docs/manual/organizer/"`);
+      expect(app).toContain(`"${key}": "./docs/manual/organizer/index.en.html"`);
+    }
+  });
+  it("uses existing LLM entry points without claiming automatic enforcement", () => {
+    for (const path of ["landing/llms.txt", "landing/llms-full.txt"]) {
+      const text = read(path);
+      expect(text).toContain("/docs/operate/use-existing-pack/");
+      expect(text).toContain("not an automatically enforced agent setting");
+      expect(text).toContain("same checkout");
+    }
+    expect(read("AGENTS.md")).toContain(
+      "operate/use-existing-pack/page.ja.mdx#catalog-source-schema",
+    );
+    expect(read("CLAUDE.md")).toContain("@AGENTS.md");
+  });
+});

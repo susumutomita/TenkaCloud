@@ -138,6 +138,29 @@ Codespaces forwarded-origin and exercise routing have not been verified for this
 
 Next: [organizer manual](/developers/docs/manual/organizer/), [participant manual](/developers/docs/manual/participant/) and [deployment boundaries](/developers/docs/operate/deploy-paths/).
 
+
+### Use local problem directories
+
+Mix Git entries (`{ "url": "https://…", "ref": "main" }`) and local entries (`{ "path": "../TenkaCloudChallenge" }`) in `catalog-sources.json`'s `sources` array. Multiple local directories are supported. Relative paths resolve from the configuration file's directory; absolute paths are accepted. For private Git, obtain an authorized checkout yourself and select its path. TenkaCloud needs no credentials for this route. Direct Git acquisition remains unauthenticated HTTPS.
+
+```json
+{
+  "schemaVersion": 1,
+  "sources": [
+    { "path": "../TenkaCloudChallenge" },
+    { "path": "../private-event-problems" }
+  ]
+}
+```
+
+Each problem's `metadata.json` is the source of the problem list; there is no separate list to edit. Keep the existing `challenges/<id>/metadata.json` / `battles/<id>/metadata.json` layout, or a standard pack's declared `problemsRoot`. Ordinary files such as READMEs are not listed as problems. Missing required metadata/files, invalid values, ID/directory mismatches and duplicate IDs across sources fail validation. A second repository cannot override an existing problem ID.
+
+Both `make local` and `make deploy` preparation capture uncommitted additions and edits into validated immutable snapshots, then consume those snapshots. The author directory is unchanged. Acquisition or validation failure preserves the previous selection and stops startup/build. Saved events retain their definitions; no running host is automatically updated or restarted. Keep the build enabled on the next start after editing content.
+
+Select a dedicated problem directory and keep real credentials out of teaching content. Copying excludes dot entries including `.git`, `.dockerignore` and `.htaccess`, `node_modules`, `dist`, `coverage`, conventional `credentials` / `secret` filenames, and common private-key file extensions. This does not detect secrets embedded in arbitrary filenames or file content. If a required teaching asset is excluded, separate it from secrets and use an appropriate name/layout before validation. Source-root and included symlinks, and special files, are refused. Retained local editions are verified from their snapshots without rereading mutable author files. A local revision's `commit` field is an internal ID made from the first 40 hex digits of its content digest, not a Git commit. A local lock alone cannot restore content on another machine without its snapshot store.
+
+Use `CATALOG_SOURCES=./config/my-catalogs.json make local` for another configuration file. `CATALOG_SOURCES=./config/my-catalogs.json make deploy ENV=development` uses the same selection but also performs the normal deployment: review target, cost and permissions first. To check acquisition without starting or deploying, use `make catalog-download CATALOG_SOURCES=./config/my-catalogs.json`, then `make catalog-prepare`. Retained Git revisions in an existing lock may still require network access even when the current selection contains only local paths.
+
 ## Books and compatibility
 
 [自分で作るクラウド競技](https://zenn.dev/bull/books/cloud-competition) and
@@ -149,3 +172,5 @@ A source merge does not verify publication or playability.
 New installations use `tenkacloud-cloud` stack names; existing `tenkacloud-lite` stacks keep their names. The CLI discovers Lite/cloud installations; if both exist, explicitly choose `TENKACLOUD_STACK_LAYOUT=lite` or `cloud`. Original Lite updates verify ownership and persistent resource IDs. Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use `CLOUD_ARGS="--confirm-no-active-events"` for a noninteractive upgrade; generic `--yes` cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic `make deploy` behavior. Published cloud-v1 resource/database layouts cannot be updated in place, and no data is migrated automatically. `--drain-events` is unavailable; finish event Teardown before removing the platform.
 
 Both databases admit 99 teams; SQL coordination retains the original 4 MiB state policy. All eight current catalog templates fit within the 51,200-byte `TemplateBody` limit, and `TemplateURL` is not implemented. This is not an all-AWS-problems deployment claim.
+
+See the [formal source contract, schema, mixed-source example and verification commands](/developers/docs/operate/use-existing-pack/#catalog-source-schema).

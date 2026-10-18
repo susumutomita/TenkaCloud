@@ -153,6 +153,7 @@
       "hero.cta_video": "▶ 30 秒でわかる",
       "hero.host_prefix": "主催者の方へ:",
       "hero.cta_host": "開催ガイド",
+      "hero.hostHref": "./docs/manual/organizer/",
       "hero.cta_quote": "Hosted Event の見積もり",
       "hero.trust": "合同会社 BULL 運営 · Apache 2.0",
       "app.lang": "◉ 日本語 ▼",
@@ -243,11 +244,13 @@
       "aud.b.p":
         "イベント、チーム、問題、得点を共通の画面で管理します。ローカルと AWS 開催では実行環境が異なります。問題ごとの接続条件と検証状況は運営ガイドで確認できます。",
       "aud.b.more": "運営ガイド",
+      "aud.b.moreHref": "./docs/manual/organizer/",
       "aud.c.role": "エンジニア / 個人参加",
       "aud.c.h": "実戦で、腕を上げる。",
       "aud.c.p":
         "問題を解いて学ぶ OSS の競技基盤です。勉強会・学校・コミュニティでローカル開催でき、AWS 問題はクラウド開催で扱います。OSS ライセンスは無料ですが、クラウド資源の利用料は別です。",
       "aud.c.more": "問題を作る",
+      "aud.c.moreHref": "./docs/manual/problem-author/",
 
       "onboard.eyebrow": "オンボーディング",
       "onboard.h2": "ローカル競技を、順番に試す。",
@@ -314,7 +317,8 @@
         '問題は <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> などの URL と ref を選んで取得し、大会は不変 snapshot を使います。独自問題の定義・実行環境・採点方法は作問ガイドで検証してください。Problem Pack の対応範囲も同ガイドで確認できます。',
       "extend.cta1": "問題カタログを見る",
       "extend.cta2": "new-problem skill",
-      "extend.cta3": "Problem Pack の対応状況",
+      "extend.cta3": "問題作成ガイド",
+      "extend.cta3Href": "./docs/manual/problem-author/",
       "extend.agent_title": "AI エージェントで始める",
       "extend.agent_lead":
         'Claude Code や Codex に下のプロンプトを貼り付けると、エージェントが TenkaCloud の説明から「遊ぶ / 立てる」の案内までやってくれます。中身は LLM 向けブリーフィング <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a> です。',
@@ -449,6 +453,7 @@
       "hero.cta_video": "▶ Watch the 30-second tour",
       "hero.host_prefix": "Hosting an event?",
       "hero.cta_host": "Hosting guide",
+      "hero.hostHref": "./docs/manual/organizer/index.en.html",
       "hero.cta_quote": "Get a Hosted Event quote",
       "hero.trust": "Operated by BULL LLC · Apache 2.0",
       "app.lang": "◉ English ▼",
@@ -539,11 +544,13 @@
       "aud.b.p":
         "Manage events, teams, problems and scores in shared consoles. Local and AWS hosting use different runtimes. Check the organizer guide for each problem’s access conditions and verification status.",
       "aud.b.more": "Operator guide",
+      "aud.b.moreHref": "./docs/manual/organizer/index.en.html",
       "aud.c.role": "Engineers / individual learners",
       "aud.c.h": "Sharpen on the real thing.",
       "aud.c.p":
         "An open-source platform for learning through competitions. Communities and schools can host locally; AWS exercises use cloud hosting. The OSS license is free; cloud resources are billed separately.",
       "aud.c.more": "Author a problem",
+      "aud.c.moreHref": "./docs/manual/problem-author/index.en.html",
 
       "onboard.eyebrow": "Onboarding",
       "onboard.h2": "Try a local competition, step by step.",
@@ -610,7 +617,7 @@
         'Select a repository URL and ref, such as <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a>, to download problems; events retain immutable snapshots. Use the authoring guide to verify custom definitions, runtimes and scoring, and check its Problem Pack support boundaries.',
       "extend.cta1": "Browse the catalog",
       "extend.cta2": "new-problem skill",
-      "extend.cta3": "Problem Pack support status",
+      "extend.cta3": "Problem author guide",
       "extend.cta3Href": "./docs/manual/problem-author/index.en.html",
       "extend.agent_title": "Start with an AI agent",
       "extend.agent_lead":

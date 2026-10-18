@@ -5,10 +5,12 @@ import { computeContentDigest } from "../../packages/problem-sdk/src/content-dig
 import { resolveInside } from "../../packages/problem-sdk/src/safe-path.js";
 import { restoreSourcePermissions } from "./source-permissions.js";
 
-export const SourceSchema = z
+const GitSourceSchema = z
   .object({ url: z.string(), ref: z.string().min(1), subdir: z.string().optional() })
   .strict();
-const RevisionSchema = SourceSchema.extend({
+const LocalSourceSchema = z.object({ path: z.string().trim().min(1) }).strict();
+export const SourceSchema = z.union([GitSourceSchema, LocalSourceSchema]);
+const revisionFields = {
   commit: z.string().regex(/^[a-f0-9]{40}$/u),
   digest: z.string().regex(/^[a-f0-9]{64}$/u),
   problemsRoot: z
@@ -24,7 +26,11 @@ const RevisionSchema = SourceSchema.extend({
           ),
       "Invalid problems root",
     ),
-}).strict();
+};
+const RevisionSchema = z.union([
+  GitSourceSchema.extend(revisionFields).strict(),
+  LocalSourceSchema.extend(revisionFields).strict(),
+]);
 export const SelectionSchema = z
   .object({
     schemaVersion: z.literal(1),

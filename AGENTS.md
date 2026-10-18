@@ -1,6 +1,7 @@
 # TenkaCloud の作業ルール
 
 本体はこのリポジトリ、問題は主催者が明示選択して取得した不変 snapshot が正本です。`problems/` は生成された build 用ビューです。
+カタログ変更時は[取得元の仕様・正式 schema・例・検証コマンド](./apps/developer-portal/src/app/developers/docs/operate/use-existing-pack/page.ja.mdx#catalog-source-schema)を先に確認してください。
 構成と担当コードは[開発者マニュアル](./apps/developer-portal/src/app/developers/docs/manual/developer/page.ja.mdx)を、必要な範囲だけ参照してください。
 
 ## 進め方

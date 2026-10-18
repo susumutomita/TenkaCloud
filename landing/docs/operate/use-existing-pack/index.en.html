@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Use an existing pack — TenkaCloud Docs</title>
+<title>Select a problem catalog — TenkaCloud Docs</title>
 <link rel="canonical" href="https://tenkacloud.com/docs/operate/use-existing-pack/index.en.html" />
 <link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/operate/use-existing-pack/" />
 <link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/operate/use-existing-pack/index.en.html" />
@@ -51,7 +51,7 @@
 <section><h5>Operate</h5><ul>
 <li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
-<li><a href="/docs/operate/use-existing-pack/index.en.html" aria-current="page">Use an existing pack</a></li>
+<li><a href="/docs/operate/use-existing-pack/index.en.html" aria-current="page">Select a problem catalog</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
@@ -65,20 +65,69 @@
 </aside>
 <main class="doc">
 <article>
-<h1>Use an existing pack <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>Problem Packs let organizers distribute and host company exercises or problems intended for publication after an event without adding them to the public catalog. Installation stores an immutable revision; Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads supported problems in its local <code>problems/</code> tree rather than the Pack store. Publication remains a separate author decision.</p>
-<h2 id="prerequisites">Prerequisites</h2><p>Obtain a trusted local pack directory or HTTPS Git URL plus an immutable full 40-hex commit SHA. Review the declared runtime, files and provenance before installation.</p>
-<h2 id="install-the-pinned-git-revision">Install the pinned Git revision</h2><pre><code class="language-sh">make pack-install ARGS=&quot;git &lt;https-url&gt; --commit &lt;40-hex-commit-sha&gt;&quot;
-make pack-list
-bun run pack inspect &lt;id@version&gt;
+<h1>Select a problem catalog <span class="doc-badge doc-badge--preview">Preview</span></h1>
+<p>Start with the <a href="/docs/getting-started/index.en.html#local-start">hosting quickstart</a> or <a href="/docs/manual/problem-author/index.en.html">problem author manual</a>. This page defines the catalog source contract for this checkout. Local-path support described here is a local development change until the corresponding revision is released; a deployed site or older checkout may use an earlier contract.</p>
+<h2 id="catalog-source-schema">Catalog source schema</h2><p>The machine-readable source of truth is <a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/catalog-read.ts"><code>SelectionSchema</code> and <code>SourceSchema</code> in catalog-read.ts</a>. Check these definitions in the same checkout as your launcher. The acquisition checks in <a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts"><code>downloaded-catalog.ts</code></a> and <code>git-source.ts</code> also validate paths, transport and content. <code>scripts/problem-pack/catalog-schema.json</code> describes <strong>problem metadata</strong>, not source selection; do not use it to validate this configuration.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Contract</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>schemaVersion</code></td>
+<td>Required number <code>1</code></td>
+</tr>
+<tr>
+<td><code>sources</code></td>
+<td>Required nonempty array; each entry is exactly one of the two shapes below</td>
+</tr>
+<tr>
+<td>Git source</td>
+<td>Required string <code>url</code>, nonempty string <code>ref</code>; optional string <code>subdir</code></td>
+</tr>
+<tr>
+<td>Local source</td>
+<td>Only <code>path</code>: a nonempty string after trimming whitespace</td>
+</tr>
+<tr>
+<td><code>retained</code></td>
+<td>Optional array of immutable revisions maintained by the catalog tools; retain their snapshot store as well</td>
+</tr>
+</tbody></table>
+<p>Unknown fields are rejected at both the configuration and entry level. There is no <code>type</code>, <code>kind</code> or <code>branch</code> field. Do not combine <code>path</code> with <code>url</code>, <code>ref</code> or <code>subdir</code>. Git acquisition accepts unauthenticated HTTPS without embedded credentials, query or fragment; <code>ref</code> selects a branch, tag, <code>HEAD</code> or full commit and is resolved to an immutable commit. <code>subdir</code> must stay inside the repository without an absolute path or <code>..</code>.</p>
+<p>A local path is resolved from the <strong>configuration file&#39;s directory</strong>, not the shell working directory. Absolute paths are accepted. Point <code>path</code> directly at the catalog or pack root; a local entry has no <code>subdir</code>. Private repositories require an authorized checkout by the user before selecting its directory. Direct authenticated Git acquisition is unsupported. No GitHub Actions or catalog-bump workflow is required.</p>
+<h2 id="mixed-sources">Mix Git and local sources</h2><p>Save this as <code>config/my-catalogs.json</code>. The two local directories must contain distinct problem IDs, also distinct from the public catalog.</p>
+<pre><code class="language-json">{
+  &quot;schemaVersion&quot;: 1,
+  &quot;sources&quot;: [
+    { &quot;url&quot;: &quot;https://github.com/susumutomita/TenkaCloudChallenge.git&quot;, &quot;ref&quot;: &quot;main&quot; },
+    { &quot;path&quot;: &quot;../../private-event-problems&quot; },
+    { &quot;path&quot;: &quot;../../uncommitted-workshop-problems&quot; }
+  ]
+}
 </code></pre>
-<p>Run from the repository root. The default store is <code>.tenkacloud/pack-store</code>. Git install uses the network; local-directory validation and installation do not deploy anything.</p>
-<h2 id="verify-the-installed-revision">Verify the stored revision</h2><p>Check the source, resolved commit and digest. Installation is not authorization to run arbitrary code, expose endpoints or create cloud resources.</p>
-<h2 id="create-the-event">Use in a Cloud event</h2><p>Run from the repository root for Cloud, replacing <code>&lt;id@version&gt;</code> with the manifest ID and version:</p>
-<pre><code class="language-sh">bun run pack activate &lt;id@version&gt; --tenant local
+<p>From the TenkaCloud root, first validate acquisition and materialization without starting a host or deploying:</p>
+<pre><code class="language-sh">make catalog-download CATALOG_SOURCES=./config/my-catalogs.json
+make catalog-prepare
 </code></pre>
-<p><code>local</code> is the fixed selector consumed by the Cloud catalog loader; it does not select Local hosting. Use the default <code>.tenkacloud/pack-store</code>. There is no <code>make pack-activate</code> target. Activation itself performs no AWS operations. Normal Cloud source preparation includes this store in the private source archive and deployment reads the active problem catalog and execution assets. Update between events with <code>make deploy</code>, then select the problem in a new event. Existing events keep their saved catalog. Review runtime and scoring support and rehearse participant solving, scoring and teardown before hosting.</p>
-<p>Local does not connect the Pack store to its event catalog. Author supported private Docker/Compose problems in the local <code>problems/</code> tree, validate them and start with <code>make local</code>. AWS problems run on Cloud. For a private Git repository, obtain an authorized local checkout separately and install that directory. The Pack CLI Git fetcher does not use credentials.</p>
+<p>Then start a host when ready:</p>
+<pre><code class="language-sh">CATALOG_SOURCES=./config/my-catalogs.json make local
+</code></pre>
+<p><code>CATALOG_SOURCES=./config/my-catalogs.json make deploy ENV=development</code> uses the same snapshot preparation and then performs a real deployment. Review the target, permissions and costs separately before running it. These commands do not change the selection of an already running host; coordinate any restart with the organizer.</p>
+<h2 id="metadata-and-snapshots">Metadata and immutable snapshots</h2><p>Use the existing <code>challenges/&lt;id&gt;/metadata.json</code> and <code>battles/&lt;id&gt;/metadata.json</code> layout, or a validated SDK pack with <code>tenkacloud-pack.json</code> declaring <code>problemsRoot</code>. Follow the <a href="/docs/reference/problem-metadata/index.en.html">problem metadata reference</a> and <a href="/docs/reference/pack-manifest/index.en.html">pack manifest</a>. The existing discovery code generates the problem list from metadata in category/problem directories. <code>sources</code> selects acquisition roots; it is not a manually maintained problem list. Do not author in generated <code>problems/</code>.</p>
+<p>At acquisition, local content, including uncommitted edits and added problems, is copied and validated into <code>.tenkacloud/catalog-store/snapshots/&lt;digest&gt;</code>. Local and Cloud consume selected immutable snapshots; <code>problems/</code> is a generated build view. There is no file watcher or hot reload. Duplicate IDs, invalid/missing required metadata or files, non-directories and included symbolic links fail before replacing the previous selection. The local source root itself must not be a symbolic link.</p>
+<p>Use a dedicated problem directory. Copying excludes dot files/directories, <code>node_modules</code>, <code>dist</code>, <code>coverage</code>, credential/secret filenames and common private-key files. This is a filename filter, <strong>not a secret-content detector</strong>. Required hidden assets are also excluded: rename or separate them and validate the result. Review all files before acquisition; do not rely on this filter to sanitize a home directory or private repository.</p>
+<p><code>selected.json</code> records a digest and resolved source. For local revisions its compatibility <code>commit</code> value is the first 40 digest characters, not a Git commit. Retained local revisions read their stored snapshot, never the mutable author directory. A lock file alone cannot restore a missing local snapshot; keep the snapshot store needed by retained events.</p>
+<h2 id="runtime-boundary">Execution and Pack CLI boundaries</h2><p>Catalog acceptance does not enable every runtime. Local native execution retains its reviewed problem allowlist; remote Docker exercises require supported Linux isolation. CloudFormation problems require Cloud hosting and retain their existing reviewed support boundary. Cloud excludes Docker/Compose. Validate participant solving, scoring and teardown for each supported problem before an event; metadata discovery alone proves none of those runtime outcomes.</p>
+<p><code>make pack-validate ARGS=&quot;./my-pack&quot;</code> validates an SDK pack. Pack CLI <code>install</code> and <code>activate</code> manage a separate <code>.tenkacloud/pack-store</code>; those activation records are not the input to current <code>make local</code> or <code>make deploy</code>. Select the original validated directory through <code>sources</code> instead. See the <a href="/docs/tutorials/first-pack/index.en.html">first pack tutorial</a>.</p>
+<h2 id="verify-contract">Verify this contract</h2><p>With the repository&#39;s pinned tools and installed dependencies, run:</p>
+<pre><code class="language-sh">bun test scripts/problem-pack/test/local-catalog.test.ts scripts/problem-pack/test/catalog-bump.test.ts scripts/problem-pack/test/discover-problems-catalog.test.ts
+bun run generate:landing-docs
+bun run scripts/landing/generate-landing-docs.ts --check
+</code></pre>
+<p>The source tests cover mixed Git/local acquisition, configuration-relative paths, metadata discovery, immutable retention and invalid-input rollback. They do not perform an AWS deployment or prove a complete multi-team event.</p>
 
 </article>
 </main>
