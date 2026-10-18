@@ -82,6 +82,7 @@ function renderCatalog(path = "/problems") {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/problems" element={<LocalHostCatalogPage config={config} />} />
+          <Route path="/detail-without-id" element={<LocalHostCatalogPage config={config} detail />} />
           <Route
             path="/problems/:problemId"
             element={<LocalHostCatalogPage config={config} detail />}
@@ -149,6 +150,13 @@ describe("local catalog with production public metadata", () => {
     renderCatalog("/problems/hello-world");
     expect(await screen.findByRole("heading", { name: "Problem not found" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: sampleMetadata.name })).toBeNull();
+  });
+
+  it("does not render problem content when a detail view has no route ID", async () => {
+    renderCatalog("/detail-without-id");
+    expect(await screen.findByRole("link", { name: challengeMetadata.name })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Description" })).toBeNull();
+    expect(screen.queryByText(englishContent[0].learningGoals[0])).toBeNull();
   });
 
   it("waits for the actual host catalog without briefly offering unsupported samples", async () => {
