@@ -7,8 +7,6 @@ import { DOC_PAGES } from "@/content/docs-registry";
 export const STATIC_ROUTES: readonly string[] = [
   "/",
   "/product/",
-  // Public marketing catalog (#2408), JA primary + EN mirror.
-  "/catalog/",
   "/developers/",
   "/developers/api/",
   // Issue #2950: the machine (M2M) API reference, JA primary + EN mirror.
@@ -20,9 +18,8 @@ export const STATIC_ROUTES: readonly string[] = [
   "/terms/",
   "/legal/",
   // English mirrors. The JA pages above are the primary; /en/* mirror the marketing
-  // home and catalog, and the legal pages there are English reference versions.
+  // home, and the legal pages there are English reference versions.
   "/en/",
-  "/en/catalog/",
   "/en/privacy/",
   "/en/terms/",
   "/en/legal/",

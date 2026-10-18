@@ -571,7 +571,7 @@ main {
 /* ============================================================================
    Marketing surface — legacy landing design system (#2408 restyle).
    Ported from landing/styles/main.css and scoped under .landing so the marketing
-   home ("/", "/en/") and public catalog ("/catalog", "/en/catalog") reproduce the
+   home ("/", "/en/") reproduces the
    old ink-palette / Inter+Noto design. The palette is redeclared locally so the
    marketing surface stays light (the legacy landing was light-only), independent of
    the docs dark-mode tokens above. The docs surface is untouched. */
@@ -1800,114 +1800,6 @@ main {
 .landing .contact-legal a {
   color: rgba(255, 255, 255, 0.86);
   text-decoration: underline;
-}
-
-/* ---- catalog page ---- */
-.landing--catalog {
-  min-height: 100%;
-}
-
-.landing--catalog .page {
-  max-width: var(--w);
-  padding: 40px 28px 80px;
-}
-
-.landing--catalog h1 {
-  font-size: clamp(30px, 3.2vw, 42px);
-}
-
-.landing--catalog .catalog-topline {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.landing--catalog .marketing-lead {
-  color: var(--ink-2);
-  font-size: 15px;
-  max-width: 760px;
-  margin: 0 0 16px;
-  line-height: 1.65;
-}
-
-.landing--catalog .catalog-legend {
-  font-size: 13px;
-  color: var(--ink-3);
-  line-height: 2.1;
-}
-
-.landing--catalog .catalog-group {
-  margin-top: 32px;
-}
-
-.landing--catalog .catalog-group h2 {
-  font-size: 22px;
-}
-
-.landing--catalog .catalog-count {
-  color: var(--ink-3);
-  font-weight: 400;
-  font-size: 16px;
-}
-
-.landing--catalog .catalog-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-  margin-top: 12px;
-}
-
-.landing--catalog .catalog-card {
-  border: 1px solid #b8c0cc;
-  border-radius: 12px;
-  background: #fff;
-  padding: 18px;
-  box-shadow: 0 8px 24px rgba(8, 20, 37, 0.05);
-}
-
-.landing--catalog .catalog-card__head {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.landing--catalog .catalog-card h3 {
-  margin: 0 0 6px;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-}
-
-.landing--catalog .catalog-card__id {
-  display: inline-block;
-  font-family: var(--brand-font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  background: var(--paper-3);
-  border-radius: 4px;
-  padding: 1px 6px;
-}
-
-.landing--catalog .catalog-tags {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.landing--catalog .catalog-tags li {
-  font-size: 11px;
-  color: var(--ink-3);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 1px 8px;
-}
-
-.landing--catalog .catalog-source {
-  margin-top: 32px;
-  font-size: 13px;
-  color: var(--ink-3);
 }
 
 .landing .badge {

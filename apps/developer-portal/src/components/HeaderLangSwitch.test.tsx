@@ -12,24 +12,24 @@ afterEach(cleanup);
 
 describe("HeaderLangSwitch", () => {
   it("should mark JA current and link English to the page's EN mirror on a JA route", () => {
-    pathnameMock.mockReturnValue("/catalog/");
+    pathnameMock.mockReturnValue("/privacy/");
     render(<HeaderLangSwitch />);
     const ja = screen.getByRole("link", { name: "日本語" });
     const en = screen.getByRole("link", { name: "English" });
     expect(ja).toHaveAttribute("aria-current", "page");
-    expect(ja).toHaveAttribute("href", "/catalog/");
-    expect(en).toHaveAttribute("href", "/en/catalog/");
+    expect(ja).toHaveAttribute("href", "/privacy/");
+    expect(en).toHaveAttribute("href", "/en/privacy/");
     expect(en).not.toHaveAttribute("aria-current");
   });
 
   it("should mark EN current and link 日本語 to the page's JA mirror on an EN route", () => {
-    pathnameMock.mockReturnValue("/en/catalog/");
+    pathnameMock.mockReturnValue("/en/privacy/");
     render(<HeaderLangSwitch />);
     const ja = screen.getByRole("link", { name: "日本語" });
     const en = screen.getByRole("link", { name: "English" });
     expect(en).toHaveAttribute("aria-current", "page");
-    expect(en).toHaveAttribute("href", "/en/catalog/");
-    expect(ja).toHaveAttribute("href", "/catalog/");
+    expect(en).toHaveAttribute("href", "/en/privacy/");
+    expect(ja).toHaveAttribute("href", "/privacy/");
   });
 
   it("should fall back to the JA home when usePathname returns null", () => {

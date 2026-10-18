@@ -14,7 +14,6 @@ const HOME_EN = "/en/";
 // [ja, en] pairs. Keep in sync with the bilingual routes in routes.ts.
 const MIRROR_PAIRS: readonly (readonly [string, string])[] = [
   ["/", "/en/"],
-  ["/catalog/", "/en/catalog/"],
   ["/privacy/", "/en/privacy/"],
   ["/terms/", "/en/terms/"],
   ["/legal/", "/en/legal/"],
