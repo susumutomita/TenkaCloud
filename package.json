@@ -120,12 +120,13 @@
     "esbuild": "0.28.2",
     "fast-uri": "4.1.1",
     "hono": "4.13.11",
-    "ip-address": "10.1.1",
+    "ip-address": "10.7.4",
     "linkify-it": "6.1.0",
     "markdown-it": "14.2.0",
     "postcss": "8.5.25",
-    "qs": "6.15.3",
+    "qs": "6.16.1",
     "sharp": "0.35.5",
+    "undici": "8.12.2",
     "vite": "7.3.5",
     "vitest": "5.0.5"
   }
