@@ -112,7 +112,7 @@ export PATH="${BUN_INSTALL:-$HOME/.bun}/bin:$PATH"
 bun --version # must match mise.toml
 ```
 
-The configured ports remain 5174 and 5175. Ordinary `make local` does not recognize forwarded HTTPS origins: opening a forwarded URL can fail the strict Host/Origin checks. Existing `--public-admin-origin` and `--public-participant-origin` are a native-only candidate, with the organizer port kept Private; Codespaces proxy/authentication and remote play remain unverified. The recording shows an earlier experience. Use the local setup above for a reviewed event.
+The configured ports remain 5174 and 5175. Inside Codespaces, `make local` validates the Codespaces name/domain and selects exact HTTPS forwarding origins using those ports. Explicit public origins take precedence. This uses native public mode: both listeners bind the container interfaces, Docker/Compose problems are excluded, and no key is logged at startup. Keep organizer port 5174 Private; obtain a key through `make local-reset` in a private interactive terminal with the same data directory (this revokes old organizer sessions). Port visibility and proxy trust are never changed automatically. See the [Codespaces guide](https://tenkacloud.com/docs/getting-started/index.en.html#codespaces-native). Local origin/authentication regressions pass; live Codespaces proxy/browser behavior and remote events remain unverified. The recording shows an earlier experience.
 
 ### Deploy on AWS
 

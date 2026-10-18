@@ -6,6 +6,7 @@ declare namespace NodeJS {
     CONTROL_DATA_TURSO_AUTH_TOKEN?: string;
     CONTROL_DATA_ENV?: string;
     TENKACLOUD_COMPOSE_CLI?: string;
+    CODESPACES?: string;
     CODESPACE_NAME?: string;
     GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?: string;
   }

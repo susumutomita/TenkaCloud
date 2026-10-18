@@ -57,8 +57,15 @@ export function parseOptions(
       throw new Error("Ports must be integers from 1024 to 65535.");
     return Number(raw);
   };
+  const adminPort = port(values["admin-port"]);
+  const participantPort = port(values["participant-port"] ?? "5175");
   const appliance = consoleAppliance(values);
-  const exposure = appliance ? undefined : publicExposure(values);
+  const exposure = appliance
+    ? undefined
+    : publicExposure({
+        ...values,
+        ...codespacesOrigins(values, environment, adminPort, participantPort),
+      });
   assertExposureEnvironment(Boolean(appliance), exposure, values.lan, environment);
   assertCompetitionOptions(
     values["competition-network"],
@@ -67,8 +74,6 @@ export function parseOptions(
   );
   assertVpnOptions(values, Boolean(exposure));
   const hostname = exposure ? "0.0.0.0" : listenAddress(values.lan, values["unsafe-lan"]);
-  const adminPort = port(values["admin-port"]);
-  const participantPort = port(values["participant-port"] ?? "5175");
   const gatewayPorts = parseGatewayPorts(values["gateway-ports"]);
   // With --vpn-peers the registration supplies the participant port; vpnListener checks it.
   assertListenerPorts(
@@ -104,6 +109,43 @@ export function parseOptions(
     ...(exposure ? { public: exposure } : {}),
     build: !values["no-build"],
     help: values.help,
+  };
+}
+
+/** Select exact forwarded origins; this neither opens ports nor changes their visibility. */
+function codespacesOrigins(
+  values: {
+    lan?: string;
+    "vpn-peers"?: string;
+    "public-admin-origin"?: string;
+    "public-participant-origin"?: string;
+  },
+  environment: Readonly<Record<string, string | undefined>>,
+  adminPort: number,
+  participantPort: number,
+): { "public-admin-origin"?: string; "public-participant-origin"?: string } {
+  if (
+    environment.CODESPACES !== "true" ||
+    values.lan !== undefined ||
+    values["vpn-peers"] !== undefined ||
+    values["public-admin-origin"] !== undefined ||
+    values["public-participant-origin"] !== undefined
+  )
+    return {};
+  const name = environment.CODESPACE_NAME ?? "";
+  const domain = environment.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN;
+  if (
+    !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(name) ||
+    `${name}-${adminPort}`.length > 63 ||
+    `${name}-${participantPort}`.length > 63 ||
+    domain !== "app.github.dev"
+  )
+    throw new Error(
+      "Invalid Codespaces name or forwarding domain; use valid Codespaces metadata or explicit public origins.",
+    );
+  return {
+    "public-admin-origin": `https://${name}-${adminPort}.${domain}`,
+    "public-participant-origin": `https://${name}-${participantPort}.${domain}`,
   };
 }
 

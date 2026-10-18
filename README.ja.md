@@ -114,7 +114,7 @@ export PATH="${BUN_INSTALL:-$HOME/.bun}/bin:$PATH"
 bun --version # mise.toml の指定版を確認
 ```
 
-設定した port は従来どおり 5174 と 5175 です。通常の `make local` は転送先の HTTPS origin を認識せず、転送 URL を開くと厳密な Host/Origin 検査で拒否される場合があります。既存の `--public-admin-origin` と `--public-participant-origin` は、主催者 port を Private に保つ native 専用の候補ですが、Codespaces の proxy・認証・リモート競技は未検証です。動画は以前の構成の紹介です。確認済みの開催には前述のローカル手順を使ってください。
+設定した port は従来どおり 5174 と 5175 です。Codespaces 内の `make local` は端末名・転送ドメインを検証し、各 port の完全一致 HTTPS origin を選びます。明示した public origin は優先します。native public mode を使うため両 listener はコンテナーのインタフェースに待ち受け、Docker/Compose 問題は除外し、起動ログにはキーを出しません。主催者 port 5174 は Private のままにし、キーが必要なら同じデータディレクトリを指定した `make local-reset` を非共有の対話ターミナルで実行します（古い主催者セッションを失効させます）。port の公開設定と proxy の信頼は自動変更しません。[Codespaces 手順](https://tenkacloud.com/docs/getting-started/#codespaces-native)も参照してください。origin・認証のローカル回帰は確認しましたが、実 Codespaces の proxy・browser・リモート競技は未検証です。動画は以前の構成の紹介です。
 
 ### AWS にデプロイする
 
