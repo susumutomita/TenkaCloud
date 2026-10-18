@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { allRoutes } from "@/lib/routes";
 import { searchIndex } from "@/lib/search";
-import { CATALOG_DATA } from "./catalog-data";
 import { DOC_PAGES, DOC_SECTIONS, findDocBySlug } from "./docs-registry";
 
 const FIRST_PACK_SLUG = "tutorials/first-pack";
@@ -110,7 +109,6 @@ describe("docs registry — role manuals (#2818)", () => {
       }
       expect(source).not.toContain("lite-pipeline.yaml");
       expect(source).not.toContain("make deploy-saas");
-      expect(source).toContain(String(CATALOG_DATA.problems.length));
       for (const detail of [
         "512",
         "40",
@@ -431,7 +429,6 @@ describe("integration candidate documentation contract", () => {
       );
       expect(source).toMatch(/reviewed IAM|権限設定/);
       expect(source).toMatch(/generic CloudFormation|汎用 CloudFormation/);
-      expect(source).toContain(String(CATALOG_DATA.problems.length));
       expect(source).toMatch(/in progress|進行中/);
     }
   });

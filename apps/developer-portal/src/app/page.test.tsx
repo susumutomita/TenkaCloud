@@ -1,6 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { GITHUB_DISCUSSIONS } from "@/lib/links";
+import { CATALOG_REPO, GITHUB_DISCUSSIONS } from "@/lib/links";
 import { isInternalHref, isKnownRoute } from "@/lib/routes";
 import EnglishHomePage from "./en/page";
 import HomePage from "./page";
@@ -11,7 +11,7 @@ function isResolvable(href: string): boolean {
   return isKnownRoute(href) || isKnownRoute(`${href.replace(/\/$/, "")}/`);
 }
 
-// The marketing home is the public front door of tenkacloud.com (#2408). Japanese
+// The separate Next.js marketing export renders Japanese
 // renders at "/", English at "/en/", both from the one bilingual content model.
 // These tests pin that the front door routes into real, resolvable portal pages
 // (a dead CTA fails here, not in the browser) and that both languages ship.
@@ -34,8 +34,7 @@ describe("HomePage (Japanese, /)", () => {
       .getAllByRole("link", { name: "問題カタログを見る" })
       .find((link) => link.getAttribute("data-cta") === "home-catalog");
     expect(cta).toBeDefined();
-    expect(cta).toHaveAttribute("href", "/catalog/");
-    expect(isKnownRoute("/catalog/")).toBe(true);
+    expect(cta).toHaveAttribute("href", CATALOG_REPO);
   });
 
   it("should offer a role-neutral documentation CTA that resolves to a known route", () => {
@@ -70,13 +69,12 @@ describe("EnglishHomePage (/en/)", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("cloud skills");
   });
 
-  it("should point the catalog CTA and language switch at the English mirrors", () => {
+  it("should link the external catalog and return to the Japanese home", () => {
     render(<EnglishHomePage />);
     const cta = screen
       .getAllByRole("link", { name: "Browse the catalog" })
       .find((link) => link.getAttribute("data-cta") === "home-catalog");
-    // The English home keeps the English reader on the English catalog mirror.
-    expect(cta).toHaveAttribute("href", "/en/catalog/");
+    expect(cta).toHaveAttribute("href", CATALOG_REPO);
     // The language switch returns to the Japanese (primary) home.
     expect(screen.getByRole("link", { name: "日本語" })).toHaveAttribute("href", "/");
   });

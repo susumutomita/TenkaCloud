@@ -61,12 +61,6 @@ jobs:
       - name: Dead-code gate (knip)
         run: make dead-code
 
-      # #2254: enforce the catalog authoring contract (schema + bilingual-README invariant) against
-      # the platform's problems/ mirror, so a README-less / schema-invalid problem fails platform CI
-      # too — not only the catalog repo's own CI. Green today (all problems valid); catches drift.
-      - name: Validate problem catalog (schema + bilingual README, #2254)
-        run: make validate-problems
-
       - name: Run textlint
         run: make lint-text
 

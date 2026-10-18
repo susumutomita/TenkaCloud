@@ -433,11 +433,6 @@
       "count": 3
     }
   },
-  "apps/developer-portal/scripts/generate-catalog.ts": {
-    "sonarjs/no-os-command-from-path": {
-      "count": 1
-    }
-  },
   "apps/developer-portal/scripts/generate-machine-api.test.ts": {
     "@typescript-eslint/consistent-indexed-object-style": {
       "count": 1

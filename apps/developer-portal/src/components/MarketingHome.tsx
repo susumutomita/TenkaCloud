@@ -1,10 +1,9 @@
 import Script from "next/script";
 import { BUSINESS_HOME_COPY } from "@/content/home-business-copy";
 import { HOME_COPY } from "@/content/site-copy";
-import { catalogCounts } from "@/lib/catalog";
 import { htmlLang, type Locale } from "@/lib/i18n";
 import {
-  catalogPath,
+  CATALOG_REPO,
   GITHUB_DISCUSSIONS,
   GITHUB_REPO,
   legalPath,
@@ -22,12 +21,6 @@ import { BattlePreview, ChallengePreview, HeroDashboard, SsoPreview } from "./Ma
 export function MarketingHome({ locale }: { locale: Locale }) {
   const business = BUSINESS_HOME_COPY[locale];
   const product = HOME_COPY[locale];
-  const counts = catalogCounts();
-
-  const catalogLead = product.catalog.lead
-    .replace("{total}", String(counts.total))
-    .replace("{battle}", String(counts.readyBattle))
-    .replace("{challenge}", String(counts.readyChallenge));
 
   const [privacyLabel, termsLabel, legalLabel] = product.legalLine.split(" / ");
 
@@ -65,11 +58,7 @@ export function MarketingHome({ locale }: { locale: Locale }) {
               <a className={styles.heroActionSecondary} data-cta="home-demo" href="/product/">
                 {business.hero.secondaryCta}
               </a>
-              <a
-                className={styles.heroActionText}
-                data-cta="home-catalog"
-                href={catalogPath(locale)}
-              >
+              <a className={styles.heroActionText} data-cta="home-catalog" href={CATALOG_REPO}>
                 {business.hero.tertiaryCta}
               </a>
             </div>
@@ -271,9 +260,9 @@ export function MarketingHome({ locale }: { locale: Locale }) {
         <div className="wrap audience-intro">
           <div className="eyebrow">{product.catalog.eyebrow}</div>
           <h2>{product.catalog.heading}</h2>
-          <p className="lead">{catalogLead}</p>
+          <p className="lead">{product.catalog.lead}</p>
           <div className="extend-cta">
-            <a className="cta-primary" data-cta="home-catalog-section" href={catalogPath(locale)}>
+            <a className="cta-primary" data-cta="home-catalog-section" href={CATALOG_REPO}>
               {product.catalog.cta}
             </a>
             <a className="cta-primary" data-cta="home-docs" href="/developers/">
