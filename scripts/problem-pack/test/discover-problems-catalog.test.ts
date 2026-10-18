@@ -152,25 +152,11 @@ describe("discoverProblemsCatalog ordering (#2086)", () => {
     expect(second).toEqual(first); // deterministic: same order on every call
   });
 
-  it("should follow filesystem traversal order without applying its own sort", () => {
-    // Names chosen so id-sorted order would differ from category-then-name walk.
+  it("should order categories and problem directories independently of creation order", () => {
     writeProblem("zzz-category", "aaa", { id: "aaa" });
     writeProblem("aaa-category", "zzz", { id: "zzz" });
-
-    // The expected order mirrors the implementation's two-level readdir walk
-    // (category dirs, then problem dirs within each), proving no independent
-    // alphabetical sort of ids is applied on top.
-    const expected: string[] = [];
-    for (const category of fs.readdirSync(workspace, { withFileTypes: true })) {
-      if (!category.isDirectory()) continue;
-      for (const problem of fs.readdirSync(path.join(workspace, category.name), {
-        withFileTypes: true,
-      })) {
-        if (problem.isDirectory()) expected.push(problem.name); // id === dir name here
-      }
-    }
-
-    expect(Object.keys(discoverProblemsCatalog(workspace))).toEqual(expected);
+    writeProblem("aaa-category", "bbb", { id: "bbb" });
+    expect(Object.keys(discoverProblemsCatalog(workspace))).toEqual(["bbb", "zzz", "aaa"]);
   });
 });
 

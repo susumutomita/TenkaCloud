@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import Ajv from "ajv";
 import { z } from "zod";
 import platformPackage from "../../package.json";
@@ -30,6 +30,7 @@ import {
 import schema from "./catalog-schema.json";
 import { realGitArchiveFetcher } from "./git-fetcher.js";
 import { type GitArchiveFetcher, parseGitSource } from "./git-source.js";
+import { copyLocalCatalog } from "./local-catalog.js";
 import { satisfiesCoreRange } from "./manifest.js";
 import { computeContentDigest } from "./snapshot.js";
 import { restoreSourcePermissions, sealSourcePermissions } from "./source-permissions.js";
@@ -112,6 +113,7 @@ function directories(root: string): string[] {
     existsSync(join(root, category))
       ? readdirSync(join(root, category), { withFileTypes: true })
           .filter((entry) => entry.isDirectory())
+          .sort((left, right) => left.name.localeCompare(right.name, "en"))
           .map((entry) => join(root, category, entry.name))
       : [],
   );
@@ -200,8 +202,10 @@ export function downloadConfiguredCatalog(
   deps: Parameters<typeof downloadCatalog>[2] = {},
 ): void {
   try {
-    const selection = SelectionSchema.parse(
-      JSON.parse(readFileSync(resolve(root, configPath), "utf8")),
+    const configFile = resolve(root, configPath);
+    const selection = SelectionSchema.parse(JSON.parse(readFileSync(configFile, "utf8")));
+    selection.sources = selection.sources.map((source) =>
+      "path" in source ? { path: resolve(dirname(configFile), source.path) } : source,
     );
     const internalPath = join(root, "catalog-lock.json");
     const internal = existsSync(internalPath)
@@ -242,6 +246,7 @@ function downloadRevision(
   source: z.infer<typeof SelectionSchema>["sources"][number] | Revision,
   deps: { fetcher?: GitArchiveFetcher; resolveRef?: typeof resolveCatalogRef },
 ): Revision {
+  if ("path" in source) return localRevision(root, source);
   if (
     "commit" in source &&
     /^[a-f0-9]{40}$/iu.test(source.ref) &&
@@ -278,6 +283,41 @@ function downloadRevision(
     mkdirSync(join(store(root), "snapshots"), { recursive: true });
     saveSnapshot(scratch, destination, digest, root);
     return { ...source, commit, digest, problemsRoot: relativeRoot };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+/** Retained local editions never read the mutable author's directory again. */
+function localRevision(
+  root: string,
+  source: { path: string } | Extract<Revision, { path: string }>,
+): Revision {
+  if ("digest" in source) {
+    const directory = snapshot(root, source.digest);
+    if (
+      !existsSync(directory) ||
+      source.commit !== source.digest.slice(0, 40) ||
+      computeContentDigest(directory, true) !== source.digest
+    )
+      throw new Error("Retained local catalog snapshot is missing or changed");
+    if (problemsRoot(directory) !== source.problemsRoot)
+      throw new Error("Retained local catalog problems root changed");
+    return source;
+  }
+  const scratch = mkdtempSync(join(tmpdir(), "tenka-local-catalog-"));
+  try {
+    const path = resolve(root, source.path);
+    copyLocalCatalog(path, scratch);
+    const relativeRoot = problemsRoot(scratch);
+    validateCatalogIdentity(join(scratch, relativeRoot));
+    sealSourcePermissions(scratch);
+    const digest = computeContentDigest(scratch, true);
+    mkdirSync(join(store(root), "snapshots"), { recursive: true });
+    saveSnapshot(scratch, snapshot(root, digest), digest, root);
+    // Existing runtime asset paths require a 40-hex revision. For local content
+    // this is a content identifier, never a claim about a Git commit.
+    return { path, commit: digest.slice(0, 40), digest, problemsRoot: relativeRoot };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }

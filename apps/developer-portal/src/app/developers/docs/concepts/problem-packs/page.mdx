@@ -8,7 +8,7 @@ A pack is a versioned, inspectable unit of competition content. Its manifest dec
 
 ## What is a problem pack
 
-Problem Packs let organizers distribute and host company exercises or problems intended for publication after an event without adding them to the public catalog. Installation stores an immutable revision; Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads supported problems in its local `problems/` tree rather than the Pack store. Publication remains a separate author decision.
+Hosting uses immutable snapshots selected by `sources`. `problems/` is a generated view; Pack CLI activation records are not hosting inputs. See the [source contract, local-path example and formal schema](/developers/docs/operate/use-existing-pack/#catalog-source-schema).
 
 ## Battle versus Challenge
 

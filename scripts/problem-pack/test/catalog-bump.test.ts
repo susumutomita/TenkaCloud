@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import {
@@ -243,3 +243,44 @@ test("CI keeps the required ci gate", () => {
     expect(job.name).toBeUndefined();
   }
 });
+
+test("bump preserves mixed local sources and resolves relative paths before moving config to scratch", () =>
+  fixture((root) => {
+    const local = { path: "../private-problems" };
+    const resolvedPath = resolve(root, "../private-problems");
+    const localRevision = {
+      path: resolvedPath,
+      commit: "f".repeat(40),
+      digest: "f".repeat(64),
+      problemsRoot: ".",
+    };
+    const mixed = { ...selection, sources: [...selection.sources, local] };
+    const mixedLock = { ...lock, sources: [...lock.sources, localRevision] };
+    const result = planCatalogBump(mixed, mixedLock, "v1.12.0");
+    if (!result) throw new Error("Expected mixed-source bump");
+    const bumped = bumpCatalog(root, result, {
+      acquire: (path) => {
+        expect(JSON.parse(readFileSync(path, "utf8")).sources).toEqual([
+          { url: challengeUrl, ref: "v1.12.0" },
+          other,
+          { path: resolvedPath },
+        ]);
+        mkdirSync(store(root), { recursive: true });
+        writeFileSync(
+          lockPath(root),
+          JSON.stringify({
+            schemaVersion: 1,
+            sources: [next, otherRevision, localRevision],
+            retained: [retained],
+          }),
+        );
+      },
+      prepare: () => {
+        expect(JSON.parse(readFileSync(lockPath(root), "utf8")).sources[2].path).toBe(resolvedPath);
+      },
+    });
+    expect(bumped.sources[2]).toEqual(localRevision);
+    expect(JSON.parse(readFileSync(join(root, "catalog-sources.json"), "utf8")).sources[2]).toEqual(
+      local,
+    );
+  }));

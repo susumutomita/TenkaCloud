@@ -5,7 +5,7 @@ export const metadata = { title: "Security and provenance model" };
 
 # Security and provenance model <MaturityBadge level="stable" />
 
-> Problem Packs can manage company problems and content awaiting publication without a public catalog contribution. Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads its `problems/` tree rather than the Pack store. Publication remains a separate author decision.
+> Hosting uses immutable snapshots selected by `sources`. `problems/` is a generated view; Pack CLI activation records are not hosting inputs. See the [source contract, local-path example and formal schema](/developers/docs/operate/use-existing-pack/#catalog-source-schema).
 
 A problem pack must be reproducible and tamper-evident. The facts below are
 **normative reference** derived from the pack manifest's inert-by-design schema and

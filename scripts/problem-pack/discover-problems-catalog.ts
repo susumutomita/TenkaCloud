@@ -284,10 +284,14 @@ function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetada
     );
     return;
   }
-  for (const category of fs.readdirSync(problemsRoot, { withFileTypes: true })) {
+  for (const category of fs
+    .readdirSync(problemsRoot, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name, "en"))) {
     if (!category.isDirectory()) continue;
     const categoryDir = path.join(problemsRoot, category.name);
-    for (const problem of fs.readdirSync(categoryDir, { withFileTypes: true })) {
+    for (const problem of fs
+      .readdirSync(categoryDir, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name, "en"))) {
       if (!problem.isDirectory()) continue;
       const metadataPath = path.join(categoryDir, problem.name, "metadata.json");
       const metadata = readProblemMetadata(metadataPath, category.name, problem.name);

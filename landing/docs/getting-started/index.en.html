@@ -51,7 +51,7 @@
 <section><h5>Operate</h5><ul>
 <li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
-<li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
+<li><a href="/docs/operate/use-existing-pack/index.en.html">Select a problem catalog</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
@@ -141,6 +141,20 @@ make local
 <h2 id="cloud-status">Cloud deployment status</h2><p><code>make deploy</code> and <code>make destroy</code> use the current Lambda + Turso/DynamoDB CLI after reviewed IAM setup. Cloud hosting uses Lambda and Cognito, selectable Turso or DynamoDB, generic CloudFormation deployment, flag/multi-flag and scheduled scoring, participant Console/CLI access, and native coordination including Cryptography Battle. Destroy confirms targets and honors deployed removal policies. Ordinary <code>make destroy</code> leaves external Turso rows; <code>make destroy-all</code> explicitly resets them. Exercise teardown is separate. The restored cloud backend does not promise a zero-cost deployment. AWS-service problems are cloud-only. Docker/Compose exercises are local-only and are not listed in the cloud catalog. Live AWS and hosted Turso event capacity remain unverified. The cloud pipeline defaults to the current CLI; review its source settings and deployment role before starting a build.</p>
 <p>Codespaces forwarded-origin and exercise routing have not been verified for this candidate. Use the local checkout procedure above until that path has its own evidence.</p>
 <p>Next: <a href="/docs/manual/organizer/index.en.html">organizer manual</a>, <a href="/docs/manual/participant/index.en.html">participant manual</a> and <a href="/docs/operate/deploy-paths/index.en.html">deployment boundaries</a>.</p>
+<h3>Use local problem directories</h3>
+<p>Mix Git entries (<code>{ &quot;url&quot;: &quot;https://…&quot;, &quot;ref&quot;: &quot;main&quot; }</code>) and local entries (<code>{ &quot;path&quot;: &quot;../TenkaCloudChallenge&quot; }</code>) in <code>catalog-sources.json</code>&#39;s <code>sources</code> array. Multiple local directories are supported. Relative paths resolve from the configuration file&#39;s directory; absolute paths are accepted. For private Git, obtain an authorized checkout yourself and select its path. TenkaCloud needs no credentials for this route. Direct Git acquisition remains unauthenticated HTTPS.</p>
+<pre><code class="language-json">{
+  &quot;schemaVersion&quot;: 1,
+  &quot;sources&quot;: [
+    { &quot;path&quot;: &quot;../TenkaCloudChallenge&quot; },
+    { &quot;path&quot;: &quot;../private-event-problems&quot; }
+  ]
+}
+</code></pre>
+<p>Each problem&#39;s <code>metadata.json</code> is the source of the problem list; there is no separate list to edit. Keep the existing <code>challenges/&lt;id&gt;/metadata.json</code> / <code>battles/&lt;id&gt;/metadata.json</code> layout, or a standard pack&#39;s declared <code>problemsRoot</code>. Ordinary files such as READMEs are not listed as problems. Missing required metadata/files, invalid values, ID/directory mismatches and duplicate IDs across sources fail validation. A second repository cannot override an existing problem ID.</p>
+<p>Both <code>make local</code> and <code>make deploy</code> preparation capture uncommitted additions and edits into validated immutable snapshots, then consume those snapshots. The author directory is unchanged. Acquisition or validation failure preserves the previous selection and stops startup/build. Saved events retain their definitions; no running host is automatically updated or restarted. Keep the build enabled on the next start after editing content.</p>
+<p>Select a dedicated problem directory and keep real credentials out of teaching content. Copying excludes dot entries including <code>.git</code>, <code>.dockerignore</code> and <code>.htaccess</code>, <code>node_modules</code>, <code>dist</code>, <code>coverage</code>, conventional <code>credentials</code> / <code>secret</code> filenames, and common private-key file extensions. This does not detect secrets embedded in arbitrary filenames or file content. If a required teaching asset is excluded, separate it from secrets and use an appropriate name/layout before validation. Source-root and included symlinks, and special files, are refused. Retained local editions are verified from their snapshots without rereading mutable author files. A local revision&#39;s <code>commit</code> field is an internal ID made from the first 40 hex digits of its content digest, not a Git commit. A local lock alone cannot restore content on another machine without its snapshot store.</p>
+<p>Use <code>CATALOG_SOURCES=./config/my-catalogs.json make local</code> for another configuration file. <code>CATALOG_SOURCES=./config/my-catalogs.json make deploy ENV=development</code> uses the same selection but also performs the normal deployment: review target, cost and permissions first. To check acquisition without starting or deploying, use <code>make catalog-download CATALOG_SOURCES=./config/my-catalogs.json</code>, then <code>make catalog-prepare</code>. Retained Git revisions in an existing lock may still require network access even when the current selection contains only local paths.</p>
 <h2>Books and compatibility</h2>
 <p><a href="https://zenn.dev/bull/books/cloud-competition">自分で作るクラウド競技</a> and
 <a href="https://leanpub.com/build-your-own-cloud-competition">Build Your Own Cloud Competition</a>
@@ -149,6 +163,7 @@ is this documentation and its matching checkout. The book source revision in zen
 A source merge does not verify publication or playability.</p>
 <p>New installations use <code>tenkacloud-cloud</code> stack names; existing <code>tenkacloud-lite</code> stacks keep their names. The CLI discovers Lite/cloud installations; if both exist, explicitly choose <code>TENKACLOUD_STACK_LAYOUT=lite</code> or <code>cloud</code>. Original Lite updates verify ownership and persistent resource IDs. Original unpinned Lite installations require a one-time confirmation that no active competitions remain, after resource/schema checks and before bootstrap, source upload or deployment. Keep active competitions on their installed version until completion. After verifying that condition, confirm interactively or use <code>CLOUD_ARGS=&quot;--confirm-no-active-events&quot;</code> for a noninteractive upgrade; generic <code>--yes</code> cannot bypass this check. A legacy catalog key alone does not prove a safe upgrade, and historical data is not migrated automatically. New and already-restored installations keep ordinary automatic <code>make deploy</code> behavior. Published cloud-v1 resource/database layouts cannot be updated in place, and no data is migrated automatically. <code>--drain-events</code> is unavailable; finish event Teardown before removing the platform.</p>
 <p>Both databases admit 99 teams; SQL coordination retains the original 4 MiB state policy. All eight current catalog templates fit within the 51,200-byte <code>TemplateBody</code> limit, and <code>TemplateURL</code> is not implemented. This is not an all-AWS-problems deployment claim.</p>
+<p>See the <a href="/docs/operate/use-existing-pack/index.en.html#catalog-source-schema">formal source contract, schema, mixed-source example and verification commands</a>.</p>
 
 </article>
 </main>

@@ -4,7 +4,7 @@ export const metadata = { title: "First pack tutorial" };
 
 # First pack tutorial <MaturityBadge level="preview" />
 
-Problem Packs let organizers distribute and host company exercises or problems intended for publication after an event without adding them to the public catalog. Installation stores an immutable revision; Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads supported problems in its local `problems/` tree rather than the Pack store. Publication remains a separate author decision.
+Hosting uses immutable snapshots selected by `sources`. `problems/` is a generated view; Pack CLI activation records are not hosting inputs. See the [source contract, local-path example and formal schema](/developers/docs/operate/use-existing-pack/#catalog-source-schema).
 
 Just want to run an existing pack? → [Use an existing pack](/developers/docs/operate/use-existing-pack/).
 
@@ -40,15 +40,7 @@ For a Git install use an HTTPS URL and full immutable 40-hex commit SHA. Keep so
 
 <h2 id="runtime-boundary">Connect to hosting</h2>
 
-Run from the repository root for Cloud, replacing `<id@version>` with the manifest ID and version:
-
-```sh
-bun run pack activate <id@version> --tenant local
-```
-
-`local` is the fixed selector consumed by the Cloud catalog loader; it does not select Local hosting. Use the default `.tenkacloud/pack-store`. There is no `make pack-activate` target. Activation itself performs no AWS operations. Normal Cloud source preparation includes this store in the private source archive and deployment reads the active problem catalog and execution assets. Update between events with `make deploy`, then select the problem in a new event. Existing events keep their saved catalog. Review runtime and scoring support and rehearse participant solving, scoring and teardown before hosting.
-
-Local does not connect the Pack store to its event catalog. Author supported private Docker/Compose problems in the local `problems/` tree, validate them and start with `make local`. AWS problems run on Cloud. For a private Git repository, obtain an authorized local checkout separately and install that directory. The Pack CLI Git fetcher does not use credentials.
+Select the original validated directory using a `sources` entry with `path`. Follow the [mixed-source example and formal schema](/developers/docs/operate/use-existing-pack/#catalog-source-schema). Pack CLI install/activate and the current hosting catalog use separate stores. Do not edit generated `problems/`.
 
 <h2 id="common-failures">Common failures and diagnostic codes</h2>
 

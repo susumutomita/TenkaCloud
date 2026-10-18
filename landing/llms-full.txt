@@ -95,7 +95,7 @@ before making a small change.
 | Event/team setup | `apps/application-admin-console/src/pages/EventDetail.tsx` |
 | Participant answer or score display | `apps/participant-portal/src/`, then `scripts/local-host/service.ts` or `infrastructure/lib/problem-deploy/handlers/participant-handler/` |
 | Deployment or backend configuration | `infrastructure/templates/cloud-pipeline.yaml`, `scripts/cloud-hosting/main.ts`, `infrastructure/lib/problem-deploy/control-data/` |
-| Problem rules, hints, or game UI | `problems/<category>/<problem>/metadata.json`, its runtime/plugin, and `portal/` |
+| Problem rules, hints, or game UI | Selected source directory `<category>/<problem>/metadata.json`, its runtime/plugin, and `portal/`; `problems/` is a generated snapshot view |
 | Shared API or scoring contract | `packages/portal-contracts/`, `packages/problem-sdk/`, corresponding producers and consumers |
 
 For a checkout, read `AGENTS.md`; `CLAUDE.md` is just an import of it. Preserve the
@@ -117,3 +117,7 @@ shared-environment changes, or secret access. Read-only investigation can procee
 - [『自分で作るクラウド競技』(日本語)](https://zenn.dev/bull/books/cloud-competition)
 
 These explain design decisions, **not** a specification. Current code and tests take precedence.
+
+## Catalog contract / カタログ仕様
+
+Read the [source contract, schema links, mixed Git/local example and verification commands](https://tenkacloud.com/docs/operate/use-existing-pack/index.en.html#catalog-source-schema) ([日本語](https://tenkacloud.com/docs/operate/use-existing-pack/#catalog-source-schema)). For unreleased local-path changes, read `apps/developer-portal/src/app/developers/docs/operate/use-existing-pack/page.mdx` in the same checkout; published pages and main may describe an older revision. `llms.txt` is a document index, not an automatically enforced agent setting.

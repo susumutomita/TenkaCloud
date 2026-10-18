@@ -28,7 +28,7 @@ const result = await findCatalogBump(root, process.env.CATALOG_TAG ?? "", {
 });
 if (result) {
   const lock = bumpCatalog(root, result.plan);
-  const revision = lock.sources.find((entry) => entry.url === challengeUrl);
+  const revision = lock.sources.find((entry) => "url" in entry && entry.url === challengeUrl);
   if (!revision) throw new Error("Resolved TenkaCloudChallenge revision is missing");
   writeFileSync(
     "catalog-bump-body.md",

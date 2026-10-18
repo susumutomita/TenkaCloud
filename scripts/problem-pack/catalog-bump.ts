@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { z } from "zod";
 import {
   CatalogLockSchema,
@@ -39,7 +39,9 @@ export function isNewerRelease(current: string, target: string): boolean {
 function retain(entries: Revision[], previous: Revision): Revision[] {
   return [
     ...new Map(
-      [...entries, { ...previous, ref: previous.commit }].map((r) => [r.commit, r]),
+      [...entries, "ref" in previous ? { ...previous, ref: previous.commit } : previous].map(
+        (r) => [r.commit, r],
+      ),
     ).values(),
   ];
 }
@@ -47,13 +49,14 @@ function retain(entries: Revision[], previous: Revision): Revision[] {
 export function planCatalogBump(selectionInput: unknown, lockInput: unknown, tag: string) {
   const selection = SelectionSchema.parse(selectionInput);
   const lock = CatalogLockSchema.parse(lockInput);
-  const source = selection.sources.find((entry) => entry.url === challengeUrl);
-  if (!source) throw new Error("TenkaCloudChallenge source is missing");
+  const source = selection.sources.find((entry) => "url" in entry && entry.url === challengeUrl);
+  if (!source || !("url" in source)) throw new Error("TenkaCloudChallenge source is missing");
   if (!isNewerRelease(source.ref, tag)) return null;
   const previous = lock.sources.find(
-    (entry) => entry.url === source.url && entry.subdir === source.subdir,
+    (entry) => "url" in entry && entry.url === source.url && entry.subdir === source.subdir,
   );
-  if (!previous || previous.ref !== source.ref) throw new Error("Catalog source and lock disagree");
+  if (!previous || !("ref" in previous) || previous.ref !== source.ref)
+    throw new Error("Catalog source and lock disagree");
   return {
     oldTag: source.ref,
     selection: {
@@ -86,18 +89,28 @@ export function bumpCatalog(
   const scratch = mkdtempSync(join(tmpdir(), "catalog-bump-"));
   try {
     const sourcesPath = join(scratch, "catalog-sources.json");
-    writeFileSync(sourcesPath, json(plan.selection));
+    const acquisitionSelection = {
+      ...plan.selection,
+      sources: plan.selection.sources.map((source) =>
+        "path" in source ? { path: resolve(root, source.path) } : source,
+      ),
+    };
+    writeFileSync(sourcesPath, json(acquisitionSelection));
     (deps.acquire ?? ((path) => make(root, "catalog-download", `CATALOG_SOURCES=${path}`)))(
       sourcesPath,
     );
     const selectedText = readCatalogSelection(root);
     const selected = CatalogLockSchema.parse(JSON.parse(selectedText));
-    const expectedSources = selected.sources.map(({ url, ref, subdir }) => ({
-      url,
-      ref,
-      ...(subdir === undefined ? {} : { subdir }),
-    }));
-    if (json(expectedSources) !== json(plan.selection.sources))
+    const expectedSources = selected.sources.map((source) =>
+      "path" in source
+        ? { path: source.path }
+        : {
+            url: source.url,
+            ref: source.ref,
+            ...(source.subdir === undefined ? {} : { subdir: source.subdir }),
+          },
+    );
+    if (json(expectedSources) !== json(acquisitionSelection.sources))
       throw new Error("Acquisition selected unexpected sources");
     const lock = CatalogLockSchema.parse({
       schemaVersion: 1,
@@ -128,8 +141,8 @@ export async function findCatalogBump(
   const selection = SelectionSchema.parse(
     JSON.parse(readFileSync(join(root, "catalog-sources.json"), "utf8")),
   );
-  const current = selection.sources.find((entry) => entry.url === challengeUrl);
-  if (!current) throw new Error("TenkaCloudChallenge source is missing");
+  const current = selection.sources.find((entry) => "url" in entry && entry.url === challengeUrl);
+  if (!current || !("ref" in current)) throw new Error("TenkaCloudChallenge source is missing");
   if (!semver.test(current.ref)) return null;
   if (override && !isNewerRelease(current.ref, override)) return null;
   const release = ReleaseSchema.parse(await deps.release(override));

@@ -1,37 +1,81 @@
 import { MaturityBadge } from "@/components/MaturityBadge";
 
-export const metadata = { title: "既存パックを使う" };
+export const metadata = { title: "問題カタログの選択" };
 
-# 既存パックを使う <MaturityBadge level="preview" />
+# 問題カタログの選択 <MaturityBadge level="preview" />
 
-Problem Pack は、公開カタログへ登録せず、企業内の問題やイベント終了後に公開する予定の問題を配布・開催するための単位です。install は不変な revision を保存し、Cloud は有効化済みの AWS/CloudFormation 問題を次の配置で読み込みます。Local は Pack store を直接読まず、手元の `problems/` にある対応問題を読みます。公開は作成者が別途判断します。
+起動は[開催のクイックスタート](/developers/docs/getting-started/#local-start)、作成は[問題作成マニュアル](/developers/docs/manual/problem-author/)から始めます。このページは、この checkout の取得元設定の仕様です。ローカルパス対応は該当 revision がリリースされるまではローカルの開発変更です。公開サイトや古い checkout に同じ機能があるとは限りません。
 
-<h2 id="prerequisites">前提条件</h2>
+<h2 id="catalog-source-schema">カタログ取得元の正式 schema</h2>
 
-信頼する pack のローカルディレクトリ、または HTTPS Git URL と完全な 40 桁 commit SHA を用意します。runtime、ファイル、provenance を確認してください。
+機械可読な正本は [`catalog-read.ts` の `SelectionSchema` と `SourceSchema`](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/catalog-read.ts)です。起動に使う checkout の定義を確認してください。[`downloaded-catalog.ts`](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts) と `git-source.ts` の取得処理で、パス・通信方式・内容も検証します。`scripts/problem-pack/catalog-schema.json` は**問題の metadata** の schema であり、取得元設定の schema ではありません。
 
-<h2 id="install-the-pinned-git-revision">固定した revision を保存する</h2>
+| フィールド | 契約 |
+| --- | --- |
+| `schemaVersion` | 必須。数値の `1` |
+| `sources` | 必須。1 件以上の配列。各要素は下記どちらか一方の形 |
+| Git 取得元 | 必須の文字列 `url`、空でない文字列 `ref`、任意の文字列 `subdir` |
+| ローカル取得元 | `path` だけ。前後の空白を除いて空でない文字列 |
+| `retained` | 任意。カタログツールが管理する不変 revision の配列。対応する snapshot store も保持する |
 
-```sh
-make pack-install ARGS="git <https-url> --commit <40-hex-commit-sha>"
-make pack-list
-bun run pack inspect <id@version>
+設定全体と各要素は未知のフィールドを拒否します。`type`、`kind`、`branch` はありません。`path` と `url`・`ref`・`subdir` は混在できません。Git 取得は認証なしの HTTPS に限定し、URL 内の認証情報・query・fragment を拒否します。`ref` は branch・tag・`HEAD`・完全な commit を指定し、取得時に不変 commit へ解決します。`subdir` は repository 内の相対パスに限り、絶対パスや `..` は使えません。
+
+ローカルの相対パスは、シェルの作業ディレクトリではなく**設定ファイルのあるディレクトリ基準**です。絶対パスも使えます。`path` はカタログまたは Pack のルートを直接指定し、`subdir` は付けません。private repository は利用者が権限のある方法で事前に clone / checkout し、そのディレクトリを選びます。Git の直接認証取得は未対応です。GitHub Actions や catalog-bump workflow は不要です。
+
+<h2 id="mixed-sources">Git とローカルの混在例</h2>
+
+`config/my-catalogs.json` に保存します。2 つのローカルディレクトリには、公開カタログとも互いにも重複しない問題 ID を用意してください。
+
+```json
+{
+  "schemaVersion": 1,
+  "sources": [
+    { "url": "https://github.com/susumutomita/TenkaCloudChallenge.git", "ref": "main" },
+    { "path": "../../private-event-problems" },
+    { "path": "../../uncommitted-workshop-problems" }
+  ]
+}
 ```
 
-リポジトリのルートで実行します。既定の保存先は `.tenkacloud/pack-store` です。Git install はネットワークを使います。ローカルディレクトリの検証や保存はリソースを配置しません。
-
-<h2 id="verify-the-installed-revision">保存結果を確認する</h2>
-
-取得元、解決済み commit、digest を確認します。install 成功は、任意コードの実行、endpoint の公開、クラウド作成の承認ではありません。
-
-<h2 id="create-the-event">Cloud の大会で使う</h2>
-
-Cloud ではリポジトリのルートで次を実行します。`<id@version>` は manifest の ID と version に置き換えます。
+TenkaCloud のルートから、まず host 起動・deploy をせずに取得と生成を確認します。
 
 ```sh
-bun run pack activate <id@version> --tenant local
+make catalog-download CATALOG_SOURCES=./config/my-catalogs.json
+make catalog-prepare
 ```
 
-`local` は Cloud のカタログ読込処理が使う固定の選択名で、Local 開催を指定する値ではありません。保存先は `.tenkacloud/pack-store` です。`make pack-activate` はありません。activate 自体は AWS 操作を行いません。通常の Cloud 配置でこの store が非公開の source archive に含まれ、有効化した問題と実行素材が読み込まれます。開催間に `make deploy` で更新し、新しい大会で対象問題を選びます。既存大会の保存済みカタログは変わりません。問題の runtime と採点対応を確認し、開催前に解答・採点・撤収をリハーサルしてください。
+開催準備ができたら起動します。
 
-Local では Pack store から大会カタログへの接続は未対応です。公開せずに使う対応 Docker/Compose 問題は手元の `problems/` に作成し、検証して `make local` で起動します。AWS 問題は Cloud で使います。非公開 Git repository から取得する場合は、運営者が権限を持つ方法で手元へ checkout し、そのローカルディレクトリを install してください。Pack CLI の Git 取得は認証情報を使いません。
+```sh
+CATALOG_SOURCES=./config/my-catalogs.json make local
+```
+
+`CATALOG_SOURCES=./config/my-catalogs.json make deploy ENV=development` も同じ snapshot 準備を行い、その後に実際の deploy を行います。実行前に対象・権限・費用を別途確認してください。稼働中の host は自動で切り替わりません。再起動は開催者と調整します。
+
+<h2 id="metadata-and-snapshots">metadata と不変 snapshot</h2>
+
+既存の `challenges/<id>/metadata.json`、`battles/<id>/metadata.json` の配置、または `tenkacloud-pack.json` に `problemsRoot` を宣言した検証済み SDK Pack を使います。[問題 metadata](/developers/docs/reference/problem-metadata/)と [Pack manifest](/developers/docs/reference/pack-manifest/)の仕様に従ってください。問題リストは既存の探索処理が category/problem ディレクトリの metadata から生成します。`sources` は取得元を選ぶ設定で、問題一覧を手書きするものではありません。生成物の `problems/` に問題を作成しないでください。
+
+取得時に未 commit の編集・追加問題もコピー・検証し、`.tenkacloud/catalog-store/snapshots/<digest>` に保存します。Local と Cloud は選択済みの不変 snapshot を使い、`problems/` は build 用の生成ビューです。ファイル監視や hot reload はありません。ID 重複、必須 metadata・ファイルの欠落や不正、ディレクトリ以外の指定、コピー対象の symbolic link は以前の選択を置き換える前に拒否します。取得元ルート自身の symbolic link も拒否します。
+
+問題専用のディレクトリを使ってください。dot file / directory、`node_modules`・`dist`・`coverage`、credential / secret 名や一般的な秘密鍵ファイルはコピーから除外します。これはファイル名フィルターであり、**内容中の秘密情報を検出する機能ではありません**。必要な hidden asset も除外されるため、名前変更や分離を行って結果を検証します。取得前に全ファイルを確認し、home directory や private repository 全体の無害化には使わないでください。
+
+`selected.json` は digest と解決済み取得元を記録します。ローカル revision の互換用 `commit` は digest の先頭 40 文字で、Git commit ではありません。保持したローカル revision は保存済み snapshot を読み、変更可能な作成元を再取得しません。lock ファイルだけでは失われたローカル snapshot を復元できません。既存イベントに必要な snapshot store も保持してください。
+
+<h2 id="runtime-boundary">実行制限と Pack CLI の境界</h2>
+
+カタログとして受理されても、すべての runtime を実行できるわけではありません。Local の native 問題は既存のレビュー済み allowlist を維持し、リモート Docker 問題には対応 Linux の隔離機構が必要です。CloudFormation 問題は Cloud 開催専用で、既存のレビュー済み対応範囲を維持します。Cloud は Docker / Compose を除外します。開催前に対応する問題の解答・採点・撤収を確認してください。metadata の発見だけでは、これらの実行結果を証明しません。
+
+SDK Pack は `make pack-validate ARGS="./my-pack"` で検証します。Pack CLI の `install` / `activate` は別の `.tenkacloud/pack-store` を管理し、現在の `make local` / `make deploy` はその有効化記録を入力に使いません。検証した元ディレクトリを `sources` で指定します。[最初の Pack チュートリアル](/developers/docs/tutorials/first-pack/)も参照してください。
+
+<h2 id="verify-contract">仕様の検証コマンド</h2>
+
+repository の指定ツールと依存関係を用意して実行します。
+
+```sh
+bun test scripts/problem-pack/test/local-catalog.test.ts scripts/problem-pack/test/catalog-bump.test.ts scripts/problem-pack/test/discover-problems-catalog.test.ts
+bun run generate:landing-docs
+bun run scripts/landing/generate-landing-docs.ts --check
+```
+
+取得テストは Git / local の混在、設定ファイル基準のパス、metadata 探索、不変 revision の保持、不正入力時の選択保持を検証します。AWS deploy や全チームでの大会完遂を実証するものではありません。

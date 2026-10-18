@@ -51,7 +51,7 @@
 <section><h5>Operate</h5><ul>
 <li><a href="/docs/operate/deploy-paths/index.en.html">Launch and deployment boundaries</a></li>
 <li><a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a></li>
-<li><a href="/docs/operate/use-existing-pack/index.en.html">Use an existing pack</a></li>
+<li><a href="/docs/operate/use-existing-pack/index.en.html">Select a problem catalog</a></li>
 </ul></section>
 <section><h5>Reference</h5><ul>
 <li><a href="/docs/reference/pack-manifest/index.en.html">Pack manifest reference</a></li>
@@ -68,7 +68,7 @@
 <h1>Problem packs <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>A pack is a versioned, inspectable unit of competition content. Its manifest declares identity, runtime requirements and problem files. The artifact depends on the runtime; a CloudFormation template is only one possibility.</p>
 <h2>What is a problem pack</h2>
-<p>Problem Packs let organizers distribute and host company exercises or problems intended for publication after an event without adding them to the public catalog. Installation stores an immutable revision; Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads supported problems in its local <code>problems/</code> tree rather than the Pack store. Publication remains a separate author decision.</p>
+<p>Hosting uses immutable snapshots selected by <code>sources</code>. <code>problems/</code> is a generated view; Pack CLI activation records are not hosting inputs. See the <a href="/docs/operate/use-existing-pack/index.en.html#catalog-source-schema">source contract, local-path example and formal schema</a>.</p>
 <h2>Battle versus Challenge</h2>
 <p>Challenge and Battle describe a problem&#39;s interaction and scoring model. Runtime placement is a separate concern. All former local Compose problems are intended to run as Challenge competitions; generic catalog/workbench restoration and terminal/browser verification are still in progress.</p>
 <h2>Scoring kinds</h2>

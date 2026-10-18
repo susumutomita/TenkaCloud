@@ -8,7 +8,7 @@ Use this manual when you create or maintain the content participants solve:
 the scenario, deployable environment, verifier, scoring metadata, and hints.
 You do not need to operate a TenkaCloud event or change platform code.
 
-Problem Packs can manage company problems and content awaiting publication without a public catalog contribution. Cloud reads activated AWS/CloudFormation packs on the next deployment. Local reads its `problems/` tree rather than the Pack store. Publication remains a separate author decision.
+Hosting uses immutable snapshots selected by `sources`. `problems/` is a generated view; Pack CLI activation records are not hosting inputs. See the [source contract, local-path example and formal schema](/developers/docs/operate/use-existing-pack/#catalog-source-schema).
 
 ## Your goal
 

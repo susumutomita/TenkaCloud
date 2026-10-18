@@ -14,10 +14,6 @@ const FIRST_PACK_SOURCE = readFileSync(
   "src/app/developers/docs/tutorials/first-pack/page.mdx",
   "utf8",
 );
-const USE_EXISTING_PACK_SOURCE = readFileSync(
-  "src/app/developers/docs/operate/use-existing-pack/page.mdx",
-  "utf8",
-);
 const ROLE_MANUAL_HREFS = [
   "/developers/docs/manual/",
   "/developers/docs/manual/developer/",
@@ -319,82 +315,76 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
     expect(page?.maturity).toBe("preview");
   });
 
-  it("should find the use-existing-pack page by pack install and provenance terms", () => {
-    const installResults = searchIndex("pack install git 40-hex");
-    expect(installResults.some((r) => r.href === USE_EXISTING_PACK_HREF)).toBe(true);
-
-    const provenanceResults = searchIndex("pack provenance");
-    expect(provenanceResults.some((r) => r.href === USE_EXISTING_PACK_HREF)).toBe(true);
+  it("should find the source contract by local acquisition and snapshot terms", () => {
+    for (const query of ["catalog local sources", "snapshot private", "SelectionSchema"])
+      expect(searchIndex(query).some((r) => r.href === USE_EXISTING_PACK_HREF)).toBe(true);
+    expect(
+      searchIndex("Catalog source schema").some(
+        (r) => r.href === `${USE_EXISTING_PACK_HREF}#catalog-source-schema`,
+      ),
+    ).toBe(true);
   });
 
-  it("should document Cloud Pack deployment separately from the unconnected Local Pack store", () => {
-    for (const slug of [
+  it("should keep catalog selection and Pack CLI boundaries aligned across indexed and real docs", () => {
+    const slugs = [
       "concepts/problem-packs",
       "manual/problem-author",
       "reference/cli",
       "reference/security-provenance",
       FIRST_PACK_SLUG,
       USE_EXISTING_PACK_SLUG,
-    ]) {
+    ];
+    for (const slug of slugs) {
       const page = findDocBySlug(slug);
-      expect(page?.body).toContain("Cloud");
-      expect(page?.body).toContain("Local");
-      expect(page?.body).not.toContain("Activation is an offline catalog record");
-      expect(page?.body).not.toContain("activate はオフラインのカタログ記録");
-      expect(page?.body).not.toContain("do not add problems to the current event catalog");
+      expect(page?.body).toContain("sources");
+      expect(page?.body).not.toContain("Cloud reads activated");
+      expect(page?.body).not.toContain("Cloud は有効化済み");
+      for (const suffix of ["", ".ja"]) {
+        const source = readFileSync(`src/app/developers/docs/${slug}/page${suffix}.mdx`, "utf8");
+        if (slug === USE_EXISTING_PACK_SLUG) expect(source).toContain('id="catalog-source-schema"');
+        else expect(source).toContain("/developers/docs/operate/use-existing-pack/");
+        expect(source).not.toContain("bun run pack activate <id@version> --tenant local");
+      }
     }
-    expect(findDocBySlug(FIRST_PACK_SLUG)?.description).toContain("Cloud hosting");
-    expect(findDocBySlug(FIRST_PACK_SLUG)?.description).not.toContain("without claiming");
     const operation = findDocBySlug(USE_EXISTING_PACK_SLUG);
-    expect(operation?.description).toContain("Cloud deployment");
-    expect(operation?.description).not.toContain("not implemented");
-    expect(operation?.headings.find((heading) => heading.id === "create-the-event")?.text).toBe(
-      "Use in a Cloud event",
-    );
+    expect(operation?.title).toBe("Select a problem catalog");
+    expect(operation?.description).toContain("Git and local sources");
+    expect(
+      operation?.headings.find((heading) => heading.id === "catalog-source-schema")?.text,
+    ).toBe("Catalog source schema");
     expect(
       findDocBySlug(FIRST_PACK_SLUG)?.headings.find((heading) => heading.id === "runtime-boundary")
         ?.text,
     ).toBe("Connect to hosting");
-    for (const slug of [FIRST_PACK_SLUG, USE_EXISTING_PACK_SLUG]) {
-      expect(findDocBySlug(slug)?.body).toContain(
-        "Local does not connect the Pack store to its event catalog",
-      );
-      expect(
-        searchIndex("private source archive").some(
-          (result) => result.href === `/developers/docs/${slug}/`,
-        ),
-      ).toBe(true);
-    }
-    const japaneseSources = ["tutorials/first-pack", "operate/use-existing-pack"].map((slug) =>
-      readFileSync(`src/app/developers/docs/${slug}/page.ja.mdx`, "utf8"),
+    expect(findDocBySlug("getting-started")?.body).toContain("configuration file's directory");
+    expect(findDocBySlug("getting-started")?.body).toContain(
+      "この設定ファイルが置かれたディレクトリ",
     );
-    for (const source of [FIRST_PACK_SOURCE, USE_EXISTING_PACK_SOURCE, ...japaneseSources]) {
-      expect(source).toContain("AWS/CloudFormation");
-      expect(source).toContain("bun run pack activate <id@version> --tenant local");
-      expect(source).toContain(".tenkacloud/pack-store");
-      expect(source).toContain("make deploy");
-      expect(source).toContain("problems/");
-      expect(source).not.toContain("make pack-activate ARGS=");
-      expect(source).not.toContain("--tenant acme");
-      expect(source).not.toContain("Event integration is unavailable");
-      expect(source).not.toContain("Activation is an offline catalog record");
+    for (const suffix of ["", ".ja"]) {
+      const source = readFileSync(
+        `src/app/developers/docs/${USE_EXISTING_PACK_SLUG}/page${suffix}.mdx`,
+        "utf8",
+      );
+      for (const detail of [
+        "SelectionSchema",
+        "SourceSchema",
+        "catalog-read.ts",
+        "metadata.json",
+        ".tenkacloud/catalog-store",
+        ".tenkacloud/pack-store",
+        "make local",
+        "make deploy",
+        "make catalog-download",
+        "../../private-event-problems",
+      ])
+        expect(source).toContain(detail);
     }
-    for (const source of [FIRST_PACK_SOURCE, USE_EXISTING_PACK_SOURCE]) {
-      expect(source).toContain("private source archive");
-      expect(source).toContain("select the problem in a new event");
-      expect(source).toContain("Existing events keep their saved catalog");
-      expect(source).toContain("it does not select Local hosting");
-      expect(source).toContain("Local does not connect the Pack store to its event catalog");
-      expect(source).toContain("participant solving, scoring and teardown");
-    }
-    for (const source of japaneseSources) {
-      expect(source).toContain("非公開の source archive");
-      expect(source).toContain("新しい大会で対象問題を選びます");
-      expect(source).toContain("既存大会の保存済みカタログは変わりません");
-      expect(source).toContain("Local 開催を指定する値ではありません");
-      expect(source).toContain("Local では Pack store から大会カタログへの接続は未対応");
-      expect(source).toContain("解答・採点・撤収をリハーサル");
-    }
+    expect(operation?.body).toContain("activation records are not the input");
+    expect(operation?.body).toContain(
+      "Local native execution retains its reviewed problem allowlist",
+    );
+    expect(operation?.body).toContain("CloudFormation problems require Cloud hosting");
+    expect(operation?.body).toContain("Direct authenticated Git acquisition is unsupported");
   });
 
   it("should keep architecture search headings aligned with the actual page", () => {

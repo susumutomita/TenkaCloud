@@ -51,7 +51,7 @@
 <section><h5>運用</h5><ul>
 <li><a href="/docs/operate/deploy-paths/">起動と配置の境界</a></li>
 <li><a href="/docs/operate/run-an-event/">大会を最後まで運営する</a></li>
-<li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
+<li><a href="/docs/operate/use-existing-pack/">問題カタログの選択</a></li>
 </ul></section>
 <section><h5>リファレンス</h5><ul>
 <li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
@@ -141,6 +141,20 @@ make local
 <h2 id="cloud-status">クラウド配置の状態</h2><p><code>make deploy</code> と <code>make destroy</code> は権限設定を確認したうえで、この版の Lambda + Turso/DynamoDB CLI を実行します。クラウド開催は Lambda・Cognito と選択した Turso / DynamoDB で、汎用 CloudFormation 配置、flag / multi-flag・定期採点、参加者の Console / CLI アクセス、Cryptography Battle などの組み込み coordination を実行します。撤収時に対象を確認し、基盤の所有データはデフォルトで削除します。通常の <code>make destroy</code> は外部 Turso の行を残し、<code>make destroy-all</code> で明示的にリセットします。問題環境の撤収は別操作です。Lambda + Turso/DynamoDB によるクラウド開催は検証中で、費用ゼロを保証していません。AWS サービスの問題はクラウド開催専用です。Docker / Compose 問題はローカル開催専用で、クラウドのカタログには表示しません。実 AWS・hosted Turso での大会性能は未検証です。cloud pipeline は現行 CLI を既定で使います。build を始める前にソース設定と配置 role を確認してください。</p>
 <p>Codespaces の転送 URL と問題接続は、この candidate では未確認です。確認記録ができるまでは上のローカル手順を使ってください。</p>
 <p>次は<a href="/docs/manual/organizer/">開催者マニュアル</a>、<a href="/docs/manual/participant/">参加者マニュアル</a>、<a href="/docs/operate/deploy-paths/">配置の境界</a>です。</p>
+<h3>ローカルの問題ディレクトリを使う</h3>
+<p><code>catalog-sources.json</code> の <code>sources</code> には、Git の <code>{ &quot;url&quot;: &quot;https://…&quot;, &quot;ref&quot;: &quot;main&quot; }</code> とローカルの <code>{ &quot;path&quot;: &quot;../TenkaCloudChallenge&quot; }</code> を混在できます。複数のローカルディレクトリも指定できます。相対 path はこの設定ファイルが置かれたディレクトリを基準に解決し、絶対 path も受け付けます。private Git は、利用者が通常の方法で取得した checkout を path に指定します。TenkaCloud に credential を設定する必要はありません。Git の直接取得は従来どおり認証なしの HTTPS です。</p>
+<pre><code class="language-json">{
+  &quot;schemaVersion&quot;: 1,
+  &quot;sources&quot;: [
+    { &quot;path&quot;: &quot;../TenkaCloudChallenge&quot; },
+    { &quot;path&quot;: &quot;../private-event-problems&quot; }
+  ]
+}
+</code></pre>
+<p>問題ごとの <code>metadata.json</code> が一覧の正本です。独立した問題一覧は編集しません。既存の <code>challenges/&lt;id&gt;/metadata.json</code> と <code>battles/&lt;id&gt;/metadata.json</code> の構造、または <code>tenkacloud-pack.json</code> の <code>problemsRoot</code> を使います。README などの通常ファイルは問題として列挙しません。必要なメタデータ・ファイルの欠損、無効値、ディレクトリ名と ID の不一致、source 間を含む ID 重複はエラーです。別 repository の同じ ID を上書きする用途には使えません。</p>
+<p><code>make local</code> と <code>make deploy</code> の準備は、編集・追加した未コミットのファイルも含めて検証済み snapshot を作り、その固定版を使います。元の作問ディレクトリは変更しません。取得・検証に失敗したら以前の選択を保持し、起動・build を中止します。保存済み大会の定義を途中で更新せず、稼働中 host の自動更新・再起動もしません。変更を取り込む次回起動は build を省略しないでください。</p>
+<p>問題専用のディレクトリを指定し、実 credential を教材へ置かないでください。取得時は <code>.git</code> を含む dot entry（<code>.dockerignore</code> や <code>.htaccess</code> も対象）、<code>node_modules</code>、<code>dist</code>、<code>coverage</code>、<code>credentials</code> / <code>secret</code> 系のファイル名、秘密鍵の一般的な拡張子を除外します。これは任意の名前・本文に含まれる秘密の検出ではありません。教材に必要なファイルまで除外される場合は、秘密と分離した名前・構成に直して検証します。source 自身と含まれる symlink、特殊ファイルは拒否し、外部へたどりません。retained snapshot は作問元を再読込せず検証します。local の <code>commit</code> 欄は content digest の先頭40桁による内部 ID で、Git commit ではありません。snapshot store を移さず local の lock だけ別環境へコピーして復元することはできません。</p>
+<p>別の設定ファイルを使う場合は <code>CATALOG_SOURCES=./config/my-catalogs.json make local</code>、deploy 準備は <code>CATALOG_SOURCES=./config/my-catalogs.json make deploy ENV=development</code> の形式です。後者は通常の実 deploy を含むので、対象・費用・権限を確認して実行します。取得だけの確認には <code>make catalog-download CATALOG_SOURCES=./config/my-catalogs.json</code>、続いて <code>make catalog-prepare</code> を使います。保存済みの Git snapshot を補うため、local のみの選択でも既存 lock に Git の retained revision があればネットワーク取得が必要です。</p>
 <h2>書籍と互換性</h2>
 <p><a href="https://zenn.dev/bull/books/cloud-competition">自分で作るクラウド競技</a>と
 <a href="https://leanpub.com/build-your-own-cloud-competition">Build Your Own Cloud Competition</a>は、
@@ -149,6 +163,7 @@ make local
 ソースのマージは公開反映やプレイ確認を保証しません。</p>
 <p>新規クラウド環境の stack 名は <code>tenkacloud-cloud</code> 系です。既存の <code>tenkacloud-lite</code> 系 stack は名前を維持します。CLI は Lite / cloud の既存 stack を検出し、両方ある場合は <code>TENKACLOUD_STACK_LAYOUT=lite</code> または <code>cloud</code> の明示指定が必要です。旧 Lite の更新は所有情報と永続 resource ID を検証します。 catalog pin のない旧 Lite 環境は、resource / schema の検査後、bootstrap・source upload・配置の前に、進行中の大会がないことを初回だけ明示確認します。開催中の大会は完了まで配置済みの版で継続してください。大会が残っていないことを運用者が確認してから対話で承認し、非対話の更新には <code>CLOUD_ARGS=&quot;--confirm-no-active-events&quot;</code> を使います。通常の <code>--yes</code> ではこの確認を省略できません。legacy catalog key だけでは安全な更新を証明できず、過去のデータも自動移行しません。新規環境と復旧済み環境は通常の <code>make deploy</code> で自動配置します。公開 cloud-v1 の resource / DB schema への上書き更新は拒否し、データは自動移行しません。<code>--drain-events</code> は使えません。問題環境を大会の Teardown で撤収してから基盤を削除してください。</p>
 <p>両 DB とも 99 チーム、SQL coordination は旧 4 MiB 上限です。現行 catalog の 8 template はすべて <code>TemplateBody</code> の 51,200 bytes 以内で、<code>TemplateURL</code> は未実装です。全 AWS 問題の配置確認済みを意味しません。</p>
+<p><a href="/docs/operate/use-existing-pack/#catalog-source-schema">取得元の正式仕様・schema・混在例と検証コマンド</a>を参照してください。</p>
 
 </article>
 </main>

@@ -212,3 +212,36 @@ test("downloaded Cloud catalog retains crypto-tagged problems and their source a
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("local authored packs use the same Cloud snapshot preparation without rereading the checkout", () => {
+  const root = mkdtempSync(join(tmpdir(), "cloud-local-catalog-"));
+  const author = mkdtempSync(join(tmpdir(), "cloud-local-author-"));
+  try {
+    cpSync(join(repository, "scripts/problem-pack/test/fixtures/sample-aws-flag"), author, {
+      recursive: true,
+    });
+    downloadCatalog(root, { schemaVersion: 1, sources: [{ path: author }] });
+    const first = downloadedCloudCatalog(root);
+    expect(Object.keys(first.bundle.catalog as object)).toEqual(["sample-flag"]);
+    writeFileSync(
+      join(author, "problems/challenges/sample-flag/template.yaml"),
+      "uncommitted next edition",
+    );
+    rmSync(author, { recursive: true });
+    const retained = downloadedCloudCatalog(root);
+    expect(retained.bundle).toEqual(first.bundle);
+    expect(retained.packAssets).toEqual(first.packAssets);
+    expect(
+      readFileSync(
+        join(
+          String(retained.packAssets[0]?.problemsRootAbs),
+          "problems/challenges/sample-flag/template.yaml",
+        ),
+        "utf8",
+      ),
+    ).not.toBe("uncommitted next edition");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(author, { recursive: true, force: true });
+  }
+});
