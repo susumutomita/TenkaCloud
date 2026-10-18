@@ -174,3 +174,10 @@ describe("local catalog with production public metadata", () => {
     expect(screen.queryByRole("link", { name: sampleMetadata.name })).toBeNull();
   });
 });
+
+it("explains why Docker exercises are unavailable in the local catalog", async () => {
+  const warning = "Docker exercises are unavailable. Native problems remain available.";
+  get.mockResolvedValue({ ...supported, warnings: [warning] });
+  renderCatalog();
+  expect(await screen.findByText(warning)).toBeInTheDocument();
+});

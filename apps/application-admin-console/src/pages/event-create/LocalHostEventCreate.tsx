@@ -22,6 +22,7 @@ interface HostLimits {
 const LEGACY_LIMITS: HostLimits = { maxTeams: 40, maxEventJobs: 40 };
 
 interface HostCatalogResponse {
+  readonly warnings?: readonly string[];
   readonly limits?: HostLimits;
   readonly items: readonly {
     readonly problemId: string;
@@ -31,6 +32,7 @@ interface HostCatalogResponse {
 }
 
 export interface HostCatalog {
+  readonly warnings?: readonly string[];
   /** Problem IDs the host can run; empty until loaded (nothing is selectable meanwhile). */
   readonly supported: ReadonlySet<string>;
   readonly cloud: ReadonlySet<string>;
@@ -48,6 +50,7 @@ export interface HostCatalog {
 const EMPTY: ReadonlySet<string> = new Set();
 
 export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
+  const [warnings, setWarnings] = useState<readonly string[]>([]);
   const [supported, setSupported] = useState<ReadonlySet<string>>(EMPTY);
   const [cloud, setCloud] = useState<ReadonlySet<string>>(EMPTY);
   const [coordination, setCoordination] = useState<ReadonlySet<string>>(EMPTY);
@@ -68,6 +71,7 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
       .then((response) => {
         if (!active) return;
         setLimits(response.limits ?? LEGACY_LIMITS);
+        setWarnings(response.warnings ?? []);
         setContent(
           new Map(
             response.items.flatMap((item) =>
@@ -103,7 +107,7 @@ export function useHostCatalog(apiClient: ApiClient | null): HostCatalog {
       active = false;
     };
   }, [apiClient, retryRequest]);
-  return { supported, cloud, coordination, content, error, limits, loading, retry };
+  return { supported, cloud, coordination, content, error, limits, loading, retry, warnings };
 }
 
 function LocalHostEventCreateNotice({
@@ -116,6 +120,11 @@ function LocalHostEventCreateNotice({
   const t = useT();
   return (
     <>
+      {catalog.warnings?.map((warning) => (
+        <Alert key={warning} type="warning">
+          {warning}
+        </Alert>
+      ))}
       {jobCountInvalid && (
         <Alert type="error">
           {t("local_host.job_count_invalid", { max: catalog.limits.maxEventJobs })}

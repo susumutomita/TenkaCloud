@@ -246,6 +246,7 @@ export interface EngineResult {
 }
 
 export interface RuntimeEngine {
+  readonly catalogWarnings?: readonly string[];
   bindVpnIngress?(
     ingress: import("./vpn/native-backend").VpnIngress,
     gatewayPort?: (job: Job) => number,

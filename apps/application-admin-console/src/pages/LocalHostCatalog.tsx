@@ -26,17 +26,26 @@ export function LocalHostCatalogPage({
         {catalog.error}
       </Alert>
     );
-  return detail ? (
-    <ProblemDetailPage
-      config={config}
-      supportedProblemIds={catalog.supported}
-      organizerContent={problemId ? catalog.content?.get(problemId) : undefined}
-    />
-  ) : (
-    <ProblemsPage
-      localHost
-      supportedProblemIds={catalog.supported}
-      organizerContent={catalog.content}
-    />
+  return (
+    <>
+      {catalog.warnings?.map((warning) => (
+        <Alert key={warning} type="warning">
+          {warning}
+        </Alert>
+      ))}
+      {detail ? (
+        <ProblemDetailPage
+          config={config}
+          supportedProblemIds={catalog.supported}
+          organizerContent={problemId ? catalog.content?.get(problemId) : undefined}
+        />
+      ) : (
+        <ProblemsPage
+          localHost
+          supportedProblemIds={catalog.supported}
+          organizerContent={catalog.content}
+        />
+      )}
+    </>
   );
 }
