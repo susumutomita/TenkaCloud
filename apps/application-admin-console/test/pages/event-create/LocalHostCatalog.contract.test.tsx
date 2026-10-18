@@ -24,3 +24,18 @@ it("uses the authenticated catalog's coordination runtime and preserves optional
   expect(result.current.content?.has("compose")).toBe(false);
   expect(result.current.limits.maxTeams).toBe(2);
 });
+
+it("preserves a host Docker warning while keeping absent Docker IDs unselectable", async () => {
+  const warning = "Docker exercises are unavailable. Native problems remain available.";
+  const api = {
+    get: vi.fn().mockResolvedValue({
+      items: [{ problemId: "crypto-battle", runtime: "coordination" }],
+      warnings: [warning],
+    }),
+  };
+  const { result } = renderHook(() => useHostCatalog(api as unknown as ApiClient));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.warnings).toEqual([warning]);
+  expect(result.current.supported.has("sqli-demo")).toBe(false);
+  expect(result.current.supported.has("crypto-battle")).toBe(true);
+});

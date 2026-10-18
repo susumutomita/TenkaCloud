@@ -76,6 +76,20 @@ make local
 
 [Organizer manual](./apps/developer-portal/src/app/developers/docs/manual/organizer/page.mdx)
 
+### Join from another device over Tailscale
+
+First verify startup, joining and scoring on one PC. For remote participants, start with the hosting device's currently assigned Tailscale IPv4. Follow the [first-connection guide](https://tenkacloud.com/docs/getting-started/index.en.html#tailscale-first-connection) for app installation, account selection, dedicated-host sharing and effective permissions. Do not share a company tailnet or device without approval.
+
+```bash
+make local LOCAL_ARGS="--lan $(tailscale ip -4) --unsafe-lan"
+```
+
+Run in an interactive terminal; redirecting output to a log does not reveal the organizer key. The organizer uses `http://127.0.0.1:5174/` on the host. Give each participant the printed `http://<host-IPv4>:5175/` and only their team's key. A copied team invitation has the form `<participant-URL>/login#invite=<team-key>`. Treat the link as a secret; send it only to its intended recipient and keep it out of public logs and screenshots. Do not forward or proxy 5174 to participants.
+
+`--lan` selects an HTTP listener; it does not configure a VPN or firewall. Check permission for participant TCP 5175 and, only when using Docker exercises, the configured gateway ports (default TCP 5200–5239). Only active gateways listen. Start with a native problem such as Crypto Battle and check login, actions and scores. Remote Docker requires supported native Linux with explicit isolation; Mac / Docker Desktop is unsupported. Start/resume/recovery without that mode is refused. If Docker itself is unavailable, startup and the organizer UI explain why and Docker problems cannot enter new events. After making Docker available, coordinate a maintenance time before restarting the host.
+
+Use the printed IP URL rather than a MagicDNS URL with this setup. Changing the Tailscale account/IP does not update a running host's bind address. Coordinate stopping and starting it with the correct IP. Connectivity alone does not prove isolation of participant PCs/home networks or complete live-event playability.
+
 ### Open a development environment in Codespaces
 
 <div align="center">

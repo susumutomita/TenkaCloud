@@ -83,6 +83,10 @@ function renderCatalog(path = "/problems") {
         <Routes>
           <Route path="/problems" element={<LocalHostCatalogPage config={config} />} />
           <Route
+            path="/detail-without-id"
+            element={<LocalHostCatalogPage config={config} detail />}
+          />
+          <Route
             path="/problems/:problemId"
             element={<LocalHostCatalogPage config={config} detail />}
           />
@@ -151,6 +155,13 @@ describe("local catalog with production public metadata", () => {
     expect(screen.queryByRole("heading", { name: sampleMetadata.name })).toBeNull();
   });
 
+  it("does not render problem content when a detail view has no route ID", async () => {
+    renderCatalog("/detail-without-id");
+    expect(await screen.findByRole("link", { name: challengeMetadata.name })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Description" })).toBeNull();
+    expect(screen.queryByText(englishContent[0].learningGoals[0])).toBeNull();
+  });
+
   it("waits for the actual host catalog without briefly offering unsupported samples", async () => {
     let resolveCatalog!: (value: typeof supported) => void;
     get.mockReturnValue(
@@ -173,4 +184,11 @@ describe("local catalog with production public metadata", () => {
     expect(screen.queryByRole("link", { name: challengeMetadata.name })).toBeNull();
     expect(screen.queryByRole("link", { name: sampleMetadata.name })).toBeNull();
   });
+});
+
+it("explains why Docker exercises are unavailable in the local catalog", async () => {
+  const warning = "Docker exercises are unavailable. Native problems remain available.";
+  get.mockResolvedValue({ ...supported, warnings: [warning] });
+  renderCatalog();
+  expect(await screen.findByText(warning)).toBeInTheDocument();
 });

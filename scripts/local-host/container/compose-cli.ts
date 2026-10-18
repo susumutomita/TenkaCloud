@@ -36,7 +36,10 @@ const DOCKER_COMPOSE_STANDALONE: ComposeCli = {
 export type CommandSucceeds = (command: string, args: readonly string[]) => boolean;
 
 function commandSucceeds(command: string, args: readonly string[]): boolean {
-  return spawnSync(command, [...args], { stdio: "ignore", env: process.env }).status === 0;
+  return (
+    spawnSync(command, [...args], { stdio: "ignore", env: process.env, timeout: 3_000 }).status ===
+    0
+  );
 }
 
 function composeCliAvailable(cli: ComposeCli, succeeds: CommandSucceeds): boolean {
@@ -74,6 +77,25 @@ export function resolveComposeCli(
     "Docker Compose is required for local play. Install Docker Desktop / Engine with " +
       "`docker compose`, or install the standalone `docker-compose` command.",
   );
+}
+
+/** Read-only capability check; no pull, build, context switch or daemon startup. */
+export function dockerAvailability(succeeds: CommandSucceeds = commandSucceeds): {
+  available: boolean;
+  reason?: string;
+} {
+  try {
+    resolveComposeCli(undefined, succeeds);
+    if (!succeeds("docker", ["info", "--format", "{{.ServerVersion}}"]))
+      throw new Error("Docker daemon is unavailable.");
+    return { available: true };
+  } catch {
+    return {
+      available: false,
+      reason:
+        "Docker exercises are unavailable: the Docker CLI, Compose or daemon could not be reached. Native problems remain available. Install/start Docker, then restart the host at an agreed maintenance time to refresh this catalog.",
+    };
+  }
 }
 
 export function composeArgs(

@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { assertHostCatalogBuild, buildHosting } from "./build";
 import { CompetitionEngine } from "./competition-engine";
+import { dockerAvailability } from "./container/compose-cli";
 import { DEFAULT_GATEWAY_PORTS, formatGatewayPorts } from "./gateway-ports";
 import { parseOptions, vpnListener } from "./options";
 import { openOrganizerKeyDisplay } from "./organizer-key-output";
@@ -82,15 +83,17 @@ export function localCompetitionEngine(
   root: string,
   directory: string,
   options: ReturnType<typeof parseOptions>,
+  docker: ReturnType<typeof dockerAvailability> = { available: true },
 ): CompetitionEngine {
   const engine = new CompetitionEngine(
     root,
     directory,
-    !options.public,
+    !options.public && docker.available,
     undefined,
     options.dockerNetworkPool,
     options.submissionCatalogPath,
     options.competitionNetwork,
+    docker.reason ? [docker.reason] : [],
   );
   return !options.public && options.hostname !== "127.0.0.1"
     ? engine.requireNetworkIsolation()
@@ -126,8 +129,10 @@ export async function runLocalHost(
     ? new NativeVpnIngress(loadVpnPeerPlan(options.vpnPeerPath))
     : undefined;
   const settings = { ...options, ...(vpn ? { ...vpnListener(options, vpn.plan), vpn } : {}) };
+  const docker = options.public ? { available: false } : dockerAvailability();
+  if ("reason" in docker && docker.reason) console.warn(docker.reason);
   const host = await startLocalHost(root, settings, (directory) =>
-    localCompetitionEngine(root, directory, options),
+    localCompetitionEngine(root, directory, options, docker),
   );
   try {
     lifecycle.onReady?.(host);

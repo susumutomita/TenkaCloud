@@ -64,3 +64,15 @@ it("explains the legacy coordination rejection and preserves unrelated failures"
     "API 422: Unrelated failure",
   );
 });
+
+it("shows the host's Docker capability warning before event creation", () => {
+  const warning = "Docker exercises are unavailable. Native problems remain available.";
+  render(
+    <EventCreateCapacityNotice
+      local
+      catalog={{ ...catalog, warnings: [warning] }}
+      capacity={eventCapacity(true, catalog, 1, 0, undefined)}
+    />,
+  );
+  expect(screen.getByText(warning)).toBeInTheDocument();
+});

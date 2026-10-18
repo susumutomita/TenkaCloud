@@ -78,6 +78,20 @@ make local
 
 [開催者マニュアル](./apps/developer-portal/src/app/developers/docs/manual/organizer/page.ja.mdx)
 
+### Tailscale 経由で別の端末から参加する
+
+まず同じ PC で起動・参加・得点を確認します。別端末からは、接続済みの開催端末自身の Tailscale IPv4 を指定して起動します。初参加者のアプリ導入・アカウントの照合・専用端末共有・権限確認は [初回接続の手順](https://tenkacloud.com/docs/getting-started/#tailscale-first-connection) に従います。会社の tailnet や端末を承認なしに共有しないでください。
+
+```bash
+make local LOCAL_ARGS="--lan $(tailscale ip -4) --unsafe-lan"
+```
+
+対話できる実ターミナルで実行し、出力をログへリダイレクトして主催者キーを取得しようとしないでください。開催者はこの PC の `http://127.0.0.1:5174/` を使い、参加者には表示された `http://<開催端末IPv4>:5175/` と自分のチームのキーだけを渡します。チーム画面の招待リンクをコピーする場合は `<参加者URL>/login#invite=<チームキー>` の形式です。リンク自体が秘密なので、本人にだけ渡し、公開ログや画像に含めません。5174 は参加者へ forward / proxy しません。
+
+`--lan` は HTTP の待受指定で、VPN や firewall を設定しません。参加者向けは TCP 5175、Docker を使う場合だけ設定済み gateway（デフォルト TCP 5200–5239）の許可を確認します。gateway は使用中の port だけ listen します。まず Docker を使わない native 問題（例: Crypto Battle）でログイン・操作・得点を確認してください。別端末から Docker 問題を使うには対応 native Linux の明示的な隔離モードが必要で、Mac / Docker Desktop は未対応です。隔離なしの開始・再開・復旧は拒否します。Docker 自体が利用不可なら、起動時と主催者画面に理由を示し、Docker 問題は新しい大会で選べません。Docker を利用可能にした後の再起動は主催者と保守時間を調整してください。
+
+この IP 起動では MagicDNS 名の URL を使わず、表示された IP の URL と照合します。Tailscale のアカウント切替などで IP が変わっても、稼働 host の待受は自動で変わりません。停止・再開を調整して正しい IP で起動し直します。接続成功は、参加者 PC 全体や家庭 LAN の隔離、全問題の競技開催の実証ではありません。
+
 ### Codespaces で開発環境を開く
 
 <div align="center">

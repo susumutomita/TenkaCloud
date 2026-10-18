@@ -653,6 +653,7 @@ export class HostingDomain {
       return this.accountRoute(request, principal);
     if (request.path === "/host/catalog" && request.method === "GET") {
       return ok({
+        warnings: this.engine.catalogWarnings ?? [],
         limits: {
           maxTeams: MAX_JOBS,
           maxEventJobs: this.engine.supportsOnDemand ? MAX_EVENT_JOBS : MAX_JOBS,

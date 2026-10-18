@@ -61,6 +61,7 @@ export class CompetitionEngine extends DockerHostingEngine {
     networkPool?: string,
     submissionCatalogPath?: string,
     competitionNetwork = false,
+    readonly catalogWarnings: readonly string[] = [],
   ) {
     super(root, dataDirectory, networkPool, competitionNetwork);
     this.battles = coordinationCatalog(root);

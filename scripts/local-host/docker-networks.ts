@@ -154,6 +154,7 @@ function dockerNetworkCommand(args: string[]): string {
     // eslint-disable-next-line sonarjs/no-os-command-from-path -- selected local Docker CLI, fixed arguments
     return execFileSync("docker", args, {
       encoding: "utf8",
+      env: process.env,
       timeout: 10_000,
       maxBuffer: 8 * 1024 * 1024,
       stdio: ["ignore", "pipe", "pipe"],
