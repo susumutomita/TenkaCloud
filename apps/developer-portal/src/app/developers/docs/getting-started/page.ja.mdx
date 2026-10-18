@@ -8,15 +8,54 @@ export const metadata = { title: "はじめに" };
 
 <h2 id="local-start">ローカル競技を起動する</h2>
 
-確認対象の checkout、Bun 1.3.11、明示選択して取得した問題カタログ を使います。macOS または Linux（WSL2 を含む）が対象です。Docker 問題には Docker Engine と Compose が必要です。リポジトリのルートで実行します。
+Git、Make、Bun 1.3.11 と確認対象の checkout を用意します。macOS または Linux（WSL2 を含む）が対象です。Docker 問題には Docker Engine と Compose が必要です。リポジトリのルートで実行します。
 
 ```sh
-bun install --frozen-lockfile --ignore-scripts
-make catalog-download catalog-prepare
+git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
 make local
 ```
 
+`make local` は起動前に `catalog-sources.json` の URL と `ref` から問題を取得します。既定は TenkaCloudChallenge の `main` です。取得にはネットワーク接続が必要で、失敗すると起動を中止します。`make deploy` も同じ選択を使います。保存済みの大会は取得時の不変 snapshot を使い続けます。`problems/` は生成される build 用ビューで、Git submodule ではありません。作問用 branch を使う場合は設定の `ref` を変更します。設定と取得処理は [catalog-sources.json](https://github.com/susumutomita/TenkaCloud/blob/main/catalog-sources.json) と [downloaded-catalog.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts) で確認できます。
+
 既定の開催者 URL は `http://127.0.0.1:5174`、参加者 URL は `http://127.0.0.1:5175` です。実際にはプロセスが表示した URL を使います。主催者キーだけでログインし、ユーザー名・パスワードは使いません。対話ターミナルで `make local` を起動するたびに新しいキーを一度だけ表示し、以前の主催者キーとログインを失効させます。起動中の再発行は、別の対話ターミナルで同じデータディレクトリを指定して `make local-reset` を実行します。大会・得点・参加者キー・問題のデータを保持します。非対話起動と public/container 起動では既存のキーを保持し、ログにキーを出力しません。
+
+<h2 id="connect-from-another-device">別の端末から参加する</h2>
+
+既定の loopback URL は同じ PC でだけ開けます。信頼できる隔離ネットワーク上で参加者へ接続させる場合は、host に割り当て済みの IPv4 を明示します。以下の `100.96.12.34` は説明用なので、実際のアドレスへ置き換えてください。Tailscale の `100.64.0.0/10` 内の IPv4 も受け付けます。VPN や権限をこのコマンドで設定することはありません。
+
+```sh
+make local LOCAL_ARGS="--lan 100.96.12.34 --unsafe-lan"
+```
+
+開催者は host 自身の `http://127.0.0.1:5174` を開きます。参加者へは `http://100.96.12.34:5175` と、そのチームのキーを渡します。参加者側で `127.0.0.1` を開くと参加者自身の端末へ接続するため、host には届きません。主催者キーは参加者へ渡さないでください。
+
+`--unsafe-lan` は HTTP での待受への同意です。アプリ自身が TLS を提供するわけではありません。通常の LAN 起動では `--competition-network` は無効で、演習からホスト・家庭 LAN への通信を拒否する専用 firewall guard は適用されません。コンテナ内で操作できる参加者からの到達は、Docker と OS の経路に依存します。待受 IP の指定だけでチーム間・家庭 LAN を隔離できるとは扱わないでください。HTTPS 構成、VM からの実通信、多人数での競技開催は、この手順で検証済みとは扱いません。
+
+隔離用の native Linux モードは別の実装です。設定不足や未対応環境では拒否し、Mac / Docker Desktop へ自動で適用することはありません。[初期値と条件](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts)・[guard の前提](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/linux-network-guard.ts)を確認してください。Tailscale 接続は、この専用モードや参加者端末間のアクセス制限を有効にする操作ではありません。
+
+初回は build を省略しません。すでに同じコードと選択カタログで build 済みの場合だけ `--no-build` を追加できます。未 build またはカタログ不一致で起動を拒否されたら、次の起動で省略せずに build します。稼働中の host を変更する場合は、開催者と停止・再開の時刻を決めてから進めます。
+
+<h2 id="check-local-connection">起動と接続を確認する</h2>
+
+host 上で開催者画面、参加者の端末で参加者画面の HTTP 応答を確認します。別端末の例の IP は実際の host の IP へ置き換えます。
+
+```sh
+# host 上で実行
+curl --fail --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:5174/
+# 参加者の端末で実行
+curl --fail --silent --output /dev/null --write-out '%{http_code}\n' http://100.96.12.34:5175/
+```
+
+どちらも `200` を確認してから、ブラウザでログイン画面を開きます。応答がない場合は、起動ログの URL、指定 IP が host にあること、端末間の既存の接続経路を確認します。HTTP 応答だけではログイン・採点・問題環境への接続は確認できません。次の大会手順で正答・誤答と得点も確認してください。
+
+この説明の実装根拠は [options.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts) と [server.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts) です。開発時の回帰確認は次を実行します。待受アドレスと origin のテスト、取得失敗・snapshot と build の整合性のテストであり、実際のネットワーク隔離の証明ではありません。
+
+```sh
+make catalog-download catalog-prepare
+bun test scripts/local-host/tests/public-mode.test.ts scripts/local-host/tests/catalog-startup.test.ts
+```
 
 <h2 id="first-event">大会を作成して参加する</h2>
 

@@ -67,12 +67,32 @@
 <article>
 <h1>はじめに <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>未公開の統合 candidate の手順です。ローカルの大会・チーム運用は実装されていますが、クラウド基盤の配置や全カタログのプレイ確認が完了した公開版ではありません。</p>
-<h2 id="local-start">ローカル競技を起動する</h2><p>確認対象の checkout、Bun 1.3.11、明示選択して取得した問題カタログ を使います。macOS または Linux（WSL2 を含む）が対象です。Docker 問題には Docker Engine と Compose が必要です。リポジトリのルートで実行します。</p>
-<pre><code class="language-sh">bun install --frozen-lockfile --ignore-scripts
-make catalog-download catalog-prepare
+<h2 id="local-start">ローカル競技を起動する</h2><p>Git、Make、Bun 1.3.11 と確認対象の checkout を用意します。macOS または Linux（WSL2 を含む）が対象です。Docker 問題には Docker Engine と Compose が必要です。リポジトリのルートで実行します。</p>
+<pre><code class="language-sh">git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
 make local
 </code></pre>
+<p><code>make local</code> は起動前に <code>catalog-sources.json</code> の URL と <code>ref</code> から問題を取得します。既定は TenkaCloudChallenge の <code>main</code> です。取得にはネットワーク接続が必要で、失敗すると起動を中止します。<code>make deploy</code> も同じ選択を使います。保存済みの大会は取得時の不変 snapshot を使い続けます。<code>problems/</code> は生成される build 用ビューで、Git submodule ではありません。作問用 branch を使う場合は設定の <code>ref</code> を変更します。設定と取得処理は <a href="https://github.com/susumutomita/TenkaCloud/blob/main/catalog-sources.json">catalog-sources.json</a> と <a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts">downloaded-catalog.ts</a> で確認できます。</p>
 <p>既定の開催者 URL は <code>http://127.0.0.1:5174</code>、参加者 URL は <code>http://127.0.0.1:5175</code> です。実際にはプロセスが表示した URL を使います。主催者キーだけでログインし、ユーザー名・パスワードは使いません。対話ターミナルで <code>make local</code> を起動するたびに新しいキーを一度だけ表示し、以前の主催者キーとログインを失効させます。起動中の再発行は、別の対話ターミナルで同じデータディレクトリを指定して <code>make local-reset</code> を実行します。大会・得点・参加者キー・問題のデータを保持します。非対話起動と public/container 起動では既存のキーを保持し、ログにキーを出力しません。</p>
+<h2 id="connect-from-another-device">別の端末から参加する</h2><p>既定の loopback URL は同じ PC でだけ開けます。信頼できる隔離ネットワーク上で参加者へ接続させる場合は、host に割り当て済みの IPv4 を明示します。以下の <code>100.96.12.34</code> は説明用なので、実際のアドレスへ置き換えてください。Tailscale の <code>100.64.0.0/10</code> 内の IPv4 も受け付けます。VPN や権限をこのコマンドで設定することはありません。</p>
+<pre><code class="language-sh">make local LOCAL_ARGS=&quot;--lan 100.96.12.34 --unsafe-lan&quot;
+</code></pre>
+<p>開催者は host 自身の <code>http://127.0.0.1:5174</code> を開きます。参加者へは <code>http://100.96.12.34:5175</code> と、そのチームのキーを渡します。参加者側で <code>127.0.0.1</code> を開くと参加者自身の端末へ接続するため、host には届きません。主催者キーは参加者へ渡さないでください。</p>
+<p><code>--unsafe-lan</code> は HTTP での待受への同意です。アプリ自身が TLS を提供するわけではありません。通常の LAN 起動では <code>--competition-network</code> は無効で、演習からホスト・家庭 LAN への通信を拒否する専用 firewall guard は適用されません。コンテナ内で操作できる参加者からの到達は、Docker と OS の経路に依存します。待受 IP の指定だけでチーム間・家庭 LAN を隔離できるとは扱わないでください。HTTPS 構成、VM からの実通信、多人数での競技開催は、この手順で検証済みとは扱いません。</p>
+<p>隔離用の native Linux モードは別の実装です。設定不足や未対応環境では拒否し、Mac / Docker Desktop へ自動で適用することはありません。<a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts">初期値と条件</a>・<a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/linux-network-guard.ts">guard の前提</a>を確認してください。Tailscale 接続は、この専用モードや参加者端末間のアクセス制限を有効にする操作ではありません。</p>
+<p>初回は build を省略しません。すでに同じコードと選択カタログで build 済みの場合だけ <code>--no-build</code> を追加できます。未 build またはカタログ不一致で起動を拒否されたら、次の起動で省略せずに build します。稼働中の host を変更する場合は、開催者と停止・再開の時刻を決めてから進めます。</p>
+<h2 id="check-local-connection">起動と接続を確認する</h2><p>host 上で開催者画面、参加者の端末で参加者画面の HTTP 応答を確認します。別端末の例の IP は実際の host の IP へ置き換えます。</p>
+<pre><code class="language-sh"># host 上で実行
+curl --fail --silent --output /dev/null --write-out &#39;%{http_code}\n&#39; http://127.0.0.1:5174/
+# 参加者の端末で実行
+curl --fail --silent --output /dev/null --write-out &#39;%{http_code}\n&#39; http://100.96.12.34:5175/
+</code></pre>
+<p>どちらも <code>200</code> を確認してから、ブラウザでログイン画面を開きます。応答がない場合は、起動ログの URL、指定 IP が host にあること、端末間の既存の接続経路を確認します。HTTP 応答だけではログイン・採点・問題環境への接続は確認できません。次の大会手順で正答・誤答と得点も確認してください。</p>
+<p>この説明の実装根拠は <a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts">options.ts</a> と <a href="https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts">server.ts</a> です。開発時の回帰確認は次を実行します。待受アドレスと origin のテスト、取得失敗・snapshot と build の整合性のテストであり、実際のネットワーク隔離の証明ではありません。</p>
+<pre><code class="language-sh">make catalog-download catalog-prepare
+bun test scripts/local-host/tests/public-mode.test.ts scripts/local-host/tests/catalog-startup.test.ts
+</code></pre>
 <h2 id="first-event">大会を作成して参加する</h2><ol>
 <li>開催者コンソールで大会、チーム、出題する問題を選びます。</li>
 <li>jobs を準備し、チームごとの結果を確認します。新しい Docker jobs は参加者が起動するまで停止状態です。AWS 問題は配置手順を使います。</li>

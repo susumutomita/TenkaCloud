@@ -8,15 +8,54 @@ This documents the unpublished integration candidate. Local event/team operation
 
 <h2 id="local-start">Start a local competition</h2>
 
-Use the reviewed checkout, Bun 1.3.11 and its explicitly selected downloaded problem catalog on macOS or Linux (including WSL2). Docker Engine with Compose is needed for Docker exercises. Run from the repository root:
+Prepare Git, Make, Bun 1.3.11 and the reviewed checkout on macOS or Linux (including WSL2). Docker Engine with Compose is needed for Docker exercises. Run from the repository root:
 
 ```sh
-bun install --frozen-lockfile --ignore-scripts
-make catalog-download catalog-prepare
+git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
 make local
 ```
 
+Before startup, `make local` downloads the URL and `ref` selected in `catalog-sources.json`, defaulting to TenkaCloudChallenge's `main`. Network access is required; acquisition failure stops startup. `make deploy` uses the same selection. Saved events retain their immutable acquisition snapshots. `problems/` is a generated build view, not a Git submodule. To use an authoring branch, change the configured `ref`. See [catalog-sources.json](https://github.com/susumutomita/TenkaCloud/blob/main/catalog-sources.json) and [downloaded-catalog.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/problem-pack/downloaded-catalog.ts).
+
 The default organizer URL is `http://127.0.0.1:5174`; the participant URL is `http://127.0.0.1:5175`. Use the URLs printed by the process. Sign in with the organizer key only; no username or password is needed. Each interactive `make local` start displays a new key once and revokes the previous organizer key and sessions. To rotate it while running, use `make local-reset` in another interactive terminal with the same data directory. Events, scores, participant keys and problem data are preserved. Noninteractive and public/container starts retain existing keys without printing them to logs.
+
+<h2 id="connect-from-another-device">Connect from another device</h2>
+
+Default loopback URLs work only on the host PC. To admit participants on a trusted isolated network, specify an IPv4 already assigned to the host. Replace the example `100.96.12.34` with your host's address. Tailscale IPv4 addresses within `100.64.0.0/10` are accepted too. This command does not configure a VPN or its permissions.
+
+```sh
+make local LOCAL_ARGS="--lan 100.96.12.34 --unsafe-lan"
+```
+
+The organizer opens `http://127.0.0.1:5174` on the host. Give participants `http://100.96.12.34:5175` and their own team key. Opening `127.0.0.1` on a participant's device connects to that device, not the host. Keep the organizer key private.
+
+`--unsafe-lan` acknowledges an HTTP listener; the application does not provide TLS here. Ordinary LAN startup leaves `--competition-network` disabled and does not install the dedicated firewall guard that denies exercise traffic to the host and home LAN. Reachability from a participant-controlled container depends on Docker and OS routes. Binding one IP does not establish team or home LAN isolation. This procedure does not establish verified HTTPS hosting, VM connectivity or a full multiplayer competition.
+
+The isolated native Linux mode is a separate implementation. Missing configuration or unsupported environments are rejected; it is not automatically applied on Mac / Docker Desktop. See [defaults and conditions](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts) and [guard prerequisites](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/linux-network-guard.ts). Connecting through Tailscale does not activate that mode or restrict connectivity between participant devices.
+
+Keep the build enabled on first startup. Add `--no-build` only after building the same code and selected catalog. If startup rejects a missing build or mismatched catalog, rebuild on the next start by omitting that flag. Agree on a maintenance window with the organizer before changing a running host.
+
+<h2 id="check-local-connection">Check startup and connectivity</h2>
+
+Check the organizer page on the host and the participant page from the participant's device. Replace the example IP with the actual host IP.
+
+```sh
+# Run on the host
+curl --fail --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:5174/
+# Run on the participant's device
+curl --fail --silent --output /dev/null --write-out '%{http_code}\n' http://100.96.12.34:5175/
+```
+
+Expect `200` from each, then open the login pages in a browser. If unreachable, check the startup URLs, that the IP belongs to the host and the existing route between devices. HTTP responses alone do not verify authentication, scoring or exercise access. Follow the event steps below and check both correct and incorrect submissions and the score.
+
+Implementation evidence: [options.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/options.ts) and [server.ts](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/server.ts). Developers can run the following regression checks for listener/origin behavior, acquisition failures and snapshot/build consistency. These tests do not prove isolation on a real network.
+
+```sh
+make catalog-download catalog-prepare
+bun test scripts/local-host/tests/public-mode.test.ts scripts/local-host/tests/catalog-startup.test.ts
+```
 
 <h2 id="first-event">Create and play an event</h2>
 
