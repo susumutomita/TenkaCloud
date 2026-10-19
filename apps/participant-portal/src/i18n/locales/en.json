@@ -382,6 +382,8 @@
     "attack_probe_summary_landed": "{landed} of {total} probes still landing",
     "attack_probe_summary_clear": "All {total} probes blocked",
     "last_scored_label": "Last scored",
+    "access_open": "Open environment",
+    "access_open_failed": "Could not open the environment. Try again. Allow pop-ups for this portal if your browser blocked the new tab.",
     "outputs_header": "Access URLs",
     "codespaces_terminal_hint": "In Codespaces the URL above is browser-only. From the terminal:",
     "stack_outputs_detail_header": "Deployment outputs (details)",
