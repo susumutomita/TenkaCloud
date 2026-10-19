@@ -40,6 +40,7 @@ function detail(status: EventDetail["status"] = "READY"): EventDetail {
           teamId: "B",
           status: "FAILED",
           error: "Docker daemon is unavailable.",
+          diagnostic: { reference: "01SAFEFAILURE", operation: "start", problemId: "sqli-demo" },
         },
       ],
     },
@@ -153,6 +154,8 @@ describe("LocalEnvironmentsPanel", () => {
       "JOB-A",
       "stop",
     );
+    expect(screen.getByText("01SAFEFAILURE / start / sqli-demo")).toBeInTheDocument();
+    expect(screen.getByText("Docker daemon is unavailable.")).toBeInTheDocument();
     // A failed environment cannot be stopped, only restarted or torn down.
     expect(
       screen.getByRole("button", { name: 'local_host.env_stop_aria|{"team":"team-b"}' }),

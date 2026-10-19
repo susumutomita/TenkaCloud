@@ -64,6 +64,7 @@
     "hashery": ["prepare"],
     "hookified": ["prepare"],
     "inline-style-parser": ["prepare"],
+    "ip-address": ["prepare"],
     "istanbul-reports": ["prepare"],
     "jsdom": ["prepare"],
     "keyv": ["prepare"],

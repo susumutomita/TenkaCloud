@@ -172,3 +172,45 @@ describe("host container controls", () => {
     expect(stop()).toBeEnabled();
   });
 });
+
+it("shows copyable safe correlation details for an asynchronous failure", async () => {
+  const diagnostic = {
+    reference: "01SAFEFAILURE",
+    operation: "stop" as const,
+    problemId: "code-lab",
+  };
+  render(
+    <I18nProvider>
+      <HostContainerControls
+        session={{ status: "error", error: "The operation failed", diagnostic }}
+        problemId="code-lab"
+        apiBaseUrl="http://localhost/api"
+        sessionToken="synthetic-team-key"
+        onScored={vi.fn().mockResolvedValue(undefined)}
+      />
+    </I18nProvider>,
+  );
+  expect(screen.getByRole("button", { name: "Copy diagnostic details" })).toBeInTheDocument();
+  expect(screen.getByText(/reference: 01SAFEFAILURE/)).toHaveTextContent("operation: stop");
+  expect(screen.getByText(/reference: 01SAFEFAILURE/)).toHaveTextContent("problem: code-lab");
+  expect(screen.getByText(/They can find the cause/)).toBeInTheDocument();
+  expect(screen.queryByText("The operation failed", { exact: true })).toBeNull();
+});
+
+it("keeps failures from older hosts readable without a diagnostic reference", () => {
+  render(
+    <I18nProvider>
+      <HostContainerControls
+        session={{ status: "error", error: "Legacy environment failure; retained data preserved." }}
+        problemId="code-lab"
+        apiBaseUrl="http://localhost/api"
+        sessionToken="synthetic-team-key"
+        onScored={vi.fn().mockResolvedValue(undefined)}
+      />
+    </I18nProvider>,
+  );
+  expect(
+    screen.getByText("Legacy environment failure; retained data preserved."),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Copy diagnostic details" })).toBeNull();
+});
