@@ -18,8 +18,8 @@ function loginFixture() {
   const data = join(root, "state");
   const bin = join(root, "bin");
   const probes = join(root, "docker-probes.log");
-  mkdirSync(data);
-  mkdirSync(bin);
+  mkdirSync(data, { mode: 0o700 });
+  mkdirSync(bin, { mode: 0o700 });
   for (const command of ["docker", "docker-compose"]) {
     writeFileSync(
       join(bin, command),
