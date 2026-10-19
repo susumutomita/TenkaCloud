@@ -20,7 +20,7 @@ import {
   type EventSummary,
   listEvents,
 } from "../api/events-client";
-import { STATUS_COLOR } from "../components/event-detail/shared";
+import { eventTeardownBadge, STATUS_COLOR } from "../components/event-detail/shared";
 import type { AppConfig } from "../config";
 import { usePollingList } from "../hooks/usePollingList";
 import { interpolate, useT } from "../i18n";
@@ -62,11 +62,14 @@ function buildColumns(ctx: ColumnContext): TableProps.ColumnDefinition<EventSumm
     {
       id: "status",
       header: ctx.t("event_list.col_status"),
-      cell: (item) => (
-        <Badge color={STATUS_COLOR[item.status]}>
-          {ctx.t(`event_list.status_label.${item.status}`)}
-        </Badge>
-      ),
+      cell: (item) =>
+        item.status === "TEARDOWN" ? (
+          eventTeardownBadge(item, ctx.t)
+        ) : (
+          <Badge color={STATUS_COLOR[item.status]}>
+            {ctx.t(`event_list.status_label.${item.status}`)}
+          </Badge>
+        ),
     },
     {
       id: "teamCount",
@@ -86,7 +89,13 @@ function buildColumns(ctx: ColumnContext): TableProps.ColumnDefinition<EventSumm
         <Button
           variant="link"
           loading={ctx.archivingId === item.eventId}
-          disabled={!ctx.canMutateTenant || !ARCHIVABLE_STATUSES.has(item.status)}
+          disabled={
+            !ctx.canMutateTenant ||
+            !ARCHIVABLE_STATUSES.has(item.status) ||
+            (item.status === "TEARDOWN" &&
+              item.teardownStatus !== undefined &&
+              item.teardownStatus !== "complete")
+          }
           onClick={() => ctx.onArchiveClick(item)}
           ariaLabel={interpolate(ctx.t("event_list.archive_aria"), { name: item.name })}
         >

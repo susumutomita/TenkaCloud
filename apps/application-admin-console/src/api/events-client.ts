@@ -20,6 +20,8 @@ export interface EventSummary {
   eventId: string;
   name: string;
   status: EventStatus;
+  /** Derived local-host cleanup state. TEARDOWN itself also retains completed event history. */
+  teardownStatus?: "in_progress" | "complete" | "incomplete";
   teamCount: number;
   problemCount: number;
   createdAt: string;
