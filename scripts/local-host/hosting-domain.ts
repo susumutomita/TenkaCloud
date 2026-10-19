@@ -401,6 +401,7 @@ export class HostingDomain {
               status: job.status,
               stopSupported: definitionKind(job.definition) !== "cloudformation",
               ...(job.error ? { error: job.error } : {}),
+              ...(job.status === "FAILED" && job.diagnostic ? { diagnostic: job.diagnostic } : {}),
               ...(job.operation ? { operation: job.operation } : {}),
               ...this.gatewayPortField(job),
             })),
@@ -1157,6 +1158,7 @@ export class HostingDomain {
         await this.closeSurface?.(job.jobId);
         await this.changeEnvironment(job, operation);
         job.error = undefined;
+        job.diagnostic = undefined;
       } catch (error) {
         this.recordRuntimeFailure(
           job,
@@ -1484,6 +1486,7 @@ export class HostingDomain {
     job.gatewaySlot = await this.demandGatewaySlot(job);
   }
   private acceptDemand(job: Job, action: "start" | "stop"): ApiResponse {
+    job.diagnostic = undefined;
     job.operation = action === "start" ? "restart" : "stop";
     if (action === "start") job.status = "IN_PROGRESS";
     this.store.transaction(() => this.store.putJob(job));
@@ -1546,7 +1549,14 @@ export class HostingDomain {
   private networkRetention(jobId: string): number {
     return this.networkRetentions.get(jobId) ?? 0;
   }
-  private recordRuntimeFailure(job: Job, error: unknown, fallback: string, before: number): void {
+  private recordRuntimeFailure(
+    job: Job,
+    error: unknown,
+    fallback: string,
+    before: number,
+    operation: NonNullable<Job["diagnostic"]>["operation"] = job.operation ?? "recover",
+  ): void {
+    job.diagnostic = undefined;
     const retained = this.store.job(job.jobId);
     if (
       job.networkIsolationVersion === 1 &&
@@ -1562,6 +1572,7 @@ export class HostingDomain {
     }
     job.status = "FAILED";
     job.error = failureMessage(error, fallback);
+    job.diagnostic = { reference: id(this.now()), operation, problemId: job.problemId };
   }
   private async runDemandOperation(jobId: string, action: "start" | "stop"): Promise<void> {
     const job = this.store.job(jobId);
@@ -1577,12 +1588,14 @@ export class HostingDomain {
         job.status = "COMPLETE";
       }
       job.error = undefined;
+      job.diagnostic = undefined;
     } catch (error) {
       this.recordRuntimeFailure(
         job,
         error,
         "Local environment operation failed; data retained.",
         retentionBefore,
+        action,
       );
       if (!job.unit) job.gatewaySlot = undefined;
     }
@@ -1743,6 +1756,7 @@ export class HostingDomain {
       job.deployedAt = undefined;
       job.status = "IN_PROGRESS";
       job.error = undefined;
+      job.diagnostic = undefined;
       this.store.putJob(job);
       await this.engine.start(job, (unit) => {
         job.unit = unit;
@@ -1751,7 +1765,7 @@ export class HostingDomain {
       job.status = "COMPLETE";
       job.deployedAt = this.now();
     } catch (error) {
-      this.recordRuntimeFailure(job, error, "Runtime failed.", retentionBefore);
+      this.recordRuntimeFailure(job, error, "Runtime failed.", retentionBefore, "start");
     }
     this.store.putJob(job);
   }
@@ -1789,6 +1803,7 @@ export class HostingDomain {
           if (job.unit) await this.engine.stop(job);
           job.unit = null;
           job.error = undefined;
+          job.diagnostic = undefined;
           job.status = "DELETED";
         } catch (error) {
           this.recordRuntimeFailure(
@@ -1796,6 +1811,7 @@ export class HostingDomain {
             error,
             "Cleanup failed; ownership retained.",
             retentionBefore,
+            "teardown",
           );
         }
         this.store.putJob(job);
@@ -1945,6 +1961,7 @@ export class HostingDomain {
       await this.engine.resume(job);
       job.status = "COMPLETE";
       job.error = undefined;
+      job.diagnostic = undefined;
       job.resumeAfterLocalDown = undefined;
     } catch (error) {
       this.recordRuntimeFailure(
@@ -1961,12 +1978,17 @@ export class HostingDomain {
     if (job.status === "DELETING") {
       job.status = "DELETED";
       job.error = undefined;
+      job.diagnostic = undefined;
       this.store.putJob(job);
       return;
     }
     if (!NONTERMINAL_STATUSES.includes(job.status)) return;
-    job.status = "FAILED";
-    job.error = "Startup was interrupted before runtime ownership was acquired. Retry deployment.";
+    this.recordRuntimeFailure(
+      job,
+      new Error("Startup was interrupted before runtime ownership was acquired. Retry deployment."),
+      "Runtime recovery failed.",
+      this.networkRetention(job.jobId),
+    );
     this.store.putJob(job);
   }
   private hasDemandOperation(job: Job): boolean {
@@ -2006,6 +2028,7 @@ export class HostingDomain {
         await this.engine.recover(job);
         job.status = "COMPLETE";
         job.error = undefined;
+        job.diagnostic = undefined;
       }
     } catch (error) {
       this.recordRuntimeFailure(job, error, "Runtime recovery failed.", retentionBefore);
@@ -2020,6 +2043,7 @@ export class HostingDomain {
       await this.engine.recover(job);
       job.status = "COMPLETE";
       job.error = undefined;
+      job.diagnostic = undefined;
     } catch (error) {
       this.recordRuntimeFailure(job, error, "Runtime recovery failed.", retentionBefore);
     }
