@@ -14,6 +14,22 @@ import { LanguageSwitch } from "./LanguageSwitch";
 import styles from "./MarketingHome.module.css";
 import { BattlePreview, ChallengePreview, HeroDashboard, SsoPreview } from "./MarketingPreviews";
 
+function MarketingCard({
+  item,
+  className,
+}: {
+  item: { label: string; title: string; body: string };
+  className: string;
+}) {
+  return (
+    <article className={className}>
+      <span className={styles.cardLabel}>{item.label}</span>
+      <h3>{item.title}</h3>
+      <p>{item.body}</p>
+    </article>
+  );
+}
+
 // The home page follows the order in which an enterprise buyer evaluates a new
 // platform: problem -> value -> economics -> stakeholders -> use cases -> product
 // experience -> operating model -> security -> commercial model. Technical details
@@ -86,11 +102,7 @@ export function MarketingHome({ locale }: { locale: Locale }) {
           </div>
           <div className={styles.problemGrid}>
             {business.problems.items.map((item) => (
-              <article className={styles.problemCard} key={item.label}>
-                <span className={styles.cardLabel}>{item.label}</span>
-                <h3>{item.title}</h3>
-                <p>{item.body}</p>
-              </article>
+              <MarketingCard key={item.label} item={item} className={styles.problemCard} />
             ))}
           </div>
         </div>
@@ -184,11 +196,7 @@ export function MarketingHome({ locale }: { locale: Locale }) {
           </div>
           <div className={styles.useCaseGrid}>
             {business.useCases.items.map((item) => (
-              <article className={styles.useCaseCard} key={item.label}>
-                <span className={styles.cardLabel}>{item.label}</span>
-                <h3>{item.title}</h3>
-                <p>{item.body}</p>
-              </article>
+              <MarketingCard key={item.label} item={item} className={styles.useCaseCard} />
             ))}
           </div>
         </div>

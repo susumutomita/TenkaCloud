@@ -65,6 +65,7 @@ export interface SpawnHostOptions {
   readonly participantPort: number;
   readonly gatewayPorts: GatewayPortRange;
   readonly readyTimeoutMs: number;
+  readonly env?: NodeJS.ProcessEnv;
 }
 
 /** Runs the production local host through the benchmark's private organizer-key wrapper. */
@@ -84,7 +85,7 @@ export async function spawnHostProcess(options: SpawnHostOptions): Promise<HostP
       "--gateway-ports",
       formatGatewayPorts(options.gatewayPorts),
     ],
-    { cwd: options.repositoryRoot },
+    { cwd: options.repositoryRoot, env: options.env },
   );
   try {
     return await waitForHostProcess(processHandle, options.readyTimeoutMs);
