@@ -31,15 +31,23 @@ function multiVerifyScoringView(
     // 順序ゲートを外す flat の問題だけ露出 (既定 sequential は送らない)。 portal の
     // HintsPanel がこれを見て各 sub-flag の hint lock を外す。
     ...(hintReveal ? { hintReveal } : {}),
-    flags: checks.map((check) => ({
-      id: check.id,
-      label: check.label,
-      input: check.input,
-      points: check.points,
-      solved: runtime.solved.has(check.id),
-      ...(check.i18n ? { i18n: check.i18n } : {}),
-      ...(check.hints.length > 0 ? { hints: hintViews(runtime.revealedHints, check.hints) } : {}),
-    })),
+    flags: checks.map((check) => {
+      const solved = runtime.solved.has(check.id);
+      const english = {
+        ...check.i18n?.en,
+        ...(solved && check.writeupI18n ? { writeup: check.writeupI18n } : {}),
+      };
+      return {
+        id: check.id,
+        label: check.label,
+        input: check.input,
+        points: check.points,
+        solved,
+        ...(solved && check.writeup ? { writeup: check.writeup } : {}),
+        ...(Object.keys(english).length > 0 ? { i18n: { en: english } } : {}),
+        ...(check.hints.length > 0 ? { hints: hintViews(runtime.revealedHints, check.hints) } : {}),
+      };
+    }),
   };
 }
 

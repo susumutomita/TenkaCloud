@@ -10,7 +10,7 @@ import Input from "@cloudscape-design/components/input";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
-import { PendingOperation } from "@tenkacloud/web-kit";
+import { Markdown, PendingOperation } from "@tenkacloud/web-kit";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -445,6 +445,10 @@ function SolvedSubFlagReview({
   readonly label: string;
 }) {
   const t = useT();
+  const lang = useLang();
+  const englishWriteup = flag.i18n?.en?.writeup ?? flag.writeup;
+  const localizedWriteup = lang === "en" ? englishWriteup : flag.writeup;
+  const writeup = flag.solved ? localizedWriteup : undefined;
   const revealedHints = (flag.hints ?? []).flatMap((hint, index) =>
     hint.revealed ? [{ hint, index }] : [],
   );
@@ -452,8 +456,9 @@ function SolvedSubFlagReview({
 
   return (
     <ExpandableSection
+      key={writeup?.trim() ? "writeup" : "hints"}
       variant="container"
-      defaultExpanded={false}
+      defaultExpanded={Boolean(writeup?.trim())}
       headingTagOverride="h3"
       headerText={t("multi_flag.solved_header", { label })}
       headerDescription={t("multi_flag.review_summary", {
@@ -462,6 +467,12 @@ function SolvedSubFlagReview({
       })}
       headerAriaLabel={t("multi_flag.review_aria", { label, hintCount })}
     >
+      {writeup?.trim() && (
+        <Box margin={{ bottom: "m" }}>
+          <Header variant="h3">{t("problem_panel.writeup_heading")}</Header>
+          <Markdown source={writeup} />
+        </Box>
+      )}
       {revealedHints.length === 0 ? (
         <Box color="text-body-secondary">{t("multi_flag.review_no_hints")}</Box>
       ) : (

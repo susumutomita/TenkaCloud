@@ -575,6 +575,29 @@ describe("loadContainerProblem: multi-verify (issue #2252)", () => {
     });
   });
 
+  it("keeps bilingual checkpoint prose in private fields and rejects blank canonical prose", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      multiVerify(
+        [check({ writeup: "日本語の解説" }), other()],
+        [{ id: "public-backup", label: "Public backup", writeup: "English explanation" }],
+      ),
+    );
+    expect(problem.scoring).toMatchObject({
+      checks: [
+        {
+          writeup: "日本語の解説",
+          writeupI18n: "English explanation",
+          i18n: { en: { label: "Public backup" } },
+        },
+        expect.any(Object),
+      ],
+    });
+    expect(() =>
+      loadContainerProblem(DIR, multiVerify([check({ writeup: " " }), other()])),
+    ).toThrow(/writeup must be a non-empty string/);
+  });
+
   it("should preserve a multiline input declaration and reject unknown input shapes", () => {
     const problem = loadContainerProblem(
       DIR,

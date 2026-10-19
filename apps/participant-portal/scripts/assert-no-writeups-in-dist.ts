@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { collectProblemWriteups, containsProblemWriteup } from "../build/strip-problem-writeups";
 
 const appRoot = resolve(import.meta.dirname, "..");
 const repoRoot = resolve(appRoot, "../..");
@@ -18,13 +19,7 @@ function filesUnder(root: string, filename?: string): string[] {
 }
 
 const writeups = filesUnder(catalogRoot, "metadata.json").flatMap((path) => {
-  const metadata = JSON.parse(readFileSync(path, "utf8")) as {
-    writeup?: unknown;
-    i18n?: { en?: { writeup?: unknown } };
-  };
-  return [metadata.writeup, metadata.i18n?.en?.writeup].filter(
-    (value): value is string => typeof value === "string" && value.length > 0,
-  );
+  return collectProblemWriteups(JSON.parse(readFileSync(path, "utf8")));
 });
 
 const bundles = filesUnder(distRoot).map((path) => ({
@@ -32,7 +27,7 @@ const bundles = filesUnder(distRoot).map((path) => ({
   body: readFileSync(path, "utf8"),
 }));
 for (const writeup of writeups) {
-  const leaked = bundles.find(({ body }) => body.includes(writeup));
+  const leaked = bundles.find(({ body }) => containsProblemWriteup(body, writeup));
   if (leaked) {
     throw new Error(`participant bundle contains a catalog writeup: ${leaked.path}`);
   }

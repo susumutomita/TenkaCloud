@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   stripProblemWriteups,
+  collectProblemWriteups,
+  containsProblemWriteup,
   stripProblemWriteupsPlugin,
 } from "../../build/strip-problem-writeups";
 
@@ -23,6 +25,25 @@ describe("stripProblemWriteups (#2191 spoiler boundary)", () => {
       name: "Safe title",
       i18n: { en: { name: "Safe title EN" } },
     });
+  });
+
+  it("removes nested checkpoint JA/EN prose before bundling while retaining safe labels", () => {
+    const metadata = {
+      scoring: { kind: "multi-verify", checks: [{ id: "one", label: "One", writeup: "JA checkpoint secret" }] },
+      i18n: { en: { checks: [{ id: "one", label: "One EN", writeup: "EN checkpoint secret" }] } },
+    };
+    expect(collectProblemWriteups(metadata)).toEqual(["JA checkpoint secret", "EN checkpoint secret"]);
+    const transformed = stripProblemWriteups(JSON.stringify(metadata), "/repo/problems/challenges/one/metadata.json");
+    expect(transformed).not.toContain("checkpoint secret");
+    expect(transformed).toContain("One EN");
+    expect(collectProblemWriteups(JSON.parse(transformed ?? "{}"))).toEqual([]);
+  });
+
+  it("detects both raw prose and escaped JavaScript literals in built assets", () => {
+    const prose = '## Checkpoint\n\nRead the "message" field.';
+    expect(containsProblemWriteup(prose, prose)).toBe(true);
+    expect(containsProblemWriteup(`const hidden = ${JSON.stringify(prose)}`, prose)).toBe(true);
+    expect(containsProblemWriteup("const safe = 1;", prose)).toBe(false);
   });
 
   it("ignores non-catalog JSON and metadata without writeups", () => {
