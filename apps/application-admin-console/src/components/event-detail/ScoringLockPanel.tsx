@@ -7,7 +7,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import type { EventDetail } from "../../api/events-client";
 import { useLang } from "../../i18n";
 import { formatRelativeTime, type SupportedLang } from "../../lib/format";
-import { eventStatusBadge, Field } from "./shared";
+import { eventStatusBadge, eventTeardownBadge, Field } from "./shared";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -49,7 +49,9 @@ export function ScoringLockPanel({
         <ColumnLayout columns={4} variant="text-grid">
           <Field label={t("event_detail.field_status")}>
             <SpaceBetween direction="horizontal" size="xxs">
-              {eventStatusBadge(detail)}
+              {detail.status === "TEARDOWN"
+                ? eventTeardownBadge(detail, t)
+                : eventStatusBadge(detail)}
               {detail.scoringLocked === true && (
                 <Badge color="red">{t("event_detail.scoring_locked_badge")}</Badge>
               )}

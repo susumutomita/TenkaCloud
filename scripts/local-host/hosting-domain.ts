@@ -173,6 +173,25 @@ function withEnglish(
   problem.i18n = { en: english };
 }
 
+/** The engine projects persisted, team-scoped scorer state; request flags never enter here. */
+function scorerProblemComplete(problem: Record<string, unknown>): boolean {
+  const raw = problem.scoring;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const scoring = object(raw);
+  if (scoring.kind === "flag") return scoring.flagSubmitted === true;
+  if (scoring.kind !== "multi-flag" || !Array.isArray(scoring.flags)) return false;
+  return (
+    scoring.flags.length > 0 &&
+    scoring.flags.every(
+      (flag) =>
+        flag !== null &&
+        typeof flag === "object" &&
+        !Array.isArray(flag) &&
+        object(flag).solved === true,
+    )
+  );
+}
+
 /** Strip organizer-only and not-yet-earned content from a scorer problem view. */
 function participantProblem(
   raw: Record<string, unknown>,
@@ -197,7 +216,9 @@ function participantProblem(
     if (runtime === "docker" && typeof english.instructions === "string")
       english.instructions = noticeEn + english.instructions;
   });
-  if (!ended) {
+  const solvedDuringEvent =
+    (gateKind === "ok" || gateKind === "scoring_locked") && scorerProblemComplete(problem);
+  if (!ended && !solvedDuringEvent) {
     delete problem.writeup;
     withEnglish(problem, (english) => {
       delete english.writeup;
@@ -363,10 +384,22 @@ export class HostingDomain {
     }
     return event;
   }
+  /** TEARDOWN retains event history; only runtime ownership proves cleanup is complete. */
+  private teardownStatus(eventId: string): "in_progress" | "complete" | "incomplete" {
+    const jobs = this.store.jobs(eventId);
+    if (this.busyEvents.has(eventId) || jobs.some((job) => this.busyJobs.has(job.jobId)))
+      return "in_progress";
+    return jobs.every((job) => job.status === "DELETED" && job.unit === null && !job.operation)
+      ? "complete"
+      : "incomplete";
+  }
   private summary(event: HostedEvent) {
     const { problems, ...summary } = event;
     return {
       ...summary,
+      ...(event.status === "TEARDOWN"
+        ? { teardownStatus: this.teardownStatus(event.eventId) }
+        : {}),
       ...(!this.progression.configurationValid(event)
         ? { progressionGate: undefined, progressionGateError: "invalid_progression_gate" }
         : {}),

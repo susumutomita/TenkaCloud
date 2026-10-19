@@ -104,8 +104,13 @@
       "DEPLOYING": "デプロイ中",
       "READY": "準備完了",
       "ENDED": "終了",
-      "TEARDOWN": "削除中",
+      "TEARDOWN": "環境削除",
       "ARCHIVED": "終了済"
+    },
+    "teardown_status": {
+      "in_progress": "環境削除中",
+      "complete": "環境削除済み",
+      "incomplete": "環境削除が未完了"
     },
     "col_team_count": "チーム数",
     "col_problem_count": "問題数",

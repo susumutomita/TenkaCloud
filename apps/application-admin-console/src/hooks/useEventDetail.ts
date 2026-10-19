@@ -9,6 +9,7 @@ const IN_FLIGHT_DEPLOYMENT_STATUSES = new Set(["PENDING", "IN_PROGRESS", "DELETI
 
 /** Is any environment of this event still being created, changed or removed? */
 function hasEnvironmentWorkInFlight(detail: EventDetail | null): boolean {
+  if (detail?.teardownStatus === "in_progress") return true;
   return Object.values(detail?.deploymentsByProblem ?? {}).some((deployments) =>
     deployments.some(
       (deployment) =>
