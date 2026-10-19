@@ -757,6 +757,68 @@ describe("multi-verify extensions (issue #2252)", () => {
     expect(screen.getByText(/公開バックアップ/)).toBeInTheDocument();
   });
 
+  it("opens an explanation when the post-submit server refresh releases it", async () => {
+    apiMocks.submitFlag.mockResolvedValue({
+      kind: "ok",
+      flagId: "ep01",
+      scoreDelta: 300,
+      totalScore: 300,
+    });
+    function RefreshedPanel() {
+      const [flags, setFlags] = useState<readonly MultiFlagEntryView[]>(FLAGS);
+      return (
+        <MultiFlagSubmissionPanel
+          {...baseProps}
+          flags={flags}
+          onScored={async () => {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            setFlags([
+              {
+                ...FLAGS[0],
+                solved: true,
+                writeup: "## Released after the accepted answer\n\nWhy GET matters.",
+              },
+              FLAGS[1],
+            ]);
+          }}
+        />
+      );
+    }
+    render(withProviders(<RefreshedPanel />));
+    const user = userEvent.setup();
+    await user.type(screen.getAllByRole("textbox")[0], "synthetic answer");
+    await user.click(screen.getAllByRole("button", { name: /^Submit/ })[0]);
+    expect(
+      await screen.findByRole("heading", { name: "Released after the accepted answer" }),
+    ).toBeVisible();
+  });
+
+  it.each(["ja", "en"])("shows only the server-earned checkpoint explanation in %s", (locale) => {
+    window.localStorage.setItem("tenkacloud.portal.locale", locale);
+    renderPanel({
+      flags: [
+        {
+          ...FLAGS[0],
+          solved: true,
+          writeup: "## 日本語の操作解説\n\nなぜ大事か。",
+          i18n: { en: { writeup: "## English operation explanation\n\nWhy it matters." } },
+        },
+        {
+          ...FLAGS[1],
+          solved: false,
+          writeup: "MUST NOT SHOW unsolved explanation",
+          i18n: { en: { writeup: "MUST NOT SHOW unsolved EN" } },
+        },
+      ],
+    });
+    expect(
+      screen.getByRole("heading", {
+        name: locale === "ja" ? "日本語の操作解説" : "English operation explanation",
+      }),
+    ).toBeVisible();
+    expect(screen.queryByText(/MUST NOT SHOW/)).not.toBeInTheDocument();
+  });
+
   it("should keep a solved cloud checkpoint as a collapsed keyboard review row", async () => {
     renderPanel({
       flags: [

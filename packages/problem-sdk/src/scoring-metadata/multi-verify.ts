@@ -22,6 +22,8 @@ export interface MultiVerifyCheck {
   readonly id: string;
   /** Competitor-facing label. Must not spoil the vulnerability (authoring rule). */
   readonly label: string;
+  /** Optional explanation, released only after the participant solves this checkpoint. */
+  readonly writeup?: string;
   /** Portal input shape. Unset / `text` keeps the backward-compatible single-line field. */
   readonly input?: "text" | "multiline";
   readonly points: number;
@@ -56,8 +58,14 @@ function isCheckpointInput(value: unknown): value is MultiVerifyCheck["input"] {
   return value === undefined || value === "text" || value === "multiline";
 }
 
-function checkpointInputView(input: MultiVerifyCheck["input"]) {
-  return input === undefined ? {} : { input };
+function checkpointPresentation(input: unknown, rawWriteup: unknown) {
+  if (!isCheckpointInput(input)) return undefined;
+  const writeup = optionalNonEmptyString(rawWriteup);
+  if (rawWriteup !== undefined && !writeup?.trim()) return undefined;
+  return {
+    ...(input === undefined ? {} : { input }),
+    ...(writeup ? { writeup } : {}),
+  };
 }
 
 /**
@@ -106,6 +114,7 @@ function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
   const c = value as {
     id?: unknown;
     label?: unknown;
+    writeup?: unknown;
     input?: unknown;
     points?: unknown;
     wrongAnswerPenalty?: unknown;
@@ -116,7 +125,8 @@ function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
   if (!id || !MULTI_VERIFY_CHECK_ID.test(id) || !label || label.length > MULTI_VERIFY_LABEL_MAX) {
     return undefined;
   }
-  if (!isCheckpointInput(c.input)) return undefined;
+  const presentation = checkpointPresentation(c.input, c.writeup);
+  if (!presentation) return undefined;
   if (typeof c.points !== "number" || !Number.isInteger(c.points) || c.points <= 0) {
     return undefined;
   }
@@ -137,7 +147,7 @@ function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
   return {
     id,
     label,
-    ...checkpointInputView(c.input),
+    ...presentation,
     points: c.points,
     wrongAnswerPenalty: clampWrongAnswerPenalty(c.wrongAnswerPenalty),
     ...(hints ? { hints } : {}),

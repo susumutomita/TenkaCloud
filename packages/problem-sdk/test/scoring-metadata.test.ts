@@ -422,6 +422,15 @@ describe("parseScoringMetadata: multi-verify (issue #2252)", () => {
     checks,
   });
 
+  it("preserves optional checkpoint explanations without changing legacy checks", () => {
+    expect(
+      parseScoringMetadata(valid([validCheck({ writeup: "Why this matters" }), secondCheck()])),
+    ).toMatchObject({ checks: [{ writeup: "Why this matters" }, expect.any(Object)] });
+    for (const writeup of [null, 12, "", " "]) {
+      expect(parseScoringMetadata(valid([validCheck({ writeup }), secondCheck()]))).toBeUndefined();
+    }
+  });
+
   it("should parse a minimal multi-verify with two checks", () => {
     expect(parseScoringMetadata(valid())).toEqual({
       kind: "multi-verify",

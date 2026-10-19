@@ -48,8 +48,8 @@ const problem: ContainerProblem = {
     ],
   },
 };
-function state(p = problem) {
-  return createContainerState([p], {
+function state(p = problem, others: readonly ContainerProblem[] = []) {
+  return createContainerState([p, ...others], {
     teamName: "Team",
     verify: verifySubmission,
     startContainer: async (item) => ({
@@ -251,4 +251,80 @@ test("invalid version or foreign problem snapshots fail closed without clearing 
     }),
   ).toThrow("unknown container problem");
   expect(snapshotLocalPlayState(session)).toEqual(own);
+});
+
+test("checkpoint prose follows only its own accepted ID across SQLite restore and team isolation", async () => {
+  const active = verifier();
+  const p: ContainerProblem = {
+    ...active.problem,
+    scoring: {
+      kind: "multi-verify",
+      totalPoints: 100,
+      checks: ["read", "write"].map((id) => ({
+        id,
+        label: id,
+        points: 50,
+        wrongAnswerPenalty: 1,
+        hints: [],
+        writeup: `private ${id} JA explanation`,
+        writeupI18n: `private ${id} EN explanation`,
+        i18n: { en: { label: `${id} EN label` } },
+      })),
+    },
+  };
+  const sibling: ContainerProblem = {
+    ...p,
+    problemId: "sibling",
+    scoring: {
+      kind: "multi-verify",
+      totalPoints: 100,
+      checks: ["read", "write"].map((id) => ({
+        id,
+        label: id,
+        points: 50,
+        wrongAnswerPenalty: 1,
+        hints: [],
+        writeup: `private sibling ${id} explanation`,
+      })),
+    },
+  };
+  const session = state(p, [sibling]),
+    other = state(p, [sibling]);
+  await session.lifecycle.ensureRunning(p.problemId);
+  const view = () => JSON.stringify(teamView(session, Date.parse(iso)));
+  expect(view()).not.toContain("explanation");
+  const submit = (flagId: string, flag: string) =>
+    submitFlag(request({ problemId: p.problemId, flagId, flag }), session, iso);
+  expect((await submit("unknown", "correct")).status).toBe(404);
+  expect((await submit("read", "wrong")).body).toMatchObject({ kind: "wrong" });
+  expect(view()).not.toContain("explanation");
+  expect((await submit("read", "correct")).body).toMatchObject({ kind: "ok" });
+  for (const locale of ["JA", "EN"]) {
+    expect(view()).toContain(`private read ${locale} explanation`);
+    expect(view()).not.toContain(`private write ${locale} explanation`);
+  }
+  expect(view()).not.toContain("private writeup");
+  expect(view()).not.toContain("private sibling");
+  expect(JSON.stringify(teamView(other, Date.parse(iso)))).not.toContain("explanation");
+  const directory = mkdtempSync(join(tmpdir(), "checkpoint-snapshot-"));
+  cleanup.push(() => rmSync(directory, { recursive: true, force: true }));
+  const filename = join(directory, "snapshot.sqlite");
+  const database = new Database(filename);
+  database.exec("CREATE TABLE saved (value TEXT NOT NULL)");
+  const snapshot = JSON.stringify(snapshotLocalPlayState(session));
+  expect(snapshot).not.toContain("explanation");
+  database.prepare("INSERT INTO saved VALUES (?)").run(snapshot);
+  database.close();
+  const reopened = new Database(filename);
+  const saved = reopened.prepare("SELECT value FROM saved").get() as { value: string };
+  reopened.close();
+  const restored = state(p, [sibling]);
+  restoreLocalPlayState(restored, parseLocalPlaySnapshot(saved.value));
+  const restoredView = JSON.stringify(teamView(restored, Date.parse(iso)));
+  expect(restoredView).toContain("private read EN explanation");
+  expect(restoredView).not.toContain("private write EN explanation");
+  expect(restoredView).not.toContain("private sibling");
+  expect((await submit("write", "correct")).body).toMatchObject({ kind: "ok" });
+  expect(view()).toContain("private write EN explanation");
+  expect(view()).toContain("private English writeup");
 });

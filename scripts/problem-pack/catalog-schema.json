@@ -27,7 +27,7 @@
     },
     "localizedChecks": {
       "type": "array",
-      "description": "[TenkaCloud#2252] `scoring.checks[]` の locale 別翻訳。 canonical は top-level `scoring.checks[]`。 本配列は同じ `id` の `label` と `hints[].content` だけを差し替える (= points / id / penalty は language-neutral なので再宣言しない)。 multi-verify 問題では全 check の英訳が必須 (ja/en parity)。",
+      "description": "[TenkaCloud#2252] `scoring.checks[]` の locale 別翻訳。 canonical は top-level `scoring.checks[]`。 本配列は同じ `id` の `label`、正解後の `writeup`、`hints[].content` を差し替える (= points / id / penalty は language-neutral なので再宣言しない)。 multi-verify 問題では全 check の英訳が必須 (ja/en parity)。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -42,6 +42,12 @@
             "type": "string",
             "minLength": 1,
             "description": "翻訳済み表示名 (非スポイラー)。"
+          },
+          "writeup": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "description": "このチェックポイントの正解後だけ表示する解説の英訳。"
           },
           "hints": {
             "$ref": "#/$defs/localizedHints"
@@ -749,6 +755,12 @@
                     "type": "string",
                     "enum": ["text", "multiline"],
                     "description": "[TenkaCloud#2876] Portal の提出欄の形。multiline はソースコードなど改行を保持する値に使う。省略時または text は後方互換の 1 行入力。"
+                  },
+                  "writeup": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "description": "このチェックポイントの正解後だけ表示する学習用解説。未正解の参加者には配信しない。英訳は i18n.en.checks[] の同じ id に記述する。"
                   },
                   "points": {
                     "type": "integer",

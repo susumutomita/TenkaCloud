@@ -54,6 +54,9 @@ export interface ContainerVerifyScoring {
 export interface ContainerCheck {
   readonly id: string;
   readonly label: string;
+  /** Post-solve text, kept off participant views until this exact check is solved. */
+  readonly writeup?: string;
+  readonly writeupI18n?: string;
   /** Portal input shape. Unset / `text` is the backward-compatible default. */
   readonly input?: "text" | "multiline";
   readonly points: number;
@@ -210,6 +213,7 @@ function parseEnglishHintMap(hints: unknown): ReadonlyMap<string, string> {
 
 interface EnglishCheckOverlay {
   readonly label?: string;
+  readonly writeup?: string;
   readonly hintById: ReadonlyMap<string, string>;
 }
 
@@ -224,12 +228,13 @@ function parseEnglishCheckMap(checks: unknown): ReadonlyMap<string, EnglishCheck
   if (!Array.isArray(checks)) return checkById;
   for (const raw of checks) {
     if (typeof raw !== "object" || raw === null) continue;
-    const entry = raw as { id?: unknown; label?: unknown; hints?: unknown };
+    const entry = raw as { id?: unknown; label?: unknown; hints?: unknown; writeup?: unknown };
     const id = optionalString(entry.id);
     if (id === undefined) continue;
     const label = optionalString(entry.label);
     checkById.set(id, {
       ...(label !== undefined ? { label } : {}),
+      ...(optionalString(entry.writeup) ? { writeup: optionalString(entry.writeup) } : {}),
       hintById: parseEnglishHintMap(entry.hints),
     });
   }
@@ -333,6 +338,7 @@ function parseOneCheck(
   const check = raw as {
     id?: unknown;
     label?: unknown;
+    writeup?: unknown;
     input?: unknown;
     points?: unknown;
     wrongAnswerPenalty?: unknown;
@@ -388,7 +394,17 @@ function parseOneCheck(
     points,
     wrongAnswerPenalty,
     hints,
+    ...checkpointWriteups(check.writeup, overlay?.writeup, index),
     ...(overlay?.label !== undefined ? { i18n: { en: { label: overlay.label } } } : {}),
+  };
+}
+
+function checkpointWriteups(ja: unknown, en: string | undefined, index: number) {
+  const writeup =
+    ja === undefined ? undefined : requiredString(ja, `scoring.checks[${index}].writeup`);
+  return {
+    ...(writeup ? { writeup } : {}),
+    ...(en ? { writeupI18n: en } : {}),
   };
 }
 
