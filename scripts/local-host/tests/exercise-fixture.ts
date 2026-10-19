@@ -13,6 +13,7 @@ import {
   type RuntimeEngine,
   type SqlDatabase,
 } from "../model";
+import { MAX_SUBMISSION_BODY } from "../submission-size";
 
 interface Exercise {
   origin: string;
@@ -28,6 +29,9 @@ export class ExerciseFixture implements RuntimeEngine {
   hostPorts?: (definition: string, offset: number) => readonly number[];
   failStop = false;
   verifyDelay = 0;
+  failVerify = false;
+  /** Optional synthetic multi-checkpoint exercise; progress is persisted in the team snapshot. */
+  checkpoints: readonly string[] = [];
   constructor(private readonly openDatabase: (path: string) => SqlDatabase) {}
   catalog() {
     return [
@@ -74,12 +78,13 @@ export class ExerciseFixture implements RuntimeEngine {
     };
     const verify = async (body: string): Promise<{ status: number; body: unknown }> => {
       if (this.verifyDelay) await new Promise((accept) => setTimeout(accept, this.verifyDelay));
+      if (this.failVerify) return { status: 503, body: { error: "fixture_verifier_unavailable" } };
       return { status: 200, body: { correct: object(JSON.parse(body)).submission === flag } };
     };
     const route = async (request: IncomingMessage): Promise<{ status: number; body: unknown }> => {
       const key = `${request.method ?? "GET"} ${request.url ?? "/"}`;
       if (key === "GET /healthz") return { status: 200, body: { status: "ok" } };
-      if (key === "POST /verify") return verify(await readBody(request));
+      if (key === "POST /verify") return verify(await readBody(request, MAX_SUBMISSION_BODY));
       if (key === "POST /login") return login(await readBody(request));
       return { status: 404, body: { error: "not_found" } };
     };
@@ -161,17 +166,29 @@ export class ExerciseFixture implements RuntimeEngine {
         i18n: { en: { name: "Exercise", writeup: "private-english-solution" } },
         lifecycle: { status: "running", runtimeKind: "docker" },
         score: context.team.score,
-        scoring: {
-          kind: "flag",
-          points: 100,
-          flagSubmitted: snapshot.solved === true,
-        },
+        scoring:
+          this.checkpoints.length > 0
+            ? {
+                kind: "multi-flag",
+                points: 100,
+                flags: this.checkpoints.map((id) => ({
+                  id,
+                  label: id,
+                  points: 50,
+                  solved: snapshot[`solved:${id}`] === true,
+                })),
+              }
+            : { kind: "flag", points: 100, flagSubmitted: snapshot.solved === true },
       })),
     };
   }
   async submit(context: Context, body: Record<string, unknown>): Promise<EngineResult> {
     const snapshot = context.team.snapshot ? object(JSON.parse(context.team.snapshot)) : {};
-    if (snapshot.solved) return this.result(context, snapshot, "already_scored", 0);
+    const checkpoint = this.checkpoints.length > 0 ? String(body.flagId) : undefined;
+    if (checkpoint && !this.checkpoints.includes(checkpoint))
+      throw new Error("Unknown fixture checkpoint.");
+    const solvedKey = checkpoint ? `solved:${checkpoint}` : "solved";
+    if (snapshot[solvedKey]) return this.result(context, snapshot, "already_scored", 0);
     const job = context.jobs.find((candidate) => candidate.problemId === body.problemId);
     if (!job) throw new Error("Unknown fixture problem.");
     const response = await fetch(`${this.surface(job)}/verify`, {
@@ -179,8 +196,12 @@ export class ExerciseFixture implements RuntimeEngine {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ submission: body.flag }),
     });
+    if (!response.ok) throw new Error("Fixture verifier unavailable.");
     const verdict = object(await response.json());
-    if (verdict.correct) snapshot.solved = true;
+    if (verdict.correct) {
+      snapshot[solvedKey] = true;
+      snapshot.solved = this.checkpoints.every((id) => snapshot[`solved:${id}`] === true);
+    }
     return this.result(
       context,
       snapshot,

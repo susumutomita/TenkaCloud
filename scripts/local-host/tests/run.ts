@@ -572,6 +572,138 @@ test("Idempotent wrong submissions, hint charges and payload conflict detection"
       assert.equal((await f.request("participant", path, "POST", {}, a.teamLoginKey)).status, 200);
     assert.equal(f.store.team(a.teamId).score, -25);
   }));
+test("Solved team writeups survive refresh, verifier errors, locks and SQLite reload without leaking partial progress", () =>
+  fixture(async (f) => {
+    f.engine.checkpoints = ["read", "write"];
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const a = required(event.teams[0]);
+    const b = required(event.teams[1]);
+    const read = (key: string) => f.request("participant", "/api/portal/me", "GET", undefined, key);
+    const hidden = async (key: string) => {
+      const view = await read(key);
+      assert.equal(view.status, 200);
+      assert.ok(!JSON.stringify(view.body).includes("private-solution"));
+      assert.ok(!JSON.stringify(view.body).includes("private-english-solution"));
+    };
+    const shown = async () => {
+      const view = await read(a.teamLoginKey);
+      assert.equal(view.status, 200);
+      const problem = object((view.body.problems as unknown[])[0]);
+      assert.equal(problem.writeup, "private-solution");
+      assert.equal(object(object(problem.i18n).en).writeup, "private-english-solution");
+      await hidden(b.teamLoginKey);
+    };
+    const challenge = await f.challenge(a.teamLoginKey);
+    const submit = (flagId: string, flag = challenge.flag) =>
+      f.request(
+        "participant",
+        "/api/portal/me/submit-flag",
+        "POST",
+        {
+          problemId: "sqli-demo",
+          flagId,
+          flag,
+          scoring: { kind: "flag", flagSubmitted: true },
+          solved: true,
+        },
+        a.teamLoginKey,
+      );
+    await hidden(a.teamLoginKey);
+    assert.equal((await submit("read", "wrong")).body.kind, "wrong");
+    await hidden(a.teamLoginKey);
+    assert.equal((await submit("read")).body.kind, "ok");
+    await hidden(a.teamLoginKey);
+    f.engine.failVerify = true;
+    assert.equal((await submit("write")).status, 500);
+    await hidden(a.teamLoginKey);
+    f.engine.failVerify = false;
+    assert.equal((await submit("write")).body.kind, "ok");
+    await shown();
+    assert.equal((await submit("write")).body.kind, "already_scored");
+    await shown();
+    await f.request("admin", `/api/events/${event.eventId}/lock-scoring`, "POST", {});
+    await shown();
+    await f.restart();
+    await shown();
+    await f.request("admin", `/api/events/${event.eventId}/lock-scoring`, "DELETE", {});
+    await f.request("admin", `/api/events/${event.eventId}/end`, "POST", {});
+    // Preserve the existing event-end pass-through; each engine owns its ended release policy.
+    for (const team of [a, b]) {
+      const ended = await read(team.teamLoginKey);
+      assert.equal(object((ended.body.problems as unknown[])[0]).writeup, "private-solution");
+    }
+  }));
+test("Missing or malformed scorer progress fails closed without breaking valid participant reads", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const original = f.engine.view.bind(f.engine);
+    for (const scoring of [
+      undefined,
+      null,
+      42,
+      [],
+      { kind: "flag", flagSubmitted: "true" },
+      { kind: "multi-flag", flags: [] },
+      { kind: "multi-flag", flags: [null] },
+      { kind: "multi-flag", flags: [{ solved: "true" }] },
+    ]) {
+      Object.defineProperty(f.engine, "view", {
+        configurable: true,
+        value: async (...args: Parameters<typeof original>) => {
+          const view = await original(...args);
+          return { ...view, problems: view.problems.map((problem) => ({ ...problem, scoring })) };
+        },
+      });
+      const view = await f.request(
+        "participant",
+        "/api/portal/me",
+        "GET",
+        undefined,
+        required(event.teams[0]).teamLoginKey,
+      );
+      // Invalid truthy non-object scoring keeps the existing view validation error.
+      const invalidShape = typeof scoring === "number" || Array.isArray(scoring);
+      assert.equal(view.status, invalidShape ? 400 : 200);
+      assert.ok(!JSON.stringify(view.body).includes("private-solution"));
+      assert.ok(!JSON.stringify(view.body).includes("private-english-solution"));
+    }
+  }));
+test("A single accepted answer reveals only its own team's writeup during an active event", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const a = required(event.teams[0]);
+    const challenge = await f.challenge(a.teamLoginKey);
+    const submitted = await f.request(
+      "participant",
+      "/api/portal/me/submit-flag",
+      "POST",
+      { problemId: "sqli-demo", flag: challenge.flag },
+      a.teamLoginKey,
+    );
+    assert.equal(submitted.body.kind, "ok");
+    const solved = await f.request(
+      "participant",
+      "/api/portal/me",
+      "GET",
+      undefined,
+      a.teamLoginKey,
+    );
+    assert.equal(object((solved.body.problems as unknown[])[0]).writeup, "private-solution");
+    const other = await f.request(
+      "participant",
+      "/api/portal/me",
+      "GET",
+      undefined,
+      required(event.teams[1]).teamLoginKey,
+    );
+    assert.ok(!JSON.stringify(other.body).includes("private-solution"));
+  }));
 test("Start, lock and end gates also prevent early instructions and writeup disclosure", () =>
   fixture(async (f) => {
     const event = await f.create();
