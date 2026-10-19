@@ -43,7 +43,7 @@ for (const args of [[], ["--no-build"]])
     const root = mkdtempSync(join(tmpdir(), "tc-unselected-launcher-"));
     try {
       await expect(runManagedLocal(root, args)).rejects.toThrow(
-        "Catalog acquisition from catalog-sources.json failed",
+        "Catalog import failed; startup/build stopped.",
       );
       expect(existsSync(join(root, ".tenkacloud"))).toBe(false);
     } finally {
@@ -68,7 +68,7 @@ for (const args of [[], ["--no-build"]])
             throw new Error("main branch unavailable");
           },
         }),
-      ).rejects.toThrow("main branch unavailable");
+      ).rejects.toThrow("Source 1 (selected catalog)");
       expect(existsSync(join(root, ".tenkacloud/host"))).toBe(false);
       expect(existsSync(join(root, ".tenkacloud/catalog-store/selected.json"))).toBe(false);
     } finally {

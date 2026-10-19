@@ -4,6 +4,7 @@ import { createServer, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { logCatalogImport } from "../problem-pack/catalog-import-log";
 import { downloadConfiguredCatalog } from "../problem-pack/downloaded-catalog";
 import { randomToken, sameSecret } from "./auth";
 import { hasDatabaseState, prepareDatabase, privateDirectory } from "./files";
@@ -242,7 +243,7 @@ export async function runManagedLocal(
     await runLocalHost(args, { repositoryRoot: root });
     return 0;
   }
-  downloadConfiguredCatalog(root, undefined, catalogDeps);
+  logCatalogImport(() => downloadConfiguredCatalog(root, undefined, catalogDeps));
   process.umask(0o077);
   const directory = realpathSync(privateDirectory(options.dataDirectory));
   const path = join(directory, SESSION_FILE);

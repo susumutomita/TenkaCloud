@@ -36,6 +36,20 @@ import { computeContentDigest } from "./snapshot.js";
 import { restoreSourcePermissions, sealSourcePermissions } from "./source-permissions.js";
 import { validatePackDirectory } from "./validate-pack.js";
 
+export type CatalogImport = { revision: Revision; problemCount: number }[];
+
+/** Carries source context separately from unsafe transport/validation details. */
+export class CatalogSourceFailure extends Error {
+  constructor(
+    readonly source: z.infer<typeof SelectionSchema>["sources"][number],
+    readonly sourceNumber: number,
+    readonly retained: boolean,
+    cause: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+  }
+}
+
 const dummyCommit = "0".repeat(40);
 const ajv = new Ajv({ allErrors: true, strict: false });
 ajv.addFormat("uri", {
@@ -79,6 +93,7 @@ export function resolveCatalogRef(url: string, ref: string): string {
     ],
     {
       encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
       timeout: 120_000,
       env: {
         ...process.env,
@@ -189,8 +204,8 @@ export function downloadCatalog(
   root: string,
   config: unknown,
   deps: { fetcher?: GitArchiveFetcher; resolveRef?: typeof resolveCatalogRef } = {},
-): void {
-  withCatalogMutation(root, () =>
+): CatalogImport {
+  return withCatalogMutation(root, () =>
     downloadCatalogInternal(root, SelectionSchema.parse(config), deps),
   );
 }
@@ -200,7 +215,7 @@ export function downloadConfiguredCatalog(
   root: string,
   configPath = process.env.CATALOG_SOURCES ?? "catalog-sources.json",
   deps: Parameters<typeof downloadCatalog>[2] = {},
-): void {
+): CatalogImport {
   try {
     const configFile = resolve(root, configPath);
     const selection = SelectionSchema.parse(JSON.parse(readFileSync(configFile, "utf8")));
@@ -211,7 +226,7 @@ export function downloadConfiguredCatalog(
     const internal = existsSync(internalPath)
       ? CatalogLockSchema.parse(JSON.parse(readFileSync(internalPath, "utf8")))
       : undefined;
-    downloadCatalog(
+    return downloadCatalog(
       root,
       {
         ...selection,
@@ -235,11 +250,11 @@ export function downloadConfiguredCatalog(
 export function downloadLockedCatalog(
   root: string,
   deps: Parameters<typeof downloadCatalog>[2] = {},
-): void {
+): CatalogImport {
   const lock = CatalogLockSchema.parse(
     JSON.parse(readFileSync(join(root, "catalog-lock.json"), "utf8")),
   );
-  withCatalogMutation(root, () => downloadCatalogInternal(root, lock, deps));
+  return withCatalogMutation(root, () => downloadCatalogInternal(root, lock, deps));
 }
 function downloadRevision(
   root: string,
@@ -327,10 +342,19 @@ function downloadCatalogInternal(
   root: string,
   selection: z.infer<typeof SelectionSchema>,
   deps: { fetcher?: GitArchiveFetcher; resolveRef?: typeof resolveCatalogRef },
-): void {
+): CatalogImport {
   const revisions: Revision[] = [];
   for (const source of [...selection.sources, ...(selection.retained ?? [])]) {
-    revisions.push(downloadRevision(root, source, deps));
+    try {
+      revisions.push(downloadRevision(root, source, deps));
+    } catch (cause) {
+      throw new CatalogSourceFailure(
+        source,
+        revisions.length + 1,
+        revisions.length >= selection.sources.length,
+        cause,
+      );
+    }
   }
   // Reject cross-pack conflicts before changing the selected lock or browser view.
   const ids = new Set<string>();
@@ -343,6 +367,10 @@ function downloadCatalogInternal(
       ids.add(id);
     }
   const current = revisions.slice(0, selection.sources.length);
+  const imported = current.map((revision) => ({
+    revision,
+    problemCount: directories(join(snapshot(root, revision.digest), revision.problemsRoot)).length,
+  }));
   const previous = existsSync(lockPath(root))
     ? CatalogLockSchema.parse(JSON.parse(readFileSync(lockPath(root), "utf8")))
     : undefined;
@@ -363,6 +391,7 @@ function downloadCatalogInternal(
   } finally {
     rmSync(transaction, { recursive: true, force: true });
   }
+  return imported;
 }
 
 /** A tag can be moved after review; automated acquisition must still match the committed lock. */

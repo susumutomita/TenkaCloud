@@ -52,6 +52,8 @@ CATALOG_SOURCES=./config/my-catalogs.json make local
 
 `CATALOG_SOURCES=./config/my-catalogs.json make deploy ENV=development` も同じ snapshot 準備を行い、その後に実際の deploy を行います。実行前に対象・権限・費用を別途確認してください。稼働中の host は自動で切り替わりません。再起動は開催者と調整します。
 
+起動時と `make catalog-download` は取得開始を表示し、全取得元の検証と選択の保存が終わると、取得元ごとに URL または解決済みローカルパス、snapshot digest、問題数を表示します。Git は指定した `ref` と解決済み commit も表示します。URL の認証情報・query・fragment や通信エラーの生データは出しません。最後に選択中の取得元数と合計問題数を表示します。保持済みの過去版はこの合計に含めません。失敗時は明示的に停止を表示し、途中までの取得を成功として案内しません。これらは起動用カタログの取得結果であり、保存済み大会の問題が移行したことを表しません。
+
 <h2 id="metadata-and-snapshots">metadata と不変 snapshot</h2>
 
 既存の `challenges/<id>/metadata.json`、`battles/<id>/metadata.json` の配置、または `tenkacloud-pack.json` に `problemsRoot` を宣言した検証済み SDK Pack を使います。[問題 metadata](/developers/docs/reference/problem-metadata/)と [Pack manifest](/developers/docs/reference/pack-manifest/)の仕様に従ってください。問題リストは既存の探索処理が category/problem ディレクトリの metadata から生成します。`sources` は取得元を選ぶ設定で、問題一覧を手書きするものではありません。生成物の `problems/` に問題を作成しないでください。
