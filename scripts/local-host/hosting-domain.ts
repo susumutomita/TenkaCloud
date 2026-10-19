@@ -363,10 +363,22 @@ export class HostingDomain {
     }
     return event;
   }
+  /** TEARDOWN retains event history; only runtime ownership proves cleanup is complete. */
+  private teardownStatus(eventId: string): "in_progress" | "complete" | "incomplete" {
+    const jobs = this.store.jobs(eventId);
+    if (this.busyEvents.has(eventId) || jobs.some((job) => this.busyJobs.has(job.jobId)))
+      return "in_progress";
+    return jobs.every((job) => job.status === "DELETED" && job.unit === null && !job.operation)
+      ? "complete"
+      : "incomplete";
+  }
   private summary(event: HostedEvent) {
     const { problems, ...summary } = event;
     return {
       ...summary,
+      ...(event.status === "TEARDOWN"
+        ? { teardownStatus: this.teardownStatus(event.eventId) }
+        : {}),
       ...(!this.progression.configurationValid(event)
         ? { progressionGate: undefined, progressionGateError: "invalid_progression_gate" }
         : {}),

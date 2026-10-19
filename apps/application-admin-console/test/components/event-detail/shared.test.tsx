@@ -8,6 +8,7 @@ import type {
 } from "../../../src/api/events-client";
 import {
   eventStatusBadge,
+  eventTeardownBadge,
   Field,
   renderProblemDeployStatus,
   renderProblemJobLinks,
@@ -161,4 +162,20 @@ describe("Field", () => {
     expect(screen.getByText("My Label")).toBeInTheDocument();
     expect(screen.getByText("child-value")).toBeInTheDocument();
   });
+});
+
+describe("eventTeardownBadge", () => {
+  it.each(["in_progress", "complete", "incomplete", undefined] as const)(
+    "renders cleanup state %s",
+    (teardownStatus) => {
+      render(eventTeardownBadge({ teardownStatus }, t));
+      expect(
+        screen.getByText(
+          teardownStatus
+            ? `event_list.teardown_status.${teardownStatus}`
+            : "event_list.status_label.TEARDOWN",
+        ),
+      ).toBeInTheDocument();
+    },
+  );
 });

@@ -8,6 +8,7 @@ import type {
   EventDeploymentSummary,
   EventDetail,
   EventStatus,
+  EventSummary,
 } from "../../api/events-client";
 import {
   computeEffectiveStatus,
@@ -37,6 +38,17 @@ export const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"
   TEARDOWN: "red",
   ARCHIVED: "grey",
 };
+
+/** Use confirmed cleanup state; older hosts do not prove progress or completion. */
+export function eventTeardownBadge(event: Pick<EventSummary, "teardownStatus">, t: Translate) {
+  const state = event.teardownStatus;
+  const colors = { in_progress: "blue", incomplete: "red", complete: "grey" } as const;
+  return (
+    <Badge color={state ? colors[state] : "grey"}>
+      {t(state ? `event_list.teardown_status.${state}` : "event_list.status_label.TEARDOWN")}
+    </Badge>
+  );
+}
 
 /**
  * #1330: effective status (= time-aware) ごとの badge 色。 RUNNING は競技進行中なので
