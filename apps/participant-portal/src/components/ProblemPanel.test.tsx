@@ -748,6 +748,16 @@ describe("ProblemPanel render branches", () => {
     expect(screen.getByText("tc-x402-paywall-team-1")).toBeInTheDocument();
   });
 
+  it("offers a fresh handoff action instead of rendering the cached ticket URL", () => {
+    renderPanel({
+      status: "COMPLETE",
+      stackOutputs: { Web: "https://exercise.example.test/__join?ticket=synthetic-cached" },
+    });
+    expect(screen.getByRole("button", { name: "Open environment" })).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain("synthetic-cached");
+  });
+
   it("should fall back to details only when stack outputs have no URLs", () => {
     renderPanel({
       status: "COMPLETE",

@@ -19,6 +19,7 @@ import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
 import { type LocaleCode, useLang, useT } from "../i18n";
 import { describeAgo, type SupportedLang } from "../lib/format";
 import { AttackProbesPanel } from "./AttackProbesPanel";
+import { ChallengeAccessLink } from "./ChallengeAccessLink";
 import { CompetitionNetworkPanel } from "./CompetitionNetworkPanel";
 import { ContainerWorkbenchPanel } from "./ContainerWorkbenchPanel";
 import { HostContainerControls } from "./HostContainerControls";
@@ -473,9 +474,13 @@ export function ProblemPanel({
                       label,
                       value: (
                         <SpaceBetween size="xxs">
-                          <a href={value} target="_blank" rel="noreferrer noopener">
-                            <code>{value}</code>
-                          </a>
+                          <ChallengeAccessLink
+                            value={value}
+                            label={label}
+                            jobId={problem.jobId}
+                            apiBaseUrl={apiBaseUrl}
+                            sessionToken={sessionToken}
+                          />
                           {loopback && (
                             <Box fontSize="body-s" color="text-status-inactive">
                               {t("problem_panel.codespaces_terminal_hint")} <code>{loopback}</code>

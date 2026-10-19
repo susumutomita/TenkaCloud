@@ -382,6 +382,8 @@
     "attack_probe_summary_landed": "{total} 件中 {landed} 件が刺さっています",
     "attack_probe_summary_clear": "{total} 件すべて防御できています",
     "last_scored_label": "最終加点",
+    "access_open": "環境を開く",
+    "access_open_failed": "環境を開けませんでした。もう一度お試しください。新しいタブがブロックされた場合は、このポータルのポップアップを許可してください。",
     "outputs_header": "アクセス先 URL",
     "codespaces_terminal_hint": "Codespaces では上の URL はブラウザ専用。ターミナルからは:",
     "stack_outputs_detail_header": "デプロイ出力 (詳細)",
