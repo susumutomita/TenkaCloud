@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -11,6 +11,38 @@ import { ensureHostBuild } from "./host-build-fixture";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 await ensureHostBuild(repository);
+
+/** Authentication uses the production native host without depending on a Docker daemon. */
+function loginFixture() {
+  const root = mkdtempSync(join(tmpdir(), "tenka-bench-login-"));
+  const data = join(root, "state");
+  const bin = join(root, "bin");
+  const probes = join(root, "docker-probes.log");
+  mkdirSync(data);
+  mkdirSync(bin);
+  for (const command of ["docker", "docker-compose"]) {
+    writeFileSync(
+      join(bin, command),
+      `#!/bin/sh\nprintf '%s\\n' ${command} >> "$TENKACLOUD_TEST_DOCKER_LOG"\nexit 1\n`,
+      { mode: 0o700 },
+    );
+  }
+  return {
+    root,
+    data,
+    probes,
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      TENKACLOUD_COMPOSE_CLI: "",
+      TENKACLOUD_TEST_DOCKER_LOG: probes,
+    },
+  };
+}
+
+function expectFixtureProbes(probes: string): void {
+  expect(readFileSync(probes, "utf8").trim().split("\n")).toEqual(["docker", "docker-compose"]);
+}
 
 async function availablePorts() {
   const admin = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
@@ -24,7 +56,8 @@ async function availablePorts() {
 }
 
 test("HTTP benchmark starts the production host and signs in repeatedly with its private key", async () => {
-  const data = mkdtempSync(join(tmpdir(), "tenka-bench-login-"));
+  const fixture = loginFixture();
+  const { data } = fixture;
   let host: Awaited<ReturnType<typeof spawnHostProcess>> | undefined;
   try {
     host = await spawnHostProcess({
@@ -33,7 +66,9 @@ test("HTTP benchmark starts the production host and signs in repeatedly with its
       ...(await availablePorts()),
       gatewayPorts: { start: 1024, end: 1063 },
       readyTimeoutMs: 5000,
+      env: fixture.env,
     });
+    expectFixtureProbes(fixture.probes);
     expect(/^[A-Za-z0-9_-]{43}$/u.test(host.info.hostKey)).toBe(true);
     for (let attempt = 0; attempt < 2; attempt++) {
       const token = await adminLogin(host.info.adminOrigin, host.info.hostKey);
@@ -47,12 +82,13 @@ test("HTTP benchmark starts the production host and signs in repeatedly with its
       expect(readFileSync(join(data, file)).includes(host.info.hostKey)).toBe(false);
   } finally {
     await host?.stop();
-    rmSync(data, { recursive: true, force: true });
+    rmSync(fixture.root, { recursive: true, force: true });
   }
 }, 15_000);
 
 test("benchmark production entry delivers its organizer key only through the private pipe", async () => {
-  const data = mkdtempSync(join(tmpdir(), "tenka-bench-private-key-"));
+  const fixture = loginFixture();
+  const { data } = fixture;
   const ports = await availablePorts();
   const { child, stdout, stderr, privateOutput, exited } = spawnPrivateKeyProcess(
     [
@@ -69,7 +105,7 @@ test("benchmark production entry delivers its organizer key only through the pri
       "--gateway-ports",
       "1024-1063",
     ],
-    { cwd: repository },
+    { cwd: repository, env: fixture.env },
   );
   let output = "";
   for (const stream of [stdout, stderr])
@@ -92,6 +128,7 @@ test("benchmark production entry delivers its organizer key only through the pri
     const origin = `http://127.0.0.1:${String(ports.adminPort)}`;
     const token = await adminLogin(origin, key);
     expect((await apiCall(origin, "/host/me", "GET", token)).status).toBe(200);
+    expectFixtureProbes(fixture.probes);
   } finally {
     clearTimeout(timeout);
     lines.close();
@@ -99,6 +136,6 @@ test("benchmark production entry delivers its organizer key only through the pri
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGINT");
     expect(await exited).toBe(0);
     if (key) expect(output.includes(key)).toBe(false);
-    rmSync(data, { recursive: true, force: true });
+    rmSync(fixture.root, { recursive: true, force: true });
   }
 }, 15_000);
