@@ -51,7 +51,9 @@ try {
   assert.equal(error.status, 500);
   assert.equal(await error.text(), "internal_error");
   assert.equal(errors.length, 1);
-  assert.equal((await fetch(`${origin}/after-error`)).status, 200);
+  const recovered = await fetch(`${origin}/after-error`);
+  assert.equal(recovered.status, 200);
+  assert.deepEqual(await recovered.json(), { path: "/after-error" });
   const occupied = createHttpServer(
     async (_request, response) => {
       response.end();
