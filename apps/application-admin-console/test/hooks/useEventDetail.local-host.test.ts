@@ -103,6 +103,33 @@ describe("useEventDetail in-flight polling", () => {
     expect(mockGetEvent.mock.calls.length).toBe(calls);
   });
 
+  it("polls through the final cleanup task after rows are deleted, then stops on confirmed completion", async () => {
+    const pending = { ...detail("DELETED"), status: "TEARDOWN", teardownStatus: "in_progress" };
+    const complete = { ...pending, teardownStatus: "complete" };
+    mockGetEvent.mockResolvedValueOnce(pending).mockResolvedValue(complete);
+    const { result } = renderHook(() =>
+      useEventDetail({
+        apiClient: CLIENT,
+        eventId: "e1",
+        eventIdValid: true,
+        inFlightPollMs: 3000,
+      }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.detail?.teardownStatus).toBe("in_progress");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(result.current.detail?.teardownStatus).toBe("complete");
+    const calls = mockGetEvent.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(mockGetEvent.mock.calls.length).toBe(calls);
+  });
+
   it("follows Cloud environment work every 30s outside the scoring window", async () => {
     mockGetEvent.mockResolvedValue(detail("IN_PROGRESS"));
     const extra = await fetchesAfter(60_000, {

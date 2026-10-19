@@ -122,6 +122,27 @@ describe("EventListPage", () => {
     expect(mockNav).toHaveBeenCalledWith("/events/new");
   });
 
+  it.each(["in_progress", "complete", "incomplete", undefined] as const)(
+    "renders confirmed teardown state %s without inventing completion or permitting unfinished archive",
+    async (teardownStatus) => {
+      mockList.mockResolvedValue({ items: [ev({ status: "TEARDOWN", teardownStatus })] });
+      renderPage();
+      await screen.findByText("Event One");
+      expect(
+        screen.getByText(
+          teardownStatus
+            ? `event_list.teardown_status.${teardownStatus}`
+            : "event_list.status_label.TEARDOWN",
+        ),
+      ).toBeInTheDocument();
+      const archive = screen.getByRole("button", { name: "archive Event One" });
+      if (teardownStatus === undefined || teardownStatus === "complete")
+        expect(archive).toBeEnabled();
+      else expect(archive).toBeDisabled();
+      expect(mockArchive).not.toHaveBeenCalled();
+    },
+  );
+
   it("should show an empty-state create action that navigates when there are no events", async () => {
     mockList.mockResolvedValue({ items: [] });
     renderPage();

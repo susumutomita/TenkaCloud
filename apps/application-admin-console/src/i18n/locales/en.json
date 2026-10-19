@@ -104,8 +104,13 @@
       "DEPLOYING": "Deploying",
       "READY": "Ready",
       "ENDED": "Ended",
-      "TEARDOWN": "Tearing down",
+      "TEARDOWN": "Teardown requested",
       "ARCHIVED": "Ended"
+    },
+    "teardown_status": {
+      "in_progress": "Removing environments",
+      "complete": "Environments removed",
+      "incomplete": "Environment cleanup incomplete"
     },
     "col_team_count": "Teams",
     "col_problem_count": "Problems",
