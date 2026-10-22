@@ -327,6 +327,8 @@ async function withDocker(
     engine: DockerHostingEngine;
     job: Job;
     calls: string[];
+    guard: LocalNetworkGuard;
+    runner: ConstructorParameters<typeof DockerHostingEngine>[5];
     dockerCalls: () => string[];
   }) => Promise<void>,
 ) {
@@ -371,7 +373,10 @@ async function withDocker(
     calls.push(`compose-${action}`);
   };
   const fetched = spyOn(globalThis, "fetch").mockImplementation(
-    async () => new Response("{}", { headers: { "content-type": "application/json" } }),
+    Object.assign(
+      async () => new Response("{}", { headers: { "content-type": "application/json" } }),
+      { preconnect: fetch.preconnect },
+    ),
   );
   try {
     const selected = new DockerHostingEngine(root, data).catalog()[0];
@@ -394,6 +399,8 @@ async function withDocker(
       engine: build({ data, calls, guard, runner }),
       job,
       calls,
+      guard,
+      runner,
       dockerCalls: () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : []),
     });
   } finally {
