@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../src/api/client";
 import {
+  defaultMatchLength,
   formatEndEventError,
+  resolveMatchLength,
   resolveScheduledStartInput,
   validateDeployAtInput,
   validateEndsAtInput,
@@ -104,4 +106,28 @@ describe("formatEndEventError", () => {
   it("should format a non-ApiError via toErrorMessage", () => {
     expect(formatEndEventError(new Error("boom"), t)).toBe("boom");
   });
+});
+
+describe("match length (#3453)", () => {
+  it("should open a Battle on 10 minutes and anything else without an end", () => {
+    expect(defaultMatchLength(true)).toBe("10");
+    expect(defaultMatchLength(false)).toBe("none");
+  });
+
+  it("should resolve presets, no end and a typed length", () => {
+    expect(resolveMatchLength("20", "")).toEqual({ ok: true, durationMinutes: 20 });
+    expect(resolveMatchLength("none", "999")).toEqual({ ok: true });
+    expect(resolveMatchLength("custom", " 240 ")).toEqual({ ok: true, durationMinutes: 240 });
+    expect(resolveMatchLength("custom", "5")).toEqual({ ok: true, durationMinutes: 5 });
+  });
+
+  it.each(["", "4", "241", "10.5", "-10", "1e2", "abc"])(
+    "should reject the typed length %j",
+    (typed) => {
+      expect(resolveMatchLength("custom", typed)).toEqual({
+        ok: false,
+        errorKey: "event_detail.start_now_custom_error",
+      });
+    },
+  );
 });

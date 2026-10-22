@@ -1,3 +1,4 @@
+import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EventDetail } from "../../../src/api/events-client";
@@ -21,6 +22,11 @@ vi.mock("../../../src/components/event-detail/shared", () => ({
     </div>
   ),
   scoringBadge: () => <span data-testid="scoring-badge" />,
+}));
+const CATEGORIES: Readonly<Record<string, string>> = { battle: "Battle", quiz: "Challenge" };
+vi.mock("../../../src/data/problems", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/data/problems")>()),
+  findProblem: (id: string) => (CATEGORIES[id] ? { category: CATEGORIES[id] } : undefined),
 }));
 
 type Props = Parameters<typeof EventSchedulePanel>[0];
@@ -181,7 +187,9 @@ describe("EventSchedulePanel", () => {
     fireEvent.click(btn("event_detail.starts_at_pick"));
     expect(p.onOpenScheduleModal).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.starts_at_now"));
-    expect(p.onStartNow).toHaveBeenCalled();
+    expect(p.onStartNow).not.toHaveBeenCalled();
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(undefined);
     fireEvent.click(btn("event_detail.ends_at_pick"));
     expect(p.onOpenEndsAtModal).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.ends_at_now"));
@@ -365,5 +373,70 @@ describe("EventSchedulePanel", () => {
   it("should disable the deploy pick button while a deploy schedule is in flight", () => {
     renderPanel({ deployScheduleInFlight: true });
     expect(btn("event_detail.deploy_at_pick")).toBeDisabled();
+  });
+});
+
+describe("EventSchedulePanel start dialog (#3453)", () => {
+  const withProblems = (...ids: string[]): EventDetail => ({
+    ...props().detail,
+    problems: ids.map((problemId) => ({ problemId, defaultRegion: "local" })),
+  });
+  const openDialog = (ids: string[]) => {
+    const p = props({ detail: withProblems(...ids) });
+    const { container } = render(<EventSchedulePanel {...p} />);
+    fireEvent.click(btn("event_detail.starts_at_now"));
+    const dialog = createWrapper(container.ownerDocument.body).findModal()?.findContent();
+    const radio = dialog?.findRadioGroup();
+    if (!dialog || !radio) throw new Error("Expected the length choices.");
+    return { p, radio, dialog };
+  };
+  const checked = (radio: ReturnType<typeof openDialog>["radio"]) =>
+    ["10", "20", "40", "90", "custom", "none"].filter(
+      (value) => radio.findInputByValue(value)?.getElement().checked,
+    );
+
+  it("should preselect 10 minutes for an event with a Battle and send it on start", () => {
+    const { p, radio } = openDialog(["quiz", "battle"]);
+    expect(checked(radio)).toEqual(["10"]);
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(10);
+    expect(screen.queryByText("event_detail.start_now_header")).not.toBeInTheDocument();
+  });
+
+  it("should preselect no end for an event without a Battle and start without a length", () => {
+    const { p, radio } = openDialog(["quiz"]);
+    expect(checked(radio)).toEqual(["none"]);
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(undefined);
+  });
+
+  it("should send each preset the organizer picks", () => {
+    const { p, radio } = openDialog(["quiz"]);
+    radio.findInputByValue("90")?.click();
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(90);
+  });
+
+  it("should validate a typed length inline and send it once valid", () => {
+    const { p, radio, dialog } = openDialog(["battle"]);
+    radio.findInputByValue("custom")?.click();
+    const input = dialog.findInput();
+    if (!input) throw new Error("Expected the minutes input.");
+    expect(btn("event_detail.start_now_confirm")).toBeDisabled();
+    expect(screen.queryByText("event_detail.start_now_custom_error")).not.toBeInTheDocument();
+    input.setInputValue("4");
+    expect(screen.getByText("event_detail.start_now_custom_error")).toBeInTheDocument();
+    expect(btn("event_detail.start_now_confirm")).toBeDisabled();
+    input.setInputValue("45");
+    expect(screen.queryByText("event_detail.start_now_custom_error")).not.toBeInTheDocument();
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(45);
+  });
+
+  it("should start nothing when the dialog is cancelled", () => {
+    const { p } = openDialog(["battle"]);
+    fireEvent.click(btn("event_detail.modal_cancel"));
+    expect(p.onStartNow).not.toHaveBeenCalled();
+    expect(screen.queryByText("event_detail.start_now_header")).not.toBeInTheDocument();
   });
 });

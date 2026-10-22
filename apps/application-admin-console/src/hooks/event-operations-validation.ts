@@ -128,6 +128,30 @@ export function resolveScheduledStartInput(
   return { ok: true, startsAt: local.toISOString() };
 }
 
+/** [Issue #3453] The match lengths offered when starting now; any other length is typed in. */
+export const MATCH_LENGTH_PRESETS = [10, 20, 40, 90] as const;
+export type MatchLengthChoice = `${(typeof MATCH_LENGTH_PRESETS)[number]}` | "custom" | "none";
+
+/** A Battle opens on the shortest preset; any other event keeps the end unscheduled. */
+export function defaultMatchLength(includesBattle: boolean): MatchLengthChoice {
+  return includesBattle ? "10" : "none";
+}
+
+/** `none` starts without an end; the server turns a length into the end on its own clock. */
+export function resolveMatchLength(
+  choice: MatchLengthChoice,
+  customMinutes: string,
+):
+  | { readonly ok: true; readonly durationMinutes?: number }
+  | { readonly ok: false; readonly errorKey: string } {
+  if (choice === "none") return { ok: true };
+  if (choice !== "custom") return { ok: true, durationMinutes: Number(choice) };
+  const minutes = /^\d+$/u.test(customMinutes.trim()) ? Number(customMinutes.trim()) : Number.NaN;
+  return minutes >= 5 && minutes <= 240
+    ? { ok: true, durationMinutes: minutes }
+    : { ok: false, errorKey: "event_detail.start_now_custom_error" };
+}
+
 export function formatEndEventError(err: unknown, t: Translate): string {
   if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
     const match = err.message.match(/"currentStatus"\s*:\s*"([A-Z_]+)"/);

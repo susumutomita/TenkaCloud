@@ -161,12 +161,16 @@ export function useEventOperations(args: {
     }
   };
 
-  const handleStartNow = async () => {
+  const handleStartNow = async (durationMinutes?: number) => {
     if (!apiClient || !canMutateTenant || scheduleInFlight) return;
     setScheduleInFlight("now");
     setError(null);
     try {
-      await setEventSchedule(apiClient, eventId, { startNow: true });
+      await setEventSchedule(
+        apiClient,
+        eventId,
+        durationMinutes === undefined ? { startNow: true } : { startNow: true, durationMinutes },
+      );
       await refresh();
     } catch (err) {
       setError(toErrorMessage(err));

@@ -9,8 +9,10 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
 import type { ApiClient } from "../../api/client";
 import type { BulkDeployBody, EventDetail } from "../../api/events-client";
+import { findProblem } from "../../data/problems";
 import { isTerminalEventStatus } from "../../lib/effective-event-status";
 import type { WizardState } from "../../lib/event-wizard";
+import { StartNowModal } from "./StartNowModal";
 import { Field, scoringBadge } from "./shared";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
@@ -388,7 +390,8 @@ export function EventSchedulePanel({
   readonly onOpenScheduleModal: () => void;
   readonly onOpenTeardownModal: () => void;
   readonly onSaveFreezeMinutes: () => void;
-  readonly onStartNow: () => void;
+  /** [Issue #3453] No length keeps the end unscheduled, exactly as before the dialog existed. */
+  readonly onStartNow: (durationMinutes?: number) => void;
   readonly onUpdateFreezeMinutes: (value: string) => void;
   readonly scheduleInFlight: "now" | "scheduled" | null;
   readonly teardownInFlight: boolean;
@@ -398,6 +401,7 @@ export function EventSchedulePanel({
   readonly wizard: WizardState | null;
 }) {
   const closedEvent = hostScheduleClosed(detail, localHost, cloudHost);
+  const [startNowOpen, setStartNowOpen] = useState(false);
   return (
     <Container
       header={
@@ -438,12 +442,26 @@ export function EventSchedulePanel({
                 disabled={
                   !apiClient || !canMutateTenant || closedEvent || scheduleInFlight === "scheduled"
                 }
-                onClick={onStartNow}
+                onClick={() => setStartNowOpen(true)}
               >
                 {t("event_detail.starts_at_now")}
               </Button>
             </SpaceBetween>
           </SpaceBetween>
+          {startNowOpen && (
+            <StartNowModal
+              canMutateTenant={canMutateTenant}
+              includesBattle={detail.problems.some(
+                (problem) => findProblem(problem.problemId)?.category === "Battle",
+              )}
+              onDismiss={() => setStartNowOpen(false)}
+              onStart={(durationMinutes) => {
+                setStartNowOpen(false);
+                onStartNow(durationMinutes);
+              }}
+              t={t}
+            />
+          )}
         </Field>
         <Field label={t("event_detail.ends_at_label")}>
           <SpaceBetween size="xs">
