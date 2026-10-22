@@ -98,6 +98,23 @@ describe("runTick", () => {
     const live = { allies: ["t2"], expiresAtMs: 5000 };
     expect(runTick(alliance, live, 1000)).toBe(live);
   });
+
+  it("should forward the platform timing to the tick hook", () => {
+    const clock: CoordinationPlugin<{ remainingMs?: number }, never> = {
+      initialState: () => ({}),
+      validateOp: () => ({ ok: true }),
+      applyOp: (state) => state,
+      tick: (_state, eventNowMs, timing) =>
+        timing?.matchDurationMs === undefined
+          ? {}
+          : { remainingMs: timing.matchDurationMs - eventNowMs },
+      projectForTeam: (state) => state,
+    };
+    expect(runTick(clock, {}, 60_000, { matchDurationMs: 600_000 })).toEqual({
+      remainingMs: 540_000,
+    });
+    expect(runTick(clock, { remainingMs: 1 }, 60_000)).toEqual({});
+  });
 });
 
 describe("defineCoordinationPlugin", () => {

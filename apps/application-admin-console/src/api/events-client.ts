@@ -372,13 +372,15 @@ export interface SetScheduleResult {
  * 競技開始/終了時刻を設定する。`{ startsAt }` で日時指定、`{ startNow: true }` で server now 採用。
  * #536: `{ endsAt }` も同 endpoint で受ける (= 終了予約)。組み合わせ可:
  *   `{ startsAt }` / `{ startNow: true }` / `{ endsAt }` / `{ startsAt, endsAt }` /
- *   `{ startNow: true, endsAt }`
+ *   `{ startNow: true, endsAt }` / `{ startNow: true, durationMinutes }`
  * Event + 紐づく全 deployment 行に伝播する (eventStartsAt / eventEndsAt の denormalize)。
  */
 export interface SetEventScheduleBody {
   startsAt?: string;
   startNow?: true;
   endsAt?: string;
+  /** #3453: 5〜240 分。`startNow: true` 専用で、server が自分の時計から endsAt を決める。 */
+  durationMinutes?: number;
   /** 自動撤去予定時刻 (ISO8601)。teardownAt >= endsAt 必須 (backend が検証)。 */
   teardownAt?: string;
   /** 自動デプロイ予定時刻 (ISO8601)。deployAt <= endsAt 必須 (backend が検証)。 */

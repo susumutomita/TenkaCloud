@@ -330,6 +330,18 @@ describe("useEventOperations — scheduling", () => {
     expect(setError).toHaveBeenCalledWith("x");
   });
 
+  it("should start now with the chosen match length", async () => {
+    ops.setEventSchedule.mockResolvedValueOnce(undefined);
+    const { result } = setup();
+    await act(async () => {
+      await result.current.handleStartNow(40);
+    });
+    expect(ops.setEventSchedule).toHaveBeenCalledWith(CLIENT, "evt-1", {
+      startNow: true,
+      durationMinutes: 40,
+    });
+  });
+
   it("should reject an invalid scheduled-start input before calling the API", async () => {
     const { result, setError } = setup();
     act(() => {

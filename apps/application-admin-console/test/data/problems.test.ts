@@ -70,6 +70,19 @@ describe("metadataToDetail", () => {
     expect(JSON.stringify(detail)).not.toContain("secret hint");
   });
 
+  it("marks a coordination Battle without copying its plugin declaration", () => {
+    const detail = metadataToDetail({
+      ...BASE_METADATA,
+      category: "Battle",
+      interTeamCoordination: { plugin: "coordination/private-engine.ts" },
+    });
+    expect(detail.coordination).toBe(true);
+    expect(JSON.stringify(detail)).not.toContain("private-engine");
+    expect(metadataToDetail({ ...BASE_METADATA, category: "Battle" })).not.toHaveProperty(
+      "coordination",
+    );
+  });
+
   it("should include defaultRegion + non-empty supportedRegions and drop deploy internals", () => {
     const detail = metadataToDetail({
       ...BASE_METADATA,

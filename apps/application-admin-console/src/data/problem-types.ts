@@ -76,6 +76,11 @@ export interface ProblemSummary {
    * scoring 未宣言 (= deploy のみで競技要素なし) は undefined。 カタログ絞り込みの facet に使う。
    */
   scoringKind?: string;
+  /**
+   * [Issue #3453] `metadata.json` が `interTeamCoordination` を宣言している (= platform が plugin を
+   * 動かす Battle)。開始ダイアログが競技時間の初期値を決めるのに使う。宣言の無い問題は omit。
+   */
+  coordination?: true;
   /** template.yaml から導出した、価格非依存の課金リスク分類。 */
   costEstimate?: ProblemCostEstimateSummary;
   /**
@@ -141,6 +146,8 @@ export interface ProblemMetadata {
    * 配点詳細 (points / flagOutputKey 等) は backend の責務なので型として持たない。
    */
   scoring?: { kind: string };
+  /** [Issue #3453] 参加者間 coordination の宣言。console は宣言の有無だけを読む。 */
+  interTeamCoordination?: { readonly plugin: string };
   /** Issue #1201: 問題作成者宣言の推奨 region。 wizard が初期値に使う。 */
   defaultRegion?: string;
   /** Issue #1201 Phase 2: 動作確認済 region 集合。 wizard が picker の選択肢を絞る。 */

@@ -83,6 +83,7 @@ export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: strin
       : {}),
     // Issue #1776: scoring.kind をカタログ facet 用に投影。 scoring 未宣言は omit。
     ...(metadata.scoring ? { scoringKind: metadata.scoring.kind } : {}),
+    ...(metadata.interTeamCoordination ? { coordination: true as const } : {}),
     ...(costEstimate ? { costEstimate } : {}),
   };
 }
