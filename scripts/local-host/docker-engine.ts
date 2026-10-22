@@ -185,6 +185,9 @@ async function ready(url: string): Promise<void> {
   throw new Error("The problem's verifier did not become reachable within one minute.");
 }
 
+const PINNED_ISOLATION_REFUSAL =
+  "This event was prepared with network isolation, and this host cannot provide it (it needs --competition-network and --docker-network-pool on supported native Linux). Create a new event. On a Mac with trusted participants, start with --lan <ip> --unsafe-lan --unsafe-docker-lan.";
+
 export class DockerHostingEngine implements RuntimeEngine {
   readonly supportsOnDemand = true;
   containerCost(definition: string) {
@@ -279,28 +282,48 @@ export class DockerHostingEngine implements RuntimeEngine {
     if (this.networkState) this.assertRetainedIsolation(this.networkState.jobs());
     return this;
   }
-  /** Trusted-group LAN hosting: new Docker environments run with no team network isolation. */
+  /** Trusted-group LAN hosting: lifts the listener's isolation requirement for new Docker environments. */
   allowUnisolatedDockerLan(): this {
-    if (this.competitionNetwork || this.isolationMandatory)
-      throw new Error("Unisolated Docker LAN hosting cannot be combined with network isolation.");
+    if (this.competitionNetwork)
+      throw new Error(
+        "Unisolated Docker LAN hosting cannot be combined with --competition-network.",
+      );
+    this.isolationMandatory = false;
     this.unisolatedLan = true;
     return this;
   }
-  /** Environments prepared for isolation never run without it; refuse before any Docker, allocation or guard call. */
-  private assertNotPinnedIsolated(job: Job): void {
-    if (this.competitionNetwork) return;
-    let recorded: unknown;
+  private retainedIsolatedUnit(job: Job): LocalComposeUnit | undefined {
     try {
-      recorded = job.unit ? (JSON.parse(job.unit) as LocalComposeUnit).isolationVersion : undefined;
+      const unit = job.unit ? (JSON.parse(job.unit) as LocalComposeUnit) : undefined;
+      return unit?.isolationVersion === 1 ? unit : undefined;
     } catch {
-      recorded = undefined;
+      return undefined;
     }
-    if (job.networkIsolationVersion === 1 || recorded === 1)
+  }
+  /**
+   * Environments prepared with isolation never run without it. A host with no network pool cannot
+   * even attempt isolation, so refuse before any Docker, allocation or guard call.
+   */
+  private assertNotPinnedIsolated(job: Job): void {
+    if (this.competitionNetwork || this.networkPool) return;
+    if (job.networkIsolationVersion === 1 || this.retainedIsolatedUnit(job))
       throw new HostError(
         409,
-        "This event was prepared for isolated LAN hosting, and this host cannot provide that isolation (it needs --competition-network on supported native Linux). Create a new event. On a Mac with trusted participants, start with --lan <ip> --unsafe-lan --unsafe-docker-lan. No environment was started or resumed.",
+        `${PINNED_ISOLATION_REFUSAL} No environment was started or resumed.`,
         "network_isolation_required",
       );
+  }
+  /** A retained isolated unit is halted through the guard, so its workload is stopped as before. */
+  private async refusePinnedIsolation(job: Job): Promise<void> {
+    try {
+      this.assertNotPinnedIsolated(job);
+    } catch (error) {
+      const retained = this.retainedIsolatedUnit(job);
+      if (!retained) throw error;
+      await this.awaitGuardHalt(job);
+      this.revokeRunning(job.jobId);
+      return this.haltGuardedUnit(job, retained, error);
+    }
   }
   private assertIsolationEnabled(): void {
     if (this.isolationMandatory && !this.competitionNetwork)
@@ -727,7 +750,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     return this.withPendingAdmission(job, () => this.recoverRetained(job));
   }
   private async recoverRetained(job: Job): Promise<void> {
-    this.assertNotPinnedIsolated(job);
+    await this.refusePinnedIsolation(job);
     this.assertIsolationEnabled();
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
@@ -885,7 +908,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     }
   }
   async resume(job: Job): Promise<void> {
-    this.assertNotPinnedIsolated(job);
+    await this.refusePinnedIsolation(job);
     this.assertIsolationEnabled();
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
@@ -1551,9 +1574,11 @@ export class DockerHostingEngine implements RuntimeEngine {
       job.unit = JSON.stringify(unit);
       job.status = "STOPPED";
       const overlap = overlapCause(error);
-      job.error = overlap
-        ? `${overlap.message} The runtime was stopped; remove the conflicting host route, then restart it.`
-        : "Competition guard failed; runtime was stopped and requires verified recovery.";
+      job.error = "Competition guard failed; runtime was stopped and requires verified recovery.";
+      if (overlap)
+        job.error = `${overlap.message} The runtime was stopped; remove the conflicting host route, then restart it.`;
+      if (error instanceof HostError && error.kind === "network_isolation_required")
+        job.error = `${PINNED_ISOLATION_REFUSAL} The retained runtime was stopped.`;
       this.unconfirmedHalts.delete(job.jobId);
     } catch (stopError) {
       failures.push(stopError);

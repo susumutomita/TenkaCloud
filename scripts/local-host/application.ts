@@ -104,9 +104,8 @@ export function localCompetitionEngine(
     docker.reason ? [docker.reason] : [],
   );
   if (options.public || options.hostname === "127.0.0.1") return engine;
-  return options.unsafeDockerLan
-    ? engine.allowUnisolatedDockerLan()
-    : engine.requireNetworkIsolation();
+  const isolated = engine.requireNetworkIsolation();
+  return options.unsafeDockerLan ? isolated.allowUnisolatedDockerLan() : isolated;
 }
 
 export async function runLocalHost(

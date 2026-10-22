@@ -1,16 +1,18 @@
 /* eslint-disable sonarjs/no-hardcoded-ip -- Parser vectors and fake guard plans only; no external connections. */
 import { Database } from "bun:sqlite";
 import { expect, spyOn, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as transport from "../../lib/node-http";
 import { announceHost, localCompetitionEngine } from "../application";
 import { DockerHostingEngine } from "../docker-engine";
+import { allocateNetworkSubnets, type NetworkSubnets } from "../docker-networks";
 import { persistentKey, prepareDatabase } from "../files";
 import { parseGatewayPorts } from "../gateway-ports";
 import type { LocalNetworkGuard } from "../linux-network-guard";
+import { egressComposeSource } from "../local-network";
 import { definitionKind, type Job } from "../model";
 import { parseOptions } from "../options";
 import { publishedComposePorts } from "../runtime-ports";
@@ -311,22 +313,30 @@ test("startup warns that Docker exercises have no network isolation only under -
 });
 
 /** Docker is a PATH stub that records any call; the guard and Compose runner only record calls. */
-async function withUnisolatedLan(
+
+/** Docker is a PATH stub that logs its arguments; the guard and Compose runner only record calls. */
+async function withDocker(
   jobId: string,
+  build: (f: {
+    data: string;
+    calls: string[];
+    guard: LocalNetworkGuard;
+    runner: ConstructorParameters<typeof DockerHostingEngine>[5];
+  }) => DockerHostingEngine,
   run: (f: {
     engine: DockerHostingEngine;
     job: Job;
     calls: string[];
-    dockerCalled: () => boolean;
-    data: string;
+    dockerCalls: () => string[];
   }) => Promise<void>,
-  allowUnisolated = true,
 ) {
   const data = mkdtempSync(join(tmpdir(), "tc-unsafe-docker-lan-"));
   const bin = join(data, "bin");
   mkdirSync(bin);
-  const marker = join(data, "docker-called");
-  writeFileSync(join(bin, "docker"), `#!/bin/sh\ntouch '${marker}'\nexit 0\n`, { mode: 0o700 });
+  const log = join(data, "docker-calls");
+  writeFileSync(join(bin, "docker"), `#!/bin/sh\necho "$@" >> '${log}'\nexit 0\n`, {
+    mode: 0o700,
+  });
   const oldPath = process.env.PATH;
   const oldCli = process.env.TENKACLOUD_COMPOSE_CLI;
   process.env.PATH = `${bin}:${oldPath ?? ""}`;
@@ -357,6 +367,9 @@ async function withUnisolatedLan(
       calls.push("guard-stopOwned");
     },
   };
+  const runner: ConstructorParameters<typeof DockerHostingEngine>[5] = async (_u, action) => {
+    calls.push(`compose-${action}`);
+  };
   const fetched = spyOn(globalThis, "fetch").mockImplementation(
     async () => new Response("{}", { headers: { "content-type": "application/json" } }),
   );
@@ -364,17 +377,6 @@ async function withUnisolatedLan(
     const selected = new DockerHostingEngine(root, data).catalog()[0];
     if (!selected) throw new Error("Missing catalog fixture.");
     const { composeText } = JSON.parse(selected.definition) as { composeText: string };
-    const engine = new DockerHostingEngine(
-      root,
-      data,
-      allowUnisolated ? undefined : "10.245.0.0/24",
-      false,
-      guard,
-      async (_u, action) => {
-        calls.push(`compose-${action}`);
-      },
-    );
-    if (allowUnisolated) engine.allowUnisolatedDockerLan();
     const job: Job = {
       jobId,
       eventId: "event",
@@ -388,7 +390,12 @@ async function withUnisolatedLan(
         publishedComposePorts(composeText).map((port, index) => [String(port), 41_000 + index]),
       ),
     };
-    await run({ engine, job, calls, dockerCalled: () => existsSync(marker), data });
+    await run({
+      engine: build({ data, calls, guard, runner }),
+      job,
+      calls,
+      dockerCalls: () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : []),
+    });
   } finally {
     fetched.mockRestore();
     if (oldPath === undefined) delete process.env.PATH;
@@ -399,27 +406,53 @@ async function withUnisolatedLan(
   }
 }
 
-test("--unsafe-docker-lan start, recover and resume reach Compose without any isolation or guard call", async () => {
-  await withUnisolatedLan("unsafe-lan-run", async ({ engine, job, calls }) => {
-    await engine.start(job, (unit) => {
-      job.unit = unit;
-    });
-    const unit = JSON.parse(job.unit ?? "{}");
-    expect(unit.isolationVersion).toBeUndefined();
-    expect(job.networkIsolationVersion).toBeUndefined();
-    expect(calls).toEqual(["compose-up"]);
-    expect(engine.terminalSupported(job)).toBe(false);
-    await engine.resume(job);
-    expect(calls).toEqual(["compose-up", "compose-restart"]);
-    await expect(engine.recover(job)).rejects.toThrow(
-      "The recorded problem environment is not running.",
-    );
-    expect(calls).toEqual(["compose-up", "compose-restart"]);
-  });
-});
+/** The production composition: parsed options, then the application's engine wiring. */
+const composed = (args: string[]) => (f: { data: string }) =>
+  localCompetitionEngine(root, f.data, parseOptions(args, root, {}));
 
-test("--unsafe-docker-lan running jobs pass the terminal and workbench guards", async () => {
-  await withUnisolatedLan("unsafe-lan-guard", async ({ engine, job }) => {
+for (const [label, args] of [
+  ["with --unsafe-docker-lan", unsafeDockerLan],
+  ["without --unsafe-docker-lan", lan],
+] as const)
+  test(`LAN Docker start, resume and recover ${label}`, async () => {
+    await withDocker(
+      `lan-run-${label.length}`,
+      composed(args),
+      async ({ engine, job, dockerCalls }) => {
+        if (args === lan) {
+          const retain = (unit: string | null) => {
+            job.unit = unit;
+          };
+          await expect(engine.start(job, retain)).rejects.toMatchObject({
+            status: 409,
+            kind: "network_isolation_required",
+          });
+          job.unit = "synthetic-retained-unit";
+          for (const operation of ["resume", "recover"] as const)
+            await expect(engine[operation](job)).rejects.toMatchObject({
+              status: 409,
+              kind: "network_isolation_required",
+            });
+          expect(dockerCalls()).toEqual([]);
+          return;
+        }
+        await engine.start(job, (unit) => {
+          job.unit = unit;
+        });
+        expect(JSON.parse(job.unit ?? "{}").isolationVersion).toBeUndefined();
+        expect(job.networkIsolationVersion).toBeUndefined();
+        expect(dockerCalls().filter((line) => line.includes(" up "))).toHaveLength(1);
+        await engine.resume(job);
+        expect(dockerCalls().filter((line) => line.endsWith(" restart"))).toHaveLength(1);
+        await expect(engine.recover(job)).rejects.toThrow(
+          "The recorded problem environment is not running.",
+        );
+      },
+    );
+  });
+
+test("a LAN Docker job passes the terminal and workbench guards only under --unsafe-docker-lan", async () => {
+  await withDocker("lan-guard", composed(unsafeDockerLan), async ({ engine, job }) => {
     await engine.start(job, (unit) => {
       job.unit = unit;
     });
@@ -430,19 +463,27 @@ test("--unsafe-docker-lan running jobs pass the terminal and workbench guards", 
     expect(engine.terminalSupported(job)).toBe(true);
     await expect(engine.workbench(job, "starter")).resolves.toEqual({});
   });
+  await withDocker("lan-guard-off", composed(lan), async ({ engine, job }) => {
+    expect(engine.terminalSupported(job)).toBe(false);
+    await expect(engine.workbench(job, "starter")).rejects.toThrow();
+  });
 });
 
-for (const operation of ["start", "resume", "recover"] as const)
-  test(`--unsafe-docker-lan ${operation} refuses an isolation-pinned job before any Docker, Compose or guard call`, async () => {
-    for (const pinned of operation === "start" ? (["job"] as const) : (["job", "unit"] as const))
-      await withUnisolatedLan(`unsafe-lan-pinned-${operation}-${pinned}`, async (f) => {
+const PINNED_MESSAGE =
+  /prepared with network isolation.*cannot provide it.*Create a new event.*--lan <ip> --unsafe-lan --unsafe-docker-lan\./u;
+
+for (const [label, build] of [
+  ["--lan --unsafe-docker-lan", composed(unsafeDockerLan)],
+  ["--lan", composed(lan)],
+  ["loopback", composed([])],
+] as const)
+  for (const operation of ["start", "resume", "recover"] as const)
+    test(`${label} ${operation} refuses an isolation-pinned job before any Docker, Compose or guard call`, async () => {
+      await withDocker(`pinned-${label.length}-${operation}`, build, async (f) => {
         const job: Job = {
           ...f.job,
-          ...(pinned === "job" ? { networkIsolationVersion: 1 as const } : {}),
-          unit:
-            operation === "start"
-              ? null
-              : JSON.stringify({ composeProjectName: "tch-pinned", isolationVersion: 1 }),
+          networkIsolationVersion: 1,
+          unit: operation === "start" ? null : JSON.stringify({ composeProjectName: "tch-pinned" }),
         };
         const before = JSON.stringify(job);
         let retained = false;
@@ -455,14 +496,87 @@ for (const operation of ["start", "resume", "recover"] as const)
         await expect(result).rejects.toMatchObject({
           status: 409,
           kind: "network_isolation_required",
-          message: expect.stringContaining("Create a new event"),
+          message: expect.stringMatching(PINNED_MESSAGE),
         });
         expect(JSON.stringify(job)).toBe(before);
         expect(retained).toBe(false);
         expect(f.calls).toEqual([]);
-        expect(f.dockerCalled()).toBe(false);
+        expect(f.dockerCalls()).toEqual([]);
       });
+    });
+
+const direct =
+  (pool?: string) =>
+  ({ data, guard, runner }: Parameters<Parameters<typeof withDocker>[1]>[0]) =>
+    new DockerHostingEngine(root, data, pool, false, guard, runner);
+
+for (const operation of ["resume", "recover"] as const)
+  test(`${operation} of a retained isolated unit on a host without isolation halts it and carries the new message`, async () => {
+    await withDocker(`retained-${operation}`, direct(), async (f) => {
+      // The unit an earlier --competition-network run recorded, built by the real planner.
+      const isolated = new DockerHostingEngine(root, "", "10.240.0.0/24", true, f.guard, f.runner);
+      const job: Job = { ...f.job, networkIsolationVersion: 1 };
+      const { composeText } = JSON.parse(job.definition) as { composeText: string };
+      const subnets = allocateNetworkSubnets(
+        egressComposeSource(composeText, []),
+        "10.240.0.0/24",
+        [],
+      );
+      const plan = Reflect.get(isolated, "plan") as (
+        job: Job,
+        verifySources: boolean,
+        subnets: NetworkSubnets,
+        claim: boolean,
+      ) => { started: { unit: unknown }; composeText: string };
+      const hostData = Reflect.get(f.engine, "dataDirectory") as string;
+      Reflect.set(isolated, "dataDirectory", hostData);
+      const prepared = plan.call(isolated, job, false, subnets, true);
+      const unit = prepared.started.unit as { composePath: string };
+      writeFileSync(unit.composePath, prepared.composeText);
+      job.unit = JSON.stringify(unit);
+      await expect(f.engine[operation](job)).rejects.toThrow();
+      expect(f.calls).toContain("guard-stopOwned");
+      expect(job.status).toBe("STOPPED");
+      expect(job.error).toMatch(PINNED_MESSAGE);
+      expect(job.error).toEndWith("The retained runtime was stopped.");
+    });
   });
+
+test("a host with a network pool keeps the guard path for a pinned job; one without gets the new 409", async () => {
+  await withDocker("pool-pinned", direct("10.245.0.0/24"), async (f) => {
+    const sentinel = new Error("guard preflight reached");
+    Reflect.set(Reflect.get(f.engine, "networkGuard") as object, "preflight", () => {
+      f.calls.push("guard-preflight");
+      throw sentinel;
+    });
+    const job: Job = { ...f.job, networkIsolationVersion: 1 };
+    await expect(f.engine.start(job, () => undefined)).rejects.not.toMatchObject({
+      kind: "network_isolation_required",
+    });
+    expect(f.calls).toContain("guard-preflight");
+  });
+});
+
+test("unisolated Docker LAN hosting and required isolation exclude each other", () => {
+  const f = fixture(unsafeDockerLan);
+  const competition = fixture([
+    ...lan,
+    "--competition-network",
+    "--docker-network-pool",
+    "10.245.0.0/24",
+  ]);
+  try {
+    expect(() => f.engine.requireNetworkIsolation()).toThrow(
+      "Network isolation cannot be required after unisolated Docker LAN hosting.",
+    );
+    expect(() => competition.engine.allowUnisolatedDockerLan()).toThrow(
+      "Unisolated Docker LAN hosting cannot be combined with --competition-network.",
+    );
+  } finally {
+    competition.close();
+    f.close();
+  }
+});
 
 test("--unsafe-docker-lan startup recovery fails an isolation-pinned job with the new-event message and leaves its unit", async () => {
   const f = fixture(unsafeDockerLan);
@@ -471,7 +585,7 @@ test("--unsafe-docker-lan startup recovery fails an isolation-pinned job with th
   prepareDatabase(path);
   persistentKey(join(directory, "host-key"));
   const seed = new HostStore(new Database(path));
-  const unit = JSON.stringify({ composeProjectName: "tch-lan-fixture", isolationVersion: 1 });
+  const unit = JSON.stringify({ composeProjectName: "tch-lan-fixture" });
   const job = {
     ...f.job,
     status: "COMPLETE" as const,
@@ -530,55 +644,5 @@ test("--unsafe-docker-lan startup recovery fails an isolation-pinned job with th
   } finally {
     f.close();
     rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-for (const operation of ["start", "resume", "recover"] as const)
-  test(`loopback ${operation} refuses an isolation-pinned job with one clear message before any Docker, allocation or guard call`, async () => {
-    await withUnisolatedLan(
-      `loopback-pinned-${operation}`,
-      async (f) => {
-        const job: Job = {
-          ...f.job,
-          networkIsolationVersion: 1,
-          unit: operation === "start" ? null : JSON.stringify({ composeProjectName: "tch-pinned" }),
-        };
-        const before = JSON.stringify(job);
-        let retained = false;
-        const result =
-          operation === "start"
-            ? f.engine.start(job, () => {
-                retained = true;
-              })
-            : f.engine[operation](job);
-        await expect(result).rejects.toMatchObject({
-          status: 409,
-          kind: "network_isolation_required",
-          message: expect.stringMatching(
-            /prepared for isolated LAN hosting.*cannot provide that isolation.*Create a new event.*--lan <ip> --unsafe-lan --unsafe-docker-lan/u,
-          ),
-        });
-        expect(JSON.stringify(job)).toBe(before);
-        expect(retained).toBe(false);
-        expect(f.calls).toEqual([]);
-        expect(f.dockerCalled()).toBe(false);
-      },
-      false,
-    );
-  });
-
-test("unisolated Docker LAN hosting and required isolation exclude each other", () => {
-  const f = fixture(unsafeDockerLan);
-  const isolated = fixture(lan);
-  try {
-    expect(() => f.engine.requireNetworkIsolation()).toThrow(
-      "Network isolation cannot be required after unisolated Docker LAN hosting.",
-    );
-    expect(() => isolated.engine.allowUnisolatedDockerLan()).toThrow(
-      "Unisolated Docker LAN hosting cannot be combined with network isolation.",
-    );
-  } finally {
-    isolated.close();
-    f.close();
   }
 });
