@@ -65,6 +65,8 @@ make install
 make local
 ```
 
+Claude Code があれば、clone したリポジトリで `claude` を起動し、`/tenkacloud-setup` と入力します。Claude Code が環境とポートを確かめ、開催の目的を聞いて `make install` を実行します。最後に、自分の端末で実行する `make local` のコマンドを組み立てます。
+
 1. 表示された開催者 URL を開き、対話ターミナルで `make local` を起動するたびに一度だけ表示される新しい**主催者キー**でログインする。ユーザー名やパスワードは不要である。
 2. 大会・チーム・問題を選び、問題環境を準備して大会を開始する。
 3. 各チームへ参加者 URL とそのチームのキーを配る。Docker 問題は参加者が必要なときに **Start / resume** で起動する。

@@ -63,6 +63,8 @@ make install
 make local
 ```
 
+With Claude Code installed, run `claude` in the cloned repository and type `/tenkacloud-setup`. It checks your tools and ports, asks how you will host, runs `make install` and builds the `make local` command for you to run in your own terminal.
+
 1. Open the printed organizer URL and sign in with the new **organizer key** shown once in your terminal on each interactive `make local` start. No username or password is needed.
 2. Create an event, add teams and select problems. Prepare their environments, then start the event.
 3. Give each team its own participant URL and key. For Docker exercises, participants choose **Start / resume** when ready.
