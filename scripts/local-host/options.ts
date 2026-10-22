@@ -20,6 +20,7 @@ export function parseOptions(
       "submission-catalog": { type: "string" },
       lan: { type: "string" },
       "unsafe-lan": { type: "boolean", default: false },
+      "unsafe-docker-lan": { type: "boolean", default: false },
       "admin-port": { type: "string", default: "5174" },
       "participant-port": { type: "string" },
       "gateway-ports": { type: "string", default: DEFAULT_GATEWAY_PORTS },
@@ -66,6 +67,7 @@ export function parseOptions(
         ...values,
         ...codespacesOrigins(values, environment, adminPort, participantPort),
       });
+  assertUnsafeDockerLan(values, Boolean(exposure));
   assertExposureEnvironment(Boolean(appliance), exposure, values.lan, environment);
   assertCompetitionOptions(
     values["competition-network"],
@@ -89,6 +91,7 @@ export function parseOptions(
   return {
     dataDirectory: resolve(values.data ?? joinDefault(repositoryRoot)),
     competitionNetwork: values["competition-network"],
+    unsafeDockerLan: values["unsafe-docker-lan"],
     ...(values["vpn-peers"] ? { vpnPeerPath: resolve(values["vpn-peers"]) } : {}),
     ...(values["submission-catalog"]
       ? { submissionCatalogPath: resolve(values["submission-catalog"]) }
@@ -147,6 +150,26 @@ function codespacesOrigins(
     "public-admin-origin": `https://${name}-${adminPort}.${domain}`,
     "public-participant-origin": `https://${name}-${participantPort}.${domain}`,
   };
+}
+
+/** Dropping team network isolation is only for a trusted group on an explicit LAN listener. */
+function assertUnsafeDockerLan(
+  values: {
+    "unsafe-docker-lan"?: boolean;
+    "unsafe-lan"?: boolean;
+    "competition-network"?: boolean;
+    "vpn-peers"?: string;
+    lan?: string;
+  },
+  exposed: boolean,
+): void {
+  if (!values["unsafe-docker-lan"]) return;
+  if (!values.lan || !values["unsafe-lan"])
+    throw new Error("--unsafe-docker-lan requires --lan <private-ip> --unsafe-lan.");
+  if (values["competition-network"] || values["vpn-peers"] || exposed)
+    throw new Error(
+      "--unsafe-docker-lan drops team network isolation; it cannot be combined with --competition-network, --vpn-peers, or public origins.",
+    );
 }
 
 function assertVpnOptions(
