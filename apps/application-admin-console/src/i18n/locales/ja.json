@@ -371,6 +371,8 @@
     "start_now_length_custom": "時間を入力する",
     "start_now_length_none": "終了時刻を決めない",
     "start_now_length_none_description": "終わらせるときは「日時を指定して終了」か「即座に終了」を使います。",
+    "start_now_length_keep": "予約済みの終了時刻を使う",
+    "start_now_length_keep_description": "{endsAt} (UTC) に終了します。",
     "start_now_custom_label": "競技時間 (分)",
     "start_now_custom_constraint": "5 から 240 までの整数",
     "start_now_custom_error": "5 から 240 までの整数で入力してください。",

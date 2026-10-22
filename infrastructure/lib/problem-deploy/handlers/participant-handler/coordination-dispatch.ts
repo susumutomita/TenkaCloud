@@ -43,7 +43,8 @@ import {
 export interface CoordinationRequestClock {
   readonly eventNowMs: number;
   readonly nowIso: string;
-  readonly timing: CoordinationTiming;
+  /** `undefined` while no end is scheduled, never an empty object. */
+  readonly timing: CoordinationTiming | undefined;
 }
 
 /** dispatch 1 回の文脈。 route が team-login-key 認証 + event scope を解決して渡す。 */

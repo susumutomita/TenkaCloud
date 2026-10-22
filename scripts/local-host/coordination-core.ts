@@ -21,7 +21,8 @@ export interface LocalMatch {
 /** The Battle clock a transition runs at; both values already net of scoring-lock pauses. */
 export interface MatchClock {
   readonly elapsedMs: number;
-  readonly timing: CoordinationTiming;
+  /** `undefined` while no end is scheduled, never an empty object. */
+  readonly timing: CoordinationTiming | undefined;
 }
 export interface MatchTransition {
   match: LocalMatch;

@@ -78,18 +78,18 @@ describe("matchDurationTiming", () => {
         eventEndsAt: "2026-10-22T10:10:00.000Z",
       }),
     ).toEqual({ matchDurationMs: 600_000 });
-    expect(matchDurationTiming({ eventStartsAt: "2026-10-22T10:00:00.000Z" })).toEqual({});
+    expect(matchDurationTiming({ eventStartsAt: "2026-10-22T10:00:00.000Z" })).toBeUndefined();
   });
   it("should omit the length for a locked, ended or malformed window", () => {
-    expect(matchDurationTiming({ eventEndsAt: "2026-10-22T10:10:00.000Z" })).toEqual({});
+    expect(matchDurationTiming({ eventEndsAt: "2026-10-22T10:10:00.000Z" })).toBeUndefined();
     expect(
       matchDurationTiming({
         eventStartsAt: "2026-10-22T10:00:00.000Z",
         eventEndsAt: "1970-01-01T00:00:00.000Z",
       }),
-    ).toEqual({});
+    ).toBeUndefined();
     expect(
       matchDurationTiming({ eventStartsAt: "not-a-date", eventEndsAt: "2026-10-22T10:10:00.000Z" }),
-    ).toEqual({});
+    ).toBeUndefined();
   });
 });

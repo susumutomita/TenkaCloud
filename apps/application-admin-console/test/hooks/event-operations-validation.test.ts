@@ -109,14 +109,17 @@ describe("formatEndEventError", () => {
 });
 
 describe("match length (#3453)", () => {
-  it("should open a Battle on 10 minutes and anything else without an end", () => {
-    expect(defaultMatchLength(true)).toBe("10");
-    expect(defaultMatchLength(false)).toBe("none");
+  it("should keep a reserved end, else open a coordination Battle on 10 minutes", () => {
+    expect(defaultMatchLength(true, true)).toBe("keep");
+    expect(defaultMatchLength(false, true)).toBe("keep");
+    expect(defaultMatchLength(true, false)).toBe("10");
+    expect(defaultMatchLength(false, false)).toBe("none");
   });
 
   it("should resolve presets, no end and a typed length", () => {
     expect(resolveMatchLength("20", "")).toEqual({ ok: true, durationMinutes: 20 });
     expect(resolveMatchLength("none", "999")).toEqual({ ok: true });
+    expect(resolveMatchLength("keep", "999")).toEqual({ ok: true });
     expect(resolveMatchLength("custom", " 240 ")).toEqual({ ok: true, durationMinutes: 240 });
     expect(resolveMatchLength("custom", "5")).toEqual({ ok: true, durationMinutes: 5 });
   });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DeploymentsCoordinationPort } from "../../lib/problem-deploy/control-data/deployments-repository.js";
 import {
   buildCoordinationTickBatch,
   type CollectedTickTarget,
@@ -300,6 +301,55 @@ describe("createCoordinationTickPass", () => {
         moduleRef: "cap",
         eventNowMs: CAPTURE_MS,
         teamIds: ["team-a", "team-b"],
+      },
+    ]);
+  });
+
+  it("should carry the live match length to a reset recovered after end, when the window has one", async () => {
+    const invoke = vi.fn<CoordinationTickInvoker>().mockResolvedValue(undefined);
+    const repository = {
+      readCoordinationRun: async () => ({ runId: "run-2", pendingInitialization: true }),
+    } as unknown as DeploymentsCoordinationPort;
+    const windows: Record<string, { eventStartsAt: string; eventEndsAt: string }> = {
+      // A scheduled end that passed while the event stayed READY keeps its real window.
+      e1: { eventStartsAt: STARTED, eventEndsAt: "2026-06-01T00:30:00.000Z" },
+      // An ENDED event's live window closes at the epoch, so it carries no length.
+      e2: { eventStartsAt: STARTED, eventEndsAt: "1970-01-01T00:00:00.000Z" },
+    };
+    const pass = createCoordinationTickPass(
+      invoke,
+      "coord-dispatcher",
+      new Set(),
+      repository,
+      async (scope) => ({
+        problemIds: new Set(["cap"]),
+        window: windows[String(scope.eventId)],
+      }),
+    );
+    await pass.collectRecovery([
+      { tenantId: "t1", eventId: "e1", problemId: "cap", runId: "default" },
+      { tenantId: "t1", eventId: "e2", problemId: "cap", runId: "default" },
+    ]);
+    await pass.run(Date.parse(NOW), NOW);
+    expect(invoke.mock.calls[0]?.[1].targets).toEqual([
+      {
+        tenantId: "t1",
+        eventId: "e1",
+        moduleRef: "cap",
+        eventNowMs: Date.parse(NOW),
+        timing: { matchDurationMs: 1_800_000 },
+        teamIds: [],
+        drainOnly: true,
+        initializeRunId: "run-2",
+      },
+      {
+        tenantId: "t1",
+        eventId: "e2",
+        moduleRef: "cap",
+        eventNowMs: Date.parse(NOW),
+        teamIds: [],
+        drainOnly: true,
+        initializeRunId: "run-2",
       },
     ]);
   });

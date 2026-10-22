@@ -586,18 +586,20 @@ describe("the scoring tick passes the match length (#3453)", () => {
     ]);
   });
 
-  it("should keep the batch and drop a malformed timing with a warning", () => {
+  it("should keep the batch, drop a malformed timing with a warning, and treat an empty one as absent", () => {
     const parsed = parseCoordinationTickBatch({
       action: "coordination-tick",
       nowIso: NOW_ISO,
       targets: [
         capTarget({ timing: { matchDurationMs: -1 } }),
         capTarget({ eventId: "e2", timing: { matchDurationMs: 600_000 } }),
+        capTarget({ eventId: "e3", timing: {} }),
       ],
     });
-    expect(parsed?.targets.map((target) => target.timing)).toEqual([
+    expect(parsed?.targets.map((target) => target.timing)).toStrictEqual([
       undefined,
       { matchDurationMs: 600_000 },
+      undefined,
     ]);
     expect(warnSpy).toHaveBeenCalledWith(
       "[coordination-dispatcher] dropped malformed tick timing",

@@ -149,7 +149,7 @@ function toTickCandidate(
     eventId,
     moduleRef: problemId,
     eventStartMs,
-    ...(timing.matchDurationMs !== undefined ? { timing } : {}),
+    ...(timing ? { timing } : {}),
     teamId,
     ...(drainOnly ? { drainOnly: true } : {}),
   };
@@ -180,6 +180,36 @@ export function buildCoordinationTickBatch(
   };
 }
 
+/** The saved catalog's coordination problems and the live event window for one scope. */
+type SavedCatalogResolver = (scope: Partial<DeploymentItem>) => Promise<{
+  problemIds: ReadonlySet<string>;
+  window?: Pick<DeploymentItem, "eventStartsAt" | "eventEndsAt">;
+}>;
+
+/**
+ * A saved scope whose deployments have all left COMPLETE, as a drain target. Without a saved
+ * catalog the scope carries no event window, so a reset it initializes gets no match length;
+ * reading the event here would add a read per scope.
+ */
+async function recoveryTarget(
+  scope: CoordinationStateScope,
+  declared: ReadonlySet<string>,
+  resolveProblemIds: SavedCatalogResolver | undefined,
+): Promise<CollectedTickTarget | undefined> {
+  const resolved = resolveProblemIds ? await resolveProblemIds(scope) : undefined;
+  if (!(resolved?.problemIds ?? declared).has(scope.problemId)) return undefined;
+  const timing = resolved?.window ? matchDurationTiming(resolved.window) : undefined;
+  return {
+    tenantId: scope.tenantId,
+    eventId: scope.eventId,
+    moduleRef: scope.problemId,
+    eventStartMs: 0,
+    ...(timing ? { timing } : {}),
+    teamIds: [],
+    drainOnly: true,
+  };
+}
+
 /**
  * per-minute pass 用の driver を組む。 scan で集めた event が 1 つ以上あり、 dispatcher function name が
  * 配線されている場合にのみ、 invoker が scope ごとに async Invoke する。対象が 0 / dispatcher 未配線
@@ -190,10 +220,7 @@ export function createCoordinationTickPass(
   dispatcherFunctionName: string,
   coordinationProblemIds: ReadonlySet<string>,
   repository?: DeploymentsCoordinationPort,
-  resolveProblemIds?: (scope: Partial<DeploymentItem>) => Promise<{
-    problemIds: ReadonlySet<string>;
-    window?: Pick<DeploymentItem, "eventStartsAt" | "eventEndsAt">;
-  }>,
+  resolveProblemIds?: SavedCatalogResolver,
 ): CoordinationTickPass {
   const targets = new Map<string, CollectedTickTarget>();
   const ended = new Map<string, CollectedTickTarget>();
@@ -223,9 +250,9 @@ export function createCoordinationTickPass(
     },
     collectRecovery: async (scopes) => {
       for (const scope of scopes) {
-        let ids = coordinationProblemIds;
+        let target: CollectedTickTarget | undefined;
         try {
-          ids = resolveProblemIds ? (await resolveProblemIds(scope)).problemIds : ids;
+          target = await recoveryTarget(scope, coordinationProblemIds, resolveProblemIds);
         } catch (error) {
           console.warn("[generic-scoring] saved recovery catalog unavailable", {
             eventId: scope.eventId,
@@ -233,17 +260,8 @@ export function createCoordinationTickPass(
           });
           continue;
         }
-        if (!ids.has(scope.problemId)) continue;
         const key = JSON.stringify([scope.tenantId, scope.eventId, scope.problemId]);
-        if (!ended.has(key))
-          ended.set(key, {
-            tenantId: scope.tenantId,
-            eventId: scope.eventId,
-            moduleRef: scope.problemId,
-            eventStartMs: 0,
-            teamIds: [],
-            drainOnly: true,
-          });
+        if (target && !ended.has(key)) ended.set(key, target);
       }
     },
     run: async (nowMs, nowIso) => {

@@ -451,14 +451,15 @@ export function EventSchedulePanel({
           {startNowOpen && (
             <StartNowModal
               canMutateTenant={canMutateTenant}
-              includesBattle={detail.problems.some(
-                (problem) => findProblem(problem.problemId)?.category === "Battle",
+              coordinationBattle={detail.problems.some(
+                (problem) => findProblem(problem.problemId)?.coordination === true,
               )}
               onDismiss={() => setStartNowOpen(false)}
               onStart={(durationMinutes) => {
                 setStartNowOpen(false);
                 onStartNow(durationMinutes);
               }}
+              reservedEndsAt={detail.endsAt}
               t={t}
             />
           )}

@@ -1330,7 +1330,9 @@ export class HostingDomain {
       )
     )
       throw new HostError(422, "Automatic deploy/teardown schedules are not supported locally.");
-    const lengthEnd = matchLengthEnd(body, this.now());
+    // One clock reading: a 10-minute start must end exactly 10 minutes after it began.
+    const now = this.now();
+    const lengthEnd = matchLengthEnd(body, now);
     const parseTime = (value: unknown): string => {
       const input = text(value, "timestamp", 40);
       const milliseconds = Date.parse(input);
@@ -1343,7 +1345,7 @@ export class HostingDomain {
     };
     assertCoordinationRoster(event.problems, this.store.teams(event.eventId).length);
     this.coordination.assertSchedule(event, body);
-    if (body.startNow) event.startsAt = new Date(this.now()).toISOString();
+    if (body.startNow) event.startsAt = new Date(now).toISOString();
     if (body.startsAt !== undefined) event.startsAt = parseTime(body.startsAt);
     if (body.endsAt !== undefined) event.endsAt = parseTime(body.endsAt);
     if (lengthEnd) event.endsAt = lengthEnd;

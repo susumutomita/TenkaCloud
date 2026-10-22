@@ -31,7 +31,7 @@ describe("real catalog crypto plugin in local runtime", () => {
         plugin,
         initial,
         context.teamIds,
-        { elapsedMs: 0, timing: {} },
+        { elapsedMs: 0, timing: undefined },
         {
           teamId: "alpha",
           op: { kind: "ready" },
@@ -44,13 +44,16 @@ describe("real catalog crypto plugin in local runtime", () => {
         plugin,
         first.match,
         context.teamIds,
-        { elapsedMs: 0, timing: {} },
+        { elapsedMs: 0, timing: undefined },
         {
           teamId: "beta",
           op: { kind: "ready" },
         },
       ).match;
-      match = transitionMatch(plugin, match, context.teamIds, { elapsedMs: 1, timing: {} }).match;
+      match = transitionMatch(plugin, match, context.teamIds, {
+        elapsedMs: 1,
+        timing: undefined,
+      }).match;
       const own = plugin.projectForTeam(match.state, "alpha") as Projection;
       const order = own.myContracts.find((contract) => contract.allowedMethods.includes("leak"));
       expect(order).toBeDefined();
@@ -59,7 +62,7 @@ describe("real catalog crypto plugin in local runtime", () => {
         plugin,
         match,
         context.teamIds,
-        { elapsedMs: 1, timing: {} },
+        { elapsedMs: 1, timing: undefined },
         move,
       );
       expect(submitted.rejection).toBeUndefined();
@@ -69,7 +72,7 @@ describe("real catalog crypto plugin in local runtime", () => {
         plugin,
         submitted.match,
         context.teamIds,
-        { elapsedMs: 1, timing: {} },
+        { elapsedMs: 1, timing: undefined },
         move,
       );
       expect(duplicate.rejection).toBeDefined();

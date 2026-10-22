@@ -23,7 +23,7 @@ const recorder: HostPlugin = {
   tickOnRequest: true,
   tick: (state, eventNowMs, timing) => ({
     ...(state as object),
-    tick: { eventNowMs, matchDurationMs: timing?.matchDurationMs ?? null },
+    tick: { eventNowMs, timing: timing ?? null },
   }),
   projectForTeam: (state) => state,
 };
@@ -41,14 +41,13 @@ afterEach(async () => {
 
 async function fixture() {
   const data = mkdtempSync(join(tmpdir(), "tenka-coordination-timing-"));
-  const clock = { now: START - 5 * MINUTE };
+  const clock = { now: START - 5 * MINUTE, step: 0 };
   const store = new HostStore(new Database(join(data, "host.sqlite")));
-  const service = new HostingService(
-    store,
-    new RecordingEngine(root, data),
-    HOST_KEY,
-    () => clock.now,
-  );
+  const service = new HostingService(store, new RecordingEngine(root, data), HOST_KEY, () => {
+    const now = clock.now;
+    clock.now += clock.step;
+    return now;
+  });
   const admin = await startHttpHost({
     kind: "admin",
     hostname: "127.0.0.1",
@@ -126,6 +125,15 @@ test("start with a match length sets endsAt from the host clock and rejects ever
   });
 });
 
+test("start and end come from one host clock reading even when the clock moves per call", async () => {
+  const f = await fixture();
+  f.clock.now = START;
+  f.clock.step = 1;
+  const started = await f.schedule({ startNow: true, durationMinutes: 10 });
+  const { startsAt, endsAt } = started.body as { startsAt: string; endsAt: string };
+  expect(Date.parse(endsAt) - Date.parse(startsAt)).toBe(600_000);
+});
+
 test("a Battle receives the match length at creation and on every tick, net of pauses", async () => {
   const f = await fixture();
   f.clock.now = START;
@@ -134,14 +142,14 @@ test("a Battle receives the match length at creation and on every tick, net of p
   f.clock.now = START + MINUTE;
   expect(await f.projection()).toEqual({
     created: 10 * MINUTE,
-    tick: { eventNowMs: MINUTE, matchDurationMs: 10 * MINUTE },
+    tick: { eventNowMs: MINUTE, timing: { matchDurationMs: 10 * MINUTE } },
   });
 
   expect((await f.schedule({ endsAt: "2026-10-22T10:20:00Z" })).status).toBe(200);
   f.clock.now = START + 2 * MINUTE;
   expect(await f.projection()).toEqual({
     created: 10 * MINUTE,
-    tick: { eventNowMs: 2 * MINUTE, matchDurationMs: 20 * MINUTE },
+    tick: { eventNowMs: 2 * MINUTE, timing: { matchDurationMs: 20 * MINUTE } },
   });
 
   expect((await f.lock("POST")).status).toBe(200);
@@ -150,7 +158,7 @@ test("a Battle receives the match length at creation and on every tick, net of p
   f.clock.now = START + 6 * MINUTE;
   expect(await f.projection()).toEqual({
     created: 10 * MINUTE,
-    tick: { eventNowMs: 3 * MINUTE, matchDurationMs: 17 * MINUTE },
+    tick: { eventNowMs: 3 * MINUTE, timing: { matchDurationMs: 17 * MINUTE } },
   });
 });
 
@@ -162,13 +170,13 @@ test("a Battle started without an end receives no match length until one is rese
   f.clock.now = START + MINUTE;
   expect(await f.projection()).toEqual({
     created: null,
-    tick: { eventNowMs: MINUTE, matchDurationMs: null },
+    tick: { eventNowMs: MINUTE, timing: null },
   });
 
   expect((await f.schedule({ endsAt: "2026-10-22T10:30:00Z" })).status).toBe(200);
   f.clock.now = START + 2 * MINUTE;
   expect(await f.projection()).toEqual({
     created: null,
-    tick: { eventNowMs: 2 * MINUTE, matchDurationMs: 30 * MINUTE },
+    tick: { eventNowMs: 2 * MINUTE, timing: { matchDurationMs: 30 * MINUTE } },
   });
 });

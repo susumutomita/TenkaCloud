@@ -81,6 +81,8 @@ describe("PATCH /events/:eventId/schedule", () => {
 
   it.each([
     ["without startNow", { durationMinutes: 10 }],
+    ["with only a teardown", { durationMinutes: 10, teardownAt: "2099-01-01T00:00:00.000Z" }],
+    ["with only a freeze window", { durationMinutes: 10, scoreboardFreezeMinutes: 5 }],
     ["below 5 minutes", { startNow: true, durationMinutes: 4 }],
     ["above 240 minutes", { startNow: true, durationMinutes: 241 }],
     ["fractional", { startNow: true, durationMinutes: 10.5 }],

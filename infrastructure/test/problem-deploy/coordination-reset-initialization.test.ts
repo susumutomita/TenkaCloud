@@ -188,6 +188,11 @@ describe.each(["DynamoDB", "SQL"])("accepted reset initialization: %s", (backend
       expect(ctx.initialState).toHaveBeenCalledWith(
         expect.objectContaining({ teamIds: ["red"], teamNames: { red: "Red" } }),
       );
+      // A COMPLETE row reaches the pass with its event window; a recovered scope without a
+      // saved catalog has none, so that reset starts without a match length.
+      const initialized: { matchDurationMs?: number } | undefined =
+        ctx.initialState.mock.calls[0]?.[0];
+      expect(initialized?.matchDurationMs).toBe(status === "COMPLETE" ? 3_600_000 : undefined);
       expect(ctx.tick).not.toHaveBeenCalled();
       expect(await ctx.repository.getDeployment(deployment.jobId)).toMatchObject({
         score: 217,

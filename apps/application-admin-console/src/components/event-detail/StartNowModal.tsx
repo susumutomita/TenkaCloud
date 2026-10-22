@@ -21,19 +21,25 @@ type Translate = (key: string, params?: Readonly<Record<string, string | number>
  */
 export function StartNowModal({
   canMutateTenant,
-  includesBattle,
+  coordinationBattle,
   onDismiss,
   onStart,
+  reservedEndsAt,
   t,
 }: {
   readonly canMutateTenant: boolean;
-  readonly includesBattle: boolean;
+  /** The event includes a problem that declares interTeamCoordination. */
+  readonly coordinationBattle: boolean;
   readonly onDismiss: () => void;
-  /** Called with no length when the organizer keeps the end unscheduled. */
+  /** Called with no length when the organizer keeps the reserved end or starts without one. */
   readonly onStart: (durationMinutes?: number) => void;
+  /** An end reserved before start; starting without a length keeps it, so "no end" is not offered. */
+  readonly reservedEndsAt?: string;
   readonly t: Translate;
 }) {
-  const [choice, setChoice] = useState<MatchLengthChoice>(defaultMatchLength(includesBattle));
+  const [choice, setChoice] = useState<MatchLengthChoice>(
+    defaultMatchLength(coordinationBattle, reservedEndsAt !== undefined),
+  );
   const [customMinutes, setCustomMinutes] = useState("");
   const resolved = resolveMatchLength(choice, customMinutes);
   const customError =
@@ -75,11 +81,19 @@ export function StartNowModal({
                 label: t("event_detail.start_now_length_minutes", { minutes }),
               })),
               { value: "custom", label: t("event_detail.start_now_length_custom") },
-              {
-                value: "none",
-                label: t("event_detail.start_now_length_none"),
-                description: t("event_detail.start_now_length_none_description"),
-              },
+              reservedEndsAt === undefined
+                ? {
+                    value: "none",
+                    label: t("event_detail.start_now_length_none"),
+                    description: t("event_detail.start_now_length_none_description"),
+                  }
+                : {
+                    value: "keep",
+                    label: t("event_detail.start_now_length_keep"),
+                    description: t("event_detail.start_now_length_keep_description", {
+                      endsAt: reservedEndsAt,
+                    }),
+                  },
             ]}
           />
         </FormField>

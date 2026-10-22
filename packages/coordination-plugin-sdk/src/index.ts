@@ -86,6 +86,10 @@ export interface CoordinationContext {
  *
  * 試合の終了を決めるのは platform だけ。終了時刻を過ぎた操作は platform が拒否する。
  * plugin はこの値をペース、フェーズ、残り時間の表示に使う。
+ *
+ * plugin は `timing?.matchDurationMs` だけを読む。`timing` そのものの有無で判断しない。
+ * 今の platform は長さが無いとき `timing` を省く。ただし将来この型に項目が増えると、
+ * 長さの無い `timing` が届くことがある。
  */
 export interface CoordinationTiming {
   /**

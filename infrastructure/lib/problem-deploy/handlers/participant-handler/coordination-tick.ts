@@ -85,6 +85,7 @@ const TickTargetSchema = z.object({
     .object({
       matchDurationMs: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
     })
+    .transform((timing) => (timing.matchDurationMs === undefined ? undefined : timing))
     .optional()
     .catch(({ input }) => {
       console.warn("[coordination-dispatcher] dropped malformed tick timing", { input });

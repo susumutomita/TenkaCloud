@@ -21,7 +21,7 @@ const plugin: HostPlugin = {
   teamScores: (state) => (state as { scores: Record<string, number> }).scores,
 };
 
-const START = { elapsedMs: 0, timing: {} };
+const START = { elapsedMs: 0, timing: undefined };
 
 describe("durable local coordination transitions", () => {
   test("issues different private match secrets and never projects them", () => {

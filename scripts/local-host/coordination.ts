@@ -64,7 +64,9 @@ export class LocalCoordination {
     return {
       elapsedMs,
       timing:
-        Number.isSafeInteger(matchDurationMs) && matchDurationMs > 0 ? { matchDurationMs } : {},
+        Number.isSafeInteger(matchDurationMs) && matchDurationMs > 0
+          ? { matchDurationMs }
+          : undefined,
     };
   }
   private row(event: HostedEvent, problem: Problem): MatchRow {

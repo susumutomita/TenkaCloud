@@ -1112,6 +1112,10 @@ it("request clocks are relative to the server's active event window, never suppl
   expect(requestClock(window, "2026-06-01T01:00:00Z")).toBeUndefined();
   expect(requestClock(window, "2026-05-31T23:59:59Z")).toBeUndefined();
   expect(
-    requestClock({ eventStartsAt: "2026-06-01T00:00:00Z" }, "2026-06-01T00:00:07Z")?.timing,
-  ).toEqual({});
+    requestClock({ eventStartsAt: "2026-06-01T00:00:00Z" }, "2026-06-01T00:00:07Z"),
+  ).toStrictEqual({
+    eventNowMs: 7000,
+    nowIso: "2026-06-01T00:00:07Z",
+    timing: undefined,
+  });
 });
