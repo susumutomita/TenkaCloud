@@ -62,6 +62,35 @@ describe("PATCH /events/:eventId/schedule", () => {
     expect(typeof mocks.setEventSchedule.mock.calls[0][3].startsAt).toBe("string");
   });
 
+  it("should resolve a match length to an end on the server clock", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-10-22T10:00:00.000Z"));
+    try {
+      mocks.setEventSchedule.mockResolvedValueOnce({ kind: "ok", updatedDeployments: 2 });
+      const res = await patchSchedule({ startNow: true, durationMinutes: 10 });
+      expect(res.status).toBe(StatusCodes.OK);
+      expect(mocks.setEventSchedule.mock.calls[0][3]).toMatchObject({
+        startsAt: "2026-10-22T10:00:00.000Z",
+        endsAt: "2026-10-22T10:10:00.000Z",
+        nowMs: Date.parse("2026-10-22T10:00:00.000Z"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ["without startNow", { durationMinutes: 10 }],
+    ["below 5 minutes", { startNow: true, durationMinutes: 4 }],
+    ["above 240 minutes", { startNow: true, durationMinutes: 241 }],
+    ["fractional", { startNow: true, durationMinutes: 10.5 }],
+    ["with startsAt", { startsAt: "2099-01-01T00:00:00.000Z", durationMinutes: 10 }],
+    ["with endsAt", { startNow: true, endsAt: "2099-01-01T00:00:00.000Z", durationMinutes: 10 }],
+  ])("should 400 a match length %s without scheduling", async (_case, body) => {
+    expect((await patchSchedule(body)).status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.setEventSchedule).not.toHaveBeenCalled();
+  });
+
   it("should pass an explicit startsAt through when startNow is false", async () => {
     mocks.setEventSchedule.mockResolvedValueOnce({ kind: "ok", updatedDeployments: 0 });
     await patchSchedule({ startsAt: "2099-01-01T00:00:00.000Z" });

@@ -21,6 +21,11 @@ export interface CoordinationTickTarget {
   readonly moduleRef: string;
   /** event 開始からの経過 ms (= 採点 pass が `nowMs - eventStartMs` で算出した plugin の tick 時刻)。 */
   readonly eventNowMs: number;
+  /**
+   * [Issue #3453] plugin の tick と `initialState` に渡す時計の事実 (SDK の `CoordinationTiming`)。
+   * 終了予約が無い間は送らない。古い採点 Lambda も送らないので、受信側は省略を許す。
+   */
+  readonly timing?: { readonly matchDurationMs?: number };
   /** row 未初期化時の `initialState(ctx)` に渡す参加チーム一覧 (= 採点 pass が scan で観測)。 */
   readonly teamIds: readonly string[];
   /** Completed event: publish only already-saved scores, without loading or advancing the game. */

@@ -206,9 +206,13 @@ export type EventSummary = z.infer<typeof EventSummarySchema>;
  * - `endsAt: ISO8601` — 競技終了予約時刻 (#536)。HealthCheck が `now >= endsAt` で
  *   採点 gate を閉じるので、operator は手動で「Event を終了」を押さなくてよい
  *
+ * - `durationMinutes: 5..240` — 即座に開始と同時に競技時間を決める (#3453)。終了予約は
+ *   server now + durationMinutes。ブラウザの時計は使わないので `startNow: true` 専用で、
+ *   `startsAt` / `endsAt` とは同時指定不可
+ *
  * 少なくとも 1 つは指定必須。同時指定可能な組:
  *   `{ startsAt }` / `{ startNow: true }` / `{ endsAt }` / `{ startsAt, endsAt }` /
- *   `{ startNow: true, endsAt }`
+ *   `{ startNow: true, endsAt }` / `{ startNow: true, durationMinutes }`
  *
  * datetime は `+09:00` 等の non-Z オフセット入力も受け付けるが、**canonical UTC Z 形式
  * に transform して persist する** (Issue #497)。理由: HealthCheck の `isScoringActive`
@@ -253,6 +257,7 @@ export const ScheduleEventRequestSchema = z
      * 0 で freeze 無効化、 1〜180 分の範囲を受け付ける。 未指定なら既存値を保持。
      */
     scoreboardFreezeMinutes: z.number().int().min(0).max(180).optional(),
+    durationMinutes: z.number().int().min(5).max(240).optional(),
   })
   .refine(
     (v) =>
@@ -269,7 +274,16 @@ export const ScheduleEventRequestSchema = z
   )
   .refine((v) => !(v.startsAt !== undefined && v.startNow === true), {
     message: "startsAt と startNow は同時指定不可",
-  });
+  })
+  .refine(
+    (v) =>
+      v.durationMinutes === undefined ||
+      (v.startNow === true && v.startsAt === undefined && v.endsAt === undefined),
+    {
+      message:
+        "durationMinutes は startNow: true とだけ指定できる (startsAt / endsAt とは同時指定不可)",
+    },
+  );
 
 export const TeamSummarySchema = z.object({
   teamId: z.string(),

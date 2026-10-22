@@ -157,6 +157,21 @@ describe("collectCoordinationTickTargets", () => {
     expect(t?.teamIds).toEqual(["team-a", "team-b"]);
   });
 
+  it("should carry the scheduled match length, and none while no end is scheduled", () => {
+    const out = new Map<string, CollectedTickTarget>();
+    collectCoordinationTickTargets(
+      IDS,
+      [
+        { ...baseItem(), eventEndsAt: "2026-06-01T01:30:00.000Z" },
+        { ...baseItem(), eventId: "e2" },
+      ],
+      out,
+      NOW,
+    );
+    expect(out.get(targetKey("t1", "e1", "cap"))?.timing).toEqual({ matchDurationMs: 5_400_000 });
+    expect(out.get(targetKey("t1", "e2", "cap"))).not.toHaveProperty("timing");
+  });
+
   it("should collect separate targets for distinct events", () => {
     const out = new Map<string, CollectedTickTarget>();
     collectCoordinationTickTargets(IDS, [baseItem(), { ...baseItem(), eventId: "e2" }], out, NOW);
@@ -212,6 +227,31 @@ describe("buildCoordinationTickBatch", () => {
       {
         tenantId: "t1",
         eventId: "e1",
+        moduleRef: "cap",
+        eventNowMs: CAPTURE_MS,
+        teamIds: ["team-a"],
+      },
+    ]);
+  });
+
+  it("should send the match length on the wire only when one is scheduled", () => {
+    const batch = buildCoordinationTickBatch(
+      [target({ timing: { matchDurationMs: 600_000 } }), target({ eventId: "e2" })],
+      1_000_000 + CAPTURE_MS,
+      NOW,
+    );
+    expect(batch.targets).toEqual([
+      {
+        tenantId: "t1",
+        eventId: "e1",
+        moduleRef: "cap",
+        eventNowMs: CAPTURE_MS,
+        timing: { matchDurationMs: 600_000 },
+        teamIds: ["team-a"],
+      },
+      {
+        tenantId: "t1",
+        eventId: "e2",
         moduleRef: "cap",
         eventNowMs: CAPTURE_MS,
         teamIds: ["team-a"],

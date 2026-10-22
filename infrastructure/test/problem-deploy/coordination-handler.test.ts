@@ -605,7 +605,8 @@ describe("makeCoordinationScopeResolver", () => {
         // namespace.
         state: { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" },
         teamId: "t1",
-        ctx: { eventId: "e1", teamIds: ["t1"], teamNames: {} },
+        // [Issue #3453] The scheduled 10-hour window reaches initialState as the match length.
+        ctx: { eventId: "e1", teamIds: ["t1"], teamNames: {}, matchDurationMs: 36_000_000 },
         // moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
         moduleRef: "p1",
         fallbackProjection: {},
@@ -1103,7 +1104,14 @@ it("request clocks are relative to the server's active event window, never suppl
   );
   const window = { eventStartsAt: "2026-06-01T00:00:00Z", eventEndsAt: "2026-06-01T01:00:00Z" };
   expect(requestClock(window, "2026-06-01T00:00:07Z", 5000)?.eventNowMs).toBe(5000);
-  expect(requestClock(window, "2026-06-01T00:00:07Z")?.eventNowMs).toBe(7000);
+  expect(requestClock(window, "2026-06-01T00:00:07Z")).toEqual({
+    eventNowMs: 7000,
+    nowIso: "2026-06-01T00:00:07Z",
+    timing: { matchDurationMs: 3_600_000 },
+  });
   expect(requestClock(window, "2026-06-01T01:00:00Z")).toBeUndefined();
   expect(requestClock(window, "2026-05-31T23:59:59Z")).toBeUndefined();
+  expect(
+    requestClock({ eventStartsAt: "2026-06-01T00:00:00Z" }, "2026-06-01T00:00:07Z")?.timing,
+  ).toEqual({});
 });

@@ -1,3 +1,4 @@
+import type { CoordinationTiming } from "@tenkacloud/coordination-plugin-sdk";
 import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
 import {
   type CoordinationStateScope,
@@ -10,7 +11,7 @@ import {
   type CoordinationTickBatch,
 } from "../shared/coordination-tick-contract.js";
 import type { CoordinationTickInvoker } from "./coordination-tick-dispatch.js";
-import { isRoundTerminated } from "./round-liveness.js";
+import { isRoundTerminated, matchDurationTiming } from "./round-liveness.js";
 
 /**
  * scoring-driven tick (#2324) の **採点 pass 側**。 coordination を宣言した event を per-minute
@@ -30,6 +31,8 @@ export interface CollectedTickTarget {
   readonly moduleRef: string;
   /** event 開始時刻 (epoch ms)。 送出時に `eventNowMs = nowMs - eventStartMs` へ変換する。 */
   readonly eventStartMs: number;
+  /** Present only while an end is scheduled. */
+  readonly timing?: CoordinationTiming;
   readonly teamIds: string[];
   readonly drainOnly?: boolean;
   readonly initializeRunId?: string;
@@ -101,14 +104,8 @@ export function collectCoordinationTickTargets(
       if (!existing.teamIds.includes(candidate.teamId)) existing.teamIds.push(candidate.teamId);
       continue;
     }
-    destination.set(key, {
-      tenantId: candidate.tenantId,
-      eventId: candidate.eventId,
-      moduleRef: candidate.moduleRef,
-      eventStartMs: candidate.eventStartMs,
-      teamIds: [candidate.teamId],
-      ...(candidate.drainOnly ? { drainOnly: true } : {}),
-    });
+    const { teamId, ...target } = candidate;
+    destination.set(key, { ...target, teamIds: [teamId] });
   }
 }
 
@@ -118,6 +115,7 @@ interface TickCandidate {
   readonly eventId: string;
   readonly moduleRef: string;
   readonly eventStartMs: number;
+  readonly timing?: CoordinationTiming;
   readonly teamId: string;
   readonly drainOnly?: boolean;
 }
@@ -145,11 +143,13 @@ function toTickCandidate(
   const drainOnly = isRoundTerminated(item, nowIso);
   const eventStartMs = Date.parse(eventStartsAt);
   if (Number.isNaN(eventStartMs)) return null;
+  const timing = matchDurationTiming(item);
   return {
     tenantId,
     eventId,
     moduleRef: problemId,
     eventStartMs,
+    ...(timing.matchDurationMs !== undefined ? { timing } : {}),
     teamId,
     ...(drainOnly ? { drainOnly: true } : {}),
   };
@@ -172,6 +172,7 @@ export function buildCoordinationTickBatch(
       eventId: t.eventId,
       moduleRef: t.moduleRef,
       eventNowMs: nowMs - t.eventStartMs,
+      ...(t.timing ? { timing: t.timing } : {}),
       teamIds: t.teamIds,
       ...(t.drainOnly ? { drainOnly: true } : {}),
       ...(t.initializeRunId ? { initializeRunId: t.initializeRunId } : {}),

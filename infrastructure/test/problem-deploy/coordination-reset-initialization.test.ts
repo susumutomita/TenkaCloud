@@ -145,6 +145,18 @@ describe.each(["DynamoDB", "SQL"])("accepted reset initialization: %s", (backend
     expect(ctx.initialState).toHaveBeenCalledTimes(1);
   });
 
+  it("passes the scheduled match length to the reset's initial state", async () => {
+    const ctx = await setup(backend);
+    await ctx.repository.putDeployment(deployment);
+    const [target] = ctx.batch.targets;
+    if (!target) throw new Error("Expected a reset target.");
+    const timed = { ...ctx.batch, targets: [{ ...target, timing: { matchDurationMs: 600_000 } }] };
+    expect((await handleCoordinationTickBatch(ctx.deps, timed)).written).toBe(1);
+    expect(ctx.initialState).toHaveBeenCalledWith(
+      expect.objectContaining({ matchDurationMs: 600_000 }),
+    );
+  });
+
   it.each(["COMPLETE", "DELETED"] as const)(
     "fulfils a reset accepted one millisecond before end through scheduled recovery, once (deployment=%s)",
     async (status) => {

@@ -1180,7 +1180,7 @@ for (const [backend, createStore] of backendStores) {
       ctx: { eventId: rtScope.eventId, teamIds: ["t1"] },
       fallbackProjection: { count: -1 },
     };
-    const clock = { eventNowMs: 100, nowIso: "2026-06-01T00:00:01Z" };
+    const clock = { eventNowMs: 100, nowIso: "2026-06-01T00:00:01Z", timing: {} };
     const timed: typeof counter = {
       ...counter,
       tickOnRequest: true,
@@ -1223,6 +1223,21 @@ for (const [backend, createStore] of backendStores) {
       ).toEqual({ kind: "ok", projection: { count: 1 } });
       expect((await readCoordinationState(store, rtScope))?.version).toBe(1);
     });
+    it("passes the host match length to the tick of a read", async () => {
+      const store = createStore();
+      await writeCoordinationState(store, rtScope, { count: 1 }, 0, clock.nowIso);
+      const lengthCounter: typeof counter = {
+        ...counter,
+        tickOnRequest: true,
+        tick: (s, _ms, timing) => ({ count: s.count + (timing?.matchDurationMs ?? 0) }),
+      };
+      expect(
+        await projectCoordinationForTeam(store, lengthCounter, {
+          ...request,
+          requestTick: { ...clock, timing: { matchDurationMs: 600_000 } },
+        }),
+      ).toEqual({ kind: "ok", projection: { count: 600_001 } });
+    });
     it("does not advance without a host clock, as on an ended-event read", async () => {
       const store = createStore();
       await writeCoordinationState(store, rtScope, { count: 1 }, 0, clock.nowIso);
@@ -1236,7 +1251,7 @@ for (const [backend, createStore] of backendStores) {
 
 describe("request tick failure boundaries", () => {
   const request = { scope, teamId: "t1", ctx, fallbackProjection: { count: -1 } };
-  const clock = { eventNowMs: 100, nowIso: "2026-06-01T00:00:01Z" };
+  const clock = { eventNowMs: 100, nowIso: "2026-06-01T00:00:01Z", timing: {} };
   const timed = { ...counter, tickOnRequest: true, tick: () => ({ count: 10 }) };
   const row = { state: { count: 1 }, version: 1, stateSchemaVersion: 1 };
   it("refuses invalid host time before a read or operation", async () => {
@@ -1289,7 +1304,33 @@ it("initializes the first opted-in move at the host time before validation", asy
     teamId: "t1",
     op: { kind: "inc" },
     nowIso: "2026-06-01T00:00:01Z",
-    requestTick: { eventNowMs: 1000, nowIso: "2026-06-01T00:00:01Z" },
+    requestTick: { eventNowMs: 1000, nowIso: "2026-06-01T00:00:01Z", timing: {} },
   });
   expect(result).toEqual({ kind: "ok", projection: { count: 6 } });
+});
+
+it("gives the first move's initial state and its request tick the host match length", async () => {
+  const { store } = fakeStore({ getItem: undefined });
+  const timing = { matchDurationMs: 600_000 };
+  const recorder: CoordinationPlugin<
+    { created: number | null; seen: number | null },
+    unknown,
+    { created: number | null; seen: number | null }
+  > = {
+    initialState: (c) => ({ created: c.matchDurationMs ?? null, seen: null }),
+    validateOp: () => ({ ok: true }),
+    applyOp: (s) => s,
+    tickOnRequest: true,
+    tick: (s, _ms, t) => ({ ...s, seen: t?.matchDurationMs ?? null }),
+    projectForTeam: (s) => s,
+  };
+  const result = await dispatchCoordinationOp(store, recorder, {
+    scope,
+    ctx: { ...ctx, ...timing },
+    teamId: "t1",
+    op: {},
+    nowIso: "2026-06-01T00:00:01Z",
+    requestTick: { eventNowMs: 1000, nowIso: "2026-06-01T00:00:01Z", timing },
+  });
+  expect(result).toEqual({ kind: "ok", projection: { created: 600_000, seen: 600_000 } });
 });

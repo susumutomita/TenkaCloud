@@ -544,6 +544,70 @@ describe("handleCoordinationTickBatch", () => {
   });
 });
 
+describe("the scoring tick passes the match length (#3453)", () => {
+  interface TimingState {
+    readonly created: number | null;
+    readonly seen: number | null;
+  }
+  const timingPlugin: CoordinationPlugin<TimingState, unknown, TimingState> = {
+    initialState: (ctx) => ({ created: ctx.matchDurationMs ?? null, seen: null }),
+    validateOp: () => ({ ok: true }),
+    applyOp: (s) => s,
+    tick: (s, _eventNowMs, timing) => ({ ...s, seen: timing?.matchDurationMs ?? null }),
+    projectForTeam: (s) => s,
+  };
+
+  it("should hand the match length to initialState and to the tick", async () => {
+    const ddb = fakeDdb({ getItem: undefined });
+    await handleCoordinationTickBatch(
+      depsWith(importerOf(timingPlugin), ddb.store),
+      batch([capTarget({ timing: { matchDurationMs: 600_000 } })]),
+    );
+    expect(ddb.puts).toEqual([
+      {
+        PK: "COORD#t1#e1#cap#default",
+        state: { created: 600_000, seen: 600_000 },
+        version: 1,
+      },
+    ]);
+  });
+
+  it("should tick a batch from an older scoring Lambda that sends no timing", async () => {
+    const ddb = fakeDdb({ getItem: { state: { created: null, seen: 600_000 }, version: 4 } });
+    const parsed = parseCoordinationTickBatch({
+      action: "coordination-tick",
+      nowIso: NOW_ISO,
+      targets: [capTarget()],
+    });
+    if (!parsed) throw new Error("Expected the batch to parse.");
+    await handleCoordinationTickBatch(depsWith(importerOf(timingPlugin), ddb.store), parsed);
+    expect(ddb.puts).toEqual([
+      { PK: "COORD#t1#e1#cap#default", state: { created: null, seen: null }, version: 5 },
+    ]);
+  });
+
+  it("should keep the batch and drop a malformed timing with a warning", () => {
+    const parsed = parseCoordinationTickBatch({
+      action: "coordination-tick",
+      nowIso: NOW_ISO,
+      targets: [
+        capTarget({ timing: { matchDurationMs: -1 } }),
+        capTarget({ eventId: "e2", timing: { matchDurationMs: 600_000 } }),
+      ],
+    });
+    expect(parsed?.targets.map((target) => target.timing)).toEqual([
+      undefined,
+      { matchDurationMs: 600_000 },
+    ]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[coordination-dispatcher] dropped malformed tick timing",
+      {
+        input: { matchDurationMs: -1 },
+      },
+    );
+  });
+});
+
 describe("parseCoordinationTickBatch", () => {
   it("should parse a valid tick batch and default teamIds", () => {
     const parsed = parseCoordinationTickBatch({

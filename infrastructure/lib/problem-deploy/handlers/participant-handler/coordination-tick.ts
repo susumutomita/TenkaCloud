@@ -80,6 +80,16 @@ const TickTargetSchema = z.object({
   eventId: z.string().min(1),
   moduleRef: z.string().min(1),
   eventNowMs: z.number().finite(),
+  // A malformed timing must not discard the whole batch: the plugin then ticks as an older platform's would.
+  timing: z
+    .object({
+      matchDurationMs: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+    })
+    .optional()
+    .catch(({ input }) => {
+      console.warn("[coordination-dispatcher] dropped malformed tick timing", { input });
+      return undefined;
+    }),
   teamIds: z.array(z.string()).default([]),
   drainOnly: z.boolean().optional(),
   initializeRunId: z.string().min(1).optional(),
@@ -169,6 +179,7 @@ async function initializeAcceptedCoordinationReset(
       teamIds: roster.teamIds,
       teamNames: roster.teamNames,
       ...(roster.deploymentInputs ? { deploymentInputs: roster.deploymentInputs } : {}),
+      ...target.timing,
       matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
     });
     const pendingScores = coordinationScoreDelivery(
@@ -363,6 +374,7 @@ async function applyLoadedCoordinationTick(
       teamIds: roster.teamIds,
       teamNames: roster.teamNames,
       ...(roster.deploymentInputs ? { deploymentInputs: roster.deploymentInputs } : {}),
+      ...target.timing,
       matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
     });
     version = 0;
@@ -372,7 +384,7 @@ async function applyLoadedCoordinationTick(
   const { nextState, pendingScores, stateChanged } = prepareTickTransition(
     plugin,
     currentState,
-    target.eventNowMs,
+    target,
     nowIso,
     !existing,
   );
@@ -433,11 +445,11 @@ async function applyLoadedCoordinationTick(
 function prepareTickTransition(
   plugin: CoordinationPlugin<unknown, unknown>,
   currentState: unknown,
-  eventNowMs: number,
+  clock: Pick<CoordinationTickTarget, "eventNowMs" | "timing">,
   nowIso: string,
   initializing: boolean,
 ) {
-  const nextState = runTick(plugin, currentState, eventNowMs);
+  const nextState = runTick(plugin, currentState, clock.eventNowMs, clock.timing);
   const pendingScores = coordinationScoreDelivery(
     plugin,
     currentState,

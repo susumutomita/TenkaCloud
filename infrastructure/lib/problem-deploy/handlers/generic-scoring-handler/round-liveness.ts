@@ -1,3 +1,4 @@
+import type { CoordinationTiming } from "@tenkacloud/coordination-plugin-sdk";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
 /**
@@ -57,4 +58,16 @@ export function isRoundTerminated(
   const terminal = resolveRoundTerminalAt(round, capMinutes);
   if (!terminal) return false;
   return nowIso >= terminal;
+}
+
+/**
+ * [Issue #3453] Battle plugin に渡す試合の長さ。tick の `eventNowMs` と同じ時計で測る。
+ *
+ * クラウドの時計は採点ロックの停止時間を引かないので、ここでも引かない。
+ * 明示された `eventEndsAt` だけを使い、liveness cap の終端は使わない (= 終了予約が無い間は渡さない)。
+ */
+export function matchDurationTiming(round: RoundWindow): CoordinationTiming {
+  if (typeof round.eventStartsAt !== "string" || typeof round.eventEndsAt !== "string") return {};
+  const matchDurationMs = Date.parse(round.eventEndsAt) - Date.parse(round.eventStartsAt);
+  return Number.isSafeInteger(matchDurationMs) && matchDurationMs > 0 ? { matchDurationMs } : {};
 }

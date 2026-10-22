@@ -5,7 +5,10 @@ import type { CoordinationStateBudget } from "../../control-data/domain/coordina
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import { executionPluginImporter } from "../coordination-dispatcher-handler/s3-plugin-importer.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import type { RoundWindow } from "../generic-scoring-handler/round-liveness.js";
+import {
+  matchDurationTiming,
+  type RoundWindow,
+} from "../generic-scoring-handler/round-liveness.js";
 import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
 import { isCoordinationDeploymentPlayable } from "../shared/coordination-liveness.js";
 import { resolvePlayableCoordinationRunId } from "../shared/coordination-run.js";
@@ -19,6 +22,7 @@ import {
   storeArtifactSubmissions,
   withArtifactRefs,
 } from "./coordination-artifacts.js";
+import type { CoordinationRequestClock } from "./coordination-dispatch.js";
 import {
   acquireCoordinationInitialization,
   type CoordinationInitializationLease,
@@ -497,6 +501,7 @@ export function makeCoordinationScopeResolver(
           // [Issue #3172] So a plugin can name an opponent instead of printing its ULID.
           teamNames: roster.teamNames,
           ...(roster.deploymentInputs ? { deploymentInputs: roster.deploymentInputs } : {}),
+          ...matchDurationTiming(window),
         },
         window,
         // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
@@ -527,11 +532,19 @@ function coordinationCandidates(
 }
 
 /** Never accepts a participant timestamp; ended events remain read-only. */
-export function requestClock(window: RoundWindow, nowIso: string, quantumMs = 1) {
+export function requestClock(
+  window: RoundWindow,
+  nowIso: string,
+  quantumMs = 1,
+): CoordinationRequestClock | undefined {
   if (!isScoringActive(window, nowIso) || !window.eventStartsAt) return undefined;
   const elapsed = Date.parse(nowIso) - Date.parse(window.eventStartsAt);
   if (!Number.isFinite(elapsed) || elapsed < 0) return undefined;
-  return { eventNowMs: Math.floor(elapsed / quantumMs) * quantumMs, nowIso };
+  return {
+    eventNowMs: Math.floor(elapsed / quantumMs) * quantumMs,
+    nowIso,
+    timing: matchDurationTiming(window),
+  };
 }
 
 async function resolveInitializationRoster(
