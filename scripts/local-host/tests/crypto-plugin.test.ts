@@ -27,27 +27,51 @@ describe("real catalog crypto plugin in local runtime", () => {
         teamNames: { alpha: "Alpha", beta: "Beta" },
       };
       const initial = createMatch(plugin, context);
-      const first = transitionMatch(plugin, initial, context.teamIds, 0, {
-        teamId: "alpha",
-        op: { kind: "ready" },
-      });
+      const first = transitionMatch(
+        plugin,
+        initial,
+        context.teamIds,
+        { elapsedMs: 0, timing: {} },
+        {
+          teamId: "alpha",
+          op: { kind: "ready" },
+        },
+      );
       const waiting = plugin.projectForTeam(first.match.state, "alpha") as Projection;
       expect(waiting.ready).toMatchObject({ count: 1, total: 2, me: true });
       expect(waiting.myContracts).toHaveLength(0);
-      let match = transitionMatch(plugin, first.match, context.teamIds, 0, {
-        teamId: "beta",
-        op: { kind: "ready" },
-      }).match;
-      match = transitionMatch(plugin, match, context.teamIds, 1).match;
+      let match = transitionMatch(
+        plugin,
+        first.match,
+        context.teamIds,
+        { elapsedMs: 0, timing: {} },
+        {
+          teamId: "beta",
+          op: { kind: "ready" },
+        },
+      ).match;
+      match = transitionMatch(plugin, match, context.teamIds, { elapsedMs: 1, timing: {} }).match;
       const own = plugin.projectForTeam(match.state, "alpha") as Projection;
       const order = own.myContracts.find((contract) => contract.allowedMethods.includes("leak"));
       expect(order).toBeDefined();
       const move = { teamId: "alpha", op: { kind: "leak", contractId: required(order).id } };
-      const submitted = transitionMatch(plugin, match, context.teamIds, 1, move);
+      const submitted = transitionMatch(
+        plugin,
+        match,
+        context.teamIds,
+        { elapsedMs: 1, timing: {} },
+        move,
+      );
       expect(submitted.rejection).toBeUndefined();
       expect(submitted.deltas.alpha).toBeGreaterThan(0);
       expect(submitted.deltas.beta).toBe(0);
-      const duplicate = transitionMatch(plugin, submitted.match, context.teamIds, 1, move);
+      const duplicate = transitionMatch(
+        plugin,
+        submitted.match,
+        context.teamIds,
+        { elapsedMs: 1, timing: {} },
+        move,
+      );
       expect(duplicate.rejection).toBeDefined();
       expect(duplicate.deltas.alpha).toBe(0);
       const saved = JSON.parse(JSON.stringify(submitted.match));

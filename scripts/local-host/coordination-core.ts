@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import {
   type CoordinationContext,
   type CoordinationPlugin,
+  type CoordinationTiming,
   dispatchOp,
 } from "@tenkacloud/coordination-plugin-sdk";
 import {
@@ -16,6 +17,11 @@ export interface LocalMatch {
   matchSecret: string;
   version: number;
   scores: Record<string, number>;
+}
+/** The Battle clock a transition runs at; both values already net of scoring-lock pauses. */
+export interface MatchClock {
+  readonly elapsedMs: number;
+  readonly timing: CoordinationTiming;
 }
 export interface MatchTransition {
   match: LocalMatch;
@@ -40,16 +46,17 @@ export function transitionMatch(
   plugin: HostPlugin,
   previous: LocalMatch,
   teamIds: readonly string[],
-  elapsedMs: number,
+  clock: MatchClock,
   move?: { teamId: string; op: unknown },
 ): MatchTransition {
-  if (!Number.isSafeInteger(elapsedMs) || elapsedMs < 0) throw new Error("Invalid match clock.");
+  if (!Number.isSafeInteger(clock.elapsedMs) || clock.elapsedMs < 0)
+    throw new Error("Invalid match clock.");
   if (move && !teamIds.includes(move.teamId)) throw new Error("Team is outside the event roster.");
   const reconciled = reconcileStateSchema(plugin, structuredClone(previous));
   if (reconciled.kind !== "ok") throw new Error(`Cannot load match schema: ${reconciled.reason}`);
   let state =
     plugin.tickOnRequest && plugin.tick
-      ? plugin.tick(reconciled.state, elapsedMs)
+      ? plugin.tick(reconciled.state, clock.elapsedMs, clock.timing)
       : reconciled.state;
   let rejection: string | undefined;
   if (move) {

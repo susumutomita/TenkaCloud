@@ -21,6 +21,8 @@ const plugin: HostPlugin = {
   teamScores: (state) => (state as { scores: Record<string, number> }).scores,
 };
 
+const START = { elapsedMs: 0, timing: {} };
+
 describe("durable local coordination transitions", () => {
   test("issues different private match secrets and never projects them", () => {
     const ctx = { eventId: "same-public-event", teamIds: ["a", "b"] };
@@ -33,32 +35,32 @@ describe("durable local coordination transitions", () => {
   });
   test("awards absolute scores, preserves input and rejects another roster", () => {
     const first = createMatch(plugin, { eventId: "e", teamIds: ["a", "b"] });
-    const next = transitionMatch(plugin, first, ["a", "b"], 0, { teamId: "a", op: 30 });
+    const next = transitionMatch(plugin, first, ["a", "b"], START, { teamId: "a", op: 30 });
     expect(first.scores.a).toBe(0);
     expect(next.deltas).toEqual({ a: 30, b: 0 });
-    expect(transitionMatch(plugin, next.match, ["a", "b"], 0).deltas.a).toBe(0);
-    expect(() => transitionMatch(plugin, first, ["a", "b"], 0, { teamId: "c", op: 30 })).toThrow(
-      "roster",
-    );
+    expect(transitionMatch(plugin, next.match, ["a", "b"], START).deltas.a).toBe(0);
+    expect(() =>
+      transitionMatch(plugin, first, ["a", "b"], START, { teamId: "c", op: 30 }),
+    ).toThrow("roster");
   });
   test("accepts finite negative and fractional scores, rejects non-finite scores", () => {
     const first = createMatch(plugin, { eventId: "e", teamIds: ["a"] });
-    const result = transitionMatch(plugin, first, ["a"], 0, { teamId: "a", op: -6.5 });
+    const result = transitionMatch(plugin, first, ["a"], START, { teamId: "a", op: -6.5 });
     expect(result.match.scores.a).toBe(-6.5);
     expect(result.deltas.a).toBe(-6.5);
     for (const op of [NaN, Infinity, -Infinity])
-      expect(() => transitionMatch(plugin, first, ["a"], 0, { teamId: "a", op })).toThrow(
+      expect(() => transitionMatch(plugin, first, ["a"], START, { teamId: "a", op })).toThrow(
         "invalid score",
       );
   });
   test("rejects malformed operations and incompatible saved state without resetting", () => {
     const first = createMatch(plugin, { eventId: "e", teamIds: ["a"] });
-    expect(transitionMatch(plugin, first, ["a"], 0, { teamId: "a", op: {} }).rejection).toBe(
+    expect(transitionMatch(plugin, first, ["a"], START, { teamId: "a", op: {} }).rejection).toBe(
       "number_required",
     );
-    expect(() => transitionMatch(plugin, { ...first, stateSchemaVersion: 999 }, ["a"], 0)).toThrow(
-      "schema",
-    );
+    expect(() =>
+      transitionMatch(plugin, { ...first, stateSchemaVersion: 999 }, ["a"], START),
+    ).toThrow("schema");
     expect(first.scores.a).toBe(0);
   });
 });
