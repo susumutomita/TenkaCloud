@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { logCatalogImport } from "../catalog-import-log";
@@ -109,6 +117,45 @@ test("real mixed acquisition reports every selected source, resolved commit and 
     expect(readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8")).toBe(
       previous,
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a lock left by an interrupted run is named with its recovery instead of source advice", () => {
+  const root = mkdtempSync(join(tmpdir(), "tc-import-lock-"));
+  const lock = join(root, ".tenkacloud/catalog-store/mutation.lock");
+  let fetched = false;
+  try {
+    writeFileSync(
+      join(root, "catalog-sources.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        sources: [{ url: "https://example.invalid/catalog.git", ref: "main" }],
+      }),
+    );
+    mkdirSync(lock, { recursive: true });
+    let message = "";
+    try {
+      logCatalogImport(
+        () =>
+          downloadConfiguredCatalog(root, undefined, {
+            resolveRef: () => {
+              fetched = true;
+              return "a".repeat(40);
+            },
+          }),
+        () => undefined,
+      );
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      message = error.message;
+    }
+    expect(message).toBe(
+      `Catalog import failed; startup/build stopped. Another catalog operation is active. If no make local, make deploy or catalog download is running, an interrupted run left ${lock} behind; remove that directory and retry.`,
+    );
+    expect(fetched).toBe(false);
+    expect(existsSync(lock)).toBe(true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

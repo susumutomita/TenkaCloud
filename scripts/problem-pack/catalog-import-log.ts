@@ -1,3 +1,4 @@
+import { CatalogMutationActive } from "./catalog-read.js";
 import { type CatalogImport, CatalogSourceFailure } from "./downloaded-catalog.js";
 
 /** Log only validated source identity, never transport errors, credentials or URL queries. */
@@ -28,17 +29,19 @@ export function logCatalogImport(
     imported = acquire();
   } catch (error) {
     const failure =
-      error instanceof Error && error.cause instanceof CatalogSourceFailure ? error.cause : error;
-    let context = "";
-    if (failure instanceof CatalogSourceFailure) {
+      error instanceof Error &&
+      (error.cause instanceof CatalogSourceFailure || error.cause instanceof CatalogMutationActive)
+        ? error.cause
+        : error;
+    let context = " Check catalog source configuration, access and validation.";
+    if (failure instanceof CatalogMutationActive) context = ` ${failure.message}`;
+    else if (failure instanceof CatalogSourceFailure) {
       const kind = failure.retained ? "retained snapshot" : "selected catalog";
-      context = ` Source ${failure.sourceNumber} (${kind}): ${JSON.stringify(sourceIdentity(failure.source))}.`;
+      context = ` Source ${failure.sourceNumber} (${kind}): ${JSON.stringify(sourceIdentity(failure.source))}.${context}`;
     }
     // Child-process and validation errors can contain URLs with tokens or file contents.
     // The launcher prints this message; do not attach the unsafe original as a cause.
-    throw new Error(
-      `Catalog import failed; startup/build stopped.${context} Check catalog source configuration, access and validation.`,
-    );
+    throw new Error(`Catalog import failed; startup/build stopped.${context}`);
   }
   for (const { revision, problemCount } of imported)
     log(

@@ -163,7 +163,12 @@ test("real SQLite startup rejects a retained unisolated job before listeners and
   prepareDatabase(path);
   persistentKey(join(directory, "host-key"));
   const store = new HostStore(new Database(path));
-  const job = { ...f.job, status: "COMPLETE" as const, unit: "legacy-runtime" };
+  // Units written before isolation existed have no isolationVersion.
+  const job = {
+    ...f.job,
+    status: "COMPLETE" as const,
+    unit: JSON.stringify({ problemId: f.job.problemId, offset: 0 }),
+  };
   const createdAt = new Date(0).toISOString();
   store.putEvent({
     eventId: job.eventId,
@@ -208,7 +213,12 @@ test("real SQLite startup rejects a retained unisolated job before listeners and
         (data) => localCompetitionEngine(root, data, parseOptions(lan, root, {})),
         () => undefined,
       ),
-    ).rejects.toMatchObject({ kind: "network_isolation_required" });
+    ).rejects.toMatchObject({
+      kind: "network_isolation_required",
+      message: expect.stringContaining(
+        `Retained unisolated Docker environments prevent remote hosting: ${job.problemId}. Start make local without --lan`,
+      ),
+    });
     expect(listened).toBe(false);
     const restored = new HostStore(new Database(path));
     try {
