@@ -108,14 +108,19 @@ export function retainedCatalogRoots(root: string): string[] {
   return [...new Set(retainedCatalogSnapshots(root).map((entry) => entry.problemRoot))];
 }
 
+/** The message names only the repository-local lock, so launchers may print it as is. */
+export class CatalogMutationActive extends Error {}
+
 export function withCatalogMutation<T>(root: string, operation: () => T): T {
   mkdirSync(store(root), { recursive: true });
   const lock = join(store(root), "mutation.lock");
   try {
     mkdirSync(lock);
-  } catch {
-    throw new Error(
-      "Another catalog operation is active; check its process before recovering mutation.lock",
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+    // A killed run (for example Ctrl+C during a Git fetch) skips the finally below.
+    throw new CatalogMutationActive(
+      `Another catalog operation is active. If no make local, make deploy or catalog download is running, an interrupted run left ${lock} behind; remove that directory and retry.`,
     );
   }
   try {

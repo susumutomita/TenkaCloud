@@ -286,17 +286,20 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   private assertRetainedIsolation(jobs: readonly Job[]): void {
     if (!this.isolationMandatory) return;
-    for (const job of jobs) {
-      if (definitionKind(job.definition) !== "compose" || !job.unit || job.status === "DELETED")
-        continue;
-      this.assertIsolationEnabled();
-      if ((JSON.parse(job.unit) as LocalComposeUnit).isolationVersion !== 1)
-        throw new HostError(
-          409,
-          "Retained unisolated Docker environments prevent remote hosting. Stop and retire them through the original loopback host before creating isolated environments. No retained environment was changed.",
-          "network_isolation_required",
-        );
-    }
+    const retained = jobs.filter(
+      (job) => definitionKind(job.definition) === "compose" && job.unit && job.status !== "DELETED",
+    );
+    // Name the environments first: without them, even a host lacking isolation can start.
+    const unisolated = retained.filter(
+      (job) => (JSON.parse(job.unit ?? "") as LocalComposeUnit).isolationVersion !== 1,
+    );
+    if (unisolated.length)
+      throw new HostError(
+        409,
+        `Retained unisolated Docker environments prevent remote hosting: ${[...new Set(unisolated.map((job) => job.problemId))].join(", ")}. Start make local without --lan, use Teardown on them in the host console, then restart. No retained environment was changed.`,
+        "network_isolation_required",
+      );
+    if (retained.length) this.assertIsolationEnabled();
   }
   bindNetworkState(state: NonNullable<DockerHostingEngine["networkState"]>): void {
     this.assertRetainedIsolation(state.jobs());
