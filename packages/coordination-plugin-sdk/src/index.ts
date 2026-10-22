@@ -66,6 +66,33 @@ export interface CoordinationContext {
    * `ctx.eventId` を選ぶと上記の理由でそれは秘密ではない。
    */
   readonly matchSecret?: string;
+  /**
+   * [Issue #3453] `initialState` が呼ばれた時点の試合の長さ。意味は
+   * {@link CoordinationTiming.matchDurationMs} と同じ。
+   *
+   * 試合中に変わりうるので、最新の値は毎回の `tick` に届く {@link CoordinationTiming} で読む。
+   */
+  readonly matchDurationMs?: number;
+}
+
+/**
+ * [Issue #3453] Platform clock facts passed on every tick. Every field is optional: older platforms omit them.
+ *
+ * `initialState` の ctx だけでなく毎回の `tick` で渡す理由は 2 つある。
+ *   - `initialState` の時点では長さが決まっていないことがある。クラウドの読み取り経路は
+ *     開始前でも `initialState` を呼んで画面を作る。主催者が終了時刻を決めずに開始し、
+ *     あとから終了予約をすることもできる。
+ *   - 主催者は試合中に終了予約を動かせる。動かすたびに長さが変わる。
+ *
+ * 試合の終了を決めるのは platform だけ。終了時刻を過ぎた操作は platform が拒否する。
+ * plugin はこの値をペース、フェーズ、残り時間の表示に使う。
+ */
+export interface CoordinationTiming {
+  /**
+   * Match length on the same clock as `eventNowMs`. Absent while no end is scheduled.
+   * platform は正の整数だけを渡す。受け入れる範囲は plugin が決める。
+   */
+  readonly matchDurationMs?: number;
 }
 
 /** operation の受理可否。 不可のとき error は機械可読な短い理由コード。 */
@@ -87,8 +114,11 @@ export interface CoordinationPlugin<State, Op, Projection = unknown> {
   validateOp(state: State, teamId: string, op: Op): ValidateResult;
   /** state を変える純関数 (= 副作用なし)。 validateOp が ok のときだけ呼ばれる。 */
   applyOp(state: State, teamId: string, op: Op): State;
-  /** scoring engine が tick ごとに呼ぶ optional hook (= 経過時間で alliance 解消等)。 */
-  tick?(state: State, eventNowMs: number): State;
+  /**
+   * scoring engine が tick ごとに呼ぶ optional hook (= 経過時間で alliance 解消等)。
+   * `timing` は {@link CoordinationTiming}。古い platform は省略する。
+   */
+  tick?(state: State, eventNowMs: number, timing?: CoordinationTiming): State;
   /** Opt in to host-clock advancement before authenticated reads and moves.
    * tick must ignore older clocks: concurrent requests can arrive out of order.
    */
@@ -178,8 +208,9 @@ export function runTick<State, Op>(
   plugin: CoordinationPlugin<State, Op>,
   state: State,
   eventNowMs: number,
+  timing?: CoordinationTiming,
 ): State {
-  return plugin.tick ? plugin.tick(state, eventNowMs) : state;
+  return plugin.tick ? plugin.tick(state, eventNowMs, timing) : state;
 }
 
 /**
