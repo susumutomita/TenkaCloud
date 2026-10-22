@@ -35,7 +35,15 @@ The organizer opens `http://127.0.0.1:5174` on the host. Give participants `http
 
 Remote Docker exercises require supported native Linux with explicit `--competition-network` and `--docker-network-pool` settings. The pool must not overlap LAN / VPN routes. Missing prerequisites, including Docker 28.4.x, a rootful local daemon and firewall / nsenter permissions, cause rejection. Read the [guard prerequisites](https://github.com/susumutomita/TenkaCloud/blob/main/scripts/local-host/linux-network-guard.ts) first. Selecting a LAN listener alone does not automatically change firewall or VPN settings.
 
-If a retained Docker unit lacks isolation, even when stopped, LAN host startup is rejected before listeners open. Existing jobs / units are not automatically stopped or migrated. Agree on maintenance with the organizer, preserve needed data, then stop and retire those environments through the original loopback host before creating isolated ones. Do not update or restart a running host without that coordination.
+On a Mac or any host that cannot use the isolation mode, a group of fully trusted participants can add `--unsafe-docker-lan` to run Docker exercises from other devices.
+
+```sh
+make local LOCAL_ARGS="--lan 100.96.12.34 --unsafe-lan --unsafe-docker-lan"
+```
+
+The flag is accepted only together with `--lan <ip> --unsafe-lan`. Combining it with `--competition-network`, `--vpn-peers` or public origins is rejected before startup. Docker exercises then have no network isolation between teams: an exercise can reach other teams' exercises, the host and the LAN, so use it only with participants you trust. Authentication and per-team data separation do not change. Events prepared with isolation are never started, resumed or recovered without it, even under this flag; they are rejected with `network_isolation_required`, and you create a new event instead. Startup prints this warning right after the `LAN HTTP is unencrypted` warning.
+
+If a retained Docker unit lacks isolation, even when stopped, LAN host startup is rejected before listeners open. Existing jobs / units are not automatically stopped or migrated. Started with `--unsafe-docker-lan`, the host accepts such units. Otherwise, agree on maintenance with the organizer, preserve needed data, then stop and retire those environments through the original loopback host before creating isolated ones. Do not update or restart a running host without that coordination.
 
 This boundary concerns exercise containers. Tailscale connectivity alone does not restrict a participant device's entire network access or communication between devices. This procedure does not establish verified HTTPS hosting, VM connectivity or a full multiplayer competition.
 

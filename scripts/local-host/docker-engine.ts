@@ -192,6 +192,7 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   private problems: Problem[] | undefined;
   private isolationMandatory = false;
+  private unisolatedLan = false;
   private readonly relays = new Map<string, LoopbackRelays>();
   private readonly relayClosures = new Map<string, Promise<void>>();
   private readonly running = new Map<string, StartedContainer>();
@@ -272,9 +273,34 @@ export class DockerHostingEngine implements RuntimeEngine {
   }
   /** Monotonic requirement set by the listener composition before recovery. */
   requireNetworkIsolation(): this {
+    if (this.unisolatedLan)
+      throw new Error("Network isolation cannot be required after unisolated Docker LAN hosting.");
     this.isolationMandatory = true;
     if (this.networkState) this.assertRetainedIsolation(this.networkState.jobs());
     return this;
+  }
+  /** Trusted-group LAN hosting: new Docker environments run with no team network isolation. */
+  allowUnisolatedDockerLan(): this {
+    if (this.competitionNetwork || this.isolationMandatory)
+      throw new Error("Unisolated Docker LAN hosting cannot be combined with network isolation.");
+    this.unisolatedLan = true;
+    return this;
+  }
+  /** Environments prepared for isolation never run without it; refuse before any Docker, allocation or guard call. */
+  private assertNotPinnedIsolated(job: Job): void {
+    if (this.competitionNetwork) return;
+    let recorded: unknown;
+    try {
+      recorded = job.unit ? (JSON.parse(job.unit) as LocalComposeUnit).isolationVersion : undefined;
+    } catch {
+      recorded = undefined;
+    }
+    if (job.networkIsolationVersion === 1 || recorded === 1)
+      throw new HostError(
+        409,
+        "This event was prepared for isolated LAN hosting, and this host cannot provide that isolation (it needs --competition-network on supported native Linux). Create a new event. On a Mac with trusted participants, start with --lan <ip> --unsafe-lan --unsafe-docker-lan. No environment was started or resumed.",
+        "network_isolation_required",
+      );
   }
   private assertIsolationEnabled(): void {
     if (this.isolationMandatory && !this.competitionNetwork)
@@ -296,7 +322,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     if (unisolated.length)
       throw new HostError(
         409,
-        `Retained unisolated Docker environments prevent remote hosting: ${[...new Set(unisolated.map((job) => job.problemId))].join(", ")}. Start make local without --lan, use Teardown on them in the host console, then restart. No retained environment was changed.`,
+        `Retained unisolated Docker environments prevent remote hosting: ${[...new Set(unisolated.map((job) => job.problemId))].join(", ")}. Start make local without --lan, start it with --unsafe-docker-lan if every participant is trusted, or use Teardown on them in the host console and restart. No retained environment was changed.`,
         "network_isolation_required",
       );
     if (retained.length) this.assertIsolationEnabled();
@@ -587,6 +613,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     retain: (unit: string | null) => void,
     admitted: () => void,
   ): Promise<void> {
+    this.assertNotPinnedIsolated(job);
     this.assertIsolationEnabled();
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
@@ -700,6 +727,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     return this.withPendingAdmission(job, () => this.recoverRetained(job));
   }
   private async recoverRetained(job: Job): Promise<void> {
+    this.assertNotPinnedIsolated(job);
     this.assertIsolationEnabled();
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);
@@ -857,6 +885,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     }
   }
   async resume(job: Job): Promise<void> {
+    this.assertNotPinnedIsolated(job);
     this.assertIsolationEnabled();
     await this.awaitGuardHalt(job);
     this.revokeRunning(job.jobId);

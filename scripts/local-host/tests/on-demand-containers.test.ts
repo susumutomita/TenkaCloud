@@ -675,7 +675,7 @@ test("dormant isolation requirement survives an engine restart without the optio
         restarted.start(jobs[0] as Job, () => {
           throw new Error("must not retain an unguarded unit");
         }),
-      ).rejects.toThrow("explicit non-overlapping");
+      ).rejects.toThrow("this host cannot provide that isolation");
     },
     false,
     true,
