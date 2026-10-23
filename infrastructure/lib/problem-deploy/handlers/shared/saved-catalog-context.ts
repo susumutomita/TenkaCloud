@@ -54,7 +54,7 @@ export async function readSavedEvent(
 
 /** Current lifecycle data controls execution; normalized invalid dates close the gate. */
 export function liveEventRoundWindow(
-  event: EventRecord | undefined,
+  event: Partial<EventRecord> | undefined,
   fallback: Pick<DeploymentItem, "eventStartsAt" | "eventEndsAt">,
 ): Pick<DeploymentItem, "eventStartsAt" | "eventEndsAt"> {
   if (!event) return { eventStartsAt: fallback.eventStartsAt, eventEndsAt: fallback.eventEndsAt };
@@ -70,6 +70,17 @@ export function liveEventRoundWindow(
     eventStartsAt: !stopped && Number.isFinite(start) ? new Date(start).toISOString() : undefined,
     eventEndsAt,
   };
+}
+
+/** End Event locks scoring, but its existing battles still owe their final tick. */
+export function coordinationRoundWindow(
+  event: Partial<EventRecord> | undefined,
+  fallback: Pick<DeploymentItem, "eventStartsAt" | "eventEndsAt">,
+): Pick<DeploymentItem, "eventStartsAt" | "eventEndsAt"> {
+  if (event?.status === "ENDED") {
+    return { eventStartsAt: event.startsAt, eventEndsAt: event.endsAt };
+  }
+  return liveEventRoundWindow(event, fallback);
 }
 
 export function savedScoringMap(catalog: ResolvedExecutionCatalog) {

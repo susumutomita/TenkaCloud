@@ -8,11 +8,19 @@ import type { CoordinationTickBatch } from "../../lib/problem-deploy/handlers/sh
  */
 interface LiveState {
   deleteOnImport: boolean;
-  event: Record<string, string> | undefined;
+  preserveEnd: boolean;
+  configured: boolean[];
+  event: Record<string, string | boolean> | undefined;
   resolved: { endsAt?: string; error?: string }[];
 }
 const live = vi.hoisted(
-  (): LiveState => ({ deleteOnImport: false, event: undefined, resolved: [] }),
+  (): LiveState => ({
+    deleteOnImport: false,
+    preserveEnd: false,
+    configured: [],
+    event: undefined,
+    resolved: [],
+  }),
 );
 
 vi.mock("../../lib/problem-deploy/control-data/runtime-repositories", () => ({
@@ -45,7 +53,7 @@ vi.mock(
     executionPluginImporter: () => async () => {
       live.event = live.deleteOnImport
         ? undefined
-        : { ...live.event, endsAt: "2026-06-01T00:20:00.000Z" };
+        : { ...live.event, ...(live.preserveEnd ? {} : { endsAt: "2026-06-01T00:20:00.000Z" }) };
       return {};
     },
   }),
@@ -67,6 +75,7 @@ vi.mock(
           try {
             const scoped = await deps.resolveCatalog?.(target, batch.nowIso);
             live.resolved.push({ endsAt: scoped?.event?.endsAt });
+            live.configured.push(Boolean(scoped?.config[target.moduleRef]));
           } catch (error) {
             live.resolved.push({ error: String(error) });
           }
@@ -88,11 +97,11 @@ const target = {
   eventNowMs: 300_000,
   teamIds: [],
 };
-const tick = (over: Record<string, unknown>) =>
+const tick = (over: Record<string, unknown>, nowIso = "2026-06-01T00:05:00.000Z") =>
   handler(
     {
       action: "coordination-tick",
-      nowIso: "2026-06-01T00:05:00.000Z",
+      nowIso,
       targets: [{ ...target, ...over }],
     },
     undefined as never,
@@ -100,6 +109,8 @@ const tick = (over: Record<string, unknown>) =>
 
 beforeEach(() => {
   live.deleteOnImport = false;
+  live.preserveEnd = false;
+  live.configured = [];
   live.event = {
     tenantId: "t1",
     eventId: "e1",
@@ -125,6 +136,29 @@ describe("coordination dispatcher catalog resolver", () => {
     expect(live.resolved).toEqual([
       { error: "Error: catalog_event_missing: saved event is unavailable" },
     ]);
+  });
+
+  it.each([{}, { drainOnly: true }])(
+    "allows endpoint settlement after End Event for %j",
+    async (over) => {
+      live.event = { ...live.event, status: "ENDED", scoringLocked: true };
+      live.preserveEnd = true;
+      await tick(over, "2026-06-01T00:11:00.000Z");
+      expect(live.configured).toEqual([true]);
+      expect(live.resolved).toEqual([{ endsAt: "2026-06-01T00:10:00.000Z" }]);
+    },
+  );
+
+  it("allows an ordinary queued tick after scheduled completion", async () => {
+    live.preserveEnd = true;
+    await tick({}, "2026-06-01T00:11:00.000Z");
+    expect(live.configured).toEqual([true]);
+  });
+
+  it("does not enable an ordinary tick while READY scoring is locked", async () => {
+    live.event = { ...live.event, scoringLocked: true };
+    await tick({}, "2026-06-01T00:11:00.000Z");
+    expect(live.configured).toEqual([false]);
   });
 
   it("should hand a drain the event it read, since a drain never runs the plugin", async () => {

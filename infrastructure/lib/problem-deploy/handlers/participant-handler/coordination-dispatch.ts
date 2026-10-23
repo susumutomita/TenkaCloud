@@ -260,12 +260,14 @@ async function attemptDispatch<State, Op, Projection>(
   snapshot?: CoordinationStateSnapshot,
 ): Promise<CoordinationDispatchOutcome> {
   const existing = await readCoordinationState(store, input.scope, snapshot);
+  if (existing?.terminalTickDelivered) return { kind: "rejected", error: "event_ended" };
   if (
     !(await deliverCoordinationScores(store, input.scope, existing, {
       deadlineMs: scoreDeadlineMs,
     }))
   )
     return { kind: "unavailable" };
+  if (!existing && input.rosterIncomplete) return { kind: "unavailable" };
   // [Issue #3133] 秘密が要るのは `initialState` を呼ぶときだけ — ctx を受け取る hook は
   // それ 1 つで、 validateOp / applyOp / projectForTeam は (state, teamId, op) しか見ない。
   // だから既存 state があるときは秘密に一切触らない: 全 op に read/write を足さずに済む。
@@ -281,10 +283,7 @@ async function attemptDispatch<State, Op, Projection>(
     state = reconciled.state;
     version = existing.version;
   } else {
-    if (input.rosterIncomplete) return { kind: "unavailable" };
-    state = plugin.initialState(await withMatchSecret(store, input.scope, input.ctx, input.nowIso));
-    if (plugin.tickOnRequest === true && input.requestTick)
-      state = runTick(plugin, state, input.requestTick.eventNowMs, input.requestTick.timing);
+    state = await initialDispatchState(store, plugin, input);
     version = 0;
   }
 
@@ -339,6 +338,20 @@ async function attemptDispatch<State, Op, Projection>(
     input.fallbackProjection as Projection,
   );
   return { kind: "ok", projection };
+}
+
+async function initialDispatchState<State, Op, Projection>(
+  store: CoordinationStoreDeps,
+  plugin: CoordinationPlugin<State, Op, Projection>,
+  input: CoordinationDispatchInput<Op>,
+): Promise<State> {
+  const state = plugin.initialState(
+    await withMatchSecret(store, input.scope, input.ctx, input.nowIso),
+  );
+  if (plugin.tickOnRequest === true && input.requestTick) {
+    return runTick(plugin, state, input.requestTick.eventNowMs, input.requestTick.timing);
+  }
+  return state;
 }
 
 /** {@link projectCoordinationForTeam} の結果。 */
@@ -485,7 +498,7 @@ async function attemptRequestTick<State, Op, Projection>(
 > {
   const existing = await readCoordinationState(store, scope, snapshot);
   // A read must not initialize or reopen a match.
-  if (!existing) return undefined;
+  if (!existing || existing.terminalTickDelivered) return undefined;
   if (!(await deliverCoordinationScores(store, scope, existing, { deadlineMs })))
     return { kind: "unavailable" };
   const reconciled = reconcileStateSchema<State>(schema, existing);
