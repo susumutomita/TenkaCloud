@@ -401,7 +401,7 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
         password: REHEARSAL_ORGANIZER.password,
       })
     ).body.idToken;
-    // An event that ends while locked must not acquire retroactive penalties on unlock.
+    // An event that ends while locked receives its end on unlock, without counting the locked time.
     const peer = required(unrelated.teams[0]);
     await api("admin", `/events/${unrelated.eventId}/schedule`, "PATCH", { startNow: true });
     for (const team of unrelated.teams) await op(team.teamLoginKey, { kind: "ready" });
@@ -419,7 +419,9 @@ test("real HTTP/SQLite crypto competition: login, scoring, event isolation, resu
     );
     await api("participant", "/portal/leaderboard", "GET", undefined, peer.teamLoginKey);
     const unfreezed = JSON.parse(required(store.coordination(unrelated.eventId, "crypto-battle")));
-    expect(unfreezed.state).toEqual(frozen.state);
+    expect(unfreezed.state.nowMs).toBe(frozen.state.nowMs);
+    expect(frozen.state.phase).toBe("build");
+    expect(unfreezed.state.phase).toBe("ended");
     expect(unfreezed.scores).toEqual(frozen.scores);
     expect(store.event(unrelated.eventId).coordinationPausedMs).toBe(1000);
     const beforeEndedOp = store.coordination(unrelated.eventId, "crypto-battle");
