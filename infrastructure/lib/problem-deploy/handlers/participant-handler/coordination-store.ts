@@ -77,6 +77,7 @@ export interface CoordinationStateRow {
    */
   readonly stateSchemaVersion?: number;
   readonly pendingScores?: CoordinationScoreDelivery;
+  readonly terminalTickDelivered?: true;
 }
 
 /** A request-local read, bound to exactly one namespace. Never reused on write retries. */
@@ -127,6 +128,7 @@ export async function readCoordinationState(
       expiresAt: record.expiresAt,
       stateSchemaVersion: record.state.stateSchemaVersion,
       pendingScores: record.state.pendingScores,
+      terminalTickDelivered: record.state.terminalTickDelivered,
     };
   }
   return { state: record.state, version: record.version, expiresAt: record.expiresAt };
@@ -213,15 +215,20 @@ export async function writeCoordinationState(
   pendingScores?: CoordinationScoreDelivery,
   requirePendingInitialization = false,
   initializationOwner?: string,
+  terminalTickDelivered?: true,
 ): Promise<WriteCoordinationOutcome> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   const payload: unknown =
-    stateSchemaVersion >= 2 || isCoordinationStateEnvelope(state) || pendingScores !== undefined
+    stateSchemaVersion >= 2 ||
+    isCoordinationStateEnvelope(state) ||
+    pendingScores !== undefined ||
+    terminalTickDelivered
       ? ({
           __tenkacloudCoordinationEnvelope: COORDINATION_ENVELOPE_MARKER,
           stateSchemaVersion,
           state,
           ...(pendingScores ? { pendingScores } : {}),
+          ...(terminalTickDelivered ? { terminalTickDelivered } : {}),
         } satisfies CoordinationStateEnvelope)
       : state;
   // [Issue #3151] Measured on `payload` -- the bytes that actually reach the

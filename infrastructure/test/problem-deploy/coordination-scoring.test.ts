@@ -932,17 +932,43 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
   );
 
   it("automatically drains after event end without loading the game, extending TTL, or invoking again after ACK", async () => {
-    const { repository, store, input, tick } = await setup(backend);
+    const { repository, store, input } = await setup(backend);
     await dispatchCoordinationOp(store, plugin, input);
     const publish = vi
       .spyOn(repository, "publishCoordinationScore")
       .mockRejectedValueOnce(new Error("last tick failed"));
-    await tick();
+    const scoped = {
+      store,
+      importer: async () => ({ default: plugin }),
+      config: { battle: { plugin: "battle" } },
+    };
+    await handleCoordinationTickBatch(
+      {
+        ...scoped,
+        resolveCatalog: async () => ({
+          ...scoped,
+          event: { startsAt: at, endsAt: "2026-09-06T00:00:01.000Z" },
+        }),
+      },
+      {
+        action: COORDINATION_TICK_ACTION,
+        nowIso: "2026-09-06T00:00:02.000Z",
+        targets: [
+          {
+            tenantId: scope.tenantId,
+            eventId: scope.eventId,
+            moduleRef: scope.problemId,
+            teamIds: ["red"],
+            eventNowMs: 2000,
+          },
+        ],
+      },
+    );
     publish.mockRestore();
     const saved = await readCoordinationState(store, scope);
     expect(saved?.pendingScores).toBeDefined();
     const importer = vi.fn(async () => {
-      throw new Error("ended events must not load a plugin");
+      throw new Error("settled events must not load a plugin");
     });
     const secret = vi.spyOn(repository, "ensureCoordinationMatchSecret");
     const touch = vi.spyOn(repository, "touchCoordinationState");

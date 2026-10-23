@@ -10,7 +10,7 @@ import {
   type CoordinationTickBatch,
 } from "../shared/coordination-tick-contract.js";
 import type { CoordinationTickInvoker } from "./coordination-tick-dispatch.js";
-import { isRoundTerminated } from "./round-liveness.js";
+import { isRoundTerminated, matchDurationTiming } from "./round-liveness.js";
 
 /**
  * scoring-driven tick (#2324) の **採点 pass 側**。 coordination を宣言した event を per-minute
@@ -20,7 +20,7 @@ import { isRoundTerminated } from "./round-liveness.js";
  * 由来の plugin を **ここでは load / 実行しない**。 「どの event が coordination を宣言しているか」だけを
  * `PROBLEM_COORDINATION` config (= problemId 集合、 plugin code ではない純 metadata) で判定し、 実 tick
  * (plugin の runTick) は最小 IAM の dispatcher に委ねる (= op 経路と同じ場所)。終了済みの scope は
- * 保存済みの得点が残る間だけ配送する。対象が 0 なら invoke しない。
+ * 終了 tick または保存済み得点の配送が残る間だけ配送する。対象が 0 なら invoke しない。
  */
 
 /** scan で集めた 1 event 分の tick 対象 (= wire 送出前の内部形。 eventNowMs は送出時に算出)。 */
@@ -32,6 +32,8 @@ export interface CollectedTickTarget {
   readonly eventStartMs: number;
   readonly teamIds: string[];
   readonly drainOnly?: boolean;
+  /** Only an explicit, positive match length can owe an endpoint tick. Internal, never trusted on wire. */
+  readonly terminalTickDue?: true;
   readonly initializeRunId?: string;
 }
 
@@ -41,7 +43,7 @@ export interface CoordinationTickPass {
   collect(items: readonly Partial<DeploymentItem>[], nowIso: string): void | Promise<void>;
   /** Saved obligations remain discoverable after all deployment rows leave COMPLETE. */
   collectRecovery(scopes: readonly CoordinationStateScope[]): void | Promise<void>;
-  /** active を先に送り、終了済みは保存済み pending を見つけた場合だけ送る。 */
+  /** active を先に送り、終了済みは未精算または保存済み pending がある場合だけ送る。 */
   run(nowMs: number, nowIso: string): Promise<void>;
 }
 
@@ -101,14 +103,8 @@ export function collectCoordinationTickTargets(
       if (!existing.teamIds.includes(candidate.teamId)) existing.teamIds.push(candidate.teamId);
       continue;
     }
-    destination.set(key, {
-      tenantId: candidate.tenantId,
-      eventId: candidate.eventId,
-      moduleRef: candidate.moduleRef,
-      eventStartMs: candidate.eventStartMs,
-      teamIds: [candidate.teamId],
-      ...(candidate.drainOnly ? { drainOnly: true } : {}),
-    });
+    const { teamId, ...target } = candidate;
+    destination.set(key, { ...target, teamIds: [teamId] });
   }
 }
 
@@ -120,6 +116,8 @@ interface TickCandidate {
   readonly eventStartMs: number;
   readonly teamId: string;
   readonly drainOnly?: boolean;
+  /** Only an explicit, positive match length can owe an endpoint tick. Internal, never trusted on wire. */
+  readonly terminalTickDue?: true;
 }
 function toTickCandidate(
   coordinationProblemIds: ReadonlySet<string>,
@@ -152,6 +150,7 @@ function toTickCandidate(
     eventStartMs,
     teamId,
     ...(drainOnly ? { drainOnly: true } : {}),
+    ...(drainOnly && matchDurationTiming(item) ? { terminalTickDue: true } : {}),
   };
 }
 
@@ -299,10 +298,15 @@ async function pendingEndedTarget(
 ): Promise<CollectedTickTarget | undefined> {
   const key = { tenantId: target.tenantId, eventId: target.eventId, problemId: target.moduleRef };
   const pointer = await repository.readCoordinationRun(key);
+  if (pointer?.closed) return undefined;
   if (pointer?.pendingInitialization) return { ...target, initializeRunId: pointer.runId };
   const runId = pointer?.runId ?? DEFAULT_COORDINATION_RUN_ID;
   const row = await repository.readCoordinationState({ ...key, runId });
-  return row && isCoordinationStateEnvelope(row.state) && row.state.pendingScores
+  if (!row) return undefined;
+  const envelope = isCoordinationStateEnvelope(row.state) ? row.state : undefined;
+  // A retained COMPLETE deployment is also an obligation to deliver the endpoint.
+  // Recovery-only targets (no roster/start) may drain, but cannot resurrect matches.
+  return envelope?.pendingScores || (target.terminalTickDue && !envelope?.terminalTickDelivered)
     ? target
     : undefined;
 }

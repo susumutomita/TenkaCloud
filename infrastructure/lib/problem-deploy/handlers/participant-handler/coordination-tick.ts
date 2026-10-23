@@ -14,12 +14,14 @@ import {
 import { z } from "zod";
 import type { EventRecord } from "../../control-data/domain/events.js";
 import { matchDurationTiming } from "../generic-scoring-handler/round-liveness.js";
+import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
 import { resolvePlayableCoordinationRunId } from "../shared/coordination-run.js";
 import {
   COORDINATION_TICK_ACTION,
   type CoordinationTickBatch,
   type CoordinationTickTarget,
 } from "../shared/coordination-tick-contract.js";
+import { coordinationRoundWindow } from "../shared/saved-catalog-context.js";
 import type { CoordinationConfig } from "./coordination-handler.js";
 import {
   type CoordinationPluginLoad,
@@ -75,11 +77,15 @@ export interface CoordinationTickDeps {
 
 /** One target's deps, scoped to its saved catalog, and the event as the dispatcher read it. */
 export interface ScopedTickDeps extends CoordinationTickDeps {
-  readonly event?: Pick<EventRecord, "startsAt" | "endsAt">;
+  readonly event?: Pick<EventRecord, "startsAt" | "endsAt"> &
+    Partial<Pick<EventRecord, "status" | "scoringLocked">>;
 }
 
 /** A wire target with the match length read from the live event. */
-type LiveTickTarget = CoordinationTickTarget & { readonly timing: CoordinationTiming | undefined };
+type LiveTickTarget = CoordinationTickTarget & {
+  readonly timing: CoordinationTiming | undefined;
+  readonly terminal?: true;
+};
 
 /**
  * [Issue #3453] The scoring pass invokes this Lambda asynchronously, so a length it read can be
@@ -90,11 +96,38 @@ function liveMatchTiming(event: ScopedTickDeps["event"]): CoordinationTiming | u
   return event && matchDurationTiming({ eventStartsAt: event.startsAt, eventEndsAt: event.endsAt });
 }
 
+function liveTickTarget(
+  target: CoordinationTickTarget,
+  event: ScopedTickDeps["event"],
+  nowIso: string,
+): LiveTickTarget {
+  const timing = liveMatchTiming(event);
+  if (timing?.matchDurationMs !== undefined && event?.endsAt && nowIso >= event.endsAt) {
+    return { ...target, timing, eventNowMs: timing.matchDurationMs, terminal: true };
+  }
+  return { ...target, timing };
+}
+
+/** Recheck lifecycle after materialization; only terminal settlement bypasses End Event's lock. */
+function tickEventStopped(
+  event: ScopedTickDeps["event"],
+  target: LiveTickTarget,
+  nowIso: string,
+): boolean {
+  if (!event?.status) return false;
+  if (
+    target.terminal &&
+    (event.status === "ENDED" || (event.status === "READY" && !event.scoringLocked))
+  )
+    return false;
+  return !isScoringActive(coordinationRoundWindow(event, {}), nowIso);
+}
+
 /** batch 処理の結果サマリ (= async invoke 応答は捨てられるが、 直接テスト / ログ用に返す)。 */
 export interface CoordinationTickBatchResult {
   /** 受理した target 数。 */
   readonly ticked: number;
-  /** state が進んで実際に write した数 (= no-op tick は含まない)。 */
+  /** state または終了記録を実際に write した数。 */
   readonly written: number;
 }
 
@@ -124,7 +157,7 @@ export function parseCoordinationTickBatch(event: unknown): CoordinationTickBatc
 
 /**
  * batch の各 target を tick する。 1 target の失敗は次 tick で再評価するため握り潰す (= silent に
- * せず warn で可視化)。 return は実 write 数 (= no-op tick は 0)。
+ * せず warn で可視化)。 return は実 write 数 (終了記録以外の no-op tick は 0)。
  */
 export async function handleCoordinationTickBatch(
   deps: CoordinationTickDeps,
@@ -137,10 +170,13 @@ export async function handleCoordinationTickBatch(
       const scoped: ScopedTickDeps = deps.resolveCatalog
         ? await deps.resolveCatalog(target, batch.nowIso)
         : deps;
-      const live = { ...target, timing: liveMatchTiming(scoped.event) };
+      const live = liveTickTarget(target, scoped.event, batch.nowIso);
+      if (!target.initializeRunId && tickEventStopped(scoped.event, live, batch.nowIso)) {
+        return drainSavedCoordinationScores(scoped, target).then(() => false);
+      }
       if (target.initializeRunId) {
         return initializeAcceptedCoordinationReset(scoped, live, batch.nowIso);
-      } else if (target.drainOnly) {
+      } else if (target.drainOnly && !live.terminal) {
         return drainSavedCoordinationScores(scoped, target).then(() => false);
       } else {
         return tickCoordinationEvent(scoped, live, batch.nowIso, scoreBudgetMs);
@@ -190,7 +226,7 @@ async function initializeAcceptedCoordinationReset(
       requireComplete: true,
     });
     if (!roster.teamIds.length) throw new Error("Reset initialization has no deployment roster");
-    const state = load.plugin.initialState({
+    const initial = load.plugin.initialState({
       eventId: target.eventId,
       teamIds: roster.teamIds,
       teamNames: roster.teamNames,
@@ -198,9 +234,12 @@ async function initializeAcceptedCoordinationReset(
       ...target.timing,
       matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
     });
+    const state = target.terminal
+      ? runTick(load.plugin, initial, target.eventNowMs, target.timing)
+      : initial;
     const pendingScores = coordinationScoreDelivery(
       load.plugin,
-      state,
+      initial,
       state,
       { kind: "tick" },
       pointer.startedAt,
@@ -218,6 +257,7 @@ async function initializeAcceptedCoordinationReset(
       pendingScores,
       true,
       lease.owner,
+      target.terminal,
     );
     if (written.kind !== "ok") {
       console.warn(`[coordination-dispatcher] reset initialization ${written.kind}`, key);
@@ -297,6 +337,7 @@ async function tickCoordinationEvent(
     runId,
   };
   let existing = await readCoordinationState(deps.store, scope);
+  if (target.terminal && !existing) return false;
   const lease = existing ? undefined : await acquireCoordinationInitialization(deps.store, scope);
   if (!existing && !lease) return false;
   try {
@@ -326,9 +367,15 @@ async function applyLoadedCoordinationTick(
   },
 ): Promise<boolean> {
   const { scope, existing, load, scoreBudgetMs, initializationOwner } = work;
+  // The initializer may have lost the race before acquiring its lease. This check
+  // must also cover the post-lease reread, before any TTL or plugin transition.
+  if (existing?.terminalTickDelivered) {
+    await tryDeliverCoordinationScores(deps.store, scope, existing);
+    return false;
+  }
   // A stalled delivery must not age out a live match. Refresh before delivery:
   // both a partial result and a thrown backend error defer this tick.
-  await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
+  if (!target.terminal) await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
   // Cold plugin loading and namespace resolution must not consume every retry's delivery slice.
   const scoreDeadlineMs = Date.now() + scoreBudgetMs;
   if (
@@ -404,7 +451,9 @@ async function applyLoadedCoordinationTick(
     nowIso,
     !existing,
   );
-  if (!stateChanged) {
+  // A terminal no-op still consumes the host lifecycle obligation once. The latch
+  // shares this CAS with state and scores, so retries cannot double-settle or reopen it.
+  if (!stateChanged && !target.terminal) {
     // [Issue #3150] migration だけが起きて tick 自体は no-op だった行はここに来る。 write が無い
     // ので封筒は書き換わらず、 行は旧版のまま残る (= lazy upgrade。 migration は次に呼ばれるときも
     // 冪等に走るので害はない)。 TTL の延長だけは行う -- 試合を消さないのはここでも同じ。
@@ -420,6 +469,7 @@ async function applyLoadedCoordinationTick(
     pendingScores,
     false,
     initializationOwner,
+    target.terminal,
   );
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で

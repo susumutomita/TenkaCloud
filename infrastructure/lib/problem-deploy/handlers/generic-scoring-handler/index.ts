@@ -14,7 +14,7 @@ import {
   buildScheduledTeardownResources,
   resolveEventsRepository,
 } from "../event-handler/shared.js";
-import { liveEventRoundWindow } from "../shared/saved-catalog-context.js";
+import { coordinationRoundWindow } from "../shared/saved-catalog-context.js";
 import { applyKindResult } from "./apply-kind-result.js";
 import { dispatchCompositeReadyTargets } from "./composite-ready-dispatch.js";
 import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";
@@ -164,7 +164,7 @@ export async function handler(): Promise<void> {
           const scoped = await resolveScoringCatalog(shared, scope);
           return {
             problemIds: new Set(Object.keys(scoped.executionCatalog?.coordination ?? {})),
-            window: liveEventRoundWindow(scoped.liveEvent, scope),
+            window: coordinationRoundWindow(scoped.liveEvent, scope),
           };
         }
       : undefined,

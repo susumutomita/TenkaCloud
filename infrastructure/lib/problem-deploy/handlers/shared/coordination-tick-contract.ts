@@ -23,7 +23,8 @@ export interface CoordinationTickTarget {
   readonly eventNowMs: number;
   /** row 未初期化時の `initialState(ctx)` に渡す参加チーム一覧 (= 採点 pass が scan で観測)。 */
   readonly teamIds: readonly string[];
-  /** Completed event: publish only already-saved scores, without loading or advancing the game. */
+  /** Ended candidate: drain saved scores; the dispatcher may first settle an existing match
+   * at the endpoint validated against its live event. Never initialize a new match. */
   readonly drainOnly?: boolean;
   /** Fulfil an accepted reset after end; dispatcher must revalidate this exact pending run. */
   readonly initializeRunId?: string;

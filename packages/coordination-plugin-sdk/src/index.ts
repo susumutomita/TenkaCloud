@@ -121,6 +121,10 @@ export interface CoordinationPlugin<State, Op, Projection = unknown> {
   /**
    * scoring engine が tick ごとに呼ぶ optional hook (= 経過時間で alliance 解消等)。
    * `timing` は {@link CoordinationTiming}。古い platform は省略する。
+   * Cloud hosts settle an existing match at its scheduled/End Event endpoint with
+   * eventNowMs === matchDurationMs, possibly on a later timer pass. The host stores
+   * completion atomically with state and scores, even for a no-op final tick.
+   * Conflicts/failures may evaluate the pure hook again; successful settlement is once per run.
    */
   tick?(state: State, eventNowMs: number, timing?: CoordinationTiming): State;
   /** Opt in to host-clock advancement before authenticated reads and moves.

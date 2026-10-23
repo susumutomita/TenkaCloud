@@ -196,7 +196,10 @@ describe.each(["DynamoDB", "SQL"])("accepted reset initialization: %s", (backend
           matchDurationMs: 3_600_000,
         }),
       );
-      expect(ctx.tick).not.toHaveBeenCalled();
+      expect(ctx.tick).toHaveBeenCalledOnce();
+      expect(ctx.tick).toHaveBeenCalledWith(expect.anything(), 3_600_000, {
+        matchDurationMs: 3_600_000,
+      });
       expect(await ctx.repository.getDeployment(deployment.jobId)).toMatchObject({
         score: 217,
         coordinationSubtotal: 17,

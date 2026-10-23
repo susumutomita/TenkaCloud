@@ -30,7 +30,7 @@ import { CoordinationOpBodySchema } from "../participant-handler/schemas.js";
 import { buildParticipantSharedResources } from "../participant-handler/shared.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import {
-  liveEventRoundWindow,
+  coordinationRoundWindow,
   readSavedEvent,
   resolveSavedCatalogContext,
 } from "../shared/saved-catalog-context.js";
@@ -115,9 +115,14 @@ const tickDeps: CoordinationTickDeps = {
     const context = await resolveSavedCatalogContext(shared, target);
     if (!context) throw new Error("catalog_pin_missing: coordination tick catalog unavailable");
     const { catalog, event } = context;
-    const stopped = event && !isScoringActive(liveEventRoundWindow(event, {}), nowIso);
+    const stopped = event && !isScoringActive(coordinationRoundWindow(event, {}), nowIso);
+    const terminal =
+      event?.startsAt &&
+      event.endsAt &&
+      nowIso >= event.endsAt &&
+      (event.status === "ENDED" || (event.status === "READY" && !event.scoringLocked));
     const config =
-      stopped && !target.drainOnly && !target.initializeRunId
+      stopped && !terminal && !target.drainOnly && !target.initializeRunId
         ? {}
         : parseCoordinationConfig(JSON.stringify(catalog.coordination));
     const importer = executionPluginImporter(catalog);
@@ -125,7 +130,8 @@ const tickDeps: CoordinationTickDeps = {
     if (config[target.moduleRef]) await importer(target.moduleRef);
     // Catalog and plugin loads can outlast an end change; a run of the plugin needs the end as of now.
     const runsPlugin =
-      Boolean(config[target.moduleRef]) && (!target.drainOnly || Boolean(target.initializeRunId));
+      Boolean(config[target.moduleRef]) &&
+      (!target.drainOnly || Boolean(target.initializeRunId) || Boolean(terminal));
     return {
       importer,
       config,

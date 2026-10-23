@@ -14,6 +14,8 @@ export interface CoordinationStateEnvelope {
   readonly __tenkacloudCoordinationEnvelope: 1;
   readonly stateSchemaVersion: number;
   readonly pendingScores?: CoordinationScoreDelivery;
+  /** Host lifecycle latch, atomic with the final transition and score obligation. */
+  readonly terminalTickDelivered?: true;
   readonly state: unknown;
 }
 
