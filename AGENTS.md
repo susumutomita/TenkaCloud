@@ -13,7 +13,7 @@
 
 ## 守ること
 
-- host の大会・チーム分離、開催者と参加者の認証、必須の `ExternalId`、必要最小限の IAM 権限を保つ。
+- host の大会・チーム分離、開催者と参加者の認証、必須の `ExternalId`、必要最小限の IAM 権限を保つ。例外は 1 つだけ。主催者が `--lan --unsafe-lan --unsafe-docker-lan` を明示したときは、新しい大会の Docker 演習でチーム間のネットワーク分離を外してよい。認証とデータの分離は外さない。
 - アプリの実行ロールへ `AdministratorAccess` を付けない。`competitor-bootstrap.yaml` の競技者アカウント初期設定と、利用者が確認して実行する標準 CDK bootstrap の CloudFormation 実行ロールは例外。既存 `CDKToolkit` の権限・信頼設定を勝手に書き換えない。
 - HTTP API、SQLite / Turso / DynamoDB の保存形式、`runtime-config.json` の契約を変えるときは、保存側・配信側と利用側を同じ PR で確認する。
 - ローカル開催は単一プロセスと永続 SQLite を使う。クラウド開催は Lambda と選択した Turso または DynamoDB で、旧 Lite の必要な処理を再利用する。SaaS / SBT は戻さない。クラウドの正本をプロセス内の状態に置かず、未結線の機能を対応済みと案内しない。
