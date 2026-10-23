@@ -1,6 +1,6 @@
 /* eslint-disable sonarjs/no-hardcoded-ip -- Synthetic addresses are test data and are never contacted. */
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse } from "yaml";
@@ -107,15 +107,7 @@ for (const operation of ["resume", "recover"] as const)
   for (const condition of ["revoked", "different digest"] as const)
     test(`${operation} installs only DROP with ${condition} grant`, async () => {
       const f = networkEngineFixture();
-      const bin = mkdtempSync(join(tmpdir(), "tc-egress-recovery-"));
-      mkdirSync(join(bin, "bin"));
-      writeFileSync(join(bin, "bin/docker"), "#!/bin/sh\necho synthetic-running-container\n", {
-        mode: 0o700,
-      });
-      const oldPath = process.env.PATH;
-      const oldCli = process.env.TENKACLOUD_COMPOSE_CLI;
-      process.env.PATH = `${bin}/bin:${oldPath ?? ""}`;
-      process.env.TENKACLOUD_COMPOSE_CLI = "docker compose";
+      f.setUnitRunning(true);
       try {
         const { job, admitted } = f.add("egress-retained", 0, 0, false, [request(f)]);
         await admitted;
@@ -151,11 +143,6 @@ for (const operation of ["resume", "recover"] as const)
         expect(installed[0]?.egressSegments).toHaveLength(1);
         expect(f.engine.networkSupported(job)).toBe(true);
       } finally {
-        if (oldPath === undefined) delete process.env.PATH;
-        else process.env.PATH = oldPath;
-        if (oldCli === undefined) delete process.env.TENKACLOUD_COMPOSE_CLI;
-        else process.env.TENKACLOUD_COMPOSE_CLI = oldCli;
-        rmSync(bin, { recursive: true, force: true });
         await f.close();
       }
     });

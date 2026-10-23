@@ -19,6 +19,8 @@ export function networkEngineFixture() {
   const directory = mkdtempSync(join(tmpdir(), "tc-network-lifecycle-"));
   const calls: string[] = [];
   let now = 1000;
+  // Recovery stops at the running check unless a test opts in; past it, recovery waits on relays and verifier readiness.
+  let unitRunning = false;
   const record = (action: string) => () => {
     calls.push(action);
   };
@@ -60,6 +62,8 @@ export function networkEngineFixture() {
       throw new Error("Unvalidated Compose must never execute");
     },
     () => now,
+    undefined,
+    () => unitRunning,
   );
   const problem = requiredNetworkValue(engine.catalog()[0]);
   const store = new HostStore(new Database(":memory:"));
@@ -207,6 +211,9 @@ export function networkEngineFixture() {
     add,
     setNow: (value: number) => {
       now = value;
+    },
+    setUnitRunning: (value: boolean) => {
+      unitRunning = value;
     },
     close: async () => {
       await engine.drainNetworkChecks();
