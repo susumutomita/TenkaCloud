@@ -114,6 +114,16 @@ describe("PATCH /events/:eventId/schedule", () => {
       "past_ends_at",
     ],
     [
+      "running_battle_start_change",
+      {
+        kind: "running_battle_start_change",
+        startsAt: "2099-01-01T00:00:00Z",
+        currentStartsAt: "2026-01-01T00:00:00Z",
+      },
+      StatusCodes.CONFLICT,
+      "running_battle_start_change",
+    ],
+    [
       "ends_before_starts",
       {
         kind: "ends_before_starts",

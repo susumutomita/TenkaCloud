@@ -103,6 +103,18 @@ function scheduleOutcomeResponse(c: Context, outcome: SetEventScheduleOutcome): 
         },
         StatusCodes.BAD_REQUEST,
       );
+    case "running_battle_start_change":
+      // Challenge #933: 開始済みの Battle は、処理済みの時刻を基準に試合を進めている。
+      return c.json(
+        {
+          error: "running_battle_start_change",
+          message:
+            "開始済みのバトルの開始時刻は変更できません。やり直す場合は新しいイベントを作成してください。",
+          startsAt: outcome.startsAt,
+          currentStartsAt: outcome.currentStartsAt,
+        },
+        StatusCodes.CONFLICT,
+      );
     case "no_op":
       return c.json(
         { error: "no_op", message: "更新対象が指定されていません" },
