@@ -11,10 +11,10 @@ description: TenkaCloud の make local を、利用者と対話しながらセ�
 
 - ホストを起動する `make local` と、主催者キーを再発行する `make local-reset` を、Bash ツールで実行しない。コマンドを組み立てて示し、利用者に自分の端末で実行してもらう。主催者キーは stdin と stdout がどちらも TTY のときだけ表示され (`scripts/local-host/organizer-key-output.ts`)、Bash ツールは TTY ではない。`make local` を Bash ツールで実行してよいのは、フラグを確かめる `make local LOCAL_ARGS="--help"` のときだけである。
 - 主催者キーを取り出さない。`script` などで疑似端末を作ってコマンドを実行しない。出力をファイルへ書き出してキーを探さない。
-- 主催者キーとチームキーを会話に貼るよう求めない。主催者キーが貼られたら、漏れたキーとして扱う。利用者が自分の端末で `make local-reset` を実行して差し替えるよう勧める。
+- 主催者キーとチームキーを会話に貼るよう求めない。主催者キーが貼られたら、漏れたキーとして扱う。利用者が自分の端末で `make local-reset` を実行して差し替えるよう勧める。`make local-reset` が差し替えるのは主催者キーだけで、チームキーは変わらない。チームキーが貼られたら、主催者コンソールの該当大会のチーム一覧で、そのチームの「キーを再発行」を実行してもらう。現在のキーは直ちに使えなくなる。新しいキーは、そのチームに配り直す。
 - プロンプトの先頭に `!` を付けて起動コマンドを実行する方法は案内しない。
 - 次の操作は、何が消えるかを示し、利用者が明示的に了承したときだけ行う。`make local-clear`、`make destroy`、`make destroy-all`、大会データの削除、Docker 環境の削除 (主催者コンソールの Teardown を含む)、`docker system prune`、`docker network prune`。`make local-clear` は確認を求めるので、利用者が自分の端末で実行する。確認を省くフラグは付けない。
-- 利用者が `--data <dir>` を付けて起動している、または付けたい場合は、1 で `<data-dir>` として記録する。`make down`、`make local-reset`、`make local-clear` には、起動と同じ `--data` を必ず付ける (`make down LOCAL_ARGS="--data <data-dir>"`)。付けないと、既定のデータディレクトリを操作して、動いているホストに届かない。
+- 利用者が `--data <dir>` を付けて起動している、または付けたい場合は、1 で `<data-dir>` として記録する。`make down`、`make local-reset`、`make local-clear` には、起動と同じ `--data` を必ず付ける (`make down LOCAL_ARGS="--data <data-dir>"`)。このスキルが示す `make local` の起動コマンドと再起動コマンドにも、すべて `--data <data-dir>` を足す。付けないと、既定のデータディレクトリを操作して、動いているホストに届かない。
 - `.env` と秘密情報を読まない。`.claude/settings.json` も読み取りを禁止している。
 - `npx` と `bunx` を使わない。
 - firewall と、Tailscale の ACL や共有の設定を変更しない。手順を示すだけにする。
@@ -30,15 +30,15 @@ description: TenkaCloud の make local を、利用者と対話しながらセ�
 - Docker。Docker 演習を使うときだけ要る。暗号バトルのように Docker を使わない問題は、Docker なしで動く。種類 (colima、Docker Desktop、Linux の Docker Engine)、`docker info --format '{{.ServerVersion}}'` の版、`docker compose version --short` の版を調べる。
 - ポート。5174 (主催者コンソール)、5175 (参加者ポータル)、5200-5239 (演習の gateway) を待ち受けているプロセスがないか。macOS では `lsof -nP -iTCP:5174-5175 -sTCP:LISTEN` と `lsof -nP -iTCP:5200-5239 -sTCP:LISTEN` を使う。
 - 既存の `make local` が `--data <dir>` 付きで動いているか、利用者に聞く。付いていれば `<data-dir>` として覚える。
-- 環境変数 `CODESPACES` が `true` なら Codespaces である。README の Codespaces の節を案内し、4 と 5 の手順は使わない。
+- 環境変数 `CODESPACES` が `true` なら Codespaces である。`parseOptions` は `--lan` などを付けない起動で、Codespaces の公開 origin を自動で選ぶ (`scripts/local-host/options.ts`)。2 と 4 と 5 は使わず、3 の後、`LOCAL_ARGS` なしの `make local` を 6 で示す。LAN と分離ありの選択肢は出さない。README の Codespaces の節を案内する。
 
 ## 2. 目的を聞く
 
-AskUserQuestion で、次の 4 つから選んでもらう。
+AskUserQuestion で、次の 4 つから選んでもらう。1 で Codespaces と分かったときは聞かず、3 へ進む。
 
 | 選択肢 | 進め方 |
 | --- | --- |
-| この PC で 1 人で試す | 3 の後、6 で `make local` を示す |
+| この PC で 1 人で試す | 3 の後、6 で `make local` を示す。`<data-dir>` があれば `LOCAL_ARGS="--data <data-dir>"` を付ける |
 | 信頼できる仲間と LAN か Tailscale で開催する | 3 の後、4 へ進む |
 | チーム間の分離ありで開催する (native Linux) | 3 の後、4 の 1 だけで待受 IP を決め、5 へ進む。4 の 2 から 7 は使わない |
 | クラウドで開催する | このスキルの対象外。README の「Deploy on AWS」(日本語版は「AWS にデプロイする」) の節と `make deploy` を案内して終える |
@@ -77,6 +77,7 @@ native Linux だけが対象である。起動時に `scripts/local-host/linux-n
 
 - `docker info --format '{{json .}}'` で、`ServerVersion` が 28.4.x、`OperatingSystem` が Docker Desktop でない、`SecurityOptions` に rootless がない。
 - `docker context inspect --format '{{.Endpoints.docker.Host}}'` が `unix:///var/run/docker.sock` である。
+- 環境変数 `DOCKER_HOST` が未設定か、ちょうど `unix:///var/run/docker.sock` である (`echo "${DOCKER_HOST-}"`)。ガードは `DOCKER_CONTEXT` を見ず、`DOCKER_HOST` の値を直接読む。別の値なら、利用者が `unset DOCKER_HOST` してから起動する。
 - `/proc/sys/net/bridge/bridge-nf-call-iptables` と `/proc/sys/net/bridge/bridge-nf-call-ip6tables` が `1` である。
 - 起動したプロセスが、`iptables`、`ip6tables`、`nsenter` を root の権限で実行できる。権限の与え方は利用者が決める。
 
@@ -85,7 +86,7 @@ native Linux だけが対象である。起動時に `scripts/local-host/linux-n
 - 境界のそろったプライベート IPv4 の /16 から /24 で、10.0.0.0/8、172.16.0.0/12、192.168.0.0/16 のどれかに入る。
 - `ip -j route show table all` と `ip -j -6 route show table all` に出る経路と重ならない。LAN と VPN の経路も同じ表に出る。`dst` が `default` の経路は比べない。ガードも `default` を飛ばす。すべての IPv4 の範囲が `default` と重なるので、含めると選べる値がなくなる。
 
-起動コマンドは次のとおり。`<host-ip>` は 4 の 1 で決めた IP、`<pool-cidr>` は決めた値に置き換える。`<host-ip>` が決まっていなければ、先に 4 の 1 を済ませる。
+起動コマンドは次のとおり。`<data-dir>` を記録していれば `--data <data-dir>` も足す。`<host-ip>` は 4 の 1 で決めた IP、`<pool-cidr>` は決めた値に置き換える。`<host-ip>` が決まっていなければ、先に 4 の 1 を済ませる。
 
 ```sh
 make local LOCAL_ARGS="--lan <host-ip> --unsafe-lan --competition-network --docker-network-pool <pool-cidr>"
