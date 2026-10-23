@@ -8,6 +8,12 @@ export function boosterStartAt(state: CryptoBattleState): number | undefined {
     : state.startedAtMs + state.config.phaseBoundaries.pressureToEndgameMs;
 }
 
+/** [Issue #926] The end in force comes at or before the endgame boundary, so nothing is distributed. */
+export function endsBeforeEndgame(state: CryptoBattleState): boolean {
+  const boundary = boosterStartAt(state);
+  return boundary !== undefined && boundary >= state.startedAtMs! + state.config.matchDurationMs;
+}
+
 /** Old matches past the boundary have no historical ranking to reconstruct. */
 export function storedBooster(state: CryptoBattleState): EndgameBooster {
   const stored = state.endgameBooster;
@@ -46,7 +52,7 @@ export function projectBooster(state: CryptoBattleState, teamId: string): HintBo
   const startsInMs = startsAt === undefined ? undefined : Math.max(0, startsAt - now);
   const status = stored.status === "unavailable" ? "unavailable"
     : startsAt === undefined ? "waiting"
-    : stored.status === "pending" ? "scheduled"
+    : stored.status === "pending" ? (endsBeforeEndgame(state) ? "unavailable" : "scheduled")
     : !stored.teamIds.includes(teamId) ? "ineligible"
     : remainingMs > 0 && now >= startsAt ? "active" : "expired";
   return { status, startAfterMs, startsInMs, remainingMs: status === "active" ? remainingMs : 0 };

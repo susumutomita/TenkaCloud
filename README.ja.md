@@ -171,7 +171,7 @@ AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` 
 
 commit、内容の digest、旧 snapshot は `catalog-lock.json` と `.tenkacloud/catalog-store/` で内部管理します。ブランチの更新後も、保存済み大会の問題定義と進捗を保持します。旧 snapshot は保存済み大会の画面にも使い、新規大会の問題としては表示しません。必要な旧 snapshot の復元に失敗した場合は、選択状態を変える前に停止します。
 
-CI は `bun run catalog download-locked` と `make catalog-verify-lock` で、ブランチの更新とは独立して内部 lock の固定版を取得・検証します。定期ワークフローやカタログ更新 PR の自動作成は使いません。
+CI はカタログを取得せず、`scripts/problem-pack/test/fixtures/ci-catalog` の固定の入力でテストします。内部 lock の固定版は、`bun run catalog download-locked` と `make catalog-verify-lock` で取得・検証できます。定期ワークフローやカタログ更新 PR の自動作成は使いません。
 
 再利用する問題や非公開コンテンツには、公開 SDK とオフラインの Problem Pack ツールで作成・検証・不変な revision の保存ができます。
 

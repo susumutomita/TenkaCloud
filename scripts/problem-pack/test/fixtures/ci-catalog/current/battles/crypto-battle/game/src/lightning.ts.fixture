@@ -1,4 +1,4 @@
-import { boosterStartAt } from "./booster.ts";
+import { boosterStartAt, endsBeforeEndgame } from "./booster.ts";
 import type { Contract, CryptoBattleState, EndgameLightning, LightningCard, LightningOutcome, LightningProjection } from "./types.ts";
 
 const duration = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0;
@@ -100,7 +100,7 @@ export function projectLightning(state: CryptoBattleState, teamId: string): Ligh
   const common = { startAfterMs, startsInMs: boundary === undefined ? undefined : Math.max(0, boundary - now), remainingMs: 0 };
   if (distribution.status === "unavailable") return { ...common, status: "unavailable" };
   if (boundary === undefined) return { ...common, status: "waiting" };
-  if (distribution.status === "pending") return { ...common, status: "scheduled" };
+  if (distribution.status === "pending") return { ...common, status: endsBeforeEndgame(state) ? "unavailable" : "scheduled" };
   if (!card) return { ...common, status: "ineligible" };
   if (card.status === "armed" || card.status === "spent") return { ...common, status: card.status,
     contractId: card.contractId, points: card.points, ...(card.status === "spent" ? { outcome: card.outcome } : {}),
