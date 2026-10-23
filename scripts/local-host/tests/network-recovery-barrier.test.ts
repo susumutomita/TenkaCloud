@@ -1,7 +1,4 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { StartedContainer } from "../container/container-runner";
 import type { Job } from "../model";
 import { networkEngineFixture } from "./network-engine-fixture";
@@ -13,15 +10,7 @@ for (const phase of ["readiness", "verification", "admission"] as const)
       const alpha = f.add("alpha", 1);
       const beta = f.add("beta", 1);
       await Promise.all([alpha.admitted, beta.admitted]);
-      const bin = mkdtempSync(join(tmpdir(), "tc-recovery-docker-fake-"));
-      mkdirSync(join(bin, "bin"));
-      writeFileSync(join(bin, "bin/docker"), "#!/bin/sh\necho synthetic-running-container\n", {
-        mode: 0o700,
-      });
-      const oldPath = process.env.PATH;
-      const oldCli = process.env.TENKACLOUD_COMPOSE_CLI;
-      process.env.PATH = `${bin}/bin:${oldPath ?? ""}`;
-      process.env.TENKACLOUD_COMPOSE_CLI = "docker compose";
+      f.setUnitRunning(true);
       const entered = Promise.withResolvers<undefined>();
       const gate = Promise.withResolvers<undefined>();
       const pause = async () => {
@@ -76,11 +65,6 @@ for (const phase of ["readiness", "verification", "admission"] as const)
       } finally {
         gate.resolve(undefined);
         await Promise.allSettled([result, batch]);
-        if (oldPath === undefined) delete process.env.PATH;
-        else process.env.PATH = oldPath;
-        if (oldCli === undefined) delete process.env.TENKACLOUD_COMPOSE_CLI;
-        else process.env.TENKACLOUD_COMPOSE_CLI = oldCli;
-        rmSync(bin, { recursive: true, force: true });
         await f.close();
       }
     });

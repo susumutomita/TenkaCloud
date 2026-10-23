@@ -512,6 +512,7 @@ export class DockerHostingEngine implements RuntimeEngine {
     private readonly runCompose: typeof compose = compose,
     private readonly guardNow: () => number = Date.now,
     private readonly catalogLoader: typeof loadDockerCatalog = loadDockerCatalog,
+    private readonly composeUnitRunning: typeof isComposeUnitRunning = isComposeUnitRunning,
   ) {}
   catalog(): readonly Problem[] {
     this.problems ??= this.catalogLoader(this.repositoryRoot);
@@ -768,7 +769,7 @@ export class DockerHostingEngine implements RuntimeEngine {
       if (readFileSync(unit.composePath, "utf8") !== plan.composeText)
         throw new Error("Recorded runtime composition changed; refusing to adopt it.");
       await this.admitRetainedGuard(job, unit);
-      if (!isComposeUnitRunning(unit))
+      if (!this.composeUnitRunning(unit))
         throw new Error(
           "The recorded problem environment is not running. Retry deployment from the host console.",
         );
