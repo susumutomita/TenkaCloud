@@ -26,6 +26,7 @@ const skill = readFileSync(join(ROOT, SKILL_PATH), "utf8");
 const PLACEHOLDERS: Readonly<Record<string, string>> = {
   "<host-ip>": "100.96.12.34",
   "<pool-cidr>": "10.77.0.0/24",
+  "<data-dir>": "./tenkacloud-data",
 };
 /* eslint-enable sonarjs/no-hardcoded-ip */
 
