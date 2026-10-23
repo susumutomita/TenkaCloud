@@ -285,6 +285,11 @@ export interface EventSchedulePatch {
  */
 export interface EventScheduleExpectation {
   readonly startsAt: string | undefined;
+  /**
+   * Also require the stored start to be later than this instant. Both are canonical
+   * `toISOString()` values (the schedule route normalizes every start), so they compare as text.
+   */
+  readonly startsAfter?: string;
 }
 
 /**

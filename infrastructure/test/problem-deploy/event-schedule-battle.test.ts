@@ -101,6 +101,57 @@ describe.each(["dynamodb", "turso"] as const)("started Battle schedule on %s", (
     expect((await read(TENANT_ID, EVENT_ID))?.startsAt).toBe(NOW_ISO);
   });
 
+  it("should refuse a start change when the start passes before the write", async () => {
+    const { events, shared } = fixture(backend, { battle: {} });
+    const startsSoon = "2026-10-23T10:00:30.000Z";
+    await events.putEvent(battleEvent({ startsAt: startsSoon }));
+    const out = await setEventSchedule(shared, TENANT_ID, EVENT_ID, {
+      startsAt: RESERVED,
+      nowMs: NOW_MS,
+      clock: () => Date.parse(startsSoon) + 1,
+    });
+    expect(out).toEqual({
+      kind: "running_battle_start_change",
+      startsAt: RESERVED,
+      currentStartsAt: startsSoon,
+    });
+    expect((await events.getEvent(TENANT_ID, EVENT_ID))?.startsAt).toBe(startsSoon);
+  });
+
+  it("should store the clock read just before the write for an end that has passed by then", async () => {
+    const { events, shared } = fixture(backend, { battle: {} });
+    await events.putEvent(battleEvent({ startsAt: STARTED }));
+    const writtenAt = NOW_MS + 5_000;
+    const out = await setEventSchedule(shared, TENANT_ID, EVENT_ID, {
+      endsAt: "2026-10-23T10:00:01.000Z",
+      nowMs: NOW_MS,
+      clock: () => writtenAt,
+    });
+    expect(out).toMatchObject({ kind: "ok", endsAt: "2026-10-23T10:00:05.000Z" });
+    expect((await events.getEvent(TENANT_ID, EVENT_ID))?.endsAt).toBe("2026-10-23T10:00:05.000Z");
+  });
+
+  it("should treat an unreadable stored start as no start, so it can be corrected", async () => {
+    const { events, shared } = fixture(backend, { battle: {} });
+    await events.putEvent(battleEvent({ startsAt: "not-a-date" }));
+    const out = await setEventSchedule(shared, TENANT_ID, EVENT_ID, {
+      startsAt: RESERVED,
+      nowMs: NOW_MS,
+    });
+    expect(out).toMatchObject({ kind: "ok", startsAt: RESERVED });
+  });
+
+  it("should let a Battle still in DRAFT past its reserved start move its start", async () => {
+    const { events, shared } = fixture(backend, { battle: {} });
+    await events.putEvent(battleEvent({ status: "DRAFT", startsAt: STARTED }));
+    const out = await setEventSchedule(shared, TENANT_ID, EVENT_ID, {
+      startsAt: RESERVED,
+      nowMs: NOW_MS,
+    });
+    expect(out).toMatchObject({ kind: "ok", startsAt: RESERVED });
+    expect((await events.getEvent(TENANT_ID, EVENT_ID))?.startsAt).toBe(RESERVED);
+  });
+
   it("should take the Battle rule from the event's saved catalog, not this deployment's", async () => {
     const { events, shared } = fixture(backend, {});
     const key = `catalogs/${"a".repeat(64)}.json`;

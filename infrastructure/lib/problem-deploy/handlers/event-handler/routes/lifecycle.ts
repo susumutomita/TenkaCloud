@@ -176,6 +176,7 @@ export function registerLifecycleRoutes(app: Hono, shared: EventSharedResources)
             deployAt: parsed.data.deployAt,
             scoreboardFreezeMinutes: parsed.data.scoreboardFreezeMinutes,
             nowMs,
+            clock: Date.now,
           });
           return scheduleOutcomeResponse(c, outcome);
         } catch (err) {

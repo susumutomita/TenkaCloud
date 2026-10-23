@@ -79,6 +79,23 @@ describe("PATCH /events/:eventId/schedule", () => {
     }
   });
 
+  it("should hand the schedule a clock that reads the time again", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-10-22T10:00:00.000Z"));
+    try {
+      mocks.setEventSchedule.mockResolvedValueOnce({ kind: "ok", updatedDeployments: 0 });
+      await patchSchedule({ endsAt: "2099-01-01T00:00:00.000Z" });
+      vi.setSystemTime(Date.parse("2026-10-22T10:00:05.000Z"));
+      const { nowMs, clock } = mocks.setEventSchedule.mock.calls[0][3];
+      expect([nowMs, clock()]).toEqual([
+        Date.parse("2026-10-22T10:00:00.000Z"),
+        Date.parse("2026-10-22T10:00:05.000Z"),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each([
     ["without startNow", { durationMinutes: 10 }],
     ["with only a teardown", { durationMinutes: 10, teardownAt: "2099-01-01T00:00:00.000Z" }],

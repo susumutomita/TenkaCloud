@@ -541,6 +541,10 @@ export class DynamoDbEventsRepository implements EventsRepository {
       conditions.push("startsAt = :expectedStartsAt");
       values[":expectedStartsAt"] = expected.startsAt;
     } else if (expected) conditions.push("attribute_not_exists(startsAt)");
+    if (expected?.startsAfter !== undefined) {
+      conditions.push("startsAt > :startsAfter");
+      values[":startsAfter"] = expected.startsAfter;
+    }
     return this.conditionalUpdate(
       tenantId,
       eventId,

@@ -35,6 +35,8 @@ export interface SetEventScheduleParams {
   readonly scoreboardFreezeMinutes?: number;
   /** 現在時刻 (ms)。validation の比較基準 */
   readonly nowMs: number;
+  /** Read again just before the write, for the started-Battle rule. Without it, `nowMs` stands. */
+  readonly clock?: () => number;
 }
 
 /**
@@ -114,8 +116,9 @@ export async function setEventSchedule(
   const repositories = await resolveEventRepositories(shared);
   const currentEvent = await repositories.events.getEvent(tenantId, eventId);
   if (!currentEvent) return { kind: "not_found" };
-  const params = await startedBattleSchedule(shared, currentEvent, requested);
-  if ("kind" in params) return params;
+  const decided = await startedBattleSchedule(shared, currentEvent, requested);
+  if ("kind" in decided) return decided;
+  const { params, startsAfter } = decided;
   const { startsAt, endsAt, teardownAt, deployAt, scoreboardFreezeMinutes } = params;
 
   const effectiveStartsAt = startsAt ?? currentEvent.startsAt;
@@ -138,6 +141,7 @@ export async function setEventSchedule(
   // Every check above read this start. Write only if no other request has moved it since.
   const result = await repositories.events.updateSchedule(tenantId, eventId, patch, now, {
     startsAt: currentEvent.startsAt,
+    startsAfter,
   });
   if (result.outcome === "conflict") return { kind: "schedule_changed" };
   if (result.outcome !== "updated") return { kind: "not_found" };
@@ -170,25 +174,34 @@ export async function setEventSchedule(
  * coordination problem whose start has passed. Its start stays fixed. An end inside the clock-skew
  * slack is stored as the server's now, because the cloud console's End now sends the browser's
  * clock through this route. An end older than the slack was already refused as `past_ends_at`.
+ *
+ * A DRAFT event is not deployed, so no tick can have run however late its start is
+ * (`liveEventRoundWindow` hides its start). The clock is read after the catalog, just before
+ * the write. A start moved before the Battle starts is also written only while the stored start
+ * is still later than that instant.
  */
 async function startedBattleSchedule(
   shared: EventSharedResources,
   event: EventRecord,
   params: SetEventScheduleParams,
 ): Promise<
-  SetEventScheduleParams | Extract<SetEventScheduleOutcome, { kind: "running_battle_start_change" }>
+  | { readonly params: SetEventScheduleParams; readonly startsAfter?: string }
+  | Extract<SetEventScheduleOutcome, { kind: "running_battle_start_change" }>
 > {
-  const { startsAt, endsAt, nowMs } = params;
+  const { startsAt, endsAt, clock = () => params.nowMs } = params;
   const currentStartsAt = event.startsAt;
-  if (currentStartsAt === undefined) return params;
+  if (currentStartsAt === undefined || event.status === "DRAFT") return { params };
   const startMs = Date.parse(currentStartsAt);
-  if (!Number.isFinite(startMs) || startMs > nowMs) return params;
+  if (!Number.isFinite(startMs)) return { params };
   const movesStart = startsAt !== undefined && Date.parse(startsAt) !== startMs;
-  const endsInPast = endsAt !== undefined && Date.parse(endsAt) < nowMs;
-  if (!movesStart && !endsInPast) return params;
-  if (!(await hasCoordinationProblem(shared, event))) return params;
+  // An end on a Battle not yet started is refused as ends_before_starts if it is already past.
+  if (!movesStart && (endsAt === undefined || startMs > params.nowMs)) return { params };
+  if (!(await hasCoordinationProblem(shared, event))) return { params };
+  const nowMs = clock();
+  if (startMs > nowMs) return { params, startsAfter: new Date(nowMs).toISOString() };
   if (movesStart) return { kind: "running_battle_start_change", startsAt, currentStartsAt };
-  return { ...params, endsAt: new Date(nowMs).toISOString() };
+  if (endsAt === undefined || Date.parse(endsAt) >= nowMs) return { params };
+  return { params: { ...params, endsAt: new Date(nowMs).toISOString() } };
 }
 
 /** The event's saved catalog decides, as for a reset; events without one use this deployment's. */

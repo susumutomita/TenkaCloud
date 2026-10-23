@@ -373,6 +373,26 @@ describe.each(backends)("EventsRepository mutations parity: %s", (_name, makeRep
       expect(stored?.startsAt).toBe("2026-07-08T12:00:00.000Z");
     });
 
+    it("should write a start change only while the stored start is after the given instant", async () => {
+      const { events } = makeRepos();
+      const startsAt = "2026-07-08T12:00:30.000Z";
+      await events.putEvent(sampleEvent({ startsAt }));
+      const id = "01EVENTAAAAAAAAAAAAAAAAAAA";
+      const patch = { startsAt: "2026-07-09T00:00:00.000Z" };
+      const passed = await events.updateSchedule("tenant-a", id, patch, AT, {
+        startsAt,
+        startsAfter: "2026-07-08T12:00:30.000Z",
+      });
+      expect(passed.outcome).toBe("conflict");
+      expect((await events.getEvent("tenant-a", id))?.startsAt).toBe(startsAt);
+      const ahead = await events.updateSchedule("tenant-a", id, patch, AT, {
+        startsAt,
+        startsAfter: "2026-07-08T12:00:29.999Z",
+      });
+      expect(ahead.outcome).toBe("updated");
+      expect((await events.getEvent("tenant-a", id))?.startsAt).toBe("2026-07-09T00:00:00.000Z");
+    });
+
     it("should treat an expected absent start as a condition too", async () => {
       const { events } = makeRepos();
       await events.putEvent(sampleEvent());

@@ -410,21 +410,22 @@ export class SqlEventsRepository implements EventsRepository {
       pairs.push("'$.scoreboardFreezeMinutes', ?");
       params.push(patch.scoreboardFreezeMinutes);
     }
-    const expectedStart = expected?.startsAt;
+    const where: string[] = [];
+    const whereParams: SqlParam[] = [];
+    if (expected?.startsAt !== undefined) {
+      where.push("json_extract(payload, '$.startsAt') = ?");
+      whereParams.push(expected.startsAt);
+    } else if (expected) where.push("json_type(payload, '$.startsAt') IS NULL");
+    if (expected?.startsAfter !== undefined) {
+      where.push("json_extract(payload, '$.startsAt') > ?");
+      whereParams.push(expected.startsAfter);
+    }
     return this.conditionalUpdate({
       tenantId,
       eventId,
       set: `payload = json_set(payload, ${pairs.join(", ")})`,
       setParams: params,
-      ...(expected
-        ? {
-            where:
-              expectedStart === undefined
-                ? "json_type(payload, '$.startsAt') IS NULL"
-                : "json_extract(payload, '$.startsAt') = ?",
-            whereParams: expectedStart === undefined ? [] : [expectedStart],
-          }
-        : {}),
+      ...(expected ? { where: where.join(" AND "), whereParams } : {}),
       onMiss: expected ? "probe" : "not_found",
       withPostImage: true,
     });

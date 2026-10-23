@@ -63,7 +63,14 @@ function readDocumentPath(item: Item, token: string, names: Names): unknown {
 }
 
 function tokenize(expr: string): string[] {
-  return expr.match(/[#:]?[A-Za-z0-9_.]+|<>|<=|<|=|\(|\)|,/g) ?? [];
+  return expr.match(/[#:]?[A-Za-z0-9_.]+|<>|<=|<|>=|>|=|\(|\)|,/g) ?? [];
+}
+
+/** DynamoDB orders strings by their bytes and numbers by value; mixed types never match. */
+function isAfter(strict: boolean, a: unknown, b: unknown): boolean {
+  if (typeof a === "string" && typeof b === "string") return strict ? a > b : a >= b;
+  if (typeof a === "number" && typeof b === "number") return strict ? a > b : a >= b;
+  return false;
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -140,6 +147,7 @@ export function evalConditionExpression(
     if (op === "<>") return !deepEqual(operandValue(left), operandValue(next()));
     if (op === "<=") return Number(operandValue(left)) <= Number(operandValue(next()));
     if (op === "<") return Number(operandValue(left)) < Number(operandValue(next()));
+    if (op.startsWith(">")) return isAfter(op === ">", operandValue(left), operandValue(next()));
     if (op === "IN") {
       expect("(");
       const list: unknown[] = [operandValue(next())];
