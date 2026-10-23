@@ -49,7 +49,7 @@ vi.mock("../../../src/components/event-detail/EventSchedulePanel", () => ({
       <button type="button" onClick={p.onSaveFreezeMinutes}>
         save-freeze
       </button>
-      <button type="button" onClick={p.onStartNow}>
+      <button type="button" onClick={() => p.onStartNow(20)}>
         start-now
       </button>
       <button type="button" onClick={() => p.onUpdateFreezeMinutes("9")}>
@@ -175,7 +175,7 @@ describe("tab wrappers", () => {
     fireEvent.click(screen.getByText("save-freeze"));
     expect(ops.handleSaveFreezeMinutes).toHaveBeenCalled();
     fireEvent.click(screen.getByText("start-now"));
-    expect(ops.handleStartNow).toHaveBeenCalled();
+    expect(ops.handleStartNow).toHaveBeenCalledWith(20);
     fireEvent.click(screen.getByText("update-freeze"));
     expect(ops.setFreezeMinutesInput).toHaveBeenCalledWith("9");
   });

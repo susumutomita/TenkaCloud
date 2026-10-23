@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 import {
   type CoordinationContext,
   type CoordinationPlugin,
+  type CoordinationTiming,
   dispatchOp,
   runTick,
   safeProjectForTeam,
@@ -38,6 +39,14 @@ import {
  * 呼ぶだけで、 問題依存の意味論を一切持たない (problem=plugin / platform=host)。
  */
 
+/** Set only by the host from the authenticated event window; participants never supply it. */
+export interface CoordinationRequestClock {
+  readonly eventNowMs: number;
+  readonly nowIso: string;
+  /** `undefined` while no end is scheduled, never an empty object. */
+  readonly timing: CoordinationTiming | undefined;
+}
+
 /** dispatch 1 回の文脈。 route が team-login-key 認証 + event scope を解決して渡す。 */
 export interface CoordinationDispatchInput<Op> {
   /**
@@ -57,8 +66,7 @@ export interface CoordinationDispatchInput<Op> {
   /** projection が失敗 / 未初期化のときに返す安全な既定値 (= 機密を出さない)。 */
   readonly fallbackProjection: unknown;
   readonly nowIso: string;
-  /** Set only by the host from the authenticated event window. */
-  readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
+  readonly requestTick?: CoordinationRequestClock;
 }
 
 export type CoordinationDispatchOutcome =
@@ -276,7 +284,7 @@ async function attemptDispatch<State, Op, Projection>(
     if (input.rosterIncomplete) return { kind: "unavailable" };
     state = plugin.initialState(await withMatchSecret(store, input.scope, input.ctx, input.nowIso));
     if (plugin.tickOnRequest === true && input.requestTick)
-      state = runTick(plugin, state, input.requestTick.eventNowMs);
+      state = runTick(plugin, state, input.requestTick.eventNowMs, input.requestTick.timing);
     version = 0;
   }
 
@@ -363,7 +371,7 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
     readonly rosterIncomplete?: true;
     readonly stateSnapshot?: CoordinationStateSnapshot;
     readonly fallbackProjection: unknown;
-    readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
+    readonly requestTick?: CoordinationRequestClock;
   },
   schema: CoordinationSchemaDeclaration<State> = plugin,
 ): Promise<CoordinationProjectionOutcome> {
@@ -436,7 +444,7 @@ async function advanceRequestTick<State, Op, Projection>(
   input: {
     readonly scope: CoordinationStateScope;
     readonly stateSnapshot?: CoordinationStateSnapshot;
-    readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
+    readonly requestTick?: CoordinationRequestClock;
   },
   schema: CoordinationSchemaDeclaration<State>,
 ): Promise<
@@ -467,7 +475,7 @@ async function attemptRequestTick<State, Op, Projection>(
   store: CoordinationStoreDeps,
   plugin: CoordinationPlugin<State, Op, Projection>,
   scope: CoordinationStateScope,
-  clock: { readonly eventNowMs: number; readonly nowIso: string },
+  clock: CoordinationRequestClock,
   schema: CoordinationSchemaDeclaration<State>,
   deadlineMs: number,
   snapshot?: CoordinationStateSnapshot,
@@ -483,7 +491,7 @@ async function attemptRequestTick<State, Op, Projection>(
   const reconciled = reconcileStateSchema<State>(schema, existing);
   if (reconciled.kind === "mismatch")
     return { kind: "schema_mismatch", reason: reconciled.reason, detail: reconciled.detail };
-  const next = runTick(plugin, reconciled.state, clock.eventNowMs);
+  const next = runTick(plugin, reconciled.state, clock.eventNowMs, clock.timing);
   const pendingScores = coordinationScoreDelivery(
     plugin,
     reconciled.state,

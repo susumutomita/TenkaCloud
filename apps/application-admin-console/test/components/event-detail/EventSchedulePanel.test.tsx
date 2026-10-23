@@ -1,7 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import createWrapper from "@cloudscape-design/components/test-utils/dom";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ApiClient } from "../../../src/api/client";
 import type { EventDetail } from "../../../src/api/events-client";
 import { EventSchedulePanel } from "../../../src/components/event-detail/EventSchedulePanel";
+import { useEventOperations } from "../../../src/hooks/useEventOperations";
 import type { WizardState } from "../../../src/lib/event-wizard";
 
 /**
@@ -181,7 +184,9 @@ describe("EventSchedulePanel", () => {
     fireEvent.click(btn("event_detail.starts_at_pick"));
     expect(p.onOpenScheduleModal).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.starts_at_now"));
-    expect(p.onStartNow).toHaveBeenCalled();
+    expect(p.onStartNow).not.toHaveBeenCalled();
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(undefined);
     fireEvent.click(btn("event_detail.ends_at_pick"));
     expect(p.onOpenEndsAtModal).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.ends_at_now"));
@@ -365,5 +370,143 @@ describe("EventSchedulePanel", () => {
   it("should disable the deploy pick button while a deploy schedule is in flight", () => {
     renderPanel({ deployScheduleInFlight: true });
     expect(btn("event_detail.deploy_at_pick")).toBeDisabled();
+  });
+});
+
+describe("EventSchedulePanel start dialog (#3453)", () => {
+  const withProblems = (...ids: string[]): EventDetail => ({
+    ...props().detail,
+    endsAt: undefined,
+    problems: ids.map((problemId) => ({ problemId, defaultRegion: "local" })),
+  });
+  const openDialog = (ids: string[]) => {
+    const p = props({ detail: withProblems(...ids) });
+    const { container } = render(<EventSchedulePanel {...p} />);
+    fireEvent.click(btn("event_detail.starts_at_now"));
+    const dialog = createWrapper(container.ownerDocument.body).findModal()?.findContent();
+    const radio = dialog?.findRadioGroup();
+    if (!dialog || !radio) throw new Error("Expected the length choices.");
+    return { p, radio, dialog };
+  };
+  const checked = (radio: ReturnType<typeof openDialog>["radio"]) =>
+    ["10", "20", "40", "90", "custom", "keep", "none"].filter(
+      (value) => radio.findInputByValue(value)?.getElement().checked,
+    );
+
+  it("should preselect 10 minutes for an event with a coordination Battle and send it on start", () => {
+    const { p, radio } = openDialog(["hello-world", "crypto-battle"]);
+    expect(checked(radio)).toEqual(["10"]);
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(10);
+    expect(screen.queryByText("event_detail.start_now_header")).not.toBeInTheDocument();
+  });
+
+  it("should preselect no end for an event whose only Battle is an uptime Battle", () => {
+    const { p, radio } = openDialog(["hello-world-battle"]);
+    expect(checked(radio)).toEqual(["none"]);
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(undefined);
+  });
+
+  it("should send each preset the organizer picks", () => {
+    const { p, radio } = openDialog(["hello-world-battle"]);
+    radio.findInputByValue("90")?.click();
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(90);
+  });
+
+  it("should validate a typed length inline and send it once valid", () => {
+    const { p, radio, dialog } = openDialog(["crypto-battle"]);
+    radio.findInputByValue("custom")?.click();
+    const input = dialog.findInput();
+    if (!input) throw new Error("Expected the minutes input.");
+    expect(btn("event_detail.start_now_confirm")).toBeDisabled();
+    expect(screen.queryByText("event_detail.start_now_custom_error")).not.toBeInTheDocument();
+    input.setInputValue("4");
+    expect(screen.getByText("event_detail.start_now_custom_error")).toBeInTheDocument();
+    expect(btn("event_detail.start_now_confirm")).toBeDisabled();
+    input.setInputValue("45");
+    expect(screen.queryByText("event_detail.start_now_custom_error")).not.toBeInTheDocument();
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    expect(p.onStartNow).toHaveBeenCalledWith(45);
+  });
+
+  it("should start nothing when the dialog is cancelled", () => {
+    const { p } = openDialog(["crypto-battle"]);
+    fireEvent.click(btn("event_detail.modal_cancel"));
+    expect(p.onStartNow).not.toHaveBeenCalled();
+    expect(screen.queryByText("event_detail.start_now_header")).not.toBeInTheDocument();
+  });
+});
+
+describe("EventSchedulePanel start dialog with a reserved end (#3453)", () => {
+  function StartHarness({
+    detail,
+    patch,
+  }: {
+    detail: EventDetail;
+    patch: (path: string, body: unknown) => Promise<unknown>;
+  }) {
+    const apiClient = { patch } as unknown as ApiClient;
+    const operations = useEventOperations({
+      apiClient,
+      canMutateTenant: true,
+      detail,
+      eventId: "evt-1",
+      refresh: async () => undefined,
+      setError: () => undefined,
+      t: (key) => key,
+    });
+    return (
+      <EventSchedulePanel
+        {...props({
+          apiClient,
+          detail,
+          onStartNow: (minutes) => void operations.handleStartNow(minutes),
+          scheduleInFlight: operations.scheduleInFlight,
+        })}
+      />
+    );
+  }
+  const reserved: EventDetail = {
+    ...props().detail,
+    status: "READY",
+    startsAt: undefined,
+    endsAt: "2026-10-22T11:00:00Z",
+    problems: [{ problemId: "crypto-battle", defaultRegion: "local" }],
+  };
+  const startWith = async (pick?: string) => {
+    const patch = vi.fn(async () => ({ updatedDeployments: 2 }));
+    const { container } = render(<StartHarness detail={reserved} patch={patch} />);
+    fireEvent.click(btn("event_detail.starts_at_now"));
+    const radio = createWrapper(container.ownerDocument.body)
+      .findModal()
+      ?.findContent()
+      .findRadioGroup();
+    if (!radio) throw new Error("Expected the length choices.");
+    const before = {
+      keep: radio.findInputByValue("keep")?.getElement().checked,
+      showsEnd: screen.queryByText("event_detail.start_now_length_keep_description") !== null,
+    };
+    const offersNoEnd = radio.findInputByValue("none") !== null;
+    if (pick) radio.findInputByValue(pick)?.click();
+    fireEvent.click(btn("event_detail.start_now_confirm"));
+    await waitFor(() => expect(patch).toHaveBeenCalledOnce());
+    return { patch, before, offersNoEnd };
+  };
+
+  it("should keep the reserved end by default and send exactly startNow", async () => {
+    const { patch, before, offersNoEnd } = await startWith();
+    expect(before).toEqual({ keep: true, showsEnd: true });
+    expect(offersNoEnd).toBe(false);
+    expect(patch).toHaveBeenCalledWith("events/evt-1/schedule", { startNow: true });
+  });
+
+  it("should replace the reserved end only when the organizer picks a length", async () => {
+    const { patch } = await startWith("20");
+    expect(patch).toHaveBeenCalledWith("events/evt-1/schedule", {
+      startNow: true,
+      durationMinutes: 20,
+    });
   });
 });

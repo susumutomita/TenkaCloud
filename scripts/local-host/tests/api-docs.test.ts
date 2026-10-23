@@ -40,6 +40,13 @@ test("initial prepare and schedule examples are valid and schedule selectors are
   expect(validatePrepare(prepare?.example)).toBe(true);
   expect(validateSchedule(schedule?.example)).toBe(true);
   expect(validateSchedule({ startNow: true, startsAt: "2030-01-01T00:00:00Z" })).toBe(false);
+  expect(validateSchedule({ startNow: true, durationMinutes: 10 })).toBe(true);
+  expect(validateSchedule({ durationMinutes: 10 })).toBe(false);
+  expect(validateSchedule({ startNow: true, durationMinutes: 4 })).toBe(false);
+  expect(validateSchedule({ startNow: true, durationMinutes: 10.5 })).toBe(false);
+  expect(
+    validateSchedule({ startNow: true, durationMinutes: 10, endsAt: "2030-01-01T00:00:00Z" }),
+  ).toBe(false);
   expect(validatePrepare({ retryFailedOnly: false })).toBe(false);
 });
 test("docs and real HTTP lifecycle preserve role, origin, expiry and replay boundaries", async () => {

@@ -141,7 +141,11 @@ export function registerLifecycleRoutes(app: Hono, shared: EventSharedResources)
         const resolvedStartsAt = parsed.data.startNow
           ? new Date(nowMs).toISOString()
           : parsed.data.startsAt;
-        const resolvedEndsAt = parsed.data.endsAt;
+        // #3453: 競技時間も server now から終了予約に解決する (= 別端末のブラウザ時計に依存しない)。
+        const resolvedEndsAt =
+          parsed.data.durationMinutes === undefined
+            ? parsed.data.endsAt
+            : new Date(nowMs + parsed.data.durationMinutes * 60_000).toISOString();
         try {
           const outcome = await setEventSchedule(shared, resolveTenantId(c), eventId, {
             startsAt: resolvedStartsAt,

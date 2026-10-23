@@ -4,6 +4,7 @@ import {
   type CoordinationDispatchInput,
   type CoordinationDispatchOutcome,
   type CoordinationProjectionOutcome,
+  type CoordinationRequestClock,
   type CoordinationSchemaDeclaration,
   dispatchCoordinationOp,
   projectCoordinationForTeam,
@@ -268,7 +269,7 @@ export async function loadAndProjectCoordinationForTeam(
     readonly rosterIncomplete?: true;
     readonly stateSnapshot?: CoordinationStateSnapshot;
     readonly fallbackProjection: unknown;
-    readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
+    readonly requestTick?: CoordinationRequestClock;
   },
 ): Promise<CoordinationProjectionOutcome> {
   const load = await loadCoordinationPlugin(importer, moduleRef);

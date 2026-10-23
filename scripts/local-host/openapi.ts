@@ -182,11 +182,19 @@ export function localOpenApi(role: "admin" | "participant") {
               200,
               {
                 additionalProperties: false,
-                not: { required: ["startNow", "startsAt"] },
+                not: {
+                  anyOf: [
+                    { required: ["startNow", "startsAt"] },
+                    { required: ["durationMinutes", "startsAt"] },
+                    { required: ["durationMinutes", "endsAt"] },
+                    { required: ["durationMinutes"], not: { required: ["startNow"] } },
+                  ],
+                },
                 ...object({
                   startNow: { type: "boolean", enum: [true] },
                   startsAt: { type: "string", format: "date-time" },
                   endsAt: { type: "string", format: "date-time" },
+                  durationMinutes: { type: "integer", minimum: 5, maximum: 240 },
                   scoreboardFreezeMinutes: { type: "integer", minimum: 0, maximum: 180 },
                 }),
               },
@@ -194,7 +202,7 @@ export function localOpenApi(role: "admin" | "participant") {
               { startNow: true },
             ),
             description:
-              "Requires READY. Use startNow:true or startsAt, never both. endsAt must follow startsAt. Participation is controlled by this schedule.",
+              "Requires READY. Use startNow:true or startsAt, never both. endsAt must follow startsAt. durationMinutes requires startNow:true without startsAt or endsAt; the host sets endsAt to its own clock plus that many minutes. Participation is controlled by this schedule.",
           },
         },
         "/events/{eventId}/end": {

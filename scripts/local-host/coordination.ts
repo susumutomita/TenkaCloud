@@ -2,6 +2,7 @@ import { LOCAL_COORDINATION_STATE_LIMIT } from "./coordination-catalog";
 import {
   createMatch,
   type LocalMatch,
+  type MatchClock,
   type MatchTransition,
   transitionMatch,
 } from "./coordination-core";
@@ -46,16 +47,27 @@ export class LocalCoordination {
     if (!plugin) throw new HostError(503, "Coordination runtime is unavailable.");
     return plugin;
   }
-  private elapsed(event: HostedEvent): number {
+  /** Scoring-lock pauses stop the Battle clock without moving endsAt, so both values subtract them. */
+  private clock(event: HostedEvent): MatchClock {
+    const paused = event.coordinationPausedMs ?? 0;
     let end = event.endsAt ? Date.parse(event.endsAt) : Infinity;
     if (event.scoringLocked && event.scoringLockedAt)
       end = Math.min(end, Date.parse(event.scoringLockedAt));
-    return Math.max(
+    const elapsedMs = Math.max(
       0,
-      Math.min(this.host.now(), end) -
-        Date.parse(event.startsAt ?? event.createdAt) -
-        (event.coordinationPausedMs ?? 0),
+      Math.min(this.host.now(), end) - Date.parse(event.startsAt ?? event.createdAt) - paused,
     );
+    const matchDurationMs =
+      event.startsAt && event.endsAt
+        ? Date.parse(event.endsAt) - Date.parse(event.startsAt) - paused
+        : Number.NaN;
+    return {
+      elapsedMs,
+      timing:
+        Number.isSafeInteger(matchDurationMs) && matchDurationMs > 0
+          ? { matchDurationMs }
+          : undefined,
+    };
   }
   private row(event: HostedEvent, problem: Problem): MatchRow {
     let row = this.rows.get(event.eventId);
@@ -74,6 +86,7 @@ export class LocalCoordination {
         eventId: event.eventId,
         teamIds: teams.map((team) => team.teamId).sort((a, b) => a.localeCompare(b)),
         teamNames: Object.fromEntries(teams.map((team) => [team.teamId, team.displayName])),
+        ...this.clock(event).timing,
       });
       row = { problemId: problem.problemId, body: JSON.stringify(match) };
     }
@@ -199,7 +212,7 @@ export class LocalCoordination {
       plugin,
       this.load(event, problem),
       this.host.store.teams(event.eventId).map((team) => team.teamId),
-      this.elapsed(event),
+      this.clock(event),
     );
     this.save(event, problem, result, settle);
   }
@@ -268,7 +281,7 @@ export class LocalCoordination {
       plugin,
       match,
       this.host.store.teams(event.eventId).map((item) => item.teamId),
-      this.elapsed(event),
+      this.clock(event),
       { teamId: team.teamId, op: body.op },
     );
     const response: ApiResponse = result.rejection

@@ -1319,14 +1319,20 @@ export class HostingDomain {
       throw new HostError(409, "Deploy the event before scheduling it.");
     if (
       Object.keys(body).some(
-        (key) => !["startNow", "startsAt", "endsAt", "scoreboardFreezeMinutes"].includes(key),
+        (key) =>
+          ![
+            "startNow",
+            "startsAt",
+            "endsAt",
+            "durationMinutes",
+            "scoreboardFreezeMinutes",
+          ].includes(key),
       )
     )
       throw new HostError(422, "Automatic deploy/teardown schedules are not supported locally.");
-    if (body.startNow !== undefined && body.startNow !== true)
-      throw new HostError(400, "startNow must be true.");
-    if (body.startNow && body.startsAt !== undefined)
-      throw new HostError(400, "Choose startNow or startsAt, not both.");
+    // One clock reading: a 10-minute start must end exactly 10 minutes after it began.
+    const now = this.now();
+    const lengthEnd = matchLengthEnd(body, now);
     const parseTime = (value: unknown): string => {
       const input = text(value, "timestamp", 40);
       const milliseconds = Date.parse(input);
@@ -1339,9 +1345,10 @@ export class HostingDomain {
     };
     assertCoordinationRoster(event.problems, this.store.teams(event.eventId).length);
     this.coordination.assertSchedule(event, body);
-    if (body.startNow) event.startsAt = new Date(this.now()).toISOString();
+    if (body.startNow) event.startsAt = new Date(now).toISOString();
     if (body.startsAt !== undefined) event.startsAt = parseTime(body.startsAt);
     if (body.endsAt !== undefined) event.endsAt = parseTime(body.endsAt);
+    if (lengthEnd) event.endsAt = lengthEnd;
     if (event.startsAt && event.endsAt && Date.parse(event.endsAt) <= Date.parse(event.startsAt))
       throw new HostError(400, "The end must be after the start.");
     if (body.scoreboardFreezeMinutes !== undefined) {
@@ -2857,6 +2864,26 @@ function deploymentPlan(previous: Job | undefined, failedOnly: boolean): "skip" 
   if (failedOnly) return previous?.status === "FAILED" ? "deploy" : "skip";
   if (previous?.status === "COMPLETE" || previous?.status === "STOPPED") return "skip";
   return "deploy";
+}
+
+/**
+ * Validates how a schedule request picks its start and returns the end a chosen match length
+ * sets. That end follows the host clock, so a match length accompanies only startNow alone.
+ */
+function matchLengthEnd(body: Record<string, unknown>, now: number): string | undefined {
+  if (body.startNow !== undefined && body.startNow !== true)
+    throw new HostError(400, "startNow must be true.");
+  if (body.startNow && body.startsAt !== undefined)
+    throw new HostError(400, "Choose startNow or startsAt, not both.");
+  const minutes = body.durationMinutes;
+  if (minutes === undefined) return undefined;
+  if (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 5 || minutes > 240)
+    throw new HostError(400, "The match length must be a whole number of minutes from 5 to 240.");
+  if (body.startNow !== true)
+    throw new HostError(400, "A match length can only be chosen when starting now.");
+  if (body.startsAt !== undefined || body.endsAt !== undefined)
+    throw new HostError(400, "Choose a match length or an end time, not both.");
+  return new Date(now + minutes * 60_000).toISOString();
 }
 
 /** Only a running environment that no organizer operation is changing is handed out. */

@@ -99,7 +99,7 @@ export function ScheduleTab({
       onOpenScheduleModal={() => operations.setScheduleModalOpen(true)}
       onOpenTeardownModal={() => operations.setTeardownModalOpen(true)}
       onSaveFreezeMinutes={() => void operations.handleSaveFreezeMinutes()}
-      onStartNow={() => void operations.handleStartNow()}
+      onStartNow={(durationMinutes) => void operations.handleStartNow(durationMinutes)}
       onUpdateFreezeMinutes={operations.setFreezeMinutesInput}
       scheduleInFlight={operations.scheduleInFlight}
       teardownInFlight={operations.teardownInFlight}
