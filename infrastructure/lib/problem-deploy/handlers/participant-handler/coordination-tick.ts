@@ -6,8 +6,14 @@ import { coordinationStateChanged } from "./coordination-state-changed.js";
 
 export { coordinationStateChanged } from "./coordination-state-changed.js";
 
-import { type CoordinationPlugin, runTick } from "@tenkacloud/coordination-plugin-sdk";
+import {
+  type CoordinationPlugin,
+  type CoordinationTiming,
+  runTick,
+} from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
+import type { EventRecord } from "../../control-data/domain/events.js";
+import { matchDurationTiming } from "../generic-scoring-handler/round-liveness.js";
 import { resolvePlayableCoordinationRunId } from "../shared/coordination-run.js";
 import {
   COORDINATION_TICK_ACTION,
@@ -64,7 +70,24 @@ export interface CoordinationTickDeps {
   readonly resolveCatalog?: (
     target: CoordinationTickTarget,
     nowIso: string,
-  ) => Promise<CoordinationTickDeps>;
+  ) => Promise<ScopedTickDeps>;
+}
+
+/** One target's deps, scoped to its saved catalog, and the event as the dispatcher read it. */
+export interface ScopedTickDeps extends CoordinationTickDeps {
+  readonly event?: Pick<EventRecord, "startsAt" | "endsAt">;
+}
+
+/** A wire target with the match length read from the live event. */
+type LiveTickTarget = CoordinationTickTarget & { readonly timing: CoordinationTiming | undefined };
+
+/**
+ * [Issue #3453] The scoring pass invokes this Lambda asynchronously, so a length it read can be
+ * stale by the time a target runs. The raw start and end, not the live round window: that window
+ * closes an ended event at the epoch, and a reset recovered after the end still needs its length.
+ */
+function liveMatchTiming(event: ScopedTickDeps["event"]): CoordinationTiming | undefined {
+  return event && matchDurationTiming({ eventStartsAt: event.startsAt, eventEndsAt: event.endsAt });
 }
 
 /** batch 処理の結果サマリ (= async invoke 応答は捨てられるが、 直接テスト / ログ用に返す)。 */
@@ -80,17 +103,6 @@ const TickTargetSchema = z.object({
   eventId: z.string().min(1),
   moduleRef: z.string().min(1),
   eventNowMs: z.number().finite(),
-  // A malformed timing must not discard the whole batch: the plugin then ticks as an older platform's would.
-  timing: z
-    .object({
-      matchDurationMs: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
-    })
-    .transform((timing) => (timing.matchDurationMs === undefined ? undefined : timing))
-    .optional()
-    .catch(({ input }) => {
-      console.warn("[coordination-dispatcher] dropped malformed tick timing", { input });
-      return undefined;
-    }),
   teamIds: z.array(z.string()).default([]),
   drainOnly: z.boolean().optional(),
   initializeRunId: z.string().min(1).optional(),
@@ -122,13 +134,16 @@ export async function handleCoordinationTickBatch(
   const scoreBudgetMs = COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   for (const target of batch.targets) {
     const work = (async () => {
-      const scoped = deps.resolveCatalog ? await deps.resolveCatalog(target, batch.nowIso) : deps;
+      const scoped: ScopedTickDeps = deps.resolveCatalog
+        ? await deps.resolveCatalog(target, batch.nowIso)
+        : deps;
+      const live = { ...target, timing: liveMatchTiming(scoped.event) };
       if (target.initializeRunId) {
-        return initializeAcceptedCoordinationReset(scoped, target, batch.nowIso);
+        return initializeAcceptedCoordinationReset(scoped, live, batch.nowIso);
       } else if (target.drainOnly) {
         return drainSavedCoordinationScores(scoped, target).then(() => false);
       } else {
-        return tickCoordinationEvent(scoped, target, batch.nowIso, scoreBudgetMs);
+        return tickCoordinationEvent(scoped, live, batch.nowIso, scoreBudgetMs);
       }
     })();
     const didWrite = await work.catch((err) => {
@@ -145,7 +160,7 @@ export async function handleCoordinationTickBatch(
 /** Only an explicit, still-pending reset may materialize a state after event end. */
 async function initializeAcceptedCoordinationReset(
   deps: CoordinationTickDeps,
-  target: CoordinationTickTarget,
+  target: LiveTickTarget,
   nowIso: string,
 ): Promise<boolean> {
   if (!deps.config[target.moduleRef]) return false;
@@ -247,7 +262,7 @@ function warnTickSchemaMismatch(
  */
 async function tickCoordinationEvent(
   deps: CoordinationTickDeps,
-  target: CoordinationTickTarget,
+  target: LiveTickTarget,
   nowIso: string,
   scoreBudgetMs: number,
 ): Promise<boolean> {
@@ -300,7 +315,7 @@ async function tickCoordinationEvent(
 
 async function applyLoadedCoordinationTick(
   deps: CoordinationTickDeps,
-  target: CoordinationTickTarget,
+  target: LiveTickTarget,
   nowIso: string,
   work: {
     scope: CoordinationStateScope;
@@ -446,7 +461,7 @@ async function applyLoadedCoordinationTick(
 function prepareTickTransition(
   plugin: CoordinationPlugin<unknown, unknown>,
   currentState: unknown,
-  clock: Pick<CoordinationTickTarget, "eventNowMs" | "timing">,
+  clock: Pick<LiveTickTarget, "eventNowMs" | "timing">,
   nowIso: string,
   initializing: boolean,
 ) {

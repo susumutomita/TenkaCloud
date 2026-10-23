@@ -30,7 +30,12 @@ function buildShared(): {
 
 function mockCurrentEvent(
   ddbSend: ReturnType<typeof vi.fn>,
-  item: { tenantId?: string; startsAt?: string; endsAt?: string } = { tenantId: "tenant-acme" },
+  item: {
+    tenantId?: string;
+    startsAt?: string;
+    endsAt?: string;
+    problems?: readonly { problemId: string }[];
+  } = { tenantId: "tenant-acme" },
 ) {
   ddbSend.mockResolvedValueOnce({ Item: item });
 }
@@ -69,7 +74,9 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
 
     const eventUpd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
     expect(eventUpd).toBeInstanceOf(UpdateCommand);
-    expect(eventUpd.input.ConditionExpression).toBe("tenantId = :tenantId");
+    expect(eventUpd.input.ConditionExpression).toBe(
+      "tenantId = :tenantId AND attribute_not_exists(startsAt)",
+    );
     expect(eventUpd.input.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
     expect(eventUpd.input.ExpressionAttributeValues?.[":startsAt"]).toBe(STARTS_AT);
     // endsAt 未指定なので update 対象に含まれない
@@ -287,6 +294,112 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
     const out = await setEventSchedule(shared, "tenant-acme", "EV1", { nowMs: NOW_MS });
     expect(out).toEqual({ kind: "no_op" });
     expect(ddbSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("setEventSchedule on a started Battle (Challenge #933 review)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const STARTED = new Date(NOW_MS - 10 * 60_000).toISOString();
+  const battle = (problemId: string, startsAt = STARTED) => ({
+    tenantId: "tenant-acme",
+    startsAt,
+    problems: [{ problemId }],
+  });
+  const withCoordination = () => {
+    const built = buildShared();
+    return { ...built, shared: { ...built.shared, problemsCoordination: { battle: {} } } };
+  };
+  const acceptUpdate = (ddbSend: ReturnType<typeof vi.fn>) => {
+    ddbSend.mockResolvedValueOnce({ Attributes: { eventId: "EV1", tenantId: "tenant-acme" } });
+    ddbSend.mockResolvedValueOnce({ Items: [{ PK: "DEPLOYMENT#J1", eventId: "EV1" }] });
+    ddbSend.mockResolvedValue({});
+  };
+
+  it("should store the server's now for an end stamped by the browser a moment ago", async () => {
+    const { shared, ddbSend } = withCoordination();
+    mockCurrentEvent(ddbSend, battle("battle"));
+    acceptUpdate(ddbSend);
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      endsAt: new Date(NOW_MS - 30_000).toISOString(),
+      nowMs: NOW_MS,
+    });
+    expect(out).toEqual({
+      kind: "ok",
+      startsAt: undefined,
+      endsAt: NOW_ISO,
+      updatedDeployments: 1,
+    });
+    const eventUpd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
+    const deployUpd = ddbSend.mock.calls[3]?.[0] as UpdateCommand;
+    expect(eventUpd.input.ExpressionAttributeValues?.[":endsAt"]).toBe(NOW_ISO);
+    expect(deployUpd.input.ExpressionAttributeValues?.[":e"]).toBe(NOW_ISO);
+  });
+
+  it("should keep the end as sent for a started event without a Battle", async () => {
+    const { shared, ddbSend } = withCoordination();
+    mockCurrentEvent(ddbSend, battle("hello-world"));
+    acceptUpdate(ddbSend);
+    const slackEnd = new Date(NOW_MS - 30_000).toISOString();
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      endsAt: slackEnd,
+      nowMs: NOW_MS,
+    });
+    expect(out).toEqual({
+      kind: "ok",
+      startsAt: undefined,
+      endsAt: slackEnd,
+      updatedDeployments: 1,
+    });
+  });
+
+  it.each([
+    ["Start now", NOW_ISO],
+    ["a later start", new Date(NOW_MS + 60_000).toISOString()],
+  ])("should refuse %s once the Battle has started, without writing", async (_case, startsAt) => {
+    const { shared, ddbSend } = withCoordination();
+    mockCurrentEvent(ddbSend, battle("battle"));
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", { startsAt, nowMs: NOW_MS });
+    expect(out).toEqual({
+      kind: "running_battle_start_change",
+      startsAt,
+      currentStartsAt: STARTED,
+    });
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("should accept the running Battle's own start sent again in another format", async () => {
+    const { shared, ddbSend } = withCoordination();
+    const justStarted = new Date(NOW_MS - 30_000).toISOString();
+    mockCurrentEvent(ddbSend, battle("battle", justStarted));
+    acceptUpdate(ddbSend);
+    const sameStart = justStarted.replace(".000Z", "Z");
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      startsAt: sameStart,
+      endsAt: ENDS_AT,
+      nowMs: NOW_MS,
+    });
+    expect(out).toEqual({
+      kind: "ok",
+      startsAt: sameStart,
+      endsAt: ENDS_AT,
+      updatedDeployments: 1,
+    });
+  });
+
+  it("should let a Battle that has not started move its start", async () => {
+    const { shared, ddbSend } = withCoordination();
+    mockCurrentEvent(ddbSend, battle("battle", new Date(NOW_MS + 10 * 60_000).toISOString()));
+    acceptUpdate(ddbSend);
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      startsAt: NOW_ISO,
+      nowMs: NOW_MS,
+    });
+    expect(out).toEqual({
+      kind: "ok",
+      startsAt: NOW_ISO,
+      endsAt: undefined,
+      updatedDeployments: 1,
+    });
   });
 });
 

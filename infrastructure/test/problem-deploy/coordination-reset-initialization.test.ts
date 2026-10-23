@@ -86,7 +86,9 @@ async function setup(backend: string, scores = true) {
       : {}),
   };
   const importer = vi.fn(async () => ({ default: plugin }));
-  const deps = { store, importer, config: { battle: { plugin: "battle" } } };
+  const scoped = { store, importer, config: { battle: { plugin: "battle" } } };
+  const liveEvent = { startsAt: deployment.eventStartsAt, endsAt };
+  const deps = { ...scoped, resolveCatalog: async () => ({ ...scoped, event: liveEvent }) };
   const shared = {
     ...store,
     deploymentsTableName: "Deployments",
@@ -145,15 +147,17 @@ describe.each(["DynamoDB", "SQL"])("accepted reset initialization: %s", (backend
     expect(ctx.initialState).toHaveBeenCalledTimes(1);
   });
 
-  it("passes the scheduled match length to the reset's initial state", async () => {
+  it("passes the live event's match length to the reset's initial state, not the batch's", async () => {
     const ctx = await setup(backend);
-    await ctx.repository.putDeployment(deployment);
     const [target] = ctx.batch.targets;
-    if (!target) throw new Error("Expected a reset target.");
-    const timed = { ...ctx.batch, targets: [{ ...target, timing: { matchDurationMs: 600_000 } }] };
-    expect((await handleCoordinationTickBatch(ctx.deps, timed)).written).toBe(1);
+    const sent = parseCoordinationTickBatch({
+      ...ctx.batch,
+      targets: [{ ...target, timing: { matchDurationMs: 600_000 } }],
+    });
+    if (!sent) throw new Error("Expected the batch to parse.");
+    expect((await handleCoordinationTickBatch(ctx.deps, sent)).written).toBe(1);
     expect(ctx.initialState).toHaveBeenCalledWith(
-      expect.objectContaining({ matchDurationMs: 600_000 }),
+      expect.objectContaining({ matchDurationMs: 3_600_000 }),
     );
   });
 
@@ -186,13 +190,12 @@ describe.each(["DynamoDB", "SQL"])("accepted reset initialization: %s", (backend
       expect(invoke).toHaveBeenCalledTimes(1);
       expect(ctx.initialState).toHaveBeenCalledTimes(1);
       expect(ctx.initialState).toHaveBeenCalledWith(
-        expect.objectContaining({ teamIds: ["red"], teamNames: { red: "Red" } }),
+        expect.objectContaining({
+          teamIds: ["red"],
+          teamNames: { red: "Red" },
+          matchDurationMs: 3_600_000,
+        }),
       );
-      // A COMPLETE row reaches the pass with its event window; a recovered scope without a
-      // saved catalog has none, so that reset starts without a match length.
-      const initialized: { matchDurationMs?: number } | undefined =
-        ctx.initialState.mock.calls[0]?.[0];
-      expect(initialized?.matchDurationMs).toBe(status === "COMPLETE" ? 3_600_000 : undefined);
       expect(ctx.tick).not.toHaveBeenCalled();
       expect(await ctx.repository.getDeployment(deployment.jobId)).toMatchObject({
         score: 217,

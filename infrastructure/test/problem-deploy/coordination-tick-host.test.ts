@@ -544,7 +544,7 @@ describe("handleCoordinationTickBatch", () => {
   });
 });
 
-describe("the scoring tick passes the match length (#3453)", () => {
+describe("the dispatcher reads the match length from the live event (#3453)", () => {
   interface TimingState {
     readonly created: number | null;
     readonly seen: number | null;
@@ -556,57 +556,62 @@ describe("the scoring tick passes the match length (#3453)", () => {
     tick: (s, _eventNowMs, timing) => ({ ...s, seen: timing?.matchDurationMs ?? null }),
     projectForTeam: (s) => s,
   };
-
-  it("should hand the match length to initialState and to the tick", async () => {
-    const ddb = fakeDdb({ getItem: undefined });
-    await handleCoordinationTickBatch(
-      depsWith(importerOf(timingPlugin), ddb.store),
-      batch([capTarget({ timing: { matchDurationMs: 600_000 } })]),
-    );
-    expect(ddb.puts).toEqual([
-      {
-        PK: "COORD#t1#e1#cap#default",
-        state: { created: 600_000, seen: 600_000 },
-        version: 1,
-      },
-    ]);
-  });
-
-  it("should tick a batch from an older scoring Lambda that sends no timing", async () => {
-    const ddb = fakeDdb({ getItem: { state: { created: null, seen: 600_000 }, version: 4 } });
+  const liveDeps = (
+    store: CoordinationStoreDeps,
+    event: { readonly startsAt?: string; readonly endsAt?: string },
+  ): CoordinationTickDeps => {
+    const deps = depsWith(importerOf(timingPlugin), store);
+    return { ...deps, resolveCatalog: async () => ({ ...deps, event }) };
+  };
+  /** What an older scoring Lambda still sends: its own length, read before the invoke. */
+  const sentBatch = (timing: unknown) => {
     const parsed = parseCoordinationTickBatch({
       action: "coordination-tick",
       nowIso: NOW_ISO,
-      targets: [capTarget()],
+      targets: [{ ...capTarget(), timing }],
     });
     if (!parsed) throw new Error("Expected the batch to parse.");
-    await handleCoordinationTickBatch(depsWith(importerOf(timingPlugin), ddb.store), parsed);
+    return parsed;
+  };
+
+  it("should tick with the live event's length when the batch carries an older one", async () => {
+    const ddb = fakeDdb({ getItem: undefined });
+    await handleCoordinationTickBatch(
+      liveDeps(ddb.store, {
+        startsAt: "2026-06-01T00:55:00.000Z",
+        endsAt: "2026-06-01T01:05:00.000Z",
+      }),
+      sentBatch({ matchDurationMs: 5_400_000 }),
+    );
+    expect(ddb.puts).toEqual([
+      { PK: "COORD#t1#e1#cap#default", state: { created: 600_000, seen: 600_000 }, version: 1 },
+    ]);
+  });
+
+  it("should tick without a length once the end is cleared, whatever the batch carries", async () => {
+    const ddb = fakeDdb({ getItem: { state: { created: 600_000, seen: 600_000 }, version: 4 } });
+    await handleCoordinationTickBatch(
+      liveDeps(ddb.store, { startsAt: "2026-06-01T00:55:00.000Z" }),
+      sentBatch({ matchDurationMs: 600_000 }),
+    );
+    expect(ddb.puts).toEqual([
+      { PK: "COORD#t1#e1#cap#default", state: { created: 600_000, seen: null }, version: 5 },
+    ]);
+  });
+
+  it("should never take the length from the batch when no live event is read", async () => {
+    const ddb = fakeDdb({ getItem: { state: { created: null, seen: 600_000 }, version: 4 } });
+    await handleCoordinationTickBatch(
+      depsWith(importerOf(timingPlugin), ddb.store),
+      sentBatch({ matchDurationMs: 600_000 }),
+    );
     expect(ddb.puts).toEqual([
       { PK: "COORD#t1#e1#cap#default", state: { created: null, seen: null }, version: 5 },
     ]);
   });
 
-  it("should keep the batch, drop a malformed timing with a warning, and treat an empty one as absent", () => {
-    const parsed = parseCoordinationTickBatch({
-      action: "coordination-tick",
-      nowIso: NOW_ISO,
-      targets: [
-        capTarget({ timing: { matchDurationMs: -1 } }),
-        capTarget({ eventId: "e2", timing: { matchDurationMs: 600_000 } }),
-        capTarget({ eventId: "e3", timing: {} }),
-      ],
-    });
-    expect(parsed?.targets.map((target) => target.timing)).toStrictEqual([
-      undefined,
-      { matchDurationMs: 600_000 },
-      undefined,
-    ]);
-    expect(warnSpy).toHaveBeenCalledWith(
-      "[coordination-dispatcher] dropped malformed tick timing",
-      {
-        input: { matchDurationMs: -1 },
-      },
-    );
+  it("should keep parsing a batch from an older scoring Lambda, even with a malformed length", () => {
+    expect(sentBatch({ matchDurationMs: -1 }).targets).toStrictEqual([capTarget()]);
   });
 });
 

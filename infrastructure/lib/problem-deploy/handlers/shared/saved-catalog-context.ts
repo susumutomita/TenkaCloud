@@ -28,18 +28,28 @@ export async function resolveSavedCatalogContext(
   let event: EventRecord | undefined;
   if (scope.eventId) {
     if (!scope.tenantId) throw new Error("catalog_scope_missing: event tenant is required");
-    const events = await shared.runtime.resolveEventsRepository({
-      ddb: shared.ddb,
-      eventsTableName: shared.eventsTableName,
-    });
-    event = await events.getEvent(scope.tenantId, scope.eventId, true);
-    if (!event) throw new Error("catalog_event_missing: saved event is unavailable");
+    event = await readSavedEvent(shared, scope.tenantId, scope.eventId);
     if (event.catalogKey && key && event.catalogKey !== key) {
       throw new Error("catalog_pin_mismatch: event and deployment reference different catalogs");
     }
     key = event.catalogKey ?? key;
   }
   return { catalog: await shared.catalogLoader(key), event };
+}
+
+/** The event as stored now, read strongly; a missing event fails rather than reading as none. */
+export async function readSavedEvent(
+  shared: Pick<SavedCatalogResources, "runtime" | "ddb" | "eventsTableName">,
+  tenantId: string,
+  eventId: string,
+): Promise<EventRecord> {
+  const events = await shared.runtime.resolveEventsRepository({
+    ddb: shared.ddb,
+    eventsTableName: shared.eventsTableName,
+  });
+  const event = await events.getEvent(tenantId, eventId, true);
+  if (!event) throw new Error("catalog_event_missing: saved event is unavailable");
+  return event;
 }
 
 /** Current lifecycle data controls execution; normalized invalid dates close the gate. */

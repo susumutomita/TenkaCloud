@@ -31,6 +31,7 @@ import { buildParticipantSharedResources } from "../participant-handler/shared.j
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import {
   liveEventRoundWindow,
+  readSavedEvent,
   resolveSavedCatalogContext,
 } from "../shared/saved-catalog-context.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
@@ -122,10 +123,14 @@ const tickDeps: CoordinationTickDeps = {
     const importer = executionPluginImporter(catalog);
     // Missing/corrupt artifacts cannot mutate state, leases, TTLs, or scoring.
     if (config[target.moduleRef]) await importer(target.moduleRef);
+    // Catalog and plugin loads can outlast an end change; a run of the plugin needs the end as of now.
+    const runsPlugin =
+      Boolean(config[target.moduleRef]) && (!target.drainOnly || Boolean(target.initializeRunId));
     return {
       importer,
       config,
       store: { ...coordinationDeps.store, coordinationScoreModes: coordinationScoreModes(config) },
+      event: runsPlugin ? await readSavedEvent(shared, target.tenantId, target.eventId) : event,
     };
   },
 };

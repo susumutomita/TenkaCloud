@@ -3,7 +3,9 @@ import type {
   DeploymentsLifecyclePort,
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
+import type { EventRecord } from "../../control-data/domain/events.js";
 import type { EventSchedulePatch } from "../../control-data/events-repository.js";
+import { savedExecutionCatalog } from "../shared/execution-catalog-context.js";
 import {
   type EventSharedResources,
   resolveDeploymentsRepository,
@@ -33,6 +35,8 @@ export interface SetEventScheduleParams {
   readonly scoreboardFreezeMinutes?: number;
   /** 現在時刻 (ms)。validation の比較基準 */
   readonly nowMs: number;
+  /** Read again just before the write, for the started-Battle rule. Without it, `nowMs` stands. */
+  readonly clock?: () => number;
 }
 
 /**
@@ -45,6 +49,8 @@ export interface SetEventScheduleParams {
  * - `teardown_before_ends`: 実効 teardownAt < 実効 endsAt → 400 相当 (always-ends)
  * - `past_deploy_at`: 指定 deployAt が `now - SLACK_MS` 以前 → 400 相当
  * - `deploy_after_ends`: 実効 deployAt > 実効 endsAt → 400 相当 (deploy は終了より前)
+ * - `running_battle_start_change`: 開始済みの Battle の startsAt を変える → 409 相当
+ * - `schedule_changed`: 読んだ後に別の request が startsAt を変えた → 409 相当
  * - `no_op`: 何も指定なし (= zod 通過後ありえない、defense-in-depth)
  * - `ok`: 更新後の startsAt / endsAt / teardownAt / deployAt + 影響を受けた deployment 数
  */
@@ -57,6 +63,8 @@ export type SetEventScheduleOutcome =
   | { kind: "teardown_before_ends"; teardownAt: string; endsAt: string }
   | { kind: "past_deploy_at"; deployAt: string; nowMs: number }
   | { kind: "deploy_after_ends"; deployAt: string; endsAt: string }
+  | { kind: "running_battle_start_change"; startsAt: string; currentStartsAt: string }
+  | { kind: "schedule_changed" }
   | { kind: "no_op" }
   | {
       kind: "ok";
@@ -88,6 +96,7 @@ const SCHEDULE_SLACK_MS = 60_000;
  *   - past_starts_at: startsAt < now - SLACK
  *   - past_ends_at:   endsAt   < now - SLACK
  *   - ends_before_starts: effective endsAt <= effective startsAt
+ *   - 開始済みの Battle: {@link startedBattleSchedule}
  *
  * tenant 跨ぎ参照防止: Event 行の tenantId が引数 `tenantId` と一致しない場合は `not_found`。
  */
@@ -95,10 +104,9 @@ export async function setEventSchedule(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
-  params: SetEventScheduleParams,
+  requested: SetEventScheduleParams,
 ): Promise<SetEventScheduleOutcome> {
-  const { startsAt, endsAt, teardownAt, deployAt, scoreboardFreezeMinutes } = params;
-  const validation = validateScheduleParams(params);
+  const validation = validateScheduleParams(requested);
   if (validation) return validation;
 
   // Event 行の read / write は同じ repository seam を使う。 turso backend
@@ -108,6 +116,10 @@ export async function setEventSchedule(
   const repositories = await resolveEventRepositories(shared);
   const currentEvent = await repositories.events.getEvent(tenantId, eventId);
   if (!currentEvent) return { kind: "not_found" };
+  const decided = await startedBattleSchedule(shared, currentEvent, requested);
+  if ("kind" in decided) return decided;
+  const { params, startsAfter } = decided;
+  const { startsAt, endsAt, teardownAt, deployAt, scoreboardFreezeMinutes } = params;
 
   const effectiveStartsAt = startsAt ?? currentEvent.startsAt;
   const effectiveEndsAt = endsAt ?? currentEvent.endsAt;
@@ -126,7 +138,12 @@ export async function setEventSchedule(
   // union は updated / not_found の 2 値に畳まれる (HTTP ステータス対応は不変)。
   const now = new Date(params.nowMs).toISOString();
   const patch = buildSchedulePatch(params);
-  const result = await repositories.events.updateSchedule(tenantId, eventId, patch, now);
+  // Every check above read this start. Write only if no other request has moved it since.
+  const result = await repositories.events.updateSchedule(tenantId, eventId, patch, now, {
+    startsAt: currentEvent.startsAt,
+    startsAfter,
+  });
+  if (result.outcome === "conflict") return { kind: "schedule_changed" };
   if (result.outcome !== "updated") return { kind: "not_found" };
 
   // 紐づく deployment 行を全部引いて eventStartsAt / eventEndsAt を伝播。
@@ -148,6 +165,53 @@ export async function setEventSchedule(
     ...(scoreboardFreezeMinutes !== undefined ? { scoreboardFreezeMinutes } : {}),
     updatedDeployments,
   };
+}
+
+/**
+ * [Challenge #933 review] A Battle plugin judges each tick against the end it was last told and
+ * relies on the platform never moving that end before a moment it already processed. The local
+ * host enforces this in `assertSchedule`; this is the cloud side, for the same events: one with a
+ * coordination problem whose start has passed. Its start stays fixed. An end inside the clock-skew
+ * slack is stored as the server's now, because the cloud console's End now sends the browser's
+ * clock through this route. An end older than the slack was already refused as `past_ends_at`.
+ *
+ * A DRAFT event is not deployed, so no tick can have run however late its start is
+ * (`liveEventRoundWindow` hides its start). The clock is read after the catalog, just before
+ * the write. A start moved before the Battle starts is also written only while the stored start
+ * is still later than that instant.
+ */
+async function startedBattleSchedule(
+  shared: EventSharedResources,
+  event: EventRecord,
+  params: SetEventScheduleParams,
+): Promise<
+  | { readonly params: SetEventScheduleParams; readonly startsAfter?: string }
+  | Extract<SetEventScheduleOutcome, { kind: "running_battle_start_change" }>
+> {
+  const { startsAt, endsAt, clock = () => params.nowMs } = params;
+  const currentStartsAt = event.startsAt;
+  if (currentStartsAt === undefined || event.status === "DRAFT") return { params };
+  const startMs = Date.parse(currentStartsAt);
+  if (!Number.isFinite(startMs)) return { params };
+  const movesStart = startsAt !== undefined && Date.parse(startsAt) !== startMs;
+  // An end on a Battle not yet started is refused as ends_before_starts if it is already past.
+  if (!movesStart && (endsAt === undefined || startMs > params.nowMs)) return { params };
+  if (!(await hasCoordinationProblem(shared, event))) return { params };
+  const nowMs = clock();
+  if (startMs > nowMs) return { params, startsAfter: new Date(nowMs).toISOString() };
+  if (movesStart) return { kind: "running_battle_start_change", startsAt, currentStartsAt };
+  if (endsAt === undefined || Date.parse(endsAt) >= nowMs) return { params };
+  return { params: { ...params, endsAt: new Date(nowMs).toISOString() } };
+}
+
+/** The event's saved catalog decides, as for a reset; events without one use this deployment's. */
+async function hasCoordinationProblem(
+  shared: EventSharedResources,
+  event: EventRecord,
+): Promise<boolean> {
+  const coordination =
+    (await savedExecutionCatalog(event.catalogKey))?.coordination ?? shared.problemsCoordination;
+  return event.problems.some((problem) => Object.hasOwn(coordination, problem.problemId));
 }
 
 function validateScheduleParams(
