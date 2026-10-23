@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { DeploymentsCoordinationPort } from "../../lib/problem-deploy/control-data/deployments-repository.js";
 import {
   buildCoordinationTickBatch,
   type CollectedTickTarget,
@@ -260,6 +261,36 @@ describe("createCoordinationTickPass", () => {
         moduleRef: "cap",
         eventNowMs: CAPTURE_MS,
         teamIds: ["team-a", "team-b"],
+      },
+    ]);
+  });
+
+  it("should recover only the scopes the event's saved catalog declares", async () => {
+    const invoke = vi.fn<CoordinationTickInvoker>().mockResolvedValue(undefined);
+    const repository = {
+      readCoordinationRun: async () => ({ runId: "run-2", pendingInitialization: true }),
+    } as unknown as DeploymentsCoordinationPort;
+    const pass = createCoordinationTickPass(
+      invoke,
+      "coord-dispatcher",
+      new Set(),
+      repository,
+      async () => ({ problemIds: new Set(["cap"]) }),
+    );
+    await pass.collectRecovery([
+      { tenantId: "t1", eventId: "e1", problemId: "cap", runId: "default" },
+      { tenantId: "t1", eventId: "e1", problemId: "retired", runId: "default" },
+    ]);
+    await pass.run(Date.parse(NOW), NOW);
+    expect(invoke.mock.calls[0]?.[1].targets).toEqual([
+      {
+        tenantId: "t1",
+        eventId: "e1",
+        moduleRef: "cap",
+        eventNowMs: Date.parse(NOW),
+        teamIds: [],
+        drainOnly: true,
+        initializeRunId: "run-2",
       },
     ]);
   });

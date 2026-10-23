@@ -345,6 +345,50 @@ describe.each(backends)("EventsRepository mutations parity: %s", (_name, makeRep
         await events.updateSchedule("tenant-b", "01EVENTAAAAAAAAAAAAAAAAAAA", { endsAt: AT }, AT),
       ).toEqual({ outcome: "not_found" });
     });
+
+    it("should write only while the stored start is the expected one", async () => {
+      const { events } = makeRepos();
+      await events.putEvent(sampleEvent({ startsAt: "2026-07-09T00:00:00.000Z" }));
+      const expected = { startsAt: "2026-07-09T00:00:00.000Z" };
+      const first = await events.updateSchedule(
+        "tenant-a",
+        "01EVENTAAAAAAAAAAAAAAAAAAA",
+        { startsAt: "2026-07-08T12:00:00.000Z" },
+        AT,
+        expected,
+      );
+      const second = await events.updateSchedule(
+        "tenant-a",
+        "01EVENTAAAAAAAAAAAAAAAAAAA",
+        { startsAt: "2026-07-09T06:00:00.000Z" },
+        AT,
+        expected,
+      );
+      expect(first.outcome).toBe("updated");
+      expect(second.outcome).toBe("conflict");
+      expect(second.outcome === "conflict" && second.event?.startsAt).toBe(
+        "2026-07-08T12:00:00.000Z",
+      );
+      const stored = await events.getEvent("tenant-a", "01EVENTAAAAAAAAAAAAAAAAAAA");
+      expect(stored?.startsAt).toBe("2026-07-08T12:00:00.000Z");
+    });
+
+    it("should treat an expected absent start as a condition too", async () => {
+      const { events } = makeRepos();
+      await events.putEvent(sampleEvent());
+      const unscheduled = { startsAt: undefined };
+      const patch = { startsAt: "2026-07-09T00:00:00.000Z" };
+      const id = "01EVENTAAAAAAAAAAAAAAAAAAA";
+      expect((await events.updateSchedule("tenant-a", id, patch, AT, unscheduled)).outcome).toBe(
+        "updated",
+      );
+      expect((await events.updateSchedule("tenant-a", id, patch, AT, unscheduled)).outcome).toBe(
+        "conflict",
+      );
+      expect(await events.updateSchedule("tenant-a", "missing", patch, AT, unscheduled)).toEqual({
+        outcome: "not_found",
+      });
+    });
   });
 
   describe("markTeardown", () => {

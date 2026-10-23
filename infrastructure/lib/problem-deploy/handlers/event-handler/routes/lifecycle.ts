@@ -115,6 +115,16 @@ function scheduleOutcomeResponse(c: Context, outcome: SetEventScheduleOutcome): 
         },
         StatusCodes.CONFLICT,
       );
+    case "schedule_changed":
+      // 読んだ後に別の操作が開始時刻を変えた。最新の状態で判断し直してもらう。
+      return c.json(
+        {
+          error: "schedule_changed",
+          message:
+            "ほかの操作で開始時刻が変わりました。画面を再読み込みしてから、もう一度操作してください。",
+        },
+        StatusCodes.CONFLICT,
+      );
     case "no_op":
       return c.json(
         { error: "no_op", message: "更新対象が指定されていません" },

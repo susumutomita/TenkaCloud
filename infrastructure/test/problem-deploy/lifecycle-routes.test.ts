@@ -123,6 +123,7 @@ describe("PATCH /events/:eventId/schedule", () => {
       StatusCodes.CONFLICT,
       "running_battle_start_change",
     ],
+    ["schedule_changed", { kind: "schedule_changed" }, StatusCodes.CONFLICT, "schedule_changed"],
     [
       "ends_before_starts",
       {

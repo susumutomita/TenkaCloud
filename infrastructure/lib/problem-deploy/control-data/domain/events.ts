@@ -279,6 +279,15 @@ export interface EventSchedulePatch {
 }
 
 /**
+ * The start a schedule write was decided against (`undefined` = no start yet). With it,
+ * {@link EventsRepository.updateSchedule} writes only while the stored start is unchanged, so
+ * two overlapping requests cannot both act on the same read.
+ */
+export interface EventScheduleExpectation {
+  readonly startsAt: string | undefined;
+}
+
+/**
  * [Issue #2437] Which scheduled-action audit stamp
  * {@link EventsRepository.markScheduleFired} writes: `teardown` →
  * `teardownFiredAt`, `deploy` → `deployFiredAt`.
@@ -395,15 +404,17 @@ export interface EventsRepository {
   archiveEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome>;
   /**
    * [#536 / #537] Partial schedule update — writes only the fields
-   * present in `patch` plus `updatedAt`. The condition is tenant-scope only, so
-   * the union never yields `conflict` (a failed condition means the row is
-   * absent or foreign → `not_found`).
+   * present in `patch` plus `updatedAt`. Without `expected` the condition is
+   * tenant-scope only, so the union never yields `conflict` (a failed condition
+   * means the row is absent or foreign → `not_found`). With `expected`, a stored
+   * start that differs from it yields `conflict` carrying the probed event.
    */
   updateSchedule(
     tenantId: string,
     eventId: string,
     patch: EventSchedulePatch,
     at: string,
+    expected?: EventScheduleExpectation,
   ): Promise<EventMutationOutcome>;
   /**
    * [#557] Marks the event TEARDOWN unless it is already ARCHIVED (an archived

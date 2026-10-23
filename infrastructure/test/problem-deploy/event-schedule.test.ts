@@ -74,7 +74,9 @@ describe("setEventSchedule (startsAt のみ、既存パターン)", () => {
 
     const eventUpd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
     expect(eventUpd).toBeInstanceOf(UpdateCommand);
-    expect(eventUpd.input.ConditionExpression).toBe("tenantId = :tenantId");
+    expect(eventUpd.input.ConditionExpression).toBe(
+      "tenantId = :tenantId AND attribute_not_exists(startsAt)",
+    );
     expect(eventUpd.input.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
     expect(eventUpd.input.ExpressionAttributeValues?.[":startsAt"]).toBe(STARTS_AT);
     // endsAt 未指定なので update 対象に含まれない

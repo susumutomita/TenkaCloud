@@ -48,6 +48,7 @@ export interface SetEventScheduleParams {
  * - `past_deploy_at`: 指定 deployAt が `now - SLACK_MS` 以前 → 400 相当
  * - `deploy_after_ends`: 実効 deployAt > 実効 endsAt → 400 相当 (deploy は終了より前)
  * - `running_battle_start_change`: 開始済みの Battle の startsAt を変える → 409 相当
+ * - `schedule_changed`: 読んだ後に別の request が startsAt を変えた → 409 相当
  * - `no_op`: 何も指定なし (= zod 通過後ありえない、defense-in-depth)
  * - `ok`: 更新後の startsAt / endsAt / teardownAt / deployAt + 影響を受けた deployment 数
  */
@@ -61,6 +62,7 @@ export type SetEventScheduleOutcome =
   | { kind: "past_deploy_at"; deployAt: string; nowMs: number }
   | { kind: "deploy_after_ends"; deployAt: string; endsAt: string }
   | { kind: "running_battle_start_change"; startsAt: string; currentStartsAt: string }
+  | { kind: "schedule_changed" }
   | { kind: "no_op" }
   | {
       kind: "ok";
@@ -133,7 +135,11 @@ export async function setEventSchedule(
   // union は updated / not_found の 2 値に畳まれる (HTTP ステータス対応は不変)。
   const now = new Date(params.nowMs).toISOString();
   const patch = buildSchedulePatch(params);
-  const result = await repositories.events.updateSchedule(tenantId, eventId, patch, now);
+  // Every check above read this start. Write only if no other request has moved it since.
+  const result = await repositories.events.updateSchedule(tenantId, eventId, patch, now, {
+    startsAt: currentEvent.startsAt,
+  });
+  if (result.outcome === "conflict") return { kind: "schedule_changed" };
   if (result.outcome !== "updated") return { kind: "not_found" };
 
   // 紐づく deployment 行を全部引いて eventStartsAt / eventEndsAt を伝播。
@@ -192,7 +198,7 @@ async function hasCoordinationProblem(
 ): Promise<boolean> {
   const coordination =
     (await savedExecutionCatalog(event.catalogKey))?.coordination ?? shared.problemsCoordination;
-  return event.problems.some((problem) => Object.hasOwn(coordination ?? {}, problem.problemId));
+  return event.problems.some((problem) => Object.hasOwn(coordination, problem.problemId));
 }
 
 function validateScheduleParams(

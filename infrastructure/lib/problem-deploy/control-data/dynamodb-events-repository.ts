@@ -18,7 +18,10 @@ import {
   type ProgressionGateConfig,
   parseProgressionGate,
 } from "../handlers/shared/progression-gate.js";
-import type { HostingAccountSelfTestAcknowledgment } from "./domain/events.js";
+import type {
+  EventScheduleExpectation,
+  HostingAccountSelfTestAcknowledgment,
+} from "./domain/events.js";
 import { teamRecordToItem } from "./dynamodb-teams-repository.js";
 import { sweepExpiredRows } from "./dynamodb-ttl-sweep.js";
 import type {
@@ -507,6 +510,7 @@ export class DynamoDbEventsRepository implements EventsRepository {
     eventId: string,
     patch: EventSchedulePatch,
     at: string,
+    expected?: EventScheduleExpectation,
   ): Promise<EventMutationOutcome> {
     // 動的 SET (schedule.ts buildScheduleUpdate の event 側と同一の組み立て順)。
     const parts = ["updatedAt = :now"];
@@ -531,17 +535,22 @@ export class DynamoDbEventsRepository implements EventsRepository {
       parts.push("scoreboardFreezeMinutes = :fz");
       values[":fz"] = patch.scoreboardFreezeMinutes;
     }
-    // 条件は tenant 照合のみ → CCF は行不在 / tenant 不一致 = not_found (probe 不要)。
+    // expected 無しの条件は tenant 照合のみ → CCF は行不在 / tenant 不一致 = not_found (probe 不要)。
+    const conditions = ["tenantId = :tenantId"];
+    if (expected?.startsAt !== undefined) {
+      conditions.push("startsAt = :expectedStartsAt");
+      values[":expectedStartsAt"] = expected.startsAt;
+    } else if (expected) conditions.push("attribute_not_exists(startsAt)");
     return this.conditionalUpdate(
       tenantId,
       eventId,
       {
         UpdateExpression: `SET ${parts.join(", ")}`,
-        ConditionExpression: "tenantId = :tenantId",
+        ConditionExpression: conditions.join(" AND "),
         ExpressionAttributeValues: values,
         ReturnValues: "ALL_NEW",
       },
-      "not_found",
+      expected ? "probe_consistent" : "not_found",
     );
   }
 

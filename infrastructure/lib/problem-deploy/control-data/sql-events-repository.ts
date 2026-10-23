@@ -3,7 +3,10 @@ import {
   type ProgressionGateConfig,
   parseProgressionGate,
 } from "../handlers/shared/progression-gate.js";
-import type { HostingAccountSelfTestAcknowledgment } from "./domain/events.js";
+import type {
+  EventScheduleExpectation,
+  HostingAccountSelfTestAcknowledgment,
+} from "./domain/events.js";
 import { TEAM_INSERT_SQL, teamRowParams } from "./sql-teams-repository.js";
 import type {
   ClearProgressionGateOutcome,
@@ -382,6 +385,7 @@ export class SqlEventsRepository implements EventsRepository {
     eventId: string,
     patch: EventSchedulePatch,
     at: string,
+    expected?: EventScheduleExpectation,
   ): Promise<EventMutationOutcome> {
     // 動的 json_set (DDB backend の動的 SET と同じ「指定された field のみ」を書く)。
     const pairs = ["'$.updatedAt', ?"];
@@ -406,12 +410,22 @@ export class SqlEventsRepository implements EventsRepository {
       pairs.push("'$.scoreboardFreezeMinutes', ?");
       params.push(patch.scoreboardFreezeMinutes);
     }
+    const expectedStart = expected?.startsAt;
     return this.conditionalUpdate({
       tenantId,
       eventId,
       set: `payload = json_set(payload, ${pairs.join(", ")})`,
       setParams: params,
-      onMiss: "not_found",
+      ...(expected
+        ? {
+            where:
+              expectedStart === undefined
+                ? "json_type(payload, '$.startsAt') IS NULL"
+                : "json_extract(payload, '$.startsAt') = ?",
+            whereParams: expectedStart === undefined ? [] : [expectedStart],
+          }
+        : {}),
+      onMiss: expected ? "probe" : "not_found",
       withPostImage: true,
     });
   }
