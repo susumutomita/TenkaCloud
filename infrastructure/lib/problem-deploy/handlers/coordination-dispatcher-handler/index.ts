@@ -126,6 +126,7 @@ const tickDeps: CoordinationTickDeps = {
       importer,
       config,
       store: { ...coordinationDeps.store, coordinationScoreModes: coordinationScoreModes(config) },
+      event,
     };
   },
 };
