@@ -458,6 +458,19 @@ describe.each(["SQL", "DynamoDB"])("terminal tick: %s", (backend) => {
     expect(await readCoordinationState(ctx.store, scope)).toEqual(saved);
   });
 
+  it("does not dispatch an ended run after its lifecycle pointer is closed", async () => {
+    const ctx = await setup(backend, clockPlugin);
+    await writeCoordinationState(ctx.store, scope, { phase: "running" }, 0, startsAt);
+    const saved = await readCoordinationState(ctx.store, scope);
+    await ctx.repository.deleteCoordinationRun(key);
+    expect(await ctx.repository.readCoordinationRun(key)).toMatchObject({ closed: true });
+    await ctx.passAt(endsAt);
+    await ctx.passAt("2026-09-06T00:11:00.000Z");
+    expect(ctx.invoke).not.toHaveBeenCalled();
+    expect(ctx.importer).not.toHaveBeenCalled();
+    expect(await readCoordinationState(ctx.store, scope)).toEqual(saved);
+  });
+
   it.each([undefined, startsAt, "2026-09-05T00:00:00.000Z"])(
     "does not repeatedly dispatch a round without a positive explicit duration (%s)",
     async (end) => {
