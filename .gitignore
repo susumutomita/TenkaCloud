@@ -158,6 +158,7 @@ vite.config.ts.timestamp-*
 .claude/*
 !.claude/settings.json
 !.claude/templates/
+!.claude/skills/
 
 .playwright-mcp
 apps/*/test-results/
