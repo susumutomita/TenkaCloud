@@ -2,6 +2,7 @@ import { initialSteal, stealTask, validateSteal, applySteal, projectSteal } from
 import { curriculumPlan } from "./curriculum.ts";
 import { evolutionTask, evolutionAnswer, parseEvolutionAnswer } from "./evolution.ts";
 import { MATCH_PACING, pacingConfig } from "./pacing.ts";
+import { startedTiming, waitingRemainingMs, withMatchDuration } from "./match-length.ts";
 import { deriveBigInt } from "./prng.ts";
 import {anamorphicTask,anamorphicAnswer,parseAnamorphicAnswer} from "./anamorphic.ts";
 import {starkTask,starkAnswer,parseStarkAnswer} from "./stark.ts";
@@ -140,6 +141,7 @@ import type {
   CiphertextArtifact,
   Contract,
   CoordinationContext,
+  CoordinationTiming,
   CryptoBattleConfig,
   CryptoBattleOp,
   CryptoBattleProjection,
@@ -314,7 +316,7 @@ export function initialState(
     };
     publicPuzzles[teamId] = deriveSudokuPuzzle(seed, teamId, 1);
   }
-  return {
+  return withMatchDuration({
     ...(scoreSteal ? { scoreSteal } : {}),
     config: mergedConfig,
     seed,
@@ -333,7 +335,7 @@ export function initialState(
     successfulHunts: [],
     huntAttempts: {},
     huntLog: [],
-  };
+  }, ctx.matchDurationMs);
 }
 
 function computePhase(elapsedMs: number, config: CryptoBattleConfig): Phase {
@@ -683,7 +685,9 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  */
 // v22 adds a persisted queue cap and independent anamorphic worksheets.
 // Older rows keep their existing tasks and unlimited queue settings.
-export const STATE_SCHEMA_VERSION = 23;
+// v24 adds the platform-reported match length and its rejection code. A v23
+// row has neither and keeps the length it was created with until a report.
+export const STATE_SCHEMA_VERSION = 24;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -726,9 +730,9 @@ export const STATE_SCHEMA_VERSION = 23;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19 && fromVersion !== 20 && fromVersion !== 21 && fromVersion !== 22) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19 && fromVersion !== 20 && fromVersion !== 21 && fromVersion !== 22 && fromVersion !== 23) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21 and v22 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22 and v23 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -847,7 +851,17 @@ function withMigratedContracts(persistedState: CryptoBattleState): CryptoBattleS
   };
 }
 
-export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
+/**
+ * [Issue #926] `timing` is the platform's report for this tick. It sets the end
+ * before `advance` replays the clock to `eventNowMs` -- see `match-length.ts`.
+ * A stale clock carries a stale report, so both are ignored.
+ */
+export function tick(persistedState: CryptoBattleState, eventNowMs: number, timing?: CoordinationTiming): CryptoBattleState {
+  if (eventNowMs < (persistedState.nowMs ?? eventNowMs)) return advance(persistedState, eventNowMs);
+  return advance(withMatchDuration(withMigratedContracts(persistedState), timing?.matchDurationMs), eventNowMs);
+}
+
+function advance(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
   let state = withMigratedContracts(persistedState);
   if (state.nowMs !== undefined && eventNowMs < state.nowMs) return state;
   if (state.startedAtMs === undefined) return tickAtTime(state, eventNowMs);
@@ -865,7 +879,7 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
     }
     const boundary = boosterStartAt(state);
     if ((state.endgameBooster?.status === "pending" || state.endgameLightning?.status === "pending") &&
-        boundary !== undefined && boundary >= now) at = Math.min(at, boundary);
+        boundary !== undefined && boundary >= now && boundary < matchEnd) at = Math.min(at, boundary);
     state = tickEvent(state, at);
     if (at === eventNowMs) return state;
   }
@@ -874,7 +888,8 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
 function tickEvent(state: CryptoBattleState, eventNowMs: number): CryptoBattleState {
   const advanced = tickAtTime(state, eventNowMs);
   const boundary = boosterStartAt(state);
-  if (boundary !== undefined && eventNowMs >= boundary) {
+  // [Issue #926] An end moved before the endgame means the endgame never came.
+  if (boundary !== undefined && eventNowMs >= boundary && boundary < state.startedAtMs! + state.config.matchDurationMs) {
     return settleLightning({ ...advanced,
       endgameBooster: state.endgameBooster?.status === "pending" ? awardBooster(advanced) : state.endgameBooster,
       endgameLightning: state.endgameLightning?.status === "pending" ? awardLightning(advanced) : state.endgameLightning,
@@ -2791,7 +2806,11 @@ function applyReady(state: CryptoBattleState, teamId: string): CryptoBattleState
 
 function applyStart(state: CryptoBattleState): CryptoBattleState {
   const startedAtMs = state.nowMs ?? 0;
-  return tick({ ...state, startedAtMs, nextContractAtMs: startedAtMs, phase: "build" }, startedAtMs);
+  // [Issue #926] A platform length ends the match at a fixed point on the
+  // event clock, so the span left after START is what the phases divide.
+  // They stay fixed from here; later reports move only the end.
+  const started = { ...state, startedAtMs, nextContractAtMs: startedAtMs, phase: "build" as const };
+  return tick(startedTiming(started), startedAtMs);
 }
 
 /** A declaration and its terminal result persist in the same operation/state write. */
@@ -2984,7 +3003,7 @@ export function projectForTeam(
   // up for", and it is the same field they watch count down afterwards.
   const matchRemainingMs =
     state.startedAtMs === undefined
-      ? state.config.matchDurationMs
+      ? waitingRemainingMs(state)
       : state.nowMs === undefined
         ? undefined
         : Math.max(0, state.startedAtMs + state.config.matchDurationMs - state.nowMs);

@@ -169,7 +169,7 @@ Each launch or deployment resolves the configured branch again. Acquisition fail
 
 Commits, content digests and historical snapshots are managed internally in `catalog-lock.json` and `.tenkacloud/catalog-store/`. Saved events keep their problem definitions and progress when a branch advances. Historical snapshots supply saved events' browser modules and are not offered as new-event problems. Restoring a required internal snapshot must succeed before the selection changes.
 
-CI uses `bun run catalog download-locked` followed by `make catalog-verify-lock` to verify the committed internal snapshot independently of branch updates. No scheduled workflow or automated update PR is required.
+CI does not download a catalog; it tests against the frozen inputs in `scripts/problem-pack/test/fixtures/ci-catalog`. To fetch and verify the committed internal snapshot, run `bun run catalog download-locked` followed by `make catalog-verify-lock`. No scheduled workflow or automated update PR is required.
 
 For reusable or private content, the public SDK and offline Problem Pack tools create, validate and store immutable revisions:
 
