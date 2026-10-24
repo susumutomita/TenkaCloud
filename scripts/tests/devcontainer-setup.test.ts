@@ -68,10 +68,10 @@ test("a missing Bun is installed at the mise pin before the real safe Make insta
     expect(result.status).toBe(0);
     const trace = input.trace();
     expect(trace).toContain("https://bun.com/install");
-    expect(trace).toContain("install bun-v1.3.11\n");
+    expect(trace).toContain("install bun-v1.4.4\n");
     expect(trace).toContain("bun install --ignore-scripts\n");
     expect(trace).toContain("bun x husky\n");
-    expect(trace.indexOf("install bun-v1.3.11")).toBeLessThan(
+    expect(trace.indexOf("install bun-v1.4.4")).toBeLessThan(
       trace.indexOf("bun install --ignore-scripts"),
     );
     expect(trace).not.toContain("submodule");

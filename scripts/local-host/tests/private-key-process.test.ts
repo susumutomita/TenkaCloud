@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readlinkSync, rmSync } from "node:fs";
+import { fstatSync, mkdtempSync, readdirSync, readlinkSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -69,6 +69,30 @@ test("private child output carries the organizer key separately from public outp
     stderr: "public diagnostic\n",
     key: syntheticKeyLine,
   });
+});
+
+test("a failed private reader preserves its error and releases caller-owned descriptors", async () => {
+  const result = spawnPrivateKeyProcess([process.execPath, "-e", "setInterval(() => {}, 1000)"], {
+    cwd: process.cwd(),
+  });
+  const descriptor = result.child.stdio[3];
+  const failure = new Error("Synthetic private reader failure");
+  const exited = result.exited.catch((error: unknown) => error);
+  result.stdout.resume();
+  result.stderr.resume();
+  try {
+    result.privateOutput.destroy(failure);
+    expect(await exited).toBe(failure);
+    // Keep the subprocess alive: cleanup must not depend on its exit or GC.
+    if (process.platform !== "win32" && Bun.semver.satisfies(Bun.version, ">=1.4.0")) {
+      if (descriptor === undefined || descriptor === null)
+        throw new Error("Synthetic private descriptor was not created.");
+      expect(() => fstatSync(descriptor)).toThrow("EBADF");
+    }
+  } finally {
+    result.child.kill("SIGKILL");
+    await result.child.exited;
+  }
 });
 
 test("collecting private-pipe children cannot close later SQLite descriptors", async () => {

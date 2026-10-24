@@ -16,7 +16,7 @@
 # Generate/recover the key in a private exec terminal; it never enters container logs:
 # docker exec -it <container> bun run scripts/local-host/local.ts reset --data /data
 
-FROM oven/bun:1.3.11-alpine AS build
+FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS build
 WORKDIR /app
 # Manifests first, so the install layer is keyed on the dependency tree. Every
 # workspace in package.json needs its manifest for --frozen-lockfile.
@@ -33,7 +33,7 @@ COPY . .
 RUN bun run build:host
 
 # Resolve runtime dependencies from the same frozen graph used for the UI build.
-FROM oven/bun:1.3.11-alpine AS runtime-deps
+FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS runtime-deps
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY infrastructure/package.json ./infrastructure/
@@ -44,7 +44,7 @@ COPY apps/participant-portal/package.json ./apps/participant-portal/
 RUN --mount=type=cache,target=/root/.bun/install/cache \
       bun install --production --frozen-lockfile --ignore-scripts
 
-FROM oven/bun:1.3.11-alpine AS runtime
+FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS runtime
 WORKDIR /app
 ARG TENKACLOUD_SOURCE_COMMIT
 ARG TENKACLOUD_CATALOG_DIGEST
