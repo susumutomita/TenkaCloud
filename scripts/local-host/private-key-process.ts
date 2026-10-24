@@ -1,11 +1,14 @@
+import { closeSync } from "node:fs";
 import { Readable } from "node:stream";
 import { finished } from "node:stream/promises";
 
 /**
  * Bun 1.3.11's node:child_process adapter gives extra pipes two fd owners: the
  * Node socket and the native subprocess. After the socket closes, later GC can
- * close an unrelated file that reused its fd. Keep fd 3 owned only by Bun's
- * subprocess; Bun.file borrows it without introducing a second socket owner.
+ * close an unrelated file that reused its fd. Bun.file borrows fd 3 without
+ * introducing a second socket owner. Since Bun 1.4, reading child.stdio on
+ * POSIX transfers extra pipe ownership to the caller, so release it explicitly
+ * after its reader settles. Older Bun versions retain native ownership.
  */
 export function spawnPrivateKeyProcess(
   command: readonly string[],
@@ -28,13 +31,17 @@ export function spawnPrivateKeyProcess(
   const stdout = Readable.from(child.stdout, { objectMode: false });
   const stderr = Readable.from(child.stderr, { objectMode: false });
   const privateOutput = Readable.from(Bun.file(descriptor).stream(), { objectMode: false });
-  // Keep the native fd owner alive until every borrowed reader has reached EOF.
+  const privateOutputFinished = finished(privateOutput).finally(() => {
+    if (process.platform !== "win32" && Bun.semver.satisfies(Bun.version, ">=1.4.0"))
+      closeSync(descriptor);
+  });
+  // Keep the subprocess alive until every reader has reached EOF.
   // Callers consume all three streams, including continuing past the key line.
   const exited = Promise.all([
     child.exited,
     finished(stdout),
     finished(stderr),
-    finished(privateOutput),
+    privateOutputFinished,
   ]).then(([code]) => {
     // Bun represents signal exits with exitCode=null and exited=128+signal.
     // Read the native owner here even after every borrowed reader has closed.

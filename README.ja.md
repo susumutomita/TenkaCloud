@@ -56,7 +56,7 @@ TenkaCloud は、ハンズオン形式のクラウド競技会を開くための
 
 ### ローカルで試す (AWS 不要)
 
-macOS、Linux または WSL2 に Git、Make、**Bun 1.3.11** を用意します。Docker 問題には Docker Engine と Compose v2 が必要です。組み込みの Cryptography Battle は Docker も AWS も使いません。開発ツールのバージョンは [mise.toml](./mise.toml) にあります。
+macOS、Linux または WSL2 に Git、Make、**Bun 1.4.4** を用意します。Docker 問題には Docker Engine と Compose v2 が必要です。組み込みの Cryptography Battle は Docker も AWS も使いません。開発ツールのバージョンは [mise.toml](./mise.toml) にあります。
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git

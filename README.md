@@ -54,7 +54,7 @@ Invited to an event? Use the **Participant Portal URL and team key from your org
 
 ### Try it locally (no AWS)
 
-Install Git, Make and **Bun 1.3.11** on macOS, Linux or WSL2. Docker Engine with Compose v2 is needed for Docker exercises; the built-in Cryptography Battle needs neither Docker nor AWS. [mise.toml](./mise.toml) pins the development tools.
+Install Git, Make and **Bun 1.4.4** on macOS, Linux or WSL2. Docker Engine with Compose v2 is needed for Docker exercises; the built-in Cryptography Battle needs neither Docker nor AWS. [mise.toml](./mise.toml) pins the development tools.
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git

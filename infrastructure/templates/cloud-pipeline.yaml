@@ -158,7 +158,7 @@ Parameters:
 
   BunVersion:
     Type: String
-    Default: 1.3.11
+    Default: 1.4.4
     Description: Bun version installed in the build (matches the repo toolchain).
 
   CodeBuildTimeoutMinutes:
