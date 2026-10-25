@@ -18,7 +18,7 @@
         "js-yaml": "5.4.1",
         "swagger-ui-dist": "5.33.1",
         "ws": "^8.22.0",
-        "yaml": "^2.9.0",
+        "yaml": "^2.9.1",
         "zod": "^4.6.5",
       },
       "devDependencies": {
@@ -68,7 +68,7 @@
         "react": "^19.3.0",
         "react-dom": "^19.3.0",
         "react-router": "^8.4.0",
-        "yaml": "^2.9.0",
+        "yaml": "^2.9.1",
       },
       "devDependencies": {
         "@testing-library/jest-dom": "^6.9.1",
@@ -186,7 +186,7 @@
         "hono": "4.13.11",
         "http-status-codes": "^2.3.0",
         "ulid": "3.0.2",
-        "yaml": "2.9.0",
+        "yaml": "2.9.1",
         "zod": "^4.6.5",
       },
       "devDependencies": {
@@ -257,7 +257,7 @@
       "name": "@tenkacloud/problem-cost",
       "version": "0.1.0",
       "dependencies": {
-        "yaml": "^2.9.0",
+        "yaml": "^2.9.1",
       },
       "devDependencies": {
         "typescript": "^6.0.3",
@@ -2860,7 +2860,7 @@
 
     "xtend": ["xtend@4.0.2", "", {}, "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ=="],
 
-    "yaml": ["yaml@2.9.0", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA=="],
+    "yaml": ["yaml@2.9.1", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw=="],
 
     "yocto-queue": ["yocto-queue@0.1.0", "", {}, "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q=="],
 
