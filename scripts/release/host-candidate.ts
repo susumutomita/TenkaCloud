@@ -16,9 +16,9 @@ const image = z
   .strict();
 export const HostCandidateSchema = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(3),
     status: z.literal("unpublished"),
-    sources: z.object({ platformCommit: commit.nullable(), catalog: CatalogLockSchema }).strict(),
+    sources: z.object({ platformCommit: commit.nullable() }).strict(),
     image: image.nullable(),
     limitations: z.array(z.string().min(1)).min(1),
   })
@@ -59,9 +59,9 @@ export function captureCandidate(input: {
     throw new Error("Image source/catalog labels do not match the clean checkout");
   }
   return HostCandidateSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     status: "unpublished",
-    sources: { platformCommit: input.platformCommit, catalog: input.catalog },
+    sources: { platformCommit: input.platformCommit },
     image: { tag: input.tag, imageId: inspected.Id, registryDigests: inspected.RepoDigests ?? [] },
     limitations: [
       "This record does not publish an image or certify a release.",
@@ -78,11 +78,6 @@ export function catalogIdentity(catalog: z.infer<typeof CatalogLockSchema>): str
     .update(JSON.stringify(CatalogLockSchema.parse(catalog)))
     .digest("hex");
 }
-function catalogPin(root: string) {
-  return CatalogLockSchema.parse(
-    JSON.parse(readFileSync(resolve(root, "catalog-lock.json"), "utf8")),
-  );
-}
 function main(): void {
   const root = resolve(import.meta.dir, "../..");
   const args = process.argv.slice(2);
@@ -93,22 +88,10 @@ function main(): void {
     console.log(catalogIdentity(CatalogLockSchema.parse(selected)));
     return;
   }
-  if (args.length === 1 && args[0] === "--sync-catalog") {
-    const path = resolve(root, "release/host-candidate.json");
-    const pending = HostCandidateSchema.parse(JSON.parse(readFileSync(path, "utf8")));
-    if (pending.image !== null) throw new Error("Cannot change the catalog of a built image");
-    writeFileSync(
-      path,
-      `${JSON.stringify({ ...pending, sources: { ...pending.sources, catalog: catalogPin(root) } }, null, 2)}\n`,
-    );
-    return;
-  }
   if (args.length === 1 && args[0] === "--check") {
-    const pending = HostCandidateSchema.parse(
+    HostCandidateSchema.parse(
       JSON.parse(readFileSync(resolve(root, "release/host-candidate.json"), "utf8")),
     );
-    if (catalogIdentity(pending.sources.catalog) !== catalogIdentity(catalogPin(root)))
-      throw new Error("Host candidate catalog does not match the default catalog lock");
     console.log("Unpublished host candidate contract is valid; no release or image was published.");
     return;
   }

@@ -16,11 +16,10 @@ The machine-readable source of truth is [`SelectionSchema` and `SourceSchema` in
 | `sources` | Required nonempty array; each entry is exactly one of the two shapes below |
 | Git source | Required string `url`, nonempty string `ref`; optional string `subdir` |
 | Local source | Only `path`: a nonempty string after trimming whitespace |
-| `retained` | Optional array of immutable revisions maintained by the catalog tools; retain their snapshot store as well |
 
 Unknown fields are rejected at both the configuration and entry level. There is no `type`, `kind` or `branch` field. Do not combine `path` with `url`, `ref` or `subdir`. Git acquisition accepts unauthenticated HTTPS without embedded credentials, query or fragment; `ref` selects a branch, tag, `HEAD` or full commit and is resolved to an immutable commit. `subdir` must stay inside the repository without an absolute path or `..`.
 
-A local path is resolved from the **configuration file's directory**, not the shell working directory. Absolute paths are accepted. Point `path` directly at the catalog or pack root; a local entry has no `subdir`. Private repositories require an authorized checkout by the user before selecting its directory. Direct authenticated Git acquisition is unsupported. No GitHub Actions or catalog-bump workflow is required.
+A local path is resolved from the **configuration file's directory**, not the shell working directory. Absolute paths are accepted. Point `path` directly at the catalog or pack root; a local entry has no `subdir`. Private repositories require an authorized checkout by the user before selecting its directory. Direct authenticated Git acquisition is unsupported. No GitHub Actions or catalog update PR is required.
 
 <h2 id="mixed-sources">Mix Git and local sources</h2>
 
@@ -60,7 +59,7 @@ At acquisition, local content, including uncommitted edits and added problems, i
 
 Use a dedicated problem directory. Copying excludes dot files/directories, `node_modules`, `dist`, `coverage`, credential/secret filenames and common private-key files. This is a filename filter, **not a secret-content detector**. Required hidden assets are also excluded: rename or separate them and validate the result. Review all files before acquisition; do not rely on this filter to sanitize a home directory or private repository.
 
-`selected.json` records a digest and resolved source. For local revisions its compatibility `commit` value is the first 40 digest characters, not a Git commit. Retained local revisions read their stored snapshot, never the mutable author directory. A lock file alone cannot restore a missing local snapshot; keep the snapshot store needed by retained events.
+`selected.json` records a digest and resolved source. For local revisions its compatibility `commit` value is the first 40 digest characters, not a Git commit. Acquisition fetches only configured sources; there is no automatic historical download or separate fixed-edition acquisition command. Existing events read their already stored snapshots. Preserve the required snapshot store when moving an installation; missing history is not automatically restored.
 
 <h2 id="replace-catalog">Add or replace problems</h2>
 
@@ -82,7 +81,7 @@ Catalog acceptance does not enable every runtime. Local native execution retains
 With the repository's pinned tools and installed dependencies, run:
 
 ```sh
-bun test scripts/problem-pack/test/local-catalog.test.ts scripts/problem-pack/test/catalog-bump.test.ts scripts/problem-pack/test/discover-problems-catalog.test.ts
+bun test scripts/problem-pack/test/local-catalog.test.ts scripts/problem-pack/test/downloaded-catalog.test.ts scripts/problem-pack/test/discover-problems-catalog.test.ts
 bun run generate:landing-docs
 bun run scripts/landing/generate-landing-docs.ts --check
 ```

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   cpSync,
@@ -20,9 +21,7 @@ import { CatalogLockSchema, retainedCatalogRoots, selectedCatalogRoots } from ".
 import {
   downloadCatalog,
   downloadConfiguredCatalog,
-  downloadLockedCatalog,
   materializeCatalog,
-  verifyCatalogLock,
 } from "../downloaded-catalog.js";
 import type { GitArchiveFetcher } from "../git-source.js";
 
@@ -43,6 +42,7 @@ test("configured branch acquisition resolves again, keeps old snapshots internal
     const text = JSON.stringify(selection);
     writeFileSync(path, text);
     let commit = revision;
+    const fetched: string[] = [];
     const deps = {
       resolveRef: (url: string, ref: string) => {
         expect(url).toBe(selection.sources[0]?.url);
@@ -50,6 +50,7 @@ test("configured branch acquisition resolves again, keeps old snapshots internal
         return commit;
       },
       fetcher: ((request) => {
+        fetched.push(request.commit);
         fetcher(request);
         writeFileSync(join(request.destinationDir, "shared.txt"), request.commit);
       }) satisfies GitArchiveFetcher,
@@ -57,11 +58,12 @@ test("configured branch acquisition resolves again, keeps old snapshots internal
     downloadConfiguredCatalog(root, undefined, deps);
     const first = selectedCatalogRoots(root)[0];
     expect(first).toBeDefined();
-    const lock = readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8");
+    const lock = "obsolete committed lock is no longer acquisition configuration";
     writeFileSync(join(root, "catalog-lock.json"), lock);
     commit = "b".repeat(40);
     downloadConfiguredCatalog(root, undefined, deps);
     expect(selectedCatalogRoots(root)[0]).not.toBe(first);
+    expect(fetched).toEqual([revision, "b".repeat(40)]);
     expect(retainedCatalogRoots(root)).toContain(String(first));
     expect(readFileSync(join(String(first), "shared.txt"), "utf8")).toBe(revision);
     expect(readFileSync(path, "utf8")).toBe(text);
@@ -89,30 +91,6 @@ test("configured branch acquisition resolves again, keeps old snapshots internal
     expect(existsSync(join(root, ".tenkacloud/catalog-store/mutation.lock"))).toBe(false);
   }));
 
-test("locked CI acquisition restores and verifies pinned bytes without resolving a branch", () =>
-  fixture((root, fetcher) => {
-    downloadCatalog(root, config(["locked"]), { fetcher });
-    const lock = readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8");
-    writeFileSync(join(root, "catalog-lock.json"), lock);
-    rmSync(join(root, ".tenkacloud"), { recursive: true, force: true });
-    downloadLockedCatalog(root, {
-      fetcher,
-      resolveRef: () => {
-        throw new Error("must not resolve a moving branch");
-      },
-    });
-    expect(() => verifyCatalogLock(root)).not.toThrow();
-    rmSync(join(root, ".tenkacloud"), { recursive: true, force: true });
-    expect(() =>
-      downloadLockedCatalog(root, {
-        fetcher: (request) => {
-          fetcher(request);
-          writeFileSync(join(request.destinationDir, "shared.txt"), "changed");
-        },
-      }),
-    ).toThrow("does not match");
-    expect(existsSync(join(root, ".tenkacloud/catalog-store/selected.json"))).toBe(false);
-  }));
 function fixture(run: (root: string, fetcher: GitArchiveFetcher) => void) {
   const root = mkdtempSync(join(tmpdir(), "downloaded-catalog-"));
   const fetcher: GitArchiveFetcher = (request) => {
@@ -395,55 +373,42 @@ test("unsafe standard pack roots cannot replace an accepted catalog selection", 
     }
   }));
 
-test("a moved tag that no longer matches catalog-lock.json is refused", () =>
-  fixture((root, fetcher) => {
-    const tagged = {
-      schemaVersion: 1,
-      sources: [{ url: "https://example.invalid/sample-a.git", ref: "v1" }],
-    };
-    downloadCatalog(root, tagged, { fetcher, resolveRef: () => revision });
-    const selected = CatalogLockSchema.parse(
-      JSON.parse(readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8")),
+for (const command of ["download-locked", "verify-lock"])
+  test(`retired catalog command ${command} fails without acquiring or reading a lock`, () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--no-env-file",
+        join(repository, "scripts/problem-pack/downloaded-catalog-main.ts"),
+        command,
+      ],
+      { cwd: repository, encoding: "utf8" },
     );
-    writeFileSync(
-      join(root, "catalog-lock.json"),
-      JSON.stringify({ schemaVersion: 1, sources: selected.sources }),
-    );
-    expect(() => verifyCatalogLock(root)).not.toThrow();
-    downloadCatalog(root, tagged, { fetcher, resolveRef: () => "b".repeat(40) });
-    expect(() => verifyCatalogLock(root)).toThrow("differs from catalog-lock.json");
-  }));
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Usage: bun run catalog download <sources.json>");
+    expect(result.stderr).not.toContain("ENOENT");
+  });
 
-test("fresh acquisition restores pinned retained snapshots without offering old problems", () =>
+test("historical acquisition settings are rejected before fetch and preserve stored event assets", () =>
   fixture((root, fetcher) => {
     downloadCatalog(root, config(["sample-a"]), { fetcher });
-    const old = CatalogLockSchema.parse(
-      JSON.parse(readFileSync(join(root, ".tenkacloud/catalog-store/selected.json"), "utf8")),
-    ).sources[0];
-    rmSync(join(root, ".tenkacloud"), { recursive: true, force: true });
-    const selection = { ...config(["sample-b"]), retained: [old] };
-    downloadCatalog(root, selection, { fetcher });
-    materializeCatalog(root);
-    expect(loadDockerCatalog(root).map((entry) => entry.problemId)).toEqual(["sample-b"]);
-    expect(hostBrowserProblemPaths(root)).toEqual(["challenges/sample-b"]);
-    expect(retainedCatalogRoots(root)).toHaveLength(2);
-    const lock = join(root, ".tenkacloud/catalog-store/selected.json");
-    const original = readFileSync(lock, "utf8");
-    for (const patch of [
-      { digest: "0".repeat(64) },
-      { commit: "b".repeat(40) },
-      { problemsRoot: "missing" },
-    ]) {
-      expect(() =>
-        downloadCatalog(root, { ...selection, retained: [{ ...old, ...patch }] }, { fetcher }),
-      ).toThrow("Retained catalog revision does not match");
-      expect(readFileSync(lock, "utf8")).toBe(original);
-    }
-    writeFileSync(
-      join(root, "catalog-lock.json"),
-      JSON.stringify({ schemaVersion: 1, sources: JSON.parse(original).sources, retained: [old] }),
-    );
-    expect(() => verifyCatalogLock(root)).not.toThrow();
-    writeFileSync(lock, JSON.stringify({ ...JSON.parse(original), retained: [] }));
-    expect(() => verifyCatalogLock(root)).toThrow("differs from catalog-lock.json");
+    const path = join(root, ".tenkacloud/catalog-store/selected.json");
+    const previous = readFileSync(path, "utf8");
+    const old = CatalogLockSchema.parse(JSON.parse(previous)).sources[0];
+    let fetched = false;
+    expect(() =>
+      downloadCatalog(
+        root,
+        { ...config(["sample-b"]), retained: [old] },
+        {
+          fetcher: () => {
+            fetched = true;
+          },
+        },
+      ),
+    ).toThrow("retained");
+    expect(fetched).toBe(false);
+    expect(readFileSync(path, "utf8")).toBe(previous);
+    expect(retainedCatalogRoots(root)).toHaveLength(1);
+    expect(loadDockerCatalog(root).map((entry) => entry.problemId)).toEqual(["sample-a"]);
   }));

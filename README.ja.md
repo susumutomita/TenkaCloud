@@ -169,9 +169,9 @@ AWS に接続せずヘルプを見るには、`make deploy CLOUD_ARGS="--help"` 
 
 起動・デプロイのたびに設定ブランチを解決します。取得に失敗した場合は原因を表示して停止し、古いキャッシュで続行しません。`--no-build` でも取得し、画面の再ビルドが必要なら起動を拒否します。稼働中の host へ反映するには再起動または再デプロイが必要です。手動のビルド準備には `make catalog-download catalog-prepare` を使えます。
 
-commit、内容の digest、旧 snapshot は `catalog-lock.json` と `.tenkacloud/catalog-store/` で内部管理します。ブランチの更新後も、保存済み大会の問題定義と進捗を保持します。旧 snapshot は保存済み大会の画面にも使い、新規大会の問題としては表示しません。必要な旧 snapshot の復元に失敗した場合は、選択状態を変える前に停止します。
+解決済み commit と内容の digest は `.tenkacloud/catalog-store/selected.json` に記録します。取得するのは設定した取得元だけで、旧カタログは再取得しません。保存済み大会の問題定義・進捗・画面には既存のローカル snapshot を使い、新規大会の問題としては表示しません。環境を移す場合も必要な資材を保持してください。失われた旧版を自動復元する機能はありません。
 
-CI はカタログを取得せず、`scripts/problem-pack/test/fixtures/ci-catalog` の固定の入力でテストします。内部 lock の固定版は、`bun run catalog download-locked` と `make catalog-verify-lock` で取得・検証できます。定期ワークフローやカタログ更新 PR の自動作成は使いません。
+CI はカタログを取得せず、`scripts/problem-pack/test/fixtures/ci-catalog` の固定の入力でテストします。通常起動は `catalog-sources.json` を直接使います。別の固定版取得コマンドや、commit するカタログ lock、カタログ更新 PR の仕組みはありません。
 
 再利用する問題や非公開コンテンツには、公開 SDK とオフラインの Problem Pack ツールで作成・検証・不変な revision の保存ができます。
 

@@ -22,13 +22,11 @@ install: ## Install development dependencies safely | 開発依存関係を安�
 install_ci: ## Install locked CI dependencies without lifecycle scripts | lockfile固定・script無効でCI依存関係をインストール
 	bun install --frozen-lockfile --ignore-scripts
 CATALOG_SOURCES ?= catalog-sources.json
-.PHONY: catalog-download catalog-prepare catalog-verify-lock
+.PHONY: catalog-download catalog-prepare
 catalog-download: ## Download selected catalog repositories without executing them | 選択した問題repoをコード実行なしで取得
 	bun run catalog download $(CATALOG_SOURCES)
 catalog-prepare: ## Prepare the selected catalog for builds | 選択した問題catalogのbuild用ビューを作成
 	bun run catalog prepare
-catalog-verify-lock: ## Check the downloaded catalog matches catalog-lock.json | 取得したcatalogがcatalog-lock.jsonと一致するか確認
-	bun run catalog verify-lock
 # How many workspaces `build` / `typecheck` run at once. 1 (serial, fail-fast, output in order)
 # is the default a developer wants in a terminal; CI passes WORKSPACE_JOBS=4 because one
 # `tsc --noEmit` uses a single core and the serial chain left three of the runner's four idle.
