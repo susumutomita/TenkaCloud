@@ -20,7 +20,6 @@ import {
   catalogMetadata,
   lockPath,
   type Revision,
-  readCatalogSelection,
   SelectionSchema,
   selectedCatalogRoots,
   snapshot,
@@ -43,7 +42,6 @@ export class CatalogSourceFailure extends Error {
   constructor(
     readonly source: z.infer<typeof SelectionSchema>["sources"][number],
     readonly sourceNumber: number,
-    readonly retained: boolean,
     cause: unknown,
   ) {
     super(cause instanceof Error ? cause.message : String(cause), { cause });
@@ -210,7 +208,7 @@ export function downloadCatalog(
   );
 }
 
-/** User configuration contains sources; historical pins remain in the internal lock/store. */
+/** Acquire only configured sources; saved event assets remain in the local store. */
 export function downloadConfiguredCatalog(
   root: string,
   configPath = process.env.CATALOG_SOURCES ?? "catalog-sources.json",
@@ -222,22 +220,7 @@ export function downloadConfiguredCatalog(
     selection.sources = selection.sources.map((source) =>
       "path" in source ? { path: resolve(dirname(configFile), source.path) } : source,
     );
-    const internalPath = join(root, "catalog-lock.json");
-    const internal = existsSync(internalPath)
-      ? CatalogLockSchema.parse(JSON.parse(readFileSync(internalPath, "utf8")))
-      : undefined;
-    return downloadCatalog(
-      root,
-      {
-        ...selection,
-        retained: [
-          ...(internal?.sources ?? []),
-          ...(internal?.retained ?? []),
-          ...(selection.retained ?? []),
-        ],
-      },
-      deps,
-    );
+    return downloadCatalog(root, selection, deps);
   } catch (error) {
     throw new Error(
       `Catalog acquisition from ${configPath} failed; startup/build stopped. ${error instanceof Error ? error.message : String(error)}`,
@@ -246,34 +229,13 @@ export function downloadConfiguredCatalog(
   }
 }
 
-/** Reproducible CI/release acquisition verifies the internal pins without resolving a moving ref. */
-export function downloadLockedCatalog(
-  root: string,
-  deps: Parameters<typeof downloadCatalog>[2] = {},
-): CatalogImport {
-  const lock = CatalogLockSchema.parse(
-    JSON.parse(readFileSync(join(root, "catalog-lock.json"), "utf8")),
-  );
-  return withCatalogMutation(root, () => downloadCatalogInternal(root, lock, deps));
-}
 function downloadRevision(
   root: string,
-  source: z.infer<typeof SelectionSchema>["sources"][number] | Revision,
+  source: z.infer<typeof SelectionSchema>["sources"][number],
   deps: { fetcher?: GitArchiveFetcher; resolveRef?: typeof resolveCatalogRef },
 ): Revision {
   if ("path" in source) return localRevision(root, source);
-  if (
-    "commit" in source &&
-    /^[a-f0-9]{40}$/iu.test(source.ref) &&
-    source.ref.toLowerCase() !== source.commit
-  )
-    throw new Error(
-      "Retained catalog revision does not match its pinned commit, digest or problems root",
-    );
-  const commit =
-    "commit" in source
-      ? source.commit
-      : (deps.resolveRef ?? resolveCatalogRef)(source.url, source.ref);
+  const commit = (deps.resolveRef ?? resolveCatalogRef)(source.url, source.ref);
   const parsed = parseGitSource({ url: source.url, commit, subdir: source.subdir });
   if (!parsed.ok) throw new Error(parsed.message);
   const scratch = mkdtempSync(join(tmpdir(), "tenka-catalog-"));
@@ -287,13 +249,6 @@ function downloadRevision(
     validateCatalogIdentity(join(scratch, relativeRoot));
     sealSourcePermissions(scratch);
     const digest = computeContentDigest(scratch, true);
-    if (
-      "commit" in source &&
-      (commit !== source.commit || digest !== source.digest || relativeRoot !== source.problemsRoot)
-    )
-      throw new Error(
-        "Retained catalog revision does not match its pinned commit, digest or problems root",
-      );
     const destination = snapshot(root, digest);
     mkdirSync(join(store(root), "snapshots"), { recursive: true });
     saveSnapshot(scratch, destination, digest, root);
@@ -303,23 +258,7 @@ function downloadRevision(
   }
 }
 
-/** Retained local editions never read the mutable author's directory again. */
-function localRevision(
-  root: string,
-  source: { path: string } | Extract<Revision, { path: string }>,
-): Revision {
-  if ("digest" in source) {
-    const directory = snapshot(root, source.digest);
-    if (
-      !existsSync(directory) ||
-      source.commit !== source.digest.slice(0, 40) ||
-      computeContentDigest(directory, true) !== source.digest
-    )
-      throw new Error("Retained local catalog snapshot is missing or changed");
-    if (problemsRoot(directory) !== source.problemsRoot)
-      throw new Error("Retained local catalog problems root changed");
-    return source;
-  }
+function localRevision(root: string, source: { path: string }): Revision {
   const scratch = mkdtempSync(join(tmpdir(), "tenka-local-catalog-"));
   try {
     const path = resolve(root, source.path);
@@ -344,21 +283,16 @@ function downloadCatalogInternal(
   deps: { fetcher?: GitArchiveFetcher; resolveRef?: typeof resolveCatalogRef },
 ): CatalogImport {
   const revisions: Revision[] = [];
-  for (const source of [...selection.sources, ...(selection.retained ?? [])]) {
+  for (const source of selection.sources) {
     try {
       revisions.push(downloadRevision(root, source, deps));
     } catch (cause) {
-      throw new CatalogSourceFailure(
-        source,
-        revisions.length + 1,
-        revisions.length >= selection.sources.length,
-        cause,
-      );
+      throw new CatalogSourceFailure(source, revisions.length + 1, cause);
     }
   }
   // Reject cross-pack conflicts before changing the selected lock or browser view.
   const ids = new Set<string>();
-  for (const revision of revisions.slice(0, selection.sources.length))
+  for (const revision of revisions)
     for (const directory of directories(
       join(snapshot(root, revision.digest), revision.problemsRoot),
     )) {
@@ -366,7 +300,7 @@ function downloadCatalogInternal(
       if (ids.has(id)) throw new Error(`Duplicate catalog problem ID: ${id}`);
       ids.add(id);
     }
-  const current = revisions.slice(0, selection.sources.length);
+  const current = revisions;
   const imported = current.map((revision) => ({
     revision,
     problemCount: directories(join(snapshot(root, revision.digest), revision.problemsRoot)).length,
@@ -392,28 +326,6 @@ function downloadCatalogInternal(
     rmSync(transaction, { recursive: true, force: true });
   }
   return imported;
-}
-
-/** A tag can be moved after review; automated acquisition must still match the committed lock. */
-export function verifyCatalogLock(root: string): void {
-  const selected = CatalogLockSchema.parse(JSON.parse(readCatalogSelection(root)));
-  const expected = CatalogLockSchema.parse(
-    JSON.parse(readFileSync(join(root, "catalog-lock.json"), "utf8")),
-  );
-  if (
-    JSON.stringify(selected.sources) !== JSON.stringify(expected.sources) ||
-    (expected.retained ?? []).some(
-      (revision) =>
-        !(selected.retained ?? []).some(
-          (entry) => JSON.stringify(entry) === JSON.stringify(revision),
-        ),
-    )
-  )
-    throw new Error(
-      "The downloaded catalog differs from catalog-lock.json. Review the resolved source, then " +
-        "copy its sources into catalog-lock.json and run " +
-        "`bun run scripts/release/host-candidate.ts --sync-catalog`.",
-    );
 }
 
 /** Explicit build preparation. Sources used by saved Docker jobs stay in catalog-store. */

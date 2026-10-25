@@ -35,7 +35,6 @@ export const SelectionSchema = z
   .object({
     schemaVersion: z.literal(1),
     sources: z.array(SourceSchema).min(1),
-    retained: z.array(RevisionSchema).optional(),
   })
   .strict();
 export const CatalogLockSchema = z

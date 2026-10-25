@@ -40,7 +40,8 @@ test("a local candidate records the exact image and source pins without claiming
     imageId: `sha256:${"c".repeat(64)}`,
     registryDigests: [],
   });
-  expect(result.sources).toEqual({ platformCommit: source, catalog: catalog });
+  expect(result.schemaVersion).toBe(3);
+  expect(result.sources).toEqual({ platformCommit: source });
 });
 test("local RepoDigests metadata does not promote an image to a published release", () => {
   const repoDigest = `tenkacloud-host@sha256:${"c".repeat(64)}`;

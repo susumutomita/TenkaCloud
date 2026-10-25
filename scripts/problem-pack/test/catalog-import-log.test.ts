@@ -207,7 +207,6 @@ test("failure source identity is safe even when rejected input contains credenti
             cause: new CatalogSourceFailure(
               { url, ref: "ref-private-secret", subdir: "subdir-private-secret" },
               2,
-              true,
               new Error("Bearer raw-secret"),
             ),
           });
@@ -219,7 +218,7 @@ test("failure source identity is safe even when rejected input contains credenti
       message = error.message;
       expect(error.cause).toBeUndefined();
     }
-    expect(message).toContain("Source 2 (retained snapshot)");
+    expect(message).toContain("Source 2 (selected catalog)");
     expect(message).not.toMatch(
       /user|password|query-secret|fragment-secret|private-token|raw-secret|ref-private-secret|subdir-private-secret|unsafe outer body/u,
     );

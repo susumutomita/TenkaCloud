@@ -167,9 +167,9 @@ Configure the repository URL and branch in `catalog-sources.json` (`url` and `re
 
 Each launch or deployment resolves the configured branch again. Acquisition failures stop the command and report the cause; they do not continue with an older cached selection. `--no-build` also acquires the branch and refuses to start if its interfaces need rebuilding. A running host is unchanged until restarted or redeployed. Manual build preparation remains available through `make catalog-download catalog-prepare`.
 
-Commits, content digests and historical snapshots are managed internally in `catalog-lock.json` and `.tenkacloud/catalog-store/`. Saved events keep their problem definitions and progress when a branch advances. Historical snapshots supply saved events' browser modules and are not offered as new-event problems. Restoring a required internal snapshot must succeed before the selection changes.
+Resolved commits and content digests are recorded in `.tenkacloud/catalog-store/selected.json`. Acquisition fetches only the configured sources; it does not fetch historical catalogs. Existing local snapshots remain available for saved events' definitions, progress and browser modules, and are not offered as new-event problems. Preserve those assets when moving an installation; missing history is not automatically downloaded.
 
-CI does not download a catalog; it tests against the frozen inputs in `scripts/problem-pack/test/fixtures/ci-catalog`. To fetch and verify the committed internal snapshot, run `bun run catalog download-locked` followed by `make catalog-verify-lock`. No scheduled workflow or automated update PR is required.
+CI does not download a catalog; it tests against the frozen inputs in `scripts/problem-pack/test/fixtures/ci-catalog`. Normal startup uses `catalog-sources.json` directly. There is no separate committed catalog lock, fixed-edition acquisition command or catalog update PR workflow.
 
 For reusable or private content, the public SDK and offline Problem Pack tools create, validate and store immutable revisions:
 

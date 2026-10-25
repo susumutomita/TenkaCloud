@@ -16,11 +16,10 @@ export const metadata = { title: "問題カタログの選択" };
 | `sources` | 必須。1 件以上の配列。各要素は下記どちらか一方の形 |
 | Git 取得元 | 必須の文字列 `url`、空でない文字列 `ref`、任意の文字列 `subdir` |
 | ローカル取得元 | `path` だけ。前後の空白を除いて空でない文字列 |
-| `retained` | 任意。カタログツールが管理する不変 revision の配列。対応する snapshot store も保持する |
 
 設定全体と各要素は未知のフィールドを拒否します。`type`、`kind`、`branch` はありません。`path` と `url`・`ref`・`subdir` は混在できません。Git 取得は認証なしの HTTPS に限定し、URL 内の認証情報・query・fragment を拒否します。`ref` は branch・tag・`HEAD`・完全な commit を指定し、取得時に不変 commit へ解決します。`subdir` は repository 内の相対パスに限り、絶対パスや `..` は使えません。
 
-ローカルの相対パスは、シェルの作業ディレクトリではなく**設定ファイルのあるディレクトリ基準**です。絶対パスも使えます。`path` はカタログまたは Pack のルートを直接指定し、`subdir` は付けません。private repository は利用者が権限のある方法で事前に clone / checkout し、そのディレクトリを選びます。Git の直接認証取得は未対応です。GitHub Actions や catalog-bump workflow は不要です。
+ローカルの相対パスは、シェルの作業ディレクトリではなく**設定ファイルのあるディレクトリ基準**です。絶対パスも使えます。`path` はカタログまたは Pack のルートを直接指定し、`subdir` は付けません。private repository は利用者が権限のある方法で事前に clone / checkout し、そのディレクトリを選びます。Git の直接認証取得は未対応です。GitHub Actions やカタログ更新 PR は不要です。
 
 <h2 id="mixed-sources">Git とローカルの混在例</h2>
 
@@ -62,7 +61,7 @@ CATALOG_SOURCES=./config/my-catalogs.json make local
 
 問題専用のディレクトリを使ってください。dot file / directory、`node_modules`・`dist`・`coverage`、credential / secret 名や一般的な秘密鍵ファイルはコピーから除外します。これはファイル名フィルターであり、**内容中の秘密情報を検出する機能ではありません**。必要な hidden asset も除外されるため、名前変更や分離を行って結果を検証します。取得前に全ファイルを確認し、home directory や private repository 全体の無害化には使わないでください。
 
-`selected.json` は digest と解決済み取得元を記録します。ローカル revision の互換用 `commit` は digest の先頭 40 文字で、Git commit ではありません。保持したローカル revision は保存済み snapshot を読み、変更可能な作成元を再取得しません。lock ファイルだけでは失われたローカル snapshot を復元できません。既存イベントに必要な snapshot store も保持してください。
+`selected.json` は digest と解決済み取得元を記録します。ローカル revision の互換用 `commit` は digest の先頭 40 文字で、Git commit ではありません。取得するのは設定した取得元だけで、旧版の自動再取得や別の固定版取得コマンドはありません。既存大会の過去版表示・再開には保存済みの snapshot を使います。環境を移す場合も必要な snapshot store を保持してください。失われた旧版を自動復元する機能はありません。
 
 <h2 id="replace-catalog">問題を追加・入れ替える</h2>
 
@@ -84,7 +83,7 @@ SDK Pack は `make pack-validate ARGS="./my-pack"` で検証します。Pack CLI
 repository の指定ツールと依存関係を用意して実行します。
 
 ```sh
-bun test scripts/problem-pack/test/local-catalog.test.ts scripts/problem-pack/test/catalog-bump.test.ts scripts/problem-pack/test/discover-problems-catalog.test.ts
+bun test scripts/problem-pack/test/local-catalog.test.ts scripts/problem-pack/test/downloaded-catalog.test.ts scripts/problem-pack/test/discover-problems-catalog.test.ts
 bun run generate:landing-docs
 bun run scripts/landing/generate-landing-docs.ts --check
 ```

@@ -16,7 +16,6 @@ import { CatalogLockSchema, SelectionSchema, selectedCatalogSnapshots } from "..
 import {
   downloadCatalog,
   downloadConfiguredCatalog,
-  downloadLockedCatalog,
   materializeCatalog,
 } from "../downloaded-catalog";
 
@@ -117,9 +116,11 @@ test("configured relative paths resolve against the config file, include uncommi
   expect(readFileSync(join(first.problemRoot, "challenges/draft/README.md"), "utf8")).not.toBe(
     "uncommitted edit",
   );
-  writeFileSync(join(root, "catalog-lock.json"), selected(root));
+  const beforeMissingAuthor = selected(root);
   rmSync(author, { recursive: true });
-  downloadLockedCatalog(root);
+  expect(() => downloadConfiguredCatalog(root, "config/sources.json")).toThrow();
+  expect(selected(root)).toBe(beforeMissingAuthor);
+  expect(selectedCatalogSnapshots(root)[0]?.revision.digest).not.toBe(first.revision.digest);
   expect(CatalogLockSchema.parse(JSON.parse(selected(root))).retained).toHaveLength(2);
 });
 
