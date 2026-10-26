@@ -884,3 +884,15 @@ body[data-phase="hitstop"] .request {
 .overlay {
   justify-content: safe center;
 }
+
+/* Dense request stream: solid payload text, at most two readable cards per lane. */
+.heading .premise{font:12px/1.65 system-ui,sans-serif;letter-spacing:0;text-transform:none;color:#4a6078;margin:8px 0 0}.premise strong{display:block;color:#193551;font-weight:650}.heading{margin-bottom:10px}.heading h2{font-size:clamp(30px,5vw,48px)}
+.wire-preview{font-size:11px;line-height:1.5;color:#163f6a;white-space:pre-wrap;overflow-wrap:anywhere;overflow:visible;text-overflow:clip;margin:8px 0;padding:7px 8px;background:#f1f6fc;border-radius:5px}.context-row{font-size:11px}.operation{font-size:15px}.service{margin-bottom:4px}.request{padding:11px 12px}.field{height:clamp(410px,calc(100svh - 340px),650px)}
+@media(max-width:740px){.heading{margin-top:12px}.heading .premise{font-size:11px;line-height:1.45}.heading h2{font-size:29px}.heading>p:first-child{font-size:8px}.field{height:clamp(310px,calc(100svh - 285px),650px)}.wire-preview{font-size:10px;line-height:1.4;padding:6px;margin:6px 0}.context-row{font-size:10px;line-height:1.5}.request{padding:9px 10px}.operation{font-size:12px;line-height:1.4}.service{font-size:8px}.hud{margin-top:6px}.top h1{font-size:11px}.controls{min-height:42px;padding-top:9px}.rule{margin-top:3px}}
+
+.field{height:clamp(320px,calc(100svh - 420px),620px)}@media(max-width:740px){.field{height:clamp(220px,calc(100svh - 355px),620px)}}
+
+.hud{gap:30px}.hud .survival{gap:3px;min-width:90px}.hud .survival strong{font-size:38px;font-weight:650;letter-spacing:-.05em;font-variant-numeric:tabular-nums}.hud .survival small:last-child{font-size:8px}.hud .points strong{font-size:23px}.hud .level strong{font-size:19px}.best-result{text-align:center;color:#49647f;font-size:12px}.score-result{font-variant-numeric:tabular-nums}
+@media(max-width:740px){.hud{gap:20px;padding:10px 14px}.hud .survival{min-width:70px}.hud .survival strong{font-size:30px}.hud .points strong{font-size:20px}.hud .level strong{font-size:16px}.hud .life strong{font-size:17px}.hud small{font-size:7px}.hud .survival small:last-child{font-size:7px}.field{height:clamp(210px,calc(100svh - 365px),620px)}}
+
+body[data-layout-blocked="true"] .cards{visibility:hidden}

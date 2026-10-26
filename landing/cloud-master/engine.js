@@ -22,16 +22,16 @@ export function createGame(catalog, seed = 726, study = false) {
     end: null,
     grace: 0,
     hitstop: 0,
-    nextSpawnAt: 4500,
+    nextSpawnAt: 1200,
   };
 }
 function freeSlot(state) {
-  return [0, 1, 2].find((slot) => !state.active.some((item) => item.slot === slot));
+  return [0, 1, 2, 3, 4, 5].find((slot) => !state.active.some((item) => item.slot === slot));
 }
 function spawn(state) {
   const slot = freeSlot(state);
   if (slot === undefined) return;
-  const config = difficulty(state.correct);
+  const config = difficulty(state.elapsed);
   state.active.push({
     uid: state.serial++,
     slot,
@@ -43,6 +43,7 @@ function spawn(state) {
 export function start(state) {
   if (state.phase !== "ready") return;
   state.phase = "playing";
+  state.nextSpawnAt = state.elapsed + difficulty(state.elapsed).intervalMs;
   spawn(state);
 }
 function remove(state, item) {
@@ -166,8 +167,8 @@ function advanceWorld(state, target) {
       .sort((a, b) => a.uid - b.uid);
     if (expired.length && expire(state, expired)) return;
     if (state.elapsed >= state.nextSpawnAt) {
-      const config = difficulty(state.correct);
-      if (state.active.length < Math.min(config.limit, state.maxCards ?? 3)) spawn(state);
+      const config = difficulty(state.elapsed);
+      if (state.active.length < Math.min(config.limit, state.maxCards ?? 6)) spawn(state);
       state.nextSpawnAt = state.elapsed + config.intervalMs;
     }
   }

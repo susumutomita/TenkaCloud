@@ -1,17 +1,5 @@
-/** One stable task: flag a request that violates the policy visible on its card. */
-export const PATTERNS = ["service", "account", "network", "approval", "acl", "keyOwner"];
-const COMMON = [
-  "s3",
-  "ec2",
-  "iam",
-  "lambda",
-  "dynamodb",
-  "sqs",
-  "sns",
-  "cloudtrail",
-  "logs",
-  "rds",
-];
+import { SECURITY_SCENARIOS } from "./security-scenarios.js";
+export const PATTERNS = SECURITY_SCENARIOS.map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
   return state.rng / 4294967296;
@@ -24,207 +12,173 @@ export function shuffled(values, state) {
   }
   return list;
 }
-export function levelFor(correct) {
-  return Math.min(5, 1 + Math.floor(correct / 5));
+export function levelFor(elapsed) {
+  return 1 + Math.floor(Math.max(0, elapsed) / 15000);
 }
-export function difficulty(correct) {
-  const level = levelFor(correct);
+export function difficulty(elapsed = 0) {
+  const time = Math.max(0, elapsed);
   return {
-    level,
-    fallMs: [18000, 16000, 14000, 12000, 10500][level - 1],
-    intervalMs: [4500, 4000, 3500, 3000, 2600][level - 1],
-    limit: level === 1 ? 2 : 3,
+    level: levelFor(time),
+    tier: time < 30000 ? 1 : time < 90000 ? 2 : 3,
+    fallMs: Math.round(4200 + 7800 * Math.exp(-time / 100000)),
+    intervalMs: Math.round(280 + 920 * Math.exp(-time / 65000)),
+    limit: 6,
   };
-}
-function ipv4(value) {
-  return value.split(".").reduce((n, part) => (n * 256 + Number(part)) >>> 0, 0);
 }
 export function violates(context) {
-  if (context.kind === "network")
-    return ipv4(context.actual) >>> 8 !== ipv4(context.allowed.split("/")[0]) >>> 8;
-  return context.actual !== context.allowed;
+  return JSON.stringify(context.actual) !== JSON.stringify(context.allowed);
 }
-function nextService(state) {
-  const level = levelFor(state.correct);
-  if (!state.serviceBag.length || state.bagLevel !== level) {
-    const available = state.catalog
-      .map((service, index) => ({ service, index }))
-      .filter(({ service }) => level >= 3 || COMMON.includes(service.id));
-    state.serviceBag = shuffled(
-      available.map(({ index }) => index),
-      state,
-    );
-    state.bagLevel = level;
-    if (state.serviceBag.at(-1) === state.lastService && state.serviceBag.length > 1)
-      [state.serviceBag[0], state.serviceBag[state.serviceBag.length - 1]] = [
-        state.serviceBag.at(-1),
-        state.serviceBag[0],
+const STARTER = new Set([
+  "RDSPubliclyAccessible",
+  "EC2SecurityGroupPublicSSH",
+  "Stealth:IAMUser/CloudTrailLoggingDisabled",
+  "Policy:S3/BucketPublicAccessGranted",
+  "RDSIAMAuthDisabled",
+  "LambdaFunctionUrlPublicAccess",
+  "S3LifecycleRapidExpiration",
+]);
+export function availableScenarios(catalog) {
+  return SECURITY_SCENARIOS.filter(
+    (s) =>
+      s.serviceId === "signin" ||
+      catalog.some((m) => m.id === s.serviceId && m.operations.some((op) => op[0] === s.operation)),
+  );
+}
+function choose(state) {
+  const tier = difficulty(state.study ? 90000 : state.elapsed).tier;
+  if (!state.scenarioBag.length || state.scenarioTier !== tier) {
+    let list = availableScenarios(state.catalog);
+    if (tier === 1) list = list.filter((s) => STARTER.has(s.id));
+    else if (tier === 2)
+      list = list.filter(
+        (s) =>
+          !s.field.startsWith("eventContext.") &&
+          !s.field.includes("Principal") &&
+          !s.id.includes("SESFullAccess"),
+      );
+    state.scenarioBag = shuffled(list, state);
+    state.scenarioTier = tier;
+    if (state.scenarioBag.at(-1)?.id === state.lastScenario && state.scenarioBag.length > 1)
+      [state.scenarioBag[0], state.scenarioBag[state.scenarioBag.length - 1]] = [
+        state.scenarioBag.at(-1),
+        state.scenarioBag[0],
       ];
   }
-  const index = state.serviceBag.pop();
-  state.lastService = index;
-  return index;
+  const result = state.scenarioBag.pop();
+  state.lastScenario = result.id;
+  return result;
 }
-function nextOperation(state, index) {
-  const service = state.catalog[index];
-  if (!state.operationBags[index]?.length)
-    state.operationBags[index] = shuffled(
-      service.operations.map((_, i) => i),
-      state,
-    );
-  return service.operations[state.operationBags[index].pop()];
+function valueText(value) {
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
-function wire(service, operation, parameters) {
-  const [name, method, path] = operation;
-  const lines = [`${method} ${path}`];
-  if (service.protocol === "json" && service.target)
-    lines.push(`X-Amz-Target: ${service.target}.${name}`);
-  if (["query", "ec2"].includes(service.protocol))
-    lines.push(`Action=${name}&Version=${service.version}`);
-  if (service.protocol === "smithy-rpc-v2-cbor") lines.push("Smithy-Protocol: rpc-v2-cbor");
-  if (parameters) lines.push(parameters);
-  return lines.join("\n");
-}
-function genericContext(state, service, danger) {
-  const level = levelFor(state.correct);
-  const kinds = level === 1 ? ["service"] : ["service", "account", "network"];
-  let kind = kinds[Math.floor(random(state) * kinds.length)];
-  if (service.name.length > 18 && kind === "service") kind = "account";
-  if (kind === "account")
-    return {
-      kind,
-      allowed: "検証アカウント",
-      actual: danger ? "本番アカウント" : "検証アカウント",
-      policy: "許可: 検証内の全API",
-      observed: `実行先: ${danger ? "本番" : "検証"}`,
-      severity: 4,
-    };
-  if (kind === "network")
-    return {
-      kind,
-      allowed: "192.0.2.0/24",
-      actual: danger ? "198.51.100.23" : "192.0.2.23",
-      policy: "許可元: 192.0.2.0/24",
-      observed: `発信元: ${danger ? "198.51.100.23" : "192.0.2.23"}`,
-      severity: 3,
-    };
-  const other = state.catalog.find(
-    (s) => COMMON.includes(s.id) && s.id !== service.id && s.name.length < 18,
-  );
-  const allowed = danger ? other.name : service.name;
-  return {
-    kind,
-    allowed,
-    actual: service.name,
-    policy: `許可: ${allowed} の全API`,
-    observed: `要求先: ${service.name}`,
-    severity: 1,
-  };
-}
-function curated(state, danger) {
-  const pick = Math.floor(random(state) * 3);
-  if (pick === 0)
-    return {
-      serviceId: "cloudtrail",
-      operation: "StopLogging",
-      parameters: '{"Name":"training-trail"}',
-      context: {
-        kind: "approval",
-        allowed: "承認あり",
-        actual: danger ? "承認なし" : "承認あり",
-        policy: "本番ログ停止: 承認が必要",
-        observed: `変更申請: ${danger ? "なし" : "承認済み"}`,
-        severity: 8,
-      },
-    };
-  if (pick === 1)
-    return {
-      serviceId: "s3",
-      operation: "PutBucketAcl",
-      parameters: `x-amz-acl: ${danger ? "public-read" : "private"}`,
-      context: {
-        kind: "acl",
-        allowed: "private",
-        actual: danger ? "public-read" : "private",
-        policy: "このバケット: 非公開限定",
-        observed: `公開範囲: ${danger ? "全員 (public-read)" : "非公開 (private)"}`,
-        severity: 7.5,
-      },
-    };
-  return {
-    serviceId: "iam",
-    operation: "CreateAccessKey",
-    parameters: `UserName=training-${danger ? "beta" : "alpha"}`,
-    context: {
-      kind: "keyOwner",
-      allowed: "training-alpha",
-      actual: danger ? "training-beta" : "training-alpha",
-      policy: "許可ユーザー: training-alpha",
-      observed: `キー作成先: training-${danger ? "beta" : "alpha"}`,
-      severity: 5.5,
-    },
-  };
-}
-function reason(context, danger, operation) {
-  const detail = {
-    service: `担当に許可されているのは「${context.allowed}」。要求先は「${context.actual}」です。`,
-    account: `操作できるのは「${context.allowed}」。今回は「${context.actual}」への要求です。`,
-    network: `許可された発信元は ${context.allowed}。今回は ${context.actual} です。`,
-    approval: `${operation} は監査ログの記録停止を求める API です。本番での停止には変更承認が必要で、今回は「${context.actual}」です。`,
-    acl:
-      context.actual === "public-read"
-        ? "public-read はバケットの READ（一覧など）を全員へ許可する指定です。非公開限定の演習ルールに反します。オブジェクト内容の公開とは別です。"
-        : "private は所有者に限る指定です。非公開限定の演習ルールに沿っています。",
-    keyOwner: `キー作成を許可された対象は ${context.allowed}。今回は ${context.actual} を指定しています。`,
-  }[context.kind];
-  return `${detail}${danger ? "表示した演習ルールの範囲外なので検知します。" : "演習ルールの範囲内なので、そのまま通します。"} API 名だけで不正と決めたわけではありません。実行結果は判定しません。`;
-}
-function requestChoice(state, intended) {
-  if (levelFor(state.correct) >= 2 && random(state) < 0.28) {
-    const selected = curated(state, intended);
-    const service = state.catalog.find((s) => s.id === selected.serviceId);
-    return {
-      service,
-      operation: service.operations.find((op) => op[0] === selected.operation),
-      context: selected.context,
-      parameters: selected.parameters,
-    };
+function nested(path, value) {
+  const parts = path.replaceAll("[0]", ".0").split(".");
+  const root = {};
+  let node = root;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    node[key] = parts[i + 1] === "0" ? [] : {};
+    node = node[key];
   }
-  const index = nextService(state);
-  const service = state.catalog[index];
-  return {
-    service,
-    operation: nextOperation(state, index),
-    context: genericContext(state, service, intended),
-    parameters: "",
-  };
+  node[parts.at(-1)] = value;
+  return root;
 }
+function requestData(s, actual) {
+  let parameters = s.field.startsWith("eventContext.") ? {} : nested(s.field, actual);
+  const metadata = s.field.startsWith("eventContext.") ? { [s.field.slice(13)]: actual } : {};
+  if (s.id === "RDSMasterPasswordReset")
+    parameters = { DBInstanceIdentifier: "customer-db", MasterUserPassword: "[REDACTED]" };
+  if (s.id === "SageMakerLifecycleConfigModified")
+    parameters = { OnStart: [{ Content: "[本文省略・実行不可]" }] };
+  if (s.id === "EC2UserDataModified") parameters = { UserData: { Value: "[本文省略・実行不可]" } };
+  if (s.id === "RolesAnywhereTrustAnchorCreated")
+    parameters = {
+      source: {
+        sourceType: "CERTIFICATE_BUNDLE",
+        sourceData: { x509CertificateData: "[公開証明書省略]" },
+      },
+    };
+  if (s.id === "RDSSnapshotPubliclyShared") parameters.AttributeName = "restore";
+  if (s.id === "EC2SecurityGroupPublicSSH")
+    Object.assign(parameters.IpPermissions[0], { IpProtocol: "tcp", FromPort: 22, ToPort: 22 });
+  if (s.id === "S3BucketPolicyExternalAccess") {
+    Object.assign(parameters.Policy.Statement[0], {
+      Effect: "Allow",
+      Action: "s3:GetObject",
+      Resource: "arn:aws:s3:::customer-data/*",
+    });
+    parameters.Policy = JSON.stringify(parameters.Policy);
+  }
+  if (s.id === "IAMRoleTrustPolicyModified") {
+    Object.assign(parameters.PolicyDocument.Statement[0], {
+      Effect: "Allow",
+      Action: "sts:AssumeRole",
+    });
+    parameters.PolicyDocument = JSON.stringify(parameters.PolicyDocument);
+  }
+  if (s.id === "S3LifecycleRapidExpiration")
+    Object.assign(parameters.LifecycleConfiguration.Rules[0], {
+      ID: "audit-retention",
+      Status: "Enabled",
+      Filter: { Prefix: "" },
+    });
+  return { parameters, metadata };
+}
+function visiblePayload(s, actual) {
+  const field = s.field.replace("eventContext.", "観測.");
+  if (s.id === "EC2SecurityGroupPublicSSH") return `TCP 22 / CidrIp: ${actual}`;
+  if (s.id === "RDSMasterPasswordReset") return `MasterUserPassword: [REDACTED]\n変更票: ${actual}`;
+  if (s.id === "SageMakerLifecycleConfigModified")
+    return `OnStart.Content: [本文省略]\n内容ハッシュ: ${actual}`;
+  if (s.id === "EC2UserDataModified") return `UserData: [本文省略]\n内容ハッシュ: ${actual}`;
+  if (s.id === "RolesAnywhereTrustAnchorCreated")
+    return `CERTIFICATE_BUNDLE\n証明書指紋: ${actual}`;
+  return `${field}: ${valueText(actual)}`;
+}
+
 export function nextQuestion(state) {
   if (!state.outcomes.length)
     state.outcomes = shuffled([true, false, true, false, true, false], state);
   const intended = state.outcomes.pop();
-  const { service, operation, context, parameters } = requestChoice(state, intended);
-  const requestPath =
-    service.protocol === "smithy-rpc-v2-cbor"
-      ? `/service/${service.target}/operation/${operation[0]}`
-      : operation[2];
-  const requestOperation = [operation[0], operation[1], requestPath];
+  const scenario = choose(state);
+  const model =
+    scenario.serviceId === "signin" ? null : state.catalog.find((s) => s.id === scenario.serviceId);
+  const operation = model?.operations.find((op) => op[0] === scenario.operation);
+  const actual = intended ? scenario.risk : scenario.safe;
+  const observed = visiblePayload(scenario, actual);
+  const context = {
+    kind: scenario.id,
+    allowed: scenario.safe,
+    actual,
+    policy: scenario.baseline,
+    observed,
+    severity: scenario.severity,
+  };
   const danger = violates(context);
+  const method = operation?.[1] ?? "EVENT",
+    path = operation?.[2] ?? "CloudTrail console sign-in";
+  const { parameters, metadata } = requestData(scenario, actual);
   return {
-    id: `${state.questionSerial++}:${service.id}:${operation[0]}`,
-    serviceId: service.id,
-    service: service.name,
-    operation: operation[0],
-    method: operation[1],
-    path: requestPath,
-    protocol: service.protocol,
-    wire: wire(service, requestOperation, parameters),
+    id: `${state.questionSerial++}:${scenario.id}`,
+    scenarioId: scenario.id,
+    serviceId: scenario.serviceId,
+    service: model?.name ?? "AWS Sign-In",
+    operation: scenario.operation,
+    method,
+    path,
+    protocol: model?.protocol ?? "cloudtrail-event",
+    payload: observed,
+    parameters,
+    metadata,
+    wire: `${scenario.serviceId === "signin" ? "合成CloudTrailイベント" : "API引数のデコード抜粋"} · ${scenario.operation}\n${JSON.stringify(parameters, null, 2)}\n付帯観測（API引数とは別）: ${JSON.stringify(metadata)}\n${scenario.baseline}`,
     context,
     danger,
-    severity: danger ? context.severity : 0,
-    points: danger ? Math.round(context.severity * 10) : 10,
-    why: reason(context, danger, operation[0]),
-    source: `https://github.com/boto/botocore/tree/1.43.118/botocore/data/${service.id}/${service.version}`,
+    severity: danger ? scenario.severity : 0,
+    points: danger ? Math.round(scenario.severity * 10) : 10,
+    why: `${scenario.why} ${danger ? "表示した対象・用途と要求内容が衝突するため検知します。" : "表示した対象・用途に沿う内容なので通します。"} 公開説明を基にした演習であり、AWSの実判定や要求の実行成功を再現しません。`,
+    source: scenario.id.includes(":")
+      ? "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-active.html"
+      : "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html",
   };
 }
 export function createQuestionStream(catalog, seed = 726) {
@@ -235,10 +189,10 @@ export function createQuestionStream(catalog, seed = 726) {
     catalog,
     rng: (mixed ^ (mixed >>> 16)) >>> 0,
     correct: 0,
-    serviceBag: [],
-    bagLevel: 0,
-    lastService: null,
-    operationBags: {},
+    elapsed: 0,
+    scenarioTier: 0,
+    scenarioBag: [],
+    lastScenario: null,
     outcomes: [],
     questionSerial: 0,
   };

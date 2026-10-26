@@ -1,10 +1,32 @@
 import { loadCatalog } from "./api-catalog.js";
-import { collect, createGame, finish, next, pause, resume, start, tick } from "./engine.js";
+import {
+  collect,
+  createGame,
+  finish,
+  next,
+  passStudy,
+  pause,
+  resume,
+  start,
+  tick,
+} from "./engine.js";
 import { difficulty } from "./recognition.js";
 import { buildShare } from "./share.js";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+let layoutBlocked = false,
+  layoutKey = "";
+const BEST_KEY = "tenkacloud.api-watch.best.v1";
+let bestMs = 0;
+try {
+  const value = Number(localStorage.getItem(BEST_KEY));
+  if (Number.isFinite(value) && value >= 0) bestMs = value;
+} catch {}
+const duration = (ms) => {
+  const seconds = Math.floor(Math.max(0, ms) / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+};
 let catalog,
   state,
   epoch = 0,
@@ -24,10 +46,20 @@ function button(text, handler, primary = true) {
   b.addEventListener("click", handler);
   return b;
 }
+function layoutCapacity() {
+  const tall = $("cards").clientHeight >= 440;
+  return innerWidth <= 740 ? (tall ? 4 : 2) : tall ? 6 : 3;
+}
+function currentLayout() {
+  return `${innerWidth <= 740 ? 2 : 3}:${layoutCapacity()}`;
+}
 function prepare(seed = newSeed(), study = false, begin = false) {
+  layoutBlocked = false;
+  document.body.removeAttribute("data-layout-blocked");
+  layoutKey = currentLayout();
   epoch++;
   state = createGame(catalog, seed, study);
-  state.maxCards = innerWidth <= 740 ? 2 : 3;
+  state.maxCards = layoutCapacity();
   phase = "";
   lastTime = null;
   seen = 0;
@@ -40,26 +72,23 @@ function prepare(seed = newSeed(), study = false, begin = false) {
   render();
 }
 function preview() {
-  const s3 = catalog.find((s) => s.id === "s3"),
-    iam = catalog.find((s) => s.id === "iam");
   return [
     {
       uid: "demo-pass",
       slot: 0,
       born: 0,
-      deadline: 18000,
+      deadline: 12000,
       question: {
-        service: s3.name,
-        operation: "GetObject",
-        method: "GET",
-        path: "/{Bucket}/{Key+}",
-        wire: "GET /training-assets/guide.txt HTTP/1.1",
+        service: "RDS",
+        operation: "ModifyDBInstance",
+        payload: "PubliclyAccessible: false",
+        wire: '{"PubliclyAccessible":false}',
         context: {
-          kind: "service",
-          allowed: "S3",
-          actual: "S3",
-          policy: "許可: S3 の全API",
-          observed: "要求先: S3",
+          kind: "demo",
+          allowed: false,
+          actual: false,
+          policy: "顧客DB / 社内VPC内のみ",
+          observed: "PubliclyAccessible: false",
         },
         danger: false,
       },
@@ -68,19 +97,18 @@ function preview() {
       uid: "demo-flag",
       slot: 1,
       born: 0,
-      deadline: 18000,
+      deadline: 12000,
       question: {
-        service: iam.name,
-        operation: "CreateAccessKey",
-        method: "POST",
-        path: "/",
-        wire: "POST / HTTP/1.1\nAction=CreateAccessKey&Version=2010-05-08",
+        service: "RDS",
+        operation: "ModifyDBInstance",
+        payload: "PubliclyAccessible: true",
+        wire: '{"PubliclyAccessible":true}',
         context: {
-          kind: "service",
-          allowed: "S3",
-          actual: "IAM",
-          policy: "許可: S3 の全API",
-          observed: "要求先: IAM",
+          kind: "demo",
+          allowed: false,
+          actual: true,
+          policy: "顧客DB / 社内VPC内のみ",
+          observed: "PubliclyAccessible: true",
         },
         danger: true,
       },
@@ -93,6 +121,7 @@ function makeCard(item, previewing) {
   if (!previewing) n.type = "button";
   n.className = `request${previewing ? " preview" : ""}`;
   n.dataset.uid = String(item.uid);
+  n.dataset.scenarioId = q.scenarioId ?? "demo";
   n.dataset.slot = String(item.slot);
   n.dataset.context = JSON.stringify({
     kind: q.context.kind,
@@ -116,7 +145,7 @@ function makeCard(item, previewing) {
   operation.textContent = q.operation;
   const wire = document.createElement("span");
   wire.className = "wire-preview";
-  wire.textContent = `${q.method} ${q.path}`;
+  wire.textContent = q.payload;
   wire.title = q.wire;
   const policy = document.createElement("span");
   policy.className = "context-row policy";
@@ -124,18 +153,18 @@ function makeCard(item, previewing) {
   const actual = document.createElement("span");
   actual.className = "context-row observed";
   actual.textContent = q.context.observed;
-  n.append(top, operation, wire, policy, actual);
+  n.append(top, operation, wire, policy);
   if (previewing) {
     const cue = document.createElement("span");
     cue.className = "example-note";
-    cue.textContent = q.danger ? "許可外 → タップして検知" : "許可内 → 触らず通す ＋10 ↓";
+    cue.textContent = q.danger ? "DBを外へ公開 → タップ" : "非公開のまま → 通す ＋10 ↓";
     n.append(cue);
   }
   const thisEpoch = epoch;
   n.addEventListener("click", () => pick(item.uid, thisEpoch));
   n.setAttribute(
     "aria-label",
-    `${q.service}、${q.operation}。${q.context.policy}。${q.context.observed}。タップして検知`,
+    `${q.service}、${q.operation}。${q.payload}。${q.context.policy}。タップして検知`,
   );
   return n;
 }
@@ -175,8 +204,10 @@ function positions(items, previewing) {
       : state.study
         ? 0.22
         : Math.max(0, Math.min(1, (state.elapsed - item.born) / (item.deadline - item.born)));
-    const movement =
-      reduced.matches && !previewing && !state.study ? [0.55, 0.1, 0.02][item.slot] : fraction;
+    const stationary = reduced.matches && !previewing && !state.study;
+    const movement = stationary
+      ? Math.max(0.04, 0.55 - Math.floor(item.slot / columns) * 0.51)
+      : fraction;
     const lane = item.slot % columns;
     node.style.left = `${lane * (field.clientWidth / columns) + (narrow ? 0 : 9)}px`;
     const y =
@@ -185,24 +216,20 @@ function positions(items, previewing) {
         : Math.max(8, movement * Math.max(0, field.clientHeight - node.offsetHeight));
     return { item, node, lane, y };
   });
-  if (narrow)
-    for (let lane = 0; lane < 2; lane++) {
-      const pair = entries
-        .filter((v) => v.lane === lane)
-        .sort((a, b) => a.item.born - b.item.born || a.item.slot - b.item.slot);
-      if (pair.length === 2) {
-        const [older, younger] = pair;
-        younger.y = Math.min(
-          younger.y,
-          Math.max(
-            10,
-            field.clientHeight - older.node.offsetHeight - younger.node.offsetHeight - 14,
-          ),
-        );
-        older.y = Math.max(older.y, younger.y + younger.node.offsetHeight + 12);
-        older.y = Math.min(older.y, field.clientHeight - older.node.offsetHeight - 2);
-      }
+  for (let lane = 0; lane < columns; lane++) {
+    const pair = entries
+      .filter((v) => v.lane === lane)
+      .sort((a, b) => a.item.born - b.item.born || a.item.slot - b.item.slot);
+    if (pair.length === 2) {
+      const [older, younger] = pair;
+      younger.y = Math.min(
+        younger.y,
+        Math.max(10, field.clientHeight - older.node.offsetHeight - younger.node.offsetHeight - 14),
+      );
+      older.y = Math.max(older.y, younger.y + younger.node.offsetHeight + 12);
+      older.y = Math.min(older.y, field.clientHeight - older.node.offsetHeight - 2);
     }
+  }
   for (const entry of entries) entry.node.style.top = `${Math.max(8, entry.y)}px`;
 }
 function syncCards() {
@@ -223,6 +250,8 @@ function syncCards() {
     }
     const node = nodes.get(uid);
     const arriving = !previewing && !state.study && state.elapsed - item.born < 300;
+    node.dataset.slot = String(item.slot);
+    node.querySelector(".slot").textContent = String(item.slot + 1);
     node.classList.toggle("arriving", arriving);
     node.querySelector(".deadline-time").textContent =
       previewing || state.study
@@ -262,7 +291,7 @@ function explanation() {
     e.kind === "miss"
       ? `取り逃し ${e.groupCount ?? 1}件 · ♥−${e.groupCount ?? 1}`
       : e.kind === "wrong"
-        ? "許可内の操作でした"
+        ? "正常な操作を検知しました"
         : e.kind === "flag"
           ? "検知できました"
           : "正しく通しました";
@@ -300,7 +329,7 @@ function review() {
     source.href = e.question.source;
     source.target = "_blank";
     source.rel = "noopener noreferrer";
-    source.textContent = "固定版のAWSモデル ↗";
+    source.textContent = "GuardDutyの公開説明 ↗";
     article.append(h, context, wire, why, source);
     root.append(article);
   }
@@ -342,13 +371,25 @@ function sharing() {
   $("overlay").append(note);
 }
 function result() {
+  if (!state.study && state.elapsed > bestMs) {
+    bestMs = state.elapsed;
+    try {
+      localStorage.setItem(BEST_KEY, String(bestMs));
+    } catch {}
+  }
   const actions = modal(
-    "今回の検知記録",
-    `正しい検知 ${state.correct} ／ 正常通過 ${state.passed} ／ ミス ${state.mistakes} ／ Lv.${difficulty(state.correct).level}`,
+    state.study ? "今回の練習記録" : "今回の生存記録",
+    `正しい検知 ${state.correct} ／ 正常通過 ${state.passed} ／ ミス ${state.mistakes} ／ Lv.${difficulty(state.elapsed).level}`,
   );
   const score = document.createElement("div");
   score.className = "score-result";
-  score.textContent = `${state.score} pt`;
+  score.textContent = state.study ? `${state.score} pt` : duration(state.elapsed);
+  if (!state.study) {
+    const best = document.createElement("p");
+    best.className = "best-result";
+    best.textContent = `自己ベスト ${duration(bestMs)} · ${state.score} pt`;
+    $("overlay").append(best);
+  }
   $("overlay").prepend(score);
   const seed = state.seed,
     study = state.study;
@@ -358,7 +399,9 @@ function result() {
   );
   sharing();
   review();
-  announce(`結果。${state.score}点。正しい検知${state.correct}回。`);
+  announce(
+    `結果。生存時間${duration(state.elapsed)}。${state.score}点。正しい検知${state.correct}回。`,
+  );
 }
 function phaseContent() {
   $("overlay").hidden = true;
@@ -395,11 +438,32 @@ function phaseContent() {
     const hint = document.createElement("span");
     hint.className = "keyboard-hint";
     hint.textContent = document.body.classList.contains("keyboard")
-      ? "1〜3で検知 · Pで一時停止"
+      ? "1〜6で検知 · Pで一時停止"
       : "分かった上のカードも、その場でタップ";
     $("controls").append(hint);
   }
-  if (state.phase === "paused") {
+  if (state.phase === "paused" && layoutBlocked) {
+    const seed = state.seed,
+      study = state.study;
+    const actions = modal(
+      "画面サイズが変わりました",
+      "この広さでは全カードを読めないため停止しました。元の向き・広さへ戻すと、同じ続きから再開できます。",
+    );
+    actions.append(
+      button("最初からやり直す", () => prepare(seed, study, true)),
+      button(
+        "ここまでの結果",
+        () => {
+          layoutBlocked = false;
+          document.body.removeAttribute("data-layout-blocked");
+          finish(state);
+          render();
+        },
+        false,
+      ),
+    );
+  }
+  if (state.phase === "paused" && !layoutBlocked) {
     const actions = modal("ひと休み。", "カードも時間も止まっています。");
     actions.append(
       button("再開", togglePause),
@@ -421,14 +485,17 @@ function phaseContent() {
 function render() {
   document.body.dataset.phase = state.phase;
   $("score").textContent = String(state.score);
-  $("level").innerHTML = `${difficulty(state.correct).level}<span>/ 5</span>`;
+  $("survival").textContent = duration(state.elapsed);
+  $("personal-best").textContent =
+    `BEST ${duration(Math.max(bestMs, state.study ? 0 : state.elapsed))}`;
+  $("level").innerHTML = `${difficulty(state.elapsed).level}`;
   $("lives").textContent = `${"♥ ".repeat(state.lives)}${"♡ ".repeat(3 - state.lives)}`;
   $("lives").setAttribute("aria-label", `残りライフ${state.lives}`);
   $("pause").disabled = !["playing", "hitstop", "feedback", "paused"].includes(state.phase);
   $("pause").setAttribute("aria-label", state.phase === "paused" ? "再開" : "一時停止");
   $("floor").textContent = state.study
     ? "時間なし · 拾うか、そのまま通すか"
-    : "許可外を見逃すと ♥−1・止まって解説";
+    : "危険な操作を見逃すと ♥−1・止まって解説";
   for (const entry of state.history.slice(seen)) feedbackEffect(entry);
   seen = state.history.length;
   syncCards();
@@ -438,7 +505,7 @@ function render() {
   }
 }
 function togglePause() {
-  if (!state) return;
+  if (!state || layoutBlocked) return;
   updateNow();
   if (state.phase === "paused") resume(state);
   else pause(state);
@@ -465,12 +532,16 @@ $("about").addEventListener("toggle", () => {
 $("study").addEventListener("click", () => prepare(newSeed(), true, true));
 document.addEventListener("keydown", (event) => {
   if (!state || event.altKey || event.ctrlKey || event.metaKey) return;
-  if (["Tab", "1", "2", "3"].includes(event.key)) document.body.classList.add("keyboard");
-  if (event.repeat && ["1", "2", "3", "Enter", " ", "p", "P", "Escape"].includes(event.key)) {
+  if (["Tab", "1", "2", "3", "4", "5", "6"].includes(event.key))
+    document.body.classList.add("keyboard");
+  if (
+    event.repeat &&
+    ["1", "2", "3", "4", "5", "6", "Enter", " ", "p", "P", "Escape"].includes(event.key)
+  ) {
     event.preventDefault();
     return;
   }
-  if (["1", "2", "3"].includes(event.key) && state.phase === "playing") {
+  if (["1", "2", "3", "4", "5", "6"].includes(event.key) && state.phase === "playing") {
     event.preventDefault();
     const item = state.active.find((v) => v.slot === Number(event.key) - 1);
     if (item) pick(item.uid, epoch);
@@ -490,6 +561,55 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) backgroundPause();
 });
 window.addEventListener("blur", backgroundPause);
+function fitsLayout(columns, remap) {
+  if (state.active.length > columns * 2) return false;
+  const heights = Array.from({ length: columns }, () => []);
+  state.active.forEach((item, i) => {
+    heights[(remap ? i : item.slot) % columns].push(nodes.get(String(item.uid))?.offsetHeight ?? 0);
+  });
+  return heights.every(
+    (list) =>
+      list.reduce((n, h) => n + h, 0) + Math.max(0, list.length - 1) * 12 <=
+      $("cards").clientHeight - 16,
+  );
+}
+window.addEventListener("resize", () => {
+  if (!state) return;
+  const key = currentLayout();
+  if (key === layoutKey && !layoutBlocked) return;
+  if (state.phase === "ready") {
+    prepare(state.seed, state.study);
+    return;
+  }
+  if (state.phase === "finished") return;
+  const columns = innerWidth <= 740 ? 2 : 3;
+  const changed = Number(layoutKey.split(":")[0]) !== columns;
+  if (!fitsLayout(columns, changed || layoutBlocked)) {
+    updateNow();
+    pause(state);
+    layoutBlocked = true;
+    document.body.dataset.layoutBlocked = "true";
+    lastTime = null;
+    layoutKey = key;
+    phase = "";
+    render();
+    return;
+  }
+  state.maxCards = layoutCapacity();
+  if (changed || layoutBlocked) {
+    updateNow();
+    pause(state);
+    state.active.forEach((item, i) => {
+      item.slot = i;
+    });
+    layoutBlocked = false;
+    document.body.removeAttribute("data-layout-blocked");
+    lastTime = null;
+    phase = "";
+  }
+  layoutKey = key;
+  render();
+});
 window.addEventListener("pagehide", backgroundPause);
 function frame(time) {
   if (lastTime !== null) tick(state, Math.max(0, time - lastTime));

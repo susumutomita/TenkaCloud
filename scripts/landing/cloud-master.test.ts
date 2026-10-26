@@ -14,7 +14,9 @@ import {
   start,
   tick,
 } from "../../landing/cloud-master/engine.js";
+import coverage from "../../landing/cloud-master/guardduty-coverage.json";
 import {
+  availableScenarios,
   createQuestionStream,
   difficulty,
   levelFor,
@@ -29,22 +31,20 @@ function playing(seed = 726) {
   start(state);
   return state;
 }
-function findOpening(danger) {
+function findOpening(danger, points = null) {
   for (let seed = 0; seed < 50; seed++) {
     const state = playing(seed);
-    if (state.active[0].question.danger === danger) return state;
+    if (
+      state.active[0].question.danger === danger &&
+      (points === null || state.active[0].question.points === points)
+    )
+      return state;
   }
   throw new Error("Missing balanced seed");
 }
 function afterDelay(state) {
   tick(state, 301);
   return state.active[0];
-}
-
-function expectVisibleParameters(q: ReturnType<typeof nextQuestion>) {
-  if (q.context.kind === "service") expect(q.context.actual).toBe(q.service);
-  if (q.context.kind === "acl") expect(q.wire).toContain(`x-amz-acl: ${q.context.actual}`);
-  if (q.context.kind === "keyOwner") expect(q.wire).toContain(`UserName=${q.context.actual}`);
 }
 
 describe("pinned public AWS API catalog and visible policy keys", () => {
@@ -70,82 +70,99 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
     }
     expect(operations).toBe(19437);
   });
-  test("seeded generation binds actual model operations and grades only visible context", () => {
+  test("all authored cases have model-backed operations, visible payloads and reproducible balanced variants", () => {
     const a = createQuestionStream(catalog, 123),
       b = createQuestionStream(catalog, 123);
-    a.correct = b.correct = 15;
-    const kinds = new Set();
-    const cases = new Set();
+    a.elapsed = b.elapsed = 120000;
+    const kinds = new Set(),
+      cases = new Set();
     let dangerous = 0;
     for (let i = 0; i < 1200; i++) {
       const q = nextQuestion(a);
       expect(q).toEqual(nextQuestion(b));
-      const model = catalog.find((s) => s.id === q.serviceId);
-      expect(
-        model.operations.some(
-          (op) =>
-            op[0] === q.operation &&
-            op[1] === q.method &&
-            (q.protocol === "smithy-rpc-v2-cbor" || op[2] === q.path),
-        ),
-      ).toBe(true);
+      if (q.serviceId !== "signin")
+        expect(
+          catalog.find((m) => m.id === q.serviceId).operations.some((op) => op[0] === q.operation),
+        ).toBe(true);
+      else expect(q.protocol).toBe("cloudtrail-event");
+      expect(q.payload).toContain(q.context.observed);
+      expect(q.wire).toContain(q.operation);
+      expect(q.context.policy.length).toBeGreaterThan(12);
       expect(q.danger).toBe(violates(q.context));
-      expectVisibleParameters(q);
       expect(q.points).toBe(q.danger ? Math.round(q.severity * 10) : 10);
-      expect(q.wire).toContain(`${q.method} ${q.path}`);
-      if (q.protocol === "smithy-rpc-v2-cbor") {
-        expect(q.path).toBe(`/service/${model.target}/operation/${q.operation}`);
-        expect(q.wire).toContain("Smithy-Protocol: rpc-v2-cbor");
-        expect(q.wire).not.toContain("X-Amz-Target:");
-      }
-      kinds.add(q.context.kind);
-      cases.add(`${q.context.kind}:${q.danger}`);
+      expect(q.source).toStartWith("https://docs.aws.amazon.com/guardduty/");
+      kinds.add(q.scenarioId);
+      cases.add(`${q.scenarioId}:${q.danger}`);
       dangerous += Number(q.danger);
     }
-    expect(kinds.size).toBe(6);
-    expect(cases.size).toBe(12);
+    expect(kinds.size).toBe(availableScenarios(catalog).length);
+    expect(cases.size).toBe(availableScenarios(catalog).length * 2);
     expect(dangerous).toBe(600);
   });
-  test("all435 model services appear through fair seeded service bags at broad levels", () => {
-    const stream = createQuestionStream(catalog, 88);
-    stream.correct = 20;
-    const services = new Set();
-    for (let i = 0; i < 2000; i++) services.add(nextQuestion(stream).serviceId);
-    expect(services.size).toBe(435);
-  });
-  test("same API can be normal or suspicious depending on visible approval", () => {
-    const stream = createQuestionStream(catalog, 76);
-    stream.correct = 10;
-    const entries = [];
-    for (let i = 0; i < 700; i++) {
-      const q = nextQuestion(stream);
-      if (q.operation === "StopLogging" && q.context.kind === "approval") entries.push(q);
+  test("same API has opposite decisions based on actual security parameters", () => {
+    const s = createQuestionStream(catalog, 15);
+    s.elapsed = 120000;
+    const rds = [];
+    for (let i = 0; i < 1000; i++) {
+      const q = nextQuestion(s);
+      if (q.scenarioId === "RDSPubliclyAccessible") rds.push(q);
     }
-    expect(entries.some((q) => q.danger)).toBe(true);
-    expect(entries.some((q) => !q.danger)).toBe(true);
-    for (const q of entries) expect(q.danger).toBe(q.context.actual !== "承認あり");
+    expect(rds.some((q) => q.danger)).toBe(true);
+    expect(rds.some((q) => !q.danger)).toBe(true);
+    for (const q of rds) expect(q.danger).toBe(q.parameters.PubliclyAccessible === true);
+  });
+  test("all public finding and custom signal rows have explicit implementation status", () => {
+    const c = coverage;
+    expect(c.active).toHaveLength(211);
+    expect(c.customSignals).toHaveLength(35);
+    expect(c.retired).toHaveLength(21);
+    for (const row of [...c.active, ...c.customSignals]) {
+      expect(["educational_case", "pending"]).toContain(row.implementation);
+      expect(row.sourceUrl).toStartWith("https://docs.aws.amazon.com/");
+      if (row.implementation === "pending") expect(row.reason.length).toBeGreaterThan(15);
+    }
+    expect(
+      c.customSignals.find((x) => x.signalName === "S3CustomerProvidedKeysEnabled").implementation,
+    ).toBe("pending");
   });
 });
 
 describe("levels, finite incoming stream and exact scoring", () => {
-  test("earned correct detections advance levels at5,10,15,20 and speed is capped", () => {
-    expect([0, 4, 5, 9, 10, 14, 15, 19, 20, 999].map(levelFor)).toEqual([
-      1, 1, 2, 2, 3, 3, 4, 4, 5, 5,
-    ]);
-    let previous = Infinity;
-    for (let i = 0; i < 30; i++) {
-      const d = difficulty(i);
-      expect(d.fallMs).toBeLessThanOrEqual(previous);
-      previous = d.fallMs;
-      expect(d.fallMs).toBeGreaterThanOrEqual(10500);
+  test("survival time continuously accelerates pressure, not score, without a3minute cutoff", () => {
+    expect([0, 14999, 15000, 180000, 360000].map(levelFor)).toEqual([1, 1, 2, 13, 25]);
+    let fall = Infinity,
+      interval = Infinity;
+    for (let elapsed = 0; elapsed <= 360000; elapsed += 1000) {
+      const d = difficulty(elapsed);
+      expect(d.fallMs).toBeLessThanOrEqual(fall);
+      expect(d.intervalMs).toBeLessThanOrEqual(interval);
+      expect(d.fallMs).toBeGreaterThanOrEqual(4200);
+      fall = d.fallMs;
+      interval = d.intervalMs;
     }
-    expect(difficulty(999)).toEqual(difficulty(20));
+    expect(difficulty(360000).fallMs).toBeLessThan(difficulty(180000).fallMs);
+    expect(difficulty(180000).level).toBeGreaterThan(5);
+  });
+  test("every semantic tier remains balanced and all deciding evidence stays visible", () => {
+    for (const elapsed of [0, 30000, 90000]) {
+      const stream = createQuestionStream(catalog, 42);
+      stream.elapsed = elapsed;
+      let flags = 0;
+      for (let i = 0; i < 120; i++) {
+        const q = nextQuestion(stream);
+        expect(q.payload).toBe(q.context.observed);
+        expect(q.context.policy.length).toBeGreaterThan(12);
+        expect(q.danger).toBe(violates(q.context));
+        flags += Number(q.danger);
+      }
+      expect(flags).toBe(60);
+    }
   });
   test("round starts sparse, later objects arrive and any recognized upper item can be flagged", () => {
     let state = playing(0);
     for (let seed = 0; seed < 50; seed++) {
       const candidate = playing(seed);
-      tick(candidate, 4801);
+      tick(candidate, 1501);
       if (candidate.active[1]?.question.danger) {
         state = candidate;
         break;
@@ -179,7 +196,7 @@ describe("levels, finite incoming stream and exact scoring", () => {
     expect(s.history.find((entry) => entry.uid === item.uid).points).toBe(0);
   });
   test("danger score is severity times10, hitstop applies only to the10point hit", () => {
-    const s = findOpening(true),
+    const s = findOpening(true, 10),
       item = afterDelay(s);
     expect(item.question.points).toBe(10);
     expect(collect(s, item.uid)).toBe(true);
@@ -197,7 +214,7 @@ describe("levels, finite incoming stream and exact scoring", () => {
     expect(s.elapsed).toBe(elapsed + 20);
   });
   test("hitstop consumes frame time without moving the game clock, including pause/resume", () => {
-    const s = findOpening(true),
+    const s = findOpening(true, 10),
       item = afterDelay(s);
     collect(s, item.uid);
     pause(s);
@@ -214,7 +231,7 @@ describe("levels, finite incoming stream and exact scoring", () => {
     let state = playing(0);
     for (let seed = 0; seed < 100; seed++) {
       const candidate = createGame(catalog, seed);
-      candidate.correct = 10;
+      candidate.elapsed = 90000;
       start(candidate);
       if (candidate.active[0].question.danger && candidate.active[0].question.points > 10) {
         state = candidate;
@@ -238,10 +255,53 @@ describe("levels, finite incoming stream and exact scoring", () => {
     s.correct = 20;
     tick(s, 10000);
     expect(s.active.length).toBeLessThanOrEqual(2);
-    expect(difficulty(20).intervalMs).toBeLessThan(difficulty(0).intervalMs);
+    expect(difficulty(90000).intervalMs).toBeLessThan(difficulty(0).intervalMs);
   });
 });
 
+describe("active survival clock", () => {
+  test("skilled play continues beyond3minutes and pauses cannot inflate elapsed", () => {
+    const s = playing(6);
+    for (let wall = 0; wall < 205000; wall += 20) {
+      tick(s, 20);
+      if (s.phase === "playing")
+        for (const item of [...s.active]) if (item.question.danger) collect(s, item.uid);
+    }
+    expect(s.phase === "playing" || s.phase === "hitstop").toBe(true);
+    expect(s.elapsed).toBeGreaterThan(180000);
+    const time = s.elapsed;
+    pause(s);
+    tick(s, 999999);
+    expect(s.elapsed).toBe(time);
+    resume(s);
+    tick(s, 20);
+    expect(s.elapsed).toBeLessThanOrEqual(time + 20);
+    expect(s.lives).toBe(3);
+  });
+  test("restart resets time and study never accumulates survival time", () => {
+    const a = playing(8);
+    tick(a, 11000);
+    expect(a.elapsed).toBeGreaterThan(10000);
+    const b = playing(8);
+    expect(b.elapsed).toBe(0);
+    const study = createGame(catalog, 8, true);
+    start(study);
+    tick(study, 900000);
+    expect(study.elapsed).toBe(0);
+  });
+  test("synthetic enrichment never masquerades as an API input member", () => {
+    const stream = createQuestionStream(catalog, 28);
+    stream.elapsed = 90000;
+    for (let i = 0; i < 500; i++) {
+      const q = nextQuestion(stream);
+      expect(Object.keys(q.parameters).some((k) => k.startsWith("eventContext"))).toBe(false);
+      if (q.scenarioId === "RDSMasterPasswordReset")
+        expect(q.parameters.MasterUserPassword).toBe("[REDACTED]");
+      if (q.scenarioId === "OrganizationLeaveAttempt") expect(q.parameters).toEqual({});
+      if (q.serviceId === "signin") expect(q.wire).toStartWith("合成CloudTrailイベント");
+    }
+  });
+});
 describe("miss explanations, races and farming guards", () => {
   test("miss freezes all time until understood; final miss explains before results", () => {
     const s = playing(42);
@@ -260,7 +320,7 @@ describe("miss explanations, races and farming guards", () => {
     expect(s.end.reason).toBe("lives");
   });
   test("expired dangerous card cannot be scored or cost another life from a stale tap", () => {
-    const s = findOpening(true),
+    const s = findOpening(true, 10),
       item = s.active[0];
     tick(s, item.deadline);
     const lives = s.lives;
@@ -269,7 +329,7 @@ describe("miss explanations, races and farming guards", () => {
     expect(s.feedback.kind).toBe("miss");
   });
   test("double clicks and invalid IDs never score twice", () => {
-    const s = findOpening(true),
+    const s = findOpening(true, 10),
       item = afterDelay(s);
     expect(collect(s, item.uid)).toBe(true);
     expect(collect(s, item.uid)).toBe(false);
