@@ -77,14 +77,15 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
     const kinds = new Set(),
       cases = new Set();
     let dangerous = 0;
-    for (let i = 0; i < 1200; i++) {
+    for (let i = 0; i < 6000; i++) {
       const q = nextQuestion(a);
       expect(q).toEqual(nextQuestion(b));
-      if (q.serviceId !== "signin")
+      if (q.serviceId !== "signin" && !q.protocol.startsWith("synthetic-"))
         expect(
           catalog.find((m) => m.id === q.serviceId).operations.some((op) => op[0] === q.operation),
         ).toBe(true);
-      else expect(q.protocol).toBe("cloudtrail-event");
+      else
+        expect(q.protocol === "cloudtrail-event" || q.protocol.startsWith("synthetic-")).toBe(true);
       expect(q.payload).toContain(q.context.observed);
       expect(q.wire).toContain(q.operation);
       expect(q.context.policy.length).toBeGreaterThan(12);
@@ -97,13 +98,13 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
     }
     expect(kinds.size).toBe(availableScenarios(catalog).length);
     expect(cases.size).toBe(availableScenarios(catalog).length * 2);
-    expect(dangerous).toBe(600);
+    expect(dangerous).toBe(3000);
   });
   test("same API has opposite decisions based on actual security parameters", () => {
     const s = createQuestionStream(catalog, 15);
     s.elapsed = 120000;
     const rds = [];
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 6000; i++) {
       const q = nextQuestion(s);
       if (q.scenarioId === "RDSPubliclyAccessible") rds.push(q);
     }
@@ -123,7 +124,7 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
     }
     expect(
       c.customSignals.find((x) => x.signalName === "S3CustomerProvidedKeysEnabled").implementation,
-    ).toBe("pending");
+    ).toBe("educational_case");
   });
 });
 

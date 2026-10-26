@@ -1,8 +1,10 @@
 import { loadCatalog } from "./api-catalog.js";
 import {
+  allow,
   collect,
   createGame,
   finish,
+  INPUT_GUARD_MS,
   next,
   passStudy,
   pause,
@@ -10,11 +12,13 @@ import {
   start,
   tick,
 } from "./engine.js";
+import { swipeDirection } from "./gestures.js";
 import { difficulty } from "./recognition.js";
 import { buildShare } from "./share.js";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+let activeGestureCancel = null;
 let layoutBlocked = false,
   layoutKey = "";
 const BEST_KEY = "tenkacloud.api-watch.best.v1";
@@ -47,16 +51,16 @@ function button(text, handler, primary = true) {
   return b;
 }
 function layoutCapacity() {
-  const tall = $("cards").clientHeight >= 440;
-  return innerWidth <= 740 ? (tall ? 4 : 2) : tall ? 6 : 3;
+  return innerWidth <= 740 ? ($("cards").clientHeight >= 620 ? 4 : 3) : 6;
 }
 function currentLayout() {
-  return `${innerWidth <= 740 ? 2 : 3}:${layoutCapacity()}`;
+  return `${innerWidth <= 740 ? 1 : 2}:${layoutCapacity()}`;
 }
 function prepare(seed = newSeed(), study = false, begin = false) {
   layoutBlocked = false;
   document.body.removeAttribute("data-layout-blocked");
   layoutKey = currentLayout();
+  activeGestureCancel?.();
   epoch++;
   state = createGame(catalog, seed, study);
   state.maxCards = layoutCapacity();
@@ -123,11 +127,7 @@ function makeCard(item, previewing) {
   n.dataset.uid = String(item.uid);
   n.dataset.scenarioId = q.scenarioId ?? "demo";
   n.dataset.slot = String(item.slot);
-  n.dataset.context = JSON.stringify({
-    kind: q.context.kind,
-    allowed: q.context.allowed,
-    actual: q.context.actual,
-  });
+  n.dataset.context = JSON.stringify(q.context);
   const top = document.createElement("span");
   top.className = "service";
   const name = document.createElement("span");
@@ -153,7 +153,11 @@ function makeCard(item, previewing) {
   const actual = document.createElement("span");
   actual.className = "context-row observed";
   actual.textContent = q.context.observed;
-  n.append(top, operation, wire, policy);
+  if (previewing) n.append(top, operation, wire, policy);
+  else {
+    top.append(operation);
+    n.append(top, wire, policy);
+  }
   if (previewing) {
     const cue = document.createElement("span");
     cue.className = "example-note";
@@ -161,12 +165,113 @@ function makeCard(item, previewing) {
     n.append(cue);
   }
   const thisEpoch = epoch;
-  n.addEventListener("click", () => pick(item.uid, thisEpoch));
+  let pointerClickAllowed = false;
+  n.addEventListener("click", (event) => {
+    if (event.detail > 0) {
+      if (!pointerClickAllowed) return;
+      pointerClickAllowed = false;
+    }
+    pick(item.uid, thisEpoch);
+  });
+  if (!previewing)
+    bindSwipe(
+      n,
+      item.uid,
+      thisEpoch,
+      () => {
+        pointerClickAllowed = false;
+      },
+      () => {
+        pointerClickAllowed = true;
+      },
+    );
   n.setAttribute(
     "aria-label",
-    `${q.service}、${q.operation}。${q.payload}。${q.context.policy}。タップして検知`,
+    `${q.service}、${q.operation}。${q.payload}。${q.context.policy}。左矢印で検知、右矢印で通す。タップでも検知`,
   );
   return n;
+}
+function bindSwipe(node, uid, thisEpoch, suppress, beginGesture) {
+  let gesture = null;
+  const reset = () => {
+    if (gesture && node.hasPointerCapture?.(gesture.id)) node.releasePointerCapture(gesture.id);
+    gesture = null;
+    node.style.transform = "";
+    node.removeAttribute("data-drag");
+    if (activeGestureCancel === cancel) activeGestureCancel = null;
+  };
+  const cancel = () => {
+    if (gesture) suppress();
+    reset();
+  };
+  node.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || node.disabled || state.phase !== "playing") return;
+    activeGestureCancel?.();
+    beginGesture();
+    gesture = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      time: performance.now(),
+      dx: 0,
+      dy: 0,
+    };
+    activeGestureCancel = cancel;
+    node.setPointerCapture(event.pointerId);
+  });
+  node.addEventListener("pointermove", (event) => {
+    if (!gesture || gesture.id !== event.pointerId) return;
+    gesture.dx = event.clientX - gesture.x;
+    gesture.dy = event.clientY - gesture.y;
+    if (Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25) {
+      node.dataset.drag = gesture.dx < 0 ? "stop" : "allow";
+      node.style.transform = `translateX(${Math.max(-90, Math.min(90, gesture.dx))}px)`;
+    }
+  });
+  node.addEventListener("pointerup", (event) => {
+    if (!gesture || gesture.id !== event.pointerId) return;
+    const g = gesture;
+    const direction = swipeDirection({
+      dx: event.clientX - g.x,
+      dy: event.clientY - g.y,
+      elapsed: performance.now() - g.time,
+    });
+    const moved = Math.hypot(event.clientX - g.x, event.clientY - g.y) > 10;
+    const bounds = node.getBoundingClientRect();
+    reset();
+    if (moved) suppress();
+    if (direction && state.phase === "playing") {
+      event.preventDefault();
+      suppress();
+      decide(uid, thisEpoch, direction, bounds);
+    }
+  });
+  node.addEventListener("pointercancel", cancel);
+  node.addEventListener("lostpointercapture", () => {
+    if (gesture) cancel();
+  });
+  node.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight Enter");
+}
+function directionEffect(bounds, direction, uid) {
+  if (reduced.matches) return;
+  const n = document.createElement("div");
+  n.className = `decision-trail ${direction}`;
+  n.dataset.resolvedUid = String(uid);
+  Object.assign(n.style, {
+    left: `${bounds.left}px`,
+    top: `${bounds.top}px`,
+    width: `${bounds.width}px`,
+    height: `${bounds.height}px`,
+  });
+  document.body.append(n);
+  setTimeout(() => n.remove(), 180);
+}
+function decide(uid, thisEpoch, direction, bounds) {
+  if (thisEpoch !== epoch || !state || state.phase !== "playing") return;
+  updateNow();
+  const accepted = direction === "allow" ? allow(state, uid) : collect(state, uid);
+  if (accepted && bounds) directionEffect(bounds, direction, uid);
+  render();
 }
 function updateNow() {
   const time = performance.now();
@@ -185,18 +290,54 @@ function feedbackEffect(entry) {
   n.dataset.resolvedUid = String(entry.uid);
   n.dataset.operation = entry.question.operation;
 
-  n.textContent =
-    entry.kind === "pass" ? "通過 ＋10" : entry.kind === "flag" ? `検知 ＋${entry.points}` : "♥ −1";
+  n.textContent = ["pass", "allow"].includes(entry.kind)
+    ? "通過 ＋10"
+    : entry.kind === "flag"
+      ? `検知 ＋${entry.points}`
+      : "♥ −1";
   const detail = document.createElement("small");
   detail.textContent = entry.question.operation;
   n.append(detail);
+  if (
+    entry.correct &&
+    entry.kind !== "pass" &&
+    entry.comboAfter >= 3 &&
+    (entry.comboAfter === 3 || entry.comboAfter === 5 || entry.comboAfter % 10 === 0)
+  ) {
+    const combo = document.createElement("b");
+    combo.textContent = `${entry.comboAfter} COMBO`;
+    n.append(combo);
+    n.classList.add("combo-milestone");
+  }
   $("effects").replaceChildren(n);
   setTimeout(() => n.remove(), 220);
+}
+function stackLanePositions(entries, columns, fieldHeight) {
+  for (let lane = 0; lane < columns; lane++) {
+    const pair = entries
+      .filter((v) => v.lane === lane)
+      .sort((a, b) => a.item.born - b.item.born || a.item.slot - b.item.slot);
+    const stack = [...pair].reverse();
+    let bottom = 8;
+    for (const entry of stack) {
+      entry.y = Math.max(entry.y, bottom);
+      bottom = entry.y + entry.node.offsetHeight + 12;
+    }
+    const overflow = bottom - 12 - fieldHeight + 2;
+    if (overflow > 0) for (const entry of stack) entry.y -= overflow;
+    if (stack[0]?.y < 8) {
+      let y = 8;
+      for (const entry of stack) {
+        entry.y = y;
+        y += entry.node.offsetHeight + 12;
+      }
+    }
+  }
 }
 function positions(items, previewing) {
   const field = $("cards"),
     narrow = innerWidth <= 740,
-    columns = narrow ? 2 : 3;
+    columns = previewing ? (narrow ? 2 : 3) : narrow ? 1 : 2;
   const entries = items.map((item) => {
     const node = nodes.get(String(item.uid));
     const fraction = previewing
@@ -216,20 +357,7 @@ function positions(items, previewing) {
         : Math.max(8, movement * Math.max(0, field.clientHeight - node.offsetHeight));
     return { item, node, lane, y };
   });
-  for (let lane = 0; lane < columns; lane++) {
-    const pair = entries
-      .filter((v) => v.lane === lane)
-      .sort((a, b) => a.item.born - b.item.born || a.item.slot - b.item.slot);
-    if (pair.length === 2) {
-      const [older, younger] = pair;
-      younger.y = Math.min(
-        younger.y,
-        Math.max(10, field.clientHeight - older.node.offsetHeight - younger.node.offsetHeight - 14),
-      );
-      older.y = Math.max(older.y, younger.y + younger.node.offsetHeight + 12);
-      older.y = Math.min(older.y, field.clientHeight - older.node.offsetHeight - 2);
-    }
-  }
+  stackLanePositions(entries, columns, field.clientHeight);
   for (const entry of entries) entry.node.style.top = `${Math.max(8, entry.y)}px`;
 }
 function syncCards() {
@@ -249,7 +377,7 @@ function syncCards() {
       $("cards").append(node);
     }
     const node = nodes.get(uid);
-    const arriving = !previewing && !state.study && state.elapsed - item.born < 300;
+    const arriving = !previewing && !state.study && state.elapsed - item.born < INPUT_GUARD_MS;
     node.dataset.slot = String(item.slot);
     node.querySelector(".slot").textContent = String(item.slot + 1);
     node.classList.toggle("arriving", arriving);
@@ -274,7 +402,24 @@ function modal(title, description) {
   node.append(h, p, actions);
   return actions;
 }
+function officialLink(question) {
+  const a = document.createElement("a");
+  a.href = question.source;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.textContent = "この判定の公式説明 ↗";
+  a.addEventListener("click", () => {
+    if (["playing", "hitstop"].includes(state.phase)) {
+      updateNow();
+      pause(state);
+      lastTime = null;
+      render();
+    }
+  });
+  return a;
+}
 function actualRequest(entry, actions) {
+  $("overlay").insertBefore(officialLink(entry.question), actions);
   const text = document.createElement("p");
   text.className = "actual";
   text.textContent = `${entry.question.operation}\n${entry.question.context.policy}\n${entry.question.context.observed}`;
@@ -290,11 +435,13 @@ function explanation() {
   const title =
     e.kind === "miss"
       ? `取り逃し ${e.groupCount ?? 1}件 · ♥−${e.groupCount ?? 1}`
-      : e.kind === "wrong"
-        ? "正常な操作を検知しました"
-        : e.kind === "flag"
-          ? "検知できました"
-          : "正しく通しました";
+      : e.kind === "allow-danger"
+        ? "危険な操作を通しました · ♥−1"
+        : e.kind === "wrong"
+          ? "正常な操作を検知しました"
+          : e.kind === "flag"
+            ? "検知できました"
+            : "正しく通しました";
   const actions = modal(title, e.question.why);
   actualRequest(e, actions);
   const lives = document.createElement("p");
@@ -316,7 +463,7 @@ function review() {
   for (const e of [...state.history].reverse()) {
     const article = document.createElement("article"),
       h = document.createElement("h3");
-    h.textContent = `${{ flag: "正しい検知", pass: "正常通過", wrong: "誤検知", miss: "見逃し" }[e.kind]} · ${e.question.service} / ${e.question.operation} · ${e.points}点`;
+    h.textContent = `${{ flag: "正しい検知", pass: "正常通過", allow: "手動で正常通過", "allow-danger": "危険を通過", wrong: "誤検知", miss: "見逃し" }[e.kind]} · ${e.question.service} / ${e.question.operation} · ${e.points}点`;
     const context = document.createElement("p");
     context.textContent = `${e.question.context.policy} ／ ${e.question.context.observed}`;
     const wire = document.createElement("pre");
@@ -484,7 +631,15 @@ function phaseContent() {
 }
 function render() {
   document.body.dataset.phase = state.phase;
+  document.body.dataset.study = String(state.study);
+  const wasActive = document.body.classList.contains("active-game");
+  const active = state.phase !== "ready";
+  document.body.classList.toggle("active-game", active);
+  const pauseHost = active ? document.querySelector(".hud") : document.querySelector(".top");
+  if ($("pause").parentElement !== pauseHost) pauseHost.append($("pause"));
   $("score").textContent = String(state.score);
+  $("combo").textContent = state.combo >= 2 ? `${state.combo} COMBO` : "";
+  if (state.phase !== "playing") activeGestureCancel?.();
   $("survival").textContent = duration(state.elapsed);
   $("personal-best").textContent =
     `BEST ${duration(Math.max(bestMs, state.study ? 0 : state.elapsed))}`;
@@ -499,6 +654,8 @@ function render() {
   for (const entry of state.history.slice(seen)) feedbackEffect(entry);
   seen = state.history.length;
   syncCards();
+  if (active && !layoutBlocked) state.maxCards = layoutCapacity();
+  if (active && !wasActive) layoutKey = currentLayout();
   if (phase !== state.phase) {
     phase = state.phase;
     if (phase !== "hitstop") phaseContent();
@@ -530,8 +687,18 @@ $("about").addEventListener("toggle", () => {
   if ($("about").open) pauseForRules();
 });
 $("study").addEventListener("click", () => prepare(newSeed(), true, true));
+function handleDirectionalKey(event) {
+  const target = event.target.closest?.("button.request");
+  if (!["ArrowLeft", "ArrowRight"].includes(event.key) || !target || state.phase !== "playing")
+    return false;
+  event.preventDefault();
+  if (!event.repeat)
+    decide(Number(target.dataset.uid), epoch, event.key === "ArrowRight" ? "allow" : "stop");
+  return true;
+}
 document.addEventListener("keydown", (event) => {
   if (!state || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (handleDirectionalKey(event)) return;
   if (["Tab", "1", "2", "3", "4", "5", "6"].includes(event.key))
     document.body.classList.add("keyboard");
   if (
@@ -552,7 +719,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 function backgroundPause() {
-  if (!state) return;
+  if (!state || !["playing", "hitstop"].includes(state.phase)) return;
   pause(state);
   lastTime = null;
   render();
@@ -562,7 +729,6 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("blur", backgroundPause);
 function fitsLayout(columns, remap) {
-  if (state.active.length > columns * 2) return false;
   const heights = Array.from({ length: columns }, () => []);
   state.active.forEach((item, i) => {
     heights[(remap ? i : item.slot) % columns].push(nodes.get(String(item.uid))?.offsetHeight ?? 0);
@@ -582,7 +748,7 @@ window.addEventListener("resize", () => {
     return;
   }
   if (state.phase === "finished") return;
-  const columns = innerWidth <= 740 ? 2 : 3;
+  const columns = innerWidth <= 740 ? 1 : 2;
   const changed = Number(layoutKey.split(":")[0]) !== columns;
   if (!fitsLayout(columns, changed || layoutBlocked)) {
     updateNow();

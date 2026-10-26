@@ -1,5 +1,5 @@
 import { createQuestionStream, difficulty, nextQuestion } from "./recognition.js";
-export const INPUT_GUARD_MS = 300;
+export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 120;
 export function createGame(catalog, seed = 726, study = false) {
   return {
@@ -58,6 +58,7 @@ function record(state, item, kind, correct, points) {
     points,
     at: state.elapsed,
     livesAfter: state.lives,
+    comboAfter: state.combo,
   };
   state.history.push(entry);
   state.feedback = entry;
@@ -98,17 +99,30 @@ export function collect(state, uid) {
   }
   return true;
 }
-export function passStudy(state) {
-  if (!state.study || state.phase !== "playing") return false;
-  const item = state.active[0];
+export function allow(state, uid) {
+  if (state.phase !== "playing") return false;
+  const item = state.active.find((entry) => entry.uid === uid);
+  if (
+    !item ||
+    (!state.study && (state.elapsed >= item.deadline || state.elapsed - item.born < INPUT_GUARD_MS))
+  )
+    return false;
   remove(state, item);
-  if (item.question.danger) lose(state, item, "miss");
-  else {
-    state.passed++;
-    record(state, item, "pass", true, 10);
+  if (item.question.danger) {
+    lose(state, item, "allow-danger");
+    state.phase = "feedback";
+    return true;
   }
-  state.phase = "feedback";
+  state.passed++;
+  state.combo++;
+  state.best = Math.max(state.best, state.combo);
+  record(state, item, "allow", true, 10);
+  if (state.study) state.phase = "feedback";
   return true;
+}
+export function passStudy(state) {
+  if (!state.study) return false;
+  return allow(state, state.active[0]?.uid);
 }
 export function next(state) {
   if (state.phase !== "feedback") return;
