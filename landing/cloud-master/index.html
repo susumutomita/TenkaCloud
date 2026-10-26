@@ -1,41 +1,23 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#081a24">
-<meta name="description" content="分かったカードから先取り。クラウドの役割、HTTP、AWS API を見分けるサバイバルゲーム。">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f2f6fc"><meta name="description" content="架空のAWSリクエストから、許可条件に反する操作を見つける落ちもの学習ゲーム。">
 <title>目指せクラウドマスター | TenkaCloud</title>
-<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./game.css">
-<script type="module" src="./game.js"></script>
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="./game.css"><script type="module" src="./game.js"></script>
 </head>
 <body>
-<main class="arcade">
-  <header class="masthead"><a href="../" class="brand" aria-label="TenkaCloud の LP に戻る">天<span>TenkaCloud</span></a><h1>目指せクラウドマスター</h1><button id="pause" type="button" disabled aria-label="一時停止">Ⅱ</button></header>
-  <nav id="modes" aria-label="出題モード"></nav>
-  <section class="game" aria-label="落ちものサバイバル">
-    <div class="mission"><div><p id="mode-caption"></p><h2 id="objective"></h2><p id="objective-detail"></p></div><div class="scoreboard"><span>SCORE</span><strong id="score">0</strong><small id="record">0 キャッチ</small><span id="lives" class="lives" aria-label="残りライフ3">♥ ♥ ♥</span></div></div>
-    <div class="sky" id="field">
-      <div class="sun" aria-hidden="true"></div><div class="horizon" aria-hidden="true"></div>
-      <svg class="cloud-art cloud-a" viewBox="0 0 220 80" aria-hidden="true"><path d="M8 66h201a27 27 0 0 0-27-35c-4-36-55-35-62-9-22-26-57-5-51 19C40 24 12 37 8 66Z"/></svg>
-      <svg class="cloud-art cloud-b" viewBox="0 0 220 80" aria-hidden="true"><path d="M8 66h201a27 27 0 0 0-27-35c-4-36-55-35-62-9-22-26-57-5-51 19C40 24 12 37 8 66Z"/></svg>
-      <div class="lane-lines" aria-hidden="true"><i></i><i></i><i></i></div>
-      <p id="field-cue" class="field-cue">光るカードでキャッチを試そう ↓</p>
-      <div id="cards" class="cards" aria-label="落ちてくるカード"></div>
-      <div id="effects" class="effects" aria-hidden="true"></div>
-      <div class="miss-line"><span id="miss-rule">見逃し −1・停止して解説</span></div>
-      <div id="overlay" class="overlay" hidden></div>
-    </div>
-    <div class="catch-zone" id="catch-zone"><span class="catch-mark" id="catch-mark" aria-hidden="true"></span><div><small>拾うのは、これだけ</small><strong id="catch-label"></strong></div><span class="catch-arrow" aria-hidden="true">↑</span><p id="catch-hint">カードを直接タップ</p></div>
-    <div class="controls" id="controls"></div>
-    <p id="rule-line" class="rule-line"><strong>ライフ3 · 0で終了。</strong> 誤タップ −1 ／ 見逃し −1。対象外は見送る。</p>
-  </section>
-  <div class="underbar"><span id="seed-label"></span><span>合成データ・通信なし・端末保存なし</span></div>
-  <p class="fair-note">得点はこのプレイ内の記録。スキル認定ではありません。</p>
-  <section id="review" class="review" hidden aria-labelledby="review-title"><h2 id="review-title">この回のキャッチを振り返る</h2><div id="review-list"></div></section>
-  <p id="live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
-</main>
-<noscript>JavaScript を有効にすると遊べます。</noscript>
-</body>
-</html>
+<main class="app">
+<header class="top"><a href="../" class="brand">天 <span>TenkaCloud</span></a><h1>目指せクラウドマスター</h1><button type="button" id="pause" disabled aria-label="一時停止">Ⅱ</button></header>
+<section class="game" aria-label="AWSリクエスト検知ゲーム">
+ <div class="heading"><p>AWS REQUEST WATCH</p><h2>許可外の操作だけ、タップ。</h2></div>
+ <div class="hud glass"><div><small>SCORE</small><strong id="score">0</strong></div><div class="level"><small>LEVEL</small><strong id="level">1<span>/ 5</span></strong></div><div class="life"><small>0で終了</small><strong id="lives" aria-label="残りライフ3">♥ ♥ ♥</strong></div><div id="effects" class="effects" aria-hidden="true"></div></div>
+ <div class="field" id="field"><div class="field-grid" aria-hidden="true"></div><div id="cards" class="cards" aria-label="流れてくるAWSリクエスト"></div><div class="floor" id="floor">許可外を見逃すと ♥−1・止まって解説</div><div id="overlay" class="overlay glass" hidden></div></div>
+ <div id="controls" class="controls"><button type="button" class="primary" disabled>データを準備中…</button></div>
+ <p class="rule"><strong>許可内は触らず通す ＋10。</strong> 誤タップは ♥−1。</p>
+</section>
+<footer><p>架空のAWSイベントを使う学習ゲーム。実際のGuardDuty判定・通信遮断の再現ではありません。</p><details id="about"><summary>出題範囲・得点・時間なしの練習</summary><p>botocore 1.43.118 の435 SDKサービスモデル・19,437 API操作を収録。AWS全製品数やGuardDutyの対応範囲を表す数ではありません。APIは要求形式の抜粋で、認証・必須引数を省略しています。</p><p>演習用の許可範囲・承認ルールに反する操作を検知します。正常通過は10点。正しい検知はゲーム内危険度×10点。ゲーム内危険度はGuardDutyの実際のseverity値ではありません。危険度は回答後に表示します。</p><p>正しい検知5回ごとにレベルが上がり、最大5。速度と流入間隔に上限があります。狭い画面は同時2枚まで。Tabでカードへ移動、1〜3キーでも検知、Pで一時停止。背景移動中も停止します。</p><button type="button" id="study" class="secondary">時間なしで学ぶ</button><p><a href="./api-catalog-manifest.json" target="_blank" rel="noopener noreferrer">収録モデル・固定版・除外一覧</a> · <a href="https://docs.aws.amazon.com/guardduty/latest/ug/custom-detection-rules.html" target="_blank" rel="noopener noreferrer">GuardDutyの公式説明</a></p></details><p class="record-note">得点はカジュアルな練習記録。スキル認定ではありません。保存・追跡・AWSへの通信なし。</p></footer>
+<section id="review" class="review" hidden><h2>今回のリクエストを振り返る</h2><div id="review-list"></div></section>
+<p id="live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+</main><noscript>JavaScriptを有効にすると遊べます。</noscript>
+</body></html>

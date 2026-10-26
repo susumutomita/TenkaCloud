@@ -1,217 +1,179 @@
-import { buildDeck, objective } from "./recognition.js";
-export const FALL_MS = 15000;
+import { createQuestionStream, difficulty, nextQuestion } from "./recognition.js";
 export const INPUT_GUARD_MS = 300;
-export function createGame(mode = "foundation", seed = 726, study = false) {
+export const HITSTOP_MS = 120;
+export function createGame(catalog, seed = 726, study = false) {
   return {
-    mode,
+    ...createQuestionStream(catalog, seed),
     seed: seed >>> 0,
     study,
-    target: objective(mode, seed),
-    deck: buildDeck(mode, seed),
     phase: "ready",
     previous: null,
     elapsed: 0,
     score: 0,
     lives: 3,
     mistakes: 0,
-    grace: 0,
     combo: 0,
     best: 0,
-    correct: 0,
     history: [],
     active: [],
     serial: 0,
-    cursor: 0,
-    cycle: 0,
-    lastId: null,
-    opportunityAt: null,
     passed: 0,
     feedback: null,
     end: null,
+    grace: 0,
+    hitstop: 0,
+    nextSpawnAt: 4500,
   };
 }
-function spawn(state, slot, age = 0, forceMatch = false) {
-  if (state.cursor === state.deck.length) {
-    state.deck = buildDeck(state.mode, state.seed, ++state.cycle);
-    state.cursor = 0;
-  }
-  if (forceMatch) {
-    const index = state.deck.findIndex((q, i) => i >= state.cursor && q.match);
-    if (index >= 0)
-      [state.deck[state.cursor], state.deck[index]] = [state.deck[index], state.deck[state.cursor]];
-  }
-  const life = Math.max(10000, FALL_MS - state.correct * 100);
-  if (state.deck[state.cursor].id === state.lastId) {
-    const different = state.deck.findIndex(
-      (q, index) => index > state.cursor && q.id !== state.lastId,
-    );
-    if (different >= 0)
-      [state.deck[state.cursor], state.deck[different]] = [
-        state.deck[different],
-        state.deck[state.cursor],
-      ];
-  }
-  const question = state.deck[state.cursor++];
-  state.lastId = question.id;
-  const item = {
+function freeSlot(state) {
+  return [0, 1, 2].find((slot) => !state.active.some((item) => item.slot === slot));
+}
+function spawn(state) {
+  const slot = freeSlot(state);
+  if (slot === undefined) return;
+  const config = difficulty(state.correct);
+  state.active.push({
     uid: state.serial++,
     slot,
-    born: state.elapsed - age,
-    deadline: state.elapsed - age + life,
-    question,
-  };
-  state.active.push(item);
-  return item;
+    born: state.elapsed,
+    deadline: state.elapsed + config.fallMs,
+    question: nextQuestion(state),
+  });
 }
 export function start(state) {
   if (state.phase !== "ready") return;
   state.phase = "playing";
-  if (state.study) {
-    spawn(state, 0, 500);
-    return;
-  }
-  spawn(state, 0, 9000);
-  spawn(state, 1, 4500);
-  spawn(state, 2, 500);
-  scheduleOpportunity(state);
+  spawn(state);
 }
-function record(state, item, picked) {
-  const correct = picked === item.question.match;
-  const points = correct ? 100 + Math.min(state.combo, 5) * 20 : 0;
-  state.combo = correct ? state.combo + 1 : 0;
-  state.best = Math.max(state.best, state.combo);
-  state.score += points;
-  state.correct += Number(correct);
+function remove(state, item) {
+  state.active = state.active.filter((entry) => entry.uid !== item.uid);
+}
+function record(state, item, kind, correct, points) {
   const entry = {
     uid: item.uid,
     question: item.question,
-    picked,
+    kind,
     correct,
     points,
     at: state.elapsed,
+    livesAfter: state.lives,
   };
   state.history.push(entry);
   state.feedback = entry;
+  state.score += points;
   return entry;
 }
-function loseLife(state, entry, kind) {
+function lose(state, item, kind) {
   state.lives = Math.max(0, state.lives - 1);
   state.mistakes++;
   state.combo = 0;
-  entry.kind = kind;
+  const entry = record(state, item, kind, false, 0);
   entry.livesAfter = state.lives;
-  if (state.lives === 0) state.end = { reason: "lives", trigger: kind, entry };
+  if (!state.lives) state.end = { reason: "lives", trigger: kind, entry };
+  return entry;
 }
 export function collect(state, uid) {
   if (state.phase !== "playing") return false;
-  const item = state.active.find((q) => q.uid === uid);
+  const item = state.active.find((entry) => entry.uid === uid);
   if (
     !item ||
     (!state.study && (state.elapsed >= item.deadline || state.elapsed - item.born < INPUT_GUARD_MS))
   )
     return false;
-  const entry = record(state, item, true);
-  if (state.study) {
-    state.phase = "feedback";
+  remove(state, item);
+  if (!item.question.danger) {
+    lose(state, item, "wrong");
+    if (state.study || !state.lives) state.phase = "feedback";
     return true;
   }
-  state.active = state.active.filter((q) => q.uid !== uid);
-  spawn(state, item.slot);
-  if (!entry.correct) {
-    loseLife(state, entry, "wrong");
-    if (state.lives === 0) state.phase = "feedback";
+  state.correct++;
+  state.combo++;
+  state.best = Math.max(state.best, state.combo);
+  record(state, item, "flag", true, item.question.points);
+  if (state.study) state.phase = "feedback";
+  else if (item.question.points === 10) {
+    state.hitstop = HITSTOP_MS;
+    state.phase = "hitstop";
   }
-  scheduleOpportunity(state);
   return true;
 }
 export function passStudy(state) {
   if (!state.study || state.phase !== "playing") return false;
-  record(state, state.active[0], false);
+  const item = state.active[0];
+  remove(state, item);
+  if (item.question.danger) lose(state, item, "miss");
+  else {
+    state.passed++;
+    record(state, item, "pass", true, 10);
+  }
   state.phase = "feedback";
   return true;
 }
 export function next(state) {
   if (state.phase !== "feedback") return;
-  if (!state.study) {
-    if (state.lives === 0) {
-      state.phase = "finished";
-      return;
-    }
-    state.phase = "playing";
-    state.grace = 800;
+  if (!state.lives) {
+    state.phase = "finished";
     return;
   }
-  state.active = [];
   state.phase = "playing";
-  spawn(state, 0, 500);
+  state.grace = 800;
+  if (state.study) spawn(state);
 }
-function scheduleOpportunity(state) {
-  if (state.active.some((item) => item.question.match)) state.opportunityAt = null;
-  else state.opportunityAt ??= state.elapsed + 900;
-}
-function refreshOpportunity(state) {
-  if (state.opportunityAt === null || state.elapsed < state.opportunityAt) return;
-  const oldest = [...state.active].sort((a, b) => a.born - b.born || a.uid - b.uid)[0];
-  state.active = state.active.filter((item) => item.uid !== oldest.uid);
-  state.passed++;
-  spawn(state, oldest.slot, 0, true);
-  state.opportunityAt = null;
+function expire(state, items) {
+  const missed = items.filter((item) => item.question.danger);
+  for (const item of items) {
+    remove(state, item);
+    if (item.question.danger) lose(state, item, "miss");
+    else {
+      state.passed++;
+      record(state, item, "pass", true, 10);
+    }
+  }
+  if (missed.length) {
+    state.feedback = state.history.findLast(
+      (entry) => entry.kind === "miss" && entry.at === state.elapsed,
+    );
+    state.feedback.groupCount = missed.length;
+    state.phase = "feedback";
+    return true;
+  }
+  return false;
 }
 export function tick(state, milliseconds) {
-  if (
-    state.phase !== "playing" ||
-    state.study ||
-    !Number.isFinite(milliseconds) ||
-    milliseconds <= 0
-  )
-    return;
-  const grace = Math.min(state.grace, milliseconds);
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return;
+  let remaining = milliseconds;
+  if (state.phase === "hitstop") {
+    const stop = Math.min(remaining, state.hitstop);
+    state.hitstop -= stop;
+    remaining -= stop;
+    if (state.hitstop > 0) return;
+    state.phase = "playing";
+  }
+  if (state.phase !== "playing" || state.study) return;
+  const grace = Math.min(state.grace, remaining);
   state.grace -= grace;
-  const target = state.elapsed + milliseconds - grace;
+  remaining -= grace;
+  advanceWorld(state, state.elapsed + remaining);
+}
+function advanceWorld(state, target) {
   while (state.elapsed < target) {
-    state.elapsed = Math.min(
-      target,
-      state.opportunityAt ?? Infinity,
-      ...state.active.map((q) => q.deadline),
-    );
+    const deadline = state.active.length
+      ? Math.min(...state.active.map((item) => item.deadline))
+      : Infinity;
+    state.elapsed = Math.min(target, state.nextSpawnAt, deadline);
     const expired = state.active
-      .filter((q) => q.deadline <= state.elapsed)
+      .filter((item) => item.deadline <= state.elapsed)
       .sort((a, b) => a.uid - b.uid);
-    const missed = expired.filter((q) => q.question.match);
-    if (missed.length) {
-      for (const item of expired) {
-        state.active = state.active.filter((q) => q.uid !== item.uid);
-        if (item.question.match) {
-          const entry = {
-            uid: item.uid,
-            question: item.question,
-            picked: null,
-            correct: false,
-            points: 0,
-            at: state.elapsed,
-          };
-          state.history.push(entry);
-          state.feedback = entry;
-          loseLife(state, entry, "miss");
-        } else state.passed++;
-        spawn(state, item.slot);
-      }
-      state.feedback.groupCount = missed.length;
-      state.phase = "feedback";
-      scheduleOpportunity(state);
-      return;
+    if (expired.length && expire(state, expired)) return;
+    if (state.elapsed >= state.nextSpawnAt) {
+      const config = difficulty(state.correct);
+      if (state.active.length < Math.min(config.limit, state.maxCards ?? 3)) spawn(state);
+      state.nextSpawnAt = state.elapsed + config.intervalMs;
     }
-    for (const item of expired) {
-      state.active = state.active.filter((q) => q.uid !== item.uid);
-      state.passed++;
-      spawn(state, item.slot);
-    }
-    scheduleOpportunity(state);
-    refreshOpportunity(state);
   }
 }
 export function pause(state) {
-  if (!["playing", "feedback"].includes(state.phase)) return;
+  if (!["playing", "feedback", "hitstop"].includes(state.phase)) return;
   state.previous = state.phase;
   state.phase = "paused";
 }
@@ -221,7 +183,7 @@ export function resume(state) {
   state.previous = null;
 }
 export function finish(state) {
-  if (!["playing", "feedback", "paused"].includes(state.phase)) return;
+  if (!["playing", "feedback", "hitstop", "paused"].includes(state.phase)) return;
   state.end = { reason: "manual", entry: null };
   state.phase = "finished";
 }

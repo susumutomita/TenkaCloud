@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
+import manifest from "../../landing/cloud-master/api-catalog-manifest.json";
 import {
   collect,
   createGame,
   finish,
+  HITSTOP_MS,
   next,
   passStudy,
   pause,
@@ -10,254 +14,336 @@ import {
   start,
   tick,
 } from "../../landing/cloud-master/engine.js";
-import { choices, questions, templates } from "../../landing/cloud-master/questions.js";
-import { buildDeck, objective } from "../../landing/cloud-master/recognition.js";
+import {
+  createQuestionStream,
+  difficulty,
+  levelFor,
+  nextQuestion,
+  violates,
+} from "../../landing/cloud-master/recognition.js";
+import { buildShare } from "../../landing/cloud-master/share.js";
 
-describe("authored conditions and protocol semantics", () => {
-  test("six families have five distinct condition/answer variants, never random relabeling", () => {
-    expect(questions).toHaveLength(30);
-    expect(new Set(questions.map((q) => q.id)).size).toBe(30);
-    for (const template of templates)
-      for (const choice of choices) {
-        const question = questions.find((q) => q.id === `${template.id}:${choice.id}`);
-        expect(question.answer).toBe(choice.id);
-        expect(question.prompt).toBe(template.variants[choice.id][0]);
-        expect(question.why.length).toBeGreaterThan(25);
+const catalog = await loadCatalog();
+function playing(seed = 726) {
+  const state = createGame(catalog, seed);
+  start(state);
+  return state;
+}
+function findOpening(danger) {
+  for (let seed = 0; seed < 50; seed++) {
+    const state = playing(seed);
+    if (state.active[0].question.danger === danger) return state;
+  }
+  throw new Error("Missing balanced seed");
+}
+function afterDelay(state) {
+  tick(state, 301);
+  return state.active[0];
+}
+
+function expectVisibleParameters(q: ReturnType<typeof nextQuestion>) {
+  if (q.context.kind === "service") expect(q.context.actual).toBe(q.service);
+  if (q.context.kind === "acl") expect(q.wire).toContain(`x-amz-acl: ${q.context.actual}`);
+  if (q.context.kind === "keyOwner") expect(q.wire).toContain(`UserName=${q.context.actual}`);
+}
+
+describe("pinned public AWS API catalog and visible policy keys", () => {
+  test("exact coverage, source digest and all API templates validate", () => {
+    expect(catalog).toHaveLength(435);
+    expect(manifest.serviceModels).toBe(435);
+    expect(manifest.operations).toBe(19437);
+    expect(manifest.excludedOperations).toHaveLength(0);
+    expect(manifest.excludedOlderApiVersions).toHaveLength(33);
+    expect(createHash("sha256").update(JSON.stringify(catalog)).digest("hex")).toBe(
+      manifest.plainSha256,
+    );
+    let operations = 0;
+    for (const service of catalog) {
+      expect(service.name.length).toBeGreaterThan(0);
+      expect(service.operations.length).toBeGreaterThan(0);
+      for (const [name, method, path] of service.operations) {
+        expect(name.length).toBeGreaterThan(0);
+        expect(method).toMatch(/^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$/u);
+        expect(path.startsWith("/")).toBe(true);
+        operations++;
       }
-  });
-  test("seeded decks preserve conditions and balance all non-target categories", () => {
-    for (const seed of [0, 1, 2, 3, 4, 726, 999]) {
-      const target = objective("foundation", seed);
-      const deck = buildDeck("foundation", seed);
-      expect(deck).toEqual(buildDeck("foundation", seed));
-      expect(deck).not.toEqual(buildDeck("foundation", seed + 5));
-      expect(deck.filter((q) => q.match)).toHaveLength(24);
-      expect(new Set(deck.filter((q) => !q.match).map((q) => q.category)).size).toBe(4);
-      for (const q of deck) expect(q.match).toBe(q.answer === target.id);
-      for (let i = 1; i < deck.length; i++) expect(deck[i].id).not.toBe(deck[i - 1].id);
     }
+    expect(operations).toBe(19437);
   });
-  test("HTTP requests differ from responses; TLS and port 443 are not proof", () => {
-    const deck = buildDeck("http", 123);
-    for (const q of deck) {
-      if (q.match) {
-        expect(q.prompt).toMatch(
-          /^(GET|HEAD|POST|PUT) \/[^ ]+ HTTP\/1\.1\r\nHost: practice\.invalid\r\n/u,
-        );
-        if (q.prompt.includes("Content-Length:")) {
-          const [headers, body] = q.prompt.split("\r\n\r\n");
-          expect(Number(headers.match(/Content-Length: (\d+)/u)[1])).toBe(body.length);
-        }
-      } else expect(q.category).not.toBe("request");
+  test("seeded generation binds actual model operations and grades only visible context", () => {
+    const a = createQuestionStream(catalog, 123),
+      b = createQuestionStream(catalog, 123);
+    a.correct = b.correct = 15;
+    const kinds = new Set();
+    const cases = new Set();
+    let dangerous = 0;
+    for (let i = 0; i < 1200; i++) {
+      const q = nextQuestion(a);
+      expect(q).toEqual(nextQuestion(b));
+      const model = catalog.find((s) => s.id === q.serviceId);
+      expect(
+        model.operations.some(
+          (op) =>
+            op[0] === q.operation &&
+            op[1] === q.method &&
+            (q.protocol === "smithy-rpc-v2-cbor" || op[2] === q.path),
+        ),
+      ).toBe(true);
+      expect(q.danger).toBe(violates(q.context));
+      expectVisibleParameters(q);
+      expect(q.points).toBe(q.danger ? Math.round(q.severity * 10) : 10);
+      expect(q.wire).toContain(`${q.method} ${q.path}`);
+      if (q.protocol === "smithy-rpc-v2-cbor") {
+        expect(q.path).toBe(`/service/${model.target}/operation/${q.operation}`);
+        expect(q.wire).toContain("Smithy-Protocol: rpc-v2-cbor");
+        expect(q.wire).not.toContain("X-Amz-Target:");
+      }
+      kinds.add(q.context.kind);
+      cases.add(`${q.context.kind}:${q.danger}`);
+      dangerous += Number(q.danger);
     }
-    for (const category of ["response", "opaque", "transport", "smtp", "dns"])
-      expect(deck.some((q) => q.category === category && !q.match)).toBe(true);
+    expect(kinds.size).toBe(6);
+    expect(cases.size).toBe(12);
+    expect(dangerous).toBe(600);
   });
-  test("AWS operation plus DryRun decides meaning; request is not a success response", () => {
-    const deck = buildDeck("aws", 42);
-    for (const q of deck) {
-      expect(q.match).toBe(q.operation === "StartInstances" && q.parameters.DryRun === false);
-      expect(q.prompt).toContain(`DryRun=${q.parameters.DryRun}`);
-      expect(q.parameters["InstanceId.1"]).toMatch(/^i-[0-9a-f]{17}$/u);
-      expect(q.source).toContain(`API_${q.operation}.html`);
+  test("all435 model services appear through fair seeded service bags at broad levels", () => {
+    const stream = createQuestionStream(catalog, 88);
+    stream.correct = 20;
+    const services = new Set();
+    for (let i = 0; i < 2000; i++) services.add(nextQuestion(stream).serviceId);
+    expect(services.size).toBe(435);
+  });
+  test("same API can be normal or suspicious depending on visible approval", () => {
+    const stream = createQuestionStream(catalog, 76);
+    stream.correct = 10;
+    const entries = [];
+    for (let i = 0; i < 700; i++) {
+      const q = nextQuestion(stream);
+      if (q.operation === "StopLogging" && q.context.kind === "approval") entries.push(q);
     }
-    expect(deck.some((q) => q.operation === "StartInstances" && !q.match)).toBe(true);
-    expect(deck.find((q) => q.match).why).toContain("成功したか");
+    expect(entries.some((q) => q.danger)).toBe(true);
+    expect(entries.some((q) => !q.danger)).toBe(true);
+    for (const q of entries) expect(q.danger).toBe(q.context.actual !== "承認あり");
   });
 });
 
-describe("survival rules and input hazards", () => {
-  function playing(mode = "foundation", seed = 726) {
-    const s = createGame(mode, seed);
-    start(s);
-    return s;
-  }
-  test("three simultaneous objects, newest can be taken before oldest", () => {
-    const s = playing();
-    expect(s.active).toHaveLength(3);
-    const target = s.active.filter((q) => q.question.match).at(-1);
-    expect(collect(s, target.uid)).toBe(true);
-    expect(s.phase).toBe("playing");
-    expect(s.score).toBe(100);
-    expect(s.active).toHaveLength(3);
-    expect(s.history[0].uid).toBe(target.uid);
+describe("levels, finite incoming stream and exact scoring", () => {
+  test("earned correct detections advance levels at5,10,15,20 and speed is capped", () => {
+    expect([0, 4, 5, 9, 10, 14, 15, 19, 20, 999].map(levelFor)).toEqual([
+      1, 1, 2, 2, 3, 3, 4, 4, 5, 5,
+    ]);
+    let previous = Infinity;
+    for (let i = 0; i < 30; i++) {
+      const d = difficulty(i);
+      expect(d.fallMs).toBeLessThanOrEqual(previous);
+      previous = d.fallMs;
+      expect(d.fallMs).toBeGreaterThanOrEqual(10500);
+    }
+    expect(difficulty(999)).toEqual(difficulty(20));
   });
-  test("double tap, detached old target, invalid target and held repeats cannot score twice", () => {
-    const s = playing();
-    const item = s.active.find((q) => q.question.match);
-    expect(collect(s, item.uid)).toBe(true);
+  test("round starts sparse, later objects arrive and any recognized upper item can be flagged", () => {
+    let state = playing(0);
+    for (let seed = 0; seed < 50; seed++) {
+      const candidate = playing(seed);
+      tick(candidate, 4801);
+      if (candidate.active[1]?.question.danger) {
+        state = candidate;
+        break;
+      }
+    }
+    expect(state.active).toHaveLength(2);
+    const upper = state.active[1];
+    expect(collect(state, upper.uid)).toBe(true);
+    expect(state.history[0].uid).toBe(upper.uid);
+    expect(state.active[0].uid).toBe(0);
+  });
+  test("normal pass gets10 exactly once at the boundary", () => {
+    const s = findOpening(false),
+      item = s.active[0];
+    tick(s, item.deadline - 1);
+    expect(s.score).toBe(0);
+    tick(s, 1);
+    expect(s.score).toBe(10);
+    expect(s.passed).toBe(1);
     expect(collect(s, item.uid)).toBe(false);
-    expect(collect(s, 999999)).toBe(false);
-    expect(s.score).toBe(100);
-    expect(s.history).toHaveLength(1);
-    const replacement = s.active.find((q) => q.slot === item.slot);
-    expect(collect(s, replacement.uid)).toBe(false);
+    expect(s.score).toBe(10);
   });
-  test("wrong pick costs one life, continues, and records actual mistake", () => {
-    const s = playing("http");
-    const other = s.active.find((q) => !q.question.match);
-    expect(collect(s, other.uid)).toBe(true);
-    expect(s.phase).toBe("playing");
+  test("normal false positive costs life and never later receives pass points", () => {
+    const s = findOpening(false),
+      item = afterDelay(s);
+    expect(collect(s, item.uid)).toBe(true);
     expect(s.lives).toBe(2);
     expect(s.score).toBe(0);
-    expect(s.feedback.kind).toBe("wrong");
-    expect(s.feedback.question).toEqual(other.question);
-    expect(collect(s, other.uid)).toBe(false);
+    tick(s, item.deadline - s.elapsed);
+    expect(s.history.filter((entry) => entry.uid === item.uid)).toHaveLength(1);
+    expect(s.history.find((entry) => entry.uid === item.uid).points).toBe(0);
+  });
+  test("danger score is severity times10, hitstop applies only to the10point hit", () => {
+    const s = findOpening(true),
+      item = afterDelay(s);
+    expect(item.question.points).toBe(10);
+    expect(collect(s, item.uid)).toBe(true);
+    expect(s.score).toBe(10);
+    expect(s.phase).toBe("hitstop");
+    const elapsed = s.elapsed;
+    tick(s, HITSTOP_MS - 1);
+    expect(s.elapsed).toBe(elapsed);
+    expect(s.phase).toBe("hitstop");
+    expect(collect(s, item.uid)).toBe(false);
+    tick(s, 1);
+    expect(s.phase).toBe("playing");
+    expect(s.elapsed).toBe(elapsed);
+    tick(s, 20);
+    expect(s.elapsed).toBe(elapsed + 20);
+  });
+  test("hitstop consumes frame time without moving the game clock, including pause/resume", () => {
+    const s = findOpening(true),
+      item = afterDelay(s);
+    collect(s, item.uid);
+    pause(s);
+    const before = JSON.stringify({ ...s, catalog: null });
+    tick(s, 9999);
+    expect(JSON.stringify({ ...s, catalog: null })).toBe(before);
+    resume(s);
+    const elapsed = s.elapsed;
+    tick(s, 150);
+    expect(s.elapsed).toBe(elapsed + 30);
+    expect(s.score).toBe(10);
+  });
+  test("higher severity is worth more and never gets the10-point hitstop", () => {
+    let state = playing(0);
+    for (let seed = 0; seed < 100; seed++) {
+      const candidate = createGame(catalog, seed);
+      candidate.correct = 10;
+      start(candidate);
+      if (candidate.active[0].question.danger && candidate.active[0].question.points > 10) {
+        state = candidate;
+        break;
+      }
+    }
+    const item = afterDelay(state);
+    expect(item.question.points).toBeGreaterThan(10);
+    collect(state, item.uid);
+    expect(state.score).toBe(item.question.points);
+    expect(state.phase).toBe("playing");
+  });
+  test("normal pass never triggers success hitstop", () => {
+    const s = findOpening(false);
+    tick(s, s.active[0].deadline);
+    expect(s.phase).not.toBe("hitstop");
+  });
+  test("narrow display cap and progressive spawn interval are deterministic", () => {
+    const s = playing(3);
+    s.maxCards = 2;
+    s.correct = 20;
+    tick(s, 10000);
+    expect(s.active.length).toBeLessThanOrEqual(2);
+    expect(difficulty(20).intervalMs).toBeLessThan(difficulty(0).intervalMs);
+  });
+});
+
+describe("miss explanations, races and farming guards", () => {
+  test("miss freezes all time until understood; final miss explains before results", () => {
+    const s = playing(42);
+    for (let i = 0; i < 3; i++) {
+      tick(s, 100000);
+      expect(s.phase).toBe("feedback");
+      expect(s.feedback.kind).toBe("miss");
+      const before = JSON.stringify({ ...s, catalog: null });
+      tick(s, 999999);
+      expect(JSON.stringify({ ...s, catalog: null })).toBe(before);
+      next(s);
+      if (s.lives === 0) break;
+    }
+    expect(s.lives).toBe(0);
+    expect(s.phase).toBe("finished");
+    expect(s.end.reason).toBe("lives");
+  });
+  test("expired dangerous card cannot be scored or cost another life from a stale tap", () => {
+    const s = findOpening(true),
+      item = s.active[0];
+    tick(s, item.deadline);
+    const lives = s.lives;
+    expect(collect(s, item.uid)).toBe(false);
+    expect(s.lives).toBe(lives);
+    expect(s.feedback.kind).toBe("miss");
+  });
+  test("double clicks and invalid IDs never score twice", () => {
+    const s = findOpening(true),
+      item = afterDelay(s);
+    expect(collect(s, item.uid)).toBe(true);
+    expect(collect(s, item.uid)).toBe(false);
+    expect(collect(s, 9999)).toBe(false);
+    expect(s.score).toBe(10);
     expect(s.history).toHaveLength(1);
   });
-  test("nonmatches pass harmlessly; required target misses freeze for explanation", () => {
-    const s = playing();
-    const target = s.active.find((q) => q.question.match);
-    const earliest = Math.min(...s.active.map((q) => q.deadline));
-    const first = s.active.find((q) => q.deadline === earliest);
-    if (first.question.match) {
-      tick(s, earliest);
-      expect(s.feedback.kind).toBe("miss");
-      expect(s.feedback.picked).toBeNull();
-    } else {
-      tick(s, earliest);
-      expect(s.phase).toBe("playing");
-      expect(s.passed).toBe(1);
-      expect(s.score).toBe(0);
-      tick(s, target.deadline - s.elapsed);
-      expect(s.feedback.kind).toBe("miss");
-    }
-  });
-  test("expired card cannot be scored after a delayed event", () => {
-    const s = playing();
-    const target = s.active.find((q) => q.question.match);
-    tick(s, target.deadline + 1);
-    expect(collect(s, target.uid)).toBe(false);
-    expect(s.feedback.kind).toBe("miss");
-    expect(s.score).toBe(0);
-  });
-  test("pause freezes all positions; wrong-key pick while paused cannot end a round", () => {
-    const s = playing();
-    tick(s, 1000);
-    pause(s);
-    pause(s);
-    tick(s, 999999);
-    expect(s.elapsed).toBe(1000);
-    expect(collect(s, s.active[0].uid)).toBe(false);
-    resume(s);
-    resume(s);
-    expect(s.phase).toBe("playing");
-    tick(s, 500);
-    expect(s.elapsed).toBe(1500);
-  });
-  test("large and small frames freeze at the same first miss", () => {
-    const a = playing("http", 55),
-      b = playing("http", 55);
+  test("large frame and split frames produce the same first explanation", () => {
+    const a = playing(444),
+      b = playing(444);
     tick(a, 100000);
     for (let i = 0; i < 100; i++) tick(b, 1000);
-    expect(a).toEqual(b);
-    expect(a.feedback.kind).toBe("miss");
+    expect({ ...a, catalog: null }).toEqual({ ...b, catalog: null });
   });
-  test("continuous stream has no fixed timer, avoids immediate repeats across cycles", () => {
-    const s = playing("aws");
-    const seen = [];
-    for (let i = 0; i < 300; i++) {
-      tick(s, 301);
-      const matches = s.active.filter((item) => item.question.match);
-      for (const item of matches) {
-        collect(s, item.uid);
-        seen.push(item.question.id);
-      }
-      for (const item of s.active.filter((item) => !item.question.match))
-        item.deadline = s.elapsed + 1;
-      tick(s, 1);
+  test("inaction cannot farm indefinitely; score freezes with a missed target", () => {
+    const s = playing(84);
+    for (let i = 0; i < 3; i++) {
+      tick(s, 100000);
+      const score = s.score;
+      tick(s, 10000000);
+      expect(s.score).toBe(score);
+      next(s);
     }
-    expect(s.phase).toBe("playing");
-    expect(s.cycle).toBeGreaterThan(0);
-    expect(s.elapsed).toBeGreaterThan(75000);
-    expect(s.correct).toBeGreaterThan(30);
-    expect(s.history.every((entry) => entry.correct)).toBe(true);
-    expect(seen.length).toBe(s.correct);
+    expect(s.phase).toBe("finished");
+    expect(s.lives).toBe(0);
+    expect(s.passed).toBeLessThan(15);
   });
-  test("untimed study accepts pick/pass, explains errors and continues", () => {
-    const s = createGame("aws", 4, true);
+  test("blind tapping ends after three mistakes instead of farming indefinitely", () => {
+    const s = playing(55);
+    for (let step = 0; step < 500 && s.phase !== "finished"; step++) {
+      tick(s, 500);
+      if (s.phase === "feedback") {
+        next(s);
+        continue;
+      }
+      for (const item of [...s.active]) collect(s, item.uid);
+    }
+    expect(s.lives).toBe(0);
+    expect(s.phase).toBe("finished");
+    expect(s.mistakes).toBe(3);
+    expect(s.history.filter((entry) => !entry.correct).every((entry) => entry.points === 0)).toBe(
+      true,
+    );
+  });
+  test("untimed study, manual end and seeded retry remain available", () => {
+    const s = createGame(catalog, 88, true);
     start(s);
     tick(s, 1000000);
     expect(s.elapsed).toBe(0);
     const q = s.active[0];
-    if (q.question.match) collect(s, q.uid);
+    if (q.question.danger) collect(s, q.uid);
     else passStudy(s);
-    expect(s.phase).toBe("feedback");
-    expect(s.feedback.correct).toBe(true);
-    pause(s);
-    resume(s);
     expect(s.phase).toBe("feedback");
     next(s);
     expect(s.phase).toBe("playing");
     finish(s);
     expect(s.end.reason).toBe("manual");
+    expect(createGame(catalog, 88, true)).toEqual(createGame(catalog, 88, true));
   });
-  test("miss freezes every clock until acknowledgment; final life explains before result", () => {
-    const s = playing("http", 123);
-    for (let mistake = 0; mistake < 3; mistake++) {
-      tick(s, 100000);
-      expect(s.phase).toBe("feedback");
-      const snapshot = JSON.stringify(s);
-      tick(s, 999999);
-      expect(JSON.stringify(s)).toBe(snapshot);
-      expect(s.lives).toBe(2 - mistake);
-      next(s);
-      expect(s.phase).toBe(mistake === 2 ? "finished" : "playing");
-    }
-    expect(s.end.reason).toBe("lives");
-    expect(s.end.trigger).toBe("miss");
-  });
-  test("a missing opportunity is replaced within 900ms without relabeling live cards", () => {
-    const s = playing("http", 123);
-    let longest = 0,
-      gap = 0;
-    for (let step = 0; step < 1200; step++) {
-      for (const item of [...s.active].filter((q) => q.question.match)) collect(s, item.uid);
-      const original = s.active.map((q) => ({ uid: q.uid, id: q.question.id }));
-      tick(s, 100);
-      for (const item of s.active) {
-        const old = original.find((q) => q.uid === item.uid);
-        if (old) expect(item.question.id).toBe(old.id);
-      }
-      gap = s.active.some((q) => q.question.match) ? 0 : gap + 100;
-      longest = Math.max(longest, gap);
-    }
-    expect(longest).toBeLessThanOrEqual(900);
-    expect(s.lives).toBe(3);
-  });
-  test("new runs use seed-specific rules, retry is reproducible, invalid deltas are ignored", () => {
-    const a = playing("foundation", 100),
-      retry = playing("foundation", 100),
-      other = playing("foundation", 101);
-    expect(a).toEqual(retry);
-    expect(a.target).not.toEqual(other.target);
-    for (const delta of [0, -1, NaN, Infinity]) tick(a, delta);
-    expect(a).toEqual(retry);
-  });
-});
-
-describe("user-triggered X sharing", () => {
-  test("encodes title/mode/score and labels branch previews without inventing production", async () => {
-    const { buildShare } = await import("../../landing/cloud-master/share.js");
-    const s = createGame("http", 123);
-    s.score = 1420;
-    s.correct = 9;
-    s.target.label = "HTTP & 日本語 #1";
-    const preview = buildShare(s, { hostname: "localhost" });
-    const intent = new URL(preview.intent);
-    expect(intent.origin + intent.pathname).toBe("https://x.com/intent/tweet");
-    expect(intent.searchParams.get("text")).toContain("1420 pt・9 正解");
-    expect(intent.searchParams.get("text")).toContain("HTTP & 日本語 #1");
-    expect(intent.searchParams.get("text")).toContain("プレビュー");
-    expect(intent.searchParams.get("url")).toBe(
+  test("sharing is an encoded user-triggered compose URL, with preview scope explicit", () => {
+    const s = playing(99);
+    s.score = 125;
+    s.correct = 2;
+    s.passed = 3;
+    const result = buildShare(s, { hostname: "localhost" }),
+      url = new URL(result.intent);
+    expect(url.origin + url.pathname).toBe("https://x.com/intent/tweet");
+    expect(url.searchParams.get("text")).toContain("125 pt");
+    expect(url.searchParams.get("text")).toContain("プレビュー");
+    expect(url.searchParams.get("url")).toBe(
       "https://feat-cloud-master-game.tenkacloud-www.pages.dev/cloud-master/",
     );
     expect(buildShare(s, { hostname: "tenkacloud.com" }).url).toBe(
       "https://tenkacloud.com/cloud-master/",
     );
-    expect(buildShare(s, { hostname: "abc123.tenkacloud-www.pages.dev" }).url).toBe(
-      "https://abc123.tenkacloud-www.pages.dev/cloud-master/",
-    );
-    expect(buildShare(s, { hostname: "evil.invalid" }).url).not.toContain("evil");
   });
 });
