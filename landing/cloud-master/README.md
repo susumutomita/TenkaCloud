@@ -17,19 +17,27 @@ background pause. The survival display, result, best and share use tenths of a s
 Correct detection taps grow a visual-only combo. Passive normal passage still scores10 but does not grow combo. Mistakes reset it; no multiplier/speed bonus. Correct taps show a brief deflection, confirmation and actual-value reason without stopping play (except the specified120ms10-point hitstop). Full explanation and official links remain in review.
 Movement over10px or pointer cancellation cancels the tap; it never flags/allows via a swipe. Enter/Space and1–6 are equivalent accessible detection controls; P/Escape pauses. Reduced motion keeps textual confirmation without deflection.
 
-Initial arrivals1.2s, fall12s. Active elapsed time increases pressure independently
-of score: at180s new falls5.49s/interval338ms; at300s4.59s/289ms. Asymptotes4.2s/280ms
-preserve reading time. No five-level ceiling or mandatory three-minute cutoff;
-levels advance every15 active seconds. Human average survival is not measured.
-New-object input guard is100ms (previously300ms); resolution removes the object in
-the same input handler. Finite arrivals prevent instant-refill score farming.
+Initial arrivals1.2s/fall12s. Discrete active-time levels apply to NEW cards; existing cards retain their birth/deadline. The compact survival caption shows level and a nonblocking1.2-second LEVEL UP accent. No transition pauses, input lock or card reset.
+
+| Active time | Level | New-card fall | Arrival interval | Pool |
+| --- | --- | --- | --- | --- |
+|0s|1|12s|1.2s|Seven clear parameter cases|
+|20s|2|10.5s|1s|More direct SDK parameter cases|
+|40s|3|9s|850ms|Identity/context and CloudTrail/S3 observations|
+|60s|4|7.8s|700ms|DNS/network evidence joins|
+|90s|5|6.8s|560ms|All253 authored families|
+|120s|6|6s|440ms|All families, bounded subtle numeric contrasts|
+|150s|7|5.4s|360ms|All families|
+|180s|8|5s|320ms|All families|
+
+After180s, levels continue every30active seconds, reducing fall by300ms and interval by10ms until readable floors4.2s/280ms. Three minutes is a hard-survival tuning target, not a cutoff or a measured human average. Scores do not drive levels. New-object input guard remains100ms; finite arrivals prevent instant refill.
+
+The browser uses tickFrame: existing deadlines/pass scoring advance through a long frame, but only one NEW request can be admitted at the rendered update's current time. No retroactive unseen card batch is dumped after a delayed frame. Next admission is scheduled from that visible birth. tick remains the deterministic offline event simulation used by partition-invariance tests; production frame admission has separate regression tests.
 
 Every new round gets a crypto random seed; retry can reuse it. Shuffled scenario
-bags avoid immediate repeats; each six-outcome bag balances normal/suspicious.
+bags avoid adjacent scenario repeats; the same scenario/outcome is also excluded while active and for8seconds after completion. Each six-outcome bag balances normal/suspicious. If no fresh candidate exists, admission waits without consuming an answer or fabricating a replacement.
 Reserved IP/domain indicators and bounded counts also vary by seed, with visible
 baselines updated consistently; address prefixes never encode the answer.
-First30s use seven clear parameter cases, from30s the pool broadens, from90s subtle
-process/identity/correlation evidence joins.
 Best survival duration is local-only with storage-unavailable handling. Inspectable
 scores/times are casual practice, not certification. X compose requires user action;
 posting remains theirs, with copy/selectable-text fallback.
@@ -111,3 +119,9 @@ Cards retain their DOM node and compositor transform. Dimensions are read as one
 A controlled390×844 Chromium CPU4× run with16 actual births (effects excluded) measured layout count2629→253 and layout duration2.916→0.289 seconds. Spawn-near frame interval p95 was33.3→16.7ms. In a separate16ms rectangle sample, adding a new card moved existing cards by up to29.47px before and0.93px after (ordinary trajectory progress). Total sample wall times differed (~23.9/~22.2s); this is a synthetic comparison, not an iPhone benchmark or a guarantee of no dropped frames. Worst-frame outliers and startup long tasks remain. No font/image downloads occurred during play; resources were local module/CSS/favicon startup loads. Traces and harness accompany the review artifact. The original public-source audit was supplied by the native researcher; the denied original URL was not bypassed from this executor.
 
 The user's permanent bottom freeze was not reproduced in the tested cases. Global lane clamping was a confirmed old source behavior and a plausible conditional cause, not proven as the sole cause of the reported screenshot. Tests cover normal-only high-pressure passage, exactly-once boundary scoring, mixed streams beyond3minutes, explicit pauses, pointer cancellation and viewport changes.800ms resume grace is intentionally retained after a missed-card explanation to avoid an immediate follow-up miss; it excludes survival time.
+
+## Miss and mistaken-tap learning
+
+A content-sized pause card puts a concrete consequence and decisive actual value first, with a short beginner explanation and plain service meaning beside the API name. Expected condition/normal example is explicit. Full observed payload, case-specific reasoning and caveats remain in expandable details; the exact official link stays visible. Benign mistaken taps use separate normal wording, never dangerous counterpart prose. S3 bucketREAD is listing permission, not all object contents; public access remains conditional on other controls. Completed effect ghosts are removed on pause/explanation; untouched active requests, RNG, history and score are retained on acknowledgment.
+
+Independent baseline investigation found no UID resurrection in100seeds/300miss-resume cycles, but262 newly-issued identical cases within8seconds (minimum positive47ms). A5second rAF gap reproduced four due births in one render. Cooldown and visible-admission changes address those distinct measured causes; no active-card clearing or RNG reset is used.

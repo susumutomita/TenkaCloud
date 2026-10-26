@@ -128,8 +128,8 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
 });
 
 describe("levels, finite incoming stream and exact scoring", () => {
-  test("survival time continuously accelerates pressure, not score, without a3minute cutoff", () => {
-    expect([0, 14999, 15000, 180000, 360000].map(levelFor)).toEqual([1, 1, 2, 13, 25]);
+  test("survival time advances discrete pressure levels, not score, without a3minute cutoff", () => {
+    expect([0, 19999, 20000, 180000, 360000].map(levelFor)).toEqual([1, 1, 2, 8, 14]);
     let fall = Infinity,
       interval = Infinity;
     for (let elapsed = 0; elapsed <= 360000; elapsed += 1000) {

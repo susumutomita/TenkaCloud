@@ -13,19 +13,34 @@ export function shuffled(values, state) {
   }
   return list;
 }
+export const LEVEL_STAGES = [
+  { at: 0, fallMs: 12000, intervalMs: 1200 },
+  { at: 20000, fallMs: 10500, intervalMs: 1000 },
+  { at: 40000, fallMs: 9000, intervalMs: 850 },
+  { at: 60000, fallMs: 7800, intervalMs: 700 },
+  { at: 90000, fallMs: 6800, intervalMs: 560 },
+  { at: 120000, fallMs: 6000, intervalMs: 440 },
+  { at: 150000, fallMs: 5400, intervalMs: 360 },
+  { at: 180000, fallMs: 5000, intervalMs: 320 },
+];
 export function levelFor(elapsed) {
-  return 1 + Math.floor(Math.max(0, elapsed) / 15000);
+  const time = Math.max(0, Number.isFinite(elapsed) ? elapsed : 0);
+  return time >= 180000
+    ? 8 + Math.floor((time - 180000) / 30000)
+    : LEVEL_STAGES.findLastIndex((s) => time >= s.at) + 1;
 }
 export function difficulty(elapsed = 0) {
-  const time = Math.max(0, elapsed);
+  const level = levelFor(elapsed),
+    base = LEVEL_STAGES[Math.min(level, 8) - 1];
   return {
-    level: levelFor(time),
-    tier: time < 30000 ? 1 : time < 90000 ? 2 : 3,
-    fallMs: Math.round(4200 + 7800 * Math.exp(-time / 100000)),
-    intervalMs: Math.round(280 + 920 * Math.exp(-time / 65000)),
+    level,
+    tier: level === 1 ? 1 : level < 5 ? 2 : 3,
+    fallMs: Math.max(4200, base.fallMs - Math.max(0, level - 8) * 300),
+    intervalMs: Math.max(280, base.intervalMs - Math.max(0, level - 8) * 10),
     limit: 6,
   };
 }
+export const QUESTION_COOLDOWN_MS = 8000;
 export function violates(context) {
   if (context.kind === "evidence") {
     if (context.operator === "gt") {
@@ -65,33 +80,61 @@ function poolsFor(catalog) {
     ),
     ...EVIDENCE_SCENARIOS,
   ];
-  const middle = all.filter((s) =>
-    s.family
-      ? ["cloudtrail", "dns", "network", "s3_data", "configuration"].includes(s.family)
-      : !s.field.startsWith("eventContext.") &&
-        !s.field.includes("Principal") &&
-        !s.id.includes("SESFullAccess"),
-  );
-  const result = { all, tiers: { 1: all.filter((s) => STARTER.has(s.id)), 2: middle, 3: all } };
+  const rank = (s) => {
+    if (STARTER.has(s.id)) return 1;
+    if (!s.family)
+      return s.field.startsWith("eventContext.") ||
+        s.field.includes("Principal") ||
+        s.id.includes("SESFullAccess")
+        ? 3
+        : 2;
+    if (["cloudtrail", "s3_data", "configuration"].includes(s.family)) return 3;
+    if (["dns", "network"].includes(s.family)) return 4;
+    return 5;
+  };
+  const result = {
+    all,
+    stages: Object.fromEntries(
+      [1, 2, 3, 4, 5].map((stage) => [stage, all.filter((s) => rank(s) <= stage)]),
+    ),
+  };
   preparedPools.set(catalog, result);
   return result;
 }
 export function availableScenarios(catalog) {
   return poolsFor(catalog).all;
 }
-function choose(state) {
-  const tier = difficulty(state.elapsed).tier;
-  if (!state.scenarioBag.length || state.scenarioTier !== tier) {
-    const list = poolsFor(state.catalog).tiers[tier];
-    state.scenarioBag = shuffled(list, state);
-    state.scenarioTier = tier;
-    if (state.scenarioBag.at(-1)?.id === state.lastScenario && state.scenarioBag.length > 1)
-      [state.scenarioBag[0], state.scenarioBag[state.scenarioBag.length - 1]] = [
-        state.scenarioBag.at(-1),
-        state.scenarioBag[0],
-      ];
+export function availableAtLevel(catalog, level) {
+  return poolsFor(catalog).stages[Math.min(5, Math.max(1, level))];
+}
+function blockedDecisions(state) {
+  const keys = new Set(
+    (state.active ?? []).map((x) => `${x.question.scenarioId}:${x.question.danger}`),
+  );
+  const history = state.history ?? [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (state.elapsed - history[i].at >= QUESTION_COOLDOWN_MS) break;
+    keys.add(`${history[i].question.scenarioId}:${history[i].question.danger}`);
   }
-  const result = state.scenarioBag.pop();
+  return keys;
+}
+function choose(state, intended) {
+  const stage = Math.min(5, difficulty(state.elapsed).level),
+    pool = availableAtLevel(state.catalog, stage),
+    blocked = blockedDecisions(state);
+  const fresh = (s) => !blocked.has(`${s.id}:${intended}`);
+  if (!pool.some(fresh)) return null;
+  if (!state.scenarioBag.length || state.scenarioTier !== stage) {
+    state.scenarioBag = shuffled(pool, state);
+    state.scenarioTier = stage;
+  }
+  let index = state.scenarioBag.findLastIndex((s) => fresh(s) && s.id !== state.lastScenario);
+  if (index < 0) {
+    const alternatives = pool.filter((s) => fresh(s) && s.id !== state.lastScenario);
+    state.scenarioBag = shuffled(alternatives.length ? alternatives : pool.filter(fresh), state);
+    index = state.scenarioBag.length - 1;
+  }
+  const result = state.scenarioBag.splice(index, 1)[0];
   state.lastScenario = result.id;
   return result;
 }
@@ -267,6 +310,8 @@ function evidenceQuestion(state, source, intended) {
     danger,
     severity: danger ? s.severity : 0,
     points: danger ? s.severity * 10 : 10,
+    teachingNote: s.why,
+    normalValue: s.normal,
     why: decisionExplanation(context, s.focusLabel, s.why),
     briefReason: briefReason(context, s.focusLabel),
     source: officialSource(s.source, s.referenceText),
@@ -276,7 +321,11 @@ export function nextQuestion(state) {
   if (!state.outcomes.length)
     state.outcomes = shuffled([true, false, true, false, true, false], state);
   const intended = state.outcomes.pop();
-  const scenario = choose(state);
+  const scenario = choose(state, intended);
+  if (!scenario) {
+    state.outcomes.push(intended);
+    return null;
+  }
   if (scenario.family) return evidenceQuestion(state, scenario, intended);
   const model =
     scenario.serviceId === "signin" ? null : state.catalog.find((s) => s.id === scenario.serviceId);
@@ -317,6 +366,7 @@ export function nextQuestion(state) {
       scenario.field.replace("eventContext.", "観測."),
       scenario.why,
     ),
+    teachingNote: scenario.why,
     briefReason: briefReason(context, scenario.field.replace("eventContext.", "観測.")),
     source: officialSource(
       scenario.id.includes(":")

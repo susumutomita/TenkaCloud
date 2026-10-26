@@ -8,17 +8,17 @@
 </head>
 <body>
 <main class="app">
-<header class="top"><a href="../" class="brand">天 <span>TenkaCloud</span></a><h1>目指せクラウドマスター</h1><button type="button" id="pause" disabled aria-label="一時停止">Ⅱ</button></header>
+<header class="top"><a href="../" class="brand"><img src="../assets/svg/tenkacloud-mark.svg" width="24" height="24" alt=""> <span>TenkaCloud</span></a><h1>目指せクラウドマスター</h1><button type="button" id="pause" disabled aria-label="一時停止">Ⅱ</button></header>
 <section class="game" aria-label="AWSリクエスト検知ゲーム">
  <div class="start-card" aria-labelledby="start-title">
-  <h2 id="start-title">APIの番人。</h2>
+  <h2 id="start-title"><img class="start-logo" src="../assets/svg/tenkacloud-mark.svg" width="32" height="32" alt="TenkaCloud"><span>APIの番人。</span></h2>
   <p class="start-role">本番AWSを守る監視担当は、あなた。</p>
   <p class="start-action"><strong>危険な操作だけタップ。</strong><br>正常は、そのまま流す。</p>
   <ul class="start-rules"><li>ライフ3つ。見逃し・誤タップで−1。</li><li>生存時間に挑戦。徐々に速く、巧妙に。</li></ul>
   <p id="start-best" class="start-best"></p>
   <div id="controls" class="controls"><button type="button" class="primary" disabled>データを準備中…</button></div>
  </div>
- <div class="hud glass"><div class="survival"><small>生存時間</small><strong id="survival">0.0秒</strong><small id="personal-best">BEST 0.0秒</small></div><div class="points"><small>SCORE</small><strong id="score">0</strong><small id="combo"></small></div><div class="level"><small>LEVEL</small><strong id="level">1</strong></div><div class="life"><small>0で終了</small><strong id="lives" aria-label="残りライフ3">♥ ♥ ♥</strong></div><div id="effects" class="effects" aria-hidden="true"></div><span id="hit-reason" aria-hidden="true"></span></div>
+ <div class="hud glass"><div class="survival"><small id="level-caption"><span id="survival-label">生存時間</span> <span class="level-inline">Lv.<b id="level">1</b></span></small><strong id="survival">0.0秒</strong><small id="personal-best">BEST 0.0秒</small></div><div class="points"><small>SCORE</small><strong id="score">0</strong><small id="combo"></small></div><div class="life"><small>0で終了</small><strong id="lives" aria-label="残りライフ3">♥ ♥ ♥</strong></div><div id="effects" class="effects" aria-hidden="true"></div><span id="hit-reason" aria-hidden="true"></span></div>
  <div class="field" id="field"><div class="field-grid" aria-hidden="true"></div><div id="cards" class="cards" aria-label="流れてくるAWSリクエスト"></div><div id="overlay" class="overlay glass" hidden></div></div>
 
 </section>

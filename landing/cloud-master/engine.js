@@ -31,12 +31,14 @@ function spawn(state) {
   const slot = freeSlot(state);
   if (slot === undefined) return;
   const config = difficulty(state.elapsed);
+  const question = nextQuestion(state);
+  if (!question) return;
   state.active.push({
     uid: state.serial++,
     slot,
     born: state.elapsed,
     deadline: state.elapsed + config.fallMs,
-    question: nextQuestion(state),
+    question,
   });
 }
 export function start(state) {
@@ -123,7 +125,7 @@ function expire(state, items) {
   }
   return false;
 }
-export function tick(state, milliseconds) {
+function advanceClock(state, milliseconds, deferNew) {
   if (!Number.isFinite(milliseconds) || milliseconds <= 0) return;
   let remaining = milliseconds;
   if (state.phase === "hitstop") {
@@ -137,9 +139,26 @@ export function tick(state, milliseconds) {
   const grace = Math.min(state.grace, remaining);
   state.grace -= grace;
   remaining -= grace;
-  advanceWorld(state, state.elapsed + remaining);
+  advanceWorld(state, state.elapsed + remaining, deferNew);
 }
-function advanceWorld(state, target) {
+export function tick(state, milliseconds) {
+  advanceClock(state, milliseconds, false);
+}
+export function tickFrame(state, milliseconds) {
+  advanceClock(state, milliseconds, true);
+}
+function admit(state) {
+  const config = difficulty(state.elapsed);
+  if (state.active.length < Math.min(config.limit, state.maxCards ?? 6)) spawn(state);
+  return config.intervalMs;
+}
+function scheduleBoundary(state, deferNew) {
+  if (!deferNew) admit(state);
+  state.nextSpawnAt = state.elapsed + difficulty(state.elapsed).intervalMs;
+  return deferNew;
+}
+function advanceWorld(state, target, deferNew) {
+  let arrivalDue = false;
   while (state.elapsed < target) {
     const deadline = state.active.length
       ? Math.min(...state.active.map((item) => item.deadline))
@@ -149,12 +168,10 @@ function advanceWorld(state, target) {
       .filter((item) => item.deadline <= state.elapsed)
       .sort((a, b) => a.uid - b.uid);
     if (expired.length && expire(state, expired)) return;
-    if (state.elapsed >= state.nextSpawnAt) {
-      const config = difficulty(state.elapsed);
-      if (state.active.length < Math.min(config.limit, state.maxCards ?? 6)) spawn(state);
-      state.nextSpawnAt = state.elapsed + config.intervalMs;
-    }
+    if (state.elapsed >= state.nextSpawnAt)
+      arrivalDue = scheduleBoundary(state, deferNew) || arrivalDue;
   }
+  if (arrivalDue && state.phase === "playing") state.nextSpawnAt = state.elapsed + admit(state);
 }
 export function pause(state) {
   if (!["playing", "feedback", "hitstop"].includes(state.phase)) return;

@@ -8,8 +8,9 @@ import {
   pause,
   resume,
   start,
-  tick,
+  tickFrame as tick,
 } from "./engine.js";
+import { explanationCard } from "./explanation.js";
 import { flowPositions } from "./motion.js";
 import { difficulty } from "./recognition.js";
 import { buildShare } from "./share.js";
@@ -30,7 +31,9 @@ const duration = formatSurvival;
 let geometry = null;
 const motion = new Map();
 let reasonUntil = 0,
-  lastReason = "";
+  lastReason = "",
+  shownLevel = 1,
+  levelUntil = 0;
 function text(id, value) {
   const node = $(id);
   if (node.textContent !== value) node.textContent = value;
@@ -79,6 +82,8 @@ function prepare(seed = newSeed(), begin = false) {
   geometry = null;
   lastReason = "";
   reasonUntil = 0;
+  shownLevel = 1;
+  levelUntil = 0;
   $("cards").replaceChildren();
   $("effects").replaceChildren();
   $("review").hidden = true;
@@ -322,18 +327,48 @@ function officialLink(question) {
   });
   return a;
 }
-function actualRequest(entry, actions) {
-  $("overlay").insertBefore(officialLink(entry.question), actions);
-  const text = document.createElement("p");
-  text.className = "actual";
-  text.textContent = `${entry.question.operation}\n${entry.question.context.policy}\n${entry.question.context.observed}`;
-  $("overlay").insertBefore(text, $("overlay").querySelector("p"));
-}
 function explanation() {
-  const e = state.feedback;
-  const title = e.kind === "miss" ? "見逃した観測の解説" : "この判断の解説";
-  const actions = modal(null, e.question.why);
-  actualRequest(e, actions);
+  const e = state.feedback,
+    view = explanationCard(e.question);
+  const actions = modal(view.headline, view.reason),
+    root = $("overlay");
+  root.classList.add("miss-card");
+  root.dataset.judgment = e.question.danger ? "danger" : "normal";
+  const mark = document.createElement("span");
+  mark.className = "miss-mark";
+  mark.textContent = e.question.danger ? "!" : "✓";
+  mark.setAttribute("aria-hidden", "true");
+  root.prepend(mark);
+  const policy = document.createElement("p");
+  policy.className = "miss-context";
+  policy.textContent = `${view.operation} · ${view.meaning}`;
+  const comparison = document.createElement("dl");
+  comparison.className = "miss-comparison";
+  for (const [label, content] of [
+    [`${view.field}（今回）`, view.actual],
+    [view.expectedLabel, view.expected],
+  ]) {
+    const dt = document.createElement("dt"),
+      dd = document.createElement("dd"),
+      code = document.createElement("code");
+    dt.textContent = label;
+    code.textContent = content;
+    if (content.length > 24) code.classList.add("long-value");
+    dd.append(code);
+    comparison.append(dt, dd);
+  }
+  root.insertBefore(policy, root.querySelector("p"));
+  root.insertBefore(comparison, root.querySelector("p:not(.miss-context)"));
+  root.insertBefore(officialLink(e.question), actions);
+  const details = document.createElement("details"),
+    summary = document.createElement("summary"),
+    why = document.createElement("p"),
+    wire = document.createElement("pre");
+  summary.textContent = "詳しい観測・判定条件";
+  why.textContent = view.fullReason;
+  wire.textContent = view.wire;
+  details.append(summary, why, wire);
+  root.insertBefore(details, actions);
   actions.append(
     button(!state.lives ? "結果を見る" : "わかった・再開", () => {
       next(state);
@@ -341,7 +376,11 @@ function explanation() {
       render();
     }),
   );
-  announce(`${title}。${e.question.why}`);
+  const content = document.createElement("div");
+  content.className = "miss-body";
+  for (const child of [...root.children]) if (child !== actions) content.append(child);
+  root.insertBefore(content, actions);
+  announce(`${view.headline}。${view.reason}`);
 }
 function review() {
   const root = $("review-list");
@@ -438,6 +477,7 @@ function result() {
 }
 function phaseContent() {
   $("overlay").hidden = true;
+  $("overlay").classList.remove("miss-card");
   $("overlay").replaceChildren();
   $("controls").replaceChildren();
   if (state.phase === "ready")
@@ -503,7 +543,7 @@ function renderFeedback() {
       lastReason = "";
       reasonUntil = 0;
     }
-    if (entry.kind === "flag") {
+    if (["flag", "wrong"].includes(entry.kind)) {
       lastReason = entry.question.briefReason;
       reasonUntil = state.elapsed + 2200;
       announce(lastReason);
@@ -511,6 +551,27 @@ function renderFeedback() {
   }
   text("hit-reason", lastReason && state.elapsed < reasonUntil ? lastReason : "");
   seen = state.history.length;
+}
+function renderLevel() {
+  const level = difficulty(state.elapsed).level;
+  if (level > shownLevel) {
+    shownLevel = level;
+    levelUntil = state.elapsed + 1200;
+  }
+  text("level", String(level));
+  text("survival-label", state.elapsed < levelUntil ? "LEVEL UP" : "生存時間");
+  const caption = $("level-caption"),
+    up = state.elapsed < levelUntil;
+  if (caption.classList.contains("level-up") !== up) caption.classList.toggle("level-up", up);
+}
+function cancelInactiveInput() {
+  if (state.phase !== "playing") activeGestureCancel?.();
+  if (!["playing", "hitstop"].includes(state.phase))
+    $("cards")
+      .querySelectorAll(".tap-hit")
+      .forEach((n) => {
+        n.remove();
+      });
 }
 function render() {
   attribute(document.body, "data-phase", state.phase);
@@ -522,10 +583,10 @@ function render() {
   text("start-best", bestMs > 0 ? `自己ベスト ${duration(bestMs)}` : "");
   text("score", String(state.score));
   text("combo", state.combo >= 2 ? `${state.combo} COMBO` : "");
-  if (state.phase !== "playing") activeGestureCancel?.();
+  cancelInactiveInput();
   text("survival", duration(state.elapsed));
   text("personal-best", `BEST ${duration(Math.max(bestMs, state.elapsed))}`);
-  text("level", String(difficulty(state.elapsed).level));
+  renderLevel();
   text("lives", `${"♥ ".repeat(state.lives)}${"♡ ".repeat(3 - state.lives)}`);
   attribute($("lives"), "aria-label", `残りライフ${state.lives}`);
   const pauseDisabled = !["playing", "hitstop", "feedback", "paused"].includes(state.phase);

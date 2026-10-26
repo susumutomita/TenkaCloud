@@ -79,7 +79,7 @@ describe("all published defensive evidence", () => {
       for (const danger of [false, true]) {
         const stream = createQuestionStream(catalog, 91);
         stream.elapsed = 120000;
-        stream.scenarioTier = 3;
+        stream.scenarioTier = 5;
         stream.scenarioBag = [scenario];
         stream.outcomes = [danger];
         const q = nextQuestion(stream);
@@ -100,7 +100,7 @@ describe("all published defensive evidence", () => {
       const scenario = availableScenarios(catalog).find((s) => s.id === id);
       const stream = createQuestionStream(catalog, 42);
       stream.elapsed = 120000;
-      stream.scenarioTier = 3;
+      stream.scenarioTier = 5;
       stream.scenarioBag = [scenario];
       stream.outcomes = [false];
       const q = nextQuestion(stream);

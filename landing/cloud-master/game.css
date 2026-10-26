@@ -1344,3 +1344,44 @@ body:not(.active-game) footer details p { font-size:12px; }
 body.active-game .start-card { display:none; }
 @media(max-width:740px) { .start-card { padding:28px 24px; } }
 @media(max-height:650px) { body:not(.active-game) .app { padding-top:max(14px,env(safe-area-inset-top)); padding-bottom:max(12px,env(safe-area-inset-bottom)); gap:8px; } .start-card {padding:22px 20px;} .start-card h2 {font-size:38px;} .start-role {margin:10px 0 18px;font-size:15px;} .start-action {margin-bottom:18px;font-size:20px;line-height:1.55;} .start-card .controls {padding-top:20px;} .start-card .primary {min-height:52px;} .start-best {margin-top:12px;} }
+
+/* Content-sized educational pause, with the decisive values first. */
+body[data-phase="feedback"] .cards {opacity:.2;}
+body[data-phase="feedback"] .overlay.miss-card {inset:auto;left:50%;top:50%;transform:translate(-50%,-50%);width:min(calc(100% - 28px),520px);max-height:calc(100% - 28px);box-sizing:border-box;display:block;padding:24px;text-align:left;border-radius:20px;border:1px solid #e3d2d8;border-top:4px solid #b53553;background:#fff;backdrop-filter:none;box-shadow:0 18px 60px #293a5133;}
+.miss-card .miss-mark {display:inline-flex;width:30px;height:30px;border-radius:50%;align-items:center;justify-content:center;background:#ffebef;color:#a32d49;font:800 21px/1 system-ui; margin-bottom:14px;}
+.miss-card[data-judgment="normal"] {border-top-color:#256b9f!important;}
+.miss-card[data-judgment="normal"] .miss-mark {background:#eaf3fc;color:#256b9f;}
+.overlay.miss-card h2 {font-size:clamp(23px,5.8vw,29px);line-height:1.35;margin:0 0 12px;}
+.overlay.miss-card p {font-size:14px;line-height:1.7;color:#364c61;margin:0 0 16px;}
+.overlay.miss-card .miss-context {font-size:12px;color:#5a6876;}
+.miss-comparison {margin:0 0 18px;display:grid;grid-template-columns:1fr;gap:5px;}
+.miss-comparison dt {font-size:11px;color:#5d6774;}
+.miss-comparison dd {margin:0 0 7px;overflow-wrap:anywhere;}
+.miss-comparison code {font:600 16px/1.55 ui-monospace,monospace;color:#9f2844;}
+.miss-comparison dd:last-child code {color:#2f536e;font-size:14px;}
+.miss-card details {font-size:12px;margin:16px 0;color:#53677b;}
+.miss-card details p {font-size:12px!important;margin-top:12px!important;}
+.miss-card pre {font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;}
+.miss-card .actions {margin-top:20px;display:block;}
+.miss-card .actions .primary {width:100%;min-height:50px;font-size:15px;}
+.level-inline {color:#185e95;white-space:nowrap;}
+.level-up {color:#075a98!important;background:#e3f2ff;border-radius:4px;}
+body.active-game .hud .survival {gap:1px;}
+body.active-game .hud .survival strong {font-size:24px;}
+body.active-game .hud #level-caption {font-size:9px;line-height:11px;letter-spacing:0;white-space:nowrap;}
+body.active-game .hud #level {font-size:9px;font-weight:800;}
+@media(max-height:650px) {body[data-phase="feedback"] .overlay.miss-card {padding:18px;} .miss-card .miss-mark {margin-bottom:8px;width:25px;height:25px;font-size:18px;} .overlay.miss-card h2 {font-size:23px;} .miss-card .actions {margin-top:12px;} .miss-comparison {margin-bottom:10px;gap:3px;} .miss-card details {margin:12px 0;}}
+body.active-game #hit-reason {line-height:12px;bottom:0;}
+
+.miss-comparison dd:first-of-type code {font-size:22px;font-weight:750;}
+.miss-comparison code.long-value {font-size:14px!important;}
+.overlay.miss-card .miss-context {font:600 13px/1.6 ui-monospace,monospace;color:#496079;}
+
+body[data-phase="feedback"] .overlay.miss-card {display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;overflow:hidden;}
+.miss-body {min-height:0;overflow:auto;}
+.miss-card .actions {flex:0 0 auto;}
+@media(max-height:650px) {.overlay.miss-card h2 {font-size:21px;line-height:1.3;margin-bottom:8px;} .overlay.miss-card p {font-size:13px;line-height:1.5;margin-bottom:10px;} .overlay.miss-card .miss-context {font-size:11px;line-height:1.4;} .miss-comparison dt {font-size:10px;} .miss-comparison dd {margin-bottom:4px;} .miss-comparison dd:first-of-type code {font-size:20px;line-height:1.3;} .miss-card .actions .primary {min-height:44px;font-size:14px;} .miss-card details {margin:10px 0;} }
+
+.start-card h2 {display:flex;align-items:center;gap:10px;}
+.start-logo {display:block;flex:0 0 auto;width:32px;height:32px;object-fit:contain;}
+@media(max-width:350px) {.start-card h2 {font-size:34px;gap:8px;} .start-logo {width:28px;height:28px;}}
