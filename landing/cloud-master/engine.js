@@ -1,11 +1,10 @@
 import { createQuestionStream, difficulty, nextQuestion } from "./recognition.js";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 120;
-export function createGame(catalog, seed = 726, study = false) {
+export function createGame(catalog, seed = 726) {
   return {
     ...createQuestionStream(catalog, seed),
     seed: seed >>> 0,
-    study,
     phase: "ready",
     previous: null,
     elapsed: 0,
@@ -77,52 +76,23 @@ function lose(state, item, kind) {
 export function collect(state, uid) {
   if (state.phase !== "playing") return false;
   const item = state.active.find((entry) => entry.uid === uid);
-  if (
-    !item ||
-    (!state.study && (state.elapsed >= item.deadline || state.elapsed - item.born < INPUT_GUARD_MS))
-  )
+  if (!item || state.elapsed >= item.deadline || state.elapsed - item.born < INPUT_GUARD_MS)
     return false;
   remove(state, item);
   if (!item.question.danger) {
     lose(state, item, "wrong");
-    if (state.study || !state.lives) state.phase = "feedback";
+    if (!state.lives) state.phase = "feedback";
     return true;
   }
   state.correct++;
   state.combo++;
   state.best = Math.max(state.best, state.combo);
   record(state, item, "flag", true, item.question.points);
-  if (state.study) state.phase = "feedback";
-  else if (item.question.points === 10) {
+  if (item.question.points === 10) {
     state.hitstop = HITSTOP_MS;
     state.phase = "hitstop";
   }
   return true;
-}
-export function allow(state, uid) {
-  if (state.phase !== "playing") return false;
-  const item = state.active.find((entry) => entry.uid === uid);
-  if (
-    !item ||
-    (!state.study && (state.elapsed >= item.deadline || state.elapsed - item.born < INPUT_GUARD_MS))
-  )
-    return false;
-  remove(state, item);
-  if (item.question.danger) {
-    lose(state, item, "allow-danger");
-    state.phase = "feedback";
-    return true;
-  }
-  state.passed++;
-  state.combo++;
-  state.best = Math.max(state.best, state.combo);
-  record(state, item, "allow", true, 10);
-  if (state.study) state.phase = "feedback";
-  return true;
-}
-export function passStudy(state) {
-  if (!state.study) return false;
-  return allow(state, state.active[0]?.uid);
 }
 export function next(state) {
   if (state.phase !== "feedback") return;
@@ -132,7 +102,6 @@ export function next(state) {
   }
   state.phase = "playing";
   state.grace = 800;
-  if (state.study) spawn(state);
 }
 function expire(state, items) {
   const missed = items.filter((item) => item.question.danger);
@@ -164,7 +133,7 @@ export function tick(state, milliseconds) {
     if (state.hitstop > 0) return;
     state.phase = "playing";
   }
-  if (state.phase !== "playing" || state.study) return;
+  if (state.phase !== "playing") return;
   const grace = Math.min(state.grace, remaining);
   state.grace -= grace;
   remaining -= grace;

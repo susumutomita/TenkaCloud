@@ -52,8 +52,10 @@ const STARTER = new Set([
   "LambdaFunctionUrlPublicAccess",
   "S3LifecycleRapidExpiration",
 ]);
-export function availableScenarios(catalog) {
-  return [
+const preparedPools = new WeakMap();
+function poolsFor(catalog) {
+  if (preparedPools.has(catalog)) return preparedPools.get(catalog);
+  const all = [
     ...SECURITY_SCENARIOS.filter(
       (s) =>
         s.serviceId === "signin" ||
@@ -63,20 +65,24 @@ export function availableScenarios(catalog) {
     ),
     ...EVIDENCE_SCENARIOS,
   ];
+  const middle = all.filter((s) =>
+    s.family
+      ? ["cloudtrail", "dns", "network", "s3_data", "configuration"].includes(s.family)
+      : !s.field.startsWith("eventContext.") &&
+        !s.field.includes("Principal") &&
+        !s.id.includes("SESFullAccess"),
+  );
+  const result = { all, tiers: { 1: all.filter((s) => STARTER.has(s.id)), 2: middle, 3: all } };
+  preparedPools.set(catalog, result);
+  return result;
+}
+export function availableScenarios(catalog) {
+  return poolsFor(catalog).all;
 }
 function choose(state) {
-  const tier = difficulty(state.study ? 90000 : state.elapsed).tier;
+  const tier = difficulty(state.elapsed).tier;
   if (!state.scenarioBag.length || state.scenarioTier !== tier) {
-    let list = availableScenarios(state.catalog);
-    if (tier === 1) list = list.filter((s) => STARTER.has(s.id));
-    else if (tier === 2)
-      list = list.filter((s) =>
-        s.family
-          ? ["cloudtrail", "dns", "network", "s3_data", "configuration"].includes(s.family)
-          : !s.field.startsWith("eventContext.") &&
-            !s.field.includes("Principal") &&
-            !s.id.includes("SESFullAccess"),
-      );
+    const list = poolsFor(state.catalog).tiers[tier];
     state.scenarioBag = shuffled(list, state);
     state.scenarioTier = tier;
     if (state.scenarioBag.at(-1)?.id === state.lastScenario && state.scenarioBag.length > 1)
@@ -203,6 +209,17 @@ function decisionExplanation(context, focusLabel, detail) {
   }
   return `今回の判断: ${danger ? "検知" : "通す"}。今回の観測: ${context.observed}。対象・用途: ${context.policy}。${comparison}${danger ? ` 補足: ${detail}` : ""} 数値・条件は表示した演習の前提です。AWSの非公開判定式や実行成功は再現しません。`;
 }
+function briefReason(context, label) {
+  const field = label.split(".").at(-1);
+  if (!violates(context)) return `${field}: ${valueText(context.actual)} — 表示した正常条件と整合`;
+  const comparison =
+    context.kind !== "evidence"
+      ? `正常値 ${valueText(context.allowed)} と不一致`
+      : context.operator === "gt"
+        ? `演習上限 ${valueText(context.threshold)} 超え`
+        : "表示した要確認条件に一致";
+  return `${field}: ${valueText(context.actual)} — ${comparison}`;
+}
 function evidenceQuestion(state, source, intended) {
   const s = sampleEvidence(state, source);
   const actual = intended ? s.flag : s.normal;
@@ -251,6 +268,7 @@ function evidenceQuestion(state, source, intended) {
     severity: danger ? s.severity : 0,
     points: danger ? s.severity * 10 : 10,
     why: decisionExplanation(context, s.focusLabel, s.why),
+    briefReason: briefReason(context, s.focusLabel),
     source: officialSource(s.source, s.referenceText),
   };
 }
@@ -299,6 +317,7 @@ export function nextQuestion(state) {
       scenario.field.replace("eventContext.", "観測."),
       scenario.why,
     ),
+    briefReason: briefReason(context, scenario.field.replace("eventContext.", "観測.")),
     source: officialSource(
       scenario.id.includes(":")
         ? `https://docs.aws.amazon.com/guardduty/latest/ug/${scenario.id.includes(":S3/") ? "guardduty_finding-types-s3.html" : "guardduty_finding-types-iam.html"}`
@@ -308,6 +327,8 @@ export function nextQuestion(state) {
   };
 }
 export function createQuestionStream(catalog, seed = 726) {
+  // Build catalog/tier indexes before the animation loop starts.
+  poolsFor(catalog);
   let mixed = ((seed >>> 0) + 0x9e3779b9) >>> 0;
   mixed = Math.imul(mixed ^ (mixed >>> 16), 0x85ebca6b);
   mixed = Math.imul(mixed ^ (mixed >>> 13), 0xc2b2ae35);

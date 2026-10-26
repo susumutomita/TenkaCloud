@@ -1,20 +1,19 @@
 import { loadCatalog } from "./api-catalog.js";
 import {
-  allow,
   collect,
   createGame,
   finish,
   INPUT_GUARD_MS,
   next,
-  passStudy,
   pause,
   resume,
   start,
   tick,
 } from "./engine.js";
-import { swipeDirection } from "./gestures.js";
+import { flowPositions } from "./motion.js";
 import { difficulty } from "./recognition.js";
 import { buildShare } from "./share.js";
+import { formatSurvival } from "./time.js";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -27,10 +26,18 @@ try {
   const value = Number(localStorage.getItem(BEST_KEY));
   if (Number.isFinite(value) && value >= 0) bestMs = value;
 } catch {}
-const duration = (ms) => {
-  const seconds = Math.floor(Math.max(0, ms) / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-};
+const duration = formatSurvival;
+let geometry = null;
+const motion = new Map();
+let reasonUntil = 0,
+  lastReason = "";
+function text(id, value) {
+  const node = $(id);
+  if (node.textContent !== value) node.textContent = value;
+}
+function attribute(node, name, value) {
+  if (node.getAttribute(name) !== value) node.setAttribute(name, value);
+}
 let catalog,
   state,
   epoch = 0,
@@ -56,18 +63,22 @@ function layoutCapacity() {
 function currentLayout() {
   return `${innerWidth <= 740 ? 1 : 2}:${layoutCapacity()}`;
 }
-function prepare(seed = newSeed(), study = false, begin = false) {
+function prepare(seed = newSeed(), begin = false) {
   layoutBlocked = false;
   document.body.removeAttribute("data-layout-blocked");
   layoutKey = currentLayout();
   activeGestureCancel?.();
   epoch++;
-  state = createGame(catalog, seed, study);
+  state = createGame(catalog, seed);
   state.maxCards = layoutCapacity();
   phase = "";
   lastTime = null;
   seen = 0;
   nodes.clear();
+  motion.clear();
+  geometry = null;
+  lastReason = "";
+  reasonUntil = 0;
   $("cards").replaceChildren();
   $("effects").replaceChildren();
   $("review").hidden = true;
@@ -136,10 +147,7 @@ function makeCard(item, previewing) {
   slot.className = "slot";
   slot.textContent = String(item.slot + 1);
   slot.setAttribute("aria-hidden", "true");
-  const timer = document.createElement("span");
-  timer.className = "deadline-time";
-  timer.setAttribute("aria-hidden", "true");
-  top.append(name, slot, timer);
+  top.append(name, slot);
   const operation = document.createElement("span");
   operation.className = "operation";
   operation.textContent = q.operation;
@@ -150,9 +158,6 @@ function makeCard(item, previewing) {
   const policy = document.createElement("span");
   policy.className = "context-row policy";
   policy.textContent = q.context.policy;
-  const actual = document.createElement("span");
-  actual.className = "context-row observed";
-  actual.textContent = q.context.observed;
   if (previewing) n.append(top, operation, wire, policy);
   else {
     top.append(operation);
@@ -174,10 +179,8 @@ function makeCard(item, previewing) {
     pick(item.uid, thisEpoch);
   });
   if (!previewing)
-    bindSwipe(
+    bindTap(
       n,
-      item.uid,
-      thisEpoch,
       () => {
         pointerClickAllowed = false;
       },
@@ -187,91 +190,43 @@ function makeCard(item, previewing) {
     );
   n.setAttribute(
     "aria-label",
-    `${q.service}、${q.operation}。${q.payload}。${q.context.policy}。左矢印で検知、右矢印で通す。タップでも検知`,
+    `${q.service}、${q.operation}。${q.payload}。${q.context.policy}。危険ならタップ、EnterまたはSpaceで検知`,
   );
   return n;
 }
-function bindSwipe(node, uid, thisEpoch, suppress, beginGesture) {
-  let gesture = null;
+function bindTap(node, suppress, beginTap) {
+  let pointer = null;
   const reset = () => {
-    if (gesture && node.hasPointerCapture?.(gesture.id)) node.releasePointerCapture(gesture.id);
-    gesture = null;
-    node.style.transform = "";
-    node.removeAttribute("data-drag");
+    const id = pointer?.id;
+    pointer = null;
+    if (id !== undefined && node.hasPointerCapture?.(id)) node.releasePointerCapture(id);
     if (activeGestureCancel === cancel) activeGestureCancel = null;
   };
   const cancel = () => {
-    if (gesture) suppress();
+    suppress();
     reset();
   };
   node.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 || node.disabled || state.phase !== "playing") return;
     activeGestureCancel?.();
-    beginGesture();
-    gesture = {
-      id: event.pointerId,
-      x: event.clientX,
-      y: event.clientY,
-      time: performance.now(),
-      dx: 0,
-      dy: 0,
-    };
+    beginTap();
+    pointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
     activeGestureCancel = cancel;
     node.setPointerCapture(event.pointerId);
   });
   node.addEventListener("pointermove", (event) => {
-    if (!gesture || gesture.id !== event.pointerId) return;
-    gesture.dx = event.clientX - gesture.x;
-    gesture.dy = event.clientY - gesture.y;
-    if (Math.abs(gesture.dx) > 12 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25) {
-      node.dataset.drag = gesture.dx < 0 ? "stop" : "allow";
-      node.style.transform = `translateX(${Math.max(-90, Math.min(90, gesture.dx))}px)`;
-    }
-  });
-  node.addEventListener("pointerup", (event) => {
-    if (!gesture || gesture.id !== event.pointerId) return;
-    const g = gesture;
-    const direction = swipeDirection({
-      dx: event.clientX - g.x,
-      dy: event.clientY - g.y,
-      elapsed: performance.now() - g.time,
-    });
-    const moved = Math.hypot(event.clientX - g.x, event.clientY - g.y) > 10;
-    const bounds = node.getBoundingClientRect();
-    reset();
-    if (moved) suppress();
-    if (direction && state.phase === "playing") {
-      event.preventDefault();
+    if (
+      pointer?.id === event.pointerId &&
+      Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) > 10
+    )
       suppress();
-      decide(uid, thisEpoch, direction, bounds);
-    }
   });
+  node.addEventListener("pointerup", reset);
   node.addEventListener("pointercancel", cancel);
   node.addEventListener("lostpointercapture", () => {
-    if (gesture) cancel();
+    if (pointer) cancel();
   });
-  node.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight Enter");
-}
-function directionEffect(bounds, direction, uid) {
-  if (reduced.matches) return;
-  const n = document.createElement("div");
-  n.className = `decision-trail ${direction}`;
-  n.dataset.resolvedUid = String(uid);
-  Object.assign(n.style, {
-    left: `${bounds.left}px`,
-    top: `${bounds.top}px`,
-    width: `${bounds.width}px`,
-    height: `${bounds.height}px`,
-  });
-  document.body.append(n);
-  setTimeout(() => n.remove(), 180);
-}
-function decide(uid, thisEpoch, direction, bounds) {
-  if (thisEpoch !== epoch || !state || state.phase !== "playing") return;
-  updateNow();
-  const accepted = direction === "allow" ? allow(state, uid) : collect(state, uid);
-  if (accepted && bounds) directionEffect(bounds, direction, uid);
-  render();
+  node.setAttribute("aria-keyshortcuts", "Enter Space");
 }
 function updateNow() {
   const time = performance.now();
@@ -281,7 +236,32 @@ function updateNow() {
 function pick(uid, thisEpoch) {
   if (thisEpoch !== epoch || !state || state.phase !== "playing") return;
   updateNow();
-  collect(state, uid);
+  if (!geometry) syncCards();
+  const node = nodes.get(String(uid));
+  if (!node || node.disabled) return;
+  const accepted = collect(state, uid);
+  if (accepted && state.feedback?.kind === "flag" && node && !reduced.matches) {
+    const effect = node.cloneNode(true);
+    effect.classList.add("tap-hit");
+    effect.setAttribute("aria-hidden", "true");
+    effect.tabIndex = -1;
+    effect.disabled = true;
+    effect.dataset.resolvedUid = String(uid);
+    const transform = node.style.transform;
+    $("cards").append(effect);
+    effect
+      .animate(
+        [
+          { transform, opacity: 0.8 },
+          { transform: `${transform} translateX(18px) scale(0.97)`, opacity: 0 },
+        ],
+        { duration: 140, easing: "ease-out" },
+      )
+      .finished.then(
+        () => effect.remove(),
+        () => effect.remove(),
+      );
+  }
   render();
 }
 function feedbackEffect(entry) {
@@ -290,75 +270,38 @@ function feedbackEffect(entry) {
   n.dataset.resolvedUid = String(entry.uid);
   n.dataset.operation = entry.question.operation;
 
-  n.textContent = ["pass", "allow"].includes(entry.kind)
-    ? "通過 ＋10"
-    : entry.kind === "flag"
-      ? `検知 ＋${entry.points}`
-      : "♥ −1";
-  const detail = document.createElement("small");
-  detail.textContent = entry.question.operation;
-  n.append(detail);
-  if (
-    entry.correct &&
-    entry.kind !== "pass" &&
-    entry.comboAfter >= 3 &&
-    (entry.comboAfter === 3 || entry.comboAfter === 5 || entry.comboAfter % 10 === 0)
-  ) {
-    const combo = document.createElement("b");
-    combo.textContent = `${entry.comboAfter} COMBO`;
-    n.append(combo);
-    n.classList.add("combo-milestone");
-  }
+  n.textContent =
+    entry.kind === "pass" ? "通過 ＋10" : entry.kind === "flag" ? `検知 ＋${entry.points}` : "♥ −1";
   $("effects").replaceChildren(n);
   setTimeout(() => n.remove(), 220);
 }
-function stackLanePositions(entries, columns, fieldHeight) {
-  for (let lane = 0; lane < columns; lane++) {
-    const pair = entries
-      .filter((v) => v.lane === lane)
-      .sort((a, b) => a.item.born - b.item.born || a.item.slot - b.item.slot);
-    const stack = [...pair].reverse();
-    let bottom = 8;
-    for (const entry of stack) {
-      entry.y = Math.max(entry.y, bottom);
-      bottom = entry.y + entry.node.offsetHeight + 12;
-    }
-    const overflow = bottom - 12 - fieldHeight + 2;
-    if (overflow > 0) for (const entry of stack) entry.y -= overflow;
-    if (stack[0]?.y < 8) {
-      let y = 8;
-      for (const entry of stack) {
-        entry.y = y;
-        y += entry.node.offsetHeight + 12;
-      }
-    }
-  }
-}
 function positions(items, previewing) {
   const field = $("cards"),
-    narrow = innerWidth <= 740,
-    columns = previewing ? (narrow ? 2 : 3) : narrow ? 1 : 2;
-  const entries = items.map((item) => {
+    narrow = innerWidth <= 740;
+  const columns = previewing ? (narrow ? 2 : 3) : narrow ? 1 : 2;
+  if (!geometry) {
+    // Read dimensions as one batch after additions, before any position writes.
+    geometry = { width: field.clientWidth, height: field.clientHeight, heights: new Map() };
+    for (const [uid, node] of nodes) geometry.heights.set(uid, node.offsetHeight);
+  }
+  const entries = items.map((item) => ({
+    ...item,
+    height: geometry.heights.get(String(item.uid)),
+  }));
+  const located = previewing
+    ? entries.map((item) => ({
+        ...item,
+        y: 14 + [0.18, 0.47][item.slot] * Math.max(0, geometry.height - item.height - 24),
+      }))
+    : flowPositions(entries, motion, state.elapsed, geometry.height, columns, reduced.matches);
+  for (const item of located) {
     const node = nodes.get(String(item.uid));
-    const fraction = previewing
-      ? [0.18, 0.47][item.slot]
-      : state.study
-        ? 0.22
-        : Math.max(0, Math.min(1, (state.elapsed - item.born) / (item.deadline - item.born)));
-    const stationary = reduced.matches && !previewing && !state.study;
-    const movement = stationary
-      ? Math.max(0.04, 0.55 - Math.floor(item.slot / columns) * 0.51)
-      : fraction;
-    const lane = item.slot % columns;
-    node.style.left = `${lane * (field.clientWidth / columns) + (narrow ? 0 : 9)}px`;
-    const y =
-      previewing || state.study
-        ? 14 + movement * Math.max(0, field.clientHeight - node.offsetHeight - 24)
-        : Math.max(8, movement * Math.max(0, field.clientHeight - node.offsetHeight));
-    return { item, node, lane, y };
-  });
-  stackLanePositions(entries, columns, field.clientHeight);
-  for (const entry of entries) entry.node.style.top = `${Math.max(8, entry.y)}px`;
+    const x = ((item.slot % columns) * geometry.width) / columns + (narrow ? 0 : 9);
+    node.style.transform = `translate3d(${x}px,${item.y}px,0)`;
+    const disabled =
+      state.phase !== "playing" || state.elapsed - item.born < INPUT_GUARD_MS || item.y < 0;
+    if (node.disabled !== disabled) node.disabled = disabled;
+  }
 }
 function syncCards() {
   const previewing = state.phase === "ready",
@@ -368,6 +311,8 @@ function syncCards() {
     if (!valid.has(uid)) {
       node.remove();
       nodes.delete(uid);
+      motion.delete(uid);
+      geometry = null;
     }
   for (const item of items) {
     const uid = String(item.uid);
@@ -375,17 +320,16 @@ function syncCards() {
       const node = makeCard(item, previewing);
       nodes.set(uid, node);
       $("cards").append(node);
+      geometry = null;
     }
     const node = nodes.get(uid);
-    const arriving = !previewing && !state.study && state.elapsed - item.born < INPUT_GUARD_MS;
-    node.dataset.slot = String(item.slot);
-    node.querySelector(".slot").textContent = String(item.slot + 1);
-    node.classList.toggle("arriving", arriving);
-    node.querySelector(".deadline-time").textContent =
-      previewing || state.study
-        ? ""
-        : `残り${Math.max(0, Math.ceil((item.deadline - state.elapsed) / 1000))}秒`;
-    node.disabled = state.phase !== "playing" || arriving;
+    const arriving = !previewing && state.elapsed - item.born < INPUT_GUARD_MS;
+    attribute(node, "data-slot", String(item.slot));
+    const slot = node.querySelector(".slot");
+    if (slot.textContent !== String(item.slot + 1)) slot.textContent = String(item.slot + 1);
+    if (node.classList.contains("arriving") !== arriving)
+      node.classList.toggle("arriving", arriving);
+    // No per-card countdown: the survival clock is the only running counter.
   }
   positions(items, previewing);
 }
@@ -393,13 +337,17 @@ function modal(title, description) {
   const node = $("overlay");
   node.replaceChildren();
   node.hidden = false;
+  node.setAttribute("role", "dialog");
+  node.setAttribute("aria-modal", "true");
+  node.setAttribute("aria-label", title ?? "判定の解説");
   const h = document.createElement("h2");
-  h.textContent = title;
+  h.textContent = title ?? "";
   const p = document.createElement("p");
   p.textContent = description;
   const actions = document.createElement("div");
   actions.className = "actions";
-  node.append(h, p, actions);
+  if (title) node.append(h);
+  node.append(p, actions);
   return actions;
 }
 function officialLink(question) {
@@ -424,31 +372,14 @@ function actualRequest(entry, actions) {
   text.className = "actual";
   text.textContent = `${entry.question.operation}\n${entry.question.context.policy}\n${entry.question.context.observed}`;
   $("overlay").insertBefore(text, $("overlay").querySelector("p"));
-  if (entry.question.danger) {
-    const score = document.createElement("p");
-    score.textContent = `ゲーム内危険度 ${entry.question.severity} × 10 = ${entry.question.points}点${entry.kind === "miss" ? "（今回は見逃し）" : ""}`;
-    $("overlay").insertBefore(score, actions);
-  }
 }
 function explanation() {
   const e = state.feedback;
-  const title =
-    e.kind === "miss"
-      ? `取り逃し ${e.groupCount ?? 1}件 · ♥−${e.groupCount ?? 1}`
-      : e.kind === "allow-danger"
-        ? "危険な操作を通しました · ♥−1"
-        : e.kind === "wrong"
-          ? "正常な操作を検知しました"
-          : e.kind === "flag"
-            ? "検知できました"
-            : "正しく通しました";
-  const actions = modal(title, e.question.why);
+  const title = e.kind === "miss" ? "見逃した観測の解説" : "この判断の解説";
+  const actions = modal(null, e.question.why);
   actualRequest(e, actions);
-  const lives = document.createElement("p");
-  lives.textContent = `残りライフ ${state.lives} / 3。カードと時間は停止中。`;
-  $("overlay").insertBefore(lives, actions);
   actions.append(
-    button(!state.lives ? "結果を見る" : state.study ? "次のリクエスト" : "わかった・再開", () => {
+    button(!state.lives ? "結果を見る" : "わかった・再開", () => {
       next(state);
       lastTime = null;
       render();
@@ -463,7 +394,7 @@ function review() {
   for (const e of [...state.history].reverse()) {
     const article = document.createElement("article"),
       h = document.createElement("h3");
-    h.textContent = `${{ flag: "正しい検知", pass: "正常通過", allow: "手動で正常通過", "allow-danger": "危険を通過", wrong: "誤検知", miss: "見逃し" }[e.kind]} · ${e.question.service} / ${e.question.operation} · ${e.points}点`;
+    h.textContent = `${{ flag: "正しい検知", pass: "正常通過", wrong: "誤検知", miss: "見逃し" }[e.kind]} · ${e.question.service} / ${e.question.operation} · ${e.points}点`;
     const context = document.createElement("p");
     context.textContent = `${e.question.context.policy} ／ ${e.question.context.observed}`;
     const wire = document.createElement("pre");
@@ -518,31 +449,30 @@ function sharing() {
   $("overlay").append(note);
 }
 function result() {
-  if (!state.study && state.elapsed > bestMs) {
+  if (state.elapsed > bestMs) {
     bestMs = state.elapsed;
     try {
       localStorage.setItem(BEST_KEY, String(bestMs));
     } catch {}
   }
   const actions = modal(
-    state.study ? "今回の練習記録" : "今回の生存記録",
+    "今回の生存記録",
     `正しい検知 ${state.correct} ／ 正常通過 ${state.passed} ／ ミス ${state.mistakes} ／ Lv.${difficulty(state.elapsed).level}`,
   );
   const score = document.createElement("div");
   score.className = "score-result";
-  score.textContent = state.study ? `${state.score} pt` : duration(state.elapsed);
-  if (!state.study) {
+  score.textContent = duration(state.elapsed);
+  {
     const best = document.createElement("p");
     best.className = "best-result";
     best.textContent = `自己ベスト ${duration(bestMs)} · ${state.score} pt`;
     $("overlay").append(best);
   }
   $("overlay").prepend(score);
-  const seed = state.seed,
-    study = state.study;
+  const seed = state.seed;
   actions.append(
-    button("もう一回", () => prepare(newSeed(), study, true)),
-    button("同じ流れで復習", () => prepare(seed, study, true), false),
+    button("もう一回", () => prepare(newSeed(), true)),
+    button("同じ流れで復習", () => prepare(seed, true), false),
   );
   sharing();
   review();
@@ -562,26 +492,7 @@ function phaseContent() {
         render();
       }),
     );
-  if (state.phase === "playing" && state.study)
-    $("controls").append(
-      button(
-        "そのまま通す",
-        () => {
-          passStudy(state);
-          render();
-        },
-        false,
-      ),
-      button(
-        "ここまでの結果",
-        () => {
-          finish(state);
-          render();
-        },
-        false,
-      ),
-    );
-  if (state.phase === "playing" && !state.study) {
+  if (state.phase === "playing") {
     const hint = document.createElement("span");
     hint.className = "keyboard-hint";
     hint.textContent = document.body.classList.contains("keyboard")
@@ -590,14 +501,13 @@ function phaseContent() {
     $("controls").append(hint);
   }
   if (state.phase === "paused" && layoutBlocked) {
-    const seed = state.seed,
-      study = state.study;
+    const seed = state.seed;
     const actions = modal(
       "画面サイズが変わりました",
       "この広さでは全カードを読めないため停止しました。元の向き・広さへ戻すと、同じ続きから再開できます。",
     );
     actions.append(
-      button("最初からやり直す", () => prepare(seed, study, true)),
+      button("最初からやり直す", () => prepare(seed, true)),
       button(
         "ここまでの結果",
         () => {
@@ -629,32 +539,44 @@ function phaseContent() {
   if (["feedback", "paused", "finished"].includes(state.phase))
     $("overlay").querySelector("button")?.focus({ preventScroll: true });
 }
+function renderFeedback() {
+  for (let i = seen; i < state.history.length; i++) {
+    const entry = state.history[i];
+    feedbackEffect(entry);
+    if (!entry.correct) {
+      lastReason = "";
+      reasonUntil = 0;
+    }
+    if (entry.kind === "flag") {
+      lastReason = entry.question.briefReason;
+      reasonUntil = state.elapsed + 2200;
+      announce(lastReason);
+    }
+  }
+  text("hit-reason", lastReason && state.elapsed < reasonUntil ? lastReason : "");
+  seen = state.history.length;
+}
 function render() {
-  document.body.dataset.phase = state.phase;
-  document.body.dataset.study = String(state.study);
+  attribute(document.body, "data-phase", state.phase);
   const wasActive = document.body.classList.contains("active-game");
   const active = state.phase !== "ready";
-  document.body.classList.toggle("active-game", active);
+  if (wasActive !== active) document.body.classList.toggle("active-game", active);
   const pauseHost = active ? document.querySelector(".hud") : document.querySelector(".top");
   if ($("pause").parentElement !== pauseHost) pauseHost.append($("pause"));
-  $("score").textContent = String(state.score);
-  $("combo").textContent = state.combo >= 2 ? `${state.combo} COMBO` : "";
+  text("score", String(state.score));
+  text("combo", state.combo >= 2 ? `${state.combo} COMBO` : "");
   if (state.phase !== "playing") activeGestureCancel?.();
-  $("survival").textContent = duration(state.elapsed);
-  $("personal-best").textContent =
-    `BEST ${duration(Math.max(bestMs, state.study ? 0 : state.elapsed))}`;
-  $("level").innerHTML = `${difficulty(state.elapsed).level}`;
-  $("lives").textContent = `${"♥ ".repeat(state.lives)}${"♡ ".repeat(3 - state.lives)}`;
-  $("lives").setAttribute("aria-label", `残りライフ${state.lives}`);
-  $("pause").disabled = !["playing", "hitstop", "feedback", "paused"].includes(state.phase);
-  $("pause").setAttribute("aria-label", state.phase === "paused" ? "再開" : "一時停止");
-  $("floor").textContent = state.study
-    ? "時間なし · 拾うか、そのまま通すか"
-    : "危険な操作を見逃すと ♥−1・止まって解説";
-  for (const entry of state.history.slice(seen)) feedbackEffect(entry);
-  seen = state.history.length;
+  text("survival", duration(state.elapsed));
+  text("personal-best", `BEST ${duration(Math.max(bestMs, state.elapsed))}`);
+  text("level", String(difficulty(state.elapsed).level));
+  text("lives", `${"♥ ".repeat(state.lives)}${"♡ ".repeat(3 - state.lives)}`);
+  attribute($("lives"), "aria-label", `残りライフ${state.lives}`);
+  const pauseDisabled = !["playing", "hitstop", "feedback", "paused"].includes(state.phase);
+  if ($("pause").disabled !== pauseDisabled) $("pause").disabled = pauseDisabled;
+  attribute($("pause"), "aria-label", state.phase === "paused" ? "再開" : "一時停止");
+  renderFeedback();
   syncCards();
-  if (active && !layoutBlocked) state.maxCards = layoutCapacity();
+  if (active && !wasActive && !layoutBlocked) state.maxCards = layoutCapacity();
   if (active && !wasActive) layoutKey = currentLayout();
   if (phase !== state.phase) {
     phase = state.phase;
@@ -686,21 +608,16 @@ $("about")
 $("about").addEventListener("toggle", () => {
   if ($("about").open) pauseForRules();
 });
-$("study").addEventListener("click", () => prepare(newSeed(), true, true));
-function handleDirectionalKey(event) {
-  const target = event.target.closest?.("button.request");
-  if (!["ArrowLeft", "ArrowRight"].includes(event.key) || !target || state.phase !== "playing")
-    return false;
-  event.preventDefault();
-  if (!event.repeat)
-    decide(Number(target.dataset.uid), epoch, event.key === "ArrowRight" ? "allow" : "stop");
-  return true;
-}
 document.addEventListener("keydown", (event) => {
   if (!state || event.altKey || event.ctrlKey || event.metaKey) return;
-  if (handleDirectionalKey(event)) return;
-  if (["Tab", "1", "2", "3", "4", "5", "6"].includes(event.key))
+
+  if (
+    ["Tab", "1", "2", "3", "4", "5", "6"].includes(event.key) &&
+    !document.body.classList.contains("keyboard")
+  ) {
     document.body.classList.add("keyboard");
+    geometry = null;
+  }
   if (
     event.repeat &&
     ["1", "2", "3", "4", "5", "6", "Enter", " ", "p", "P", "Escape"].includes(event.key)
@@ -740,11 +657,12 @@ function fitsLayout(columns, remap) {
   );
 }
 window.addEventListener("resize", () => {
+  geometry = null;
   if (!state) return;
   const key = currentLayout();
   if (key === layoutKey && !layoutBlocked) return;
   if (state.phase === "ready") {
-    prepare(state.seed, state.study);
+    prepare(state.seed);
     return;
   }
   if (state.phase === "finished") return;
@@ -776,21 +694,29 @@ window.addEventListener("resize", () => {
   layoutKey = key;
   render();
 });
+reduced.addEventListener("change", () => {
+  geometry = null;
+  motion.clear();
+  if (state) render();
+});
 window.addEventListener("pagehide", backgroundPause);
 function frame(time) {
   if (lastTime !== null) tick(state, Math.max(0, time - lastTime));
   lastTime = time;
-  render();
+  if (["playing", "hitstop"].includes(state.phase) || phase !== state.phase) render();
   requestAnimationFrame(frame);
 }
 async function boot() {
   try {
     catalog = await loadCatalog();
+    document.fonts.ready.then(() => {
+      geometry = null;
+    });
     prepare();
     requestAnimationFrame(frame);
   } catch (error) {
     $("controls").replaceChildren(button("読み込みを再試行", () => location.reload()));
-    $("floor").textContent = "問題データを読み込めませんでした。対応ブラウザで再試行してください。";
+    $("controls").querySelector("button").textContent = "問題を読み込めませんでした・再試行";
     announce(String(error));
   }
 }

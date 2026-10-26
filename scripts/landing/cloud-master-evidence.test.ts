@@ -1,18 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
 import {
-  allow,
   collect,
   createGame,
   INPUT_GUARD_MS,
-  next,
   pause,
   resume,
   start,
   tick,
 } from "../../landing/cloud-master/engine.js";
 import { EVIDENCE_SCENARIOS } from "../../landing/cloud-master/evidence-scenarios.js";
-import { swipeDirection } from "../../landing/cloud-master/gestures.js";
 import coverage from "../../landing/cloud-master/guardduty-coverage.json";
 import {
   availableScenarios,
@@ -30,6 +27,8 @@ function expectExplanation(q: ReturnType<typeof nextQuestion>, reference: string
   expect(q.why).toContain(`今回の観測: ${q.payload}。`);
   expect(q.why).toContain(`対象・用途: ${q.context.policy}。`);
   expect(q.why).toContain(`今回の値 ${displayedValue(q.context.actual)}`);
+  expect(q.briefReason).toContain(displayedValue(q.context.actual));
+  if (!danger) expect(q.briefReason).toContain("正常条件と整合");
   expect(q.why).toContain(danger ? "ため検知します" : "ため通します");
   if (!danger) expect(q.why).not.toContain("補足:");
   expect(new URL(q.source).hostname).toBe("docs.aws.amazon.com");
@@ -199,89 +198,49 @@ describe("all published defensive evidence", () => {
     expect(scan.focusLabel).toBe("宛先ポート種類");
   });
 });
-describe("manual allow, gesture intent and visual-only combo", () => {
+describe("tap-only detection and visual-only combo", () => {
   test("new objects become interactive at the100ms guard boundary", () => {
-    const s = createGame(catalog, 8);
-    start(s);
-    tick(s, INPUT_GUARD_MS - 1);
-    expect(collect(s, s.active[0].uid)).toBe(false);
-    tick(s, 1);
-    expect(
-      s.active[0].question.danger ? collect(s, s.active[0].uid) : allow(s, s.active[0].uid),
-    ).toBe(true);
-    expect(INPUT_GUARD_MS).toBe(100);
+    const s = opening(true);
+    const fresh = createGame(catalog, s.seed);
+    start(fresh);
+    tick(fresh, INPUT_GUARD_MS - 1);
+    expect(collect(fresh, fresh.active[0].uid)).toBe(false);
+    tick(fresh, 1);
+    expect(collect(fresh, fresh.active[0].uid)).toBe(true);
   });
-  test("allow normal gives10 once, manual combo increments, passive passage does not inflate it", () => {
-    const s = opening(false),
-      uid = s.active[0].uid;
-    expect(allow(s, uid)).toBe(true);
-    expect(s.score).toBe(10);
-    expect(s.combo).toBe(1);
-    expect(allow(s, uid)).toBe(false);
-    expect(collect(s, uid)).toBe(false);
-    expect(s.history).toHaveLength(1);
+  test("normal fall scores10 once without increasing combo; tapping it costs one life", () => {
     const passive = opening(false);
     passive.combo = 2;
-    tick(passive, passive.active[0].deadline - passive.elapsed);
+    const item = passive.active[0];
+    tick(passive, item.deadline - passive.elapsed);
+    expect(passive.history.filter((r) => r.uid === item.uid)).toHaveLength(1);
+    expect(passive.history.find((r) => r.uid === item.uid).points).toBe(10);
     expect(passive.combo).toBe(2);
-    expect(passive.score).toBe(10);
+    const wrong = opening(false);
+    wrong.combo = 2;
+    expect(collect(wrong, wrong.active[0].uid)).toBe(true);
+    expect(wrong.lives).toBe(2);
+    expect(wrong.combo).toBe(0);
+    expect(wrong.score).toBe(0);
   });
-  test("allow danger costs one life and freezes the actual-item explanation", () => {
+  test("correct taps alone grow combo; duplicate input and restart cannot inflate it", () => {
     const s = opening(true),
       uid = s.active[0].uid;
-    s.combo = 4;
-    expect(allow(s, uid)).toBe(true);
-    expect(s.lives).toBe(2);
-    expect(s.combo).toBe(0);
-    expect(s.score).toBe(0);
-    expect(s.phase).toBe("feedback");
-    expect(s.feedback.kind).toBe("allow-danger");
-    const time = s.elapsed;
-    tick(s, 999999);
-    expect(s.elapsed).toBe(time);
-    expect(allow(s, uid)).toBe(false);
-    expect(s.lives).toBe(2);
-    next(s);
-    expect(s.phase).toBe("playing");
+    expect(collect(s, uid)).toBe(true);
+    expect(s.combo).toBe(1);
+    expect(collect(s, uid)).toBe(false);
+    expect(s.combo).toBe(1);
+    expect(createGame(catalog, s.seed).combo).toBe(0);
   });
-  test("manual combo grows across both correct choices; mistakes and restart reset it", () => {
-    const s = createGame(catalog, 3, true);
-    start(s);
-    for (let i = 0; i < 5; i++) {
-      const q = s.active[0];
-      if (q.question.danger) collect(s, q.uid);
-      else allow(s, q.uid);
-      expect(s.combo).toBe(i + 1);
-      next(s);
-    }
-    const item = s.active[0];
-    if (item.question.danger) allow(s, item.uid);
-    else collect(s, item.uid);
-    expect(s.combo).toBe(0);
-    expect(createGame(catalog, 3).combo).toBe(0);
-  });
-  test("pause and exact deadline cannot double-resolve an allow", () => {
+  test("pause and exact deadline cannot double-resolve a normal pass", () => {
     const s = opening(false),
       item = s.active[0];
     pause(s);
-    expect(allow(s, item.uid)).toBe(false);
+    expect(collect(s, item.uid)).toBe(false);
     resume(s);
     tick(s, item.deadline - s.elapsed);
-    expect(allow(s, item.uid)).toBe(false);
+    expect(collect(s, item.uid)).toBe(false);
     expect(s.history.filter((r) => r.uid === item.uid)).toHaveLength(1);
     expect(s.history.find((r) => r.uid === item.uid).points).toBe(10);
-  });
-  test("horizontal threshold rejects cancelled, short, diagonal and vertical gestures", () => {
-    expect(swipeDirection({ dx: -60, dy: 5, elapsed: 200 })).toBe("stop");
-    expect(swipeDirection({ dx: 60, dy: 5, elapsed: 200 })).toBe("allow");
-    expect(swipeDirection({ dx: 32, dy: 2, elapsed: 40 })).toBe("allow");
-    for (const data of [
-      { dx: 20, dy: 0, elapsed: 10 },
-      { dx: 45, dy: 40, elapsed: 80 },
-      { dx: 0, dy: 90, elapsed: 90 },
-      { dx: 80, dy: 0, elapsed: 100, cancelled: true },
-      { dx: 35, dy: 0, elapsed: 300 },
-    ])
-      expect(swipeDirection(data)).toBe(null);
   });
 });

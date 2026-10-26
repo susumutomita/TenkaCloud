@@ -8,7 +8,6 @@ import {
   finish,
   HITSTOP_MS,
   next,
-  passStudy,
   pause,
   resume,
   start,
@@ -279,16 +278,12 @@ describe("active survival clock", () => {
     expect(s.elapsed).toBeLessThanOrEqual(time + 20);
     expect(s.lives).toBe(3);
   });
-  test("restart resets time and study never accumulates survival time", () => {
+  test("restart resets active survival time", () => {
     const a = playing(8);
     tick(a, 11000);
     expect(a.elapsed).toBeGreaterThan(10000);
     const b = playing(8);
     expect(b.elapsed).toBe(0);
-    const study = createGame(catalog, 8, true);
-    start(study);
-    tick(study, 900000);
-    expect(study.elapsed).toBe(0);
   });
   test("synthetic enrichment never masquerades as an API input member", () => {
     const stream = createQuestionStream(catalog, 28);
@@ -375,20 +370,14 @@ describe("miss explanations, races and farming guards", () => {
       true,
     );
   });
-  test("untimed study, manual end and seeded retry remain available", () => {
-    const s = createGame(catalog, 88, true);
+  test("manual end and seeded retry remain available in the single survival mode", () => {
+    const s = createGame(catalog, 88);
     start(s);
-    tick(s, 1000000);
-    expect(s.elapsed).toBe(0);
-    const q = s.active[0];
-    if (q.question.danger) collect(s, q.uid);
-    else passStudy(s);
-    expect(s.phase).toBe("feedback");
-    next(s);
-    expect(s.phase).toBe("playing");
+    tick(s, 1000);
     finish(s);
     expect(s.end.reason).toBe("manual");
-    expect(createGame(catalog, 88, true)).toEqual(createGame(catalog, 88, true));
+    expect(createGame(catalog, 88)).toEqual(createGame(catalog, 88));
+    expect(s).not.toHaveProperty("study");
   });
   test("sharing is an encoded user-triggered compose URL, with preview scope explicit", () => {
     const s = playing(99);
