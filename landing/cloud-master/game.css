@@ -1321,3 +1321,26 @@ body.active-game .impact { font-size:18px; background:#f2f7ff; padding:1px 4px; 
 @media(max-width:740px) { body.active-game .hud { gap:14px; padding-left:10px; padding-right:10px; } }
 @media(max-width:350px) { body.active-game .hud { gap:8px; padding-left:8px; padding-right:8px; } body.active-game .hud #pause { flex-basis:30px; width:30px; height:30px; } body.active-game .hud .survival strong { font-size:23px; } body.active-game .hud .life strong { font-size:18px; } body.active-game .hud .points>strong {font-size:18px;} }
 @media(max-height:650px) { body:not(.active-game) .field {height:200px;} body:not(.active-game) .heading {margin-bottom:10px;} body:not(.active-game) .heading .premise strong {font-size:18px;margin-top:6px;} body:not(.active-game) .controls {min-height:50px;padding-top:10px;} }
+
+/* One start card; the live game stays out of the pre-play page. */
+body:not(.active-game) .app { width:min(100%,620px); min-height:100svh; box-sizing:border-box; margin:0 auto; padding:max(24px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left)); display:flex; flex-direction:column; justify-content:center; gap:14px; }
+body:not(.active-game) .top,body:not(.active-game) .hud,body:not(.active-game) .field { display:none; }
+body:not(.active-game) .game { margin:0; }
+.start-card { padding:38px; border:1px solid #d8e3ee; border-radius:24px; background:#ffffffed; box-shadow:0 18px 60px #36547712; }
+.start-card h2 { margin:0; font:850 clamp(40px,9vw,54px)/1.15 system-ui,sans-serif; letter-spacing:-.06em; color:#112d49; }
+.start-role { margin:14px 0 28px; font:16px/1.7 system-ui,sans-serif; color:#48627a; }
+.start-action { margin:0 0 28px; font:600 clamp(20px,4.9vw,25px)/1.65 system-ui,sans-serif; color:#1d4366; letter-spacing:-.035em; }
+.start-action strong { font-weight:800; }
+.start-rules { margin:0; padding-left:1.1em; font:14px/1.8 system-ui,sans-serif; color:#3d566c; }
+.start-rules li+li { margin-top:5px; }
+.start-best { margin:22px 0 0; font:600 14px/1.6 system-ui,sans-serif; font-variant-numeric:tabular-nums; color:#245a87; }
+.start-best:empty { display:none; }
+.start-card .controls { padding:24px 0 0; min-height:0; display:block; }
+.start-card .primary { width:100%; min-height:56px; font-size:16px; }
+body:not(.active-game) footer { margin:0; text-align:center; font:12px/1.7 system-ui,sans-serif; color:#526b80; }
+body:not(.active-game) footer summary { padding:8px; cursor:pointer; }
+body:not(.active-game) footer details[open] { text-align:left; }
+body:not(.active-game) footer details p { font-size:12px; }
+body.active-game .start-card { display:none; }
+@media(max-width:740px) { .start-card { padding:28px 24px; } }
+@media(max-height:650px) { body:not(.active-game) .app { padding-top:max(14px,env(safe-area-inset-top)); padding-bottom:max(12px,env(safe-area-inset-bottom)); gap:8px; } .start-card {padding:22px 20px;} .start-card h2 {font-size:38px;} .start-role {margin:10px 0 18px;font-size:15px;} .start-action {margin-bottom:18px;font-size:20px;line-height:1.55;} .start-card .controls {padding-top:20px;} .start-card .primary {min-height:52px;} .start-best {margin-top:12px;} }

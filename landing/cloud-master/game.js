@@ -86,50 +86,6 @@ function prepare(seed = newSeed(), begin = false) {
   if (begin) start(state);
   render();
 }
-function preview() {
-  return [
-    {
-      uid: "demo-pass",
-      slot: 0,
-      born: 0,
-      deadline: 12000,
-      question: {
-        service: "RDS",
-        operation: "ModifyDBInstance",
-        payload: "PubliclyAccessible: false",
-        wire: '{"PubliclyAccessible":false}',
-        context: {
-          kind: "demo",
-          allowed: false,
-          actual: false,
-          policy: "顧客DB / 社内VPC内のみ",
-          observed: "PubliclyAccessible: false",
-        },
-        danger: false,
-      },
-    },
-    {
-      uid: "demo-flag",
-      slot: 1,
-      born: 0,
-      deadline: 12000,
-      question: {
-        service: "RDS",
-        operation: "ModifyDBInstance",
-        payload: "PubliclyAccessible: true",
-        wire: '{"PubliclyAccessible":true}',
-        context: {
-          kind: "demo",
-          allowed: false,
-          actual: true,
-          policy: "顧客DB / 社内VPC内のみ",
-          observed: "PubliclyAccessible: true",
-        },
-        danger: true,
-      },
-    },
-  ];
-}
 function makeCard(item, previewing) {
   const q = item.question;
   const n = document.createElement(previewing ? "div" : "button");
@@ -305,7 +261,7 @@ function positions(items, previewing) {
 }
 function syncCards() {
   const previewing = state.phase === "ready",
-    items = previewing ? preview() : state.active;
+    items = previewing ? [] : state.active;
   const valid = new Set(items.map((item) => String(item.uid)));
   for (const [uid, node] of nodes)
     if (!valid.has(uid)) {
@@ -563,6 +519,7 @@ function render() {
   if (wasActive !== active) document.body.classList.toggle("active-game", active);
   const pauseHost = active ? document.querySelector(".hud") : document.querySelector(".top");
   if ($("pause").parentElement !== pauseHost) pauseHost.append($("pause"));
+  text("start-best", bestMs > 0 ? `自己ベスト ${duration(bestMs)}` : "");
   text("score", String(state.score));
   text("combo", state.combo >= 2 ? `${state.combo} COMBO` : "");
   if (state.phase !== "playing") activeGestureCancel?.();
