@@ -191,6 +191,18 @@ function sampleEvidence(state, source) {
   }
   return s;
 }
+function decisionExplanation(context, focusLabel, detail) {
+  const danger = violates(context);
+  let comparison;
+  if (context.kind !== "evidence") {
+    comparison = `この演習の正常条件は ${focusLabel}: ${valueText(context.allowed)}。今回の値 ${valueText(context.actual)} は${danger ? "その条件と一致しないため検知します" : "その条件と一致するため通します"}。`;
+  } else if (context.operator === "gt") {
+    comparison = `この演習の上限は ${focusLabel}: ${valueText(context.threshold)}。今回の値 ${valueText(context.actual)} は${danger ? "上限を超えるため検知します" : "上限以下のため通します"}。`;
+  } else {
+    comparison = `この演習の要確認条件は ${focusLabel}: ${valueText(context.threshold)}。今回の値 ${valueText(context.actual)} は${danger ? "その条件と一致するため検知します" : "その条件とは異なるため通します"}。`;
+  }
+  return `今回の判断: ${danger ? "検知" : "通す"}。今回の観測: ${context.observed}。対象・用途: ${context.policy}。${comparison}${danger ? ` 補足: ${detail}` : ""} 数値・条件は表示した演習の前提です。AWSの非公開判定式や実行成功は再現しません。`;
+}
 function evidenceQuestion(state, source, intended) {
   const s = sampleEvidence(state, source);
   const actual = intended ? s.flag : s.normal;
@@ -238,7 +250,7 @@ function evidenceQuestion(state, source, intended) {
     danger,
     severity: danger ? s.severity : 0,
     points: danger ? s.severity * 10 : 10,
-    why: `${s.why} ${danger ? "表示した事実をこの演習条件で要確認とします。" : "表示した条件と整合する正常例です。"} 数値・許可条件は演習用で、AWSの非公開判定式や実行成功は再現しません。`,
+    why: decisionExplanation(context, s.focusLabel, s.why),
     source: officialSource(s.source, s.referenceText),
   };
 }
@@ -282,7 +294,11 @@ export function nextQuestion(state) {
     danger,
     severity: danger ? scenario.severity : 0,
     points: danger ? Math.round(scenario.severity * 10) : 10,
-    why: `${scenario.why} ${danger ? "表示した対象・用途と要求内容が衝突するため検知します。" : "表示した対象・用途に沿う内容なので通します。"} 公開説明を基にした演習であり、AWSの実判定や要求の実行成功を再現しません。`,
+    why: decisionExplanation(
+      context,
+      scenario.field.replace("eventContext.", "観測."),
+      scenario.why,
+    ),
     source: officialSource(
       scenario.id.includes(":")
         ? `https://docs.aws.amazon.com/guardduty/latest/ug/${scenario.id.includes(":S3/") ? "guardduty_finding-types-s3.html" : "guardduty_finding-types-iam.html"}`

@@ -22,6 +22,19 @@ import {
 } from "../../landing/cloud-master/recognition.js";
 
 const catalog = await loadCatalog();
+const displayedValue = (value: unknown) =>
+  typeof value === "string" ? value : JSON.stringify(value);
+function expectExplanation(q: ReturnType<typeof nextQuestion>, reference: string, danger: boolean) {
+  expect(q.danger).toBe(danger);
+  expect(q.why).toStartWith(`今回の判断: ${danger ? "検知" : "通す"}。`);
+  expect(q.why).toContain(`今回の観測: ${q.payload}。`);
+  expect(q.why).toContain(`対象・用途: ${q.context.policy}。`);
+  expect(q.why).toContain(`今回の値 ${displayedValue(q.context.actual)}`);
+  expect(q.why).toContain(danger ? "ため検知します" : "ため通します");
+  if (!danger) expect(q.why).not.toContain("補足:");
+  expect(new URL(q.source).hostname).toBe("docs.aws.amazon.com");
+  expect(decodeURIComponent(new URL(q.source).hash)).toContain(reference);
+}
 function opening(danger: boolean) {
   for (let seed = 0; seed < 100; seed++) {
     const s = createGame(catalog, seed);
@@ -59,6 +72,45 @@ describe("all published defensive evidence", () => {
       fixtures.add(s.fixtureId);
     }
     expect(fixtures.size).toBe(212);
+  });
+  test("all506 explanations bind to the actual sampled observation and its normal or flagged decision", () => {
+    let count = 0;
+    for (const scenario of availableScenarios(catalog)) {
+      const pair = [];
+      for (const danger of [false, true]) {
+        const stream = createQuestionStream(catalog, 91);
+        stream.elapsed = 120000;
+        stream.scenarioTier = 3;
+        stream.scenarioBag = [scenario];
+        stream.outcomes = [danger];
+        const q = nextQuestion(stream);
+        expectExplanation(q, scenario.referenceText ?? scenario.id, danger);
+        pair.push(q);
+        count++;
+      }
+      expect(pair[0].why).not.toBe(pair[1].why);
+    }
+    expect(count).toBe(506);
+  });
+  test("benign SDK values never inherit the dangerous pair explanation", () => {
+    for (const [id, value, wrongText] of [
+      ["EC2SecurityGroupPublicSSH", "192.0.2.0/24", "全IPv4"],
+      ["RDSPubliclyAccessible", false, "外部に公開"],
+      ["RDSIAMAuthDisabled", true, "認証を無効"],
+    ]) {
+      const scenario = availableScenarios(catalog).find((s) => s.id === id);
+      const stream = createQuestionStream(catalog, 42);
+      stream.elapsed = 120000;
+      stream.scenarioTier = 3;
+      stream.scenarioBag = [scenario];
+      stream.outcomes = [false];
+      const q = nextQuestion(stream);
+      expect(q.context.actual).toBe(value);
+      expect(q.why).toContain(`今回の値 ${value}`);
+      expect(q.why).toContain("一致するため通します");
+      expect(q.why).not.toContain(wrongText);
+      expect(q.why).not.toContain(scenario.why);
+    }
   });
   test("fresh seeds change sequence, same seed reproduces and adjacent questions never repeat", () => {
     const a = createQuestionStream(catalog, 102),
