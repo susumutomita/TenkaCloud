@@ -1,9 +1,63 @@
 # Cloud Master
 
-A Japanese, frontend-only cloud foundations game at `/cloud-master/`.
-The landing page links here. No accounts, persistence, analytics, or remote APIs.
+Japanese frontend-only recognition survival at `/cloud-master/`, linked from the LP.
+No accounts, persistence, analytics, packet capture, AWS calls, or game backend.
 
-## Preview and test
+## Rules and controls
+
+The objective stays fixed throughout a round. Pick any matching card immediately,
+including an upper card, by tapping it or pressing its 1–3 slot key.
+Each round has three visible lives. A wrong pick costs one life and continues.
+A required target reaching the striped line costs one life and freezes every
+card and the game clock for an explanation. Explicit acknowledgment resumes play.
+The last-life mistake is explained before results. Nonmatches pass harmlessly.
+
+Three cards remain in play. Correct picks give 100 points plus a 20-point chain
+increment, capped at a 100-point bonus. Correct picks keep flowing. Misses pause for explanations;
+all attempted cards can also be reviewed after the round.
+If only nonmatches remain, one is automatically passed after 900 ms to admit
+another authored target. No live card is relabeled. New cards have a 300 ms input
+guard against a second tap landing on a replacement.
+
+P or Escape pauses. Hidden tabs and an unfocused browser pause until manual resume.
+Reduced motion keeps cards stationary while their deadline bars continue.
+Untimed practice supports pick/pass decisions with explanations and no game over.
+The opening field includes a skippable, tappable demonstration.
+
+New rounds use browser-generated random seeds. The same seed can be retried.
+Seeded generation changes order, authored conditions, and synthetic parameters;
+it never randomly changes the meaning of an existing question. Distractor
+categories rotate before recycling and immediately repeated questions are avoided.
+The score is casual practice data, inspectable in the browser, not certification.
+
+## Modes and source semantics
+
+- Foundations: six scenario families, each with five condition/answer variants.
+- HTTP: identify plaintext HTTP/1.1 requests among responses and other synthetic
+  protocol displays. Port 443 or opaque TLS records do not establish HTTP.
+- AWS API: identify EC2 StartInstances with DryRun=false among permission checks,
+  stop requests, and describe requests. Cards show decoded Query API parameters,
+  not IAM action notation, CloudTrail records, or evidence of execution success.
+
+Protocol cards show up to three lines on the field; review retains the full
+synthetic example. AWS always retains the decisive DryRun parameter.
+All identifiers and message content are synthetic and non-secret.
+
+Official references used for the authored answer key:
+
+- [HTTP/1.1 request and status lines, RFC 9112](https://www.rfc-editor.org/rfc/rfc9112.html)
+- [SMTP EHLO, RFC 5321](https://www.rfc-editor.org/rfc/rfc5321.html#section-4.1.1.1)
+- [EC2 StartInstances and DryRun](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_StartInstances.html)
+- [EC2 StopInstances](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_StopInstances.html)
+- [EC2 DescribeInstances](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeInstances.html)
+- [X Web Intents](https://docs.x.com/x-for-websites/web-intents/overview)
+
+X sharing opens a user-triggered native intent with title, mode, score, correct
+count, and current game URL. Posting stays in X. Preview URLs are labeled as
+previews; localhost uses this PR's existing branch preview. No X SDK or tracking
+script is loaded. A copy action and selectable-text fallback work independently.
+
+## Verify and deploy
 
 From the repository root:
 
@@ -13,32 +67,12 @@ bun test scripts/landing/cloud-master.test.ts
 make before-commit
 ```
 
-Open `http://localhost:4173/cloud-master/` in a browser.
-The static files need no build step and ship through the existing
-`tenkacloud-www` Cloudflare Pages project (`wrangler.toml`, output `landing/`).
-Use a branch preview to review changes; merging and production publication are
-separate operations. Do not deploy this directory over the entire existing LP.
+Open `http://localhost:4173/cloud-master/`. The static files need no build step.
+Use the existing `tenkacloud-www` Cloudflare Pages project, output `landing/`.
+Review the same PR branch preview; do not overwrite the full LP with this folder.
+Production merge and publication are separate operations.
 
-## Rules
-
-- The timed mode has 75 seconds of active play. Reading explanations pauses time.
-- Learning mode has all 20 scenarios, with no falling deadline or overall timer.
-- Correct answers give 100 points plus 20 per consecutive correct answer,
-  capped at a 100-point bonus. A mistake or missed card breaks the chain.
-- Every third consecutive correct answer lights another point on the sky path.
-  The longest chain keeps those points lit for the rest of the current playthrough.
-- Wrong answers and missed cards explain the correct role before continuing.
-- A hidden tab, unfocused window, or page navigation pauses play. Resume is manual.
-- Keys 1–5 answer; P or Escape pauses/resumes. Buttons support touch and keyboard.
-- Reduced motion keeps the scenario still; its deadline bar and timer remain.
-- Scores describe only this playthrough and do not certify cloud skills.
-
-`engine.js` contains the question bank and deterministic state transitions.
-Seed 726 produces the same scenario order on every restart. `game.js` owns the DOM,
-clock, focus, and browser lifecycle. `game.css` owns responsive presentation.
-
-Browser QA should cover correct/wrong taps, repeated taps, keyboard answers,
-missed cards, pause/resume, background pause, restart, timer completion, learning
-completion, reduced motion, and question/control visibility on a 320px screen.
-Real iOS Safari and physical-device testing remain separate from Chromium touch
-emulation.
+Browser QA covers clean first views, complete desktop/mobile rounds, early picks,
+life loss, paused target misses, benign pass-through, duplicate/stale clicks, pause,
+keyboard focus, reduced motion, generated share intents, and copy fallback.
+Physical devices and iOS Safari are separate from Chromium touch emulation.
