@@ -310,6 +310,7 @@ function evidenceQuestion(state, source, intended) {
     danger,
     severity: danger ? s.severity : 0,
     points: danger ? s.severity * 10 : 10,
+    decisionField: s.focusLabel,
     teachingNote: s.why,
     normalValue: s.normal,
     why: decisionExplanation(context, s.focusLabel, s.why),
@@ -366,6 +367,7 @@ export function nextQuestion(state) {
       scenario.field.replace("eventContext.", "観測."),
       scenario.why,
     ),
+    decisionField: scenario.field.replace("eventContext.", "観測."),
     teachingNote: scenario.why,
     briefReason: briefReason(context, scenario.field.replace("eventContext.", "観測.")),
     source: officialSource(

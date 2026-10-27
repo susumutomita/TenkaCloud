@@ -7,14 +7,14 @@ resource/purpose/baseline context. No AWS requests, attack execution or backend.
 
 ## Decisions, survival and feedback
 
-Three lives. False positives cost one and continue. A dangerous miss costs one
-and freezes every card and active time for the actual-item explanation; explicit
-acknowledgment resumes. The final mistake explains before results. Normal passive passage earns10 once. Correct detection earns authored game danger
+Three lives. Every false positive or dangerous miss costs exactly one and immediately
+freezes every card and active time for the actual-item explanation; explicit
+acknowledgment resumes. The final mistake explains before results. Simultaneous deadlines stop at the first miss; already-due untouched dangerous cards get a1500ms decision window after acknowledgment, without resetting their original positions or identity. Normal passive passage earns10 once. Correct detection earns authored game danger
 ×10; these are not actual AWS severity values. Only correct10-point dangerous hits
 receive120ms hitstop. Survival time freezes in hitstop, explanations, explicit and
 background pause. The survival display, result, best and share use tenths of a second; HUD text changes only when its value changes.
 
-Correct detection taps grow a visual-only combo. Passive normal passage still scores10 but does not grow combo. Mistakes reset it; no multiplier/speed bonus. Correct taps show a brief deflection, confirmation and actual-value reason without stopping play (except the specified120ms10-point hitstop). Full explanation and official links remain in review.
+Correct detection taps grow a visual-only combo. Passive normal passage still scores10 but does not grow combo. Mistakes reset it; no multiplier/speed bonus. Correct taps show a brief deflection, confirmation and actual-value reason without stopping play (except the specified120ms10-point hitstop). The short reason appears transiently at the bottom, behind the request layer, without taking field space. Full explanation and official links remain in review. API-case summaries are authored separately for benign and dangerous values; predicate labels distinguish request inputs from attached change-ticket/hash evidence.
 Movement over10px or pointer cancellation cancels the tap; it never flags/allows via a swipe. Enter/Space and1–6 are equivalent accessible detection controls; P/Escape pauses. Reduced motion keeps textual confirmation without deflection.
 
 Initial arrivals1.2s/fall12s. Discrete active-time levels apply to NEW cards; existing cards retain their birth/deadline. The compact survival caption shows level and a nonblocking1.2-second LEVEL UP accent. No transition pauses, input lock or card reset.

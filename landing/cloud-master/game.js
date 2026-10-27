@@ -57,7 +57,10 @@ function button(text, handler, primary = true) {
   b.type = "button";
   b.className = primary ? "primary" : "secondary";
   b.textContent = text;
-  b.addEventListener("click", handler);
+  b.addEventListener("click", (event) => {
+    if (!b.isConnected || b.disabled) return;
+    handler(event);
+  });
   return b;
 }
 function layoutCapacity() {
@@ -543,14 +546,36 @@ function renderFeedback() {
       lastReason = "";
       reasonUntil = 0;
     }
-    if (["flag", "wrong"].includes(entry.kind)) {
-      lastReason = entry.question.briefReason;
-      reasonUntil = state.elapsed + 2200;
-      announce(lastReason);
+    if (entry.kind === "flag" && entry.correct) {
+      const v = explanationCard(entry.question);
+      lastReason = { copy: v.successReason, fact: `${v.field}: ${v.actual}` };
+      reasonUntil = performance.now() + 1400;
+      announce(`${lastReason.copy}。${lastReason.fact}`);
     }
   }
-  text("hit-reason", lastReason && state.elapsed < reasonUntil ? lastReason : "");
+  const show =
+    lastReason && performance.now() < reasonUntil && ["playing", "hitstop"].includes(state.phase);
+  text("hit-copy", show ? lastReason.copy : "");
+  text("hit-value", show ? lastReason.fact : "");
+  $("hit-reason").hidden = !show;
   seen = state.history.length;
+}
+function positionReason() {
+  const toast = $("hit-reason");
+  if (toast.hidden || !geometry) return;
+  // Use cached trajectories, not per-frame DOM measurements. Find the lowest free strip.
+  let bottom = geometry.height - 8;
+  const occupied = state.active
+    .map((item) => ({
+      top: motion.get(String(item.uid))?.y ?? -1000,
+      height: geometry.heights.get(String(item.uid)) ?? 0,
+    }))
+    .sort((a, b) => b.top - a.top);
+  for (const item of occupied) {
+    if (item.top < bottom && item.top + item.height > bottom - 64) bottom = item.top - 8;
+  }
+  toast.hidden = bottom < geometry.height * 0.4 + 64;
+  toast.style.bottom = `calc(${Math.max(8, geometry.height - bottom)}px + env(safe-area-inset-bottom,0px))`;
 }
 function renderLevel() {
   const level = difficulty(state.elapsed).level;
@@ -594,6 +619,7 @@ function render() {
   attribute($("pause"), "aria-label", state.phase === "paused" ? "再開" : "一時停止");
   renderFeedback();
   syncCards();
+  positionReason();
   if (active && !wasActive && !layoutBlocked) state.maxCards = layoutCapacity();
   if (active && !wasActive) layoutKey = currentLayout();
   if (phase !== state.phase) {

@@ -1,6 +1,8 @@
 import { createQuestionStream, difficulty, nextQuestion } from "./recognition.js";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 120;
+export const REVIEW_DECISION_MS = 1500;
+const deadlineOf = (item) => item.decisionDeadline ?? item.deadline;
 export function createGame(catalog, seed = 726) {
   return {
     ...createQuestionStream(catalog, seed),
@@ -78,12 +80,12 @@ function lose(state, item, kind) {
 export function collect(state, uid) {
   if (state.phase !== "playing") return false;
   const item = state.active.find((entry) => entry.uid === uid);
-  if (!item || state.elapsed >= item.deadline || state.elapsed - item.born < INPUT_GUARD_MS)
+  if (!item || state.elapsed >= deadlineOf(item) || state.elapsed - item.born < INPUT_GUARD_MS)
     return false;
   remove(state, item);
   if (!item.question.danger) {
     lose(state, item, "wrong");
-    if (!state.lives) state.phase = "feedback";
+    state.phase = "feedback";
     return true;
   }
   state.correct++;
@@ -102,26 +104,24 @@ export function next(state) {
     state.phase = "finished";
     return;
   }
+  // Untouched cards already due at the exact same instant need a real chance after acknowledgment.
+  for (const item of state.active) {
+    if (item.question.danger && deadlineOf(item) <= state.elapsed)
+      item.decisionDeadline = state.elapsed + REVIEW_DECISION_MS;
+  }
   state.phase = "playing";
   state.grace = 800;
 }
 function expire(state, items) {
-  const missed = items.filter((item) => item.question.danger);
   for (const item of items) {
     remove(state, item);
-    if (item.question.danger) lose(state, item, "miss");
-    else {
-      state.passed++;
-      record(state, item, "pass", true, 10);
+    if (item.question.danger) {
+      lose(state, item, "miss");
+      state.phase = "feedback";
+      return true;
     }
-  }
-  if (missed.length) {
-    state.feedback = state.history.findLast(
-      (entry) => entry.kind === "miss" && entry.at === state.elapsed,
-    );
-    state.feedback.groupCount = missed.length;
-    state.phase = "feedback";
-    return true;
+    state.passed++;
+    record(state, item, "pass", true, 10);
   }
   return false;
 }
@@ -160,12 +160,10 @@ function scheduleBoundary(state, deferNew) {
 function advanceWorld(state, target, deferNew) {
   let arrivalDue = false;
   while (state.elapsed < target) {
-    const deadline = state.active.length
-      ? Math.min(...state.active.map((item) => item.deadline))
-      : Infinity;
+    const deadline = state.active.length ? Math.min(...state.active.map(deadlineOf)) : Infinity;
     state.elapsed = Math.min(target, state.nextSpawnAt, deadline);
     const expired = state.active
-      .filter((item) => item.deadline <= state.elapsed)
+      .filter((item) => deadlineOf(item) <= state.elapsed)
       .sort((a, b) => a.uid - b.uid);
     if (expired.length && expire(state, expired)) return;
     if (state.elapsed >= state.nextSpawnAt)
