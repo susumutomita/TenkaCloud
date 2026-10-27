@@ -1,7 +1,9 @@
 export const CARD_GAP = 16;
 export function cardHeightBudget(width) {
-  // Numeric keyboard cues add a wrapped line on the narrowest supported phones.
-  return width <= 350 ? 148 : 132;
+  // Shared JA/EN bounds keep live cards readable when the language changes.
+  const columnWidth = width <= 740 ? width : width / 2;
+  if (columnWidth < 375) return 208;
+  return columnWidth < 590 ? 172 : 136;
 }
 export function fieldCapacity(height, columns, width = 375) {
   const perLane = Math.floor(

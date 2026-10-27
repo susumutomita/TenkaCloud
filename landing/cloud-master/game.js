@@ -11,9 +11,11 @@ import {
   tickFrame as tick,
 } from "./engine.js";
 import { explanationCard } from "./explanation.js";
-import { decisionFact, REASON_DURATION_MS } from "./feedback.js";
+import { decisionFact, reasonDuration } from "./feedback.js";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js";
 import { CARD_GAP, fieldCapacity } from "./layout.js";
 import { flowPositions } from "./motion.js";
+import { loadQuestionLocale, questionView } from "./question-locales.js";
 import { difficulty } from "./recognition.js";
 import { buildShare } from "./share.js";
 import { formatSurvival } from "./time.js";
@@ -29,7 +31,9 @@ try {
   const value = Number(localStorage.getItem(BEST_KEY));
   if (Number.isFinite(value) && value >= 0) bestMs = value;
 } catch {}
-const duration = formatSurvival;
+const duration = (milliseconds) => formatSurvival(milliseconds, getLocale());
+const languageButton = $("language-switch");
+let cardLanguage = getLocale();
 let geometry = null;
 const motion = new Map();
 let reasonUntil = 0,
@@ -105,7 +109,8 @@ function beginRound() {
   render();
 }
 function makeCard(item, previewing) {
-  const q = item.question;
+  const q = item.question,
+    view = questionView(q, getLocale());
   const n = document.createElement(previewing ? "div" : "button");
   if (!previewing) n.type = "button";
   n.className = `request${previewing ? " preview" : ""}`;
@@ -116,7 +121,7 @@ function makeCard(item, previewing) {
   const top = document.createElement("span");
   top.className = "service";
   const name = document.createElement("span");
-  name.textContent = q.service;
+  name.textContent = view.service;
   const slot = document.createElement("span");
   slot.className = "slot";
   slot.textContent = String(item.slot + 1);
@@ -124,14 +129,14 @@ function makeCard(item, previewing) {
   top.append(name, slot);
   const operation = document.createElement("span");
   operation.className = "operation";
-  operation.textContent = q.operation;
+  operation.textContent = view.operation;
   const wire = document.createElement("span");
   wire.className = "wire-preview";
-  wire.textContent = q.payload;
-  wire.title = q.wire;
+  wire.textContent = view.payload;
+  wire.title = view.wire;
   const policy = document.createElement("span");
   policy.className = "context-row policy";
-  policy.textContent = q.context.policy;
+  policy.textContent = view.policy;
   if (previewing) n.append(top, operation, wire, policy);
   else {
     top.append(operation);
@@ -140,7 +145,7 @@ function makeCard(item, previewing) {
   if (previewing) {
     const cue = document.createElement("span");
     cue.className = "example-note";
-    cue.textContent = q.danger ? "DBを外へ公開 → タップ" : "非公開のまま → 通す ＋10 ↓";
+    cue.textContent = q.danger ? tr("DBを外へ公開 → タップ") : tr("非公開のまま → 通す ＋10 ↓");
     n.append(cue);
   }
   const thisEpoch = epoch;
@@ -164,9 +169,31 @@ function makeCard(item, previewing) {
     );
   n.setAttribute(
     "aria-label",
-    `${q.service}、${q.operation}。${q.payload}。${q.context.policy}。危険ならタップ、EnterまたはSpaceで検知`,
+    tr("{service}、{operation}。{payload}。{policy}。危険ならタップ、EnterまたはSpaceで検知", {
+      service: view.service,
+      operation: view.operation,
+      payload: view.payload,
+      policy: view.policy,
+    }),
   );
   return n;
+}
+function refreshCard(node, q) {
+  const view = questionView(q, getLocale());
+  node.querySelector(".service>span:first-child").textContent = view.service;
+  node.querySelector(".operation").textContent = view.operation;
+  node.querySelector(".wire-preview").textContent = view.payload;
+  node.querySelector(".wire-preview").title = view.wire;
+  node.querySelector(".policy").textContent = view.policy;
+  node.setAttribute(
+    "aria-label",
+    tr("{service}、{operation}。{payload}。{policy}。危険ならタップ、EnterまたはSpaceで検知", {
+      service: view.service,
+      operation: view.operation,
+      payload: view.payload,
+      policy: view.policy,
+    }),
+  );
 }
 function bindTap(node, suppress, beginTap) {
   let pointer = null;
@@ -245,7 +272,11 @@ function feedbackEffect(entry) {
   n.dataset.operation = entry.question.operation;
 
   n.textContent =
-    entry.kind === "pass" ? "通過 ＋10" : entry.kind === "flag" ? `検知 ＋${entry.points}` : "♥ −1";
+    entry.kind === "pass"
+      ? tr("通過 ＋10")
+      : entry.kind === "flag"
+        ? tr("検知 ＋{points}", { points: formatCount(entry.points) })
+        : "♥ −1";
   $("effects").replaceChildren(n);
   setTimeout(() => n.remove(), 220);
 }
@@ -283,6 +314,11 @@ function positions(items, previewing) {
   }
 }
 function syncCards() {
+  const changedLanguage = cardLanguage !== getLocale();
+  if (changedLanguage) {
+    geometry = null;
+    cardLanguage = getLocale();
+  }
   const previewing = state.phase === "ready",
     items = previewing ? [] : state.active;
   const valid = new Set(items.map((item) => String(item.uid)));
@@ -302,6 +338,7 @@ function syncCards() {
       geometry = null;
     }
     const node = nodes.get(uid);
+    if (changedLanguage) refreshCard(node, item.question);
     const arriving = !previewing && state.elapsed - item.born < INPUT_GUARD_MS;
     attribute(node, "data-slot", String(item.slot));
     const slot = node.querySelector(".slot");
@@ -318,7 +355,7 @@ function modal(title, description) {
   node.hidden = false;
   node.setAttribute("role", "dialog");
   node.setAttribute("aria-modal", "true");
-  node.setAttribute("aria-label", title ?? "判定の解説");
+  node.setAttribute("aria-label", title ?? tr("判定の解説"));
   const h = document.createElement("h2");
   h.textContent = title ?? "";
   const p = document.createElement("p");
@@ -334,7 +371,7 @@ function officialLink(question) {
   a.href = question.source;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
-  a.textContent = "この判定の公式説明 ↗";
+  a.textContent = tr("この判定の公式説明 ↗");
   a.addEventListener("click", () => {
     if (["playing", "hitstop"].includes(state.phase)) {
       updateNow();
@@ -347,7 +384,7 @@ function officialLink(question) {
 }
 function explanation() {
   const e = state.feedback,
-    view = explanationCard(e.question);
+    view = explanationCard(e.question, getLocale());
   const actions = modal(view.headline, view.reason),
     root = $("overlay");
   root.classList.add("miss-card");
@@ -363,7 +400,7 @@ function explanation() {
   const comparison = document.createElement("dl");
   comparison.className = "miss-comparison";
   for (const [label, content] of [
-    [`${view.field}（今回）`, view.actual],
+    [tr("{field}（今回）", { field: view.field }), view.actual],
     [view.expectedLabel, view.expected],
   ]) {
     const dt = document.createElement("dt"),
@@ -387,7 +424,7 @@ function explanation() {
   details.append(why, wire);
   root.insertBefore(details, actions);
   actions.append(
-    button(!state.lives ? "結果を見る" : "続ける", () => {
+    button(!state.lives ? tr("結果を見る") : tr("続ける"), () => {
       next(state);
       lastTime = null;
       render();
@@ -397,35 +434,50 @@ function explanation() {
   content.className = "miss-body";
   for (const child of [...root.children]) if (child !== actions) content.append(child);
   root.insertBefore(content, actions);
-  announce(`${view.headline}。${view.reason}`);
+  announce(tr("{summary}。{detail}", { summary: view.headline, detail: view.reason }));
 }
 function review() {
   const root = $("review-list");
   root.replaceChildren();
   $("review").hidden = state.history.length === 0;
   for (const e of [...state.history].reverse()) {
+    const view = questionView(e.question, getLocale()),
+      explanationView = explanationCard(e.question, getLocale());
     const article = document.createElement("article"),
       h = document.createElement("h3");
-    h.textContent = `${{ flag: "正しい検知", pass: "正常通過", wrong: "誤検知", miss: "見逃し" }[e.kind]} · ${e.question.service} / ${e.question.operation} · ${e.points}点`;
+    h.textContent = tr("{kind} · {service} / {operation} · {points}点", {
+      kind: {
+        flag: tr("正しい検知"),
+        pass: tr("正常通過"),
+        wrong: tr("誤検知"),
+        miss: tr("見逃し"),
+      }[e.kind],
+      service: view.service,
+      operation: view.operation,
+      points: formatCount(e.points),
+    });
     const context = document.createElement("p");
-    context.textContent = `${e.question.context.policy} ／ ${e.question.context.observed}`;
+    context.textContent = tr("{policy} ／ {observed}", {
+      policy: view.policy,
+      observed: view.observed,
+    });
     const wire = document.createElement("pre");
-    wire.textContent = e.question.wire;
+    wire.textContent = view.wire;
     const why = document.createElement("p");
-    why.textContent = e.question.why;
+    why.textContent = explanationView.fullReason;
     if (e.question.danger)
-      why.textContent += ` ゲーム内危険度 ${e.question.severity} × 10 = ${e.question.points}点。`;
+      why.textContent += ` ${tr("ゲーム内危険度 {severity} × 10 = {points}点。", { severity: e.question.severity, points: e.question.points })}`;
     const source = document.createElement("a");
     source.href = e.question.source;
     source.target = "_blank";
     source.rel = "noopener noreferrer";
-    source.textContent = "GuardDutyの公開説明 ↗";
+    source.textContent = tr("GuardDutyの公開説明 ↗");
     article.append(h, context, wire, why, source);
     root.append(article);
   }
 }
 function sharing() {
-  const share = buildShare(state, location);
+  const share = buildShare(state, location, getLocale());
   const row = document.createElement("div");
   row.className = "share-actions";
   const link = document.createElement("a");
@@ -433,18 +485,18 @@ function sharing() {
   link.href = share.intent;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
-  link.textContent = "Xでシェア ↗";
+  link.textContent = tr("Xでシェア ↗");
   const copy = button(
-    "結果をコピー",
+    tr("結果をコピー"),
     async () => {
       try {
         await navigator.clipboard.writeText(share.copy);
-        copy.textContent = "コピーしました ✓";
+        copy.textContent = tr("コピーしました ✓");
       } catch {
         const text = document.createElement("textarea");
         text.readOnly = true;
         text.className = "copy-text";
-        text.setAttribute("aria-label", "共有する練習記録");
+        text.setAttribute("aria-label", tr("共有する練習記録"));
         text.value = share.copy;
         row.append(text);
         text.focus();
@@ -457,7 +509,7 @@ function sharing() {
   $("overlay").append(row);
   const note = document.createElement("p");
   note.className = "share-note";
-  note.textContent = "投稿はXで確認。開けないときはコピーできます。";
+  note.textContent = tr("投稿はXで確認。開けないときはコピーできます。");
   $("overlay").append(note);
 }
 function result() {
@@ -468,8 +520,13 @@ function result() {
     } catch {}
   }
   const actions = modal(
-    "今回の生存記録",
-    `正しい検知 ${state.correct} ／ 正常通過 ${state.passed} ／ ミス ${state.mistakes} ／ Lv.${difficulty(state.elapsed).level}`,
+    tr("今回の生存記録"),
+    tr("正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ Lv.{level}", {
+      correct: formatCount(state.correct),
+      passed: formatCount(state.passed),
+      mistakes: formatCount(state.mistakes),
+      level: formatCount(difficulty(state.elapsed).level),
+    }),
   );
   const score = document.createElement("div");
   score.className = "score-result";
@@ -477,29 +534,37 @@ function result() {
   {
     const best = document.createElement("p");
     best.className = "best-result";
-    best.textContent = `自己ベスト ${duration(bestMs)} · ${state.score} pt`;
+    best.textContent = tr("自己ベスト {time} · {score} pt", {
+      time: duration(bestMs),
+      score: formatCount(state.score),
+    });
     $("overlay").append(best);
   }
   $("overlay").prepend(score);
   const seed = state.seed;
   actions.append(
-    button("もう一回", () => prepare(newSeed(), true)),
-    button("同じ流れで復習", () => prepare(seed, true), false),
+    button(tr("もう一回"), () => prepare(newSeed(), true)),
+    button(tr("同じ流れで復習"), () => prepare(seed, true), false),
   );
   sharing();
   review();
   announce(
-    `結果。生存時間${duration(state.elapsed)}。${state.score}点。正しい検知${state.correct}回。`,
+    tr("結果。生存時間{time}。{score}点。正しい検知{correct}回。", {
+      time: duration(state.elapsed),
+      score: formatCount(state.score),
+      correct: formatCount(state.correct),
+    }),
   );
 }
 function phaseContent() {
+  $("language-home").append(languageButton);
   $("overlay").hidden = true;
   $("overlay").classList.remove("miss-card");
   $("overlay").replaceChildren();
   $("controls").replaceChildren();
   if (state.phase === "ready")
     $("controls").append(
-      button("はじめる", () => {
+      button(tr("はじめる"), () => {
         beginRound();
       }),
     );
@@ -507,20 +572,22 @@ function phaseContent() {
     const hint = document.createElement("span");
     hint.className = "keyboard-hint";
     hint.textContent = document.body.classList.contains("keyboard")
-      ? "1〜6で検知 · Pで一時停止"
-      : "分かった上のカードも、その場でタップ";
+      ? tr("1〜6で検知 · Pで一時停止")
+      : tr("分かった上のカードも、その場でタップ");
     $("controls").append(hint);
   }
   if (state.phase === "paused" && layoutBlocked) {
     const seed = state.seed;
     const actions = modal(
-      "画面サイズが変わりました",
-      "この広さでは全カードを読めないため停止しました。元の向き・広さへ戻すと、同じ続きから再開できます。",
+      tr("画面サイズが変わりました"),
+      tr(
+        "この広さでは全カードを読めないため停止しました。元の向き・広さへ戻すと、同じ続きから再開できます。",
+      ),
     );
     actions.append(
-      button("最初からやり直す", () => prepare(seed, true)),
+      button(tr("最初からやり直す"), () => prepare(seed, true)),
       button(
-        "ここまでの結果",
+        tr("ここまでの結果"),
         () => {
           layoutBlocked = false;
           document.body.removeAttribute("data-layout-blocked");
@@ -532,11 +599,11 @@ function phaseContent() {
     );
   }
   if (state.phase === "paused" && !layoutBlocked) {
-    const actions = modal("ひと休み。", "カードも時間も止まっています。");
+    const actions = modal(tr("ひと休み。"), tr("カードも時間も止まっています。"));
     actions.append(
-      button("再開", togglePause),
+      button(tr("再開"), togglePause),
       button(
-        "結果を見る",
+        tr("結果を見る"),
         () => {
           finish(state);
           render();
@@ -547,6 +614,8 @@ function phaseContent() {
   }
   if (state.phase === "feedback") explanation();
   if (state.phase === "finished") result();
+  if (["paused", "finished"].includes(state.phase))
+    $("overlay").querySelector(".actions").append(languageButton);
   if (["feedback", "paused", "finished"].includes(state.phase))
     $("overlay").querySelector("button")?.focus({ preventScroll: true });
 }
@@ -559,10 +628,20 @@ function renderFeedback() {
       reasonUntil = 0;
     }
     if (entry.kind === "flag" && entry.correct) {
-      const v = explanationCard(entry.question);
-      lastReason = { copy: v.successReason, ...decisionFact(entry.question) };
-      reasonUntil = performance.now() + REASON_DURATION_MS;
-      announce(`${lastReason.copy}。${lastReason.label}: ${lastReason.value}`);
+      const v = explanationCard(entry.question, getLocale());
+      lastReason = {
+        question: entry.question,
+        copy: v.successReason,
+        ...decisionFact(entry.question, getLocale()),
+      };
+      reasonUntil =
+        performance.now() + reasonDuration(lastReason.copy, lastReason.value, getLocale());
+      announce(
+        tr("{summary}。{detail}", {
+          summary: lastReason.copy,
+          detail: `${lastReason.label}: ${lastReason.value}`,
+        }),
+      );
     }
   }
   const show =
@@ -574,7 +653,7 @@ function renderFeedback() {
   $("hit-reason").hidden = !show;
   seen = state.history.length;
 }
-function reasonGap(lane, columns) {
+function reasonGap(lane, columns, height) {
   let bottom = geometry.height - 8;
   const occupied = state.active
     .filter((item) => item.slot % columns === lane)
@@ -584,22 +663,29 @@ function reasonGap(lane, columns) {
     }))
     .sort((a, b) => b.top - a.top);
   for (const item of occupied) {
-    if (item.top < bottom && item.top + item.height > bottom - 72) bottom = item.top - 16;
+    if (item.top < bottom && item.top + item.height > bottom - height - 8) bottom = item.top - 16;
   }
   return bottom;
 }
 function positionReason() {
   const toast = $("hit-reason");
   if (toast.hidden || !geometry) return;
-  // Cached trajectories only. Desktop feedback uses one lane's lowest free strip.
   const columns = innerWidth <= 740 ? 1 : 2;
-  const gaps = Array.from({ length: columns }, (_, lane) => reasonGap(lane, columns));
+  const width = geometry.width / columns - (columns === 2 ? 18 : 0);
+  toast.style.width = `${width}px`;
+  if (lastReason.width !== width) {
+    // Measure only after a new message or width change, never on every frame.
+    lastReason.height = toast.offsetHeight;
+    lastReason.width = width;
+  }
+  const gaps = Array.from({ length: columns }, (_, lane) =>
+    reasonGap(lane, columns, lastReason.height),
+  );
   const bottom = Math.max(...gaps),
     lane = gaps.indexOf(bottom);
-  toast.hidden = bottom < geometry.height * 0.35 + 72;
+  toast.hidden = bottom < geometry.height * 0.35 + lastReason.height;
   toast.style.left = `${geometry.left + (lane * geometry.width) / columns}px`;
   toast.style.right = "auto";
-  toast.style.width = `${geometry.width / columns - (columns === 2 ? 18 : 0)}px`;
   toast.style.margin = "0";
   toast.style.bottom = `calc(${Math.max(8, geometry.height - bottom)}px + env(safe-area-inset-bottom,0px))`;
 }
@@ -610,7 +696,7 @@ function renderLevel() {
     levelUntil = state.elapsed + 1200;
   }
   text("level", String(level));
-  text("survival-label", state.elapsed < levelUntil ? "LEVEL UP" : "生存時間");
+  text("survival-label", state.elapsed < levelUntil ? "LEVEL UP" : tr("生存時間"));
   const caption = $("level-caption"),
     up = state.elapsed < levelUntil;
   if (caption.classList.contains("level-up") !== up) caption.classList.toggle("level-up", up);
@@ -631,18 +717,18 @@ function render() {
   if (wasActive !== active) document.body.classList.toggle("active-game", active);
   const pauseHost = active ? document.querySelector(".hud") : document.querySelector(".top");
   if ($("pause").parentElement !== pauseHost) pauseHost.append($("pause"));
-  text("start-best", bestMs > 0 ? `自己ベスト ${duration(bestMs)}` : "");
-  text("score", String(state.score));
-  text("combo", state.combo >= 2 ? `${state.combo}連続` : "");
+  text("start-best", bestMs > 0 ? tr("自己ベスト {time}", { time: duration(bestMs) }) : "");
+  text("score", formatCount(state.score));
+  text("combo", state.combo >= 2 ? tr("{count}連続", { count: formatCount(state.combo) }) : "");
   cancelInactiveInput();
   text("survival", duration(state.elapsed));
-  text("personal-best", `BEST ${duration(Math.max(bestMs, state.elapsed))}`);
+  text("personal-best", tr("BEST {time}", { time: duration(Math.max(bestMs, state.elapsed)) }));
   renderLevel();
   text("lives", `${"♥".repeat(state.lives)}${"♡".repeat(3 - state.lives)}`);
-  attribute($("lives"), "aria-label", `残りライフ${state.lives}`);
+  attribute($("lives"), "aria-label", tr("残りライフ{count}", { count: formatCount(state.lives) }));
   const pauseDisabled = !["playing", "hitstop", "feedback", "paused"].includes(state.phase);
   if ($("pause").disabled !== pauseDisabled) $("pause").disabled = pauseDisabled;
-  attribute($("pause"), "aria-label", state.phase === "paused" ? "再開" : "一時停止");
+  attribute($("pause"), "aria-label", state.phase === "paused" ? tr("再開") : tr("一時停止"));
   renderFeedback();
   syncCards();
   positionReason();
@@ -776,18 +862,94 @@ function frame(time) {
   if (["playing", "hitstop"].includes(state.phase) || phase !== state.phase) render();
   requestAnimationFrame(frame);
 }
+const staticTextNodes = [];
+const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+  const key = node.textContent.trim();
+  if (/[\u3040-\u30ff\u3400-\u9fff]/u.test(key))
+    staticTextNodes.push({
+      node,
+      key,
+      before: node.textContent.match(/^\s*/)[0],
+      after: node.textContent.match(/\s*$/)[0],
+    });
+}
+function applyStaticLocale() {
+  const locale = getLocale();
+  document.documentElement.lang = locale;
+  document.title = tr("APIの番人。 | 目指せクラウドマスター");
+  document.querySelector('meta[name="description"]').content = tr(
+    "本番AWSの異変をリクエスト引数から見抜く、生存時間チャレンジ。",
+  );
+  for (const { node, key, before, after } of staticTextNodes)
+    node.textContent = before + tr(key) + after;
+  $("cards").setAttribute("aria-label", tr("流れてくるAWSリクエスト"));
+  document.querySelector(".game").setAttribute("aria-label", tr("AWSリクエスト検知ゲーム"));
+  $("pause").setAttribute("aria-label", tr("一時停止"));
+  $("lives").setAttribute("aria-label", tr("残りライフ{count}", { count: state?.lives ?? 3 }));
+  languageButton.textContent = locale === "ja" ? "English" : "日本語";
+  languageButton.setAttribute(
+    "aria-label",
+    locale === "ja" ? tr("英語に切り替え") : tr("日本語に切り替え"),
+  );
+}
+function pauseForLanguage() {
+  if (state && ["playing", "hitstop"].includes(state.phase)) {
+    updateNow();
+    pause(state);
+    lastTime = null;
+    render();
+  }
+}
+languageButton.addEventListener("click", async () => {
+  if (languageButton.disabled) return;
+  const nextLocale = getLocale() === "ja" ? "en" : "ja";
+  pauseForLanguage();
+  languageButton.disabled = true;
+  try {
+    await loadQuestionLocale(nextLocale);
+    pauseForLanguage();
+    setLocale(nextLocale);
+    try {
+      const url = new URL(location.href);
+      url.searchParams.set("lang", nextLocale);
+      history.replaceState(null, "", url);
+    } catch {}
+    applyStaticLocale();
+    geometry = null;
+    phase = "";
+    if (lastReason?.question) {
+      const q = lastReason.question;
+      lastReason = {
+        question: q,
+        copy: explanationCard(q, getLocale()).successReason,
+        ...decisionFact(q, getLocale()),
+      };
+    }
+    if (state) {
+      state.maxCards = layoutCapacity();
+      layoutKey = currentLayout();
+      render();
+    }
+  } catch {
+    announce(tr("言語データを読み込めませんでした。もう一度お試しください。"));
+  } finally {
+    languageButton.disabled = false;
+  }
+});
 async function boot() {
   try {
-    catalog = await loadCatalog();
+    [catalog] = await Promise.all([loadCatalog(), loadQuestionLocale(getLocale())]);
     document.fonts.ready.then(() => {
       geometry = null;
     });
     prepare();
     requestAnimationFrame(frame);
   } catch (error) {
-    $("controls").replaceChildren(button("読み込みを再試行", () => location.reload()));
-    $("controls").querySelector("button").textContent = "問題を読み込めませんでした・再試行";
+    $("controls").replaceChildren(button(tr("読み込みを再試行"), () => location.reload()));
+    $("controls").querySelector("button").textContent = tr("問題を読み込めませんでした・再試行");
     announce(String(error));
   }
 }
+applyStaticLocale();
 boot();

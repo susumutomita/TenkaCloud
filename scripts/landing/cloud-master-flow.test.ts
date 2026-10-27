@@ -21,9 +21,9 @@ import {
 const catalog = await loadCatalog();
 test("bounded geometry fits full-height cards and keeps maximum six keyboard targets", () => {
   for (const [height, columns, width, capacity] of [
-    [772, 1, 390, 5],
-    [595, 1, 375, 4],
-    [496, 1, 320, 3],
+    [772, 1, 390, 4],
+    [595, 1, 375, 3],
+    [496, 1, 320, 2],
     [824, 2, 1440, 6],
   ]) {
     expect(fieldCapacity(height, columns, width)).toBe(capacity);
@@ -54,7 +54,7 @@ function flow(at: number, capacity: number) {
 }
 test("Lv1 and Lv8 arrivals stay regular at real viewport capacities without changing fall or stage clocks", () => {
   for (const at of [0, 180000])
-    for (const capacity of [3, 4, 5, 6]) {
+    for (const capacity of [2, 3, 4, 5, 6]) {
       const { s, births } = flow(at, capacity),
         gaps = births.slice(1).map((t, i) => t - births[i]);
       expect(births.length).toBeGreaterThan(2);

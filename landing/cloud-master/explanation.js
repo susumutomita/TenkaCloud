@@ -1,5 +1,6 @@
 import { API_COPY, EVIDENCE_HEADLINES } from "./explanation-copy.js";
 import { explanationTitle } from "./explanation-titles.js";
+import { questionView } from "./question-locales.js";
 
 const value = (x) => (typeof x === "string" ? x : JSON.stringify(x));
 const MEANING = {
@@ -41,7 +42,8 @@ function evidenceCopy(q, field, actual) {
     reason: `${field}は${actual}。${c.policy}`,
   };
 }
-export function explanationCard(q) {
+export function explanationCard(q, locale = "ja") {
+  if (locale === "en") return questionView(q, locale);
   const c = q.context,
     field = q.decisionField;
   const actual = value(c.actual),
