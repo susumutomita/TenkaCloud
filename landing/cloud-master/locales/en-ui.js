@@ -51,8 +51,8 @@ export const EN_UI = {
   今回の生存記録: "This run",
   "全件の対応状況・根拠・出典と判定の前提":
     "Full coverage, evidence, sources, and decision assumptions",
-  "公開スナップショットの211標準finding・35 CloudTrailシグナルに加え、Runtime本文の追加7シグナルを演習化。253演習・正常／要確認506基本ケースです。API要求以外は合成の通信・実行時・相関記録と区別します。実際のAWS判定式の再現ではありません。":
-    "Exercises cover 211 standard findings and 35 CloudTrail signals from a public snapshot, plus 7 additional signals from Runtime documentation. There are 253 exercises and 506 base cases covering normal and review-needed activity. Events other than API requests are labeled as synthetic network, runtime, or correlated records. These exercises do not reproduce actual AWS decision rules.",
+  "公開スナップショットの211標準finding・35 CloudTrailシグナルに加え、Runtime本文の追加7シグナルを演習化。259演習・正常／要確認518基本ケースです。うち6件はサービス導入用の演習方針ケースです。API要求以外は合成の通信・実行時・相関記録と区別します。実際のAWS判定式の再現ではありません。":
+    "Exercises cover 211 standard findings and 35 CloudTrail signals from a public snapshot, plus 7 additional signals from Runtime documentation. There are 259 exercises and 518 base cases covering normal and review-needed activity. Six are additional policy cases for learning service roles. Events other than API requests are labeled as synthetic network, runtime, or correlated records. These exercises do not reproduce actual AWS decision rules.",
   共有する練習記録: "Practice record to share",
   再開: "Resume",
   "分かった上のカードも、その場でタップ": "Tap suspicious cards as soon as you spot them",
@@ -80,8 +80,8 @@ export const EN_UI = {
   正常の例: "Normal example",
   "正常は、そのまま流す。": "Let normal ones pass.",
   正常通過: "Normal passes",
-  "正常通過10点。検知はゲーム内危険度×10点。AWSのseverity値そのものではありません。3ライフ・見逃しは停止して解説。速度と出現圧は生存時間で増加します。3分を超えても続行できます。1〜6キー・Tab・Pにも対応。背景移動中も停止します。":
-    "Normal cards passed: 10 points each. Correct flags: game danger level × 10 points. Game danger levels are not AWS severity values. You have 3 lives; a missed threat pauses play for an explanation. Speed and card volume increase as you survive. Play continues beyond 3 minutes. Keys 1–6, Tab, and P are supported. Play also pauses when the game is in the background.",
+  "正常通過10点。検知はゲーム内危険度×10点。AWSのseverity値そのものではありません。3ライフ・見逃しは停止して解説。新しいルールを練習し、正常・危険を両方判断できると次へ進みます。全ルールの導入後に速度が上がります。3分を超えても続行できます。1〜6キー・Tab・Pにも対応。背景移動中も停止します。":
+    "Normal cards passed: 10 points each. Correct flags: game danger level × 10 points. Game danger levels are not AWS severity values. You have 3 lives; a missed threat pauses play for an explanation. Practice each new rule and correctly judge both normal and flagged cases to advance. Speed increases after all rules are introduced. Play continues beyond 3 minutes. Keys 1–6, Tab, and P are supported. Play also pauses when the game is in the background.",
   残りライフ3: "3 lives left",
   "残りライフ{count}": "{count} lives left",
   生存時間: "Survival",

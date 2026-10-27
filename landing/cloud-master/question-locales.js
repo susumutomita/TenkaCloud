@@ -1,5 +1,5 @@
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=b49c5b2f64";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=b49c5b2f64";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=222af1e398";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=222af1e398";
 
 const SOURCE = new Map([...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => [s.id, s]));
 const JAPANESE = /[\u3040-\u30ff\u3400-\u9fff]/u;
@@ -18,6 +18,9 @@ const SERVICE = {
   構成差分: "Configuration",
 };
 const MEANING = {
+  elbv2: "Route requests",
+  cloudfront: "Deliver content",
+  wafv2: "Inspect web requests",
   s3: "File storage",
   iam: "Permissions",
   ec2: "Virtual servers",
@@ -39,7 +42,7 @@ export function validateEnglishCatalog(data) {
 }
 export async function loadQuestionLocale(locale) {
   if (locale !== "en" || english) return;
-  loading ??= import("./locales/en-scenarios.js?v=b49c5b2f64")
+  loading ??= import("./locales/en-scenarios.js?v=222af1e398")
     .then((module) => {
       validateEnglishCatalog(module.EN_SCENARIOS);
       english = module.EN_SCENARIOS;

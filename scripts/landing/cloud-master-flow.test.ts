@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
+import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   arrivalInterval,
   collect,
@@ -54,14 +55,14 @@ function flow(at: number, capacity: number) {
   }
   return { s, births };
 }
-test("Lv1 and Lv8 arrivals stay regular at real viewport capacities with opening reading time and unchanged late-stage pressure", () => {
-  for (const at of [0, 180000])
+test("learned pools preserve finite arrivals at real viewport capacities", () => {
+  for (const at of [180000, ALL_RULES_AT + 270000])
     for (const capacity of [2, 3, 4, 5, 6]) {
       const { s, births } = flow(at, capacity),
         gaps = births.slice(1).map((t, i) => t - births[i]);
       expect(births.length).toBeGreaterThan(2);
       expect(Math.max(...gaps)).toBeLessThanOrEqual(arrivalInterval(s) + 16);
-      expect(s.active.every((x) => x.deadline - x.born === (at ? 5000 : 16000))).toBe(true);
+      expect(s.active.every((x) => x.deadline - x.born === difficulty(at).fallMs)).toBe(true);
     }
 });
 test("pause, first mistake and resume cannot dump arrivals or resurrect a resolved identity", () => {
@@ -92,8 +93,8 @@ test("every dangerous fact retains its value; shortened account and AWS-managed 
   for (const scenario of availableScenarios(catalog)) {
     const stream = createQuestionStream(catalog, 37);
     Object.assign(stream, {
-      elapsed: 120000,
-      scenarioTier: 5,
+      elapsed: ALL_RULES_AT,
+      scenarioTier: LESSONS.length,
       scenarioBag: [scenario],
       outcomes: [true],
     });
@@ -111,27 +112,16 @@ test("every dangerous fact retains its value; shortened account and AWS-managed 
   expect(REASON_DURATION_MS).toBe(2000);
 });
 
-test("opening reading time increases while time thresholds and later pressure stay intact", () => {
-  for (const [at, level, fallMs] of [
-    [0, 1, 16000],
-    [20000, 2, 13500],
-    [40000, 3, 11000],
-    [60000, 4, 9000],
-    [90000, 5, 6800],
-    [120000, 6, 6000],
-    [150000, 7, 5400],
-    [180000, 8, 5000],
-  ]) {
-    expect(difficulty(at).level).toBe(level);
-    expect(difficulty(at).fallMs).toBe(fallMs);
-    if (at) expect(difficulty(at - 1).level).toBe(level - 1);
+test("new service lessons retain sixteen seconds of decision time", () => {
+  for (let level = 1; level <= LESSONS.length; level++) {
+    expect(difficulty(0, level).fallMs).toBe(16000);
+    expect(difficulty(0, level).intervalMs).toBe(1200);
   }
   for (const capacity of [3, 4, 6]) {
     const { s, births } = flow(0, capacity);
-    const expected = Math.ceil(16000 / capacity);
-    expect(arrivalInterval(s)).toBe(expected);
-    for (let i = 1; i < births.length; i++)
-      expect(births[i] - births[i - 1]).toBeLessThanOrEqual(expected + 16);
+    expect(arrivalInterval(s)).toBe(Math.ceil(16000 / capacity));
+    expect(births.length).toBeGreaterThan(2);
+    expect(s.active.every((x) => x.question.scenarioId === "EC2ApprovedStop")).toBe(true);
     expect(s.elapsed).toBeLessThan(20000);
   }
 });
@@ -170,11 +160,10 @@ test("clearing the opening field schedules one finite arrival without changing l
   }
 });
 
-test("level cues describe actual new patterns and speed changes, including the speed floor", () => {
-  expect(levelChanges(1, 2)).toEqual({ faster: true, morePatterns: true });
-  expect(levelChanges(3, 4)).toEqual({ faster: true, morePatterns: true });
-  expect(levelChanges(4, 5)).toEqual({ faster: true, morePatterns: true });
-  expect(levelChanges(5, 6)).toEqual({ faster: true, morePatterns: false });
-  expect(levelChanges(10, 11)).toEqual({ faster: true, morePatterns: false });
-  expect(levelChanges(11, 12)).toEqual({ faster: false, morePatterns: false });
+test("content and speed changes happen separately, including the speed floor", () => {
+  expect(levelChanges(1, 2)).toEqual({ faster: false, morePatterns: true });
+  expect(levelChanges(16, 17)).toEqual({ faster: false, morePatterns: true });
+  expect(levelChanges(17, 18)).toEqual({ faster: true, morePatterns: false });
+  expect(levelChanges(26, 27)).toEqual({ faster: true, morePatterns: false });
+  expect(levelChanges(27, 28)).toEqual({ faster: false, morePatterns: false });
 });

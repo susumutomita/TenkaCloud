@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
+import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
 import { collect, createGame, next, start, tickFrame } from "../../landing/cloud-master/engine.js";
 import { explanationCard } from "../../landing/cloud-master/explanation.js";
 import {
@@ -43,6 +44,7 @@ function perfectStep(s: ReturnType<typeof createGame>) {
 }
 function sampleFreshGame(seed: number) {
   const s = createGame(catalog, seed);
+  s.elapsed = ALL_RULES_AT;
   start(s);
   const seen = new Set<number>();
   let count = 0;
@@ -55,8 +57,8 @@ function sampleFreshGame(seed: number) {
 }
 function generatedCase(source: ReturnType<typeof availableScenarios>[number], danger: boolean) {
   const stream = createQuestionStream(catalog, 37);
-  stream.elapsed = 120000;
-  stream.scenarioTier = 5;
+  stream.elapsed = ALL_RULES_AT;
+  stream.scenarioTier = LESSONS.length;
   stream.scenarioBag = [source];
   stream.outcomes = [danger];
   return nextQuestion(stream);
@@ -87,6 +89,7 @@ function checkBucket(v: ReturnType<typeof explanationCard>) {
 describe("visible frame admission and resume ledger", () => {
   test("one delayed rendered frame admits at most one fresh card, with a future next cadence", () => {
     const s = createGame(catalog, 3);
+    s.elapsed = ALL_RULES_AT;
     s.outcomes = Array(100).fill(false);
     start(s);
     tickFrame(s, 1501);
@@ -104,10 +107,11 @@ describe("visible frame admission and resume ledger", () => {
   });
   test("existing physical deadlines and normal pass scoring survive long renderer gaps", () => {
     const s = createGame(catalog, 3);
+    s.elapsed = ALL_RULES_AT;
     s.outcomes = Array(100).fill(false);
     start(s);
     const first = s.active[0];
-    tickFrame(s, first.deadline + 500);
+    tickFrame(s, first.deadline - s.elapsed + 500);
     expect(s.history.filter((x) => x.uid === first.uid)).toHaveLength(1);
     expect(s.score).toBe(10);
     expect(s.active.some((x) => x.uid === first.uid)).toBe(false);
@@ -173,37 +177,30 @@ describe("visible frame admission and resume ledger", () => {
   });
 });
 describe("discrete stages and compact evidence explanations", () => {
-  test("every stage changes pressure; semantic pools grow through all253 authored families", () => {
+  test("each taught stage expands the pool while preserving the learning speed", () => {
     let size = 0;
     for (let i = 0; i < LEVEL_STAGES.length; i++) {
       const t = LEVEL_STAGES[i].at,
         d = difficulty(t);
       expect(d.level).toBe(i + 1);
-      if (i) {
-        expect(difficulty(t - 1).level).toBe(i);
-        expect(d.fallMs).toBeLessThan(difficulty(t - 1).fallMs);
-        expect(d.intervalMs).toBeLessThan(difficulty(t - 1).intervalMs);
-      }
-      if (i < 5) {
-        const pool = availableAtLevel(catalog, i + 1);
-        expect(pool.length).toBeGreaterThan(size);
-        size = pool.length;
-      }
+      if (i) expect(difficulty(t - 1).level).toBe(i);
+      expect(d.fallMs).toBe(16000);
+      const pool = availableAtLevel(catalog, i + 1);
+      expect(pool.length).toBeGreaterThan(size);
+      size = pool.length;
     }
-    expect(size).toBe(253);
-    expect(difficulty(210000).level).toBe(9);
+    expect(size).toBe(259);
   });
-  test("level transition preserves existing card birth/deadline and doesn't freeze active time", () => {
+  test("elapsed time alone cannot introduce an unseen rule or replace existing identities", () => {
     const s = createGame(catalog, 3);
-    s.elapsed = 19984;
     start(s);
     const before = identity(s);
     tickFrame(s, 32);
-    expect(s.elapsed).toBe(20016);
-    expect(difficulty(s.elapsed).level).toBe(2);
+    expect(s.elapsed).toBe(32);
+    expect(s.taughtLevel).toBe(1);
     expect(identity(s)).toEqual(before);
   });
-  test("all506 concise explanations preserve actual case and full official evidence", () => {
+  test("all518 concise explanations preserve actual case and full official evidence", () => {
     for (const source of availableScenarios(catalog))
       for (const danger of [false, true]) checkExplanation(generatedCase(source, danger), danger);
   });

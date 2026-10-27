@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
 import manifest from "../../landing/cloud-master/api-catalog-manifest.json";
+import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   collect,
   createGame,
@@ -25,14 +26,15 @@ import {
 import { buildShare } from "../../landing/cloud-master/share.js";
 
 const catalog = await loadCatalog();
-function playing(seed = 726) {
+function playing(seed = 726, advanced = false) {
   const state = createGame(catalog, seed);
+  if (advanced) state.elapsed = ALL_RULES_AT;
   start(state);
   return state;
 }
 function findOpening(danger, points = null) {
-  for (let seed = 0; seed < 50; seed++) {
-    const state = playing(seed);
+  for (let seed = 0; seed < 1000; seed++) {
+    const state = playing(seed, points === 10);
     if (
       state.active[0].question.danger === danger &&
       (points === null || state.active[0].question.points === points)
@@ -72,7 +74,7 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
   test("all authored cases have model-backed operations, visible payloads and reproducible balanced variants", () => {
     const a = createQuestionStream(catalog, 123),
       b = createQuestionStream(catalog, 123);
-    a.elapsed = b.elapsed = 120000;
+    a.elapsed = b.elapsed = ALL_RULES_AT;
     const kinds = new Set(),
       cases = new Set();
     let dangerous = 0;
@@ -91,9 +93,16 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
       expect(q.danger).toBe(violates(q.context));
       expect(q.points).toBe(q.danger ? Math.round(q.severity * 10) : 10);
       expect(new URL(q.source).hostname).toBe("docs.aws.amazon.com");
-      expect(["/guardduty/", "/IAM/", "/systems-manager/"]).toContain(
-        `/${new URL(q.source).pathname.split("/")[1]}/`,
-      );
+      expect([
+        "/guardduty/",
+        "/IAM/",
+        "/systems-manager/",
+        "/AWSEC2/",
+        "/AmazonRDS/",
+        "/elasticloadbalancing/",
+        "/cloudfront/",
+        "/waf/",
+      ]).toContain(`/${new URL(q.source).pathname.split("/")[1]}/`);
       kinds.add(q.scenarioId);
       cases.add(`${q.scenarioId}:${q.danger}`);
       dangerous += Number(q.danger);
@@ -104,7 +113,7 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
   });
   test("same API has opposite decisions based on actual security parameters", () => {
     const s = createQuestionStream(catalog, 15);
-    s.elapsed = 120000;
+    s.elapsed = ALL_RULES_AT;
     const rds = [];
     for (let i = 0; i < 6000; i++) {
       const q = nextQuestion(s);
@@ -131,20 +140,17 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
 });
 
 describe("levels, finite incoming stream and exact scoring", () => {
-  test("survival time advances discrete pressure levels, not score, without a3minute cutoff", () => {
-    expect([0, 19999, 20000, 180000, 360000].map(levelFor)).toEqual([1, 1, 2, 8, 14]);
-    let fall = Infinity,
-      interval = Infinity;
-    for (let elapsed = 0; elapsed <= 360000; elapsed += 1000) {
-      const d = difficulty(elapsed);
-      expect(d.fallMs).toBeLessThanOrEqual(fall);
-      expect(d.intervalMs).toBeLessThanOrEqual(interval);
-      expect(d.fallMs).toBeGreaterThanOrEqual(4200);
-      fall = d.fallMs;
-      interval = d.intervalMs;
+  test("nominal curriculum stages keep a steady reading pace before advanced pressure", () => {
+    expect(levelFor(0)).toBe(1);
+    expect(levelFor(39999)).toBe(1);
+    expect(levelFor(40000)).toBe(2);
+    expect(levelFor(ALL_RULES_AT)).toBe(LESSONS.length);
+    for (let level = 1; level <= LESSONS.length; level++) {
+      expect(difficulty(0, level).fallMs).toBe(16000);
+      expect(difficulty(0, level).intervalMs).toBe(1200);
     }
-    expect(difficulty(360000).fallMs).toBeLessThan(difficulty(180000).fallMs);
-    expect(difficulty(180000).level).toBeGreaterThan(5);
+    expect(difficulty(0, LESSONS.length + 1).fallMs).toBeLessThan(16000);
+    expect(difficulty(0, LESSONS.length + 100).fallMs).toBe(4200);
   });
   test("every semantic tier remains balanced and all deciding evidence stays visible", () => {
     for (const elapsed of [0, 30000, 90000]) {
@@ -258,7 +264,7 @@ describe("levels, finite incoming stream and exact scoring", () => {
     s.correct = 20;
     tick(s, 10000);
     expect(s.active.length).toBeLessThanOrEqual(2);
-    expect(difficulty(90000).intervalMs).toBeLessThan(difficulty(0).intervalMs);
+    expect(difficulty(ALL_RULES_AT + 30000).intervalMs).toBeLessThan(difficulty(0).intervalMs);
   });
 });
 

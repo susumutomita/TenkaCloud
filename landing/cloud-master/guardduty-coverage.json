@@ -9465,5 +9465,43 @@
   ],
   "implementedRuntimeCustomSignals": 7,
   "additionalRuntimeDocReviewedAt": "2026-10-26",
-  "decisionScope": "Every playable card judges its stated exercise policy, not the presence or absence of a GuardDuty finding. A normal policy contrast is not proof of safety. Public finding/signal IDs are references; private detector logic is not reproduced."
+  "decisionScope": "Every playable card judges its stated exercise policy, not the presence or absence of a GuardDuty finding. A normal policy contrast is not proof of safety. Public finding/signal IDs are references; private detector logic is not reproduced.",
+  "introductoryPolicyCases": [
+    {
+      "caseId": "EC2ApprovedStop",
+      "kind": "exercise_policy_not_guardduty_finding",
+      "source": "https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_StopInstances.html",
+      "assumptions": "EC2＝アプリの置き場 / 停止OK: i-trainingだけ"
+    },
+    {
+      "caseId": "RDSApprovedStop",
+      "kind": "exercise_policy_not_guardduty_finding",
+      "source": "https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_StopDBInstance.html",
+      "assumptions": "RDS＝データの保存先 / 停止OK: training-dbだけ"
+    },
+    {
+      "caseId": "ALBApprovedForwardTarget",
+      "kind": "exercise_policy_not_guardduty_finding",
+      "source": "https://docs.aws.amazon.com/elasticloadbalancing/latest/APIReference/API_ModifyListener.html",
+      "assumptions": "ALB＝要求をアプリへ振り分け / 転送先: app-prodだけ"
+    },
+    {
+      "caseId": "SecurityGroupAppSource",
+      "kind": "exercise_policy_not_guardduty_finding",
+      "source": "https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_AuthorizeSecurityGroupIngress.html",
+      "assumptions": "SG＝接続の門 / アプリへ接続OK: sg-albだけ"
+    },
+    {
+      "caseId": "CloudFrontApprovedOrigin",
+      "kind": "exercise_policy_not_guardduty_finding",
+      "source": "https://docs.aws.amazon.com/cloudfront/latest/APIReference/API_UpdateDistribution.html",
+      "assumptions": "CloudFront＝利用者へ配信 / 配信元: app-alb.tenka.example"
+    },
+    {
+      "caseId": "WAFEnforcedBlock",
+      "kind": "exercise_policy_not_guardduty_finding",
+      "source": "https://docs.aws.amazon.com/waf/latest/APIReference/API_UpdateWebACL.html",
+      "assumptions": "WAF＝入口の検査 / この本番ルールはBlockを維持"
+    }
+  ]
 }

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
+import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
 import { explanationCard } from "../../landing/cloud-master/explanation.js";
 import { API_COPY } from "../../landing/cloud-master/explanation-copy.js";
 import {
@@ -13,8 +14,8 @@ const officialDocsUrl = /^https:\/\/docs\.aws\.amazon\.com\//;
 function checkCase(s: ReturnType<typeof availableScenarios>[number], danger: boolean) {
   const stream = createQuestionStream(catalog, 37);
   Object.assign(stream, {
-    elapsed: 120000,
-    scenarioTier: 5,
+    elapsed: ALL_RULES_AT,
+    scenarioTier: LESSONS.length,
     scenarioBag: [s],
     outcomes: [danger],
   });
@@ -38,7 +39,7 @@ function checkCase(s: ReturnType<typeof availableScenarios>[number], danger: boo
     expect(v.reason).toContain("一覧を公開しない");
   }
 }
-test("all506 concise answers identify the actual predicate, source and case-specific reason", () => {
+test("all518 concise answers identify the actual predicate, source and case-specific reason", () => {
   for (const s of availableScenarios(catalog))
     for (const danger of [false, true]) checkCase(s, danger);
 });
@@ -48,8 +49,8 @@ test("titles explain the same operation for both outcomes without changing the c
     const results = [false, true].map((danger) => {
       const stream = createQuestionStream(catalog, 37);
       Object.assign(stream, {
-        elapsed: 120000,
-        scenarioTier: 5,
+        elapsed: ALL_RULES_AT,
+        scenarioTier: LESSONS.length,
         scenarioBag: [s],
         outcomes: [danger],
       });

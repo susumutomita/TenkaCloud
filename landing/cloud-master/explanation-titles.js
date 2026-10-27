@@ -1,4 +1,10 @@
 const API_TITLES = {
+  EC2ApprovedStop: "EC2を停止する対象の確認",
+  RDSApprovedStop: "RDSを停止する対象の確認",
+  ALBApprovedForwardTarget: "ALBの既定の転送先を確認",
+  SecurityGroupAppSource: "アプリ側SGで許可する接続元を確認",
+  CloudFrontApprovedOrigin: "CloudFrontの配信元を確認",
+  WAFEnforcedBlock: "WAFの執行ルールを確認",
   EC2PasswordDataRetrieved: "Windowsパスワード取得とSession Managerの比較",
   RDSMasterPasswordReset: "データベースの管理パスワードを変える操作",
   EC2TerminationProtectionEnabled: "サーバーの終了を防ぐ保護設定",
