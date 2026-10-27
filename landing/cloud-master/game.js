@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=09779a6597";
-import { lessonForLevel } from "./curriculum.js?v=09779a6597";
+import { loadCatalog } from "./api-catalog.js?v=d4e78492cd";
+import { lessonForLevel } from "./curriculum.js?v=d4e78492cd";
 import {
   collect,
   createGame,
@@ -11,17 +11,17 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=09779a6597";
-import { explanationCard } from "./explanation.js?v=09779a6597";
-import { decisionFact, reasonDuration } from "./feedback.js?v=09779a6597";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=09779a6597";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=09779a6597";
-import { flowPositions } from "./motion.js?v=09779a6597";
-import { lessonNotice, pressureNotice } from "./notices.js?v=09779a6597";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=09779a6597";
-import { availableAtLevel, difficulty } from "./recognition.js?v=09779a6597";
-import { buildShare } from "./share.js?v=09779a6597";
-import { formatSurvival } from "./time.js?v=09779a6597";
+} from "./engine.js?v=d4e78492cd";
+import { explanationCard } from "./explanation.js?v=d4e78492cd";
+import { decisionFact, reasonDuration } from "./feedback.js?v=d4e78492cd";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=d4e78492cd";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=d4e78492cd";
+import { flowPositions } from "./motion.js?v=d4e78492cd";
+import { lessonNotice, pressureNotice } from "./notices.js?v=d4e78492cd";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=d4e78492cd";
+import { availableAtLevel, difficulty } from "./recognition.js?v=d4e78492cd";
+import { buildShare } from "./share.js?v=d4e78492cd";
+import { formatSurvival } from "./time.js?v=d4e78492cd";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
