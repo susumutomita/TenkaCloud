@@ -1,5 +1,5 @@
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=e1dbc492b6";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=e1dbc492b6";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=b4e44e232c";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=b4e44e232c";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -14,10 +14,10 @@ export function shuffled(values, state) {
   return list;
 }
 export const LEVEL_STAGES = [
-  { at: 0, fallMs: 12000, intervalMs: 1200 },
-  { at: 20000, fallMs: 10500, intervalMs: 1000 },
-  { at: 40000, fallMs: 9000, intervalMs: 850 },
-  { at: 60000, fallMs: 7800, intervalMs: 700 },
+  { at: 0, fallMs: 16000, intervalMs: 1200 },
+  { at: 20000, fallMs: 13500, intervalMs: 1000 },
+  { at: 40000, fallMs: 11000, intervalMs: 850 },
+  { at: 60000, fallMs: 9000, intervalMs: 700 },
   { at: 90000, fallMs: 6800, intervalMs: 560 },
   { at: 120000, fallMs: 6000, intervalMs: 440 },
   { at: 150000, fallMs: 5400, intervalMs: 360 },
@@ -41,6 +41,13 @@ export function difficulty(elapsed = 0) {
   };
 }
 export const QUESTION_COOLDOWN_MS = 8000;
+export function levelChanges(previous, current) {
+  const at = (level) => LEVEL_STAGES[Math.min(level, 8) - 1].at + Math.max(0, level - 8) * 30000;
+  return {
+    faster: difficulty(at(current)).fallMs < difficulty(at(previous)).fallMs,
+    morePatterns: Math.min(current, 5) > Math.min(previous, 5),
+  };
+}
 export function violates(context) {
   if (context.kind === "evidence") {
     if (context.operator === "gt") {

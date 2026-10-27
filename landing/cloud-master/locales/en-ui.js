@@ -1,4 +1,8 @@
 export const EN_UI = {
+  レベルアップ: "LEVEL UP",
+  "スピードアップ · 新しい問題": "Faster · New patterns",
+  スピードアップ: "Faster cards",
+  最高スピードで継続: "Maximum pace continues",
   "{summary}。{detail}": "{summary}. {detail}",
   "0.0秒": "0.0s",
   "1〜6で検知 · Pで一時停止": "1–6 to flag · P to pause",

@@ -16,14 +16,14 @@ background pause. The survival display, result, best and share use tenths of a s
 Short score reactions use a clipped layer at the top of the playfield, below request text, so they cannot overlap HUD values or controls. Correct detection taps grow a visual-only combo. Passive normal passage still scores10 but does not grow combo. Mistakes reset it; no multiplier/speed bonus. Correct taps show a brief deflection, confirmation and actual-value reason without stopping play (except the specified120ms10-point hitstop). The latest short reason appears for2seconds in Japanese (2–3seconds for longer English text) at the bottom, behind the request layer, without taking field space. The actual value has its own wrapping element; only the field label can be elided. Account-root ARNs show their exact12-digit account, and AWS-managed policy ARNs show the policy name; full original values stay in explanation/review. Full explanation and official links remain in review. API-case summaries are authored separately for benign and dangerous values; predicate labels distinguish request inputs from attached change-ticket/hash evidence.
 Movement over10px or pointer cancellation cancels the tap; it never flags/allows via a swipe. Enter/Space and1–6 are equivalent accessible detection controls; P/Escape pauses. Reduced motion keeps textual confirmation without deflection.
 
-Initial fall12s. Visible capacity paces admissions evenly instead of filling the field and waiting for expiry. Actual interval is the larger of the stage minimum and fall time divided by capacity:390×844 uses4slots/3s initially,375×667 uses3/4s,320×568 uses2/6s, and desktop6/2s. Existing cards keep their deadlines. Discrete active-time levels apply to NEW cards; existing cards retain their birth/deadline. The compact survival caption shows level and a nonblocking1.2-second LEVEL UP accent. No transition pauses, input lock or card reset.
+Initial fall16s. Visible capacity paces admissions evenly instead of filling the field and waiting for expiry. Actual interval is the larger of the stage minimum and fall time divided by capacity:390×844 uses4slots/4s initially,375×667 uses3/about5.33s,320×568 uses2/8s, and desktop6/about2.67s. An opening correct detection that empties the field brings the next arrival forward to at most1.2active seconds, never instant refill; later cadence is unchanged. Existing cards keep their deadlines. Discrete active-time levels apply to NEW cards; existing cards retain their birth/deadline. The compact survival caption shows level and a nonblocking2.2-second LEVEL UP cue in an available lane gap plus a field-rim accent. The cue distinguishes speed with new patterns (levels2–5), speed alone, and the eventual speed floor; it never covers cards or correct-hit reasons. No transition pauses, input lock or card reset.
 
 | Active time | Level | New-card fall | Minimum interval | Pool |
 | --- | --- | --- | --- | --- |
-|0s|1|12s|1.2s|Seven clear parameter cases|
-|20s|2|10.5s|1s|More direct SDK parameter cases|
-|40s|3|9s|850ms|Identity/context and CloudTrail/S3 observations|
-|60s|4|7.8s|700ms|DNS/network evidence joins|
+|0s|1|16s|1.2s|Seven clear parameter cases|
+|20s|2|13.5s|1s|More direct SDK parameter cases|
+|40s|3|11s|850ms|Identity/context and CloudTrail/S3 observations|
+|60s|4|9s|700ms|DNS/network evidence joins|
 |90s|5|6.8s|560ms|All253 authored families|
 |120s|6|6s|440ms|All families, bounded subtle numeric contrasts|
 |150s|7|5.4s|360ms|All families|
