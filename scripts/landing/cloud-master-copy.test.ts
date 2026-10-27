@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
 import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
+import { EVIDENCE_SCENARIOS } from "../../landing/cloud-master/evidence-scenarios.js";
 import { explanationCard } from "../../landing/cloud-master/explanation.js";
 import { API_COPY } from "../../landing/cloud-master/explanation-copy.js";
+import coverage from "../../landing/cloud-master/guardduty-coverage.json";
+import { EN_SCENARIOS } from "../../landing/cloud-master/locales/en-scenarios.js";
 import {
   availableScenarios,
   createQuestionStream,
@@ -76,4 +79,42 @@ test("official documentation URLs require the exact AWS documentation hostname",
     "https://docs.aws.amazon.com.example/reference",
   ])
     expect(url).not.toMatch(officialDocsUrl);
+});
+
+test("practice activity log wording matches both outcomes and published examples", () => {
+  const ids = [
+    "CredentialAccess:IAMUser/AnomalousBehavior",
+    "DefenseEvasion:IAMUser/AnomalousBehavior",
+    "Discovery:IAMUser/AnomalousBehavior",
+    "Impact:IAMUser/AnomalousBehavior",
+    "InitialAccess:IAMUser/AnomalousBehavior",
+    "Persistence:IAMUser/AnomalousBehavior",
+    "PrivilegeEscalation:IAMUser/AnomalousBehavior",
+  ];
+  for (const id of ids) {
+    const source = EVIDENCE_SCENARIOS.find((s) => s.id === id);
+    expect(source.title).toEndWith(" · 操作ログ");
+    expect(EN_SCENARIOS[id].title).toEndWith(" · Activity log");
+    expect(EN_SCENARIOS[id].extra).toEqual([
+      ["Record", "Practice activity log / Compare with the plan"],
+    ]);
+    const examples = coverage.active.find((s) => s.findingType === id).educationalEvidence;
+    for (const danger of [false, true]) {
+      const stream = createQuestionStream(catalog, 37);
+      Object.assign(stream, {
+        elapsed: ALL_RULES_AT,
+        scenarioTier: LESSONS.length,
+        scenarioBag: [source],
+        outcomes: [danger],
+      });
+      const q = nextQuestion(stream);
+      expect(q.danger).toBe(danger);
+      expect(q.payload).toContain("練習用の操作ログ / 予定と比較");
+      expect(q.payload).not.toContain("合成窓");
+      expect(danger ? examples.flaggedExample : examples.normalExample).toBe(q.payload);
+    }
+  }
+  const sharing = EVIDENCE_SCENARIOS.find((s) => s.id === "Exfiltration:IAMUser/AnomalousBehavior");
+  expect(sharing.title).toEndWith(" · 操作ログ");
+  expect(sharing.extra[0][1]).toContain("作成＋共有設定差分");
 });

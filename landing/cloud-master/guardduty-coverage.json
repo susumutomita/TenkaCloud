@@ -59,8 +59,8 @@
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=CredentialAccess%3AIAMUser%2FAnomalousBehavior",
         "assumptions": "役割: web-ops / 通常・今回の予定: cache-session",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "SecretId: payroll-master\n記録: CloudTrail合成窓 / 変更予定あり",
-        "normalExample": "SecretId: cache-session\n記録: CloudTrail合成窓 / 変更予定あり"
+        "flaggedExample": "SecretId: payroll-master\n記録: 練習用の操作ログ / 予定と比較",
+        "normalExample": "SecretId: cache-session\n記録: 練習用の操作ログ / 予定と比較"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -99,8 +99,8 @@
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=DefenseEvasion%3AIAMUser%2FAnomalousBehavior",
         "assumptions": "役割: web-ops / 通常・今回の予定: retired-detector",
         "exactAWSRuleReproduced": false,
-        "normalExample": "DetectorId: retired-detector\n記録: CloudTrail合成窓 / 変更予定あり",
-        "flaggedExample": "DetectorId: production-detector\n記録: CloudTrail合成窓 / 変更予定あり"
+        "normalExample": "DetectorId: retired-detector\n記録: 練習用の操作ログ / 予定と比較",
+        "flaggedExample": "DetectorId: production-detector\n記録: 練習用の操作ログ / 予定と比較"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -179,8 +179,8 @@
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=Discovery%3AIAMUser%2FAnomalousBehavior",
         "assumptions": "役割: web-ops / 通常・今回の予定: タグApp=web",
         "exactAWSRuleReproduced": false,
-        "normalExample": "照会範囲: タグApp=web\n記録: CloudTrail合成窓 / 変更予定あり",
-        "flaggedExample": "照会範囲: 全アカウント・全リージョン\n記録: CloudTrail合成窓 / 変更予定あり"
+        "normalExample": "照会範囲: タグApp=web\n記録: 練習用の操作ログ / 予定と比較",
+        "flaggedExample": "照会範囲: 全アカウント・全リージョン\n記録: 練習用の操作ログ / 予定と比較"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -259,8 +259,8 @@
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=Impact%3AIAMUser%2FAnomalousBehavior",
         "assumptions": "役割: web-ops / 通常・今回の予定: i-retired",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "InstanceId: i-payment\n記録: CloudTrail合成窓 / 変更予定あり",
-        "normalExample": "InstanceId: i-retired\n記録: CloudTrail合成窓 / 変更予定あり"
+        "flaggedExample": "InstanceId: i-payment\n記録: 練習用の操作ログ / 予定と比較",
+        "normalExample": "InstanceId: i-retired\n記録: 練習用の操作ログ / 予定と比較"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -299,8 +299,8 @@
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=InitialAccess%3AIAMUser%2FAnomalousBehavior",
         "assumptions": "役割: web-ops / 通常・今回の予定: 登録済み管理端末",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "端末: 未登録端末・新地域\n記録: CloudTrail合成窓 / 変更予定あり",
-        "normalExample": "端末: 登録済み管理端末\n記録: CloudTrail合成窓 / 変更予定あり"
+        "flaggedExample": "端末: 未登録端末・新地域\n記録: 練習用の操作ログ / 予定と比較",
+        "normalExample": "端末: 登録済み管理端末\n記録: 練習用の操作ログ / 予定と比較"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -459,8 +459,8 @@
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=Persistence%3AIAMUser%2FAnomalousBehavior",
         "assumptions": "役割: web-ops / 通常・今回の予定: approved-support",
         "exactAWSRuleReproduced": false,
-        "normalExample": "UserName: approved-support\n記録: CloudTrail合成窓 / 変更予定あり",
-        "flaggedExample": "UserName: unknown-maintainer\n記録: CloudTrail合成窓 / 変更予定あり"
+        "normalExample": "UserName: approved-support\n記録: 練習用の操作ログ / 予定と比較",
+        "flaggedExample": "UserName: unknown-maintainer\n記録: 練習用の操作ログ / 予定と比較"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -745,8 +745,8 @@
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=PrivilegeEscalation%3AIAMUser%2FAnomalousBehavior",
         "assumptions": "役割: audit-role / 通常・今回の予定: ReadOnlyAccess",
         "exactAWSRuleReproduced": false,
-        "normalExample": "PolicyArn末尾: ReadOnlyAccess\n記録: CloudTrail合成窓 / 変更予定あり",
-        "flaggedExample": "PolicyArn末尾: AdministratorAccess\n記録: CloudTrail合成窓 / 変更予定あり"
+        "normalExample": "PolicyArn末尾: ReadOnlyAccess\n記録: 練習用の操作ログ / 予定と比較",
+        "flaggedExample": "PolicyArn末尾: AdministratorAccess\n記録: 練習用の操作ログ / 予定と比較"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
