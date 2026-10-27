@@ -14,12 +14,12 @@ the Continue button resumes. The final mistake explains before results. Simultan
 receive120ms hitstop. Survival time freezes in hitstop, explanations, explicit and
 background pause. The survival display, result, best and share use tenths of a second; HUD text changes only when its value changes.
 
-Correct detection taps grow a visual-only combo. Passive normal passage still scores10 but does not grow combo. Mistakes reset it; no multiplier/speed bonus. Correct taps show a brief deflection, confirmation and actual-value reason without stopping play (except the specified120ms10-point hitstop). The short reason appears transiently at the bottom, behind the request layer, without taking field space. Full explanation and official links remain in review. API-case summaries are authored separately for benign and dangerous values; predicate labels distinguish request inputs from attached change-ticket/hash evidence.
+Short score reactions use a clipped layer at the top of the playfield, below request text, so they cannot overlap HUD values or controls. Correct detection taps grow a visual-only combo. Passive normal passage still scores10 but does not grow combo. Mistakes reset it; no multiplier/speed bonus. Correct taps show a brief deflection, confirmation and actual-value reason without stopping play (except the specified120ms10-point hitstop). The latest short reason appears for2seconds at the bottom, behind the request layer, without taking field space. The actual value has its own wrapping element; only the field label can be elided. Account-root ARNs show their exact12-digit account, and AWS-managed policy ARNs show the policy name; full original values stay in explanation/review. Full explanation and official links remain in review. API-case summaries are authored separately for benign and dangerous values; predicate labels distinguish request inputs from attached change-ticket/hash evidence.
 Movement over10px or pointer cancellation cancels the tap; it never flags/allows via a swipe. Enter/Space and1–6 are equivalent accessible detection controls; P/Escape pauses. Reduced motion keeps textual confirmation without deflection.
 
-Initial arrivals1.2s/fall12s. Discrete active-time levels apply to NEW cards; existing cards retain their birth/deadline. The compact survival caption shows level and a nonblocking1.2-second LEVEL UP accent. No transition pauses, input lock or card reset.
+Initial fall12s. Visible capacity paces admissions evenly instead of filling the field and waiting for expiry. Actual interval is the larger of the stage minimum and fall time divided by capacity:390×844 uses5slots/2.4s initially,375×667 uses4/3s, and desktop6/2s. Existing cards keep their deadlines. Discrete active-time levels apply to NEW cards; existing cards retain their birth/deadline. The compact survival caption shows level and a nonblocking1.2-second LEVEL UP accent. No transition pauses, input lock or card reset.
 
-| Active time | Level | New-card fall | Arrival interval | Pool |
+| Active time | Level | New-card fall | Minimum interval | Pool |
 | --- | --- | --- | --- | --- |
 |0s|1|12s|1.2s|Seven clear parameter cases|
 |20s|2|10.5s|1s|More direct SDK parameter cases|
@@ -47,8 +47,7 @@ posting remains theirs, with copy/selectable-text fallback.
 Active play hides the title, introduction, prose/footer and unused controls. HUD56px;
 remaining safe viewport belongs to the field. Portrait uses one column of wide
 strips, tall desktop two columns. Payload13px and context11px; no decorative nested
-payload boxes. Tall phones show four readable cards, short320×568 shows three,
-desktop up to six. Max measured case heights and geometry are checked across every
+payload boxes. Capacity uses a132px card budget (148px at widths≤350px, including keyboard cues) and16px gaps, capped at six:390×844 fits five,375×667 four,320×568 three, desktop up to six. Max measured case heights and geometry are checked across every
 normal/flag variant. Resizing preserves live objects, time and lives; orientation
 pauses/remaps if needed. A field too small for retained cards waits for readable
 space instead of silently removing objects or forcing loss of progress.

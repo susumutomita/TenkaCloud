@@ -199,12 +199,14 @@ a:hover {
     0 1px 2px #3950640d;
   will-change: top;
 }
-.request:hover:not(:disabled),
 .request:focus-visible {
   border-color: #7eadea;
   box-shadow:
     0 0 0 2px #c8e0ff,
     0 10px 23px #6887a120;
+}
+@media (hover:hover) and (pointer:fine) {
+  .request:hover:not(:disabled) {border-color:#7eadea;box-shadow:0 0 0 2px #c8e0ff,0 10px 23px #6887a120;}
 }
 .request.preview {
   cursor: default;
@@ -1397,3 +1399,19 @@ body.active-game #hit-reason { position:absolute; z-index:1; left:12px;right:12p
 
 .miss-details {margin:16px 0;padding-top:12px;border-top:1px solid #dce5ed;color:#53677b;}
 .miss-details p {font-size:12px!important;line-height:1.65!important;}
+
+/* Keep the actual decision value legible; only the field label may be elided. */
+#hit-fact {display:flex;align-items:baseline;gap:8px;}
+#hit-label {flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font:400 11px/1.4 system-ui,sans-serif;}
+#hit-value {flex:0 1 auto;max-width:85%;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;}
+body.active-game .hud #pause {flex:0 0 44px;width:44px;height:44px;}
+body.active-game .hud {gap:10px;padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right));}
+body.active-game .hud #level-caption,body.active-game .hud #level {font-size:10px;line-height:12px;}
+body.active-game .hud .points {grid-template-rows:12px 22px;row-gap:0;}
+body.active-game .hud .points>small:first-child,body.active-game #combo {font-size:10px;line-height:12px;letter-spacing:0;}
+body.active-game .hud .life strong {font-size:21px;letter-spacing:4px;}
+.start-rules {font-size:16px;}
+
+/* Short score reactions never cover the HUD or incoming request text. */
+.field > .effects {z-index:1;overflow:hidden;display:flex;align-items:flex-start;justify-content:flex-end;box-sizing:border-box;padding:20px 12px 0;}
+.field > .effects .impact {font-size:18px;background:#f2f7ff;padding:1px 4px;border-radius:4px;}

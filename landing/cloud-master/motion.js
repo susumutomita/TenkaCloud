@@ -1,3 +1,5 @@
+import { CARD_GAP } from "./layout.js";
+
 // New arrivals queue behind older cards without moving those cards.
 // After a removal, ease toward the independent trajectory while respecting expiry.
 function independentY(item, old, elapsed, fieldHeight) {
@@ -18,8 +20,8 @@ export function flowPositions(items, previous, elapsed, fieldHeight, columns, st
     let leader = null;
     for (const item of ordered) {
       let y = independentY(item, previous.get(String(item.uid)), elapsed, fieldHeight);
-      if (stationary) y = leader ? leader.y + leader.height + 12 : 8;
-      else if (leader) y = Math.min(y, leader.y - item.height - 12);
+      if (stationary) y = leader ? leader.y + leader.height + CARD_GAP : 8;
+      else if (leader) y = Math.min(y, leader.y - item.height - CARD_GAP);
       previous.set(String(item.uid), { y, elapsed });
       const entry = { ...item, y };
       result.push(entry);

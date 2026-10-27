@@ -11,6 +11,8 @@ import {
   tickFrame as tick,
 } from "./engine.js";
 import { explanationCard } from "./explanation.js";
+import { decisionFact, REASON_DURATION_MS } from "./feedback.js";
+import { CARD_GAP, fieldCapacity } from "./layout.js";
 import { flowPositions } from "./motion.js";
 import { difficulty } from "./recognition.js";
 import { buildShare } from "./share.js";
@@ -64,7 +66,7 @@ function button(text, handler, primary = true) {
   return b;
 }
 function layoutCapacity() {
-  return innerWidth <= 740 ? ($("cards").clientHeight >= 620 ? 4 : 3) : 6;
+  return fieldCapacity($("cards").clientHeight, innerWidth <= 740 ? 1 : 2, innerWidth);
 }
 function currentLayout() {
   return `${innerWidth <= 740 ? 1 : 2}:${layoutCapacity()}`;
@@ -91,7 +93,15 @@ function prepare(seed = newSeed(), begin = false) {
   $("effects").replaceChildren();
   $("review").hidden = true;
   $("about").open = false;
-  if (begin) start(state);
+  if (begin) beginRound();
+  else render();
+}
+function beginRound() {
+  document.body.classList.add("active-game");
+  state.maxCards = layoutCapacity();
+  layoutKey = currentLayout();
+  start(state);
+  lastTime = null;
   render();
 }
 function makeCard(item, previewing) {
@@ -490,9 +500,7 @@ function phaseContent() {
   if (state.phase === "ready")
     $("controls").append(
       button("はじめる", () => {
-        start(state);
-        lastTime = null;
-        render();
+        beginRound();
       }),
     );
   if (state.phase === "playing") {
@@ -552,15 +560,17 @@ function renderFeedback() {
     }
     if (entry.kind === "flag" && entry.correct) {
       const v = explanationCard(entry.question);
-      lastReason = { copy: v.successReason, fact: `${v.field}: ${v.actual}` };
-      reasonUntil = performance.now() + 1400;
-      announce(`${lastReason.copy}。${lastReason.fact}`);
+      lastReason = { copy: v.successReason, ...decisionFact(entry.question) };
+      reasonUntil = performance.now() + REASON_DURATION_MS;
+      announce(`${lastReason.copy}。${lastReason.label}: ${lastReason.value}`);
     }
   }
   const show =
     lastReason && performance.now() < reasonUntil && ["playing", "hitstop"].includes(state.phase);
   text("hit-copy", show ? lastReason.copy : "");
-  text("hit-value", show ? lastReason.fact : "");
+  text("hit-label", show ? lastReason.label : "");
+  text("hit-value", show ? lastReason.value : "");
+  attribute($("hit-value"), "title", show ? lastReason.fullValue : "");
   $("hit-reason").hidden = !show;
   seen = state.history.length;
 }
@@ -623,12 +633,12 @@ function render() {
   if ($("pause").parentElement !== pauseHost) pauseHost.append($("pause"));
   text("start-best", bestMs > 0 ? `自己ベスト ${duration(bestMs)}` : "");
   text("score", String(state.score));
-  text("combo", state.combo >= 2 ? `${state.combo} COMBO` : "");
+  text("combo", state.combo >= 2 ? `${state.combo}連続` : "");
   cancelInactiveInput();
   text("survival", duration(state.elapsed));
   text("personal-best", `BEST ${duration(Math.max(bestMs, state.elapsed))}`);
   renderLevel();
-  text("lives", `${"♥ ".repeat(state.lives)}${"♡ ".repeat(3 - state.lives)}`);
+  text("lives", `${"♥".repeat(state.lives)}${"♡".repeat(3 - state.lives)}`);
   attribute($("lives"), "aria-label", `残りライフ${state.lives}`);
   const pauseDisabled = !["playing", "hitstop", "feedback", "paused"].includes(state.phase);
   if ($("pause").disabled !== pauseDisabled) $("pause").disabled = pauseDisabled;
@@ -712,7 +722,7 @@ function fitsLayout(columns, remap) {
   });
   return heights.every(
     (list) =>
-      list.reduce((n, h) => n + h, 0) + Math.max(0, list.length - 1) * 12 <=
+      list.reduce((n, h) => n + h, 0) + Math.max(0, list.length - 1) * CARD_GAP <=
       $("cards").clientHeight - 16,
   );
 }

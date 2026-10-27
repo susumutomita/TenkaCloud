@@ -43,10 +43,16 @@ function spawn(state) {
     question,
   });
 }
+export function arrivalInterval(state) {
+  const config = difficulty(state.elapsed);
+  if (state.maxCards === undefined) return config.intervalMs;
+  const capacity = Math.max(1, Math.min(config.limit, state.maxCards));
+  return Math.max(config.intervalMs, Math.ceil(config.fallMs / capacity));
+}
 export function start(state) {
   if (state.phase !== "ready") return;
   state.phase = "playing";
-  state.nextSpawnAt = state.elapsed + difficulty(state.elapsed).intervalMs;
+  state.nextSpawnAt = state.elapsed + arrivalInterval(state);
   spawn(state);
 }
 function remove(state, item) {
@@ -150,11 +156,11 @@ export function tickFrame(state, milliseconds) {
 function admit(state) {
   const config = difficulty(state.elapsed);
   if (state.active.length < Math.min(config.limit, state.maxCards ?? 6)) spawn(state);
-  return config.intervalMs;
+  return arrivalInterval(state);
 }
 function scheduleBoundary(state, deferNew) {
   if (!deferNew) admit(state);
-  state.nextSpawnAt = state.elapsed + difficulty(state.elapsed).intervalMs;
+  state.nextSpawnAt = state.elapsed + arrivalInterval(state);
   return deferNew;
 }
 function advanceWorld(state, target, deferNew) {
