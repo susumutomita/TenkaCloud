@@ -1,4 +1,4 @@
-import { loadCatalog } from "./api-catalog.js?v=b4e44e232c";
+import { loadCatalog } from "./api-catalog.js?v=b49c5b2f64";
 import {
   collect,
   createGame,
@@ -9,16 +9,16 @@ import {
   resume,
   start,
   tickFrame as tick,
-} from "./engine.js?v=b4e44e232c";
-import { explanationCard } from "./explanation.js?v=b4e44e232c";
-import { decisionFact, reasonDuration } from "./feedback.js?v=b4e44e232c";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=b4e44e232c";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=b4e44e232c";
-import { flowPositions } from "./motion.js?v=b4e44e232c";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=b4e44e232c";
-import { difficulty, levelChanges } from "./recognition.js?v=b4e44e232c";
-import { buildShare } from "./share.js?v=b4e44e232c";
-import { formatSurvival } from "./time.js?v=b4e44e232c";
+} from "./engine.js?v=b49c5b2f64";
+import { explanationCard } from "./explanation.js?v=b49c5b2f64";
+import { decisionFact, reasonDuration } from "./feedback.js?v=b49c5b2f64";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=b49c5b2f64";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=b49c5b2f64";
+import { flowPositions } from "./motion.js?v=b49c5b2f64";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=b49c5b2f64";
+import { difficulty, levelChanges } from "./recognition.js?v=b49c5b2f64";
+import { buildShare } from "./share.js?v=b49c5b2f64";
+import { formatSurvival } from "./time.js?v=b49c5b2f64";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -373,7 +373,7 @@ function officialLink(question) {
   a.href = question.source;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
-  a.textContent = tr("この判定の公式説明 ↗");
+  a.textContent = tr("参考となるAWS公式資料 ↗");
   a.addEventListener("click", () => {
     if (["playing", "hitstop"].includes(state.phase)) {
       updateNow();
@@ -473,7 +473,7 @@ function review() {
     source.href = e.question.source;
     source.target = "_blank";
     source.rel = "noopener noreferrer";
-    source.textContent = tr("GuardDutyの公開説明 ↗");
+    source.textContent = tr("参考となるAWS公式資料 ↗");
     article.append(h, context, wire, why, source);
     root.append(article);
   }

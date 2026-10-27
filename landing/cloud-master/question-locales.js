@@ -1,5 +1,5 @@
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=b4e44e232c";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=b4e44e232c";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=b49c5b2f64";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=b49c5b2f64";
 
 const SOURCE = new Map([...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => [s.id, s]));
 const JAPANESE = /[\u3040-\u30ff\u3400-\u9fff]/u;
@@ -39,7 +39,7 @@ export function validateEnglishCatalog(data) {
 }
 export async function loadQuestionLocale(locale) {
   if (locale !== "en" || english) return;
-  loading ??= import("./locales/en-scenarios.js?v=b4e44e232c")
+  loading ??= import("./locales/en-scenarios.js?v=b49c5b2f64")
     .then((module) => {
       validateEnglishCatalog(module.EN_SCENARIOS);
       english = module.EN_SCENARIOS;
@@ -95,7 +95,6 @@ function englishPolicy(q, source, en) {
   return policy;
 }
 function apiPayload(q, field, actual) {
-  if (q.scenarioId === "EC2SecurityGroupPublicSSH") return `TCP 22 / CidrIp: ${actual}`;
   if (q.scenarioId === "RDSMasterPasswordReset")
     return `MasterUserPassword: [REDACTED]\nChange ticket: ${actual}`;
   if (q.scenarioId === "SageMakerLifecycleConfigModified")
@@ -114,7 +113,7 @@ function fullReason(q, view, en, map) {
     criterion = `Scenario limit: ${view.field}: ${q.context.threshold}.`;
   else
     criterion = `Review condition: ${view.field}: ${text(display(q.context.threshold, map))}. Normal example: ${view.expected}.`;
-  return `${q.danger ? "Flag this observation." : "Let this observation pass."} Observed: ${view.field}: ${view.actual}. ${criterion} ${q.danger ? en.why : view.reason} Values and thresholds are exercise assumptions, not AWS's private detection logic or proof that a request succeeded.`;
+  return `${q.danger ? "Flag this observation." : "Let this observation pass."} Observed: ${view.field}: ${view.actual}. ${criterion} ${q.danger ? en.why : view.reason} This judges the stated exercise policy, not whether GuardDuty creates a finding. Passing is not proof of safety. Values and thresholds are exercise assumptions, not AWS's private detection logic or proof that a request succeeded.`;
 }
 function expectedValue(q, map) {
   if (q.context.kind !== "evidence") return text(display(q.context.allowed, map));

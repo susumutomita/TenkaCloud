@@ -1,4 +1,4 @@
-import { createQuestionStream, difficulty, nextQuestion } from "./recognition.js?v=b4e44e232c";
+import { createQuestionStream, difficulty, nextQuestion } from "./recognition.js?v=b49c5b2f64";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 120;
 export const REVIEW_DECISION_MS = 1500;

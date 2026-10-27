@@ -90,7 +90,10 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
       expect(q.context.policy.length).toBeGreaterThan(12);
       expect(q.danger).toBe(violates(q.context));
       expect(q.points).toBe(q.danger ? Math.round(q.severity * 10) : 10);
-      expect(q.source).toStartWith("https://docs.aws.amazon.com/guardduty/");
+      expect(new URL(q.source).hostname).toBe("docs.aws.amazon.com");
+      expect(["/guardduty/", "/IAM/", "/systems-manager/"]).toContain(
+        `/${new URL(q.source).pathname.split("/")[1]}/`,
+      );
       kinds.add(q.scenarioId);
       cases.add(`${q.scenarioId}:${q.danger}`);
       dangerous += Number(q.danger);
