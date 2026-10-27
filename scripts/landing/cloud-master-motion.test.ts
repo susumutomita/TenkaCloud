@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
 import { ALL_RULES_AT } from "../../landing/cloud-master/curriculum.js";
-import { createGame, start, tick } from "../../landing/cloud-master/engine.js";
+import {
+  createGame,
+  next,
+  pause,
+  resume,
+  showLesson,
+  start,
+  tick,
+  tickFrame,
+} from "../../landing/cloud-master/engine.js";
 import { flowPositions } from "../../landing/cloud-master/motion.js";
 import { buildShare } from "../../landing/cloud-master/share.js";
 import { formatSurvival } from "../../landing/cloud-master/time.js";
@@ -69,6 +78,65 @@ describe("independent falling trajectories", () => {
     expect(passes).toBeGreaterThan(10);
     expect(s.score).toBe(passes * 10);
     expect(new Set(s.history.map((x) => x.uid)).size).toBe(passes);
+  });
+  test("teaching protection keeps the card above the boundary until its scoring deadline", () => {
+    const s = createGame(catalog, 0);
+    s.maxCards = 1;
+    start(s);
+    const first = s.active[0];
+    expect(first.question.danger).toBe(false);
+    const cache = new Map();
+    let lastY = 0;
+    for (let i = 0; i < 1200 && s.active.some((x) => x.uid === first.uid); i++) {
+      if (s.lessonNotice) showLesson(s);
+      tickFrame(s, 16);
+      if (s.active.some((x) => x.uid === first.uid)) {
+        const row = flowPositions([{ ...first, height: 130 }], cache, s.elapsed, 476, 1)[0];
+        expect(row.y).toBeGreaterThanOrEqual(lastY);
+        expect(row.y + 130).toBeLessThan(476);
+        lastY = row.y;
+      }
+      if (i === 820) {
+        const before = { elapsed: s.elapsed, deadline: first.decisionDeadline };
+        pause(s);
+        tickFrame(s, 30000);
+        resume(s);
+        expect(s.elapsed).toBe(before.elapsed);
+        expect(first.decisionDeadline).toBe(before.deadline);
+      }
+    }
+    expect(first.decisionDeadline).toBeCloseTo(first.deadline + 4000, 5);
+    expect(s.history.filter((h) => h.uid === first.uid)).toHaveLength(1);
+    expect(s.score).toBe(10);
+    tickFrame(s, 100);
+    expect(s.history.filter((h) => h.uid === first.uid)).toHaveLength(1);
+  });
+  test("a missed card is removed once and never restored by continue", () => {
+    const s = createGame(catalog, 1);
+    s.maxCards = 1;
+    start(s);
+    const uid = s.active[0].uid;
+    for (let i = 0; i < 1300 && s.phase !== "feedback"; i++) {
+      if (s.lessonNotice) showLesson(s);
+      tickFrame(s, 16);
+    }
+    expect(s.phase).toBe("feedback");
+    expect(s.lives).toBe(2);
+    expect(s.active.some((x) => x.uid === uid)).toBe(false);
+    next(s);
+    tickFrame(s, 850);
+    expect(s.active.some((x) => x.uid === uid)).toBe(false);
+    expect(s.history.filter((h) => h.uid === uid && h.kind === "miss")).toHaveLength(1);
+    expect(s.lives).toBe(2);
+  });
+  test("resizing the field or translated card reprojects into the new visible range", () => {
+    const cache = new Map(),
+      a = card(0, 0, 130);
+    flowPositions([a], cache, 10000, 752, 1);
+    const small = flowPositions([a], cache, 10016, 476, 1)[0];
+    expect(small.y + a.height).toBeLessThan(476);
+    const taller = flowPositions([{ ...a, height: 170 }], cache, 10032, 476, 1)[0];
+    expect(taller.y + 170).toBeLessThan(476);
   });
   test("reduced motion lays out unequal heights without overlap", () => {
     const rows = flowPositions(

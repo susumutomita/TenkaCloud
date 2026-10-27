@@ -1,4 +1,6 @@
 export const EN_UI = {
+  "落下が速く、危険の見分け方も少しずつ巧妙に。":
+    "Faster falls; threats become subtler as you survive.",
   "参考となるAWS公式資料 ↗": "AWS reference for this exercise ↗",
   レベルアップ: "LEVEL UP",
   "スピードアップ · 新しい問題": "Faster · New patterns",

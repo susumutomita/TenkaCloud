@@ -308,7 +308,7 @@ a:hover {
     monospace;
   text-shadow: 0 2px 0 #fff;
   white-space: nowrap;
-  animation: impact 0.22s ease-out forwards;
+  animation: impact 0.9s ease-out forwards;
 }
 .impact small {
   display: block;
@@ -519,8 +519,12 @@ details p {
     opacity: 1;
     transform: scale(0.95);
   }
-  40% {
+  15% {
     transform: scale(1.04);
+  }
+  75% {
+    opacity: 1;
+    transform: scale(1);
   }
   100% {
     opacity: 0;
@@ -1428,16 +1432,11 @@ html[lang="en"] .start-action {font-size:clamp(19px,4.6vw,24px);}
 
 #pause svg {display:block;margin:auto;}
 
-/* Level feedback uses an empty lane gap; requests retain the top visual/input layer. */
-.level-transition {position:absolute;z-index:1;height:80px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;pointer-events:none;color:#145a86;background:#e1f2ff;border:1px solid #90b9d6;border-radius:14px;animation:level-arrive 160ms ease-out;}
+/* Centered, translucent notices leave the underlying requests tappable. */
+.level-transition {position:absolute;z-index:5;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100% - 24px));box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 16px;pointer-events:none;color:#123b58;background:rgba(240,248,255,.9);border-radius:12px;box-shadow:0 2px 14px #173d5a22;text-align:center;animation:level-arrive 160ms ease-out;}
 .level-transition[hidden] {display:none;}
-.level-transition strong {font:800 clamp(21px,4.7vw,28px)/1.15 system-ui,sans-serif;letter-spacing:-.03em;white-space:nowrap;}
-.level-transition span {font:600 14px/1.4 system-ui,sans-serif;}
+.level-transition strong {font:800 clamp(18px,4.7vw,24px)/1.25 system-ui,sans-serif;letter-spacing:-.02em;overflow-wrap:anywhere;}
+.level-transition span {font:600 14px/1.4 system-ui,sans-serif;overflow-wrap:anywhere;}
 .field.level-up-active::after {content:"";position:absolute;inset:2px;border:3px solid #629ec5;border-radius:inherit;pointer-events:none;z-index:1;}
 @keyframes level-arrive {from {opacity:0;}to {opacity:1;}}
 @media(prefers-reduced-motion:reduce) {.level-transition {animation:none;}}
-
-/* Concrete lesson cues use a free lane gap; they never cover requests or intercept taps. */
-.level-transition {height:auto;padding:8px 10px;align-items:flex-start;gap:3px;border-radius:10px;text-align:left;}
-.level-transition strong {font:800 16px/1.25 system-ui,sans-serif;white-space:normal;overflow-wrap:anywhere;}
-.level-transition span {font:600 12px/1.4 system-ui,sans-serif;overflow-wrap:anywhere;}
