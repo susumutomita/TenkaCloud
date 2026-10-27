@@ -26,7 +26,8 @@ function checkCase(s: ReturnType<typeof availableScenarios>[number], danger: boo
   expect(v.source).toMatch(/^https:\/\/docs.aws.amazon.com\//);
   expect(v.fullReason).toBe(q.why);
   expect(v.reason).not.toBe("表示された対象・用途の範囲内です。");
-  if (!danger) expect(v.headline).toBe("これは止めなくてOK");
+  expect(v.headline).toBeDefined();
+  expect(v.headline).not.toMatch(/これは止めなくてOK|これは危険/);
   if (q.context.kind !== "evidence") expect(API_COPY[q.scenarioId]).toBeDefined();
   if (q.scenarioId === "RDSMasterPasswordReset") expect(v.field).toContain("changeTicket");
   if (["SageMakerLifecycleConfigModified", "EC2UserDataModified"].includes(q.scenarioId))
@@ -39,4 +40,25 @@ function checkCase(s: ReturnType<typeof availableScenarios>[number], danger: boo
 test("all506 concise answers identify the actual predicate, source and case-specific reason", () => {
   for (const s of availableScenarios(catalog))
     for (const danger of [false, true]) checkCase(s, danger);
+});
+
+test("titles explain the same operation for both outcomes without changing the correct-hit reason", () => {
+  for (const s of availableScenarios(catalog)) {
+    const results = [false, true].map((danger) => {
+      const stream = createQuestionStream(catalog, 37);
+      Object.assign(stream, {
+        elapsed: 120000,
+        scenarioTier: 5,
+        scenarioBag: [s],
+        outcomes: [danger],
+      });
+      return explanationCard(nextQuestion(stream));
+    });
+    expect(results[0].headline).toBe(results[1].headline);
+    expect(results[0].headline).not.toMatch(/止めなくてOK|これは危険|不一致|上限を超え/);
+    if (s.id === "Policy:S3/BucketPublicAccessGranted")
+      expect(results[0].headline).toBe("ファイル一覧を誰に見せるかの設定");
+    if (s.operation === "GetPasswordData") expect(results[0].headline).toContain("取得する操作");
+    if (s.operation === "DeleteFlowLogs") expect(results[0].headline).toContain("収集を止める操作");
+  }
 });

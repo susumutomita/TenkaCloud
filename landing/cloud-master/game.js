@@ -368,17 +368,16 @@ function explanation() {
   root.insertBefore(policy, root.querySelector("p"));
   root.insertBefore(comparison, root.querySelector("p:not(.miss-context)"));
   root.insertBefore(officialLink(e.question), actions);
-  const details = document.createElement("details"),
-    summary = document.createElement("summary"),
+  const details = document.createElement("section"),
     why = document.createElement("p"),
     wire = document.createElement("pre");
-  summary.textContent = "詳しい観測・判定条件";
+  details.className = "miss-details";
   why.textContent = view.fullReason;
   wire.textContent = view.wire;
-  details.append(summary, why, wire);
+  details.append(why, wire);
   root.insertBefore(details, actions);
   actions.append(
-    button(!state.lives ? "結果を見る" : "わかった・再開", () => {
+    button(!state.lives ? "結果を見る" : "続ける", () => {
       next(state);
       lastTime = null;
       render();

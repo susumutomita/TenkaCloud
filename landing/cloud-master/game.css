@@ -1394,3 +1394,6 @@ body.active-game #hit-reason { position:absolute; z-index:1; left:12px;right:12p
 
 #hit-copy, #hit-value {display:block;overflow:hidden;text-overflow:ellipsis;}
 #hit-value {font:600 12px/1.4 ui-monospace,monospace;}
+
+.miss-details {margin:16px 0;padding-top:12px;border-top:1px solid #dce5ed;color:#53677b;}
+.miss-details p {font-size:12px!important;line-height:1.65!important;}

@@ -1,4 +1,5 @@
 import { API_COPY, EVIDENCE_HEADLINES } from "./explanation-copy.js";
+import { explanationTitle } from "./explanation-titles.js";
 
 const value = (x) => (typeof x === "string" ? x : JSON.stringify(x));
 const MEANING = {
@@ -51,7 +52,7 @@ export function explanationCard(q) {
     : evidenceCopy(q, field, actual);
   const { headline, reason } = summary;
   return {
-    headline,
+    headline: explanationTitle(q),
     operation: q.operation,
     meaning: MEANING[q.serviceId] ?? q.service,
     danger: q.danger,

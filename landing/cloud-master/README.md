@@ -9,7 +9,7 @@ resource/purpose/baseline context. No AWS requests, attack execution or backend.
 
 Three lives. Every false positive or dangerous miss costs exactly one and immediately
 freezes every card and active time for the actual-item explanation; explicit
-acknowledgment resumes. The final mistake explains before results. Simultaneous deadlines stop at the first miss; already-due untouched dangerous cards get a1500ms decision window after acknowledgment, without resetting their original positions or identity. Normal passive passage earns10 once. Correct detection earns authored game danger
+the Continue button resumes. The final mistake explains before results. Simultaneous deadlines stop at the first miss; already-due untouched dangerous cards get a1500ms decision window after acknowledgment, without resetting their original positions or identity. Normal passive passage earns10 once. Correct detection earns authored game danger
 ×10; these are not actual AWS severity values. Only correct10-point dangerous hits
 receive120ms hitstop. Survival time freezes in hitstop, explanations, explicit and
 background pause. The survival display, result, best and share use tenths of a second; HUD text changes only when its value changes.
@@ -122,6 +122,6 @@ The user's permanent bottom freeze was not reproduced in the tested cases. Globa
 
 ## Miss and mistaken-tap learning
 
-A content-sized pause card puts a concrete consequence and decisive actual value first, with a short beginner explanation and plain service meaning beside the API name. Expected condition/normal example is explicit. Full observed payload, case-specific reasoning and caveats remain in expandable details; the exact official link stays visible. Benign mistaken taps use separate normal wording, never dangerous counterpart prose. S3 bucketREAD is listing permission, not all object contents; public access remains conditional on other controls. Completed effect ghosts are removed on pause/explanation; untouched active requests, RNG, history and score are retained on acknowledgment.
+A content-sized pause card puts the operation’s meaning and decisive actual value first, with a short beginner explanation and plain service meaning beside the API name. Expected condition/normal example is explicit. Full observed payload, case-specific reasoning and caveats are visible immediately in a scrollable body; the exact official link stays visible. Benign mistaken taps use separate normal wording, never dangerous counterpart prose. S3 bucketREAD is listing permission, not all object contents; public access remains conditional on other controls. Completed effect ghosts are removed on pause/explanation; untouched active requests, RNG, history and score are retained on acknowledgment.
 
 Independent baseline investigation found no UID resurrection in100seeds/300miss-resume cycles, but262 newly-issued identical cases within8seconds (minimum positive47ms). A5second rAF gap reproduced four due births in one render. Cooldown and visible-admission changes address those distinct measured causes; no active-card clearing or RNG reset is used.
