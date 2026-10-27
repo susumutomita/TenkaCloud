@@ -2,6 +2,8 @@
 export const LESSONS = [
   {
     id: "ec2",
+    cue: "本番の無断停止・終了、終了保護OFFに注意。",
+    enCue: "Watch unapproved stops, termination and protection OFF.",
     title: "EC2の稼働と保護を守る",
     example: "本番の未承認停止・終了と、終了保護OFFをタップ。",
     enTitle: "Protect the running EC2 app",
@@ -14,6 +16,8 @@ export const LESSONS = [
   },
   {
     id: "early-threats",
+    cue: "業務外の秘密取得・本番監視停止・未登録端末に注意。",
+    enCue: "Watch secret access, monitor stops and unfamiliar devices.",
     title: "いつもの担当・用途と違う動き",
     example: "業務外の秘密取得、本番監視の停止、未登録端末に注意。",
     enTitle: "Spot unusual actor activity",
@@ -26,6 +30,8 @@ export const LESSONS = [
   },
   {
     id: "rds",
+    cue: "停止OKは training-db だけ。",
+    enCue: "Only training-db may stop.",
     title: "RDS＝データの保存先",
     example: "停止OKは training-db だけ。注文DBは止めない。",
     enTitle: "RDS stores the data",
@@ -34,6 +40,8 @@ export const LESSONS = [
   },
   {
     id: "alb",
+    cue: "転送先は app-prod。別の宛先に注意。",
+    enCue: "Keep app-prod as the forwarding target.",
     title: "ALB＝アプリへ振り分ける",
     example: "既定の転送先は app-prod。別の転送先はタップ。",
     enTitle: "ALB routes requests to the app",
@@ -42,6 +50,8 @@ export const LESSONS = [
   },
   {
     id: "app-path",
+    cue: "接続元は sg-alb のみ。",
+    enCue: "Only sg-alb may connect to the app.",
     title: "SG＝接続を許す門",
     example: "アプリへの接続は sg-alb からだけ許可。",
     enTitle: "SG controls allowed connections",
@@ -50,6 +60,8 @@ export const LESSONS = [
   },
   {
     id: "delivery",
+    cue: "配信元は app-alb.tenka.example。",
+    enCue: "Keep app-alb.tenka.example as the origin.",
     title: "CloudFront＝利用者へ配信",
     example: "配信元は app-alb.tenka.example を維持。",
     enTitle: "CloudFront delivers content",
@@ -58,6 +70,8 @@ export const LESSONS = [
   },
   {
     id: "waf",
+    cue: "本番WAFの Block → Count に注意。",
+    enCue: "Watch Block being changed to Count on production WAF.",
     title: "WAF＝入口のリクエスト検査",
     example: "この本番ルールは Block。Count への変更はタップ。",
     enTitle: "WAF inspects incoming requests",
@@ -66,6 +80,8 @@ export const LESSONS = [
   },
   {
     id: "private-auth",
+    cue: "社内DBの公開・必要な認証の無効化に注意。",
+    enCue: "Watch public internal DBs and required auth being disabled.",
     title: "公開と本人確認の保護を残す",
     example: "社内DBの公開 true、必要な認証の無効化はタップ。",
     enTitle: "Keep privacy and authentication",
@@ -74,6 +90,8 @@ export const LESSONS = [
   },
   {
     id: "sharing",
+    cue: "外部や全員への共有拡大に注意。",
+    enCue: "Watch internal sharing being widened to outsiders.",
     title: "共有相手を確かめる",
     example: "自社だけの共有を、外部や全員へ広げる変更はタップ。",
     enTitle: "Check who receives access",
@@ -94,6 +112,8 @@ export const LESSONS = [
   },
   {
     id: "privilege",
+    cue: "閲覧担当への管理権限追加に注意。",
+    enCue: "Watch admin or FullAccess grants to a viewing role.",
     title: "必要な権限だけを付ける",
     example: "閲覧担当へ AdministratorAccess や FullAccess はタップ。",
     enTitle: "Grant only needed permissions",
@@ -109,6 +129,8 @@ export const LESSONS = [
   },
   {
     id: "temporary-access",
+    cue: "短期RoleとSession Manager。長期キー・SSHは避ける。",
+    enCue: "Use temp roles and Session Manager; no long-term keys/SSH.",
     title: "短期認証と承認済み管理経路",
     example: "長期キーやSSHではなく、短期RoleとSession Manager。",
     enTitle: "Use temporary credentials and approved administration",
@@ -133,6 +155,8 @@ export const LESSONS = [
   },
   {
     id: "audit",
+    cue: "本番ログ停止・必要な保存期間の短縮に注意。",
+    enCue: "Watch production logs being stopped or retention shortened.",
     title: "監査と保存期間を守る",
     example: "本番ログの停止や、必要な保存期間の短縮はタップ。",
     enTitle: "Keep audit logs and retention",
@@ -148,6 +172,8 @@ export const LESSONS = [
   },
   {
     id: "approved-change",
+    cue: "変更票・構成ハッシュ・対象を予定と照合。",
+    enCue: "Match tickets, config hashes and targets with the plan.",
     title: "予定された対象と変更を照合",
     example: "承認票・構成ハッシュ・対象が今回の予定と違えばタップ。",
     enTitle: "Match the approved target and change",
@@ -183,6 +209,8 @@ export const LESSONS = [
   },
   {
     id: "indicators",
+    cue: "IP・ドメイン・指紋を注意指標と照合。",
+    enCue: "Match IPs, domains and fingerprints with the watch list.",
     title: "示された注意指標と照合",
     example: "観測したIP・ドメイン・指紋が注意対象と一致したらタップ。",
     enTitle: "Match the supplied watch indicator",
@@ -288,6 +316,8 @@ export const LESSONS = [
   },
   {
     id: "limits",
+    cue: "演習上限超えに注意。AWSの閾値ではない。",
+    enCue: "Watch the exercise limit; it is not an AWS threshold.",
     title: "普段との数値の差を読む",
     example: "表示した演習上限を超える観測をタップ。AWSの閾値ではない。",
     enTitle: "Compare observations with the exercise limit",
@@ -317,6 +347,8 @@ export const LESSONS = [
   },
   {
     id: "runtime",
+    cue: "承認済み保守か、予定外のアプリ動作か。",
+    enCue: "Check approved maintenance vs unexpected app activity.",
     title: "動作の起点と権限境界を照合",
     example: "承認済み保守か、アプリからの予定外動作かを確かめる。",
     enTitle: "Check process origin and privilege boundaries",
@@ -367,6 +399,8 @@ export const LESSONS = [
   },
   {
     id: "containers",
+    cue: "匿名の主体・過大なコンテナー権限に注意。",
+    enCue: "Watch anonymous identities and excessive container rights.",
     title: "コンテナーの主体と操作範囲",
     example: "専用の主体と最小権限を保つ。匿名や過大な権限を確かめる。",
     enTitle: "Check container identity and scope",
@@ -395,6 +429,8 @@ export const LESSONS = [
   },
   {
     id: "correlation",
+    cue: "対象・起点・時系列を合わせる。単独で断定しない。",
+    enCue: "Combine target, origin and sequence; one event is not proof.",
     title: "複数の観測を組み合わせる",
     example: "対象・起点・時系列を合わせて判断。単一イベントで断定しない。",
     enTitle: "Combine the observations",

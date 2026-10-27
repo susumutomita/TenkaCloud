@@ -1432,11 +1432,19 @@ html[lang="en"] .start-action {font-size:clamp(19px,4.6vw,24px);}
 
 #pause svg {display:block;margin:auto;}
 
-/* Centered, translucent notices leave the underlying requests tappable. */
-.level-transition {position:absolute;z-index:5;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100% - 24px));box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 16px;pointer-events:none;color:#123b58;background:rgba(240,248,255,.9);border-radius:12px;box-shadow:0 2px 14px #173d5a22;text-align:center;animation:level-arrive 160ms ease-out;}
-.level-transition[hidden] {display:none;}
-.level-transition strong {font:800 clamp(18px,4.7vw,24px)/1.25 system-ui,sans-serif;letter-spacing:-.02em;overflow-wrap:anywhere;}
-.level-transition span {font:600 14px/1.4 system-ui,sans-serif;overflow-wrap:anywhere;}
-.field.level-up-active::after {content:"";position:absolute;inset:2px;border:3px solid #629ec5;border-radius:inherit;pointer-events:none;z-index:1;}
-@keyframes level-arrive {from {opacity:0;}to {opacity:1;}}
-@media(prefers-reduced-motion:reduce) {.level-transition {animation:none;}}
+/* A permanent, compact footer keeps messages outside every falling trajectory. */
+:root {--message-height:48px;}
+.message-bar {display:none;}
+body.active-game .field {height:calc(100svh - 56px - env(safe-area-inset-top) - var(--message-height) - env(safe-area-inset-bottom));}
+body.active-game .cards {bottom:8px;}
+body.active-game .message-bar {display:flex;align-items:center;justify-content:center;height:calc(var(--message-height) + env(safe-area-inset-bottom));box-sizing:border-box;padding:5px max(12px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));background:#f2f7ff;color:#123b58;pointer-events:none;overflow:hidden;}
+.message-bar .level-transition {position:static;width:100%;max-width:1000px;box-sizing:border-box;text-align:left;font:600 14px/1.2 system-ui,sans-serif;overflow-wrap:anywhere;}
+.level-transition strong {font:750 14px/1.2 system-ui,sans-serif;}
+.level-transition strong:not(:last-child)::after {content:" · ";}
+.level-transition span:empty {display:none;}
+.level-transition:has(span:empty) strong::after {content:"";}
+body.active-game .message-bar #hit-reason:not([hidden]) {position:static;display:block;width:100%;max-width:1000px;margin:0;padding:0;border-radius:0;background:none;box-shadow:none;text-align:left;font:600 14px/1.2 system-ui,sans-serif;white-space:normal;}
+.message-bar #hit-copy {white-space:nowrap;}
+.message-bar #hit-fact {gap:6px;}
+.message-bar #hit-label {font:400 12px/1.2 system-ui,sans-serif;white-space:nowrap;}
+.message-bar #hit-value {font:600 13px/1.2 ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}

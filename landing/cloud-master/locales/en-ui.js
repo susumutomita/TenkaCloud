@@ -1,4 +1,13 @@
 export const EN_UI = {
+  難度: "Difficulty ",
+  "難度{level}↑": "Difficulty {level}↑",
+  難度アップ: "Difficulty up",
+  "速度↑": "Faster",
+  "枚数↑": "More cards",
+  比較が細かく: "Closer comparisons",
+  生存時間で難度アップ: "Difficulty rises with survival time",
+  "生存時間で難度アップ。徐々に速く、巧妙に。":
+    "Difficulty rises with survival time: faster, subtler threats.",
   "落下が速く、危険の見分け方も少しずつ巧妙に。":
     "Faster falls; threats become subtler as you survive.",
   "参考となるAWS公式資料 ↗": "AWS reference for this exercise ↗",
@@ -77,8 +86,8 @@ export const EN_UI = {
     "Judge the displayed exercise policy. Passing is not proof of safety; this game does not determine whether GuardDuty creates a finding or block traffic.",
   "検知 ＋{points}": "Flagged +{points}",
   正しい検知: "Correct flags",
-  "正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ Lv.{level}":
-    "Correct flags {correct} / Normal passes {passed} / Mistakes {mistakes} / Lv.{level}",
+  "正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ 難度{level}":
+    "Correct flags {correct} / Normal passes {passed} / Mistakes {mistakes} / Difficulty {level}",
   正常の例: "Normal example",
   "正常は、そのまま流す。": "Let normal ones pass.",
   正常通過: "Normal passes",
