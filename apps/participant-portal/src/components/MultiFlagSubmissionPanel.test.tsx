@@ -764,26 +764,7 @@ describe("multi-verify extensions (issue #2252)", () => {
       scoreDelta: 300,
       totalScore: 300,
     });
-    function RefreshedPanel() {
-      const [flags, setFlags] = useState<readonly MultiFlagEntryView[]>(FLAGS);
-      return (
-        <MultiFlagSubmissionPanel
-          {...baseProps}
-          flags={flags}
-          onScored={async () => {
-            await new Promise((resolve) => setTimeout(resolve, 0));
-            setFlags([
-              {
-                ...FLAGS[0],
-                solved: true,
-                writeup: "## Released after the accepted answer\n\nWhy GET matters.",
-              },
-              FLAGS[1],
-            ]);
-          }}
-        />
-      );
-    }
+
     render(withProviders(<RefreshedPanel />));
     const user = userEvent.setup();
     await user.type(screen.getAllByRole("textbox")[0], "synthetic answer");
@@ -993,22 +974,7 @@ describe("multi-verify extensions (issue #2252)", () => {
       },
     );
 
-    function LocalWpReviewHarness() {
-      const [flags, setFlags] = useState(serverFlags);
-      const refresh = async () => setFlags(serverFlags);
-      return (
-        <MultiFlagSubmissionPanel
-          apiBaseUrl="http://127.0.0.1:51238"
-          sessionToken="local-team-key"
-          problemId={wpExposedBackup.id}
-          flags={flags}
-          onScored={refresh}
-          revealOrder="flat"
-        />
-      );
-    }
-
-    render(withProviders(<LocalWpReviewHarness />, "local"));
+    render(withProviders(<LocalWpReviewHarness getFlags={() => serverFlags} />, "local"));
     expect(await screen.findAllByRole("button", { name: "Reveal hint" })).toHaveLength(12);
 
     for (let remaining = 12; remaining > 0; remaining -= 1) {
@@ -1106,3 +1072,39 @@ describe("multi-verify extensions (issue #2252)", () => {
     ).toHaveAttribute("aria-expanded", "false");
   });
 });
+
+function RefreshedPanel() {
+  const [flags, setFlags] = useState<readonly MultiFlagEntryView[]>(FLAGS);
+  return (
+    <MultiFlagSubmissionPanel
+      {...baseProps}
+      flags={flags}
+      onScored={async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        setFlags([
+          {
+            ...FLAGS[0],
+            solved: true,
+            writeup: "## Released after the accepted answer\n\nWhy GET matters.",
+          },
+          FLAGS[1],
+        ]);
+      }}
+    />
+  );
+}
+
+function LocalWpReviewHarness({ getFlags }: { getFlags: () => readonly MultiFlagEntryView[] }) {
+  const [flags, setFlags] = useState(getFlags);
+  const refresh = async () => setFlags(getFlags());
+  return (
+    <MultiFlagSubmissionPanel
+      apiBaseUrl="http://127.0.0.1:51238"
+      sessionToken="local-team-key"
+      problemId={wpExposedBackup.id}
+      flags={flags}
+      onScored={refresh}
+      revealOrder="flat"
+    />
+  );
+}

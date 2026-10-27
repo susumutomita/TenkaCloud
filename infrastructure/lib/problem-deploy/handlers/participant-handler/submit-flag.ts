@@ -201,7 +201,7 @@ async function scoreWrongMultiFlag(
   return {
     kind: "wrong",
     scoreDelta: -penalty,
-    totalScore: rawScore < 0 ? 0 : rawScore,
+    totalScore: rawScore === 0 ? rawScore : Math.max(0, rawScore),
     wrongCount: Number(outcome.record?.wrongAnswerCount ?? 1),
   };
 }
@@ -257,7 +257,7 @@ async function scoreWrongFlag(
   return {
     kind: "wrong",
     scoreDelta: -penalty,
-    totalScore: rawScore < 0 ? 0 : rawScore,
+    totalScore: rawScore === 0 ? rawScore : Math.max(0, rawScore),
     wrongCount: Number(outcome.record?.wrongAnswerCount ?? 1),
   };
 }

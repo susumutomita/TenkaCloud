@@ -27,7 +27,6 @@ describe("PORTAL_SLOT_NAMES", () => {
 
 describe("PortalSlotProps / PortalSlotComponent (type-level)", () => {
   it("should accept a component whose props type is exactly PortalSlotProps", () => {
-    const StatusPanel: PortalSlotComponent = (_props: PortalSlotProps) => null;
     expectTypeOf(StatusPanel).parameter(0).toEqualTypeOf<PortalSlotProps>();
   });
 
@@ -71,3 +70,5 @@ describe("PortalSlotProps / PortalSlotComponent (type-level)", () => {
     expectTypeOf(client.submitOp).returns.resolves.toEqualTypeOf<PortalCoordinationOutcome>();
   });
 });
+
+const StatusPanel: PortalSlotComponent = (_props: PortalSlotProps) => null;

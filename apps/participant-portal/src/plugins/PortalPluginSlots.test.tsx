@@ -1,3 +1,4 @@
+import type { PortalCoordinationClient, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { render, screen, waitFor } from "@testing-library/react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -76,9 +77,6 @@ describe("PortalPluginSlots", () => {
   });
 
   it("should render the component when the StatusPanel slot resolves", async () => {
-    function FakeStatusPanel() {
-      return <div data-testid="fake-status">fake status</div>;
-    }
     mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
       slotName === "StatusPanel" ? FakeStatusPanel : undefined,
     );
@@ -88,9 +86,7 @@ describe("PortalPluginSlots", () => {
 
   it("should pass interTeamCoordination to the slot props when present (#1420)", async () => {
     mockBuildCoordination.mockReturnValue({ name: "Router", description: "service mesh" });
-    function CoordPanel(props: { coordination?: { name?: string } }) {
-      return <div data-testid="coord">{props.coordination?.name}</div>;
-    }
+
     mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
       slotName === "StatusPanel" ? CoordPanel : undefined,
     );
@@ -99,17 +95,6 @@ describe("PortalPluginSlots", () => {
   });
 
   it("should pass locale and live posture snapshot to plugin slot props (#1895/#1896)", async () => {
-    function RuntimePropsPanel(props: {
-      locale: string;
-      posture?: Record<string, boolean>;
-      platform?: string;
-    }) {
-      return (
-        <div data-testid="runtime-props">
-          {props.locale}:{props.platform}:{props.posture?.db_present ? "done" : "missing"}
-        </div>
-      );
-    }
     mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
       slotName === "StatusPanel" ? RuntimePropsPanel : undefined,
     );
@@ -127,9 +112,6 @@ describe("PortalPluginSlots", () => {
   });
 
   it("should pass eventEndsAt to plugin slot props when the event has an end time, and omit it otherwise", async () => {
-    function EndsAtPanel(props: { eventEndsAt?: string }) {
-      return <div data-testid="ends-at">{props.eventEndsAt ?? "none"}</div>;
-    }
     mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
       slotName === "StatusPanel" ? EndsAtPanel : undefined,
     );
@@ -145,11 +127,6 @@ describe("PortalPluginSlots", () => {
   });
 
   it("should pass the authoritative endpoint override to plugin slot props", async () => {
-    function EndpointPanel(props: {
-      endpoints: readonly { slot: string; effectiveUrl?: string }[];
-    }) {
-      return <div data-testid="endpoint-url">{props.endpoints[0]?.effectiveUrl}</div>;
-    }
     mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
       slotName === "StatusPanel" ? EndpointPanel : undefined,
     );
@@ -176,12 +153,13 @@ describe("PortalPluginSlots", () => {
 
   it("should bind a live coordination client when coordinationApiUrl + sessionToken are present and route op/projection through it (#1420)", async () => {
     let captured: { submitOp: (op: unknown) => unknown; getProjection: () => unknown } | undefined;
-    function CoordClientPanel(props: {
-      coordinationClient?: { submitOp: (op: unknown) => unknown; getProjection: () => unknown };
-    }) {
-      captured = props.coordinationClient;
-      return <div data-testid="cc">{props.coordinationClient ? "bound" : "none"}</div>;
-    }
+    const CoordClientPanel = renderCapturedClient.bind(
+      null,
+      (client: PortalCoordinationClient | undefined) => {
+        captured = client;
+      },
+      "cc",
+    );
     mockLoadPluginSlot.mockImplementation((_p, slotName) =>
       slotName === "StatusPanel" ? CoordClientPanel : undefined,
     );
@@ -211,10 +189,13 @@ describe("PortalPluginSlots", () => {
 
   it("retains separate uncertain payload keys across rerenders and clears only acknowledged intents", async () => {
     let captured: { submitOp: (op: unknown) => Promise<unknown> } | undefined;
-    function Panel(props: { coordinationClient?: typeof captured }) {
-      captured = props.coordinationClient;
-      return <div data-testid="retry-client">bound</div>;
-    }
+    const Panel = renderCapturedClient.bind(
+      null,
+      (client: PortalCoordinationClient | undefined) => {
+        captured = client;
+      },
+      "retry-client",
+    );
     mockLoadPluginSlot.mockImplementation((_p, slot) =>
       slot === "StatusPanel" ? Panel : undefined,
     );
@@ -246,10 +227,13 @@ describe("PortalPluginSlots", () => {
 
   it("does not let a late duplicate response clear a newer intent for the same payload", async () => {
     let captured: { submitOp: (op: unknown) => Promise<unknown> } | undefined;
-    function Panel(props: { coordinationClient?: typeof captured }) {
-      captured = props.coordinationClient;
-      return <div data-testid="concurrent-client">bound</div>;
-    }
+    const Panel = renderCapturedClient.bind(
+      null,
+      (client: PortalCoordinationClient | undefined) => {
+        captured = client;
+      },
+      "concurrent-client",
+    );
     mockLoadPluginSlot.mockImplementation((_p, slot) =>
       slot === "StatusPanel" ? Panel : undefined,
     );
@@ -282,10 +266,13 @@ describe("PortalPluginSlots", () => {
 
   it("coalesces concurrent slot polls without retaining a completed response or crossing sessions", async () => {
     let client: { getProjection: () => Promise<unknown> } | undefined;
-    function Panel(props: { coordinationClient?: typeof client }) {
-      client = props.coordinationClient;
-      return <div data-testid="shared-poll-client">bound</div>;
-    }
+    const Panel = renderCapturedClient.bind(
+      null,
+      (value: PortalCoordinationClient | undefined) => {
+        client = value;
+      },
+      "shared-poll-client",
+    );
     mockLoadPluginSlot.mockImplementation((_p, slot) =>
       slot === "StatusPanel" ? Panel : undefined,
     );
@@ -326,10 +313,13 @@ describe("PortalPluginSlots", () => {
 
   it("bounds uncertain operations without evicting their retry keys", async () => {
     let captured: { submitOp: (op: unknown) => Promise<unknown> } | undefined;
-    function Panel(props: { coordinationClient?: typeof captured }) {
-      captured = props.coordinationClient;
-      return <div data-testid="bounded-client">bound</div>;
-    }
+    const Panel = renderCapturedClient.bind(
+      null,
+      (client: PortalCoordinationClient | undefined) => {
+        captured = client;
+      },
+      "bounded-client",
+    );
     mockLoadPluginSlot.mockImplementation((_p, slot) =>
       slot === "StatusPanel" ? Panel : undefined,
     );
@@ -353,11 +343,8 @@ describe("PortalPluginSlots", () => {
   });
 
   it("should NOT bind a coordination client when the dispatcher URL or session is missing (#1420)", async () => {
-    function Panel(props: { coordinationClient?: unknown }) {
-      return <div data-testid="cc">{props.coordinationClient ? "bound" : "none"}</div>;
-    }
     mockLoadPluginSlot.mockImplementation((_p, slotName) =>
-      slotName === "StatusPanel" ? Panel : undefined,
+      slotName === "StatusPanel" ? UnboundClientPanel : undefined,
     );
     // dispatcher URL あり / session なし → 束縛しない (= 認証無しで coordination を叩かせない)
     render(<PortalPluginSlots {...baseProps} coordinationApiUrl="https://coord.example" />);
@@ -366,9 +353,6 @@ describe("PortalPluginSlots", () => {
   });
 
   it("should let ErrorBoundary fall back to an Alert when a plugin throws (= the whole portal does not crash) and elevate the log to console.error (Issue #1251)", async () => {
-    function CrashyPanel(): never {
-      throw new Error("plugin runtime crash");
-    }
     mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
       slotName === "StatusPanel" ? CrashyPanel : undefined,
     );
@@ -402,12 +386,6 @@ describe("PortalPluginSlots", () => {
   });
 
   it("should render multiple declared slots in PORTAL_SLOT_NAMES literal order (StatusPanel -> RegistrationPanel -> HelpDrawer)", async () => {
-    function StatusComp() {
-      return <div data-testid="slot-status">status</div>;
-    }
-    function RegisterComp() {
-      return <div data-testid="slot-register">register</div>;
-    }
     mockLoadPluginSlot.mockImplementation((_problemId, slotName) => {
       if (slotName === "StatusPanel") return StatusComp;
       if (slotName === "RegistrationPanel") return RegisterComp;
@@ -428,22 +406,6 @@ describe("PortalPluginSlots", () => {
 
   // ErrorBoundary class を直接 vs 統合した render path を pin。 stale state を防ぐため別 instance で。
   it("ErrorBoundary alone: should catch a child throw and include the given slotName in the header", () => {
-    class ProbeErrorBoundary extends Component<
-      { slotName: string; children: ReactNode },
-      { hasError: boolean; message?: string }
-    > {
-      state = { hasError: false, message: undefined as string | undefined };
-      static getDerivedStateFromError(err: unknown) {
-        return { hasError: true, message: err instanceof Error ? err.message : String(err) };
-      }
-      componentDidCatch(_err: Error, _info: ErrorInfo): void {}
-      render() {
-        return this.state.hasError ? `ERR: ${this.state.message}` : this.props.children;
-      }
-    }
-    function Throws(): never {
-      throw new Error("boom");
-    }
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
       const { container } = render(
@@ -457,3 +419,85 @@ describe("PortalPluginSlots", () => {
     }
   });
 });
+
+function FakeStatusPanel() {
+  return <div data-testid="fake-status">fake status</div>;
+}
+
+function CoordPanel(props: { coordination?: { name?: string } }) {
+  return <div data-testid="coord">{props.coordination?.name}</div>;
+}
+
+function RuntimePropsPanel(props: {
+  locale: string;
+  posture?: Record<string, boolean>;
+  platform?: string;
+}) {
+  return (
+    <div data-testid="runtime-props">
+      {props.locale}:{props.platform}:{props.posture?.db_present ? "done" : "missing"}
+    </div>
+  );
+}
+
+function EndsAtPanel(props: { eventEndsAt?: string }) {
+  return <div data-testid="ends-at">{props.eventEndsAt ?? "none"}</div>;
+}
+
+function EndpointPanel(props: { endpoints: readonly { slot: string; effectiveUrl?: string }[] }) {
+  return <div data-testid="endpoint-url">{props.endpoints[0]?.effectiveUrl}</div>;
+}
+
+function CrashyPanel(): never {
+  throw new Error("plugin runtime crash");
+}
+
+function StatusComp() {
+  return <div data-testid="slot-status">status</div>;
+}
+
+function RegisterComp() {
+  return <div data-testid="slot-register">register</div>;
+}
+
+function Throws(): never {
+  throw new Error("boom");
+}
+
+function renderCapturedClient(
+  capture: (client: PortalCoordinationClient | undefined) => void,
+  testId: string,
+  props: PortalSlotProps,
+) {
+  return <CapturedClientPanel {...props} capture={capture} testId={testId} />;
+}
+
+function CapturedClientPanel({
+  coordinationClient,
+  capture,
+  testId,
+}: PortalSlotProps & {
+  capture: (client: PortalCoordinationClient | undefined) => void;
+  testId: string;
+}) {
+  capture(coordinationClient);
+  return <div data-testid={testId}>{coordinationClient ? "bound" : "none"}</div>;
+}
+
+function UnboundClientPanel(props: { coordinationClient?: unknown }) {
+  return <div data-testid="cc">{props.coordinationClient ? "bound" : "none"}</div>;
+}
+
+class ProbeErrorBoundary extends Component<
+  { slotName: string; children: ReactNode },
+  { hasError: boolean; message?: string }
+> {
+  state = { hasError: false, message: undefined as string | undefined };
+  static getDerivedStateFromError(err: unknown) {
+    return { hasError: true, message: err instanceof Error ? err.message : String(err) };
+  }
+  componentDidCatch(_err: Error, _info: ErrorInfo): void {}
+  render() {
+    return this.state.hasError ? `ERR: ${this.state.message}` : this.props.children;
+  }
+}

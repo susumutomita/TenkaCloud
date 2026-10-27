@@ -1,5 +1,5 @@
 import { renderHook } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import type { AppConfig } from "../src/config";
 import { AppConfigProvider, useAppConfig, useIsMock } from "../src/config-context";
@@ -9,10 +9,10 @@ import { AppConfigProvider, useAppConfig, useIsMock } from "../src/config-contex
  * mode !== "backend" 派生を pin する。
  */
 const cfg = (mode: string) => ({ mode }) as AppConfig;
-const wrapWith = (config: AppConfig) =>
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <AppConfigProvider config={config}>{children}</AppConfigProvider>;
-  };
+function ConfigWrapper(config: AppConfig, { children }: { children: ReactNode }) {
+  return createElement(AppConfigProvider, { config, children });
+}
+const wrapWith = (config: AppConfig) => ConfigWrapper.bind(null, config);
 
 describe("config-context", () => {
   it("should return the config from inside the provider", () => {
