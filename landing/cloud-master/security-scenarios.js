@@ -392,7 +392,7 @@ export const SECURITY_SCENARIOS = [
     safe: "private",
     risk: "public-read",
     baseline: "対象: 顧客データのバケット / 一覧は社内限定",
-    why: "public-readのバケットREAD権限は一覧などを全員へ広げます。オブジェクト内容の公開とは別です。",
+    why: "public-readのバケットREAD権限は一覧などを全員へ広げます。オブジェクト内容の公開とは別です。実際の公開可否はBlock Public Accessなど他の保護設定にも依存します。",
     severity: 8,
   },
   {

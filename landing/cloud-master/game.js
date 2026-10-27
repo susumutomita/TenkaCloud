@@ -245,7 +245,12 @@ function positions(items, previewing) {
   const columns = previewing ? (narrow ? 2 : 3) : narrow ? 1 : 2;
   if (!geometry) {
     // Read dimensions as one batch after additions, before any position writes.
-    geometry = { width: field.clientWidth, height: field.clientHeight, heights: new Map() };
+    geometry = {
+      width: field.clientWidth,
+      height: field.clientHeight,
+      left: field.offsetLeft,
+      heights: new Map(),
+    };
     for (const [uid, node] of nodes) geometry.heights.set(uid, node.offsetHeight);
   }
   const entries = items.map((item) => ({
@@ -560,21 +565,33 @@ function renderFeedback() {
   $("hit-reason").hidden = !show;
   seen = state.history.length;
 }
-function positionReason() {
-  const toast = $("hit-reason");
-  if (toast.hidden || !geometry) return;
-  // Use cached trajectories, not per-frame DOM measurements. Find the lowest free strip.
+function reasonGap(lane, columns) {
   let bottom = geometry.height - 8;
   const occupied = state.active
+    .filter((item) => item.slot % columns === lane)
     .map((item) => ({
       top: motion.get(String(item.uid))?.y ?? -1000,
       height: geometry.heights.get(String(item.uid)) ?? 0,
     }))
     .sort((a, b) => b.top - a.top);
   for (const item of occupied) {
-    if (item.top < bottom && item.top + item.height > bottom - 64) bottom = item.top - 8;
+    if (item.top < bottom && item.top + item.height > bottom - 72) bottom = item.top - 16;
   }
-  toast.hidden = bottom < geometry.height * 0.4 + 64;
+  return bottom;
+}
+function positionReason() {
+  const toast = $("hit-reason");
+  if (toast.hidden || !geometry) return;
+  // Cached trajectories only. Desktop feedback uses one lane's lowest free strip.
+  const columns = innerWidth <= 740 ? 1 : 2;
+  const gaps = Array.from({ length: columns }, (_, lane) => reasonGap(lane, columns));
+  const bottom = Math.max(...gaps),
+    lane = gaps.indexOf(bottom);
+  toast.hidden = bottom < geometry.height * 0.35 + 72;
+  toast.style.left = `${geometry.left + (lane * geometry.width) / columns}px`;
+  toast.style.right = "auto";
+  toast.style.width = `${geometry.width / columns - (columns === 2 ? 18 : 0)}px`;
+  toast.style.margin = "0";
   toast.style.bottom = `calc(${Math.max(8, geometry.height - bottom)}px + env(safe-area-inset-bottom,0px))`;
 }
 function renderLevel() {

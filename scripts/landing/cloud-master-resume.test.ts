@@ -81,6 +81,7 @@ function checkBucket(v: ReturnType<typeof explanationCard>) {
   expect(v.actual).toBe("public-read");
   expect(v.reason).toContain("ファイル内容の公開とは別");
   expect(v.fullReason).toContain("オブジェクト内容の公開とは別");
+  expect(v.fullReason).toContain("他の保護設定");
 }
 
 describe("visible frame admission and resume ledger", () => {
