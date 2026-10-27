@@ -1,4 +1,9 @@
 export const API_COPY = {
+  EC2ProductionTerminationProtection: [
+    "稼働本番の終了保護を解除する変更です。",
+    "今回は終了保護ONを維持する方針。OFFはDisableApiTermination.Value=falseに対応します。",
+    "稼働本番のAPI終了保護ONを維持する変更です。",
+  ],
   EC2ApprovedStop: [
     "今回は停止対象でないアプリを止める要求です。",
     "今回は停止対象でないアプリを止める要求です。",

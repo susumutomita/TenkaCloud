@@ -2,21 +2,21 @@ import {
   FIRST_LESSON_MS,
   LESSON_GRACE_MS,
   LESSON_NOTICE_MS,
-  LESSON_PRACTICE_MS,
-  LESSONS,
-} from "./curriculum.js?v=222af1e398";
+  LESSON_TIMES,
+} from "./curriculum.js?v=72404db6ae";
 import {
   createQuestionStream,
   difficulty,
-  levelChanges,
   levelFor,
   nextQuestion,
-} from "./recognition.js?v=222af1e398";
+  PRESSURE_STAGES,
+  pressureFor,
+} from "./recognition.js?v=72404db6ae";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 120;
 export const REVIEW_DECISION_MS = 1500;
 const deadlineOf = (item) => item.decisionDeadline ?? item.deadline;
-const configFor = (state) => difficulty(state.elapsed, state.taughtLevel);
+const configFor = (state) => difficulty(state.elapsed, state.taughtLevel, state.pressureIndex);
 export function createGame(catalog, seed = 726) {
   return {
     ...createQuestionStream(catalog, seed),
@@ -39,6 +39,9 @@ export function createGame(catalog, seed = 726) {
     hitstop: 0,
     nextSpawnAt: 1200,
     taughtLevel: 1,
+    pressureIndex: 0,
+    pressureResumeAt: 0,
+    discardedTeachingMs: 0,
     lessonStats: { normal: 0, danger: 0 },
     nextLessonAt: FIRST_LESSON_MS,
     lessonNotice: null,
@@ -71,37 +74,37 @@ export function arrivalInterval(state) {
 export function start(state) {
   if (state.phase !== "ready") return;
   state.taughtLevel = levelFor(state.elapsed);
-  state.nextLessonAt =
-    state.elapsed + (state.taughtLevel === 1 ? FIRST_LESSON_MS : LESSON_PRACTICE_MS);
+  state.nextLessonAt = LESSON_TIMES[state.taughtLevel] ?? Infinity;
+  state.pressureIndex = pressureFor(state.elapsed);
   state.phase = "playing";
   state.nextSpawnAt = state.elapsed + arrivalInterval(state);
   spawn(state);
 }
-function readyForLesson(state) {
-  return (
-    state.taughtLevel > LESSONS.length ||
-    (state.lessonStats.normal >= 2 && state.lessonStats.danger >= 2)
-  );
-}
 function lessonBoundary(state) {
-  return !state.lessonNotice && readyForLesson(state)
-    ? Math.max(state.elapsed, state.nextLessonAt)
-    : Infinity;
+  return !state.lessonNotice ? Math.max(state.elapsed, state.nextLessonAt) : Infinity;
+}
+function pressureBoundary(state) {
+  const next = PRESSURE_STAGES[state.pressureIndex + 1];
+  if (state.lessonNotice || !next) return Infinity;
+  const due = Math.max(state.elapsed, next.at, state.pressureResumeAt);
+  // Leave a visible gap on both sides of teaching, even if a cue was delayed.
+  return state.nextLessonAt <= due + 3000 ? Infinity : due;
+}
+function applyPressure(state) {
+  if (state.lessonNotice || state.elapsed < pressureBoundary(state)) return;
+  if (state.pressureIndex < pressureFor(state.elapsed)) {
+    state.pressureIndex++;
+    state.pressureResumeAt = state.elapsed + 6000;
+  }
 }
 function queueLesson(state) {
-  if (state.lessonNotice || !readyForLesson(state) || state.elapsed < state.nextLessonAt) return;
-  const level = state.taughtLevel + 1;
-  if (!levelChanges(state.taughtLevel, level).faster && level > LESSONS.length) {
-    state.taughtLevel = level;
-    state.nextLessonAt = state.elapsed + LESSON_PRACTICE_MS;
-    return;
-  }
+  if (state.lessonNotice || state.elapsed < state.nextLessonAt) return;
   state.lessonNotice = {
-    level,
+    level: state.taughtLevel + 1,
     shownAt: null,
     visible: false,
-    readRemaining: level <= LESSONS.length ? LESSON_NOTICE_MS : 2200,
-    graceRemaining: level <= LESSONS.length ? LESSON_GRACE_MS : 800,
+    readRemaining: LESSON_NOTICE_MS,
+    graceRemaining: LESSON_GRACE_MS,
   };
   state.nextSpawnAt = Infinity;
 }
@@ -166,9 +169,7 @@ export function collect(state, uid) {
   state.combo++;
   state.best = Math.max(state.best, state.combo);
   record(state, item, "flag", true, item.question.points);
-  const config = configFor(state);
-  if (config.level === 1 && !state.active.length && !state.lessonNotice)
-    state.nextSpawnAt = Math.min(state.nextSpawnAt, state.elapsed + config.intervalMs);
+  refillEmptyField(state);
   if (item.question.points === 10) {
     state.hitstop = HITSTOP_MS;
     state.phase = "hitstop";
@@ -187,6 +188,10 @@ export function next(state) {
   state.phase = "playing";
   state.grace = 800;
 }
+function refillEmptyField(state) {
+  if (!state.active.length && !state.lessonNotice)
+    state.nextSpawnAt = Math.min(state.nextSpawnAt, state.elapsed + configFor(state).intervalMs);
+}
 function expire(state, items) {
   for (const item of items) {
     remove(state, item);
@@ -197,6 +202,7 @@ function expire(state, items) {
     }
     state.passed++;
     record(state, item, "pass", true, 10);
+    refillEmptyField(state);
   }
   return false;
 }
@@ -217,7 +223,8 @@ function finishLessonNotice(state) {
   if (!notice || notice.shownAt === null || notice.readRemaining > 0 || notice.graceRemaining > 0)
     return;
   state.lessonNotice = null;
-  state.nextLessonAt = state.elapsed + LESSON_PRACTICE_MS;
+  state.nextLessonAt = LESSON_TIMES[state.taughtLevel] ?? Infinity;
+  state.pressureResumeAt = Math.max(state.pressureResumeAt, state.elapsed + 3000);
   state.nextSpawnAt = state.elapsed + arrivalInterval(state);
   if (state.phase === "playing") state.nextSpawnAt = state.elapsed + admit(state);
 }
@@ -236,8 +243,14 @@ function advanceClock(state, milliseconds, deferNew) {
   state.grace -= grace;
   remaining -= grace;
   // A long, unseen frame cannot consume a painted teaching cue and admit its new rule.
-  if (deferNew && state.lessonNotice?.shownAt !== null && state.lessonNotice?.shownAt !== undefined)
+  if (
+    deferNew &&
+    state.lessonNotice?.shownAt !== null &&
+    state.lessonNotice?.shownAt !== undefined
+  ) {
+    state.discardedTeachingMs += Math.max(0, remaining - 100);
     remaining = Math.min(remaining, 100);
+  }
   protectForReading(state, remaining);
   advanceWorld(state, state.elapsed + remaining, deferNew);
   finishLessonNotice(state);
@@ -263,12 +276,19 @@ function advanceWorld(state, target, deferNew) {
   let arrivalDue = false;
   while (state.elapsed < target) {
     const deadline = state.active.length ? Math.min(...state.active.map(deadlineOf)) : Infinity;
-    state.elapsed = Math.min(target, state.nextSpawnAt, deadline, lessonBoundary(state));
+    state.elapsed = Math.min(
+      target,
+      state.nextSpawnAt,
+      deadline,
+      lessonBoundary(state),
+      pressureBoundary(state),
+    );
     const expired = state.active
       .filter((item) => deadlineOf(item) <= state.elapsed)
       .sort((a, b) => a.uid - b.uid);
     if (expired.length && expire(state, expired)) return;
     queueLesson(state);
+    applyPressure(state);
     if (state.elapsed >= state.nextSpawnAt)
       arrivalDue = scheduleBoundary(state, deferNew) || arrivalDue;
   }

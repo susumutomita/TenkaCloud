@@ -72,7 +72,7 @@ test("managed recovery uses a Session Manager shell; even restricted SSH is flag
     expect(questionView(q, "en").payload).not.toContain("CidrIp:");
   }
 });
-test("all 518 explanations distinguish exercise policy from real findings in both languages", () => {
+test("all 520 explanations distinguish exercise policy from real findings in both languages", () => {
   for (const s of availableScenarios(catalog))
     for (const danger of [false, true]) {
       const q = question(s.id, danger);

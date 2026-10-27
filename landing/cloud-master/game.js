@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=222af1e398";
-import { lessonForLevel } from "./curriculum.js?v=222af1e398";
+import { loadCatalog } from "./api-catalog.js?v=72404db6ae";
+import { lessonForLevel } from "./curriculum.js?v=72404db6ae";
 import {
   collect,
   createGame,
@@ -11,16 +11,16 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=222af1e398";
-import { explanationCard } from "./explanation.js?v=222af1e398";
-import { decisionFact, reasonDuration } from "./feedback.js?v=222af1e398";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=222af1e398";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=222af1e398";
-import { flowPositions } from "./motion.js?v=222af1e398";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=222af1e398";
-import { difficulty } from "./recognition.js?v=222af1e398";
-import { buildShare } from "./share.js?v=222af1e398";
-import { formatSurvival } from "./time.js?v=222af1e398";
+} from "./engine.js?v=72404db6ae";
+import { explanationCard } from "./explanation.js?v=72404db6ae";
+import { decisionFact, reasonDuration } from "./feedback.js?v=72404db6ae";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=72404db6ae";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=72404db6ae";
+import { flowPositions } from "./motion.js?v=72404db6ae";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=72404db6ae";
+import { difficulty } from "./recognition.js?v=72404db6ae";
+import { buildShare } from "./share.js?v=72404db6ae";
+import { formatSurvival } from "./time.js?v=72404db6ae";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
