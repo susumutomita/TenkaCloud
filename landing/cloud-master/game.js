@@ -1,4 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=b49c5b2f64";
+import { loadCatalog } from "./api-catalog.js?v=222af1e398";
+import { lessonForLevel } from "./curriculum.js?v=222af1e398";
 import {
   collect,
   createGame,
@@ -7,18 +8,19 @@ import {
   next,
   pause,
   resume,
+  showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=b49c5b2f64";
-import { explanationCard } from "./explanation.js?v=b49c5b2f64";
-import { decisionFact, reasonDuration } from "./feedback.js?v=b49c5b2f64";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=b49c5b2f64";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=b49c5b2f64";
-import { flowPositions } from "./motion.js?v=b49c5b2f64";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=b49c5b2f64";
-import { difficulty, levelChanges } from "./recognition.js?v=b49c5b2f64";
-import { buildShare } from "./share.js?v=b49c5b2f64";
-import { formatSurvival } from "./time.js?v=b49c5b2f64";
+} from "./engine.js?v=222af1e398";
+import { explanationCard } from "./explanation.js?v=222af1e398";
+import { decisionFact, reasonDuration } from "./feedback.js?v=222af1e398";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=222af1e398";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=222af1e398";
+import { flowPositions } from "./motion.js?v=222af1e398";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=222af1e398";
+import { difficulty } from "./recognition.js?v=222af1e398";
+import { buildShare } from "./share.js?v=222af1e398";
+import { formatSurvival } from "./time.js?v=222af1e398";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -39,8 +41,7 @@ const motion = new Map();
 let reasonUntil = 0,
   lastReason = "",
   shownLevel = 1,
-  levelUntil = 0,
-  levelMessage = "";
+  lessonPaintToken = null;
 function text(id, value) {
   const node = $(id);
   if (node.textContent !== value) node.textContent = value;
@@ -93,8 +94,7 @@ function prepare(seed = newSeed(), begin = false) {
   lastReason = "";
   reasonUntil = 0;
   shownLevel = 1;
-  levelUntil = 0;
-  levelMessage = "";
+  lessonPaintToken = null;
   $("cards").replaceChildren();
   $("effects").replaceChildren();
   $("review").hidden = true;
@@ -527,7 +527,7 @@ function result() {
       correct: formatCount(state.correct),
       passed: formatCount(state.passed),
       mistakes: formatCount(state.mistakes),
-      level: formatCount(difficulty(state.elapsed).level),
+      level: formatCount(difficulty(state.elapsed, state.taughtLevel).level),
     }),
   );
   const score = document.createElement("div");
@@ -695,45 +695,90 @@ function positionReason() {
   toast.style.margin = "0";
   toast.style.bottom = `calc(${Math.max(8, geometry.height - bottom)}px + env(safe-area-inset-bottom,0px))`;
 }
+function lessonText(lesson, key) {
+  return getLocale() === "en" ? lesson[key === "title" ? "enTitle" : "enExample"] : lesson[key];
+}
 function renderLevel() {
-  const level = difficulty(state.elapsed).level;
+  const level = difficulty(state.elapsed, state.taughtLevel).level;
   if (level > shownLevel) {
-    const change = levelChanges(shownLevel, level);
-    levelMessage = change.morePatterns
-      ? "スピードアップ · 新しい問題"
-      : change.faster
-        ? "スピードアップ"
-        : "最高スピードで継続";
     shownLevel = level;
-    levelUntil = state.elapsed + 2200;
-    announce(`${tr("レベルアップ")} ${level}. ${tr(levelMessage)}`);
+    const lesson = lessonForLevel(level);
+    announce(
+      `${tr("レベルアップ")} ${level}. ${lessonText(lesson, "title")}. ${lessonText(lesson, "example")}`,
+    );
   }
   text("level", String(level));
-  text("survival-label", state.elapsed < levelUntil ? "LEVEL UP" : tr("生存時間"));
-  const caption = $("level-caption"),
-    up = state.elapsed < levelUntil;
-  if (caption.classList.contains("level-up") !== up) caption.classList.toggle("level-up", up);
+  const up = Boolean(
+    state.lessonNotice?.shownAt !== null &&
+      state.lessonNotice?.shownAt !== undefined &&
+      state.lessonNotice.readRemaining > 0,
+  );
+  text("survival-label", up ? "LEVEL UP" : tr("生存時間"));
+  $("level-caption").classList.toggle("level-up", up);
   $("field").classList.toggle("level-up-active", up);
 }
+function cueIsClear(cue) {
+  const box = cue.getBoundingClientRect(),
+    field = $("cards").getBoundingClientRect();
+  if (document.hidden || box.height <= 0 || box.top < field.top || box.bottom > field.bottom)
+    return false;
+  return [...nodes.values()].every((node) => {
+    const card = node.getBoundingClientRect();
+    return (
+      box.right <= card.left ||
+      box.left >= card.right ||
+      box.bottom + 4 <= card.top ||
+      box.top - 4 >= card.bottom
+    );
+  });
+}
+function confirmLessonPaint(notice, cue) {
+  if (lessonPaintToken === notice) return;
+  lessonPaintToken = notice;
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      if (lessonPaintToken !== notice) return;
+      lessonPaintToken = null;
+      if (state.lessonNotice !== notice || cue.hidden || !cueIsClear(cue)) return;
+      if (showLesson(state)) {
+        lastTime = performance.now();
+        renderLevel();
+      }
+    }),
+  );
+}
 function positionLevelCue() {
-  const cue = $("level-transition");
-  cue.hidden =
-    !geometry || state.elapsed >= levelUntil || !["playing", "hitstop"].includes(state.phase);
-  if (cue.hidden) return;
-  text("level-transition-title", `${tr("レベルアップ")} · Lv.${shownLevel}`);
-  text("level-transition-detail", tr(levelMessage));
+  const cue = $("level-transition"),
+    notice = state.lessonNotice;
+  const visible =
+    notice && notice.readRemaining > 0 && ["playing", "hitstop"].includes(state.phase) && geometry;
+  cue.hidden = !visible;
+  if (!visible) {
+    if (notice) notice.visible = false;
+    return;
+  }
+  const lesson = lessonForLevel(notice.level);
+  text("level-transition-title", `Lv.${notice.level} · ${lessonText(lesson, "title")}`);
+  text("level-transition-detail", lessonText(lesson, "example"));
   const columns = innerWidth <= 740 ? 1 : 2;
-  const height = 80;
+  cue.style.width = `${geometry.width / columns - 18}px`;
+  const height = cue.offsetHeight;
   const gaps = Array.from({ length: columns }, (_, lane) =>
     reasonGap(lane, columns, height, lastReason?.box),
   );
   const bottom = Math.max(...gaps),
     lane = gaps.indexOf(bottom);
   cue.hidden = bottom < height + 8;
-  cue.style.width = `${geometry.width / columns - 18}px`;
   cue.style.left = `${geometry.left + (lane * geometry.width) / columns}px`;
   cue.style.top = `${bottom - height}px`;
+  if (cue.hidden || !cueIsClear(cue)) {
+    cue.hidden = true;
+    notice.visible = false;
+    return;
+  }
+  if (!notice.visible) confirmLessonPaint(notice, cue);
 }
+
 function cancelInactiveInput() {
   if (state.phase !== "playing") activeGestureCancel?.();
   if (!["playing", "hitstop"].includes(state.phase))
@@ -751,6 +796,8 @@ function render() {
   const pauseHost = active ? document.querySelector(".hud") : document.querySelector(".top");
   if ($("pause").parentElement !== pauseHost) pauseHost.append($("pause"));
   text("start-best", bestMs > 0 ? tr("自己ベスト {time}", { time: duration(bestMs) }) : "");
+  document.querySelector(".start-role").textContent =
+    `${lessonText(lessonForLevel(1), "title")}。${lessonText(lessonForLevel(1), "example")}`;
   text("score", formatCount(state.score));
   text("combo", state.combo >= 2 ? tr("{count}連続", { count: formatCount(state.combo) }) : "");
   cancelInactiveInput();

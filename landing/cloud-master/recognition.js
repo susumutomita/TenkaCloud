@@ -1,5 +1,14 @@
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=b49c5b2f64";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=b49c5b2f64";
+import {
+  ALL_RULES_AT,
+  FIRST_LESSON_MS,
+  LESSON_GRACE_MS,
+  LESSON_NOTICE_MS,
+  LESSON_PRACTICE_MS,
+  LESSONS,
+  scenarioLevel,
+} from "./curriculum.js?v=222af1e398";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=222af1e398";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=222af1e398";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -13,39 +22,36 @@ export function shuffled(values, state) {
   }
   return list;
 }
-export const LEVEL_STAGES = [
-  { at: 0, fallMs: 16000, intervalMs: 1200 },
-  { at: 20000, fallMs: 13500, intervalMs: 1000 },
-  { at: 40000, fallMs: 11000, intervalMs: 850 },
-  { at: 60000, fallMs: 9000, intervalMs: 700 },
-  { at: 90000, fallMs: 6800, intervalMs: 560 },
-  { at: 120000, fallMs: 6000, intervalMs: 440 },
-  { at: 150000, fallMs: 5400, intervalMs: 360 },
-  { at: 180000, fallMs: 5000, intervalMs: 320 },
-];
+export const LEVEL_STAGES = Array.from({ length: LESSONS.length }, (_, index) => ({
+  at:
+    index === 0
+      ? 0
+      : FIRST_LESSON_MS + (index - 1) * (LESSON_NOTICE_MS + LESSON_GRACE_MS + LESSON_PRACTICE_MS),
+  fallMs: 16000,
+  intervalMs: 1200,
+}));
 export function levelFor(elapsed) {
   const time = Math.max(0, Number.isFinite(elapsed) ? elapsed : 0);
-  return time >= 180000
-    ? 8 + Math.floor((time - 180000) / 30000)
+  return time >= ALL_RULES_AT
+    ? LESSONS.length + Math.floor((time - ALL_RULES_AT) / LESSON_PRACTICE_MS)
     : LEVEL_STAGES.findLastIndex((s) => time >= s.at) + 1;
 }
-export function difficulty(elapsed = 0) {
-  const level = levelFor(elapsed),
-    base = LEVEL_STAGES[Math.min(level, 8) - 1];
+export function difficulty(elapsed = 0, taughtLevel = levelFor(elapsed)) {
+  const level = Math.max(1, taughtLevel),
+    pace = Math.min(10, Math.max(0, level - LESSONS.length));
   return {
     level,
-    tier: level === 1 ? 1 : level < 5 ? 2 : 3,
-    fallMs: Math.max(4200, base.fallMs - Math.max(0, level - 8) * 300),
-    intervalMs: Math.max(280, base.intervalMs - Math.max(0, level - 8) * 10),
+    tier: level < LESSONS.length ? 1 : 3,
+    fallMs: Math.max(4200, 16000 - pace * 1200),
+    intervalMs: Math.max(280, 1200 - pace * 92),
     limit: 6,
   };
 }
 export const QUESTION_COOLDOWN_MS = 8000;
 export function levelChanges(previous, current) {
-  const at = (level) => LEVEL_STAGES[Math.min(level, 8) - 1].at + Math.max(0, level - 8) * 30000;
   return {
-    faster: difficulty(at(current)).fallMs < difficulty(at(previous)).fallMs,
-    morePatterns: Math.min(current, 5) > Math.min(previous, 5),
+    faster: difficulty(0, current).fallMs < difficulty(0, previous).fallMs,
+    morePatterns: Math.min(current, LESSONS.length) > Math.min(previous, LESSONS.length),
   };
 }
 export function violates(context) {
@@ -65,44 +71,22 @@ export function violates(context) {
   }
   return JSON.stringify(context.actual) !== JSON.stringify(context.allowed);
 }
-const STARTER = new Set([
-  "RDSPubliclyAccessible",
-  "EC2SecurityGroupPublicSSH",
-  "Stealth:IAMUser/CloudTrailLoggingDisabled",
-  "Policy:S3/BucketPublicAccessGranted",
-  "RDSIAMAuthDisabled",
-  "LambdaFunctionUrlPublicAccess",
-  "S3LifecycleRapidExpiration",
-]);
 const preparedPools = new WeakMap();
 function poolsFor(catalog) {
   if (preparedPools.has(catalog)) return preparedPools.get(catalog);
+  const supported = (s) =>
+    s.serviceId === "signin" ||
+    catalog.some((m) => m.id === s.serviceId && m.operations.some((op) => op[0] === s.operation));
   const all = [
     ...SECURITY_SCENARIOS.filter(
-      (s) =>
-        s.serviceId === "signin" ||
-        catalog.some(
-          (m) => m.id === s.serviceId && m.operations.some((op) => op[0] === s.operation),
-        ),
+      (s) => supported(s) && (!s.normalRequest || supported(s.normalRequest)),
     ),
     ...EVIDENCE_SCENARIOS,
   ];
-  const rank = (s) => {
-    if (STARTER.has(s.id)) return 1;
-    if (!s.family)
-      return s.field.startsWith("eventContext.") ||
-        s.field.includes("Principal") ||
-        s.id.includes("SESFullAccess")
-        ? 3
-        : 2;
-    if (["cloudtrail", "s3_data", "configuration"].includes(s.family)) return 3;
-    if (["dns", "network"].includes(s.family)) return 4;
-    return 5;
-  };
   const result = {
     all,
     stages: Object.fromEntries(
-      [1, 2, 3, 4, 5].map((stage) => [stage, all.filter((s) => rank(s) <= stage)]),
+      LESSONS.map((_, index) => [index + 1, all.filter((s) => scenarioLevel(s.id) <= index + 1)]),
     ),
   };
   preparedPools.set(catalog, result);
@@ -112,38 +96,83 @@ export function availableScenarios(catalog) {
   return poolsFor(catalog).all;
 }
 export function availableAtLevel(catalog, level) {
-  return poolsFor(catalog).stages[Math.min(5, Math.max(1, level))];
+  return poolsFor(catalog).stages[Math.min(LESSONS.length, Math.max(1, level))];
+}
+function currentLevel(state) {
+  return state.taughtLevel ?? difficulty(state.elapsed).level;
+}
+function currentGroup(state) {
+  return availableAtLevel(state.catalog, currentLevel(state)).filter(
+    (s) => scenarioLevel(s.id) === currentLevel(state),
+  );
 }
 function blockedDecisions(state) {
   const keys = new Set(
     (state.active ?? []).map((x) => `${x.question.scenarioId}:${x.question.danger}`),
   );
-  const history = state.history ?? [];
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (state.elapsed - history[i].at >= QUESTION_COOLDOWN_MS) break;
-    keys.add(`${history[i].question.scenarioId}:${history[i].question.danger}`);
+  const group = currentGroup(state),
+    small = group.length <= 2 && state.taughtLevel !== undefined;
+  for (const entry of state.history ?? []) {
+    const cooldown =
+      small && scenarioLevel(entry.question.scenarioId) === currentLevel(state)
+        ? 2000
+        : QUESTION_COOLDOWN_MS;
+    if (state.elapsed - entry.at < cooldown)
+      keys.add(`${entry.question.scenarioId}:${entry.question.danger}`);
   }
   return keys;
 }
-function choose(state, intended) {
-  const stage = Math.min(5, difficulty(state.elapsed).level),
-    pool = availableAtLevel(state.catalog, stage),
+function freshFor(pool, blocked, intended) {
+  return pool.filter((s) => !blocked.has(`${s.id}:${intended}`));
+}
+function chooseFromBag(state, key, pool, intended, blocked) {
+  const fresh = freshFor(pool, blocked, intended);
+  if (!fresh.length) return null;
+  const ids = new Set(pool.map((s) => s.id));
+  state[key] = (state[key] ?? []).filter((s) => ids.has(s.id));
+  if (!state[key].length) state[key] = shuffled(pool, state);
+  let index = state[key].findLastIndex(
+    (s) => fresh.some((x) => x.id === s.id) && s.id !== state.lastScenario,
+  );
+  if (index < 0) {
+    const alternatives = fresh.filter((s) => s.id !== state.lastScenario);
+    state[key] = shuffled(alternatives.length ? alternatives : fresh, state);
+    index = state[key].length - 1;
+  }
+  return state[key].splice(index, 1)[0];
+}
+function selection(state) {
+  if (!state.outcomes.length)
+    state.outcomes = shuffled([true, false, true, false, true, false], state);
+  const level = currentLevel(state),
+    stage = Math.min(level, LESSONS.length),
+    pool = availableAtLevel(state.catalog, level),
+    group = currentGroup(state),
     blocked = blockedDecisions(state);
-  const fresh = (s) => !blocked.has(`${s.id}:${intended}`);
-  if (!pool.some(fresh)) return null;
-  if (!state.scenarioBag.length || state.scenarioTier !== stage) {
-    state.scenarioBag = shuffled(pool, state);
+  if (state.scenarioTier !== stage) {
+    state.scenarioBag = [];
+    state.lessonBag = [];
     state.scenarioTier = stage;
   }
-  let index = state.scenarioBag.findLastIndex((s) => fresh(s) && s.id !== state.lastScenario);
-  if (index < 0) {
-    const alternatives = pool.filter((s) => fresh(s) && s.id !== state.lastScenario);
-    state.scenarioBag = shuffled(alternatives.length ? alternatives : pool.filter(fresh), state);
-    index = state.scenarioBag.length - 1;
-  }
-  const result = state.scenarioBag.splice(index, 1)[0];
-  state.lastScenario = result.id;
-  return result;
+  const priority = state.practiceTurn && group.length ? group : pool;
+  let index = state.outcomes.findLastIndex(
+    (outcome) => freshFor(priority, blocked, outcome).length,
+  );
+  if (index < 0)
+    index = state.outcomes.findLastIndex((outcome) => freshFor(pool, blocked, outcome).length);
+  if (index < 0) return null;
+  const intended = state.outcomes[index];
+  let scenario =
+    state.practiceTurn && group.length
+      ? chooseFromBag(state, "lessonBag", group, intended, blocked)
+      : null;
+  const practised = Boolean(scenario);
+  scenario ??= chooseFromBag(state, "scenarioBag", pool, intended, blocked);
+  if (!scenario) return null;
+  state.outcomes.splice(index, 1);
+  if (state.practiceTurn === false || practised) state.practiceTurn = !state.practiceTurn;
+  state.lastScenario = scenario.id;
+  return { scenario, intended };
 }
 function valueText(value) {
   return typeof value === "string" ? value : JSON.stringify(value);
@@ -160,12 +189,58 @@ function nested(path, value) {
   node[parts.at(-1)] = value;
   return root;
 }
+const foundationParameters = {
+  ALBApprovedForwardTarget: (target) => ({
+    ListenerArn:
+      "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:listener/app/production/1111111111111111/2222222222222222",
+    DefaultActions: [
+      {
+        Type: "forward",
+        TargetGroupArn: `arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:targetgroup/${target}/3333333333333333`,
+      },
+    ],
+  }),
+  SecurityGroupAppSource: (group) => ({
+    GroupId: "sg-application",
+    IpPermissions: [
+      { IpProtocol: "tcp", FromPort: 8080, ToPort: 8080, UserIdGroupPairs: [{ GroupId: group }] },
+    ],
+  }),
+  CloudFrontApprovedOrigin: (domain) => ({
+    Id: "SYNTHETIC-DISTRIBUTION",
+    IfMatch: "SYNTHETIC-ETAG",
+    DistributionConfig: {
+      Origins: { Quantity: 1, Items: [{ Id: "app-origin", DomainName: domain }] },
+      DefaultCacheBehavior: { TargetOriginId: "app-origin" },
+    },
+  }),
+  WAFEnforcedBlock: (action) => ({
+    Name: "production-web",
+    Scope: "REGIONAL",
+    Id: "SYNTHETIC-WEB-ACL",
+    LockToken: "SYNTHETIC-LOCK",
+    DefaultAction: { Allow: {} },
+    Rules: [
+      {
+        Name: "known-denylist",
+        Priority: 0,
+        Action: structuredClone(action),
+        Statement: {
+          IPSetReferenceStatement: {
+            ARN: "arn:aws:wafv2:ap-northeast-1:111122223333:regional/ipset/known-denylist/11111111-2222-3333-4444-555555555555",
+          },
+        },
+      },
+    ],
+  }),
+};
+function initialParameters(s, actual) {
+  if (foundationParameters[s.id]) return foundationParameters[s.id](actual);
+  if (s.parameters) return structuredClone(s.parameters);
+  return s.field.startsWith("eventContext.") ? {} : nested(s.field, actual);
+}
 function requestData(s, actual) {
-  let parameters = s.parameters
-    ? structuredClone(s.parameters)
-    : s.field.startsWith("eventContext.")
-      ? {}
-      : nested(s.field, actual);
+  let parameters = initialParameters(s, actual);
   const metadata = s.field.startsWith("eventContext.") ? { [s.field.slice(13)]: actual } : {};
   if (s.id === "RDSMasterPasswordReset")
     parameters = { DBInstanceIdentifier: "customer-db", MasterUserPassword: "[REDACTED]" };
@@ -225,7 +300,7 @@ function sampleEvidence(state, source) {
   if (s.operator === "gt") {
     const minimum = s.threshold > 0 ? Math.max(1, Math.ceil(s.threshold * 0.2)) : 0;
     s.normal = minimum + Math.floor(random(state) * (s.threshold - minimum + 1));
-    const subtle = difficulty(state.elapsed).tier >= 3;
+    const subtle = difficulty(state.elapsed, state.taughtLevel).tier >= 3;
     s.flag =
       s.threshold +
       1 +
@@ -330,16 +405,13 @@ function evidenceQuestion(state, source, intended) {
   };
 }
 export function nextQuestion(state) {
-  if (!state.outcomes.length)
-    state.outcomes = shuffled([true, false, true, false, true, false], state);
-  const intended = state.outcomes.pop();
-  const scenario = choose(state, intended);
-  if (!scenario) {
-    state.outcomes.push(intended);
-    return null;
-  }
-  if (scenario.family) return evidenceQuestion(state, scenario, intended);
-  return apiQuestion(state, scenario, intended);
+  const selected = selection(state);
+  if (!selected) return null;
+  const { scenario, intended } = selected;
+  const question = scenario.family
+    ? evidenceQuestion(state, scenario, intended)
+    : apiQuestion(state, scenario, intended);
+  return { ...question, lessonLevel: scenarioLevel(scenario.id) };
 }
 function apiSource(scenario) {
   return officialSource(

@@ -1,9 +1,12 @@
-import { API_COPY, EVIDENCE_HEADLINES } from "./explanation-copy.js?v=b49c5b2f64";
-import { explanationTitle } from "./explanation-titles.js?v=b49c5b2f64";
-import { questionView } from "./question-locales.js?v=b49c5b2f64";
+import { API_COPY, EVIDENCE_HEADLINES } from "./explanation-copy.js?v=222af1e398";
+import { explanationTitle } from "./explanation-titles.js?v=222af1e398";
+import { questionView } from "./question-locales.js?v=222af1e398";
 
 const value = (x) => (typeof x === "string" ? x : JSON.stringify(x));
 const MEANING = {
+  elbv2: "リクエストの振り分け",
+  cloudfront: "コンテンツの配信",
+  wafv2: "Webリクエストの検査",
   s3: "ファイル置き場",
   iam: "操作権限",
   ec2: "仮想サーバー",

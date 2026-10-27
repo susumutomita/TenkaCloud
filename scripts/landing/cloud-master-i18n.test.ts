@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
+import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
 import { collect, createGame, start, tickFrame } from "../../landing/cloud-master/engine.js";
 import { explanationCard } from "../../landing/cloud-master/explanation.js";
 import { chooseLocale, tr } from "../../landing/cloud-master/i18n.js";
@@ -26,10 +27,15 @@ await loadQuestionLocale("en");
 const japanese = /[\u3040-\u30ff\u3400-\u9fff]/u;
 function generated(s, danger, seed = 37) {
   const stream = createQuestionStream(catalog, seed);
-  Object.assign(stream, { elapsed: 120000, scenarioTier: 5, scenarioBag: [s], outcomes: [danger] });
+  Object.assign(stream, {
+    elapsed: ALL_RULES_AT,
+    scenarioTier: LESSONS.length,
+    scenarioBag: [s],
+    outcomes: [danger],
+  });
   return nextQuestion(stream);
 }
-test("all253 English scenarios and506 outcomes fully localize evidence, conditions, details and reasons without mutating answers", () => {
+test("all259 English scenarios and506 outcomes fully localize evidence, conditions, details and reasons without mutating answers", () => {
   const all = availableScenarios(catalog);
   expect(englishScenarioIds().sort()).toEqual(all.map((s) => s.id).sort());
   for (const s of all)

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
+import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
 import { explanationCard } from "../../landing/cloud-master/explanation.js";
 import coverage from "../../landing/cloud-master/guardduty-coverage.json";
 import { loadQuestionLocale, questionView } from "../../landing/cloud-master/question-locales.js";
@@ -14,8 +15,8 @@ await loadQuestionLocale("en");
 function question(id: string, danger: boolean) {
   const stream = createQuestionStream(catalog, 91);
   Object.assign(stream, {
-    elapsed: 120000,
-    scenarioTier: 5,
+    elapsed: ALL_RULES_AT,
+    scenarioTier: LESSONS.length,
     scenarioBag: [availableScenarios(catalog).find((s) => s.id === id)],
     outcomes: [danger],
   });
@@ -71,7 +72,7 @@ test("managed recovery uses a Session Manager shell; even restricted SSH is flag
     expect(questionView(q, "en").payload).not.toContain("CidrIp:");
   }
 });
-test("all 506 explanations distinguish exercise policy from real findings in both languages", () => {
+test("all 518 explanations distinguish exercise policy from real findings in both languages", () => {
   for (const s of availableScenarios(catalog))
     for (const danger of [false, true]) {
       const q = question(s.id, danger);

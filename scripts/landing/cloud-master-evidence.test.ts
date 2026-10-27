@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
+import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
 import {
   collect,
   createGame,
@@ -48,7 +49,7 @@ function opening(danger: boolean) {
 describe("all published defensive evidence", () => {
   test("every published index type and named runtime signal has a playable authored contrast", () => {
     const ids = new Set(availableScenarios(catalog).map((s) => s.id));
-    expect(ids.size).toBe(253);
+    expect(ids.size).toBe(259);
     for (const r of coverage.active) expect(ids.has(r.findingType)).toBe(true);
     for (const r of [...coverage.customSignals, ...coverage.runtimeCustomSignals])
       expect(ids.has(r.signalName)).toBe(true);
@@ -72,14 +73,14 @@ describe("all published defensive evidence", () => {
     }
     expect(fixtures.size).toBe(212);
   });
-  test("all506 explanations bind to the actual sampled observation and its normal or flagged decision", () => {
+  test("all518 explanations bind to the actual sampled observation and its normal or flagged decision", () => {
     let count = 0;
     for (const scenario of availableScenarios(catalog)) {
       const pair = [];
       for (const danger of [false, true]) {
         const stream = createQuestionStream(catalog, 91);
-        stream.elapsed = 120000;
-        stream.scenarioTier = 5;
+        stream.elapsed = ALL_RULES_AT;
+        stream.scenarioTier = LESSONS.length;
         stream.scenarioBag = [scenario];
         stream.outcomes = [danger];
         const q = nextQuestion(stream);
@@ -89,7 +90,7 @@ describe("all published defensive evidence", () => {
       }
       expect(pair[0].why).not.toBe(pair[1].why);
     }
-    expect(count).toBe(506);
+    expect(count).toBe(518);
   });
   test("benign SDK values never inherit the dangerous pair explanation", () => {
     for (const [id, value, wrongText] of [
@@ -99,8 +100,8 @@ describe("all published defensive evidence", () => {
     ]) {
       const scenario = availableScenarios(catalog).find((s) => s.id === id);
       const stream = createQuestionStream(catalog, 42);
-      stream.elapsed = 120000;
-      stream.scenarioTier = 5;
+      stream.elapsed = ALL_RULES_AT;
+      stream.scenarioTier = LESSONS.length;
       stream.scenarioBag = [scenario];
       stream.outcomes = [false];
       const q = nextQuestion(stream);
@@ -115,7 +116,7 @@ describe("all published defensive evidence", () => {
     const a = createQuestionStream(catalog, 102),
       b = createQuestionStream(catalog, 102),
       c = createQuestionStream(catalog, 103);
-    a.elapsed = b.elapsed = c.elapsed = 120000;
+    a.elapsed = b.elapsed = c.elapsed = ALL_RULES_AT;
     const sequence = [];
     const different = [];
     let previous = "";
@@ -131,7 +132,7 @@ describe("all published defensive evidence", () => {
   });
   test("sampled indicators share address ranges and numeric thresholds remain visible", () => {
     const stream = createQuestionStream(catalog, 87);
-    stream.elapsed = 120000;
+    stream.elapsed = ALL_RULES_AT;
     const flags = new Set(),
       normal = new Set();
     const groups = [normal, flags];
@@ -158,7 +159,7 @@ describe("all published defensive evidence", () => {
   });
   test("decision sources are specific official chapter references and every predicate field is visible", () => {
     const s = createQuestionStream(catalog, 62);
-    s.elapsed = 120000;
+    s.elapsed = ALL_RULES_AT;
     for (let i = 0; i < 1500; i++) {
       const q = nextQuestion(s);
       const url = new URL(q.source);

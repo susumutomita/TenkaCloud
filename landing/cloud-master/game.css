@@ -1436,3 +1436,8 @@ html[lang="en"] .start-action {font-size:clamp(19px,4.6vw,24px);}
 .field.level-up-active::after {content:"";position:absolute;inset:2px;border:3px solid #629ec5;border-radius:inherit;pointer-events:none;z-index:1;}
 @keyframes level-arrive {from {opacity:0;}to {opacity:1;}}
 @media(prefers-reduced-motion:reduce) {.level-transition {animation:none;}}
+
+/* Concrete lesson cues use a free lane gap; they never cover requests or intercept taps. */
+.level-transition {height:auto;padding:8px 10px;align-items:flex-start;gap:3px;border-radius:10px;text-align:left;}
+.level-transition strong {font:800 16px/1.25 system-ui,sans-serif;white-space:normal;overflow-wrap:anywhere;}
+.level-transition span {font:600 12px/1.4 system-ui,sans-serif;overflow-wrap:anywhere;}
