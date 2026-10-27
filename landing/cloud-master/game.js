@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=8beafb0e72";
-import { lessonForLevel } from "./curriculum.js?v=8beafb0e72";
+import { loadCatalog } from "./api-catalog.js?v=09779a6597";
+import { lessonForLevel } from "./curriculum.js?v=09779a6597";
 import {
   collect,
   createGame,
@@ -11,16 +11,17 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=8beafb0e72";
-import { explanationCard } from "./explanation.js?v=8beafb0e72";
-import { decisionFact, reasonDuration } from "./feedback.js?v=8beafb0e72";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=8beafb0e72";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=8beafb0e72";
-import { flowPositions } from "./motion.js?v=8beafb0e72";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=8beafb0e72";
-import { difficulty } from "./recognition.js?v=8beafb0e72";
-import { buildShare } from "./share.js?v=8beafb0e72";
-import { formatSurvival } from "./time.js?v=8beafb0e72";
+} from "./engine.js?v=09779a6597";
+import { explanationCard } from "./explanation.js?v=09779a6597";
+import { decisionFact, reasonDuration } from "./feedback.js?v=09779a6597";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=09779a6597";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=09779a6597";
+import { flowPositions } from "./motion.js?v=09779a6597";
+import { lessonNotice, pressureNotice } from "./notices.js?v=09779a6597";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=09779a6597";
+import { availableAtLevel, difficulty } from "./recognition.js?v=09779a6597";
+import { buildShare } from "./share.js?v=09779a6597";
+import { formatSurvival } from "./time.js?v=09779a6597";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -43,6 +44,7 @@ let reasonUntil = 0,
   shownLevel = 1,
   shownPressure = 0,
   pressureNoticeUntil = 0,
+  pressureMessage = null,
   lessonPaintToken = null;
 function text(id, value) {
   const node = $(id);
@@ -98,6 +100,7 @@ function prepare(seed = newSeed(), begin = false) {
   shownLevel = 1;
   shownPressure = 0;
   pressureNoticeUntil = 0;
+  pressureMessage = null;
   lessonPaintToken = null;
   $("cards").replaceChildren();
   $("effects").replaceChildren();
@@ -527,7 +530,7 @@ function result() {
   }
   const actions = modal(
     tr("今回の生存記録"),
-    tr("正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ Lv.{level}", {
+    tr("正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ 難度{level}", {
       correct: formatCount(state.correct),
       passed: formatCount(state.passed),
       mistakes: formatCount(state.mistakes),
@@ -640,8 +643,7 @@ function renderFeedback() {
         copy: v.successReason,
         ...decisionFact(entry.question, getLocale()),
       };
-      reasonUntil =
-        performance.now() + reasonDuration(lastReason.copy, lastReason.value, getLocale());
+      reasonUntil = 0;
       announce(
         tr("{summary}。{detail}", {
           summary: lastReason.copy,
@@ -651,7 +653,9 @@ function renderFeedback() {
     }
   }
   const show =
-    lastReason && performance.now() < reasonUntil && ["playing", "hitstop"].includes(state.phase);
+    lastReason &&
+    (!reasonUntil || performance.now() < reasonUntil) &&
+    ["playing", "hitstop"].includes(state.phase);
   text("hit-copy", show ? lastReason.copy : "");
   text("hit-label", show ? lastReason.label : "");
   text("hit-value", show ? lastReason.value : "");
@@ -659,62 +663,26 @@ function renderFeedback() {
   $("hit-reason").hidden = !show;
   seen = state.history.length;
 }
-function reasonGap(lane, columns, height, extra) {
-  let bottom = geometry.height - 8;
-  const occupied = state.active
-    .filter((item) => item.slot % columns === lane)
-    .map((item) => ({
-      top: motion.get(String(item.uid))?.y ?? -1000,
-      height: geometry.heights.get(String(item.uid)) ?? 0,
-    }));
-  if (extra?.lane === lane) occupied.push(extra);
-  occupied.sort((a, b) => b.top - a.top);
-  for (const item of occupied) {
-    if (item.top < bottom && item.top + item.height > bottom - height - 8) bottom = item.top - 16;
-  }
-  return bottom;
-}
-function positionReason() {
-  const toast = $("hit-reason");
-  if (lastReason) lastReason.box = null;
-  if (toast.hidden || !geometry) return;
-  const columns = innerWidth <= 740 ? 1 : 2;
-  const width = geometry.width / columns - (columns === 2 ? 18 : 0);
-  toast.style.width = `${width}px`;
-  if (lastReason.width !== width) {
-    // Measure only after a new message or width change, never on every frame.
-    lastReason.height = toast.offsetHeight;
-    lastReason.width = width;
-  }
-  const gaps = Array.from({ length: columns }, (_, lane) =>
-    reasonGap(lane, columns, lastReason.height),
-  );
-  const bottom = Math.max(...gaps),
-    lane = gaps.indexOf(bottom);
-  toast.hidden = bottom < geometry.height * 0.35 + lastReason.height;
-  if (!toast.hidden)
-    lastReason.box = { lane, top: bottom - lastReason.height, height: lastReason.height };
-  toast.style.left = `${geometry.left + (lane * geometry.width) / columns}px`;
-  toast.style.right = "auto";
-  toast.style.margin = "0";
-  toast.style.bottom = `calc(${Math.max(8, geometry.height - bottom)}px + env(safe-area-inset-bottom,0px))`;
-}
 function lessonText(lesson, key) {
   return getLocale() === "en" ? lesson[key === "title" ? "enTitle" : "enExample"] : lesson[key];
 }
 function renderLevel() {
   if (state.pressureIndex > shownPressure) {
+    pressureMessage = {
+      previous: shownPressure,
+      current: state.pressureIndex,
+      numeric: availableAtLevel(catalog, state.taughtLevel).some((s) => s.operator === "gt"),
+    };
     shownPressure = state.pressureIndex;
     pressureNoticeUntil = state.elapsed + 2000;
-    announce(tr("スピードアップ"));
+    const message = currentProgressMessage(null, false, true);
+    announce(`${message.title}. ${message.detail}`);
   }
   const level = difficulty(state.elapsed, state.taughtLevel).level;
   if (level > shownLevel) {
     shownLevel = level;
-    const lesson = lessonForLevel(level);
-    announce(
-      `${tr("レベルアップ")} ${level}. ${lessonText(lesson, "title")}. ${lessonText(lesson, "example")}`,
-    );
+    const message = lessonNotice(level, getLocale());
+    announce(`${message.title}. ${message.detail}`);
   }
   text("level", String(level));
   const up = Boolean(
@@ -722,13 +690,13 @@ function renderLevel() {
       state.lessonNotice?.shownAt !== undefined &&
       state.lessonNotice.readRemaining > 0,
   );
-  text("survival-label", up ? "LEVEL UP" : tr("生存時間"));
+  text("survival-label", tr("生存時間"));
   $("level-caption").classList.toggle("level-up", up);
   $("field").classList.toggle("level-up-active", up);
 }
 function cueIsVisible(cue) {
   const box = cue.getBoundingClientRect(),
-    field = $("cards").getBoundingClientRect();
+    field = $("message-bar").getBoundingClientRect();
   return !document.hidden && box.height > 0 && box.top >= field.top && box.bottom <= field.bottom;
 }
 function confirmLessonPaint(notice, cue) {
@@ -746,31 +714,47 @@ function confirmLessonPaint(notice, cue) {
     }),
   );
 }
+function currentProgressMessage(notice, teaching, speedingUp) {
+  if (teaching) return lessonNotice(notice.level, getLocale());
+  if (speedingUp)
+    return pressureNotice(
+      pressureMessage.previous,
+      pressureMessage.current,
+      { capacity: state.maxCards, numeric: pressureMessage.numeric },
+      getLocale(),
+    );
+  return { title: tr("生存時間で難度アップ"), detail: "" };
+}
+function startReasonTimer() {
+  if (!$("hit-reason").hidden && !reasonUntil)
+    reasonUntil =
+      performance.now() + reasonDuration(lastReason.copy, lastReason.value, getLocale());
+}
 function positionLevelCue() {
   const cue = $("level-transition"),
     notice = state.lessonNotice;
   const teaching = Boolean(notice && notice.readRemaining > 0);
   const speedingUp = !notice && state.elapsed < pressureNoticeUntil;
-  const visible =
-    (teaching || speedingUp) && ["playing", "hitstop"].includes(state.phase) && geometry;
+  const active = ["playing", "hitstop"].includes(state.phase);
+  const intro = state.elapsed < 3000 && $("hit-reason").hidden;
+  const visible = (teaching || speedingUp || intro) && active;
   cue.hidden = !visible;
   if (!visible) {
     if (notice) notice.visible = false;
+    startReasonTimer();
     return;
   }
+  $("hit-reason").hidden = true;
+  const message = currentProgressMessage(notice, teaching, speedingUp);
+  text("level-transition-title", message.title);
+  text("level-transition-detail", message.detail);
   if (teaching) {
-    const lesson = lessonForLevel(notice.level);
-    text("level-transition-title", `Lv.${notice.level} · ${lessonText(lesson, "title")}`);
-    text("level-transition-detail", lessonText(lesson, "example"));
     if (!cueIsVisible(cue)) {
       cue.hidden = true;
       notice.visible = false;
       return;
     }
     if (!notice.visible) confirmLessonPaint(notice, cue);
-  } else {
-    text("level-transition-title", tr("スピードアップ"));
-    text("level-transition-detail", tr("落下が速く、危険の見分け方も少しずつ巧妙に。"));
   }
 }
 
@@ -806,7 +790,6 @@ function render() {
   attribute($("pause"), "aria-label", state.phase === "paused" ? tr("再開") : tr("一時停止"));
   renderFeedback();
   syncCards();
-  positionReason();
   positionLevelCue();
   if (active && !wasActive && !layoutBlocked) state.maxCards = layoutCapacity();
   if (active && !wasActive) layoutKey = currentLayout();

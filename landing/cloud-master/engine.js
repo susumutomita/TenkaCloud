@@ -3,7 +3,7 @@ import {
   LESSON_GRACE_MS,
   LESSON_NOTICE_MS,
   LESSON_TIMES,
-} from "./curriculum.js?v=8beafb0e72";
+} from "./curriculum.js?v=09779a6597";
 import {
   createQuestionStream,
   difficulty,
@@ -11,7 +11,7 @@ import {
   nextQuestion,
   PRESSURE_STAGES,
   pressureFor,
-} from "./recognition.js?v=8beafb0e72";
+} from "./recognition.js?v=09779a6597";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 120;
 export const REVIEW_DECISION_MS = 1500;
