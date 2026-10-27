@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=e279d431f3";
-import { lessonForLevel } from "./curriculum.js?v=e279d431f3";
+import { loadCatalog } from "./api-catalog.js?v=8beafb0e72";
+import { lessonForLevel } from "./curriculum.js?v=8beafb0e72";
 import {
   collect,
   createGame,
@@ -11,16 +11,16 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=e279d431f3";
-import { explanationCard } from "./explanation.js?v=e279d431f3";
-import { decisionFact, reasonDuration } from "./feedback.js?v=e279d431f3";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=e279d431f3";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=e279d431f3";
-import { flowPositions } from "./motion.js?v=e279d431f3";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=e279d431f3";
-import { difficulty } from "./recognition.js?v=e279d431f3";
-import { buildShare } from "./share.js?v=e279d431f3";
-import { formatSurvival } from "./time.js?v=e279d431f3";
+} from "./engine.js?v=8beafb0e72";
+import { explanationCard } from "./explanation.js?v=8beafb0e72";
+import { decisionFact, reasonDuration } from "./feedback.js?v=8beafb0e72";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=8beafb0e72";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=8beafb0e72";
+import { flowPositions } from "./motion.js?v=8beafb0e72";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=8beafb0e72";
+import { difficulty } from "./recognition.js?v=8beafb0e72";
+import { buildShare } from "./share.js?v=8beafb0e72";
+import { formatSurvival } from "./time.js?v=8beafb0e72";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -41,6 +41,8 @@ const motion = new Map();
 let reasonUntil = 0,
   lastReason = "",
   shownLevel = 1,
+  shownPressure = 0,
+  pressureNoticeUntil = 0,
   lessonPaintToken = null;
 function text(id, value) {
   const node = $(id);
@@ -94,6 +96,8 @@ function prepare(seed = newSeed(), begin = false) {
   lastReason = "";
   reasonUntil = 0;
   shownLevel = 1;
+  shownPressure = 0;
+  pressureNoticeUntil = 0;
   lessonPaintToken = null;
   $("cards").replaceChildren();
   $("effects").replaceChildren();
@@ -699,6 +703,11 @@ function lessonText(lesson, key) {
   return getLocale() === "en" ? lesson[key === "title" ? "enTitle" : "enExample"] : lesson[key];
 }
 function renderLevel() {
+  if (state.pressureIndex > shownPressure) {
+    shownPressure = state.pressureIndex;
+    pressureNoticeUntil = state.elapsed + 2000;
+    announce(tr("スピードアップ"));
+  }
   const level = difficulty(state.elapsed, state.taughtLevel).level;
   if (level > shownLevel) {
     shownLevel = level;
@@ -717,20 +726,10 @@ function renderLevel() {
   $("level-caption").classList.toggle("level-up", up);
   $("field").classList.toggle("level-up-active", up);
 }
-function cueIsClear(cue) {
+function cueIsVisible(cue) {
   const box = cue.getBoundingClientRect(),
     field = $("cards").getBoundingClientRect();
-  if (document.hidden || box.height <= 0 || box.top < field.top || box.bottom > field.bottom)
-    return false;
-  return [...nodes.values()].every((node) => {
-    const card = node.getBoundingClientRect();
-    return (
-      box.right <= card.left ||
-      box.left >= card.right ||
-      box.bottom + 4 <= card.top ||
-      box.top - 4 >= card.bottom
-    );
-  });
+  return !document.hidden && box.height > 0 && box.top >= field.top && box.bottom <= field.bottom;
 }
 function confirmLessonPaint(notice, cue) {
   if (lessonPaintToken === notice) return;
@@ -739,7 +738,7 @@ function confirmLessonPaint(notice, cue) {
     requestAnimationFrame(() => {
       if (lessonPaintToken !== notice) return;
       lessonPaintToken = null;
-      if (state.lessonNotice !== notice || cue.hidden || !cueIsClear(cue)) return;
+      if (state.lessonNotice !== notice || cue.hidden || !cueIsVisible(cue)) return;
       if (showLesson(state)) {
         lastTime = performance.now();
         renderLevel();
@@ -750,33 +749,29 @@ function confirmLessonPaint(notice, cue) {
 function positionLevelCue() {
   const cue = $("level-transition"),
     notice = state.lessonNotice;
+  const teaching = Boolean(notice && notice.readRemaining > 0);
+  const speedingUp = !notice && state.elapsed < pressureNoticeUntil;
   const visible =
-    notice && notice.readRemaining > 0 && ["playing", "hitstop"].includes(state.phase) && geometry;
+    (teaching || speedingUp) && ["playing", "hitstop"].includes(state.phase) && geometry;
   cue.hidden = !visible;
   if (!visible) {
     if (notice) notice.visible = false;
     return;
   }
-  const lesson = lessonForLevel(notice.level);
-  text("level-transition-title", `Lv.${notice.level} · ${lessonText(lesson, "title")}`);
-  text("level-transition-detail", lessonText(lesson, "example"));
-  const columns = innerWidth <= 740 ? 1 : 2;
-  cue.style.width = `${geometry.width / columns - 18}px`;
-  const height = cue.offsetHeight;
-  const gaps = Array.from({ length: columns }, (_, lane) =>
-    reasonGap(lane, columns, height, lastReason?.box),
-  );
-  const bottom = Math.max(...gaps),
-    lane = gaps.indexOf(bottom);
-  cue.hidden = bottom < height + 8;
-  cue.style.left = `${geometry.left + (lane * geometry.width) / columns}px`;
-  cue.style.top = `${bottom - height}px`;
-  if (cue.hidden || !cueIsClear(cue)) {
-    cue.hidden = true;
-    notice.visible = false;
-    return;
+  if (teaching) {
+    const lesson = lessonForLevel(notice.level);
+    text("level-transition-title", `Lv.${notice.level} · ${lessonText(lesson, "title")}`);
+    text("level-transition-detail", lessonText(lesson, "example"));
+    if (!cueIsVisible(cue)) {
+      cue.hidden = true;
+      notice.visible = false;
+      return;
+    }
+    if (!notice.visible) confirmLessonPaint(notice, cue);
+  } else {
+    text("level-transition-title", tr("スピードアップ"));
+    text("level-transition-detail", tr("落下が速く、危険の見分け方も少しずつ巧妙に。"));
   }
-  if (!notice.visible) confirmLessonPaint(notice, cue);
 }
 
 function cancelInactiveInput() {
