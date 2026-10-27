@@ -434,7 +434,7 @@ function explanation() {
   content.className = "miss-body";
   for (const child of [...root.children]) if (child !== actions) content.append(child);
   root.insertBefore(content, actions);
-  announce(`${view.headline}。${view.reason}`);
+  announce(tr("{summary}。{detail}", { summary: view.headline, detail: view.reason }));
 }
 function review() {
   const root = $("review-list");
@@ -636,7 +636,12 @@ function renderFeedback() {
       };
       reasonUntil =
         performance.now() + reasonDuration(lastReason.copy, lastReason.value, getLocale());
-      announce(`${lastReason.copy}。${lastReason.label}: ${lastReason.value}`);
+      announce(
+        tr("{summary}。{detail}", {
+          summary: lastReason.copy,
+          detail: `${lastReason.label}: ${lastReason.value}`,
+        }),
+      );
     }
   }
   const show =

@@ -1,4 +1,5 @@
 export const EN_UI = {
+  "{summary}。{detail}": "{summary}. {detail}",
   "0.0秒": "0.0s",
   "1〜6で検知 · Pで一時停止": "1–6 to flag · P to pause",
   "APIの番人。": "API Guardian",

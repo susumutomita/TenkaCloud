@@ -129,6 +129,28 @@ test("English UI messages preserve placeholders and every literal message has an
     }
   }
 });
+test("feedback announcements use English punctuation while preserving Japanese text and actual values", () => {
+  expect(
+    tr(
+      "{summary}。{detail}",
+      {
+        summary: "Request a public object listing",
+        detail: "ACL: public-read",
+      },
+      "en",
+    ),
+  ).toBe("Request a public object listing. ACL: public-read");
+  expect(
+    tr(
+      "{summary}。{detail}",
+      {
+        summary: "ファイル一覧を誰に見せるかの設定",
+        detail: "一覧を公開しない指定です。",
+      },
+      "ja",
+    ),
+  ).toBe("ファイル一覧を誰に見せるかの設定。一覧を公開しない指定です。");
+});
 test("language preference prioritizes manual selection and legacy Japanese users; fresh English browsers start English", () => {
   expect(chooseLocale({ saved: "ja", languages: ["en-US"] })).toBe("ja");
   expect(chooseLocale({ saved: "en", languages: ["ja-JP"] })).toBe("en");
