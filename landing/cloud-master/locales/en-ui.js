@@ -1,4 +1,5 @@
 export const EN_UI = {
+  "参考となるAWS公式資料 ↗": "AWS reference for this exercise ↗",
   レベルアップ: "LEVEL UP",
   "スピードアップ · 新しい問題": "Faster · New patterns",
   スピードアップ: "Faster cards",
@@ -70,8 +71,8 @@ export const EN_UI = {
   "本番AWSの顧客データ・監査ログを守る合成イベントの演習。カードのAPI引数（SDK形式の抜粋）と、対象・用途を読んで検知します。CloudTrailのログイン記録はAPI要求と区別して表示します。API名だけで危険と判定しません。":
     "Practice with synthetic events involving customer data and audit logs in a production AWS environment. Read each card’s API arguments (SDK-style excerpts), target, and purpose to spot suspicious activity. CloudTrail sign-in records are labeled separately from API requests. An API name alone does not make a request suspicious.",
   "本番AWSを守る監視担当は、あなた。": "You’re on watch for a production AWS environment.",
-  "架空のAWSイベントを使う学習ゲーム。実際のGuardDuty判定・通信遮断の再現ではありません。":
-    "A learning game using fictional AWS events. It does not reproduce actual GuardDuty decisions or traffic blocking. GuardDuty does not block traffic.",
+  "表示した演習方針への適合を判断する学習ゲーム。正常例も安全の証明ではなく、実際のGuardDuty findingの有無・通信遮断は判定しません。":
+    "Judge the displayed exercise policy. Passing is not proof of safety; this game does not determine whether GuardDuty creates a finding or block traffic.",
   "検知 ＋{points}": "Flagged +{points}",
   正しい検知: "Correct flags",
   "正しい検知 {correct} ／ 正常通過 {passed} ／ ミス {mistakes} ／ Lv.{level}":

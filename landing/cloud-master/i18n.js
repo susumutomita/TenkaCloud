@@ -1,4 +1,4 @@
-import { EN_UI } from "./locales/en-ui.js?v=b4e44e232c";
+import { EN_UI } from "./locales/en-ui.js?v=f4323ff2cb";
 export const LOCALE_KEY = "tenkacloud.api-watch.locale.v1";
 export function chooseLocale({ saved, requested, languages = [], legacyRecord = false } = {}) {
   if (["ja", "en"].includes(requested)) return requested;

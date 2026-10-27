@@ -59,6 +59,57 @@ At390×844 our field788px (93.4 percent), usable752px, four cards in one reading
 Actual original-mobile comparison and physical iPhone/Safari remain unverified.
 Original artwork/text/assets are not copied.
 
+## AWS security guidance and decision scope
+
+All 253 families (41 API/event and 212 evidence cases) and their Japanese/English
+teaching text were reviewed. Every card judges the displayed **exercise policy**;
+it does not decide whether GuardDuty produces a finding. Passing is not proof of
+safety or absence of a finding. API names and custom signal names remain reference
+identities, not public detector expressions. Seven API families now use a different,
+recommended normal operation; the coverage file records both operations explicitly.
+
+The exercise prohibits creating long-term IAM access keys, service-specific bot
+credentials and inbound SSH. AWS workloads use temporary workload roles; external
+CI uses constrained OIDC/federation. Roles Anywhere is an option for external
+workloads with managed X.509 certificates, not a requirement for every bot. Human
+normal contrasts use verified IdP federation and temporary roles. Managed-node
+recovery uses a `Session Manager` shell with an authorized role and SSM prerequisites;
+`SSH-over-Session-Manager` and port forwarding are not the normal cases. These are
+stated exercise policies, not a claim that AWS universally forbids every legacy key
+or SSH use case. Temporary role credentials are not newly created IAM user keys.
+
+- Before: CreateAccessKey for build-bot was normal rotation; now the normal case is
+  AssumeRoleWithWebIdentity, while key creation for that same bot is review-needed.
+- Before: three reputation examples also created app-bot keys; both variants now
+  observe an approved UpdateFunctionCode using a temporary role and compare the
+  supplied source-reputation evidence.
+- Before: sending an SSH key to the right server or allowing a restricted TCP22
+  source passed; now recovery starts `Session Manager`, and the SG normal case
+  revokes an existing SSH rule. Windows password retrieval is also replaced by a
+  `Session Manager` normal contrast.
+- Tor API callers are exit-node sources, distinct from an EC2 Tor client's guard
+  node destination. Resource-credential cases identify the issuing resource and
+  caller-account ownership or external egress; external CI obtaining its own role
+  is not credential exfiltration.
+- Network summaries are distinguished from OS authentication-log enrichment.
+  Bedrock logging configuration is account/Region-wide. Dedicated Kubernetes
+  service accounts and explicit Role scope avoid recommending default-account
+  grants; creating a Role is distinct from binding it to a subject. UID transitions
+  alone do not establish a Runtime finding.
+
+Sources checked for this revision:
+[IAM best practices](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html),
+[Roles Anywhere](https://docs.aws.amazon.com/rolesanywhere/latest/userguide/introduction.html),
+[Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html),
+[GuardDuty IAM](https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html),
+[EC2](https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html),
+[EKS](https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html),
+[Runtime](https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html),
+[Bedrock logging scope](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html),
+and its [parameterless delete API](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_DeleteModelInvocationLoggingConfiguration.html).
+Regional/account-specific rules, private machine-learning thresholds, real finding emission and
+actual AWS administration remain unverified. No AWS API or attack was executed.
+
 ## Public coverage versus exact vendor predicates
 
 Playable: **253 authored scenario families /506 basic normal-versus-flag cases**:

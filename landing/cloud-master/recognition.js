@@ -1,5 +1,5 @@
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=b4e44e232c";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=b4e44e232c";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=f4323ff2cb";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=f4323ff2cb";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -161,7 +161,11 @@ function nested(path, value) {
   return root;
 }
 function requestData(s, actual) {
-  let parameters = s.field.startsWith("eventContext.") ? {} : nested(s.field, actual);
+  let parameters = s.parameters
+    ? structuredClone(s.parameters)
+    : s.field.startsWith("eventContext.")
+      ? {}
+      : nested(s.field, actual);
   const metadata = s.field.startsWith("eventContext.") ? { [s.field.slice(13)]: actual } : {};
   if (s.id === "RDSMasterPasswordReset")
     parameters = { DBInstanceIdentifier: "customer-db", MasterUserPassword: "[REDACTED]" };
@@ -203,7 +207,7 @@ function requestData(s, actual) {
 }
 function visiblePayload(s, actual) {
   const field = s.field.replace("eventContext.", "観測.");
-  if (s.id === "EC2SecurityGroupPublicSSH") return `TCP 22 / CidrIp: ${actual}`;
+  if (s.id === "EC2SecurityGroupPublicSSH" && !s.parameters) return `TCP 22 / CidrIp: ${actual}`;
   if (s.id === "RDSMasterPasswordReset") return `MasterUserPassword: [REDACTED]\n変更票: ${actual}`;
   if (s.id === "SageMakerLifecycleConfigModified")
     return `OnStart.Content: [本文省略]\n内容ハッシュ: ${actual}`;
@@ -257,7 +261,7 @@ function decisionExplanation(context, focusLabel, detail) {
   } else {
     comparison = `この演習の要確認条件は ${focusLabel}: ${valueText(context.threshold)}。今回の値 ${valueText(context.actual)} は${danger ? "その条件と一致するため検知します" : "その条件とは異なるため通します"}。`;
   }
-  return `今回の判断: ${danger ? "検知" : "通す"}。今回の観測: ${context.observed}。対象・用途: ${context.policy}。${comparison}${danger ? ` 補足: ${detail}` : ""} 数値・条件は表示した演習の前提です。AWSの非公開判定式や実行成功は再現しません。`;
+  return `今回の判断: ${danger ? "検知" : "通す"}。今回の観測: ${context.observed}。対象・用途: ${context.policy}。${comparison}${danger ? ` 補足: ${detail}` : ""} これは表示した演習方針への適合判定です。通す例も安全の証明ではなく、GuardDuty findingの有無は判定しません。数値・条件は演習の前提で、AWSの非公開判定式や実行成功は再現しません。`;
 }
 function briefReason(context, label) {
   const field = label.split(".").at(-1);
@@ -335,11 +339,25 @@ export function nextQuestion(state) {
     return null;
   }
   if (scenario.family) return evidenceQuestion(state, scenario, intended);
+  return apiQuestion(state, scenario, intended);
+}
+function apiSource(scenario) {
+  return officialSource(
+    scenario.source ??
+      (scenario.id.includes(":")
+        ? `https://docs.aws.amazon.com/guardduty/latest/ug/${scenario.id.includes(":S3/") ? "guardduty_finding-types-s3.html" : "guardduty_finding-types-iam.html"}`
+        : "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html"),
+    scenario.referenceText ?? scenario.id,
+  );
+}
+function apiQuestion(state, scenario, intended) {
+  const request =
+    !intended && scenario.normalRequest ? { ...scenario, ...scenario.normalRequest } : scenario;
   const model =
-    scenario.serviceId === "signin" ? null : state.catalog.find((s) => s.id === scenario.serviceId);
-  const operation = model?.operations.find((op) => op[0] === scenario.operation);
+    request.serviceId === "signin" ? null : state.catalog.find((s) => s.id === request.serviceId);
+  const operation = model?.operations.find((op) => op[0] === request.operation);
   const actual = intended ? scenario.risk : scenario.safe;
-  const observed = visiblePayload(scenario, actual);
+  const observed = visiblePayload(request, actual);
   const context = {
     kind: scenario.id,
     allowed: scenario.safe,
@@ -351,20 +369,20 @@ export function nextQuestion(state) {
   const danger = violates(context);
   const method = operation?.[1] ?? "EVENT",
     path = operation?.[2] ?? "CloudTrail console sign-in";
-  const { parameters, metadata } = requestData(scenario, actual);
+  const { parameters, metadata } = requestData(request, actual);
   return {
     id: `${state.questionSerial++}:${scenario.id}`,
     scenarioId: scenario.id,
-    serviceId: scenario.serviceId,
+    serviceId: request.serviceId,
     service: model?.name ?? "AWS Sign-In",
-    operation: scenario.operation,
+    operation: request.operation,
     method,
     path,
     protocol: model?.protocol ?? "cloudtrail-event",
     payload: observed,
     parameters,
     metadata,
-    wire: `${scenario.serviceId === "signin" ? "合成CloudTrailイベント" : "API引数のデコード抜粋"} · ${scenario.operation}\n${JSON.stringify(parameters, null, 2)}\n付帯観測（API引数とは別）: ${JSON.stringify(metadata)}\n${scenario.baseline}`,
+    wire: `${request.serviceId === "signin" ? "合成CloudTrailイベント" : "API引数のデコード抜粋"} · ${request.operation}\n${JSON.stringify(parameters, null, 2)}\n付帯観測（API引数とは別）: ${JSON.stringify(metadata)}\n${scenario.baseline}`,
     context,
     danger,
     severity: danger ? scenario.severity : 0,
@@ -377,12 +395,7 @@ export function nextQuestion(state) {
     decisionField: scenario.field.replace("eventContext.", "観測."),
     teachingNote: scenario.why,
     briefReason: briefReason(context, scenario.field.replace("eventContext.", "観測.")),
-    source: officialSource(
-      scenario.id.includes(":")
-        ? `https://docs.aws.amazon.com/guardduty/latest/ug/${scenario.id.includes(":S3/") ? "guardduty_finding-types-s3.html" : "guardduty_finding-types-iam.html"}`
-        : "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html",
-      scenario.id,
-    ),
+    source: apiSource(scenario),
   };
 }
 export function createQuestionStream(catalog, seed = 726) {

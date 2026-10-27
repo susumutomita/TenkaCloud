@@ -137,10 +137,10 @@
         "caseId": "DefenseEvasion:IAMUser/BedrockLoggingDisabled",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=DefenseEvasion%3AIAMUser%2FBedrockLoggingDisabled",
-        "assumptions": "本番Bedrock / 推論監査ログを常時保存",
+        "assumptions": "Bedrock: account/Region単位 / 稼働本番は監査必須",
         "exactAWSRuleReproduced": false,
-        "normalExample": "log対象: retired-test",
-        "flaggedExample": "log対象: production-ai"
+        "normalExample": "対象account/Region: 廃止済み検証account/Region\nAPI引数: なし / 環境情報は付帯観測",
+        "flaggedExample": "対象account/Region: 稼働本番account/Region\nAPI引数: なし / 環境情報は付帯観測"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -539,10 +539,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.InsideAWS",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FInstanceCredentialExfiltration.InsideAWS",
-        "assumptions": "VM専用セッション / 発行先: workload-Aのみ",
+        "assumptions": "発行元: 自社111122223333のEC2 workload-A",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "使用元: 別AWS資源・workload-B\n関連付け: 同一セッションID / 出所確認済み",
-        "normalExample": "使用元: workload-A\n関連付け: 同一セッションID / 出所確認済み"
+        "flaggedExample": "使用元: 別アカウント444455556666のIP\n関連付け: 同一短期セッション・使用元所有者照合済み",
+        "normalExample": "使用元: 自社workload-A（111122223333）\n関連付け: 同一短期セッション・使用元所有者照合済み"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -782,10 +782,10 @@
         "caseId": "Recon:IAMUser/MaliciousIPCaller",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=Recon%3AIAMUser%2FMaliciousIPCaller",
-        "assumptions": "演習不正通信指標: 198.51.100.231 / 主体ops-roleの通常業務",
+        "assumptions": "演習不正通信指標: 198.51.100.205 / 主体ops-roleの通常業務",
         "exactAWSRuleReproduced": false,
-        "normalExample": "発信元: 198.51.100.232\neventName: DescribeInstances",
-        "flaggedExample": "発信元: 192.0.2.33\neventName: DescribeInstances"
+        "normalExample": "発信元: 198.51.100.206\neventName: DescribeInstances",
+        "flaggedExample": "発信元: 198.51.100.205\neventName: DescribeInstances"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -861,10 +861,10 @@
         "caseId": "Recon:IAMUser/TorIPCaller",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=Recon%3AIAMUser%2FTorIPCaller",
-        "assumptions": "演習Tor入口指標: 203.0.113.231 / 主体ops-roleの通常業務",
+        "assumptions": "演習Tor出口指標: 198.51.100.205 / 主体ops-roleの通常業務",
         "exactAWSRuleReproduced": false,
-        "normalExample": "発信元: 203.0.113.232\neventName: DescribeInstances",
-        "flaggedExample": "発信元: 198.51.100.175\neventName: DescribeInstances"
+        "normalExample": "発信元: 198.51.100.206\neventName: DescribeInstances",
+        "flaggedExample": "発信元: 198.51.100.205\neventName: DescribeInstances"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1020,10 +1020,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/MaliciousIPCaller",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FMaliciousIPCaller",
-        "assumptions": "演習不正通信指標: 192.0.2.39 / 主体ops-roleの通常業務",
+        "assumptions": "演習不正通信指標: 198.51.100.205 / 主体ops-roleの通常業務",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "発信元: 192.0.2.39\neventName: CreateAccessKey(UserName=app-bot)",
-        "normalExample": "発信元: 198.51.100.251\neventName: CreateAccessKey(UserName=app-bot)"
+        "flaggedExample": "発信元: 198.51.100.205\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新",
+        "normalExample": "発信元: 198.51.100.206\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1060,10 +1060,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/MaliciousIPCaller.Custom",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FMaliciousIPCaller.Custom",
-        "assumptions": "演習不正通信指標: 192.0.2.118 / 主体ops-roleの通常業務",
+        "assumptions": "演習不正通信指標: 198.51.100.205 / 主体ops-roleの通常業務",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "発信元: 192.0.2.118\neventName: CreateAccessKey(UserName=app-bot)",
-        "normalExample": "発信元: 198.51.100.209\neventName: CreateAccessKey(UserName=app-bot)"
+        "flaggedExample": "発信元: 198.51.100.205\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新",
+        "normalExample": "発信元: 198.51.100.206\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1099,10 +1099,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/TorIPCaller",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FTorIPCaller",
-        "assumptions": "演習Tor入口指標: 198.51.100.58 / 主体ops-roleの通常業務",
+        "assumptions": "演習Tor出口指標: 198.51.100.205 / 主体ops-roleの通常業務",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "発信元: 198.51.100.58\neventName: CreateAccessKey(UserName=app-bot)",
-        "normalExample": "発信元: 198.51.100.171\neventName: CreateAccessKey(UserName=app-bot)"
+        "flaggedExample": "発信元: 198.51.100.205\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新",
+        "normalExample": "発信元: 198.51.100.206\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1177,9 +1177,9 @@
         "caseId": "Policy:IAMUser/RootCredentialUsage",
         "evidenceKind": "cloudtrail-event",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=Policy%3AIAMUser%2FRootCredentialUsage",
-        "assumptions": "合成イベント: Success / 日常の閲覧作業・管理者IAMあり",
+        "assumptions": "日常の閲覧: MFA済みfederated Role / Root不要",
         "exactAWSRuleReproduced": false,
-        "normalExample": "userIdentity.type: IAMUser",
+        "normalExample": "userIdentity.type: AssumedRole",
         "flaggedExample": "userIdentity.type: Root"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
@@ -1258,10 +1258,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration.OutsideAWS",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FInstanceCredentialExfiltration.OutsideAWS",
-        "assumptions": "VM専用セッション / 発行先: workload-Aのみ",
+        "assumptions": "発行元: 自社111122223333のEC2 workload-A",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "使用元: AWS外IP・workload-B\n関連付け: 同一セッションID / 出所確認済み",
-        "normalExample": "使用元: workload-A\n関連付け: 同一セッションID / 出所確認済み"
+        "flaggedExample": "使用元: AWS外IP・未承認egress\n関連付け: 同一短期セッション・使用元所有者照合済み",
+        "normalExample": "使用元: 自社workload-A（111122223333）\n関連付け: 同一短期セッション・使用元所有者照合済み"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1300,10 +1300,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/ResourceCredentialExfiltration.InsideAWS",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FResourceCredentialExfiltration.InsideAWS",
-        "assumptions": "ワークロード専用セッション / 発行先: workload-Aのみ",
+        "assumptions": "発行元: 自社111122223333のLambda/ECS workload-A",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "使用元: 別AWS資源・workload-B\n関連付け: 同一セッションID / 出所確認済み",
-        "normalExample": "使用元: workload-A\n関連付け: 同一セッションID / 出所確認済み"
+        "flaggedExample": "使用元: 別アカウント444455556666のIP\n関連付け: 同一短期セッション・使用元所有者照合済み",
+        "normalExample": "使用元: 自社workload-A（111122223333）\n関連付け: 同一短期セッション・使用元所有者照合済み"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1342,10 +1342,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/ResourceCredentialExfiltration.OutsideAWS",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FResourceCredentialExfiltration.OutsideAWS",
-        "assumptions": "ワークロード専用セッション / 発行先: workload-Aのみ",
+        "assumptions": "発行元: 自社111122223333のLambda/ECS workload-A",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "使用元: AWS外IP・workload-B\n関連付け: 同一セッションID / 出所確認済み",
-        "normalExample": "使用元: workload-A\n関連付け: 同一セッションID / 出所確認済み"
+        "flaggedExample": "使用元: AWS外IP・未承認egress\n関連付け: 同一短期セッション・使用元所有者照合済み",
+        "normalExample": "使用元: 自社workload-A（111122223333）\n関連付け: 同一短期セッション・使用元所有者照合済み"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1377,10 +1377,10 @@
         "caseId": "Impact:EC2/MaliciousDomainRequest.Custom",
         "evidenceKind": "synthetic-dns",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Impact%3AEC2%2FMaliciousDomainRequest.Custom",
-        "assumptions": "演習不正通信指標: svc-578.example / 対象は通常の業務処理",
+        "assumptions": "演習不正通信指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-579.example\n資源: EC2業務ワークロード",
-        "flaggedExample": "問い合わせ先: svc-844.example\n資源: EC2業務ワークロード"
+        "normalExample": "問い合わせ先: svc-406.example\n資源: EC2業務ワークロード",
+        "flaggedExample": "問い合わせ先: svc-405.example\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1411,10 +1411,10 @@
         "caseId": "Backdoor:EC2/C&CActivity.B!DNS",
         "evidenceKind": "synthetic-dns",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Backdoor%3AEC2%2FC%26CActivity.B!DNS",
-        "assumptions": "演習C2指標: svc-937.example / 対象は通常の業務処理",
+        "assumptions": "演習C2指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-938.example\n資源: EC2業務ワークロード",
-        "flaggedExample": "問い合わせ先: svc-612.example\n資源: EC2業務ワークロード"
+        "normalExample": "問い合わせ先: svc-406.example\n資源: EC2業務ワークロード",
+        "flaggedExample": "問い合わせ先: svc-405.example\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1445,10 +1445,10 @@
         "caseId": "CryptoCurrency:EC2/BitcoinTool.B!DNS",
         "evidenceKind": "synthetic-dns",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=CryptoCurrency%3AEC2%2FBitcoinTool.B!DNS",
-        "assumptions": "演習暗号資産指標: svc-744.example / 対象は通常の業務処理",
+        "assumptions": "演習暗号資産指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-745.example\n資源: EC2業務ワークロード",
-        "flaggedExample": "問い合わせ先: svc-637.example\n資源: EC2業務ワークロード"
+        "normalExample": "問い合わせ先: svc-406.example\n資源: EC2業務ワークロード",
+        "flaggedExample": "問い合わせ先: svc-405.example\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1479,10 +1479,10 @@
         "caseId": "Impact:EC2/AbusedDomainRequest.Reputation",
         "evidenceKind": "synthetic-dns",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Impact%3AEC2%2FAbusedDomainRequest.Reputation",
-        "assumptions": "演習悪用報告指標: svc-220.example / 対象は通常の業務処理",
+        "assumptions": "演習悪用報告指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-221.example\n資源: EC2業務ワークロード",
-        "flaggedExample": "問い合わせ先: svc-218.example\n資源: EC2業務ワークロード"
+        "normalExample": "問い合わせ先: svc-406.example\n資源: EC2業務ワークロード",
+        "flaggedExample": "問い合わせ先: svc-405.example\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1513,10 +1513,10 @@
         "caseId": "Impact:EC2/BitcoinDomainRequest.Reputation",
         "evidenceKind": "synthetic-dns",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Impact%3AEC2%2FBitcoinDomainRequest.Reputation",
-        "assumptions": "演習暗号資産指標: svc-287.example / 対象は通常の業務処理",
+        "assumptions": "演習暗号資産指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-288.example\n資源: EC2業務ワークロード",
-        "flaggedExample": "問い合わせ先: svc-574.example\n資源: EC2業務ワークロード"
+        "normalExample": "問い合わせ先: svc-406.example\n資源: EC2業務ワークロード",
+        "flaggedExample": "問い合わせ先: svc-405.example\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1581,10 +1581,10 @@
         "caseId": "Impact:EC2/SuspiciousDomainRequest.Reputation",
         "evidenceKind": "synthetic-dns",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Impact%3AEC2%2FSuspiciousDomainRequest.Reputation",
-        "assumptions": "演習低評価指標: svc-264.example / 対象は通常の業務処理",
+        "assumptions": "演習低評価指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-265.example\n資源: EC2業務ワークロード",
-        "flaggedExample": "問い合わせ先: svc-699.example\n資源: EC2業務ワークロード"
+        "normalExample": "問い合わせ先: svc-406.example\n資源: EC2業務ワークロード",
+        "flaggedExample": "問い合わせ先: svc-405.example\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1615,10 +1615,10 @@
         "caseId": "Trojan:EC2/BlackholeTraffic!DNS",
         "evidenceKind": "synthetic-dns",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Trojan%3AEC2%2FBlackholeTraffic!DNS",
-        "assumptions": "演習シンクホール指標: svc-843.example / 対象は通常の業務処理",
+        "assumptions": "演習シンクホール指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-844.example\n資源: EC2業務ワークロード",
-        "flaggedExample": "問い合わせ先: svc-496.example\n資源: EC2業務ワークロード"
+        "normalExample": "問い合わせ先: svc-406.example\n資源: EC2業務ワークロード",
+        "flaggedExample": "問い合わせ先: svc-405.example\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1822,10 +1822,10 @@
         "caseId": "Trojan:EC2/PhishingDomainRequest!DNS",
         "evidenceKind": "synthetic-dns",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Trojan%3AEC2%2FPhishingDomainRequest!DNS",
-        "assumptions": "演習フィッシング指標: svc-872.example / 対象は通常の業務処理",
+        "assumptions": "演習フィッシング指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-873.example\n資源: EC2業務ワークロード",
-        "flaggedExample": "問い合わせ先: svc-371.example\n資源: EC2業務ワークロード"
+        "normalExample": "問い合わせ先: svc-406.example\n資源: EC2業務ワークロード",
+        "flaggedExample": "問い合わせ先: svc-405.example\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1891,10 +1891,10 @@
         "caseId": "Backdoor:EC2/C&CActivity.B",
         "evidenceKind": "synthetic-network",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Backdoor%3AEC2%2FC%26CActivity.B",
-        "assumptions": "演習C2指標: 198.51.100.6 / 対象は通常の業務処理",
+        "assumptions": "演習C2指標: 198.51.100.205 / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続先: 198.51.100.7\n資源: EC2業務ワークロード",
-        "flaggedExample": "接続先: 192.0.2.138\n資源: EC2業務ワークロード"
+        "normalExample": "接続先: 198.51.100.206\n資源: EC2業務ワークロード",
+        "flaggedExample": "接続先: 198.51.100.205\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -2420,8 +2420,8 @@
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Impact%3AEC2%2FWinRMBruteForce",
         "assumptions": "本番ホスト / 管理元の失敗は一分5件まで・試験なし",
         "exactAWSRuleReproduced": false,
-        "normalExample": "失敗回数: 1\n対象: WinRM / 同一発信元\n方向: 本番ホストからの送信",
-        "flaggedExample": "失敗回数: 6\n対象: WinRM / 同一発信元\n方向: 本番ホストからの送信"
+        "normalExample": "OS認証の失敗回数: 2\n対象: WinRM / 同一発信元\n方向: 本番ホストからの送信",
+        "flaggedExample": "OS認証の失敗回数: 10\n対象: WinRM / 同一発信元\n方向: 本番ホストからの送信"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -2494,10 +2494,10 @@
         "caseId": "Recon:EC2/PortProbeUnprotectedPort",
         "evidenceKind": "synthetic-network",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Recon%3AEC2%2FPortProbeUnprotectedPort",
-        "assumptions": "本番管理ポート / 演習脅威リスト:203.0.113.162",
+        "assumptions": "本番管理ポート / 演習脅威リスト:198.51.100.205",
         "exactAWSRuleReproduced": false,
-        "normalExample": "発信元IP: 203.0.113.163\nネットワーク: 外部経路が開いている / 観測済み",
-        "flaggedExample": "発信元IP: 198.51.100.180\nネットワーク: 外部経路が開いている / 観測済み"
+        "normalExample": "発信元IP: 198.51.100.206\nネットワーク: 外部経路が開いている / 観測済み",
+        "flaggedExample": "発信元IP: 198.51.100.205\nネットワーク: 外部経路が開いている / 観測済み"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -2568,10 +2568,10 @@
         "caseId": "Trojan:EC2/BlackholeTraffic",
         "evidenceKind": "synthetic-network",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=Trojan%3AEC2%2FBlackholeTraffic",
-        "assumptions": "演習シンクホール指標: 192.0.2.215 / 対象は通常の業務処理",
+        "assumptions": "演習シンクホール指標: 198.51.100.205 / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続先: 192.0.2.216\n資源: EC2業務ワークロード",
-        "flaggedExample": "接続先: 192.0.2.168\n資源: EC2業務ワークロード"
+        "normalExample": "接続先: 198.51.100.206\n資源: EC2業務ワークロード",
+        "flaggedExample": "接続先: 198.51.100.205\n資源: EC2業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -2679,10 +2679,10 @@
         "caseId": "UnauthorizedAccess:EC2/RDPBruteForce",
         "evidenceKind": "synthetic-network",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=UnauthorizedAccess%3AEC2%2FRDPBruteForce",
-        "assumptions": "本番ホスト / 管理元の失敗は一分5件まで・試験なし",
+        "assumptions": "SSM管理EC2: TCP3389不要 / 演習基準0件",
         "exactAWSRuleReproduced": false,
-        "normalExample": "失敗回数: 2\n対象: RDP / 同一発信元",
-        "flaggedExample": "失敗回数: 8\n対象: RDP / 同一発信元"
+        "normalExample": "対象ポートへの接続回数: 0\n観測: EC2 i-production TARGET / TCP3389 / 合成VPC flow集計",
+        "flaggedExample": "対象ポートへの接続回数: 5\n観測: EC2 i-production TARGET / TCP3389 / 合成VPC flow集計"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -2717,10 +2717,10 @@
         "caseId": "UnauthorizedAccess:EC2/SSHBruteForce",
         "evidenceKind": "synthetic-network",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-ec2.html#:~:text=UnauthorizedAccess%3AEC2%2FSSHBruteForce",
-        "assumptions": "本番ホスト / 管理元の失敗は一分5件まで・試験なし",
+        "assumptions": "SSM管理EC2: TCP22不要 / 演習基準0件",
         "exactAWSRuleReproduced": false,
-        "normalExample": "失敗回数: 1\n対象: SSH / 同一発信元",
-        "flaggedExample": "失敗回数: 7\n対象: SSH / 同一発信元"
+        "normalExample": "対象ポートへの接続回数: 0\n観測: EC2 i-production TARGET / TCP22 / 合成VPC flow集計",
+        "flaggedExample": "対象ポートへの接続回数: 5\n観測: EC2 i-production TARGET / TCP22 / 合成VPC flow集計"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -3131,10 +3131,10 @@
         "caseId": "CredentialAccess:Kubernetes/MaliciousIPCaller",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=CredentialAccess%3AKubernetes%2FMaliciousIPCaller",
-        "assumptions": "検証用脅威リスト: 198.51.100.47 / 本番クラスタ",
+        "assumptions": "検証用脅威リスト: 198.51.100.205 / 本番クラスタ",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIP: 198.51.100.48\nverb / resource: get secrets",
-        "flaggedExample": "sourceIP: 192.0.2.63\nverb / resource: get secrets"
+        "normalExample": "sourceIP: 198.51.100.206\nverb / resource: get secrets",
+        "flaggedExample": "sourceIP: 198.51.100.205\nverb / resource: get secrets"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -3245,10 +3245,10 @@
         "caseId": "CredentialAccess:Kubernetes/TorIPCaller",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=CredentialAccess%3AKubernetes%2FTorIPCaller",
-        "assumptions": "検証用Tor出口リスト: 198.51.100.214 / 本番クラスタ",
+        "assumptions": "検証用Tor出口リスト: 198.51.100.205 / 本番クラスタ",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIP: 198.51.100.215\nverb / resource: get secrets",
-        "flaggedExample": "sourceIP: 192.0.2.116\nverb / resource: get secrets"
+        "normalExample": "sourceIP: 198.51.100.206\nverb / resource: get secrets",
+        "flaggedExample": "sourceIP: 198.51.100.205\nverb / resource: get secrets"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -3282,10 +3282,10 @@
         "caseId": "DefenseEvasion:Kubernetes/MaliciousIPCaller",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=DefenseEvasion%3AKubernetes%2FMaliciousIPCaller",
-        "assumptions": "検証用脅威リスト: 203.0.113.192 / 本番クラスタ",
+        "assumptions": "検証用脅威リスト: 198.51.100.205 / 本番クラスタ",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIP: 203.0.113.193\nverb / resource: delete events",
-        "flaggedExample": "sourceIP: 192.0.2.162\nverb / resource: delete events"
+        "normalExample": "sourceIP: 198.51.100.206\nverb / resource: delete events",
+        "flaggedExample": "sourceIP: 198.51.100.205\nverb / resource: delete events"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -3320,10 +3320,10 @@
         "caseId": "DefenseEvasion:Kubernetes/MaliciousIPCaller.Custom",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=DefenseEvasion%3AKubernetes%2FMaliciousIPCaller.Custom",
-        "assumptions": "検証用脅威リスト: 198.51.100.234 / 本番クラスタ",
+        "assumptions": "検証用脅威リスト: 198.51.100.205 / 本番クラスタ",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIP: 198.51.100.235\nverb / resource: delete events",
-        "flaggedExample": "sourceIP: 198.51.100.67\nverb / resource: delete events"
+        "normalExample": "sourceIP: 198.51.100.206\nverb / resource: delete events",
+        "flaggedExample": "sourceIP: 198.51.100.205\nverb / resource: delete events"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -3474,10 +3474,10 @@
         "caseId": "Discovery:Kubernetes/MaliciousIPCaller",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=Discovery%3AKubernetes%2FMaliciousIPCaller",
-        "assumptions": "検証用脅威リスト: 203.0.113.64 / 本番クラスタ",
+        "assumptions": "検証用脅威リスト: 198.51.100.205 / 本番クラスタ",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIP: 203.0.113.65\nverb / resource: list pods",
-        "flaggedExample": "sourceIP: 203.0.113.205\nverb / resource: list pods"
+        "normalExample": "sourceIP: 198.51.100.206\nverb / resource: list pods",
+        "flaggedExample": "sourceIP: 198.51.100.205\nverb / resource: list pods"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -3588,10 +3588,10 @@
         "caseId": "Discovery:Kubernetes/TorIPCaller",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=Discovery%3AKubernetes%2FTorIPCaller",
-        "assumptions": "検証用Tor出口リスト: 192.0.2.243 / 本番クラスタ",
+        "assumptions": "検証用Tor出口リスト: 198.51.100.205 / 本番クラスタ",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIP: 192.0.2.244\nverb / resource: list pods",
-        "flaggedExample": "sourceIP: 203.0.113.237\nverb / resource: list pods"
+        "normalExample": "sourceIP: 198.51.100.206\nverb / resource: list pods",
+        "flaggedExample": "sourceIP: 198.51.100.205\nverb / resource: list pods"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -3775,10 +3775,10 @@
         "caseId": "Impact:Kubernetes/MaliciousIPCaller.Custom",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=Impact%3AKubernetes%2FMaliciousIPCaller.Custom",
-        "assumptions": "検証用脅威リスト: 198.51.100.71 / 本番クラスタ",
+        "assumptions": "検証用脅威リスト: 198.51.100.205 / 本番クラスタ",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIP: 198.51.100.72\nverb / resource: delete deployments",
-        "flaggedExample": "sourceIP: 203.0.113.112\nverb / resource: delete deployments"
+        "normalExample": "sourceIP: 198.51.100.206\nverb / resource: delete deployments",
+        "flaggedExample": "sourceIP: 198.51.100.205\nverb / resource: delete deployments"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -3851,10 +3851,10 @@
         "caseId": "Impact:Kubernetes/TorIPCaller",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=Impact%3AKubernetes%2FTorIPCaller",
-        "assumptions": "検証用Tor出口リスト: 203.0.113.96 / 本番クラスタ",
+        "assumptions": "検証用Tor出口リスト: 198.51.100.205 / 本番クラスタ",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIP: 203.0.113.97\nverb / resource: delete deployments",
-        "flaggedExample": "sourceIP: 192.0.2.14\nverb / resource: delete deployments"
+        "normalExample": "sourceIP: 198.51.100.206\nverb / resource: delete deployments",
+        "flaggedExample": "sourceIP: 198.51.100.205\nverb / resource: delete deployments"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -4002,10 +4002,10 @@
         "caseId": "Persistence:Kubernetes/TorIPCaller",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=Persistence%3AKubernetes%2FTorIPCaller",
-        "assumptions": "検証用Tor出口リスト: 192.0.2.216 / 本番クラスタ",
+        "assumptions": "検証用Tor出口リスト: 198.51.100.205 / 本番クラスタ",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIP: 192.0.2.217\nverb / resource: create deployments",
-        "flaggedExample": "sourceIP: 198.51.100.24\nverb / resource: create deployments"
+        "normalExample": "sourceIP: 198.51.100.206\nverb / resource: create deployments",
+        "flaggedExample": "sourceIP: 198.51.100.205\nverb / resource: create deployments"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -4041,10 +4041,10 @@
         "caseId": "Policy:Kubernetes/AdminAccessToDefaultServiceAccount",
         "evidenceKind": "synthetic-kubernetes",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=Policy%3AKubernetes%2FAdminAccessToDefaultServiceAccount",
-        "assumptions": "default ServiceAccountは閲覧だけ",
+        "assumptions": "Podは専用SA＋最小権限 / default SAへの付与なし",
         "exactAWSRuleReproduced": false,
         "flaggedExample": "roleRef: cluster-admin\nsubject: system:serviceaccount:default:default",
-        "normalExample": "roleRef: view\nsubject: system:serviceaccount:default:default"
+        "normalExample": "roleRef: view\nsubject: system:serviceaccount:app:viewer"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -4236,8 +4236,8 @@
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty-finding-types-eks-audit-logs.html#:~:text=PrivilegeEscalation%3AKubernetes%2FAnomalousBehavior.RoleCreated",
         "assumptions": "監査担当 / podsの読取だけ",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "verbs: *",
-        "normalExample": "verbs: get,list"
+        "flaggedExample": "verbs: *\n対象: namespace app / pods / bindingなし",
+        "normalExample": "verbs: get,list\n対象: namespace app / pods / bindingなし"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -4382,10 +4382,10 @@
         "caseId": "CryptoCurrency:Lambda/BitcoinTool.B",
         "evidenceKind": "synthetic-network",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/lambda-protection-finding-types.html#:~:text=CryptoCurrency%3ALambda%2FBitcoinTool.B",
-        "assumptions": "演習暗号資産指標: 203.0.113.1 / 対象は通常の業務処理",
+        "assumptions": "演習暗号資産指標: 198.51.100.205 / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続先: 203.0.113.2\n資源: Lambda業務ワークロード",
-        "flaggedExample": "接続先: 198.51.100.7\n資源: Lambda業務ワークロード"
+        "normalExample": "接続先: 198.51.100.206\n資源: Lambda業務ワークロード",
+        "flaggedExample": "接続先: 198.51.100.205\n資源: Lambda業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -4418,10 +4418,10 @@
         "caseId": "Trojan:Lambda/BlackholeTraffic",
         "evidenceKind": "synthetic-network",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/lambda-protection-finding-types.html#:~:text=Trojan%3ALambda%2FBlackholeTraffic",
-        "assumptions": "演習シンクホール指標: 203.0.113.12 / 対象は通常の業務処理",
+        "assumptions": "演習シンクホール指標: 198.51.100.205 / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続先: 203.0.113.13\n資源: Lambda業務ワークロード",
-        "flaggedExample": "接続先: 203.0.113.94\n資源: Lambda業務ワークロード"
+        "normalExample": "接続先: 198.51.100.206\n資源: Lambda業務ワークロード",
+        "flaggedExample": "接続先: 198.51.100.205\n資源: Lambda業務ワークロード"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -4563,10 +4563,10 @@
         "caseId": "UnauthorizedAccess:Lambda/TorRelay",
         "evidenceKind": "synthetic-network",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/lambda-protection-finding-types.html#:~:text=UnauthorizedAccess%3ALambda%2FTorRelay",
-        "assumptions": "演習Tor中継指標: 198.51.100.238 / 対象は通常の業務処理",
+        "assumptions": "演習Tor中継指標: 198.51.100.205 / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続先: 198.51.100.239\n資源: Lambda業務ワークロード\n接続形態: 受信＋中継送信 / 同じprocess",
-        "flaggedExample": "接続先: 203.0.113.90\n資源: Lambda業務ワークロード\n接続形態: 受信＋中継送信 / 同じprocess"
+        "normalExample": "接続先: 198.51.100.206\n資源: Lambda業務ワークロード\n接続形態: 受信＋中継送信 / 同じprocess",
+        "flaggedExample": "接続先: 198.51.100.205\n資源: Lambda業務ワークロード\n接続形態: 受信＋中継送信 / 同じprocess"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5217,10 +5217,10 @@
         "caseId": "CredentialAccess:RDS/TorIPCaller.FailedLogin",
         "evidenceKind": "synthetic-rds",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-rds-protection.html#:~:text=CredentialAccess%3ARDS%2FTorIPCaller.FailedLogin",
-        "assumptions": "演習Torリスト: 203.0.113.32 / 本番DB",
+        "assumptions": "演習Tor出口リスト: 198.51.100.205 / 本番DB",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続元: 203.0.113.33\n記録: ログイン失敗",
-        "flaggedExample": "接続元: 198.51.100.19\n記録: ログイン失敗"
+        "normalExample": "接続元: 198.51.100.206\n記録: ログイン失敗",
+        "flaggedExample": "接続元: 198.51.100.205\n記録: ログイン失敗"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5252,10 +5252,10 @@
         "caseId": "CredentialAccess:RDS/TorIPCaller.SuccessfulLogin",
         "evidenceKind": "synthetic-rds",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-rds-protection.html#:~:text=CredentialAccess%3ARDS%2FTorIPCaller.SuccessfulLogin",
-        "assumptions": "演習Torリスト: 198.51.100.79 / 本番DB",
+        "assumptions": "演習Tor出口リスト: 198.51.100.205 / 本番DB",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "接続元: 198.51.100.79\n記録: ログイン成功",
-        "normalExample": "接続元: 198.51.100.96\n記録: ログイン成功"
+        "flaggedExample": "接続元: 198.51.100.205\n記録: ログイン成功",
+        "normalExample": "接続元: 198.51.100.206\n記録: ログイン成功"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5287,10 +5287,10 @@
         "caseId": "Discovery:RDS/MaliciousIPCaller",
         "evidenceKind": "synthetic-rds",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-rds-protection.html#:~:text=Discovery%3ARDS%2FMaliciousIPCaller",
-        "assumptions": "演習脅威リスト: 203.0.113.80 / 本番DB",
+        "assumptions": "演習脅威リスト: 198.51.100.205 / 本番DB",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続元: 203.0.113.81\n記録: 接続探索・認証試行なし",
-        "flaggedExample": "接続元: 203.0.113.161\n記録: 接続探索・認証試行なし"
+        "normalExample": "接続元: 198.51.100.206\n記録: 接続探索・認証試行なし",
+        "flaggedExample": "接続元: 198.51.100.205\n記録: 接続探索・認証試行なし"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5322,10 +5322,10 @@
         "caseId": "Discovery:RDS/TorIPCaller",
         "evidenceKind": "synthetic-rds",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-rds-protection.html#:~:text=Discovery%3ARDS%2FTorIPCaller",
-        "assumptions": "演習Torリスト: 203.0.113.4 / 本番DB",
+        "assumptions": "演習Tor出口リスト: 198.51.100.205 / 本番DB",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続元: 203.0.113.5\n記録: 接続探索・認証試行なし",
-        "flaggedExample": "接続元: 203.0.113.244\n記録: 接続探索・認証試行なし"
+        "normalExample": "接続元: 198.51.100.206\n記録: 接続探索・認証試行なし",
+        "flaggedExample": "接続元: 198.51.100.205\n記録: 接続探索・認証試行なし"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5428,10 +5428,10 @@
         "caseId": "Exfiltration:RDS/TorIPCaller",
         "evidenceKind": "synthetic-rds",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-rds-protection.html#:~:text=Exfiltration%3ARDS%2FTorIPCaller",
-        "assumptions": "演習Torリスト: 192.0.2.99 / 本番DB",
+        "assumptions": "演習Tor出口リスト: 198.51.100.205 / 本番DB",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続元: 192.0.2.100\n記録: データ読取の監査",
-        "flaggedExample": "接続元: 203.0.113.107\n記録: データ読取の監査"
+        "normalExample": "接続元: 198.51.100.206\n記録: データ読取の監査",
+        "flaggedExample": "接続元: 198.51.100.205\n記録: データ読取の監査"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5535,10 +5535,10 @@
         "caseId": "Impact:RDS/MaliciousIPCaller",
         "evidenceKind": "synthetic-rds",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-rds-protection.html#:~:text=Impact%3ARDS%2FMaliciousIPCaller",
-        "assumptions": "演習脅威リスト: 198.51.100.21 / 本番DB",
+        "assumptions": "演習脅威リスト: 198.51.100.205 / 本番DB",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続元: 198.51.100.22\n記録: 更新・削除の監査",
-        "flaggedExample": "接続元: 192.0.2.137\n記録: 更新・削除の監査"
+        "normalExample": "接続元: 198.51.100.206\n記録: 更新・削除の監査",
+        "flaggedExample": "接続元: 198.51.100.205\n記録: 更新・削除の監査"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5570,10 +5570,10 @@
         "caseId": "Impact:RDS/TorIPCaller",
         "evidenceKind": "synthetic-rds",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-rds-protection.html#:~:text=Impact%3ARDS%2FTorIPCaller",
-        "assumptions": "演習Torリスト: 192.0.2.250 / 本番DB",
+        "assumptions": "演習Tor出口リスト: 198.51.100.205 / 本番DB",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続元: 192.0.2.251\n記録: 更新・削除の監査",
-        "flaggedExample": "接続元: 198.51.100.131\n記録: 更新・削除の監査"
+        "normalExample": "接続元: 198.51.100.206\n記録: 更新・削除の監査",
+        "flaggedExample": "接続元: 198.51.100.205\n記録: 更新・削除の監査"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5680,10 +5680,10 @@
         "caseId": "Discovery:S3/MaliciousIPCaller.Custom",
         "evidenceKind": "synthetic-s3_data",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-s3.html#:~:text=Discovery%3AS3%2FMaliciousIPCaller.Custom",
-        "assumptions": "演習脅威リスト: 203.0.113.30 / 顧客バケット",
+        "assumptions": "演習脅威リスト: 198.51.100.205 / 顧客バケット",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIPAddress: 203.0.113.31\n対象: customer-records / ListObjectsV2",
-        "flaggedExample": "sourceIPAddress: 198.51.100.206\n対象: customer-records / ListObjectsV2"
+        "normalExample": "sourceIPAddress: 198.51.100.206\n対象: customer-records / ListObjectsV2",
+        "flaggedExample": "sourceIPAddress: 198.51.100.205\n対象: customer-records / ListObjectsV2"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5716,10 +5716,10 @@
         "caseId": "Discovery:S3/TorIPCaller",
         "evidenceKind": "synthetic-s3_data",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-s3.html#:~:text=Discovery%3AS3%2FTorIPCaller",
-        "assumptions": "演習Torリスト: 192.0.2.100 / 顧客バケット",
+        "assumptions": "演習Tor出口リスト: 198.51.100.205 / 顧客バケット",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "sourceIPAddress: 192.0.2.100\n対象: customer-records / ListObjectsV2",
-        "normalExample": "sourceIPAddress: 198.51.100.199\n対象: customer-records / ListObjectsV2"
+        "flaggedExample": "sourceIPAddress: 198.51.100.205\n対象: customer-records / ListObjectsV2",
+        "normalExample": "sourceIPAddress: 198.51.100.206\n対象: customer-records / ListObjectsV2"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -5939,10 +5939,10 @@
         "caseId": "Impact:S3/MaliciousIPCaller",
         "evidenceKind": "synthetic-s3_data",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-s3.html#:~:text=Impact%3AS3%2FMaliciousIPCaller",
-        "assumptions": "演習脅威リスト: 198.51.100.230 / 顧客バケット",
+        "assumptions": "演習脅威リスト: 198.51.100.205 / 顧客バケット",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIPAddress: 198.51.100.231\n対象: customer-records / PutObject",
-        "flaggedExample": "sourceIPAddress: 203.0.113.211\n対象: customer-records / PutObject"
+        "normalExample": "sourceIPAddress: 198.51.100.206\n対象: customer-records / PutObject",
+        "flaggedExample": "sourceIPAddress: 198.51.100.205\n対象: customer-records / PutObject"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -6086,10 +6086,10 @@
         "caseId": "UnauthorizedAccess:S3/TorIPCaller",
         "evidenceKind": "synthetic-s3_data",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-s3.html#:~:text=UnauthorizedAccess%3AS3%2FTorIPCaller",
-        "assumptions": "演習Torリスト: 192.0.2.232 / 顧客バケット",
+        "assumptions": "演習Tor出口リスト: 198.51.100.205 / 顧客バケット",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIPAddress: 192.0.2.233\n対象: customer-records / GetObject",
-        "flaggedExample": "sourceIPAddress: 192.0.2.244\n対象: customer-records / GetObject"
+        "normalExample": "sourceIPAddress: 198.51.100.206\n対象: customer-records / GetObject",
+        "flaggedExample": "sourceIPAddress: 198.51.100.205\n対象: customer-records / GetObject"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -6123,10 +6123,10 @@
         "caseId": "UnauthorizedAccess:S3/MaliciousIPCaller.Custom",
         "evidenceKind": "synthetic-s3_data",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-s3.html#:~:text=UnauthorizedAccess%3AS3%2FMaliciousIPCaller.Custom",
-        "assumptions": "演習脅威リスト: 203.0.113.85 / 顧客バケット",
+        "assumptions": "演習脅威リスト: 198.51.100.205 / 顧客バケット",
         "exactAWSRuleReproduced": false,
-        "normalExample": "sourceIPAddress: 203.0.113.86\n対象: customer-records / GetObject",
-        "flaggedExample": "sourceIPAddress: 198.51.100.120\n対象: customer-records / GetObject"
+        "normalExample": "sourceIPAddress: 198.51.100.206\n対象: customer-records / GetObject",
+        "flaggedExample": "sourceIPAddress: 198.51.100.205\n対象: customer-records / GetObject"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -6158,10 +6158,10 @@
         "caseId": "Backdoor:Runtime/C&CActivity.B",
         "evidenceKind": "synthetic-runtime",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html#:~:text=Backdoor%3ARuntime%2FC%26CActivity.B",
-        "assumptions": "演習C2指標: 203.0.113.177 / 対象は通常の業務処理",
+        "assumptions": "演習C2指標: 198.51.100.205 / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "接続先: 203.0.113.178\n起点process: PID421 / parent=web-worker",
-        "flaggedExample": "接続先: 198.51.100.15\n起点process: PID421 / parent=web-worker"
+        "normalExample": "接続先: 198.51.100.206\n起点process: PID421 / parent=web-worker",
+        "flaggedExample": "接続先: 198.51.100.205\n起点process: PID421 / parent=web-worker"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -6193,10 +6193,10 @@
         "caseId": "Backdoor:Runtime/C&CActivity.B!DNS",
         "evidenceKind": "synthetic-runtime",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html#:~:text=Backdoor%3ARuntime%2FC%26CActivity.B!DNS",
-        "assumptions": "演習C2指標: svc-953.example / 対象は通常の業務処理",
+        "assumptions": "演習C2指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-954.example\n起点process: PID421 / parent=web-worker",
-        "flaggedExample": "問い合わせ先: svc-359.example\n起点process: PID421 / parent=web-worker"
+        "normalExample": "問い合わせ先: svc-406.example\n起点process: PID421 / parent=web-worker",
+        "flaggedExample": "問い合わせ先: svc-405.example\n起点process: PID421 / parent=web-worker"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -6263,10 +6263,10 @@
         "caseId": "CryptoCurrency:Runtime/BitcoinTool.B!DNS",
         "evidenceKind": "synthetic-runtime",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html#:~:text=CryptoCurrency%3ARuntime%2FBitcoinTool.B!DNS",
-        "assumptions": "演習暗号資産指標: svc-661.example / 対象は通常の業務処理",
+        "assumptions": "演習暗号資産指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-662.example\n起点process: PID421 / parent=web-worker",
-        "flaggedExample": "問い合わせ先: svc-794.example\n起点process: PID421 / parent=web-worker"
+        "normalExample": "問い合わせ先: svc-406.example\n起点process: PID421 / parent=web-worker",
+        "flaggedExample": "問い合わせ先: svc-405.example\n起点process: PID421 / parent=web-worker"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -6879,10 +6879,10 @@
         "caseId": "Impact:Runtime/AbusedDomainRequest.Reputation",
         "evidenceKind": "synthetic-runtime",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html#:~:text=Impact%3ARuntime%2FAbusedDomainRequest.Reputation",
-        "assumptions": "演習悪用報告指標: svc-853.example / 対象は通常の業務処理",
+        "assumptions": "演習悪用報告指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-854.example\n起点process: PID421 / parent=web-worker",
-        "flaggedExample": "問い合わせ先: svc-157.example\n起点process: PID421 / parent=web-worker"
+        "normalExample": "問い合わせ先: svc-406.example\n起点process: PID421 / parent=web-worker",
+        "flaggedExample": "問い合わせ先: svc-405.example\n起点process: PID421 / parent=web-worker"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -6914,10 +6914,10 @@
         "caseId": "Impact:Runtime/BitcoinDomainRequest.Reputation",
         "evidenceKind": "synthetic-runtime",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html#:~:text=Impact%3ARuntime%2FBitcoinDomainRequest.Reputation",
-        "assumptions": "演習暗号資産指標: svc-373.example / 対象は通常の業務処理",
+        "assumptions": "演習暗号資産指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-374.example\n起点process: PID421 / parent=web-worker",
-        "flaggedExample": "問い合わせ先: svc-465.example\n起点process: PID421 / parent=web-worker"
+        "normalExample": "問い合わせ先: svc-406.example\n起点process: PID421 / parent=web-worker",
+        "flaggedExample": "問い合わせ先: svc-405.example\n起点process: PID421 / parent=web-worker"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -7018,10 +7018,10 @@
         "caseId": "Impact:Runtime/SuspiciousDomainRequest.Reputation",
         "evidenceKind": "synthetic-runtime",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html#:~:text=Impact%3ARuntime%2FSuspiciousDomainRequest.Reputation",
-        "assumptions": "演習低評価指標: svc-435.example / 対象は通常の業務処理",
+        "assumptions": "演習低評価指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-436.example\n起点process: PID421 / parent=web-worker",
-        "flaggedExample": "問い合わせ先: svc-113.example\n起点process: PID421 / parent=web-worker"
+        "normalExample": "問い合わせ先: svc-406.example\n起点process: PID421 / parent=web-worker",
+        "flaggedExample": "問い合わせ先: svc-405.example\n起点process: PID421 / parent=web-worker"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -7222,10 +7222,10 @@
         "caseId": "PrivilegeEscalation:Runtime/ElevationToRoot",
         "evidenceKind": "synthetic-runtime",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html#:~:text=PrivilegeEscalation%3ARuntime%2FElevationToRoot",
-        "assumptions": "本番Web / 非root1000で動く設計",
+        "assumptions": "本番Web: UID1000固定 / 未承認setuidと系譜を照合",
         "exactAWSRuleReproduced": false,
-        "normalExample": "UID変更: 1000→1000\n資源: 本番Web / 合成ランタイム記録",
-        "flaggedExample": "UID変更: 1000→0\n資源: 本番Web / 合成ランタイム記録"
+        "normalExample": "UID変更: 1000→1000\n資源: 本番Web / 合成ランタイム記録\nプロセス系譜: 承認済みweb-worker / setuid変化なし",
+        "flaggedExample": "UID変更: 1000→0\n資源: 本番Web / 合成ランタイム記録\nプロセス系譜: 未承認の子プロセス / 不審なsetuid変化"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -7534,10 +7534,10 @@
         "caseId": "Trojan:Runtime/DriveBySourceTraffic!DNS",
         "evidenceKind": "synthetic-runtime",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html#:~:text=Trojan%3ARuntime%2FDriveBySourceTraffic!DNS",
-        "assumptions": "演習配布元指標: svc-363.example / 対象は通常の業務処理",
+        "assumptions": "演習配布元指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-364.example\n起点process: PID421 / parent=web-worker",
-        "flaggedExample": "問い合わせ先: svc-800.example\n起点process: PID421 / parent=web-worker"
+        "normalExample": "問い合わせ先: svc-406.example\n起点process: PID421 / parent=web-worker",
+        "flaggedExample": "問い合わせ先: svc-405.example\n起点process: PID421 / parent=web-worker"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -7569,10 +7569,10 @@
         "caseId": "Trojan:Runtime/DropPoint!DNS",
         "evidenceKind": "synthetic-runtime",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-runtime-monitoring.html#:~:text=Trojan%3ARuntime%2FDropPoint!DNS",
-        "assumptions": "演習データ受取先指標: svc-235.example / 対象は通常の業務処理",
+        "assumptions": "演習データ受取先指標: svc-405.example / 対象は通常の業務処理",
         "exactAWSRuleReproduced": false,
-        "normalExample": "問い合わせ先: svc-236.example\n起点process: PID421 / parent=web-worker",
-        "flaggedExample": "問い合わせ先: svc-545.example\n起点process: PID421 / parent=web-worker"
+        "normalExample": "問い合わせ先: svc-406.example\n起点process: PID421 / parent=web-worker",
+        "flaggedExample": "問い合わせ先: svc-405.example\n起点process: PID421 / parent=web-worker"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -7745,17 +7745,19 @@
       "requestOnlySufficient": false,
       "gameMode": "synthetic_event_plus_context",
       "logicAvailability": "public signal label; exact expression requires authorized GetCustomDetectionRule export",
-      "educationalMapping": "inferred relevant field checklist, not exact SQL or exact API mapping",
+      "educationalMapping": "Exercise policy contrast with a different normal API, not a reproduced GuardDuty rule or finding decision.",
       "implementation": "educational_case",
       "reason": "Authored normal and flagged synthetic evidence with explicit context; not an exact vendor predicate.",
       "educationalEvidence": {
         "caseId": "EC2PasswordDataRetrieved",
         "evidenceKind": "ec2",
-        "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html#:~:text=EC2PasswordDataRetrieved",
-        "assumptions": "実行者: 復旧担当 / 今回の復旧対象: i-trainingのみ",
+        "officialExplanation": "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html#:~:text=No%20open%20inbound%20ports",
+        "assumptions": "復旧Role: i-training・SSM準備済み / Session Managerのみ",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "InstanceId: i-payroll",
-        "normalExample": "InstanceId: i-training"
+        "flaggedExample": "観測.operation: GetPasswordData",
+        "normalExample": "観測.operation: StartSession",
+        "normalOperation": "StartSession",
+        "flaggedOperation": "GetPasswordData"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -8462,10 +8464,10 @@
         "caseId": "ConsoleLoginWithoutMFA",
         "evidenceKind": "cloudtrail-event",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html#:~:text=ConsoleLoginWithoutMFA",
-        "assumptions": "合成ログイン結果: Success / 人間の管理者はMFA必須",
+        "assumptions": "管理者はfederation / IdPの別途MFA検証を照合",
         "exactAWSRuleReproduced": false,
-        "normalExample": "additionalEventData.MFAUsed: Yes",
-        "flaggedExample": "additionalEventData.MFAUsed: No"
+        "normalExample": "観測.idpMfaVerified: Yes",
+        "flaggedExample": "観測.idpMfaVerified: No"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -8540,17 +8542,19 @@
       "requestOnlySufficient": false,
       "gameMode": "synthetic_event_plus_context",
       "logicAvailability": "public signal label; exact expression requires authorized GetCustomDetectionRule export",
-      "educationalMapping": "inferred relevant field checklist, not exact SQL or exact API mapping",
+      "educationalMapping": "Exercise policy contrast with a different normal API, not a reproduced GuardDuty rule or finding decision.",
       "implementation": "educational_case",
       "reason": "Authored normal and flagged synthetic evidence with explicit context; not an exact vendor predicate.",
       "educationalEvidence": {
         "caseId": "EC2InstanceSSHKeyPushed",
         "evidenceKind": "json",
-        "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html#:~:text=EC2InstanceSSHKeyPushed",
-        "assumptions": "実行者: 復旧担当 / 今回の作業対象: i-maintenance",
+        "officialExplanation": "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html#:~:text=No%20open%20inbound%20ports",
+        "assumptions": "復旧Role: i-maintenance・SSM準備済み / SSH禁止・Session Managerのみ",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "InstanceId: i-payroll",
-        "normalExample": "InstanceId: i-maintenance"
+        "flaggedExample": "観測.operation: SendSSHPublicKey",
+        "normalExample": "観測.operation: StartSession",
+        "normalOperation": "StartSession",
+        "flaggedOperation": "SendSSHPublicKey"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -8624,17 +8628,19 @@
       "requestOnlySufficient": false,
       "gameMode": "synthetic_event_plus_context",
       "logicAvailability": "public signal label; exact expression requires authorized GetCustomDetectionRule export",
-      "educationalMapping": "inferred relevant field checklist, not exact SQL or exact API mapping",
+      "educationalMapping": "Exercise policy contrast with a different normal API, not a reproduced GuardDuty rule or finding decision.",
       "implementation": "educational_case",
       "reason": "Authored normal and flagged synthetic evidence with explicit context; not an exact vendor predicate.",
       "educationalEvidence": {
         "caseId": "EC2SecurityGroupPublicSSH",
         "evidenceKind": "ec2",
-        "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html#:~:text=EC2SecurityGroupPublicSSH",
-        "assumptions": "対象: 管理SG / TCP22 / 管理元: 192.0.2.0/24",
+        "officialExplanation": "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html#:~:text=No%20open%20inbound%20ports",
+        "assumptions": "管理SG: SSH禁止・既存TCP22ルール削除 / SSM準備済み",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "TCP 22 / CidrIp: 0.0.0.0/0",
-        "normalExample": "TCP 22 / CidrIp: 192.0.2.0/24"
+        "flaggedExample": "観測.operation: AuthorizeSecurityGroupIngress",
+        "normalExample": "観測.operation: RevokeSecurityGroupIngress",
+        "normalOperation": "RevokeSecurityGroupIngress",
+        "flaggedOperation": "AuthorizeSecurityGroupIngress"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -8666,17 +8672,19 @@
       "requestOnlySufficient": false,
       "gameMode": "synthetic_event_plus_context",
       "logicAvailability": "public signal label; exact expression requires authorized GetCustomDetectionRule export",
-      "educationalMapping": "inferred relevant field checklist, not exact SQL or exact API mapping",
+      "educationalMapping": "Exercise policy contrast with a different normal API, not a reproduced GuardDuty rule or finding decision.",
       "implementation": "educational_case",
       "reason": "Authored normal and flagged synthetic evidence with explicit context; not an exact vendor predicate.",
       "educationalEvidence": {
         "caseId": "IAMAccessKeyCreated",
         "evidenceKind": "query",
-        "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html#:~:text=IAMAccessKeyCreated",
-        "assumptions": "対象: 定期ローテーション / 作成先: build-bot",
+        "officialExplanation": "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#:~:text=Require%20workloads%20to%20use%20temporary%20credentials",
+        "assumptions": "build-bot: 短期Roleのみ・長期キー禁止 / OIDC信頼条件確認済み",
         "exactAWSRuleReproduced": false,
-        "normalExample": "UserName: build-bot",
-        "flaggedExample": "UserName: retired-admin"
+        "normalExample": "観測.operation: AssumeRoleWithWebIdentity",
+        "flaggedExample": "観測.operation: CreateAccessKey",
+        "normalOperation": "AssumeRoleWithWebIdentity",
+        "flaggedOperation": "CreateAccessKey"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -8750,17 +8758,19 @@
       "requestOnlySufficient": false,
       "gameMode": "synthetic_event_plus_context",
       "logicAvailability": "public signal label; exact expression requires authorized GetCustomDetectionRule export",
-      "educationalMapping": "inferred relevant field checklist, not exact SQL or exact API mapping",
+      "educationalMapping": "Exercise policy contrast with a different normal API, not a reproduced GuardDuty rule or finding decision.",
       "implementation": "educational_case",
       "reason": "Authored normal and flagged synthetic evidence with explicit context; not an exact vendor predicate.",
       "educationalEvidence": {
         "caseId": "IAMUserLoginProfileCreated",
         "evidenceKind": "query",
-        "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html#:~:text=IAMUserLoginProfileCreated",
-        "assumptions": "対象: API専用botはコンソールログイン禁止",
+        "officialExplanation": "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#:~:text=Require%20human%20users%20to%20use%20federation",
+        "assumptions": "人はIdP federation＋短期Role / MFA・信頼条件確認済み",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "UserName: api-only-bot",
-        "normalExample": "UserName: support-console"
+        "flaggedExample": "観測.operation: CreateLoginProfile",
+        "normalExample": "観測.operation: AssumeRoleWithSAML",
+        "normalOperation": "AssumeRoleWithSAML",
+        "flaggedOperation": "CreateLoginProfile"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -8792,17 +8802,19 @@
       "requestOnlySufficient": false,
       "gameMode": "synthetic_event_plus_context",
       "logicAvailability": "public signal label; exact expression requires authorized GetCustomDetectionRule export",
-      "educationalMapping": "inferred relevant field checklist, not exact SQL or exact API mapping",
+      "educationalMapping": "Exercise policy contrast with a different normal API, not a reproduced GuardDuty rule or finding decision.",
       "implementation": "educational_case",
       "reason": "Authored normal and flagged synthetic evidence with explicit context; not an exact vendor predicate.",
       "educationalEvidence": {
         "caseId": "IAMUserLoginProfileUpdated",
         "evidenceKind": "query",
-        "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html#:~:text=IAMUserLoginProfileUpdated",
-        "assumptions": "対象: API専用botはコンソールログイン禁止",
+        "officialExplanation": "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#:~:text=Require%20human%20users%20to%20use%20federation",
+        "assumptions": "人はIdP federation＋短期Role / MFA・信頼条件確認済み",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "UserName: api-only-bot",
-        "normalExample": "UserName: support-console"
+        "flaggedExample": "観測.operation: UpdateLoginProfile",
+        "normalExample": "観測.operation: AssumeRoleWithSAML",
+        "normalOperation": "AssumeRoleWithSAML",
+        "flaggedOperation": "UpdateLoginProfile"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -9043,17 +9055,19 @@
       "requestOnlySufficient": false,
       "gameMode": "synthetic_event_plus_context",
       "logicAvailability": "public signal label; exact expression requires authorized GetCustomDetectionRule export",
-      "educationalMapping": "inferred relevant field checklist, not exact SQL or exact API mapping",
+      "educationalMapping": "Exercise policy contrast with a different normal API, not a reproduced GuardDuty rule or finding decision.",
       "implementation": "educational_case",
       "reason": "Authored normal and flagged synthetic evidence with explicit context; not an exact vendor predicate.",
       "educationalEvidence": {
         "caseId": "BedrockServiceCredentialCreated",
         "evidenceKind": "query",
-        "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/findings-custom-detection-rules.html#:~:text=BedrockServiceCredentialCreated",
-        "assumptions": "対象: Git開発bot / CodeCommit用の認証情報を交換",
+        "officialExplanation": "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#:~:text=Require%20workloads%20to%20use%20temporary%20credentials",
+        "assumptions": "外部CI: OIDC＋短期Role / 長期認証情報禁止・信頼条件確認済み",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "ServiceName: bedrock.amazonaws.com",
-        "normalExample": "ServiceName: codecommit.amazonaws.com"
+        "flaggedExample": "観測.operation: CreateServiceSpecificCredential",
+        "normalExample": "観測.operation: AssumeRoleWithWebIdentity",
+        "normalOperation": "AssumeRoleWithWebIdentity",
+        "flaggedOperation": "CreateServiceSpecificCredential"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -9450,5 +9464,6 @@
     "Exfiltration:Runtime/SuspiciousCommand"
   ],
   "implementedRuntimeCustomSignals": 7,
-  "additionalRuntimeDocReviewedAt": "2026-10-26"
+  "additionalRuntimeDocReviewedAt": "2026-10-26",
+  "decisionScope": "Every playable card judges its stated exercise policy, not the presence or absence of a GuardDuty finding. A normal policy contrast is not proof of safety. Public finding/signal IDs are references; private detector logic is not reproduced."
 }

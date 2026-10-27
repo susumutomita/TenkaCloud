@@ -59,7 +59,7 @@ test("titles explain the same operation for both outcomes without changing the c
     expect(results[0].headline).not.toMatch(/止めなくてOK|これは危険|不一致|上限を超え/);
     if (s.id === "Policy:S3/BucketPublicAccessGranted")
       expect(results[0].headline).toBe("ファイル一覧を誰に見せるかの設定");
-    if (s.operation === "GetPasswordData") expect(results[0].headline).toContain("取得する操作");
+    if (s.operation === "GetPasswordData") expect(results[0].headline).toContain("Session Manager");
     if (s.operation === "DeleteFlowLogs") expect(results[0].headline).toContain("収集を止める操作");
   }
 });

@@ -93,7 +93,7 @@ describe("all published defensive evidence", () => {
   });
   test("benign SDK values never inherit the dangerous pair explanation", () => {
     for (const [id, value, wrongText] of [
-      ["EC2SecurityGroupPublicSSH", "192.0.2.0/24", "全IPv4"],
+      ["EC2SecurityGroupPublicSSH", "RevokeSecurityGroupIngress", "新規許可"],
       ["RDSPubliclyAccessible", false, "外部に公開"],
       ["RDSIAMAuthDisabled", true, "認証を無効"],
     ]) {
