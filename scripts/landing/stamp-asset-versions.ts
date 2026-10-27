@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 
 /**
  * landing の HTML が参照する `./styles/main.css?v=…` / `./app.js?v=…` の
@@ -50,7 +50,60 @@ export function currentVersions(): AssetVersions {
   );
 }
 
+const GAME_REFERENCE = /(["'])(\.\/[^"'?\s]+\.(?:js|css))(?:\?v=[a-f0-9]{10})?\1/g;
+
+export function cloudMasterVersion(files: Record<string, string>): string {
+  return assetVersion(
+    Object.keys(files)
+      .sort((a, b) => a.localeCompare(b, "en"))
+      .map(
+        (name) =>
+          `${name}\0${files[name].replace(/(\.\/[^"'?\s]+\.(?:js|css))\?v=[a-f0-9]{10}/g, "$1")}`,
+      )
+      .join("\0"),
+  );
+}
+
+export function stampCloudMasterFile(
+  source: string,
+  name: string,
+  files: Record<string, string>,
+  version: string,
+): string {
+  return source.replace(GAME_REFERENCE, (match, quote: string, path: string) => {
+    const target = posix.join(posix.dirname(name), path);
+    return Object.hasOwn(files, target) ? `${quote}${path}?v=${version}${quote}` : match;
+  });
+}
+
+export function cloudMasterFiles(directory: string): Record<string, string> {
+  const files: Record<string, string> = {};
+  function visit(relative = "") {
+    for (const entry of readdirSync(join(directory, relative), { withFileTypes: true })) {
+      const name = posix.join(relative, entry.name);
+      if (entry.isDirectory()) visit(name);
+      else if (/\.(?:js|css)$/.test(name))
+        files[name] = readFileSync(join(directory, name), "utf8");
+    }
+  }
+  visit();
+  return files;
+}
+
+function stampCloudMaster(directory: string) {
+  const files = cloudMasterFiles(directory);
+  const version = cloudMasterVersion(files);
+  const targets = { ...files, "index.html": readFileSync(join(directory, "index.html"), "utf8") };
+  for (const [name, before] of Object.entries(targets)) {
+    const after = stampCloudMasterFile(before, name, files, version);
+    if (after !== before) writeFileSync(join(directory, name), after);
+  }
+}
+
 function main() {
+  // Version the entire module graph, not just its entry: cached dependencies can otherwise
+  // mix incompatible releases. Normalize generated versions before hashing to stay idempotent.
+  stampCloudMaster(join(landing, "cloud-master"));
   const versions = currentVersions();
   const targets = readdirSync(landing).filter((name) => name.endsWith(".html"));
   for (const name of targets) {
