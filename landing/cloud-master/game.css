@@ -1415,3 +1415,15 @@ body.active-game .hud .life strong {font-size:21px;letter-spacing:4px;}
 /* Short score reactions never cover the HUD or incoming request text. */
 .field > .effects {z-index:1;overflow:hidden;display:flex;align-items:flex-start;justify-content:flex-end;box-sizing:border-box;padding:20px 12px 0;}
 .field > .effects .impact {font-size:18px;background:#f2f7ff;padding:1px 4px;border-radius:4px;}
+
+/* Language settings live on the start page and in Pause, keeping the play HUD compact. */
+body:not(.active-game) footer {display:flex;align-items:flex-start;justify-content:center;gap:10px;}
+#language-home {flex:0 0 auto;}
+body:not(.active-game) #about {min-width:0;text-align:left;}
+.language-switch {min-width:44px;min-height:44px;padding:7px 10px;border:1px solid #cbdce9;border-radius:10px;background:#fff;color:#245a87;font:600 12px/1.4 system-ui,sans-serif;cursor:pointer;}
+.miss-card .language-switch {width:auto;}
+.actions .language-switch {margin-top:10px;}
+html[lang="en"] .start-card h2 {font-size:clamp(32px,7vw,48px);letter-spacing:-.045em;}
+html[lang="en"] .start-action {font-size:clamp(19px,4.6vw,24px);}
+
+#pause svg {display:block;margin:auto;}
