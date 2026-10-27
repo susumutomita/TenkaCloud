@@ -1,4 +1,4 @@
-import { loadCatalog } from "./api-catalog.js";
+import { loadCatalog } from "./api-catalog.js?v=e1dbc492b6";
 import {
   collect,
   createGame,
@@ -9,16 +9,16 @@ import {
   resume,
   start,
   tickFrame as tick,
-} from "./engine.js";
-import { explanationCard } from "./explanation.js";
-import { decisionFact, reasonDuration } from "./feedback.js";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js";
-import { CARD_GAP, fieldCapacity } from "./layout.js";
-import { flowPositions } from "./motion.js";
-import { loadQuestionLocale, questionView } from "./question-locales.js";
-import { difficulty } from "./recognition.js";
-import { buildShare } from "./share.js";
-import { formatSurvival } from "./time.js";
+} from "./engine.js?v=e1dbc492b6";
+import { explanationCard } from "./explanation.js?v=e1dbc492b6";
+import { decisionFact, reasonDuration } from "./feedback.js?v=e1dbc492b6";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=e1dbc492b6";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=e1dbc492b6";
+import { flowPositions } from "./motion.js?v=e1dbc492b6";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=e1dbc492b6";
+import { difficulty } from "./recognition.js?v=e1dbc492b6";
+import { buildShare } from "./share.js?v=e1dbc492b6";
+import { formatSurvival } from "./time.js?v=e1dbc492b6";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
