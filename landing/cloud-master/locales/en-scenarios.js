@@ -1134,16 +1134,12 @@ export const EN_SCENARIOS = {
   "UnauthorizedAccess:IAMUser/MaliciousIPCaller": {
     id: "UnauthorizedAccess:IAMUser/MaliciousIPCaller",
     family: "cloudtrail",
-    title: "UpdateFunctionCode · Management-event audit",
-    baseline:
-      "Exercise indicator for malicious communication: 203.0.113.38 / Routine work by ops-role",
+    title: "UpdateFunctionCode · Audit",
+    baseline: "Approved web-worker update / threat indicator: 203.0.113.38",
     focusLabel: "Source",
     normal: "192.0.2.24",
     flag: "203.0.113.38",
-    extra: [
-      ["eventName", "UpdateFunctionCode(FunctionName=web-worker)"],
-      ["Actor", "AssumedRole ops-role / temporary session, approved update"],
-    ],
+    extra: [["Actor", "ops-role (temporary role)"]],
     operator: "eq",
     threshold: "203.0.113.38",
     why: "Compare the observed source with the exercise indicator associated with malicious communication. Indicators are fictional reserved values. Do not judge an IP address or domain by its appearance alone; review external reputation together with the resource involved and its purpose.",
@@ -1157,16 +1153,12 @@ export const EN_SCENARIOS = {
   "UnauthorizedAccess:IAMUser/MaliciousIPCaller.Custom": {
     id: "UnauthorizedAccess:IAMUser/MaliciousIPCaller.Custom",
     family: "cloudtrail",
-    title: "UpdateFunctionCode · Management-event audit",
-    baseline:
-      "Exercise indicator for malicious communication: 203.0.113.39 / Routine work by ops-role",
+    title: "UpdateFunctionCode · Audit",
+    baseline: "Approved web-worker update / threat indicator: 203.0.113.39",
     focusLabel: "Source",
     normal: "192.0.2.24",
     flag: "203.0.113.39",
-    extra: [
-      ["eventName", "UpdateFunctionCode(FunctionName=web-worker)"],
-      ["Actor", "AssumedRole ops-role / temporary session, approved update"],
-    ],
+    extra: [["Actor", "ops-role (temporary role)"]],
     operator: "eq",
     threshold: "203.0.113.39",
     why: "Compare the observed source with the exercise indicator associated with malicious communication. Indicators are fictional reserved values. Do not judge an IP address or domain by its appearance alone; review external reputation together with the resource involved and its purpose.",
@@ -1180,15 +1172,12 @@ export const EN_SCENARIOS = {
   "UnauthorizedAccess:IAMUser/TorIPCaller": {
     id: "UnauthorizedAccess:IAMUser/TorIPCaller",
     family: "cloudtrail",
-    title: "UpdateFunctionCode · Management-event audit",
-    baseline: "Exercise indicator for Tor exit traffic: 203.0.113.40 / Routine work by ops-role",
+    title: "UpdateFunctionCode · Audit",
+    baseline: "Approved web-worker update / Tor exit indicator: 203.0.113.40",
     focusLabel: "Source",
     normal: "192.0.2.24",
     flag: "203.0.113.40",
-    extra: [
-      ["eventName", "UpdateFunctionCode(FunctionName=web-worker)"],
-      ["Actor", "AssumedRole ops-role / temporary session, approved update"],
-    ],
+    extra: [["Actor", "ops-role (temporary role)"]],
     operator: "eq",
     threshold: "203.0.113.40",
     why: "Compare the observed source with the exercise indicator associated with Tor exit traffic. Indicators are fictional reserved values. Do not judge an IP address or domain by its appearance alone; review external reputation together with the resource involved and its purpose.",

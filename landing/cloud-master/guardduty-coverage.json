@@ -1020,10 +1020,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/MaliciousIPCaller",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FMaliciousIPCaller",
-        "assumptions": "演習不正通信指標: 198.51.100.205 / 主体ops-roleの通常業務",
+        "assumptions": "web-worker承認済み更新 / 演習の不正通信指標: 198.51.100.205",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "発信元: 198.51.100.205\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新",
-        "normalExample": "発信元: 198.51.100.206\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新"
+        "flaggedExample": "発信元: 198.51.100.205\n主体: ops-role（短期Role）",
+        "normalExample": "発信元: 198.51.100.206\n主体: ops-role（短期Role）"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1060,10 +1060,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/MaliciousIPCaller.Custom",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FMaliciousIPCaller.Custom",
-        "assumptions": "演習不正通信指標: 198.51.100.205 / 主体ops-roleの通常業務",
+        "assumptions": "web-worker承認済み更新 / 演習の不正通信指標: 198.51.100.205",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "発信元: 198.51.100.205\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新",
-        "normalExample": "発信元: 198.51.100.206\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新"
+        "flaggedExample": "発信元: 198.51.100.205\n主体: ops-role（短期Role）",
+        "normalExample": "発信元: 198.51.100.206\n主体: ops-role（短期Role）"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
@@ -1099,10 +1099,10 @@
         "caseId": "UnauthorizedAccess:IAMUser/TorIPCaller",
         "evidenceKind": "synthetic-cloudtrail",
         "officialExplanation": "https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_finding-types-iam.html#:~:text=UnauthorizedAccess%3AIAMUser%2FTorIPCaller",
-        "assumptions": "演習Tor出口指標: 198.51.100.205 / 主体ops-roleの通常業務",
+        "assumptions": "web-worker承認済み更新 / 演習のTor出口指標: 198.51.100.205",
         "exactAWSRuleReproduced": false,
-        "flaggedExample": "発信元: 198.51.100.205\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新",
-        "normalExample": "発信元: 198.51.100.206\neventName: UpdateFunctionCode(FunctionName=web-worker)\n主体: AssumedRole ops-role / 短期セッション・承認済み更新"
+        "flaggedExample": "発信元: 198.51.100.205\n主体: ops-role（短期Role）",
+        "normalExample": "発信元: 198.51.100.206\n主体: ops-role（短期Role）"
       },
       "checklistScope": "Investigation checklist for real findings; the educational card shows the decisive subset and stated exercise assumptions."
     },
