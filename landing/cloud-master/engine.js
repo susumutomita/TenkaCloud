@@ -1,4 +1,4 @@
-import { createQuestionStream, difficulty, nextQuestion } from "./recognition.js?v=e1dbc492b6";
+import { createQuestionStream, difficulty, nextQuestion } from "./recognition.js?v=b4e44e232c";
 export const INPUT_GUARD_MS = 100;
 export const HITSTOP_MS = 120;
 export const REVIEW_DECISION_MS = 1500;
@@ -98,6 +98,9 @@ export function collect(state, uid) {
   state.combo++;
   state.best = Math.max(state.best, state.combo);
   record(state, item, "flag", true, item.question.points);
+  const config = difficulty(state.elapsed);
+  if (config.level === 1 && !state.active.length)
+    state.nextSpawnAt = Math.min(state.nextSpawnAt, state.elapsed + config.intervalMs);
   if (item.question.points === 10) {
     state.hitstop = HITSTOP_MS;
     state.phase = "hitstop";

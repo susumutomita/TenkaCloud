@@ -1427,3 +1427,12 @@ html[lang="en"] .start-card h2 {font-size:clamp(32px,7vw,48px);letter-spacing:-.
 html[lang="en"] .start-action {font-size:clamp(19px,4.6vw,24px);}
 
 #pause svg {display:block;margin:auto;}
+
+/* Level feedback uses an empty lane gap; requests retain the top visual/input layer. */
+.level-transition {position:absolute;z-index:1;height:80px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px;pointer-events:none;color:#145a86;background:#e1f2ff;border:1px solid #90b9d6;border-radius:14px;animation:level-arrive 160ms ease-out;}
+.level-transition[hidden] {display:none;}
+.level-transition strong {font:800 clamp(21px,4.7vw,28px)/1.15 system-ui,sans-serif;letter-spacing:-.03em;white-space:nowrap;}
+.level-transition span {font:600 14px/1.4 system-ui,sans-serif;}
+.field.level-up-active::after {content:"";position:absolute;inset:2px;border:3px solid #629ec5;border-radius:inherit;pointer-events:none;z-index:1;}
+@keyframes level-arrive {from {opacity:0;}to {opacity:1;}}
+@media(prefers-reduced-motion:reduce) {.level-transition {animation:none;}}

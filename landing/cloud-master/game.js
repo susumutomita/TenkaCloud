@@ -1,4 +1,4 @@
-import { loadCatalog } from "./api-catalog.js?v=e1dbc492b6";
+import { loadCatalog } from "./api-catalog.js?v=b4e44e232c";
 import {
   collect,
   createGame,
@@ -9,16 +9,16 @@ import {
   resume,
   start,
   tickFrame as tick,
-} from "./engine.js?v=e1dbc492b6";
-import { explanationCard } from "./explanation.js?v=e1dbc492b6";
-import { decisionFact, reasonDuration } from "./feedback.js?v=e1dbc492b6";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=e1dbc492b6";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=e1dbc492b6";
-import { flowPositions } from "./motion.js?v=e1dbc492b6";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=e1dbc492b6";
-import { difficulty } from "./recognition.js?v=e1dbc492b6";
-import { buildShare } from "./share.js?v=e1dbc492b6";
-import { formatSurvival } from "./time.js?v=e1dbc492b6";
+} from "./engine.js?v=b4e44e232c";
+import { explanationCard } from "./explanation.js?v=b4e44e232c";
+import { decisionFact, reasonDuration } from "./feedback.js?v=b4e44e232c";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=b4e44e232c";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=b4e44e232c";
+import { flowPositions } from "./motion.js?v=b4e44e232c";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=b4e44e232c";
+import { difficulty, levelChanges } from "./recognition.js?v=b4e44e232c";
+import { buildShare } from "./share.js?v=b4e44e232c";
+import { formatSurvival } from "./time.js?v=b4e44e232c";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -39,7 +39,8 @@ const motion = new Map();
 let reasonUntil = 0,
   lastReason = "",
   shownLevel = 1,
-  levelUntil = 0;
+  levelUntil = 0,
+  levelMessage = "";
 function text(id, value) {
   const node = $(id);
   if (node.textContent !== value) node.textContent = value;
@@ -93,6 +94,7 @@ function prepare(seed = newSeed(), begin = false) {
   reasonUntil = 0;
   shownLevel = 1;
   levelUntil = 0;
+  levelMessage = "";
   $("cards").replaceChildren();
   $("effects").replaceChildren();
   $("review").hidden = true;
@@ -653,15 +655,16 @@ function renderFeedback() {
   $("hit-reason").hidden = !show;
   seen = state.history.length;
 }
-function reasonGap(lane, columns, height) {
+function reasonGap(lane, columns, height, extra) {
   let bottom = geometry.height - 8;
   const occupied = state.active
     .filter((item) => item.slot % columns === lane)
     .map((item) => ({
       top: motion.get(String(item.uid))?.y ?? -1000,
       height: geometry.heights.get(String(item.uid)) ?? 0,
-    }))
-    .sort((a, b) => b.top - a.top);
+    }));
+  if (extra?.lane === lane) occupied.push(extra);
+  occupied.sort((a, b) => b.top - a.top);
   for (const item of occupied) {
     if (item.top < bottom && item.top + item.height > bottom - height - 8) bottom = item.top - 16;
   }
@@ -669,6 +672,7 @@ function reasonGap(lane, columns, height) {
 }
 function positionReason() {
   const toast = $("hit-reason");
+  if (lastReason) lastReason.box = null;
   if (toast.hidden || !geometry) return;
   const columns = innerWidth <= 740 ? 1 : 2;
   const width = geometry.width / columns - (columns === 2 ? 18 : 0);
@@ -684,6 +688,8 @@ function positionReason() {
   const bottom = Math.max(...gaps),
     lane = gaps.indexOf(bottom);
   toast.hidden = bottom < geometry.height * 0.35 + lastReason.height;
+  if (!toast.hidden)
+    lastReason.box = { lane, top: bottom - lastReason.height, height: lastReason.height };
   toast.style.left = `${geometry.left + (lane * geometry.width) / columns}px`;
   toast.style.right = "auto";
   toast.style.margin = "0";
@@ -692,14 +698,41 @@ function positionReason() {
 function renderLevel() {
   const level = difficulty(state.elapsed).level;
   if (level > shownLevel) {
+    const change = levelChanges(shownLevel, level);
+    levelMessage = change.morePatterns
+      ? "スピードアップ · 新しい問題"
+      : change.faster
+        ? "スピードアップ"
+        : "最高スピードで継続";
     shownLevel = level;
-    levelUntil = state.elapsed + 1200;
+    levelUntil = state.elapsed + 2200;
+    announce(`${tr("レベルアップ")} ${level}. ${tr(levelMessage)}`);
   }
   text("level", String(level));
   text("survival-label", state.elapsed < levelUntil ? "LEVEL UP" : tr("生存時間"));
   const caption = $("level-caption"),
     up = state.elapsed < levelUntil;
   if (caption.classList.contains("level-up") !== up) caption.classList.toggle("level-up", up);
+  $("field").classList.toggle("level-up-active", up);
+}
+function positionLevelCue() {
+  const cue = $("level-transition");
+  cue.hidden =
+    !geometry || state.elapsed >= levelUntil || !["playing", "hitstop"].includes(state.phase);
+  if (cue.hidden) return;
+  text("level-transition-title", `${tr("レベルアップ")} · Lv.${shownLevel}`);
+  text("level-transition-detail", tr(levelMessage));
+  const columns = innerWidth <= 740 ? 1 : 2;
+  const height = 80;
+  const gaps = Array.from({ length: columns }, (_, lane) =>
+    reasonGap(lane, columns, height, lastReason?.box),
+  );
+  const bottom = Math.max(...gaps),
+    lane = gaps.indexOf(bottom);
+  cue.hidden = bottom < height + 8;
+  cue.style.width = `${geometry.width / columns - 18}px`;
+  cue.style.left = `${geometry.left + (lane * geometry.width) / columns}px`;
+  cue.style.top = `${bottom - height}px`;
 }
 function cancelInactiveInput() {
   if (state.phase !== "playing") activeGestureCancel?.();
@@ -732,6 +765,7 @@ function render() {
   renderFeedback();
   syncCards();
   positionReason();
+  positionLevelCue();
   if (active && !wasActive && !layoutBlocked) state.maxCards = layoutCapacity();
   if (active && !wasActive) layoutKey = currentLayout();
   if (phase !== state.phase) {
