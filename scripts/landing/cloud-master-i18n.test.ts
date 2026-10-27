@@ -7,12 +7,6 @@ import { chooseLocale, tr } from "../../landing/cloud-master/i18n.js";
 import { EN_SCENARIOS } from "../../landing/cloud-master/locales/en-scenarios.js";
 import { EN_UI } from "../../landing/cloud-master/locales/en-ui.js";
 import {
-  englishScenarioIds,
-  loadQuestionLocale,
-  questionView,
-  validateEnglishCatalog,
-} from "../../landing/cloud-master/question-locales.js";
-import {
   availableScenarios,
   createQuestionStream,
   nextQuestion,
@@ -21,6 +15,13 @@ import { buildShare } from "../../landing/cloud-master/share.js";
 import { formatSurvival } from "../../landing/cloud-master/time.js";
 
 const catalog = await loadCatalog();
+// Match the browser graph's module identity: explanation.js imports this versioned module.
+const version = readFileSync(
+  new URL("../../landing/cloud-master/index.html", import.meta.url),
+  "utf8",
+).match(/game\.js\?v=([a-f0-9]{10})/)?.[1];
+const { englishScenarioIds, loadQuestionLocale, questionView, validateEnglishCatalog } =
+  await import(`../../landing/cloud-master/question-locales.js?v=${version}`);
 await loadQuestionLocale("en");
 const japanese = /[\u3040-\u30ff\u3400-\u9fff]/u;
 function generated(s, danger, seed = 37) {

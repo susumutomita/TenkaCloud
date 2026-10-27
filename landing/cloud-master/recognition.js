@@ -1,5 +1,5 @@
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=e1dbc492b6";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=e1dbc492b6";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;

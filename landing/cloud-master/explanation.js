@@ -1,6 +1,6 @@
-import { API_COPY, EVIDENCE_HEADLINES } from "./explanation-copy.js";
-import { explanationTitle } from "./explanation-titles.js";
-import { questionView } from "./question-locales.js";
+import { API_COPY, EVIDENCE_HEADLINES } from "./explanation-copy.js?v=e1dbc492b6";
+import { explanationTitle } from "./explanation-titles.js?v=e1dbc492b6";
+import { questionView } from "./question-locales.js?v=e1dbc492b6";
 
 const value = (x) => (typeof x === "string" ? x : JSON.stringify(x));
 const MEANING = {
