@@ -39,24 +39,38 @@ const onlyFirst = (comp: ReturnType<typeof lazy>) => (_: string, slot: string) =
   slot === SLOT ? comp : undefined;
 
 function pendingOperationPanel(clients: PortalCoordinationClient[], op: unknown) {
-  return function OperationPanel({ coordinationClient }: PortalSlotProps) {
-    const [status, setStatus] = useState("ready");
-    if (coordinationClient) clients.push(coordinationClient);
-    return (
-      <>
-        <output aria-label="operation state">{status}</output>
-        <button
-          type="button"
-          onClick={() => {
-            setStatus("pending");
-            void coordinationClient?.submitOp(op).then((result) => setStatus(result.kind));
-          }}
-        >
-          Submit move
-        </button>
-      </>
-    );
-  };
+  return renderOperationPanel.bind(null, clients, op);
+}
+
+function renderOperationPanel(
+  clients: PortalCoordinationClient[],
+  op: unknown,
+  props: PortalSlotProps,
+) {
+  return <OperationPanel {...props} clients={clients} op={op} />;
+}
+
+function OperationPanel({
+  clients,
+  op,
+  coordinationClient,
+}: PortalSlotProps & { clients: PortalCoordinationClient[]; op: unknown }) {
+  const [status, setStatus] = useState("ready");
+  if (coordinationClient) clients.push(coordinationClient);
+  return (
+    <>
+      <output aria-label="operation state">{status}</output>
+      <button
+        type="button"
+        onClick={() => {
+          setStatus("pending");
+          void coordinationClient?.submitOp(op).then((result) => setStatus(result.kind));
+        }}
+      >
+        Submit move
+      </button>
+    </>
+  );
 }
 
 afterEach(() => {

@@ -13,6 +13,7 @@
  */
 
 import {
+  type Context,
   createContext,
   type ReactNode,
   useCallback,
@@ -134,45 +135,16 @@ export function createI18n<L extends string>(config: I18nConfig<L>): I18nKit<L> 
 
   const I18nContext = createContext<I18nContextValue<L> | undefined>(undefined);
 
-  function I18nProvider({ children }: { readonly children: ReactNode }): ReactNode {
-    const [locale, setLocaleState] = useState<L>(() => loadStoredLocale() ?? detectBrowserLocale());
-
-    // <html lang="..."> も locale に追従させる (= a11y / screen reader 対応)。
-    useEffect(() => {
-      // SSR guard: document は browser / jsdom では常に定義済みなので不到達。
-      /* v8 ignore next */
-      if (typeof document === "undefined") return;
-      document.documentElement.lang = locale;
-    }, [locale]);
-
-    const setLocale = useCallback((code: L) => {
-      setLocaleState(code);
-      persistLocale(code);
-    }, []);
-
-    const t = useCallback(
-      (key: string, params?: Readonly<Record<string, string | number>>): string => {
-        // 1) 指定 locale で lookup → 2) fallback locale → 3) raw key
-        const v = resolveKey(dictionaries[locale], key);
-        const template = v ?? resolveKey(dictionaries[fallbackLocale], key) ?? key;
-        return interpolateFn(template, params);
-      },
-      [locale],
-    );
-
-    const value = useMemo<I18nContextValue<L>>(
-      () => ({ locale, setLocale, t }),
-      [locale, setLocale, t],
-    );
-
-    return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
-  }
-
-  function useI18n(): I18nContextValue<L> {
-    const ctx = useContext(I18nContext);
-    if (!ctx) throw new Error("useI18n must be called inside <I18nProvider>");
-    return ctx;
-  }
+  const I18nProvider = (renderI18nProvider<L>).bind(null, {
+    I18nContext,
+    loadStoredLocale,
+    detectBrowserLocale,
+    persistLocale,
+    dictionaries,
+    fallbackLocale,
+    interpolateFn,
+  });
+  const useI18n = (useI18nContext<L>).bind(null, I18nContext);
 
   return {
     I18nProvider,
@@ -188,4 +160,81 @@ export function createI18n<L extends string>(config: I18nConfig<L>): I18nKit<L> 
       persistLocale,
     },
   };
+}
+
+interface I18nRuntime<L extends string> {
+  readonly I18nContext: Context<I18nContextValue<L> | undefined>;
+  readonly loadStoredLocale: () => L | undefined;
+  readonly detectBrowserLocale: () => L;
+  readonly persistLocale: (code: L) => void;
+  readonly dictionaries: I18nConfig<L>["dictionaries"];
+  readonly fallbackLocale: L;
+  readonly interpolateFn: typeof interpolate;
+}
+
+function renderI18nProvider<L extends string>(
+  runtime: I18nRuntime<L>,
+  { children }: { readonly children: ReactNode },
+): ReactNode {
+  return <BoundI18nProvider runtime={runtime}>{children}</BoundI18nProvider>;
+}
+
+function BoundI18nProvider<L extends string>({
+  runtime,
+  children,
+}: {
+  runtime: I18nRuntime<L>;
+  children: ReactNode;
+}): ReactNode {
+  const {
+    I18nContext,
+    loadStoredLocale,
+    detectBrowserLocale,
+    persistLocale,
+    dictionaries,
+    fallbackLocale,
+    interpolateFn,
+  } = runtime;
+  const [locale, setLocaleState] = useState<L>(() => loadStoredLocale() ?? detectBrowserLocale());
+
+  // <html lang="..."> も locale に追従させる (= a11y / screen reader 対応)。
+  useEffect(() => {
+    // SSR guard: document は browser / jsdom では常に定義済みなので不到達。
+    /* v8 ignore next */
+    if (typeof document === "undefined") return;
+    document.documentElement.lang = locale;
+  }, [locale]);
+
+  const setLocale = useCallback(
+    (code: L) => {
+      setLocaleState(code);
+      persistLocale(code);
+    },
+    [persistLocale],
+  );
+
+  const t = useCallback(
+    (key: string, params?: Readonly<Record<string, string | number>>): string => {
+      // 1) 指定 locale で lookup → 2) fallback locale → 3) raw key
+      const v = resolveKey(dictionaries[locale], key);
+      const template = v ?? resolveKey(dictionaries[fallbackLocale], key) ?? key;
+      return interpolateFn(template, params);
+    },
+    [locale, dictionaries, fallbackLocale, interpolateFn],
+  );
+
+  const value = useMemo<I18nContextValue<L>>(
+    () => ({ locale, setLocale, t }),
+    [locale, setLocale, t],
+  );
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+function useI18nContext<L extends string>(
+  I18nContext: Context<I18nContextValue<L> | undefined>,
+): I18nContextValue<L> {
+  const ctx = useContext(I18nContext);
+  if (!ctx) throw new Error("useI18n must be called inside <I18nProvider>");
+  return ctx;
 }

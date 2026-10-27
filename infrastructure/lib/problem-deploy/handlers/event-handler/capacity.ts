@@ -197,7 +197,7 @@ function sum(values: readonly number[]): number {
 }
 
 function max(values: readonly number[]): number {
-  return values.reduce((acc, v) => (v > acc ? v : acc), 0);
+  return values.reduce((acc, v) => (Number.isNaN(v) ? acc : Math.max(acc, v)), 0);
 }
 
 function round3(value: number): number {

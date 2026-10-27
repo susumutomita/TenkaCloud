@@ -396,3 +396,13 @@ describe("getCapacityOverview", () => {
     ).rejects.toThrow(/GSI without IndexName on Deployments-x/);
   });
 });
+
+it.each([
+  { values: [Number.NaN, 120, Number.NaN], peak: 2 },
+  { values: [-Infinity, -0, 0], peak: 0 },
+  { values: [60, Infinity, Number.NaN], peak: Infinity },
+])("preserves peak reduction for boundary samples $values", async ({ values, peak }) => {
+  const { clients } = buildClients({ values: { t0cr: values } });
+  const overview = await getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients });
+  expect(overview.tables[0]?.consumedReadPerSecPeak).toBe(peak);
+});

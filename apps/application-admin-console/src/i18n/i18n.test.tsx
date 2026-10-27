@@ -101,10 +101,6 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
 
   // 翻訳結果が UI に出ることを実 render で確認
   it("should reflect translation result in the UI under Provider", () => {
-    function Probe() {
-      const t = useT();
-      return <div>{t("app.loading")}</div>;
-    }
     render(
       <I18nProvider>
         <Probe />
@@ -115,3 +111,8 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(el).toBeInTheDocument();
   });
 });
+
+function Probe() {
+  const t = useT();
+  return <div>{t("app.loading")}</div>;
+}

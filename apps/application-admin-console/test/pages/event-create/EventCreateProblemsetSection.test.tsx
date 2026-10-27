@@ -265,23 +265,8 @@ describe("EventCreateProblemsetSection", () => {
 describe("selection across filters", () => {
   it("keeps selected IDs when filtering, adding another problem, clearing and removing", () => {
     const changed = vi.fn();
-    function ControlledSelection() {
-      const [selected, setSelected] = useState<
-        EventCreateProblemsetSectionProps["selectedProblems"]
-      >([]);
-      return (
-        <EventCreateProblemsetSection
-          {...props({
-            selectedProblems: selected,
-            onProblemsChange: (next) => {
-              changed(next.map((option) => option.value));
-              setSelected(next);
-            },
-          })}
-        />
-      );
-    }
-    const { container } = render(<ControlledSelection />);
+
+    const { container } = render(<ControlledSelection changed={changed} />);
     const wrapper = createWrapper(container);
     const picker = () => problemPicker(container);
     const search = wrapper.findInput('[data-testid="problem-filter-search"]');
@@ -366,3 +351,20 @@ it("limits only host-classified coordination Battles and allows changing the sel
   );
   expect(onChange.mock.lastCall?.[0][0].value).toBe("p2");
 });
+
+function ControlledSelection({ changed }: { changed: (ids: (string | undefined)[]) => void }) {
+  const [selected, setSelected] = useState<EventCreateProblemsetSectionProps["selectedProblems"]>(
+    [],
+  );
+  return (
+    <EventCreateProblemsetSection
+      {...props({
+        selectedProblems: selected,
+        onProblemsChange: (next) => {
+          changed(next.map((option) => option.value));
+          setSelected(next);
+        },
+      })}
+    />
+  );
+}

@@ -1,7 +1,7 @@
 /**
  * Issue #3226: the normal console in local-host mode (the `bun start` competition host).
  */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -298,17 +298,14 @@ describe("local host problem selection", () => {
       get: vi.fn().mockReturnValue(new Promise((accept) => (answerOld = accept))),
     };
     const newClient = { get: vi.fn().mockResolvedValue({ items: [{ problemId: "new" }] }) };
-    let captured: ReturnType<typeof useHostCatalog> | undefined;
-    function Probe({ client }: { client: never }) {
-      captured = useHostCatalog(client);
-      return null;
-    }
-    const view = render(<Probe client={oldClient as never} />);
-    view.rerender(<Probe client={newClient as never} />);
-    await waitFor(() => expect(captured?.supported.has("new")).toBe(true));
+    const view = renderHook(({ client }) => useHostCatalog(client), {
+      initialProps: { client: oldClient as never },
+    });
+    view.rerender({ client: newClient as never });
+    await waitFor(() => expect(view.result.current.supported.has("new")).toBe(true));
     answerOld({ items: [{ problemId: "old" }] });
     await new Promise((accept) => setTimeout(accept, 0));
-    expect(captured?.supported.has("old")).toBe(false);
+    expect(view.result.current.supported.has("old")).toBe(false);
   });
 
   it("does not report a failure from a client that has since been replaced", async () => {
@@ -317,30 +314,22 @@ describe("local host problem selection", () => {
       get: vi.fn().mockReturnValue(new Promise((_accept, reject) => (failOld = reject))),
     };
     const newClient = { get: vi.fn().mockResolvedValue({ items: [{ problemId: "new" }] }) };
-    let captured: ReturnType<typeof useHostCatalog> | undefined;
-    function Probe({ client }: { client: never }) {
-      captured = useHostCatalog(client);
-      return null;
-    }
-    const view = render(<Probe client={oldClient as never} />);
-    view.rerender(<Probe client={newClient as never} />);
-    await waitFor(() => expect(captured?.supported.has("new")).toBe(true));
+    const view = renderHook(({ client }) => useHostCatalog(client), {
+      initialProps: { client: oldClient as never },
+    });
+    view.rerender({ client: newClient as never });
+    await waitFor(() => expect(view.result.current.supported.has("new")).toBe(true));
     failOld(new Error("old host down"));
     await new Promise((accept) => setTimeout(accept, 0));
-    expect(captured?.error).toBeNull();
+    expect(view.result.current.error).toBeNull();
   });
 
   it("loads the host catalog and reports a failure", async () => {
     const ok = { get: vi.fn().mockResolvedValue({ items: [{ problemId: "sqli-demo" }] }) };
-    let captured: ReturnType<typeof useHostCatalog> | undefined;
-    function Probe({ client }: { client: never }) {
-      captured = useHostCatalog(client);
-      return null;
-    }
-    render(<Probe client={ok as never} />);
-    await waitFor(() => expect(captured?.supported.has("sqli-demo")).toBe(true));
+    const view = renderHook(() => useHostCatalog(ok as never));
+    await waitFor(() => expect(view.result.current.supported.has("sqli-demo")).toBe(true));
     const failing = { get: vi.fn().mockRejectedValue(new Error("down")) };
-    render(<Probe client={failing as never} />);
-    await waitFor(() => expect(captured?.error).toMatch(/down/u));
+    const failedView = renderHook(() => useHostCatalog(failing as never));
+    await waitFor(() => expect(failedView.result.current.error).toMatch(/down/u));
   });
 });

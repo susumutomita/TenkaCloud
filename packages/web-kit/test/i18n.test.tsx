@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createI18n, interpolate, resolveKey } from "../src/i18n";
 
@@ -174,3 +174,67 @@ describe("I18nProvider + hooks", () => {
     expect(() => renderHook(() => kit.useI18n())).toThrow(/must be called inside/);
   });
 });
+
+describe("i18n kit isolation", () => {
+  it("rejects a hook from another kit even inside a provider", () => {
+    const first = makeKit();
+    const second = makeKit();
+    expect(() => renderHook(second.useI18n, { wrapper: first.I18nProvider })).toThrow(
+      /I18nProvider/,
+    );
+  });
+
+  it("keeps nested kits independent and preserves locale and child state across rerenders", () => {
+    const first = makeKit();
+    const second = createI18n<L>({
+      dictionaries: { ja: { greet: "second {name}" }, en: { greet: "other {name}" } },
+      supportedLocales: ["ja", "en"],
+      defaultLocale: "ja",
+      fallbackLocale: "en",
+      storageKey: "test.second.locale",
+      interpolate: (template) => template.toUpperCase(),
+    });
+    const wrapper = nestedProviders.bind(null, first.I18nProvider, second.I18nProvider);
+    const { result, rerender } = renderHook(
+      () => ({
+        first: first.useI18n(),
+        second: second.useI18n(),
+        state: useState(0),
+      }),
+      { wrapper },
+    );
+    act(() => {
+      result.current.first.setLocale("ja");
+      result.current.second.setLocale("ja");
+    });
+    const firstSetter = result.current.first.setLocale;
+    const secondTranslation = result.current.second.t;
+    act(() => {
+      result.current.first.setLocale("en");
+      result.current.second.setLocale("ja");
+      result.current.state[1](7);
+    });
+    rerender();
+    expect(result.current.first.locale).toBe("en");
+    expect(result.current.first.t("greet", { name: "Ada" })).toBe("Hello Ada");
+    expect(result.current.second.locale).toBe("ja");
+    expect(result.current.second.t("greet", { name: "Ada" })).toBe("SECOND {NAME}");
+    expect(result.current.state[0]).toBe(7);
+    expect(result.current.first.setLocale).toBe(firstSetter);
+    expect(result.current.second.t).toBe(secondTranslation);
+    expect(localStorage.getItem(STORAGE_KEY)).toBe("en");
+    expect(localStorage.getItem("test.second.locale")).toBe("ja");
+  });
+});
+
+function nestedProviders(
+  First: ReturnType<typeof makeKit>["I18nProvider"],
+  Second: ReturnType<typeof makeKit>["I18nProvider"],
+  { children }: { children: ReactNode },
+) {
+  return (
+    <First>
+      <Second>{children}</Second>
+    </First>
+  );
+}

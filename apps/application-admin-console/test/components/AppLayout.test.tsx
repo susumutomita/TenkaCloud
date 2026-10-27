@@ -88,13 +88,10 @@ describe("ShellLayout", () => {
   it("should remount the current route content when refreshing the latest state", () => {
     mockAuth.mockReturnValue({ tokens: { idToken: "tok" }, logout });
     let mountCount = 0;
-    function RouteContent() {
-      const [mountId] = useState(() => ++mountCount);
-      return <span>route-mount-{mountId}</span>;
-    }
+
     const { container } = render(
       <ShellLayout>
-        <RouteContent />
+        <RouteContent nextMount={() => ++mountCount} />
       </ShellLayout>,
     );
 
@@ -168,3 +165,8 @@ describe("ShellLayout", () => {
     expect(mockNav).toHaveBeenCalledWith("/login");
   });
 });
+
+function RouteContent({ nextMount }: { nextMount: () => number }) {
+  const [mountId] = useState(nextMount);
+  return <span>route-mount-{mountId}</span>;
+}

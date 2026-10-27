@@ -173,12 +173,13 @@ describe("AuthProvider login delegation", () => {
 
 describe("useAuth guard", () => {
   it("should throw when used outside an AuthProvider", () => {
-    const Bare = () => {
-      useAuth();
-      return null;
-    };
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(() => render(<Bare />)).toThrow("useAuth must be used inside <AuthProvider>");
     spy.mockRestore();
   });
 });
+
+function Bare() {
+  useAuth();
+  return null;
+}

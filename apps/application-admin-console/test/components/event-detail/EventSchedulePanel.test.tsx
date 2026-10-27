@@ -440,34 +440,6 @@ describe("EventSchedulePanel start dialog (#3453)", () => {
 });
 
 describe("EventSchedulePanel start dialog with a reserved end (#3453)", () => {
-  function StartHarness({
-    detail,
-    patch,
-  }: {
-    detail: EventDetail;
-    patch: (path: string, body: unknown) => Promise<unknown>;
-  }) {
-    const apiClient = { patch } as unknown as ApiClient;
-    const operations = useEventOperations({
-      apiClient,
-      canMutateTenant: true,
-      detail,
-      eventId: "evt-1",
-      refresh: async () => undefined,
-      setError: () => undefined,
-      t: (key) => key,
-    });
-    return (
-      <EventSchedulePanel
-        {...props({
-          apiClient,
-          detail,
-          onStartNow: (minutes) => void operations.handleStartNow(minutes),
-          scheduleInFlight: operations.scheduleInFlight,
-        })}
-      />
-    );
-  }
   const reserved: EventDetail = {
     ...props().detail,
     status: "READY",
@@ -510,3 +482,32 @@ describe("EventSchedulePanel start dialog with a reserved end (#3453)", () => {
     });
   });
 });
+
+function StartHarness({
+  detail,
+  patch,
+}: {
+  detail: EventDetail;
+  patch: (path: string, body: unknown) => Promise<unknown>;
+}) {
+  const apiClient = { patch } as unknown as ApiClient;
+  const operations = useEventOperations({
+    apiClient,
+    canMutateTenant: true,
+    detail,
+    eventId: "evt-1",
+    refresh: async () => undefined,
+    setError: () => undefined,
+    t: (key) => key,
+  });
+  return (
+    <EventSchedulePanel
+      {...props({
+        apiClient,
+        detail,
+        onStartNow: (minutes) => void operations.handleStartNow(minutes),
+        scheduleInFlight: operations.scheduleInFlight,
+      })}
+    />
+  );
+}

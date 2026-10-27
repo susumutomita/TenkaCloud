@@ -133,6 +133,32 @@ describe("submitFlag", () => {
     expect(updateCmd.input.ConditionExpression).toContain("attribute_not_exists(flagSubmitted)");
   });
 
+  it.each([
+    { score: Number.NaN, expected: Number.NaN },
+    { score: -Infinity, expected: 0 },
+    { score: -1, expected: 0 },
+    { score: -0, expected: -0 },
+    { score: 0, expected: 0 },
+    { score: 1, expected: 1 },
+    { score: Infinity, expected: Infinity },
+  ])("preserves single-flag penalty score boundaries (%s)", async ({ score, expected }) => {
+    const scoring: Record<string, ProblemScoringMetadata> = {
+      "hello-world": {
+        ...flagScoring["hello-world"],
+        kind: "flag",
+        flagOutputKey: "ParameterValue",
+        points: 100,
+        wrongAnswerPenalty: 10,
+      },
+    };
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 10 })] });
+    ddbSend.mockResolvedValueOnce({ Attributes: { score, wrongAnswerCount: 1 } });
+    ddbSend.mockResolvedValueOnce({});
+    const out = await submitFlag(shared, scoring, "KEY", "hello-world", "wrong");
+    if (out.kind !== "wrong") throw new Error("Expected wrong-answer result");
+    expect(out.totalScore).toBe(expected);
+  });
+
   it("Issue #817: should clamp totalScore at 0 even when penalty drives score negative", async () => {
     const penaltyScoring: Record<string, ProblemScoringMetadata> = {
       "hello-world": {
@@ -478,6 +504,23 @@ describe("submitFlag", () => {
       ddbSend.mockResolvedValueOnce({ Items: [multiRow({ stackOutputs: undefined })] });
       const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "answer-ep01", "ep01");
       expect(out).toEqual({ kind: "no_outputs" });
+    });
+
+    it.each([
+      { score: Number.NaN, expected: Number.NaN },
+      { score: -Infinity, expected: 0 },
+      { score: -1, expected: 0 },
+      { score: -0, expected: -0 },
+      { score: 0, expected: 0 },
+      { score: 1, expected: 1 },
+      { score: Infinity, expected: Infinity },
+    ])("preserves multi-flag penalty score boundaries (%s)", async ({ score, expected }) => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow({ score: 10 })] });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score, wrongAnswerCount: 1 } });
+      ddbSend.mockResolvedValueOnce({});
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "wrong", "ep02");
+      if (out.kind !== "wrong") throw new Error("Expected wrong-answer result");
+      expect(out.totalScore).toBe(expected);
     });
 
     it("should deduct the per-flag penalty, write a flag-wrong event, and clamp totalScore at 0", async () => {
