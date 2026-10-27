@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { loadCatalog } from "../../landing/cloud-master/api-catalog.js";
 import { ALL_RULES_AT, LESSONS } from "../../landing/cloud-master/curriculum.js";
-import { collect, createGame, next, start, tickFrame } from "../../landing/cloud-master/engine.js";
+import {
+  collect,
+  createGame,
+  next,
+  showLesson,
+  start,
+  tickFrame,
+} from "../../landing/cloud-master/engine.js";
 import { explanationCard } from "../../landing/cloud-master/explanation.js";
 import {
   availableAtLevel,
@@ -36,6 +43,7 @@ function newBirths(s: ReturnType<typeof createGame>, seen: Set<number>) {
 }
 function perfectStep(s: ReturnType<typeof createGame>) {
   if (s.phase === "feedback") next(s);
+  if (s.lessonNotice) showLesson(s);
   if (s.phase === "finished") return false;
   if (s.phase === "playing")
     for (const item of [...s.active])
@@ -89,10 +97,9 @@ function checkBucket(v: ReturnType<typeof explanationCard>) {
 describe("visible frame admission and resume ledger", () => {
   test("one delayed rendered frame admits at most one fresh card, with a future next cadence", () => {
     const s = createGame(catalog, 3);
-    s.elapsed = ALL_RULES_AT;
     s.outcomes = Array(100).fill(false);
     start(s);
-    tickFrame(s, 1501);
+    tickFrame(s, 1601);
     expect(s.active).toHaveLength(2);
     const untouched = identity(s),
       serial = s.serial;
@@ -139,6 +146,7 @@ describe("visible frame admission and resume ledger", () => {
     const resolved = new Set();
     let resumes = 0;
     for (let i = 0; i < 2000 && s.phase !== "finished"; i++) {
+      if (s.lessonNotice) showLesson(s);
       tickFrame(s, 200);
       for (const x of s.history) {
         resolved.add(x.uid);
@@ -177,19 +185,19 @@ describe("visible frame admission and resume ledger", () => {
   });
 });
 describe("discrete stages and compact evidence explanations", () => {
-  test("each taught stage expands the pool while preserving the learning speed", () => {
+  test("each announced stage expands the cumulative pool", () => {
     let size = 0;
     for (let i = 0; i < LEVEL_STAGES.length; i++) {
       const t = LEVEL_STAGES[i].at,
         d = difficulty(t);
       expect(d.level).toBe(i + 1);
       if (i) expect(difficulty(t - 1).level).toBe(i);
-      expect(d.fallMs).toBe(16000);
+      expect(d.fallMs).toBeGreaterThanOrEqual(4200);
       const pool = availableAtLevel(catalog, i + 1);
       expect(pool.length).toBeGreaterThan(size);
       size = pool.length;
     }
-    expect(size).toBe(259);
+    expect(size).toBe(260);
   });
   test("elapsed time alone cannot introduce an unseen rule or replace existing identities", () => {
     const s = createGame(catalog, 3);
@@ -200,7 +208,7 @@ describe("discrete stages and compact evidence explanations", () => {
     expect(s.taughtLevel).toBe(1);
     expect(identity(s)).toEqual(before);
   });
-  test("all518 concise explanations preserve actual case and full official evidence", () => {
+  test("all520 concise explanations preserve actual case and full official evidence", () => {
     for (const source of availableScenarios(catalog))
       for (const danger of [false, true]) checkExplanation(generatedCase(source, danger), danger);
   });

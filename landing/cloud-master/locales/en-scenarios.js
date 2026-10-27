@@ -1,4 +1,23 @@
 export const EN_SCENARIOS = {
+  EC2ProductionTerminationProtection: {
+    id: "EC2ProductionTerminationProtection",
+    serviceId: "ec2",
+    operation: "ModifyInstanceAttribute",
+    field: "eventContext.terminationProtection",
+    safe: "ON",
+    risk: "OFF",
+    baseline: "Production EC2 app / Keep API termination protection ON",
+    why: "This running production instance must retain API termination protection under the exercise policy. The ON/OFF observation has been checked against DisableApiTermination.Value=true/false. Turning protection off is not inherently malicious; this case has no approved retirement. Protection covers API and related termination paths, not every stop, failure or deletion route.",
+    severity: 5,
+    source:
+      "https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_ModifyInstanceAttribute.html",
+    referenceText: "DisableApiTermination",
+    meaningTitle: "Check production API termination protection",
+    dangerHeadline: "This change turns off required production termination protection.",
+    dangerReason:
+      "The running production target must keep protection ON; OFF corresponds to DisableApiTermination.Value=false.",
+    normalReason: "The running production instance keeps API termination protection ON.",
+  },
   EC2ApprovedStop: {
     id: "EC2ApprovedStop",
     serviceId: "ec2",

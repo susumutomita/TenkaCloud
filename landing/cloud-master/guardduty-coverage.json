@@ -9502,6 +9502,11 @@
       "kind": "exercise_policy_not_guardduty_finding",
       "source": "https://docs.aws.amazon.com/waf/latest/APIReference/API_UpdateWebACL.html",
       "assumptions": "WAF＝入口の検査 / この本番ルールはBlockを維持"
+    },
+    {
+      "caseId": "EC2ProductionTerminationProtection",
+      "sourceUrl": "https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_ModifyInstanceAttribute.html",
+      "policy": "Keep API termination protection enabled on the running production instance; ON/OFF is checked against the actual request boolean."
     }
   ]
 }

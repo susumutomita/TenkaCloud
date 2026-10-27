@@ -662,4 +662,18 @@ export const SECURITY_SCENARIOS = [
     source: "https://docs.aws.amazon.com/waf/latest/APIReference/API_UpdateWebACL.html",
     referenceText: "Rules",
   },
+  {
+    id: "EC2ProductionTerminationProtection",
+    serviceId: "ec2",
+    operation: "ModifyInstanceAttribute",
+    field: "eventContext.terminationProtection",
+    safe: "ON",
+    risk: "OFF",
+    baseline: "EC2本番アプリ / API終了保護ONを維持",
+    why: "稼働を維持する本番VMではAPI終了保護をONに保つ演習方針です。表示したON/OFFは引数DisableApiTermination.Valueのtrue/falseと照合した付帯観測です。保護解除が常に攻撃とは限らず、今回は廃止承認のない稼働本番を対象にしています。終了保護はAPI等からの終了を防ぐ設定で、あらゆる停止・障害・削除経路を防ぐ保証ではありません。",
+    severity: 5,
+    source:
+      "https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_ModifyInstanceAttribute.html",
+    referenceText: "DisableApiTermination",
+  },
 ];

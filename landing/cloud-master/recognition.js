@@ -1,14 +1,6 @@
-import {
-  ALL_RULES_AT,
-  FIRST_LESSON_MS,
-  LESSON_GRACE_MS,
-  LESSON_NOTICE_MS,
-  LESSON_PRACTICE_MS,
-  LESSONS,
-  scenarioLevel,
-} from "./curriculum.js?v=222af1e398";
-import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=222af1e398";
-import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=222af1e398";
+import { LESSON_TIMES, LESSONS, scenarioLevel } from "./curriculum.js?v=72404db6ae";
+import { EVIDENCE_SCENARIOS } from "./evidence-scenarios.js?v=72404db6ae";
+import { SECURITY_SCENARIOS } from "./security-scenarios.js?v=72404db6ae";
 export const PATTERNS = [...SECURITY_SCENARIOS, ...EVIDENCE_SCENARIOS].map((s) => s.id);
 export function random(state) {
   state.rng = (Math.imul(state.rng, 1664525) + 1013904223) >>> 0;
@@ -22,35 +14,44 @@ export function shuffled(values, state) {
   }
   return list;
 }
-export const LEVEL_STAGES = Array.from({ length: LESSONS.length }, (_, index) => ({
-  at:
-    index === 0
-      ? 0
-      : FIRST_LESSON_MS + (index - 1) * (LESSON_NOTICE_MS + LESSON_GRACE_MS + LESSON_PRACTICE_MS),
-  fallMs: 16000,
-  intervalMs: 1200,
-}));
+export const LEVEL_STAGES = LESSON_TIMES.map((at) => ({ at }));
+export const PRESSURE_STAGES = [
+  { at: 0, fallMs: 14000, intervalMs: 1600, limit: 3, tier: 1 },
+  { at: 35000, fallMs: 12500, intervalMs: 1400, limit: 3, tier: 1 },
+  { at: 55000, fallMs: 11000, intervalMs: 1200, limit: 4, tier: 1 },
+  { at: 75000, fallMs: 10000, intervalMs: 1000, limit: 4, tier: 1 },
+  { at: 95000, fallMs: 9000, intervalMs: 900, limit: 4, tier: 1 },
+  { at: 115000, fallMs: 8000, intervalMs: 800, limit: 5, tier: 2 },
+  { at: 145000, fallMs: 7000, intervalMs: 700, limit: 5, tier: 2 },
+  { at: 175000, fallMs: 6200, intervalMs: 600, limit: 6, tier: 2 },
+  { at: 210000, fallMs: 5400, intervalMs: 500, limit: 6, tier: 3 },
+  { at: 250000, fallMs: 4600, intervalMs: 400, limit: 6, tier: 3 },
+  { at: 280000, fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 },
+];
 export function levelFor(elapsed) {
   const time = Math.max(0, Number.isFinite(elapsed) ? elapsed : 0);
-  return time >= ALL_RULES_AT
-    ? LESSONS.length + Math.floor((time - ALL_RULES_AT) / LESSON_PRACTICE_MS)
-    : LEVEL_STAGES.findLastIndex((s) => time >= s.at) + 1;
+  return LESSON_TIMES.findLastIndex((at) => time >= at) + 1;
 }
-export function difficulty(elapsed = 0, taughtLevel = levelFor(elapsed)) {
-  const level = Math.max(1, taughtLevel),
-    pace = Math.min(10, Math.max(0, level - LESSONS.length));
+export function pressureFor(elapsed) {
+  return Math.max(
+    0,
+    PRESSURE_STAGES.findLastIndex((p) => elapsed >= p.at),
+  );
+}
+export function difficulty(
+  elapsed = 0,
+  taughtLevel = levelFor(elapsed),
+  pressureIndex = pressureFor(elapsed),
+) {
   return {
-    level,
-    tier: level < LESSONS.length ? 1 : 3,
-    fallMs: Math.max(4200, 16000 - pace * 1200),
-    intervalMs: Math.max(280, 1200 - pace * 92),
-    limit: 6,
+    ...PRESSURE_STAGES[Math.max(0, Math.min(PRESSURE_STAGES.length - 1, pressureIndex))],
+    level: Math.max(1, taughtLevel),
   };
 }
 export const QUESTION_COOLDOWN_MS = 8000;
 export function levelChanges(previous, current) {
   return {
-    faster: difficulty(0, current).fallMs < difficulty(0, previous).fallMs,
+    faster: false,
     morePatterns: Math.min(current, LESSONS.length) > Math.min(previous, LESSONS.length),
   };
 }
@@ -190,6 +191,10 @@ function nested(path, value) {
   return root;
 }
 const foundationParameters = {
+  EC2ProductionTerminationProtection: (value) => ({
+    InstanceId: "i-production",
+    DisableApiTermination: { Value: value === "ON" },
+  }),
   ALBApprovedForwardTarget: (target) => ({
     ListenerArn:
       "arn:aws:elasticloadbalancing:ap-northeast-1:111122223333:listener/app/production/1111111111111111/2222222222222222",
@@ -295,17 +300,23 @@ function visiblePayload(s, actual) {
 export function officialSource(base, reference) {
   return `${base}#:~:text=${encodeURIComponent(reference)}`;
 }
+function sampleNumericEvidence(state, s) {
+  const tier = difficulty(state.elapsed, state.taughtLevel, state.pressureIndex).tier;
+  const ratio = tier === 1 ? 0.2 : tier === 2 ? 0.6 : 0.8;
+  const minimum = s.threshold > 0 ? Math.max(1, Math.ceil(s.threshold * ratio)) : 0;
+  s.normal = minimum + Math.floor(random(state) * (s.threshold - minimum + 1));
+  const spread =
+    tier === 1
+      ? Math.max(5, s.threshold * 5)
+      : tier === 2
+        ? Math.max(5, s.threshold)
+        : Math.max(2, s.threshold * 0.2);
+  s.flag = s.threshold + 1 + Math.floor(random(state) * spread) + (tier === 1 ? s.threshold : 0);
+}
 function sampleEvidence(state, source) {
   const s = { ...source };
   if (s.operator === "gt") {
-    const minimum = s.threshold > 0 ? Math.max(1, Math.ceil(s.threshold * 0.2)) : 0;
-    s.normal = minimum + Math.floor(random(state) * (s.threshold - minimum + 1));
-    const subtle = difficulty(state.elapsed, state.taughtLevel).tier >= 3;
-    s.flag =
-      s.threshold +
-      1 +
-      Math.floor(random(state) * Math.max(5, s.threshold * (subtle ? 1 : 5))) +
-      (subtle ? 0 : s.threshold);
+    sampleNumericEvidence(state, s);
   } else if (typeof s.flag === "string" && /^203\.0\.113\.\d+$/u.test(s.flag)) {
     const prefix = ["192.0.2", "198.51.100", "203.0.113"][Math.floor(random(state) * 3)];
     const n = 1 + Math.floor(random(state) * 250);

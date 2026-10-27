@@ -49,7 +49,7 @@ function opening(danger: boolean) {
 describe("all published defensive evidence", () => {
   test("every published index type and named runtime signal has a playable authored contrast", () => {
     const ids = new Set(availableScenarios(catalog).map((s) => s.id));
-    expect(ids.size).toBe(259);
+    expect(ids.size).toBe(260);
     for (const r of coverage.active) expect(ids.has(r.findingType)).toBe(true);
     for (const r of [...coverage.customSignals, ...coverage.runtimeCustomSignals])
       expect(ids.has(r.signalName)).toBe(true);
@@ -73,7 +73,7 @@ describe("all published defensive evidence", () => {
     }
     expect(fixtures.size).toBe(212);
   });
-  test("all518 explanations bind to the actual sampled observation and its normal or flagged decision", () => {
+  test("all520 explanations bind to the actual sampled observation and its normal or flagged decision", () => {
     let count = 0;
     for (const scenario of availableScenarios(catalog)) {
       const pair = [];
@@ -90,7 +90,7 @@ describe("all published defensive evidence", () => {
       }
       expect(pair[0].why).not.toBe(pair[1].why);
     }
-    expect(count).toBe(518);
+    expect(count).toBe(520);
   });
   test("benign SDK values never inherit the dangerous pair explanation", () => {
     for (const [id, value, wrongText] of [

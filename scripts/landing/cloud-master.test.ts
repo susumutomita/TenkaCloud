@@ -11,6 +11,7 @@ import {
   next,
   pause,
   resume,
+  showLesson,
   start,
   tick,
 } from "../../landing/cloud-master/engine.js";
@@ -21,6 +22,7 @@ import {
   difficulty,
   levelFor,
   nextQuestion,
+  PRESSURE_STAGES,
   violates,
 } from "../../landing/cloud-master/recognition.js";
 import { buildShare } from "../../landing/cloud-master/share.js";
@@ -28,7 +30,7 @@ import { buildShare } from "../../landing/cloud-master/share.js";
 const catalog = await loadCatalog();
 function playing(seed = 726, advanced = false) {
   const state = createGame(catalog, seed);
-  if (advanced) state.elapsed = ALL_RULES_AT;
+  if (advanced) state.elapsed = ALL_RULES_AT + 30000;
   start(state);
   return state;
 }
@@ -46,6 +48,13 @@ function findOpening(danger, points = null) {
 function afterDelay(state) {
   tick(state, 301);
   return state.active[0];
+}
+
+function untilMistake(s) {
+  for (let frame = 0; frame < 1000 && s.phase !== "feedback"; frame++) {
+    if (s.lessonNotice) showLesson(s);
+    tick(s, 100);
+  }
 }
 
 describe("pinned public AWS API catalog and visible policy keys", () => {
@@ -140,17 +149,24 @@ describe("pinned public AWS API catalog and visible policy keys", () => {
 });
 
 describe("levels, finite incoming stream and exact scoring", () => {
-  test("nominal curriculum stages keep a steady reading pace before advanced pressure", () => {
+  test("time adds content and pressure within five minutes without ending the round", () => {
     expect(levelFor(0)).toBe(1);
-    expect(levelFor(39999)).toBe(1);
-    expect(levelFor(40000)).toBe(2);
+    expect(levelFor(11999)).toBe(1);
+    expect(levelFor(12000)).toBe(2);
     expect(levelFor(ALL_RULES_AT)).toBe(LESSONS.length);
-    for (let level = 1; level <= LESSONS.length; level++) {
-      expect(difficulty(0, level).fallMs).toBe(16000);
-      expect(difficulty(0, level).intervalMs).toBe(1200);
+    let fall = Infinity,
+      interval = Infinity,
+      limit = 0;
+    for (const p of PRESSURE_STAGES) {
+      const d = difficulty(p.at);
+      expect(d.fallMs).toBeLessThanOrEqual(fall);
+      expect(d.intervalMs).toBeLessThanOrEqual(interval);
+      expect(d.limit).toBeGreaterThanOrEqual(limit);
+      fall = d.fallMs;
+      interval = d.intervalMs;
+      limit = d.limit;
     }
-    expect(difficulty(0, LESSONS.length + 1).fallMs).toBeLessThan(16000);
-    expect(difficulty(0, LESSONS.length + 100).fallMs).toBe(4200);
+    expect(difficulty(300000)).toMatchObject({ fallMs: 4200, intervalMs: 280, limit: 6, tier: 3 });
   });
   test("every semantic tier remains balanced and all deciding evidence stays visible", () => {
     for (const elapsed of [0, 30000, 90000]) {
@@ -171,7 +187,7 @@ describe("levels, finite incoming stream and exact scoring", () => {
     let state = playing(0);
     for (let seed = 0; seed < 50; seed++) {
       const candidate = playing(seed);
-      tick(candidate, 1501);
+      tick(candidate, 1701);
       if (candidate.active[1]?.question.danger) {
         state = candidate;
         break;
@@ -311,7 +327,7 @@ describe("miss explanations, races and farming guards", () => {
   test("miss freezes all time until understood; final miss explains before results", () => {
     const s = playing(42);
     for (let i = 0; i < 3; i++) {
-      tick(s, 100000);
+      untilMistake(s);
       expect(s.phase).toBe("feedback");
       expect(s.feedback.kind).toBe("miss");
       const before = JSON.stringify({ ...s, catalog: null });
@@ -352,7 +368,7 @@ describe("miss explanations, races and farming guards", () => {
   test("inaction cannot farm indefinitely; score freezes with a missed target", () => {
     const s = playing(84);
     for (let i = 0; i < 3; i++) {
-      tick(s, 100000);
+      untilMistake(s);
       const score = s.score;
       tick(s, 10000000);
       expect(s.score).toBe(score);

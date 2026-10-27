@@ -1,12 +1,28 @@
-// Authored lesson order: each case belongs to one explicitly reviewed group.
+// Public synthetic-scenario case IDs, grouped by the rule announced before admission.
 export const LESSONS = [
   {
     id: "ec2",
-    title: "EC2＝アプリの置き場",
-    example: "停止OKは i-training だけ。他のEC2はタップ。",
-    enTitle: "EC2 runs the app",
-    enExample: "Stop only i-training. Flag other EC2 targets.",
-    scenarios: ["EC2ApprovedStop"],
+    title: "EC2の稼働と保護を守る",
+    example: "本番の未承認停止・終了と、終了保護OFFをタップ。",
+    enTitle: "Protect the running EC2 app",
+    enExample: "Flag unapproved stops/termination and turning production protection OFF.",
+    scenarios: [
+      "EC2ApprovedStop",
+      "Impact:IAMUser/AnomalousBehavior",
+      "EC2ProductionTerminationProtection",
+    ],
+  },
+  {
+    id: "early-threats",
+    title: "いつもの担当・用途と違う動き",
+    example: "業務外の秘密取得、本番監視の停止、未登録端末に注意。",
+    enTitle: "Spot unusual actor activity",
+    enExample: "Check out-of-scope secret access, production monitoring stops and new devices.",
+    scenarios: [
+      "CredentialAccess:IAMUser/AnomalousBehavior",
+      "DefenseEvasion:IAMUser/AnomalousBehavior",
+      "InitialAccess:IAMUser/AnomalousBehavior",
+    ],
   },
   {
     id: "rds",
@@ -147,12 +163,8 @@ export const LESSONS = [
       "RolesAnywhereTrustAnchorCreated",
       "SESDomainIdentityVerified",
       "Stealth:IAMUser/PasswordPolicyChange",
-      "CredentialAccess:IAMUser/AnomalousBehavior",
-      "DefenseEvasion:IAMUser/AnomalousBehavior",
       "Discovery:IAMUser/AnomalousBehavior",
       "Exfiltration:IAMUser/AnomalousBehavior",
-      "Impact:IAMUser/AnomalousBehavior",
-      "InitialAccess:IAMUser/AnomalousBehavior",
       "PenTest:IAMUser/KaliLinux",
       "PenTest:IAMUser/ParrotLinux",
       "PenTest:IAMUser/PentooLinux",
@@ -350,7 +362,6 @@ export const LESSONS = [
       "CurlWgetExfiltrateData",
       "DataSplittingForExfiltration",
       "S3DataExfiltrationWithRclone",
-      // Public case identifier; no credential value is stored in this curriculum.
       "PasswordShadowFileDiscovery",
     ],
   },
@@ -399,13 +410,15 @@ export const LESSONS = [
     ],
   },
 ];
-export const LESSON_NOTICE_MS = 4000;
-export const LESSON_GRACE_MS = 1200;
-export const LESSON_PRACTICE_MS = 30000;
-export const FIRST_LESSON_MS = 40000;
-export const ALL_RULES_AT =
-  FIRST_LESSON_MS +
-  (LESSONS.length - 1) * (LESSON_NOTICE_MS + LESSON_GRACE_MS + LESSON_PRACTICE_MS);
+// Active-play deadlines; answers never gate the next lesson.
+export const LESSON_TIMES = [
+  0, 12000, 28000, 42000, 60000, 76000, 92000, 110000, 126000, 142000, 158000, 174000, 190000,
+  206000, 222000, 238000, 254000, 270000,
+];
+export const LESSON_NOTICE_MS = 3000;
+export const LESSON_GRACE_MS = 1000;
+export const FIRST_LESSON_MS = LESSON_TIMES[1];
+export const ALL_RULES_AT = LESSON_TIMES.at(-1) + LESSON_NOTICE_MS + LESSON_GRACE_MS;
 const stages = new Map(
   LESSONS.flatMap((lesson, index) => lesson.scenarios.map((id) => [id, index + 1])),
 );
@@ -415,12 +428,5 @@ export function scenarioLevel(id) {
   return level;
 }
 export function lessonForLevel(level) {
-  if (level <= LESSONS.length) return LESSONS[Math.max(0, level - 1)];
-  return {
-    id: "practice",
-    title: "既習ルールの復習",
-    example: "判断ルールは同じ。少し速いカードでも対象と条件を確認。",
-    enTitle: "Practise the learned rules",
-    enExample: "The rules stay the same. Check target and conditions on faster cards.",
-  };
+  return LESSONS[Math.max(0, Math.min(LESSONS.length - 1, level - 1))];
 }

@@ -1,4 +1,5 @@
 const API_TITLES = {
+  EC2ProductionTerminationProtection: "稼働本番のAPI終了保護を確認",
   EC2ApprovedStop: "EC2を停止する対象の確認",
   RDSApprovedStop: "RDSを停止する対象の確認",
   ALBApprovedForwardTarget: "ALBの既定の転送先を確認",

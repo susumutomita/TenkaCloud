@@ -39,7 +39,7 @@ function checkCase(s: ReturnType<typeof availableScenarios>[number], danger: boo
     expect(v.reason).toContain("一覧を公開しない");
   }
 }
-test("all518 concise answers identify the actual predicate, source and case-specific reason", () => {
+test("all520 concise answers identify the actual predicate, source and case-specific reason", () => {
   for (const s of availableScenarios(catalog))
     for (const danger of [false, true]) checkCase(s, danger);
 });

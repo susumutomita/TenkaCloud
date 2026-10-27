@@ -5,6 +5,7 @@ import {
   FIRST_LESSON_MS,
   LESSON_GRACE_MS,
   LESSON_NOTICE_MS,
+  LESSON_TIMES,
   LESSONS,
   scenarioLevel,
 } from "../../landing/cloud-master/curriculum.js";
@@ -61,8 +62,8 @@ function generate(id: string, danger: boolean) {
 }
 test("all normal and flagged cases have exactly one introduction and cumulative pool", () => {
   const ids = LESSONS.flatMap((l) => l.scenarios);
-  expect(ids.length).toBe(259);
-  expect(new Set(ids).size).toBe(259);
+  expect(ids.length).toBe(260);
+  expect(new Set(ids).size).toBe(260);
   expect(new Set(ids)).toEqual(new Set(availableScenarios(catalog).map((s) => s.id)));
   expect(() => scenarioLevel("missing-case")).toThrow();
   for (let level = 1; level <= LESSONS.length; level++) {
@@ -88,28 +89,28 @@ test("all normal and flagged cases have exactly one introduction and cumulative 
       }
   }
 });
-test("EC2 then RDS need only stated target policy without network or identity prerequisites", () => {
-  expect(LESSONS.slice(0, 6).map((l) => l.id)).toEqual([
+test("opening has EC2 lifecycle variety and early actor threats without network prerequisites", () => {
+  expect(LESSONS.slice(0, 7).map((l) => l.id)).toEqual([
     "ec2",
+    "early-threats",
     "rds",
     "alb",
     "app-path",
     "delivery",
     "waf",
   ]);
-  for (const level of [1, 2])
-    for (const source of availableAtLevel(catalog, level))
-      for (const danger of [false, true]) {
-        const q = generate(source.id, danger);
-        expect(["StopInstances", "StopDBInstance"]).toContain(q.operation);
-        for (const lang of ["ja", "en"]) {
-          const view = questionView(q, lang);
-          expect(`${view.policy} ${view.payload}`).not.toMatch(
-            /CIDR|\bIAM\b|\bSSH\b|\bSG\b|ポート|セキュリティグループ|security group|\bport\b/i,
-          );
-          expect(view.payload).toMatch(/i-training|i-app-running|training-db|orders-db/);
-        }
+  expect(LESSONS[0].scenarios).toHaveLength(3);
+  for (const source of availableAtLevel(catalog, 2))
+    for (const danger of [false, true]) {
+      const q = generate(source.id, danger);
+      for (const lang of ["ja", "en"]) {
+        const view = questionView(q, lang);
+        expect(`${view.policy} ${view.payload}`).not.toMatch(
+          /CIDR|\bSSH\b|\bSG\b|ポート|セキュリティグループ|security group|\bport\b/i,
+        );
       }
+    }
+  expect(LESSONS[1].scenarios.every((id) => id.includes("IAMUser/AnomalousBehavior"))).toBe(true);
 });
 test("sampler has no future rules, reserves current practice, stays balanced and seeded", () => {
   for (let level = 1; level <= LESSONS.length; level++) {
@@ -145,43 +146,46 @@ test("sampler has no future rules, reserves current practice, stays balanced and
   );
   expect(orders.size).toBeGreaterThan(8);
 });
-test("small lessons block active duplicate decisions and preserve unavailable practice reservation", () => {
-  const s = game(),
-    first = s.active[0].question,
-    other = nextQuestion(s);
-  expect(other.danger).not.toBe(first.danger);
-  s.active.push({ uid: 999, born: 0, deadline: 16000, question: other });
+test("the introductory pool blocks active duplicates and waits without consuming an outcome", () => {
+  const s = game();
+  s.active = [];
+  for (const source of availableAtLevel(catalog, 1))
+    for (const danger of [false, true])
+      s.active.push({
+        uid: s.active.length,
+        born: 0,
+        deadline: 14000,
+        question: generate(source.id, danger),
+      });
   const outcomes = [...s.outcomes],
     turn = s.practiceTurn;
   expect(nextQuestion(s)).toBe(null);
   expect(s.outcomes).toEqual(outcomes);
   expect(s.practiceTurn).toBe(turn);
+  s.history = s.active.map((x) => ({ question: x.question, at: 0 }));
   s.active = [];
-  s.history = [first, other].map((question) => ({ question, at: 0 }));
-  s.elapsed = 1999;
+  s.elapsed = 7999;
   expect(nextQuestion(s)).toBe(null);
-  s.elapsed = 2000;
+  s.elapsed = 8000;
   expect(nextQuestion(s)).not.toBe(null);
 });
-test("time alone cannot advance any lesson including the final correlation lesson", () => {
-  for (const level of [1, LESSONS.length]) {
-    const s = game(12, level);
-    s.active = [];
-    s.nextSpawnAt = Infinity;
-    tick(s, FIRST_LESSON_MS + 10000);
-    expect(s.lessonNotice).toBe(null);
-    expect(s.taughtLevel).toBe(level);
-    s.lessonStats = { normal: 2, danger: 1 };
-    tick(s, 1);
-    expect(s.lessonNotice).toBe(null);
-    s.lessonStats.danger = 2;
-    tick(s, 1);
-    expect(s.lessonNotice.level).toBe(level + 1);
-    expect(s.taughtLevel).toBe(level);
-    tickFrame(s, 20000);
-    expect(s.lessonNotice.shownAt).toBe(null);
-    expect(s.active).toHaveLength(0);
-  }
+test("time introduces each rule without a correct-answer gate and never skips unseen lessons", () => {
+  const s = game();
+  s.active = [];
+  s.nextSpawnAt = Infinity;
+  tick(s, FIRST_LESSON_MS);
+  expect(s.lessonStats).toEqual({ normal: 0, danger: 0 });
+  expect(s.lessonNotice.level).toBe(2);
+  expect(s.taughtLevel).toBe(1);
+  tickFrame(s, 20000);
+  expect(s.lessonNotice.shownAt).toBe(null);
+  expect(s.taughtLevel).toBe(1);
+  showLesson(s);
+  tick(s, LESSON_NOTICE_MS + LESSON_GRACE_MS);
+  expect(s.nextLessonAt).toBe(LESSON_TIMES[2]);
+  tick(s, 1);
+  expect(s.lessonNotice.level).toBe(3);
+  expect(s.taughtLevel).toBe(2);
 });
 test("paint acknowledgment plus finite reading and grace precede every new-rule card", () => {
   const s = pending();
@@ -198,8 +202,8 @@ test("paint acknowledgment plus finite reading and grace precede every new-rule 
   tick(s, 1);
   expect(s.lessonNotice).toBe(null);
   expect(s.active).toHaveLength(1);
-  expect(s.active[0].question.scenarioId).toBe("RDSApprovedStop");
-  expect(s.active[0].deadline - s.active[0].born).toBe(16000);
+  expect(s.active[0].question.lessonLevel).toBe(2);
+  expect(s.active[0].deadline - s.active[0].born).toBe(14000);
 });
 test("read budget and card identity survive pause, repeated acknowledgment and stale input", () => {
   const s = game();
@@ -264,16 +268,15 @@ test("new API observations agree with request members and verified target labels
     expect(waf.parameters.Rules[0]).not.toHaveProperty("OverrideAction");
   }
 });
-test("perfect play reaches every taught lesson at narrow and wide capacities without skips", () => {
-  for (const capacity of [2, 3, 6]) {
+test("perfect play unlocks all cases by five active minutes without skips or forced ending", () => {
+  for (const capacity of [1, 2, 3, 6]) {
     const s = game(capacity),
       visited = new Set([1]);
     s.maxCards = capacity;
-    for (let step = 0; step < 20000 && s.taughtLevel <= LESSONS.length; step++) {
-      tickFrame(s, 100);
+    for (let step = 0; step < 6500; step++) {
+      tickFrame(s, 50);
       if (s.lessonNotice && s.lessonNotice.shownAt === null) {
-        expect(s.lessonStats.normal).toBeGreaterThanOrEqual(2);
-        expect(s.lessonStats.danger).toBeGreaterThanOrEqual(2);
+        expect(s.lessonNotice.level).toBe(s.taughtLevel + 1);
         showLesson(s);
         visited.add(s.taughtLevel);
       }
@@ -284,8 +287,10 @@ test("perfect play reaches every taught lesson at narrow and wide capacities wit
       expect(s.phase).not.toBe("feedback");
     }
     expect(s.lives).toBe(3);
-    expect(s.taughtLevel).toBe(LESSONS.length + 1);
-    expect(visited.size).toBe(LESSONS.length + 1);
+    expect(s.taughtLevel).toBe(LESSONS.length);
+    expect(visited.size).toBe(LESSONS.length);
+    expect(s.elapsed).toBeGreaterThan(300000);
+    expect(s.phase).not.toBe("finished");
     expect(new Set(s.history.map((h) => h.uid)).size).toBe(s.history.length);
     expect(s.score).toBe(s.history.reduce((sum, h) => sum + h.points, 0));
   }

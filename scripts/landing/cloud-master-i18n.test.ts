@@ -35,7 +35,7 @@ function generated(s, danger, seed = 37) {
   });
   return nextQuestion(stream);
 }
-test("all259 English scenarios and506 outcomes fully localize evidence, conditions, details and reasons without mutating answers", () => {
+test("all260 English scenarios and520 outcomes fully localize evidence, conditions, details and reasons without mutating answers", () => {
   const all = availableScenarios(catalog);
   expect(englishScenarioIds().sort()).toEqual(all.map((s) => s.id).sort());
   for (const s of all)

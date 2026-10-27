@@ -41,7 +41,7 @@ function flow(at: number, capacity: number) {
   start(s);
   const births = [s.active[0].born],
     seen = new Set([s.active[0].uid]);
-  for (let i = 0; i < 1180; i++) {
+  for (let i = 0; i < (at ? 1180 : 600); i++) {
     tickFrame(s, 16);
     for (const item of [...s.active]) {
       if (!seen.has(item.uid)) {
@@ -56,7 +56,7 @@ function flow(at: number, capacity: number) {
   return { s, births };
 }
 test("learned pools preserve finite arrivals at real viewport capacities", () => {
-  for (const at of [180000, ALL_RULES_AT + 270000])
+  for (const at of [ALL_RULES_AT + 270000])
     for (const capacity of [2, 3, 4, 5, 6]) {
       const { s, births } = flow(at, capacity),
         gaps = births.slice(1).map((t, i) => t - births[i]);
@@ -112,17 +112,14 @@ test("every dangerous fact retains its value; shortened account and AWS-managed 
   expect(REASON_DURATION_MS).toBe(2000);
 });
 
-test("new service lessons retain sixteen seconds of decision time", () => {
-  for (let level = 1; level <= LESSONS.length; level++) {
-    expect(difficulty(0, level).fallMs).toBe(16000);
-    expect(difficulty(0, level).intervalMs).toBe(1200);
-  }
-  for (const capacity of [3, 4, 6]) {
+test("opening limits simultaneous volume while later pressure remains readable", () => {
+  expect(difficulty(0)).toMatchObject({ fallMs: 14000, intervalMs: 1600, limit: 3 });
+  expect(difficulty(300000)).toMatchObject({ fallMs: 4200, intervalMs: 280, limit: 6 });
+  for (const capacity of [2, 3, 4, 6]) {
     const { s, births } = flow(0, capacity);
-    expect(arrivalInterval(s)).toBe(Math.ceil(16000 / capacity));
-    expect(births.length).toBeGreaterThan(2);
-    expect(s.active.every((x) => x.question.scenarioId === "EC2ApprovedStop")).toBe(true);
-    expect(s.elapsed).toBeLessThan(20000);
+    expect(births.length).toBeGreaterThan(1);
+    expect(s.active.length).toBeLessThanOrEqual(3);
+    expect(arrivalInterval(s)).toBe(Math.max(1600, Math.ceil(14000 / Math.min(3, capacity))));
   }
 });
 
@@ -142,7 +139,7 @@ test("clearing the opening field schedules one finite arrival without changing l
     const score = s.score;
     expect(collect(s, item.uid)).toBe(false);
     expect(s.score).toBe(score);
-    expect(s.nextSpawnAt).toBe(at ? due : s.elapsed + 1200);
+    expect(s.nextSpawnAt).toBe(at ? due : s.elapsed + 1600);
     if (!at) {
       if (s.hitstop) tickFrame(s, s.hitstop);
       pause(s);
@@ -151,7 +148,7 @@ test("clearing the opening field schedules one finite arrival without changing l
       expect(s.elapsed).toBe(elapsed);
       resume(s);
       if (s.grace) tickFrame(s, s.grace);
-      tickFrame(s, 1199);
+      tickFrame(s, 1599);
       expect(s.active.length).toBe(0);
       tickFrame(s, 1);
       expect(s.active.length).toBe(1);
@@ -160,10 +157,7 @@ test("clearing the opening field schedules one finite arrival without changing l
   }
 });
 
-test("content and speed changes happen separately, including the speed floor", () => {
-  expect(levelChanges(1, 2)).toEqual({ faster: false, morePatterns: true });
-  expect(levelChanges(16, 17)).toEqual({ faster: false, morePatterns: true });
-  expect(levelChanges(17, 18)).toEqual({ faster: true, morePatterns: false });
-  expect(levelChanges(26, 27)).toEqual({ faster: true, morePatterns: false });
-  expect(levelChanges(27, 28)).toEqual({ faster: false, morePatterns: false });
+test("new content notices do not imply an instantaneous speed change", () => {
+  for (let level = 1; level < LESSONS.length; level++)
+    expect(levelChanges(level, level + 1)).toEqual({ faster: false, morePatterns: true });
 });
