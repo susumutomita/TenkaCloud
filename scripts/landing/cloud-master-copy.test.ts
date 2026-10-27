@@ -9,6 +9,7 @@ import {
 } from "../../landing/cloud-master/recognition.js";
 
 const catalog = await loadCatalog();
+const officialDocsUrl = /^https:\/\/docs\.aws\.amazon\.com\//;
 function checkCase(s: ReturnType<typeof availableScenarios>[number], danger: boolean) {
   const stream = createQuestionStream(catalog, 37);
   Object.assign(stream, {
@@ -23,7 +24,7 @@ function checkCase(s: ReturnType<typeof availableScenarios>[number], danger: boo
   expect(v.actual).toBe(
     typeof q.context.actual === "string" ? q.context.actual : JSON.stringify(q.context.actual),
   );
-  expect(v.source).toMatch(/^https:\/\/docs.aws.amazon.com\//);
+  expect(v.source).toMatch(officialDocsUrl);
   expect(v.fullReason).toBe(q.why);
   expect(v.reason).not.toBe("表示された対象・用途の範囲内です。");
   expect(v.headline).toBeDefined();
@@ -61,4 +62,17 @@ test("titles explain the same operation for both outcomes without changing the c
     if (s.operation === "GetPasswordData") expect(results[0].headline).toContain("取得する操作");
     if (s.operation === "DeleteFlowLogs") expect(results[0].headline).toContain("収集を止める操作");
   }
+});
+
+test("official documentation URLs require the exact AWS documentation hostname", () => {
+  expect("https://docs.aws.amazon.com/guardduty/latest/ug/what-is-guardduty.html").toMatch(
+    officialDocsUrl,
+  );
+  for (const url of [
+    "https://docsXaws.amazon.com/reference",
+    "https://docs.awsXamazon.com/reference",
+    "https://docs.aws.amazonXcom/reference",
+    "https://docs.aws.amazon.com.example/reference",
+  ])
+    expect(url).not.toMatch(officialDocsUrl);
 });
