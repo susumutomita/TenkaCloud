@@ -1,15 +1,16 @@
-import { CARD_GAP } from "./layout.js?v=72404db6ae";
+import { CARD_GAP } from "./layout.js?v=e279d431f3";
 
 // New arrivals queue behind older cards without moving those cards.
 // After a removal, ease toward the independent trajectory while respecting expiry.
 function independentY(item, old, elapsed, fieldHeight) {
-  const span = Math.max(1, item.deadline - item.born);
+  const deadline = item.decisionDeadline ?? item.deadline;
+  const span = Math.max(1, deadline - item.born);
   const range = Math.max(0, fieldHeight - item.height);
   const desired = Math.max(8, Math.min(1, (elapsed - item.born) / span) * range);
-  if (!old) return desired;
-  const remaining = Math.max(1, item.deadline - old.elapsed);
+  if (!old || old.range !== range) return desired;
+  const remaining = Math.max(1, deadline - old.elapsed);
   const speed = Math.max((range / span) * 3, (range - old.y) / remaining);
-  return Math.min(desired, old.y + Math.max(0, elapsed - old.elapsed) * speed);
+  return Math.max(old.y, Math.min(desired, old.y + Math.max(0, elapsed - old.elapsed) * speed));
 }
 export function flowPositions(items, previous, elapsed, fieldHeight, columns, stationary = false) {
   const result = [];
@@ -22,7 +23,7 @@ export function flowPositions(items, previous, elapsed, fieldHeight, columns, st
       let y = independentY(item, previous.get(String(item.uid)), elapsed, fieldHeight);
       if (stationary) y = leader ? leader.y + leader.height + CARD_GAP : 8;
       else if (leader) y = Math.min(y, leader.y - item.height - CARD_GAP);
-      previous.set(String(item.uid), { y, elapsed });
+      previous.set(String(item.uid), { y, elapsed, range: Math.max(0, fieldHeight - item.height) });
       const entry = { ...item, y };
       result.push(entry);
       leader = entry;

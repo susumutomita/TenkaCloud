@@ -308,7 +308,7 @@ a:hover {
     monospace;
   text-shadow: 0 2px 0 #fff;
   white-space: nowrap;
-  animation: impact 0.22s ease-out forwards;
+  animation: impact 0.9s ease-out forwards;
 }
 .impact small {
   display: block;
@@ -519,8 +519,12 @@ details p {
     opacity: 1;
     transform: scale(0.95);
   }
-  40% {
+  15% {
     transform: scale(1.04);
+  }
+  75% {
+    opacity: 1;
+    transform: scale(1);
   }
   100% {
     opacity: 0;

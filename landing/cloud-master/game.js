@@ -1,5 +1,5 @@
-import { loadCatalog } from "./api-catalog.js?v=72404db6ae";
-import { lessonForLevel } from "./curriculum.js?v=72404db6ae";
+import { loadCatalog } from "./api-catalog.js?v=e279d431f3";
+import { lessonForLevel } from "./curriculum.js?v=e279d431f3";
 import {
   collect,
   createGame,
@@ -11,16 +11,16 @@ import {
   showLesson,
   start,
   tickFrame as tick,
-} from "./engine.js?v=72404db6ae";
-import { explanationCard } from "./explanation.js?v=72404db6ae";
-import { decisionFact, reasonDuration } from "./feedback.js?v=72404db6ae";
-import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=72404db6ae";
-import { CARD_GAP, fieldCapacity } from "./layout.js?v=72404db6ae";
-import { flowPositions } from "./motion.js?v=72404db6ae";
-import { loadQuestionLocale, questionView } from "./question-locales.js?v=72404db6ae";
-import { difficulty } from "./recognition.js?v=72404db6ae";
-import { buildShare } from "./share.js?v=72404db6ae";
-import { formatSurvival } from "./time.js?v=72404db6ae";
+} from "./engine.js?v=e279d431f3";
+import { explanationCard } from "./explanation.js?v=e279d431f3";
+import { decisionFact, reasonDuration } from "./feedback.js?v=e279d431f3";
+import { formatCount, getLocale, setLocale, tr } from "./i18n.js?v=e279d431f3";
+import { CARD_GAP, fieldCapacity } from "./layout.js?v=e279d431f3";
+import { flowPositions } from "./motion.js?v=e279d431f3";
+import { loadQuestionLocale, questionView } from "./question-locales.js?v=e279d431f3";
+import { difficulty } from "./recognition.js?v=e279d431f3";
+import { buildShare } from "./share.js?v=e279d431f3";
+import { formatSurvival } from "./time.js?v=e279d431f3";
 
 const $ = (id) => document.getElementById(id);
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -280,7 +280,7 @@ function feedbackEffect(entry) {
         ? tr("検知 ＋{points}", { points: formatCount(entry.points) })
         : "♥ −1";
   $("effects").replaceChildren(n);
-  setTimeout(() => n.remove(), 220);
+  setTimeout(() => n.remove(), 900);
 }
 function positions(items, previewing) {
   const field = $("cards"),
