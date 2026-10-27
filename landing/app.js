@@ -1,11 +1,11 @@
 (() => {
   var SEO_METADATA = {
     ja: {
-      title: "TenkaCloud | AWSクラウド実戦演習・競技プラットフォーム",
+      title: "TenkaCloud | ゲームで学ぶセキュリティ研修・クラウド演習",
       description:
-        "TenkaCloudはローカルとAWSクラウドで開催するOSSの競技基盤です。チーム、問題、得点を共通の画面で管理します。対応する実行環境と検証状況は運営ガイドで確認できます。",
+        "セキュリティの判断をゲームで学ぶTenkaCloud。クラウド操作の判断ゲームとチーム演習を、企業の研修や勉強会に。現在使えるデモと開催方法を紹介します。",
       socialDescription:
-        "ローカルとAWSクラウドで開催するApache 2.0のOSS競技基盤。対応する問題、実行環境、費用と検証状況は運営ガイドで確認できます。",
+        "危険なクラウド操作を見抜くゲームとチーム演習。企業の研修に、判断と振り返りの体験を。今すぐデモを試せます。",
       canonical: "https://tenkacloud.com/?lang=ja",
       locale: "ja_JP",
       alternateLocale: "en_US",
@@ -14,11 +14,11 @@
         "ローカルとAWSクラウドで問題と得点を共有する、Apache 2.0の競技プラットフォーム。",
     },
     en: {
-      title: "TenkaCloud | Open-source AWS cloud competition platform",
+      title: "TenkaCloud | Security training through games and cloud exercises",
       description:
-        "TenkaCloud is an open-source platform for local and AWS cloud competitions. Manage teams, problems and scores in shared consoles; check the guide for supported runtimes and verification status.",
+        "Practice security decisions with TenkaCloud. Explore the available cloud decision game and team exercises for workplace training, onboarding and workshops.",
       socialDescription:
-        "Host local and AWS cloud competitions with shared consoles for teams, problems and scores. Check current runtime support, costs and verification status.",
+        "Spot risky cloud operations and practice as a team. Add decisions and reflection to workplace training. Try the available demos.",
       canonical: "https://tenkacloud.com/index.en.html",
       locale: "en_US",
       alternateLocale: "ja_JP",
@@ -135,19 +135,36 @@
       "nav.contact": "お問い合わせ",
       "nav.github": "GitHub",
 
-      "hero.h1a": "クラウドエンジニアの、",
-      "hero.h1b": "天下一武道会。",
+      "hero.h1a": "セキュリティ研修を、",
+      "game.cta": "Cloud Master で遊ぶ",
+      "game.p":
+        "クラウド操作の引数と状況から異変を見抜く「APIの番人。」。正常な操作は通し、危険な操作をタップ。3ライフと見逃し解説で学べます。",
+      "game.h2": "目指せクラウドマスター。",
+      "game.eyebrow": "現在遊べるゲーム",
+      "future.plan":
+        "一般社員向けの、怪しいメールを見分ける教材などを構想しています。現在利用できるのは、クラウド操作の判断ゲームとチーム演習です。",
+      "future.p":
+        "急かされた依頼。権威を感じる差出人。見慣れた画面。人を責めるのではなく、立ち止まり、確認し、安全な行動を選ぶ練習へ。",
+      "future.h2": "守るのは、設定だけではない。",
+      "future.eyebrow": "これから広げたい領域",
+      "hero.caption": "Cloud Master · 実際のプレー画面",
+      "hero.gameAlt": "Cloud Master の実際のプレー画面。操作の状況を読み、危険なものを選ぶ。",
+      "hero.gameSrc": "./assets/cloud-master-ja.png",
+      "hero.gameHref": "./cloud-master/?lang=ja",
+      "hero.walkthrough": "チーム演習の体験版",
+      "hero.consult": "研修での利用を相談する",
+      "hero.h1b": "判断して学ぶゲームへ。",
       "hero.sub":
-        "ローカルと AWS クラウドで開催する OSS の競技プラットフォーム。チームで問題を解き、得点と進捗を共有します。まずは同じ PC でローカル競技を試せます。",
+        "AIとともに作る人にも、使う人にも。危険に気づき、判断し、理由を確かめる。繰り返し試す体験を、いつもの研修に。",
       "hero.vibe":
         "<strong>まずは、同じ PC で。</strong> ローカル開催は SQLite を使い、AWS アカウントは不要です。Docker 問題には Docker Engine と Compose が必要です。",
-      "hero.quest_meta": "最初の1問 · 登録不要 · 約3分",
+      "hero.quest_meta": "今すぐ遊べる · 登録不要",
       "hero.quest_badge": "ブラウザ体験版",
       "hero.quest_diff": "インストール不要",
-      "hero.quest_title": "TenkaCloud を、問題を解きながら知る。",
+      "hero.quest_title": "Cloud Master を試す",
       "hero.quest_desc":
-        "練習環境を開き、ヒントと回答提出、得点を6つのステップで体験します。ブラウザ内の体験後は、同じ流れで自分の PC に競技を起動できます。",
-      "hero.quest_cta": "最初の問題を解く",
+        "危険なクラウド操作をタップ。見逃した理由まで振り返る、短時間のサバイバル。",
+      "hero.quest_cta": "ゲームをはじめる",
       "hero.startHref": "/docs/getting-started/#local-start",
       "hero.cta_demo": "自分の PC で起動する",
       "hero.cta_video": "▶ 30 秒でわかる",
@@ -230,26 +247,26 @@
         "資格情報の期限は参加者画面に表示します。AWS 開催の設定と問題ごとの接続条件は運営ガイドで確認してください。実 AWS での大会性能は未検証です。",
       "preview.sso.button": "表示例: AWS Console",
 
-      "aud.eyebrow": "誰のための",
-      "aud.h2": "クラウド実戦力を、組織で育てる。",
+      "aud.eyebrow": "企業での使い方",
+      "aud.h2": "読む研修に、判断する練習を。",
       "aud.lead":
-        "クラウド人材育成 (= CCoE) / Platform / SRE / Security 部門が、 イベント基盤を自前で作らずに ハンズオン AWS 演習 を開催 / 運営できます。 環境払い出し / ログイン / 採点 / 進捗管理 まで、 ひとつの画面で完結。",
-      "aud.a.role": "CCoE / クラウド人材育成",
-      "aud.a.h": "研修イベントを、 年に複数回。",
+        "人材育成・セキュリティ・開発部門の方へ。スライドや動画での理解に、実践と振り返りを重ね、知識の定着を目指します。",
+      "aud.a.role": "新任開発者の基礎研修",
+      "aud.a.h": "危険に、気づく。",
       "aud.a.p":
-        "新卒オンボーディング / 内製化推進 / 部門横断の AWS 演習を、 同じプラットフォームで 年に複数回 開催できる。 単発ハンズオンから 計画的な 年間プログラム へ。",
-      "aud.a.more": "導入のご相談",
-      "aud.b.role": "Platform / SRE",
-      "aud.b.h": "演習設計を、 1 画面で。",
+        "Cloud Masterで、クラウド操作の状況を読み、危険なものを見抜く。誤答の理由を確かめて、次の判断につなげます。",
+      "aud.a.more": "ゲームを試す",
+      "aud.b.role": "チームの勉強会・演習",
+      "aud.b.h": "根拠を、話し合う。",
       "aud.b.p":
-        "イベント、チーム、問題、得点を共通の画面で管理します。ローカルと AWS 開催では実行環境が異なります。問題ごとの接続条件と検証状況は運営ガイドで確認できます。",
-      "aud.b.more": "運営ガイド",
+        "チームで問題を解き、得点を共有。なぜその操作を選んだか、ログのどこを手掛かりにしたかを、勉強会で話し合えます。",
+      "aud.b.more": "演習の開催方法",
       "aud.b.moreHref": "./docs/manual/organizer/",
-      "aud.c.role": "エンジニア / 個人参加",
-      "aud.c.h": "実戦で、腕を上げる。",
+      "aud.c.role": "定期研修の実践補完",
+      "aud.c.h": "自分たちの題材で、試す。",
       "aud.c.p":
-        "問題を解いて学ぶ OSS の競技基盤です。勉強会・学校・コミュニティでローカル開催でき、AWS 問題はクラウド開催で扱います。OSS ライセンスは無料ですが、クラウド資源の利用料は別です。",
-      "aud.c.more": "問題を作る",
+        "社内で学んだ内容を、演習問題として出題する。既存の問題を使うほか、自社の研修に合わせた問題を作れます。",
+      "aud.c.more": "問題の作り方",
       "aud.c.moreHref": "./docs/manual/problem-author/",
 
       "onboard.eyebrow": "オンボーディング",
@@ -397,12 +414,11 @@
       "pricing.tail":
         '<strong>カスタム問題の追加開発</strong>は要件定義から実装まで通常の受託開発と同じスコープになるため、 別途お見積もりします。 それ以上の規模 / 特別要件も含めて、 <a href="#contact">お問い合わせ</a> ください。',
 
-      "ent.eyebrow": "どのプランがよいか分からない",
-      "ent.h2": "まずは話してみませんか。",
-      "ent.p":
-        "クラウド人材育成プログラム、 内製化推進、 継続的な AWS 演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。",
+      "ent.eyebrow": "研修を企画する方へ",
+      "ent.h2": "どんな判断を、練習したいですか。",
+      "ent.p": "対象者と研修の場面を伺い、使えるゲームやチーム演習、開催方法を一緒に考えます。",
       "ent.enterprise":
-        "企業内での研修・演習・評価・独自教材の提供などで利用を検討される場合は、ぜひ一度お声がけください。TenkaCloud はオープンソースとして公開していますが、実際の現場で求められる題材、運用方法、閉じた環境での利用要件を伺いながら、プロダクトと教材の両方を改善していきたいと考えています。",
+        "新任開発者の研修、定期学習の実践補完、チームの勉強会など。まずは今あるデモを試して、扱いたい題材をお聞かせください。",
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
       "contact.discussions": "GitHub Discussions (公開)",
@@ -435,19 +451,37 @@
       "nav.contact": "Contact",
       "nav.github": "GitHub",
 
-      "hero.h1a": "The cloud engineer's ",
-      "hero.h1b": "Tenka-Ichi.",
+      "hero.h1a": "Security training.",
+      "game.cta": "Play Cloud Master",
+      "game.p":
+        "In API Watch, spot unusual operations from their arguments and context. Let normal actions pass and flag risky ones. Learn with three lives and explanations of missed threats.",
+      "game.h2": "Become a Cloud Master.",
+      "game.eyebrow": "Available to play today",
+      "future.plan":
+        "We are exploring suspicious-email exercises for a broader employee audience. The cloud decision game and team exercises are available today.",
+      "future.p":
+        "An urgent request. An authoritative sender. A familiar screen. Practice pausing, checking and choosing a safe response, without blaming the person.",
+      "future.h2": "Security goes beyond settings.",
+      "future.eyebrow": "A direction for future learning",
+      "hero.caption": "Cloud Master · Actual gameplay",
+      "hero.gameAlt":
+        "Actual Cloud Master gameplay. Read the operation context and flag risky actions.",
+      "hero.gameSrc": "./assets/cloud-master-en.png",
+      "hero.gameHref": "./cloud-master/?lang=en",
+      "hero.walkthrough": "Try the team exercise walkthrough",
+      "hero.consult": "Discuss training for your team",
+      "hero.h1b": "Learn by making the call.",
       "hero.sub":
-        "An open-source competition platform for local and AWS cloud hosting. Teams solve problems and share scores and progress. Start with a local competition on one PC.",
+        "For people who build with AI and people who use software. Spot risks, make a decision and understand why. Bring repeated practice into your training.",
       "hero.vibe":
         "<strong>Start on one PC.</strong> Local hosting uses SQLite and needs no AWS account. Docker exercises require Docker Engine and Compose.",
-      "hero.quest_meta": "First problem · No signup · About 3 minutes",
+      "hero.quest_meta": "Play now · No signup",
       "hero.quest_badge": "Browser walkthrough",
       "hero.quest_diff": "No installation",
-      "hero.quest_title": "Learn TenkaCloud by solving a problem.",
+      "hero.quest_title": "Try Cloud Master",
       "hero.quest_desc":
-        "Open a practice environment, reveal hints, submit answers and earn points in six steps. Then follow the same flow to start a competition on your own PC.",
-      "hero.quest_cta": "Solve the first problem",
+        "Flag risky cloud operations in a short survival game. Review what you missed and why.",
+      "hero.quest_cta": "Play the game",
       "hero.startHref": "/docs/getting-started/index.en.html#local-start",
       "hero.cta_demo": "Start on your computer",
       "hero.cta_video": "▶ Watch the 30-second tour",
@@ -530,26 +564,26 @@
         "Credential expiry is shown in the participant portal. Check the organizer guide for AWS setup and per-problem access conditions. Live AWS event performance remains unverified.",
       "preview.sso.button": "Example: AWS Console",
 
-      "aud.eyebrow": "Who it's for",
-      "aud.h2": "Build cloud capability across the org.",
+      "aud.eyebrow": "For your organization",
+      "aud.h2": "Add decision practice to training.",
       "aud.lead":
-        "For Cloud Enablement (CCoE), Platform / SRE, and Security teams that need hands-on AWS training — without rebuilding the event platform. Environment provisioning, login, scoring, and progress tracking — all in one screen.",
-      "aud.a.role": "Cloud Enablement / CCoE",
-      "aud.a.h": "Run training events multiple times a year.",
+        "For learning, security and engineering teams. Complement slides and videos with practice and reflection, with the aim of making knowledge stick.",
+      "aud.a.role": "Developer onboarding",
+      "aud.a.h": "Notice the risk.",
       "aud.a.p":
-        "New-grad onboarding, internalization programs, cross-team AWS drills — run them multiple times a year on the same platform. Move from one-off workshops to a planned annual program.",
-      "aud.a.more": "Talk to us",
-      "aud.b.role": "Platform / SRE",
-      "aud.b.h": "Design drills from one screen.",
+        "Read the context of cloud operations in Cloud Master and spot risky actions. Review the reason behind a mistake before trying again.",
+      "aud.a.more": "Try the game",
+      "aud.b.role": "Team workshops and exercises",
+      "aud.b.h": "Discuss the evidence.",
       "aud.b.p":
-        "Manage events, teams, problems and scores in shared consoles. Local and AWS hosting use different runtimes. Check the organizer guide for each problem’s access conditions and verification status.",
-      "aud.b.more": "Operator guide",
+        "Solve problems as a team and share scores. Use your workshop to discuss why you chose an action and which log entries informed your decision.",
+      "aud.b.more": "How to host an exercise",
       "aud.b.moreHref": "./docs/manual/organizer/index.en.html",
-      "aud.c.role": "Engineers / individual learners",
-      "aud.c.h": "Sharpen on the real thing.",
+      "aud.c.role": "Practice alongside regular training",
+      "aud.c.h": "Use your own topics.",
       "aud.c.p":
-        "An open-source platform for learning through competitions. Communities and schools can host locally; AWS exercises use cloud hosting. The OSS license is free; cloud resources are billed separately.",
-      "aud.c.more": "Author a problem",
+        "Turn what your team has studied into exercise problems. Use existing problems or author ones that fit your training.",
+      "aud.c.more": "How to author problems",
       "aud.c.moreHref": "./docs/manual/problem-author/index.en.html",
 
       "onboard.eyebrow": "Onboarding",
@@ -700,12 +734,12 @@
       "pricing.tail":
         '<strong>Custom problem authoring</strong> follows the same scope as regular software development (requirements → implementation), so we quote it separately. <a href="#contact">Get in touch</a> for that and for anything beyond these tiers.',
 
-      "ent.eyebrow": "Not sure which plan fits",
-      "ent.h2": "Let's talk.",
+      "ent.eyebrow": "Planning training?",
+      "ent.h2": "What decisions should your team practice?",
       "ent.p":
-        "Cloud enablement programs, internal onboarding, recurring AWS drills — share your scale, cadence, and audience, and we'll figure out the right setup together.",
+        "Tell us who is learning and where the training fits. We can explore the available game, team exercises and hosting options together.",
       "ent.enterprise":
-        "If you are considering TenkaCloud for enterprise or internal training use, please feel free to contact us. TenkaCloud is open source, but we would love to learn more about real-world training needs, custom exercise requirements, and how organizations want to run hands-on operations/security drills.",
+        "Developer onboarding, practice alongside regular learning, or a team workshop: try the current demos and tell us which topics matter to your team.",
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
       "contact.discussions": "GitHub Discussions (public)",
@@ -777,6 +811,11 @@
       var key = el.getAttribute("data-i18n-src");
       if (dict[key] == null) return;
       el.setAttribute("src", dict[key]);
+    });
+    document.querySelectorAll("[data-i18n-alt]").forEach((el) => {
+      var key = el.getAttribute("data-i18n-alt");
+      if (dict[key] == null) return;
+      el.setAttribute("alt", dict[key]);
     });
     document.querySelectorAll("[data-i18n-title]").forEach((el) => {
       var key = el.getAttribute("data-i18n-title");

@@ -22,7 +22,7 @@ describe("landing page SEO", () => {
   it("should publish Japanese default metadata on the TenkaCloud domain", () => {
     expect(index).toContain('<html lang="ja">');
     expect(index).toContain(
-      "<title>TenkaCloud | AWSクラウド実戦演習・競技プラットフォーム</title>",
+      "<title>TenkaCloud | ゲームで学ぶセキュリティ研修・クラウド演習</title>",
     );
     expect(index).toContain('<link rel="canonical" href="https://tenkacloud.com/?lang=ja" />');
     expect(index).toContain('<meta property="og:url" content="https://tenkacloud.com/?lang=ja" />');
@@ -55,13 +55,13 @@ describe("landing page SEO", () => {
     const english = read("landing/index.en.html");
     expect(english).toContain('<html lang="en" data-static-lang="en">');
     expect(english).toContain(
-      "<title>TenkaCloud | Open-source AWS cloud competition platform</title>",
+      "<title>TenkaCloud | Security training through games and cloud exercises</title>",
     );
     expect(english).toContain(
       '<link rel="canonical" href="https://tenkacloud.com/index.en.html" />',
     );
-    expect(english).toContain("The cloud engineer's");
-    expect(english).toContain("Build cloud capability across the org.");
+    expect(english).toContain("Learn by making the call.");
+    expect(english).toContain("Add decision practice to training.");
   });
 
   it("should expose organization, website, and software structured data", () => {
@@ -192,21 +192,20 @@ describe("landing interactive onboarding entry", () => {
     expect(hero).not.toContain("cta-row");
   });
 
-  it("routes the primary card to the existing six-step browser walkthrough", () => {
+  it("routes the primary card to the available game and retains the team walkthrough", () => {
     const hero = heroSection(index);
     expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
     const card = hero.slice(hero.indexOf('class="hero-quest-card"'));
     const opening = card.slice(0, card.indexOf(">"));
-    expect(opening).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
-    expect(opening).toContain('data-cta="start-drill"');
+    expect(opening).toContain('href="./cloud-master/?lang=ja"');
+    expect(opening).toContain('data-cta="play-cloud-master"');
     expect(opening).not.toContain("target=");
+    expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
+    expect(hero).toContain('data-cta="start-drill"');
+    expect(hero).toContain('href="#contact"');
     expect(hero.indexOf('href="/docs/getting-started/#local-start"')).toBeGreaterThan(
       hero.indexOf('class="hero-secondary"'),
     );
-    expect(hero).not.toContain('href="/portal-demo/start');
-    expect(hero).toContain('data-cta="start-drill"');
-    expect(hero).toContain("ヒントと回答提出、得点を6つのステップ");
-    expect(hero).not.toContain("旧版");
   });
 
   it("should not present the Lite/Codespaces mode choice anywhere in the hero", () => {
@@ -215,12 +214,11 @@ describe("landing interactive onboarding entry", () => {
     expect(hero).not.toContain("Codespaces");
   });
 
-  it("routes the organizer CTA to the current hosting guide while preserving the pricing CTA", () => {
+  it("keeps the current organizer guide and a training consultation CTA", () => {
     const hero = heroSection(index);
     expect(hero).toContain('data-cta="deploy-aws"');
     expect(hero).toContain('href="./docs/manual/organizer/"');
-    expect(hero).toContain('data-cta="get-quote"');
-    expect(hero).toContain('href="#pricing"');
+    expect(hero).toContain('href="#contact"');
   });
 
   it("keeps language switches on the matching startup guide", () => {
@@ -238,7 +236,8 @@ describe("landing interactive onboarding entry", () => {
     expect(hero).toContain('data-cta="start-drill"');
     expect(hero).toContain('href="/docs/getting-started/index.en.html#local-start"');
     expect(hero).toContain('data-cta="local-start"');
-    expect(hero).toContain("submit answers and earn points in six steps");
+    expect(hero).toContain('href="./cloud-master/?lang=en"');
+    expect(hero).toContain("Play the game");
     expect(hero).not.toContain("Earlier introductory demo");
   });
 });
@@ -503,5 +502,40 @@ describe("catalog documentation entry points", () => {
       "operate/use-existing-pack/page.ja.mdx#catalog-source-schema",
     );
     expect(read("CLAUDE.md")).toContain("@AGENTS.md");
+  });
+});
+
+describe("enterprise security training entry", () => {
+  it("separates available exercises from the future employee email concept in both static locales", () => {
+    for (const [page, futureCopy, availableCopy, alt] of [
+      [
+        "landing/index.html",
+        "構想しています",
+        "現在利用できるのは",
+        "Cloud Master の実際のプレー画面",
+      ],
+      [
+        "landing/index.en.html",
+        "We are exploring",
+        "available today",
+        "Actual Cloud Master gameplay",
+      ],
+    ]) {
+      const html = read(page);
+      const future = html.slice(
+        html.indexOf('<section class="future-learning">'),
+        html.indexOf('<section class="alt" id="modes">'),
+      );
+      expect(future).toContain(futureCopy);
+      expect(future).toContain(availableCopy);
+      expect(future).not.toContain("<a ");
+      expect(html).toContain(alt);
+      expect(html.indexOf('id="training"')).toBeLessThan(html.indexOf('id="modes"'));
+      expect(html).toContain('data-i18n-href="hero.gameHref"');
+      expect(html).toContain('data-i18n-alt="hero.gameAlt"');
+    }
+    for (const locale of ["ja", "en"]) {
+      expect(existsSync(join(root, `landing/assets/cloud-master-${locale}.png`))).toBe(true);
+    }
   });
 });

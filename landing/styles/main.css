@@ -962,3 +962,49 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   /* nav 右側を縮める (= ロゴと言語切替が干渉しない) */
   .nav-right .lang { padding: 0 8px; font-size: 11px; }
 }
+
+/* Enterprise training: the live game is the first experience, hosting details follow. */
+.hero { padding:64px 0 56px; }
+.hero-grid {grid-template-columns:minmax(0, 1.2fr) minmax(0, .8fr);gap:80px;}
+.hero h1 {max-width:640px;font-size:clamp(38px,4.1vw,60px);line-height:1.3;letter-spacing:-.04em;}
+.hero h1 span,.hero h1 em {display:block;}
+.hero .sub {max-width:540px;line-height:1.9;}
+.hero .hero-quest-card {max-width:500px;margin-top:28px;}
+.hero .hero-quest-title {font-size:22px;}
+.hero .hero-quest-meta {font-size:12px;color:#526276;}
+.training-consult {display:inline-flex;align-items:center;min-height:44px;margin-top:12px;color:#0066cc;font-weight:700;text-underline-offset:4px;}
+.training-visual {margin:0;display:flex;flex-direction:column;align-items:center;gap:14px;}
+.training-visual img {display:block;max-width:100%;width:auto;height:540px;border:1px solid #cbd8e7;border-radius:18px;box-shadow:0 24px 70px #203b5c18;}
+.training-visual figcaption {font-size:12px;color:#526276;text-align:center;}
+#training {border-top:1px solid var(--line-soft);}
+#training .audience-intro {max-width:860px;margin-bottom:36px;}
+#training .aud .col {border:0;border-top:2px solid #173f67;border-radius:0;padding:24px 20px;background:transparent;}
+#training .aud .col h3 {font-size:26px;line-height:1.4;}
+#training .aud .col p {font-size:15px;line-height:1.8;}
+#training .aud .col .role {font-family:var(--font-sans);font-size:13px;color:#526276;letter-spacing:0;}
+#training .aud .col .more {font-size:14px;min-height:44px;display:inline-flex;align-items:center;margin-top:12px;}
+.future-learning {background:#eef3f8;}
+.future-grid {display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start;}
+.future-grid h2 {max-width:440px;font-size:clamp(30px,3.2vw,44px);line-height:1.35;}
+.future-grid .lead {font-size:18px;line-height:1.9;margin:0 0 20px;}
+.future-plan {font-size:14px;line-height:1.8;color:#526276;margin:0;}
+.hero a:focus-visible,#training a:focus-visible {outline:3px solid #0969da;outline-offset:4px;}
+@media(max-width:980px){
+ .hero-grid {grid-template-columns:1fr;gap:36px;}
+ .hero h1 {max-width:720px;}
+ .training-visual img {height:440px;}
+ .future-grid {grid-template-columns:1fr;gap:12px;}
+ .future-grid h2 {max-width:none;}
+}
+@media(max-width:640px){
+ .hero {padding:32px 0 40px;}
+ .hero h1 {font-size:clamp(29px,8vw,42px);margin-bottom:20px;line-height:1.4;}
+ .hero .sub {font-size:15px;line-height:1.85;}
+ .hero .hero-quest-card {padding:20px;margin-top:24px;}
+ .hero .hero-quest-desc {font-size:14px;}
+ .hero .hero-secondary {font-size:12px;line-height:2.2;}
+ .training-visual img {height:420px;}
+ #training .aud {gap:16px;}
+ #training .aud .col {padding:20px 4px 12px;min-height:0;}
+ .future-grid .lead {font-size:16px;}
+}

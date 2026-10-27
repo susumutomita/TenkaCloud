@@ -92,7 +92,7 @@ function replaceI18nAttribute(
   html: string,
   key: string,
   value: string,
-  attribute: "href" | "src" | "title",
+  attribute: "href" | "src" | "title" | "alt",
 ): string {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
@@ -200,6 +200,7 @@ export function generateEnglishLanding(): string {
       html = replaceI18nAttribute(html, key, value, "href");
       html = replaceI18nAttribute(html, key, value, "src");
       html = replaceI18nAttribute(html, key, value, "title");
+      html = replaceI18nAttribute(html, key, value, "alt");
     }
   }
 
